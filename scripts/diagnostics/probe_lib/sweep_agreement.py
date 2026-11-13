@@ -58,7 +58,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2] / "deploy_tools"))
 _sys.path.insert(0, str(HOST_LIB_FILES))
 
 from ci_verdict import CI_GATE_NAME, _run_state
-from local_sweep import Sweep, parse_result_line
+from local_sweep import LOCAL, Sweep, parse_result_line
 
 # Every line the unit logs. Alloy labels a syslog line with its tag, the unit's
 # SyslogIdentifier=.
@@ -137,6 +137,22 @@ def swept(rows: Rows) -> list[Swept]:
     return list(found.values())
 
 
+def _state(run: dict, step: str) -> str:
+    """`_run_state` of the step a local check stands for, or of the job where no step is known.
+
+    A run's job carries its steps, and a commit's check-run does not. A hosted job also sets
+    the runner up and, on a pull request, checks the shard weights, which no sweep runs. Its
+    conclusion is red when one of those fails, and that says nothing of the swept tree.
+    """
+    for one in run.get("steps") or ():
+        if one["name"] == step:
+            if one["conclusion"] == "skipped":
+                # An earlier step failed, so this one never ran.
+                return "pending"
+            return _run_state({"status": "completed", "conclusion": one["conclusion"]})
+    return _run_state(run)
+
+
 def hosted(check_runs: CheckRuns) -> dict[str, str]:
     """What hosted CI said of each job of `HOSTED_JOBS`, from a commit's check-runs or a run's jobs.
 
@@ -145,7 +161,8 @@ def hosted(check_runs: CheckRuns) -> dict[str, str]:
         gate that passed, and `none` for a job with no run, one still running, and one that
         was cancelled. A re-run job has several check-runs under one name, and the newest
         decides. A leg that ran outranks a skipped one, so a commit with both a proven run and
-        a full run reads by the full run.
+        a full run reads by the full run. Where a job carries its steps, the step the local
+        check stands for decides, and `none` covers a job that failed before reaching it.
     """
     newest: dict[str, dict] = {}
     for run in check_runs:
@@ -156,7 +173,9 @@ def hosted(check_runs: CheckRuns) -> dict[str, str]:
     verdicts = {}
     for job, prefix in HOSTED_JOBS.items():
         states = {
-            _run_state(r) for name, r in newest.items() if name.startswith(prefix)
+            _state(r, LOCAL[job].step)
+            for name, r in newest.items()
+            if name.startswith(prefix)
         }
         ran = states - {"skipped"}
         if "fail" in ran:
@@ -329,7 +348,10 @@ def _check_runs(hosted_at: str) -> CheckRuns:
         ValueError: gh printed a line that is not JSON.
     """
     path = f"repos/{{owner}}/{{repo}}/{hosted_at}?per_page=100"
-    each = "(.check_runs // .jobs)[] | {id, name, status, conclusion}"
+    each = (
+        "(.check_runs // .jobs)[] | {id, name, status, conclusion, "
+        "steps: [(.steps // [])[] | {name, conclusion}]}"
+    )
     out = gh("api", "--paginate", path, "--jq", each, cwd=REPO, timeout=60).stdout
     return [json.loads(line) for line in out.splitlines() if line.strip()]
 

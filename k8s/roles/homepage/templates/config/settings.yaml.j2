@@ -19,14 +19,14 @@ layout:
     columns: 2
     header: false
     # THREE columns, and the number is derived from the tile count rather than chosen. Services
-    # holds twelve tiles, which divides by three exactly: four full rows, no orphan on the last
+    # holds fifteen tiles, which divides by three exactly: five full rows, no orphan on the last
     # one and no hole beside it. It held nine until 2026-09-10, when the three media widgets
-    # moved in from a `Media` group to make this column four rows deep — see the calendar height
-    # in custom.css.j2, which is derived from that row count so the two Top Row columns end
-    # level.
+    # moved in from a `Media` group, and twelve until 2026-11-13, when the three music tiles
+    # joined — see the calendar height in custom.css.j2, which is derived from that row count so
+    # the two Top Row columns end level.
     #
     # Keep this in step with the tile count, and remember a THIRD thing now depends on it: a
-    # thirteenth tile both reintroduces the orphan and leaves the calendar column short. Add
+    # sixteenth tile both reintroduces the orphan and leaves the calendar column short. Add
     # three at a time, or re-derive the calendar height alongside.
     Services:
       style: row

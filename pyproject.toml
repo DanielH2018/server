@@ -375,6 +375,7 @@ extra-paths = [
   "k8s/roles/qbittorrent/files",
   "k8s/roles/pihole/files",
   "k8s/roles/arr-notification/files",
+  "k8s/roles/lidarr/files",
   "scripts/renderer/job_files",
   "hosts/components/fake-remux/files",
   "k8s/roles/ical-proxy/files",

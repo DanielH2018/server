@@ -13,4 +13,6 @@ ExecStart=/usr/lib/homelab/worktree-sweep
 # and `journalctl -t worktree-sweep` reads it.
 SyslogIdentifier=worktree-sweep
 # The Healthchecks.io key. systemd hands the copy to User=, so the script reads it unprivileged.
-LoadCredential=healthchecks_ping_key:/run/credstore/healthchecks_ping_key
+# Import, not Load: Load fails the unit with 243/CREDENTIALS on a missing file, and a missing ping
+# key must skip only the ping, not the sweep.
+ImportCredential=healthchecks_ping_key

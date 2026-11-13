@@ -167,6 +167,25 @@ eight. A whole sweep on eight workers under `MemoryHigh=4500M` took 301 s and pe
 The scratch tree goes under `~/.cache/local-sweep`. A tree under `/tmp` fails one test of the
 Bash hook on every commit, because that hook reads any path under `/tmp` as scratch.
 
+A check runs under a hosted runner's locale, `C.UTF-8`, and not the host's. daniel-box is
+`en_US.UTF-8`, where `sort` ignores punctuation and orders `~ALL` ahead of `!refs/tags/v*`.
+A runner orders it after. `_check_env` in `local_sweep.py` sets the locale, and *Replaying a
+hosted run* has the run that showed the difference.
+
+A check also runs under the `env:` that the swept commit's `ci.yml` gives its job. The pytest
+job sets `UV_NO_GROUP=lint`, so the hosted suite runs with no lint tool installed. The local
+`pytest` runs `uv run --exact`, because `uv run` alone keeps the lint tools that the hooks
+check installed into the same tree a minute earlier. A test holds both local jobs to `env:`
+values that are literal, since a value with a `${{ }}` expression is one only a runner can
+evaluate.
+
+The local `pytest` skips tests that a hosted runner runs. Four tests of
+`k8s/roles/crowdsec/tests/test_jobs_image.py` need Docker, which daniel-box does not
+have, and they skip where `CI` is unset. A change that breaks one of them reads green
+locally. Issue [#8435][sweep-skips] tracks the full list.
+
+[sweep-skips]: https://github.com/DanielH2018/server/issues/8435
+
 #### The shadow sweep
 
 `homelab-local-sweep.service` runs the tool from the primary checkout as the deploy user, the
@@ -194,6 +213,13 @@ says how many of the compared checks hosted CI ran itself, because a proven skip
 construction. A re-run job takes its newest attempt. A job that was cancelled, or is still
 running, has no verdict, and the check is counted as not comparable. Any other conclusion but
 success is red, as `hosts/lib/ci_verdict.py` reads it.
+
+For a replayed run the probe reads one step of the hosted job, not the job. A local check
+stands for one step: `Run hooks (full sweep)` or `Run the test suite`. The job's other steps
+set the runner up, and on a pull request the pytest job also checks the shard weights. A job
+that failed in one of those says nothing of the swept tree. A job that failed before its
+step ran has no verdict. GitHub returns steps for a run's jobs and not for a commit's
+check-runs, so a master sweep is compared with the whole job.
 
 The probe exits 1 only for a sweep that read green where
 hosted CI read red, which is a red tree a queue would have merged. A sweep that read red where
@@ -240,6 +266,21 @@ hooks check finds `prek`, which a user unit's own `PATH` does not hold. The next
 A replay that reads green where hosted CI read red is either a hosted flake or a difference
 between daniel-box and a hosted runner. Each one is read and explained before B2 starts,
 because the second kind is a failure a queue would merge.
+
+The first eight replays, on 2026-11-13, read green three times where the hosted job was red.
+None was a flake:
+
+- **The locale.** Run 43336474461 failed
+  `test_a_weakened_update_restriction_is_flagged[a tag pattern excluded]`. The test pinned
+  the order `sort` gives two patterns. At the run's merge commit it passes under
+  `en_US.UTF-8` and fails under `C.UTF-8`. The sweep sets the hosted locale.
+- **The lint tools.** Run 43146864552 failed two tests with
+  `FileNotFoundError: 'actionlint'`. The hosted pytest job installs no lint tool, and the
+  sweep's tree had them from its hooks check. The sweep gives a check its job's `env:` and
+  syncs the suite's environment exactly.
+- **A step the sweep does not run.** Run 43108849551 passed its suite, 3,666 tests, and
+  failed the shard-weight check that follows it. The probe compares a replay with the step
+  the check stands for.
 
 The timer samples the tip of master. A commit that merges and is superseded between two runs
 is never swept, and at most three sweeps start in an hour.

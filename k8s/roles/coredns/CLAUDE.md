@@ -24,8 +24,10 @@ the bundle from GHCR. A bad apply here stops name resolution, and host probes st
   (`docs/k3s-upgrade.md`).
 - **`coredns_image` is a pin, not a Renovate target.** The k3s addon stopped reconciling the
   image when the marker went in. `renovate.json` disables Renovate for this key.
-  `hosts/tests/test_coredns_image_follows_bundled_manifest.py` holds the pin to an
-  excerpt of the bundled manifest, labelled with the k3s version it came from.
+  `hosts/tests/test_coredns_image_follows_bundled_manifest.py` holds the pin to an excerpt of
+  the bundled manifest, labelled with the k3s version it came from, plus the tag's digest. The
+  test records that digest per tag in `_DIGESTS`, so an excerpt naming a new tag fails until a
+  k3s bump records the new digest (`docs/k3s-upgrade.md`).
 - **The ConfigMap declares only `Corefile`.** k3s's node controller writes `NodeHosts` and
   keeps writing it, so Flux must never declare that key.
   `tests/test_coredns_render.py` holds the one-key rule and the Corefile's named members.

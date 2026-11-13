@@ -3,8 +3,8 @@
 `test_alertmanager_routing.py` is at its line cap, so the `pi-checks.yaml` share of its `PAGING`
 outcome lives here, on the same walk of the rendered routing tree. The SD-health pair is critical,
 so it mails as well as posts. The container-recovery pair is a warning, so it posts to Discord
-alone, as the "Daniel Pi Recovery" tile did, and so does the watchdog daemon pair. A rule that
-regains `shadow` walks to the blackhole.
+alone, as the "Daniel Pi Recovery" tile did, and so do the watchdog daemon pair and the audit-log
+pair. A rule that regains `shadow` walks to the blackhole.
 
 Run: uv run pytest tests/services/test_alertmanager_routing_b5_pi.py
 """
@@ -30,6 +30,8 @@ EXPECTED = {
     "PiRecoveryNotReporting": ["discord"],
     "PiWatchdogFailed": ["discord"],
     "PiWatchdogNotReporting": ["discord"],
+    "PiAuditFailed": ["discord"],
+    "PiAuditNotReporting": ["discord"],
 }
 
 

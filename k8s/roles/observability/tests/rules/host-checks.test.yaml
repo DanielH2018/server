@@ -2273,3 +2273,186 @@ tests:
                 `systemctl status homelab-claude-guardrail-ack.timer` and `journalctl -t
                 claude-guardrail-ack`, then
                 /var/lib/node-exporter-textfile/claude-guardrail-ack.prom on the host.
+  # SystemdUnitsFailed (#8219): every host counts a failed unit from minute 0. The 10m `for`
+  # holds the page through the 9th minute, and each host's rule fires at the 10th.
+  - interval: 1m
+    input_series:
+      - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x15'
+      - series: 'up{instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '1x15'
+      - series: 'up{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '1x15'
+      - series: 'homelab_check_success{check="systemd-units", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0x15'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="systemd-units", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0+60x15'
+      - series: 'homelab_check_success{check="systemd-units", instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '0x15'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="systemd-units", instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '0+60x15'
+      - series: 'homelab_check_success{check="systemd-units", instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '0x15'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="systemd-units", instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '0+60x15'
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: SystemdUnitsFailed
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: SystemdUnitsNotReporting
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: SystemdUnitsFailed
+        exp_alerts:
+          - exp_labels:
+              check: systemd-units
+              instance: daniel-box
+              job: node
+              origin: daniel-box
+              severity: warning
+              service: daniel-box
+            exp_annotations:
+              summary: daniel-box has a failed system unit.
+              description: >-
+                systemd-units-check on daniel-box counted at least one system unit in the failed
+                state; homelab_systemd_failed_units{check="systemd-units"} holds how many. Run
+                `systemctl --failed` on daniel-box and read each unit's journal. Once the cause is
+                fixed, `systemctl reset-failed <unit>` or a clean run clears the state, and the
+                next check resolves this alert.
+          - exp_labels:
+              check: systemd-units
+              instance: daniel-server
+              job: node
+              origin: daniel-server
+              severity: warning
+              service: daniel-server
+            exp_annotations:
+              summary: daniel-server has a failed system unit.
+              description: >-
+                systemd-units-check on daniel-server counted at least one system unit in the failed
+                state; homelab_systemd_failed_units{check="systemd-units"} holds how many. Run
+                `systemctl --failed` on daniel-server and read each unit's journal. Once the cause is
+                fixed, `systemctl reset-failed <unit>` or a clean run clears the state, and the
+                next check resolves this alert.
+          - exp_labels:
+              check: systemd-units
+              instance: daniel-pi
+              job: node-pi
+              origin: daniel-pi
+              severity: warning
+              service: daniel-pi
+            exp_annotations:
+              summary: daniel-pi has a failed system unit.
+              description: >-
+                systemd-units-check on daniel-pi counted at least one system unit in the failed
+                state; homelab_systemd_failed_units{check="systemd-units"} holds how many. Run
+                `systemctl --failed` on daniel-pi and read each unit's journal. Once the cause is
+                fixed, `systemctl reset-failed <unit>` or a clean run clears the state, and the
+                next check resolves this alert.
+  # SystemdUnitsNotReporting's stale arm: a timestamp frozen at 0 crosses the 900s deadline
+  # after the 15th minute, while the verdict stays green.
+  - interval: 1m
+    input_series:
+      - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x20'
+      - series: 'up{instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '1x20'
+      - series: 'up{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '1x20'
+      - series: 'homelab_check_success{check="systemd-units", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x20'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="systemd-units", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0x20'
+      - series: 'homelab_check_success{check="systemd-units", instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '1x20'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="systemd-units", instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '0x20'
+      - series: 'homelab_check_success{check="systemd-units", instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '1x20'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="systemd-units", instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '0x20'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: SystemdUnitsNotReporting
+        exp_alerts: []
+      - eval_time: 16m
+        alertname: SystemdUnitsFailed
+        exp_alerts: []
+      - eval_time: 16m
+        alertname: SystemdUnitsNotReporting
+        exp_alerts:
+          - exp_labels:
+              check: systemd-units
+              instance: daniel-box
+              job: node
+              origin: daniel-box
+              severity: warning
+              service: daniel-box
+            exp_annotations:
+              summary: daniel-box's failed-unit check has stopped reporting.
+              description: >-
+                No systemd-units verdict newer than 900s reached Prometheus from daniel-box's textfile
+                collector, so nothing is counting its failed units. Read `systemctl status
+                homelab-systemd-units.timer` and `journalctl -t systemd-units` on daniel-box, then
+                /var/lib/node-exporter-textfile/systemd-units.prom on the host.
+          - exp_labels:
+              check: systemd-units
+              instance: daniel-server
+              job: node
+              origin: daniel-server
+              severity: warning
+              service: daniel-server
+            exp_annotations:
+              summary: daniel-server's failed-unit check has stopped reporting.
+              description: >-
+                No systemd-units verdict newer than 900s reached Prometheus from daniel-server's textfile
+                collector, so nothing is counting its failed units. Read `systemctl status
+                homelab-systemd-units.timer` and `journalctl -t systemd-units` on daniel-server, then
+                /var/lib/node-exporter-textfile/systemd-units.prom on the host.
+          - exp_labels:
+              check: systemd-units
+              instance: daniel-pi
+              job: node-pi
+              origin: daniel-pi
+              severity: warning
+              service: daniel-pi
+            exp_annotations:
+              summary: daniel-pi's failed-unit check has stopped reporting.
+              description: >-
+                No systemd-units verdict newer than 900s reached Prometheus from daniel-pi's textfile
+                collector, so nothing is counting its failed units. Read `systemctl status
+                homelab-systemd-units.timer` and `journalctl -t systemd-units` on daniel-pi, then
+                /var/lib/node-exporter-textfile/systemd-units.prom on the host.
+  # SystemdUnitsNotReporting's absent arm: daniel-box's file reports for 5 minutes and is gone,
+  # so the arm fires once 900s pass with no sample. daniel-server never wrote one, as before its
+  # package installs the timer, and its history guard keeps it quiet.
+  - interval: 1m
+    input_series:
+      - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x30'
+      - series: 'up{instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '1x30'
+      - series: 'up{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '1x30'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="systemd-units", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0+60x5'
+    alert_rule_test:
+      - eval_time: 19m
+        alertname: SystemdUnitsNotReporting
+        exp_alerts: []
+      - eval_time: 21m
+        alertname: SystemdUnitsNotReporting
+        exp_alerts:
+          - exp_labels:
+              check: systemd-units
+              origin: daniel-box
+              severity: warning
+              service: daniel-box
+            exp_annotations:
+              summary: daniel-box's failed-unit check has stopped reporting.
+              description: >-
+                No systemd-units verdict newer than 900s reached Prometheus from daniel-box's textfile
+                collector, so nothing is counting its failed units. Read `systemctl status
+                homelab-systemd-units.timer` and `journalctl -t systemd-units` on daniel-box, then
+                /var/lib/node-exporter-textfile/systemd-units.prom on the host.

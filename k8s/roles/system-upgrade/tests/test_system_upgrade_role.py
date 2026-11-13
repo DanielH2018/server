@@ -299,3 +299,44 @@ def test_the_vendored_namespace_is_the_one_every_template_names():
     assert namespace["metadata"]["name"] == "system-upgrade"
     for template in (*PLANS, "networkpolicy.yaml.j2"):
         assert _rendered(template)[0]["metadata"]["namespace"] == "system-upgrade"
+
+
+def _patched_controller_pod() -> dict:
+    """The vendored controller's pod spec with the patch's containers merged in by name."""
+    [vendored] = [
+        d
+        for d in _upstream("system-upgrade-controller.yaml")
+        if d["kind"] == "Deployment"
+    ]
+    pod = vendored["spec"]["template"]["spec"]
+    patched = _patch("system-upgrade-controller.yaml")["spec"]["template"]["spec"]
+    by_name = {c["name"]: c for c in patched.get("containers", [])}
+    for container in pod["containers"]:
+        overlay = by_name.get(container["name"], {})
+        resources = container.get("resources") or {}
+        for key, values in (overlay.get("resources") or {}).items():
+            resources[key] = {**resources.get(key, {}), **values}
+        container["resources"] = resources
+    return pod
+
+
+def _is_best_effort(pod: dict) -> bool:
+    """Kubernetes' rule: no container sets a cpu or memory request or limit."""
+    return not any(
+        resource in (container.get("resources") or {}).get(kind, {})
+        for container in pod["containers"] + pod.get("initContainers", [])
+        for kind in ("requests", "limits")
+        for resource in ("cpu", "memory")
+    )
+
+
+def test_the_patched_controller_pod_is_not_best_effort():
+    # The kubelet evicts a BestEffort pod first under memory pressure, whatever its
+    # priority class, and this pod applies the k3s upgrades to both nodes (#8225).
+    assert not _is_best_effort(_patched_controller_pod())
+
+
+def test_the_patched_controller_sets_a_memory_request_and_limit():
+    [container] = _patched_controller_pod()["containers"]
+    assert "memory" in container["resources"].get("requests", {})
+    assert "memory" in container["resources"].get("limits", {})

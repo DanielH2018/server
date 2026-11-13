@@ -601,12 +601,16 @@ def await_merge(ln: Landing) -> None:
     await_ci reads it green, and again each `AFTER_S` after. A check left pending under a completed workflow run
     ends the wait `merge-timeout` with the empty-commit remedy, because no poll ever clears it
     (#7996).
+
+    A CI read GitHub refuses for its rate sleeps until the quota frees rather than one merge
+    poll, counted as waited and cut short at `merge_timeout` (#8147).
     """
     o, t = ln.opts, ln.tools
     waited = 0
     conflicting = 0
     refused = OnChange(say)
     no_overlap = OnChange(say)
+    rate_limited = OnChange(say)
     # await_ci's last answer when it was `pending`, for the merge-timeout message; else empty.
     ci_pending = ""
     # The pacing hold the last green poll printed (`pace.py`), for the merge-timeout message.
@@ -664,8 +668,17 @@ def await_merge(ln: Landing) -> None:
             say(f"checking the landing policy again on the updated head {head[:8]}")
             ln.pinned_head = policy.check(ln)
             continue
+        # Seconds until GitHub's quota frees, when it refused this poll's CI read; else 0.
+        pause = 0
         if head:
-            rc, line = t.await_ci(head, 0)
+            try:
+                rc, line = t.await_ci(head, 0)
+            except await_ci.RateLimitedError as exc:
+                pause = exc.wait_s
+                rate_limited(
+                    f"{head[:8]}: {exc}; the merge wait backs off until it does"
+                )
+        if head and not pause:
             ci_pending = line if rc == CI_PENDING else ""
             if await_ci.DRAFT_SKIPPED not in ci_pending:
                 draft_head = ""
@@ -745,7 +758,9 @@ def await_merge(ln: Landing) -> None:
             # A run cancelled on the head never supplies a verdict on its own (#5931). A run
             # skipped as a draft names its own remedy in await_ci's line, because a re-run of
             # it skips again (#6077).
-            if draft_head:
+            if pause:
+                why = f"GitHub refused its CI read for the rate; the quota frees in {pause}s"
+            elif draft_head:
                 why = f"its head has no CI verdict ({ci_pending})"
             elif ci_pending:
                 why = (
@@ -761,6 +776,8 @@ def await_merge(ln: Landing) -> None:
             )
         # A held lander adds no throughput, so it polls slower and spends less quota (#7993).
         step = o.merge_poll * HELD_POLL_FACTOR if hold else o.merge_poll
+        if pause:
+            step = max(step, min(pause, wait_ends_at - waited - held))
         t.sleep(step)
         if hold:
             held += step

@@ -12,7 +12,10 @@
 #
 # Renovate must not bump it alone: the k8s image manager matches every `_image:` key in a k8s
 # role's defaults, and renovate.json disables this one. The image is whatever k3s bundles.
-coredns_image: rancher/mirrored-coredns-coredns:1.14.7
+#
+# The digest is the tag's index digest, and a k3s bump moves it by hand with the tag
+# (docs/k3s-upgrade.md). The test holds the pin to the digest it records for the excerpt's tag.
+coredns_image: rancher/mirrored-coredns-coredns:1.14.7@sha256:7efd3c635b03efd68c4e8398fc45f0d993d0e9ab016f72c1cefb0fd6d01aa286
 
 # The kube-dns Service address. `clusterIP` is immutable, so the render writes the address the
 # cluster already holds. It is also the address node-level probes dial, and it must sit inside

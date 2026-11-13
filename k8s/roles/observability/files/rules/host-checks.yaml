@@ -722,6 +722,122 @@ groups:
             collector, so nothing confirms the weekly firmware update still runs. Read the `Weekly firmware update` cron in
             root's crontab and `journalctl -t fwupd-auto`, then
             /var/lib/node-exporter-textfile/firmware-update.prom on the host.
+      # The failed-unit check (#8219): systemd-units-check.sh in the host-maintenance component
+      # counts the failed system units every 5 minutes on every host. node-exporter runs without
+      # --collector.systemd, so this is the one rule that sees a unit with no OnFailure= hook and
+      # no verdict of its own. The 10m `for` spans two runs, so a unit that fails and is restarted
+      # or reset between them stays quiet. The NotReporting absent arm carries the same 28-day
+      # history guard as the weekly jobs above, because no file exists until a host's package
+      # installs the timer, and the Pi updates once a day. Both 900s literals equal the script's
+      # DEADLINE_S, and hosts/tests/test_systemd_units_check.py pins them to it.
+      - alert: SystemdUnitsFailed
+        expr: homelab_check_success{check="systemd-units",origin="daniel-box"} == 0
+        for: 10m
+        labels:
+          severity: warning
+          service: daniel-box
+        annotations:
+          summary: daniel-box has a failed system unit.
+          description: >-
+            systemd-units-check on daniel-box counted at least one system unit in the failed
+            state; homelab_systemd_failed_units{check="systemd-units"} holds how many. Run
+            `systemctl --failed` on daniel-box and read each unit's journal. Once the cause is
+            fixed, `systemctl reset-failed <unit>` or a clean run clears the state, and the
+            next check resolves this alert.
+      - alert: SystemdUnitsNotReporting
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="systemd-units",origin="daniel-box"} > 900
+            or
+              (
+                  absent_over_time(homelab_check_last_run_timestamp_seconds{check="systemd-units",origin="daniel-box"}[900s])
+                and on ()
+                  present_over_time(homelab_check_last_run_timestamp_seconds{check="systemd-units",origin="daniel-box"}[2419200s])
+              )
+          )
+          unless on (origin) (up{job="node"} == 0)
+        labels:
+          severity: warning
+          service: daniel-box
+        annotations:
+          summary: daniel-box's failed-unit check has stopped reporting.
+          description: >-
+            No systemd-units verdict newer than 900s reached Prometheus from daniel-box's textfile
+            collector, so nothing is counting its failed units. Read `systemctl status
+            homelab-systemd-units.timer` and `journalctl -t systemd-units` on daniel-box, then
+            /var/lib/node-exporter-textfile/systemd-units.prom on the host.
+      - alert: SystemdUnitsFailed
+        expr: homelab_check_success{check="systemd-units",origin="daniel-server"} == 0
+        for: 10m
+        labels:
+          severity: warning
+          service: daniel-server
+        annotations:
+          summary: daniel-server has a failed system unit.
+          description: >-
+            systemd-units-check on daniel-server counted at least one system unit in the failed
+            state; homelab_systemd_failed_units{check="systemd-units"} holds how many. Run
+            `systemctl --failed` on daniel-server and read each unit's journal. Once the cause is
+            fixed, `systemctl reset-failed <unit>` or a clean run clears the state, and the
+            next check resolves this alert.
+      - alert: SystemdUnitsNotReporting
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="systemd-units",origin="daniel-server"} > 900
+            or
+              (
+                  absent_over_time(homelab_check_last_run_timestamp_seconds{check="systemd-units",origin="daniel-server"}[900s])
+                and on ()
+                  present_over_time(homelab_check_last_run_timestamp_seconds{check="systemd-units",origin="daniel-server"}[2419200s])
+              )
+          )
+          unless on (origin) (up{job="node"} == 0)
+        labels:
+          severity: warning
+          service: daniel-server
+        annotations:
+          summary: daniel-server's failed-unit check has stopped reporting.
+          description: >-
+            No systemd-units verdict newer than 900s reached Prometheus from daniel-server's textfile
+            collector, so nothing is counting its failed units. Read `systemctl status
+            homelab-systemd-units.timer` and `journalctl -t systemd-units` on daniel-server, then
+            /var/lib/node-exporter-textfile/systemd-units.prom on the host.
+      - alert: SystemdUnitsFailed
+        expr: homelab_check_success{check="systemd-units",origin="daniel-pi"} == 0
+        for: 10m
+        labels:
+          severity: warning
+          service: daniel-pi
+        annotations:
+          summary: daniel-pi has a failed system unit.
+          description: >-
+            systemd-units-check on daniel-pi counted at least one system unit in the failed
+            state; homelab_systemd_failed_units{check="systemd-units"} holds how many. Run
+            `systemctl --failed` on daniel-pi and read each unit's journal. Once the cause is
+            fixed, `systemctl reset-failed <unit>` or a clean run clears the state, and the
+            next check resolves this alert.
+      - alert: SystemdUnitsNotReporting
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="systemd-units",origin="daniel-pi"} > 900
+            or
+              (
+                  absent_over_time(homelab_check_last_run_timestamp_seconds{check="systemd-units",origin="daniel-pi"}[900s])
+                and on ()
+                  present_over_time(homelab_check_last_run_timestamp_seconds{check="systemd-units",origin="daniel-pi"}[2419200s])
+              )
+          )
+          unless on (origin) (up{job="node-pi"} == 0)
+        labels:
+          severity: warning
+          service: daniel-pi
+        annotations:
+          summary: daniel-pi's failed-unit check has stopped reporting.
+          description: >-
+            No systemd-units verdict newer than 900s reached Prometheus from daniel-pi's textfile
+            collector, so nothing is counting its failed units. Read `systemctl status
+            homelab-systemd-units.timer` and `journalctl -t systemd-units` on daniel-pi, then
+            /var/lib/node-exporter-textfile/systemd-units.prom on the host.
       # The catch-all deadman (#6166), one rule per host so `service` stays a literal. It reads
       # each check's own homelab_check_deadline_seconds, so a producer that writes the textfile
       # is covered the day it ships, before anyone writes its NotReporting pair. It is the

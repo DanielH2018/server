@@ -76,6 +76,7 @@ VERIFY_CALLERS = frozenset(
     {
         "sonarr-verify",
         "radarr-verify",
+        "lidarr-verify",
         "prowlarr-verify",
         "qbittorrent-reach-probe",
         "janitorr-verify",

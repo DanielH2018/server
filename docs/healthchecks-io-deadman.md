@@ -168,7 +168,7 @@ skips the ping and the collection still runs.
 
 For `pi-peer-backup` the URL is a key in the existing k8s Secret, not a file on a host.
 
-The `host-maintenance` component ships the weekly reboot to all three hosts and the Docker prune to the Pi. Each unit takes the key as the credential `healthchecks_ping_key` through `LoadCredential=`. Unlike registry-gc's `ImportCredential=`, that directive fails the unit when the key file is missing, so a host without the key skips its reboot and its prune. Each script's `-r` guard covers only a credential that loaded but is unreadable.
+The `host-maintenance` component ships the weekly reboot to all three hosts and the Docker prune to the Pi. Each unit takes the key as the credential `healthchecks_ping_key` through `ImportCredential=`, as registry-gc's unit does. A host without the key still reboots and prunes: the unit starts without the credential, and each script's `-r` guard skips the ping.
 
 **HISTORY — the shared ping file.** `initial_setup` wrote one ping file on every host, with the same content, mode and owner as the k3s role's task, because its two pinging crons ran on hosts the k3s role did not write it on (#2806). H7.55b deleted both roles, and the host package removes the file from the Pi and daniel-server.
 

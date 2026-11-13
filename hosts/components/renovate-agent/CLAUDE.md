@@ -59,7 +59,13 @@ the caps or the schedule cannot quietly widen it.
   `LAND_REQUIRE_AUTHOR=app/renovate`, which `land.sh --arm-merge` reads —
   `scripts/deploy_tools/land_lib/merge.py:_require_author`;
   `hosts/tests/test_renovate_agent_unit.py::test_the_lander_pins_land_sh_to_renovates_prs`
-  pins both to the wrapper's census). **Never** a push or merge by the session: its token has no
+  pins both to the wrapper's census). **Never** a landing of a PR that changes a path on
+  `files/renovate_floor.py`'s `FLOOR`, other than by a digest-only image bump, or whose branch
+  another account pushed to, without the operator's approval of its head (dotfiles#967 slice
+  1). The lander pins `land.sh` to the head it checked through `LAND_REQUIRE_HEAD`, and refuses
+  a soak status `renovate[bot]` did not post (ENFORCED:
+  `hosts/components/renovate-agent/tests/test_renovate_floor.py`).
+  **Never** a push or merge by the session: its token has no
   contents write, so a `manual —` work order ends as a hand-off in the digest
   (`hosts/tests/test_renovate_agent_identity.py` pins the user and the token's route).
   **Never** a session in the primary

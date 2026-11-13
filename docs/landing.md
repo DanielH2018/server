@@ -179,6 +179,9 @@ and closed as not planned on 2026-11-02 (#6521).
 - A rate-limit refusal is the exception: it holds the poll. The quota runs out only when many
   landings are live, so merging on the refusal would release every held landing at once
   (#8139). The held poll counts toward `merge_timeout` like any other.
+- A rate-limit refusal of the head's own CI read backs the merge wait off until the quota
+  frees, not one merge poll. The pause counts toward `merge_timeout`, and the wait never
+  sleeps past it (#8147).
 - `LAND_PACE_MASTER_RUNS` sets the cap, and `0` turns pacing off.
 
 **A head whose only CI skipped as a draft is re-triggered once, then ends the wait if it skips again.** `ci.yml` runs
@@ -243,7 +246,11 @@ another root.
 Such code can enter `land.py`'s imports through a later approved PR whose diff never shows it.
 `land_lib/policy.py:shape_hits` reads these from the file listing and from the tree at the pinned
 head. `LAND_APPROVER` names a GitHub login whose latest
-review, if it approves the head SHA, lifts that refusal. With either of the first two set, every merge path is pinned to the head SHA the checks read. A push after the checks fails
+review, if it approves the head SHA, lifts that refusal. `LAND_REQUIRE_HEAD` names the head
+SHA a caller's own checks read, and the landing refuses any other head. `LAND_REQUIRE_APPROVAL`
+makes every landing need `LAND_APPROVER`'s approval of the head, whatever paths it changes.
+The lander in `renovate-agent` sets both after its own floor check, which exempts digest-only image
+bumps that a path list would refuse. With any of these but `LAND_APPROVER` set, every merge path is pinned to the head SHA the checks read. A push after the checks fails
 the landing, and a re-run checks the new head. `--verdict-file <path>` writes `PENDING`, then
 the landing's one result line, for a unit to hand on to the agent that started it. A landing
 that sets neither setting is unchanged, and `--any-author` lifts neither.

@@ -80,6 +80,7 @@ def test_discover_templates_finds_the_known_set():
         "pi-gz-integrity.sh.j2",
         "pi-recovery-health.sh.j2",
         "pi-watchdog-health.sh.j2",
+        "pi-audit-health.sh.j2",
         "etcd-restore-drill-vm.sh.j2",
         "etcd-drill-prepare.sh.j2",
         "sync-artifacts.sh.j2",

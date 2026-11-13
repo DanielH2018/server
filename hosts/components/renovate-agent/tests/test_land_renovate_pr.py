@@ -22,8 +22,24 @@ GOOD = {
     "baseRefName": "master",
     "state": "OPEN",
     "headRefName": "renovate/k8s-image-sonarr",
+    "headRefOid": "c" * 40,
     "files": [{"path": "ansible/roles/k8s/sonarr/defaults/main.yml"}],
 }
+HEAD = GOOD["headRefOid"]
+REST_FILES = [
+    {"status": "modified", "filename": "ansible/roles/k8s/sonarr/defaults/main.yml"}
+]
+EVENTS = [
+    {"activity_type": "push", "actor": {"login": "renovate[bot]"}, "after": HEAD},
+    {"activity_type": "branch_creation", "actor": {"login": "renovate[bot]"}},
+]
+SOAKED = [
+    {
+        "context": "renovate/stability-days",
+        "state": "success",
+        "creator": {"login": "renovate[bot]"},
+    }
+]
 
 
 @pytest.mark.parametrize("arg", ["3340", "1", "9999999"])
@@ -40,8 +56,6 @@ def test_anything_but_a_plain_pr_number_is_refused(arg):
 
 def test_a_renovate_pr_touching_no_denied_role_passes_every_check():
     assert lander.refusals(GOOD, DENIED) == []
-    passed = [{"context": "renovate/stability-days", "state": "SUCCESS"}]
-    assert lander.refusals({**GOOD, "statusCheckRollup": passed}, DENIED) == []
 
 
 @pytest.mark.parametrize(
@@ -67,14 +81,7 @@ def test_a_renovate_pr_touching_no_denied_role_passes_every_check():
         ({"files": []}, "cap"),
         ({"files": [{"path": "ansible/inventory/group_vars/all.yml"}]}, "inventory"),
         ({"files": [{"path": "inventory/group_vars/all.yml"}]}, "inventory"),
-        (
-            {
-                "statusCheckRollup": [
-                    {"context": "renovate/stability-days", "state": "PENDING"}
-                ]
-            },
-            "stability-days",
-        ),
+        ({"headRefOid": "c" * 39}, "head SHA"),
         ({"files": [{"path": f"f{i}"} for i in range(lander.FILE_CAP)]}, "cap"),
     ],
 )
@@ -104,9 +111,13 @@ class _Run:
         land_out="== 6/6\nVERDICT: settled (PR #3340)\n",
         land_rc=0,
         denylist=(0, "authelia,traefik\n"),
+        files=REST_FILES,
+        events=EVENTS,
+        statuses=SOAKED,
     ):
         self.pr, self.land_out, self.land_rc, self.calls = pr, land_out, land_rc, []
         self.denylist, self.cwds = denylist, []
+        self.api = {"/files?": files, "/activity?": events, "/statuses?": statuses}
 
     def __call__(self, argv, cwd=None, timeout=120, stdin_text=None):
         self.calls.append(argv)
@@ -115,6 +126,9 @@ class _Run:
             return 0, json.dumps(self.pr)
         if argv == list(lander.DENYLIST_ARGV):
             return self.denylist
+        if argv[:2] == ["gh", "api"]:
+            (answer,) = [v for k, v in self.api.items() if k in argv[-1]]
+            return (0, json.dumps([answer])) if answer is not None else (1, "HTTP 502")
         return self.land_rc, self.land_out
 
 
@@ -152,8 +166,41 @@ def test_a_passing_pr_is_landed_and_only_the_verdict_line_is_recorded(tmp_path):
     rc, result = _main(tmp_path, run)
     assert rc == 0 and result == "VERDICT: settled (PR #3340)\n"
     land = run.calls[-1]
-    assert land[0].endswith("scripts/deploy_tools/land.sh")
-    assert land[1:] == ["--pr", "3340", "--arm-merge", "--await-merge"]
+    assert land[:2] == ["env", f"LAND_REQUIRE_HEAD={HEAD}"]
+    assert land[2].endswith("scripts/deploy_tools/land.sh")
+    assert land[3:] == ["--pr", "3340", "--arm-merge", "--await-merge"]
+
+
+def test_a_floor_path_lands_only_with_the_operators_approval(tmp_path):
+    files = [{"status": "modified", "filename": "uv.lock"}]
+    run = _Run(GOOD, files=files)
+    _main(tmp_path, run)
+    assert run.calls[-1][:4] == [
+        "env",
+        f"LAND_REQUIRE_HEAD={HEAD}",
+        "LAND_REQUIRE_APPROVAL=1",
+        "LAND_APPROVER=DanielH2018",
+    ]
+
+
+def test_another_pusher_makes_the_landing_need_approval(tmp_path):
+    events = [{**EVENTS[0], "actor": {"login": "DanielClaudeBot"}}, EVENTS[1]]
+    run = _Run(GOOD, events=events)
+    _main(tmp_path, run)
+    assert "LAND_REQUIRE_APPROVAL=1" in run.calls[-1]
+
+
+def test_a_soak_status_another_account_posted_is_refused(tmp_path):
+    statuses = [{**SOAKED[0], "creator": {"login": "DanielClaudeBot"}}]
+    rc, result = _main(tmp_path, _Run(GOOD, statuses=statuses))
+    assert rc == 3 and "posted by DanielClaudeBot" in result
+
+
+def test_an_unreadable_branch_activity_refuses(tmp_path):
+    run = _Run(GOOD, events=None)
+    rc, result = _main(tmp_path, run)
+    assert rc == 3 and "branch activity" in result
+    assert not any("land.sh" in " ".join(argv) for argv in run.calls)
 
 
 def test_a_refused_pr_never_reaches_land_sh(tmp_path):

@@ -88,3 +88,20 @@ def test_verdict_for_raises_the_rate_limit_that_wait_sleeps_on(rate_limited):
 
     with pytest.raises(await_ci.RateLimitedError):
         await_ci.verdict_for("abc", fetch, await_ci.required_contexts())
+
+
+def test_a_zero_budget_raises_the_rate_limit_for_its_caller_to_sleep(rate_limited):
+    def fetch(_sha):
+        raise rate_limited
+
+    with pytest.raises(await_ci.RateLimitedError):
+        await_ci.wait("abc", 0, INTERVAL_S, fetch=fetch, fetch_suites=fetch)
+
+
+def test_the_cli_reads_a_zero_budget_rate_limit_as_no_verdict(capsys):
+    def wait(*_args, **_kwargs):
+        raise await_ci.RateLimitedError(900)
+
+    rc = await_ci.main(["abcdef123456", "--timeout", "0"], wait=wait, token=lambda: "t")
+    assert rc == 75
+    assert "the quota frees in 900s" in capsys.readouterr().out

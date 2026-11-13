@@ -70,7 +70,7 @@
                 # "97 NODES" — wrong at a glance rather than plausibly wrong. Keep the
                 # query's operand order and this list in the same order; changing one alone is
                 # the only way to break this quietly. ENFORCED by
-                # ansible/tests/services/test_headlamp_widget_mapping_order.py, which fails on a
+                # tests/services/test_headlamp_widget_mapping_order.py, which fails on a
                 # reordered, renamed, missing or duplicated counter.
                 #
                 # Prometheus wraps its vector as {"data": {"result": [{"metric": {...},
@@ -228,18 +228,18 @@
                 url: https://speedtest.local.{{ domain }}
                 # Dropped: upload.
                 fields: [download, ping]
-        # THE THREE MEDIA TILES MOVED HERE FROM A `Media` GROUP on 2026-09-10, which is why this
-        # group holds twelve tiles rather than nine. They are here to make the Services column
-        # four rows deep, which is what squares its bottom edge with the personal links in the
-        # Calendar column beside it — see the calendar height in custom.css.j2, which is derived
-        # from that row count. Jellyfin was the fourth media tile and was dropped entirely; it
+        # THE THREE MEDIA TILES MOVED HERE FROM A `Media` GROUP on 2026-09-10, and the three
+        # music tiles below joined on 2026-11-13, which is why this group holds fifteen tiles.
+        # The Services column's row count, five, is what the calendar height in custom.css.j2
+        # is derived from, so the column squares its bottom edge with the personal links beside
+        # it. Jellyfin was the fourth media tile and was dropped entirely; it
         # stays routed and reachable by hostname.
         #
         # THEIR URL SHAPE DIFFERS FROM THE TILES ABOVE ON PURPOSE — do not normalise it. The
         # sonarr/radarr/qbittorrent routes are Authelia-gated, and their monitoring IngressRoutes
         # deliberately expose only /api/v3/queue, so no Traefik URL reaches their widget APIs.
         # These three therefore address the ClusterIP directly, which bypasses Traefik and
-        # Authelia entirely and leaves `monitoring_route` (ansible/templates/ingressroute.yml.j2)
+        # Authelia entirely and leaves `monitoring_route` (k8s/templates/ingressroute.yml.j2)
         # as narrow as it was. Same URL shape monitor-bridge already uses
         # (roles/k8s/monitor-bridge/templates/config/env.yaml.j2).
         #
@@ -284,6 +284,27 @@
                 key: {{ sonarr_api_key }}
                 # Dropped: series.
                 fields: [wanted, queued]
+        - Lidarr:
+            icon: lidarr.png
+            href: {{ services | homepage_href('lidarr', domain) }}
+            description: Music
+            widget:
+                type: lidarr
+                url: {{ services | homepage_widget_url('lidarr', k8s_namespace) }}
+                key: {{ lidarr_api_key }}
+                # Dropped: artists.
+                fields: [wanted, queued]
+        # Link-only: navidrome's widget needs a user's Subsonic token and salt, and slskd's
+        # needs an API key slskd does not issue while it runs with auth off. The Lidarr widget
+        # above sets this row's height.
+        - Navidrome:
+            icon: navidrome.png
+            href: {{ services | homepage_href('navidrome', domain) }}
+            description: Listen
+        - slskd:
+            icon: slskd.png
+            href: {{ services | homepage_href('slskd', domain) }}
+            description: Soulseek
     - Calendar:
         - Calendar:
             id: my-calendar
@@ -402,9 +423,9 @@
 # record a credential reason the widget was not simply plumbed in. A link-only tile contradicts
 # none of those — it adds a way in, not an API call.
 #
-# Three roles carry a `hostname:` in containers_list and are NOT here, all on purpose:
-# navidrome is scaled to 0 replicas, livesync has no IngressRoute at all, and the traefik
-# dashboard's tile was replaced by the deploy queue at the operator's request on 2026-09-10.
+# Two roles carry a `hostname:` in containers_list and are NOT here, both on purpose: livesync
+# has no IngressRoute at all, and the traefik dashboard's tile was replaced by the deploy queue
+# at the operator's request on 2026-09-10.
 - Admin & Tools:
     - Grafana:
         icon: grafana.png

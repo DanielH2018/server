@@ -1,0 +1,10 @@
+# Shipped by the host package's host-maintenance component. Started by homelab-systemd-units.timer.
+[Unit]
+Description=Count failed system units and write the systemd-units textfile verdict
+
+[Service]
+Type=oneshot
+SyslogLevel=notice
+SyslogIdentifier=systemd-units
+Environment=PATH=/usr/sbin:/usr/bin:/sbin:/bin HOMELAB_LIB_DIR=/usr/lib/homelab
+ExecStart=/usr/lib/homelab/systemd-units-check

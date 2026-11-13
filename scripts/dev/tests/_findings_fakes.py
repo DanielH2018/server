@@ -71,6 +71,7 @@ def make_issue(
     comments=(),
     created="2026-08-15T10:00:00Z",
     title="t",
+    author=OPERATOR,
 ):
     """One gh issue object, with the fingerprint trailer `open` writes when ``fp`` is given.
 
@@ -90,6 +91,7 @@ def make_issue(
     )
     return {
         "number": number,
+        "author": {"login": author},
         "title": title,
         "state": state,
         "labels": [{"name": n} for n in labels],

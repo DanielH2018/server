@@ -34,10 +34,22 @@ spec:
                      secret_mount=slskd_k8s_secret_mount,
                      location=slskd_k8s_mullvad_location,
                      lan_networks=slskd_k8s_lan_networks,
+                     dns=slskd_k8s_mullvad_dns,
                      cpu_limit=slskd_k8s_wg_cpu_limit,
                      mem_limit=slskd_k8s_wg_mem_limit,
                      cpu_request=slskd_k8s_wg_cpu_request,
                      mem_request=slskd_k8s_wg_mem_request) }}
+        # slskd refuses to start until both directories exist, and it never creates them.
+        - name: slskd-dirs
+          image: {{ slskd_k8s_image }}
+          imagePullPolicy: IfNotPresent
+          command: ["mkdir", "-p", "{{ slskd_k8s_downloads_dir }}", "{{ slskd_k8s_incomplete_dir }}"]
+{{ hardened_security_context(read_only=true, non_root=true, run_as_user=slskd_k8s_uid, run_as_group=slskd_k8s_uid) }}
+          volumeMounts:
+            - name: media
+              mountPath: /data/torrents
+              subPath: torrents
+{{ container_resources(cpu_limit=slskd_k8s_soularr_cpu_limit, mem_limit=slskd_k8s_soularr_mem_limit, cpu_request=slskd_k8s_soularr_cpu_request, mem_request=slskd_k8s_soularr_mem_request) }}
       containers:
         - name: slskd
           image: {{ slskd_k8s_image }}
@@ -149,4 +161,6 @@ spec:
         - name: soularr-config
           secret:
             secretName: slskd-soularr
-            defaultMode: 0400
+            # Root owns a Secret's files and Soularr runs as uid 1000; configparser skips a
+            # file it cannot open, so 0400 leaves Soularr running with an empty config.
+            defaultMode: 0444

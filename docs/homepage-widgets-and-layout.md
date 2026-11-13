@@ -14,10 +14,10 @@ flex container and the list can never be a flex item — that is why ten attempt
 grid chain all failed.
 
 `custom.css.j2` instead makes the group a flex column, lets the wrapper grow as a block, then
-gives the list `height: calc(100% - 0.75rem)` and splits it into eight equal `minmax(0, 1fr)`
-tracks with the same `0.75rem` gap the Services grid uses. The calendar spans six tracks and
-each link row takes one: with track `t = (r - g) / 2`, six tracks and five gaps are three
-Services rows (`3r + 2g`), and two tracks plus a gap are one (`2t + g = r`). Nothing is a pixel
+gives the list `height: calc(100% - 0.75rem)` and splits it into ten equal `minmax(0, 1fr)`
+tracks with the same `0.75rem` gap the Services grid uses. The calendar spans eight tracks and
+each link row takes one: with track `t = (r - g) / 2`, eight tracks and seven gaps are four
+Services rows (`4r + 3g`), and two tracks plus a gap are one (`2t + g = r`). Nothing is a pixel
 constant, so it holds for wrapped titles and every width. A Services group that renders a
 different row count needs twice that many tracks and a matching `span`.
 
@@ -61,6 +61,8 @@ the column height.
 The groups split by WIDGET, not by topic. A widget-carrying tile is several lines tall and a
 link-only tile is one line, so a group holding both leaves ragged holes. `Services` holds every
 widget-carrying tile bar the calendar; `Admin & Tools` holds the link-only ones, four per row.
+The exception is the music row: the Navidrome and `slskd` tiles are link-only tiles in
+`Services`. They share a row with the Lidarr widget, and that row takes the widget's height.
 Two groups became four on 2026-09-10: the `Media` group's three surviving tiles moved into
 `Services` to make that column four rows deep, and `Admin` and `Tools` merged into one group of
 eight, which still divides by four. Jellyfin was dropped rather than moved, its widget having
@@ -159,9 +161,9 @@ block and took its whole grid row from 120px to 136px.
   `version: 2` in the widget block selects the `SessionsV2`/`CountV2` mappings instead:
   `Sessions` and `Items/Counts`, with the key sent as an `Authorization` header and nothing
   credential-shaped in the URL. Restoring the tile is more than a `services.yaml.j2` edit — the
-  `Services` group is pinned at twelve tiles over three columns, and the calendar column's
-  `grid-template-rows: repeat(8, …)` in `custom.css.j2` encodes that FOUR-row count (two tracks
-  per Services row), so a thirteenth tile means re-deriving both and re-measuring in the browser.
+  `Services` group is pinned at fifteen tiles over three columns, and the calendar column's
+  `grid-template-rows: repeat(10, …)` in `custom.css.j2` encodes that FIVE-row count (two tracks
+  per Services row), so a sixteenth tile means re-deriving both and re-measuring in the browser.
 - The `docker.yaml` status dots have no k8s equivalent, so `docker.yaml.j2` renders empty and
   `services.yaml.j2` drops the matching `server:`/`container:` keys — tiles render without a dot
   rather than erroring on a `my-docker` host that does not exist here.

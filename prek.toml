@@ -552,7 +552,7 @@ name = "Static ratchet tests (module length, section lint, shard partition, doc 
 entry = "uv run --frozen pytest -q -p no:cacheprovider tests/repo/test_module_length_ratchet.py tests/repo/test_every_section_lints_clean.py tests/repo/test_pytest_shards_partition_the_suite.py scripts/docs/tests/test_gen_doc_fragments.py tests/repo/test_role_claude_md.py tests/repo/test_census_rows_python.py tests/repo/test_census_rows_suite.py tests/repo/test_census_rows_roles.py tests/repo/test_census_rows_text.py tests/repo/test_census_rows_layout.py"
 language = "system"
 pass_filenames = false
-files = "(\\.py$|(^|/)CLAUDE\\.md$|^scripts/dev/pytest_shard_weights\\.json$|^tests/repo/module_length_allowlist\\.txt$|^pyproject\\.toml$|^\\.github/workflows/[^/]+\\.yml$|^(k8s|inventory|secrets|tests)/.*\\.(ya?ml|j2|ini)$|^k8s/roles/[^/]+/(templates|defaults|vars)/|^prek\\.toml$|^(\\.claude/(skills|agents)|evals/cases)/.*\\.(md|json)$|\\.(pyc|so)$|(^|/)__pycache__/|\\.(sh|bash)$|^hosts/(lib|components)/|^\\.claude/wait-sources/)"
+files = "(\\.py$|(^|/)CLAUDE\\.md$|^scripts/dev/pytest_shard_weights\\.json$|^tests/repo/module_length_allowlist\\.txt$|^pyproject\\.toml$|^\\.github/workflows/[^/]+\\.yml$|^\\.github/actions/[^/]+/action\\.yml$|^(k8s|inventory|secrets|tests)/.*\\.(ya?ml|j2|ini)$|^k8s/roles/[^/]+/(templates|defaults|vars)/|^prek\\.toml$|^(\\.claude/(skills|agents)|evals/cases)/.*\\.(md|json)$|\\.(pyc|so)$|(^|/)__pycache__/|\\.(sh|bash)$|^hosts/(lib|components)/|^\\.claude/wait-sources/)"
 
 # The two census modules over the pytest-only modules, `_test_module_rules.pytest_only_modules`:
 # the git and subprocess rows and the render-and-path rows. They were the slowest two in the

@@ -65,6 +65,14 @@ spec:
               port: 9093
             initialDelaySeconds: 5
             periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /-/healthy
+              port: 9093
+            initialDelaySeconds: 15
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 6
           # Requests from the slice plan's estimate. A week after the first deploy, read
           # max_over_time(container_memory_working_set_bytes{namespace="observability",
           # container="alertmanager"}[7d]) and raise the request if the peak sits above it.

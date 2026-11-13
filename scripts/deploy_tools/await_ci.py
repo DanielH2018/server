@@ -530,6 +530,10 @@ def wait(
 
     A rate-limit refusal waits for the quota to free, within the budget, rather than polling
     again after `interval_s`.
+
+    Raises:
+        RateLimitedError: GitHub refused a read for its rate under a zero budget, which has
+            no time to wait the quota out; the one-poll caller sleeps `wait_s` itself (#8147).
     """
     fetch = _unless_rate_limited(fetch)
     fetch_suites = _unless_rate_limited(fetch_suites)
@@ -676,6 +680,8 @@ def wait(
                 return 75, f"{target[:8]}: no verdict after {timeout_s}s"
             sleep(interval_s)
         except RateLimitedError as exc:
+            if not timeout_s:
+                raise
             left = deadline - clock()
             if left <= 0:
                 return 75, f"{target[:8]}: no verdict after {timeout_s}s -- {exc}"
@@ -684,7 +690,7 @@ def wait(
             sleep(pause)
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: list[str] | None = None, wait=wait, token=lookup_token) -> int:
     """Parse args, wait for the SHA's CI verdict, and print it.
 
     Exits with the code `wait` returns (see the module docstring's Exit codes), or 2
@@ -700,7 +706,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     ns = parser.parse_args(argv)
     try:
-        authenticated = bool(lookup_token())
+        authenticated = bool(token())
         code, msg = wait(
             ns.sha,
             ns.timeout,
@@ -710,6 +716,9 @@ def main(argv: list[str] | None = None) -> int:
     except DisarmedGateError as e:
         print(f"await_ci: {e}", file=sys.stderr)
         return CI_DISARMED
+    except RateLimitedError as e:
+        print(f"{ns.sha[:8]}: no verdict after 0s -- {e}")
+        return 75
     print(msg)
     return code
 

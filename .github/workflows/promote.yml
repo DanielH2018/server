@@ -6,7 +6,7 @@ name: promote
 # docs/target-architecture/contracts.md C2 is the contract. The operator's view is
 # docs/flux-deploy-plane.md.
 #
-# Twelve jobs, so code that runs during a render or a decision never holds a token that can
+# Thirteen jobs, so code that runs during a render or a decision never holds a token that can
 # sign, push, move a tag or post a status:
 #   render   contents: read, checks: read, packages: read. Checks out the triggering commit, or
 #            the dispatched `sha`, refuses one that is not on master, re-reads a dispatched
@@ -60,6 +60,8 @@ name: promote
 #            flight, and hands on the two digests it read.
 #   reset-move   packages: write. Checks out nothing. Moves `prod` to `last-good` only while
 #            `prod` still names the digest `reset-check` read, and records PROD_DIGEST.
+#   refuse-starter  no permissions. Runs only when an account off the starter list
+#            dispatched or re-ran the run, which every other job then skips, and fails it.
 #
 # The `schedule:` run fires when the weekly reboot's no-promotion window ends (D5.2b2). Inside
 # the window `decide` ends `deferred` and moves nothing, so this run promotes master's tip.
@@ -151,6 +153,7 @@ jobs:
     # or a dispatch of master's copy of this file. A branch's copy never runs with these tokens.
     # A reset dispatch and the scheduled run skip it, and so every job that needs it.
     if: >-
+      (github.event_name != 'workflow_dispatch' && github.run_attempt == '1' || contains(fromJSON('["DanielH2018", "github-actions[bot]"]'), github.triggering_actor)) &&
       !inputs.reset_to_last_good &&
       github.ref == 'refs/heads/master' && (
       github.event_name == 'workflow_dispatch' || (
@@ -325,6 +328,7 @@ jobs:
   images:
     needs: render
     if: >-
+      (github.event_name != 'workflow_dispatch' && github.run_attempt == '1' || contains(fromJSON('["DanielH2018", "github-actions[bot]"]'), github.triggering_actor)) &&
       github.ref == 'refs/heads/master' && (
       github.event_name == 'workflow_dispatch' || (
       github.event.workflow_run.conclusion == 'success' &&
@@ -376,6 +380,7 @@ jobs:
   publish:
     needs: [render, images]
     if: >-
+      (github.event_name != 'workflow_dispatch' && github.run_attempt == '1' || contains(fromJSON('["DanielH2018", "github-actions[bot]"]'), github.triggering_actor)) &&
       github.ref == 'refs/heads/master' && (
       github.event_name == 'workflow_dispatch' || (
       github.event.workflow_run.conclusion == 'success' &&
@@ -619,6 +624,7 @@ jobs:
     # The scheduled run skips publish, so this job runs on a skipped publish for it alone, and
     # on a successful one otherwise.
     if: >-
+      (github.event_name != 'workflow_dispatch' && github.run_attempt == '1' || contains(fromJSON('["DanielH2018", "github-actions[bot]"]'), github.triggering_actor)) &&
       !cancelled() &&
       !inputs.verify_drill &&
       !inputs.reset_to_last_good &&
@@ -754,6 +760,7 @@ jobs:
     # !cancelled() and the result, because a skipped publish on the scheduled run would skip
     # this job too: GitHub's implicit success() reads every ancestor, not only `promote`.
     if: >-
+      (github.event_name != 'workflow_dispatch' && github.run_attempt == '1' || contains(fromJSON('["DanielH2018", "github-actions[bot]"]'), github.triggering_actor)) &&
       !cancelled() &&
       needs.promote.result == 'success' &&
       needs.promote.outputs.verdict == 'promote' &&
@@ -899,10 +906,10 @@ jobs:
               echo "::warning::last-good is at '$lg', not the '$RESET_DIGEST' decide read: the run $SUPERSEDES settled first, so this run moves nothing"
               exit 0
             fi
-            flux tag artifact "oci://$repo:sha-$TARGET" --tag superseding
+            flux tag artifact "oci://$repo@$DIGEST" --tag superseding
             echo "tagged sha-$TARGET superseding: it supersedes the verification of $SUPERSEDES"
           fi
-          flux tag artifact "oci://$repo:sha-$TARGET" --tag prod
+          flux tag artifact "oci://$repo@$DIGEST" --tag prod
           printf 'moved=true\nmoved_at=%s\n' "$moved_at" >> "$GITHUB_OUTPUT"
 
       # A write that fails every try leaves PROD_DIGEST behind prod, which the deploy-pipeline
@@ -921,6 +928,7 @@ jobs:
     # always() so the job is weighed even when `tag` failed after the move, such as on a
     # failed PROD_DIGEST write: once `prod` has moved, T is verified.
     if: >-
+      (github.event_name != 'workflow_dispatch' && github.run_attempt == '1' || contains(fromJSON('["DanielH2018", "github-actions[bot]"]'), github.triggering_actor)) &&
       always() &&
       needs.tag.outputs.moved == 'true' &&
       !inputs.verify_drill &&
@@ -982,6 +990,7 @@ jobs:
     # does not gate `settle`, so a run GitHub creates without its `settle` (#7863) still
     # records the verdict that `reconcile` acts on in a later run.
     if: >-
+      (github.event_name != 'workflow_dispatch' && github.run_attempt == '1' || contains(fromJSON('["DanielH2018", "github-actions[bot]"]'), github.triggering_actor)) &&
       always() &&
       needs.tag.outputs.moved == 'true' &&
       !inputs.verify_drill &&
@@ -1041,6 +1050,7 @@ jobs:
     # always() so a verify that failed, timed out or was cancelled still settles: once `prod`
     # has moved, anything but a good verdict holds.
     if: >-
+      (github.event_name != 'workflow_dispatch' && github.run_attempt == '1' || contains(fromJSON('["DanielH2018", "github-actions[bot]"]'), github.triggering_actor)) &&
       always() &&
       needs.tag.outputs.moved == 'true' &&
       !inputs.verify_drill &&
@@ -1120,6 +1130,8 @@ jobs:
           eval "$RETRY_FUNCTIONS"
           printf '%s' "$TARGET" | grep -Eqx '[0-9a-f]{40}' \
             || { echo "::error::decide's target '$TARGET' is not 40 lowercase hex"; exit 1; }
+          printf '%s' "$DIGEST" | grep -Eqx 'sha256:[0-9a-f]{64}' \
+            || { echo "::error::decide's digest '$DIGEST' is not sha256:<64 hex>"; exit 1; }
           repo=ghcr.io/danielh2018/homelab-manifests
 
           # A verdict on T counts only while `prod` still names T's digest (D7.1). Once a
@@ -1172,7 +1184,7 @@ jobs:
           echo "owned=true" >> "$GITHUB_OUTPUT"
 
           if [ "$VERDICT" = good ]; then
-            if ! { ghcr_login && flux tag artifact "oci://$repo:sha-$TARGET" --tag last-good; }; then
+            if ! { ghcr_login && flux tag artifact "oci://$repo@$DIGEST" --tag last-good; }; then
               echo "::error::moving last-good to sha-$TARGET failed"
               exit 1
             fi
@@ -1197,7 +1209,7 @@ jobs:
             fi
             echo "stateful_hold=$hold" >> "$GITHUB_OUTPUT"
             echo "DEPLOY_HOLD set to '$hold': T changes snapshot role(s) $STATEFUL, so prod stays on sha-$TARGET"
-            if ! { ghcr_login && flux tag artifact "oci://$repo:sha-$TARGET" --tag held; }; then
+            if ! { ghcr_login && flux tag artifact "oci://$repo@$DIGEST" --tag held; }; then
               echo "::error::tagging sha-$TARGET held failed, so the next run after a clear waits as in flight"
               exit 1
             fi
@@ -1212,7 +1224,7 @@ jobs:
               exit 1
             fi
             echo "DEPLOY_HOLD set to '$TARGET': T changes forward-only $NO_RESET, so prod stays on sha-$TARGET"
-            if ! { ghcr_login && flux tag artifact "oci://$repo:sha-$TARGET" --tag held; }; then
+            if ! { ghcr_login && flux tag artifact "oci://$repo@$DIGEST" --tag held; }; then
               echo "::error::tagging sha-$TARGET held failed, so the next run after a clear waits as in flight"
               exit 1
             fi
@@ -1317,6 +1329,7 @@ jobs:
     # always() so the post still goes out when `settle` wrote the stateful hold and then
     # failed to tag T `held`. `stateful_hold` is set only once the hold is written.
     if: >-
+      (github.event_name != 'workflow_dispatch' && github.run_attempt == '1' || contains(fromJSON('["DanielH2018", "github-actions[bot]"]'), github.triggering_actor)) &&
       always() &&
       needs.settle.outputs.stateful_hold != '' &&
       !inputs.verify_drill &&
@@ -1375,6 +1388,7 @@ jobs:
   reconcile:
     needs: promote
     if: >-
+      (github.event_name != 'workflow_dispatch' && github.run_attempt == '1' || contains(fromJSON('["DanielH2018", "github-actions[bot]"]'), github.triggering_actor)) &&
       !cancelled() &&
       needs.promote.result == 'success' &&
       needs.promote.outputs.lost_settle != '' &&
@@ -1526,6 +1540,26 @@ jobs:
               echo "::warning::DEPLOY_HOLD set to '$new_hold': $COMMIT's verdict reads '${verdict:-absent}', not good for $DIGEST. To reset prod (operator-only), dispatch promote.yml with reset_to_last_good=true" ;;
           esac
 
+  # A dispatch or a re-run is started by whoever `triggering_actor` names, and every job above
+  # runs it only for an account on the list: the operator, and this workflow's own GITHUB_TOKEN
+  # dispatch from `settle`. Anyone else's start skips every job, and this one fails the run so
+  # the refusal shows as red rather than as a run that did nothing (dotfiles#967 slice 1).
+  refuse-starter:
+    if: >-
+      !(github.event_name != 'workflow_dispatch' && github.run_attempt == '1' || contains(fromJSON('["DanielH2018", "github-actions[bot]"]'), github.triggering_actor))
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Refuse a start by an account off the list
+        env:
+          STARTER: ${{ github.triggering_actor }}
+          EVENT: ${{ github.event_name }}
+          ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          echo "::error::$STARTER started this $EVENT run (attempt $ATTEMPT), and only the operator or this workflow's own dispatch may start one. Every job was skipped."
+          exit 1
+
   # The `reset_to_last_good` dispatch (D5.2b2): move `prod` back to `last-good` and do nothing
   # else, for the revert runbook's Branch 1 and the broken-sync-object runbook. It follows C2's
   # split: `reset-check` decides with read tokens, and `reset-move` writes with no checkout.
@@ -1536,6 +1570,7 @@ jobs:
   # reboot window: it moves `prod` back to a revision the cluster already ran.
   reset-check:
     if: >-
+      (github.event_name != 'workflow_dispatch' && github.run_attempt == '1' || contains(fromJSON('["DanielH2018", "github-actions[bot]"]'), github.triggering_actor)) &&
       inputs.reset_to_last_good &&
       github.ref == 'refs/heads/master' &&
       github.event_name == 'workflow_dispatch'
@@ -1583,6 +1618,7 @@ jobs:
   reset-move:
     needs: reset-check
     if: >-
+      (github.event_name != 'workflow_dispatch' && github.run_attempt == '1' || contains(fromJSON('["DanielH2018", "github-actions[bot]"]'), github.triggering_actor)) &&
       needs.reset-check.outputs.move == 'true' &&
       inputs.reset_to_last_good &&
       github.ref == 'refs/heads/master' &&

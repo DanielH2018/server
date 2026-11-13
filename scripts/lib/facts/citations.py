@@ -172,6 +172,10 @@ def macro_citations(text: str) -> list[str]:
 # the convention is adopted rather than invented. The bold need not close after the dash.
 HISTORY_MARKER = "**HISTORY —"
 
+# A hook rewrites a generated block from its source, so its text is nobody's prose: a pin it
+# names is never stale, and a change to it is no edit to the section that holds it.
+GENERATED_BLOCK = re.compile(r"<!-- generated_from:.*?<!-- /generated_from -->", re.S)
+
 _LIST_ITEM = re.compile(r"(?:[-*+]|\d+[.)])\s+")
 
 

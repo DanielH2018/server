@@ -1080,6 +1080,15 @@ spec:
               port: 9090
             initialDelaySeconds: 15
             periodSeconds: 10
+          # 30s + 10x30s: a full-WAL replay after an OOM kill outlasts a clean restart's 20s to Ready.
+          livenessProbe:
+            httpGet:
+              path: /-/healthy
+              port: 9090
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 10
           # 896Mi, not 512Mi and not 128Mi, and the REQUEST is the half that matters. The
           # kubelet ranks eviction by usage-above-request, so a 128Mi request against a
           # measured 893.6MiB peak working set (2026-08-29) put Prometheus in the worst bucket

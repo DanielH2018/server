@@ -27,7 +27,7 @@ spec:
       # map of the whole homelab, and Authelia in front of it does not make publishing that
       # map worthwhile. This route ignores k8s_public_route for the same reason
       # prometheus-monitoring does: `public=false` is the convention for infrastructure APIs
-      # (see ansible/templates/ingressroute.yml.j2's macro header). WireGuard peers still
+      # (see k8s/templates/ingressroute.yml.j2's macro header). WireGuard peers still
       # reach it — they resolve `.local.` names through Pi-hole — because the gate here is
       # the hostname, not a ClientIP matcher.
       #
@@ -57,7 +57,7 @@ spec:
   # Not boilerplate. An IngressRoute on the https entrypoint with no tls block becomes a
   # NON-TLS router and is never a candidate for an HTTPS request — it does not lose a
   # priority contest, it is not in the running at all. ENFORCED by
-  # ansible/tests/k8s/test_k8s_manifests.py. Do not shorten to the file provider's `tls: {}`;
+  # tests/k8s/test_k8s_manifests.py. Do not shorten to the file provider's `tls: {}`;
   # that shorthand is not IngressRoute syntax.
   tls:
 {% if k8s_tls_cert_resolver %}

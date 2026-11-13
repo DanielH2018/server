@@ -221,6 +221,19 @@ def test_each_unit_runs_the_wrapper_with_the_check_its_rules_read():
                 ), f"{host}'s {unit} does not run the wrapper with {check}"
 
 
+@pytest.mark.parametrize(
+    ("unit", "hosts"),
+    [("homelab-reboot", EVERY_HOST), ("homelab-docker-prune", {"daniel-pi"})],
+)
+def test_a_missing_ping_key_skips_only_the_ping(unit, hosts):
+    """LoadCredential= fails the unit on a missing key file (243/CREDENTIALS); Import does not."""
+    path = f"/usr/lib/systemd/system/{unit}.service"
+    for host in hosts:
+        text = shipped_text(host, path)
+        assert "\nImportCredential=healthchecks_ping_key\n" in text, f"{host} {path}"
+        assert "LoadCredential=" not in text, f"{host} {path}"
+
+
 @pytest.mark.parametrize("host", sorted(EVERY_HOST))
 def test_the_reboot_fires_at_the_slot_the_mute_derives_from(host):
     """Alertmanager's `weekly-reboot` mute reads the same `weekly_reboot_*` values."""

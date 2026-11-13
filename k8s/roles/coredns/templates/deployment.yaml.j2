@@ -20,8 +20,8 @@
     - `hardened_security_context` writes `drop: [ALL]` where upstream writes `drop: [all]`. The
       runtime reads both as the same capability set. The block keeps upstream's
       `NET_BIND_SERVICE` add-back, which binding port 53 needs.
-    - The image is `coredns_image`, which equals upstream's line by the test in
-      hosts/tests/test_coredns_image_follows_bundled_manifest.py.
+    - The image is `coredns_image`, upstream's line plus the tag's digest, which the test in
+      hosts/tests/test_coredns_image_follows_bundled_manifest.py holds.
 #}
 ---
 apiVersion: apps/v1
@@ -45,7 +45,7 @@ spec:
       # DECIDED: `system-cluster-critical`, a system class, not a homelab tier. k3s ships it so,
       # and every tier and Flux's own controllers resolve names through this pod, so it outranks
       # every homelab class. The entry is untiered on purpose, because `tier: platform` would
-      # derive `homelab-critical` and lower it. ansible/tests/k8s/test_pod_template_hygiene.py
+      # derive `homelab-critical` and lower it. tests/k8s/test_pod_template_hygiene.py
       # lists it in `_SYSTEM_TIER` with this reason.
 {{ pod_shell('system-cluster-critical', service_account='coredns', run_as_user=65532, non_root=true) }}
       tolerations:

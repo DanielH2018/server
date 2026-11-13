@@ -44,7 +44,7 @@ spec:
       # the VIP pins had not already spent, and the pin moves with k8s_primary_node. On
       # 2026-10-04 daniel-box used 11.2Gi of 28.2Gi allocatable, and this pod (881Mi, limit
       # 2Gi) is the largest that moved. The `home-critical-workloads-pinned-to-the-vip-node`
-      # row in ansible/tests/k8s/_edge_property_rows.py derives the set from `tier`.
+      # row in tests/k8s/_edge_property_rows.py derives the set from `tier`.
       nodeSelector:
         kubernetes.io/hostname: {{ k8s_primary_node }}
 {{ pod_shell(services | tier_priority_class('home-assistant')) }}

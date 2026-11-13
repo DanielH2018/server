@@ -45,6 +45,33 @@ lidarr_k8s_exportarr_image: ghcr.io/onedr0p/exportarr:v2.3.0@sha256:af535d94061c
 # The image's s6 init drops to PUID 1000 (lsio_env).
 lidarr_k8s_uid: 1000
 
+# The quality profiles the seed Job in templates/verify/quality-profiles.yaml.j2 declares, named
+# by Lidarr's own quality names. The seed adopts a live profile of the same name and never
+# deletes one. `Standard` and `Lossless` are profiles Lidarr ships, so they are updated in place.
+#
+# DECIDED: the operator's ruling on #8190 (2026-11-12). The lossy profile allows MP3 320, MP3 VBR
+# V0, AAC 256 and above, and Opus 192 and above, with cutoff MP3 320. Lidarr 3.1.6.5079 has no
+# Opus quality, and the operator ruled on 2026-11-13 to drop the Opus tier rather than stand in
+# OGG Vorbis for it, so no Vorbis tier is allowed. AAC-VBR is the AAC tier above AAC-256. The
+# lossless profile allows 16-bit FLAC only, so `FLAC 24bit`, ALAC and the rest stay unallowed.
+# The operator also ruled on 2026-11-13 that `Standard` sets upgradeAllowed true, because its
+# cutoff does nothing without it, and `Lossless` sets it false, because it allows one quality.
+lidarr_quality_profiles:
+  - name: Standard
+    upgrade_allowed: true
+    cutoff: MP3-320
+    allowed:
+      - MP3-VBR-V0
+      - MP3-320
+      - AAC-256
+      - AAC-320
+      - AAC-VBR
+  - name: Lossless
+    upgrade_allowed: false
+    cutoff: FLAC
+    allowed:
+      - FLAC
+
 k8s_claims:
   - name: "{{ lidarr_k8s_claim }}"
     storage_class: "{{ lidarr_k8s_storage_class }}"

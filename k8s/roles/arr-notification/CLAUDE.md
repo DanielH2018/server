@@ -2,7 +2,7 @@
 
 This role renders no manifest and starts no workload. It declares one *arr app's Discord
 "Connect" notification over the app's own API, so the notification is repo state rather than
-UI state. Under Flux the declaration runs as a seed Job in sonarr's and radarr's
+UI state. Under Flux the declaration runs as a seed Job in sonarr's, radarr's and lidarr's
 `templates/verify/` (*The Job form*, below), which reads this role's script and defaults by
 `lookup()`. Those lookups are the role's only callers: sonarr and radarr included it until #5561, which dropped the includes because
 no Ansible path ran them after the Flux flip (D5.20).
@@ -30,6 +30,10 @@ Both point at the same webhook, and that webhook is byte-for-byte the SOPS
 `arr_discord_webhook_url` that `autofix-bridge` and the `fake-remux` component already read. So this role
 adopts two rows and mints nothing: the first deploy reports **no change**.
 
+lidarr (added in #8365) had no such row. Its first deploy **creates** `Discord (health)` from
+`GET /api/v1/notification/schema`, with the same health-only triggers; a row someone adds by
+hand under that name first is adopted instead.
+
 sonarr also carries an `Episode Trimmer` CustomScript notification (id 2, `onDownload` +
 `onUpgrade`). This role never touches it — `find_notification` matches on implementation AND
 name, so a CustomScript that happened to share the name is left alone.
@@ -42,8 +46,13 @@ name, so a CustomScript that happened to share the name is left alone.
   `# DECIDED:` marker and the argument; widening is an edit to that one list.
 - **It adopts, it never deletes.** A Discord notification this role does not match is left
   alone. Deleting on a name miss would destroy live rows from a deploy path.
+- **The API version is per app, inside the script.** `ARR_API_VERSIONS` maps sonarr and radarr
+  to `v3` and lidarr to `v1`, keyed like `ARR_PORTS`, so no caller passes it. Lidarr's
+  notification carries `onHealthIssue`, `onHealthRestored` and `includeHealthWarnings` under
+  the same names (Lidarr v3.1.6.5079, `NotificationResource`), so the health-only default
+  applies unchanged.
 - **Every trigger the app carries is set, not just the true ones.** `trigger_keys` derives the
-  set from the object the API returned, because sonarr and radarr do not carry the same keys
+  set from the object the API returned, because the three apps do not carry the same keys
   and upstream adds more. Declaring only the true half would let a trigger enabled in the UI
   survive a deploy that is meant to be the whole truth about when Discord is notified.
 - **The update merges into the body the API returned.** Building one from scratch blanks
@@ -87,8 +96,9 @@ uv run python k8s/roles/arr-notification/files/seed_arr_notification.py --test
 
 ## The Job form
 
-Under Flux the seed runs as a post-apply mutation Job in `sonarr-verify` and `radarr-verify`.
-`templates/verify/notification.yaml.j2` in each app's role holds it, byte-identical in both.
+Under Flux the seed runs as a post-apply mutation Job in `sonarr-verify`, `radarr-verify` and
+`lidarr-verify`. `templates/verify/notification.yaml.j2` in each app's role holds it,
+byte-identical in all three.
 It landed inert in `templates/verify-inert/`, and the apps' flip (D5.20) moved it.
 
 - **The script is the one this role ships**, read by a cross-role `lookup()`, so a change here
@@ -115,10 +125,13 @@ It landed inert in `templates/verify-inert/`, and the apps' flip (D5.20) moved i
 rule is an accept/reject pair over `find_notification` / `declared_body` / `needs_update` —
 the three functions that decide create, rewrite or no-op.
 
-`tests/test_seed_job.py` renders both apps' flipped Jobs, runs the Job census over them, and
+`tests/test_seed_job.py` renders the three apps' flipped Jobs, runs the Job census over them, and
 runs the rendered script twice against a fixture API from no row and from a drifted row. The
-second run must write nothing; the Job's `homelab/rerun-safe` annotation names that test.
+second run must write nothing; the Job's `homelab/rerun-safe` annotation names that test. A
+red-proof pair seeds lidarr against a fixture that serves only `/api/v1` (accepted) and only
+`/api/v3` (refused).
 
-**The create path is unexercised live.** Both notifications already existed when this role was
-written, so only the update-and-no-op branch has ever run against a real app. The create branch
-is covered by the schema test and the fixture run alone until a claim is recreated.
+**The create path is unexercised live until lidarr's first deploy.** The sonarr and radarr
+notifications already existed when this role was written, so only the update-and-no-op branch
+has run against those apps. Lidarr's first deploy is the first live create; before it, the
+create branch is covered by the schema test and the fixture run alone.

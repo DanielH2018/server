@@ -71,6 +71,21 @@ def test_navidrome_trusts_no_user_header_while_rest_skips_authelia():
     assert not env & {"ND_REVERSEPROXYWHITELIST", "ND_REVERSEPROXYUSERHEADER"}, env
 
 
+def test_external_services_send_no_telemetry_and_skip_last_fm():
+    """ND_ENABLEEXTERNALSERVICES also turns on the insights collector and the Last.fm agent.
+
+    Only ListenBrainz and Deezer were asked for, so both of the others stay off explicitly.
+    """
+    [deployment] = [
+        d for d in yaml_fast.safe_load_all(_render("deployment.yaml.j2")) if d
+    ]
+    [container] = deployment["spec"]["template"]["spec"]["containers"]
+    env = {e["name"]: e.get("value") for e in container["env"]}
+    assert env["ND_ENABLEEXTERNALSERVICES"] == "true"
+    assert env["ND_ENABLEINSIGHTSCOLLECTOR"] == "false"
+    assert env["ND_LASTFM_ENABLED"] == "false"
+
+
 def _manifests_files(replicas: int) -> list[str]:
     expr = include_vars(ROLE)["manifests_files"]
     env = make_env([])

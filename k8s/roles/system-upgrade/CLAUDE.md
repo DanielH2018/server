@@ -36,10 +36,13 @@ else upgrades k3s since H6.3c and H6.3d landed. The slice plan is
   No render may fetch a URL (D5, C1).
 - **Two patches change upstream objects**, both under `files/patches/`. A kustomize patch is
   copied verbatim and cannot read a variable, so
-  `k8s/roles/system-upgrade/tests/test_system_upgrade_role.py` holds each literal equal
-  to its key in `defaults/main.yml`.
+  `k8s/roles/system-upgrade/tests/test_system_upgrade_role.py` holds the image and env
+  literals equal to their keys in `defaults/main.yml`. The resources have no key, because only
+  the patch reads them.
     - `system-upgrade-controller.yaml` pins the controller image by digest and sets the pod's
-      `priorityClassName` to the platform tier's class.
+      `priorityClassName` to the platform tier's class. It also sets the controller's
+      requests and limits, because a BestEffort pod is evicted first under memory pressure
+      whatever its class (#8225). Changing them rolls the controller pod.
     - `system-upgrade-controller-env.yaml` sets the Job deadline bounds (3600 and 5400) and the
       Job backoff limit (`system_upgrade_job_backoff_limit`).
       The controller reads its environment at start, so a later change to either bound or to

@@ -16,6 +16,12 @@ where that gating is deliberate; any other exemption that grows a startupProbe i
 So this guard does not demand universal coverage. It demands that every container without a
 probe is listed below with the reason, which is the decision worth forcing on whoever adds the
 next one.
+
+The livenessProbe half is the same census with its own record, `_NO_LIVENESS`. A container with
+no livenessProbe is never restarted when it hangs without exiting; readiness only takes it out of
+its Service. The two records hold different reasons: a sidecar's liveness probe restarts that
+sidecar alone, so the "would gate the Service" argument that exempts it from readiness does not
+exempt it from liveness.
 """
 
 from _k8s_render import rendered_docs
@@ -42,12 +48,9 @@ _NO_READINESS = {
     "LAPI out of its Service, so each job pages through its own pod-producers rule instead",
     # The exportarr metrics sidecars, same shape as the three above and one degree worse: a
     # readinessProbe here would let an EXPORTER outage pull its *arr out of its own Service,
-    # so monitoring would take down the thing it monitors. They keep a livenessProbe, and a
-    # dead exporter surfaces as `up == 0` on the `exportarr` scrape job.
-    #
-    # These four rows are the ONLY place that rule lives.
-    # tests/services/test_exportarr_sidecars.py keeps the
-    # livenessProbe half, which no census here covers.
+    # so monitoring would take down the thing it monitors. They keep a livenessProbe, which
+    # `_NO_LIVENESS` holds them to, and a dead exporter surfaces as `up == 0` on the
+    # `exportarr` scrape job. These four rows are the ONLY place that rule lives.
     ("sonarr", "exportarr"): "metrics sidecar; readiness would gate sonarr's Service",
     ("radarr", "exportarr"): "metrics sidecar; readiness would gate radarr's Service",
     ("lidarr", "exportarr"): "metrics sidecar; readiness would gate lidarr's Service",
@@ -119,6 +122,66 @@ _NO_READINESS = {
 }
 
 
+# (role, container) -> why this container has no livenessProbe.
+_NO_LIVENESS = {
+    (
+        "traefik",
+        "access-log-rotate",
+    ): "its shell loop restarts the child tail itself; a container restart adds nothing",
+    (
+        "crowdsec",
+        "crowdsec-jobs",
+    ): "job scheduler with no server to probe; each job pages through its own "
+    "pod-producers rule",
+    (
+        "slskd",
+        "soularr",
+    ): "a poll loop with no port, and it writes no heartbeat an exec probe could read",
+    (
+        "cloudflare-ddns",
+        "cloudflare-ddns",
+    ): "periodic worker with no server to probe; CloudflareDdns*UpdateSilent catches a hang",
+    (
+        "scrutiny",
+        "collector",
+    ): "periodic SMART collection with no server to probe",
+    (
+        "dri-device-plugin",
+        "generic-device-plugin",
+    ): "registers a kubelet socket and serves no HTTP; covered by monitor-bridge's check",
+    (
+        "node-exporter",
+        "iscsi-sessions",
+    ): "textfile-writing loop with no server to probe; IscsiSessionsNotReporting catches a "
+    "loop that stops writing",
+    (
+        "node-exporter",
+        "ghcr-mirror-pull",
+    ): "textfile-writing loop with no server to probe; GhcrMirrorPullNotReporting catches a "
+    "loop that stops writing",
+    (
+        "node-exporter",
+        "dockerhub-mirror-pull",
+    ): "textfile-writing loop with no server to probe; DockerhubMirrorPullNotReporting "
+    "catches a loop that stops writing",
+}
+
+# Containers the liveness census must find WITH a probe, so a rename cannot empty it unnoticed.
+_LIVENESS_REQUIRED = frozenset(
+    {
+        ("observability", "prometheus"),
+        ("observability", "alertmanager"),
+        ("observability", "grafana"),
+        ("observability", "loki"),
+        ("observability", "tempo"),
+        ("sonarr", "exportarr"),
+        ("radarr", "exportarr"),
+        ("lidarr", "exportarr"),
+        ("prowlarr", "exportarr"),
+    }
+)
+
+
 # Of the exemptions above, the ones that ALSO declare a startupProbe — so their pod is held
 # NotReady while it runs, and the exemption's reason has to say that rather than claim the
 # container never gates its Service. Both entries here say so in as many words.
@@ -159,36 +222,65 @@ def _containers():
             yield role, doc["metadata"]["name"], container
 
 
-def test_every_container_without_readiness_is_recorded():
-    offenders = []
-    for role, workload, container in _containers():
-        if "readinessProbe" in container:
-            continue
-        if (role, container["name"]) not in _NO_READINESS:
-            offenders.append(f"{role}/{workload} container {container['name']}")
+def _unrecorded(probe: str, record: dict) -> list[str]:
+    return sorted(
+        f"{role}/{workload} container {c['name']}"
+        for role, workload, c in _containers()
+        if probe not in c and (role, c["name"]) not in record
+    )
 
+
+def _assert_record_is_current(probe: str, record: dict, record_name: str) -> None:
+    """A container that gained the probe must leave the record, or the record stops meaning anything."""
+    without = {(role, c["name"]) for role, _w, c in _containers() if probe not in c}
+    live = {(role, c["name"]) for role, _w, c in _containers()}
+    stale = sorted(k for k in record if k in live and k not in without)
+    gone = sorted(k for k in record if k not in live)
+
+    assert not stale, f"now has a {probe} — remove from {record_name}: {stale}"
+    assert not gone, f"no such container — remove from {record_name}: {gone}"
+
+
+def test_every_container_without_readiness_is_recorded():
+    offenders = _unrecorded("readinessProbe", _NO_READINESS)
     assert not offenders, (
         "these containers have no readinessProbe, so a Service publishes them the instant they "
         "start.\nAdd a probe, or record the reason in _NO_READINESS in this file:\n  "
-        + "\n  ".join(sorted(offenders))
+        + "\n  ".join(offenders)
+    )
+
+
+def test_every_container_without_liveness_is_recorded():
+    probed = {
+        (role, c["name"]) for role, _w, c in _containers() if "livenessProbe" in c
+    }
+    assert _LIVENESS_REQUIRED <= probed, (
+        f"census lost a container that must keep a livenessProbe: "
+        f"{sorted(_LIVENESS_REQUIRED - probed)}"
+    )
+    offenders = _unrecorded("livenessProbe", _NO_LIVENESS)
+    assert not offenders, (
+        "these containers have no livenessProbe, so a hang that does not exit is never "
+        "restarted.\nAdd a probe, or record the reason in _NO_LIVENESS in this file:\n  "
+        + "\n  ".join(offenders)
     )
 
 
 def test_the_record_has_no_stale_entries():
-    """A container that gained a probe must leave the list, or the list stops meaning anything."""
-    without = {
-        (role, c["name"]) for role, _w, c in _containers() if "readinessProbe" not in c
-    }
-    live = {(role, c["name"]) for role, _w, c in _containers()}
-    stale = sorted(k for k in _NO_READINESS if k in live and k not in without)
-    gone = sorted(k for k in _NO_READINESS if k not in live)
+    _assert_record_is_current("readinessProbe", _NO_READINESS, "_NO_READINESS")
 
-    assert not stale, f"now has a readinessProbe — remove from _NO_READINESS: {stale}"
-    assert not gone, f"no such container — remove from _NO_READINESS: {gone}"
+
+def test_the_liveness_record_has_no_stale_entries():
+    _assert_record_is_current("livenessProbe", _NO_LIVENESS, "_NO_LIVENESS")
 
 
 def test_every_reason_is_substantive():
-    thin = sorted(k for k, v in _NO_READINESS.items() if len(v.strip()) < 20)
+    thin = sorted(
+        k
+        for record in (_NO_READINESS, _NO_LIVENESS)
+        for k, v in record.items()
+        if len(v.strip()) < 20
+    )
     assert not thin, f"reason too thin to be a decision: {thin}"
 
 

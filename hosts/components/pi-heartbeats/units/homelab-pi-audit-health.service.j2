@@ -1,0 +1,14 @@
+# Shipped by homelab-daniel-pi. Started by homelab-pi-audit-health.timer.
+[Unit]
+Description=Write whether the Pi's auditd is writing its log for Prometheus
+
+[Service]
+Type=oneshot
+# This host's journald stores notice and above (MaxLevelStore=notice), so stdout logs at notice.
+SyslogLevel=notice
+User={{ sys_user }}
+# /var/log/audit is root:adm 0750. The unit names the group, so a rebuilt Pi needs no group task.
+SupplementaryGroups=adm
+ExecStart=/usr/lib/homelab/pi-audit-health
+# /var/log/pi-health holds health.log. systemd creates it, owned by User=.
+LogsDirectory=pi-health

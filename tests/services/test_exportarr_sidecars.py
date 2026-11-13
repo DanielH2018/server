@@ -1,21 +1,21 @@
 """Guards the exportarr sidecars across the three *arr roles.
 
-The sidecar is one shared macro (`k8s/templates/exportarr.yml.j2`) invoked from three
+The sidecar is one shared macro (`ansible/templates/exportarr.yml.j2`) invoked from three
 Deployments, which is what keeps the three from drifting. What a shared macro cannot pin is
 everything AROUND the invocation — the Service port, the Secret, the image pin, the scrape
 job — and every one of those is per-role and silently omissible: leave one out and that *arr
 alone goes unmonitored while the other two prove the pattern works.
 
 The image pin is deliberately duplicated three times rather than shared from group_vars.
-Renovate's k8s-images manager matches `k8s/roles/*/defaults` and `_image:` keys only, so a
+Renovate's k8s-images manager matches `roles/k8s/*/defaults` and `_image:` keys only, so a
 shared var one directory up is invisible to it — the escape `crowdsec_k8s_image` made, recorded
 in renovate.json. Duplication that a test keeps in lockstep beats a single copy nothing tracks.
 
-WHAT THIS FILE DELIBERATELY DOES NOT ASSERT. The sidecars carry no readinessProbe, and that
-rule lives in `tests/k8s/test_readiness_coverage.py` alone: all three are rows in its
-`_NO_READINESS` record, and its `test_the_record_has_no_stale_entries` goes red the moment one
-gains a probe. Asserting it here as well would split one rule's rationale across two files.
-Do not add it here; add a row there.
+WHAT THIS FILE DELIBERATELY DOES NOT ASSERT. The sidecars carry a livenessProbe and no
+readinessProbe, and both rules live in `tests/k8s/test_readiness_coverage.py` alone: each
+sidecar is a row in its `_NO_READINESS` record and a member of `_LIVENESS_REQUIRED`. Asserting
+either here as well would split one rule's rationale across two files. Do not add it here; add a
+row there.
 """
 
 from lib.k8s_roles import resolved_manifest_files
@@ -112,31 +112,6 @@ def test_the_api_key_is_a_secret_reference_never_a_literal():
             assert apikey["valueFrom"]["secretKeyRef"]["name"] == f"{role}-exportarr"
 
 
-def test_the_sidecar_is_restarted_when_it_wedges():
-    """The sidecar keeps a livenessProbe and no readinessProbe, and only one half lives here.
-
-    The readiness half lives in `tests/k8s/test_readiness_coverage.py`, which records
-    all three exportarr containers in `_NO_READINESS` with this reason — a readinessProbe on a
-    sidecar takes the whole pod out of its *arr's Service whenever the exporter hiccups, so
-    monitoring takes down the thing it monitors. That file's
-    `test_the_record_has_no_stale_entries` goes red the moment one of the three gains a probe,
-    so asserting it again here would duplicate the rule and split its rationale across two
-    files. `ARRS` is exactly the three roles recorded there.
-
-    Liveness is the half no table covers: nothing else in the suite asks whether an exempt
-    container is restartable at all, and a wedged exporter with no probe is simply silent.
-
-    Census first: the loop `continue`s past every container not named `exportarr`, so a rename
-    or an empty render would otherwise pass with zero assertions.
-    """
-    probed = _sidecars()
-    _census(probed)
-    for role, container in sorted(probed.items()):
-        assert "livenessProbe" in container, (
-            f"{role}'s exportarr should still be restarted when it wedges"
-        )
-
-
 def test_the_sidecar_cpu_limit_covers_a_scrape_burst():
     """The cap is sized against the CFS quota per period, not the average rate.
 
@@ -217,7 +192,7 @@ def test_the_image_pins_stay_in_lockstep():
 
     Read off the RENDERED container rather than regexed out of each role's defaults.
     The pin reaches the pod as a macro ARGUMENT — `exportarr(app, image, ...)` in
-    `k8s/templates/exportarr.yml.j2`, passed as `exportarr_image=` by each role — and every
+    `ansible/templates/exportarr.yml.j2`, passed as `exportarr_image=` by each role — and every
     role renders in its OWN defaults context. So an invocation naming another role's variable
     ships `image: STUB` while all three text pins still read identical and agree. Measured on
     this tree: crossing radarr's argument to `sonarr_k8s_exportarr_image` renders
@@ -236,7 +211,7 @@ def test_each_pin_is_a_variable_renovate_can_see():
     A pin inlined into the macro invocation renders an identical manifest and is offered no
     updates, because Renovate's k8s-images manager matches an `_image:` key and nothing else. A
     pin hoisted into group_vars is still offered updates, but it loses automerge and the
-    deployer's rollback (`k8s/templates/exportarr.yml.j2` has the reason, #3277). No render
+    deployer's rollback (`ansible/templates/exportarr.yml.j2` has the reason, #3277). No render
     assertion can see either, because the manifest is the same every way.
     """
     for arr in ARRS:

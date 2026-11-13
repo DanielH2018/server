@@ -23,6 +23,7 @@ from lib.git import git
 
 from .atoms import Ambiguous, backrefs, hash_atom
 from .citations import (
+    GENERATED_BLOCK,
     HISTORY_MARKER,
     in_tree,
     mask_history,
@@ -251,10 +252,6 @@ def lint_sections(
     return out
 
 
-# A generated block restates its source on every regeneration, so a pin it names is never stale.
-_GENERATED = re.compile(r"<!-- generated_from:.*?<!-- /generated_from -->", re.S)
-
-
 def _version_facts(
     key: str,
     doc_rel: str,
@@ -271,7 +268,7 @@ def _version_facts(
     """
     doc_dir = doc_rel.rpartition("/")[0] + "/"
     found: list[LintFinding] = []
-    for raw in dict.fromkeys(spans(_GENERATED.sub("", prose))):
+    for raw in dict.fromkeys(spans(GENERATED_BLOCK.sub("", prose))):
         parts = split_image_ref(raw)
         if not parts or parts[0] not in images:
             continue
@@ -321,7 +318,7 @@ def vanished_identifiers(
     for doc in repo_docs(repo):
         rel = doc.relative_to(repo).as_posix()
         for sec in sections(rel, doc.read_text(encoding="utf-8")):
-            for span in spans(_GENERATED.sub("", mask_history(sec.body))):
+            for span in spans(GENERATED_BLOCK.sub("", mask_history(sec.body))):
                 for tok in identifiers(span) & removed:
                     named.setdefault(tok, set()).add(sec.key)
     held = still_present(repo, sorted(named), tracked)

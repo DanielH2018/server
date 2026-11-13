@@ -14,4 +14,6 @@ SyslogLevel=notice
 SyslogIdentifier=docker-prune
 Environment=PATH=/usr/sbin:/usr/bin:/sbin:/bin
 ExecStart=/usr/lib/homelab/docker-prune
-LoadCredential=healthchecks_ping_key:/run/credstore/healthchecks_ping_key
+# Import, not Load: Load fails the unit with 243/CREDENTIALS on a missing file, and a missing ping
+# key must skip only the ping, not the prune.
+ImportCredential=healthchecks_ping_key

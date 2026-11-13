@@ -43,7 +43,8 @@ that makes the trade-off. When an entry moves there, delete it here.
 - A producer that stops reporting pages through a deadman, not a heartbeat tile: each
   textfile check's `<Check>NotReporting` rule, `HostCheckOverdue` as the catch-all, and
   `BridgeCheckStale` for a monitor-bridge row (ADR 0026). Do not propose a separate uptime
-  monitor.
+  monitor. A unit that fails, rather than stops reporting, pages through `SystemdUnitsFailed`,
+  which counts every failed system unit on each host (#8219).
 - The Pi is monitored through Prometheus: `PiHostDown` and `PiPortDead` in
   `extra-probes.yaml`, and the Pi pressure rules in `hosts.yaml`, all reading the `node-pi`
   and `blackbox-pi-ports` jobs. The disk and memory rules in `hosts.yaml` name daniel-box and

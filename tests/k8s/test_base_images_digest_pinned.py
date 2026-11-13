@@ -6,7 +6,8 @@ exemptions. The fleet rule (`test_every_external_image_pin_carries_a_digest`, is
 extends the same requirement to every `*_image` default, so the repo has one pinning policy
 rather than a digest for half the fleet and a bare tag for the rest. Renovate adds the
 digests itself (`pinDigests`, re-enabled for the regex manager by PR #3326), so a bare pin
-outside `PENDING_DIGEST_PINS` is a pin Renovate could not see or was told to skip.
+is a pin Renovate could not see or was told to skip. The fleet rule has no exemptions: a pin
+renovate.json disables, such as `coredns_image`, carries a digest moved by hand.
 
 WHY THE BASE-IMAGE RULE HAS NO EXEMPTIONS. A tag is mutable: the publisher can re-push it with new bytes and every
 consumer silently changes on its next pull. For an application image that barely matters here,
@@ -103,27 +104,6 @@ def test_every_base_image_pin_carries_a_digest():
     )
 
 
-# Bare pins whose digest Renovate has already computed but cannot deliver yet. Renovate puts a
-# dep's pinDigest in the same branch as its version bump, so the digest lands when that bump
-# merges, and each bump below is held by a rule in renovate.json. Measured 2026-10-10 on the
-# Dependency Dashboard (#3): every one lists its current tag as an update, which is the pin.
-# The test below fails once an entry gains its digest, so the list only shrinks.
-PENDING_DIGEST_PINS = {
-    # "Pending Status Checks": a Docker Hub version bump soaks 7 days.
-    "observability_k8s_collector_image": "otel collector version bump, 7-day soak",
-}
-
-
-# Bare pins that follow a source other than a registry tag stream, so a digest has no
-# bump to ride on. The test that holds each pin to its source carries the reason.
-BARE_BY_DESIGN = {
-    # The pin equals the image k3s's bundled manifests/coredns.yaml names, with its registry
-    # placeholder emptied. test_coredns_image_follows_bundled_manifest.py holds that equality,
-    # and renovate.json disables Renovate for the key, so no PR would ever add a digest.
-    "coredns_image": "follows k3s's bundled CoreDNS manifest, moved by hand with k3s_version",
-}
-
-
 def _bare_pins(text):
     """Return (var, repo, tag) for every external image pin in `text` carrying no digest.
 
@@ -149,31 +129,12 @@ def _all_bare_pins():
 
 
 def test_every_external_image_pin_carries_a_digest():
-    offenders = {
-        var: where
-        for var, where in _all_bare_pins().items()
-        if var not in PENDING_DIGEST_PINS and var not in BARE_BY_DESIGN
-    }
+    offenders = _all_bare_pins()
     assert not offenders, (
         "These image pins carry a tag and no digest. Renovate's pinDigests should have "
-        "proposed one; find out why it did not, rather than adding the pin to "
-        "PENDING_DIGEST_PINS:\n  " + "\n  ".join(sorted(offenders.values()))
+        "proposed one; find out why it did not, or add the digest by hand:\n  "
+        + "\n  ".join(sorted(offenders.values()))
     )
-
-
-def test_pending_digest_pins_are_still_bare():
-    """An entry whose pin gained a digest, or went away, must leave the list."""
-    stale = sorted(set(PENDING_DIGEST_PINS) - set(_all_bare_pins()))
-    assert not stale, (
-        "Delete these from PENDING_DIGEST_PINS; each now carries a digest or no longer "
-        "exists: " + ", ".join(stale)
-    )
-
-
-def test_bare_by_design_pins_are_still_bare():
-    """An entry whose pin gained a digest, or went away, must leave the list."""
-    stale = sorted(set(BARE_BY_DESIGN) - set(_all_bare_pins()))
-    assert not stale, "Delete these from BARE_BY_DESIGN: " + ", ".join(stale)
 
 
 def test_the_scan_finds_at_least_one_pin():

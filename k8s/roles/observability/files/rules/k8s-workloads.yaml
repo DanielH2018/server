@@ -22,7 +22,7 @@
 # was the bridge's measured noise. The crash-loop arm has no `for:`, because its 1h and 30m
 # windows already hold it.
 #
-# ansible/tests/services/test_k8s_workloads_rule_literals.py holds the DaemonSet floor to the
+# tests/services/test_k8s_workloads_rule_literals.py holds the DaemonSet floor to the
 # estate and the crash-loop recency window to its floor.
 groups:
   - name: k8s-workloads
@@ -122,7 +122,7 @@ groups:
       # refires, and every resolve and refire is a notification. 30m clears two spacings. The
       # spacing could not be re-measured, because cluster Prometheus retains 7d and the
       # incident is older, so this is the conservative floor.
-      # ansible/tests/services/test_k8s_workloads_rule_literals.py holds the window at 30m or
+      # tests/services/test_k8s_workloads_rule_literals.py holds the window at 30m or
       # more.
       #
       # A pod
@@ -249,7 +249,7 @@ groups:
       # resource="devic_es_dri", and the unsanitised name matches nothing. A query on the
       # unsanitised name reads as the device plugin having deregistered, a false page on a
       # healthy cluster (live 18:05 to 18:35 UTC on 2026-08-20).
-      # ansible/tests/services/test_dri_resource_name_agrees.py holds this literal to the
+      # tests/services/test_dri_resource_name_agrees.py holds this literal to the
       # name dri-device-plugin advertises. The bridge reports INERT when no allocatable series
       # exists at all; K8sNodeAllocatableMissing pages that case instead.
       # verify="true" makes this dri-device-plugin's soak verify, D5's successor to the role's
