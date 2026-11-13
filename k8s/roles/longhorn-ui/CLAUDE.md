@@ -25,11 +25,10 @@ and the middlewares it references, nothing else.
     - The render honours `manifests_exclude_files: [service.yaml]`, so the bundle holds no
       Service. The route targets the upstream `longhorn-frontend` Service, as before.
 - **A bad route change** (auth dropped, wrong Service targeted) is a platform-class exposure
-  risk even though this role has no workload to roll back. Under Ansible a route change
-  reached the cluster only through a hand deploy. Under Flux every merged change applies on
-  the next promotion, so review is the gate. `k8s_autodeploy: false` stays in
-  `defaults/main.yml` with its reason, but it gates nothing here: the deployer skips the tag,
-  and the role has no image for Renovate to automerge.
+  risk even though this role has no workload to roll back. Flux applies every merged change
+  on the next promotion, so review is the gate. `k8s_autodeploy: false` stays in
+  `defaults/main.yml` with its reason, but it gates nothing here: the flag only holds back
+  Renovate's automerge, and the role has no image for Renovate to bump.
 
 ## Editing
 - Route/middlewares: `templates/ingressroute.yaml.j2`, `templates/middlewares.yaml.j2`.

@@ -28,10 +28,10 @@ repo's first Traefik→host route. Two facts follow:
   `k8s_node_client_ip` into the bundle, so a change to that variable reaches the cluster only
   with the next promotion that publishes this tag.
 - **A bad route change exposes a page that starts landings and clears the deployer's hold.**
-  Under Ansible a route change reached the cluster only through a hand deploy. Under Flux
-  every merged change applies on the next promotion, so review is the gate.
+  Flux applies every merged change on the next promotion, so review is the gate.
   `k8s_autodeploy: false` stays in `defaults/main.yml` with its reason, but it gates nothing
-  here: the deployer skips the tag, and the role has no image for Renovate to automerge.
+  here: the flag only holds back Renovate's automerge, and the role has no image for Renovate
+  to bump.
 
 The daemon the route fronts ships in daniel-box's host package (`hosts/components/deploy-ui/`,
 H7.50), which reaches the host when the builder publishes the next `homelab-daniel-box`.
