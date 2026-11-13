@@ -1,6 +1,6 @@
 {% import 'templates/claude-triage-pins.j2' as pins with context -%}
 [Unit]
-Description=Poll Alertmanager and start triage for alerts that just started firing
+Description=Poll Prometheus's ALERTS and start triage for alerts that just started firing
 After=network-online.target
 Wants=network-online.target
 # A broken poller fails on every tick, so its page is quiet for an hour after each delivery.

@@ -527,7 +527,8 @@ containers_list:
   # reaches an artifact, so one that resolves inside the LAN alone fails wherever the
   # reader is.
   - name: artifacts
-    # Flux applies artifacts through `promote`; its host directories are k8s_host_files' (D5.19).
+    # Flux applies artifacts through `promote`. The claude-code host component creates its host
+    # directories, in tmpfiles.d/homelab-artifacts.conf.j2 (H7.40).
     hostname: "artifacts"
     port: 8080
     use_authelia: true
@@ -537,7 +538,8 @@ containers_list:
   # static serving over a daniel-box tree, reachable on both the LAN and public names behind
   # Authelia. The role's ingressroute template records why it stopped being LAN-only.
   - name: docs
-    # Flux applies docs through `promote`; its site directory is k8s_host_files' (D5.19).
+    # Flux applies docs through `promote`. The docs-refresh host component creates its site
+    # directory, in tmpfiles.d/homelab-docs-site.conf.j2 (H7.10a).
     hostname: "docs"
     port: 8080
     use_authelia: true
@@ -892,8 +894,8 @@ containers_list:
   # weekly, so there is no same-day off-site restore point.
   - name: pi-peer-backup
     # Flux applies pi-peer-backup through `promote` and runs its gate in
-    # `pi-peer-backup-verify`; its two daniel-pi writes moved to `setup/k8s_host_files` (D5,
-    # Wave C).
+    # `pi-peer-backup-verify`. Its two daniel-pi writes ship in the `pi-peer-backup-target` host
+    # component (H7.25).
     weekly_backup_claims: {pi-peer-backup-data: 6}  # Sat
   # SMART monitoring. UI behind Authelia; /api/* is bypassed for LAN machine traffic (the
   # collector's POSTs and monitor-bridge's summary reads) in the authelia role's config.
