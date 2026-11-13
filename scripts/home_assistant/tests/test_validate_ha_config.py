@@ -282,6 +282,18 @@ def test_script_file_list_flags_unlisted_file(tmp_path):
     )
 
 
+def test_root_file_list_flags_unlisted_script(tmp_path):
+    # A shell_command's script ships from the root list like any root YAML file.
+    errors = _role_with_shipped_list(
+        tmp_path,
+        ["configuration.yaml"],
+        ["configuration.yaml", "new.py"],
+        subdir="",
+        var="home_assistant_root_files",
+    )
+    assert errors and "files/new.py is not in home_assistant_root_files" in errors[0]
+
+
 def test_template_file_list_flags_unlisted_macro(tmp_path):
     # A new .jinja that nothing lists would validate clean and never reach the pod.
     errors = _role_with_shipped_list(

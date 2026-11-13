@@ -118,6 +118,15 @@ sensor:
 # Feeds the outdoor PM2.5 threshold alerts (below) and the window advisor (files/automations/fan-and-air.yaml).
 rest: !include rest.yaml
 
+# Quits the HA dashboard on the bedroom Hub over a Cast connection of its own, for
+# bedroom_display_dismiss when HA's turn_off has not taken effect (files/cast_quit_app.py, #8201).
+# A non-zero exit logs on homeassistant.components.shell_command, which ha_runtime_error_alert
+# covers. The interpreter is the image's own, which carries pychromecast.
+# DECIDED: end the loop from this repo with a second connection, not wait on an upstream
+# pychromecast fix (operator, 2026-11-13).
+shell_command:
+  bedroom_display_quit_app: /usr/local/bin/python3 /config/cast_quit_app.py 10.0.0.137
+
 # Recorder hygiene: default_config enables the recorder with defaults (SQLite, keep 10 days, record
 # everything); a top-level recorder: block customizes it without disabling default_config. Trim the
 # highest-churn, lowest-value entities so the DB stays lean — faster history queries + faster startup
@@ -342,9 +351,10 @@ logger:
     #
     # The cost is that a genuine cast-controller failure is silenced too, and BOTH records the
     # fault emits sit on this logger, so no query for `_connect_hass failed` can tell "not
-    # firing" from "silenced". The operator accepted the fault on 2026-09-30 (#2800) and
-    # unpinned the view theme whose receiver TypeError was the `frontend.js` signal above, so
-    # that signal is gone too. A failed cast's `_handle_signal_show_view` record is dropped by
+    # firing" from "silenced". The fault runs for hours, not in episodes (2026-11-12, #8201),
+    # and HA's turn_off cannot quit the dashboard while it runs; the shell_command below quits
+    # it over a second connection, which ends the loop. The view theme whose receiver TypeError
+    # was the `frontend.js` signal above is unpinned, so that signal is gone too. A failed cast's `_handle_signal_show_view` record is dropped by
     # the `refresh_token` filter below, so it leaves no record either. The
     # rejected alternative was an ignore list in the log-error check, because a growing ignore
     # list means the check is decaying. `pychromecast.socket_client` keeps its default level:

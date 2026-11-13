@@ -54,7 +54,9 @@ spec:
         # Lay the git-owned config plane into the PVC on every start (see the ConfigMap's
         # comment). Each ConfigMap is mounted under /cm/<tree> and installed by glob: the
         # ConfigMap holds exactly the files its list in defaults/main.yml names, so the glob
-        # cannot pick up anything the list left out, and the file lists live in one place.
+        # cannot pick up anything the list left out, and the file lists live in one place. The
+        # root glob is `*` because that list carries .py scripts as well as .yaml; it skips the
+        # mount's own `..data` entries, which start with a dot.
         # .storage/, the recorder DB, secrets consumers, custom_components/ are PVC state this
         # never touches.
         #
@@ -74,7 +76,7 @@ spec:
             - sh
             - -ec
             - |
-              install -m 644 /cm/root/*.yaml /config/
+              install -m 644 /cm/root/* /config/
               install -m 600 /sec/secrets.yaml /config/secrets.yaml
               install -m 600 /sec/google_service_account.json /config/google_service_account.json
               rm -f /config/automations.yaml /config/scripts.yaml

@@ -244,7 +244,7 @@ and the bedtime/wake routines that drive them.
 - **Two FP300 consumers were deliberately left alone**, because they are on the FP300's scale and
   resyncing them to 90 would be wrong. `natural_brightness` (lighting.jinja) dims the auto-on brightness
   across `lux / 75` — moving it to the T1 needs its 0.8 slope recalculated, a separate change. The Hub
-  cast/dismiss automations (`bedroom_display_cast` / `bedroom_display_dismiss`) trigger at FP300 60 and
+  cast/dismiss automations (`bedroom_display_show` / `bedroom_display_dismiss`) trigger at FP300 60 and
   50 — a different feature with its own thresholds.
 - **`auto_light_allowed` takes a `dark_fallback` argument (added with the swap).** The T1 reports only on
   change, so it parks at `unknown` after an HA restart or a Z2M rename. The macro's old

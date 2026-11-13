@@ -74,11 +74,12 @@
 - id: bedroom_display_dismiss
   alias: Bedroom display go ambient when dark or sleeping
   description: >-
-    Send the Hub back to its ambient screen the moment the room goes dark (FP300 illuminance < 50)
-    or sleep mode turns on — but ONLY if it is currently showing the HA dashboard
-    (app_name == "Home Assistant Lovelace"), so user-started media is never interrupted. Edge-
-    triggered (not periodic) so it can't repeatedly kill media later.
+    Send the Hub back to its ambient screen when the room goes dark (FP300 illuminance < 50) or
+    sleep mode turns on, and re-check every 5 minutes until it leaves the HA dashboard
+    (app_name == "Home Assistant Lovelace"). User-started media is never interrupted: the
+    condition and the fallback script each act only on the dashboard app.
   mode: single
+  max_exceeded: silent
   trigger:
     - platform: numeric_state
       entity_id: sensor.aqara_fp300_illuminance
@@ -87,12 +88,33 @@
     - platform: state
       entity_id: input_boolean.bedroom_sleep_mode
       to: "on"
+    # The Cast connect-back loop can make turn_off fail for hours (#8201), so retry until it lands.
+    - platform: time_pattern
+      minutes: "/5"
   condition:
     - condition: state
       entity_id: media_player.bedroom_display
       attribute: app_name
       state: "Home Assistant Lovelace"
+    - condition: or
+      conditions:
+        - condition: numeric_state
+          entity_id: sensor.aqara_fp300_illuminance
+          below: 50
+        - condition: state
+          entity_id: input_boolean.bedroom_sleep_mode
+          state: "on"
   action:
+    # Fails while the loop holds HA's Cast socket thread; the fallback below covers that case.
     - service: media_player.turn_off
+      continue_on_error: true
       target:
         entity_id: media_player.bedroom_display
+    - wait_template: >-
+        {{ not is_state_attr('media_player.bedroom_display', 'app_name', 'Home Assistant Lovelace') }}
+      timeout: "00:00:15"
+    # A Cast connection of its own, which the loop cannot block. It re-reads the running app
+    # itself, so HA's stale view cannot make it stop user media.
+    - if: "{{ not wait.completed }}"
+      then:
+        - service: shell_command.bedroom_display_quit_app

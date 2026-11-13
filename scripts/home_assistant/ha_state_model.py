@@ -393,12 +393,16 @@ def parse_services(api_services: list) -> set[str]:
 
 
 def config_services(config: dict) -> set[str]:
-    """Services the config itself defines, one `script.<name>` per script.
+    """Services the config itself defines: `script.<name>` and `shell_command.<name>` per entry.
 
-    The freshness escape-hatch, so a brand-new script not yet in the committed snapshot
-    resolves.
+    The freshness escape-hatch, so a brand-new script or shell command not yet in the committed
+    snapshot resolves.
     """
-    return {f"script.{name}" for name in (config.get("script") or {})}
+    return {
+        f"{domain}.{name}"
+        for domain in ("script", "shell_command")
+        for name in (config.get(domain) or {})
+    }
 
 
 def load_external_services() -> set[str]:
