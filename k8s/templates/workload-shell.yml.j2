@@ -77,6 +77,13 @@
                               these four — two `securityContext:` keys under one pod spec is a
                               silent last-wins in YAML, and the rendered census would read the
                               survivor as the intent.
+                              `fs_group` also emits `fsGroupChangePolicy: OnRootMismatch`, so
+                              the kubelet skips its recursive chown when the volume root
+                              already carries the group. Without it the kubelet walks the
+                              whole volume on every mount, which on the shared media library
+                              grows with the library. The row
+                              `pods-with-fsgroup-skip-the-ownership-walk` in
+                              _workload_property_rows.py holds it.
 
   What stays at the call site, beside the call: `nodeSelector` (a pin with a per-site reason
   and its own guard, test_vip_pins.py, which reads the literal), `affinity`
@@ -122,6 +129,7 @@
 {% endif %}
 {% if fs_group is not none %}
         fsGroup: {{ fs_group }}
+        fsGroupChangePolicy: OnRootMismatch
 {% endif %}
 {% endif %}
 {%- endmacro %}

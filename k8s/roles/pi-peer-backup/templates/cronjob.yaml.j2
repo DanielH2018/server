@@ -33,6 +33,7 @@ spec:
             runAsUser: {{ puid }}
             runAsGroup: {{ pgid }}
             fsGroup: {{ pgid }}
+            fsGroupChangePolicy: OnRootMismatch
           priorityClassName: homelab-best-effort
           containers:
             - name: pi-peer-backup
