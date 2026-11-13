@@ -13,10 +13,11 @@ Three modes, from `POLL_MODE` in the root-owned config:
 - `armed`: queue the episode in the inbox, and start the oldest queued episode whenever no
   run holds the runner's lock.
 
-A fall below `POLL_MIN_SEVERITY` opens no run. The poller logs it as skipped, and in shadow
-mode appends it to `shadow.jsonl` with `"skipped": "below-floor"`, so the week of records the
-operator reads before arming shows what the floor dropped. The floor reads the `severity` label
-of the `ALERTS` series. A key with no severity ranks below `info`.
+`POLL_ROUTES` is a JSON object that maps an alert name, or `<alert>:<service>`, to the profile
+that runs its episode; the service key wins, and the profile `none` opens nothing. A fall the
+table does not route opens no run. The poller logs it as skipped, and in shadow mode appends it
+to `shadow.jsonl` with `"skipped": "unrouted"`, so the week of records the operator reads before
+arming shows what the table dropped. An unreadable table routes nothing.
 
 The first poll after a state file is created is a baseline. It records what is already firing
 and starts nothing, so arming never fires on every known alert at once.
@@ -59,8 +60,8 @@ PROM_AGE_QUERY = 'time() - process_start_time_seconds{job="prometheus"}'
 ALERTS_SETTLE_S = 1200
 HOLD_ALERT = "DeployHoldActive"
 EPISODE_MAX = 63
-# POLL_MIN_SEVERITY's values, lowest first. `none` admits every fall, a key with no severity too.
-SEVERITY_RANK = {"none": 0, "info": 1, "warning": 2, "critical": 3}
+# The POLL_ROUTES profile that opens nothing.
+NO_PROFILE = "none"
 # The prefix on every journal line, as `log` writes it.
 TAG = "claude-triage-poll"
 
@@ -188,9 +189,25 @@ def episode_id(key: str, now: float) -> str:
     return f"{stamp}-{body}"[:EPISODE_MAX].rstrip("-")
 
 
-def severity_rank(entry: dict) -> int:
-    """The rank of a down key's `severity`; a missing or unknown one ranks 0, below `info`."""
-    return SEVERITY_RANK.get(entry.get("severity", ""), 0)
+def parse_routes(text: str) -> dict[str, str]:
+    """POLL_ROUTES as a dict; anything but a JSON object of strings routes nothing."""
+    try:
+        routes = json.loads(text)
+    except ValueError:
+        routes = None
+    if not isinstance(routes, dict) or not all(
+        isinstance(v, str) for v in routes.values()
+    ):
+        log(f"POLL_ROUTES is not a JSON object of profiles: {text!r}", WARNING, tag=TAG)
+        return {}
+    return routes
+
+
+def route(entry: dict, routes: dict[str, str]) -> str | None:
+    """The profile a down key's fall opens, or None when the table does not route it."""
+    monitor = entry.get("monitor", "")
+    profile = routes.get(f"{monitor}:{entry.get('service', '')}", routes.get(monitor))
+    return None if profile == NO_PROFILE else profile
 
 
 def in_reboot_window(cfg: dict[str, str], now: float) -> bool:
@@ -217,8 +234,8 @@ def step(
     now: float,
     streak_needed: int,
     storm_size: int,
+    routes: dict[str, str],
     unknown: set[str] | frozenset[str] = frozenset(),
-    floor: int = 0,
 ) -> tuple[dict, list[dict]]:
     """Advance the per-key state by one poll; return (new state, episodes to open).
 
@@ -227,9 +244,9 @@ def step(
     poll that can judge every source, so a source that comes back later cannot read its
     standing alerts as new falls. A key recovers when it stops firing.
 
-    A fall whose severity ranks below `floor` comes back as a `skipped` record rather than an
+    A fall that `routes` does not route comes back as a `skipped` record rather than an
     episode, and still opens its key, so it is reported once per fall. Skipped falls never
-    count towards a storm.
+    count towards a storm. Each episode carries its `profile`, and a storm is per profile.
     """
     if down is None:
         return state, []
@@ -255,22 +272,30 @@ def step(
         del keys[key]  # recovered: the next fall is a new episode
     episodes: list[dict] = []
     if ready and not (hold or muted):
-        below = sorted(k for k in ready if severity_rank(down[k]) < floor)
-        runs = sorted(k for k in ready if k not in below)
-        episodes += [
-            {"id": episode_id(k, now), "skipped": "below-floor", **down[k]}
-            for k in below
-        ]
-        if len(runs) > storm_size:
-            episodes.append(
-                {
-                    "id": episode_id("storm", now),
-                    "storm": True,
-                    "down": [down[k] for k in runs],
-                }
-            )
-        else:
-            episodes += [{"id": episode_id(k, now), **down[k]} for k in runs]
+        by_profile: dict[str, list[str]] = {}
+        for k in sorted(ready):
+            profile = route(down[k], routes)
+            if profile is None:
+                episodes.append(
+                    {"id": episode_id(k, now), "skipped": "unrouted", **down[k]}
+                )
+            else:
+                by_profile.setdefault(profile, []).append(k)
+        for profile, runs in sorted(by_profile.items()):
+            if len(runs) > storm_size:
+                episodes.append(
+                    {
+                        "id": episode_id(f"storm {profile}", now),
+                        "profile": profile,
+                        "storm": True,
+                        "down": [down[k] for k in runs],
+                    }
+                )
+            else:
+                episodes += [
+                    {"id": episode_id(k, now), "profile": profile, **down[k]}
+                    for k in runs
+                ]
         for key in ready:
             keys[key].update(open=True, since=now)
     # While held or muted, a ready key keeps its streak and opens once the gate lifts.
@@ -376,14 +401,13 @@ def main(
         t,
         int(cfg.get("POLL_STREAK", "2")),
         int(cfg.get("POLL_STORM_SIZE", "3")),
+        parse_routes(cfg.get("POLL_ROUTES", "{}")),
         unknown,
-        # An unknown floor admits only `critical`: a typo must not open every warning.
-        SEVERITY_RANK.get(cfg.get("POLL_MIN_SEVERITY", ""), SEVERITY_RANK["critical"]),
     )
     for episode in episodes:
         detail = json.dumps(episode, sort_keys=True)
         if episode.get("skipped"):
-            log(f"skipped {episode['id']}, below POLL_MIN_SEVERITY: {detail}", tag=TAG)
+            log(f"skipped {episode['id']}, not in POLL_ROUTES: {detail}", tag=TAG)
         elif mode == "armed":
             path = os.path.join(state_dir, "inbox", f"{episode['id']}.json")
             with open(path, "w", encoding="utf-8") as f:

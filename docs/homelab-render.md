@@ -679,8 +679,8 @@ Two tests hold this:
   sets reaches a template the render reads, directly or through a role default, an
   inventory value, an `include_role` var or a `set_fact`, unless the renderer derives that
   name from the tree. It also fails on a lookup whose reads it cannot name: any plugin but
-  `file`, `template`, `pipe` and `vars`, a `pipe` other than `'base64 -w0 ' ~ <path>`, and
-  a `vars` lookup outside a loop over `py_table('CHECKS')` or `scrape_jobs`. A read through
+  `b64file`, `file`, `template` and `vars`, and a `vars` lookup outside a loop over
+  `py_table('CHECKS')` or `scrape_jobs`. A read through
   `vars.X` or `hostvars[H].X` counts as a read of `X`, and a `vars` or `hostvars` read whose
   name it cannot list fails it too. The engine is `_live_read_census.py` beside it.
 

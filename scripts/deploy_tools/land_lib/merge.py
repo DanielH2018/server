@@ -7,10 +7,9 @@ Idempotent: a MERGED PR is left alone, a CLOSED one dies.
 
 --arm-merge never arms GitHub's auto-merge. Auto-merge merges whatever head is green when CI
 finishes, while the direct merge here is pinned to the head await_ci read green and the landing
-policy checked. A session may still arm auto-merge itself; --arm-merge on the merged PR is then
-a no-op. Until 2026-10-11 the "agent branch fence" (ruleset 24517167) covered master, and
-auto-merge never applies a ruleset bypass (github/docs#45265), so an armed PR sat BLOCKED until
-a hand merge (#3911). A CHANGES_REQUESTED PR is refused outright, because someone asked for it
+policy checked. Auto-merge cannot merge to master either: ruleset 27167149 lets only the
+admin role and Renovate update it, and auto-merge never applies a ruleset bypass
+(github/docs#45265), so an armed PR sits BLOCKED (#3911). A CHANGES_REQUESTED PR is refused outright, because someone asked for it
 to change. `gh pr merge` refuses it at its own pre-flight as well (cli/cli#13388).
 
 --await-merge polls the PR's state until merged, and merges it through the REST endpoint once

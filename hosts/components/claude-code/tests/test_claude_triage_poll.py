@@ -23,9 +23,12 @@ def advance(
     hold=False,
     muted=False,
     unknown=frozenset(),
-    floor=0,
+    routes=None,
 ):
-    return poll.step(state, down, hold, muted, T0, 2, 3, unknown, floor)
+    """One poll; unless `routes` says otherwise, every fall in `down` is routed."""
+    if routes is None:
+        routes = {e["monitor"]: "triage" for e in (down or {}).values()}
+    return poll.step(state, down, hold, muted, T0, 2, 3, routes, unknown)
 
 
 def test_the_first_poll_records_what_is_down_and_starts_nothing() -> None:
@@ -100,15 +103,13 @@ def test_falls_up_to_the_storm_size_each_get_their_own_episode() -> None:
     assert len(episodes) == 3
 
 
-def test_a_fall_below_the_floor_is_skipped_once_and_never_makes_a_storm() -> None:
-    down = {
-        f"alert:W{i}:": {"monitor": f"w{i}", "severity": "warning"} for i in range(4)
-    }
-    down["alert:TargetDown:sonarr"] = {"monitor": "TargetDown", "severity": "critical"}
-    critical = poll.SEVERITY_RANK["critical"]
-    state, _ = advance({}, {}, floor=critical)
-    state, _ = advance(state, down, floor=critical)
-    state, episodes = advance(state, down, floor=critical)
+def test_an_unrouted_fall_is_skipped_once_and_never_makes_a_storm() -> None:
+    down = {f"alert:W{i}:": {"monitor": f"w{i}"} for i in range(4)}
+    down["alert:TargetDown:sonarr"] = {"monitor": "TargetDown", "service": "sonarr"}
+    routes = {"TargetDown": "triage"}
+    state, _ = advance({}, {}, routes=routes)
+    state, _ = advance(state, down, routes=routes)
+    state, episodes = advance(state, down, routes=routes)
     assert [e["monitor"] for e in episodes if e.get("skipped")] == [
         "w0",
         "w1",
@@ -116,8 +117,8 @@ def test_a_fall_below_the_floor_is_skipped_once_and_never_makes_a_storm() -> Non
         "w3",
     ]
     (opened,) = [e for e in episodes if not e.get("skipped")]
-    assert opened["monitor"] == "TargetDown"
-    _, episodes = advance(state, down, floor=critical)
+    assert (opened["monitor"], opened["profile"]) == ("TargetDown", "triage")
+    _, episodes = advance(state, down, routes=routes)
     assert episodes == []  # each skipped key stays open until it recovers
 
 
@@ -160,12 +161,22 @@ def test_down_keys_skip_the_deploy_hold_and_key_alerts_by_service() -> None:
     ]
     down = poll.down_keys(alerts)
     assert set(down) == {"alert:TargetDown:sonarr", "alert:RegistryGc:"}
-    # The floor reads the series' own `severity` label; a series with none ranks 0.
-    assert (
-        poll.severity_rank(down["alert:TargetDown:sonarr"])
-        == poll.SEVERITY_RANK["critical"]
-    )
-    assert poll.severity_rank(down["alert:RegistryGc:"]) == 0
+
+
+@pytest.mark.parametrize(
+    ("service", "profile"),
+    [("sonarr", "triage"), ("wg-easy", None), ("radarr", "repair")],
+)
+def test_a_service_route_wins_over_its_alert_and_none_opens_nothing(
+    service, profile
+) -> None:
+    routes = {
+        "ProbeFailed": "triage",
+        "ProbeFailed:wg-easy": "none",
+        "ProbeFailed:radarr": "repair",
+    }
+    entry = {"monitor": "ProbeFailed", "service": service}
+    assert poll.route(entry, routes) == profile
 
 
 REBOOT = {
@@ -195,13 +206,18 @@ def test_the_reboot_window_spans_the_lead_and_the_grace(when, muted) -> None:
     assert poll.in_reboot_window(REBOOT, now) is muted
 
 
+# The falls the `main` tests route unless their config says otherwise.
+ROUTED = ("Memory", "a", "b", "c")
+
+
 def _config(tmp_path, mode: str, extra: str = "") -> str:
     state = tmp_path / "state"
     (state / "inbox").mkdir(parents=True)
     path = tmp_path / "poll.cfg"
     path.write_text(
         f"STATE_DIR={state}\nPOLL_MODE={mode}\n"
-        "PROM_URLS=http://loopback http://cluster-ip\nPOLL_STREAK=1\n" + extra
+        "PROM_URLS=http://loopback http://cluster-ip\nPOLL_STREAK=1\n"
+        f"POLL_ROUTES={json.dumps(dict.fromkeys(ROUTED, 'triage'))}\n" + extra
     )
     return str(path)
 
@@ -234,14 +250,16 @@ def _fall(*names, severity="critical"):
 
 
 @pytest.mark.parametrize("mode", ["armed", "shadow"])
-@pytest.mark.parametrize("floor", ["critical", "crtical"])
-def test_a_warning_fall_starts_nothing_and_shadow_records_it_skipped(
-    tmp_path, mode, floor
+@pytest.mark.parametrize(
+    "routes", ['{"Memory": "triage"}', '{"RegistryGc": "none"}', "RegistryGc=triage"]
+)
+def test_an_unrouted_fall_starts_nothing_and_shadow_records_it_skipped(
+    tmp_path, mode, routes
 ) -> None:
-    """A mistyped floor admits only critical, so it holds the warning back too."""
-    config = _config(tmp_path, mode, f"POLL_MIN_SEVERITY={floor}\n")
+    """A table that is not JSON routes nothing, so it holds the fall back too."""
+    config = _config(tmp_path, mode, f"POLL_ROUTES={routes}\n")
     started = []
-    read = _reads([], _fall("RegistryGc", severity="warning"))
+    read = _reads([], _fall("RegistryGc", severity="critical"))
     assert _run(config, read, started) == 0  # the baseline
     assert _run(config, read, started) == 0
     shadow = tmp_path / "state" / "shadow.jsonl"
@@ -251,21 +269,25 @@ def test_a_warning_fall_starts_nothing_and_shadow_records_it_skipped(
         assert not shadow.exists()
     else:
         (line,) = shadow.read_text().splitlines()
-        assert json.loads(line)["skipped"] == "below-floor"
+        assert json.loads(line)["skipped"] == "unrouted"
 
 
 @pytest.mark.parametrize("mode", ["armed", "shadow"])
-def test_a_warning_floor_opens_the_warning_fall(tmp_path, mode) -> None:
-    config = _config(tmp_path, mode, "POLL_MIN_SEVERITY=warning\n")
+def test_a_routed_warning_fall_opens_with_its_profile(tmp_path, mode) -> None:
+    config = _config(tmp_path, mode, 'POLL_ROUTES={"RegistryGc": "triage"}\n')
     started = []
     read = _reads([], _fall("RegistryGc", severity="warning"))
     assert _run(config, read, started) == 0  # the baseline
     assert _run(config, read, started) == 0
     if mode == "armed":
         assert started == ["20261015t1830-alert-registrygc"]
+        inbox = tmp_path / "state" / "inbox"
+        episode = json.loads((inbox / f"{started[0]}.json").read_text())
     else:
         (line,) = (tmp_path / "state" / "shadow.jsonl").read_text().splitlines()
-        assert "skipped" not in json.loads(line)
+        episode = json.loads(line)
+    assert "skipped" not in episode
+    assert episode["profile"] == "triage"
 
 
 @pytest.mark.parametrize("mode", ["armed", "shadow"])

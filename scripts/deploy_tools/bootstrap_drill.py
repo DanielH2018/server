@@ -41,8 +41,6 @@ MARKER_LABEL = "drill.homelab/restored-by-standin"
 OWNER_LABEL = "kustomize.toolkit.fluxcd.io/name"
 CLUSTER_VARS_SECRET = "homelab-cluster-vars"
 FIXTURE_KEY = "drill_fixture_key"
-# The two names the hand-applied closure must never reach: `flux-deferred` applies the root.
-FORBIDDEN_IN_CLOSURE = frozenset({"flux-deferred", "homelab"})
 ARTIFACT_TAG = "drill"
 
 _KUSTOMIZE = "kustomize.toolkit.fluxcd.io/v1"
@@ -58,25 +56,6 @@ def dependson_closure(depends: dict[str, list[str]], start: set[str]) -> set[str
             seen.add(name)
             todo.extend(depends.get(name, []))
     return seen
-
-
-def closure_problems(depends: dict[str, list[str]], plumbing: set[str]) -> list[str]:
-    """Name each plumbing tag whose closure reaches `flux-deferred` or the root."""
-    return [
-        f"{tag}: the dependsOn closure reaches {sorted(hit)}"
-        for tag in sorted(plumbing)
-        if (hit := dependson_closure(depends, {tag}) & FORBIDDEN_IN_CLOSURE)
-    ]
-
-
-def sync_problems(docs: list[dict]) -> list[str]:
-    """Name what `cluster/flux-deferred/` lacks of the objects steps 5 and 9 apply."""
-    held = {(d.get("kind"), d.get("metadata", {}).get("name")) for d in docs}
-    return [
-        f"flux-deferred holds no {kind} {name}"
-        for kind, name in (("OCIRepository", "homelab"), ("Kustomization", "homelab"))
-        if (kind, name) not in held
-    ]
 
 
 def _strings(node):

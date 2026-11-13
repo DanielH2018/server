@@ -71,12 +71,11 @@ FILTERS = frozenset(
     }
 )
 TESTS = frozenset({"defined", "equalto", "in", "none", "search"})
-LOOKUPS = frozenset({"file", "pipe", "template", "vars"})
+LOOKUPS = frozenset({"b64file", "file", "template", "vars"})
 
 # Each filter that takes a test's name, and the position of that name among its arguments.
 _TEST_ARGUMENT = {"select": 0, "reject": 0, "selectattr": 1, "rejectattr": 1}
 _DYNAMIC = "<dynamic>"
-_ANSIBLE_PREFIX = "ansible.builtin."
 
 
 class Construct(NamedTuple):
@@ -96,7 +95,7 @@ def _lookup_kind(call: nodes.Call) -> str | None:
         return None
     kind = call.args[0] if call.args else None
     if isinstance(kind, nodes.Const):
-        return str(kind.value).removeprefix(_ANSIBLE_PREFIX)
+        return str(kind.value)
     return _DYNAMIC
 
 

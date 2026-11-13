@@ -209,6 +209,8 @@ nav:
           # and the verdict decoder; this page carries the measurement behind each rule, which
           # keeps the skill short.
           - Landing a merged PR: landing.md
+          # What the 20-job runner cap costs a landing, and the phased plan to get under it.
+          - CI throughput: ci-throughput.md
           - The GitOps pipeline: gitops-pipeline.md
           - Host packages: host-packages.md
           - The Flux deploy plane: flux-deploy-plane.md

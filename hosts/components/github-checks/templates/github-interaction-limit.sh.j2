@@ -1,5 +1,6 @@
 #!/bin/bash
-# Daily re-arm of the repo's GitHub interaction limit, and a recorded verdict saying it is armed.
+# Daily re-arm of the GitHub interaction limit on each repo in github_interaction_limit_repos,
+# and one recorded verdict saying whether every one is armed.
 #
 # Usage: github-interaction-limit [-h|--help]
 # Takes no arguments. systemd timer homelab-github-interaction-limit.timer runs it as root once
@@ -74,7 +75,6 @@ push() { # up|down msg
     || logger -t github-interaction-limit "textfile write failed (status=$1)"
 }
 
-LIMIT_URL="https://api.github.com/repos/{{ github_repo }}/interaction-limits"
 WANT_LIMIT="{{ github_interaction_limit }}"
 WANT_EXPIRY="{{ github_interaction_limit_expiry }}"
 
@@ -89,44 +89,56 @@ if [ -z "$TOKEN" ]; then
 fi
 AUTH_CONFIG=$(printf 'header = "Authorization: Bearer %s"\n' "$TOKEN")
 
-# `none` means "no limit": the API expresses that as a DELETE, and a DELETE returns 204 with
-# no body. Everything else is a PUT that answers with the limit it stored.
-if [ "$WANT_LIMIT" = "none" ]; then
-  if ! curl -sf --max-time 20 -X DELETE -K <(printf '%s\n' "$AUTH_CONFIG") \
-    -H "Accept: application/vnd.github+json" "$LIMIT_URL" >/dev/null; then
-    push down "failed to clear the interaction limit — state UNVERIFIED"
-    exit 1
+# apply REPO — applies the declared limit to REPO and sets RESULT to its one-line outcome.
+# Returns non-zero when the limit is not in its declared state, so one repo's failure never stops
+# the next repo's re-arm.
+apply() {
+  local repo=$1 url="https://api.github.com/repos/$1/interaction-limits" body live expires
+  # `none` means "no limit": the API expresses that as a DELETE, and a DELETE returns 204 with
+  # no body. Everything else is a PUT that answers with the limit it stored.
+  if [ "$WANT_LIMIT" = "none" ]; then
+    if ! curl -sf --max-time 20 -X DELETE -K <(printf '%s\n' "$AUTH_CONFIG") \
+      -H "Accept: application/vnd.github+json" "$url" >/dev/null; then
+      RESULT="${repo}: failed to clear the interaction limit — state UNVERIFIED"
+      return 1
+    fi
+    RESULT="${repo}: interaction limit declared none — cleared"
+    return 0
   fi
-  push up "interaction limit declared none — cleared"
-  exit 0
-fi
 
-# Process substitution, not a pipe — see the sibling script for the pipefail/EPIPE reason.
-if ! BODY=$(curl -sf --max-time 20 -X PUT -K <(printf '%s\n' "$AUTH_CONFIG") \
-  -H "Accept: application/vnd.github+json" -H "Content-Type: application/json" \
-  -d "{\"limit\":\"${WANT_LIMIT}\",\"expiry\":\"${WANT_EXPIRY}\"}" "$LIMIT_URL"); then
-  # Unreachable, 401, 403 (token lacks the scope) and 422 (a value the API rejects) all land
-  # here. None of them is "armed": a re-arm that never happened must say so.
-  push down "failed to set interaction limit ${WANT_LIMIT} — NOT re-armed, state UNVERIFIED"
-  exit 1
-fi
+  # Process substitution, not a pipe — see the sibling script for the pipefail/EPIPE reason.
+  if ! body=$(curl -sf --max-time 20 -X PUT -K <(printf '%s\n' "$AUTH_CONFIG") \
+    -H "Accept: application/vnd.github+json" -H "Content-Type: application/json" \
+    -d "{\"limit\":\"${WANT_LIMIT}\",\"expiry\":\"${WANT_EXPIRY}\"}" "$url"); then
+    # Unreachable, 401, 403 (token lacks the scope) and 422 (a value the API rejects) all land
+    # here. None of them is "armed": a re-arm that never happened must say so.
+    RESULT="${repo}: failed to set interaction limit ${WANT_LIMIT} — NOT re-armed, state UNVERIFIED"
+    return 1
+  fi
 
-LIVE_LIMIT=$(printf '%s' "$BODY" | jq -r '.limit // empty')
-EXPIRES_AT=$(printf '%s' "$BODY" | jq -r '.expires_at // empty')
-if [ -z "$LIVE_LIMIT" ]; then
-  # A 200 carrying something that is not an interaction-limit object — an error object, an HTML
-  # interstitial, a truncated body. Reported as a bad response, never as "armed".
-  push down "interaction-limits response had no .limit — bad response, state UNVERIFIED"
-  exit 1
-fi
+  live=$(printf '%s' "$body" | jq -r '.limit // empty')
+  expires=$(printf '%s' "$body" | jq -r '.expires_at // empty')
+  if [ -z "$live" ]; then
+    # A 200 carrying something that is not an interaction-limit object — an error object, an
+    # HTML interstitial, a truncated body. Reported as a bad response, never as "armed".
+    RESULT="${repo}: interaction-limits response had no .limit — bad response, state UNVERIFIED"
+    return 1
+  fi
+  if [ "$live" != "$WANT_LIMIT" ]; then
+    # The API accepted the PUT and stored something else. Not a shape GitHub is documented to
+    # produce, which is exactly why it is checked: this is the one branch that would otherwise
+    # read "armed" while the setting was wrong.
+    RESULT="${repo}: interaction limit is '${live}' after PUT of '${WANT_LIMIT}' — declared state NOT applied"
+    return 1
+  fi
+  RESULT="${repo}: interaction limit ${live} re-armed, expires ${expires:-unknown}"
+}
 
-if [ "$LIVE_LIMIT" != "$WANT_LIMIT" ]; then
-  # The API accepted the PUT and stored something else. Not a shape GitHub is documented to
-  # produce, which is exactly why it is checked: this is the one branch that would otherwise
-  # read "armed" while the setting was wrong.
-  push down "interaction limit is '${LIVE_LIMIT}' after PUT of '${WANT_LIMIT}' — declared state NOT applied"
-  exit 1
-fi
-
-push up "interaction limit ${LIVE_LIMIT} re-armed, expires ${EXPIRES_AT:-unknown}"
-exit 0
+STATUS=up
+SUMMARY=""
+for repo in {% for repo in github_interaction_limit_repos %}"{{ repo }}" {% endfor %}; do
+  apply "$repo" || STATUS=down
+  SUMMARY+="${SUMMARY:+; }${RESULT}"
+done
+push "$STATUS" "$SUMMARY"
+[ "$STATUS" = up ]
