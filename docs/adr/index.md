@@ -75,6 +75,7 @@ wrong is worth more than the record of one that did not.
 | [0028](0028-the-renderer-supports-a-closed-jinja-subset.md) | The cluster render supports a closed Jinja subset | Accepted | 2026-11-06 |
 | [0029](0029-each-host-is-configured-by-its-own-package-not-ansible.md) | Each host is configured by its own package, and Ansible is gone | Accepted | 2026-11-12 |
 | [0030](0030-the-ansible-tree-is-renamed-for-what-it-holds.md) | The ansible/ tree is renamed for what it holds, after its installed readers accept both paths | Accepted | 2026-11-13 |
+| [0031](0031-each-kind-of-fact-has-one-stateless-detector.md) | Each kind of documented fact has one home and one stateless detector | Accepted | 2026-11-13 |
 
 ## The long-form behind a record
 

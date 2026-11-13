@@ -6,14 +6,19 @@ itself. Three tests read the real `ci.yml` and hold the tool's tables to it.
 Run: uv run pytest scripts/deploy_tools/tests/test_local_sweep.py
 """
 
+import fcntl
+import json
 import os
+import subprocess
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
 
 import local_sweep
 from lib import yaml_fast
+from lib.git import git
 from lib.exit_codes import (
     SWEEP_BAD_ARGS,
     SWEEP_FAILED,
@@ -187,7 +192,7 @@ def test_the_scratch_tree_goes_unless_the_caller_keeps_it(repo, cache):
     checks = _bash("exit 0", "hooks")
 
     assert sweep("HEAD", repo=repo, checks=checks).kept is None
-    assert list(cache.iterdir()) == []
+    assert not list(cache.glob("*-*"))
 
     kept = sweep("HEAD", repo=repo, checks=checks, keep=True).kept
     assert kept is not None
@@ -206,6 +211,7 @@ def test_a_sweep_removes_what_a_killed_sweep_left_behind_and_nothing_else(repo, 
 
     assert sorted(p.name for p in cache.iterdir()) == [
         "kept-by-hand",
+        "lock",
         "sweep-still-running",
     ]
 
@@ -244,6 +250,16 @@ def test_a_result_line_reads_back_as_the_sweep_it_was_written_from():
     assert local_sweep.parse_result_line(in_syslog.rsplit(" ", 1)[0]) is None
     # A verdict the tool never writes would otherwise compare as "not red".
     assert local_sweep.parse_result_line(in_syslog.replace("=pass", "=ok")) is None
+
+
+def test_no_part_of_a_runs_result_line_reads_as_another_run_or_a_commits_sweep():
+    of_a_run = Sweep("abc", "def", (Check("pytest", "fail", 9),), 13, run=12345)
+    line = of_a_run.result_line()
+
+    assert local_sweep.parse_result_line(line) == of_a_run
+    assert not any(
+        local_sweep.parse_result_line(line[:end]) for end in range(len(line))
+    )
 
 
 @pytest.mark.parametrize(
@@ -301,9 +317,111 @@ def test_a_commit_git_cannot_resolve_gets_no_verdict(repo):
     assert local_sweep.main(["no-such-commit"], repo=repo) == SWEEP_NO_VERDICT
 
 
+def test_a_sweep_waits_for_the_one_before_it_and_does_not_count_the_wait(
+    repo, cache, tmp_path
+):
+    ran = tmp_path / "ran"
+    cache.mkdir(parents=True)
+    with (cache / "lock").open("w") as another_sweep, ThreadPoolExecutor(1) as pool:
+        fcntl.flock(another_sweep, fcntl.LOCK_EX)
+        waiting = pool.submit(sweep, "HEAD", repo=repo, checks=_bash(f"touch {ran}"))
+        time.sleep(2)
+        ran_beside_it = ran.exists()
+        fcntl.flock(another_sweep, fcntl.LOCK_UN)
+        result = waiting.result()
+
+    assert not ran_beside_it
+    assert ran.exists()
+    assert result.seconds < 2
+
+
+@pytest.fixture
+def merge(repo, tmp_path):
+    """A commit that only `repo`'s origin holds, as a pull request's merge is."""
+    upstream = init_repo(tmp_path / "upstream", initial_commit="base")
+    git("remote", "add", "origin", str(upstream), cwd=repo)
+    return commit(upstream, "the merge", a="1")
+
+
+def _github(merge, event="pull_request", actor="User", fork=False, log=None):
+    """A stand-in for `gh api` over one run. Its first job skipped, so GitHub holds no log
+    of it, and its second logged its checkout."""
+    run = {
+        "event": event,
+        "head_sha": "f" * 40,
+        "actor": {"login": "renovate[bot]", "type": actor},
+        "repository": {"full_name": "owner/server"},
+        "head_repository": {"full_name": "fork/server" if fork else "owner/server"},
+    }
+    jobs = {
+        "jobs": [{"id": 1, "conclusion": "skipped"}, {"id": 2, "conclusion": "failure"}]
+    }
+    if log is None:
+        log = f"git fetch origin +refs/heads/*:x +{merge}:refs/remotes/pull/7/merge\n"
+
+    def read(*args: str) -> str:
+        path = args[-1]
+        if path.endswith("/jobs/1/logs"):
+            raise subprocess.CalledProcessError(1, ["gh"], stderr="gh: Not Found")
+        if path.endswith("/jobs/2/logs"):
+            return log
+        return json.dumps(jobs if path.endswith("/jobs?per_page=100") else run)
+
+    return read
+
+
+def test_a_run_sweeps_the_merge_its_log_names_and_tags_the_result(repo, merge, capsys):
+    code = local_sweep.main(
+        ["--run", "5"], repo=repo, checks=_bash("exit 0"), github=_github(merge)
+    )
+
+    assert code == SWEEP_PASSED
+    last = capsys.readouterr().out.splitlines()[-1]
+    assert f" sha={merge} " in last
+    assert " run=5 " in last
+
+
 @pytest.mark.parametrize(
-    "argv", [[], ["HEAD", "HEAD~1"], ["--fast"], ["HEAD", "--once"]]
+    ("run", "why"),
+    [
+        ({"actor": "Bot"}, "renovate[bot] started it"),
+        ({"fork": True}, "its branch is in the fork fork/server"),
+        ({"event": "push"}, "it is a push run"),
+        (
+            {"log": "git checkout --force refs/heads/master\n"},
+            "no job's log names the merge",
+        ),
+    ],
+    ids=[
+        "a-bot-started-it",
+        "from-a-fork",
+        "not-a-pull-request",
+        "no-merge-in-the-log",
+    ],
 )
-def test_anything_but_one_commit_is_a_usage_error(repo, argv):
-    # A usage error that reached the sweep would die there and exit 69.
-    assert local_sweep.main(argv, repo=repo, checks=DIES) == SWEEP_BAD_ARGS
+def test_a_run_with_no_tree_for_this_host_is_not_swept(repo, merge, capsys, run, why):
+    # The first three stand-ins still log a merge the sweep could fetch and pass.
+    code = local_sweep.main(
+        ["--run", "5"], repo=repo, checks=_bash("exit 0"), github=_github(merge, **run)
+    )
+
+    assert code == SWEEP_NO_VERDICT
+    assert f"no tree to sweep for run 5: {why}" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        [],
+        ["HEAD", "HEAD~1"],
+        ["--fast"],
+        ["HEAD", "--once"],
+        ["HEAD", "--run", "5"],
+        ["--run", "five"],
+    ],
+)
+def test_anything_but_one_commit_or_one_run_is_a_usage_error(repo, argv):
+    # A usage error that reached GitHub or the sweep would die there and exit 69.
+    assert (
+        local_sweep.main(argv, repo=repo, checks=DIES, github=_raises) == SWEEP_BAD_ARGS
+    )
