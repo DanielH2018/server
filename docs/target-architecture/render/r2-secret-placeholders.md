@@ -211,9 +211,9 @@ writer to the cluster throughout.
       `homepage/templates/config/services.yaml.j2`. One is the loop
       `{% for rule in containers_list | authelia_service_rules(domain, rfc1918_networks) %}`
       in `authelia/templates/config-secret.yaml.j2`. Both filters keep the value intact.
-      `ansible/filter_plugins/homepage_tiles.py:homepage_href` returns
+      `scripts/renderer/template_filters/homepage_tiles.py:homepage_href` returns
       `f"https://{host}.{domain}{path}"`.
-      `ansible/filter_plugins/authelia_access.py:authelia_service_rules` builds
+      `scripts/renderer/template_filters/authelia_access.py:authelia_service_rules` builds
       `f"{hostname}.local.{domain}"` for each entry and sorts the names within each rule.
     - **Five bindings hold a key.**
         - The loop in the shared `ansible/templates/ingressroute.yml.j2` macro unpacks
@@ -239,7 +239,7 @@ writer to the cluster throughout.
   `KUMA_PUSH_{{ check.name | upper }}: "{{ lookup('vars', check.token) }}"`. The third,
   `observability/templates/prometheus.yaml.j2`, applies `| int > 0` to
   `lookup('vars', job.replicas_var)`. `replicas_var` is a field of a `containers_list`
-  entry's `metrics:` list (`ansible/filter_plugins/scrape_jobs.py`), and its one value is
+  entry's `metrics:` list (`scripts/renderer/template_filters/scrape_jobs.py`), and its one value is
   `terraria_k8s_replicas`, which is not a secret key.
 - **Rule 5's subject, measured on the syntax tree.** All 294 `.j2` files under
   `ansible/roles/k8s/*/templates/` and `ansible/templates/` parse with Jinja's default
@@ -995,7 +995,7 @@ change.
 + scripts/lib/plain_scalar.py                 (the guard's resolver, shared with D3's write)
 + scripts/renderer/standalone_map.py          (writes the guard's key map)
   scripts/renderer/renderer_lib/flux_probe.py (+ the resolver corpus)
-+ ansible/filter_plugins/standalone_guard.py
++ scripts/renderer/template_filters/standalone_guard.py
 + ansible/roles/k8s/manifests/files/standalone_secret_keys.json
   ansible/roles/k8s/manifests/tasks/main.yml  (+ the guard's two tasks before the render)
 + ansible/roles/k8s/qbittorrent/templates/mullvad-account-secret.yaml.j2
@@ -1349,7 +1349,7 @@ PR 4 deletes it.
         - The standalone map's named member becomes `email` in traefik.
         - CI's "Red-proof the round trip's second pass" step moves to `--role traefik`.
     - **Domain PR 2b, the flip.** `domain` stops being a placeholder or a stub key.
-        - `ansible/filter_plugins/secret_stubs.py` gains a `PUBLISHED` set. It does not reuse
+        - `scripts/renderer/template_filters/secret_stubs.py` gains a `PUBLISHED` set. It does not reuse
           `NEVER_STUB`, whose reason is "no template reads it". `homelab_stub_keys` excludes
           `PUBLISHED`.
         - `secret_checks.py`: `PLACEHOLDER_ANYWHERE` becomes `{"email"}`. The prometheus

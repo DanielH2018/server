@@ -1,6 +1,6 @@
 """`probe.py shed-set` — the k8s workloads to scale down when one node is lost.
 
-Each tier in `filter_plugins/service_tier.py` names a service the house, SSO or the platform
+Each tier in `template_filters/service_tier.py` names a service the house, SSO or the platform
 needs. Everything else is the shed set: the untiered services an operator scales to zero so
 the tiered ones fit on the surviving node (#3481). The set is derived from the `tier` field on
 `cluster/services.yml`, through `lib.service_tiers.shed_set`, so a service joins or

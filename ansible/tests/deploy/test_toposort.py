@@ -1,20 +1,15 @@
 #!/usr/bin/env python3
-"""Unit tests for toposort_containers in filter_plugins/toposort.py.
+"""Unit tests for toposort_containers in template_filters/toposort.py.
 
 The k8s play in deploy.yml orders every deploy through this filter, so a silent bug here
-would mis-order services. Pure in/out logic — no Ansible
-runtime needed beyond the plugin itself.
-
-Lives in ansible/tests/ (not under filter_plugins/) so Ansible's filter-plugin loader
-doesn't try to import it as a plugin; the `pythonpath` setting in pyproject.toml puts
-filter_plugins/ on sys.path so `import toposort` resolves.
+would mis-order services. Pure in/out logic.
 
 Run: uv run pytest ansible/tests
 """
 
 import pytest
 
-from toposort import DependencyCycle, toposort_containers
+from renderer.template_filters.toposort import DependencyCycle, toposort_containers
 
 
 def _containers(*specs):

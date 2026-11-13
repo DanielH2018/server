@@ -43,8 +43,6 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 from diagnostics.probe_lib import alertmanager_api, core
 from diagnostics.probe_lib.obs_api import prom_query_url
 
-from lib.repo_paths import FILTER_PLUGINS
-
 
 # C7 *Health gate*: `shadow!="true"`, `alertname!="Watchdog"`, and `severity="critical"` or
 # `verify="true"` (the soak's set, C7 *Verify successors* shape 1).
@@ -437,8 +435,7 @@ def has_ingress_route(entry):
     """
     if entry is None:
         return False
-    _sys.path.insert(0, str(FILTER_PLUGINS))
-    from ingress_probes import ingress_probe_targets
+    from renderer.template_filters.ingress_probes import ingress_probe_targets
 
     return bool(ingress_probe_targets([entry]))
 

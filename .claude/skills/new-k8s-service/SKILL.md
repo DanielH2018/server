@@ -123,7 +123,7 @@ of the list but ahead of netpol-baseline. **The entry is born owned by Flux**, b
 applies every k8s entry, and no `owner` key marks it. netpol-baseline is ordered after every other entry, because it
 is in `K8S_APPLIES_LAST`, and `test_derived_order_matches_todays_hand_ordered_list` holds the
 list to the sorted order. Otherwise, where in the list doesn't matter: the renderer toposorts
-on `build_k8s_dep_map` / `toposort_containers` (`ansible/filter_plugins/toposort.py`), and
+on `build_k8s_dep_map` / `toposort_containers` (`scripts/renderer/template_filters/toposort.py`), and
 three edges are derived automatically —
 
 - a routed entry — one carrying a `hostname` — gets an edge onto `traefik`, as does a role

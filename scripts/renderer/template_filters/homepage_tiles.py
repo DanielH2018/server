@@ -1,4 +1,4 @@
-"""Ansible filter plugin deriving homepage's tile links and widget edges from containers_list.
+"""Filters deriving homepage's tile links and widget edges from containers_list.
 
 A homepage widget that dials a Service's ClusterIP needs that Service's NetworkPolicy to admit
 `app: homepage`, because the namespace baseline admits only traefik, prometheus and the node
@@ -14,20 +14,9 @@ without the key, so a widget URL and its edge cannot disagree.
 `homepage_href` builds a tile's link from the entry's `hostname`, so a renamed route moves the
 tile with it.
 
-No Ansible import, so the tests call the same functions the renderer runs. `FilterModule`
-re-raises a function's `ValueError` as `FilterError` prefixed with the filter's name,
-which fails the render task before any apply.
+`lib.ansible_jinja_env` registers each so a `ValueError` fails the render as a `FilterError` prefixed
+with the filter's name, before any apply.
 """
-
-import sys as _sys
-from pathlib import Path as _Path
-
-# Ansible loads a plugin by file path, so `filter_errors` beside it imports by bare name only
-# once this directory is on the path (#4527).
-if str(_Path(__file__).resolve().parent) not in _sys.path:
-    _sys.path.insert(0, str(_Path(__file__).resolve().parent))
-
-from filter_errors import _as_filter
 
 HOMEPAGE_APP = "homepage"
 
@@ -113,13 +102,3 @@ def homepage_href(containers_list, name, domain, path="/", lan=False):
         raise ValueError(f"containers_list entry {name!r} has no `hostname`")
     host = f"{entry['hostname']}.local" if lan else entry["hostname"]
     return f"https://{host}.{domain}{path}"
-
-
-class FilterModule:
-    def filters(self):
-        return {
-            "netpol_callers": _as_filter(netpol_callers),
-            "netpol_caller_fences": _as_filter(netpol_caller_fences),
-            "homepage_widget_url": _as_filter(homepage_widget_url),
-            "homepage_href": _as_filter(homepage_href),
-        }

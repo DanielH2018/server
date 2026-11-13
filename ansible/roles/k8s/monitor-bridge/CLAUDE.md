@@ -74,7 +74,7 @@ job. The internals page has their series and wiring.
 `files/` holds flat modules and three packages: `bridge/` (shared plumbing), `checks/` (one
 module per domain of `check_*` bodies) and `verdicts/` (pure logic taking its inputs as
 arguments). `check_table.py` imports only `bridge.types` and the `checks.*` bodies; a row's
-fields but `fn` are literals, because `ansible/filter_plugins/py_table.py` parses the table
+fields but `fn` are literals, because `scripts/renderer/template_filters/py_table.py` parses the table
 without running it.
 
 **Adding a module means adding its path to `monitor_bridge_modules`** in `defaults/main.yml`.

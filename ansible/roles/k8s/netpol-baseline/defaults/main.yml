@@ -128,7 +128,7 @@ netpol_baseline_obs_node_cidrs: "{{ k3s_cni0_gateways + k3s_flannel_node_ips }}"
 #             it when `service` names a services entry; the Job then reads the entry's
 #             `port` through `entry_port`, so the row follows the entry rather than copying it
 #             (#3867). The lookup sits in the template because role defaults
-#             resolve without this repo's filter plugins in the render guards.
+#             resolve without this repo's template filters in the render guards.
 #   service_port — the port the leg dials, for a Service that does NOT map its port to the pod
 #             port 1:1. Absent on every row whose Service does, and the leg then dials `port`.
 #             The fence is enforced on the pod port after the Service's DNAT, so `port` stays

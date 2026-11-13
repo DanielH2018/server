@@ -286,7 +286,6 @@
  "ansible/tests/repo/test_every_ci_job_is_gated.py": 0.04,
  "ansible/tests/repo/test_every_section_lints_clean.py": 1.44,
  "ansible/tests/repo/test_failure_class_detectors.py": 0.01,
- "ansible/tests/repo/test_filter_plugins_share_as_filter.py": 1.49,
  "ansible/tests/repo/test_flux_bootstrap_section.py": 0.03,
  "ansible/tests/repo/test_flux_recovery_runbook.py": 0.01,
  "ansible/tests/repo/test_guard_tests_read_renders_not_templates.py": 25.3,

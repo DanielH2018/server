@@ -8,7 +8,7 @@ Deployment whose startup depends on it. A policy one role away would let `--tags
 stage a web pod that can only time out.
 
 `build_k8s_dep_map` cannot cover this: it derives a role's edges from templates inside that role's
-own directory (`ansible/filter_plugins/toposort.py`), so a dependency expressed in a sibling role
+own directory (`scripts/renderer/template_filters/toposort.py`), so a dependency expressed in a sibling role
 produces no edge and no ordering constraint to violate. Co-location is what closes it, and this is
 the guard that keeps it closed.
 

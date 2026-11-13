@@ -12,7 +12,7 @@ are a contract with the cluster: the `longhorn-reconcile` role's `files/longhorn
 labels each volume with a group, and the readers select on it. Renaming a live group label drops its volumes out of their RecurringJob
 with nothing failing, so the Python readers take each name from here rather than retyping it.
 The Ansible tasks, the restore drill and `seed_volume_backup.yml` take them from here too,
-through `ansible/filter_plugins/longhorn_groups.py` (#3946). The static StorageClass file cannot
+through `scripts/renderer/template_filters/longhorn_groups.py` (#3946). The static StorageClass file cannot
 call a filter and still spells `no-backup` out.
 
 WHERE IT RUNS. The health timer imports it as `longhorn_lib.longhorn_backups`, shipped in

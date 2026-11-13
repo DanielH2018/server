@@ -343,7 +343,7 @@ behind them.
   root too.
 - **Role tests import their own `files/`.** `ansible/roles/conftest.py` added that directory
   in #3746.
-- **No `filter_plugins/tests/`.** Ansible's `PluginLoader._get_paths_with_context` globs two
+- **No `template_filters/tests/`.** Ansible's `PluginLoader._get_paths_with_context` globs two
   levels of subdirectories, so a test there loads at deploy time.
 
 ## Strengths to copy from

@@ -1,7 +1,7 @@
 """The Jinja environment a test renders a task expression or a macro in.
 
 Kept apart from `_helpers.py` because it imports the renderer's filter set, and with it every
-filter plugin, which the prek hooks whose entries import `_helpers.py` would otherwise have to
+template filter, which the prek hooks whose entries import `_helpers.py` would otherwise have to
 run on.
 """
 

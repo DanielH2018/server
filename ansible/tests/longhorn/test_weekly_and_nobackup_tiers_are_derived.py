@@ -3,7 +3,7 @@
 `k3s_longhorn_weekly_volumes` and `k3s_longhorn_nobackup_volumes` were hand lists in the k3s
 role's defaults. A weekly volume's weekday was its index mod 7 in its list. Each entry now
 declares `weekly_backup_claims` (claim to shard) and `no_backup_claims`, read by
-`filter_plugins/longhorn_groups.py`. These tests pin the derivation to the lists it replaced,
+`template_filters/longhorn_groups.py`. These tests pin the derivation to the lists it replaced,
 so the migration moved no volume to another weekday. A shard that later moves on purpose
 edits the table below in the same change.
 
@@ -14,8 +14,7 @@ import pytest
 
 from _helpers import load_defaults
 from lib.repo_paths import LONGHORN_RECONCILE_ROLE
-import longhorn_groups
-from filter_errors import FilterError
+from lib.ansible_jinja_env import FilterError, repo_filters
 from lib.service_tiers import resolved_tier_lists
 
 # Each volume of the replaced weekly list, with its index mod 7 in that list.
@@ -113,5 +112,5 @@ def test_the_nobackup_set_is_the_list_it_replaced():
 def test_a_refusal_is_a_filter_error_named_for_its_filter(name, args):
     """A render failure names the filter that refused, through the filter Ansible calls."""
     with pytest.raises(FilterError) as caught:
-        longhorn_groups.FilterModule().filters()[name](*args)
+        repo_filters()[name](*args)
     assert str(caught.value).startswith(f"{name}: "), str(caught.value)

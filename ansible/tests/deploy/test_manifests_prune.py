@@ -19,7 +19,7 @@ from lib.k8s_roles import (
     MANIFESTS_PRUNE_DEFAULT,
     k8s_tags,
 )
-from role_label import ROLE_LABEL, _Loader, homelab_role_label
+from renderer.template_filters.role_label import ROLE_LABEL, _Loader, homelab_role_label
 
 
 # The roles that opt out of the prune, each by operator decision recorded as a DECIDED marker

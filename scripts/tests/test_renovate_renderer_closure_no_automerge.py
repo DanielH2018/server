@@ -26,7 +26,6 @@ ROOTS = (
     REPO / "scripts" / "renderer",
     REPO / "scripts" / "renderer" / "job_files",
     REPO / "scripts" / "deploy_tools",
-    REPO / "ansible" / "filter_plugins",
 )
 
 

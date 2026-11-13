@@ -1711,7 +1711,7 @@ says otherwise.
       `scripts/deploy_tools/land_lib/host_wait.py`. Nothing calls it yet, so no landing
       changes.
         1. `HOST_INPUTS` is a constant in the renderer: every path prefix a host render reads.
-           It holds `hosts/`, `ansible/inventory/`, `ansible/filter_plugins/`, `scripts/lib/`,
+           It holds `hosts/`, `ansible/inventory/`, `scripts/renderer/template_filters/`, `scripts/lib/`,
            `scripts/renderer/`, `pyproject.toml`, `uv.lock`, `ansible/vars/secrets.yml`,
            because host mode removes its key names, and
            `ansible/roles/setup/initial_setup/files/kuma-push-lib.sh`, which H3.8b copies. A

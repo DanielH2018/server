@@ -1,19 +1,15 @@
-"""Unit tests for `py_table` in filter_plugins/py_table.py.
+"""Unit tests for `py_table` in renderer/template_filters/py_table.py.
 
 monitor-bridge's env-secret reads the bridge's check table through this filter (#3659, #3781).
 A row the filter drops is a check missing from the rendered Secret, so each way it can lose a
 row raises instead.
-
-Lives in ansible/tests/ (not under filter_plugins/) so Ansible's filter-plugin loader doesn't
-import it as a plugin.
 
 Run: uv run pytest ansible/tests/deploy/test_py_table_filter.py
 """
 
 import pytest
 
-from filter_errors import FilterError
-from py_table import FilterModule, py_table
+from renderer.template_filters.py_table import py_table
 
 SOURCE = """
 from checks import service
@@ -52,15 +48,3 @@ def test_an_element_that_is_not_a_call_is_flagged():
 
 
 # ── error shape (#4505) ─────────────────────────────────────────────────────────────────────
-
-
-@pytest.mark.parametrize(
-    "source",
-    ["ROWS = 1\n", "ROWS = (1,)\n", "ROWS = (Row(1),)\n"],
-    ids=["no-table", "not-a-call", "positional"],
-)
-def test_a_refusal_is_a_filter_error_named_for_its_filter(source):
-    """A render failure names the filter that refused, through the filter Ansible calls."""
-    with pytest.raises(FilterError) as caught:
-        FilterModule().filters()["py_table"](source, "ROWS")
-    assert str(caught.value).startswith("py_table: "), str(caught.value)

@@ -60,10 +60,7 @@ from lib.repo_paths import HOST_LIB_FILES
 
 sys.path.insert(0, str(HOST_LIB_FILES))
 import host_lib
-from lib.repo_paths import FILTER_PLUGINS
-
-sys.path.insert(0, str(FILTER_PLUGINS))
-from longhorn_manager import ready_manager_ip
+from renderer.template_filters.longhorn_manager import ready_manager_ip
 from lib.cli_help import answer_help
 from lib.exit_codes import USAGE_ERROR
 from longhorn_reap_lib import logic

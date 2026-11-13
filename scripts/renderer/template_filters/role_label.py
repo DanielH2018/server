@@ -1,4 +1,4 @@
-"""Ansible filter plugin stamping `homelab/role: <service>` onto every object a render produced.
+"""The filter stamping `homelab/role: <service>` onto every object a render produced.
 
 The manifests role pruned an armed role's dropped objects with `kubectl apply --prune -l
 homelab/role=<service>` (#3388). The selector does two jobs there. It decides which live
@@ -18,25 +18,14 @@ the prune deleting every live object that file used to declare.
 Only `metadata.labels` changes. A Deployment's `spec.selector` and pod-template labels stay as
 rendered, so labelling a workload rolls no pods and touches no Service selector.
 
-No Ansible import at load time, so the tests call the same function the renderer runs.
-`FilterModule` registers it through `_as_filter`, which re-raises a `ValueError` as
-`FilterError("homelab_role_label: ...")` and fails the render task before any apply
-(#4505).
+`lib.ansible_jinja_env` registers it so a `ValueError` fails the render as
+`FilterError("homelab_role_label: ...")` before any apply (#4505).
 """
 
 import re
 
 import yaml
 
-import sys as _sys
-from pathlib import Path as _Path
-
-# Ansible loads a plugin by file path, so `filter_errors` beside it imports by bare name only
-# once this directory is on the path (#4527).
-if str(_Path(__file__).resolve().parent) not in _sys.path:
-    _sys.path.insert(0, str(_Path(__file__).resolve().parent))
-
-from filter_errors import _as_filter
 
 ROLE_LABEL = "homelab/role"
 
@@ -152,8 +141,3 @@ def homelab_role_label(text: str, role: str) -> str:
     return yaml.dump_all(
         docs, Dumper=_Dumper, sort_keys=False, default_flow_style=False, width=4096
     )
-
-
-class FilterModule:
-    def filters(self):
-        return {"homelab_role_label": _as_filter(homelab_role_label)}

@@ -1,4 +1,4 @@
-"""Ansible filter plugin deriving the ingress probe targets from `containers_list`.
+"""The filter deriving the ingress probe targets from `containers_list`.
 
 Every entry with a `hostname` is served at `https://<hostname>.local.<domain>`, and a probe of
 that URL needs nothing the entry does not already carry: the hostname gives the URL, `auth_tier`
@@ -8,20 +8,10 @@ per entry in the `blackbox-ingress` scrape job, which blackbox_exporter probes (
 
 An entry opts out with `probe: false`, and says why in a comment. That is the key's only form.
 
-No Ansible import, so `probe_lib/health_alerts.py` reads the same function the renderer runs.
-`FilterModule` registers the filter through `_as_filter`, so a refusal reaches the operator as
-`FilterError("ingress_probe_targets: ...")` (#4505).
+`probe_lib/health_alerts.py` reads the same function the renderer runs. `lib.ansible_jinja_env` registers
+it so a refusal reaches the operator as `FilterError("ingress_probe_targets: ...")`
+(#4505).
 """
-
-import sys as _sys
-from pathlib import Path as _Path
-
-# Ansible loads a plugin by file path, so `filter_errors` beside it imports by bare name only
-# once this directory is on the path (#4527).
-if str(_Path(__file__).resolve().parent) not in _sys.path:
-    _sys.path.insert(0, str(_Path(__file__).resolve().parent))
-
-from filter_errors import _as_filter
 
 
 def ingress_probe_targets(containers_list):
@@ -51,8 +41,3 @@ def ingress_probe_targets(containers_list):
             }
         )
     return targets
-
-
-class FilterModule:
-    def filters(self):
-        return {"ingress_probe_targets": _as_filter(ingress_probe_targets)}

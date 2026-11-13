@@ -327,7 +327,7 @@ and upstream facts through `gh`.
 - **A service's priority class comes from its tier.** The comment above the entries in
   `ansible/inventory/host_vars/daniel-box.yml` says a tiered role's templates take the class
   from `tier_priority_class` rather than writing it (#3452).
-  `ansible/filter_plugins/service_tier.py:SERVICE_TIERS` maps `platform` to
+  `scripts/renderer/template_filters/service_tier.py:SERVICE_TIERS` maps `platform` to
   `homelab-critical`. `ansible/tests/k8s/test_priority_class_is_derived_from_tier.py:_CLASS_AT_DERIVATION`
   is compared with exact equality. `service_tier.py:shed_entries` sheds every untiered entry,
   and [Break-glass](../../break-glass.md), scenario *one node is down and the survivor runs
@@ -495,7 +495,7 @@ daniel-box:   source-controller polls :prod every minute and verifies the signat
       the image registry and the alert bridge. From D2 on, Flux is the deploy path, so it
       belongs with them. A tier also keeps the entry out of `probe.py shed-set`, which
       [Break-glass](../../break-glass.md) scales to zero when a node is lost.
-      `ansible/filter_plugins/service_tier.py:tier_priority_class` takes the list as its
+      `scripts/renderer/template_filters/service_tier.py:tier_priority_class` takes the list as its
       first argument, so this mention makes the flux role a `containers_list` reader from
       D1.2 on (*Risks*, and *D1 adds no root-only suspend* below).
     - `enableServiceLinks: false`, a pod-level `runAsUser` and `runAsGroup` pinned to the uid
@@ -1221,7 +1221,7 @@ check. Flux owns no object outside `flux-system` until D2's flip PR.
       on `customresourcedefinitions`. The comment above it, which requires the RBAC and
       the collector's arguments to change together, gains the new argument.
     - Add a hand-written scrape job, `flux`, for the controllers' `http-prom` port in
-      `templates/prometheus.yaml.j2`. `ansible/filter_plugins/scrape_jobs.py` says a job
+      `templates/prometheus.yaml.j2`. `scripts/renderer/template_filters/scrape_jobs.py` says a job
       needing pod discovery stays hand-written. Its `metric_relabel_configs` drop every
       series whose name ends in `_bucket`. No rule or board here reads a Flux histogram, and
       D4's saturation rule reads gauges.
@@ -2200,7 +2200,7 @@ the timer, and the window in D1-I1-02 ends at D5's flux PR rather than D6.12.
 
 - **D1-I1-01 (high), an unattended tick can apply the flux role during H1's DR window, and
   the lever-off render resumes the root before the restores. Fixed.** Confirmed:
-  `ansible/filter_plugins/service_tier.py:tier_priority_class` takes the list as its first
+  `scripts/renderer/template_filters/service_tier.py:tier_priority_class` takes the list as its first
   argument, `scripts/deploy_tools/narrow_lib/containers.py:renders_containers_list` matches
   any mention inside Jinja code, and `containers.py:reader_paths` keeps every such template
   when `changed` is None. `docs/gitops-pipeline.md` says the narrowed list is not filtered

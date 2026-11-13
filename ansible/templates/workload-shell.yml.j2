@@ -57,7 +57,7 @@
                               so the pod loses every eviction race silently. A role whose
                               services entry declares a `tier` passes
                               `services | tier_priority_class('<role>')` instead of a
-                              literal (filter_plugins/service_tier.py, #3452).
+                              literal (template_filters/service_tier.py, #3452).
     service_account           emit `serviceAccountName: <value>`; omitted when none.
     automount                 `automountServiceAccountToken`. Left at none it follows the
                               hygiene rule: a pod that names no service_account runs as the

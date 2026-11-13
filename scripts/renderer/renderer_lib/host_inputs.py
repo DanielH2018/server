@@ -14,7 +14,6 @@ HOST_INPUTS = (
     "hosts/",
     "ansible/inventory/",
     "cluster/services.yml",  # every template's `services` (`render_guard.k8s_services`)
-    "ansible/filter_plugins/",
     "scripts/lib/",
     "scripts/renderer/",
     # They decide the environment `uv run` renders in.
@@ -30,7 +29,7 @@ HOST_INPUTS = (
     # Past the plan's list, found by the audit test: `homelab_render.py` imports it at load, for
     # cluster mode.
     "scripts/secrets_mgmt/cluster_vars_check.py",
-    # `host_lib.py` and `longhorn_lib/longhorn_backups.py`, which the filter
-    # plugins and `scripts/lib/` import at load, sit under `hosts/` and `scripts/lib/` since
-    # H7.2e, so the two directory members above already cover them.
+    # `host_lib.py` and `longhorn_lib/longhorn_backups.py`, which the template filters and
+    # `scripts/lib/` import at load, sit under `hosts/` and `scripts/lib/` since H7.2e, so the
+    # two directory members above already cover them.
 )

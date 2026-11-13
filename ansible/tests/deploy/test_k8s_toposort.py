@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The k8s play toposorts containers_list; this guards that the sort is actually correct.
 
-deploy.yml calls build_k8s_dep_map + toposort_containers (ansible/filter_plugins/toposort.py),
+deploy.yml calls build_k8s_dep_map + toposort_containers (scripts/renderer/template_filters/toposort.py),
 so the ordering rules are graph edges rather than hand position in a list -- hand position
 holds right up until someone appends a service in the obvious place. Two rules are derived:
 
@@ -50,7 +50,7 @@ from lib.render_guard import k8s_services
 from lib.repo_paths import K8S_ROLES, K8S_SERVICES
 
 from _k8s_render import rendered_docs
-from toposort import (
+from renderer.template_filters.toposort import (
     K8S_CRD_EDGE_EXEMPT,
     K8S_APPLIES_LAST,
     build_k8s_dep_map,

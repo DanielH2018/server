@@ -90,7 +90,7 @@ PR 5 is recorded as supporting evidence only, under the rule in *Verification*.
 
 ## Baseline at `70591c307`
 
-- **The tiles are generated.** `ansible/filter_plugins/kuma_monitors.py:kuma_ingress_monitors`
+- **The tiles are generated.** `scripts/renderer/template_filters/kuma_monitors.py:kuma_ingress_monitors`
   yields one tile per `containers_list` entry with a `hostname`, unless the entry sets
   `kuma: false`. `static-monitors.yaml.j2` renders each tile as an HTTP monitor on
   `https://<hostname>.local.<domain>`:
@@ -107,7 +107,7 @@ PR 5 is recorded as supporting evidence only, under the rule in *Verification*.
   monitors that M6 moves.
 - **The alerting follows the service tier.** The `service_alerting` macro in
   `static-monitors.yaml.j2` gives a `home-critical` entry the `critical` tag and the email leg.
-  Every other entry pages Discord only (`ansible/filter_plugins/service_tier.py:in_service_tier`,
+  Every other entry pages Discord only (`scripts/renderer/template_filters/service_tier.py:in_service_tier`,
   decided 2026-10-04, #3480). The filter's signature is `(containers_list, name, tier)`.
 - **Kuma pins every ingress name to the ingress VIP.**
   `ansible/roles/k8s/uptime-kuma/templates/deployment.yaml.j2` renders `hostAliases` that map
@@ -160,7 +160,7 @@ PR 5 is recorded as supporting evidence only, under the rule in *Verification*.
   ([M2](m2-first-bridge-family.md#the-weekly-reboot-mute)). M1's routing sends
   `severity="critical"` to Discord and email with no mute until then.
 - **Deploy ordering comes from three sources only.**
-  `ansible/filter_plugins/toposort.py:build_k8s_dep_map` reads an entry's `depends_on`, its
+  `scripts/renderer/template_filters/toposort.py:build_k8s_dep_map` reads an entry's `depends_on`, its
   `use_authelia` flag and whether it is routed (for the traefik edge). It never reads
   `entry_port`. The sort is stable. `scripts/dev/new_k8s_service.py:append_entry` appends a new
   entry after the list's last item, which is after `observability`.
@@ -691,7 +691,7 @@ tuned. The likely episodes:
   their promtool cases. In M2's routing pytest, drop `shadow` from their two label sets and
   change their outcome from `blackhole` to `muted`.
 - Touch only observability's rule tree, its promtool tests and M2's routing pytest. The
-  cutover's critical path then holds no deploy-plane path, such as `ansible/filter_plugins/`,
+  cutover's critical path then holds no deploy-plane path, such as `scripts/renderer/template_filters/`,
   that `land.sh` would have to narrow.
 - Branch it from master, not from PR 4. The repo squash-merges, so a branch carrying PR 4's
   commits turns CONFLICTING with no CI once PR 4 lands. The two PRs touch different files, so
@@ -730,9 +730,9 @@ its own cutover into PR 4a and PR 4b for the same reason.
 
 ### PR 6 — The filter's docstring (about 10 lines)
 
-- Rewrite the module docstring of `ansible/filter_plugins/kuma_monitors.py`, which names
+- Rewrite the module docstring of `scripts/renderer/template_filters/kuma_monitors.py`, which names
   `static-monitors.yaml.j2` as the filter's consumer. Name the probe job instead.
-- It is a separate PR because `land.sh` narrows an `ansible/filter_plugins/` change to every
+- It is a separate PR because `land.sh` narrows an `scripts/renderer/template_filters/` change to every
   role that names either filter the module registers. That widening stays off the cutover.
   No render changes, so the deploy rolls nothing.
 
@@ -1161,7 +1161,7 @@ Findings raised: 5 (1 high, 4 medium). Fixed: 5. Refuted: none.
   reaches it. *Open questions* item 7 and a cross-slice note ask M2 to write the walk that
   way.
 - **M4-C1-03 (medium).** The target pytest compares with a URL that PR 4 deletes.
-  **Fixed.** `ansible/filter_plugins/kuma_monitors.py:kuma_ingress_monitors` returns only
+  **Fixed.** `scripts/renderer/template_filters/kuma_monitors.py:kuma_ingress_monitors` returns only
   `id`, `name`, `hostname`, `behind_sso` and `entry`. PR 3's pytest builds
   `https://<tile.hostname>.local.<domain>` from the filter, and that assertion outlives PR 4. The comparison with Kuma's rendered `url` is
   the soak-join check, which PR 4 retires. Exit criterion 1 and the class 4 risk say so.

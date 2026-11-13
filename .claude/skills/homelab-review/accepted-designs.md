@@ -33,8 +33,6 @@ that makes the trade-off. When an entry moves there, delete it here.
   automerges each bump. `ansible/tests/deploy/test_channel_tag_digest_pins_stay_off_autodeploy.py`
   keeps the expensive services off auto-deploy.
 - meili stays pinned until karakeep bumps its own pin.
-- pytest must NOT live under `ansible/filter_plugins/`; the plugin loader imports every `.py`
-  there.
 
 ## backup-observability
 

@@ -16,9 +16,9 @@ Run: uv run pytest ansible/tests/services/test_blackbox_ingress_targets.py
 import copy
 
 from _k8s_render import host_context, render_role_template
-from ingress_probes import ingress_probe_targets
+from renderer.template_filters.ingress_probes import ingress_probe_targets
 from lib import yaml_fast
-from service_tier import in_service_tier
+from renderer.template_filters.service_tier import in_service_tier
 
 JOB = "blackbox-ingress"
 REQUIRED_SERVICES = frozenset({"homepage", "authelia"})

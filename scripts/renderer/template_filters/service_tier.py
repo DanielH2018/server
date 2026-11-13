@@ -1,4 +1,4 @@
-"""Ansible filter plugin deriving per-tier sets from the `tier` field on containers_list entries.
+"""Filters deriving per-tier sets from the `tier` field on containers_list entries.
 
 A service's tier is declared once, on its `containers_list` entry, and every set that ranks
 services is derived from it (#3389). Four consumers read it:
@@ -15,20 +15,10 @@ services is derived from it (#3389). Four consumers read it:
   registered filter. It drops `NEVER_SHED`, the untiered cluster plumbing no break-glass may
   scale to zero.
 
-No Ansible import, so `scripts/lib/service_tiers.py` and the docs generators read the same
-function the renderer runs. `FilterModule` re-raises a function's `ValueError` as
+`scripts/lib/service_tiers.py` and the docs generators read the same functions the
+renderer runs. `lib.ansible_jinja_env` registers each so a `ValueError` reaches the operator as a
 `FilterError` prefixed with the filter's name.
 """
-
-import sys as _sys
-from pathlib import Path as _Path
-
-# Ansible loads a plugin by file path, so `filter_errors` beside it imports by bare name only
-# once this directory is on the path (#4527).
-if str(_Path(__file__).resolve().parent) not in _sys.path:
-    _sys.path.insert(0, str(_Path(__file__).resolve().parent))
-
-from filter_errors import _as_filter
 
 # The tiers an entry's `tier` may name, each with the PriorityClass its pods run at. One tier
 # maps to exactly one class, which is why the house's services split in two: the edge and SSO
@@ -168,12 +158,3 @@ def tier_priority_class(containers_list, name):
                 )
             return SERVICE_TIERS[declared]
     raise ValueError(f"no containers_list entry named {name!r}")
-
-
-class FilterModule:
-    def filters(self):
-        return {
-            "in_service_tier": _as_filter(in_service_tier),
-            "tier_backup_claims": _as_filter(tier_backup_claims),
-            "tier_priority_class": _as_filter(tier_priority_class),
-        }

@@ -17,7 +17,7 @@ import re
 from _k8s_render import rendered_docs
 from lib import yaml_fast
 from lib.repo_paths import K8S_ROLES
-from role_label import ROLE_LABEL
+from renderer.template_filters.role_label import ROLE_LABEL
 
 RULES = K8S_ROLES / "observability" / "files" / "rules" / "workload-service.yaml"
 WORKLOAD_KINDS = {"Deployment": "deployment", "DaemonSet": "daemonset"}

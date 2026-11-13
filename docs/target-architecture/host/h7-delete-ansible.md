@@ -57,7 +57,7 @@ The exit criterion is seven observations:
 
    `uv tree | grep -c ansible-core` prints 0, and `grep -c ansible-lint prek.toml` prints 0.
    The keep-list is `ansible/vars/`, `ansible/inventory/`, `ansible/.sops.yaml`,
-   `ansible/README.md`, `ansible/secret_rotation.yml`, `ansible/filter_plugins/`,
+   `ansible/README.md`, `ansible/secret_rotation.yml`, `scripts/renderer/template_filters/`,
    `ansible/templates/`, `ansible/tests/`, and the `templates/`, `defaults/` and `files/` of
    each `ansible/roles/k8s/` role that C1's renderer reads. The Pi's `compose_services`
    stays in `ansible/inventory/host_vars/daniel-pi.yml` as renderer data.
@@ -288,7 +288,7 @@ waived, so the status is DONE. Each reading uses the commands its observation na
 - **Code outside the setup tree reads files inside it.** Outside `docs/`, Markdown and
   tests, 103 tracked files name a `roles/setup/` path, most of them in comments. The
   load-bearing reads are:
-    - `ansible/filter_plugins/longhorn_groups.py` puts `roles/setup/common/files` and
+    - `scripts/renderer/template_filters/longhorn_groups.py` puts `roles/setup/common/files` and
       `roles/setup/k3s/files` on `sys.path` and imports `longhorn_lib.longhorn_backups`,
       which imports `host_lib`. `register_ansible_filters` imports `longhorn_groups`, so the
       cluster renderer depends on both directories.
@@ -1859,7 +1859,7 @@ rule of its own, and it names the set. `host_secrets.py check` finds its hosts f
   scripts/secrets_mgmt/consumers.py                            (imports scripts/lib)
   ansible/inventory/group_vars/all.yml                         (+ ci_required_contexts,
                                                                   H7.2e)
-  ansible/filter_plugins/claude_agents.py                      (deleted, or its ansible
+  scripts/renderer/template_filters/claude_agents.py                      (deleted, or its ansible
                                                                   import removed, H7.17)
   ansible/inventory/hosts.ini                                  (host names only;
                                                                   - ansible_connection,
@@ -4247,7 +4247,7 @@ progress.
     remains, with this recommendation, and the operator rules on the later slice
     (**operator-only**).
 13. **The tree still reads as Ansible after H7.** The keep-list leaves `ansible/vars/`,
-    `ansible/inventory/`, `ansible/filter_plugins/`, `ansible/templates/`,
+    `ansible/inventory/`, `scripts/renderer/template_filters/`, `ansible/templates/`,
     `ansible/tests/`, and each k8s role's `templates/`, `defaults/` and `files/` under
     `ansible/`. A reader then looks for playbooks that no longer exist. Recommendation: one
     move PR after H7.20 renames the tree to a neutral root that the operator picks

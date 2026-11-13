@@ -1,4 +1,4 @@
-"""The `grafana_deploy_annotated` filter in filter_plugins/grafana_dashboards.py.
+"""The `grafana_deploy_annotated` filter in template_filters/grafana_dashboards.py.
 
 observability's dashboard ConfigMaps pass every board through it, so these pin the injection
 itself: both queries added, a board's own annotations kept, idempotent by name, and a stable
@@ -11,9 +11,9 @@ import json
 from typing import Any
 
 import pytest
-from filter_errors import FilterError
+from lib.ansible_jinja_env import FilterError, repo_filters
 
-import grafana_dashboards as gd
+from renderer.template_filters import grafana_dashboards as gd
 
 UID = "bf4q19tuivta8e"
 EXPR = '{job="syslog"} |= "event=deploy" | logfmt'
@@ -77,7 +77,5 @@ def test_the_output_is_a_pure_function_of_the_input():
 def test_a_board_that_is_not_a_json_object_fails_the_render(text):
     """A broken board fails the render task, named for the filter, rather than reaching Grafana."""
     with pytest.raises(FilterError) as caught:
-        gd.FilterModule().filters()["grafana_deploy_annotated"](
-            text, UID, EXPR, FLUX_EXPR
-        )
+        repo_filters()["grafana_deploy_annotated"](text, UID, EXPR, FLUX_EXPR)
     assert str(caught.value).startswith("grafana_deploy_annotated: ")

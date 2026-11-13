@@ -248,7 +248,7 @@ path below has no review phase.
 
 **A reviewed batch whose every issue carries the `red-green` label also gets a red phase.**
 `findings.py open` applies the label when every path a finding cites is code this repo's suite
-runs: Python under `scripts/`, the filter plugins and the hooks, and a role's `files/` when the
+runs: Python under `scripts/` and the hooks, and a role's `files/` when the
 role has its own `tests/`, such as monitor-bridge's registry and the HA Jinja macros. Add or
 remove it by hand where that rule is wrong. Before the implementer starts, a separate session
 writes one failing test per claim in each issue's `## Verify-by`, and per stated behaviour

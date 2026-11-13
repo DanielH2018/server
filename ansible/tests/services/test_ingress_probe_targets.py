@@ -1,6 +1,6 @@
 """The `ingress_probe_targets` filter refuses a malformed `probe:` key (#3690).
 
-The filter (`ansible/filter_plugins/ingress_probes.py`) yields one target per `containers_list`
+The filter (`scripts/renderer/template_filters/ingress_probes.py`) yields one target per `containers_list`
 entry with a `hostname`. The `blackbox-ingress` scrape job builds its targets from them, and
 `test_blackbox_ingress_targets.py` covers what the job renders. These guards cover the filter
 itself.
@@ -10,8 +10,8 @@ Run: uv run pytest ansible/tests/services/test_ingress_probe_targets.py
 
 import pytest
 
-from filter_errors import FilterError
-from ingress_probes import FilterModule, ingress_probe_targets
+from lib.ansible_jinja_env import FilterError, repo_filters
+from renderer.template_filters.ingress_probes import ingress_probe_targets
 
 _NEW = {"name": "newsvc", "hostname": "newsvc", "port": 8080}
 
@@ -39,5 +39,5 @@ def test_a_refusal_is_a_filter_error_named_for_its_filter():
     """A render failure names the filter that refused, through the filter Ansible calls."""
     entries = [{"name": "svc", "hostname": "svc", "probe": "yes"}]
     with pytest.raises(FilterError) as caught:
-        FilterModule().filters()["ingress_probe_targets"](entries)
+        repo_filters()["ingress_probe_targets"](entries)
     assert str(caught.value).startswith("ingress_probe_targets: "), str(caught.value)

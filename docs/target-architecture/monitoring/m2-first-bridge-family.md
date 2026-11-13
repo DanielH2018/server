@@ -143,7 +143,7 @@ can join its own soak rule to the same workload-service recording rules.
   runs with `--resources=pods,deployments,statefulsets,daemonsets,nodes` and
   `--metric-labels-allowlist=pods=[app],deployments=[app]`. The comment above its ClusterRole
   keeps the grants and the flag in step. Prometheus scrapes it every 1m.
-- **The deploy tag reaches the object, not the pod.** `ansible/filter_plugins/role_label.py`
+- **The deploy tag reaches the object, not the pod.** `scripts/renderer/template_filters/role_label.py`
   stamps `homelab/role: <service>` on `metadata.labels` of every document an armed role
   renders. It never touches a pod template, so pods carry no tag. `_UNARMED_ROLES` in
   `ansible/tests/deploy/test_manifests_prune.py` names the two roles that skip it, `authelia`
@@ -176,7 +176,7 @@ can join its own soak rule to the same workload-service recording rules.
   monitor and its history. The bridge reads each row's token from `KUMA_PUSH_<NAME>`
   (`bridge/types.py:push_env`), which the env-secret derives from the row name.
 - **Deploy order.** `ansible/deploy.yml` deploys the k8s play in the order
-  `ansible/filter_plugins/toposort.py:toposort_containers` gives, which is stable on
+  `scripts/renderer/template_filters/toposort.py:toposort_containers` gives, which is stable on
   `containers_list` order. In `ansible/inventory/host_vars/daniel-box.yml`, `observability`
   comes before `uptime-kuma`, which comes before `monitor-bridge`.
   `scripts/deploy_tools/land_lib/deploy.py:deploy_by_host` runs one `deploy.sh` per host with

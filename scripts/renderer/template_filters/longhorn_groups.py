@@ -1,4 +1,4 @@
-"""Ansible filter plugin rendering the Longhorn RecurringJob group labels from `longhorn_backups`.
+"""Filters rendering the Longhorn RecurringJob group labels from `longhorn_backups`.
 
 `scripts/lib/longhorn_lib/longhorn_backups.py` names the backup groups once for every Python
 reader (#3737). The k3s role's label tasks and RecurringJob template used to spell the same
@@ -21,31 +21,23 @@ a key. The filter refuses any group the module does not define, so a typo fails 
 same way a key would, and the task still reads as the label it writes (#3946).
 
 Each raises `ValueError` on a group or shard the module does not define, so a typo fails the
-render instead of writing a label no RecurringJob selects. `FilterModule` registers each
-filter through `_as_filter`, which re-raises the `ValueError` as
-`FilterError("<filter>: ...")` (#4505).
-
-No Ansible import at load time, so the tests call the same functions the renderer runs.
+render instead of writing a label no RecurringJob selects. `lib.ansible_jinja_env` registers each
+so the `ValueError` reaches the operator as `FilterError("<filter>: ...")` (#4505).
 """
 
 import sys as _sys
 from pathlib import Path as _Path
 
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
+from lib.repo_paths import HOST_LIB_FILES
+
 # `longhorn_lib.longhorn_backups` imports `host_lib` by bare name, because on the host the
 # package and host_lib.py are copied side by side. Here they sit in two directories, `hosts/lib`
 # and `scripts/lib`, so both go on the path.
-_REPO = _Path(__file__).resolve().parents[2]
-for _files in (_REPO / "hosts" / "lib", _REPO / "scripts" / "lib"):
-    if str(_files) not in _sys.path:
-        _sys.path.insert(0, str(_files))
+_sys.path.insert(0, str(HOST_LIB_FILES))
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2] / "lib"))
+from longhorn_lib import longhorn_backups
 
-from longhorn_lib import longhorn_backups  # noqa: E402
-
-# `filter_errors` sits beside this plugin, which Ansible loads by file path (#4527).
-if str(_Path(__file__).resolve().parent) not in _sys.path:
-    _sys.path.insert(0, str(_Path(__file__).resolve().parent))
-
-from filter_errors import _as_filter  # noqa: E402
 
 _SHARDS = range(longhorn_backups.WEEKLY_SHARDS)
 KNOWN_GROUPS = frozenset(
@@ -148,17 +140,3 @@ def longhorn_backup_name(key: str) -> str:
             f"{key!r} is not a Longhorn backup name; known: {', '.join(sorted(NAMES))}"
         )
     return NAMES[key]
-
-
-class FilterModule:
-    """Registers the Longhorn backup group filters."""
-
-    def filters(self):
-        return {
-            "backup_group_label": _as_filter(backup_group_label),
-            "weekly_backup_group": _as_filter(weekly_backup_group),
-            "weekly_backup_shard": _as_filter(weekly_backup_shard),
-            "longhorn_weekly_claims": _as_filter(longhorn_weekly_claims),
-            "longhorn_nobackup_claims": _as_filter(longhorn_nobackup_claims),
-            "longhorn_backup_name": _as_filter(longhorn_backup_name),
-        }

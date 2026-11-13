@@ -21,8 +21,8 @@ from collections.abc import Iterator
 from pathlib import Path
 
 from jinja2 import Environment, meta, nodes
-from py_table import py_table
-from scrape_jobs import scrape_jobs
+from renderer.template_filters.py_table import py_table
+from renderer.template_filters.scrape_jobs import scrape_jobs
 
 from lib.ansible_jinja_env import make_env, register_ansible_filters
 from lib.role_files import repo_file_path, role_file_path

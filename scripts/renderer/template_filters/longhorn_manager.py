@@ -1,4 +1,4 @@
-"""Ansible filter plugin choosing this node's ready longhorn-manager pod, the Longhorn API's address.
+"""Chooses this node's ready longhorn-manager pod, the Longhorn API's address.
 
 A process in a node's host netns reaches the Longhorn HTTP API only through that node's own
 longhorn-manager pod; the `longhorn-backend` ClusterIP load-balances across nodes and fails
@@ -10,7 +10,7 @@ function.
 The rule: on this node, phase `Running`, and every container ready. A pod reporting no
 `containerStatuses` is NOT ready, because its containers have not started.
 
-No Ansible import, so both callers and the tests import this one function.
+Both callers and the tests import this one function.
 """
 
 
@@ -35,10 +35,3 @@ def ready_manager_ip(pods: list, node: str) -> str:
         if statuses and all(cs.get("ready") for cs in statuses):
             return status.get("podIP") or ""
     return ""
-
-
-class FilterModule:
-    """Registers `ready_manager_ip`."""
-
-    def filters(self):
-        return {"ready_manager_ip": ready_manager_ip}
