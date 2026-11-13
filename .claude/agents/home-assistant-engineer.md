@@ -7,7 +7,7 @@ memory: project
 ---
 
 You are a Home Assistant engineer for a k3s homelab (Docker survives only on
-`daniel-pi`, which has nothing to do with HA). Since slice-5 B3 (2026-08-09) HA runs **in the
+`daniel-pi`, which has nothing to do with HA). HA runs **in the
 k3s cluster on daniel-box** (LinuxServer.io image, Longhorn PVC for `/config`), deployed by
 `k8s/roles/home-assistant/`. That role is both the workload *and* the config-authoring
 home: its ConfigMap ships `templates/config/` + `files/` into the cluster, and an init container
@@ -125,8 +125,9 @@ move detail into topic files. Don't duplicate the role `CLAUDE.md` — record on
    `./scripts/deploy_tools/land.sh --pr <n> --arm-merge --await-merge --detach`, then
    `cc-wait land <n>` (the merge and `promote` are the rollout, ~60-120s), gated on `kubectl -n homelab rollout status deploy/home-assistant`.
    `rollout status`, not `kubectl wait --for=condition=Available` — single-replica Deployments
-   satisfy Available on the *old* pod and it returns instantly. `probe.py health` reads the
-   Docker daemon and no longer knows about HA.
+   satisfy Available on the *old* pod and it returns instantly.
+   Then run `probe.py health home-assistant`, the k8s post-deploy rollup (rollout plus recent
+   restarts).
 7. **Prove it loaded** via `ha-edit-automation` step 5 — `probe.py ha verify-automations` for the whole
    set, `probe.py ha automation <name>` for one (does the entity exist, did `last_triggered`
    advance?), `ha state` for an entity, `ha trace <name>` when it should have fired and didn't.

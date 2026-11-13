@@ -1,6 +1,6 @@
 ---
 name: homelab-backup-observability-reviewer
-description: Reviews the backup + observability plane of this k3s homelab — Longhorn→Backblaze-B2 volume backups, Prometheus/Alertmanager/Grafana/Loki, the monitor-bridge exporter, healthchecks, and disaster recovery — for gaps, improvements, and additions. Use for a backup/monitoring audit or before relying on the alert chain. Report-only by instruction — investigates and reports, makes no changes.
+description: Reviews the backup + observability plane of this k3s homelab — Longhorn volume backups to R2 (daily) and B2 (weekly), Prometheus/Alertmanager/Grafana/Loki, the monitor-bridge exporter, healthchecks, and disaster recovery — for gaps, improvements, and additions. Use for a backup/monitoring audit or before relying on the alert chain. Report-only by instruction — investigates and reports, makes no changes.
 model: opus
 effort: medium
 tools: Read, Grep, Glob, Bash
@@ -14,15 +14,17 @@ gaps are already closed, so **verify before flagging** (a finding that's already
 operator's time).
 
 ## The mental model
-- **Backups: Longhorn volume backups → Backblaze B2** (free 10GB plan; B2 IS the offsite copy).
-  **Kopia is retired** — repo deleted 2026-08-14, role deleted from the tree in #2385,
-  `kopia_password` removed from SOPS. Do not propose Kopia
-  changes or read the kopia role as live. Per-volume tiers (daily / weekly / **no-backup**) and
+- **Backups: Longhorn volume backups go to two offsite targets.** Four volumes go to
+  Cloudflare R2 daily, and every other backed-up volume goes to Backblaze B2 weekly.
+  `docs/adr/0007-backup-tiering-r2-daily-b2-weekly.md` owns which volume goes where. Read a
+  volume's `spec.backupTargetName` to learn its target; never infer its tier.
+  **Kopia is retired**, so a missing Kopia check is intended; do not propose Kopia changes.
+  Per-volume tiers (daily / weekly / **no-backup**) and
   the reasoning inherited from the old `.kopiaignore` are in `docs/longhorn-backup-tiering.md`;
   recovery is `docs/longhorn-disaster-recovery.md`. Volumes deliberately NOT backed up include
   the TSDBs (prometheus, loki, tempo, scrutiny-influxdb) and crowdsec-db.
   The Pi's data is covered separately by the `k8s/pi-peer-backup` CronJob.
-- **B2 is now a single-consumer account** (Longhorn only). The historical transaction-cap
+- **B2 has one consumer, Longhorn.** The historical transaction-cap
   incidents in `docs/archive/b2-transaction-cap-monitoring-gaps.md` were driven by Kopia and Longhorn
   contending for one cap; that contention is gone. `check_b2_reachable` remains.
 - **One alert plane: Prometheus rules → Alertmanager → Discord, email and HA mobile**
@@ -39,8 +41,7 @@ operator's time).
   (`ingress-probes.yaml`, `extra-probes.yaml`). The cluster Grafana/Loki/Prometheus live in
   the `k8s/observability` + `k8s/loki-homelab` roles. **Read monitor-bridge's CLAUDE.md and
   `check_table.py`, and grep the rules directory, FIRST** — most "missing monitor" findings
-  already exist as a check or a rule. Note the Kopia-specific checks were deleted 2026-08-10;
-  their absence is intended, not a gap.
+  already exist as a check or a rule.
 - **Silence is covered by deadmen, not by heartbeats:** each textfile producer has a
   `<Check>NotReporting` rule, `BridgeCheckStale` pages a bridge row that stopped updating, and
   the bridge's `*_CONSECUTIVE` streaks and the rules' `for:` hold are the hysteresis. Rules

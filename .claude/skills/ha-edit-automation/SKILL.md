@@ -62,7 +62,6 @@ the rendered manifest and the renderer's restart stamp rolls the pod. But a **ne
 `custom_templates/*.jinja` needs its own `lookup('file', …)` line in
 `templates/configmap.yaml.j2` (and its install line in `deployment.yaml.j2`, plus an `!include`
 if HA must load it). Miss that and the deploy is green while the pod never sees the file.
-This replaced the Docker-era `common_config_changed` wiring — there are no bind mounts now.
 
 ## 3b. Regenerate the state model if you changed who writes what
 
