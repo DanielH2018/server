@@ -76,19 +76,56 @@ def test_the_purifier_hold_spans_a_fallback_ramp():
     assert _render(state, "unavailable", NOW - timedelta(minutes=50)) == "False"
 
 
-def test_the_other_gates_read_the_window_sensor():
-    gates = {
-        "bedroom_auto_light_allowed": _template_entity("bedroom_auto_light_allowed"),
-        "bedroom_absence_off": _automation("bedroom_absence_off")["condition"],
-        "bedroom_al_startup_suppress": _automation("bedroom_al_startup_suppress")[
-            "action"
-        ],
-        "bedroom_color_track": _automation("bedroom_color_track")["condition"],
+def _window_gate(steps: list) -> str:
+    gates = [
+        s if isinstance(s, str) else s.get("value_template") or s.get("if")
+        for s in steps
+        if WINDOW_SENSOR in str(s)
+    ]
+    assert len(gates) == 1, steps
+    return gates[0]
+
+
+def _gate_holds(source: str, window: str) -> bool:
+    # A bright, empty room by day, so the window sensor alone decides each gate.
+    entity_states = {
+        WINDOW_SENSOR: window,
+        "sensor.aqara_t1_illuminance": "1000",
+        "sun.sun": "above_horizon",
+        "binary_sensor.aqara_fp300_presence": "off",
     }
-    for name, gate in gates.items():
-        text = str(gate)
-        assert WINDOW_SENSOR in text, name
-        assert "sensor.bedroom_wake_start" not in text, name
+    rendered = render_template(
+        source,
+        states=lambda e: entity_states[e],
+        is_state=lambda e, s: entity_states[e] == s,
+    )
+    assert "sensor.bedroom_wake_start" not in source, source
+    return rendered == "True"
+
+
+def test_the_other_gates_treat_the_window_as_a_wake():
+    # Each gate's verdict while the window sensor is on, and the opposite while it is off.
+    gates = {
+        "auto-light allowed": (
+            _template_entity("bedroom_auto_light_allowed")["state"],
+            True,
+        ),
+        "absence_off may turn the lights off": (
+            _window_gate(_automation("bedroom_absence_off")["condition"]),
+            False,
+        ),
+        "al_startup_suppress may turn AL's self-on off": (
+            _window_gate(_automation("bedroom_al_startup_suppress")["action"]),
+            False,
+        ),
+        "color_track may drift the colour": (
+            _window_gate(_automation("bedroom_color_track")["condition"]),
+            False,
+        ),
+    }
+    for name, (source, in_window) in gates.items():
+        assert _gate_holds(source, "on") is in_window, name
+        assert _gate_holds(source, "off") is not in_window, name
 
 
 def test_apply_natural_keeps_its_wake_start_only_read():
