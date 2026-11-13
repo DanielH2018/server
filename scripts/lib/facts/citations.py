@@ -132,18 +132,19 @@ def line_numbered_citations(
     return [path for path, ext in _LINE_NUMBERED.findall(text) if ext in extensions]
 
 
-# A bare `ansible/tests/<file>.py` citation is the ONE exception to the line-number rule. Every
-# such path is a claim about this tree: nothing else has a directory by that name, and a
-# `pytest <path>` line or an `ENFORCED by <path>` note is an instruction someone runs. The
-# move of the guards into subdirectories rewrites these citations, and the line-number rule
-# would watch none of them go stale. A trailing `:line` or `::node_id` is allowed and dropped.
+# A bare `ansible/tests/<file>.py` or `hosts/tests/<file>.py` citation is the ONE exception to
+# the line-number rule. Every such path is a claim about this tree: nothing else has a
+# directory by that name, and a `pytest <path>` line or an `ENFORCED by <path>` note is an
+# instruction someone runs. A move of the guards rewrites these citations, and the line-number
+# rule would watch none of them go stale. A trailing `:line` or `::node_id` is allowed and
+# dropped.
 _GUARD_PATH = re.compile(
-    r"`(ansible/tests/[\w./-]+\.py)(?::\d+(?:-\d+)?|::[\w\[\]:.-]+)?`"
+    r"`((?:ansible|hosts)/tests/[\w./-]+\.py)(?::\d+(?:-\d+)?|::[\w\[\]:.-]+)?`"
 )
 
 
 def guard_path_citations(text: str) -> list[str]:
-    """Every backticked ``ansible/tests/...py`` in ``text``, with or without a line number."""
+    """Every backticked ``ansible/tests/...py`` or ``hosts/tests/...py`` in ``text``."""
     return _GUARD_PATH.findall(text)
 
 
