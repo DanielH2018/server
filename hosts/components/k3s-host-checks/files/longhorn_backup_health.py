@@ -2,7 +2,7 @@
 """Longhorn backup-plane heartbeat — the cluster-reading half of longhorn-backup-health.sh.
 
 Reads the cluster through the read-only ServiceAccount kubeconfig, the restore drill's stamp
-ConfigMap among it, the B2 deletion accounting cron's journal and k3s's config drop-in. Then prints one tab-separated line, `up<TAB>msg` or `down<TAB>msg`, for the
+ConfigMap among it, the journals of the B2 deletion accounting and budget listing, and k3s's config drop-in. Then prints one tab-separated line, `up<TAB>msg` or `down<TAB>msg`, for the
 wrapper to write as its check textfile, which a Prometheus rule reads. It never exits nonzero on a bad verdict: a DOWN is data to
 report, not a crash. Same shape as configarr_health.py: this file does the I/O,
 longhorn_backup_health_logic.py holds every threshold and decides up-or-down, and the split is
@@ -19,7 +19,8 @@ templates/longhorn-backup-health.sh.j2, a timer every 10 minutes) exports every 
 calls it. It refuses to start unless the shim exported all of them: LONGHORN_BACKUP_NAMESPACE,
 LONGHORN_BACKUP_KUBECTL, LONGHORN_BACKUP_KUBECTL_TIMEOUT_S, the LONGHORN_*_MAX_AGE_HOURS and
 LONGHORN_DAILY_BACKUP_BUDGET thresholds, LONGHORN_RESTORE_DRILL_* (namespace and ages),
-LONGHORN_B2_DELETIONS_CRON_* (cron file, expected flag, fired stamp), LONGHORN_ETCD_DROP_IN, LONGHORN_JOURNALCTL, LONGHORN_JOURNAL_TIMEOUT_S and LONGHORN_CRON_EVIDENCE_WINDOW_HOURS.
+LONGHORN_B2_DELETIONS_CRON_* and LONGHORN_B2_BUDGET_CRON_* (timer file, expected flag, fired
+stamp), LONGHORN_ETCD_DROP_IN, LONGHORN_JOURNALCTL, LONGHORN_JOURNAL_TIMEOUT_S and LONGHORN_CRON_EVIDENCE_WINDOW_HOURS.
 
 It takes no arm flag and no schedule from the shim. Each backup target's arm state comes from the
 cluster: a blank `spec.backupTargetURL` is a disarmed target (H1.7a). The daily and weekly run
@@ -120,7 +121,7 @@ DRILL_COVERAGE_SLACK_DAYS = _require_int_env(
     "LONGHORN_RESTORE_DRILL_COVERAGE_SLACK_DAYS"
 )
 CRON_EVIDENCE_WINDOW_HOURS = _require_int_env("LONGHORN_CRON_EVIDENCE_WINDOW_HOURS")
-# Check 10's B2 cron. The path, the fire stamp and the expected flag are shim-exported for the
+# Check 10's B2 timers. The path, the fire stamp and the expected flag are shim-exported for the
 # reason the transport settings are: a value only the shim knows must not sit here as a default a
 # wrong export would shadow. The B2-accounting task is gated on `has_repo_checkout`.
 B2_DELETIONS_CRON = cron_evidence.cron_state(
@@ -128,6 +129,12 @@ B2_DELETIONS_CRON = cron_evidence.cron_state(
     _require_env("LONGHORN_B2_DELETIONS_CRON_FILE"),
     _require_bool_env("LONGHORN_B2_DELETIONS_CRON_EXPECTED"),
     _require_env("LONGHORN_B2_DELETIONS_CRON_FIRED_STAMP"),
+)
+B2_BUDGET_CRON = cron_evidence.cron_state(
+    "b2-budget",
+    _require_env("LONGHORN_B2_BUDGET_CRON_FILE"),
+    _require_bool_env("LONGHORN_B2_BUDGET_CRON_EXPECTED"),
+    _require_env("LONGHORN_B2_BUDGET_CRON_FIRED_STAMP"),
 )
 # Check 12's drop-in. The schedule and the arm state are read from it each run.
 ETCD_DROP_IN = Path(_require_env("LONGHORN_ETCD_DROP_IN"))
@@ -555,7 +562,7 @@ def main(now: float | None = None) -> int:
         "--ignore-errors",
     )
 
-    # ── checks 9 and 10: what the trim and the B2 accounting said, and whether they ran ──────
+    # ── checks 9 and 10: what the trim and the B2 timers said, and whether they ran ──────
     # A failed CronJob read is rank 4, the evidence plane's rank, not `_fetch_text`'s rank 1.
     trim_read, trim_cronjob = _fetch_trim_cronjob()
     if trim_read:
@@ -566,11 +573,10 @@ def main(now: float | None = None) -> int:
         problems.append(
             (4, "could not read the trim CronJob — a trim failure has no reader")
         )
-    problems.extend(
-        cron_evidence.check_deletions(
-            journal, CRON_EVIDENCE_WINDOW_HOURS, B2_DELETIONS_CRON, now_s
+    for cron in (B2_DELETIONS_CRON, B2_BUDGET_CRON):
+        problems.extend(
+            cron_evidence.check_cron(journal, CRON_EVIDENCE_WINDOW_HOURS, cron, now_s)
         )
-    )
 
     # ── check 11: weekly volumes a backup RecurringJob skipped ───────────────────────────
     # Skipped with the backup list, like check 4, since `weekly_watched` and the coverage rows

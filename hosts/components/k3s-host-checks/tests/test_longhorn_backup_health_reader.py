@@ -75,6 +75,7 @@ def test_reader_pins_the_journal_transport(tmp_path, logger_calls):
         'printf "%s\\n" "$*" | grep -q -- "--output=cat" || exit 64\n'
         'case "$*" in\n'
         '  *"-t b2-deletions"*) echo "UNPRICED — backup-abc123" ;;\n'
+        '  *"-t b2-budget"*) echo "OVER BUDGET: daily-on-B2 — rebalance" ;;\n'
         "  *) exit 64 ;;\n"
         "esac\n",
     )
@@ -93,6 +94,7 @@ def test_reader_pins_the_journal_transport(tmp_path, logger_calls):
     # the reader logs rather than on stdout. That is where to read it, and its presence there is
     # what proves the journal read reached a verdict rather than being dropped.
     assert "b2-deletions reported UNPRICED" in logger_calls.read_text()
+    assert "b2-budget reported OVER BUDGET" in logger_calls.read_text()
 
 
 def test_reader_syslog_line_is_intercepted(tmp_path, logger_calls):

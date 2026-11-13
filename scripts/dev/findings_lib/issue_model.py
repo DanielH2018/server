@@ -75,16 +75,6 @@ NOT_BEFORE_STYLE = (
 for _d in DOMAINS:
     LABELS[f"domain/{_d}"] = ("b4befe", f"Reviewer domain: {_d}")
 
-# The GitHub Project (v2) every created issue is added to. Projects is a board over issues,
-# not a second record: the issue and its labels stay the source of truth, and the board is
-# what the operator looks at. `gh issue create --project <title>` adds the item in the same
-# call, so no second write and no item id. It needs the `project` token scope, so the board
-# is best-effort: `cmd_open` retries without it and warns rather than losing the finding.
-PROJECT_TITLE = "Server Issue Tracking"
-# The Date field on that board that mirrors an issue's `not-before:` label, so the board can
-# sort and filter by it. `findings_lib/board.py` owns the writes; the label stays the record.
-NOT_BEFORE_FIELD = "Not before"
-
 # DECIDED: the underscore-prefixed names below, and `_prefixed` further down, cross a module
 # boundary on purpose. They moved out of findings.py byte-for-byte, changing no behaviour;
 # renaming them would have turned that move into a rewrite. The underscore still carries what

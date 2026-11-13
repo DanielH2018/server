@@ -97,20 +97,21 @@ run is older than one period of its own `spec.schedule` plus 2 hours. The period
 live schedule, so no host key restates it. The native job runs inside longhorn-manager, so a
 manager that is not ready runs no trim at all, and check 10 then sees the missed run.
 
-**The B2 accounting is a host cron, so its evidence is the journal.** Check 9 reports `down` on an
-`UNPRICED` line from `b2-deletions` anywhere in
-`hosts/components/k3s-server/defaults/main.yml:k3s_longhorn_cron_evidence_window_hours`. Check 10
-reports `down` when the window holds no line a completed run writes: its `/etc/cron.d` entry
-removed, the crontab lost, or the run itself dying part-way. It judges on the summary line
-`probe.py b2-deletions` ends every completed run with (#2545); before that it took any line at
-all, so a run that logged a traceback and exited non-zero read as alive. It stays quiet in the
-three cases that produce silence legitimately: a window shorter than the 24h cron period, a host
-without the cron (`b2-deletion-accounting` is gated on `has_repo_checkout`), and a cron
-installed less than one window ago.
+**The B2 accounting and the B2 budget listing are host timers, so their evidence is the
+journal.** Check 9 reports `down` on an `UNPRICED` line from `b2-deletions`, or an
+`OVER BUDGET:` line from `b2-budget`, anywhere in
+`hosts/components/k3s-host-checks/defaults/main.yml:k3s_longhorn_cron_evidence_window_hours`.
+The `b2-budget` line is the one forward-looking reading of a B2 Class C cap breach (#8215).
+Check 10 reports `down` when the window holds no line a completed run writes: the timer
+removed, or the run itself dying part-way. It judges on the summary line each probe ends every
+completed run with (#2545); before that it took any line at all, so a run that logged a
+traceback and exited non-zero read as alive. It stays quiet in the three cases that produce
+silence legitimately: a window shorter than the 24h timer period, a host without the timer
+(both are gated on `has_repo_checkout`), and a timer installed less than one window ago.
 
 **Check 10 tells "fired and failed" from "stopped firing" with a fire stamp** (#3677).
 `initial_setup` hardens `/etc/cron.d` to 0700 root, so the `sys_user` this check runs as can
-never stat a cron's entry there. The `b2-deletions` cron line touches a stamp under
+never stat a cron's entry there. Each B2 timer's service touches a stamp under
 `k3s_cron_fired_stamp_dir` before its job runs, and the shim exports the stamp path. A stamp
 inside the window means the cron fired and its run did not complete, and the message points at
 the cron's journal tag. A stale or missing stamp means the cron has not fired. The message
@@ -118,12 +119,16 @@ then says that whether the entry is still installed needs root to check. The 202
 was the first kind: `b2-deletions` fired every day and logged only its refusal.
 
 Every matched line is matched as written, so a reworded line means changing `_TRIM_FAILURE_RE`
-/ `_DELETIONS_SUMMARY_RE` / `_DELETIONS_DECLINED_RE` in
-`scripts/lib/longhorn_lib/longhorn_cron_evidence_logic.py` in the same edit. The trim's shapes
-come from longhorn-manager's `app/recurringjob/volume.go`, so a Longhorn upgrade that rewords
-them blinds check 9 until the regex follows. The b2 shapes come from `deletions_summary_line` /
-`deletions_declined_line` in `scripts/diagnostics/probe_lib/b2_ledger.py`, which
-`test_cron_liveness_accepts_the_summary_line_the_probe_writes` holds to the regexes.
+or the tag's `CRON_LINES` entry in `scripts/lib/longhorn_lib/longhorn_cron_evidence_logic.py`
+in the same edit. The trim's shapes come from longhorn-manager's `app/recurringjob/volume.go`,
+so a Longhorn upgrade that rewords them blinds check 9 until the regex follows. The
+`b2-deletions` shapes come from `deletions_summary_line` / `deletions_declined_line` in
+`scripts/diagnostics/probe_lib/b2_ledger.py`, which
+`test_cron_liveness_accepts_the_summary_line_the_probe_writes` holds to the table. The
+`b2-budget` shapes are the `OVER BUDGET:` and `budget per day:` rows `format_backup_budget` in
+`scripts/diagnostics/probe_lib/longhorn_budget.py` prints, which
+`test_budget_check_is_clean_on_a_run_within_budget` and
+`test_budget_check_is_flagged_on_an_over_budget_projection` hold to the table.
 
 **Check 12 watches k3s's own upload, from the host's copy of its config.** It reads the newest
 ready `ETCDSnapshotFile` with an S3 location, and its bound is one period of

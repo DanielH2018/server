@@ -26,7 +26,7 @@ from _netpol_baseline_render import TAG, docs, env_of, job, verify_render, write
 
 import netpol_baseline_verify as verify
 from lib import yaml_fast
-from lib.ansible_jinja_env import make_ansible_env
+from lib.ansible_jinja_env import make_env, register_ansible_filters
 from lib.k8s_roles import K8S_ROLES
 from renderer.renderer_lib import cluster
 
@@ -58,7 +58,7 @@ def lever_problems(ctx: dict) -> list[str]:
     Each condition is evaluated with Ansible's filters, under a strict undefined so a lever
     missing from the context fails rather than reading as false.
     """
-    env = make_ansible_env(undefined_cls=jinja2.StrictUndefined)
+    env = register_ansible_filters(make_env(undefined_cls=jinja2.StrictUndefined))
     return [
         expr.split()[0]
         for expr in LEVER_ASSERTS

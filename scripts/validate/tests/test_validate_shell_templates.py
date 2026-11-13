@@ -13,6 +13,7 @@ from lib import yaml_fast
 from lib.repo_paths import HOST_VARS
 from validate import shell_templates as v
 from validate.validate_lib import shell_lint as sl
+from validate.validate_lib.shipped_render import render_shipped_text
 
 
 def test_shellcheck_batch_attributes_findings_to_the_file_that_has_them(tmp_path):
@@ -117,7 +118,7 @@ def test_render_template_stubs_undefined_vars(tmp_path):
     # ("STUB") rather than aborting the render.
     tpl = tmp_path / "sample.sh.j2"
     tpl.write_text("#!/bin/bash\necho {{ some_never_defined_var }}\n")
-    rendered = sl.render_template(tpl, {})
+    rendered = render_shipped_text(tpl, {})
     assert "STUB" in rendered
 
 
@@ -183,7 +184,7 @@ def test_role_defaults_reach_the_render_context():
     assert ctx["claude_code_artifacts_peer_sources"], ctx.get(
         "claude_code_artifacts_peer_sources"
     )
-    assert "{{" not in sl.render_template(path, ctx)
+    assert "{{" not in render_shipped_text(path, ctx)
 
 
 def test_a_host_components_templates_are_discovered():
@@ -208,7 +209,7 @@ def test_hostvars_carries_every_hosts_inventory_address():
     # A `hostvars` stub here once replaced render_context's whole map with daniel-server alone,
     # so the etcd drill's fence rendered `STUB` where daniel-box's and daniel-pi's addresses go.
     path = v.COMPONENTS / "hypervisor" / "templates" / "etcd-restore-drill-vm.sh.j2"
-    text = sl.render_template(path, v.template_context(path))
+    text = render_shipped_text(path, v.template_context(path))
     box, pi = (
         yaml_fast.safe_load((HOST_VARS / f"{h}.yml").read_text())["server_ip"]
         for h in ("daniel-box", "daniel-pi")
@@ -227,3 +228,25 @@ def test_an_override_beats_the_role_default():
         path, overrides={"claude_code_artifacts_peer_dir": "/tmp/peer"}
     )
     assert ctx["claude_code_artifacts_peer_dir"] == "/tmp/peer"
+
+
+def _include_joined_component(root, name, partial, body):
+    """A component template whose `{% include %}` is valid only if the include keeps its newline."""
+    component = root / "widget"
+    (component / "templates").mkdir(parents=True)
+    (component / "component.yml").write_text("{}\n")
+    (component / "templates" / "head.j2").write_text(partial)
+    tpl = component / "templates" / name
+    tpl.write_text("{% include 'templates/head.j2' %}" + body)
+    return tpl
+
+
+def test_check_template_flags_a_script_the_package_would_ship_broken(tmp_path):
+    """The package drops the include's last newline, so the comment swallows the `fi`."""
+    tpl = _include_joined_component(
+        tmp_path, "run.sh.j2", "#!/bin/bash\nif true; then # head\n", "echo ok; fi\n"
+    )
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+    err = v.check_template(tpl, {}, out_dir, None)
+    assert err is not None and "bash -n" in err

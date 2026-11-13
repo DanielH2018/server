@@ -27,7 +27,7 @@ import jinja2
 from _helpers import ANSIBLE, load_defaults
 from _k8s_render import rendered_docs
 from lib import yaml_fast
-from lib.ansible_jinja_env import make_ansible_env
+from lib.ansible_jinja_env import make_env, register_ansible_filters
 from lib.repo_paths import ALL_VARS, K3S_SERVER
 from renderer.renderer_lib import host as host_mode
 
@@ -59,7 +59,7 @@ MUTUALLY_EXCLUSIVE_FLAGS = frozenset(
 
 
 def _env() -> jinja2.Environment:
-    return make_ansible_env(undefined_cls=jinja2.StrictUndefined)
+    return register_ansible_filters(make_env(undefined_cls=jinja2.StrictUndefined))
 
 
 COMPONENT = K3S_SERVER

@@ -400,3 +400,19 @@ def test_host_unit_groups_render_every_shipped_unit_of_the_tree(tmp_path):
     assert {"homelab-updater.service", "homelab-updater.timer"} <= shared
     pi = {unit for package in groups["daniel-pi"] for unit in package.units()}
     assert "homelab-reconcile.service" in pi
+
+
+@requires_node
+def test_check_polkit_rule_flags_a_rule_the_package_would_ship_broken(tmp_path):
+    """The package drops the include's last newline, so the line comment swallows the `});`."""
+    templates = tmp_path / "roles" / "setup" / "fixture" / "templates"
+    templates.mkdir(parents=True)
+    (templates / "head.j2").write_text(
+        "polkit.addRule(function (action, subject) { // head\n"
+    )
+    rule = templates / "50-fixture.rules.j2"
+    rule.write_text("{% include 'head.j2' %}});\n")
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+    err = v.check_polkit_rule(rule, out_dir, "node")
+    assert err is not None and "node --check" in err

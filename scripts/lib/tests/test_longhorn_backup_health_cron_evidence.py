@@ -180,7 +180,7 @@ _SUMMARY = "b2-deletions: charged 3, skipped 0, unpriced 0"
 
 
 def test_cron_evidence_is_clean_on_a_priced_accounting():
-    assert logic.check_deletion_evidence([_SUMMARY], 26) == []
+    assert logic.check_cron_evidence("b2-deletions", [_SUMMARY], 26) == []
 
 
 def test_cron_evidence_is_flagged_on_an_unpriced_deletion_anywhere_in_the_window():
@@ -191,7 +191,7 @@ def test_cron_evidence_is_flagged_on_an_unpriced_deletion_anywhere_in_the_window
         "  n8n-files                backup-abc123",
         "  Their volume is absent from the block-tree snapshot, so nothing prices them.",
     ]
-    problems = logic.check_deletion_evidence(lines, 26)
+    problems = logic.check_cron_evidence("b2-deletions", lines, 26)
     assert len(problems) == 1
     assert problems[0][0] == 4
     assert "UNPRICED" in problems[0][1]
@@ -199,14 +199,14 @@ def test_cron_evidence_is_flagged_on_an_unpriced_deletion_anywhere_in_the_window
 
 def test_cron_evidence_reports_a_journal_read_that_failed():
     """None is "I could not look", which is not the same answer as an empty window."""
-    problems = logic.check_deletion_evidence(None, 26)
+    problems = logic.check_cron_evidence("b2-deletions", None, 26)
     assert [rank for rank, _ in problems] == [4]
     assert "b2-deletions journal" in problems[0][1]
 
 
 def test_cron_evidence_is_silent_when_the_window_holds_nothing():
     """No reading is not a verdict. Whether the cron still runs at all is a separate alarm."""
-    assert logic.check_deletion_evidence([], 26) == []
+    assert logic.check_cron_evidence("b2-deletions", [], 26) == []
 
 
 # ── check 10: is the B2 cron still firing at all? ───────────────────────────────────────────
@@ -223,7 +223,7 @@ _B2 = logic.CronState(
 
 
 def _liveness(lines, deletion=_B2, window=26):
-    problem = logic.check_deletion_liveness(lines, deletion, window, _NOW)
+    problem = logic.check_cron_liveness(lines, deletion, window, _NOW)
     return [problem] if problem else []
 
 
@@ -351,7 +351,48 @@ def test_cron_liveness_reads_a_body_line_without_a_summary_as_silence():
         "no new B2 backup deletions in the last 26h",
         "charged 3 deletion(s) over 26h: 186 Class C, priced from the listing",
     ]
-    assert not logic.deletions_have_spoken(body_rows)
+    assert not logic.cron_completed("b2-deletions", body_rows)
     problems = _liveness(body_rows)
     assert len(problems) == 1
     assert "b2-deletions has logged nothing in the last 26h" in problems[0][1]
+
+
+# ── checks 9 and 10 for the b2-budget listing ──────────────────────────────────────────────
+
+_BUDGET = _B2._replace(
+    tag="b2-budget", path="/usr/lib/systemd/system/homelab-b2-budget-listing.timer"
+)
+
+
+def _budget_report(shards):
+    """What `probe.py b2-budget` prints for one volume in `shards`, split as journald splits it."""
+    from diagnostics.probe_lib import longhorn_budget
+
+    vols = {"pvc-a": {"prune": 40, "blocks": 20, "backups": 3}}
+    return longhorn_budget.format_backup_budget(vols, shards)[0].splitlines()
+
+
+def test_budget_check_is_clean_on_a_run_within_budget():
+    """The coupling test: the summary row the probe prints is the line check 10 accepts."""
+    journal = {"b2-budget": _budget_report({"pvc-a": "weekly-backup-d1"})}.get
+    assert logic.check_cron(journal, 26, _BUDGET, _NOW) == []
+
+
+def test_budget_check_is_flagged_on_an_over_budget_projection():
+    journal = {"b2-budget": _budget_report({"pvc-a": "default"})}.get
+    problems = logic.check_cron(journal, 26, _BUDGET, _NOW)
+    assert len(problems) == 1
+    assert problems[0][0] == 4
+    assert "b2-budget reported OVER BUDGET in the last 26h" in problems[0][1]
+    assert "daily-on-B2" in problems[0][1]
+
+
+def test_budget_check_is_flagged_as_not_reporting_without_a_summary_line():
+    """A run that failed before the projection prints no summary row, so it never completed."""
+    journal = {
+        "b2-budget": ["RuntimeError: could not read the weekly RecurringJobs"]
+    }.get
+    problems = logic.check_cron(journal, 26, _BUDGET, _NOW)
+    assert len(problems) == 1
+    assert "b2-budget has logged nothing in the last 26h" in problems[0][1]
+    assert "homelab-b2-budget-listing.timer" in problems[0][1]

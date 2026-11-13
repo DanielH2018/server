@@ -104,7 +104,8 @@ in the loop, and the contract is written here so a later edit cannot quietly wid
 - **Abort valve.** The weekly tier is sharded across weekdays, so no day's deletions reach the
   B2 transaction cap (`docs/longhorn-backup-tiering.md`).
 - **Next-run review.** `probe.py b2-budget` recomputes the projected spend from the live
-  bucket. Run it after adding a volume.
+  bucket. Run it after adding a volume. Its daily timer's `OVER BUDGET:` line turns
+  `k3s-host-checks` backup health DOWN (checks 9 and 10).
 
 ## Editing
 

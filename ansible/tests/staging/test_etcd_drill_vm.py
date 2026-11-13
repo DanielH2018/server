@@ -27,7 +27,7 @@ from lib import yaml_fast
 from jinja2 import Undefined
 from lib.proc_testing import run, write_exec
 from renderer.renderer_lib import host as host_mode
-from lib.ansible_jinja_env import make_ansible_env, template_env
+from lib.ansible_jinja_env import make_env, register_ansible_filters, template_env
 from _helpers import ALL_VARS, REPO
 from _setup_render import rendered_component_text
 from _shell_render import rendered_shell_text
@@ -45,7 +45,7 @@ def _vars() -> dict:
     merged = yaml_fast.safe_load((ROLE / "defaults" / "main.yml").read_text())
     all_vars = _group_vars()
     merged["sys_user"] = all_vars["sys_user"]
-    env = make_ansible_env(undefined_cls=Undefined)
+    env = register_ansible_filters(make_env(undefined_cls=Undefined))
     for key in (
         "hypervisor_etcd_drill_vm_disk",
         "hypervisor_etcd_drill_vm_xml",
@@ -331,7 +331,7 @@ def test_every_path_the_scripts_read_is_a_path_the_package_installs():
     """The `dst:` values are literals, so a drift would first fail the drill on the 1st."""
     package = host_mode.render_host("daniel-server")
     v = _vars()
-    env = make_ansible_env(undefined_cls=Undefined)
+    env = register_ansible_filters(make_env(undefined_cls=Undefined))
     share = v["hypervisor_etcd_drill_share_dir"]
     wanted = {
         env.from_string(v[key]).render(**v)

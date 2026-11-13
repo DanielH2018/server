@@ -290,7 +290,7 @@ def test_every_completed_run_ends_with_one_summary_line():
     """Check 10 judges this cron's liveness on that line, so it cannot be conditional.
 
     The counts are the ones the report above them shows; the shape is what
-    `deletions_have_spoken` matches.
+    `cron_completed` matches.
     """
     charged, _ = ledger.format_backup_deletions(
         [{"backup": "backup-a", "volume": VOL_A, "class_c": 337}],

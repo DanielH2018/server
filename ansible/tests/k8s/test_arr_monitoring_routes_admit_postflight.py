@@ -24,7 +24,7 @@ from jinja2 import Undefined
 from jinja2.exceptions import UndefinedError
 
 from lib import yaml_fast
-from lib.ansible_jinja_env import make_ansible_env
+from lib.ansible_jinja_env import make_env, register_ansible_filters
 from lib.repo_paths import SHARED_TPL
 from _manifest_guards import (
     ALL_VARS_VALUES,
@@ -207,7 +207,7 @@ _MACRO_CTX = {
 
 def _render_monitoring_call(call: str) -> str:
     return (
-        make_ansible_env([SHARED_TPL], undefined_cls=Undefined)
+        register_ansible_filters(make_env([SHARED_TPL], undefined_cls=Undefined))
         .from_string(_MACRO_IMPORT + call)
         .render(_MACRO_CTX)
     )

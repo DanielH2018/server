@@ -34,15 +34,15 @@ class RenderError(RuntimeError):
     """A template that failed to render; nothing has been written."""
 
 
-def strict_env(templates: Path) -> jinja2.Environment:
+def strict_env(
+    templates: Path, undefined_cls=StrictChainableUndefined
+) -> jinja2.Environment:
     """The strict environment over `templates`, then the shared directory, with every filter.
 
-    Host and package modes render host components here. Unlike the render guards' environment,
-    it drops a template's last newline, as ansible-core's `AnsibleEnvironment` does, and
-    `render_file` adds back what the template module adds back. So an `{% include %}` loses
-    its last newline, as it does under Ansible.
+    Host and package modes and the setup guard render host components here. It drops a last
+    newline, and `render_file` pads as Ansible does, so an `{% include %}` loses its last one.
     """
-    env = template_env(templates, undefined_cls=StrictChainableUndefined)
+    env = template_env(templates, undefined_cls=undefined_cls)
     env.keep_trailing_newline = False
     env.filters["to_json"] = filters.to_json
     return env

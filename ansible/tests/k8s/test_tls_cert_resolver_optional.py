@@ -19,7 +19,7 @@ which is the one where the mistake is reachable.
 from lib import yaml_fast
 from jinja2 import Undefined
 
-from lib.ansible_jinja_env import make_ansible_env
+from lib.ansible_jinja_env import make_env, register_ansible_filters
 from lib.repo_paths import SHARED_TPL
 from _helpers import ALL_VARS
 
@@ -43,7 +43,7 @@ _CALLS = {
 
 def _routes(macro_call: str, resolver: str) -> list[dict]:
     rendered = (
-        make_ansible_env([SHARED_TPL], undefined_cls=Undefined)
+        register_ansible_filters(make_env([SHARED_TPL], undefined_cls=Undefined))
         .from_string(_IMPORT + macro_call)
         .render({**_CONTEXT, RESOLVER_VAR: resolver})
     )
