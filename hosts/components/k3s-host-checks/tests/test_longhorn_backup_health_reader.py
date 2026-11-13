@@ -381,11 +381,11 @@ def test_an_unparseable_json_body_is_flagged_by_name(
 def test_a_failed_backup_list_fetch_does_not_cascade_into_the_tier_loop(
     tmp_path, logger_calls
 ):
-    """One unread fetch reports one problem, not ten.
+    """One unread fetch reports one problem, not nine.
 
     Every tier is matched against the coverage rows, so passing the loop an empty list on a
-    failed backup list fetch would report all nine tiers' volumes as stale or missing — burying the
-    one thing that actually happened under nine consequences of it.
+    failed backup list fetch would report all eight tiers' volumes as stale or missing — burying the
+    one thing that actually happened under eight consequences of it.
     """
     stub = _green_path_stub_kubectl(tmp_path, _rfc3339(NOW - 60))
     proc = _run_reader_against(stub, tmp_path, STUB_FAIL_BRANCH="backups")

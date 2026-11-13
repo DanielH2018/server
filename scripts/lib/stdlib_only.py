@@ -456,61 +456,15 @@ def _role_module(top: str, dirs: list[Path]) -> bool:
     )
 
 
-_IMPORT_ERRORS = {"ImportError", "ModuleNotFoundError"}
-
-
-def _ends_the_run(node: ast.AST) -> bool:
-    """Whether `node` is a `raise` or a call to `sys.exit`, `exit` or `SystemExit`."""
-    if isinstance(node, ast.Raise):
-        return True
-    if not isinstance(node, ast.Call):
-        return False
-    func = node.func
-    name = func.attr if isinstance(func, ast.Attribute) else getattr(func, "id", None)
-    return name in {"exit", "SystemExit", "_exit"}
-
-
-# DECIDED: an import inside a `try` whose handler names ImportError or ModuleNotFoundError
-# cannot kill the caller at import, which is the failure this module exists to catch. The
-# deployer's `deploy_setup_roles.routing` imports `setup_routing` that way, and its install
-# directory deliberately ships none. A handler for any other exception guards nothing, and
-# neither does one that raises or exits: `except ImportError: raise SystemExit(...)` still dies.
-def _guarded(tree: ast.Module) -> set[int]:
-    """The ids of the import nodes a `try ... except ImportError` guards."""
-    found = set()
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.Try):
-            continue
-        guards = []
-        for handler in node.handlers:
-            kinds = (
-                handler.type.elts
-                if isinstance(handler.type, ast.Tuple)
-                else [handler.type]
-            )
-            if any(isinstance(k, ast.Name) and k.id in _IMPORT_ERRORS for k in kinds):
-                guards.append(not any(map(_ends_the_run, ast.walk(handler))))
-        if guards and all(guards):
-            for statement in node.body:
-                found |= {
-                    id(sub)
-                    for sub in ast.walk(statement)
-                    if isinstance(sub, (ast.Import, ast.ImportFrom))
-                }
-    return found
-
-
 def walk(path: Path, dirs: list[Path]) -> list[str]:
     """The imports in `path` that a no-venv run cannot be shown to satisfy.
 
     The walk reads every import, call-time ones included: a function-local import of a
     first-party module resolves and passes, but a function-local `import yaml` does not.
-    An import guarded by `except ImportError` is skipped (`_guarded`).
     """
     dirs = [Path(d).resolve() for d in dirs]
     colliding = colliding_basenames()
-    guarded = _guarded(_tree(path))
-    nodes = [n for n in ast.walk(_tree(path)) if id(n) not in guarded]
+    nodes = list(ast.walk(_tree(path)))
     bad = []
     for module, names in _imports(path, nodes):
         if module.startswith("\0"):

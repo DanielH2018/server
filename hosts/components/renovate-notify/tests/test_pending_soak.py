@@ -178,10 +178,7 @@ def test_stale_pending_fires_an_nginx_row_before_an_ordinary_digest_row():
     other = {
         "renovate/k8s-image-python": "Update python:3.14-alpine Docker digest to c6ead21"
     }
-    seen = {
-        "renovate/k8s-image-nginx": now - 9 * DAY,
-        "renovate/k8s-image-python": now - 9 * DAY,
-    }
+    seen = pl.update_pending_seen({}, {**nginx, **other}, now - 9 * DAY)
     assert [i[0] for i in pl.stale_pending(seen, nginx, now)] == [
         "renovate/k8s-image-nginx"
     ]
@@ -210,7 +207,7 @@ def test_item_soak_is_three_days_for_a_grouped_row():
 def test_stale_pending_flags_a_grouped_digest_row_at_its_own_threshold():
     now = 1_000_000.0
     current = {"renovate/k8s-image-ghcr.iohaveagitgattdarr": GROUPED_DIGEST_ROW}
-    seen = {"renovate/k8s-image-ghcr.iohaveagitgattdarr": now - 10.3 * DAY}
+    seen = pl.update_pending_seen({}, current, now - 10.3 * DAY)
     # A measured dwell past 3+7 and short of 7+7 must fire, not wait.
     assert [i[0] for i in pl.stale_pending(seen, current, now)] == [
         "renovate/k8s-image-ghcr.iohaveagitgattdarr"
@@ -270,15 +267,20 @@ def test_soak_constants_match_renovate_json():
 
 
 def test_update_pending_seen_stamps_new_items_and_keeps_old_ones():
-    seen = pl.update_pending_seen({"a": 100.0}, {"a": "x", "b": "y"}, 500.0)
+    seen = pl.update_pending_seen(
+        {"a": 100.0, pl.content_key("a", "x"): 200.0}, {"a": "x", "b": "y"}, 500.0
+    )
     assert seen == {
         "a": 100.0,
-        pl.content_key(
-            "a", "x"
-        ): 100.0,  # legacy branch-only entry seeds its digest clock
+        pl.content_key("a", "x"): 200.0,
         "b": 500.0,
         pl.content_key("b", "y"): 500.0,
     }
+
+
+def test_a_branch_clock_with_no_digest_clock_starts_the_digest_clock_now():
+    seen = pl.update_pending_seen({"a": 100.0}, {"a": "x"}, 500.0)
+    assert seen == {"a": 100.0, pl.content_key("a", "x"): 500.0}
 
 
 def test_update_pending_seen_drops_departed_items():
@@ -340,7 +342,7 @@ def test_stale_pending_uses_the_shorter_allowance_for_a_digest_item():
     now = 1_000_000.0
     digest = {"renovate/d": "Update foo:latest Docker digest to abc1234"}
     version = {"renovate/v": "Update foo Docker tag to v2"}
-    seen = {"renovate/d": now - 12 * DAY, "renovate/v": now - 12 * DAY}
+    seen = pl.update_pending_seen({}, {**digest, **version}, now - 12 * DAY)
     # 12 days is past 3+7 but short of 7+7: the digest item fires, the version item does not.
     assert [i[0] for i in pl.stale_pending(seen, digest, now)] == ["renovate/d"]
     assert pl.stale_pending(seen, version, now) == []
@@ -355,7 +357,10 @@ def test_stale_pending_treats_an_unseen_item_as_first_seen_now():
 def test_stale_pending_sorts_worst_offender_first():
     now = 1_000_000.0
     current = {"renovate/a": "tag to v1", "renovate/b": "tag to v2"}
-    seen = {"renovate/a": now - 20 * DAY, "renovate/b": now - 111 * DAY}
+    seen = {
+        **pl.update_pending_seen({}, {"renovate/a": "tag to v1"}, now - 20 * DAY),
+        **pl.update_pending_seen({}, {"renovate/b": "tag to v2"}, now - 111 * DAY),
+    }
     assert [i[0] for i in pl.stale_pending(seen, current, now)] == [
         "renovate/b",
         "renovate/a",
@@ -401,7 +406,7 @@ def test_render_pending_stays_under_discords_cap_with_the_whole_section_stuck():
     """
     now = 1_000_000.0
     current = pl.parse_pending(FIXTURE)
-    seen = {branch: now - 40 * DAY for branch in current}
+    seen = pl.update_pending_seen({}, current, now - 40 * DAY)
     items = pl.stale_pending(seen, current, now)
     assert len(items) == len(current), (
         "the whole section must be stuck for this test to bite"
@@ -415,9 +420,9 @@ def test_render_pending_stays_under_discords_cap_with_the_whole_section_stuck():
 def test_render_pending_keeps_the_worst_offender_when_it_truncates():
     now = 1_000_000.0
     current = pl.parse_pending(FIXTURE)
-    seen = {branch: now - 40 * DAY for branch in current}
+    seen = pl.update_pending_seen({}, current, now - 40 * DAY)
     worst = "renovate/k8s-image-grafanagrafana"
-    seen[worst] = now - 400 * DAY
+    seen[pl.content_key(worst, current[worst])] = now - 400 * DAY
     msg = pl.render_pending(pl.stale_pending(seen, current, now))
     assert worst in msg
     assert "400 days" in msg

@@ -167,7 +167,7 @@ def test_the_group_names_are_the_ones_setup_k3s_and_the_recurring_jobs_use():
         lr.label(lr.shard_group(6))
         == "recurring-job-group.longhorn.io/weekly-backup-d6"
     )
-    for group in ("default", "no-backup", "weekly-backup"):
+    for group in ("default", "no-backup"):
         assert lr.label(group) == backup_group_label(group)
     for shard in range(7):
         assert lr.label(lr.shard_group(shard)) == backup_group_label(

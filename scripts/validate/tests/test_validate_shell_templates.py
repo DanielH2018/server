@@ -176,8 +176,8 @@ def test_main_fails_closed_when_shellcheck_missing():
 def test_role_defaults_reach_the_render_context():
     # The gate lints what the host runs only if a role's own defaults are in the context: the
     # artifacts sync script is almost entirely a `{% for peer in claude_code_artifacts_peer_sources %}`
-    # body, and StubUndefined iterates empty (#3178). The template sits in a component, which
-    # reads the defaults of the role it names through `role:`.
+    # body, and StubUndefined iterates empty (#3178). The template sits in a component, whose
+    # own defaults/main.yml carries the list.
     path = v.COMPONENTS / "claude-code" / "templates" / "sync-artifacts.sh.j2"
     ctx = v.template_context(path)
     assert ctx["claude_code_artifacts_peer_sources"], ctx.get(
