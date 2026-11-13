@@ -26,7 +26,7 @@ CHECK_LIB = "/usr/lib/homelab/homelab-check-lib.sh"
 # and the textfile the script writes lands in TEXTFILE_DIR under tmp_path, never on the host.
 REAL_CHECK_LIB = REPO / "hosts/components/check-lib/files/homelab-check-lib.sh"
 CRON_PATH_LINE = "export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
-GITHUB_REPO = load_defaults(ROLE)["github_repo"]
+REPOS = load_defaults(ROLE)["github_interaction_limit_repos"]
 
 
 def _limit_body(limit, expires_at="2027-03-06T06:50:00Z"):
@@ -37,9 +37,19 @@ def _limit_body(limit, expires_at="2027-03-06T06:50:00Z"):
 
 
 def _run(
-    tmp_path, curl_body=None, curl_rc=0, *, limit="collaborators_only", logged_in=True
+    tmp_path,
+    curl_body=None,
+    curl_rc=0,
+    *,
+    limit="collaborators_only",
+    logged_in=True,
+    failing_repo=None,
 ):
-    """Render, stub, run. Returns (exit_code, status, message, curl_argv)."""
+    """Render, stub, run. Returns (exit_code, status, message, curl_argv).
+
+    `curl_argv` holds every curl call's arguments in order. `failing_repo` makes only the calls
+    for that repo exit 22, as a 403 does.
+    """
     # `limit` is the one value this harness has to vary across calls; every other var the
     # template reads comes from the inventory/role defaults the shared accessor already
     # resolves, so it is not re-declared here (#3178).
@@ -68,8 +78,13 @@ def _run(
         binstub,
         curl=(
             "#!/usr/bin/env bash\n"
-            f"printf '%s\\n' \"$@\" > {argv_out}\n"
-            f"printf '%s' {json.dumps(curl_body or '')}\n"
+            f"printf '%s\\n' \"$@\" >> {argv_out}\n"
+            + (
+                f'case "${{@: -1}}" in */repos/{failing_repo}/*) exit 22 ;; esac\n'
+                if failing_repo
+                else ""
+            )
+            + f"printf '%s' {json.dumps(curl_body or '')}\n"
             f"exit {curl_rc}\n"
         ),
     )
@@ -151,9 +166,32 @@ def test_the_put_carries_the_declared_limit_and_expiry(tmp_path):
     assert "PUT" in argv
     body = argv[argv.index("-d") + 1]
     assert json.loads(body) == {"limit": "collaborators_only", "expiry": "six_months"}
-    assert f"https://api.github.com/repos/{GITHUB_REPO}/interaction-limits" in argv
+    for repo in REPOS:
+        assert f"https://api.github.com/repos/{repo}/interaction-limits" in argv
     # The token reaches curl through -K, never as a header argument.
     assert not any("Bearer" in a for a in argv)
+
+
+def test_every_declared_repo_is_re_armed(tmp_path):
+    assert REPOS == ["DanielH2018/server", "DanielH2018/dotfiles"]
+    rc, status, msg, argv = _run(tmp_path, curl_body=_limit_body("collaborators_only"))
+    assert (rc, status) == (0, "up")
+    assert argv.count("PUT") == len(REPOS)
+    for repo in REPOS:
+        assert f"{repo}: interaction limit collaborators_only re-armed" in msg
+
+
+def test_one_failed_repo_is_down_and_the_others_still_re_arm(tmp_path):
+    """A 403 on the first repo must neither read as armed nor skip the second repo's PUT."""
+    rc, status, msg, argv = _run(
+        tmp_path,
+        curl_body=_limit_body("collaborators_only"),
+        failing_repo=REPOS[0],
+    )
+    assert (rc, status) == (1, "down")
+    assert f"{REPOS[0]}: failed to set interaction limit" in msg
+    assert f"{REPOS[1]}: interaction limit collaborators_only re-armed" in msg
+    assert argv.count("PUT") == len(REPOS)
 
 
 def test_no_gh_login_is_unverified_not_armed(tmp_path):
