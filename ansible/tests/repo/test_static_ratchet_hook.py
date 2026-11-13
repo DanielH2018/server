@@ -126,6 +126,7 @@ def test_the_hook_runs_every_expected_module_and_each_exists():
         "pyproject.toml",
         ".github/workflows/ci.yml",
         ".github/workflows/image-smoke.yml",
+        ".github/actions/setup-uv/action.yml",
         "ansible/roles/k8s/monitor-bridge/files/notify.sh",
         ".claude/agents/skeptic.md",
         ".claude/skills/homelab-review/SKILL.md",
