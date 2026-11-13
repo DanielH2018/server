@@ -68,21 +68,13 @@ artifacts_peer_sources:
     path: /home/ubuntu/.claude/artifacts
     stars_path: /home/ubuntu/.claude/artifact-stars.txt
 
-# Platform components the index names beside the k8s services. Longhorn is the
-# reason this list exists: it is the most-discussed subject in the corpus and matched nothing
-# without it.
+# Platform components the index names beside the k8s services: the ones with no
+# containers_list entry, so the index would not otherwise know their names. A component that
+# gains an entry leaves this list, which test_artifacts_configmap.py holds.
 artifacts_platform_services:
-  - longhorn
   - k3s
-  - metallb
-  - coredns
   - unbound
   - cert-manager
-  # traefik's flip adds a `traefik-crds` services entry. Naming it here first keeps that
-  # flip from moving this role's render while artifacts gains `dependsOn: [traefik]`, which CI's
-  # cross-plane gate refuses in one PR (arm 2, #5720). Once the entry exists, this line is
-  # redundant, and dropping it moves nothing, because the list is deduplicated.
-  - traefik-crds
 
 # Services no inventory lists, but that older artifacts are about — a document reviewing the
 # kopia retirement is only findable by service if the name is still recognised. Retiring a
