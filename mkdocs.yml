@@ -266,6 +266,7 @@ nav:
               - Email to RSS: email-to-rss.md
               - artifacts star list: artifacts-star-list.md
       - Recovery and upgrades:
+          - Host bring-up: host-bring-up.md
           - k3s control-plane upgrade: k3s-upgrade.md
           - Longhorn upgrade: longhorn-upgrade.md
           - Ubuntu 26.04 upgrade plan: ubuntu-26.04-upgrade-plan.md

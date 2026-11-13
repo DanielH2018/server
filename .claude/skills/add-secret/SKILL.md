@@ -114,7 +114,7 @@ which only the operator can write. Step 6 tells you which case you are in.
 ## Onboarding a host that cannot decrypt yet
 
 A host with no age key of its own cannot decrypt `ansible/vars/secrets.yml`. `hosts/bootstrap-host.sh`
-creates the host's key at its step 3 and prints the **public** key; `ansible/README.md` has the
+creates the host's key at its step 3 and prints the **public** key; `docs/host-bring-up.md` has the
 full flow.
 
 1. On the new host, as the operator, run `hosts/bootstrap-host.sh <hostname> --until 3`. It
