@@ -58,30 +58,6 @@ def dependson_closure(depends: dict[str, list[str]], start: set[str]) -> set[str
     return seen
 
 
-def _strings(node):
-    if isinstance(node, str):
-        yield node
-    elif isinstance(node, dict):
-        for value in node.values():
-            yield from _strings(value)
-    elif isinstance(node, list):
-        for value in node:
-            yield from _strings(value)
-
-
-def placeholder_problems(docs: list[dict]) -> list[str]:
-    """Name each string of a hand-applied document that holds `${` or `$$`.
-
-    A hand apply runs no substitution, so such a string reaches the API server verbatim.
-    """
-    return [
-        f"{d.get('kind')} {d.get('metadata', {}).get('name')}: {s!r} holds a placeholder"
-        for d in docs
-        for s in _strings(d)
-        if "${" in s or "$$" in s
-    ]
-
-
 def patch_sync(docs: list[dict], registry: str) -> tuple[dict, dict]:
     """Return the drill's OCIRepository and the root, from the rendered sync documents.
 
