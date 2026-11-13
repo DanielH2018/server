@@ -70,8 +70,13 @@ defaults:
     # removing it changes the agent's flags for nothing.
     node-label:
       - node.longhorn.io/create-default-disk=false
+    # The image-gc pair starts image GC below Longhorn's 75% replica scheduling floor, which the
+    # root filesystem shares: at the kubelet's 85 every superseded image stayed (#8307). The
+    # kubelet refuses a low threshold not below the high one, so the pair moves together.
     kubelet-arg:
       - allowed-unsafe-sysctls=net.ipv4.conf.all.src_valid_mark,net.ipv4.ip_forward
+      - image-gc-high-threshold=65
+      - image-gc-low-threshold=55
   # Kubelet's graceful node shutdown (#8296), rendered into kubelet.conf.d. Without it every
   # shutdown of this node logs out Longhorn's iSCSI sessions under mounted ext4 filesystems:
   # open-iscsi's stop runs logout-all.sh while the pods still hold the mounts, and each of the
