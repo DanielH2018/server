@@ -52,7 +52,7 @@ ISSUE_PREAMBLE = (
 
 
 # What a batch touches, as its issues name it: a role by its path, a host by its name.
-_ROLE_RE = re.compile(r"roles/(?:k8s|containers|setup)/([\w-]+)")
+_ROLE_RE = re.compile(r"k8s/roles/([\w-]+)")
 _HOST_RE = re.compile(r"\bdaniel-(?:box|server|pi)\b")
 _HOST_PREFIX_RE = re.compile(r"^\[[^]]+\] ")
 
