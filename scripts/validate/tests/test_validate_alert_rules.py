@@ -321,7 +321,7 @@ def test_ci_provisions_the_tools_then_runs_the_red_proof():
 
 def test_the_tree_rules_meet_every_convention_is_clean():
     groups, keys = alert_rules.rendered_rule_keys()
-    # Non-vacuity: the floor and the list name the group, and the file holds its five alerts.
+    # Non-vacuity: the floor and the list name the group, and the file holds its six alerts.
     assert "alerting-meta" in alert_conventions.GROUP_FLOOR
     assert groups == [
         "alerting-meta",
@@ -388,6 +388,7 @@ def test_the_tree_rules_meet_every_convention_is_clean():
         "AlertmanagerNotificationsFailing",
         "AlertmanagerMetricsMissing",
         "PrometheusRuleEvaluationFailures",
+        "WarningUnresolved",
     }
     # The ingress-probes rules take `service` from their scrape job, so the conventions read
     # the rendered prometheus.yml, as check_tree hands it to them.

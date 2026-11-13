@@ -88,3 +88,40 @@ groups:
             prometheus.yml, or the scrape works and alertmanager_notifications_failed_total is
             gone, as after an upgrade that renamed it. AlertmanagerNotificationsFailing cannot
             fire until the series is back.
+      # A warning notifies Discord alone and repeats there every 6h, so one that never resolves
+      # reaches nobody who acts on it (#8218). This rule ages each firing warning into a
+      # critical, which routes to Discord and email. The original alertname and service move to
+      # `escalated_from` and `escalated_service`: Prometheus overwrites `alertname` with this
+      # rule's name, and a source `service` would put a critical in that tag's health gate and
+      # block the landing that fixes the job. `alert-escalation` is no deploy tag, so no gate
+      # reads this alert. To silence one escalation, match `escalated_from`.
+      #
+      # Shadow and drill alerts page nobody, so they never escalate. A rule whose warning holds
+      # by design, such as DeployHoldActive, carries `escalate: "false"` and is left out too.
+      # The 48h hold survives the weekly reboot: Prometheus restores a pending `for` from
+      # ALERTS_FOR_STATE after an outage shorter than --rules.alert.for-outage-tolerance (1h).
+      # The hold restarts whenever the warning resolves, so a warning that flaps is not caught.
+      - alert: WarningUnresolved
+        expr: >-
+          label_replace(
+            label_replace(
+              max without (alertstate) (
+                ALERTS{alertstate="firing", severity="warning", shadow!="true", drill!="true", escalate!="false"}
+              ),
+              "escalated_from", "$1", "alertname", "(.+)"
+            ),
+            "escalated_service", "$1", "service", "(.+)"
+          )
+        for: 48h
+        labels:
+          severity: critical
+          service: alert-escalation
+        annotations:
+          summary: >-
+            {{ $labels.escalated_from }} ({{ $labels.escalated_service }}) has fired as a
+            warning for 48 hours.
+          description: >-
+            The warning {{ $labels.escalated_from }} for {{ $labels.escalated_service }} has
+            fired without a break for 48 hours, and its Discord repeats have not cleared it.
+            Its own description names the failing job. This page resolves when the warning
+            does. If the warning holds by design, give its rule the label escalate: "false".

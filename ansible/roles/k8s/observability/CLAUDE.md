@@ -146,6 +146,18 @@ holds the interval to that sum, and
 `ansible/tests/services/test_alertmanager_routing.py::test_every_route_a_paging_alert_reaches_is_muted`
 walks the routing tree to prove the alerts reach the mute.
 
+**A warning that fires for 48 hours pages as a critical.** `WarningUnresolved` in
+`files/rules/alerting-meta.yaml` reads firing warnings from `ALERTS` and escalates each one
+that holds for 48 hours, so it reaches Discord and email instead of repeating in Discord
+alone (#8218). It moves the source's name and service to `escalated_from` and
+`escalated_service`, and carries `service="alert-escalation"`, a tag no health gate reads.
+To silence one escalation, match `escalated_from`. Shadow and drill alerts never escalate,
+and neither does a rule labelled `escalate: "false"`: `DeployHoldActive`,
+`FanoutSlotsIdleWithFreeWork` and `FluxSuspended` hold by design.
+`ansible/tests/services/test_warning_escalation_exemptions.py` holds that exempt set to the
+rules. An Alertmanager inhibit keeps the escalated `HostCheckOverdue` quiet beside its
+escalated `*NotReporting` pair.
+
 **A host-plane rule names its host as a literal, so a new host is a rule edit.** The
 `host-checks` group carries one `HostReconcileFailed` per host in `hosts.ini`, and one
 `HostUpdateStale` per entry of `observability_expected_hosts`, each from the shape in

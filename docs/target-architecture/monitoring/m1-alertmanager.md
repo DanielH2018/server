@@ -357,6 +357,10 @@ M2 to M6 build on these rules and do not restate them.
    such series takes `service` from a literal job-to-service table in its expression instead.
    M1's row in that table is `alertmanager` → `observability`. During a parallel run with
    Kuma, a rule also carries `shadow: "true"`. That label is outside C7, and *Open questions* lists it as a contract gap.
+   A warning that fires for 48 hours escalates: `WarningUnresolved` in `alerting-meta` turns
+   it into a critical that pages Discord and email, with the source's name and service in
+   `escalated_from` and `escalated_service` (#8218). A rule whose warning holds by design,
+   such as `DeployHoldActive`, carries `escalate: "false"` and never escalates.
    The C7 health gate excludes the `Watchdog` by name (*Open questions* 5). `alert_rules.py`
    therefore allows one rule named `Watchdog` across every rule file, in `alerting-meta`, with
    the expression `vector(1)`, and requires it from PR 4 on. A second rule of that name would
