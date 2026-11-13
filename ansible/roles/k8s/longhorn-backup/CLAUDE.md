@@ -9,13 +9,12 @@ this role only declares the targets. It also renders `k3s-etcd-snapshot-s3-confi
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
-- **Applied by:** Flux, through `promote` (`platform: k8s`); `land.sh --tags=longhorn-backup`
-  gates the rollout
+- **Applied by:** Flux, through `promote`; `land.sh --tags=longhorn-backup` gates the rollout
 - **Route:** none (no `templates/ingressroute.yaml.j2`)
 - **Claims:** none (no PVC)
 <!-- /generated_from -->
 
-- **Flux applies it, not Ansible** (H1.7b). Its `containers_list` entry is `platform: k8s` and
+- **Flux applies it, not Ansible** (H1.7b). Its `containers_list` entry is in `cluster/services.yml` and
   `depends_on: [longhorn]`, because `longhorn`'s vendored file defines the BackupTarget and
   RecurringJob CRDs. While `longhorn` is not Ready, this tag applies nothing, so a disarm PR promotes and does
   not reach the cluster. The BackupTarget break-glass below is the lever for that state.
@@ -105,7 +104,8 @@ in the loop, and the contract is written here so a later edit cannot quietly wid
 - **Abort valve.** The weekly tier is sharded across weekdays, so no day's deletions reach the
   B2 transaction cap (`docs/longhorn-backup-tiering.md`).
 - **Next-run review.** `probe.py b2-budget` recomputes the projected spend from the live
-  bucket. Run it after adding a volume.
+  bucket. Run it after adding a volume. Its daily timer's `OVER BUDGET:` line turns
+  `k3s-host-checks` backup health DOWN (checks 9 and 10).
 
 ## Editing
 

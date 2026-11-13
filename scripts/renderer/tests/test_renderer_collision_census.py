@@ -7,8 +7,7 @@ its reason. A listed pair moves to Flux in one PR. A tag's `-deferred`, `-snapsh
 `-verify` directories count as the tag's own.
 
 The live test renders every render target in placeholder mode, as the render job does.
-The plan is docs/target-architecture/deploy/d5-bulk-move.md, *Prune exemptions, digests and
-the collision census (D5.1a1, D5.1a2)*.
+ADR-0020 records the decision.
 
 Run: uv run pytest scripts/renderer/tests/test_renderer_collision_census.py
 """
@@ -18,9 +17,7 @@ from collections.abc import Mapping
 
 from renderer.renderer_lib.targets import render_targets
 from lib import yaml_fast
-from lib.ansible_inventory import K8S_HOST
 from lib.exit_codes import RENDER_OK
-from lib.repo_paths import HOST_VARS
 from render_share import placeholder_renderer
 from renderer import homelab_render
 from renderer.renderer_lib.bundle import CLUSTER_VARS_FILE, KUSTOMIZATION
@@ -119,9 +116,7 @@ def test_no_two_render_targets_render_one_object(tmp_path):
     found = owners(directories)
     # A walk that reached nothing would pass, so the render must hold every target and
     # objects from two named roles.
-    assert set(render_targets(K8S_HOST, HOST_VARS)) <= {
-        split_kind(d)[0] for d in directories
-    }
+    assert set(render_targets()) <= {split_kind(d)[0] for d in directories}
     assert ("v1", "Namespace", "", "observability") in found
     assert any(k[1] == "Middleware" for k in found)
     assert collisions(found) == {}

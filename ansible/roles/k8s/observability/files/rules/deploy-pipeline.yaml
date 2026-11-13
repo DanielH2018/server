@@ -20,6 +20,7 @@ groups:
         labels:
           severity: warning
           service: deploy-pipeline
+          escalate: "false"
         annotations:
           summary: The repository variable DEPLOY_HOLD has held promotion for 15 minutes.
           description: >-

@@ -28,18 +28,17 @@ from typing import NamedTuple
 import jinja2
 
 from lib import yaml_fast
-from lib.render_guard import containers_entries
-from lib.repo_paths import HOST_VARS, INVENTORY, K8S_ROLES
+from lib.render_guard import k8s_services
+from lib.repo_paths import INVENTORY, K8S_ROLES, K8S_SERVICES
 from renderer.renderer_lib.jinja_aliases import Binding, judged_flows
 from renderer.renderer_lib.jinja_uses import Policy
 
 
-def _replicas_vars(host_vars: Path = HOST_VARS) -> set[str]:
-    """Every `replicas_var` of a `metrics:` item in any host's `containers_list`."""
+def _replicas_vars(services: Path = K8S_SERVICES) -> set[str]:
+    """Every `replicas_var` of a `metrics:` item in a k8s service's entry."""
     return {
         str(item["replicas_var"])
-        for path in sorted(host_vars.glob("*.yml"))
-        for entry in containers_entries(path)
+        for entry in k8s_services(services)
         for item in entry.get("metrics") or []
         if isinstance(item, dict) and "replicas_var" in item
     }
@@ -65,7 +64,7 @@ class VarsLookupSite(NamedTuple):
 NON_SECRET_VARS_LOOKUPS = frozenset(
     {
         # `lookup('vars', job.replicas_var) | int > 0` drops a scrape job whose workload is
-        # scaled to zero. `replicas_var` is a field of a `containers_list` entry's `metrics:`
+        # scaled to zero. `replicas_var` is a field of a service entry's `metrics:`
         # list (ansible/filter_plugins/scrape_jobs.py), and names a replica count.
         VarsLookupSite(
             "ansible/roles/k8s/observability/templates/prometheus.yaml.j2",

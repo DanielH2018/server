@@ -4,7 +4,7 @@ The render tests render each app's `templates/verify/` through `render_tag`, so 
 checked as Flux receives it in `<app>-verify`. The run tests write out the rendered
 ConfigMap's two files, the seed and its `flux_job_connect.py` copy, and run them as the Job's
 container does, against a local server that keeps notifications the way the *arr API does.
-The plan is docs/target-architecture/deploy/d5-bulk-move.md, *arr-notification's seed*.
+ADR-0020 records the decision.
 
 Run: uv run pytest ansible/roles/k8s/arr-notification/tests/test_seed_job.py
 """

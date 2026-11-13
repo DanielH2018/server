@@ -3,8 +3,7 @@
 
 Reachability itself comes from ``route_facts`` so this page and
 ``docs/reference/networking.md`` cannot disagree about the same service; what lives here is
-the per-entry dispatch — which platform's rule applies, and what the cell says when no rule
-does.
+what each cell says, including when no rule applies.
 """
 
 import sys as _sys
@@ -22,9 +21,7 @@ from docs.catalog_lib.route_facts import reachability, route_cell
 
 __all__ = [
     "auth_tier",
-    "docker_route",
     "k8s_route",
-    "route_for",
 ]
 
 
@@ -63,25 +60,6 @@ def k8s_route(
     # has a value in plaintext group_vars, so printing the condition instead of the answer
     # made the reader do a lookup this generator can do for them.
     return route_cell(label, reachability(role_dir, all_vars, entry))
-
-
-def docker_route(entry: dict[str, Any]) -> str:
-    # daniel-pi is the only Docker host and is LAN-only: a service's compose file publishes
-    # its UI on the host's LAN IP, never behind a Traefik route. There is no Docker
-    # Traefik-label path to derive, so there is no other shape.
-    return "LAN-direct (no Traefik route)"
-
-
-def route_for(
-    entry: dict[str, Any],
-    platform: str,
-    k8s_roles: Path = K8S_ROLES,
-    all_vars: Path = ALL_VARS,
-) -> str:
-    """Derive `entry`'s route cell, dispatching to `k8s_route` or `docker_route` by platform."""
-    if platform == "k8s":
-        return k8s_route(entry, k8s_roles, all_vars)
-    return docker_route(entry)
 
 
 # Auth tier — containers_list.use_authelia is read directly by the IngressRoute macro

@@ -7,13 +7,13 @@ every `lookup`, `query` or `q` call it finds. It accepts four plugins:
 - `b64file`, `file` and `template`, which read the tree. The names in their path expressions
   are names the source reads.
 - `vars`, only over an attribute of a loop variable whose loop runs over a
-  `py_table('CHECKS')` file lookup or over `containers_list | scrape_jobs(...)`. It runs the
+  `py_table('CHECKS')` file lookup or over `services | scrape_jobs(...)`. It runs the
   filter, as the render does, and every value of that attribute is a name the source reads.
 
 Any other call is a problem, because nothing can say what it reads.
 
-`vars.X`, `vars['X']`, `hostvars[H].X` and `hostvars[H]['X']` read the name `X`, as a bare
-`X` does. A computed `X`, or `vars` or `hostvars` read any other way, is a problem too. A method called on `vars` or `hostvars`, such as `vars.get('X')`, is a problem as well.
+`vars.X`, `vars['X']`, `hosts[H].X` and `hosts[H]['X']` read the name `X`, as a bare
+`X` does. A computed `X`, or `vars` or `hosts` read any other way, is a problem too. A method called on `vars` or `hosts`, such as `vars.get('X')`, is a problem as well.
 `_live_read_census.py` is the census that calls it.
 """
 
@@ -24,11 +24,11 @@ from jinja2 import Environment, meta, nodes
 from py_table import py_table
 from scrape_jobs import scrape_jobs
 
-from lib.ansible_jinja_env import make_ansible_env
+from lib.ansible_jinja_env import make_env, register_ansible_filters
 
 LOOKUPS = frozenset({"lookup", "query", "q"})
 # The two variables that hold other variables by name.
-SCOPES = frozenset({"vars", "hostvars"})
+SCOPES = frozenset({"vars", "hosts"})
 
 
 def _path_value(playbook_dir: Path, node: nodes.Expr) -> str | None:
@@ -74,14 +74,14 @@ class Reader:
 
         Args:
             playbook_dir: What `playbook_dir` holds, so a file lookup's path resolves.
-            containers: The k8s play's `containers_list`, which `scrape_jobs` runs over.
+            containers: The k8s `services`, which `scrape_jobs` runs over.
         """
         self.playbook_dir = playbook_dir
         self.containers = containers
         self.accepted: list[str] = []
         self.vars_names: set[str] = set()
         self.problems: list[str] = []
-        env: Environment = make_ansible_env()
+        env: Environment = register_ansible_filters(make_env())
         # `find_undeclared_variables` compiles, and compiling refuses an unknown filter or
         # test. The census renders nothing, and an inventory value may name a filter only a
         # setup role's play loads, so every name passes.
@@ -110,7 +110,7 @@ class Reader:
                 return None
             rows = py_table(Path(path).read_text(), "CHECKS")
         elif source.name == "scrape_jobs" and isinstance(source.node, nodes.Name):
-            if source.node.name != "containers_list":
+            if source.node.name != "services":
                 return None
             rows = scrape_jobs(self.containers, "namespace")
         else:
@@ -156,16 +156,16 @@ class Reader:
             # `vars.get('X')` calls a method on the mapping: the key is an argument, not a
             # subscript, so the census cannot name the variable it reads.
             self.problems.append(
-                f"{where}: a method called on vars or hostvars, so the census cannot name "
+                f"{where}: a method called on vars or hosts, so the census cannot name "
                 "what it reads"
             )
         if scope is not None:
-            # `vars.X`, `vars['X']`, `hostvars[H].X` and `hostvars[H]['X']` read the name X,
+            # `vars.X`, `vars['X']`, `hosts[H].X` and `hosts[H]['X']` read the name X,
             # which `find_undeclared_variables` never sees.
             key, subscripts = scope
             if key is None:
                 self.problems.append(
-                    f"{where}: vars or hostvars subscripted by a name the census cannot resolve"
+                    f"{where}: vars or hosts subscripted by a name the census cannot resolve"
                 )
             else:
                 names.add(key)
@@ -219,7 +219,7 @@ def _key(node: nodes.Getattr | nodes.Getitem) -> str | None:
 
 
 def _scope_access(node: nodes.Node) -> tuple[str | None, list[nodes.Expr]] | None:
-    """For a variable read through `vars` or a host's `hostvars` entry, the name and subscripts.
+    """For a variable read through `vars` or a host's `hosts` entry, the name and subscripts.
 
     Returns None for any other node. Otherwise returns the name the access selects, None when
     it is computed, and the subscript expressions the access evaluates, which read names too.
@@ -233,7 +233,7 @@ def _scope_access(node: nodes.Node) -> tuple[str | None, list[nodes.Expr]] | Non
     if (
         isinstance(base, (nodes.Getattr, nodes.Getitem))
         and isinstance(base.node, nodes.Name)
-        and base.node.name == "hostvars"
+        and base.node.name == "hosts"
     ):
         host = [base.arg] if isinstance(base, nodes.Getitem) else []
         return _key(node), [*host, *own]

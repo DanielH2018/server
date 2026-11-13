@@ -39,7 +39,7 @@ from _shell_render import (
     rendered_shell_texts,
 )
 from lib import yaml_fast
-from lib.render_guard import containers_entries_in, entry_platform
+from lib.render_guard import containers_entries_in
 from validate.shell_templates import discover_templates
 from _setup_render import CLAUDE_CODE
 
@@ -50,11 +50,7 @@ from _setup_render import CLAUDE_CODE
 
 
 def _pi_docker_roles() -> set[str]:
-    return {
-        entry["name"]
-        for entry in containers_entries_in(host_vars())
-        if entry_platform(entry) != "k8s"
-    }
+    return {entry["name"] for entry in containers_entries_in(host_vars())}
 
 
 def test_every_pi_docker_role_is_rendered() -> None:

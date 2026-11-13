@@ -14,6 +14,7 @@ import shutil
 
 from validate import shell_templates as v
 from validate.validate_lib import shell_lint as sl
+from validate.validate_lib.shipped_render import render_shipped_text
 from lib.proc_testing import fake_bin, run, write_exec
 from lib.repo_paths import K3S_FILES, K3S_HOST_CHECKS
 
@@ -26,7 +27,7 @@ def test_backup_health_renders_clean_shell(tmp_path):
     shellcheck_bin = shutil.which("shellcheck")
     assert shellcheck_bin, "shellcheck must be on PATH (dev dependency shellcheck-py)"
 
-    rendered = sl.render_template(BACKUP_HEALTH, v.template_context(BACKUP_HEALTH))
+    rendered = render_shipped_text(BACKUP_HEALTH, v.template_context(BACKUP_HEALTH))
     out = tmp_path / "longhorn-backup-health.sh"
     out.write_text(rendered)
     assert sl.bash_syntax_check(out) is None
@@ -49,10 +50,10 @@ def test_backup_health_bakes_no_arm_or_schedule_input():
     flipped flag and no host apply follows. The first assert is the red half: it fails if any of
     the four exports returns. The second is the render holding still while every key moves.
     """
-    base = sl.render_template(BACKUP_HEALTH, v.template_context(BACKUP_HEALTH))
+    base = render_shipped_text(BACKUP_HEALTH, v.template_context(BACKUP_HEALTH))
     for name in _BAKED_BEFORE_H1_7A:
         assert f"export {name}=" not in base, name
-    flipped = sl.render_template(
+    flipped = render_shipped_text(
         BACKUP_HEALTH,
         v.template_context(
             BACKUP_HEALTH,
@@ -75,7 +76,7 @@ def test_backup_health_logs_unconditionally_even_when_the_reader_itself_breaks()
     the one case that leaves no record at all.
     """
     ctx = v.template_context(BACKUP_HEALTH)
-    rendered = sl.render_template(BACKUP_HEALTH, ctx)
+    rendered = render_shipped_text(BACKUP_HEALTH, ctx)
     reader_failed_branch = rendered.split("if [[ $RC -ne 0", 1)[1].split("else", 1)[0]
     assert "logger -t longhorn-backup-health" in reader_failed_branch
 
@@ -100,7 +101,7 @@ def test_backup_health_shim_exports_every_env_var_the_reader_requires():
     )
 
     ctx = v.template_context(BACKUP_HEALTH)
-    rendered = sl.render_template(BACKUP_HEALTH, ctx)
+    rendered = render_shipped_text(BACKUP_HEALTH, ctx)
     exported = set(
         re.findall(r"^export (LONGHORN_[A-Z0-9_]+)=", rendered, re.MULTILINE)
     )
@@ -137,7 +138,7 @@ def _run_rendered_shim(
     that reason.
     """
     ctx = v.template_context(BACKUP_HEALTH)
-    rendered = sl.render_template(BACKUP_HEALTH, ctx)
+    rendered = render_shipped_text(BACKUP_HEALTH, ctx)
 
     fake_reader = write_exec(
         tmp_path / "fake-reader.sh", "#!/usr/bin/env bash\n" + fake_reader_body
@@ -376,7 +377,7 @@ def test_backup_health_pings_only_its_own_healthchecks_slug(tmp_path, logger_cal
     assert "longhorn-backup-health" in curl_calls[0]
     assert "/fail" not in curl_calls[0]
     assert not [c for c in curl_calls if "uptime-kuma-alive" in c]
-    rendered = sl.render_template(BACKUP_HEALTH, v.template_context(BACKUP_HEALTH))
+    rendered = render_shipped_text(BACKUP_HEALTH, v.template_context(BACKUP_HEALTH))
     assert "KUMA_PUSH_OK" not in rendered and "uptime-kuma-alive" not in rendered
 
 
@@ -390,5 +391,5 @@ def test_backup_health_writes_its_verdict_with_no_kuma_credentials(
     )
     assert proc.returncode == 0, proc.stderr
     assert verdict == "down"
-    rendered = sl.render_template(BACKUP_HEALTH, v.template_context(BACKUP_HEALTH))
+    rendered = render_shipped_text(BACKUP_HEALTH, v.template_context(BACKUP_HEALTH))
     assert "kuma-push.env" not in rendered and "PUSH_TOKEN" not in rendered

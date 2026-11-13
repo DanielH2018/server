@@ -8,8 +8,7 @@ annotation and its health gate name come from the two `digests.json` files.
 Every boundary is a `_land_fakes.py` fake except land-wait, which is the real
 `promote_wait.land_wait` over `_land_wait_fakes.Sim`. The classifier answers what the real
 `land_tags` answers for each PR's paths, so the tree under test decides whether a PR reaches
-the wait. The plan is docs/target-architecture/deploy/d6-delete-old-path.md, *`land.sh`'s k8s
-tags after D6*.
+the wait. ADR-0020 records the wait and its changed set.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_land_waits_on_the_changed_set.py
 """

@@ -20,8 +20,8 @@ from _row_table import parse, parse_ahead
 from lib.repo_paths import REPO
 
 # The `lib.repo_paths` names a test module reads the tree through, each with the segments it
-# stands for. A chain's segments start with those, so `INVENTORY / "hosts.ini"` spells the
-# same path as `REPO / "ansible/inventory/hosts.ini"`. `_REPO` and `REPO_ROOT` are the
+# stands for. A chain's segments start with those, so `INVENTORY / "group_vars/all.yml"` spells
+# the same path as `REPO / "ansible/inventory/group_vars/all.yml"`. `_REPO` and `REPO_ROOT` are the
 # spellings `local_repo_roots` leaves behind. A module's aliases of these are resolved per
 # module.
 _PATH_ANCHORS = {
@@ -38,7 +38,6 @@ _PATH_ANCHORS = {
 # The k3s entries run most specific first, and a chain reports only its first match, so
 # `REPO / "hosts/components/k3s-server/defaults/main.yml"` is one hit naming `K3S_DEFAULTS`.
 _OWNED_PATHS = (
-    (("inventory", "hosts.ini"), "HOSTS_INI"),
     (("group_vars", "all.yml"), "ALL_VARS"),
     (("host_vars",), "HOST_VARS"),
     (("components", "k3s-server", "defaults", "main.yml"), "K3S_DEFAULTS"),

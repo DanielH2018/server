@@ -24,13 +24,11 @@ from pathlib import Path
 
 from _helpers import CONTAINER_ROLES, load_yaml
 from lib import yaml_fast
-from lib.ansible_jinja_env import template_env
 from lib.render_context import render_context
+from validate.validate_lib.shipped_render import render_shipped
 from lib.render_guard import (
     HOST_VARS,
     containers_entries_in,
-    entry_platform,
-    render_or_error,
 )
 
 PI = "daniel-pi"
@@ -94,7 +92,7 @@ def render_role_template(
     entry = _entry(role, host_vars() if vars_ is None else vars_)
     path = roles / role / "templates" / template
     ctx = host_context(vars_, roles / role, {"container_item": entry})
-    rendered, err = render_or_error(template_env(path.parent), path.name, ctx)
+    rendered, err = render_shipped(path, ctx)
     assert rendered is not None, f"{role}/{template}: {err}"
     return rendered
 
@@ -112,7 +110,7 @@ _TEXTS: dict[str, tuple[tuple[str, str, str], ...]] = {}
 def rendered_texts(host: str = PI) -> tuple[tuple[str, str, str], ...]:
     """(role, template name, rendered TEXT) for every template of every Docker role on `host`.
 
-    Every `templates/*.j2` of every non-k8s `containers_list` entry, compose and bind-mounted
+    Every `templates/*.j2` of every `containers_list` entry, compose and bind-mounted
     config alike — the Pi's equivalent of `_k8s_render.rendered_texts()`. The whole set is
     rendered rather than only what a caller asks for, so the render failure of a template no
     guard reads yet still arrives as a failure here.
@@ -136,8 +134,6 @@ def render_texts(
     """
     texts = []
     for entry in containers_entries_in(vars_):
-        if entry_platform(entry) == "k8s":
-            continue
         role = entry["name"]
         for tpl in sorted((roles / role / "templates").glob("*.j2")):
             texts.append(

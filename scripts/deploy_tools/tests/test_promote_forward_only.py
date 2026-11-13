@@ -2,8 +2,7 @@
 
 The cases run the CLI against a real throwaway master whose commits carry role defaults and
 pin files, over the fake forge in `_promote_fakes.py`. `test_promote_settle.py` holds the
-`settle` half, which writes the hold. The plan's *Verification* cases for H1.1b are in
-docs/target-architecture/host/h1-cluster-config-to-flux.md.
+`settle` half, which writes the hold. ADR-0020 records the decision.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_promote_forward_only.py
 """

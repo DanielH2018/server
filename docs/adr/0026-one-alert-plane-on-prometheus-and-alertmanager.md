@@ -101,6 +101,10 @@ Every check pages through Alertmanager, and Uptime Kuma is retired.
   [#5333](https://github.com/DanielH2018/server/issues/5333) tracks the unmeasured part.
 - **The bridge shrinks by about half and stays.** It keeps the checks that only it can read,
   under a size cap, and its tests shrink with it.
+- **An alert that has a runbook links it.** An alert whose description cites a `docs/` page
+  also sets `runbook_url` to that page on the docs site, and
+  `ansible/roles/k8s/observability/files/alertmanager/homelab.tmpl` prints it as the
+  notification's `Runbook:` line, so a reader on a phone can open it.
 - **To reverse,** write a superseding ADR. A Phase A batch reverts by its two PRs while its
   token PR has not landed. Phase C reverts as the M6 plan's *Rollback* section orders.
 

@@ -5,4 +5,4 @@
 # `checks` is the check exporter's per-row verdict gauges (files/verdict_export.py), which the
 # `monitor-bridge` job collects; its number is the entry's `metrics` item. Nothing else
 # reaches either port.
-{{ service('monitor-bridge', monitor_bridge_deploy_pipeline_port, port_name='metrics', extra_ports=[{'name': 'checks', 'port': containers_list | metrics_port('monitor-bridge')}]) -}}
+{{ service('monitor-bridge', monitor_bridge_deploy_pipeline_port, port_name='metrics', extra_ports=[{'name': 'checks', 'port': services | metrics_port('monitor-bridge')}]) -}}

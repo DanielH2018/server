@@ -1,6 +1,6 @@
 # Alertmanager's UI and the services that read or silence it
 
-Status: DECIDED (spike [#6688](https://github.com/DanielH2018/server/issues/6688), closed 2026-10-31). B-6a shipped the `admins` option ([#6743](https://github.com/DanielH2018/server/pull/6743)); the operator accepted that option on 2026-11-05 (open question 1).
+Status: ARCHIVED on 2026-11-13. Before archiving it read: DECIDED (spike [#6688](https://github.com/DanielH2018/server/issues/6688), closed 2026-10-31). B-6a shipped the `admins` option ([#6743](https://github.com/DanielH2018/server/pull/6743)); the operator accepted that option on 2026-11-05 (open question 1).
 
 **HISTORY — answer 1 (b) is superseded.** On 2026-11-12 the operator retired the
 `alertmanager.local` UI route in favour of Karma (`ansible/roles/k8s/karma/`). Alertmanager's own

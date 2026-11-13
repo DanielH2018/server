@@ -22,7 +22,7 @@ import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
-from dev.findings_lib.issue_model import LABELS, NOT_BEFORE_FIELD, PROJECT_TITLE
+from dev.findings_lib.issue_model import LABELS
 from dev.fanout_lib.batch_holds import BatchHold
 from dev.findings_lib.boundaries import FindingsTools
 from lib.worktrees import Worktree
@@ -162,37 +162,6 @@ class Fakes:
 
 
 ADDED_ITEM = "ITEM-NEW"
-
-
-def board_answer(
-    *, on_board=True, current=None, field=True, project=True, title=PROJECT_TITLE
-):
-    """The board read's GraphQL response for one issue, shaped like the live one."""
-    fields = [{"id": "FIELD-NB", "name": NOT_BEFORE_FIELD}] if field else []
-    boards = (
-        [{"id": "PROJ", "title": title, "fields": {"nodes": [{}, *fields]}}]
-        if project
-        else []
-    )
-    items = (
-        [
-            {
-                "id": "ITEM",
-                "project": {"id": "PROJ"},
-                "fieldValueByName": {"date": current} if current else None,
-            }
-        ]
-        if on_board
-        else []
-    )
-    return {
-        "data": {
-            "repository": {
-                "issue": {"id": "ISSUE", "projectItems": {"nodes": items}},
-                "owner": {"projectsV2": {"nodes": boards}},
-            }
-        }
-    }
 
 
 def graphql_kind(argv) -> str:

@@ -27,7 +27,9 @@ def _templates_calling_py_table() -> list[str]:
 
 def test_the_guard_env_registers_py_table_only_if_a_template_calls_it():
     callers = _templates_calling_py_table()
-    registered = "py_table" in aje.make_ansible_env([SHARED_TPL]).filters
+    registered = (
+        "py_table" in aje.register_ansible_filters(aje.make_env([SHARED_TPL])).filters
+    )
     assert registered == bool(callers), (
         f"py_table registered={registered}, tracked templates calling it: {callers}"
     )
@@ -40,7 +42,8 @@ def test_building_the_guard_env_does_not_load_the_py_table_module():
             sys.executable,
             "-c",
             "import sys; sys.path.insert(0, 'scripts');"
-            " from lib.ansible_jinja_env import make_ansible_env; make_ansible_env();"
+            " from lib.ansible_jinja_env import make_env, register_ansible_filters;"
+            " register_ansible_filters(make_env());"
             " print('py_table' in sys.modules)",
         ],
         cwd=REPO,

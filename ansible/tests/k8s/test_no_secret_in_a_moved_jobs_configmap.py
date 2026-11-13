@@ -3,7 +3,7 @@
 A host script templated its push token into its own body, which was safe in a 0700 file. A
 script staged into a ConfigMap is readable by anything that can read ConfigMaps, so each moved
 job reads its secrets from its role's Secret through `secretKeyRef` instead
-(`docs/target-architecture/host/h2-shrink-host-plane.md`, *No secret in a ConfigMap*).
+(ADR-0029).
 
 The test binds every key name in `ansible/vars/secrets.yml` to a unique sentinel value, renders
 each moved role's top-level templates with those values, and fails when a ConfigMap's data

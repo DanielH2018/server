@@ -15,6 +15,7 @@ import re
 
 from _helpers import K8S_ROLES
 from lib import yaml_fast
+from lib.repo_paths import K3S_HOST_CHECKS_DEFAULTS
 
 RULES = K8S_ROLES / "observability" / "files" / "rules" / "storage.yaml"
 ROBUSTNESS = K8S_ROLES / "monitor-bridge" / "files" / "longhorn_robustness.py"
@@ -93,6 +94,7 @@ def literal_problems(rules: dict[str, dict], env: dict[str, str], safe: str):
     holds = {
         "LonghornVolumeDegraded": streak("LONGHORN_CONSECUTIVE"),
         "LonghornVolumesMissing": streak("LONGHORN_CONSECUTIVE"),
+        "LonghornDiskOverSchedulingFloor": streak("LONGHORN_CONSECUTIVE"),
         "PVCCoverageShortfall": streak("PVC_CLAIMS_CONSECUTIVE"),
         "LonghornSnapshotNearCap": streak("SNAPSHOT_CAP_CONSECUTIVE"),
         "LonghornSnapshotCapUnmonitored": streak("SNAPSHOT_CAP_CONSECUTIVE"),
@@ -283,4 +285,43 @@ def test_a_cap_that_no_longer_matches_the_claim_size_is_flagged():
     text = RULES.read_text().replace(">= 17179869184 *", ">= 8589934592 *")
     assert snapshot_cap_problems(text) == [
         "LonghornSnapshotNearCap: expr lacks `>= 17179869184 *`"
+    ]
+
+
+def disk_floor_problems(text: str) -> list[str]:
+    """`LonghornDiskOverSchedulingFloor` must page at k3s-host-checks' `k3s_disk_max_pct`.
+
+    Both encode Longhorn's replica scheduling floor (100 minus its 25%
+    storage-minimal-available-percentage): disk-health.sh pages daniel-box's root at it, and
+    the rule pages each node's Longhorn disk at it (#8214). One moved alone would page the two
+    nodes at different lines.
+    """
+    match = re.search(
+        r"^k3s_disk_max_pct:\s*(\d+)\s*$", K3S_HOST_CHECKS_DEFAULTS.read_text(), re.M
+    )
+    assert match, "k3s-host-checks no longer declares k3s_disk_max_pct as a plain value"
+    floor = int(match.group(1)) / 100
+    expr = rule_expr("LonghornDiskOverSchedulingFloor", text)
+    threshold = re.fullmatch(r".*\) > (\d+(?:\.\d+)?)", expr)
+    assert threshold, (
+        f"LonghornDiskOverSchedulingFloor no longer ends `) > <number>`: {expr}"
+    )
+    if float(threshold.group(1)) != floor:
+        return [
+            f"LonghornDiskOverSchedulingFloor: pages above {threshold.group(1)}, not {floor}"
+        ]
+    return []
+
+
+def test_the_longhorn_disk_floor_is_the_host_checks_floor():
+    assert disk_floor_problems(RULES.read_text()) == []
+
+
+def test_a_disk_floor_that_leaves_the_host_checks_floor_behind_is_flagged():
+    # 0.755 keeps `> 0.75` as a substring, so only a numeric comparison catches it.
+    text = RULES.read_text().replace(
+        "longhorn_disk_capacity_bytes) > 0.75", "longhorn_disk_capacity_bytes) > 0.755"
+    )
+    assert disk_floor_problems(text) == [
+        "LonghornDiskOverSchedulingFloor: pages above 0.755, not 0.75"
     ]

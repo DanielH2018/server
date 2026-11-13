@@ -1,5 +1,7 @@
 # Target architecture — design
 
+Status: ARCHIVED on 2026-11-13. The migration finished on 2026-11-12, and [what the migration built](../what-the-migration-built.md) describes the result.
+
 This page is the durable overview of the homelab target-architecture migration. It says why
 the migration exists, where each area ends up, and the order the slices run in. It records the
 substance of the churn survey of 2026-10-11, whose rendering is pruned after 30 days.

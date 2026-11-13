@@ -1,6 +1,6 @@
 """Step 4: wait on the promotion that applies this PR, or say why there is nothing to wait on.
 
-Every `containers_list` entry is `platform: k8s`, so `promote` and
+Every `cluster/services.yml` entry is a k8s service, so `promote` and
 Flux apply every tag, and a host's package reaches it through the host wait in step 5.
 """
 

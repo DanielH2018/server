@@ -95,7 +95,7 @@ remains.
 Tiering is deliberate — see [`longhorn-backup-tiering.md`](longhorn-backup-tiering.md) for
 the per-volume map and each exclusion's rationale:
 
-<!-- Generated from the k3s role's Longhorn defaults; edit those. -->
+<!-- Generated from the longhorn-reconcile role's tier lists and the longhorn-backup role's schedules; edit those. -->
 --8<-- "assets/generated/fragments/longhorn-tiers.md"
 
 - **Daily tier** (the R2 volumes): day-old at worst.

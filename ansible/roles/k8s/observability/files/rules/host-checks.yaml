@@ -994,7 +994,7 @@ groups:
       # One rule per inventory host, so `service` stays a literal. The updater writes
       # homelab_host_reconcile_ok 0 on every run while the host holds, so the rule pages a hold
       # that stands for 15 minutes, not one failed run.
-      # ansible/tests/services/test_host_plane_rule_literals.py holds the set to hosts.ini.
+      # ansible/tests/services/test_host_plane_rule_literals.py holds the set to host_vars.
       #
       # Convention 5 (m1-alertmanager.md) does not bind the host-plane rules, because the `node`
       # and `node-pi` jobs both carry `origin`. They meet it anyway: neither pages on `up`, and
@@ -1252,6 +1252,7 @@ groups:
         labels:
           severity: warning
           service: daniel-box
+          escalate: "false"
         annotations:
           summary: Free fan-out issues have waited an hour with no batch running.
           description: >-

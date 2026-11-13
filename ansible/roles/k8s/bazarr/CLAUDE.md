@@ -5,8 +5,7 @@ shared conventions.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
-- **Applied by:** Flux, through `promote` (`platform: k8s`); `land.sh --tags=bazarr` gates the
-  rollout
+- **Applied by:** Flux, through `promote`; `land.sh --tags=bazarr` gates the rollout
 - **Image:** `lscr.io/linuxserver/bazarr` (`bazarr_k8s_image`)
 - **Route:** `bazarr.<domain>` · `bazarr.local.<domain>`, Authelia one_factor
 - **Claims:** `bazarr-config` (weekly -> B2 (default target)), `media-data` (not Longhorn
@@ -18,7 +17,7 @@ shared conventions.
   Also mounts the shared `media-data` claim (read/write, via subPath) for the files
   themselves.
 - **Flux applies it, not Ansible** (D5.9, the first Wave B PR). Its `containers_list` entry is
-  `platform: k8s`, so nothing applies it by hand, and a merged change reaches the cluster when
+  in `cluster/services.yml`, so nothing applies it by hand, and a merged change reaches the cluster when
   `promote` publishes and verifies the next bundle. Its image-bump PRs therefore draw no
   `land-wait` and no `probe.py health` run. authelia, media-volume and traefik are flux-owned too,
   so the Kustomization lists them in `dependsOn`, and Flux applies this tag only after their

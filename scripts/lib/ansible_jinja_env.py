@@ -13,6 +13,9 @@ This module registers ONE set: ``renderer_lib/jinja_filters.py``'s reimplementat
 as ``StubUndefined``, and plain-data JSON would abort the render this module exists to
 complete. The renderer's own environment replaces it with ``filters.to_json``.
 
+It re-exports ``render_guard.make_env``, the one environment factory, so a caller builds a
+filtered environment as ``register_ansible_filters(make_env(...))`` from one import.
+
 The module has two tiers. Its TOP LEVEL is the light tier, and carries ``ansible_bool``
 for ``lib.k8s_context``. ``register_ansible_filters`` is the heavy tier, and imports the
 filter modules when it is first called. Nothing here loads ansible-core.
@@ -46,7 +49,7 @@ __all__ = [
     "BOOLEANS_TRUE",
     "ansible_bool",
     "file_lookup",
-    "make_ansible_env",
+    "make_env",
     "register_ansible_filters",
     "render_template",
     "template_env",
@@ -61,16 +64,16 @@ BOOLEANS_FALSE = frozenset({"no", "false", "0", "off"})
 def ansible_bool(value) -> bool:
     """Mirror Ansible's `bool` Jinja filter, `ansible.plugins.filter.core.to_bool`.
 
-    The filter every environment registers. Faithfulness matters more than convenience:
-    the reason templates use `| bool` at all is that `-e var=false` arrives as the STRING
-    "false", which plain Jinja truthiness reads as True. A stub that just called Python's
-    bool() would agree with Ansible on real booleans and disagree on exactly the inputs the
-    filter exists for, so the test would pass while production took the other branch.
+    The filter every environment registers, the renderer's and the guards' alike. It keeps
+    `to_bool`'s tables because the templates' `| bool` was written against them: a string such
+    as `"false"` reads as False, where Python's bool() and plain Jinja truthiness read any
+    non-empty string as True. A stub that called bool() would agree on real booleans and
+    disagree on exactly the strings the filter exists for.
 
     The filter is `to_bool`, NOT `module_utils.parsing.convert_bool.boolean` — that one serves
     module argument parsing and accepts `t`, `y`, `f`, `n` and any non-zero int. Mirroring
     `boolean` would render `'t'`, `'y'`, `2`, `-1` and `' True '` as True under the guard and
-    False in production. `to_bool` lowercases without stripping, stringifies
+    False in the renderer. `to_bool` lowercases without stripping, stringifies
     ints (so `bool` lands in the tables), and coerces anything outside the tables with
     `value == 1` — a fallback it deprecates for removal in ansible-core 2.23. This mirrors the
     pinned filter's control flow, fallback included; the parity test flags the removal.
@@ -95,19 +98,17 @@ def register_ansible_filters(env: Environment) -> Environment:
     """Register on ``env`` the Ansible filters and tests this repo's templates reach for.
 
     ``bool`` is ``ansible_bool`` rather than Python's ``bool()``: ``bool("false")`` is True,
-    and ``-e var=false`` arrives as the string, so Python's would render
-    ``{% if x | bool %}`` the opposite way from a deploy — the exact divergence ``| bool``
-    is written in a template to prevent.
+    so Python's would render ``{% if x | bool %}`` over a string the opposite way from what
+    the template was written for, the divergence ``| bool`` is written to prevent.
 
     ``to_uuid`` is a deterministic UUIDv5, so a stub would render a different file each run.
     ``mandatory`` returns its input, so a guard's tracking Undefined passes through it and is
     judged by name as usual.
 
-    ``filter_by_platform``, ``authelia_service_rules`` and ``tier_priority_class`` are this
-    repo's own filter plugins: ``renderer_lib.context`` splits each host's entries by platform
-    through the first, and authelia's config Secret derives its per-service access_control rules
-    through the second, which raises on a ``use_authelia: true`` entry with no ``auth_tier``.
-    A tiered role's pods take their PriorityClass from the third, which raises on an entry
+    ``authelia_service_rules`` and ``tier_priority_class`` are this repo's own filter plugins:
+    authelia's config Secret derives its per-service access_control rules through the first,
+    which raises on a ``use_authelia: true`` entry with no ``auth_tier``. A tiered role's pods
+    take their PriorityClass from the second, which raises on an entry
     with no ``tier``. observability's blackbox probe jobs ask ``in_service_tier`` whether a
     service's target pages critical, and it raises on an entry name it cannot find. observability's
     Prometheus config renders its plain scrape jobs through ``scrape_jobs``, and each owning
@@ -166,7 +167,6 @@ def register_ansible_filters(env: Environment) -> Environment:
     import role_label
     import scrape_jobs
     import service_tier
-    from toposort import filter_by_platform
     from renderer.renderer_lib import jinja_filters as filters
 
     env.filters["b64encode"] = filters.b64encode
@@ -184,7 +184,6 @@ def register_ansible_filters(env: Environment) -> Environment:
     env.filters["mandatory"] = filters.mandatory
     env.filters["to_uuid"] = filters.to_uuid
     env.filters["to_json"] = to_json_stub
-    env.filters["filter_by_platform"] = filter_by_platform
     env.filters["authelia_service_rules"] = authelia_service_rules
     env.filters["flux_components"] = flux_components.FilterModule().filters()[
         "flux_components"
@@ -230,18 +229,6 @@ def register_ansible_filters(env: Environment) -> Environment:
     return env
 
 
-def make_ansible_env(dirs=(), undefined_cls=StubUndefined) -> Environment:
-    """``render_guard.make_env`` over ``dirs``, with the Ansible filters registered.
-
-    With no ``dirs`` the environment has an empty loader, which is the form a test takes to
-    render a template's text or a task's expression through ``from_string``. That is still
-    Ansible's whitespace flags and filters: a bare ``jinja2.Environment()`` has neither, and
-    the ``tests-build-no-bare-jinja-environment`` row of
-    ``scripts/tests/test_census_rows_test_renders.py`` refuses one in a test.
-    """
-    return register_ansible_filters(make_env(dirs, undefined_cls=undefined_cls))
-
-
 def file_lookup(kind: str, path: str, **_kwargs) -> str:
     """Ansible's ``lookup('file', path)``, the one lookup a setup-plane template may call.
 
@@ -262,7 +249,9 @@ def template_env(template_dir: Path, undefined_cls=StubUndefined) -> Environment
     Every guard loads that pair — a role's own templates and the shared macros they import —
     so the pair lives here rather than in each guard's call.
     """
-    env = make_ansible_env([template_dir, SHARED_TPL], undefined_cls=undefined_cls)
+    env = register_ansible_filters(
+        make_env([template_dir, SHARED_TPL], undefined_cls=undefined_cls)
+    )
     # jinja2 leaves `Environment.globals` unannotated, so its inferred type rejects a callable.
     cast(dict[str, Any], env.globals)["lookup"] = file_lookup
     return env

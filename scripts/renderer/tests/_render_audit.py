@@ -28,7 +28,6 @@ import sys
 from pathlib import Path
 
 from renderer.renderer_lib.targets import render_targets
-from lib.ansible_inventory import K8S_HOST
 from lib.proc_testing import run
 from lib.repo_paths import REPO, SCRIPTS
 from renderer import shadow_diff
@@ -51,7 +50,7 @@ DIGEST_PROPERTY = "render_digest"
 
 def part_tags(position: int, of: int = PARTS) -> list[str]:
     """The render targets at `position`, `position + of`, ... of the sorted list."""
-    return sorted(render_targets(K8S_HOST))[position::of]
+    return sorted(render_targets())[position::of]
 
 
 def module_position(module_file: str) -> int:

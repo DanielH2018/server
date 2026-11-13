@@ -4,7 +4,7 @@ observability's `prometheus.yaml.j2` renders two scrape jobs for blackbox_export
 (one target per hand-written non-push tile that has a probe) and `blackbox-pi-ports` (one
 `tcp_connect` target per container the Pi publishes a port for). These guards render both from the
 real inventory and hold each to the thing it replaces
-(docs/target-architecture/monitoring/m6-retire-kuma.md, "B0, B5, B7 and B8"). Cutover-a1 deleted
+(ADR-0026). Cutover-a1 deleted
 the tiles, so the target addresses, modules and tiers are literals here, copied from the deleted
 tiles' declarations (`git show 50f2b2c410:ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2`).
 
@@ -63,11 +63,11 @@ def rendered_jobs(
     """
     overrides = {}
     if pi_services is not None:
-        hostvars = copy.deepcopy(host_context()["hostvars"])
-        hostvars["daniel-pi"]["compose_services"] = pi_services
-        overrides["hostvars"] = hostvars
+        hosts = copy.deepcopy(host_context()["hosts"])
+        hosts["daniel-pi"]["compose_services"] = pi_services
+        overrides["hosts"] = hosts
     if box_containers is not None:
-        overrides["containers_list"] = box_containers
+        overrides["services"] = box_containers
     overrides = overrides or None
     text = render_role_template("observability", "prometheus.yaml.j2", overrides)
     configmap = next(
@@ -94,7 +94,7 @@ def targets(
 
 def pi_containers() -> list[dict]:
     """Every Pi service entry, from the package's `compose_services`."""
-    return copy.deepcopy(host_context()["hostvars"]["daniel-pi"]["compose_services"])
+    return copy.deepcopy(host_context()["hosts"]["daniel-pi"]["compose_services"])
 
 
 def probe_by_service() -> dict[str, tuple[str, str, str]]:
@@ -118,7 +118,7 @@ def test_each_probe_target_matches_the_tile_it_replaces():
 
 def test_the_home_critical_tiles_are_the_critical_tier():
     probes = probe_by_service()
-    box = host_context()["containers_list"]
+    box = host_context()["services"]
     expected = {"traefik"} | {
         service
         for service in TIERED_PROBES
@@ -129,9 +129,9 @@ def test_the_home_critical_tiles_are_the_critical_tier():
 
 
 def test_an_untiered_service_probe_leaves_the_critical_tier():
-    # The two tiered probes take their tier from containers_list `tier`, not from a literal.
+    # The two tiered probes take their tier from the service entry's `tier`, not from a literal.
     # Untier mosquitto and its target must drop to the warning tier.
-    box = host_context()["containers_list"]
+    box = host_context()["services"]
     untiered = [
         {k: v for k, v in entry.items() if k != "tier"}
         if entry.get("name") == "mosquitto"
@@ -171,12 +171,8 @@ def test_the_edge_all_clear_probes_the_selfcheck_route_and_checks_the_body():
 
 def test_the_edge_all_clear_host_is_pinned_by_the_exporter():
     """An unrouted name resolves nowhere unless the probing pod pins it."""
-    ctx = host_context("daniel-box")
-    hostvars = {ctx["k8s_primary_node"]: {"containers_list": ctx["containers_list"]}}
     doc = yaml_fast.safe_load(
-        render_role_template(
-            "blackbox-exporter", "deployment.yaml.j2", {"hostvars": hostvars}
-        )
+        render_role_template("blackbox-exporter", "deployment.yaml.j2")
     )
     pinned = [
         name
@@ -215,7 +211,7 @@ def test_the_rendered_configmap_names_the_lan_domain_in_the_dns_module():
 
 def test_the_pi_job_has_one_target_per_published_port():
     containers = pi_containers()
-    address = host_context()["hostvars"]["daniel-pi"]["server_ip"]
+    address = host_context()["hosts"]["daniel-pi"]["server_ip"]
     expected = {
         f"{address}:{port}": name
         for name, port in (pair.split(":") for pair in published_ports(containers))
@@ -232,7 +228,7 @@ def test_the_pi_job_has_one_target_per_published_port():
 
 def test_a_published_port_the_job_lacks_is_flagged():
     containers = [*pi_containers(), {"name": "newpub", "port": 9999}]
-    address = host_context()["hostvars"]["daniel-pi"]["server_ip"]
+    address = host_context()["hosts"]["daniel-pi"]["server_ip"]
     assert f"{address}:9999" in targets(PI_PORTS_JOB, containers)
     assert f"{address}:9999" not in targets(PI_PORTS_JOB)
 

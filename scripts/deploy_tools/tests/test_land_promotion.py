@@ -1,6 +1,6 @@
 """A k8s tag lands through `promote`: the split before deploy.sh and the wait.
 
-The plan is docs/target-architecture/deploy/d2-first-leaf.md, *How `land.sh` waits*. Every
+ADR-0020 records how `land.sh` waits on the cluster. Every
 boundary is a fake from `_land_fakes.py`; `promote.land_wait` itself is tested in
 test_promote_land_wait.py.
 
@@ -323,7 +323,5 @@ def test_an_empty_k8s_service_read_is_flagged(tmp_path):
 
 
 def test_a_non_empty_k8s_service_read_is_clean(tmp_path):
-    sha = _repo_with_services(
-        tmp_path, "containers_list:\n  - name: registry\n    platform: k8s\n"
-    )
+    sha = _repo_with_services(tmp_path, "containers_list:\n  - name: registry\n")
     assert land_flux.k8s_tags_at(tmp_path, sha) == {"registry"}

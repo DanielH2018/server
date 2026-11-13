@@ -11,9 +11,7 @@ import shutil
 import pytest
 
 import bundle_census
-import bundle_gates
 import promote
-from _bundle_fixtures import route
 from lib import yaml_fast
 from lib.exit_codes import FAILED, OK, RENDER_OK
 from lib.repo_paths import K8S_ROLES
@@ -158,25 +156,13 @@ def test_d1s_empty_root_with_no_published_tag_is_flagged(tmp_path):
     )
 
 
-def _services(tmp_path, k8s, docker=()):
-    """Write a service list with a k8s entry per name in `k8s` and a Docker one per `docker`."""
+def _services(tmp_path, k8s):
+    """Write a service list with an entry per name in `k8s`."""
     path = tmp_path / "services.yml"
     path.write_text(
-        "containers_list:\n"
-        + "".join(f"  - name: {name}\n    platform: k8s\n" for name in k8s)
-        + "".join(f"  - name: {name}\n    platform: docker\n" for name in docker)
+        "containers_list:\n" + "".join(f"  - name: {name}\n" for name in k8s)
     )
     return path
-
-
-def test_a_docker_entry_is_absent_from_the_bundle_and_the_census_is_clean(tmp_path):
-    services = _services(tmp_path, ["bento-pdf"], docker=["sonarr"])
-    assert bundle_census.published_tags(services) == ["bento-pdf"]
-    out = _bundle(tmp_path, ["bento-pdf"])
-    # The CLI runs the publish gates too, and the host gate's named member is this route.
-    domain = bundle_gates.inventory_domain()
-    (out / "cluster" / "bento-pdf" / "ingressroute.yaml").write_text(route(domain))
-    assert bundle_census.report(out, bundle_census.published_tags(services)) == OK
 
 
 def test_a_k8s_tag_missing_from_the_bundle_is_flagged(tmp_path, capsys):
@@ -190,7 +176,7 @@ def test_a_k8s_tag_missing_from_the_bundle_is_flagged(tmp_path, capsys):
 def test_published_tags_lists_every_k8s_entry_and_the_floor_is_clean(tmp_path, capsys):
     """No entry carries an `owner` key, and every k8s entry is published (H1.9)."""
     names = [*bundle_census.PUBLISH_FLOOR, "bento-pdf"]
-    services = _services(tmp_path, names, docker=["wg-easy"])
+    services = _services(tmp_path, names)
     assert promote.main(["published-tags", "--services", str(services)]) == OK
     assert capsys.readouterr().out.split() == sorted(names)
     assert bundle_census.PUBLISH_FLOOR <= set(bundle_census.published_tags())

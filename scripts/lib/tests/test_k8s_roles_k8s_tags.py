@@ -1,7 +1,6 @@
 """`k8s_tags` names every tag of every k8s entry in the service list, each one Flux applies.
 
-Every k8s entry is Flux's, so no key on the entry marks it
-(docs/target-architecture/host/h1-cluster-config-to-flux.md, H1.9).
+Every k8s entry is Flux's, so no key on the entry marks it (ADR-0020).
 """
 
 from lib.k8s_roles import k8s_tags
@@ -9,18 +8,15 @@ from lib.k8s_roles import k8s_tags
 SERVICES = """\
 containers_list:
   - name: bento-pdf
-    platform: k8s
   - name: n8n
-    platform: k8s
     tags: [n8n, n8n-images]
   - name: sonarr
-    platform: k8s
 """
 
 
 def test_k8s_tags_names_every_tag_of_every_k8s_entry(tmp_path):
     services = tmp_path / "services.yml"
-    services.write_text(SERVICES + "  - name: wg-easy\n    platform: docker\n")
+    services.write_text(SERVICES + "  - port: 1\n")
     assert k8s_tags(services) == {"bento-pdf", "n8n", "n8n-images", "sonarr"}
 
 

@@ -1,5 +1,7 @@
 # Target architecture — cross-slice contracts
 
+Status: ARCHIVED on 2026-11-13. The migration finished on 2026-11-12, and [what the migration built](../what-the-migration-built.md) describes the result.
+
 Every slice plan in this directory builds against the interfaces below. A slice that needs
 an interface to change says so in its *Open questions* section and names the contract row. A
 slice must never silently diverge from a contract. [design.md](design.md) explains why each
@@ -553,12 +555,12 @@ C-4b waits on D6, but nothing from C-1 to C-7 waits on C-4b.
 ## C4. Ownership handoff (the two-writer rule)
 
 - **Ownership flag.** Until H1.9, a `containers_list` entry gained `owner: flux` in the same PR
-  that added its Kustomization. From H1.9 on, `platform: k8s` alone marks an entry Flux's.
+  that added its Kustomization. From H1.9 on, an entry in `cluster/services.yml` is Flux's by being there (#8181 dropped the
+  `platform` key).
 - **Values of `owner`.** `owner` takes `flux`. The operator ruled on 2026-11-06 that a
   flux-owned service stays flux-owned or retires (`docs/flux-deploy-plane.md`, *Retiring a
   flux-owned service*), so no PR sets another value or removes `owner` from a live entry. Every
-  reader raised on another value. H1.9 dropped the key, so `platform: k8s` alone marks an
-  entry Flux's.
+  reader raised on another value. H1.9 dropped the key, so being in `cluster/services.yml` marks an entry Flux's.
 - **What skips a flux-owned entry.** In that same PR, the Ansible k8s play, `deploy.sh`, the
   GitOps deployer's k8s arms and `land.sh` all skip it. No commit may leave a role reachable
   by both Ansible and Flux.

@@ -126,8 +126,7 @@ def test_the_datasource_uid_matches_the_provisioned_one():
 def test_both_deploy_paths_annotate():
     """`land-wait` annotates a Flux promotion with `source=promote` once it settles. The GitOps
     deployer's emitter went with its k8s arms in D6.12 and `deploy.sh`'s with H7.53; the name
-    predates both and stays, because docs/target-architecture/deploy/d6-delete-old-path.md
-    cites it."""
+    predates both and stays (ADR-0020)."""
     promote = _PROMOTE.read_text()
     assert "def annotate_promotion(" in promote and 'source="promote"' in promote
     assert '"deploy-annotation"' in promote

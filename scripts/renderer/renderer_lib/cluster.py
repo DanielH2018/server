@@ -57,8 +57,8 @@ from lib.k8s_roles import (
     role_fields,
 )
 from lib.k8s_context import resolve_vars
-from lib.render_guard import SHARED_TPL, StrictChainableUndefined, containers_entries
-from lib.repo_paths import ANSIBLE, FILTER_PLUGINS, HOST_VARS, JOB_FILES, K8S_ROLES
+from lib.render_guard import SHARED_TPL, StrictChainableUndefined, k8s_services
+from lib.repo_paths import ANSIBLE, FILTER_PLUGINS, JOB_FILES, K8S_ROLES, K8S_SERVICES
 from renderer.renderer_lib.bundle import (
     KUSTOMIZATION,
     SHARED_KINDS,
@@ -92,7 +92,7 @@ from renderer.renderer_lib.task_inputs import derived_facts, include_vars
 if str(FILTER_PLUGINS) not in _sys.path:
     _sys.path.insert(0, str(FILTER_PLUGINS))
 
-from toposort import K8S_APPLIES_LAST, build_k8s_dep_map, filter_by_platform
+from toposort import K8S_APPLIES_LAST, build_k8s_dep_map
 
 LABEL_WRAPPER = SHARED_TPL / "role-labelled.yaml.j2"
 FLUX_DEFAULTS = K8S_ROLES / "flux" / "defaults" / "main.yml"
@@ -181,22 +181,21 @@ class RenderedTag:
 
 def select_tags(
     requested: list[str] | None,
-    host: str = K8S_HOST,
-    host_vars: Path = HOST_VARS,
+    services: Path = K8S_SERVICES,
     kinds: frozenset[str] = SHARED_KINDS,
 ) -> list[str]:
-    """The sorted tags to render: `requested`, or every render target of `host`.
+    """The sorted tags to render: `requested`, or every render target in `services`.
 
     A tag Flux applies is a render target too: `render_targets` keeps it, because the bundle
     publishes it.
 
     Raises:
-        RenderRefused: A requested tag is not one of `host`'s render targets, or a tag to
+        RenderRefused: A requested tag is not a render target, or a tag to
             render takes a reserved name: the root Kustomization's, `homelab`, a member of
             `kinds` or of `RESERVED_NAMES`, or any name ending in `-deferred`, `-snapshot`,
             `-prepull`, `-precheck` or `-verify` (C3 *Reserved names*, D4.2, D5.1a1).
     """
-    targets = set(render_targets(host, host_vars))
+    targets = set(render_targets(services))
     tags = sorted(set(requested or targets))
     reserved = reserved_tags(tags, kinds)
     if reserved:
@@ -209,20 +208,19 @@ def select_tags(
         )
     unknown = sorted(set(tags) - targets)
     if unknown:
-        raise RenderRefused(f"{unknown} are not k8s render targets of {host}")
+        raise RenderRefused(f"{unknown} are not k8s render targets")
     return tags
 
 
 def bundle_ordering(
     owned: set[str],
-    host: str = K8S_HOST,
-    host_vars: Path = HOST_VARS,
+    services: Path = K8S_SERVICES,
     group_vars: Path = GROUP_VARS,
     roles: Path = K8S_ROLES,
 ) -> Ordering:
     """What the bundle generates `dependsOn` from: the full dependency map (D4.2).
 
-    The map is `build_k8s_dep_map` over the full k8s `containers_list`, the same
+    The map is `build_k8s_dep_map` over every k8s service, the same
     map `template_context` sorts with, never a `--role` subset, so a tag's edges do not depend on what else renders.
     The suspended tags are read over every flux-owned role for the same reason (D5.1b).
 
@@ -236,7 +234,7 @@ def bundle_ordering(
     problems += after_problems
     if problems:
         raise ValueError("; ".join(problems))
-    k8s = filter_by_platform(containers_entries(host_vars / f"{host}.yml"), "k8s")
+    k8s = k8s_services(services)
     group = yaml_fast.safe_load(group_vars.read_text())
     return Ordering(
         deps=build_k8s_dep_map(k8s, str(ANSIBLE)),
@@ -288,7 +286,7 @@ def tag_context(
 ) -> dict:
     """`template_context` with `container_item`, the entry the role templates read, set to `tag`'s."""
     ctx = template_context(role_dir, overrides, host, inventory)
-    ctx["container_item"] = next(e for e in ctx["containers_list"] if e["name"] == tag)
+    ctx["container_item"] = next(e for e in ctx["services"] if e["name"] == tag)
     return ctx
 
 

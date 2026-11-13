@@ -1,0 +1,105 @@
+# promtool unit tests for WarningUnresolved in files/rules/alerting-meta.yaml, whose hold runs
+# to 48 hours. Run with `scripts/validate/alert_tools.sh promtool test rules <this file>`.
+#
+# The interval is file-wide, and a 50h case at alerting-meta.test.yaml's 1m step is 3,000
+# steps, so every eval time and input series here steps by whole hours.
+# `alert_conventions.rule_test_stem` counts these cases toward alerting-meta with the main
+# file's, whose zero-series case covers this file too. Each case feeds a healthy Alertmanager scrape, because AlertmanagerMetricsMissing is a
+# warning and would otherwise escalate beside the alert under test.
+#
+# The input is ALERTS itself, the series Prometheus writes for every rule's pending and firing
+# alerts. ansible/tests/services/test_warning_escalation_exemptions.py holds the real rules'
+# labels to the selector.
+rule_files:
+  - ../../files/rules/alerting-meta.yaml
+evaluation_interval: 1h
+tests:
+  # A warning that fires for 60 hours escalates once it has held 48, and not before. The
+  # original name and service move to escalated_from and escalated_service, and its other
+  # labels stay.
+  - interval: 1h
+    input_series:
+      - series: 'up{job="alertmanager", instance="alertmanager:9093"}'
+        values: '1x60'
+      - series: 'alertmanager_notifications_failed_total{job="alertmanager", instance="alertmanager:9093", integration="discord", reason="other"}'
+        values: '0x60'
+      - series: 'ALERTS{alertname="DocsRefreshFailed", alertstate="firing", severity="warning", service="daniel-box", check="docs-refresh", origin="daniel-box"}'
+        values: '1x60'
+    alert_rule_test:
+      - eval_time: 47h
+        alertname: WarningUnresolved
+        exp_alerts: []
+      - eval_time: 49h
+        alertname: WarningUnresolved
+        exp_alerts:
+          - exp_labels:
+              escalated_from: DocsRefreshFailed
+              escalated_service: daniel-box
+              check: docs-refresh
+              origin: daniel-box
+              severity: critical
+              service: alert-escalation
+            exp_annotations:
+              summary: >-
+                DocsRefreshFailed (daniel-box) has fired as a warning for 48 hours.
+              description: >-
+                The warning DocsRefreshFailed for daniel-box has fired for 48 hours, and its
+                Discord repeats have not cleared it. Its own description names the failing job.
+                This page resolves when the warning does. If the warning holds by design, give
+                its rule the label escalate: "false".
+
+  # A one-hour absence, as across a Prometheus restart, does not restart the age: 30 hours, a
+  # gap, then 30 more still escalate. A ten-hour absence does.
+  - interval: 1h
+    input_series:
+      - series: 'up{job="alertmanager", instance="alertmanager:9093"}'
+        values: '1x62'
+      - series: 'alertmanager_notifications_failed_total{job="alertmanager", instance="alertmanager:9093", integration="discord", reason="other"}'
+        values: '0x62'
+      - series: 'ALERTS{alertname="EvalSweepFailed", alertstate="firing", severity="warning", service="daniel-box"}'
+        values: '1x30 _ 1x30'
+      - series: 'ALERTS{alertname="DocsRefreshFailed", alertstate="firing", severity="warning", service="daniel-box"}'
+        values: '1x25 _x9 1x26'
+    alert_rule_test:
+      - eval_time: 61h
+        alertname: WarningUnresolved
+        exp_alerts:
+          - exp_labels:
+              escalated_from: EvalSweepFailed
+              escalated_service: daniel-box
+              severity: critical
+              service: alert-escalation
+            exp_annotations:
+              summary: >-
+                EvalSweepFailed (daniel-box) has fired as a warning for 48 hours.
+              description: >-
+                The warning EvalSweepFailed for daniel-box has fired for 48 hours, and its
+                Discord repeats have not cleared it. Its own description names the failing job.
+                This page resolves when the warning does. If the warning holds by design, give
+                its rule the label escalate: "false".
+
+  # None of these escalate after 60 hours: a pending warning, a critical (it already emails),
+  # an info, a shadow and a drill alert (they page nobody), and a rule that opts out with
+  # escalate="false".
+  - interval: 1h
+    input_series:
+      - series: 'up{job="alertmanager", instance="alertmanager:9093"}'
+        values: '1x60'
+      - series: 'alertmanager_notifications_failed_total{job="alertmanager", instance="alertmanager:9093", integration="discord", reason="other"}'
+        values: '0x60'
+      - series: 'ALERTS{alertname="FluxSuspended", alertstate="pending", severity="warning", service="flux"}'
+        values: '1x60'
+      - series: 'ALERTS{alertname="EtcdRestoreDrillFailed", alertstate="firing", severity="critical", service="etcd"}'
+        values: '1x60'
+      - series: 'ALERTS{alertname="SomeInfo", alertstate="firing", severity="info", service="observability"}'
+        values: '1x60'
+      - series: 'ALERTS{alertname="TextfileCollectorError", alertstate="firing", severity="warning", service="daniel-box", shadow="true"}'
+        values: '1x60'
+      - series: 'ALERTS{alertname="HealthGateDrill", alertstate="firing", severity="warning", service="observability", drill="true"}'
+        values: '1x60'
+      - series: 'ALERTS{alertname="DeployHoldActive", alertstate="firing", severity="warning", service="deploy-pipeline", escalate="false"}'
+        values: '1x60'
+    alert_rule_test:
+      - eval_time: 60h
+        alertname: WarningUnresolved
+        exp_alerts: []

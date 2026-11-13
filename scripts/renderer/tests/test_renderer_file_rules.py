@@ -12,7 +12,6 @@ import pytest
 
 from renderer.renderer_lib.targets import render_targets
 from lib import yaml_fast
-from lib.ansible_inventory import K8S_HOST
 from renderer import shadow_diff
 from renderer.renderer_lib import cluster
 from renderer.renderer_lib.context import load_stubs
@@ -113,4 +112,4 @@ def test_the_default_tag_set_is_every_render_target():
     """Non-vacuity for the parametrisation above, the tags reading task-computed values too."""
     tags = set(cluster.select_tags(None))
     assert len(tags) >= 56 and {"traefik", "nut", "janitorr"} <= tags
-    assert tags == set(render_targets(K8S_HOST))
+    assert tags == set(render_targets())

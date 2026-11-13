@@ -5,8 +5,7 @@ Prometheus `node_exporter` as a DaemonSet, added at the Phase F drain so daniel-
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
-- **Applied by:** Flux, through `promote` (`platform: k8s`); `land.sh --tags=node-exporter`
-  gates the rollout
+- **Applied by:** Flux, through `promote`; `land.sh --tags=node-exporter` gates the rollout
 - **Image:** `prom/node-exporter` (`node_exporter_k8s_image`)
 - **Route:** none (no `templates/ingressroute.yaml.j2`)
 - **Claims:** none (no PVC)
@@ -18,7 +17,7 @@ Prometheus `node_exporter` as a DaemonSet, added at the Phase F drain so daniel-
 - **Mounts:** `/proc`, `/sys`, `/` (as `/rootfs`), all **read-only** `hostPath` — no write
   access despite `hostNetwork`/`hostPID`.
 - **Flux applies it, not Ansible** (D5.7, the third Wave A PR). Its `containers_list` entry
-  is `platform: k8s`, so nothing applies it by hand, and a
+  is in `cluster/services.yml`, so nothing applies it by hand, and a
   merged change reaches the cluster when `promote` publishes and verifies the next bundle. Its
   image-bump PRs therefore draw no `land-wait` and no `probe.py health` run.
 - **Where the task went.** Its `manifests_rollout:

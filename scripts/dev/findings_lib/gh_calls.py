@@ -6,13 +6,12 @@ with nothing to inject.
 
 `run` carries almost all of the write surface: it prints a plan under `--dry-run` and calls
 `tools.gh` otherwise, so a command that goes through it does not have to remember which mode
-it is in. `_create_with_optional_project` is the exception, because it reads the created
-issue's URL back out of gh's stdout and a printed plan has no URL to read. It calls
-`tools.gh` unconditionally, so a dry run must be stopped BEFORE it — `cmd_open` does that at
-`findings.py:130`, branching on `args.dry_run` and calling `run` instead.
+it is in. `_create` is the exception, because it reads the created issue's URL back out of
+gh's stdout and a printed plan has no URL to read. It calls `tools.gh` unconditionally, so a
+dry run must be stopped BEFORE it — `cmd_open` does that, branching on `args.dry_run` and
+calling `run` instead.
 """
 
-import subprocess
 import sys
 
 # Reach the sibling package directories: a directly-invoked script gets only its own
@@ -24,13 +23,11 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from dev.findings_lib.issue_model import (
     _LIST_FIELDS,
-    PROJECT_TITLE,
     comment_cap_warning,
     find_by_fingerprint,
     pr_refs,
     waited_on,
 )
-from dev.findings_lib.plans import is_project_failure, without_project
 from dev.findings_lib.boundaries import FindingsTools
 from lib.json_types import JsonObject, as_object, as_object_list
 
@@ -344,21 +341,6 @@ def run(plans: list[list[str]], dry_run: bool, tools: FindingsTools) -> None:
             tools.gh(*argv)
 
 
-def _create_with_optional_project(argv: list[str], tools: FindingsTools) -> str:
-    """Run the create argv, retrying without ``--project`` if the board is the only problem.
-
-    Returns the created issue's URL. The board is a view; losing it must not lose the
-    finding, so a Project failure warns and the issue is created anyway.
-    """
-    argv = _aimed_argv(argv, tools)
-    try:
-        return tools.gh(*argv).stdout.strip()
-    except subprocess.CalledProcessError as exc:
-        if not is_project_failure(exc.stderr):
-            raise
-        first_line = (exc.stderr or "").strip().partition("\n")[0]
-        url = tools.gh(*without_project(argv)).stdout.strip()
-        sys.stderr.write(
-            f'warning: not added to Project "{PROJECT_TITLE}": {first_line}\n'
-        )
-        return url
+def _create(argv: list[str], tools: FindingsTools) -> str:
+    """Runs an `issue create` argv and returns the created issue's URL."""
+    return tools.gh(*_aimed_argv(argv, tools)).stdout.strip()

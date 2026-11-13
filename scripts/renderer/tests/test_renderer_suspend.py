@@ -1,8 +1,7 @@
 """D5.1b's suspend lever in the renderer: `suspend: true`, the dropped edges, no `suspend: false`.
 
 Each fixture role is a `defaults/main.yml` under `tmp_path`, which `bundle_files` reads as
-`roles`, so no role in the repo sets `flux_suspend`. The plan is
-docs/target-architecture/deploy/d5-bulk-move.md, *The stop lever (D5.1b)*.
+`roles`, so no role in the repo sets `flux_suspend`. ADR-0020 records the decision.
 
 Run: uv run pytest scripts/renderer/tests/test_renderer_suspend.py
 """

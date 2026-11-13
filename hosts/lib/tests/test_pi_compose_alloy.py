@@ -17,8 +17,7 @@ Three guards moved here with the service from `ansible/tests/services/`
   runtime needs makes it collect continuously at a measured 0.28 of a core.
 - **The secret reaches Alloy through the environment only.** The password is no longer in a 0640
   file. The config reads it with `sys.env` and carries no secret, and the compose file fills the
-  variable from the project's Compose env file (operator ruling in h5-pi-compose.md *Open
-  questions* 6).
+  variable from the project's Compose env file, an operator ruling.
 
 Run: uv run pytest hosts/lib/tests/test_pi_compose_alloy.py
 """

@@ -1,0 +1,15 @@
+# Shipped by the homelab-{{ inventory_hostname }} package (hosts/components/k3s-agent) -- edits
+# here are overwritten. Kubelet's graceful node shutdown (#8296), from
+# `k3s_agent_graceful_shutdown` in the component's defaults.
+#
+# kubelet reads every *.conf in --config-dir, which k3s points at this directory, and merges each
+# over k3s's own 00-k3s-defaults.conf. kubelet takes a systemd-logind delay lock and, when the
+# host shuts down, stops pods one priority group at a time, lowest first. Each entry below opens a
+# group at its priority, and the group's pods get the stated seconds before the next group starts.
+apiVersion: kubelet.config.k8s.io/v1beta1
+kind: KubeletConfiguration
+shutdownGracePeriodByPodPriority:
+{% for group in k3s_agent_graceful_shutdown | sort(attribute='priority') %}
+  - priority: {{ group.priority }}
+    shutdownGracePeriodSeconds: {{ group.seconds }}
+{% endfor %}

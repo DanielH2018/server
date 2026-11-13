@@ -8,8 +8,7 @@ H1.1a's `flux_prune: false` in its defaults, which `role_fields` reads and the b
 always under prune (`bundle.flux_files`, operator ruling of 2026-10-22). The census reads the
 same lever for every render target, Ansible-owned ones included, because a flip carries the
 render as it stands. `traefik-crds` and `flux` are the named members the live render must
-find. This is D6.19's CRD guard, without D6's exception for `flux`. The plan is
-docs/target-architecture/deploy/d5-bulk-move.md, step 26's traefik bullet and step 29.
+find. This is the CRD guard ADR-0020 records, with no exception for `flux`.
 
 Run: uv run pytest scripts/renderer/tests/test_renderer_crd_census.py
 """
@@ -22,10 +21,8 @@ import pytest
 
 from renderer.renderer_lib.targets import render_targets
 from lib import yaml_fast
-from lib.ansible_inventory import K8S_HOST
 from lib.exit_codes import RENDER_OK
 from lib.k8s_roles import K8S_ROLES, role_fields
-from lib.repo_paths import HOST_VARS
 from renderer import homelab_render
 from renderer.renderer_lib.bundle import CLUSTER_VARS_FILE, KUSTOMIZATION
 from lib.k8s_roles import k8s_tags
@@ -131,7 +128,7 @@ def test_a_member_with_flux_prune_removed_is_flagged(tmp_path, member):
 def test_no_render_target_renders_a_crd_under_prune(tmp_path):
     directories = _render(tmp_path / "out", tmp_path)
     assert len(directories) >= 50
-    targets = set(render_targets(K8S_HOST, HOST_VARS))
+    targets = set(render_targets())
     assert targets <= {split_kind(d)[0] for d in directories}
     crds = crds_by_tag(directories)
     fields, problems = role_fields(targets)

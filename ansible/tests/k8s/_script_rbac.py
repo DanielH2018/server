@@ -1,8 +1,7 @@
 """What a job's script asks of the API server, and whether its rendered RBAC grants it.
 
-Target slice H2 moves host crons into CronJobs, each with its own ServiceAccount whose rules are
-the verbs and resources its script calls and nothing else
-(`docs/target-architecture/host/h2-shrink-host-plane.md`, *The pattern for one moved cron*). This
+Each host cron moved into a CronJob gets its own ServiceAccount, whose rules are the verbs and
+resources its script calls and nothing else (ADR-0029). This
 module derives that set and checks it against rendered Roles and ClusterRoles, so a script line
 added without its grant fails a test rather than a 04:10 UTC run.
 

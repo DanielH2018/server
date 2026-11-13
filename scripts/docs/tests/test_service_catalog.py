@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Tests for scripts/docs/service_catalog.py and the catalog_* leaves it assembles.
 
-Entirely fixture-driven — synthetic host_vars/roles under tmp_path, never the real inventory
+Entirely fixture-driven — synthetic service list and roles under tmp_path, never the real inventory
 (which changes; see scripts/deploy_tools/tests/test_deploy_tags.py's REAL-inventory tests for the
 pattern this deliberately does NOT follow — the catalog derives facts rather than guarding a set).
 Run: uv run pytest scripts/docs/tests/test_service_catalog.py
@@ -9,39 +9,27 @@ Run: uv run pytest scripts/docs/tests/test_service_catalog.py
 
 import service_catalog
 from _catalog_fixtures import make_repo, write
-from docs.catalog_lib.catalog_facts import route_for
+from docs.catalog_lib.catalog_facts import k8s_route
 from docs.catalog_lib.catalog_model import ServiceRow
 from docs.catalog_lib.catalog_render import render_html, render_markdown
-
-
-def test_platform_defaults_to_docker_when_key_absent(tmp_path):
-    paths = make_repo(tmp_path)
-    rows = service_catalog.build_rows(**paths)
-    by_name = {r.name: r for r in rows}
-    assert by_name["jellyfin"].platform == "k8s"
-    assert by_name["dozzle"].platform == "docker"
 
 
 def test_auth_tier_true_false_and_missing(tmp_path):
     paths = make_repo(tmp_path)
     # Add an entry with no use_authelia key at all.
     write(
-        paths["host_vars"] / "box.yml",
+        paths["services"],
         """\
         containers_list:
           - name: jellyfin
-            platform: k8s
             hostname: jellyfin
             use_authelia: false
           - name: authelia
-            platform: k8s
             use_authelia: true
           - name: shell
-            platform: k8s
             use_authelia: true
             auth_tier: two_factor
           - name: mystery
-            platform: k8s
         """,
     )
     for role in ("shell", "mystery"):
@@ -61,7 +49,7 @@ def test_k8s_route_uses_hostname_default_name_when_ingressroute_exists(tmp_path)
     row = next(r for r in service_catalog.build_rows(**paths) if r.name == "jellyfin")
     assert row.route.startswith("jellyfin.local.<domain>")
     entry = {"name": "jellyfin", "hostname": "jellyfin"}
-    direct = route_for(entry, "k8s", paths["k8s_roles"], paths["all_vars"])
+    direct = k8s_route(entry, paths["k8s_roles"], paths["all_vars"])
     assert direct == row.route
 
 
@@ -110,18 +98,6 @@ def test_k8s_route_is_no_route_when_role_has_no_ingressroute_template(tmp_path):
     assert row.route == "no route (infra role)"
 
 
-def test_docker_route_is_lan_direct(tmp_path):
-    paths = make_repo(tmp_path)
-    row = next(r for r in service_catalog.build_rows(**paths) if r.name == "dozzle")
-    assert row.route == "LAN-direct (no Traefik route)"
-
-
-def test_autodeploy_docker_is_applied_by_the_host_package(tmp_path):
-    paths = make_repo(tmp_path)
-    row = next(r for r in service_catalog.build_rows(**paths) if r.name == "dozzle")
-    assert row.autodeploy == "n/a: applied by the host package"
-
-
 def _jellyfin_row(tmp_path):
     paths = make_repo(tmp_path)
     write(
@@ -136,20 +112,6 @@ def test_autodeploy_of_a_k8s_entry_names_flux(tmp_path):
     row = _jellyfin_row(tmp_path)
     assert row.autodeploy.startswith("n/a: applied by Flux, through `promote`")
     assert "`land.sh`" in row.autodeploy
-
-
-def test_underscore_prefixed_host_vars_files_are_excluded(tmp_path):
-    paths = make_repo(tmp_path)
-    write(
-        paths["host_vars"] / "_example.yml",
-        """\
-        containers_list:
-          - name: not-a-real-service
-            platform: k8s
-        """,
-    )
-    rows = service_catalog.build_rows(**paths)
-    assert "not-a-real-service" not in {r.name for r in rows}
 
 
 def test_render_html_is_self_contained_and_lists_every_service(tmp_path):
@@ -170,8 +132,8 @@ def test_main_writes_output_file(tmp_path):
         [
             "--out",
             str(out_file),
-            "--host-vars",
-            str(paths["host_vars"]),
+            "--services",
+            str(paths["services"]),
             "--k8s-roles",
             str(paths["k8s_roles"]),
             "--k3s-defaults",
@@ -192,8 +154,8 @@ _ROW = ServiceRow
 
 def test_markdown_has_one_row_per_service():
     rows = [
-        _ROW("sonarr", "daniel-box", "k8s", "sonarr", "authelia", "weekly", "yes"),
-        _ROW("wg-easy", "daniel-pi", "docker", "LAN-direct", "none", "none", "no"),
+        _ROW("sonarr", "daniel-box", "sonarr", "authelia", "weekly", "yes"),
+        _ROW("wg-easy", "daniel-pi", "LAN-direct", "none", "none", "no"),
     ]
     out = render_markdown(rows)
     # Count ROWS, not substrings: a service whose route equals its name puts the same
@@ -206,8 +168,8 @@ def test_markdown_has_one_row_per_service():
 def test_markdown_groups_by_host():
     """Grouped by host, matching render_html. A flat 59-row table is unreadable."""
     rows = [
-        _ROW("sonarr", "daniel-box", "k8s", "sonarr", "authelia", "weekly", "yes"),
-        _ROW("wg-easy", "daniel-pi", "docker", "LAN-direct", "none", "none", "no"),
+        _ROW("sonarr", "daniel-box", "sonarr", "authelia", "weekly", "yes"),
+        _ROW("wg-easy", "daniel-pi", "LAN-direct", "none", "none", "no"),
     ]
     out = render_markdown(rows)
     assert "## daniel-box" in out
@@ -228,10 +190,10 @@ def test_markdown_escapes_pipes_in_values():
     No current value contains one, but route and backup_tier are derived from
     template text and nothing stops one appearing.
     """
-    rows = [_ROW("odd", "daniel-box", "k8s", "a|b", "authelia", "none", "no")]
+    rows = [_ROW("odd", "daniel-box", "a|b", "authelia", "none", "no")]
     out = render_markdown(rows)
     row_line = next(ln for ln in out.splitlines() if ln.startswith("| odd |"))
-    assert row_line.count("|") == 8, f"pipe count wrong, row split: {row_line}"
+    assert row_line.count("|") == 7, f"pipe count wrong, row split: {row_line}"
 
 
 def test_markdown_counts_unknown_fields():
@@ -240,7 +202,7 @@ def test_markdown_counts_unknown_fields():
     An underivable fact silently rendered as a blank cell is the failure the
     'unknown' convention exists to prevent.
     """
-    rows = [_ROW("x", "daniel-box", "k8s", "unknown", "authelia", "none", "no")]
+    rows = [_ROW("x", "daniel-box", "unknown", "authelia", "none", "no")]
     out = render_markdown(rows)
     assert "unknown" in out.lower()
 
@@ -248,8 +210,8 @@ def test_markdown_counts_unknown_fields():
 def test_markdown_is_stable_across_calls():
     """Unstable ordering would make the docs-refresh cron commit on every run."""
     rows = [
-        _ROW("b", "daniel-box", "k8s", "b", "authelia", "none", "no"),
-        _ROW("a", "daniel-pi", "docker", "LAN-direct", "none", "none", "no"),
+        _ROW("b", "daniel-box", "b", "authelia", "none", "no"),
+        _ROW("a", "daniel-pi", "LAN-direct", "none", "none", "no"),
     ]
     first = render_markdown(rows)
     second = render_markdown(list(reversed(rows)))
@@ -263,9 +225,7 @@ def test_markdown_ends_with_exactly_one_newline():
     hook keeps rewriting fails that commit on every run until someone fixes the
     generator. Canonical output at the source is what stops that.
     """
-    out = render_markdown(
-        [_ROW("a", "daniel-box", "k8s", "a", "authelia", "none", "no")]
-    )
+    out = render_markdown([_ROW("a", "daniel-box", "a", "authelia", "none", "no")])
     assert out.endswith("\n")
     assert not out.endswith("\n\n")
 

@@ -4,10 +4,9 @@ H2 retired eight daniel-box host crons and two setup-deployed fragments, and the
 lived in `roles/setup/k8s_host_files` until H7.48 emptied it. Daniel-box's host package carries
 them as `legacy:` entries since, and `homelab-reconcile` removes each from a host that still
 holds it. A package that drops an entry leaves the thing on a host restored from an old backup
-with nothing to remove it, and a stale fragment turns setup drift DOWN. The plan is
-`docs/target-architecture/host/h7-delete-ansible.md`, H7.48. The row sits in its own module
-because `test_census_rows_roles.py`, which imports it into `ROWS`, is at the cap for a test
-module.
+with nothing to remove it, and a stale fragment turns setup drift DOWN (ADR-0029). The row
+sits in its own module because `test_census_rows_roles.py`, which imports it into `ROWS`, is
+at the cap for a test module.
 """
 
 import json

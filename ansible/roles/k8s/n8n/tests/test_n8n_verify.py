@@ -3,7 +3,7 @@
 The script tests run `n8n_verify.main` against local ports: an HTTP server stands in for a port
 that answers, and a port nothing listens on stands in for one the fence refuses. The render
 tests render a copy of the n8n role, so one test can edit the policy and leave the tree alone.
-The plan is docs/target-architecture/deploy/d5-bulk-move.md.
+ADR-0020 records the decision.
 
 Run: uv run pytest ansible/roles/k8s/n8n/tests/test_n8n_verify.py
 """

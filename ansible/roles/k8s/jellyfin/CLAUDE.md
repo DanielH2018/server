@@ -9,8 +9,7 @@ the Trakt and SSO-Auth decisions, and why the snapshot cap is the number it is.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
-- **Applied by:** Flux, through `promote` (`platform: k8s`); `land.sh --tags=jellyfin` gates
-  the rollout
+- **Applied by:** Flux, through `promote`; `land.sh --tags=jellyfin` gates the rollout
 - **Images:** `lscr.io/linuxserver/jellyfin` (`jellyfin_k8s_image`), `python`
   (`jellyfin_k8s_plugin_init_image`)
 - **Route:** `jellyfin.<domain>` · `jellyfin.local.<domain>`, no Authelia

@@ -189,7 +189,6 @@ def test_authelia_writes_the_tier_beside_the_flag(args):
     )[0]
     assert entry == {
         "name": "widget",
-        "platform": "k8s",
         "hostname": "widget",
         "port": 8080,
         "use_authelia": True,
@@ -198,12 +197,12 @@ def test_authelia_writes_the_tier_beside_the_flag(args):
 
 
 def test_the_entry_carries_no_owner_key():
-    """`platform: k8s` alone makes a new service Flux's from its first commit (H1.9)."""
+    """A new service is Flux's from its first commit, with no key saying so (H1.9)."""
     entry = yaml_fast.safe_load(
         scaffold.entry_lines("widget", 8080, "widget", None, False)
     )[0]
-    assert entry["platform"] == "k8s"
     assert "owner" not in entry
+    assert "platform" not in entry
 
 
 def test_the_entry_lands_inside_containers_list(tmp_path):
@@ -211,7 +210,7 @@ def test_the_entry_lands_inside_containers_list(tmp_path):
     box = tmp_path / "daniel-box.yml"
     box.write_text(
         "---\nk8s_namespace: homelab\ncontainers_list:\n"
-        "  - name: alpha\n    platform: k8s\n    port: 1\n"
+        "  - name: alpha\n    port: 1\n"
         "\n# A comment above the next key.\nrenovate_agent_enabled: true\n"
     )
     scaffold.append_entry(
@@ -227,8 +226,8 @@ def test_the_entry_lands_ahead_of_a_sorts_last_role_and_its_comment(tmp_path):
     box = tmp_path / "daniel-box.yml"
     box.write_text(
         "---\ncontainers_list:\n"
-        "  - name: alpha\n    platform: k8s\n"
-        "  # Deploys LAST.\n  - name: netpol-baseline\n    platform: k8s\n"
+        "  - name: alpha\n"
+        "  # Deploys LAST.\n  - name: netpol-baseline\n"
         "has_gitops: true\n"
     )
     scaffold.append_entry(

@@ -9,7 +9,7 @@ import subprocess
 from datetime import date
 
 import pytest
-from _findings_fakes import Fakes, board_answer, facts, make_issue
+from _findings_fakes import Fakes, facts, make_issue
 
 from dev import findings
 from lib.exit_codes import FINDINGS_BAD_ARGS
@@ -213,7 +213,6 @@ def test_defer_cli_hints_at_block_when_the_body_names_a_wait(capsys, make_tools)
     issue["body"] = "Retire it once #7178 closes."
     fakes = Fakes(
         view={7195: issue, 7178: {"number": 7178, "state": "OPEN"}},
-        board={7195: board_answer(current="2026-11-20")},
     )
     tools, _ = make_tools(fakes)
     assert findings.main(["defer", "7195", "--until", "2026-11-20"], tools) == 0

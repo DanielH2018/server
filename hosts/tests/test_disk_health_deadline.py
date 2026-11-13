@@ -1,8 +1,7 @@
 """disk-health.sh's DEADLINE_S is derived from its cron's schedule, not typed beside it.
 
 `homelab_check_deadline_seconds{check="disk-health"}` is the longest legitimate gap between two
-textfile writes. docs/target-architecture/monitoring/m3-textfile-timer.md (*The deadline for
-disk-health*) sets it at two cron periods plus 300s and bounds it by three relations, which this
+textfile writes. It is two cron periods plus 300s, bounded by three relations, which this
 module checks against the RENDERED script:
 
 1. it equals 2 x the cron's period + 300;

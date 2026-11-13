@@ -1,6 +1,6 @@
-"""The sets derived from containers_list ``tier``, for readers outside Ansible.
+"""The sets derived from each service entry's ``tier``, for readers outside Ansible.
 
-``k3s_longhorn_r2_volumes`` is a Jinja expression over ``containers_list`` (#3389), and so are
+``k3s_longhorn_r2_volumes`` is a Jinja expression over ``services`` (#3389), and so are
 ``k3s_longhorn_weekly_volumes`` and ``k3s_longhorn_nobackup_volumes`` (#4207). The three live
 in the ``longhorn-reconcile`` role's defaults (``repo_paths.LONGHORN_RECONCILE_ROLE``) since
 H1.7a. The schedule, retain and arm keys are the ``longhorn-backup`` role's since H1.7b
@@ -34,8 +34,7 @@ def r2_volumes(
     """``k3s_longhorn_r2_volumes`` as the k3s role computes it.
 
     Args:
-        entries: the ``containers_list`` entries to derive from; daniel-box's k8s entries
-            when omitted.
+        entries: the service entries to derive from; ``cluster/services.yml``'s when omitted.
         namespace: the namespace for an entry that names none; ``k8s_namespace`` from
             ``group_vars/all.yml`` when omitted.
     """
@@ -47,11 +46,10 @@ def r2_volumes(
 
 
 def shed_set(entries: list[dict] | None = None) -> list[str]:
-    """The k8s services to scale down when one node is lost, in ``containers_list`` order.
+    """The k8s services to scale down when one node is lost, in ``cluster/services.yml`` order.
 
     Args:
-        entries: the ``containers_list`` entries to derive from; daniel-box's k8s entries
-            when omitted. A Pi entry never runs on a k3s node, so the default leaves it out.
+        entries: the service entries to derive from; ``cluster/services.yml``'s when omitted.
     """
     if entries is None:
         entries = list(k8s_entries().values())
@@ -85,8 +83,8 @@ def resolved_tier_lists(k3s_defaults: dict, entries: list[dict] | None = None) -
         k3s_defaults: The role's defaults, already layered under the inventory when the
             caller has one. Its ``k8s_namespace``, when present, is the namespace the
             expressions derive with.
-        entries: The ``containers_list`` entries the expressions derive from; daniel-box's
-            k8s entries in the repo inventory when omitted. A caller reading an injected
+        entries: The service entries the expressions derive from; the repo's
+            ``cluster/services.yml`` entries when omitted. A caller reading an injected
             inventory passes that inventory's entries, or the derivation reads the repo's.
     """
     resolved = dict(k3s_defaults)

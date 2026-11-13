@@ -3,8 +3,7 @@
 The script tests run `system_upgrade_verify.main` with a stand-in for the Node read and a
 fixture binary. The render tests render the tree through `render_tag`, so the Jobs are checked
 as Flux receives them in `system-upgrade-verify`, and render edited copies of the role for the
-empty-list and pin-bump cases. The plan is docs/target-architecture/host/h6-k3s-suc.md,
-*The installed binary matches the release*.
+empty-list and pin-bump cases. ADR-0025 records the decision.
 
 Run: uv run pytest ansible/roles/k8s/system-upgrade/tests/test_system_upgrade_verify.py
 """

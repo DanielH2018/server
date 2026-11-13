@@ -4,9 +4,9 @@ Two documents, read as text, because every step they describe is operator-only a
 can run them:
 
 - *The revert runbook* in docs/volume-snapshot-drills.md, the procedure that follows
-  `promote`'s stateful hold (D5.2c in docs/target-architecture/deploy/d5-bulk-move.md);
+  `promote`'s stateful hold (ADR-0020);
 - the shed scenario in docs/break-glass.md, *one node is down and the survivor runs short of
-  memory*, whose suspends and `DEPLOY_HOLD` writes follow the same rules (D5.1b).
+  memory*, whose suspends and `DEPLOY_HOLD` writes follow the same rules.
 
 Each clause below is a mistake that leaves the cluster in a worse state than the failure it
 answers: a suspend Flux takes back at its next reconcile, a clear that erases a failure hold,

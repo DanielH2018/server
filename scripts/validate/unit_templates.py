@@ -78,7 +78,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 from validate.validate_lib.ok_lines import ok_printer
 from lib.cli_help import answer_help
-from lib.ansible_jinja_env import template_env
+from validate.validate_lib.shipped_render import render_shipped
 from lib.render_context import render_context
 from renderer.renderer_lib import host as host_mode
 from lib.render_guard import (
@@ -86,7 +86,6 @@ from lib.render_guard import (
     REPO,
     dump_numbered,
     load_yaml,
-    render_or_error,
 )
 
 ROLES = ANSIBLE / "roles"
@@ -130,17 +129,6 @@ def discover_rules() -> list[Path]:
             *COMPONENT_TEMPLATES.glob("*/templates/*.rules.j2"),
         ]
     )
-
-
-def template_loader(path: Path) -> tuple[Path, str]:
-    """The directory a template's environment is rooted at, and the name it loads by.
-
-    A component template loads from the component, as the host renderer loads it, so its
-    `templates/<name>` imports resolve.
-    """
-    if path.parents[2] == COMPONENT_TEMPLATES:
-        return path.parents[1], f"templates/{path.name}"
-    return path.parent, path.name
 
 
 def unit_context(template: Path) -> dict:
@@ -188,8 +176,7 @@ def check_template(
     Returns an error string, or None on success.
     """
     rel = path.relative_to(ANSIBLE.parent)
-    root, name = template_loader(path)
-    rendered, err = render_or_error(template_env(root), name, ctx)
+    rendered, err = render_shipped(path, ctx)
     if rendered is None:
         return err
 
@@ -211,8 +198,7 @@ def check_polkit_rule(template: Path, out_dir: Path, node_bin: str) -> str | Non
     interpolates only a user name, which its role's own defaults carry.
     """
     ctx = unit_context(template)
-    root, name = template_loader(template)
-    rendered, err = render_or_error(template_env(root), name, ctx)
+    rendered, err = render_shipped(template, ctx)
     if rendered is None:
         return err
 

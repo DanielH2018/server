@@ -60,7 +60,7 @@ def test_the_package_renders_its_named_members(package):
 
 
 def test_the_source_names_daniel_box_and_the_keyring_path(package):
-    box = host_mode.host_context(None, {})[0]["hostvars"]["daniel-box"]["server_ip"]
+    box = host_mode.host_context(None, {})[0]["hosts"]["daniel-box"]["server_ip"]
     source = package.files[SOURCES][0].decode()
     assert f"URIs: http://{box}:8791\n" in source
     assert f"Signed-By: {KEYRING}\n" in source

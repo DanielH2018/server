@@ -25,9 +25,10 @@ non-zero if any template fails to render, fails `bash -n`, fails shellcheck, or 
 itself isn't available (a missing linter degrades the gate silently otherwise — fail loud
 instead of falling back to bash -n alone).
 
-This module is the entry point. `ansible_jinja_env` in `scripts/lib/` supplies Ansible's
-`search` test and `bool` filter, which vanilla Jinja2 lacks. The pieces only this validator
-imports live in `validate_lib/`: `shell_lint` (render, then `bash -n` and shellcheck).
+This module is the entry point. It renders each template through
+`validate_lib/shipped_render.py`, the renderer's own environment, so the linters read the
+bytes the package ships. The lint pieces only this validator imports live in
+`validate_lib/shell_lint.py` (`bash -n` and shellcheck).
 """
 
 import shutil
@@ -50,11 +51,10 @@ from lib.render_context import render_context
 from lib.render_guard import (
     REPO,
     dump_numbered,
-    render_or_error,
 )
 from lib import yaml_fast
 from lib.repo_paths import ROLES
-from lib.ansible_jinja_env import template_env
+from validate.validate_lib.shipped_render import render_shipped
 from validate.validate_lib.shell_lint import (
     bash_syntax_check,
     find_shellcheck,
@@ -66,7 +66,7 @@ from validate.validate_lib.shell_lint import (
 COMPONENTS = REPO / "hosts" / "components"
 
 # Shell-specific overrides: values a lint pass needs to be shell-plausible rather than the bare
-# "STUB" literal StubUndefined fills in elsewhere. No linted template needs one. `hostvars` needs
+# "STUB" literal StubUndefined fills in elsewhere. No linted template needs one. `hosts` needs
 # no stub: `render_context` builds it from each host's literal `server_ip`, and a stub here would
 # replace that whole map.
 SHELL_STUB_OVERRIDES: dict[str, str] = {}
@@ -124,7 +124,8 @@ def check_template(
 ) -> str | None:
     """Render one template, write it under out_dir, and lint the rendered file.
 
-    Writes the rendered file preserving `path`'s relative path (minus the trailing .j2).
+    Writes the rendered file at `path`'s repo-relative path, or its bare name for a template
+    outside the repo, minus the trailing .j2.
     `shellcheck_bin=None` skips the per-file shellcheck step: main() passes None and runs
     `shellcheck_batch` over every rendered file afterwards, which is the same check in one
     process. A caller checking a single template passes the binary and gets it inline.
@@ -132,9 +133,8 @@ def check_template(
     Returns:
         An error string, or None on success.
     """
-    rel = path.relative_to(REPO)
-    env = template_env(path.parent)
-    rendered, err = render_or_error(env, path.name, ctx)
+    rel = path.relative_to(REPO) if path.is_relative_to(REPO) else Path(path.name)
+    rendered, err = render_shipped(path, ctx)
     if rendered is None:
         return err
 

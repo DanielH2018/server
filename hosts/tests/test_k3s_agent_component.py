@@ -21,14 +21,17 @@ from _wifi_fallback import WIFI_FILE, WIFI_RENDERED, installed_wifi_file
 from lib import yaml_fast
 from lib.estate import REPO_INVENTORY
 from lib.proc_testing import run, write_exec
-from lib.repo_paths import K3S_DEFAULTS, K3S_SERVER, REPO
+from lib.repo_paths import K3S_DEFAULTS, K3S_SERVER, K8S_ROLES, REPO
 from renderer.renderer_lib import host as host_mode
 
 COMPONENT = REPO / "hosts" / "components" / "k3s-agent"
 UNIT = "k3s-agent.service"
 DROPIN = "/usr/lib/systemd/system/k3s-agent.service.d/50-homelab.conf"
 CONFIG = "/etc/rancher/k3s/config.yaml.d/50-homelab.yaml"
-STARTUP_FILES = {DROPIN, CONFIG, "/etc/rancher/k3s/registries.yaml"}
+GRACEFUL_SHUTDOWN = (
+    "/var/lib/rancher/k3s/agent/etc/kubelet.conf.d/50-homelab-graceful-shutdown.conf"
+)
+STARTUP_FILES = {DROPIN, CONFIG, GRACEFUL_SHUTDOWN, "/etc/rancher/k3s/registries.yaml"}
 LOGROTATE = "/etc/logrotate.d/k3s-agent"
 TMPFILES = "/usr/lib/tmpfiles.d/homelab-k3s-agent.conf"
 AGENT_CA = "/var/lib/rancher/k3s/agent/server-ca.crt"
@@ -134,6 +137,36 @@ def test_the_longhorn_packages_and_the_inotify_key_ship_in_the_package(package):
         package.activations["/etc/multipath/conf.d/50-homelab-longhorn.conf"]
         == "reload:multipathd.service"
     )
+
+
+def shutdown_groups(package) -> dict[int, int]:
+    config = yaml_fast.safe_load(text(package, GRACEFUL_SHUTDOWN))
+    assert config["kind"] == "KubeletConfiguration"
+    assert "shutdownGracePeriod" not in config
+    return {
+        group["priority"]: group["shutdownGracePeriodSeconds"]
+        for group in config["shutdownGracePeriodByPodPriority"]
+    }
+
+
+def test_shutdown_stops_workloads_before_longhorn_and_longhorn_before_system_pods(
+    package,
+):
+    """Longhorn's group opens at its own PriorityClass, so a bump that moves it fails here."""
+    upstream = K8S_ROLES / "longhorn" / "files" / "upstream" / "longhorn.yaml"
+    longhorn = next(
+        doc["value"]
+        for doc in yaml_fast.safe_load_all(upstream.read_text())
+        if doc
+        and doc["kind"] == "PriorityClass"
+        and doc["metadata"]["name"] == "longhorn-critical"
+    )
+    assert sorted(shutdown_groups(package)) == [0, longhorn, 2000000000]
+
+
+def test_the_whole_shutdown_fits_inside_the_ups_low_battery_margin(package):
+    """An FSD raised at battery.runtime.low leaves 120 s, and poweroff waits on kubelet's lock."""
+    assert sum(shutdown_groups(package).values()) < 120
 
 
 def test_the_kubeconfig_oneshot_names_the_server_and_the_ca_the_agent_fetched(

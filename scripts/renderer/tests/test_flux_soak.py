@@ -80,11 +80,13 @@ def test_a_failing_soak_prints_a_fail_annotation_and_no_pass_line(
     )
 
 
-_D6 = "docs/target-architecture/deploy/d6-delete-old-path.md"
+_ADR = "docs/adr/0020-flux-applies-the-cluster-from-a-promoted-artifact.md"
 
 
-def test_d6_records_the_result_a_failed_or_errored_soak_prints(world, tmp_path, capsys):
-    """D6's account of Grafana's deploy markers names the failure line the soak prints (#5881).
+def test_adr_0020_records_the_result_a_failed_or_errored_soak_prints(
+    world, tmp_path, capsys
+):
+    """ADR-0020's account of Grafana's deploy markers names the failure line the soak prints (#5881).
 
     The oracle is the line a failing and an erroring soak print, not text copied from the doc.
     """
@@ -105,17 +107,17 @@ def test_d6_records_the_result_a_failed_or_errored_soak_prints(world, tmp_path, 
     results = {line.group(1) for line in lines if line}
     assert len(results) == 1, results
     tracked = subprocess.run(
-        ["git", "ls-files", "--", _D6],
+        ["git", "ls-files", "--", _ADR],
         cwd=_REPO,
         capture_output=True,
         text=True,
         check=True,
         timeout=30,
     ).stdout.split()
-    assert tracked == [_D6]
-    doc = (_REPO / _D6).read_text()
+    assert tracked == [_ADR]
+    doc = (_REPO / _ADR).read_text()
     assert re.search(rf"\bresult={results.pop()}\b", doc), (
-        f"{_D6} still records a failed soak as drawing no deploy marker"
+        f"{_ADR} still records a failed soak as drawing no deploy marker"
     )
 
 

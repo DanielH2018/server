@@ -41,7 +41,7 @@ spec:
       # own loopback hostPort.
       nodeSelector:
         kubernetes.io/hostname: {{ k8s_registry_node }}
-{{ pod_shell(containers_list | tier_priority_class('registry'), run_as_user=1000, run_as_group=1000, fs_group=1000) }}
+{{ pod_shell(services | tier_priority_class('registry'), run_as_user=1000, run_as_group=1000, fs_group=1000) }}
       containers:
         - name: dockerhub-mirror
           image: {{ registry_k8s_image }}

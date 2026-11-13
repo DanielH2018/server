@@ -111,8 +111,8 @@ def edited(dest: Path, head: Path, edits: dict[str, tuple[str, str]]) -> gate.Sn
     return gate.snapshot(dest, ROLES)
 
 
-def _bento_entry_edit(field: str, value: str, new: str) -> tuple[str, str]:
-    text = (gate.REPO / SERVICES).read_text()
+def _bento_entry_edit(tree: Path, field: str, value: str, new: str) -> tuple[str, str]:
+    text = (tree / SERVICES).read_text()
     match = re.search(r"  - name: bento-pdf\n(?:    .*\n|\s*#.*\n)+", text)
     assert match, "the inventory has no bento-pdf entry"
     entry = match.group(0)
@@ -123,13 +123,13 @@ def _bento_entry_edit(field: str, value: str, new: str) -> tuple[str, str]:
 def test_an_inventory_edit_counts_both_roles_it_moves(
     tmp_path, head_tree, head_snapshot
 ):
-    edit = _bento_entry_edit("hostname", '"bento-pdf"', '"pdf"')
+    edit = _bento_entry_edit(head_tree, "hostname", '"bento-pdf"', '"pdf"')
     head = edited(tmp_path, head_tree, {SERVICES: edit})
     assert gate.counted(head_snapshot, head) == {"bento-pdf", "authelia"}
 
 
 def test_an_auth_tier_edit_counts_authelia_alone(tmp_path, head_tree, head_snapshot):
-    edit = _bento_entry_edit("auth_tier", "one_factor", "two_factor")
+    edit = _bento_entry_edit(head_tree, "auth_tier", "one_factor", "two_factor")
     head = edited(tmp_path, head_tree, {SERVICES: edit})
     assert gate.counted(head_snapshot, head) == {"authelia"}
 

@@ -1,7 +1,7 @@
 """The `blackbox-ingress` scrape job probes every ingress tile, built from `containers_list`.
 
 observability's `prometheus.yaml.j2` renders one target per tile the `ingress_probe_targets`
-filter yields (docs/target-architecture/monitoring/m4-blackbox-ingress.md, *The probe job*).
+filter yields (ADR-0026).
 These guards render the job from the real inventory, with an entry added or changed where the
 question is what moves, so each states what Prometheus would receive.
 
@@ -33,12 +33,12 @@ OPTED_OUT = frozenset(
         "scrutiny",
     }
 )
-_NEW = {"name": "newsvc", "platform": "k8s", "hostname": "newsvc", "port": 8080}
+_NEW = {"name": "newsvc", "hostname": "newsvc", "port": 8080}
 
 
-def job_targets(containers_list: list[dict] | None = None) -> dict[str, dict]:
+def job_targets(services: list[dict] | None = None) -> dict[str, dict]:
     """The rendered job's targets, each mapped to its labels, in render order."""
-    overrides = {"containers_list": containers_list} if containers_list else None
+    overrides = {"services": services} if services else None
     text = render_role_template("observability", "prometheus.yaml.j2", overrides)
     configmap = next(
         doc
@@ -59,25 +59,23 @@ def tile_url(hostname: str, domain: str) -> str:
     return f"https://{hostname}.local.{domain}"
 
 
-def unprobed_hostnames(
-    targets: dict[str, dict], containers_list: list[dict]
-) -> list[str]:
+def unprobed_hostnames(targets: dict[str, dict], services: list[dict]) -> list[str]:
     """The hostnames of the tiles the filter yields that the job has no target for."""
     domain = host_context()["domain"]
     return [
         tile["hostname"]
-        for tile in ingress_probe_targets(containers_list)
+        for tile in ingress_probe_targets(services)
         if tile_url(tile["hostname"], domain) not in targets
     ]
 
 
-def entries_with_the_retired_key(containers_list: list[dict]) -> list[str]:
+def entries_with_the_retired_key(services: list[dict]) -> list[str]:
     """The entries still carrying `kuma:`, which the filter ignores, so its opt-out is lost."""
-    return [entry["name"] for entry in containers_list if "kuma" in entry]
+    return [entry["name"] for entry in services if "kuma" in entry]
 
 
 def _entries() -> list[dict]:
-    return copy.deepcopy(host_context()["containers_list"])
+    return copy.deepcopy(host_context()["services"])
 
 
 def test_no_entry_carries_the_retired_kuma_key_is_clean():
@@ -100,17 +98,17 @@ def test_the_targets_are_the_filters_tiles_string_for_string():
     targets = job_targets()
     expected = [
         tile_url(tile["hostname"], ctx["domain"])
-        for tile in ingress_probe_targets(ctx["containers_list"])
+        for tile in ingress_probe_targets(ctx["services"])
     ]
     assert list(targets) == expected
     services = {labels["service"] for labels in targets.values()}
     assert REQUIRED_SERVICES <= services, sorted(REQUIRED_SERVICES - services)
-    assert unprobed_hostnames(targets, ctx["containers_list"]) == []
+    assert unprobed_hostnames(targets, ctx["services"]) == []
 
 
 def test_each_targets_labels_follow_its_entry_sso_and_tier():
     ctx = host_context()
-    cl = ctx["containers_list"]
+    cl = ctx["services"]
     targets = job_targets()
     for tile in ingress_probe_targets(cl):
         critical = in_service_tier(cl, tile["entry"], "home-critical")
@@ -145,15 +143,7 @@ def test_an_entry_the_job_does_not_probe_is_flagged():
 def test_every_target_host_is_pinned_in_the_exporters_host_aliases():
     ctx = host_context()
     deployment = yaml_fast.safe_load(
-        render_role_template(
-            "blackbox-exporter",
-            "deployment.yaml.j2",
-            {
-                "hostvars": {
-                    ctx["k8s_primary_node"]: {"containers_list": ctx["containers_list"]}
-                }
-            },
-        )
+        render_role_template("blackbox-exporter", "deployment.yaml.j2")
     )
     aliased = {
         name

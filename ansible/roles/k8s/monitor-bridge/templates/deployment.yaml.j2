@@ -25,7 +25,7 @@ spec:
       # Secret-volume files are root-owned; without fsGroup the 0440 credential files
       # below are unreadable to this non-root uid and both file-mounted checks silently
       # self-disable ("no URL/token" — found on the twin's first cycle, 2026-08-14).
-{{ pod_shell(containers_list | tier_priority_class('monitor-bridge'), run_as_user=puid, run_as_group=pgid, fs_group=pgid, non_root=true) }}
+{{ pod_shell(services | tier_priority_class('monitor-bridge'), run_as_user=puid, run_as_group=pgid, fs_group=pgid, non_root=true) }}
       # Pinned to daniel-box, where the etcd drill's stamp hostPath lives, and off daniel-server
       # so its drain (and eventual cold boot) never takes the alerting brain down with it.
       nodeSelector:
@@ -39,7 +39,7 @@ spec:
             - name: metrics
               containerPort: {{ monitor_bridge_deploy_pipeline_port }}
             - name: checks
-              containerPort: {{ containers_list | metrics_port('monitor-bridge') }}
+              containerPort: {{ services | metrics_port('monitor-bridge') }}
 {{ hardened_security_context(read_only=true) }}
           # The settings, one plain value per entry of config/env.yaml.j2; the credentials come
           # from env-secret.yaml.j2. A quoted number belongs there, never in the Secret: Flux's

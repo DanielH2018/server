@@ -1,5 +1,5 @@
 {% from 'networkpolicy.yml.j2' import networkpolicy with context %}
-{# One additive caller fence per containers_list entry carrying `netpol_from`: authelia,
+{# One additive caller fence per services entry carrying `netpol_from`: authelia,
    speedtest, ical-proxy, home-assistant, karakeep and scrutiny. Each admits its listed
    callers on the entry's `port`, and the reason for each caller sits beside it in
    cluster/services.yml. The macro's header says which fences fit this shape.
@@ -24,7 +24,7 @@
 
    Each fence reads `netpol_baseline_enforced`, so the rollback lever still covers it; the
    reasoning is in networkpolicy-traefik.yaml.j2. #}
-{% for fence in containers_list | netpol_caller_fences %}
+{% for fence in services | netpol_caller_fences %}
 ---
 {{ networkpolicy(fence.app, fence.port, fence.callers, netpol_baseline_enforced | bool) }}
 {% endfor %}

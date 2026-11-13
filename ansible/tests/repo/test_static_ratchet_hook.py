@@ -122,7 +122,7 @@ def test_the_hook_runs_every_expected_module_and_each_exists():
         "scripts/dev/pytest_shard_weights.json",
         "ansible/tests/repo/module_length_allowlist.txt",
         "ansible/roles/k8s/traefik/defaults/main.yml",
-        "ansible/inventory/hosts.ini",
+        "ansible/inventory/host_vars/daniel-box.yml",
         "pyproject.toml",
         ".github/workflows/ci.yml",
         ".github/workflows/image-smoke.yml",

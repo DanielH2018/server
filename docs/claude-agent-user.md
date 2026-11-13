@@ -159,6 +159,11 @@ the hook-install task does not remove the hook. A broken hook refuses every agen
 
 - **A machine user account, not a GitHub App.** The account is `DanielClaudeBot`, a write
   collaborator, because a personal-account repo has no lower role.
+- **GitHub has hidden the account since 2026-10-10 (#5126).** Everything it authored returns
+  404 to every other account: its pull requests and its issues. 70 numbers from #3622 to #4247
+  are hidden, so `findings.py` cannot list or search them, or match a new finding against them. #8216 re-filed the
+  2026-10-10 review's findings under the operator's account, and #8328 lists the rest. The
+  operator ruled on 2026-11-13 to replace the account.
 - **Its token is a classic `public_repo` token.** GitHub does not support fine-grained tokens
   for a collaborator on another personal account's repo. The token is stored in SOPS as
   `claude_code_agent_gh_token`, so `ansible/secret_rotation.yml` tracks it.
@@ -577,8 +582,8 @@ The build runs in slices, and each slice is exercised before the next starts:
 |---|---|---|
 | 1 | `claude-triage@<episode>.service`, one diagnose-only run started by hand | Built, and running on daniel-box |
 | 2 | The polling timer, first in a shadow mode that only logs what it would start | Built, in shadow mode |
-| 3 | The `claude-restart@` broker and its allowlist | Planned |
-| 4 | A fix phase that opens a PR and lands it through `homelab-claude-land@` | Planned. It needs the bot account visible again (#5126). |
+| 3 | The `claude-restart@` broker and its allowlist | Planned. The allowlist excludes every workload a routed alert covers; see [The restart allowlist](#the-restart-allowlist). |
+| 4 | A fix phase that opens a PR and lands it through `homelab-claude-land@` | Planned. It needs a visible agent account (#5126). |
 | 5 | A weekly summary | Planned. The Kuma alive push it also planned is dropped, because M6 retired Kuma and `ClaudeTriagePollNotReporting` already pages a poller that stopped. |
 
 ### Slice 1: one run, started by hand
@@ -712,6 +717,27 @@ hour.
 The mode is a literal in `templates/claude-triage-pins.j2`, on the approval floor. To arm the poller, the
 operator reads a week of `shadow.jsonl`, changes the literal and its default to `armed`, and
 lands that PR.
+
+### The restart allowlist
+
+Slice 3 builds the `claude-restart@` broker. Its allowlist excludes every workload that a
+routed alert covers. A restart of a listed workload must not be able to open the next triage
+episode.
+
+The operator's 2026-11-12 rulings
+([dotfiles#967](https://github.com/DanielH2018/dotfiles/issues/967#issuecomment-6836810225))
+assumed that only `critical` alerts open an episode. Decision 4 therefore excluded only the
+workloads behind a critical probe. That premise no longer holds. `poll_routes` routes
+`K8sDeploymentZeroAvailable`, `K8sContainerCrashLooping`, `IngressProbeFailed` and
+`ScrapeTargetDown`, which are `warning` alerts that fire for every workload. Only each rule's
+`for:` window and the two-poll streak the poller requires would stand between a restart and
+a routed episode (#8259).
+
+Slice 3's allowlist test must derive the exclusion from `poll_routes`, so widening the route
+table narrows the allowlist. A key routed to `none`, such as `ExtraProbeFailed:wg-easy`, covers
+nothing. `K8sDeploymentZeroAvailable` and `K8sContainerCrashLooping` fire for any
+Deployment and any container. While the table routes them, slice 3 has to show which
+workloads a restart cannot drive into either alert before it lists any workload.
 
 ## The operator's dotfiles
 

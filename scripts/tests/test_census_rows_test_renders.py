@@ -31,8 +31,8 @@ ROWS = (
         reason=(
             "A bare `jinja2.Environment()` has none of Ansible's whitespace flags or filters, "
             "so a `{% for %}` leaves a blank line per iteration and `| bool` fails or means "
-            "Python's `bool()`. Use `lib.ansible_jinja_env.make_ansible_env` (pass "
-            "`undefined_cls=` for a strict render) or `_jinja_env.jinja_env` for a "
+            "Python's `bool()`. Use `lib.ansible_jinja_env.register_ansible_filters(make_env())` "
+            "(pass `make_env` `undefined_cls=` for a strict render) or `_jinja_env.jinja_env` for a "
             "structure-valued expression. `liquid.Environment` is another language."
         ),
         files=pytest_only_modules,
@@ -47,7 +47,8 @@ ROWS = (
         green=(
             Subject(
                 "a.py",
-                "from lib.ansible_jinja_env import make_ansible_env\nmake_ansible_env()\n",
+                "from lib.ansible_jinja_env import make_env, register_ansible_filters\n"
+                "register_ansible_filters(make_env())\n",
             ),
             Subject("b.py", "import liquid\nliquid.Environment()\n"),
             Subject("c.py", '"""jinja2.Environment() used to be built here."""\n'),
@@ -134,7 +135,7 @@ ROWS = (
         files=pytest_only_modules,
         offence=lambda s: inline_inventory_paths(s.text, REPO / s.rel, _SIBLINGS),
         red=(
-            Subject("a.py", 'REPO / "ansible/inventory/hosts.ini"\n'),
+            Subject("a.py", 'REPO / "ansible/inventory/group_vars/all.yml"\n'),
             Subject("b.py", 'ANSIBLE / "inventory" / "group_vars" / "all.yml"\n'),
             Subject("c.py", 'Path(REPO) / "ansible/inventory/host_vars" / name\n'),
             Subject(
@@ -191,7 +192,7 @@ ROWS = (
                 "a.py", "from lib.repo_paths import ALL_VARS\nALL_VARS.read_text()\n"
             ),
             Subject("b.py", 'classify(["ansible/inventory/group_vars/all.yml"])\n'),
-            Subject("c.py", 'tmp_path / "inventory" / "hosts.ini"\n'),
+            Subject("c.py", 'tmp_path / "inventory" / "group_vars" / "all.yml"\n'),
             Subject("d.py", 'REPO / "ansible" / "templates"\n'),
             Subject("e.py", 'K3S_SERVER / "templates" / "config.yaml.j2"\n'),
             # A local alias of a constant spells nothing past it.

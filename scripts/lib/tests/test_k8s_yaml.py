@@ -14,7 +14,7 @@ whole tree.
 Run: uv run pytest scripts/lib/tests/test_k8s_yaml.py
 """
 
-from lib.ansible_jinja_env import make_ansible_env
+from lib.ansible_jinja_env import make_env, register_ansible_filters
 from lib.k8s_yaml import (
     find_claim_name_refs,
     find_pvc_names,
@@ -171,7 +171,7 @@ spec:
 
 
 def _guard_lookup(expression: str) -> str:
-    env = make_ansible_env()
+    env = register_ansible_filters(make_env())
     env.globals["lookup"] = make_lookup({})
     return env.from_string(expression).render()
 

@@ -11,7 +11,7 @@ WHAT COUNTS AS UNDEFINED. Rendering with a bare `StrictUndefined` would fail on 
 secret and every key a host component supplies, so this guard renders with a tracking
 Undefined and then judges each name it collected. A name is allowed to be undefined when it is:
 
-  - supplied by the host renderer (`renderer_lib/host.py`) — `hostvars`, `inventory_hostname`
+  - supplied by the host renderer (`renderer_lib/host.py`) — `hosts`, `services`, `inventory_hostname`
     and `playbook_dir` (`HOST_RENDER_SUPPLIED`);
   - a SOPS secret, by name, from the plaintext registry `ansible/secret_rotation.yml`;
   - defined anywhere in the inventory — `group_vars/all.yml` or any host's `host_vars` file;
@@ -39,7 +39,7 @@ from collections import defaultdict
 from pathlib import Path
 
 import yaml
-from jinja2 import ChainableUndefined
+from jinja2 import ChainableUndefined, meta
 
 # Reach the sibling package directories: a directly-invoked script gets only its own
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
@@ -51,7 +51,6 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 from validate.validate_lib.ok_lines import ok_printer
 from lib.cli_help import answer_help
 from lib import yaml_fast
-from lib.ansible_jinja_env import template_env
 from lib.render_context import render_context
 from lib.render_guard import (
     ALL_VARS,
@@ -59,15 +58,18 @@ from lib.render_guard import (
     dump_numbered,
     host_files,
     load_yaml,
-    render_or_error,
+    make_env,
 )
 from lib.repo_paths import REPO
+from validate.validate_lib.shipped_render import render_shipped, template_loader
 
 COMPONENTS = REPO / "hosts" / "components"
 SECRET_REGISTRY = ANSIBLE / "secret_rotation.yml"
 
 # The names `renderer_lib/host.py` supplies a component template, which no repo file defines.
-HOST_RENDER_SUPPLIED = frozenset({"hostvars", "inventory_hostname", "playbook_dir"})
+HOST_RENDER_SUPPLIED = frozenset(
+    {"hosts", "services", "inventory_hostname", "playbook_dir"}
+)
 
 # The host the renderer sets `inventory_hostname` to, given a plausible value here.
 HOST_RENDER_CONTEXT = {"inventory_hostname": "daniel-box"}
@@ -150,15 +152,21 @@ def discover_templates(components: Path = COMPONENTS) -> list[Path]:
     )
 
 
-def template_loader(tpl: Path) -> tuple[Path, str]:
-    """The directory `tpl`'s environment is rooted at, and the name it loads by.
+def standalone_templates(components: Path = COMPONENTS) -> list[Path]:
+    """`discover_templates`, less each template a sibling loads by name.
 
-    A component template loads from the component, as the host renderer loads it, so its
-    `templates/<name>` imports resolve.
+    A partial that a template includes or imports reaches the package only inside the template
+    that loads it, so the bytes the package ships hold no render of it on its own.
     """
-    if (tpl.parents[1] / "component.yml").is_file():
-        return tpl.parents[1], f"templates/{tpl.name}"
-    return tpl.parent, tpl.name
+    templates = discover_templates(components)
+    loaded = set()
+    for tpl in templates:
+        root, _ = template_loader(tpl)
+        tree = make_env().parse(tpl.read_text())
+        loaded.update(
+            root / name for name in meta.find_referenced_templates(tree) if name
+        )
+    return [tpl for tpl in templates if tpl not in loaded]
 
 
 def repo_relative(tpl: Path) -> str:
@@ -181,9 +189,7 @@ def check_template(tpl: Path, ctx: dict, known: frozenset[str]) -> list[str]:
     """
     rel = repo_relative(tpl)
     seen: dict[str, set[str]] = defaultdict(set)
-    root, name = template_loader(tpl)
-    env = template_env(root, undefined_cls=_tracking_undefined(seen, rel))
-    rendered, err = render_or_error(env, name, ctx)
+    rendered, err = render_shipped(tpl, ctx, _tracking_undefined(seen, rel))
     if rendered is None:
         return [err or "render error"]
 

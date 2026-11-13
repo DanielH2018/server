@@ -1,9 +1,11 @@
 # k3s control-plane upgrade runbook
 
-A k3s bump reinstalls the control plane on a single-server cluster, so it runs by hand. Renovate
-raises the PR and the `k3s control plane (manual — hand-run upgrade: docs/k3s-upgrade.md; k8s_autodeploy: false)`
-rule blocks its automerge, which means the daily unattended `/renovate-prs` run can never land it.
-This page is what an operator follows instead.
+Merging the k3s pin is the upgrade. SUC applies the merged pin to both nodes, and on this
+single-server cluster that restarts daniel-box, the only control-plane node. The operator
+therefore chooses when the upgrade happens by choosing when to merge. Renovate raises the PR,
+and the `k3s-io/k3s` package rule in `renovate.json` blocks its automerge, so the daily
+unattended `/renovate-prs` run can never land it. This page is what an operator follows before
+and after merging.
 
 Renovate raises k3s patch releases only. An `allowedVersions` cap on `k3s-io/k3s` holds k3s at
 the minor whose Kubernetes schemas are vendored under `scripts/validate/schemas/kubernetes.io/`,
@@ -221,7 +223,11 @@ ssh daniel-server 'systemctl show k3s-agent -p ExecMainStartTimestamp'
 Restarting the agent is ungraceful from Longhorn's point of view: `kubectl drain` and `cordon` are
 write verbs, and the ServiceAccount available here is read-only, so there is no drain step to run.
 Every replica on daniel-server detaches and reattaches. That is the single riskiest moment in this
-procedure, and the reason gate 1 exists.
+procedure, and the reason gate 1 exists. Kubelet's graceful node shutdown does not help here
+(#8296). It runs when the host shuts down, through the systemd-logind delay lock, and a restart of
+k3s-agent is not a host shutdown. A reboot of daniel-server is graceful: kubelet stops the
+workloads, then Longhorn, then the system pods, by the groups in `k3s_agent_graceful_shutdown`
+in `hosts/components/k3s-agent/component.yml`.
 
 ## Verify the change, not just the workload
 

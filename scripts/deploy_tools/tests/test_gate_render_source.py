@@ -26,11 +26,13 @@ def _k8s_tools(run):
     return notify_mod.GateTools(run=run, tag_platforms=lambda tag, **_: {"k8s"})
 
 
-def _pi_inventory(root, tag):
-    """Write a checkout whose ONLY containers_list entry is `tag`, declared on the Pi."""
-    host_vars = root / "ansible" / "inventory" / "host_vars"
-    host_vars.mkdir(parents=True)
-    (host_vars / "daniel-pi.yml").write_text(f"containers_list:\n  - name: {tag}\n")
+def _k8s_inventory(root, tag):
+    """Write a checkout whose ONLY service list entry is `tag`."""
+    (root / "ansible" / "inventory" / "host_vars").mkdir(parents=True)
+    (root / "cluster").mkdir()
+    (root / "cluster" / "services.yml").write_text(
+        f"containers_list:\n  - name: {tag}\n"
+    )
 
 
 def test_the_gate_renders_from_the_checkout_it_is_pointed_at(tmp_path):
@@ -67,27 +69,50 @@ def test_without_a_cwd_the_gate_renders_this_checkout(tmp_path):
 
 
 def test_the_platform_routing_reads_the_tree_the_probe_renders(tmp_path):
-    """A tag declared only at the deployed commit routes to the Pi, not k8s-first.
+    """A tag declared only at the deployed commit routes to k8s alone, not k8s-first.
 
     The manifests came from the snapshot while `tag_platforms` read the calling checkout's
-    inventory, so the two halves of one verdict came from two trees. For a PR that adds a Pi
-    role and its `containers_list` entry together, the calling tree answers `set()`, which falls
-    to the last branch of `check_one` and probes the CLUSTER first -- where a same-named
-    workload answers 0 for a Pi container nobody deployed.
+    service list, so the two halves of one verdict came from two trees. For a PR that adds a
+    role and its `cluster/services.yml` entry together, the calling tree answers `set()`, which
+    falls to the last branch of `check_one` and probes the Pi after a cluster miss.
 
-    Driven through the real `tag_platforms`: a stub would assert nothing about which inventory
-    was read.
+    Driven through the real `tag_platforms`: a stub would assert nothing about which service
+    list was read. A not-applicable cluster probe reads `skipped` only when it is the sole
+    probe.
     """
-    tag = "pi-only-at-the-snapshot"
-    _pi_inventory(tmp_path, tag)
+    tag = "added-at-the-snapshot"
+    _k8s_inventory(tmp_path, tag)
     seen = []
 
     def run(argv, **kwargs):
         seen.append(argv)
-        return _result(0, f"{tag}: up")
+        return _result(notify_mod.PROBE_NOT_APPLICABLE, f"{tag}: no workload")
 
     state, _detail = notify_mod.check_one(
         tag, tools=notify_mod.GateTools(run=run), cwd=tmp_path
+    )
+    assert state == "skipped"
+    assert [("--docker" in argv) for argv in seen] == [False]
+
+
+def test_a_pi_compose_service_tag_probes_the_pi_alone(tmp_path):
+    """#929: `alloy` is a Pi compose service and a cluster DaemonSet's name.
+
+    Read from the Pi's `compose_services`, the tag routes to `--docker` alone, so the
+    DaemonSet's ready pods cannot answer for the Pi's container.
+    """
+    _k8s_inventory(tmp_path, "loki-homelab")
+    (tmp_path / "ansible" / "inventory" / "host_vars" / "daniel-pi.yml").write_text(
+        "compose_services:\n  - name: alloy\n"
+    )
+    seen = []
+
+    def run(argv, **kwargs):
+        seen.append(argv)
+        return _result(0, "alloy: running")
+
+    state, _detail = notify_mod.check_one(
+        "alloy", tools=notify_mod.GateTools(run=run), cwd=tmp_path
     )
     assert state == "ok"
     assert [("--docker" in argv) for argv in seen] == [True]

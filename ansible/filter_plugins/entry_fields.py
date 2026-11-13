@@ -28,17 +28,14 @@ def published_ports(containers_list):
     ]
 
 
-def lan_hostnames(containers_list, platform=None):
+def lan_hostnames(containers_list):
     """The names an entry's routes answer on, in list order: `hostname`, then `extra_hostnames`.
 
     An entry contributes its `hostname` when it sets one and its `extra_hostnames` either way.
-    `platform` keeps only the entries deployed there, reading a missing `platform` as `docker`,
-    as `filter_by_platform` does. The names are bare: the template appends `.local.<domain>`.
+    The names are bare: the template appends `.local.<domain>`.
     """
     names = []
     for entry in _entries(containers_list):
-        if platform is not None and entry.get("platform", "docker") != platform:
-            continue
         if "hostname" in entry:
             names.append(entry["hostname"])
         names.extend(entry.get("extra_hostnames", []))

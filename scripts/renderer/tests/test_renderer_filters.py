@@ -14,7 +14,7 @@ import json
 
 import pytest
 
-from lib.ansible_jinja_env import make_ansible_env
+from lib.ansible_jinja_env import make_env, register_ansible_filters
 from renderer.renderer_lib import jinja_filters as filters
 from renderer.renderer_lib.jinja_filters import (
     b64encode,
@@ -205,14 +205,14 @@ def test_to_json_of_plain_data_is_clean():
 
 
 def test_mandatory_passes_an_undefined_through_to_the_guard():
-    env = make_ansible_env()
+    env = register_ansible_filters(make_env())
     undefined = env.undefined(name="absent")
     assert filters.mandatory(undefined, "the message") is undefined
 
 
 def test_every_name_the_registration_names_is_reimplemented():
     """No registered filter or test resolves into ansible-core."""
-    env = make_ansible_env()
+    env = register_ansible_filters(make_env())
     from_ansible = {
         name: fn.__module__
         for name, fn in [*env.filters.items(), *env.tests.items()]

@@ -19,10 +19,10 @@ Re-examined 2026-09-28 (#2808). Both renders share one derivation, so moving the
 single source of truth, and it loses locality: inject-nested-docs puts a role doc's head, this
 block first, in front of a session that touches the role, and nothing injects `services.md`.
 
-ONE FIELD SET. Every role is a k8s service role (`roles/k8s/<name>/`, every `platform: k8s`
-entry of the cluster host's `containers_list`), and its block carries:
+ONE FIELD SET. Every role is a k8s service role (`roles/k8s/<name>/`, every entry of
+`cluster/services.yml`), and its block carries:
 
-- an **Applied by** line (`catalog_backup.entry_owner`): it names Flux and `promote`, and says
+- an **Applied by** line (`catalog_backup.owner_stance`): it names Flux and `promote`, and says
   `land.sh --tags=<tag>` gates the rollout, the tag from `entry_tags`;
 - the image REPOSITORIES and the vars that pin them (for a built image, its GHCR repository,
   the one Flux's render pulls);
@@ -89,7 +89,6 @@ from docs.catalog_lib.catalog_backup import (
     LonghornTiers,
     claim_index,
     claim_tiers,
-    entry_owner,
     load_longhorn_tier_lists,
     owner_stance,
 )
@@ -220,8 +219,8 @@ def glance_lines(
 
     `claim_classes` is `claim_index(k8s_roles)` and `tiers` the Longhorn tier lists, both
     built once by the caller that renders every role; built here for a single-role call,
-    whose tier lists derive the R2 set from the repo's `containers_list`. `owner` is the
-    entry's `owner` as `entry_owner` reads it, None for an Ansible-owned entry. `built` is
+    whose tier lists derive the R2 set from the repo's service list. `owner` is the
+    entry's owner, `flux` for every service, None for an Ansible-owned entry. `built` is
     `built_image_names(k8s_roles)`, built here when the caller passes none.
     """
     name = entry["name"]
@@ -383,7 +382,7 @@ def stale_k8s_docs(
                 k3s_defaults=k3s_defaults,
                 claim_classes=claim_classes,
                 tiers=tiers,
-                owner=entry_owner(entry),
+                owner="flux",
                 built=built,
             )
         )

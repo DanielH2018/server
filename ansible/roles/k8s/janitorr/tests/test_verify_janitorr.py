@@ -2,8 +2,7 @@
 
 The script tests run `verify_janitorr.main` against a config file, a stand-in for the three
 apps, and a media tree under `tmp_path`. The render tests render a copy of the role, so a test
-can edit the copy and leave the tree alone. The plan is
-docs/target-architecture/deploy/d5-bulk-move.md.
+can edit the copy and leave the tree alone. ADR-0020 records the decision.
 
 Run: uv run pytest ansible/roles/k8s/janitorr/tests/test_verify_janitorr.py
 """

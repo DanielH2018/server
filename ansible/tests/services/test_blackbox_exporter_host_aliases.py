@@ -4,7 +4,7 @@
 Its Deployment calls `ingress_host_aliases()` (`ansible/templates/ingress-host-aliases.yml.j2`).
 The macro cannot stop the call from being lost: without it the probes resolve `*.local.<domain>` through cluster DNS, the failure the pin exists to exclude.
 
-Rendered with a real `hostvars`, because `rendered_docs()` leaves it empty and the macro's loop
+Rendered with the real `services`, because `rendered_docs()` leaves it empty and the macro's loop
 would then yield only the one literal probe host.
 
 Run: uv run pytest ansible/tests/services/test_blackbox_exporter_host_aliases.py
@@ -12,7 +12,7 @@ Run: uv run pytest ansible/tests/services/test_blackbox_exporter_host_aliases.py
 
 from functools import cache
 
-from _k8s_render import host_context, render_role_template
+from _k8s_render import render_role_template
 from lib import yaml_fast
 
 PROBE_HOST_PREFIX = "edge-selfcheck.local."
@@ -20,12 +20,8 @@ PROBE_HOST_PREFIX = "edge-selfcheck.local."
 
 @cache
 def _host_aliases() -> list[dict]:
-    ctx = host_context("daniel-box")
-    hostvars = {ctx["k8s_primary_node"]: {"containers_list": ctx["containers_list"]}}
     doc = yaml_fast.safe_load(
-        render_role_template(
-            "blackbox-exporter", "deployment.yaml.j2", {"hostvars": hostvars}
-        )
+        render_role_template("blackbox-exporter", "deployment.yaml.j2")
     )
     return doc["spec"]["template"]["spec"].get("hostAliases") or []
 

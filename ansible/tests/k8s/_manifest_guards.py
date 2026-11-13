@@ -10,7 +10,7 @@ from pathlib import Path
 from lib import yaml_fast
 from lib.ansible_jinja_env import template_env
 from lib.render_context import render_context
-from lib.render_guard import host_layer
+from lib.render_guard import host_layer, k8s_services
 from jinja2 import Undefined
 
 from lib.k8s_roles import manifest_template
@@ -43,7 +43,7 @@ def _render(path: Path, **ctx) -> str:
 
 
 def _k8s_entries() -> list[dict]:
-    return [c for c in BOX_VARS["containers_list"] if c.get("platform") == "k8s"]
+    return k8s_services()
 
 
 def _route_template(role: str) -> Path | None:

@@ -15,7 +15,7 @@ recovered by *Recovering Flux by hand*.
   `ansible/roles/k8s/flux/defaults/main.yml`. helm-controller and the image-automation
   controllers are not installed, because nothing here uses them.
 - **Flux applies them**, from `ansible/roles/k8s/flux/`'s render under the tag `flux`
-  (`platform: k8s`). The Kustomization `flux` applies the components at `prune: false`, and
+  (its entry is in `cluster/services.yml`). The Kustomization `flux` applies the components at `prune: false`, and
   `flux-deferred` applies the sync objects at `prune: true`. No local script applies the
   tag.
 - **The install is vendored.** `files/gotk-components.yaml` is the output of `flux install
@@ -357,7 +357,7 @@ Three things hold the ruling on the tree:
   a flux-owned service*).
   ```
 
-- **No ownership flag.** Every `platform: k8s` entry is Flux's, so no key marks one (H1.9).
+- **No ownership flag.** Every `cluster/services.yml` entry is Flux's, so no key marks one (H1.9).
 - **No Ansible path.** No local script applies a k8s entry: `promote` and Flux do, and
   `land.sh` gates the tags a PR changed.
 
@@ -1339,8 +1339,7 @@ A wait shorter than a verification is safe and costs a promotion. `decide` gives
 
 ## The bundle
 
-The render job publishes the deploy tags of every `platform: k8s` entry in
-`cluster/services.yml`. `promote.py published-tags` prints them. A tag whose entry goes is left
+The render job publishes the deploy tags of every entry in `cluster/services.yml`. `promote.py published-tags` prints them. A tag whose entry goes is left
 out, and the tag rule refuses that change while its role stays (*A Flux-owned service stays
 Flux-owned*). The publish floor fails `published-tags` and `check-bundle` when the list
 publishes no `coredns`, `longhorn`, `metallb` or `traefik`, so an empty or shrunken list

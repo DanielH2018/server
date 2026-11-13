@@ -63,22 +63,22 @@ def _announcing_nodes(metallb_pool_text: str) -> set[str]:
 
 
 def _sentinel_overrides() -> dict:
-    """The primary node variable at the sentinel, with the `hostvars` entry the renderer needs."""
+    """The primary node variable at the sentinel, with the `hosts` entry the renderer needs."""
     box = host_context()
-    node = {**box["hostvars"]["daniel-box"], "containers_list": box["containers_list"]}
+    node = box["hosts"]["daniel-box"]
     return {
         PRIMARY_NODE_VAR: SENTINEL_NODE,
-        "hostvars": {**box["hostvars"], SENTINEL_NODE: node},
+        "hosts": {**box["hosts"], SENTINEL_NODE: node},
     }
 
 
 def _sentinel_overrides() -> dict:
-    """The primary node variable at the sentinel, with the `hostvars` entry the renderer needs."""
+    """The primary node variable at the sentinel, with the `hosts` entry the renderer needs."""
     box = host_context()
-    node = {**box["hostvars"]["daniel-box"], "containers_list": box["containers_list"]}
+    node = box["hosts"]["daniel-box"]
     return {
         PRIMARY_NODE_VAR: SENTINEL_NODE,
-        "hostvars": {**box["hostvars"], SENTINEL_NODE: node},
+        "hosts": {**box["hosts"], SENTINEL_NODE: node},
     }
 
 

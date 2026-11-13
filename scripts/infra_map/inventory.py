@@ -9,6 +9,7 @@ import sys as _sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from pathlib import Path as _Path
+from collections.abc import Sequence
 from typing import Any
 
 
@@ -17,8 +18,8 @@ from typing import Any
 # and pyproject's `pythonpath` is a pytest setting.
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 from lib import yaml_fast
-from lib.ansible_inventory import PI_HOST, containers_entries_in, pi_entries_in
-from lib.render_guard import host_layer
+from lib.ansible_inventory import K8S_HOST, PI_HOST, pi_entries_in
+from lib.render_guard import host_layer, k8s_services
 
 from infra_map.constants import (
     _CONTAINER_NAME,
@@ -138,32 +139,33 @@ def resolve_vars[T](value: T, variables: dict[str, Any], _depth: int = 0) -> T |
 
 def load_inventory(
     repo_root: Path = REPO_ROOT,
-) -> tuple[dict[str, Any], dict[str, dict]]:
-    """Return ``(global_vars, {host: host_vars})`` from the Ansible inventory."""
+) -> tuple[dict[str, Any], dict[str, dict], list[dict]]:
+    """Return ``(global_vars, {host: host_vars}, k8s services)`` from the inventory."""
     inventory = repo_root / "ansible" / "inventory"
     global_vars = (
         yaml_fast.safe_load((inventory / "group_vars" / "all.yml").read_text()) or {}
     )
     host_vars = {host: host_layer(inventory / "host_vars", host) for host in HOSTS}
-    return global_vars, host_vars
+    return global_vars, host_vars, k8s_services(repo_root / "cluster" / "services.yml")
 
 
-def declared_services(host: str, host_vars: dict, global_vars: dict) -> list[dict]:
-    """Flatten a host's ``containers_list`` into normalized service records.
+def declared_services(
+    host: str, host_vars: dict, global_vars: dict, k8s: Sequence[dict] = ()
+) -> list[dict]:
+    """Flatten a host's declared services into normalized service records.
 
-    daniel-pi's services are its ``compose_services`` (H5); ``pi_entries_in`` raises when that
-    key is missing.
+    daniel-pi's services are its ``compose_services`` (H5), on Docker; ``pi_entries_in`` raises
+    when that key is missing. The k8s host's are `k8s`, the k8s service list. Any other host
+    declares none.
     """
     variables = {**global_vars, **host_vars}
     services = []
-    entries = (
-        pi_entries_in(host_vars)
-        if host == PI_HOST
-        else containers_entries_in(host_vars)
-    )
+    if host == PI_HOST:
+        entries, platform = pi_entries_in(host_vars), "docker"
+    else:
+        entries, platform = (list(k8s) if host == K8S_HOST else []), "k8s"
     for entry in entries:
         name = entry["name"]
-        platform = entry.get("platform", "docker")
         hostname = resolve_vars(entry.get("hostname", name), variables)
         namespace = None
         if platform == "k8s":
