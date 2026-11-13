@@ -134,7 +134,7 @@ ROWS = (
         files=pytest_only_modules,
         offence=lambda s: inline_inventory_paths(s.text, REPO / s.rel, _SIBLINGS),
         red=(
-            Subject("a.py", 'REPO / "ansible/inventory/hosts.ini"\n'),
+            Subject("a.py", 'REPO / "ansible/inventory/group_vars/all.yml"\n'),
             Subject("b.py", 'ANSIBLE / "inventory" / "group_vars" / "all.yml"\n'),
             Subject("c.py", 'Path(REPO) / "ansible/inventory/host_vars" / name\n'),
             Subject(
@@ -191,7 +191,7 @@ ROWS = (
                 "a.py", "from lib.repo_paths import ALL_VARS\nALL_VARS.read_text()\n"
             ),
             Subject("b.py", 'classify(["ansible/inventory/group_vars/all.yml"])\n'),
-            Subject("c.py", 'tmp_path / "inventory" / "hosts.ini"\n'),
+            Subject("c.py", 'tmp_path / "inventory" / "group_vars" / "all.yml"\n'),
             Subject("d.py", 'REPO / "ansible" / "templates"\n'),
             Subject("e.py", 'K3S_SERVER / "templates" / "config.yaml.j2"\n'),
             # A local alias of a constant spells nothing past it.

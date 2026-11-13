@@ -2,7 +2,7 @@
 
 `files/rules/host-checks.yaml` is plain YAML, so each rule names its host as a literal:
 
-- one `HostReconcileFailed` per host `hosts.ini` declares, reading that host's `origin`;
+- one `HostReconcileFailed` per inventory host (one per host_vars file), reading that host's `origin`;
 - one `HostUpdateStale` per entry of `observability_expected_hosts`, equal to the rule
   `update_stale_rule` builds from the entry. `tests/rules/fixtures/host-update-stale.yaml`
   holds that rule for `FIXTURE_HOSTS`, the one-host map `host-checks.test.yaml` fires it from,
@@ -28,7 +28,7 @@ FIXTURE = ROLE / "tests" / "rules" / "fixtures" / "host-update-stale.yaml"
 FIXTURE_HOSTS = {"fixture-host": {"job": "node-fixture", "limit_seconds": 11400}}
 # The page both host-plane alerts link as their runbook.
 RUNBOOK_URL = f"https://docs.local.{yaml_fast.safe_load(ALL_VARS.read_text())['domain']}/host-packages/"
-# Non-vacuity: the hosts hosts.ini must keep declaring for the reconcile census to mean much.
+# Non-vacuity: the hosts the inventory must keep declaring for the reconcile census to mean much.
 FLEET = frozenset({"daniel-box", "daniel-server", "daniel-pi"})
 # Non-vacuity: the k3s nodes that pin their address on a wired link with a WiFi fallback.
 WIRED_NODES = frozenset({"daniel-box", "daniel-server"})
@@ -143,7 +143,7 @@ def reconcile_failed_problems(rules: list[dict], hosts: set[str]) -> list[str]:
 
     Args:
         rules: The `HostReconcileFailed` rules a rule file holds.
-        hosts: The hosts `hosts.ini` declares.
+        hosts: The inventory hosts.
     """
     problems = []
     named = set()
@@ -157,11 +157,11 @@ def reconcile_failed_problems(rules: list[dict], hosts: set[str]) -> list[str]:
                 f"{rule.get('for')!r}, not {want!r} for '15m'"
             )
     problems += [
-        f"{host} is in hosts.ini and no HostReconcileFailed rule names it"
+        f"{host} is an inventory host and no HostReconcileFailed rule names it"
         for host in sorted(hosts - named)
     ]
     problems += [
-        f"HostReconcileFailed names {host}, which hosts.ini does not declare"
+        f"HostReconcileFailed names {host}, which is no inventory host"
         for host in sorted(named - hosts)
     ]
     return problems
@@ -272,7 +272,7 @@ def test_an_inventory_host_with_no_reconcile_rule_is_flagged():
         _rules(RULES, "HostReconcileFailed"), _hosts() | {"daniel-new"}
     )
     assert problems == [
-        "daniel-new is in hosts.ini and no HostReconcileFailed rule names it"
+        "daniel-new is an inventory host and no HostReconcileFailed rule names it"
     ]
 
 
