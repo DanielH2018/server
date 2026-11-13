@@ -86,16 +86,16 @@ def test_a_pin_that_is_not_a_version_reads_build_and_runs_nothing(tmp_path):
     assert run.calls == []
 
 
-@pytest.mark.parametrize(
-    "at", ["inventory/group_vars/all.yml", "ansible/inventory/group_vars/all.yml"]
-)
-def test_the_pin_is_read_from_either_side_of_the_ansible_rename(tmp_path, at):
-    """The installed builder renders commits from before and after ADR 0030's rename."""
+def test_the_pin_is_read_from_the_renamed_inventory(tmp_path):
+    """The installed builder also renders commits from after ADR 0030's rename."""
     run = Recorder()
     builder = hb.Builder(
         state_dir=tmp_path / "state", python=UNIT_PIN, uv="uv", run=run
     )
     builder.render(
-        tree_pinning(tmp_path, 'host_python_version: "3.15.2"', at), tmp_path / "out"
+        tree_pinning(
+            tmp_path, 'host_python_version: "3.15.2"', "inventory/group_vars/all.yml"
+        ),
+        tmp_path / "out",
     )
     assert run.calls[0][0][-1] == "3.15.2"

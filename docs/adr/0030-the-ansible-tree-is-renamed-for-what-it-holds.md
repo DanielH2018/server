@@ -85,7 +85,7 @@ The rename lands in two steps:
 
 ## Governs
 
-No single line enforces this record. The tests that hold the installed readers to both paths
+No single line enforces this record. The tests that hold the installed readers to the new paths
 are `hosts/tests/test_claude_lander.py`,
 `hosts/components/renovate-agent/tests/test_land_renovate_pr.py`,
 `hosts/lib/tests/test_host_package_builder_python.py` and

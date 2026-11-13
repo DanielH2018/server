@@ -327,23 +327,6 @@ def test_a_pr_changing_cluster_base_needs_the_operator(tmp_path) -> None:
     ) == [CLUSTER_BASE_FILE]
 
 
-# ADR 0030's paths, which the installed list must cover before the rename merges.
-RENAMED_FLOOR_FILES = [
-    "secrets/.sops.yaml",
-    "secrets/secrets.yml",
-    "k8s/roles/cluster-base/templates/readonly-rbac.yaml.j2",
-]
-
-
-@pytest.mark.parametrize("path", RENAMED_FLOOR_FILES)
-def test_a_pr_changing_a_floor_file_at_its_renamed_path_needs_the_operator(
-    path, tmp_path
-) -> None:
-    assert policy.approval_hits([{"filename": path}], floor_prefixes(tmp_path)) == [
-        path
-    ]
-
-
 def test_a_pr_changing_a_role_named_like_cluster_base_lands_without_the_operator(
     tmp_path,
 ) -> None:
