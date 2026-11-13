@@ -80,9 +80,7 @@ for _d in DOMAINS:
 # renaming them would have turned that move into a rewrite. The underscore still carries what
 # it did before — internal to the findings modules, not an API another script may import.
 # Conventions for a new module: docs/python-code-organization.md.
-_LIST_FIELDS = (
-    "number,title,state,labels,body,createdAt,closedAt,url,comments,blockedBy"
-)
+_LIST_FIELDS = "number,title,state,stateReason,labels,body,createdAt,closedAt,url,comments,blockedBy"
 # `\s*$` rather than `$`: a body fetched from the API can carry CRLF line endings, and
 # `re.M`'s `$` matches before the `\n` but not before the `\r`.
 _FP_RE = re.compile(r"^Fingerprint: `([0-9a-f]{12})`\s*$", re.M)
@@ -606,6 +604,32 @@ def _prefixed(names: set[str], prefix: str) -> str | None:
     return None
 
 
+# gh's `stateReason` for a close with no `refuted`/`accepted` label. A `NOT_PLANNED` close
+# without a label is a hand close, so it reads as that rather than as refuted.
+_STATE_REASONS = {
+    "COMPLETED": "fixed",
+    "NOT_PLANNED": "not planned",
+    "DUPLICATE": "duplicate",
+}
+
+
+def close_outcome(issue: dict) -> str:
+    """How ``issue`` was closed: `open`, `refuted`, `accepted`, `fixed`, `not planned`, ...
+
+    The label decides before `stateReason` does, because `findings.py close` writes the
+    label and gh records both not-planned outcomes as the same `NOT_PLANNED`. `stateReason`
+    is read only on a closed issue: a reopened one carries `REOPENED`.
+    """
+    if issue.get("state") != "CLOSED":
+        return "open"
+    names = label_names(issue)
+    for settled in ("refuted", "accepted"):
+        if settled in names:
+            return settled
+    reason = issue.get("stateReason") or ""
+    return _STATE_REASONS.get(reason, reason.lower() or "closed")
+
+
 def issue_rows(issues: list[dict]) -> list[dict]:
     """Flattens gh's issue JSON into the rows ``sort_key`` and ``cmd_list`` consume.
 
@@ -629,6 +653,7 @@ def issue_rows(issues: list[dict]) -> list[dict]:
                 "refuted": "refuted" in names,
                 "accepted": "accepted" in names,
                 "reason": settled_reason(issue),
+                "outcome": close_outcome(issue),
                 "no_vetted_remediation": "no-vetted-remediation" in names,
                 "verify_by": parse_verify_by(issue.get("body") or "") is not None,
                 "paths": cited_paths(issue.get("body") or ""),
@@ -638,6 +663,7 @@ def issue_rows(issues: list[dict]) -> list[dict]:
                 "blocked_by": open_blockers(issue),
                 "claimed": current_claim(issue),
                 "first_seen": (issue.get("createdAt") or "")[:10],
+                "closed_on": (issue.get("closedAt") or "")[:10] or None,
                 "reobservations": reobservations(issue),
                 "url": issue.get("url", ""),
             }

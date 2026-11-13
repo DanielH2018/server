@@ -88,6 +88,7 @@ def load_issues(
     state: str = "all",
     tools: FindingsTools | None = None,
     labels: tuple[str, ...] = (),
+    search: str = "",
 ) -> list[dict]:
     """Fetches every ``claude``-labeled issue from gh, warning when it hits the list cap.
 
@@ -97,10 +98,14 @@ def load_issues(
             `load_backlog_issues` calls it.
         labels: extra labels to narrow by. `gh issue list` ANDs repeated `--label`, so each
             one here is a further filter on the `claude` register, never a union.
+        search: a GitHub search query ANDed with the filters above, for what no flag
+            expresses, such as a close's state reason.
     """
     argv = ["issue", "list", "--label", "claude"]
     for label in labels:
         argv += ["--label", label]
+    if search:
+        argv += ["--search", search]
     argv += ["--state", state, "--limit"]
     issues = as_object_list(
         (tools or FindingsTools()).gh_json(
@@ -126,17 +131,24 @@ def load_issues(
 # the contract — `open` refusing to re-file either.
 SETTLED_LABELS = ("refuted", "accepted")
 
+# A not-planned close that carries neither settled label: closed by hand, outside
+# `findings.py close`, so no ruling was recorded.
+UNRULED_CLOSE_SEARCH = "reason:not-planned " + " ".join(
+    f"-label:{label}" for label in SETTLED_LABELS
+)
+
 
 def load_backlog_issues(tools: FindingsTools | None = None) -> list[dict]:
-    """The rows `scripts/docs/reference/backlog.py` renders, in three narrow fetches.
+    """The rows `scripts/docs/reference/backlog.py` renders, in four narrow fetches.
 
-    NOT `--state all`. `backlog.render_markdown` renders exactly three sets — the open
-    findings, the closed `refuted` ones and the closed `accepted` ones — and drops every
-    other closed issue on the floor. Fetching the whole register to throw most of it away
-    costs 58.4s for 995 issues and grows about 350 issues a week, which would break
-    `REGISTER_FETCH_TIMEOUT` above at about 5,100 issues with the backlog page silently
-    stale behind it. The same three sets are 49 + 26 + 21 = 96 issues, and they grow with
-    what is FILED and SETTLED rather than with what is closed, so this cost does not track
+    NOT `--state all`. `backlog.render_markdown` renders exactly four sets — the open
+    findings, the closed `refuted` ones, the closed `accepted` ones and the not-planned
+    closes carrying neither label — and drops every other closed issue on the floor.
+    Fetching the whole register to throw most of it away costs 58.4s for 995 issues and
+    grows about 350 issues a week, which would break `REGISTER_FETCH_TIMEOUT` above at about
+    5,100 issues with the backlog page silently stale behind it. The first three sets were
+    49 + 26 + 21 = 96 issues, the fourth was 21 on 2026-11-13, and they grow with what is
+    FILED and SETTLED rather than with what is closed, so this cost does not track
     the register's size.
 
     Returns them deduplicated by issue number: an issue carrying both settled labels comes
@@ -146,6 +158,7 @@ def load_backlog_issues(tools: FindingsTools | None = None) -> list[dict]:
     fetched = load_issues("open", tools)
     for label in SETTLED_LABELS:
         fetched += load_issues("closed", tools, labels=(label,))
+    fetched += load_issues("closed", tools, search=UNRULED_CLOSE_SEARCH)
     by_number: dict[int, dict] = {}
     for issue in fetched:
         by_number.setdefault(issue["number"], issue)
@@ -205,10 +218,10 @@ def fingerprint_match(fp: str, tools: FindingsTools) -> dict | None:
     return found
 
 
-# What `history` and `show` read: the register's fields plus the two that say how an issue
-# closed. Kept apart from `_LIST_FIELDS`, which the claim fold and the backlog cron share and
-# which needs neither.
-HISTORY_FIELDS = f"{_LIST_FIELDS},stateReason,closedByPullRequestsReferences"
+# What `history` and `show` read: the register's fields plus the PRs that closed an issue.
+# Kept apart from `_LIST_FIELDS`, which the claim fold and the backlog cron share and which
+# does not need it.
+HISTORY_FIELDS = f"{_LIST_FIELDS},closedByPullRequestsReferences"
 
 
 def search_register(query: str, tools: FindingsTools, *, limit: int) -> list[dict]:
