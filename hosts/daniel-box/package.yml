@@ -90,8 +90,6 @@ components:
   - builder
   # H7.51: fast-forwards the primary checkout beside the deployer, which H7.52 retires.
   - checkout-sync
-  # B1b of docs/ci-throughput.md: sweeps the tip of master as checkout-sync last fetched it.
-  - local-sweep
   - unattended-upgrades
   - sshd
   - host-tuning
@@ -265,3 +263,9 @@ legacy:
   - {path: /var/lib/homelab/setup-deployed-manifest.d/setup-drift-lib}
   - {path: /var/lib/homelab/setup-deployed-manifest.d/homelab-check-lib}
   - {cron: "Clear ansible log file", user: root}
+  # R1 of docs/ci-throughput.md: what the shadow sweep's unit and tool wrote outside the package.
+  # The package no longer ships the timer, so reconcile stops it. A file goes before its directory.
+  - {path: /var/lib/homelab-local-sweep/last-swept}
+  - {path: /var/lib/homelab-local-sweep}
+  - {path: "/home/{{ sys_user }}/.cache/local-sweep/lock"}
+  - {path: "/home/{{ sys_user }}/.cache/local-sweep"}
