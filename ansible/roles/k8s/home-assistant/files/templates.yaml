@@ -96,11 +96,35 @@
       state: >-
         {{ 'RB' in (states('sensor.apc_ups_status_data') or '').split() }}
 
+# Wake window: on for the 45 min after the latest wake anchor, the real alarm's wake_start or the
+# last_wake stamp the 06:00 fallback (and the alarm reset) writes, so a fallback morning counts as a
+# wake. auto_light_allowed, absence_off, al_startup_suppress and color_track read this sensor;
+# bedroom_purifier_hold, the two per-minute ramp tickers and bedroom_apply_natural compute elapsed
+# inline, each for a reason stated there. elapsed_min reads -1 outside [0, 90) so the attribute stops
+# changing once the release window ends.
+- binary_sensor:
+    - name: "Bedroom in wake window"
+      unique_id: bedroom_in_wake_window
+      state: >-
+        {% from 'lighting.jinja' import wake_elapsed, in_wake_window %}
+        {{ in_wake_window(wake_elapsed(as_timestamp(states('sensor.bedroom_wake_start'), none),
+             state_attr('input_datetime.bedroom_last_wake', 'timestamp'), now().timestamp())) }}
+      attributes:
+        elapsed_min: >-
+          {% from 'lighting.jinja' import wake_elapsed %}
+          {% set e = wake_elapsed(as_timestamp(states('sensor.bedroom_wake_start'), none),
+               state_attr('input_datetime.bedroom_last_wake', 'timestamp'), now().timestamp()) | float(-1) %}
+          {{ (e | round(1)) if 0 <= e < 90 else -1 }}
+
 # Auto-light gate: the SINGLE source of truth for "is it dark enough (or the morning wake window) to
-# put the bedroom lights on automatically" — T1 illuminance < 90 OR inside the wake window
-# [wake_start, +45min] (inherited from in_wake_window). Referenced by bedroom_presence_on (its darkness condition),
-# bedroom_apply_natural_gated, and the Tap Dial Button-4 sleep-exit (which checks it `off` to suppress
-# Adaptive Lighting's self-on in a bright room). Tune the 90-lux threshold / window here, in ONE place.
+# put the bedroom lights on automatically" — T1 illuminance < 90 OR binary_sensor.bedroom_in_wake_window.
+# Read by script.bedroom_lights_set (the presence reason, i.e. bedroom_presence_on),
+# bedroom_apply_natural_gated, and the two blips that are their complements (bedroom_presence_blip and
+# the Tap Dial button-1 HOLD blip). Tune the 90-lux threshold here, in ONE place.
+# DECIDED: a fallback morning counts as a wake window here (#8383). presence_on can then relight a
+# bright room during the fallback ramp, but the ramp's next per-minute frame restores the wake level;
+# apply_natural_gated (button-1 HOLD) lights instead of turning off; each blip stays the exact
+# complement of its lighting path because both read this one sensor.
 # Reads sensor.aqara_t1_illuminance, NOT the FP300: the bulbs swing the FP300 13x (48 <-> 640) and only
 # 1.6x the T1, so the old gate was largely reading its own output. sun.sun is passed as the
 # dark_fallback because the T1 reports only on change and parks at `unknown` after an HA restart.
@@ -108,26 +132,27 @@
     - name: "Bedroom auto-light allowed"
       unique_id: bedroom_auto_light_allowed
       state: >-
-        {% set ws = states('sensor.bedroom_wake_start') %}
-        {% from 'lighting.jinja' import in_wake_window, auto_light_allowed %}
-        {% set in_window = in_wake_window((now() - as_datetime(ws)).total_seconds() / 60 if ws not in ['unknown', 'unavailable'] else -1) | bool %}
-        {{ auto_light_allowed(in_window, states('sensor.aqara_t1_illuminance'), is_state('sun.sun', 'below_horizon')) }}
+        {% from 'lighting.jinja' import auto_light_allowed %}
+        {{ auto_light_allowed(is_state('binary_sensor.bedroom_in_wake_window', 'on'), states('sensor.aqara_t1_illuminance'), is_state('sun.sun', 'below_horizon')) }}
 
 # Air-purifier overnight HOLD: "on" from bedtime through the END of the morning wake ramp, so the
 # air-purifier plug (automation.bedroom_air_purifier_presence) is NOT cut by the FP300 dropping a
 # motionless sleeper (the documented false-absence — see role CLAUDE.md / [[ha-fp300-fan-false-hold]]).
-# sleep_mode (set by script.bedroom_bedtime, cleared by the morning reset) covers bedtime -> wake_start;
-# in_wake_window covers wake_start -> +45 min. The two are gap-free, so this is one continuous hold from
-# lights-out until the wake routine finishes. Composes the SAME pieces as bedroom_auto_light_allowed
-# above. now() => HA re-renders this ~every minute, so it flips off within ~1 min of the window ending.
+# sleep_mode (set by script.bedroom_bedtime, cleared by the morning reset) covers bedtime -> the wake;
+# the wake window covers the 45 min after it, on the alarm or the 06:00 fallback. The two are
+# gap-free, so this is one continuous hold from lights-out until the wake routine finishes.
+# DECIDED: the window is computed here through wake_elapsed, not read from
+# binary_sensor.bedroom_in_wake_window (#8383). At the alarm nothing changes state, so that sensor
+# turns on only at its next minute refresh, and the morning reset clears sleep_mode at the same
+# second; reading the sensor would drop this hold for an instant, and hold_end would cut the purifier.
 - binary_sensor:
     - name: "Bedroom purifier hold"
       unique_id: bedroom_purifier_hold
       state: >-
-        {% set ws = states('sensor.bedroom_wake_start') %}
-        {% from 'lighting.jinja' import in_wake_window %}
-        {% set in_window = in_wake_window((now() - as_datetime(ws)).total_seconds() / 60 if ws not in ['unknown', 'unavailable'] else -1) | bool %}
-        {{ is_state('input_boolean.bedroom_sleep_mode', 'on') or in_window }}
+        {% from 'lighting.jinja' import wake_elapsed, in_wake_window %}
+        {{ is_state('input_boolean.bedroom_sleep_mode', 'on')
+           or in_wake_window(wake_elapsed(as_timestamp(states('sensor.bedroom_wake_start'), none),
+                state_attr('input_datetime.bedroom_last_wake', 'timestamp'), now().timestamp())) | bool }}
 
 # DREO tower-fan oscillation toggle. The DREO integration exposes oscillation ONLY as the
 # `oscillating` attribute on fan.tower_fan (+ the fan.oscillate service) — there is no native switch
