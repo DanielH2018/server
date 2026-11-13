@@ -329,7 +329,7 @@ tests:
                 jellyfin-config declares a snapshot cap and has no longhorn_snapshot_actual_size_bytes
                 series, so its snapshot headroom is UNMONITORED, which is not the same as empty.
 
-  # A CSI global mount remounted read-only fires after the 5m hold. A writable mount and a
+  # A CSI global mount remounted read-only fires after the 1m hold. A writable mount and a
   # read-only mount outside the plugins directory do not.
   - interval: 1m
     input_series:
@@ -340,10 +340,10 @@ tests:
       - series: 'node_filesystem_readonly{job="node", instance="box:9100", mountpoint="/boot/efi"}'
         values: '1x30'
     alert_rule_test:
-      - eval_time: 4m
+      - eval_time: 0m
         alertname: KubeletCSIMountReadOnly
         exp_alerts: []
-      - eval_time: 6m
+      - eval_time: 2m
         alertname: KubeletCSIMountReadOnly
         exp_alerts:
           - exp_labels:
@@ -358,6 +358,32 @@ tests:
                 /var/lib/kubelet/plugins/kubernetes.io/csi/driver.longhorn.io/abc/globalmount remounted read-only after an iSCSI stall, behind a Longhorn
                 volume that still reads healthy. Scale the workload to 0, wait for the volume to
                 detach, and scale back.
+
+  # A remount that clears after 3 minutes still pages while it lasts: the 2026-11-11 remounts on
+  # daniel-server lasted 2 to 6 minutes (#8212). It resolves once the mount is writable again.
+  - interval: 1m
+    input_series:
+      - series: 'node_filesystem_readonly{job="node", instance="server:9100", mountpoint="/var/lib/kubelet/plugins/kubernetes.io/csi/driver.longhorn.io/ghi/globalmount"}'
+        values: '0 1 1 1 0x10'
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: KubeletCSIMountReadOnly
+        exp_alerts:
+          - exp_labels:
+              job: node
+              instance: server:9100
+              mountpoint: /var/lib/kubelet/plugins/kubernetes.io/csi/driver.longhorn.io/ghi/globalmount
+              severity: critical
+              service: longhorn
+            exp_annotations:
+              summary: The CSI mount /var/lib/kubelet/plugins/kubernetes.io/csi/driver.longhorn.io/ghi/globalmount is read-only.
+              description: >-
+                /var/lib/kubelet/plugins/kubernetes.io/csi/driver.longhorn.io/ghi/globalmount remounted read-only after an iSCSI stall, behind a Longhorn
+                volume that still reads healthy. Scale the workload to 0, wait for the volume to
+                detach, and scale back.
+      - eval_time: 6m
+        alertname: KubeletCSIMountReadOnly
+        exp_alerts: []
 
   # etcd's database. The apiserver and kubelet jobs carry the same series, so `max` reads it once.
   # 1.8 GiB of the 2 GiB quota is 90%, over 80%. 1 GiB is 50% and does not fire. The absent-series

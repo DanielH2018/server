@@ -76,7 +76,10 @@ separate from the `observability` Loki (decision KL1, `docs/archive/.../slice-7-
 - **Host lines carry a `program` label, and the line itself is untouched.** The
   `loki.process "host"` stage extracts the rsyslog tag from syslog and authlog lines (#6163).
   `HostLogErrors` counts syslog's fatal-pattern lines per machine and program over 6h, and
-  `HostOutOfMemoryKill` pages on the first host-wide OOM kill. The stage runs
+  `HostOutOfMemoryKill` pages on the first host-wide OOM kill.
+  `HostFilesystemRemountedReadOnly` pages on the first ext4 read-only remount, over a 1h range
+  that outlasts the weekly reboot's mute. It covers the node that hosts Prometheus, which
+  cannot scrape `KubeletCSIMountReadOnly`'s series while that node boots. The stage runs
   only `stage.regex` and `stage.labels`, because those rules' line filters and the `event=`
   logfmt queries read the raw rsyslog line. `ansible/tests/k8s/test_alloy_labels_host_program.py` fails on a missing
   label or an added stage. A `uv run` cron logs under the tag `uv`, so the line names the script.

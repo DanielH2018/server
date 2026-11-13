@@ -98,7 +98,7 @@ def literal_problems(rules: dict[str, dict], env: dict[str, str], safe: str):
         "PVCFull": ONE_CYCLE,
         "PVCBelowFreeFloor": ONE_CYCLE,
         "PVCFreeFloorUnmonitored": ONE_CYCLE,
-        "KubeletCSIMountReadOnly": ONE_CYCLE,
+        "KubeletCSIMountReadOnly": "1m",  # shortened from the bridge cycle by #8212
         "EtcdDBNearQuota": ONE_CYCLE,
     }
     problems += [
