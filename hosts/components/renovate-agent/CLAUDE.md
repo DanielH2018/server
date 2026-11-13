@@ -31,8 +31,10 @@ lander deploys what the session picks — not a sign the component is unfinished
 own GitHub token and Claude credential are declared outputs, so `host_secrets.py check` fails a
 host file that lacks them; `docs/renovate-agent-bounds-and-digest.md` has the checklist.
 
-**The session can neither push nor merge.** It runs as `renovate_agent_user`, with a token that
-has no contents write, in its own clone. It lands a PR only by starting
+**The session can neither push nor merge.** It runs as `renovate_agent_user`, with a read-only
+token, in its own clone. It closes, comments on or re-runs a PR only by writing a request file,
+which the runner carries out with its own token after the session ends (`files/run_requests.py`).
+It lands a PR only by starting
 `renovate-agent-land@<n>.service`, which polkit lets it start and which runs `land.sh` as
 `sys_user` on a PR the lander re-checks itself.
 
