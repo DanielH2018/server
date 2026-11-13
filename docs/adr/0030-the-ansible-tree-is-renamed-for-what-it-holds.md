@@ -12,9 +12,14 @@ governs: []
 
 Accepted on 2026-11-13. The operator approved the rename on 2026-11-12, from the
 post-migration audit
-([#8186](https://github.com/DanielH2018/server/issues/8186)). The same day, the operator
+([#8186](https://github.com/DanielH2018/server/issues/8186)), and named `k8s/roles`,
+`k8s/templates`, `inventory/` and `secrets/` as example names. The same day, the operator
 ruled that the rename merges only after every reader deployed separately from the merge
 accepts both paths and is installed.
+
+The four names that installed code reads are proposed by the PR that teaches those readers
+both paths, and the operator confirms them when that PR merges. The other rows of the table
+below are proposals that step 2 settles.
 
 ## Context
 
@@ -44,19 +49,20 @@ inventory would land without the refusal that guards it.
 
 ## Decision
 
-The `ansible/` tree is renamed to these directories:
+The `ansible/` tree is renamed to these directories. The installed readers name the first
+four rows, so a change to one of them costs another install cycle:
 
-| Before | After |
-|---|---|
-| `ansible/roles/k8s/<role>/` | `k8s/roles/<role>/` |
-| `ansible/roles/conftest.py` | `k8s/roles/conftest.py` |
-| `ansible/templates/` | `k8s/templates/` |
-| `ansible/inventory/` | `inventory/` |
-| `ansible/vars/` | `secrets/` |
-| `ansible/.sops.yaml` | `secrets/.sops.yaml` |
-| `ansible/secret_rotation.yml` | `secrets/secret_rotation.yml` |
-| `ansible/tests/` | `tests/` |
-| `ansible/README.md` | deleted; this record replaces it |
+| Before | After | Fixed by |
+|---|---|---|
+| `ansible/roles/k8s/<role>/` | `k8s/roles/<role>/` | installed readers |
+| `ansible/inventory/` | `inventory/` | installed readers |
+| `ansible/vars/` | `secrets/` | installed readers |
+| `ansible/.sops.yaml` | `secrets/.sops.yaml` | installed readers |
+| `ansible/roles/conftest.py` | `k8s/roles/conftest.py` | step 2 |
+| `ansible/templates/` | `k8s/templates/` | step 2 |
+| `ansible/secret_rotation.yml` | proposed: `secrets/secret_rotation.yml` | step 2 |
+| `ansible/tests/` | proposed: `tests/` | step 2 |
+| `ansible/README.md` | deleted; this record replaces it | step 2 |
 
 No alias or symlink keeps an old path.
 
@@ -77,11 +83,16 @@ The rename lands in two steps:
   `diff=sops` path, the `.sops.yaml` creation rules, `pyproject.toml`'s `testpaths`, rule
   globs, prek regexes, CI workflows, docs generators, skills and agent briefs. The fan-out
   pauses for it, and every open branch that touches `ansible/` rebases afterwards.
-- `secrets/secret_rotation.yml` holds no secret, but it sits under a directory that the
-  generic `.sops.yaml` creation rule matches. That rule applies only when someone runs `sops`
-  on the file, so step 2 keeps the register plaintext as long as nobody does.
-- Copies of `ansible/` paths outside the repository do not move with it. The operator's
-  memory index and the dotfiles repo's briefs are updated after step 2 lands.
+- The rotation register holds no secret. Under `secrets/`, the generic `.sops.yaml`
+  creation rule and any check that expects every YAML file there to be encrypted would also
+  match it. Step 2 checks `test_sops_creation_rules.py` and the protected-edits hook before it
+  places the register.
+- Copies of `ansible/` paths outside the repository do not move with it. The dotfiles
+  repo's auto-mode classifier text names the secrets, inventory and cluster-base paths, and it
+  deploys through `chezmoi apply`, so it names both paths before step 2 merges
+  ([dotfiles#1261](https://github.com/DanielH2018/dotfiles/issues/1261)). claude-guard
+  matches the basenames of the encrypted files, which the rename keeps. The operator's memory
+  index and the dotfiles repo's other briefs are updated after step 2 lands.
 
 ## Governs
 
