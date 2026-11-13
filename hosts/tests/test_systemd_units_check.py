@@ -5,7 +5,8 @@ textfile verdict of its own failed with nothing watching it. `systemd-units-chec
 host-maintenance component covers every unit at once, and three properties hold:
 
 THE VERDICT IS THE COUNT. No failed unit writes success 1; any failed unit, or a systemctl that
-cannot list them, writes 0.
+cannot list them, writes 0. Only the second fails the check's own unit, so the checker never
+lists itself beside the unit it found.
 
 THE RULES' LITERALS EQUAL THE SCRIPT'S DEADLINE_S, on one Failed and NotReporting pair per host.
 
@@ -85,7 +86,7 @@ def test_no_failed_unit_writes_success_1(tmp_path):
 
 def test_a_failed_unit_writes_success_0_with_the_count(tmp_path):
     code, out, series = _run(tmp_path, TWO_FAILED)
-    assert (code, series["homelab_check_success"]) == (1, "0")
+    assert (code, series["homelab_check_success"]) == (0, "0")
     assert series["homelab_systemd_failed_units"] == "2"
     assert "homelab-claude-pipeline-timeline.service nut-monitor.service" in out
 
