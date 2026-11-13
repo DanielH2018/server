@@ -77,6 +77,7 @@ def test_package_entry_points_finds_run_and_main_modules():
         "push_rules",
         "readonly_rbac",
         "shed_set",
+        "sweep_agreement",
         "takeover",
         "vip_placement",
     ]

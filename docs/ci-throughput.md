@@ -93,7 +93,10 @@ hosted sweep. A merge costs about 1.1 hosted runs in place of 2.1.
     - **B1b, landed.** `homelab-local-sweep.timer` on daniel-box sweeps `origin/master` 15
       minutes after the last sweep ended, and each commit at most once. *The shadow sweep*
       below has how it runs and how to read it.
-    - **B1c, planned.** A report compares each sweep's verdict with the hosted run's.
+    - **B1c, landed.** `probe.py sweep-agreement` compares each sweep's verdict with the
+      hosted run of the same commit, and says where B2's gate stands.
+    - **B1d, proposed.** Sweep the trees of pull requests that hosted CI read red, so the
+      comparison holds hosted reds. The gate below says why master cannot supply them.
 1. **B2, planned.** A queue of one, behind a flag, for the fan-out server lander. The local
    sweep replaces the branch-update re-test.
 1. **B3, planned.** The queue records the tested tree before each merge, and
@@ -102,8 +105,15 @@ hosted sweep. A merge costs about 1.1 hosted runs in place of 2.1.
 1. **B5, planned.** Every landing goes through the queue, and the merge pacing and the
    branch-update re-test are deleted.
 
-B2 waits for B1 to run for 7 days and to sweep 300 commits. No commit may read green locally
-and red on a hosted job the sweep covers, and the p90 sweep must take 10 minutes or less.
+B2 waits for B1 to run for 7 days and to compare 600 checks, which is 300 swept commits. No
+check may read green locally and red hosted, and the p90 sweep must take 10 minutes or less.
+
+The comparison must also hold 20 checks that hosted CI read red. A sweep can only miss a red
+tree when hosted CI read one red, so a window of green hosted runs shows how often the sweep
+raises a false alarm and nothing about what it catches. Master cannot supply 20 reds: 4 of
+its 526 CI runs failed in the week to 2026-11-13, and most of its green runs are proven skips
+that ran neither job. `GATE_HOSTED_REDS` in
+`scripts/diagnostics/probe_lib/sweep_agreement.py` is the count.
 
 Three decisions are the operator's, and all three are made:
 
@@ -162,12 +172,31 @@ way the docs refresh runs its generators. It sweeps `origin/master` as `homelab-
 last fetched it, so it fetches nothing. Nothing reads its verdict. The component's
 `component.yml` under `hosts/components/local-sweep/` holds its autonomous-role contract.
 
-- To list the sweeps, run
+- To see whether the sweeps agree with hosted CI, run
+  `uv run python scripts/diagnostics/probe.py sweep-agreement`. It reads the sweeps of the
+  last 8 days from Loki and the check-runs of each swept commit from GitHub. It lists each
+  disagreement, and its last line before the verdict says which parts of B2's gate are met.
+  It makes one GitHub read per swept commit, about 300 for a full window, so run it by hand
+  and not in a loop.
+- To list the sweeps themselves, run
   `uv run python scripts/diagnostics/probe.py loki-query '{job="syslog"} |= "SWEEP-RESULT:"'`.
   Each line carries the commit, the verdict and each check's seconds.
 - To see what failed in a red sweep, read `journalctl -t local-sweep` on daniel-box. The
   lines above the result line name each failed test or hook.
 - To pause it, run `sudo systemctl mask --now homelab-local-sweep.timer`.
+
+The probe sets two verdicts side by side for each of the two jobs the sweep runs. Four rules
+decide the hosted one. A job that skipped beside a green gate counts as green, because the
+gate passes a skip only for a tree that a pull-request run already tested. The count line
+says how many of the compared checks hosted CI ran itself, because a proven skip is green by
+construction. A re-run job takes its newest attempt. A job that was cancelled, or is still
+running, has no verdict, and the check is counted as not comparable. Any other conclusion but
+success is red, as `hosts/lib/ci_verdict.py` reads it.
+
+The probe exits 1 only for a sweep that read green where
+hosted CI read red, which is a red tree a queue would have merged. A sweep that read red where
+hosted CI read green is listed with the tests that failed, because a queue would have refused
+a good pull request.
 
 The timer samples the tip of master. A commit that merges and is superseded between two runs
 is never swept, and at most three sweeps start in an hour.

@@ -230,6 +230,22 @@ def test_the_report_counts_first_and_lists_only_what_did_not_pass():
     )
 
 
+def test_a_result_line_reads_back_as_the_sweep_it_was_written_from():
+    written = Sweep(
+        "abc", "def", (Check("hooks", "pass", 3), Check("pytest", "none", 9)), 13
+    )
+    in_syslog = (
+        f"2026-11-13T15:16:09+00:00 daniel-box local-sweep[7]: {written.result_line()}"
+    )
+
+    assert local_sweep.parse_result_line(in_syslog) == written
+    assert local_sweep.parse_result_line("local-sweep[7]: 1 pass, 1 none") is None
+    # A line cut short by the log pipeline is not half a sweep.
+    assert local_sweep.parse_result_line(in_syslog.rsplit(" ", 1)[0]) is None
+    # A verdict the tool never writes would otherwise compare as "not red".
+    assert local_sweep.parse_result_line(in_syslog.replace("=pass", "=ok")) is None
+
+
 @pytest.mark.parametrize(
     ("script", "verdict", "code"),
     [("exit 0", "pass", SWEEP_PASSED), ("exit 1", "fail", SWEEP_FAILED)],
