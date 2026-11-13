@@ -99,15 +99,10 @@ BUILT_IMAGE_TAG_STUBS: dict[str, str] = {
     "valheim": "sha-a1de17ab8888",
 }
 
-# Non-secret fallbacks for host facts not in the plaintext inventory. Anything still missing
+# Non-secret fallbacks for values `group_vars/all.yml` does not hold. Anything still missing
 # (SOPS secrets, role vars) renders via StubUndefined — fine for a STRUCTURAL parse/lint check.
 BASE_CONTEXT = {
-    "puid": 1000,
-    "pgid": 1000,
-    "tz": "America/Chicago",
-    "sys_user": "ubuntu",
     "email": "stub@example.com",
-    "domain": "example.com",
     "server_ip": "10.0.0.1",
     "k8s_built_image_tags": BUILT_IMAGE_TAG_STUBS,
 }

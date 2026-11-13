@@ -26,6 +26,7 @@ import pytest
 from _helpers import REPO
 from _k8s_render import rendered_texts
 from _role_census import role_dirs
+from lib.ansible_jinja_env import template_env
 
 
 K8S_ROLES = REPO / "ansible" / "roles" / "k8s"
@@ -365,3 +366,18 @@ def test_an_annotation_key_line_is_clean_and_a_comment_mentioning_one_is_flagged
         ]
     )
     assert ANNOTATION_KEY_RE.findall(rejected) == []
+
+
+def test_the_macro_takes_a_name_and_a_value_only():
+    env = template_env(K8S_ROLES)
+    imports = "{% from 'checksum-annotation.yml.j2' import checksum_annotation %}"
+
+    def call(args: str) -> str:
+        return env.from_string(
+            f"{imports}{{{{ checksum_annotation({args}) }}}}"
+        ).render()
+
+    assert call("'config', 'abc'") == 'checksum/config: "abc"'
+    assert call("'config', never_set") == 'checksum/config: "unstaged"'
+    with pytest.raises(TypeError, match="path"):
+        call("'config', path='/etc/hostname'")

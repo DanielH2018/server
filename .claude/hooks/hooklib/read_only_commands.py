@@ -3,7 +3,7 @@
 `read_only_agents.py` judges each stage of a read-only agent's command here, after the
 redirect check and before git and gh, which it judges itself. The set is an allowlist: a
 command it does not name is denied. A denylist of writers missed every command nobody had
-listed (`sort -o`, `gzip`, `prek run`, `./scripts/deploy.sh`), and a wrapper or a nested shell
+listed (`sort -o`, `gzip`, `prek run`, `./scripts/deploy_tools/land.sh`), and a wrapper or a nested shell
 (`timeout 5 rm`, `uv run git push`, `bash -c '…'`) carried any listed writer past it.
 
 DECIDED: allowlist, not denylist. A read the list lacks costs a read-only agent one rephrased

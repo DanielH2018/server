@@ -40,8 +40,7 @@ already happened.
 
 Before the check-mode guard, check mode ran the ban probe against an un-banned host and burned
 all eight retries on every `--check` of this role. A dry run that always reports red trains an
-operator to skip the check, which is exactly what `.claude/rules/ansible.md` asks for before
-touching production state.
+operator to skip the check, which is the one step a change to production state needed first.
 
 ## The probe's 403 at a LAPI roll was the gate's own ban (#5761)
 

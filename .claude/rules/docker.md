@@ -24,16 +24,19 @@ used to render them (`ansible/roles/containers/`).
 
 ## Conventions
 
-- All containers use Traefik labels for reverse proxy routing
-- Docker network: `proxy`
+- The Pi is LAN-only, so no service carries Traefik labels. A UI that needs reaching binds the
+  Pi's LAN IP on the `port` its `compose_services` entry names, as wg-easy does.
+- A service joins only the networks its `compose_services` entry lists. Most join `proxy`, which
+  reaches the read-only docker-proxy; autoheal joins only `lifecycle`, which reaches the
+  restart-only docker-proxy-lifecycle.
 - PUID/PGID: `1000`/`1000`, user: `ubuntu`
 - Timezone: `America/Chicago`
 - Containers should have healthchecks defined where possible
 - Set `restart: unless-stopped` on every service.
 - Persistent storage = bind mounts under a well-known `/data` path; **no anonymous volumes** — bind
-  mounts under `containers/` keep state inspectable and portable. (Kopia retired 2026-08-10;
-  the backup plane is Longhorn-on-k8s, so Docker-tier state is deliberately unbacked-up —
-  the services still on Docker hold regenerable or migrating state only.)
+  mounts under `containers/` keep state inspectable and portable. Nothing backs up the Pi's
+  Docker state except wg-easy's `./config`, which the `pi-peer-backup` CronJob pulls nightly;
+  every other service's state is regenerable.
   - **Documented exception — named volumes** are the deliberate pattern for bulky, regenerable state:
     a log shipper's read cursor (regenerable — the Pi's Alloy keeps its positions under
     `./data`). Don't flag it; justify any new named volume with a comment.
