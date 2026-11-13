@@ -179,7 +179,6 @@
  "ansible/tests/deploy/test_landing_annotations.py": 0.0,
  "ansible/tests/deploy/test_manifests_apply_verdict.py": 0.01,
  "ansible/tests/deploy/test_manifests_prune.py": 3.4,
- "ansible/tests/deploy/test_platform_filter.py": 0.0,
  "ansible/tests/deploy/test_platform_filter_real_inventory.py": 0.0,
  "ansible/tests/deploy/test_py_table_filter.py": 0.0,
  "ansible/tests/deploy/test_renovate_automerge_follows_the_autodeploy_denylist.py": 0.67,
