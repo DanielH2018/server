@@ -24,6 +24,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 import re
 from pathlib import Path
 
+from lib.k8s_lookups import K8S_LOOKUP_RE
 from lib.repo_paths import K8S_ROLES, REPO
 
 __all__ = ["CannotNarrow", "role_callers"]
@@ -37,17 +38,6 @@ class CannotNarrow(Exception):
     """
 
 
-# The first edge: a role's template `lookup()`s a file another k8s role owns, so the
-# owner's bytes render into the reader's manifests. sonarr's and radarr's
-# `templates/verify/notification.yaml.j2` read arr-notification's script and defaults this way,
-# and that lookup is the only edge arr-notification has.
-# The same shape as `k8s_lookups.K8S_LOOKUP_RE`, which captures the whole file path rather
-# than the owning role.
-_ROLE_LOOKUP = re.compile(
-    r"lookup\(\s*'(?:ansible\.builtin\.)?(?:file|template)'\s*,\s*playbook_dir\s*[+~]\s*"
-    r"'/roles/k8s/([^/']+)/[^']+'\s*(?:,[^)]*)?\)"
-)
-
 # The second edge: a key in a role's defaults makes the renderer read a helper role for it.
 # `image_builder_builds` reads image-builder's context template, and
 # `k8s_autodeploy_snapshot_pvcs` reads volume-snapshot's defaults for the role's snapshot Job.
@@ -58,11 +48,17 @@ _DEFAULTS_KEY_ROLES = {
 
 
 def _looked_up(role_dir: Path) -> set[str]:
-    """Every k8s role whose file a template of `role_dir` `lookup()`s by path."""
+    """Every k8s role whose file a template of `role_dir` `lookup()`s by path.
+
+    The first edge: the owner's bytes render into the reader's manifests. sonarr's and radarr's
+    `templates/verify/notification.yaml.j2` read arr-notification's script and defaults this
+    way, and that lookup is the only edge arr-notification has.
+    """
     found: set[str] = set()
     for src in role_dir.glob("templates/**/*.j2"):
         try:
-            found.update(_ROLE_LOOKUP.findall(src.read_text(errors="ignore")))
+            text = src.read_text(errors="ignore")
+            found.update(path.split("/")[2] for path in K8S_LOOKUP_RE.findall(text))
         except OSError as exc:
             raise CannotNarrow(f"{src} does not load: {exc}") from exc
     return found

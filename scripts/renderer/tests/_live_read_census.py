@@ -110,7 +110,7 @@ class Census:
         set_by_tasks: Each name a task sets, mapped to every task file that sets it.
         reached: Each reached name, mapped to every template or definition that reads it.
         templates: Every template the render reads.
-        accepted: Each accepted `pipe` or `vars` lookup, as `<plugin> in <file>`.
+        accepted: Each accepted `vars` lookup, as `vars in <file>`.
         vars_names: Every name a `vars` lookup source yields.
         problems: Each lookup the census cannot name the reads of.
         derived: The names the renderer computes, which stop the walk.

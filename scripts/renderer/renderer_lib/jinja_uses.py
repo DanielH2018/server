@@ -43,6 +43,10 @@ DYNAMIC_LOOKUP = "lookup('vars', {})"
 # The filters that keep a value's text intact when the value is their subject. `indent` is
 # allowed only on a key outside the multi-line set, and a non-literal lookup takes only these.
 IDENTITY_FILTERS = frozenset({"default", "to_json"})
+# DECIDED: an embedded template's output may also pass through `homelab_role_label`, which
+# round-trips whole manifests through YAML and changes no scalar's value. Rules 1 to 3 read the
+# labelled output, so a placeholder it mangled would still fail there.
+EMBED_IDENTITY_FILTERS = IDENTITY_FILTERS | {"homelab_role_label"}
 _CONTAINERS = (nodes.List, nodes.Tuple, nodes.Dict, nodes.Pair)
 
 
@@ -131,6 +135,7 @@ def judge(
     policy: Policy,
     dynamic: bool = False,
     alias: Alias | None = None,
+    embed: bool = False,
 ) -> Use:
     """Walk up from one key use through `ancestors`, innermost last, to the form that decides.
 
@@ -141,6 +146,7 @@ def judge(
         policy: The pass-through filters and the multi-line keys.
         dynamic: The use is a non-literal `vars` lookup, held to the identity forms.
         alias: The name the use reached the key through, when it is not the key itself.
+        embed: The use is a template lookup's output, which `EMBED_IDENTITY_FILTERS` keep.
     """
     forms: list[str] = [alias.form] if alias else []
     for parent, fname in reversed(ancestors):
@@ -157,7 +163,7 @@ def judge(
         if isinstance(parent, nodes.Filter):
             if fname == "node":
                 form = f"filter {parent.name}"
-                if _keeps(parent.name, key, policy, dynamic):
+                if _keeps(parent.name, key, policy, dynamic, embed):
                     forms.append(form)
                     continue
                 return Use(key, (*forms, form), True)
@@ -214,9 +220,11 @@ def _macro_call(parent: nodes.Node, fname: str, macros: set[str]) -> bool:
     )
 
 
-def _keeps(name: str, key: str, policy: Policy, dynamic: bool) -> bool:
+def _keeps(
+    name: str, key: str, policy: Policy, dynamic: bool, embed: bool = False
+) -> bool:
     """Whether filter `name` leaves the value of `key` intact."""
-    return name in IDENTITY_FILTERS or (
+    return name in (EMBED_IDENTITY_FILTERS if embed else IDENTITY_FILTERS) or (
         name == "indent" and key not in policy.multi_line and not dynamic
     )
 
@@ -377,7 +385,9 @@ def embed_of(
         return None
     (target,) = lookup
     return Embed(
-        "lookup", target, judge(f"template {target}", ancestors, macros, policy)
+        "lookup",
+        target,
+        judge(f"template {target}", ancestors, macros, policy, embed=True),
     )
 
 

@@ -267,6 +267,7 @@ def test_no_secret_expression_is_clean(source):
         ("{{ fixture_key[1:] }}", "subscript"),
         ("{{ fixture_key | trim }}", "filter trim"),
         ("{{ fixture_key | upper }}", "filter upper"),
+        ("{{ fixture_key | homelab_role_label('w') }}", "filter homelab_role_label"),
         ("{{ fixture_key | b64encode }}", "filter b64encode"),
         ("{% if fixture_key %}x{% endif %}", "truthiness test in an if"),
         ("{% if fixture_key | default('') %}x{% endif %}", "truthiness test in an if"),
@@ -362,6 +363,7 @@ LOOKUP = "{{ lookup('template', playbook_dir + '/b.j2') | %s }}"
     ("includer", "embedded"),
     [
         (LOOKUP % "indent(4)", "{{ fixture_key }}"),
+        (LOOKUP % "homelab_role_label('widget')", "{{ fixture_key }}"),
         (INCLUDE_TRIM, "no key here"),
         ("{% filter indent(4) %}{% include 'b.j2' %}{% endfilter %}", "{{ email }}"),
     ],

@@ -73,6 +73,15 @@ def test_a_template_lookup_into_another_role_is_an_edge(tmp_path):
     assert role_callers(tmp_path) == {"helper": {"reader"}}
 
 
+def test_a_b64file_lookup_into_another_role_is_an_edge(tmp_path):
+    templates = tmp_path / "ansible" / "roles" / "k8s" / "reader" / "templates"
+    templates.mkdir(parents=True)
+    (templates / "x.yaml.j2").write_text(
+        "x: {{ lookup('b64file', playbook_dir ~ '/roles/k8s/helper/files/a.png') }}\n"
+    )
+    assert role_callers(tmp_path) == {"helper": {"reader"}}
+
+
 def test_a_lookup_with_keyword_arguments_is_an_edge(tmp_path):
     """A keyword argument after the path, such as `rstrip=False`, does not hide the edge."""
     templates = tmp_path / "ansible" / "roles" / "k8s" / "reader" / "templates"
