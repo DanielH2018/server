@@ -1202,7 +1202,8 @@ account and the workflow's own `GITHUB_TOKEN`, which `settle` dispatches with. E
 `if` reads `github.triggering_actor`, so a dispatch or re-run by any other account, such as
 DanielClaudeBot, skips every job. The `refuse-starter` job then fails the run, so the refusal
 shows red. A re-run is gated too, because a re-run keeps the original run's inputs and
-`github.actor`.
+`github.actor`. A dispatch with the bot's token on 2026-11-13, run 43504535147, ran only
+`refuse-starter`, which failed it.
 
 - **Its concurrency group is `promote-reset`, not `promote`.** In `promote`, the reset would
   wait behind a `decide` that waits on a verification in flight, for up to 6 hours, and a
