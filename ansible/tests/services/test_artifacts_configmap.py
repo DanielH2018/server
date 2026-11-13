@@ -19,10 +19,12 @@ Run: uv run pytest ansible/tests/services/test_artifacts_configmap.py
 import ast
 import json
 
-from _helpers import REPO
+from _helpers import K8S_ROLES, load_defaults, load_yaml
 from _k8s_render import rendered_docs
+from lib.repo_paths import K8S_SERVICES
 
-FILES = REPO / "ansible" / "roles" / "k8s" / "artifacts" / "files"
+ROLE = K8S_ROLES / "artifacts"
+FILES = ROLE / "files"
 
 # The entry point plus the two modules it imports. Named rather than counted, so a census that
 # stopped seeing the tree fails here instead of passing over an empty set.
@@ -119,19 +121,26 @@ def test_every_embedded_module_is_parseable_python() -> None:
 
 
 def test_the_service_list_is_json_and_holds_the_platform_names() -> None:
-    """Longhorn is the most-discussed subject in the corpus and carries no containers_list
-    entry — it is installed by roles/setup/k3s — so it only reaches the indexer through
-    artifacts_platform_services. Without it the service facet misses its biggest term.
+    """k3s carries no containers_list entry, so it only reaches the indexer through
+    artifacts_platform_services.
 
     Only the role's own lists are asserted. The validator stubs containers_list, so the
     workload names it contributes are absent from this render and present on a real deploy —
     asserting them here would pin the stub rather than the manifest.
     """
     names = json.loads(_configmap()["data"]["known_services.json"])
-    assert "longhorn" in names
+    assert "k3s" in names
     assert "kopia" in names, (
         "retired names are missing, so older artifacts cannot be tagged"
     )
+
+
+def test_no_platform_name_duplicates_a_containers_list_entry() -> None:
+    """The index already takes every containers_list name, so a platform name that gained an
+    entry is dead weight that hides whether the list still means "no entry"."""
+    entries = {entry["name"] for entry in load_yaml(K8S_SERVICES)["containers_list"]}
+    platform = set(load_defaults(ROLE)["artifacts_platform_services"])
+    assert sorted(platform & entries) == []
 
 
 def test_service_names_are_unique_and_sorted() -> None:
