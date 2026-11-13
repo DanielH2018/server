@@ -102,6 +102,29 @@ minutes, and `PiWatchdogFailed` fires once it has stayed down for 30 minutes. Th
 the stop an `initial_setup` apply holds on purpose, which took 7m53s on 2026-11-01. The heartbeat
 only reports. To clear the alert, run `sudo systemctl start watchdog` on the Pi.
 
+**A restart of the daemon needs the `pi-tuning` drop-in to finish.** The packaged
+`watchdog.service` ends every stop as a failure on purpose, so that
+`OnFailure=wd_keepalive.service` keeps the hardware watchdog fed. `wd_keepalive.service` conflicts
+with `watchdog.service`, so systemd cancels the start half of a `systemctl restart`. On 2026-11-13
+an unattended upgrade of libc6 ran `needrestart`, which restarted thirteen services at 05:33 UTC.
+Its log reads `Job for watchdog.service canceled.`, and the daemon stayed down for 9.5 hours,
+until the operator started it. The watchdog package's `postinst` script restarts the daemon the
+same way.
+`units/watchdog-dropin.conf` sets `OnFailureJobMode=fail`, which refuses the `wd_keepalive` start
+while a job for `watchdog.service` is queued. A stop and a daemon that died queue none, so both
+still start `wd_keepalive`. Stand-in units under systemd 255.4, the Pi's version, gave these
+results:
+
+| Event | Packaged units | With the drop-in |
+|---|---|---|
+| `systemctl restart` | `wd_keepalive` runs, the daemon is down | the daemon runs |
+| `systemctl stop` | `wd_keepalive` runs | `wd_keepalive` runs |
+| the daemon is killed | `wd_keepalive` runs | `wd_keepalive` runs |
+
+`test_a_restart_leaves_the_watchdog_daemon_running_and_a_stop_or_a_crash_starts_the_keepalive`
+in `hosts/lib/tests/test_pi_tuning_component.py` repeats the table on any host with a systemd
+user manager.
+
 The debloat step purges Open vSwitch, which was installed with no bridges and no netplan
 config yet mlockall-pinned about 14 MB, and snapd, which had zero snaps. Both are
 dependency-safe: netplan only Suggests OVS. It also purges fwupd — its hourly

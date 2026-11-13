@@ -240,9 +240,9 @@ tests:
               description: >-
                 watchdog.service on daniel-pi has not been active for 30 minutes. wd_keepalive holds
                 the device, so the board keeps its hardware watchdog, but the `max-load-1 = 24` load
-                test is off. An interrupted initial_setup run is the known cause. Run `sudo
-                systemctl start watchdog` on daniel-pi. The `pi-watchdog-health` lines in
-                /var/log/pi-health/health.log date the stop.
+                test is off. A stop or a daemon that died is the cause, because a restart leaves the
+                daemon running. Run `sudo systemctl start watchdog` on daniel-pi. The
+                `pi-watchdog-health` lines in /var/log/pi-health/health.log date the stop.
       - eval_time: 46m
         alertname: PiWatchdogFailed
         exp_alerts: []
