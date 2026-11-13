@@ -23,8 +23,16 @@ Exit codes:
 
 Usage:
     uv run python scripts/deploy_tools/local_sweep.py <commit> [--keep] [--once FILE]
+    uv run python scripts/deploy_tools/local_sweep.py --run <id> [--keep] [--once FILE]
 
 `--keep` leaves the scratch tree and each check's whole log in place, and prints where.
+
+`--run <id>` sweeps what a pull-request run of CI tested, so the two verdicts can be compared
+(`probe.py sweep-agreement`). That is the merge of the pull request into its base as the base
+stood, and the run's log names it. The tool fetches that one commit into this checkout's
+object store, under no ref, and adds `run=<id>` to the result line. It refuses a run that a bot started and a run from a fork, because this host runs
+only a tree that someone with push access wrote. That refusal and a run with no tree both
+exit 69.
 
 `--once FILE` is for a timer. When FILE already names the commit, the tool prints nothing and
 exits 0. Otherwise it writes the commit to FILE before the first check, so a sweep that dies
@@ -34,6 +42,8 @@ leaves 1 to mean what Python means by it: the tool itself did not start.
 """
 
 import dataclasses
+import fcntl
+import json
 import os
 import re
 import shutil
@@ -58,6 +68,7 @@ from lib.exit_codes import (
     SWEEP_NO_VERDICT,
     SWEEP_PASSED,
 )
+from lib.gh import gh
 from lib.git import git, git_env, git_stdout
 from lib.progress import count_line
 from lib.repo_paths import REPO
@@ -81,6 +92,10 @@ _KEPT = "kept-"
 STALE_SECONDS = 6 * 3600
 
 _ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
+
+_API = "repos/{owner}/{repo}/actions"
+# The refspec `actions/checkout` fetches for a pull-request run.
+_TESTED = re.compile(r"\+([0-9a-f]{40}):refs/remotes/pull/\d+/merge")
 
 
 def _hooks(tree: Path) -> list[str]:
@@ -161,6 +176,7 @@ class Sweep:
         checks: Each local check, in the order run.
         seconds: The whole sweep, the clone included.
         kept: The scratch directory, when the caller asked to keep it.
+        run: The id of the CI run that tested this commit, when `--run` named one.
     """
 
     sha: str
@@ -168,6 +184,7 @@ class Sweep:
     checks: tuple[Check, ...]
     seconds: int
     kept: Path | None = None
+    run: int | None = None
 
     @property
     def verdict(self) -> str:
@@ -180,8 +197,11 @@ class Sweep:
         checks = " ".join(
             f"{c.job}={c.verdict} {c.job}_seconds={c.seconds}" for c in self.checks
         )
+        # Ahead of the fields a line cannot parse without, so a line cut short never reads
+        # as another run or as a commit's sweep.
+        run = f" run={self.run}" if self.run else ""
         return (
-            f"{_RESULT}verdict={self.verdict} sha={self.sha} tree={self.tree}"
+            f"{_RESULT}verdict={self.verdict} sha={self.sha} tree={self.tree}{run}"
             f" seconds={self.seconds} {checks}"
         )
 
@@ -204,7 +224,10 @@ def parse_result_line(line: str) -> Sweep | None:
             for key, seconds in pairs.items()
             if key.endswith("_seconds")
         )
-        sweep = Sweep(pairs["sha"], pairs["tree"], checks, int(pairs["seconds"]))
+        run = int(pairs["run"]) if "run" in pairs else None
+        sweep = Sweep(
+            pairs["sha"], pairs["tree"], checks, int(pairs["seconds"]), run=run
+        )
     except KeyError, ValueError:
         return None
     if any(check.verdict not in EXIT for check in checks):
@@ -239,6 +262,52 @@ def _reap(root: Path) -> None:
 
 def _resolve(commit: str, repo: Path) -> str:
     return git_stdout("rev-parse", "--verify", f"{commit}^{{commit}}", cwd=repo)
+
+
+class NoTree(Exception):
+    """A CI run names no tree this host sweeps. The message says why."""
+
+
+def _github(*args: str) -> str:
+    return gh("api", *args, cwd=REPO, timeout=120).stdout
+
+
+def tested_commit(run_id: int, repo: Path, github: Callable[..., str] = _github) -> str:
+    """Fetch the commit a pull-request run of CI tested into `repo`, and return its id.
+
+    A pull-request run tests the merge of the head into the base as the base stood when the
+    run started. GitHub's API names only the head, so the id comes from a job's log.
+
+    Args:
+        run_id: The Actions run.
+        repo: The repository to fetch into, from its `origin`.
+        github: Runs `gh api` with these arguments and returns what it printed.
+
+    Raises:
+        NoTree: A bot started the run, it came from a fork, it is not a pull-request run, or
+            no job's log names the merge.
+        subprocess.CalledProcessError: gh failed, or git could not fetch the commit.
+    """
+    run = json.loads(github(f"{_API}/runs/{run_id}"))
+    if run["event"] != "pull_request":
+        raise NoTree(
+            f"it is a {run['event']} run, so sweep its commit {run['head_sha']}"
+        )
+    # A bot's pull request can carry a dependency nobody has read, and a sweep installs and
+    # runs it as the user who started the sweep.
+    if run["actor"]["type"] != "User":
+        raise NoTree(f"{run['actor']['login']} started it, and that is not a person")
+    if run["head_repository"]["full_name"] != run["repository"]["full_name"]:
+        raise NoTree(f"its branch is in the fork {run['head_repository']['full_name']}")
+    jobs = json.loads(github(f"{_API}/runs/{run_id}/jobs?per_page=100"))["jobs"]
+    for job in jobs:
+        if job["conclusion"] not in ("success", "failure"):
+            continue
+        log = github("--allow-escape-sequences", f"{_API}/jobs/{job['id']}/logs")
+        if found := _TESTED.search(log):
+            git("fetch", "--quiet", "origin", found[1], cwd=repo)
+            return found[1]
+    raise NoTree("no job's log names the merge it checked out")
 
 
 def _check_env() -> dict[str, str]:
@@ -309,25 +378,29 @@ def sweep(
     Raises:
         subprocess.CalledProcessError: git could not resolve `commit` or check it out.
     """
-    start = time.monotonic()
     sha = _resolve(commit, repo)
     tree_id = git_stdout("rev-parse", f"{sha}^{{tree}}", cwd=repo)
     root = _work_root()
-    _reap(root)
-    work = Path(tempfile.mkdtemp(prefix=_KEPT if keep else _SCRATCH, dir=root))
-    try:
-        tree = work / "tree"
-        git("clone", "--quiet", "--shared", "--no-checkout", str(repo), str(tree))
-        git("checkout", "--quiet", "--detach", sha, cwd=tree)
-        ran = tuple(
-            _run(job, local, tree, work / f"{job}.log") for job, local in checks.items()
-        )
-    finally:
-        if not keep:
-            shutil.rmtree(work, ignore_errors=True)
-    return Sweep(
-        sha, tree_id, ran, round(time.monotonic() - start), work if keep else None
-    )
+    with (root / "lock").open("w") as lock:
+        # One sweep at a time for a user. Two together hold twice the memory that the timer's
+        # unit bounds one sweep to. The wait is not part of the sweep's seconds.
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        start = time.monotonic()
+        _reap(root)
+        work = Path(tempfile.mkdtemp(prefix=_KEPT if keep else _SCRATCH, dir=root))
+        try:
+            tree = work / "tree"
+            git("clone", "--quiet", "--shared", "--no-checkout", str(repo), str(tree))
+            git("checkout", "--quiet", "--detach", sha, cwd=tree)
+            ran = tuple(
+                _run(job, local, tree, work / f"{job}.log")
+                for job, local in checks.items()
+            )
+        finally:
+            if not keep:
+                shutil.rmtree(work, ignore_errors=True)
+        seconds = round(time.monotonic() - start)
+    return Sweep(sha, tree_id, ran, seconds, work if keep else None)
 
 
 def first_time(sha: str, record: Path) -> bool:
@@ -358,40 +431,62 @@ def report(result: Sweep) -> list[str]:
 EXIT = {"pass": SWEEP_PASSED, "fail": SWEEP_FAILED, "none": SWEEP_NO_VERDICT}
 
 
+def _option(args: list[str], flag: str) -> tuple[list[str] | None, list[str]]:
+    """`flag`'s value as a list of one, an empty list when it has none, None when absent."""
+    if flag not in args:
+        return None, args
+    at = args.index(flag)
+    return args[at + 1 : at + 2], args[:at] + args[at + 2 :]
+
+
 def main(
     argv: list[str] | None = None,
     *,
     repo: Path = REPO,
     checks: dict[str, Local] = LOCAL,
+    github: Callable[..., str] = _github,
 ) -> int:
-    """Sweep the commit `argv` names, print the report, and return the exit code.
+    """Sweep the commit or the run `argv` names, print the report, and return the exit code.
 
     Args:
         argv: The command line, without the program name.
         repo: The repository that holds the commit. A test passes a scratch one.
         checks: The checks to run. A test passes stand-ins.
+        github: What `--run` reads GitHub with. A test passes a stand-in.
     """
     argv = sys.argv[1:] if argv is None else argv
     if argv[:1] and argv[0] in HELP_FLAGS:
         print(__doc__.strip())
         return SWEEP_PASSED
-    commits = [arg for arg in argv if arg != "--keep"]
-    once = None
-    if "--once" in commits:
-        at = commits.index("--once")
-        once, commits = commits[at + 1 : at + 2], commits[:at] + commits[at + 2 :]
-    if len(commits) != 1 or commits[0].startswith("-") or once == []:
+    once, commits = _option([arg for arg in argv if arg != "--keep"], "--once")
+    run, commits = _option(commits, "--run")
+    if (
+        [] in (once, run)
+        or any(arg.startswith("-") for arg in commits)
+        or len(commits) != (0 if run else 1)
+        or (run and not run[0].isdecimal())
+    ):
         print(__doc__.strip(), file=sys.stderr)
         return SWEEP_BAD_ARGS
+    what = f"run {run[0]}" if run else commits[0]
     try:
         # Resolved once: `origin/master` can move between the record and the sweep.
-        sha = _resolve(commits[0], repo)
+        sha = (
+            tested_commit(int(run[0]), repo, github)
+            if run
+            else _resolve(commits[0], repo)
+        )
         if once and not first_time(sha, Path(once[0])):
             return SWEEP_PASSED
         result = sweep(sha, repo=repo, checks=checks, keep="--keep" in argv)
+        if run:
+            result = dataclasses.replace(result, run=int(run[0]))
+    except NoTree as exc:
+        print(f"no tree to sweep for {what}: {exc}", file=sys.stderr)
+        return SWEEP_NO_VERDICT
     except subprocess.CalledProcessError as exc:
         why = (exc.stderr or "").strip().splitlines()[-1:] or [str(exc)]
-        print(f"no tree to sweep for {commits[0]}: {why[0]}", file=sys.stderr)
+        print(f"no tree to sweep for {what}: {why[0]}", file=sys.stderr)
         return SWEEP_NO_VERDICT
     except Exception:
         # Python's own exit code for an uncaught error is 1, which here means a check failed.
