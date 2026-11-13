@@ -217,10 +217,10 @@ def test_the_real_tree_overrides_no_pin():
             "- include_role:\n    name: x\n  vars:\n    k3s_longhorn_version: v1.11.0\n",
         ),
         (
-            "ansible/inventory/hosts.ini",
+            "ansible/inventory/extra.ini",
             "[k3s]\ndaniel-box k3s_longhorn_version=v1.11.0\n",
         ),
-        ("ansible/inventory/hosts.ini", "[all:vars]\nk3s_longhorn_version = v1.11.0\n"),
+        ("ansible/inventory/extra.ini", "[all:vars]\nk3s_longhorn_version = v1.11.0\n"),
         ("ansible/inventory/group_vars/all", "k3s_longhorn_version: v1.11.0\n"),
         (
             "ansible/roles/k8s/system-upgrade/tasks/x.yml",
@@ -236,7 +236,7 @@ def test_the_real_tree_overrides_no_pin():
             '- hosts: all\n  vars: {note: "see #1", k3s_longhorn_version: v1.11.0}\n',
         ),
         (
-            "ansible/inventory/hosts.ini",
+            "ansible/inventory/extra.ini",
             '[k3s]\ndaniel-box note="a #b" k3s_longhorn_version=v1.11.0\n',
         ),
         (
@@ -244,7 +244,7 @@ def test_the_real_tree_overrides_no_pin():
             "- hosts: all\n  vars: {note: 'it''s #1', k3s_longhorn_version: v1.11.0}\n",
         ),
         (
-            "ansible/inventory/hosts.ini",
+            "ansible/inventory/extra.ini",
             "[k3s]\ndaniel-box ansible_user=x;y k3s_longhorn_version=v1.11.0\n",
         ),
     ],

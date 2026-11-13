@@ -4,16 +4,16 @@
   The sole services.yaml for Homepage — edit tiles and widgets here and nowhere else. The
   tiles carry no `server:`/`container:` pairs (see docker.yaml.j2 in this role for why).
 
-  DECIDED: the tiles stay hand-placed here, and a containers_list entry supplies only its
+  DECIDED: the tiles stay hand-placed here, and a services entry supplies only its
   link and its ClusterIP widget URL (#3691). Tile order is the page order, and it is measured:
   the Services column's row count sets the calendar height in custom.css.j2, and the
   operator ordered the personal links by hand. Deriving tiles from entries would put that
-  order in containers_list, where position means nothing. So a tile's icon, description and
+  order in services, where position means nothing. So a tile's icon, description and
   widget body stay here, and an entry with no tile needs no opt-out key.
 
-  A tile links through `containers_list | homepage_href(<entry>, domain)`, built from the
+  A tile links through `services | homepage_href(<entry>, domain)`, built from the
   entry's `hostname`. A widget dialling a ClusterIP gets its URL only from
-  `containers_list | homepage_widget_url(<entry>, k8s_namespace)`. That filter refuses an
+  `services | homepage_widget_url(<entry>, k8s_namespace)`. That filter refuses an
   entry without `homepage_widget: true`, and the same key adds homepage to the entry's
   NetworkPolicy callers (ansible/filter_plugins/homepage_tiles.py), so the URL and the edge
   cannot disagree.
@@ -22,7 +22,7 @@
     - Services:
         - Headlamp:
             icon: kubernetes.png
-            href: {{ containers_list | homepage_href('headlamp', domain) }}
+            href: {{ services | homepage_href('headlamp', domain) }}
             description: Cluster UI
             # k8s-only tile, and the one place this fork diverges from the Docker template
             # beyond the documented server/container drop: Headlamp has no Docker twin, and
@@ -86,7 +86,7 @@
             icon: prometheus.png
             # Karma is the alert UI. `lan=True`: its route matches no public name, because it
             # can silence every alert.
-            href: {{ containers_list | homepage_href('karma', domain, lan=True) }}
+            href: {{ services | homepage_href('karma', domain, lan=True) }}
             description: Alerts
             # The alert plane at a glance, read from Prometheus's ALERTS series (M6 B-4,
             # docs/target-architecture/monitoring/m6-retire-kuma.md). Critical and Warning
@@ -119,7 +119,7 @@
                           type: number
         - Pihole:
             icon: pi-hole.png
-            href: {{ containers_list | homepage_href('pihole', domain, '/admin') }}
+            href: {{ services | homepage_href('pihole', domain, '/admin') }}
             description: DNS Ad Blocker
             widget:
                 type: pihole
@@ -133,7 +133,7 @@
                 fields: [queries, blocked]
         - Home Assistant:
             icon: home-assistant.png
-            href: {{ containers_list | homepage_href('home-assistant', domain) }}
+            href: {{ services | homepage_href('home-assistant', domain) }}
             description: Air Quality
             # No server/container pair and a bridge-URL widget since slice-5 B3: HA runs in
             # k3s, so the Docker-DNS name is gone. The .local name resolves from containers
@@ -152,7 +152,7 @@
                       label: VOC
         - Karakeep:
             icon: karakeep.png
-            href: {{ containers_list | homepage_href('karakeep', domain) }}
+            href: {{ services | homepage_href('karakeep', domain) }}
             description: Karakeep
             # No server/container: karakeep runs in k3s now. Same as speedtest and freshrss —
             # the -k8s monitoring route, because the native route's Authelia 401s the widget.
@@ -170,7 +170,7 @@
                 fields: [bookmarks, archived]
         - FreshRSS:
             icon: freshrss.png
-            href: {{ containers_list | homepage_href('freshrss', domain) }}
+            href: {{ services | homepage_href('freshrss', domain) }}
             description: RSS Aggregator
             # No server/container: freshrss runs in k3s now. Same as speedtest and karakeep —
             # the -k8s monitoring route, because the native route's Authelia 401s the widget.
@@ -183,7 +183,7 @@
                 fields: [unread]
         - UPS:
             icon: apc.png
-            href: {{ containers_list | homepage_href('peanut', domain) }}
+            href: {{ services | homepage_href('peanut', domain) }}
             description: APC BR1500MS2
             widget:
                 type: peanut
@@ -199,7 +199,7 @@
                 fields: [battery_charge, ups_status]
         - Scrutiny:
             icon: scrutiny.png
-            href: {{ containers_list | homepage_href('scrutiny', domain) }}
+            href: {{ services | homepage_href('scrutiny', domain) }}
             description: Disk Health
             # ClusterIP, not a Traefik route: scrutiny's native route is Authelia-gated and would
             # 401 this session-less widget, and its monitoring route exposes no API path. Pod to
@@ -212,12 +212,12 @@
             # `GET /api/summary` on the ClusterIP answers 200 with the device summary.
             widget:
                 type: scrutiny
-                url: {{ containers_list | homepage_widget_url('scrutiny', k8s_namespace) }}
+                url: {{ services | homepage_widget_url('scrutiny', k8s_namespace) }}
                 # Dropped: unknown.
                 fields: [passed, failed]
         - Speedtest:
             icon: speedtest-tracker.png
-            href: {{ containers_list | homepage_href('speedtest', domain) }}
+            href: {{ services | homepage_href('speedtest', domain) }}
             description: Internet tracking
             # No server/container: speedtest runs in k3s now, so there is no Docker container
             # for the status dot. The -k8s name is the ClientIP-gated monitoring route (no
@@ -249,28 +249,28 @@
         # widget fails as a widget-proxy error, not as an auth error.
         - qBittorrent:
             icon: qbittorrent.png
-            href: {{ containers_list | homepage_href('qbittorrent', domain) }}
+            href: {{ services | homepage_href('qbittorrent', domain) }}
             description: Download
             widget:
                 type: qbittorrent
-                url: {{ containers_list | homepage_widget_url('qbittorrent', k8s_namespace) }}
+                url: {{ services | homepage_widget_url('qbittorrent', k8s_namespace) }}
                 username: {{ qbittorrent_username }}
                 password: {{ qbittorrent_password }}
                 # Dropped: seed, upload.
                 fields: [leech, download]
         - Radarr:
             icon: radarr.png
-            href: {{ containers_list | homepage_href('radarr', domain) }}
+            href: {{ services | homepage_href('radarr', domain) }}
             description: Movie
             widget:
                 type: radarr
-                url: {{ containers_list | homepage_widget_url('radarr', k8s_namespace) }}
+                url: {{ services | homepage_widget_url('radarr', k8s_namespace) }}
                 key: {{ radarr_api_key }}
                 # Dropped: movies, missing.
                 fields: [wanted, queued]
         - Sonarr:
             icon: sonarr.png
-            href: {{ containers_list | homepage_href('sonarr', domain) }}
+            href: {{ services | homepage_href('sonarr', domain) }}
             # ONE WORD, and qBittorrent's below is why. At 1280px a Services tile is 195px and
             # "Download management" wrapped its title to three lines, taking that tile to 68px
             # where every other is 52px — which took its whole grid row to 128px and overshot
@@ -280,7 +280,7 @@
             description: Series
             widget:
                 type: sonarr
-                url: {{ containers_list | homepage_widget_url('sonarr', k8s_namespace) }}
+                url: {{ services | homepage_widget_url('sonarr', k8s_namespace) }}
                 key: {{ sonarr_api_key }}
                 # Dropped: series.
                 fields: [wanted, queued]
@@ -297,13 +297,13 @@
               timezone: {{ tz }}
               integrations:
                 - type: ical
-                  url: {{ containers_list | homepage_widget_url('ical-proxy', k8s_namespace) }}/calendar1.ics
+                  url: {{ services | homepage_widget_url('ical-proxy', k8s_namespace) }}/calendar1.ics
                   name: Daniel
                   color: indigo
                   params:
                       showName: true
                 - type: ical
-                  url: {{ containers_list | homepage_widget_url('ical-proxy', k8s_namespace) }}/calendar2.ics
+                  url: {{ services | homepage_widget_url('ical-proxy', k8s_namespace) }}/calendar2.ics
                   name: Work
                   color: slate
                   params:
@@ -315,7 +315,7 @@
                   params:
                       showName: true
                 - type: ical
-                  url: {{ containers_list | homepage_widget_url('ical-proxy', k8s_namespace) }}/calendar4.ics
+                  url: {{ services | homepage_widget_url('ical-proxy', k8s_namespace) }}/calendar4.ics
                   name: Tasks
                   color: emerald
                   params:
@@ -354,7 +354,7 @@
             # Link-only: no `widget:`, so none of the media-widget rules apply. A widget added
             # here later needs `version: 2` (docs/homepage-widgets-and-layout.md).
             icon: jellyfin.png
-            href: {{ containers_list | homepage_href('jellyfin', domain) }}
+            href: {{ services | homepage_href('jellyfin', domain) }}
             # Not the bare domain like its neighbours: jellyfin.<domain> would overrun the 165px
             # tile that the Monarch note below measures.
             description: Media server
@@ -408,22 +408,22 @@
 - Admin & Tools:
     - Grafana:
         icon: grafana.png
-        href: {{ containers_list | homepage_href('observability', domain) }}
+        href: {{ services | homepage_href('observability', domain) }}
         description: Metrics and dashboards
     - Longhorn:
         icon: longhorn.png
         # LAN-only: longhorn-frontend's IngressRoute matches longhorn.local.<domain> and no
         # public name, because Authelia is the entire access control on a UI that can delete
         # volumes and their B2 backup chain.
-        href: {{ containers_list | homepage_href('longhorn-ui', domain, lan=true) }}
+        href: {{ services | homepage_href('longhorn-ui', domain, lan=true) }}
         description: Cluster storage
     - n8n:
         icon: n8n.png
-        href: {{ containers_list | homepage_href('n8n', domain) }}
+        href: {{ services | homepage_href('n8n', domain) }}
         description: Workflow automation
     - code-server:
         icon: code-server.png
-        href: {{ containers_list | homepage_href('code-server', domain) }}
+        href: {{ services | homepage_href('code-server', domain) }}
         description: Browser IDE
 
     - Deploy:
@@ -431,17 +431,17 @@
         # LAN-only, like longhorn and the traefik dashboard this tile replaced: the queue page
         # starts landings with land.sh, so it is behind Authelia on a name with no public route
         # (hosts/components/deploy-ui/).
-        href: {{ containers_list | homepage_href('deploy-ui', domain, lan=true) }}
+        href: {{ services | homepage_href('deploy-ui', domain, lan=true) }}
         description: Deploy queue
     - Artifacts:
         icon: mdi-file-document-multiple
-        href: {{ containers_list | homepage_href('artifacts', domain) }}
+        href: {{ services | homepage_href('artifacts', domain) }}
         description: Generated reports
     - Docs:
         icon: mdi-book-open-variant
-        href: {{ containers_list | homepage_href('docs', domain) }}
+        href: {{ services | homepage_href('docs', domain) }}
         description: Homelab reference
     - TeXBrain:
         icon: mdi-math-integral
-        href: {{ containers_list | homepage_href('texbrain', domain, '/editor') }}
+        href: {{ services | homepage_href('texbrain', domain, '/editor') }}
         description: LaTeX workspace

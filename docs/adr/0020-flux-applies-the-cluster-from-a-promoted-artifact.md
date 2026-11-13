@@ -53,7 +53,7 @@ C3 owns the Flux objects.
 
 Every k8s `containers_list` entry is Flux's, and a service stays Flux-owned or retires. H1.9
 ([#7752](https://github.com/DanielH2018/server/issues/7752)) dropped the `owner: flux` key
-each entry carried, because `platform: k8s` alone says it. The operator ruled on 2026-11-06 ([#7464](https://github.com/DanielH2018/server/issues/7464))
+each entry carried, because an entry in `cluster/services.yml` is Flux's by being there. The operator ruled on 2026-11-06 ([#7464](https://github.com/DanielH2018/server/issues/7464))
 that a service does not move back to Ansible. A bad role change reverts through `promote` or
 holds through the `DEPLOY_HOLD` repository variable.
 

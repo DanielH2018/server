@@ -66,7 +66,7 @@ names.
 remove it from the live Secret once ownership breaks.
 
 2026-11-05: this consequence holds only for a Secret that `kubectl apply` writes. Flux applies
-all 66 `platform: k8s` entries in `containers_list`, so no deploy applies a Secret that way.
+every entry in `cluster/services.yml`, so no deploy applies a Secret that way.
 Flux's server-side apply removes a key it owns and
 no longer applies. A key that another field manager holds still stays live.
 `.claude/rules/k8s-templates.md`, *Removing a key from a Secret template*, has the behaviour

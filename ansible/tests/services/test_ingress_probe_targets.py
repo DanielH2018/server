@@ -13,7 +13,7 @@ import pytest
 from filter_errors import FilterError
 from ingress_probes import FilterModule, ingress_probe_targets
 
-_NEW = {"name": "newsvc", "platform": "k8s", "hostname": "newsvc", "port": 8080}
+_NEW = {"name": "newsvc", "hostname": "newsvc", "port": 8080}
 
 
 @pytest.mark.parametrize(

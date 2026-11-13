@@ -15,10 +15,7 @@ group={{ group_over_default }}
 host={{ host_over_group }}
 include={{ manifests_deferred_dir_name }}
 derived={{ derived }}
-own_entry={{ hostvars['h1'].host_over_group }}
-other_host_file={{ hostvars['h2'].host_file_over_inline }}
-other_host_inline={{ hostvars['h2'].inline_only }}
-other_host_resolved={{ hostvars['h2'].ansible_host }}
+other_host_literal={{ hosts['h2'].server_ip }}
 missing_with_default={{ absent | default('fallback') }}
 """
 _ROLE_DEFAULTS = """\
@@ -38,19 +35,11 @@ group_only: from-group
 _H1_VARS = """\
 host_over_group: from-host
 manifests_deferred_dir_name: from-host
-containers_list:
-  - name: widget
-    platform: k8s
 """
 _H2_VARS = """\
 server_ip: 10.9.9.9
-host_file_over_inline: from-host-file
 """
-_HOSTS_INI = """\
-[k8s]
-h1 ansible_connection=local
-h2 ansible_connection=local ansible_host={{server_ip}} inline_only=from-inline host_file_over_inline=from-inline
-"""
+_SERVICES = "containers_list:\n  - name: widget\n"
 # What `_TREE_TEMPLATE` renders to on h1, with no extra vars.
 TREE_LITERAL = """\
 default=from-defaults
@@ -58,10 +47,7 @@ group=from-group
 host=from-host
 include=from-include
 derived=derived-from-host
-own_entry=from-host
-other_host_file=from-host-file
-other_host_inline=from-inline
-other_host_resolved=10.9.9.9
+other_host_literal=10.9.9.9
 missing_with_default=fallback
 """
 
@@ -84,12 +70,12 @@ def write_tree(root: Path, template: str = _TREE_TEMPLATE) -> tuple[Path, Invent
     group_vars = root / "inventory" / "group_vars"
     group_vars.mkdir()
     (group_vars / "all.yml").write_text(_GROUP_VARS)
-    hosts_ini = root / "inventory" / "hosts.ini"
-    hosts_ini.write_text(_HOSTS_INI)
+    services = root / "services.yml"
+    services.write_text(_SERVICES)
     inventory = Inventory(
         all_vars=group_vars / "all.yml",
         host_vars=host_vars,
         plane_hosts={"k8s": "h1"},
-        hosts_ini=hosts_ini,
+        services=services,
     )
     return root / "roles" / "k8s", inventory

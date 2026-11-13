@@ -108,23 +108,18 @@ def test_the_cli_writes_nothing_under_the_home_directory(out, tmp_path):
     assert written == ["sentinel"]
 
 
-def _host_vars(tmp_path, entries):
-    path = tmp_path / "host_vars"
-    path.mkdir()
-    (path / "daniel-box.yml").write_text("containers_list:\n" + entries)
+def _services(tmp_path, entries):
+    path = tmp_path / "services.yml"
+    path.write_text("containers_list:\n" + entries)
     return path
 
 
 def test_a_flux_owned_tag_with_role_is_clean(out, tmp_path):
     """`render_targets()` stays the full universe, so `cluster --role` still renders a tag
     Flux applies (D2.4b), where the hourly record list leaves it out."""
-    host_vars = _host_vars(
-        tmp_path, "  - name: littlelink\n    platform: k8s\n    owner: flux\n"
-    )
-    assert cluster_mod.select_tags(["littlelink"], host_vars=host_vars) == [
-        "littlelink"
-    ]
-    flux_owned = k8s_tags(host_vars / "daniel-box.yml")
+    services = _services(tmp_path, "  - name: littlelink\n    owner: flux\n")
+    assert cluster_mod.select_tags(["littlelink"], services) == ["littlelink"]
+    flux_owned = k8s_tags(services)
     assert flux_owned == {"littlelink"}
     # A fixture cluster file, so the bundle copies fake ciphertext rather than the tree's.
     dotenv = tmp_path / "cluster-vars"
@@ -141,6 +136,6 @@ def test_a_flux_owned_tag_with_role_is_clean(out, tmp_path):
 
 
 def test_a_tag_the_host_does_not_declare_with_role_is_flagged(tmp_path):
-    host_vars = _host_vars(tmp_path, "  - name: sonarr\n    platform: k8s\n")
+    services = _services(tmp_path, "  - name: sonarr\n")
     with pytest.raises(cluster_mod.RenderRefused, match="not k8s render targets"):
-        cluster_mod.select_tags(["littlelink"], host_vars=host_vars)
+        cluster_mod.select_tags(["littlelink"], services)

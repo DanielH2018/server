@@ -36,7 +36,7 @@ ansible/          # Render inputs for the k8s roles; no playbook   ← EDIT HERE
   roles/k8s/          # One role per k8s workload (manifests rendered from templates)
   templates/          # Shared Jinja partials the k8s roles include
   filter_plugins/     # Custom Jinja filters (toposort.py)
-  inventory/          # hosts.ini, group_vars/all.yml, host_vars/<host>.yml
+  inventory/          # group_vars/all.yml, host_vars/<host>.yml (one file per host)
   vars/secrets.yml    # SOPS-encrypted secrets
   tests/              # Tests over the roles, their renders and the deploy path
 cluster/          # services.yml: one entry per k8s deploy tag
@@ -171,7 +171,7 @@ prek run --all-files
 
 Almost every new service is a **k8s** workload: add a role under `ansible/roles/k8s/<name>/`
 rendering its manifests (Deployment/Service/IngressRoute/PVC), then an entry in
-`cluster/services.yml` `containers_list` with `platform: k8s`. Position in the list
+`cluster/services.yml` `containers_list`. Position in the list
 doesn't matter — the renderer toposorts on derived Traefik-CRD and authelia edges, plus any
 `depends_on:` the entry declares — so add it wherever reads best. Deploy tags derive from
 the name.

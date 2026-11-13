@@ -6,14 +6,13 @@ the bundle from GHCR. A bad apply here stops name resolution, and host probes st
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
-- **Applied by:** Flux, through `promote` (`platform: k8s`); `land.sh --tags=coredns` gates the
-  rollout
+- **Applied by:** Flux, through `promote`; `land.sh --tags=coredns` gates the rollout
 - **Image:** `rancher/mirrored-coredns-coredns` (`coredns_image`)
 - **Route:** none (no `templates/ingressroute.yaml.j2`)
 - **Claims:** none (no PVC)
 <!-- /generated_from -->
 
-- **Flux applies it, not Ansible** (H1.4). Its `containers_list` entry is `platform: k8s`
+- **Flux applies it, not Ansible** (H1.4). Its `containers_list` entry is in `cluster/services.yml`
   from its first commit. The `.skip` marker that stops k3s reconciling its addon is the
   `homelab-daniel-box` package's since H6.4a (`hosts/components/k3s-server/`). On a new
   cluster the marker goes back only once Deployment `coredns` exists: `docs/host-packages.md`,

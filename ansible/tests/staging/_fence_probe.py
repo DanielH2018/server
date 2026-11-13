@@ -128,13 +128,13 @@ def host_reaches():
 
 
 def rendered_orchestrator():
-    """The orchestrator as the shared accessor renders it, `hostvars` repointed at three hosts.
+    """The orchestrator as the shared accessor renders it, `hosts` repointed at three hosts.
 
     Everything else the template reads — the inventory, the role's own defaults — comes from
     the accessor's own context, which is what `validate/shell_templates.py` renders and lints
-    (#3178). `hostvars` alone needs an override: the accessor's base stubs only one host
+    (#3178). `hosts` alone needs an override: the accessor's base stubs only one host
     (`daniel-server`), and two of the fence's dials are OTHER hosts' addresses
-    (`hostvars['daniel-box'].server_ip`, `hostvars['daniel-pi'].server_ip`). Left at the
+    (`hosts['daniel-box'].server_ip`, `hosts['daniel-pi'].server_ip`). Left at the
     accessor's default, either lookup renders the literal `STUB`, which no `DIAL_STUB` fixture
     ever lists as reachable — a dial that can never answer, which reads as a held fence no
     matter which way the leg under test should go.
@@ -144,7 +144,7 @@ def rendered_orchestrator():
         "hypervisor",
         ORCHESTRATOR.name,
         overrides={
-            "hostvars": {
+            "hosts": {
                 host: _load_host_vars(host)
                 for host in ("daniel-box", "daniel-pi", "daniel-server")
             }

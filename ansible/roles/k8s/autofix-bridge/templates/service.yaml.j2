@@ -4,4 +4,4 @@
 # (autofix.py, through jobs_metrics.py), which observability's `autofix-bridge` job collects; its
 # number is the entry's `metrics` item. The role had no Service before M6 batch B7, because the
 # pod is a pusher that nothing dials. Nothing else reaches this port.
-{{ service('autofix-bridge', containers_list | metrics_port('autofix-bridge'), port_name='checks') -}}
+{{ service('autofix-bridge', services | metrics_port('autofix-bridge'), port_name='checks') -}}

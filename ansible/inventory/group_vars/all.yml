@@ -148,9 +148,7 @@ k3s_flannel_node_ips:
 # trustedIPs note, authelia's bypass policy, docker_install's bridge-carve-out) cite one
 # name instead of repeating the literal.
 wg_client_subnet: "10.8.0.0/24"
-# code-server's read-only docker-proxy is gated on this host_var, not containers_list (a
-# tagged `deploy.yml --tags docker-proxy` set_facts containers_list to the filtered
-# dependency closure, which would drop code-server and render False). Override per-host.
+# code-server's read-only docker-proxy is gated on this host_var. Override per-host.
 has_code_server: false
 # The k3s cluster's ingress VIP, served by MetalLB from a dedicated autoAssign: false pool.
 # Global rather than a k3s role default because two hosts consume it: daniel-box's k8s
@@ -234,7 +232,7 @@ zigbee_ext_pan_id: [221, 187, 17, 34, 51, 68, 85, 102]
 k8s_namespace: homelab
 
 # The cluster's k3s server / control-plane node. Every nodeSelector pin, node-affinity
-# preference and `hostvars[...]` lookup that means "this cluster's primary node" reads this
+# preference and `hosts[...]` lookup that means "this cluster's primary node" reads this
 # rather than the literal hostname, so a second cluster can be deployed to from the same
 # source. Prod resolves it to daniel-box; a single-node staging cluster resolves it to its
 # own node. See docs/archive/staging-cluster.md, Decision 7.
@@ -455,20 +453,18 @@ k8s_tls_cert_resolver: cloudflare
 # nowhere else on the LAN — see ingressroute.yml.j2 for why ClientIP is sound here.
 #
 # Derived from daniel-server's one literal, the way k8s_pi_client_ip below is (#4063).
-# `hostvars` holds every host in hosts.ini whatever the play targets, so the k8s play on
-# daniel-box resolves it, and the manifest-render harness lays down each host's `server_ip` as
-# `hostvars` (scripts/lib/render_context.py). A lookup that loses the host's entry resolves to
-# None without raising, so the guards compare the render against the host_vars literal.
-k8s_bridge_client_ip: "{{ hostvars['daniel-server'].server_ip }}"
+# `hosts` maps every host_vars file's host to its literal `server_ip`
+# (scripts/lib/render_context.py), whichever host renders. A lookup that loses the host's
+# entry resolves to None without raising, so the guards compare the render against the
+# host_vars literal.
+k8s_bridge_client_ip: "{{ hosts['daniel-server'].server_ip }}"
 # daniel-pi's address as the cluster sees it, derived from the Pi's one literal (#3719).
-# `hostvars` holds every host in hosts.ini whatever the play targets, so the k8s play on
-# daniel-box resolves it; pihole and monitor-bridge index it the same way. The
-# manifest-render harness lays down each host's `server_ip` as `hostvars` for this
-# (scripts/lib/render_context.py).
+# `hosts` maps every host_vars file's host to its literal `server_ip`
+# (scripts/lib/render_context.py); pihole and monitor-bridge index it the same way.
 #
 # Two consumers: loki-homelab's push-only IngressRoute (ClientIP allowlist) and the Pi's
 # static Prometheus scrape jobs.
-k8s_pi_client_ip: "{{ hostvars['daniel-pi'].server_ip }}"
+k8s_pi_client_ip: "{{ hosts['daniel-pi'].server_ip }}"
 # daniel-box's own LAN address, as a POD sees it, derived from its one literal the way
 # k8s_bridge_client_ip above is (#4063). Named rather than read as plain `server_ip` because
 # the name says which host's address a manifest means, whatever host the play targets.
@@ -477,7 +473,7 @@ k8s_pi_client_ip: "{{ hostvars['daniel-pi'].server_ip }}"
 # reach the host forwarder at 127.0.0.1 — that is the pod's own loopback — so the job needs
 # the node's routable address; deploy-ui needs it because its backend is a host process
 # (deploy-ui.service) rather than a pod.
-k8s_node_client_ip: "{{ hostvars['daniel-box'].server_ip }}"
+k8s_node_client_ip: "{{ hosts['daniel-box'].server_ip }}"
 # The port daniel-box's host CoreDNS publishes its Prometheus endpoint on. DUPLICATED FROM
 # `k3s_host_dns_metrics_port` in hosts/components/k3s-host-dns/defaults/main.yml, deliberately: role
 # defaults are only in scope while that role runs, and the k8s play never includes it, so a
@@ -662,7 +658,7 @@ has_claude_code: false
 # `claude_agent_ssh_login_enabled: true` authorizes it for the peer's own agent user, which
 # claude_code_agent_user_enabled builds. False removes the key and the ssh-users membership.
 # Group vars rather than role defaults, because the key host's ssh config reads every peer's
-# switch through hostvars.
+# switch through hosts.
 claude_agent_ssh_login_enabled: false
 claude_agent_ssh_key_host: daniel-box
 # The agent's key for the peers, generated on the key host as the agent by claude-agent-home

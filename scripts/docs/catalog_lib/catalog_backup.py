@@ -28,7 +28,6 @@ from lib.service_tiers import resolved_tier_lists
 __all__ = [
     "ClaimDecl",
     "LonghornTiers",
-    "autodeploy_eligibility",
     "backup_tier",
     "claim_index",
     "claim_names",
@@ -428,7 +427,6 @@ def claim_tiers(
 
 def backup_tier(
     entry: dict[str, Any],
-    platform: str,
     k8s_namespace: str,
     tiers: LonghornTiers,
     k8s_roles: Path = K8S_ROLES,
@@ -441,7 +439,6 @@ def backup_tier(
 
     Args:
         entry: The service's `containers_list` entry.
-        platform: "k8s" or "docker" — only "k8s" is Longhorn-backed.
         k8s_namespace: The cluster namespace PVCs are classified under.
         tiers: The R2, weekly and no-backup "namespace/claim" lists.
         k8s_roles: Root directory of the k8s roles.
@@ -449,10 +446,8 @@ def backup_tier(
             not given.
 
     Returns:
-        A semicolon-joined string of tier labels, "no PVC (stateless)", or "n/a" off k8s.
+        A semicolon-joined string of tier labels, or "no PVC (stateless)".
     """
-    if platform != "k8s":
-        return "n/a (Docker/Pi, not Longhorn-backed)"
     tiers_out = [
         tier
         for _, tier in claim_tiers(
@@ -488,27 +483,4 @@ def owner_stance(tags: str = "") -> str:
             on one line, and the `=` form gives the glance's wrap no space to break at.
     """
     tag = f"`land.sh --tags={tags}`" if tags else "`land.sh`"
-    return f"Flux, through `promote` (`platform: k8s`); {tag} gates the rollout"
-
-
-def entry_owner(entry: dict[str, Any]) -> str | None:
-    """`flux` for a k8s entry, which Flux applies, or None for a Docker one."""
-    return "flux" if entry.get("platform") == "k8s" else None
-
-
-def autodeploy_eligibility(
-    entry: dict[str, Any],
-    platform: str,
-) -> str:
-    """Say what applies `entry`'s changes, for the catalogue's last column.
-
-    Args:
-        entry: The service's `containers_list` entry.
-        platform: "k8s" or "docker". Flux applies every k8s entry.
-
-    Returns:
-        "n/a: applied by" `owner_stance` for a k8s entry, or the host package for a Docker one.
-    """
-    if platform == "k8s":
-        return f"n/a: applied by {owner_stance()}"
-    return "n/a: applied by the host package"
+    return f"Flux, through `promote`; {tag} gates the rollout"

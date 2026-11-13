@@ -6,8 +6,7 @@ routed tenant of the retired Docker edge. See repo-root `CLAUDE.md` for shared c
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
-- **Applied by:** Flux, through `promote` (`platform: k8s`); `land.sh --tags=homelab-mcp` gates
-  the rollout
+- **Applied by:** Flux, through `promote`; `land.sh --tags=homelab-mcp` gates the rollout
 - **Image:** `ghcr.io/danielh2018/homelab-mcp` (`homelab_mcp_k8s_image`)
 - **Route:** none (no `templates/ingressroute.yaml.j2`)
 - **Claims:** none (no PVC)
@@ -35,7 +34,7 @@ routed tenant of the retired Docker edge. See repo-root `CLAUDE.md` for shared c
   secrets, no exec. Deliberately narrower than the shell's own read-only ServiceAccount.
 - **Secrets** (SOPS keys, not values): `homelab_mcp_token`, `claude_ha_token`.
 - **Flux applies it, not Ansible** (D5.14, the first Wave C PR). Its `containers_list` entry is
-  `platform: k8s`, so nothing applies it by hand, and a merged change reaches the cluster when
+  in `cluster/services.yml`, so nothing applies it by hand, and a merged change reaches the cluster when
   `promote` publishes and verifies the next bundle. Its Kustomization's `dependsOn` names no other
   role, because the role renders no route.
 - **The token Secret substitutes from `homelab-cluster-vars`.** `homelab_mcp_token` and

@@ -20,8 +20,8 @@ from _live_read_census import (
 
 from lib.repo_paths import K8S_ROLES
 
-# What a fixture's renderer derives: one secret key and the containers_list view.
-FIXTURE_DERIVED = frozenset({"alpha_token", "containers_list"})
+# What a fixture's renderer derives: one secret key and the services view.
+FIXTURE_DERIVED = frozenset({"alpha_token", "services"})
 
 
 def test_the_tree_feeds_no_live_read_to_a_rendered_template():
@@ -166,25 +166,23 @@ def test_a_pipe_lookup_is_flagged(tmp_path):
 @pytest.mark.parametrize(
     "read",
     [
-        "hostvars[inventory_hostname].widget_line",
-        "hostvars['daniel-box']['widget_line']",
+        "hosts[inventory_hostname].widget_line",
+        "hosts['daniel-box']['widget_line']",
         "vars['widget_line']",
         "vars.widget_line",
     ],
 )
-def test_a_set_fact_read_through_vars_or_hostvars_is_flagged(tmp_path, read):
+def test_a_set_fact_read_through_vars_or_hosts_is_flagged(tmp_path, read):
     found = _census(
         tmp_path, {"deployment.yaml.j2": f"line: {{{{ {read} }}}}\n"}, SLURP_TASKS
     )
     assert "widget_line" in _flagged(found)
 
 
-def test_a_defaults_value_read_through_hostvars_is_clean(tmp_path):
+def test_a_defaults_value_read_through_hosts_is_clean(tmp_path):
     found = _census(
         tmp_path,
-        {
-            "deployment.yaml.j2": "port: {{ hostvars[inventory_hostname].widget_port }}\n"
-        },
+        {"deployment.yaml.j2": "port: {{ hosts[inventory_hostname].widget_port }}\n"},
         SLURP_TASKS,
         "widget_port: 8080\n",
     )
@@ -197,12 +195,12 @@ def test_a_defaults_value_read_through_hostvars_is_clean(tmp_path):
     [
         "vars['widget_' ~ suffix]",
         "vars | dict2items",
-        "hostvars[host]",
+        "hosts[host]",
         "vars.get('widget_line')",
-        "hostvars[inventory_hostname].get('widget_line')",
+        "hosts[inventory_hostname].get('widget_line')",
     ],
 )
-def test_vars_or_hostvars_read_by_a_computed_name_is_flagged(tmp_path, read):
+def test_vars_or_hosts_read_by_a_computed_name_is_flagged(tmp_path, read):
     found = _census(tmp_path, {"deployment.yaml.j2": f"x: {{{{ {read} }}}}\n"})
     assert len(found.problems) == 1
     assert "census cannot" in found.problems[0]

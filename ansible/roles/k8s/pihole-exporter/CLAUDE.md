@@ -5,15 +5,14 @@ Deployment, one Service, no volume, no route, no secret of its own.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
-- **Applied by:** Flux, through `promote` (`platform: k8s`); `land.sh --tags=pihole-exporter`
-  gates the rollout
+- **Applied by:** Flux, through `promote`; `land.sh --tags=pihole-exporter` gates the rollout
 - **Image:** `ekofr/pihole-exporter` (`pihole_exporter_k8s_image`)
 - **Route:** none (no `templates/ingressroute.yaml.j2`)
 - **Claims:** none (no PVC)
 <!-- /generated_from -->
 
 - **Flux applies it, not Ansible** (D5.5, the first Wave A PR). Its `containers_list` entry
-  is `platform: k8s`, so nothing applies it by hand, and a
+  is in `cluster/services.yml`, so nothing applies it by hand, and a
   merged change reaches the cluster when `promote` publishes and verifies the next bundle. Its
   image-bump PRs therefore draw no `land-wait` and no `probe.py health` run.
 - **Where the task went.** Flux applies the same render, and the

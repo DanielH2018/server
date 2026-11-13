@@ -240,7 +240,6 @@ def test_the_fixture_clone_is_one_commit_past_the_green_one_and_builds_a_new_hos
     green = tmp_path / "green"
     for relative in (
         fixture_case.WALKTHROUGH,
-        fixture_case.HOSTS_INI,
         fixture_case.EXAMPLE_VARS,
         fixture_case.SCRIPT,
     ):

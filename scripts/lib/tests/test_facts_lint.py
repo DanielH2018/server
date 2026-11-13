@@ -258,12 +258,12 @@ Kept out of `STAGING_SUBSET`: daniel-stage has no daemon to route to.
 
 
 def _host_findings(tmp_path, **docs):
-    """``retired-host`` findings over ``docs``, against a copy of the REAL inventory."""
+    """``retired-host`` findings over ``docs``, against one empty host_vars file per REAL host."""
     repo = _repo(tmp_path, docs.pop("CLAUDE.md", "## A\nnothing\n"))
-    for rel, text in {
-        INVENTORY_REL: (REPO / INVENTORY_REL).read_text(),
-        **docs,
-    }.items():
+    hosts = {
+        f"{INVENTORY_REL}/{name}.yml": "" for name in host_names(REPO / INVENTORY_REL)
+    }
+    for rel, text in {**hosts, **docs}.items():
         (repo / rel).parent.mkdir(parents=True, exist_ok=True)
         (repo / rel).write_text(text)
     git(repo, "add", "-A")

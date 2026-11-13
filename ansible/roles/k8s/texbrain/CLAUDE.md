@@ -6,8 +6,7 @@ the File System Access API. See repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
-- **Applied by:** Flux, through `promote` (`platform: k8s`); `land.sh --tags=texbrain` gates
-  the rollout
+- **Applied by:** Flux, through `promote`; `land.sh --tags=texbrain` gates the rollout
 - **Image:** `ghcr.io/danielh2018/texbrain` (`texbrain_k8s_image`)
 - **Route:** `texbrain.<domain>` · `texbrain.local.<domain>`, Authelia one_factor
 - **Claims:** none (no PVC)
@@ -16,7 +15,7 @@ the File System Access API. See repo-root `CLAUDE.md` for shared conventions.
 - **Digest-pinned `:latest`**, built by the fork below
 - **Host:** daniel-box or daniel-server (k8s), preference only — added 2026-08-26
 - **State:** none. No Secret, no PVC, no backup job — the pod serves files and holds nothing
-- **Flux applies it, not Ansible** (D4.5). Its `containers_list` entry is `platform: k8s`,
+- **Flux applies it, not Ansible** (D4.5). Its `containers_list` entry is in `cluster/services.yml`,
   so nothing applies it by hand, and a merged change reaches
   the cluster when `promote` publishes and verifies the next bundle. Its digest-bump PRs
   therefore draw no `land-wait` and no `probe.py health` run.

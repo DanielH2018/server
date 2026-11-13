@@ -70,12 +70,12 @@ def host_records(conf: str) -> dict[str, str]:
     return records
 
 
-def _hostvars(address_overrides: dict[str, str] | None = None) -> dict[str, dict]:
+def _hosts(address_overrides: dict[str, str] | None = None) -> dict[str, dict]:
     """`host_vars/` for the three hosts as a play's `hostvars` fact, one address replaceable."""
-    hostvars = {host: load_yaml(HOST_VARS / f"{host}.yml") for host in HOSTS}
+    hosts = {host: load_yaml(HOST_VARS / f"{host}.yml") for host in HOSTS}
     for host, address in (address_overrides or {}).items():
-        hostvars[host] = {**hostvars[host], "server_ip": address}
-    return hostvars
+        hosts[host] = {**hosts[host], "server_ip": address}
+    return hosts
 
 
 def rendered_records(address_overrides: dict[str, str] | None = None) -> dict[str, str]:
@@ -87,7 +87,7 @@ def rendered_records(address_overrides: dict[str, str] | None = None) -> dict[st
             would fail them while naming the wrong cause.
     """
     conf = render_role_template(
-        "pihole", CONFIGMAP, {"hostvars": _hostvars(address_overrides)}
+        "pihole", CONFIGMAP, {"hosts": _hosts(address_overrides)}
     )
     records = host_records(conf)
     assert records, (

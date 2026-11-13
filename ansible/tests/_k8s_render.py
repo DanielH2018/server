@@ -162,7 +162,7 @@ def render_role_template(
     on what changes. `rendered_docs()` is the whole tree at inventory values; this is one
     template at values the inventory does not hold, so it is not cached and each call renders.
 
-    `role` need not be a `containers_list` entry: an included helper role such as
+    `role` need not be a service entry: an included helper role such as
     `k8s/image-builder` renders here too, with the variables its caller hands over passed as
     `overrides`.
 
@@ -191,7 +191,7 @@ def render_role_template(
 
 @functools.cache
 def _entry_names(host: str) -> frozenset[str]:
-    return frozenset(c["name"] for c in host_context(host)["containers_list"])
+    return frozenset(c["name"] for c in host_context(host)["services"])
 
 
 @functools.cache
@@ -201,7 +201,7 @@ def _inventory_context(role: str, host: str) -> dict:
 
 
 def _template_context(role: str, overrides: dict | None, host: str) -> dict:
-    """The context one role's template renders with, for a role in no `containers_list` too."""
+    """The context one role's template renders with, for a role in no service entry too."""
     stubs = _stubs(overrides)
     if role in _entry_names(host):
         return role_context(role, stubs, host)[0]

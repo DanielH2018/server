@@ -128,8 +128,7 @@ def test_every_deployed_role_block_matches_what_the_generator_writes_now():
 
 
 def test_the_gate_covers_the_known_services():
-    # `k8s_entries` filters `containers_list` by platform; a filter that stopped
-    # matching would make the gate above pass on nothing.
+    # An empty service list would make the gate above pass on nothing.
     names = {e["name"] for e in g.Estate().k8s_entries().values()}
     assert KNOWN_SERVICES <= names, sorted(KNOWN_SERVICES - names)
 
@@ -160,10 +159,9 @@ def test_a_hand_edited_block_is_flagged(tmp_path):
     # names `sonarr-config`'s class, and media-volume declares the `media-data` it mounts.
     _copy_role("volume-claim", tmp_path / "roles")
     _copy_role("media-volume", tmp_path / "roles")
-    (tmp_path / "daniel-box.yml").write_text(
-        yaml.safe_dump({"containers_list": [entry]})
-    )
-    estate = g.Estate(Inventory(host_vars=tmp_path))
+    services = tmp_path / "services.yml"
+    services.write_text(yaml.safe_dump({"containers_list": [entry]}))
+    estate = g.Estate(Inventory(services=services))
     roles = dst.parent
     assert g.stale_k8s_docs(write=False, estate=estate, k8s_roles=roles) == []
 
@@ -186,16 +184,15 @@ def _littlelink_block(tmp_path):
     entry = dict(g.Estate().k8s_entries()["littlelink"])
     entry.pop("owner", None)
     dst = _copy_role("littlelink", tmp_path / "roles")
-    (tmp_path / "daniel-box.yml").write_text(
-        yaml.safe_dump({"containers_list": [entry]})
-    )
-    estate = g.Estate(Inventory(host_vars=tmp_path))
+    services = tmp_path / "services.yml"
+    services.write_text(yaml.safe_dump({"containers_list": [entry]}))
+    estate = g.Estate(Inventory(services=services))
     g.stale_k8s_docs(write=True, estate=estate, k8s_roles=dst.parent)
     return (dst / "CLAUDE.md").read_text().split("<!-- /generated_from -->")[0]
 
 
 def test_a_k8s_role_glance_names_flux_in_place_of_the_deploy_tag(tmp_path):
-    """No `owner` key marks the entry: `platform: k8s` alone makes it Flux's (H1.9)."""
+    """No `owner` key marks the entry: an entry in the service list alone makes it Flux's (H1.9)."""
     block = _littlelink_block(tmp_path)
     assert "- **Applied by:** Flux, through `promote`" in block
     # The block is wrapped, so match the gate across a line break.

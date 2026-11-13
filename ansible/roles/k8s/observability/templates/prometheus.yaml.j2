@@ -246,7 +246,7 @@ data:
       # feeds. A job needing anything more stays hand-written below, and reads its target's
       # port from the entry with `entry_port` (#3816).
       # ansible/filter_plugins/scrape_jobs.py documents the keys.
-{% for job in containers_list | scrape_jobs(k8s_namespace) %}
+{% for job in services | scrape_jobs(k8s_namespace) %}
 {% if job.replicas_var is not defined or lookup('vars', job.replicas_var) | int > 0 %}
       - job_name: {{ job.job }}
 {% if job.interval is defined %}
@@ -283,7 +283,7 @@ data:
         authorization:
           credentials_file: /etc/prometheus-scrape-creds/ha_token
         static_configs:
-          - targets: ['home-assistant.{{ k8s_namespace }}.svc:{{ containers_list | entry_port('home-assistant') }}']
+          - targets: ['home-assistant.{{ k8s_namespace }}.svc:{{ services | entry_port('home-assistant') }}']
       # The ingress probes (docs/target-architecture/monitoring/m4-blackbox-ingress.md): one
       # target per entry the `ingress_probe_targets` filter yields, so an entry with a
       # `hostname` gets a probe with no edit here and `probe: false` opts it out. These are the
@@ -304,12 +304,12 @@ data:
         scrape_interval: 1m
         metrics_path: /probe
         static_configs:
-{% for tile in containers_list | ingress_probe_targets %}
+{% for tile in services | ingress_probe_targets %}
           - targets: ['https://{{ tile.hostname }}.local.{{ domain }}']
             labels:
               service: {{ tile.entry }}
               module: {{ 'http_sso_302' if tile.behind_sso else 'http_2xx' }}
-              page_tier: {{ 'critical' if containers_list | in_service_tier(tile.entry, 'home-critical') else 'warning' }}
+              page_tier: {{ 'critical' if services | in_service_tier(tile.entry, 'home-critical') else 'warning' }}
 {% endfor %}
         # The standard blackbox multi-target rewrite: the target becomes the probe's `target`
         # parameter and the series' `instance`, the `module` label becomes the `module`
@@ -322,7 +322,7 @@ data:
           - source_labels: [__param_target]
             target_label: instance
           - target_label: __address__
-            replacement: 'blackbox-exporter.{{ k8s_namespace }}.svc:{{ containers_list | entry_port('blackbox-exporter') }}'
+            replacement: 'blackbox-exporter.{{ k8s_namespace }}.svc:{{ services | entry_port('blackbox-exporter') }}'
       # M6 batch B8: the probes that replace Kuma's hand-written non-push tiles
       # (docs/target-architecture/monitoring/m6-retire-kuma.md, "B0, B5, B7 and B8"). The Pi's
       # ping tile has no target: `up{job="node-pi"}` carries it. Loki's /ready tile has none
@@ -336,7 +336,7 @@ data:
         scrape_interval: 1m
         metrics_path: /probe
         static_configs:
-          - targets: ['http://{{ hostvars['daniel-pi'].server_ip }}:51821']
+          - targets: ['http://{{ hosts['daniel-pi'].server_ip }}:51821']
             labels: {service: wg-easy, module: http_2xx, page_tier: warning}
           - targets: ['https://email-rss.{{ domain }}/admin/login']
             labels: {service: email-to-rss, module: http_2xx, page_tier: warning}
@@ -353,9 +353,9 @@ data:
             labels: {service: traefik, module: http_body_OK, page_tier: critical}
 {% endif %}
           - targets: ['{{ dns_k8s_vip }}:53']
-            labels: {service: pihole, module: dns_a_homepage, page_tier: {{ 'critical' if containers_list | in_service_tier('pihole', 'home-critical') else 'warning' }}}
+            labels: {service: pihole, module: dns_a_homepage, page_tier: {{ 'critical' if services | in_service_tier('pihole', 'home-critical') else 'warning' }}}
           - targets: ['{{ mqtt_k8s_vip }}:1883']
-            labels: {service: mosquitto, module: tcp_connect, page_tier: {{ 'critical' if containers_list | in_service_tier('mosquitto', 'home-critical') else 'warning' }}}
+            labels: {service: mosquitto, module: tcp_connect, page_tier: {{ 'critical' if services | in_service_tier('mosquitto', 'home-critical') else 'warning' }}}
           - targets: ['{{ jellyfin_k8s_lan_ip }}:8096']
             labels: {service: jellyfin, module: tcp_connect, page_tier: warning}
           - targets: ['{{ slzb_ip }}:6638']
@@ -370,7 +370,7 @@ data:
           - source_labels: [__param_target]
             target_label: instance
           - target_label: __address__
-            replacement: 'blackbox-exporter.{{ k8s_namespace }}.svc:{{ containers_list | entry_port('blackbox-exporter') }}'
+            replacement: 'blackbox-exporter.{{ k8s_namespace }}.svc:{{ services | entry_port('blackbox-exporter') }}'
       # One tcp_connect target per container the Pi publishes a port for, from the
       # `published_ports` selection, which this job alone reads. A container added
       # to daniel-pi's compose_services gets a probe with no edit here. The targets sort by
@@ -387,8 +387,8 @@ data:
         scrape_timeout: 30s
         metrics_path: /probe
         static_configs:
-{% for published in ((hostvars['daniel-pi'].compose_services | published_ports) | sort) %}
-          - targets: ['{{ hostvars['daniel-pi'].server_ip }}:{{ published.split(':')[1] }}']
+{% for published in ((hosts['daniel-pi'].compose_services | published_ports) | sort) %}
+          - targets: ['{{ hosts['daniel-pi'].server_ip }}:{{ published.split(':')[1] }}']
             labels: {service: {{ published.split(':')[0] }}, module: tcp_connect}
 {% endfor %}
         relabel_configs:
@@ -399,7 +399,7 @@ data:
           - source_labels: [__param_target]
             target_label: instance
           - target_label: __address__
-            replacement: 'blackbox-exporter.{{ k8s_namespace }}.svc:{{ containers_list | entry_port('blackbox-exporter') }}'
+            replacement: 'blackbox-exporter.{{ k8s_namespace }}.svc:{{ services | entry_port('blackbox-exporter') }}'
       # GPU utilization on each node, through gpu-exporter (roles/k8s/gpu-exporter). The
       # dri-device-plugin advertises the render node as `devic.es/dri` and jellyfin and tdarr
       # both request it, but nothing turned the resulting load into a series — a slow transcode
@@ -425,7 +425,7 @@ data:
             regex: gpu-exporter
           - source_labels: [__meta_kubernetes_pod_container_port_number]
             action: keep
-            regex: "{{ containers_list | entry_port('gpu-exporter') }}"
+            regex: "{{ services | entry_port('gpu-exporter') }}"
           - source_labels: [__meta_kubernetes_pod_node_name]
             target_label: origin
           - source_labels: [__meta_kubernetes_pod_node_name]
@@ -562,7 +562,7 @@ data:
         scrape_interval: 1m
         scrape_timeout: 30s
         static_configs:
-          - targets: ['{{ k8s_pi_client_ip }}:{{ hostvars['daniel-pi'].compose_services | entry_port('alloy') }}']
+          - targets: ['{{ k8s_pi_client_ip }}:{{ hosts['daniel-pi'].compose_services | entry_port('alloy') }}']
             labels:
               origin: daniel-pi
               instance: daniel-pi

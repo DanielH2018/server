@@ -7,14 +7,13 @@ role, no Deployment of its own.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
-- **Applied by:** Flux, through `promote` (`platform: k8s`); `land.sh --tags=media-volume`
-  gates the rollout
+- **Applied by:** Flux, through `promote`; `land.sh --tags=media-volume` gates the rollout
 - **Route:** none (no `templates/ingressroute.yaml.j2`)
 - **Claim:** `media-data` (not Longhorn (media-local))
 <!-- /generated_from -->
 
 - **Flux applies it, not Ansible** (#5652, Wave D). Its `containers_list` entry is
-  `platform: k8s`, so nothing applies it by hand. A merged change
+  in `cluster/services.yml`, so nothing applies it by hand. A merged change
   reaches the cluster when `promote` publishes and verifies the next bundle. The claim carries
   `kustomize.toolkit.fluxcd.io/prune: disabled`, so neither a revert nor a removal from the
   bundle can delete it.

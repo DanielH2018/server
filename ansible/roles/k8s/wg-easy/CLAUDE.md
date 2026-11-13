@@ -17,8 +17,7 @@ LAN-only **Docker** wg-easy, on an older version with a different auth model.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
-- **Applied by:** Flux, through `promote` (`platform: k8s`); `land.sh --tags=wg-easy` gates the
-  rollout
+- **Applied by:** Flux, through `promote`; `land.sh --tags=wg-easy` gates the rollout
 - **Image:** `ghcr.io/wg-easy/wg-easy` (`wg_easy_k8s_image`)
 - **Route:** `wg-easy.<domain>` · `wg-easy.local.<domain>`, Authelia one_factor
 - **Claim:** `wg-easy-config` (weekly -> B2 (default target))
@@ -28,7 +27,7 @@ LAN-only **Docker** wg-easy, on an older version with a different auth model.
   deliberate PR; the digest keeps it immutable within v15.x.
 - **`udp_port: 51820`** on the `containers_list` entry.
 - **Flux applies it, not Ansible** (D5.12, an own-window flip with the operator on the LAN). Its
-  `containers_list` entry is `platform: k8s`, so nothing applies it by hand, and a merged change reaches the cluster when `promote` publishes and
+  `containers_list` entry is in `cluster/services.yml`, so nothing applies it by hand, and a merged change reaches the cluster when `promote` publishes and
   verifies the next bundle. The Deployment is `Recreate` and the role declares no snapshot claim, so
   the tag renders no
   `-snapshot` Job. A change that rolls the pod cuts every WireGuard peer until the new pod is

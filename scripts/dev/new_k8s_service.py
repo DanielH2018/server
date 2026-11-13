@@ -187,16 +187,16 @@ See repo-root `CLAUDE.md` for shared conventions.
 
 
 def entry_lines(name, port, hostname, auth_tier, route) -> str:
-    """The `containers_list` entry, as the block this script appends to cluster/services.yml.
+    """The service entry, as the block this script appends to cluster/services.yml.
 
     Position in the list does not set the deploy order: `ansible/filter_plugins/toposort.py`
     derives the ordering edges from the templates and the entry, and gives each
     `K8S_APPLIES_LAST` role (netpol-baseline) an edge onto every other entry. An edge no
     template carries goes in `depends_on:` here, never in the position.
 
-    `platform: k8s` alone makes the entry Flux's; it carries no `owner` key (H1.9).
+    Every entry is Flux's; it carries no `owner` key (H1.9).
     """
-    lines = [f"  - name: {name}", "    platform: k8s"]
+    lines = [f"  - name: {name}"]
     if route:
         lines.append(f'    hostname: "{hostname}"')
     lines.append(f"    port: {port}")

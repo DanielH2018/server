@@ -25,7 +25,7 @@ def _claims_line(entry, role_dir, roles, k3s_defaults, group_vars=None):
 def test_claims_line_carries_each_claims_tier_and_moves_with_the_tier_lists(tmp_path):
     """A tier beside every named claim, read from the lists — never typed (red-proof pair)."""
     roles = tmp_path / "roles"
-    entry = {"name": "svc", "platform": "k8s"}
+    entry = {"name": "svc"}
     role = roles / "svc"
     (role / "templates").mkdir(parents=True)
     (role / "defaults").mkdir()
@@ -105,7 +105,7 @@ def test_claims_line_reads_a_group_vars_override_of_a_tier_list(tmp_path):
             }
         )
     )
-    entry = {"name": "svc", "platform": "k8s"}
+    entry = {"name": "svc"}
     assert "`svc-config` (weekly" in _claims_line(entry, role, roles, k3s_defaults)
     override = {
         "k3s_longhorn_weekly_volumes": [],
@@ -116,7 +116,7 @@ def test_claims_line_reads_a_group_vars_override_of_a_tier_list(tmp_path):
     )
 
 
-def test_stale_k8s_docs_derives_the_r2_set_from_the_injected_containers_list(tmp_path):
+def test_stale_k8s_docs_derives_the_r2_set_from_the_injected_service_list(tmp_path):
     """The role's R2 expression reads the estate the generator was given, not the repo (#3947)."""
     roles = tmp_path / "roles"
     role = roles / "svc"
@@ -132,25 +132,21 @@ def test_stale_k8s_docs_derives_the_r2_set_from_the_injected_containers_list(tmp
     k3s_defaults.write_text(
         yaml.safe_dump(
             {
-                "k3s_longhorn_r2_volumes": "{{ containers_list | tier_backup_claims("
+                "k3s_longhorn_r2_volumes": "{{ services | tier_backup_claims("
                 "'home-critical', k8s_namespace) }}"
             }
         )
     )
     entry = {
         "name": "svc",
-        "platform": "k8s",
         "tier": "home-edge",
         "backup_claims": ["svc-config"],
     }
-    host_vars = tmp_path / "host_vars"
-    host_vars.mkdir()
-    (host_vars / "daniel-box.yml").write_text(
-        yaml.safe_dump({"containers_list": [entry]})
-    )
+    services = tmp_path / "services.yml"
+    services.write_text(yaml.safe_dump({"containers_list": [entry]}))
     all_vars = tmp_path / "all.yml"
     all_vars.write_text("k8s_namespace: lab\n")
-    estate = g.Estate(Inventory(all_vars=all_vars, host_vars=host_vars))
+    estate = g.Estate(Inventory(all_vars=all_vars, services=services))
     g.stale_k8s_docs(
         write=True, estate=estate, k8s_roles=roles, k3s_defaults=k3s_defaults
     )

@@ -29,9 +29,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
 
 from lib.git import git, git_stdout
 from lib.render_guard import (  # noqa: F401  (`service_tags_at` is read through this module)
-    containers_entries,
     entry_tags,
-    host_files,
+    k8s_services,
     service_tags_at,
 )
 from lib.repo_paths import REPO
@@ -64,13 +63,8 @@ _K8S_READERS_NOTE = (
 
 
 def declared_tags() -> set[str]:
-    """Every name that selects a service, read from containers_list."""
-    return {
-        tag
-        for path in host_files()
-        for entry in containers_entries(path)
-        for tag in entry_tags(entry)
-    }
+    """Every name that selects a service, read from `cluster/services.yml`."""
+    return {tag for entry in k8s_services() for tag in entry_tags(entry)}
 
 
 def plane_note(files) -> str:

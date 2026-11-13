@@ -19,7 +19,7 @@ from service_tier import NEVER_SHED, SERVICE_TIERS, shed_entries
 
 
 def _entry(name, tier=None, **extra):
-    entry = {"name": name, "platform": "k8s", **extra}
+    entry = {"name": name, **extra}
     if tier is not None:
         entry["tier"] = tier
     return entry

@@ -17,5 +17,5 @@ spec:
     app: traefik
   ports:
     - name: metrics
-      port: {{ containers_list | metrics_port('traefik-k8s') }}
+      port: {{ services | metrics_port('traefik-k8s') }}
       targetPort: 8080

@@ -29,7 +29,6 @@ from validate.validate_lib.shipped_render import render_shipped
 from lib.render_guard import (
     HOST_VARS,
     containers_entries_in,
-    entry_platform,
 )
 
 PI = "daniel-pi"
@@ -111,7 +110,7 @@ _TEXTS: dict[str, tuple[tuple[str, str, str], ...]] = {}
 def rendered_texts(host: str = PI) -> tuple[tuple[str, str, str], ...]:
     """(role, template name, rendered TEXT) for every template of every Docker role on `host`.
 
-    Every `templates/*.j2` of every non-k8s `containers_list` entry, compose and bind-mounted
+    Every `templates/*.j2` of every `containers_list` entry, compose and bind-mounted
     config alike — the Pi's equivalent of `_k8s_render.rendered_texts()`. The whole set is
     rendered rather than only what a caller asks for, so the render failure of a template no
     guard reads yet still arrives as a failure here.
@@ -135,8 +134,6 @@ def render_texts(
     """
     texts = []
     for entry in containers_entries_in(vars_):
-        if entry_platform(entry) == "k8s":
-            continue
         role = entry["name"]
         for tpl in sorted((roles / role / "templates").glob("*.j2")):
             texts.append(

@@ -50,9 +50,9 @@ longhorn_reconcile_k8s_mem_request: 32Mi
 # docs generators, the catalogue and the tier tests read them from this file
 # (`scripts/lib/service_tiers.py:resolved_tier_lists`).
 #
-# Each is a Jinja expression over `containers_list`, so a raw YAML read returns the expression;
+# Each is a Jinja expression over `services`, so a raw YAML read returns the expression;
 # Python readers resolve it through `scripts/lib/service_tiers.py`. None carries a
-# `default([])` on `containers_list`: an empty result is not "route nothing". It returns every
+# `default([])` on `services`: an empty result is not "route nothing". It returns every
 # `r2` volume to B2 and every weekly volume to the daily group, so an undefined list must fail
 # the render instead.
 
@@ -62,22 +62,22 @@ longhorn_reconcile_k8s_mem_request: 32Mi
 # the set worth putting on a target with free egress. Names are namespace/pvcName, matching
 # the keys of k3s_longhorn_weekly_volumes below.
 #
-# Derived, not listed: every `backup_claims` volume of every `home-critical` containers_list
+# Derived, not listed: every `backup_claims` volume of every `home-critical` services
 # entry (tier `home-edge` or `home-automation`; filter_plugins/service_tier.py, #3389). To
 # change the set, edit the entry.
-k3s_longhorn_r2_volumes: "{{ containers_list | tier_backup_claims('home-critical', k8s_namespace) }}"
+k3s_longhorn_r2_volumes: "{{ services | tier_backup_claims('home-critical', k8s_namespace) }}"
 
 # The weekly B2 tier, as `{namespace/pvcName: shard}`. A volume's backup weekday is its shard
 # (0=Sunday), so no weekday stacks two heavy volumes under B2's daily transaction cap.
 #
-# Derived, not listed: every `weekly_backup_claims` entry of every containers_list entry, each
+# Derived, not listed: every `weekly_backup_claims` entry of every services entry, each
 # naming its own shard (filter_plugins/longhorn_groups.py, #4207). To change the set, edit the
 # entry. The shard used to be the volume's index mod 7 in a hand list here, so removing one
 # volume moved every volume below it to another weekday; a declared shard moves only itself.
 # This job swaps each volume's recurring-job group label, so a PVC recreated from the `longhorn`
 # StorageClass reverts to daily until its next hourly run: drift in the over-backed-up
 # direction, caught by the next run.
-k3s_longhorn_weekly_volumes: "{{ containers_list | longhorn_weekly_claims(k8s_namespace) }}"
+k3s_longhorn_weekly_volumes: "{{ services | longhorn_weekly_claims(k8s_namespace) }}"
 
 # Bound volumes forced OUT of the backup set, as `namespace/pvcName` — an override for volumes
 # whose StorageClass says `longhorn` (back me up) but which should not be. Needed as a separate
@@ -91,9 +91,9 @@ k3s_longhorn_weekly_volumes: "{{ containers_list | longhorn_weekly_claims(k8s_na
 # uploaded (traefik-acme reports 35 -> 48 MB across daily backups of a 25 MB volume), and B2
 # publishes no cap-headroom endpoint, so **B2 Reachable** is the readout for a cap that fires.
 #
-# Derived, not listed: every `no_backup_claims` entry of every containers_list entry, where
+# Derived, not listed: every `no_backup_claims` entry of every services entry, where
 # each claim carries the reason it is excluded (filter_plugins/longhorn_groups.py, #4207).
-k3s_longhorn_nobackup_volumes: "{{ containers_list | longhorn_nobackup_claims(k8s_namespace) }}"
+k3s_longhorn_nobackup_volumes: "{{ services | longhorn_nobackup_claims(k8s_namespace) }}"
 
 # The CronJob's one-off run per role revision, `longhorn-reconcile-deploy-gate-<spec digest8>` in
 # `longhorn-reconcile-verify`. It is a post-apply mutation: the run holds the tier labels and

@@ -27,8 +27,9 @@ ROLES = g.RoleIndex(
 )
 
 
-def docker_host(containers_list):
-    return {"server_ip": "10.0.0.161", "containers_list": containers_list}
+def plain_host():
+    """A host_vars layer that lists no services."""
+    return {"server_ip": "10.0.0.161"}
 
 
 def pi_host(compose_services=()):
@@ -101,14 +102,18 @@ def service(name="sonarr", **overrides):
 
 def model_for(live, cluster=None):
     host_vars = {
-        "daniel-box": docker_host(
-            [{"name": "traefik", "platform": "k8s", "port": 8080}]
-        ),
-        "daniel-server": docker_host([]),
+        "daniel-box": plain_host(),
+        "daniel-server": plain_host(),
         "daniel-pi": pi_host([{"name": "sonarr", "port": 8989}]),
     }
     return g.build_model(
-        GLOBALS, host_vars, live, "2026-08-07 03:00 CDT", ROLES, cluster
+        GLOBALS,
+        host_vars,
+        live,
+        "2026-08-07 03:00 CDT",
+        ROLES,
+        cluster,
+        k8s=[{"name": "traefik", "port": 8080}],
     )
 
 

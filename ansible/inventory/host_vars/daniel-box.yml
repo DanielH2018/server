@@ -12,7 +12,7 @@ k3s_node_wifi_link: wlp4s0
 # UFW-allowed here by the k3s-server component's k3s-join-* rules. Derived from daniel-server's one
 # literal (#4063).
 k3s_agent_node_ips:
-  - "{{ hostvars['daniel-server'].server_ip }}"
+  - "{{ hosts['daniel-server'].server_ip }}"
 # Cloud-init (subiquity) image: sshd's real config is the drop-in, not the bare
 # /etc/ssh/sshd_config. The sshd and integrity-scans components read this path, so a wrong
 # value points them at a file sshd never loads.

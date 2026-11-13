@@ -66,7 +66,7 @@ spec:
       # own loopback hostPort.
       nodeSelector:
         kubernetes.io/hostname: {{ k8s_registry_node }}
-{{ pod_shell(containers_list | tier_priority_class('registry'), run_as_user=1000, run_as_group=1000, fs_group=1000) }}
+{{ pod_shell(services | tier_priority_class('registry'), run_as_user=1000, run_as_group=1000, fs_group=1000) }}
       initContainers:
         # The mirror's upstream, on the pod's loopback only: nothing outside the pod reaches it,
         # so no Service port or NetworkPolicy rule names it.

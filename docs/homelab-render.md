@@ -184,17 +184,16 @@ A role's templates render with these variables, resolved for daniel-box:
 
 - role defaults, `group_vars/all.yml` and daniel-box's host_vars, in Ansible's precedence,
   with the stub file's variables over all of them;
-- `containers_list`: the k8s entries only, in the dependency order of `toposort_containers`.
-  `scripts/renderer/renderer_lib/context.py` builds it with two filters from
+- `services`: every entry of `cluster/services.yml`, in the dependency order of
+  `toposort_containers`. `scripts/renderer/renderer_lib/context.py` sorts it with
   `ansible/filter_plugins/toposort.py`, and templates read that order. An entry's position
-  in the inventory list therefore does not matter: an ordering no template carries goes in
+  in the list therefore does not matter: an ordering no template carries goes in
   `depends_on:` on the entry;
 - `container_item`, the tag's own entry from that list;
-- `hostvars` for every host in `ansible/inventory/hosts.ini`. daniel-box's entry is the
-  rendered context, so `hostvars[k8s_primary_node].containers_list` is that same list.
-  Another host's entry holds its `hosts.ini` inline variables under its own host_vars,
-  resolved against that host's own variables. `group_vars`' `k8s_pi_client_ip` reads
-  `hostvars['daniel-pi'].server_ip`, so it is daniel-pi's address, not daniel-box's.
+- `hosts`, one entry per `ansible/inventory/host_vars/` file, holding that host's literal
+  `server_ip`, `compose_services` and `claude_agent_ssh_login_enabled`
+  (`scripts/lib/render_context.py:_hosts`). `group_vars`' `k8s_pi_client_ip` reads
+  `hosts['daniel-pi'].server_ip`, so it is daniel-pi's address, not daniel-box's.
 
 The render is strict. A name that no layer supplies stops the render with an error naming it.
 The render guards under `scripts/validate/` print `STUB` instead, and lay stub values such as
@@ -205,8 +204,7 @@ still takes its `| default(...)`.
 The same rule holds one level down. A variable whose value names an undefined variable, such
 as `x: "{{ no_such_name }}"`, is left undefined rather than resolved to `STUB` or `None`, so a
 template that reads `x` stops the render. One that nothing reads costs nothing. That matters because three `group_vars/all.yml` values name
-variables that only setup roles or Ansible itself define. Another host's `hostvars` entry is
-stricter: a value there that does not resolve stops the render at once.
+variables that only setup roles or Ansible itself define. A `hosts` entry carries only a host's literal values, so none of them can fail to resolve.
 
 ### The file rules
 
@@ -681,7 +679,7 @@ Two tests hold this:
   name from the tree. It also fails on a lookup whose reads it cannot name: any plugin but
   `b64file`, `file`, `template` and `vars`, and a `vars` lookup outside a loop over
   `py_table('CHECKS')` or `scrape_jobs`. A read through
-  `vars.X` or `hostvars[H].X` counts as a read of `X`, and a `vars` or `hostvars` read whose
+  `vars.X` or `hosts[H].X` counts as a read of `X`, and a `vars` or `hosts` read whose
   name it cannot list fails it too. The engine is `_live_read_census.py` beside it.
 
 A new value that a task reads from the cluster and a template needs fails the census. Move

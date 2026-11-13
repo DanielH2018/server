@@ -31,7 +31,7 @@ _HOST = "daniel-box"
 
 
 def _context(host: str) -> dict:
-    entries = render_context(K8S_ROLES, host=host, strict=True)["containers_list"]
+    entries = render_context(K8S_ROLES, host=host, strict=True)["services"]
     entry = next(c for c in entries if c["name"] == _ROLE)
     return render_context(
         K8S_ROLES / _ROLE, host=host, overrides={"container_item": entry}, strict=True

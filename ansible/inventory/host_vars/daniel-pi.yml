@@ -1,6 +1,6 @@
 ---
 server_ip: 10.0.0.139
-# The Pi's one address literal (#3719). group_vars' k8s_pi_client_ip reads it through hostvars.
+# The Pi's one address literal (#3719). group_vars' k8s_pi_client_ip reads it through hosts.
 ssh_config_path: /etc/ssh/sshd_config.d/50-cloud-init.conf
 # `domain` is inherited from group_vars/all.yml (daniel-hunter.com), exactly like every other
 # host — the Pi carries no host-specific override. It is a plain variable, not a secret

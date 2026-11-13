@@ -66,7 +66,7 @@ from validate.validate_lib.shell_lint import (
 COMPONENTS = REPO / "hosts" / "components"
 
 # Shell-specific overrides: values a lint pass needs to be shell-plausible rather than the bare
-# "STUB" literal StubUndefined fills in elsewhere. No linted template needs one. `hostvars` needs
+# "STUB" literal StubUndefined fills in elsewhere. No linted template needs one. `hosts` needs
 # no stub: `render_context` builds it from each host's literal `server_ip`, and a stub here would
 # replace that whole map.
 SHELL_STUB_OVERRIDES: dict[str, str] = {}

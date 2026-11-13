@@ -13,13 +13,13 @@ import render_guard
 from render_guard import (
     BASE_CONTEXT,
     HOST_VARS,
-    HOST_VARS_IN_TREE,
     SERVICES_IN_TREE,
     REPO,
     host_files,
     host_layer,
     load_yaml,
-    service_records_at_or_none,
+    k8s_services,
+    k8s_services_at,
     service_tags_at_or_none,
 )
 from repo_paths import ALL_VARS, ANSIBLE, INVENTORY, ROLES
@@ -28,36 +28,21 @@ from lib.git_testing import commit, init_repo
 
 # One commit declaring a service, and one adding a second. `deploy.sh --at <sha>` validates
 # its tags against the commit it renders, so the answer must move with the ref.
-_WITHOUT = "containers_list:\n  - name: sonarr\n    platform: k8s\n"
-_WITH = _WITHOUT + "  - name: newsvc\n    platform: k8s\n"
+_WITHOUT = "containers_list:\n  - name: sonarr\n"
+_WITH = _WITHOUT + "  - name: newsvc\n"
 
 
-def _tags_repo(tmp_path: Path, *texts: str | dict[str, str]) -> list[str]:
-    """Commit each `texts` entry as the host_vars file in `tmp_path`; the shas, in order.
-
-    A str is `daniel-box.yml`'s text; a dict is `{file name: text}` for a commit that writes
-    several hosts at once.
+def _tags_repo(tmp_path: Path, *texts: str) -> list[str]:
+    """Commit each `texts` entry as ``cluster/services.yml`` in `tmp_path`; the shas, in order.
 
     `lib.git_testing` scrubs every ``GIT_*`` variable: under a prek hook an inherited
     ``GIT_DIR`` beats ``cwd``, and these commits would land in the real repository.
     """
     init_repo(tmp_path)
-    host_vars = tmp_path / HOST_VARS_IN_TREE
-    host_vars.mkdir(parents=True)
-    shas = []
-    for n, text in enumerate(texts):
-        files = text if isinstance(text, dict) else {"daniel-box.yml": text}
-        shas.append(
-            commit(
-                tmp_path,
-                f"c{n}",
-                **{
-                    f"{HOST_VARS_IN_TREE}/{name}": content
-                    for name, content in files.items()
-                },
-            )
-        )
-    return shas
+    return [
+        commit(tmp_path, f"c{n}", **{SERVICES_IN_TREE: text})
+        for n, text in enumerate(texts)
+    ]
 
 
 def test_service_tags_at_a_ref_sees_what_that_commit_declares(tmp_path):
@@ -93,65 +78,25 @@ def test_host_vars_that_do_not_parse_at_the_ref_are_none_too(tmp_path):
     assert service_tags_at_or_none(shas[1], tmp_path) is None
 
 
-def test_service_records_at_a_ref_keep_the_declaring_host(tmp_path):
-    """CLEAN half: the host survives the read, so a Pi entry added at the
-    commit routes to daniel-pi through the same rule the working-tree read uses."""
-    shas = _tags_repo(
-        tmp_path,
-        _WITHOUT,
-        {
-            "daniel-pi.yml": "containers_list:\n  - name: newpi\n",
-            "_example.yml": "x: 1\n",
-        },
-    )
-    records = service_records_at_or_none(shas[1], tmp_path)
-    assert records == [
-        ("daniel-box", "k8s", "sonarr"),
-        ("daniel-pi", "docker", "newpi"),
+def test_k8s_services_at_a_ref_reads_the_named_entries_of_that_commit(tmp_path):
+    shas = _tags_repo(tmp_path, _WITHOUT, _WITH + "  - port: 1\n")
+    assert [e["name"] for e in k8s_services_at(shas[1], tmp_path)] == [
+        "sonarr",
+        "newsvc",
     ]
-    # The same tag is declared on NO host at the commit before it.
-    before = service_records_at_or_none(shas[0], tmp_path)
-    assert before is not None and ("daniel-pi", "docker", "newpi") not in before
+    assert [e["name"] for e in k8s_services_at(shas[0], tmp_path)] == ["sonarr"]
 
 
-def test_unreadable_service_records_are_none_rather_than_an_empty_list(tmp_path):
-    """REJECTING half: `[]` would route every tag to no host, which is a local deploy."""
-    _tags_repo(tmp_path, _WITHOUT)
-    assert service_records_at_or_none("deadbeefdeadbeefdeadbeef", tmp_path) is None
-
-
-def test_records_at_a_ref_read_the_service_list_and_the_host_vars_before_it(tmp_path):
-    """A landing reads its merge commit and `deploy.sh --at` an older one: both layouts count."""
-    (before,) = _tags_repo(tmp_path, _WITHOUT)
-    after = commit(
-        tmp_path,
-        "move",
-        **{f"{HOST_VARS_IN_TREE}/daniel-box.yml": "x: 1\n", SERVICES_IN_TREE: _WITH},
-    )
-    assert service_records_at_or_none(after, tmp_path) == [
-        ("daniel-box", "k8s", "sonarr"),
-        ("daniel-box", "k8s", "newsvc"),
-    ]
-    assert service_records_at_or_none(before, tmp_path) == [
-        ("daniel-box", "k8s", "sonarr")
-    ]
-
-
-def test_the_k8s_host_layer_holds_the_service_list_is_clean():
-    assert "containers_list" not in load_yaml(HOST_VARS / "daniel-box.yml")
-    names = {e["name"] for e in host_layer(HOST_VARS, "daniel-box")["containers_list"]}
+def test_the_service_list_is_in_cluster_services_and_no_host_vars_file():
+    names = {e["name"] for e in k8s_services()}
     assert {"sonarr", "traefik", "longhorn"} <= names
-    assert "containers_list" not in host_layer(HOST_VARS, "daniel-server")
+    assert not [p.name for p in host_files() if "containers_list" in load_yaml(p)]
 
 
-def test_a_list_in_both_files_is_flagged(tmp_path):
-    host_vars = tmp_path / HOST_VARS_IN_TREE
-    host_vars.mkdir(parents=True)
-    (host_vars / "daniel-box.yml").write_text(_WITHOUT)
-    (tmp_path / SERVICES_IN_TREE).parent.mkdir()
-    (tmp_path / SERVICES_IN_TREE).write_text(_WITH)
-    with pytest.raises(ValueError, match="both declare containers_list"):
-        host_layer(host_vars, "daniel-box")
+def test_host_layer_is_the_hosts_own_file_and_empty_for_a_host_without_one(tmp_path):
+    (tmp_path / "daniel-box.yml").write_text("server_ip: 2.2.2.2\n")
+    assert host_layer(tmp_path, "daniel-box") == {"server_ip": "2.2.2.2"}
+    assert host_layer(tmp_path, "absent") == {}
 
 
 def test_load_yaml_returns_a_mapping(tmp_path):
@@ -216,7 +161,7 @@ def test_anchors_resolve_to_the_real_tree():
     """A wrong ``parents[N]`` reads as an empty inventory, not an error."""
     assert (REPO / "pyproject.toml").is_file()
     assert (ANSIBLE / "secret_rotation.yml").is_file()
-    assert (INVENTORY / "hosts.ini").is_file()
+    assert (INVENTORY / "host_vars" / "daniel-box.yml").is_file()
     assert (HOST_VARS / "daniel-box.yml").is_file()
     assert (ROLES / "k8s").is_dir()
 

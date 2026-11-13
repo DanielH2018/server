@@ -8,8 +8,7 @@ finding and why the prefs plane is shaped this way.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
-- **Applied by:** Flux, through `promote` (`platform: k8s`); `land.sh --tags=qbittorrent` gates
-  the rollout
+- **Applied by:** Flux, through `promote`; `land.sh --tags=qbittorrent` gates the rollout
 - **Images:** `lscr.io/linuxserver/qbittorrent` (`qbittorrent_k8s_image`),
   `lscr.io/linuxserver/wireguard` (`qbittorrent_k8s_wireguard_image`), `python`
   (`qbittorrent_k8s_prefs_check_image`)
@@ -23,7 +22,7 @@ finding and why the prefs plane is shaped this way.
   shared claim — mounted here, owned elsewhere.
 
 - **Flux applies it, not Ansible** (D5, Wave D). Its `containers_list` entry is
-  `platform: k8s`, so nothing applies it by hand. A merged change
+  in `cluster/services.yml`, so nothing applies it by hand. A merged change
   reaches the cluster when `promote` publishes and verifies the next bundle. `k8s_autodeploy: false`
   still stops Renovate's
   automerge of a pin bump.

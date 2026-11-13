@@ -20,7 +20,7 @@ from _infra_map import (
     GLOBALS,
     ROLES,
     container,
-    docker_host,
+    plain_host,
     live_ok,
     model_for,
     pi_host,
@@ -67,9 +67,9 @@ def test_render_html_embeds_the_captioned_figure_not_the_bare_svg():
 
 def test_render_html_escapes_values_from_the_inventory():
     host_vars = {
-        "daniel-box": docker_host([]),
-        "daniel-server": docker_host([{"name": "<script>evil</script>", "port": 1}]),
-        "daniel-pi": pi_host([]),
+        "daniel-box": plain_host(),
+        "daniel-server": plain_host(),
+        "daniel-pi": pi_host([{"name": "<script>evil</script>", "port": 1}]),
     }
     page = g.render_html(g.build_model(GLOBALS, host_vars, {}, "now", ROLES))
     assert "<script>evil" not in page
@@ -102,7 +102,7 @@ def test_the_diagram_labels_edges_with_addresses_from_the_inventory():
     }
     model = g.build_model(
         global_vars,
-        {"daniel-box": docker_host([]), "daniel-pi": pi_host([])},
+        {"daniel-box": plain_host(), "daniel-pi": pi_host([])},
         {},
         "now",
         ROLES,
