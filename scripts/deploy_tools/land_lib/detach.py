@@ -123,6 +123,29 @@ def _live_kinds(slots: Path) -> list[str]:
     return live
 
 
+def _parent_of(pid: int) -> int | None:
+    try:
+        stat = Path(f"/proc/{pid}/stat").read_text()
+    except OSError:
+        return None
+    # The parent pid is the second field after the parenthesised command name.
+    return int(stat.rpartition(")")[2].split()[1])
+
+
+def _ancestor_holds_slot(slots: Path) -> bool:
+    """Whether a process above this one holds a slot in `slots` (issue #8280).
+
+    A parent landing from a checkout cut before `SLOT_HELD_ENV` existed holds a slot but never
+    sets the variable, so its `--fresh` child finds the slot by walking up its own parents.
+    """
+    pid = _parent_of(os.getpid())
+    while pid and pid > 1:
+        if (slots / f"{pid}.slot").exists():
+            return True
+        pid = _parent_of(pid)
+    return False
+
+
 def _release_slot(pid: int) -> None:
     with contextlib.suppress(Exception):
         (_slot_dir() / f"{pid}.slot").unlink(missing_ok=True)
@@ -133,15 +156,16 @@ def holding_slot(kind: str) -> Generator[None]:
     """Count this foreground landing in the registry while it runs, without ever refusing it.
 
     A lander unit runs `land.sh` in the foreground and has no retry, so a refusal would page
-    rather than wait. The slot still lowers the room every `--detach` beside it sees.
+    rather than wait. The slot still lowers the room every `--detach` beside it sees. A
+    landing below one that holds a slot, such as a `--fresh` child, takes none of its own.
     """
-    if os.environ.get(SLOT_HELD_ENV):
+    slots = _slot_dir()
+    if os.environ.get(SLOT_HELD_ENV) or _ancestor_holds_slot(slots):
         yield
         return
     os.environ[SLOT_HELD_ENV] = "1"
     pid = os.getpid()
     with contextlib.suppress(OSError):
-        slots = _slot_dir()
         slots.mkdir(parents=True, exist_ok=True)
         (slots / f"{pid}.slot").write_text(kind)
     try:

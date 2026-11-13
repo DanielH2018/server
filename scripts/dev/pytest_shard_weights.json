@@ -863,6 +863,7 @@
  "scripts/deploy_tools/tests/test_land_fakes_cleanup.py": 0.14,
  "scripts/deploy_tools/tests/test_land_flip_gate_tree.py": 0.19,
  "scripts/deploy_tools/tests/test_land_fresh.py": 0.17,
+ "scripts/deploy_tools/tests/test_land_fresh_slot.py": 0.92,
  "scripts/deploy_tools/tests/test_land_handoff.py": 0.0,
  "scripts/deploy_tools/tests/test_land_health_unreadable_gate.py": 0.0,
  "scripts/deploy_tools/tests/test_land_health_verdict.py": 0.0,
