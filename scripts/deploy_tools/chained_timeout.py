@@ -43,7 +43,8 @@ CONCURRENT = 5
 # names (d4-ordering.md, *The cap*). The three workflow limits are sized from this figure
 # (ansible/tests/repo/test_promote_workflow_verify.py).
 # DECIDED: the clamp stands although the published bundle's all-changed chain is past it
-# (#5868: 36732s with 122 Kustomizations, against 19800s; it was 36480s until #8190 added
+# (#5868: 36912s with 123 Kustomizations, against 19800s; it was 36732s until #8192 added
+# `slskd`, 36480s until #8190 added
 # `lidarr` and `lidarr-snapshot`, which lidarr waits on, 36360s until #8194 added
 # `navidrome-snapshot`, which navidrome waits on, 35646s until #6095 added
 # `traefik-precheck`, which traefik waits on and which waits on traefik's own edges, 33246s

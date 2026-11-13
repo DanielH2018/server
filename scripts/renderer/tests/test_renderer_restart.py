@@ -25,8 +25,10 @@ from renderer.renderer_lib.restart import (
     pod_references,
     restart_targets,
     restart_values,
+    sops_secrets,
     stamp,
 )
+from renderer.renderer_lib.sops_entries import SOPS_MANIFEST_KEYS
 from renderer.shadow_diff import stub_file_text
 from renderer.standalone_map import fleet_render
 
@@ -426,6 +428,9 @@ def test_every_outside_secret_declares_the_keys_its_owning_role_renders(fleet):
         for obj in yaml_fast.safe_load_all(text)
         if isinstance(obj, dict) and obj.get("kind") == "Secret"
     }
+    for tag, sops in fleet.sops_manifests.items():
+        for name, keys in sops_secrets(sops, SOPS_MANIFEST_KEYS).items():
+            secrets[name] = (tag, keys)
     declared = {
         (tag, name): set(keys)
         for tag in k8s_tags()

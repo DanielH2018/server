@@ -700,6 +700,7 @@
         "ansible/roles/k8s/qbittorrent/defaults/main.yml",
         "ansible/roles/k8s/registry/defaults/main.yml",
         "ansible/roles/k8s/scrutiny/defaults/main.yml",
+        "ansible/roles/k8s/slskd/defaults/main.yml",
         "ansible/roles/k8s/system-upgrade/defaults/main.yml",
         "ansible/roles/k8s/tdarr/defaults/main.yml",
         "ansible/roles/k8s/terraria/defaults/main.yml",

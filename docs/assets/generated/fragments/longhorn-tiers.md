@@ -3,7 +3,7 @@
 |---|---|---|---|---|
 | Daily | R2 (`r2`) | 4 | `30 3 * * *` | 14 |
 | Weekly | B2 (`default`) | 22, one weekday each | `30 4 * * <declared shard>` | 2 |
-| None | — | 3 listed, plus the `longhorn-nobackup` StorageClass | — | — |
+| None | — | 4 listed, plus the `longhorn-nobackup` StorageClass | — | — |
 
 Daily tier volumes (`k3s_longhorn_r2_volumes`): `homelab/traefik-acme`, `homelab/authelia-config`, `homelab/zigbee2mqtt-data`, `homelab/home-assistant-config`.
 
