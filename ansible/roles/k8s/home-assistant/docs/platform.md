@@ -124,7 +124,8 @@ logs `_connect_hass failed` and raises `PyChromecastError` into
   get` and `probe.py loki-query`. The filter does not reach copies written before it shipped:
   the pod's log file on daniel-box until kubelet rotates it, and Loki records stored before the
   Alloy stage until the 744h retention expires. Rotating the cast user's refresh token is what
-  ends those. `probe.py loki-query --json` streams the raw body and is NOT redacted.
+  ends those; *Rotating the cast user's refresh token* below has the steps. `probe.py
+  loki-query --json` streams the raw body and is NOT redacted.
 - **The fault is episodic.** The 197 warnings fall in 11 hour-buckets across 4 of the 7 days
   (09-21, 09-22, 09-23, 09-26), and 3 days have none. The longest clean gap inside the window
   is about 56 h, so a quiet day or two is not evidence the fault has cleared. Inside a burst,
@@ -207,6 +208,35 @@ records stored before the filter shipped, until the 744h retention expires:
 `probe.py loki-query` redacts the token and keeps the marker. `--json`, `logcli` and Grafana
 Explore read the stored line, which carries the token for anything shipped before the Alloy
 redaction stage.
+
+### Rotating the cast user's refresh token
+
+The token is not in SOPS. HA's cast integration creates a system user for the config entry and
+mints the token itself (`homeassistant/components/cast/home_assistant_cast.py`,
+`async_setup_ha_cast`). The token is a working HA API credential, so rotate it whenever a copy
+leaks. The operator ran these steps on 2026-11-13, in this order.
+
+1. **Delete the Google Cast config entry**, from Settings → Devices & services → Google Cast →
+   ⋮ → Delete. Removing the entry deletes the cast system user, and its token with it
+   (`async_remove_entry` calls `async_remove_user`). The old token is void from this point.
+   Do not try Settings → People: HA refuses to change or delete a system user there ("System
+   users cannot be updated").
+2. **Add Google Cast again**, with `10.0.0.137` as its known host, in the add form or the
+   entry's Configure dialog. HA is pod-networked, so it
+   has no mDNS discovery and finds the Hub through the known host alone. Setup creates a new
+   system user with a new token.
+3. **Restart HA**, from Settings → System → Restart. Without this, the new entry discovers
+   nothing and logs nothing. The deleted entry's discovery holds a process-wide lock that
+   only an HA stop releases, and the new entry's `setup_internal_discovery` returns at once
+   when it cannot take the lock (`homeassistant/components/cast/discovery.py`). On the restart
+   HA logs `Stopping internal pychromecast discovery`.
+4. **Check that the Hub is `media_player.bedroom_display` again**, and rename the entity ID back
+   if HA chose a new one. Every display automation targets that ID. Run `probe.py ha state
+   media_player.bedroom_display`, then `probe.py ha verify-entities` and `probe.py ha
+   verify-automations`.
+
+Casting stops between step 1 and step 4. Once the Hub is back, `bedroom_display_show`
+re-casts the dashboard on its own in a lit room.
 
 ### Browser Mod does not extend the cast display (investigated 2026-09-10, issue #1454)
 

@@ -310,6 +310,10 @@ before deciding what is due. Examples:
   that one small Secret. Flux applies it once `cluster_vars.py write` has updated the cluster file. Delete the old key in the
   console only after HA has restarted on the new one. `google_assistant_project_id` changes
   only with a new Google project.
+- The Google Cast system user's refresh token is not in SOPS: HA mints and stores it. Rotate it
+  in HA by deleting and re-adding the Google Cast integration, then restarting HA.
+  `ansible/roles/k8s/home-assistant/docs/platform.md`, *Rotating the cast user's refresh
+  token*, has the steps and the traps.
 - `pi_peer_backup_ssh_key`: generate a new ed25519 keypair, store the private half with
   `sops set`, and commit the public half over
   `hosts/components/pi-peer-backup-target/pi-peer-backup.pub` and into the `line:` of that
