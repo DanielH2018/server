@@ -29,10 +29,12 @@ serves read-only.
   downloads land under `/data/torrents/lidarr`, so an import is a hardlink.
 
 ## Notable
-- **Not wired yet, and why.** arr-notification's Discord seed speaks `/api/v3`, and Lidarr
-  serves `/api/v1`, so this role ships no `templates/verify/` seed. Homepage's tiles read each
-  app's key by name, so lidarr has no tile. The quality profiles decided on #8190 are set in the
-  UI until a seed Job declares them.
+- **`templates/verify/` holds arr-notification's seed Job.** The renderer emits it into
+  `lidarr-verify`, which declares the `Discord (health)` Connect notification over `/api/v1`
+  (the script picks the version per app). The Job's pod carries `app: lidarr-verify`, which
+  lidarr's `netpol_from` lists. `ansible/roles/k8s/arr-notification/CLAUDE.md` has the design.
+- **Not wired yet, and why.** Homepage's tiles read each app's key by name, so lidarr has no
+  tile. The quality profiles decided on #8190 are set in the UI until a seed Job declares them.
 - **Lidarr's own state lives in `lidarr.db`:** the root folder, the qBittorrent download client
   and the quality profiles are configured in the UI and survive through the snapshot, not git.
 - **Import lists are the discovery feed, and they live in `lidarr.db` too.** Settings, Import

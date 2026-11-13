@@ -978,6 +978,7 @@ containers_list:
       - traefik         # deliberate, not redundant — see the policy's header
       - prowlarr        # Application Sync writes indexers in
       - slskd           # Soularr, a container in the slskd pod, triggers imports
+      - lidarr-verify   # templates/verify/ Job — see the policy's header
     # homepage's Lidarr widget dials the ClusterIP; this key adds homepage to the callers above.
     homepage_widget: true
   # The Soulseek client, with Soularr feeding it Lidarr's wanted albums, behind its own

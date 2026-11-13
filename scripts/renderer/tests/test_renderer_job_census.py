@@ -477,8 +477,8 @@ def test_the_live_bundle_passes_every_row(live_bundle):
     assert set(tags) | SHARED_KINDS <= bundle.keys()
     assert {"bento-pdf", "cluster-vars", "soak"} <= bundle.keys()
     assert any(doc["kind"] == "Job" for doc in bundle["soak"]), "the soak Job is gone"
-    # The first verify directories, from sonarr's and radarr's flip (D5.20).
-    for verify in ("sonarr-verify", "radarr-verify"):
+    # The arr-notification seed directories: sonarr's and radarr's flip (D5.20), and lidarr's.
+    for verify in ("sonarr-verify", "radarr-verify", "lidarr-verify"):
         assert any(doc["kind"] == "Job" for doc in bundle[verify]), (
             f"{verify} has no Job"
         )
