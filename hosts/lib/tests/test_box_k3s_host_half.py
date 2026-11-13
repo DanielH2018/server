@@ -121,22 +121,26 @@ def test_a_check_imports_the_ping_key_and_the_file_it_read_retires(package, unit
     )
 
 
-def test_the_accounting_touches_the_stamp_check_10_reads(package):
-    service = text(package, f"{SYSTEM}homelab-b2-deletion-accounting.service")
+@pytest.mark.parametrize(
+    ("unit", "stamp", "env"),
+    [
+        ("homelab-b2-deletion-accounting", "b2-deletion-accounting", "B2_DELETIONS"),
+        ("homelab-b2-budget-listing", "b2-budget-listing", "B2_BUDGET"),
+    ],
+)
+def test_a_b2_timer_touches_the_stamp_check_10_reads(package, unit, stamp, env):
+    service = text(package, f"{SYSTEM}{unit}.service")
     shim = text(package, "/usr/lib/homelab/longhorn-backup-health.sh")
     assert (
-        "ExecStartPre=-/usr/bin/touch /var/lib/longhorn-cron-fired/b2-deletion-accounting\n"
+        f"ExecStartPre=-/usr/bin/touch /var/lib/longhorn-cron-fired/{stamp}\n"
         in service
     )
     assert (
-        'CRON_FIRED_STAMP="/var/lib/longhorn-cron-fired/b2-deletion-accounting"' in shim
+        f'LONGHORN_{env}_CRON_FIRED_STAMP="/var/lib/longhorn-cron-fired/{stamp}"'
+        in shim
     )
-
-
-def test_check_10_stats_the_timer_the_package_ships(package):
-    shim = text(package, "/usr/lib/homelab/longhorn-backup-health.sh")
-    timer = f"{SYSTEM}homelab-b2-deletion-accounting.timer"
-    assert f'LONGHORN_B2_DELETIONS_CRON_FILE="{timer}"' in shim
+    timer = f"{SYSTEM}{unit}.timer"
+    assert f'LONGHORN_{env}_CRON_FILE="{timer}"' in shim
     assert timer in package.files
 
 

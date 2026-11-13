@@ -33,10 +33,11 @@ k3s_longhorn_restore_drill_max_age_days: 3
 # state check 8 is already paging about on its own terms.
 k3s_longhorn_restore_drill_coverage_slack_days: 5
 
-# How far back checks 9 and 10 of longhorn-backup-health.sh read the `b2-deletions` journal tag.
-# The cron runs daily, so 26h holds the last run under either DST offset with a couple of hours of
-# jitter to spare. It is also how long a reported fault stays RED: an UNPRICED deletion — a
-# permanent event, not a state — ages out after this window. The trim's arms read Longhorn's
+# How far back checks 9 and 10 of longhorn-backup-health.sh read the `b2-deletions` and
+# `b2-budget` journal tags. Both timers run daily, so 26h holds the last run under either DST
+# offset with a couple of hours of jitter to spare. It is also how long a reported fault stays
+# RED: an UNPRICED deletion — a permanent event, not a state — ages out after this window, and an
+# OVER BUDGET projection clears within it once a clean run lands. The trim's arms read Longhorn's
 # `trim` CronJob and its newest Job instead, and take their cadence from its schedule.
 #
 # Check 10 makes the window load-bearing twice over. It alarms when the window holds NO
