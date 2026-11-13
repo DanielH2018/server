@@ -103,8 +103,11 @@ defaults:
   #                      indefinitely (the unit is Type=notify with TimeoutStartSec=0). Repair
   #                      with `k3s server --cluster-reset`, or wipe and re-run k3s-bringup.yml.
   #   kubelet-arg        the two unsafe sysctls wg-easy needs; setup/k3s's defaults say why.
-  #                      image-gc-high-threshold=85 is the kubelet's default value, so it
-  #                      changes no behaviour: H6.7 added it to prove the windowed restart.
+  #                      The image-gc pair starts image GC below Longhorn's 75% replica
+  #                      scheduling floor, which the root filesystem shares: at the kubelet's
+  #                      85 every superseded image stayed until Longhorn stopped scheduling
+  #                      (#8307). The kubelet refuses a low threshold not below the high one,
+  #                      so the pair moves together. k3s-agent sets the same pair.
   #   secrets-encryption the apiserver encrypts Secrets on write, so k3s's snapshots carry no
   #                      plaintext Secret to R2. Secrets written before the flag stay plaintext
   #                      until `k3s secrets-encrypt rotate-keys` rewrites them: docs/host-packages.md,
@@ -143,7 +146,8 @@ defaults:
     advertise-address: "{{ server_ip }}"
     kubelet-arg:
       - allowed-unsafe-sysctls=net.ipv4.conf.all.src_valid_mark,net.ipv4.ip_forward
-      - image-gc-high-threshold=85
+      - image-gc-high-threshold=65
+      - image-gc-low-threshold=55
     secrets-encryption: true
     etcd-expose-metrics: "{{ k3s_etcd_expose_metrics }}"
     kube-apiserver-arg: "{{ (k3s_server_audit_args if k3s_audit_log_enabled else []) + ['authentication-config=' ~ k3s_authentication_config_path] }}"

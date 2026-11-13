@@ -70,8 +70,11 @@ defaults:
     # removing it changes the agent's flags for nothing.
     node-label:
       - node.longhorn.io/create-default-disk=false
+    # The image-gc pair is k3s-server's, which says why it sits below Longhorn's floor.
     kubelet-arg:
       - allowed-unsafe-sysctls=net.ipv4.conf.all.src_valid_mark,net.ipv4.ip_forward
+      - image-gc-high-threshold=65
+      - image-gc-low-threshold=55
   # Kubelet's graceful node shutdown (#8296), rendered into kubelet.conf.d. Without it every
   # shutdown of this node logs out Longhorn's iSCSI sessions under mounted ext4 filesystems:
   # open-iscsi's stop runs logout-all.sh while the pods still hold the mounts, and each of the

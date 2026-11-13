@@ -47,8 +47,9 @@ MERGE_BASE_ARGS = [
     "--etcd-snapshot-compress",
     "--etcd-snapshot-schedule-cron=0 */12 * * *",
     "--etcd-snapshot-retention=28",
-    # H6.7: the kubelet's default value, added to prove the windowed restart.
-    "--kubelet-arg=image-gc-high-threshold=85",
+    # #8307: image GC starts below Longhorn's replica scheduling floor.
+    "--kubelet-arg=image-gc-high-threshold=65",
+    "--kubelet-arg=image-gc-low-threshold=55",
 ]
 
 
