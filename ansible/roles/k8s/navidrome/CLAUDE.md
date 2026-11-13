@@ -35,8 +35,21 @@ until 2026-11-12, and unparked with an empty library for the music pipeline to f
 - **The first account created in the web UI becomes the admin.** Authelia gates the UI, so
   only a signed-in user can reach that form, but create the admin right after a fresh
   `navidrome-data`.
-- **Subsonic clients cannot pass Authelia.** Behind `one_factor` only the web UI works; a
-  phone or desktop client needs `/rest/` exempted, with Navidrome's own auth in front of it.
+- **`/rest/` skips Authelia on the public name only.** Subsonic clients cannot pass
+  forward-auth, so `bridge_bypass_prefixes` renders a `navidrome-public-rest` route, and
+  navidrome checks each request's username and token itself. Point an app at
+  `navidrome.<domain>`; the `.local.` name still sends `/rest/` through Authelia. Each user
+  needs a password set in navidrome for the app to log in with.
+- **Never enable navidrome's reverse-proxy auth** (`ND_REVERSEPROXYWHITELIST`,
+  `ND_REVERSEPROXYUSERHEADER`). Navidrome honours the user header on `/rest/` too, so on the
+  unauthenticated route anyone could name any user.
+- **A wrong password on `/rest/` answers HTTP 200.** The Subsonic protocol reports the failure
+  in the body, so CrowdSec's status-based scenarios never see a failed login there. The edge
+  rate limit and each user's password strength are what stand in front of it. No CrowdSec
+  whitelist row covers `/rest/`: one keyed on a 2xx would also exempt those failed logins, and
+  `/rest/` has no unguessable id to key on as Jellyfin's `/Videos/<GUID>/` row does. If a
+  first library sync gets a phone banned, unban it as `ansible/roles/k8s/crowdsec/CLAUDE.md`
+  describes before reaching for a whitelist.
 - **`ND_ENABLEEXTERNALSERVICES` is `"false"`**, which is load-bearing for the network posture:
   it disables both the GitHub release check and the metadata agents, so the pod opens no
   outbound connection at all — that's what puts it in `netpol-baseline`'s `BORN_FENCED_ROLES`.
