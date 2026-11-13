@@ -12,7 +12,8 @@ hook and CI — wired in `pyproject.toml` `testpaths`). The bug-prone computed l
 pure `custom_templates/{fan,lighting}.jinja` macros; entity and time reads (`states()`,
 `now()`) stay in the YAML callers, and macros take plain numbers. The tested set:
 `fan_target_level` (curve, ±0.7-level hysteresis, night/sleep caps — used by
-`bedroom_apply_fan`), `in_wake_window` and `wake_brightness` (the morning ramp, used by
+`bedroom_apply_fan`), `wake_elapsed` (which wake anchor started the window, used by
+`binary_sensor.bedroom_in_wake_window`), `in_wake_window` and `wake_brightness` (the morning ramp, used by
 `bedroom_apply_natural` and `bedroom_apply_wake`; `wake_transition` was removed, transition is
 a fixed 60s per ramp step), and `auto_light_allowed` (the lux gate, used by `templates.yaml`'s
 `bedroom_auto_light_allowed`).

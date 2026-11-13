@@ -215,8 +215,7 @@
 # dispatcher (morning ramp in-window, else full Adaptive Lighting). The lux gate applies OUTSIDE
 # the morning wake window only: during the window (45 min — alarm-15 to alarm+30) we wake regardless
 # of ambient light; afterwards we only turn on when the room is dim. The
-# window reads sensor.bedroom_wake_start — the SAME source the dispatcher's wake exception uses
-# (inherently in sync, no duplicated formula).
+# window is binary_sensor.bedroom_in_wake_window (alarm or 06:00 fallback), read through the lux gate.
 - id: bedroom_presence_on
   alias: Bedroom presence on
   description: Set the lights to their natural state when the room becomes occupied OR when it darkens past the lux gate while you're already present (unless overridden); gated on darkness outside the morning wake window.
@@ -298,14 +297,10 @@
       to: "off"
       for: "00:05:00"
   condition:
-    # Not inside the wake window. in_wake_window is the tested macro; the sensor read stays in the
-    # caller (mirrors bedroom_purifier_hold / bedroom_apply_natural). Outside the window this is true.
+    # Not inside the wake window, on the alarm or the 06:00 fallback. An unavailable sensor reads
+    # as outside, so leaving still turns the lights off.
     - condition: template
-      value_template: >-
-        {% set ws = states('sensor.bedroom_wake_start') %}
-        {% from 'lighting.jinja' import in_wake_window %}
-        {% set in_window = in_wake_window((now() - as_datetime(ws)).total_seconds() / 60 if ws not in ['unknown', 'unavailable'] else -1) | bool %}
-        {{ not in_window }}
+      value_template: "{{ not is_state('binary_sensor.bedroom_in_wake_window', 'on') }}"
   action:
     - service: script.bedroom_lights_set
       data:
@@ -321,10 +316,12 @@
 # makes a deliberate "off" survive the NEXT arrival edge, so this stays.
 # The Tap Dial already engaged manual-off on its off-press; voice (Google Assistant), the dashboard
 # tile, and the companion app did not — this closes that gap for every control surface at once.
-# Mirrors bedroom_fan_manual_detect: trigger.to_state.context.parent_id is none means the change came
-# from a person/integration, NOT one of our own automations/scripts (whose service calls are parented),
-# so absence_off / away / bedtime / apply_natural / the Tap Dial never reach the action here. Symmetric
-# with button 1: OFF -> engage manual-off; ON -> clear it (a deliberate turn-on resumes presence auto).
+# A change counts as manual only when its context carries a user_id: Google Assistant, the dashboard
+# and the companion app set one, and none of our automations do. parent_id cannot discriminate: an
+# automation started by an MQTT, time or time_pattern trigger runs in a root context, so the Tap Dial
+# and both wake ramps write with parent_id none too (#8384). Known miss: a change made outside HA (the
+# Z2M frontend, a direct Zigbee bind) has no user_id either. Symmetric with button 1: OFF -> engage
+# manual-off; ON -> clear it (a deliberate turn-on resumes presence auto).
 - id: bedroom_manual_light_detect
   alias: Bedroom manual light detect
   description: A hand/voice/dashboard turn-off of the bedroom lights engages the manual-off override (so presence won't re-light it); a manual turn-on clears it.
@@ -338,9 +335,7 @@
       entity_id: light.bedroom_lights
       to: "off"
   condition:
-    # Act ONLY on a genuine external/manual change. parent_id is none isolates person/voice/integration
-    # actions (our automations' service calls are parented — same discriminator as the fan detector).
-    # Guarding from_state against unavailable/unknown stops an HA restart / deploy recreate (the group
+    # Act ONLY on a change a person made through HA (user_id set; see the header above). Guarding from_state against unavailable/unknown stops an HA restart / deploy recreate (the group
     # comes back unknown->on) from clearing the override.
     - condition: template
       value_template: >-
@@ -349,7 +344,7 @@
         {{ ts is not none
            and ts.state in ['on', 'off']
            and (fs is none or fs.state not in ['unavailable', 'unknown'])
-           and ts.context.parent_id is none }}
+           and ts.context.user_id is not none }}
   action:
     - if: "{{ trigger.to_state.state == 'off' }}"
       then:
@@ -391,22 +386,9 @@
     # Not the deep-night warmth window (00:00-05:00).
     - condition: template
       value_template: "{{ now().hour >= 5 }}"
-    # Not during the wake ramp (it owns a fixed warm 2200K). Covers BOTH the real ramp (anchored on
-    # sensor.bedroom_wake_start) AND the 06:00 fallback: a fallback wake exists PRECISELY because
-    # wake_start is unavailable, so keying only off wake_start would leave the fixed-warm fallback
-    # frames exposed to color drift. When wake_start is unavailable, fall back to elapsed since
-    # input_datetime.bedroom_last_wake so both ramps suppress tracking uniformly. [0,45) = in a ramp;
-    # a last_wake from a prior day yields a large elapsed -> not in window -> tracking resumes.
+    # Not during the wake ramp (it owns a fixed warm 2200K), on the alarm or the 06:00 fallback.
     - condition: template
-      value_template: >-
-        {% set ws = states('sensor.bedroom_wake_start') %}
-        {% set lw = states('input_datetime.bedroom_last_wake') %}
-        {% set elapsed = (now() - as_datetime(ws)).total_seconds() / 60
-             if ws not in ['unknown', 'unavailable']
-             else ((now().timestamp() - state_attr('input_datetime.bedroom_last_wake', 'timestamp')) / 60
-                   if lw not in ['unknown', 'unavailable', ''] else -1) %}
-        {% from 'lighting.jinja' import in_wake_window %}
-        {{ not (in_wake_window(elapsed) | bool) }}
+      value_template: "{{ not is_state('binary_sensor.bedroom_in_wake_window', 'on') }}"
     # Only when the bulb is in color-temp mode (a manual RGB pick switches color_mode to xy -> skip).
     - condition: template
       value_template: "{{ state_attr('light.bedroom_lights', 'color_mode') == 'color_temp' }}"
@@ -448,16 +430,12 @@
       event: start
   action:
     - delay: "00:00:20"
-    # Bounded on the true 45-min ramp (in_wake_window), NOT on sensor.bedroom_wake_start's own
-    # availability — that sensor now stays available through an alarm+2h grace (36b46123, for the
-    # wake-ramp's own availability guard), so gating suppression on "wake_start unavailable" would
-    # silently widen this automation's skip-span to match and leave an empty-room AL self-on
-    # un-suppressed for up to 2h after the alarm. Same pattern as bedroom_color_track's wake-ramp guard.
+    # Bounded on the true 45-min ramp, NOT on sensor.bedroom_wake_start's own availability: that
+    # sensor stays available through an alarm+2h grace, so gating on it would leave an empty-room AL
+    # self-on un-suppressed for up to 2h after the alarm.
     - if: >-
-        {% set ws = states('sensor.bedroom_wake_start') %}
-        {% from 'lighting.jinja' import in_wake_window %}
         {{ is_state('binary_sensor.aqara_fp300_presence', 'off')
-           and not (in_wake_window((now() - as_datetime(ws)).total_seconds() / 60 if ws not in ['unknown', 'unavailable'] else -1) | bool) }}
+           and not is_state('binary_sensor.bedroom_in_wake_window', 'on') }}
       then:
         - service: script.bedroom_lights_set
           data:

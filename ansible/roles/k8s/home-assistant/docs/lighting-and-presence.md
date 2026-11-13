@@ -64,13 +64,12 @@ and the bedtime/wake routines that drive them.
   live in the same automations file; `bedroom_presence_on` and the morning reset both call
   `script.bedroom_apply_natural`.
 - **The gate definition.** The lux gate is window-aware: `in morning window OR T1 illuminance <
-  90` — it waves through regardless of ambient light during the 15-min wake window, then gates on
+  90` — it waves through regardless of ambient light during the 45-min wake window, then gates on
   darkness afterward. It lives in ONE place, `binary_sensor.bedroom_auto_light_allowed`
   (templates.yaml); `bedroom_presence_on`'s darkness condition and
-  `bedroom_apply_natural_gated` both reference that sensor, so the 90-lux threshold and the
-  window get tuned there, once. The window reads `sensor.bedroom_wake_start` — the same shared
-  dynamic-wake source the dispatcher's morning exception uses (see *Manual override, bedtime and
-  wake* below) — so the two stay in sync with no duplicated formula.
+  `bedroom_apply_natural_gated` both reference that sensor, so the 90-lux threshold gets tuned
+  there, once. The window is `binary_sensor.bedroom_in_wake_window`, which counts the real alarm
+  and the 06:00 fallback wake alike (see *Manual override, bedtime and wake* below).
 - **Why the gate moved off the FP300.** See *Aqara T1 ambient light sensor* below for the
   2026-09-01 move to `sensor.aqara_t1_illuminance` and the install-day measurements. An earlier
   estimate of the same bulb-dominance effect, used for the Tap Dial B4 rationale above, put the
@@ -281,11 +280,17 @@ and the bedtime/wake routines that drive them.
   dark drop the FP300 illuminance below the gate (the documented lights-dominate-illuminance feedback
   loop), and only the Tap Dial — not Google Assistant / the dashboard tile / the app — had been
   engaging manual-off. Confirmed live via the logbook (voice `google_assistant_command` OnOff-off →
-  `presence_on` numeric-state relight 36s later). Discriminates a genuine external action from our own
-  automations' parented service calls via **`trigger.to_state.context.parent_id is none`** (same trick
-  as `bedroom_fan_manual_detect`), so absence_off / away / bedtime / apply_natural / the Tap Dial never
-  reach its action; a `from_state` unavailable/unknown guard stops an HA-restart group recompute from
-  clearing the override. Symmetric with button 1 (off→engage, on→clear).
+  `presence_on` numeric-state relight 36s later). It counts a change as manual only when
+  **`trigger.to_state.context.user_id is not none`**. Google Assistant, the dashboard and the
+  companion app set a `user_id`; none of the automations do. `parent_id is none` cannot tell the
+  two apart: an automation started by an MQTT, time or time_pattern trigger runs in a root
+  context, so every Tap Dial and wake-ramp write also has no `parent_id` (#8384). The same
+  `user_id` gate guards `bedroom_sleep_mode_fan`. The known miss is a light change made outside HA
+  (the Z2M frontend, a direct Zigbee bind), which carries no `user_id`; no such bind exists.
+  `bedroom_fan_manual_detect` keeps its `parent_id` test, because the DREO RF remote has no
+  `user_id` and its expected-level check covers the self-echo. A `from_state` unavailable/unknown
+  guard stops an HA-restart group recompute from clearing the override. Symmetric with button 1
+  (off→engage, on→clear).
 - **Bedtime / sleep routine (since 2026-06-18).** `script.bedroom_bedtime` (the shared "going to
   sleep" action) engages `input_boolean.bedroom_sleep_mode` (a quiet fan cap), then — **critically
   reordered** — calls `adaptive_lighting.set_manual_control: true` BEFORE flipping AL into sleep
@@ -336,6 +341,23 @@ and the bedtime/wake routines that drive them.
   reliable "you're here to be woken" signal and still won't ramp an empty bedroom while away (an FP300
   dog/false-positive can't trigger the wake either). **Uses the WATCH alarm** (`pixel_watch_3`), not the
   phone's (unreliable). Watch caveat moot now — set alarms anywhere; only morning ones wake.
+- **Fallback wake (no watch alarm).** `bedroom_fallback_wake` runs a weekday 06:00 wake ramp
+  when `sensor.bedroom_wake_start` holds no alarm for today. Its START branch stamps
+  `input_datetime.bedroom_last_wake`, clears the overnight overrides and applies the first frame.
+  Per-minute ticks then drive the ramp from that stamp. START runs whatever
+  `input_boolean.bedroom_manual_off` holds and clears it, the same way the alarm reset does: a
+  night that ended with manual-off on otherwise got no wake at all (#8381). The RAMP and RELEASE
+  branches still honour manual-off, so a Tap Dial "off" mid-ramp stops the ramp.
+- **The wake window counts either wake.** `binary_sensor.bedroom_in_wake_window` is on for the
+  45 min after the most recent wake anchor at or before now: the alarm's `wake_start` or the
+  `last_wake` stamp. The `wake_elapsed` macro picks the anchor. `bedroom_auto_light_allowed`,
+  `bedroom_absence_off`, `bedroom_al_startup_suppress` and `bedroom_color_track` read the sensor,
+  so a fallback morning no longer lets absence-off cut the ramp (#8383).
+  `bedroom_purifier_hold` calls `wake_elapsed` inline instead: the sensor turns on only at its
+  minute refresh, and the alarm reset clears sleep mode at the alarm second, so reading it would
+  drop the hold for an instant. `bedroom_apply_natural` keeps reading `wake_start` alone, because
+  `bedroom_apply_wake` halts without it. The two per-minute ramp tickers also compute their own
+  elapsed.
 - **Sleep-quality-aware morning (since 2026-06-18).** The wake ramp adapts to how you slept: the
   `wake_brightness` macro (`custom_templates/lighting.jinja`, the tested source of the ramp —
   `bedroom_apply_natural` now delegates the morning exception to `bedroom_apply_wake`) scales the

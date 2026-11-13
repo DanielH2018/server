@@ -134,6 +134,9 @@ bedroom_apply_natural:
     # Pick the active exception ONCE via the tested natural_exception macro (nightlight vs wake vs
     # default). in_window is computed here (entity reads stay in the caller) and passed in; the
     # macro encodes the nightlight<->wake mutual exclusion (tested in test_lighting_macros.py).
+    # DECIDED: the wake exception reads sensor.bedroom_wake_start only, never
+    # binary_sensor.bedroom_in_wake_window (#8383). On a fallback morning that sensor is on, but
+    # bedroom_apply_wake halts without wake_start, so every natural apply would do nothing.
     - variables:
         exception: >-
           {% set ws = states('sensor.bedroom_wake_start') %}
