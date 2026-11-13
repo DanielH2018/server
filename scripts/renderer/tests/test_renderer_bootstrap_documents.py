@@ -69,7 +69,7 @@ def flux_render(tmp_path_factory):
 def published_render(tmp_path_factory):
     """Two flux-owned tags with a `dependsOn` chain, plus every plumbing tag already owned."""
     out = tmp_path_factory.mktemp("published") / "out"
-    plumbing = set(NAMED_MEMBERS) & homelab_render.flux_owned_tags()
+    plumbing = set(NAMED_MEMBERS) & homelab_render.k8s_tags()
     roles = sorted({"traefik", "traefik-crds"} | plumbing)
     assert homelab_render.cluster(out, roles, None) == RENDER_OK
     return out, plumbing

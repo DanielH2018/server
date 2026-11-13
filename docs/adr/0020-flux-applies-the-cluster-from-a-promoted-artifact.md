@@ -86,8 +86,9 @@ completes this record.
 - The deployer routes every path under `ansible/roles/k8s/<role>/` to `cs.flux` and reads no
   `owner`. `ansible/roles/setup/gitops_deploy/tests/test_changeset_has_no_service_fields.py`
   holds that the deleted `ChangeSet` fields stay deleted.
-- `ansible/tests/repo/test_owner_entry_points_census.py` follows each entry point down to
-  `k8s_tags` or `entry_owner`, the readers of which tags Flux applies.
+- `k8s_tags` (`scripts/lib/k8s_roles.py`) is the one reader of which tags Flux applies, and
+  the render entry points call it directly. The census that followed each entry point down to
+  it was deleted by #8165, once its `flux_owned_tags` wrapper was gone.
 
 **Removing a tag from the bundle deletes its objects.** D6.20 ([#7487](https://github.com/DanielH2018/server/pull/7487))
 switched 65 `<tag>` Kustomizations to the default deletion policy, which follows `prune`.

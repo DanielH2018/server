@@ -39,9 +39,6 @@ def test_the_census_finds_its_named_members():
     # Cutover-2; the fixture census below pins the dynamic-lookup mechanism on its own.
     assert {"terraria_k8s_replicas"} <= found.vars_names
     assert "terraria_k8s_replicas" in found.reached
-    assert (
-        "pipe in roles/k8s/homepage/templates/icons-configmap.yaml.j2" in found.accepted
-    )
 
 
 def test_the_template_set_holds_the_build_context_and_not_the_build_job():
@@ -153,54 +150,15 @@ def test_the_same_read_in_a_deployment_template_is_flagged(tmp_path):
     assert "widget_line" in _flagged(found)
 
 
-ICON = (
-    "{% for icon in ['a.png', 'b.png'] %}{{ lookup('pipe', 'base64 -w0 ' ~ playbook_dir"
-    " ~ '/roles/k8s/widget/files/' ~ icon) }}{% endfor %}"
-)
-
-
-def test_a_base64_pipe_lookup_is_clean(tmp_path):
-    found = _census(tmp_path, {"icons-configmap.yaml.j2": f"icon: {ICON}\n"})
+def test_a_b64file_lookup_is_clean(tmp_path):
+    icon = "{{ lookup('b64file', playbook_dir ~ '/roles/k8s/widget/files/a.png') }}"
+    found = _census(tmp_path, {"icons-configmap.yaml.j2": f"icon: {icon}\n"})
     assert found.offenders() == []
-    assert found.accepted == [
-        "pipe in roles/k8s/widget/templates/icons-configmap.yaml.j2"
-    ]
 
 
-def test_a_pipe_lookup_with_another_command_is_flagged(tmp_path):
-    found = _census(
-        tmp_path, {"configmap.yaml.j2": "host: {{ lookup('pipe', 'hostname') }}\n"}
-    )
-    assert len(found.problems) == 1
-    assert "lookup('pipe')" in found.problems[0]
-
-
-@pytest.mark.parametrize(
-    "path",
-    [
-        "playbook_dir ~ '/roles/k8s/widget/files/a.png; kubectl get secret -A'",
-        "playbook_dir ~ '/files/' ~ widget_icon",
-    ],
-    ids=["a trailing command", "a path piece the census cannot list"],
-)
-def test_a_base64_pipe_lookup_with_more_than_a_path_is_flagged(tmp_path, path):
-    template = f"icon: {{{{ lookup('pipe', 'base64 -w0 ' ~ {path}) }}}}\n"
-    found = _census(tmp_path, {"icons-configmap.yaml.j2": template})
-    assert found.accepted == []
-    assert len(found.problems) == 1
-    assert "lookup('pipe')" in found.problems[0]
-
-
-@pytest.mark.parametrize(
-    "arguments",
-    [", 'extra'", ", chdir='/'", ", *extra", ", **extra"],
-    ids=["a second positional", "a keyword", "a star args", "a star kwargs"],
-)
-def test_a_base64_pipe_lookup_with_a_further_argument_is_flagged(tmp_path, arguments):
-    path = "playbook_dir ~ '/roles/k8s/widget/files/a.png'"
-    template = f"icon: {{{{ lookup('pipe', 'base64 -w0 ' ~ {path}{arguments}) }}}}\n"
-    found = _census(tmp_path, {"icons-configmap.yaml.j2": template})
-    assert found.accepted == []
+def test_a_pipe_lookup_is_flagged(tmp_path):
+    icon = "{{ lookup('pipe', 'base64 -w0 ' ~ playbook_dir ~ '/roles/k8s/widget/files/a.png') }}"
+    found = _census(tmp_path, {"icons-configmap.yaml.j2": f"icon: {icon}\n"})
     assert len(found.problems) == 1
     assert "lookup('pipe')" in found.problems[0]
 

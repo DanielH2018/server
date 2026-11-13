@@ -67,7 +67,7 @@ from lib.repo_paths import REPO
 _PYPROJECT = tomllib.loads((REPO / "pyproject.toml").read_text())
 _INI = _PYPROJECT["tool"]["pytest"]["ini_options"]
 PYTHONPATH_DIRS = [(REPO / p).resolve() for p in _INI["pythonpath"]]
-# `ansible/roles/*/*/tests` is a glob, which pytest expands and `REPO / p` does not: read
+# `ansible/roles/k8s/*/tests` is a glob, which pytest expands and `REPO / p` does not: read
 # literally, it named a directory that does not exist and kept every role test out of the census.
 TESTPATH_DIRS = [d.resolve() for p in _INI["testpaths"] for d in REPO.glob(p)]
 
@@ -83,9 +83,6 @@ _SPEC.loader.exec_module(_roles_conftest)
 role_files_dir = _roles_conftest.role_files_dir
 ROLES_ROOT = ROLES_CONFTEST.parent
 
-# Vendored third-party Python, whose import hygiene is not ours to judge.
-_EXCLUDED = ("ansible/collections",)
-
 
 def _tracked_python() -> list[Path]:
     """Every tracked `.py` file, as an absolute path.
@@ -95,12 +92,7 @@ def _tracked_python() -> list[Path]:
     (ENFORCED by `ansible/tests/repo/test_tracked_python_hazards.py`). This checkout is itself
     one of those worktrees, so the hazard is not hypothetical here.
     """
-    return [
-        REPO / rel
-        for rel in _tracked_files()
-        if rel.endswith(".py")
-        and not any(rel == p or rel.startswith(p + "/") for p in _EXCLUDED)
-    ]
+    return [REPO / rel for rel in _tracked_files() if rel.endswith(".py")]
 
 
 def _provides(directory: Path, name: str) -> bool:

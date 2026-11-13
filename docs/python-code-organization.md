@@ -14,7 +14,7 @@ quoting a number.
 
 | Measure | Value |
 |---|---|
-| First-party `.py` files (excluding `ansible/collections/`) | 758 |
+| First-party `.py` files | 758 |
 | Lines | 160,395 |
 | Non-test modules | 250 |
 | Test, conftest and `_helper` files | 508 |

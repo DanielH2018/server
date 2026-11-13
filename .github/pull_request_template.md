@@ -12,13 +12,13 @@ Full procedure: CLAUDE.md → "After a PR Merges — Pull, Deploy, Verify".
 
 ## Services touched
 
-<!-- The deploy tags this maps to, or "none — docs/tasks only". -->
+<!-- The deploy tags this maps to, or "none — docs/tests only". -->
 
 ## Deploy
 
 - [ ] Deployed after merge (`land.sh` printed `VERDICT: settled`)
 - [ ] Deliberately deferred — reason:
-- [ ] Nothing to deploy (docs-, test-, or `tasks/`-only)
+- [ ] Nothing to deploy (docs- or test-only)
 
 ## Verification
 

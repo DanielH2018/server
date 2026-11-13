@@ -45,8 +45,7 @@
 users:
   # Declared by uid only (h7-delete-ansible.md, item 17, ruling 1): the install adopts the live
   # accounts, and a rebuilt host gets groups with gid equal to uid. The uids sit in the homelab
-  # band 900-949, below the ones Ubuntu hands out from 999 down (#8100). The live accounts held
-  # 995 and 994 and move with scripts/deploy_tools/renumber_host_users.py.
+  # band 900-949, below the ones Ubuntu hands out from 999 down (#8100).
   - {name: homelab-builder, uid: 902, home: /var/lib/homelab-builder, shell: /usr/sbin/nologin, comment: Homelab package builder}
   - {name: homelab-signer, uid: 903, home: /var/lib/homelab-signer, shell: /usr/sbin/nologin, comment: Homelab repository signer}
 defaults:

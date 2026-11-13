@@ -286,7 +286,7 @@ def k8s_entries(services: Path = K8S_SERVICES) -> dict[str, dict]:
 
 
 def k8s_tags(services: Path = K8S_SERVICES) -> set[str]:
-    """Every deploy tag of a k8s entry in `services`, each one Flux applies and Ansible may not.
+    """Every deploy tag of a k8s entry in `services`, each one Flux applies (C4).
 
     The tags rather than the entry names: an entry that declares `tags` is selected by each of
     them, and its name need not be one.

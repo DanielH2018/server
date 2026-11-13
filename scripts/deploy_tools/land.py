@@ -140,7 +140,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # scripts/
 from lib.exit_codes import LAND_BAD_ARGS, LAND_GAVE_UP
 from lib.git import git
-from deploy_tools.land_lib import detach, fresh, handoff, pin_gate, pipeline
+from deploy_tools.land_lib import detach, fresh, handoff, live_limit, pin_gate, pipeline
 from deploy_tools.land_lib.landing import Landing
 from deploy_tools.land_lib.ledger import annotation_line, result_line
 from deploy_tools.land_lib.options import HANDOFF_ENV, Options, parse_args
@@ -216,7 +216,11 @@ def main(
         landing = functools.partial(tools.fresh_landing, opts.primary, child)
     else:
         landing = functools.partial(_land, opts, tools, classifier)
-    return _detached(opts, landing) if opts.detach else landing()
+    reads = live_limit.github_reads(tools.gh_json)
+    if opts.detach:
+        return _detached(opts, landing, live_limit.admission(opts.pr, reads))
+    with detach.holding_slot(live_limit.pr_kind(opts.pr, reads)):
+        return landing()
 
 
 def _regate(opts: Options, tools: Tools) -> int:
@@ -239,6 +243,10 @@ def _hand_off(opts: Options, unit: str, tools: Tools) -> int:
 
     The flags the unit cannot honour are refused here, before any fork, so the caller reads
     the refusal and its exit code at once rather than from a log.
+
+    A `--detach` here takes no slot and is never refused: the unit runs `land.sh` as the
+    operator, on the operator's token, and its foreground landing holds the slot in the
+    operator's registry. A slot or a quota read here would count the caller's user instead.
     """
     refused = handoff.refused_flags(opts)
     if refused:
@@ -262,7 +270,7 @@ def _hand_off(opts: Options, unit: str, tools: Tools) -> int:
             tools.record_verdict(opts.pr, rc, line)
         return rc
 
-    return _detached(opts, land) if opts.detach else land()
+    return _detached(opts, land, None) if opts.detach else land()
 
 
 def _resolve_since(opts: Options) -> Options:
@@ -291,11 +299,13 @@ def _resolve_since(opts: Options) -> Options:
     return dataclasses.replace(opts, since=head.stdout.strip())
 
 
-def _detached(opts: Options, landing: Callable[[], int]) -> int:
+def _detached(
+    opts: Options, landing: Callable[[], int], admission: live_limit.Admission | None
+) -> int:
     """Fork `landing` into its own logfile and name the `cc-wait` command that waits on it."""
     log = detach.log_path(opts.pr, Path(opts.log_dir) if opts.log_dir else None)
     try:
-        pid = detach.fork(log, landing, f"land{opts.pr}")
+        pid = detach.fork(log, landing, admission, f"land{opts.pr}")
     except detach.TooManyLandings as full:
         log.unlink(missing_ok=True)
         print(f"land: {full}", file=sys.stderr)
