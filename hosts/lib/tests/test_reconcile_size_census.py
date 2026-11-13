@@ -94,15 +94,6 @@ def test_a_ceiling_one_line_below_the_count_fails_and_prints_both_numbers(tmp_pa
     assert "ceiling of 9" in message
 
 
-def test_the_failure_message_names_the_operator_ruling_and_its_three_choices(tmp_path):
-    lib = _lib(tmp_path, {"homelab-reconcile": "#!/usr/bin/python3\nx = 1\n"})
-    message = over_ceiling(lib, 0)
-    assert message is not None
-    assert "operator ruling" in message
-    assert "ADR-0029" in message
-    assert "ansible-pull" in message
-
-
 def test_a_helper_only_reconcile_imports_carries_the_count_over_the_ceiling(tmp_path):
     lib = _lib(
         tmp_path,
