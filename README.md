@@ -178,4 +178,4 @@ the name.
 
 For the Pi's Docker services, the `new-container` skill adds a `pi-compose` service: a
 `compose_services` entry in `host_vars/daniel-pi.yml` and the service's compose file. See
-`CLAUDE.md` → "Adding a New Service".
+`CLAUDE.md` → "Project Overview".

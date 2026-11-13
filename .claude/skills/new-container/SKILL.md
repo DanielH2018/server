@@ -9,8 +9,8 @@ allowed-tools: Read, Write, Edit, Glob, Bash, WebFetch, WebSearch
 > `daniel-pi`** (LAN-only utilities, WireGuard).
 >
 > For anything on the cluster — which is where nearly every new service belongs — do NOT use
-> this skill. Use the `new-k8s-service` skill. See repo-root `CLAUDE.md` → "Adding a New
-> Service".
+> this skill. Use the `new-k8s-service` skill. See repo-root `CLAUDE.md` → "Project
+> Overview".
 
 The Pi's Docker services are one Compose project, `homelab`, which the `homelab-daniel-pi`
 host package installs and `homelab-compose.service` runs. There is no Ansible role for
