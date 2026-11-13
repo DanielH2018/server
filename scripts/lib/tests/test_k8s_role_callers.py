@@ -59,7 +59,7 @@ def test_a_defaults_key_is_an_edge_and_a_mention_in_a_comment_is_not(tmp_path):
 
 def test_the_lookup_form_resolves(callers):
     """sonarr and radarr reach arr-notification only through their seed Jobs' `lookup()`s."""
-    assert callers["arr-notification"] == {"radarr", "sonarr"}
+    assert callers["arr-notification"] == {"lidarr", "radarr", "sonarr"}
 
 
 def test_a_template_lookup_into_another_role_is_an_edge(tmp_path):
