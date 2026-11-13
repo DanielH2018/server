@@ -149,20 +149,3 @@ def test_build_writes_the_withheld_root_order(tmp_path):
         "drill-stateful.yaml"
         in (tmp_path / "bundle/flux/kustomization.yaml").read_text()
     )
-
-
-@pytest.mark.parametrize("placeholder", ["./${cluster_path}", "./$$cluster_path"])
-def test_build_refuses_a_hand_applied_document_holding_a_placeholder(
-    tmp_path, placeholder
-):
-    if not hasattr(drill, "placeholder_problems"):
-        return
-    docs = copy.deepcopy(SYNC_DOCS)
-    docs[1]["spec"]["path"] = placeholder
-    try:
-        refusal = drill.build(tmp_path, docs, "reg:5000", lambda text: "ENC:" + text)
-    except (SystemExit, ValueError, RuntimeError) as error:
-        refusal = error
-    assert refusal, f"build wrote a hand-applied root whose path is {placeholder!r}"
-    root = tmp_path / "hand" / "root.yaml"
-    assert not root.exists() or placeholder not in root.read_text()

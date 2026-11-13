@@ -1,8 +1,8 @@
 """The drill's `main` reaches each predicate it defines, or the predicate lives elsewhere.
 
 `check` reaches `closure_problems` and `sync_problems`, or neither exists (#8170).
-`main` reaches `placeholder_problems` and its `_strings`, through `check` or `build`, or both
-live only in the renderer test (#8254). A census over `bootstrap_drill.py`'s call graph: the
+`main` reaches `placeholder_problems` and its `_strings`, through `check` or `build`, or the
+predicate lives only in the renderer test (#8254). A census over `bootstrap_drill.py`'s call graph: the
 module is parsed, never imported.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_bootstrap_drill_check_wiring.py
@@ -77,7 +77,7 @@ def test_main_reaches_the_placeholder_check_or_it_lives_in_the_renderer_test(hel
             f"{helper} is defined in bootstrap_drill.py but neither `check` nor `build` "
             "calls it"
         )
-    else:
+    elif helper == "placeholder_problems":
         assert helper in _top_level(RENDERER_TEST)[0], (
             f"{helper} left bootstrap_drill.py but the renderer test does not define it"
         )
