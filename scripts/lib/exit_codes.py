@@ -416,7 +416,12 @@ CONTRACTS: dict[str, tuple[Code, ...]] = {
         _c(FACT_STATUS_BAD_REF, "FACT_STATUS_BAD_REF", "`notice` found no merge base."),
     ),
     "scripts/deploy_tools/local_sweep.py": (
-        _c(SWEEP_PASSED, "SWEEP_PASSED", "every local check passed."),
+        _c(
+            SWEEP_PASSED,
+            "SWEEP_PASSED",
+            "every local check passed. Under `--once`: the sweep reached a verdict, or the "
+            "record already named the commit.",
+        ),
         _c(SWEEP_FAILED, "SWEEP_FAILED", "a local check failed."),
         _c(SWEEP_BAD_ARGS, "SWEEP_BAD_ARGS", "the command line is wrong."),
         _c(
