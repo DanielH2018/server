@@ -1,9 +1,9 @@
 """Declare the *arr Discord Connect notification instead of leaving it as UI state.
 
-WHY THIS EXISTS. A Sonarr/Radarr "Connect" notification is a row in `sonarr.db` / `radarr.db`
-on the app's config PVC — live state no manifest reproduces. Both rows this script writes
-already existed when it was written (see the role's CLAUDE.md for the before-state), and both
-deliver, so the gap was never that health alerts went nowhere. It was that nothing but that
+WHY THIS EXISTS. A Sonarr/Radarr/Lidarr "Connect" notification is a row in `sonarr.db` /
+`radarr.db` / `lidarr.db` on the app's config PVC — live state no manifest reproduces. The
+sonarr and radarr rows this script writes already existed when it was written (see the role's
+CLAUDE.md for the before-state), and both deliver, so the gap was never that health alerts went nowhere. It was that nothing but that
 volume held them: a Longhorn revert past their creation, or anyone recreating the claim, drops
 the notification silently and the app goes quiet in exactly the failure it exists to report.
 
@@ -20,10 +20,10 @@ that is supposed to be the whole truth about when Discord is notified.
 WHAT IT LEAVES ALONE. `grabFields` / `importFields` / `manualInteractionFields` and the
 `avatar` / `author` overrides. The update path merges into the body the API returned rather
 than building one from scratch, so those keep whatever they hold; the create path takes them
-from `GET /api/v3/notification/schema`, which is where the app's own defaults live.
+from `GET /api/<version>/notification/schema`, which is where the app's own defaults live.
 
 WHERE THE SECRETS COME FROM. The process environment — `ARR_API_KEY` and
-`ARR_DISCORD_WEBHOOK_URL`, set by the seed Job in sonarr's and radarr's `templates/verify/`
+`ARR_DISCORD_WEBHOOK_URL`, set by the seed Job in each app's `templates/verify/`
 from two Secrets, or by the operator's shell for a hand run (the role's `CLAUDE.md`,
 *Verifying it by hand*). Never argv, and nothing here prints a field value: the output is
 one line naming the decision (created / updated / no change), which is all the Job log says.
@@ -51,10 +51,11 @@ import urllib.error
 from flux_job_connect import Request, open_url
 
 # Mirrors scripts/diagnostics/probe_lib/arr.py. The API is reached at the Service ClusterIP
-# directly, NOT through Traefik: neither app has an Authelia bypass for /api/*, so a routed
+# directly, NOT through Traefik: no app has an Authelia bypass for /api/*, so a routed
 # request 302s to the login page instead of reaching the app.
-ARR_PORTS = {"sonarr": 8989, "radarr": 7878}
-API_VERSION = "v3"
+ARR_PORTS = {"sonarr": 8989, "radarr": 7878, "lidarr": 8686}
+# Lidarr serves /api/v1; Sonarr and Radarr serve /api/v3. Keyed by app so no caller passes it.
+ARR_API_VERSIONS = {"sonarr": "v3", "radarr": "v3", "lidarr": "v1"}
 
 IMPLEMENTATION = "Discord"
 
@@ -145,7 +146,7 @@ def needs_update(existing: dict, desired: dict) -> bool:
 
 
 def schema_for(schemas: list[dict]) -> dict:
-    """The Discord entry from `GET /api/v3/notification/schema`, without its `presets`.
+    """The Discord entry from `GET /api/<version>/notification/schema`, without its `presets`.
 
     `presets` is UI scaffolding the API rejects on POST.
     """
@@ -175,9 +176,9 @@ def find_notification(notifications: list[dict], name: str) -> dict | None:
 # ── the transport ────────────────────────────────────────────────────────────────────────────
 
 
-def request(base_url: str, api_key: str, path: str, method: str = "GET", body=None):
-    """One *arr API call. The key travels as a header, never in the URL."""
-    url = f"{base_url}/api/{API_VERSION}/{path.lstrip('/')}"
+def request(api_url: str, api_key: str, path: str, method: str = "GET", body=None):
+    """One *arr API call under `api_url`. The key travels as a header, never in the URL."""
+    url = f"{api_url}/{path.lstrip('/')}"
     data = json.dumps(body).encode() if body is not None else None
     req = Request(url, data=data, method=method)
     req.add_header("X-Api-Key", api_key)
@@ -225,7 +226,7 @@ def main(argv: list[str] | None = None) -> int:
     if app not in ARR_PORTS:
         raise SeedError(f"ARR_APP={app!r} is not one of {sorted(ARR_PORTS)}")
     port = os.environ.get("ARR_PORT") or ARR_PORTS[app]
-    base_url = f"http://{env_or_fail('ARR_HOST')}:{port}"
+    api_url = f"http://{env_or_fail('ARR_HOST')}:{port}/api/{ARR_API_VERSIONS[app]}"
     api_key = env_or_fail("ARR_API_KEY")
     webhook_url = env_or_fail("ARR_DISCORD_WEBHOOK_URL")
     name = env_or_fail("ARR_NOTIFICATION_NAME")
@@ -245,9 +246,9 @@ def main(argv: list[str] | None = None) -> int:
             include_health_warnings=include_health_warnings,
         )
 
-    existing = find_notification(request(base_url, api_key, "notification"), name)
+    existing = find_notification(request(api_url, api_key, "notification"), name)
     if existing is None:
-        desired = declare(schema_for(request(base_url, api_key, "notification/schema")))
+        desired = declare(schema_for(request(api_url, api_key, "notification/schema")))
         verb, path, action = "POST", "notification", "created"
     else:
         desired = declare(existing)
@@ -255,7 +256,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.test:
         # The app dials Discord itself with this spec and 2xx's only if the message landed.
-        request(base_url, api_key, "notification/test", method="POST", body=desired)
+        request(api_url, api_key, "notification/test", method="POST", body=desired)
         print(f"{app}: test message accepted by the app for {name!r}")
         return 0
 
@@ -263,7 +264,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"{app}: {name!r} already declares this spec — no change")
         return 0
 
-    request(base_url, api_key, path, method=verb, body=desired)
+    request(api_url, api_key, path, method=verb, body=desired)
     on = sorted(key for key in trigger_keys(desired) if desired[key])
     print(f"{app}: {name!r} {action} — triggers {on}")
     return 0

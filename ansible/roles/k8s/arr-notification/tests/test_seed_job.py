@@ -1,4 +1,4 @@
-"""arr-notification's seed as a Job in sonarr-verify and radarr-verify (target slice D5).
+"""arr-notification's seed as a Job in sonarr-verify, radarr-verify and lidarr-verify (target slice D5).
 
 The render tests render each app's `templates/verify/` through `render_tag`, so the Job is
 checked as Flux receives it in `<app>-verify`. The run tests write out the rendered
@@ -26,14 +26,16 @@ from renderer.renderer_lib import cluster
 from renderer.renderer_lib.context import load_stubs
 from renderer.tests._job_census import problems
 
-APPS = ("sonarr", "radarr")
+APPS = ("sonarr", "radarr", "lidarr")
+# The path version each app's API serves; lidarr alone is v1.
+API_VERSIONS = {"sonarr": "v3", "radarr": "v3", "lidarr": "v1"}
 TEMPLATE = "templates/verify/notification.yaml.j2"
 DEFAULTS = yaml_fast.safe_load(
     (K8S_ROLES / "arr-notification/defaults/main.yml").read_text()
 )
 KEY = "fixture-key"
 URL = "https://discord.example/api/webhooks/1/fixture"
-# The Discord entry of `GET /api/v3/notification/schema`, cut to the keys the seed reads.
+# The Discord entry of `GET /api/<version>/notification/schema`, cut to the keys the seed reads.
 SCHEMA = {
     "implementation": "Discord",
     "configContract": "DiscordSettings",
@@ -91,10 +93,9 @@ def _container(docs: list[dict]) -> dict:
     return container
 
 
-def test_the_two_apps_carry_the_same_template():
-    """One file, byte for byte, so a fix to one app's seed Job cannot miss the other's."""
-    sonarr, radarr = ((K8S_ROLES / app / TEMPLATE).read_bytes() for app in APPS)
-    assert sonarr == radarr
+def test_the_apps_carry_the_same_template():
+    """One file, byte for byte, so a fix to one app's seed Job cannot miss another's."""
+    assert len({(K8S_ROLES / app / TEMPLATE).read_bytes() for app in APPS}) == 1
 
 
 @pytest.mark.parametrize("app", APPS)
@@ -155,7 +156,7 @@ def test_the_seed_job_reads_no_role_but_its_app_and_arr_notification(app):
 class _Arr:
     """A local server keeping Connect notifications as the *arr API does, and counting writes."""
 
-    def __init__(self, rows: list[dict]):
+    def __init__(self, rows: list[dict], version: str):
         self.rows = [dict(row) for row in rows]
         self.writes: list[str] = []
         state = self
@@ -174,8 +175,8 @@ class _Arr:
 
             def do_GET(self):
                 bodies = {
-                    "/api/v3/notification": state.rows,
-                    "/api/v3/notification/schema": [SCHEMA],
+                    f"/api/{version}/notification": state.rows,
+                    f"/api/{version}/notification/schema": [SCHEMA],
                 }
                 if self.headers.get("X-Api-Key") != KEY:
                     self._answer(401, {"message": "Unauthorized"})
@@ -226,6 +227,35 @@ def _run(docs: list[dict], directory, arr: _Arr) -> subprocess.CompletedProcess:
     )
 
 
+def _unpack(docs: list[dict], directory) -> None:
+    """Write the Job's ConfigMap files, the seed and its helper, into `directory`."""
+    (volume,) = _seed(docs)["spec"]["template"]["spec"]["volumes"]
+    configmap = next(
+        doc
+        for doc in docs
+        if doc["kind"] == "ConfigMap"
+        and doc["metadata"]["name"] == volume["configMap"]["name"]
+    )
+    for key, text in configmap["data"].items():
+        (directory / key).write_text(text)
+
+
+@pytest.mark.parametrize(
+    ("served", "seeds"), [("v1", True), ("v3", False)], ids=["v1", "v3"]
+)
+def test_lidarr_seeds_over_api_v1_and_only_v1(flipped, tmp_path, served, seeds):
+    """Lidarr serves `/api/v1`: a server answering only that path is seeded, one answering only
+    sonarr's `/api/v3` is refused, so the script cannot have kept its old hardcoded version."""
+    _unpack(flipped["lidarr"], tmp_path)
+    arr = _Arr([], served)
+    try:
+        result = _run(flipped["lidarr"], tmp_path, arr)
+    finally:
+        arr.close()
+    assert (result.returncode == 0) is seeds, result.stderr
+    assert arr.writes == (["POST"] if seeds else [])
+
+
 def _drifted(app: str) -> dict:
     """A live row the seed must rewrite: a trigger turned on by hand and a stale webhook."""
     row = {key: value for key, value in SCHEMA.items() if key != "presets"}
@@ -240,16 +270,8 @@ def _drifted(app: str) -> dict:
 @pytest.mark.parametrize("app", APPS)
 def test_a_second_run_changes_nothing(flipped, tmp_path, app, start):
     """`homelab/rerun-safe` names this test: the Job's second run writes nothing."""
-    (volume,) = _seed(flipped[app])["spec"]["template"]["spec"]["volumes"]
-    configmap = next(
-        doc
-        for doc in flipped[app]
-        if doc["kind"] == "ConfigMap"
-        and doc["metadata"]["name"] == volume["configMap"]["name"]
-    )
-    for key, text in configmap["data"].items():
-        (tmp_path / key).write_text(text)
-    arr = _Arr([] if start == "no-row" else [_drifted(app)])
+    _unpack(flipped[app], tmp_path)
+    arr = _Arr([] if start == "no-row" else [_drifted(app)], API_VERSIONS[app])
     try:
         first = _run(flipped[app], tmp_path, arr)
         assert first.returncode == 0, first.stderr

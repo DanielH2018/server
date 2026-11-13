@@ -2,6 +2,7 @@
 ---
 # lidarr's own callers, on its port only. traefik is listed although the baseline admits it, so
 # this policy states the complete caller set, as radarr's does. prowlarr's Application Sync POSTs
-# indexer definitions into lidarr over the ClusterIP. The list is `netpol_from:` on this role's
+# indexer definitions into lidarr over the ClusterIP. lidarr-verify is the pod label of the
+# arr-notification seed Job in templates/verify/. The list is `netpol_from:` on this role's
 # containers_list entry.
 {{ networkpolicy(container_item.name, container_item.port, container_item | netpol_callers) }}
