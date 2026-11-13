@@ -54,6 +54,12 @@ merged.
 | G3 | (declined 2026-11-12) Notice dispatches the freshness reviewer | G2 |
 | G4 | Drop the CI size test | —. The optional PR 3 also G2 |
 | G5 | Shrink root CLAUDE.md | G2 |
+| G6 | Repair what the facts audit found | — |
+| G7 | Removed names fail the PR | The tree rename of #8186 |
+| G8 | Memory resolver, checked index, read-only replica | G6 |
+| G9 | The notice blocks, with an ack in a commit message | G7 |
+| G10 | Value rows with a fixer | The tree rename of #8186 |
+| G11 | The binding sweep | G9, G10 |
 
 H2's edges are per PR (H2 Open question 1). H2.2a waits on H1.5a and H1.6, H2.3b on H1.5a,
 and H2.8a on H1.7b and H6.4b, which reach D3 and H6.4a through those two. Every other H2 PR
