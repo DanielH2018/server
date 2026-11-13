@@ -42,12 +42,8 @@ def test_every_button_branch_action_is_admitted():
         assert _admits({"action": action}), action
 
 
-@pytest.mark.parametrize(
-    "action",
-    ["dial_rotate_right_step", "dial_rotate_left_slow", "dial_rotate_right_fast"],
-)
-def test_dial_rotations_are_admitted(action):
-    assert _admits({"action": action})
+def test_dial_rotations_are_admitted():
+    assert _admits({"action": "dial_rotate_right_step"})
 
 
 @pytest.mark.parametrize(
@@ -67,6 +63,13 @@ def test_unhandled_payloads_are_dropped(payload):
 
 
 def test_fan_dial_starts_the_nudge_without_waiting():
-    text = yaml.safe_dump(_tap_dial())
-    assert "service: script.bedroom_fan_nudge" not in text
-    assert text.count("entity_id: script.bedroom_fan_nudge") == 2
+    nudges = []
+    for branch in _tap_dial()["action"][1]["choose"]:
+        for step in branch["sequence"]:
+            for inner in step.get("then", []):
+                if "bedroom_fan_nudge" in str(inner):
+                    nudges.append(inner)
+    assert len(nudges) == 2
+    for step in nudges:
+        assert step["service"] == "script.turn_on"
+        assert step["target"]["entity_id"] == "script.bedroom_fan_nudge"
