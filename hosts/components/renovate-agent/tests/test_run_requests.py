@@ -12,7 +12,9 @@ import os
 
 import agent_toolbox
 import pytest
+import renovate_agent
 import run_requests
+from lib.proc_testing import write_exec
 
 REPO = "o/r"
 CENSUS = {71, 80}
@@ -132,3 +134,21 @@ def test_a_leftover_requests_directory_is_set_aside_unread(tmp_path):
     _write(requests, "71-close.json", {"action": "close", "pr": 71})
     again = run_requests.fresh_dir(str(tmp_path))
     assert again == requests and os.listdir(again) == []
+
+
+def test_the_session_may_write_into_the_directory_the_runner_reads(
+    tmp_path, monkeypatch
+):
+    """The directory is outside the worktree; without `--add-dir` a headless Write is denied."""
+    monkeypatch.setenv("RENOVATE_SESSION_GH_TOKEN", "gh-read-sentinel")
+    seen = tmp_path / "argv"
+    claude = write_exec(tmp_path / "claude", f'printf "%s\\n" "$@" > {seen}\n')
+    prompt = tmp_path / "prompt.txt"
+    prompt.write_text("/renovate-prs\n")
+    requests = run_requests.fresh_dir(str(tmp_path))
+    cfg = {"CLAUDE_BIN": str(claude), "PROMPT_FILE": str(prompt)}
+
+    renovate_agent.run_session(cfg, str(tmp_path), str(tmp_path / "log"), requests)
+
+    argv = seen.read_text().splitlines()
+    assert argv[argv.index("--add-dir") + 1] == requests

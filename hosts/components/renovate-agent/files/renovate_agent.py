@@ -176,8 +176,13 @@ def session_env(env: Mapping[str, str]) -> dict[str, str]:
     return out
 
 
-def run_session(cfg: dict[str, str], cwd: str, log_path: str) -> tuple[str, int, bool]:
+def run_session(
+    cfg: dict[str, str], cwd: str, log_path: str, requests_dir: str
+) -> tuple[str, int, bool]:
     """Run the headless Claude session in `cwd`, teeing its stdout to `log_path`.
+
+    `requests_dir` is outside the worktree, so it is added as a working directory: a headless
+    session has no one to approve a Write there, and its request files would never land.
 
     stdin is /dev/null: without it Claude Code waits 3s for piped input on every start, and
     under systemd there is no stdin to wait for.
@@ -197,6 +202,8 @@ def run_session(cfg: dict[str, str], cwd: str, log_path: str) -> tuple[str, int,
         "json",
         "--max-budget-usd",
         cfg.get("BUDGET_USD", "25"),
+        "--add-dir",
+        requests_dir,
     ]
     timeout = int(cfg.get("RUN_TIMEOUT_S", "14400"))
     log(f"starting session (timeout {timeout}s, budget ${cfg.get('BUDGET_USD', '25')})")
@@ -273,7 +280,7 @@ def main(tools: AgentTools = TOOLS, config_path: str = CONFIG) -> int:
     log(f"{gate.reason}; preparing {path}")
     prepare_worktree(repo_dir, path, branch, tools)
     requests_dir = fresh_dir(state_dir)
-    stdout, rc, timed_out = run_session(cfg, path, log_path)
+    stdout, rc, timed_out = run_session(cfg, path, log_path, requests_dir)
     outcome = parse_run(stdout, rc, timed_out)
     census = {p.number for p in before}
     for request in carry_out(requests_dir, census, cfg["REPO"], tools, state_dir):
