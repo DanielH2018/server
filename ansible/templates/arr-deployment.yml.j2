@@ -1,5 +1,5 @@
 {#
-  The whole Deployment radarr and sonarr share — one library manager, one exportarr sidecar, a
+  The whole Deployment radarr, sonarr and lidarr share — one library manager, one exportarr sidecar, a
   config PVC at /config and the shared media tree at /data.
 
   WHY A WHOLE-DOCUMENT MACRO, where the other shared templates here carry a field block. The two
@@ -30,7 +30,7 @@
   subcommand. Everything else is a VALUE and is passed explicitly, so a call site names every
   role variable the body reads:
 
-    app                     `radarr` or `sonarr`, lowercase.
+    app                     `radarr`, `sonarr` or `lidarr`, lowercase.
     image, exportarr_image  the two pins, from the role's own `defaults/main.yml` — a shared
                             var one directory up is invisible to Renovate's k8s-images manager
                             (exportarr.yml.j2 has the incident).
@@ -51,13 +51,17 @@
                             it (sonarr: `/data/media/tv`). Named in the path-contract comment
                             only; omitted, the comment stands without the example.
     additional_metrics      sonarr alone, gating its episode collector. See exportarr.yml.j2.
+    api_key_secret          lidarr alone: the Secret whose `api_key` the app adopts as its own
+                            API key through `<APP>__AUTH__APIKEY`. sonarr and radarr keep the
+                            key their config.xml already holds; a fresh lidarr would otherwise
+                            mint one the SOPS copy does not match.
 #}
 {% from 'container-resources.yml.j2' import container_resources with context %}
 {% from 'security-context.yml.j2' import hardened_security_context with context %}
 {% from 'exportarr.yml.j2' import exportarr with context %}
 {% from 'workload-shell.yml.j2' import spec_shell, pod_shell with context %}
 {% from 'lsio-env.yml.j2' import lsio_env with context %}
-{% macro arr_deployment(app, image, port, rollout_timeout, log_level, log_rotate, docker_mods, config_claim, media_claim, exportarr_image, cpu_limit, mem_limit, cpu_request, mem_request, root_folder=none, additional_metrics=false) -%}
+{% macro arr_deployment(app, image, port, rollout_timeout, log_level, log_rotate, docker_mods, config_claim, media_claim, exportarr_image, cpu_limit, mem_limit, cpu_request, mem_request, root_folder=none, additional_metrics=false, api_key_secret=none) -%}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -104,6 +108,13 @@ spec:
               value: "{{ log_rotate }}"
             - name: DOCKER_MODS
               value: "{{ docker_mods }}"
+{% if api_key_secret %}
+            - name: {{ app | upper }}__AUTH__APIKEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ api_key_secret }}
+                  key: api_key
+{% endif %}
           volumeMounts:
             - name: {{ app }}-config
               mountPath: /config

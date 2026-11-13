@@ -23,6 +23,7 @@
 | `bazarr-config` | Weekly | B2 | Friday |
 | `freshrss-config` | Weekly | B2 | Friday |
 | `n8n-files` | Weekly | B2 | Friday |
+| `lidarr-config` | Weekly | B2 | Saturday |
 | `pi-peer-backup-data` | Weekly | B2 | Saturday |
 | `scrutiny-web-config` | Weekly | B2 | Saturday |
 | `sonarr-config` | Weekly | B2 | Saturday |
