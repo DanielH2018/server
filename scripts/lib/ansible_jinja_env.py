@@ -64,17 +64,16 @@ BOOLEANS_FALSE = frozenset({"no", "false", "0", "off"})
 def ansible_bool(value) -> bool:
     """Mirror Ansible's `bool` Jinja filter, `ansible.plugins.filter.core.to_bool`.
 
-    The filter every environment registers. Faithfulness matters more than convenience:
-    a value that passes through text reaches `| bool` as a string, such as a quoted YAML
-    scalar (`"false"`) or a default whose `{{ ... }}` renders around other text, and plain
-    Jinja truthiness reads a non-empty string as True. A stub that just called Python's bool()
-    would agree with the templates on real booleans and disagree on exactly the inputs the
-    filter exists for, so the test would pass while the renderer took the other branch.
+    The filter every environment registers, the renderer's and the guards' alike. It keeps
+    `to_bool`'s tables because the templates' `| bool` was written against them: a string such
+    as `"false"` reads as False, where Python's bool() and plain Jinja truthiness read any
+    non-empty string as True. A stub that called bool() would agree on real booleans and
+    disagree on exactly the strings the filter exists for.
 
     The filter is `to_bool`, NOT `module_utils.parsing.convert_bool.boolean` — that one serves
     module argument parsing and accepts `t`, `y`, `f`, `n` and any non-zero int. Mirroring
     `boolean` would render `'t'`, `'y'`, `2`, `-1` and `' True '` as True under the guard and
-    False in production. `to_bool` lowercases without stripping, stringifies
+    False in the renderer. `to_bool` lowercases without stripping, stringifies
     ints (so `bool` lands in the tables), and coerces anything outside the tables with
     `value == 1` — a fallback it deprecates for removal in ansible-core 2.23. This mirrors the
     pinned filter's control flow, fallback included; the parity test flags the removal.
@@ -99,9 +98,8 @@ def register_ansible_filters(env: Environment) -> Environment:
     """Register on ``env`` the Ansible filters and tests this repo's templates reach for.
 
     ``bool`` is ``ansible_bool`` rather than Python's ``bool()``: ``bool("false")`` is True,
-    so for a value that reaches the filter as a string Python's would render
-    ``{% if x | bool %}`` the opposite way from the renderer, the exact divergence ``| bool``
-    is written in a template to prevent.
+    so Python's would render ``{% if x | bool %}`` over a string the opposite way from what
+    the template was written for, the divergence ``| bool`` is written to prevent.
 
     ``to_uuid`` is a deterministic UUIDv5, so a stub would render a different file each run.
     ``mandatory`` returns its input, so a guard's tracking Undefined passes through it and is
