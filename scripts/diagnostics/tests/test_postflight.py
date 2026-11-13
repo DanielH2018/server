@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for postflight.py — the ansible/README.md §9 verifier.
+"""Tests for postflight.py — the docs/host-bring-up.md §9 verifier.
 
 The point of the script is that each §9 step fails SILENTLY in production, so the
 thing worth testing is that a bad response is reported as FAIL rather than passing

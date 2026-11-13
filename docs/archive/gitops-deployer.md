@@ -4,7 +4,7 @@ How the GitOps deployer applied the host plane until H7.52 retired `gitops-deplo
 deployer's code under `ansible/roles/setup/gitops_deploy/files/` stays until H7.53 deletes it,
 and this page is the record a maintainer of that code reads. The rules that code follows, and
 the functions that hold each one, are in [the archived role page](gitops-deploy-role.md).
-[The GitOps pipeline](../gitops-pipeline.md) has what still runs in the deployer's place.
+[The GitOps pipeline](gitops-pipeline.md) has what still runs in the deployer's place.
 
 ## What a tick does
 

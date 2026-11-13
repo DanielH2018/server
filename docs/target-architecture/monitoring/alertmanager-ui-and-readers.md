@@ -21,7 +21,7 @@ Phase B item 7 (`docs/target-architecture/monitoring/m6-retire-kuma.md:1416`, PR
 at `m6-retire-kuma.md:1930`) decides on a LAN-only `alertmanager.local.<domain>` route behind
 Authelia `two_factor`. That item resolves M1's open question 2
 (`docs/target-architecture/monitoring/m1-alertmanager.md:1499`). B-6a and B-6b are built,
-with the amendments below; `docs/target-architecture/monitoring/m6-status/pr-b-6.md` records
+with the amendments below; `m6-retire-kuma.md`, *Status by batch*, PR B-6, records
 them. The amendments are these:
 
 1. The Authelia rule names a subject, `group:admins`, and a `deny` rule for the same domain

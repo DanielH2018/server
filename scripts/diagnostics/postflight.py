@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify the post-deploy setup that Ansible can't do (ansible/README.md §9).
+"""Verify the post-deploy setup that Ansible can't do (docs/host-bring-up.md §9).
 
 Every step in §9 lives in an app's own database, and most of them fail SILENTLY —
 the container stays healthy while the feature behind it does nothing. This script
@@ -335,7 +335,7 @@ def check_authelia():
 
 
 # §9.6 was Portainer environments, removed with Portainer itself. The
-# numbering below is left alone so §9.x keeps matching ansible/README.md.
+# numbering below is left alone so §9.x keeps matching docs/host-bring-up.md.
 
 CHECKS = [
     ("9.1", "Alert plane (Alertmanager scraped, Watchdog firing)", check_alert_plane),
@@ -394,7 +394,7 @@ def main(argv=None):
 
     if failures:
         print(
-            f"\n{failures} post-deploy step(s) still need a human — see ansible/README.md §9.",
+            f"\n{failures} post-deploy step(s) still need a human — see docs/host-bring-up.md §9.",
             file=sys.stderr,
         )
         return 1
