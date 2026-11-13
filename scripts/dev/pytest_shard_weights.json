@@ -273,7 +273,7 @@
  "hosts/tests/test_pi_heartbeat_textfiles.py": 0.23,
  "hosts/tests/test_pi_node_exporter_host_unit.py": 0.56,
  "hosts/tests/test_pi_recovery_restarts_and_reports.py": 1.57,
- "hosts/tests/test_pi_service_lists_census.py": 6.36,
+ "hosts/tests/test_pi_service_lists_census.py": 0.18,
  "hosts/tests/test_pi_watchdog_alert.py": 1.1,
  "hosts/tests/test_renovate_agent_identity.py": 0.15,
  "hosts/tests/test_renovate_agent_modules_are_shipped.py": 0.0,
