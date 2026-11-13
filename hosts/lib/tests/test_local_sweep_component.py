@@ -55,8 +55,8 @@ def test_the_unit_outlasts_the_time_limits_the_tool_puts_on_its_checks(unit):
     assert int(number) * _SECONDS[suffix] > checks
 
 
-def test_the_documented_replay_command_sets_what_the_unit_sets(unit):
-    """A replay by hand has no unit, so the doc's command carries the unit's bounds itself."""
+def test_the_documented_replay_command_sets_what_the_unit_sets(package, unit):
+    """A replay by hand has no unit, so the doc's command carries the unit's settings itself."""
     doc = (REPO / "docs" / "ci-throughput.md").read_text()
     command = doc.split("#### Replaying a hosted run")[1].split("```")[1]
     properties = dict(re.findall(r"-p (\w+)=(\S+)", command))
@@ -65,8 +65,12 @@ def test_the_documented_replay_command_sets_what_the_unit_sets(unit):
         key: unit[key]
         for key in ("MemoryHigh", "MemorySwapMax", "SyslogIdentifier", "SyslogLevel")
     }
-    # The fixture keeps the unit's last Environment= line, which is the worker count.
-    assert f"-E {unit['Environment']} " in command
+    text = package.files[f"{UNITS}/homelab-local-sweep.service"][0].decode()
+    sets = dict(re.findall(r"^Environment=(\w+)=(.*)$", text, re.M))
+    # A user unit already has the user's HOME, and the command's shell expands it.
+    home = sets.pop("HOME")
+    replay = dict(re.findall(r"-E (\w+)=(\S+)", command.replace("$HOME", home)))
+    assert replay == sets
 
 
 def test_the_sweep_runs_inside_the_fleets_bound_with_a_smaller_one_of_its_own(unit):

@@ -215,11 +215,13 @@ systemd-run --user --wait --collect --quiet \
     -p MemoryHigh=4500M -p MemorySwapMax=1G \
     -p SyslogIdentifier=local-sweep -p SyslogLevel=notice \
     -p WorkingDirectory="$PWD" -E PYTEST_XDIST_AUTO_NUM_WORKERS=8 \
+    -E PATH=/usr/local/bin:/usr/bin:/bin:$HOME/.local/bin \
     /usr/bin/uv run --no-sync python scripts/deploy_tools/local_sweep.py --run <id>
 ```
 
-The properties are the ones `homelab-local-sweep.service` sets, so the replay has the unit's
-memory bound and its lines reach Loki under the unit's identifier. The next
+The properties and the environment are the ones `homelab-local-sweep.service` sets. The
+replay has the unit's memory bound, its lines reach Loki under the unit's identifier, and the
+hooks check finds `prek`, which a user unit's own `PATH` does not hold. The next
 `probe.py sweep-agreement` counts it.
 
 - **The tree is the merge, not the head.** A pull-request run tests the merge of the head
