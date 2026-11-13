@@ -9,7 +9,7 @@ This table is the one place a check is declared. Everything else derives from it
 - `cli.main` counts the table's enabled rows into `homelab_check_rows`, which `BridgeCheckStale`
   compares with the rows that export a verdict.
 - `scripts/docs/fragments_lib/fragments_bridge.py` reads it through
-  `scripts/renderer/template_filters/py_table.py` for the generated bridge fragments. That filter parses
+  `ansible/filter_plugins/py_table.py` for the generated bridge fragments. That filter parses
   this file without running it, which is why every field but `fn` is a literal and why this
   module imports only check bodies.
 
