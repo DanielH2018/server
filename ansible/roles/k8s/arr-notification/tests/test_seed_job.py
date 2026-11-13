@@ -84,6 +84,7 @@ def _seed(docs: list[dict]) -> dict:
         for doc in docs
         if doc["kind"] == "Job"
         and doc["metadata"]["annotations"]["homelab/job-kind"] == "mutation"
+        and "-notification-seed-" in doc["metadata"]["name"]
     ]
     return job
 
