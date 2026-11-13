@@ -100,7 +100,7 @@
         "type": "prometheus",
         "uid": "EGdsQqhVk"
       },
-      "description": "memory.events, as the increase over 10 minutes. `oom`, `oom_kill`, `oom_group_kill` and `max` page on ANY increase (CLAUDE_CGROUP_EVENTS) — they mean the kernel killed something or a hard cap was hit. `high` is graphed but NOT alerted on: MemoryHigh throttling is the cap working, and its value is owned by roles/setup/claude_code. A rising `high` with a flat `oom_kill` is the cgroup being held at its ceiling; that is the state to watch here rather than page on.",
+      "description": "memory.events, as the increase over 10 minutes. `oom`, `oom_kill`, `oom_group_kill` and `max` page on ANY increase (CLAUDE_CGROUP_EVENTS) — they mean the kernel killed something or a hard cap was hit. `high` is graphed but NOT alerted on: MemoryHigh throttling is the cap working, and its value is owned by the claude-code host component (hosts/components/claude-code). A rising `high` with a flat `oom_kill` is the cgroup being held at its ceiling; that is the state to watch here rather than page on.",
       "fieldConfig": {
         "defaults": {
           "custom": {

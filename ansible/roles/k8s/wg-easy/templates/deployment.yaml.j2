@@ -124,8 +124,8 @@ spec:
             - name: INSECURE
               value: "true"
             # kubelet's allowed-unsafe-sysctls is exactly
-            # net.ipv4.conf.all.src_valid_mark,net.ipv4.ip_forward (roles/setup/k3s
-            # defaults), and the net.ipv6.* sysctls upstream's compose sets are excluded
+            # net.ipv4.conf.all.src_valid_mark,net.ipv4.ip_forward (the kubelet-arg in the
+            # k3s-server and k3s-agent host components' component.yml), and the net.ipv6.* sysctls upstream's compose sets are excluded
             # there ON PURPOSE. Rather than widen that allow-list — a k3s server-arg change
             # and a restart of BOTH nodes, on the sole remote-access path — turn v15's IPv6
             # support off. NOTE the UI still displays IPv6 addresses it will not route, and
