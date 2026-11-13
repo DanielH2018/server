@@ -172,20 +172,15 @@ def test_every_tracked_python_file_is_inside_a_ty_source_root():
 
 
 def test_a_file_under_an_included_root_is_clean():
-    assert _unchecked(["scripts/dev/x.py"], ["scripts"], ["ansible/collections"]) == []
+    assert _unchecked(["scripts/dev/x.py"], ["scripts"], ["site"]) == []
 
 
 def test_a_file_outside_every_root_is_flagged():
-    assert _unchecked(["tools/x.py"], ["scripts"], ["ansible/collections"]) == [
-        "tools/x.py"
-    ]
+    assert _unchecked(["tools/x.py"], ["scripts"], ["site"]) == ["tools/x.py"]
 
 
 def test_an_excluded_file_is_not_flagged():
-    assert (
-        _unchecked(["ansible/collections/x.py"], ["scripts"], ["ansible/collections"])
-        == []
-    )
+    assert _unchecked(["site/x.py"], ["scripts"], ["site"]) == []
 
 
 def test_a_covered_pythonpath_is_clean():

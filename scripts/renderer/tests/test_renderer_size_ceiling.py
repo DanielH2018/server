@@ -24,7 +24,8 @@ from lib.repo_paths import REPO
 # 13622 once #8023 listed the Flux GitHub App's three keys in `SOPS_MANIFEST_KEYS`.
 # 13619 once #8172 rewrote the renderer's docstrings.
 # 13627 once #8173 let rule 5 judge the labelling wrapper's `lookup('template')`.
-LINE_CEILING = 13627
+# 13615 once #8165 deleted the owner-entry-points census and the renderer helper only it read.
+LINE_CEILING = 13615
 # Exit 6's command, `git ls-files 'scripts/renderer/*.py' | grep -v /tests/ | xargs cat | wc -l`.
 PATHSPEC = "scripts/renderer/*.py"
 

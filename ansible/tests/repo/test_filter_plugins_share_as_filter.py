@@ -59,9 +59,7 @@ def _filters_dict(tree: ast.Module) -> ast.Dict | None:
 def test_as_filter_is_defined_at_most_once_in_the_tracked_code():
     """The Verify-by: `def _as_filter` sums to at most 1, wherever its one home is."""
     scanned = [
-        rel
-        for rel in tracked("ansible/*.py", "scripts/*.py")
-        if "/tests/" not in rel and not rel.startswith("ansible/collections/")
+        rel for rel in tracked("ansible/*.py", "scripts/*.py") if "/tests/" not in rel
     ]
     assert {_plugin_rel(name) for name in KNOWN_WRAPPING_PLUGINS} <= set(scanned)
     defining = sorted(
