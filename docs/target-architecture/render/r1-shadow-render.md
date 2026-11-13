@@ -120,7 +120,7 @@ a shadow, and Ansible stays the only writer to the cluster.
   lookups, never in rendered bytes.
 - **The renderer's Jinja environment lacks two filters the templates use.** A `jinja2` parse
   of all 294 templates (the 273 role templates and the 21 shared macros) through
-  `scripts/lib/ansible_jinja_env.py:make_ansible_env` collects every filter and test name.
+  `scripts/lib/ansible_jinja_env.py:register_ansible_filters` collects every filter and test name.
   Two filters are not registered. `homelab_role_label` comes from
   `ansible/filter_plugins/role_label.py`, and `role-labelled.yaml.j2` uses it. `from_json`
   is used by `home-assistant/templates/config/secrets.yaml.j2`. No template uses `from_yaml`.

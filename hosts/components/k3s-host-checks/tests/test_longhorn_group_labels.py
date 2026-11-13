@@ -13,7 +13,7 @@ render would follow a rename and pass.
 import pytest
 
 from lib import yaml_fast
-from lib.ansible_jinja_env import make_ansible_env
+from lib.ansible_jinja_env import make_env, register_ansible_filters
 from longhorn_groups import (
     backup_group_label,
     longhorn_backup_name,
@@ -107,7 +107,7 @@ def test_the_bare_names_are_the_live_ones():
 
 def test_the_backup_target_templates_name_the_live_targets():
     """The `longhorn-backup` role's two target templates render the names the cluster holds."""
-    env = make_ansible_env([BACKUP_TEMPLATES])
+    env = register_ansible_filters(make_env([BACKUP_TEMPLATES]))
     context = {
         "k3s_longhorn_backup_armed": False,
         "k3s_longhorn_r2_armed": False,

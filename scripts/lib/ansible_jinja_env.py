@@ -13,6 +13,9 @@ This module registers ONE set: ``renderer_lib/jinja_filters.py``'s reimplementat
 as ``StubUndefined``, and plain-data JSON would abort the render this module exists to
 complete. The renderer's own environment replaces it with ``filters.to_json``.
 
+It re-exports ``render_guard.make_env``, the one environment factory, so a caller builds a
+filtered environment as ``register_ansible_filters(make_env(...))`` from one import.
+
 The module has two tiers. Its TOP LEVEL is the light tier, and carries ``ansible_bool``
 for ``lib.k8s_context``. ``register_ansible_filters`` is the heavy tier, and imports the
 filter modules when it is first called. Nothing here loads ansible-core.
@@ -46,7 +49,7 @@ __all__ = [
     "BOOLEANS_TRUE",
     "ansible_bool",
     "file_lookup",
-    "make_ansible_env",
+    "make_env",
     "register_ansible_filters",
     "render_template",
     "template_env",
@@ -62,10 +65,11 @@ def ansible_bool(value) -> bool:
     """Mirror Ansible's `bool` Jinja filter, `ansible.plugins.filter.core.to_bool`.
 
     The filter every environment registers. Faithfulness matters more than convenience:
-    the reason templates use `| bool` at all is that `-e var=false` arrives as the STRING
-    "false", which plain Jinja truthiness reads as True. A stub that just called Python's
-    bool() would agree with Ansible on real booleans and disagree on exactly the inputs the
-    filter exists for, so the test would pass while production took the other branch.
+    a value that passes through text reaches `| bool` as a string, such as a quoted YAML
+    scalar (`"false"`) or a default whose `{{ ... }}` renders around other text, and plain
+    Jinja truthiness reads a non-empty string as True. A stub that just called Python's bool()
+    would agree with the templates on real booleans and disagree on exactly the inputs the
+    filter exists for, so the test would pass while the renderer took the other branch.
 
     The filter is `to_bool`, NOT `module_utils.parsing.convert_bool.boolean` — that one serves
     module argument parsing and accepts `t`, `y`, `f`, `n` and any non-zero int. Mirroring
@@ -95,8 +99,8 @@ def register_ansible_filters(env: Environment) -> Environment:
     """Register on ``env`` the Ansible filters and tests this repo's templates reach for.
 
     ``bool`` is ``ansible_bool`` rather than Python's ``bool()``: ``bool("false")`` is True,
-    and ``-e var=false`` arrives as the string, so Python's would render
-    ``{% if x | bool %}`` the opposite way from a deploy — the exact divergence ``| bool``
+    so for a value that reaches the filter as a string Python's would render
+    ``{% if x | bool %}`` the opposite way from the renderer, the exact divergence ``| bool``
     is written in a template to prevent.
 
     ``to_uuid`` is a deterministic UUIDv5, so a stub would render a different file each run.
@@ -230,18 +234,6 @@ def register_ansible_filters(env: Environment) -> Environment:
     return env
 
 
-def make_ansible_env(dirs=(), undefined_cls=StubUndefined) -> Environment:
-    """``render_guard.make_env`` over ``dirs``, with the Ansible filters registered.
-
-    With no ``dirs`` the environment has an empty loader, which is the form a test takes to
-    render a template's text or a task's expression through ``from_string``. That is still
-    Ansible's whitespace flags and filters: a bare ``jinja2.Environment()`` has neither, and
-    the ``tests-build-no-bare-jinja-environment`` row of
-    ``scripts/tests/test_census_rows_test_renders.py`` refuses one in a test.
-    """
-    return register_ansible_filters(make_env(dirs, undefined_cls=undefined_cls))
-
-
 def file_lookup(kind: str, path: str, **_kwargs) -> str:
     """Ansible's ``lookup('file', path)``, the one lookup a setup-plane template may call.
 
@@ -262,7 +254,9 @@ def template_env(template_dir: Path, undefined_cls=StubUndefined) -> Environment
     Every guard loads that pair — a role's own templates and the shared macros they import —
     so the pair lives here rather than in each guard's call.
     """
-    env = make_ansible_env([template_dir, SHARED_TPL], undefined_cls=undefined_cls)
+    env = register_ansible_filters(
+        make_env([template_dir, SHARED_TPL], undefined_cls=undefined_cls)
+    )
     # jinja2 leaves `Environment.globals` unannotated, so its inferred type rejects a callable.
     cast(dict[str, Any], env.globals)["lookup"] = file_lookup
     return env

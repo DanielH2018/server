@@ -31,8 +31,8 @@ ROWS = (
         reason=(
             "A bare `jinja2.Environment()` has none of Ansible's whitespace flags or filters, "
             "so a `{% for %}` leaves a blank line per iteration and `| bool` fails or means "
-            "Python's `bool()`. Use `lib.ansible_jinja_env.make_ansible_env` (pass "
-            "`undefined_cls=` for a strict render) or `_jinja_env.jinja_env` for a "
+            "Python's `bool()`. Use `lib.ansible_jinja_env.register_ansible_filters(make_env())` "
+            "(pass `make_env` `undefined_cls=` for a strict render) or `_jinja_env.jinja_env` for a "
             "structure-valued expression. `liquid.Environment` is another language."
         ),
         files=pytest_only_modules,
@@ -47,7 +47,8 @@ ROWS = (
         green=(
             Subject(
                 "a.py",
-                "from lib.ansible_jinja_env import make_ansible_env\nmake_ansible_env()\n",
+                "from lib.ansible_jinja_env import make_env, register_ansible_filters\n"
+                "register_ansible_filters(make_env())\n",
             ),
             Subject("b.py", "import liquid\nliquid.Environment()\n"),
             Subject("c.py", '"""jinja2.Environment() used to be built here."""\n'),

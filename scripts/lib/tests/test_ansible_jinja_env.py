@@ -33,7 +33,7 @@ def test_every_registered_filter_is_the_implementation_on_the_roster(
     name: str, dotted: str
 ):
     """A guard and the renderer read one set, which `test_renderer_filters.py` holds to Ansible's results."""
-    env = aje.make_ansible_env([SHARED_TPL])
+    env = aje.register_ansible_filters(aje.make_env([SHARED_TPL]))
     registered = env.filters[name]
     assert f"{registered.__module__}.{registered.__name__}" == dotted
 
@@ -43,7 +43,7 @@ def test_to_json_is_the_stub_that_tolerates_an_undefined_value():
 
     That would abort the render this environment exists to complete.
     """
-    env = aje.make_ansible_env([SHARED_TPL])
+    env = aje.register_ansible_filters(aje.make_env([SHARED_TPL]))
     assert env.filters["to_json"] is to_json_stub
     assert env.from_string("{{ missing | to_json }}").render() == '"STUB"'
 
@@ -54,7 +54,7 @@ def test_the_search_test_is_registered_and_searches_rather_than_matches():
     The RED half is the second assertion: a `match`-flavoured implementation anchors at the
     start and would answer False for a pattern found mid-string.
     """
-    env = aje.make_ansible_env([SHARED_TPL])
+    env = aje.register_ansible_filters(aje.make_env([SHARED_TPL]))
     assert env.from_string("{{ '2400:cb00::/32' is search(':') }}").render() == "True"
     assert env.from_string("{{ '172.64.0.0/13' is search(':') }}").render() == "False"
 
@@ -65,7 +65,7 @@ def test_bool_renders_the_string_false_the_way_a_deploy_does():
     Rendering it the Python way is the failure this whole registration exists to prevent, so
     assert the rendered branch rather than the filter's identity.
     """
-    env = aje.make_ansible_env([SHARED_TPL])
+    env = aje.register_ansible_filters(aje.make_env([SHARED_TPL]))
     assert (
         env.from_string("{% if 'false' | bool %}yes{% else %}no{% endif %}").render()
         == "no"
@@ -206,7 +206,7 @@ def test_a_guard_refusal_names_its_filter_as_a_deploy_does(name: str, args: tupl
     """The guard env registers the FilterModule versions, so its refusal reads as a deploy's (#4505)."""
     from filter_errors import FilterError
 
-    env = aje.make_ansible_env([SHARED_TPL])
+    env = aje.register_ansible_filters(aje.make_env([SHARED_TPL]))
     with pytest.raises(FilterError) as caught:
         env.filters[name](*args)
     assert str(caught.value).startswith(f"{name}: "), str(caught.value)

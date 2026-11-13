@@ -39,7 +39,7 @@ from collections import defaultdict
 from pathlib import Path
 
 import yaml
-from jinja2 import ChainableUndefined
+from jinja2 import ChainableUndefined, Undefined, meta
 
 # Reach the sibling package directories: a directly-invoked script gets only its own
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
@@ -51,7 +51,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 from validate.validate_lib.ok_lines import ok_printer
 from lib.cli_help import answer_help
 from lib import yaml_fast
-from lib.ansible_jinja_env import template_env
+from lib.k8s_yaml import to_json_stub
 from lib.render_context import render_context
 from lib.render_guard import (
     ALL_VARS,
@@ -59,9 +59,10 @@ from lib.render_guard import (
     dump_numbered,
     host_files,
     load_yaml,
-    render_or_error,
+    make_env,
 )
 from lib.repo_paths import REPO
+from renderer.renderer_lib.environment import render_file, strict_env
 
 COMPONENTS = REPO / "hosts" / "components"
 SECRET_REGISTRY = ANSIBLE / "secret_rotation.yml"
@@ -150,6 +151,23 @@ def discover_templates(components: Path = COMPONENTS) -> list[Path]:
     )
 
 
+def standalone_templates(components: Path = COMPONENTS) -> list[Path]:
+    """`discover_templates`, less each template a sibling loads by name.
+
+    A partial that a template includes or imports reaches the package only inside the template
+    that loads it, so the bytes the package ships hold no render of it on its own.
+    """
+    templates = discover_templates(components)
+    loaded = set()
+    for tpl in templates:
+        root, _ = template_loader(tpl)
+        tree = make_env().parse(tpl.read_text())
+        loaded.update(
+            root / name for name in meta.find_referenced_templates(tree) if name
+        )
+    return [tpl for tpl in templates if tpl not in loaded]
+
+
 def template_loader(tpl: Path) -> tuple[Path, str]:
     """The directory `tpl`'s environment is rooted at, and the name it loads by.
 
@@ -159,6 +177,28 @@ def template_loader(tpl: Path) -> tuple[Path, str]:
     if (tpl.parents[1] / "component.yml").is_file():
         return tpl.parents[1], f"templates/{tpl.name}"
     return tpl.parent, tpl.name
+
+
+def render_shipped(
+    tpl: Path, ctx: dict, undefined_cls: type[Undefined]
+) -> tuple[str | None, str | None]:
+    """Render `tpl` to the bytes the host package ships, with `undefined_cls` for missing names.
+
+    The environment is the renderer's `strict_env` and the render is its `render_file`, so a
+    template's last newline and an `{% include %}`'s are handled as the package build handles
+    them. `ctx` reaches the template as variables only, as in `renderer_lib/host.py`.
+
+    Returns:
+        `(rendered, None)` on success, or `(None, "render error: <Type>: <msg>")`.
+    """
+    root, name = template_loader(tpl)
+    env = strict_env(root, undefined_cls=undefined_cls)
+    # The renderer's `to_json` refuses a stubbed secret; on plain data both write the same JSON.
+    env.filters["to_json"] = to_json_stub
+    try:
+        return render_file(env, name, ctx), None
+    except Exception as exc:
+        return None, f"render error: {type(exc).__name__}: {exc}"
 
 
 def repo_relative(tpl: Path) -> str:
@@ -181,9 +221,7 @@ def check_template(tpl: Path, ctx: dict, known: frozenset[str]) -> list[str]:
     """
     rel = repo_relative(tpl)
     seen: dict[str, set[str]] = defaultdict(set)
-    root, name = template_loader(tpl)
-    env = template_env(root, undefined_cls=_tracking_undefined(seen, rel))
-    rendered, err = render_or_error(env, name, ctx)
+    rendered, err = render_shipped(tpl, ctx, _tracking_undefined(seen, rel))
     if rendered is None:
         return [err or "render error"]
 
