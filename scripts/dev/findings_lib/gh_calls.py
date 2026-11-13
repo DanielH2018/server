@@ -23,8 +23,10 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from dev.findings_lib.issue_model import (
     _LIST_FIELDS,
+    REGISTER_AUTHOR,
     comment_cap_warning,
     find_by_fingerprint,
+    issue_author,
     pr_refs,
     waited_on,
 )
@@ -47,6 +49,21 @@ def _warn_at_the_comment_cap(issues: list[dict]) -> list[dict]:
         if warning:
             sys.stderr.write(warning + "\n")
     return issues
+
+
+def _operator_issues(issues: list[dict]) -> list[dict]:
+    """The issues in ``issues`` that ``REGISTER_AUTHOR`` opened, warning about the rest."""
+    kept = [i for i in issues if issue_author(i) == REGISTER_AUTHOR]
+    dropped = [i for i in issues if issue_author(i) != REGISTER_AUTHOR]
+    if dropped:
+        listed = ", ".join(
+            f"#{i.get('number')} by {issue_author(i) or '?'}" for i in dropped
+        )
+        sys.stderr.write(
+            f"warning: skipped {len(dropped)} issue(s) not opened by {REGISTER_AUTHOR}: "
+            f"{listed}\n"
+        )
+    return kept
 
 
 # The `--limit` every list here passes, and the number the warning below compares against.
@@ -123,7 +140,7 @@ def load_issues(
             "cap -- the register past it is missing, not empty; `findings.py history` "
             "searches past findings without the cap\n"
         )
-    return _warn_at_the_comment_cap(issues)
+    return _warn_at_the_comment_cap(_operator_issues(issues))
 
 
 # The labels `findings.py close` writes on its two not-planned outcomes, and the whole of
@@ -332,6 +349,12 @@ def _load_issue(number: int, tools: FindingsTools) -> JsonObject:
         tools.gh_json("issue", "view", str(number), "--json", _LIST_FIELDS),
         "gh issue view",
     )
+    author = issue_author(issue)
+    if issue and author != REGISTER_AUTHOR:
+        raise SystemExit(
+            f"#{number} was opened by {author or 'an unknown account'}, not "
+            f"{REGISTER_AUTHOR}, so findings.py does not read it"
+        )
     _warn_at_the_comment_cap([issue] if issue else [])
     return issue
 
