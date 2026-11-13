@@ -5,10 +5,10 @@
 # applies this tag by hand before it installs Flux (docs/longhorn-disaster-recovery.md,
 # *Procedure (fresh host, total loss)*, step 2).
 
-# The read-only ServiceAccount, mirrored from setup/k3s. The host files there (the kubeconfig and
-# the audit policy) read k3s_readonly_sa_name and k3s_readonly_sa_namespace, and this role's
-# template reads these two, because a k8s role's defaults are invisible to a setup role and the
-# reverse. ansible/tests/k8s/test_cluster_base_mirrors_the_k3s_identity.py holds each pair equal,
+# The read-only ServiceAccount, mirrored from hosts/components/k3s-server/defaults/main.yml. The
+# host files there (the kubeconfig and the audit policy) read k3s_readonly_sa_name and
+# k3s_readonly_sa_namespace, and this role's template reads these two, because a k8s role's
+# defaults are invisible to a host component and the reverse. ansible/tests/k8s/test_cluster_base_mirrors_the_k3s_identity.py holds each pair equal,
 # so a rename changes both sides in one PR.
 cluster_base_readonly_sa_name: homelab-readonly
 cluster_base_readonly_sa_namespace: kube-system
