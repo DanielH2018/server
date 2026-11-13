@@ -1,0 +1,13 @@
+# Shipped by both hosts' packages. Started by homelab-claude-guardrail-audit.timer.
+[Unit]
+Description=Load the audit watches on Claude Code's guardrail paths and record the verdict
+After=auditd.service
+
+[Service]
+Type=oneshot
+# Root, because auditctl needs CAP_AUDIT_CONTROL to read and load rules.
+ExecStart=/usr/lib/homelab/claude-guardrail-audit
+SyslogLevel=notice
+# DECIDED: the tag stays `claude-guardrail-audit`. It is a join key: the script logs its
+# `status=` line under it, and Loki selects that line by it.
+SyslogIdentifier=claude-guardrail-audit

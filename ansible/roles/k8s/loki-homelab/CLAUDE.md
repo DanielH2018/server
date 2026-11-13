@@ -98,6 +98,15 @@ separate from the `observability` Loki (decision KL1, `docs/archive/.../slice-7-
   (`scripts/validate/alert_rules.py:run_alloy_load`), because `alloy validate` never builds
   the stages and so accepts the bad selector.
 
+- **auditd's log ships as `{job="audit"}` on each node** (server#8250). It carries the
+  records of the Claude Code guardrail watches that `claude-guardrail-audit` loads, under the
+  keys `claude-guardrail` and `claude-memory`. The `loki.process "host_audit"` stage drops the
+  kernel's BPF, netfilter and systemd-service records and their unkeyed SYSCALL lines, which
+  were about 15000 of 27000 lines in 10 hours on daniel-box. One event spans several lines that
+  share `msg=audit(<time>:<serial>)`, so find the key on the SYSCALL line, then read the PATH
+  line with the same serial. `ansible/tests/k8s/test_alloy_ships_audit_log.py` runs the drops
+  over real line shapes.
+
 ## Ruler
 
 Loki's ruler evaluates the LogQL rules in `files/rules/` and sends each firing alert to

@@ -131,6 +131,10 @@ files:
   - {src: files/claude-cgroup-metrics.sh, dst: /usr/local/bin/claude-cgroup-metrics.sh, mode: "0755"}
   - {src: templates/claude-cgroup-metrics.service.j2, dst: /usr/lib/systemd/system/homelab-claude-cgroup-metrics.service}
   - {src: templates/claude-cgroup-metrics.timer.j2, dst: /usr/lib/systemd/system/homelab-claude-cgroup-metrics.timer}
+  # The guardrail audit (server#8250). It ships armed or not, because its own run is the way out.
+  - {src: templates/claude-guardrail-audit.sh.j2, dst: /usr/lib/homelab/claude-guardrail-audit, mode: "0755"}
+  - {src: units/homelab-claude-guardrail-audit.service.j2, dst: /usr/lib/systemd/system/homelab-claude-guardrail-audit.service}
+  - {src: units/homelab-claude-guardrail-audit.timer.j2, dst: /usr/lib/systemd/system/homelab-claude-guardrail-audit.timer}
   # The agent's clone and dotfiles syncs. Their textfiles keep the names `claude-clone-sync` and
   # `claude-dotfiles-sync`, which observability's host-checks rules read.
   - {src: files/claude-clone-sync.sh, dst: /usr/local/bin/claude-clone-sync.sh, mode: "0755", when: "claude_code_agent_user_enabled"}
@@ -219,6 +223,7 @@ enable:
   homelab-claude-rc-restart.timer: {target: timers.target, when: claude_code_rc_enabled}
   homelab-claude-bg-resume.service: {target: multi-user.target, when: claude_code_bg_resume_enabled}
   homelab-claude-cgroup-metrics.timer: timers.target
+  homelab-claude-guardrail-audit.timer: timers.target
   homelab-claude-clone-sync.timer: {target: timers.target, when: claude_code_agent_user_enabled}
   homelab-claude-dotfiles-sync.timer:
     target: timers.target

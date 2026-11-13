@@ -627,3 +627,39 @@ claude_code_rootq_socket_group: homelab-rootq
 claude_code_rootq_socket_path: /run/homelab-rootq.sock
 claude_code_rootq_socket_helper: /usr/local/libexec/homelab-rootq-socket
 claude_code_rootq_socket_client: /usr/local/bin/rootq-socket
+
+# ── The guardrail audit (server#8250, #967 slice 2's host half) ──────────────────────────
+# homelab-claude-guardrail-audit.timer runs claude-guardrail-audit.sh.j2 as root. Each run loads
+# an auditd watch on every path below that exists, removes a watch it loaded on a path the list
+# no longer names, and records whether auditd is running with every watch in place. A run, not a
+# rules file in /etc/audit/rules.d: augenrules stops loading at the first watch whose directory
+# is missing, which would take the host-hardening watches down with it, and the agent's memory
+# directory exists only after the agent's first session in its clone.
+#
+# The timer ships on every host this component ships to, so false is the way out: the next run
+# removes every watch under the two keys and reports up.
+claude_code_guardrail_audit_enabled: true
+# A `*/N` minute, read as the timer's period. A watch lost to an auditd restart is back within it.
+claude_code_guardrail_audit_minute: "*/5"
+# Watched under the key `claude-guardrail`: what decides what a session may do. Write and attribute
+# changes only (`-p wa`). A directory watch covers its whole subtree. The renovate-agent home is a
+# literal because that component's defaults do not reach this one;
+# hosts/tests/test_claude_guardrail_audit.py holds it equal to renovate_agent_home.
+claude_code_guardrail_audit_paths:
+  - /etc/claude-land/approval-paths
+  - /usr/lib/homelab/claude-agent-setup
+  - /usr/lib/homelab/claude-agent-home
+  - "/home/{{ sys_user }}/.claude/settings.json"
+  - "/home/{{ sys_user }}/.claude/hooks"
+  - "/home/{{ sys_user }}/.claude/CLAUDE.md"
+  - "/home/{{ sys_user }}/.claude/rules"
+  - "{{ claude_code_agent_user_home }}/.claude/settings.json"
+  - "{{ claude_code_agent_user_home }}/.claude/hooks"
+  - "{{ claude_code_agent_user_home }}/.claude/CLAUDE.md"
+  - "{{ claude_code_agent_user_home }}/.claude/rules"
+  - /var/lib/renovate-agent/.claude/settings.json
+# Watched under the key `claude-memory`: the memory stores a session reads at its next start. The
+# audit record names the writing process, so a Bash write shows apart from the Write tool's.
+claude_code_guardrail_audit_memory_dirs:
+  - "{{ claude_code_operator_memory_dir }}"
+  - "{{ claude_code_agent_memory_dir }}"
