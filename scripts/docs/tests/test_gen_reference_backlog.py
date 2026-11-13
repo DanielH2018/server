@@ -194,11 +194,13 @@ def test_render_orders_settled_domains_as_the_reviewer_list_does_and_unlabelled_
     )
 
 
-def test_render_keeps_a_fixed_close_out_of_every_table():
+@pytest.mark.parametrize("outcome", ["fixed", "duplicate"])
+def test_render_keeps_a_fixed_or_duplicate_close_out_of_every_table(outcome):
     md = g.render_markdown(
-        [_row(7, state="CLOSED", accepted=False, refuted=False, outcome="fixed")]
+        [_row(7, state="CLOSED", accepted=False, refuted=False, outcome=outcome)]
     )
     assert "#7" not in md and "No settled findings" in md
+    assert "No findings closed without a ruling." in md
 
 
 def test_render_shows_a_dash_for_a_settled_row_whose_close_recorded_no_reason():
