@@ -484,6 +484,10 @@ containers_list:
     port: 4533
     use_authelia: true
     auth_tier: one_factor
+    # Subsonic clients (Symfonium, Feishin) cannot pass forward-auth, so the Subsonic API skips
+    # Authelia on the public name and navidrome authenticates each request itself.
+    bridge_bypass_prefixes:
+      - /rest/
   # CouchDB for Obsidian LiveSync. use_authelia is false because the LiveSync client uses
   # non-interactive basic auth and cannot pass 2FA — CouchDB's own require_valid_user is
   # the gate. Its data volume is longhorn-NOBACKUP, so the backup plane ignores this PVC

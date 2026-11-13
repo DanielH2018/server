@@ -28,14 +28,19 @@ from validate.k8s_manifests import (
 ROLE = ANSIBLE / "roles" / "k8s" / "navidrome"
 
 
-def _render_route() -> str:
+def _render(template: str) -> str:
     ctx = render_context(
         ROLE, overrides={"container_item": k8s_entries()["navidrome"]}, strict=True
     )
     env = make_env([ROLE / "templates", SHARED_TPL])
     env.globals["lookup"] = make_lookup(ctx)
     register_ansible_filters(env)
-    return env.get_template("ingressroute.yaml.j2").render(**ctx)
+    return env.get_template(template).render(**ctx)
+
+
+def _routes() -> dict[str, dict]:
+    docs = yaml_fast.safe_load_all(_render("ingressroute.yaml.j2"))
+    return {d["metadata"]["name"]: d for d in docs if d}
 
 
 def test_the_route_renders_when_navidrome_has_a_pod():
@@ -44,14 +49,37 @@ def test_the_route_renders_when_navidrome_has_a_pod():
     Raising the replica count is the documented way to bring the workload back, and the route
     it lists must then be a real one.
     """
-    docs = [d for d in yaml_fast.safe_load_all(_render_route()) if d]
-    # One object per host: the `.local.` route and its public twin.
-    assert [d["metadata"]["name"] for d in docs] == ["navidrome", "navidrome-public"], (
-        docs
-    )
-    for route in docs:
+    routes = _routes()
+    # One object per host, plus the public name's Subsonic API bypass.
+    assert list(routes) == ["navidrome", "navidrome-public", "navidrome-public-rest"]
+    for route in routes.values():
         assert route["kind"] == "IngressRoute"
         assert route["spec"]["routes"], "an IngressRoute with no routes matches nothing"
+
+
+def test_only_the_subsonic_api_skips_authelia_on_the_public_name():
+    """Subsonic apps cannot follow a forward-auth redirect; the web UI stays gated."""
+    routes = _routes()
+    [bypass] = routes["navidrome-public-rest"]["spec"]["routes"]
+    assert "PathPrefix(`/rest/`)" in bypass["match"]
+    assert "authelia" not in {m["name"] for m in bypass["middlewares"]}
+    for name in ("navidrome", "navidrome-public"):
+        [rule] = routes[name]["spec"]["routes"]
+        assert "authelia" in {m["name"] for m in rule["middlewares"]}, name
+
+
+def test_navidrome_trusts_no_user_header_while_rest_skips_authelia():
+    """Navidrome honours its reverse-proxy user header on /rest/ too.
+
+    With /rest/ unauthenticated at the edge, enabling that header would let any caller name
+    any user, so the deployment must not set either reverse-proxy switch.
+    """
+    [deployment] = [
+        d for d in yaml_fast.safe_load_all(_render("deployment.yaml.j2")) if d
+    ]
+    [container] = deployment["spec"]["template"]["spec"]["containers"]
+    env = {e["name"] for e in container["env"]}
+    assert not env & {"ND_REVERSEPROXYWHITELIST", "ND_REVERSEPROXYUSERHEADER"}, env
 
 
 def _manifests_files(replicas: int) -> list[str]:
