@@ -934,6 +934,143 @@
       ],
       "title": "Recent events (all types)",
       "type": "logs"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 86
+      },
+      "id": 31,
+      "panels": [],
+      "title": "Guardrail decisions",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "description": "Every tool call's permission decision, by who decided it (`source`) and the outcome (`decision`). `config` is a settings rule, `hook` is a PreToolUse or PermissionRequest hook such as claude-guard, and `user_*` is a dialog answer or, see below, a rule. Auto mode's classifier verdict is a separate field. In an SDK-hosted session (`app_entrypoint` other than `cli`: `claude rc`, fan-out batches, the desktop app), a `user_*` source can be a settings rule or claude-guard's headless refusal rather than a person, and `user_temporary` also counts calls an earlier in-session grant allowed with no dialog. server#8250.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 60,
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 87
+      },
+      "id": 32,
+      "targets": [
+        {
+          "expr": "sum by (source, decision) (count_over_time({service_name=\"claude-code\"} | event_name=`tool_decision` [$__auto]))",
+          "legendFormat": "{{source}} {{decision}}",
+          "queryType": "range",
+          "refId": "A"
+        }
+      ],
+      "title": "Tool decisions by source",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "description": "Rejected tool calls, by who rejected them and the session's entrypoint, so an interactive session's denials show apart from an unattended one's. In an SDK-hosted session (`app_entrypoint` other than `cli`: `claude rc`, fan-out batches, the desktop app), a `user_*` source can be a settings rule or claude-guard's headless refusal rather than a person, and `user_temporary` also counts calls an earlier in-session grant allowed with no dialog. server#8250.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 60,
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 87
+      },
+      "id": 33,
+      "targets": [
+        {
+          "expr": "sum by (source, app_entrypoint) (count_over_time({service_name=\"claude-code\"} | event_name=`tool_decision` | decision=`reject` [$__auto]))",
+          "legendFormat": "{{app_entrypoint}} {{source}}",
+          "queryType": "range",
+          "refId": "A"
+        }
+      ],
+      "title": "Denials by source and entrypoint",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "description": "Per session over the dashboard's time range: every `user_*` decision, which is a dialog answer or a rule, and every rejection. A hook's approvals are left out: claude-guard approves thousands of calls a day. In an SDK-hosted session (`app_entrypoint` other than `cli`: `claude rc`, fan-out batches, the desktop app), a `user_*` source can be a settings rule or claude-guard's headless refusal rather than a person, and `user_temporary` also counts calls an earlier in-session grant allowed with no dialog. server#8250.",
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 95
+      },
+      "id": 34,
+      "options": {
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "Value"
+          }
+        ]
+      },
+      "targets": [
+        {
+          "expr": "sum by (session_id, app_entrypoint, source, decision) (count_over_time({service_name=\"claude-code\"} | event_name=`tool_decision` | source=~`user_.*` or decision=`reject` [$__range]))",
+          "queryType": "instant",
+          "refId": "A"
+        }
+      ],
+      "title": "Dialog answers and denials per session",
+      "transformations": [
+        {
+          "id": "labelsToFields",
+          "options": {
+            "mode": "columns"
+          }
+        },
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            }
+          }
+        }
+      ],
+      "type": "table"
     }
   ],
   "refresh": "30s",
