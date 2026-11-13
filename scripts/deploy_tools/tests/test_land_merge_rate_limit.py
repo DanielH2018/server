@@ -105,4 +105,5 @@ def test_a_rate_limited_merge_timeout_names_the_rate_limit(landing, ci_reads):
     )
     with pytest.raises(Outcome) as exc:
         merge.await_merge(ln)
-    assert f"the quota frees in {QUOTA_FREES_IN_S}s" in exc.value.detail
+    assert "refused its CI read for the rate" in exc.value.detail
+    assert "gh run rerun" not in exc.value.detail
