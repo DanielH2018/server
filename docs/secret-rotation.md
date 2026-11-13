@@ -117,7 +117,7 @@ in the Secret `flux-system/sops-age` throughout.
    Flux's `kustomize-controller` imports every entry in that Secret, so either key decrypts.
 2. On a branch, replace the cluster recipient in both cluster creation rules in
    `secrets/.sops.yaml`. Run `sops updatekeys` and `sops rotate` on the cluster file and on
-   each cluster manifest, from `ansible/` or with `--config secrets/.sops.yaml`. The
+   each cluster manifest, from `secrets/` or with `--config secrets/.sops.yaml`. The
    ciphertext in `secrets.yml` does not move, so no `.source` hash moves and no pod
    restarts. `check` reads the recipients from the rules, so it passes.
 3. Land the PR with `land.sh`, which waits on `cluster-vars` for a PR that changes the

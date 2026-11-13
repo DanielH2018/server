@@ -950,7 +950,7 @@ arm64 only.
     sudo ./bootstrap-host.sh <host> --until 3
     ```
 
-1. In `secrets/.sops.yaml`, add the creation rule for `vars/hosts/<host>\.sops\.yaml$` ahead of the
+1. In `secrets/.sops.yaml`, add the creation rule for `(^|secrets/)hosts/<host>\.sops\.yaml$` ahead of the
    generic rule. Its keys are the host's printed key, daniel-box's key and the recovery key, in that
    order. Adding a recipient is **operator-only**.
 1. **Operator-only**, when the tree names a credential for the host: write its SOPS file, and commit

@@ -192,6 +192,13 @@ def test_no_resourcequota_is_declared_anywhere() -> None:
     # rendered_docs() and this is the decision, not the mechanism. Matched on the two forms
     # that APPLY one, not on the bare word — the reasoning that rules it out names it
     # repeatedly, and a guard that trips on its own rationale gets deleted rather than read.
+    scope = ["k8s/", "inventory/", "secrets/cluster-manifests/"]
+    # A pathspec that names no tracked file makes the grep below pass over nothing.
+    for path in scope:
+        listed = run(["git", "ls-files", "--", path], cwd=_REPO, check=True).stdout
+        assert listed.strip(), (
+            f"{path} holds no tracked file; the grep below reads nothing"
+        )
     hits = run(
         [
             "git",
@@ -199,10 +206,7 @@ def test_no_resourcequota_is_declared_anywhere() -> None:
             "-lE",
             r"kind: ResourceQuota|create (resource)?quota",
             "--",
-            "ansible/",
-            # This file states the pattern, so it matches itself. Tests apply nothing
-            # to the cluster, so excluding them costs no coverage.
-            ":!tests/",
+            *scope,
         ],
         cwd=_REPO,
         check=False,

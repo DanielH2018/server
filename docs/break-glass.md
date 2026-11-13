@@ -203,7 +203,7 @@ otherwise; none of the values below are secrets themselves, only names and locat
     is the same keypair that H4.2 copied from daniel-server's user-home key. The 2026-11-09
     ruling (#6643) retired the user-home copy, so the key now lives at this one path and
     decrypts only that host file. Its public half is the first recipient of the
-    `vars/hosts/daniel-server\.sops\.yaml$` rule in `secrets/.sops.yaml`, and of no other
+    `(^|secrets/)hosts/daniel-server\.sops\.yaml$` rule in `secrets/.sops.yaml`, and of no other
     rule. The recovery key (item 1) is a recipient of the host file, so it is the way back
     when the host loses the key.
     - **To restore it** onto a rebuilt daniel-server, place the recovery key (item 1) at
@@ -211,7 +211,7 @@ otherwise; none of the values below are secrets themselves, only names and locat
       `/etc/homelab/age.key` (root, mode 0600), then delete the user-home copy. Or let
       `sudo hosts/bootstrap-host.sh daniel-server` create a fresh key at the second path (its
       step 3) and print the public key. A fresh key then needs the recipient steps in the
-      header of `secrets/.sops.yaml`, applied to `vars/hosts/daniel-server.sops.yaml` only,
+      header of `secrets/.sops.yaml`, applied to `secrets/hosts/daniel-server.sops.yaml` only,
       from daniel-box or any host holding the recovery key, before the host decrypts
       anything.
     - **A lost or exposed key means rotating every value the host held**, not only re-keying
@@ -222,7 +222,7 @@ otherwise; none of the values below are secrets themselves, only names and locat
       `age-keygen -y` on the surviving copy of the key, or from the first recipient of the
       host's own rule, and run, from the repo root:
       `uv run python -c 'import sys, yaml; [print(r["path_regex"]) for r in yaml.safe_load(open("secrets/.sops.yaml"))["creation_rules"] if sys.argv[1] in r["age"]]' <public key>`.
-      For daniel-server the only rule is `vars/hosts/daniel-server.sops.yaml`, so the list is
+      For daniel-server the only rule is `secrets/hosts/daniel-server.sops.yaml`, so the list is
       every value in its host file. Past revisions in git history still wrap `secrets.yml` and
       the cluster files to the retired user-home key, so deleting that key's private half
       is what closes it. Rotate through `docs/secret-rotation.md`, then `host_secrets.py sync daniel-server`
@@ -233,7 +233,7 @@ otherwise; none of the values below are secrets themselves, only names and locat
     key `homelab-secrets.service` decrypts `secrets/hosts/daniel-pi.sops.yaml` with. The
     Pi generated it at `hosts/bootstrap-host.sh` step 3 on 2026-10-24, so it exists at one
     path on one machine and nowhere else. The Pi is a recipient of its own file only. Its
-    public half appears in the `vars/hosts/daniel-pi\.sops\.yaml$` creation rule of
+    public half appears in the `(^|secrets/)hosts/daniel-pi\.sops\.yaml$` creation rule of
     `secrets/.sops.yaml`, beside daniel-box's key and the recovery key (item 1), and in no
     other rule. The file arrived with H4.5. Since then the key decrypts the two push tokens that
     the Pi's heartbeats load from `/run/credstore`, so a lost key costs those two values.
@@ -242,7 +242,7 @@ otherwise; none of the values below are secrets themselves, only names and locat
       the public key. No copy of the old key exists to restore. Add the new public key to the
       Pi's creation rule, and keep the old one until the rebuild is accepted, because the old
       SD card is the rollback. Then, on daniel-box or any host holding the recovery key (item
-      1), run `sops updatekeys vars/hosts/daniel-pi.sops.yaml` from `ansible/` and commit the
+      1), run `sops updatekeys hosts/daniel-pi.sops.yaml` from `secrets/` and commit the
       result. The recovery key and daniel-box's key are recipients of the file, so either one
       decrypts it while the Pi has no working key.
     - **A lost SD card is a lost host key**, and a lost or exposed key means rotating every
@@ -251,7 +251,7 @@ otherwise; none of the values below are secrets themselves, only names and locat
       one item 11 derives: every value in every SOPS file whose creation rule lists the Pi's
       public key. Take the public key from the rule, or from `age-keygen -y` on a surviving
       copy, and run item 11's command. For the Pi the only rule is
-      `vars/hosts/daniel-pi.sops.yaml`, so the list is every value in that file: the Pi
+      `secrets/hosts/daniel-pi.sops.yaml`, so the list is every value in that file: the Pi
       package's `credentials:` and the outputs it renders. Rotate each through
       `docs/secret-rotation.md`, then `host_secrets.py sync daniel-pi` (**operator-only**)
       to refresh the host file's copies.
@@ -279,7 +279,7 @@ The decision recorded with H7.24b on 2026-10-30, and the ruling of 2026-11-09 (#
   cluster manifest with `sops rotate -i --rm-age <key>`. Then the operator removes
   `~/.config/sops/age/keys.txt` from daniel-server. The rotation and the removal are
   **operator-only**. daniel-server keeps its host key, `/etc/homelab/age.key` (item 11),
-  which decrypts only `vars/hosts/daniel-server.sops.yaml`.
+  which decrypts only `secrets/hosts/daniel-server.sops.yaml`.
 - **daniel-pi holds no user-home key**, since 2026-10-03.
 - **No script creates a user-home key.** The retired `sops_setup` role did. A new host needs
   only its host key, `/etc/homelab/age.key`, which step 3 of `hosts/bootstrap-host.sh`
@@ -290,7 +290,7 @@ The decision recorded with H7.24b on 2026-10-30, and the ruling of 2026-11-09 (#
 ### Scenario: daniel-box is dead, daniel-server survives
 
 daniel-server cannot decrypt `secrets.yml` or the cluster files. Since the 2026-11-09 ruling
-(#6643) its host key decrypts only `vars/hosts/daniel-server.sops.yaml`, so this scenario needs
+(#6643) its host key decrypts only `secrets/hosts/daniel-server.sops.yaml`, so this scenario needs
 the recovery key (item 1).
 
 1. Place the recovery key at `~/.config/sops/age/keys.txt` on the machine you work from, as
@@ -418,10 +418,10 @@ daniel-box's packages stages the Pi as the canary, so its gate stays open until 
     `AllowGroups ssh-users` otherwise locks out `ubuntu` and `pi-peer-backup`.
 
 5. To let the first package decrypt its secrets, add the new key to the
-    `vars/hosts/daniel-pi\.sops\.yaml$` rule in `secrets/.sops.yaml`, **without removing the old
+    `(^|secrets/)hosts/daniel-pi\.sops\.yaml$` rule in `secrets/.sops.yaml`, **without removing the old
     key**. `compose-run` refuses to start the project without `compose.env`, and
     `homelab-secrets` cannot write that file until the package carries ciphertext for this key.
-    On daniel-box, run the re-encrypt from `ansible/`, commit, and merge through a PR. The merged
+    On daniel-box, run the re-encrypt from `secrets/`, commit, and merge through a PR. The merged
     PR's host wait does not settle until step 10.
 
     ```bash

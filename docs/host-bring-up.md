@@ -2,7 +2,7 @@
 
 One-time, low-level steps to get a **new physical host** ready for this repo.
 `hosts/bootstrap-host.sh` brings the host up, and a host's setup plane ships in its host
-package. No playbook in `ansible/` applies a setup role. Day-to-day deploys, tooling (uv),
+package. Day-to-day deploys, tooling (uv),
 secrets (SOPS), and "adding a service" are documented in the repo-root
 `README.md` and `CLAUDE.md`. This file covers the
 OS/hardware steps around the script that those don't.

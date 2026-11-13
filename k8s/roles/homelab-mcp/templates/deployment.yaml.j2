@@ -81,18 +81,14 @@ spec:
             - name: TZ
               value: "{{ tz }}"
           volumeMounts:
-            # The checkout's k8s/, inventory/ and tests/ trees, READ-ONLY, under the
-            # read_file/list_files jail root. secrets/ is not mounted, and the age key is
-            # outside the checkout. hostPath rather than a git-clone sidecar: this node
-            # already holds the checkout.
-            - name: homelab-mcp-src-k8s
-              mountPath: /srv/ansible-src/k8s
-              readOnly: true
-            - name: homelab-mcp-src-inventory
-              mountPath: /srv/ansible-src/inventory
-              readOnly: true
-            - name: homelab-mcp-src-tests
-              mountPath: /srv/ansible-src/tests
+            # ansible/ source, READ-ONLY — the read_file/list_files jail root. secrets.yml is
+            # denied in-app
+            # (safe_reads.path_is_denied) and the age key isn't under here, so the worst
+            # a jail bug could surface is SOPS ciphertext. hostPath rather than a
+            # git-clone sidecar for the same reason image-builder embeds its context:
+            # this node already holds the checkout Ansible deploys from.
+            - name: homelab-mcp-ansible-src
+              mountPath: /srv/ansible-src
               readOnly: true
             - name: homelab-mcp-tmp
               mountPath: /tmp
@@ -108,17 +104,9 @@ spec:
             periodSeconds: 30
 {{ container_resources(cpu_limit=homelab_mcp_k8s_cpu_limit, mem_limit=homelab_mcp_k8s_mem_limit, cpu_request=homelab_mcp_k8s_cpu_request, mem_request=homelab_mcp_k8s_mem_request) }}
       volumes:
-        - name: homelab-mcp-src-k8s
+        - name: homelab-mcp-ansible-src
           hostPath:
-            path: /home/{{ sys_user }}/server/k8s
-            type: Directory
-        - name: homelab-mcp-src-inventory
-          hostPath:
-            path: /home/{{ sys_user }}/server/inventory
-            type: Directory
-        - name: homelab-mcp-src-tests
-          hostPath:
-            path: /home/{{ sys_user }}/server/tests
+            path: /home/{{ sys_user }}/server/ansible
             type: Directory
         - name: homelab-mcp-tmp
           emptyDir: {}

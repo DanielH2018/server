@@ -187,12 +187,12 @@ def make_sops_tree(base: Path, values: dict = VALUES) -> SopsTree:
     tree = Tree(root)
     tree.sops_config.write_text(
         "creation_rules:\n"
-        "  - path_regex: (^|/)cluster-vars\\.sops\\.env$\n"
+        "  - path_regex: (^|secrets/)cluster-vars\\.sops\\.env$\n"
         f'    age: "{cluster},{host}"\n'
-        "  - path_regex: (^|/)cluster-manifests/[^/]+\\.sops\\.yaml$\n"
+        "  - path_regex: (^|secrets/)cluster-manifests/[^/]+\\.sops\\.yaml$\n"
         "    encrypted_regex: ^(data|stringData)$\n"
         f'    age: "{cluster},{host}"\n'
-        "  - path_regex: \\.ya?ml$\n"
+        "  - path_regex: (^|secrets/)(cluster-manifests/)?[^/]+\\.ya?ml$\n"
         f'    age: "{host}"\n'
     )
     # A call that passes its own `timeout`, as every production sops call does, overrides this.

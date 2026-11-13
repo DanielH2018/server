@@ -102,17 +102,22 @@ The rename lands in two steps:
   roles directory reads each entry as a role, and a `conftest.py` there is not one.
 - `lib.repo_paths` drops `ANSIBLE`, `ROLES` and `ANSIBLE_TESTS`. `K8S`, `K8S_ROLES`,
   `SHARED_TPL`, `INVENTORY`, `SECRETS` and `TESTS` name the new trees.
-- The SOPS creation rules match from a path segment, such as `(^|/)hosts/daniel-pi\.sops\.yaml$`.
-  Each rule then matches a path relative to `secrets/`, to the repo root, or absolute. The
-  generic rule matches any YAML file, because SOPS reads this config only for files under
-  `secrets/`. The plaintext rotation register matches it too, and no command encrypts it.
+- The SOPS creation rules match at the start of the path or after `secrets/`, such as
+  `(^|secrets/)hosts/daniel-pi\.sops\.yaml$`. Each rule then matches a path relative to
+  `secrets/`, to the repo root, or absolute, and matches no file outside `secrets/`, so
+  `sops --config secrets/.sops.yaml` run on any other file finds no rule.
+  `tests/repo/test_sops_creation_rules.py` holds both halves. The generic rule matches a YAML
+  file directly under `secrets/` or `secrets/cluster-manifests/`, and no per-host file. The
+  plaintext rotation register matches it, and no command encrypts it.
 - The secret-rotation history walk reads `secrets.yml` at both paths. A `git log` on the new
   path alone starts at the rename commit and would date every secret to it.
-- The render changes in two places only. The homelab-mcp pod mounts the checkout's `k8s/`,
-  `inventory/` and `tests/` trees under its jail root, where it mounted `ansible/`, because the
-  old host path no longer exists. Ten verify Jobs and deploy gates name their
+- The render changes in one place only. Ten verify Jobs and deploy gates name their
   `homelab/rerun-safe` test at its new path, because the renderer refuses a node ID that names
-  no test in the tree.
+  no test in the tree. The annotation is metadata, and no Job name changes.
+- The homelab-mcp pod still mounts the node's `ansible/` through a hostPath, and is the one
+  node-local reader step 2 does not move. It runs on daniel-server, whose checkout no timer
+  syncs, so a mount of `k8s/` there would hold the pod in ContainerCreating. Moving it waits
+  for a checkout the pod's node keeps current.
 - The readers that compare two commits, the forward-only pin gate in `cluster_pins.py` and
   `promote_lib/forward_only.py`, read both layouts. A range whose base predates the rename
   would otherwise read no pin and no forward-only role on that side.

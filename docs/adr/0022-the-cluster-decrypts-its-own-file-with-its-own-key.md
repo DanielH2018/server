@@ -62,8 +62,8 @@ Three options existed:
 
 The cluster has its own age key. Its private half lives in the Secret `flux-system/sops-age`
 and in the operator's password manager, and nowhere else. `secrets/.sops.yaml` gives the key
-to two creation rules only: the cluster file, `vars/cluster-vars.sops.env`, and the cluster
-manifests, `vars/cluster-manifests/*.sops.yaml`. Both rules sit ahead of the generic rule,
+to two creation rules only: the cluster file, `secrets/cluster-vars.sops.env`, and the cluster
+manifests, `secrets/cluster-manifests/*.sops.yaml`. Both rules sit ahead of the generic rule,
 because SOPS takes the first rule that matches. The generic rule, which covers `secrets.yml`,
 never lists the cluster key. The cluster therefore decrypts the cluster file with its own key,
 and never `secrets.yml`.
@@ -85,7 +85,7 @@ check` compares each file's recipients with its rule.
 cluster manifest. A cluster rule moved below it stops applying, and a manifest written then
 is encrypted without the cluster key, so the cluster cannot decrypt it.
 
-**Every `sops` command runs from `ansible/`, or with `--config secrets/.sops.yaml`.** SOPS
+**Every `sops` command runs from `secrets/`, or with `--config secrets/.sops.yaml`.** SOPS
 resolves `.sops.yaml` from the working directory. Run from the repo root without `--config`,
 it finds no creation rule. This held under ADR-0003 too, and three rules raise the cost of
 forgetting it.

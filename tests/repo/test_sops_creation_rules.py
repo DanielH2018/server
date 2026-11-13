@@ -80,6 +80,21 @@ def test_cluster_rules_resolve_from_any_path_form(prefix):
         assert _rule_for(rules, prefix + path) is _rule_for(rules, path)
 
 
+@pytest.mark.parametrize(
+    "path",
+    [
+        "inventory/group_vars/all.yml",
+        "../inventory/group_vars/all.yml",
+        f"{REPO}/inventory/group_vars/all.yml",
+        f"{REPO}/hosts/daniel-pi.sops.yaml",
+        f"{REPO}/k8s/roles/traefik/defaults/main.yml",
+    ],
+)
+def test_no_rule_matches_a_yaml_file_outside_secrets(path):
+    """`--config secrets/.sops.yaml` from the repo root must not encrypt a file elsewhere."""
+    assert [r for r in _tree_rules() if re.search(r["path_regex"], path)] == []
+
+
 def test_tree_creation_rules_is_clean():
     assert _problems(_tree_rules()) == []
 
