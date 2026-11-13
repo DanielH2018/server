@@ -91,18 +91,14 @@ def install_map() -> dict[str, tuple[Path, Path]]:
             )
         found.setdefault(live, (src.resolve(), declared_in))
 
-    # A host component installs a script by a `src:` or `role-file:` entry, and a shared
-    # module beside it by a `lib:` or `shared:` entry.
+    # A host component installs a script by a `src:` entry, and a shared module beside it by
+    # a `lib:` or `shared:` entry.
     for component in sorted(COMPONENTS.glob("*/component.yml")):
         data = yaml_fast.safe_load(component.read_text(encoding="utf-8")) or {}
-        role_dirs = sorted(ROLES.glob(f"*/{data.get('role')}"))
         for entry in data.get("files") or []:
             src = str(entry.get("src", ""))
             if src.endswith(".py") and ":" not in src:
                 add(entry["dst"], component.parent / src, component)
-            name = src.removeprefix("role-file:")
-            if name != src and role_dirs:
-                add(entry["dst"], role_dirs[0] / "files" / name, component)
             if entry.get("lib"):
                 add(entry["dst"], REPO / "hosts" / "lib" / entry["lib"], component)
             if entry.get("shared") in SHARED_FILES:

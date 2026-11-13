@@ -72,6 +72,11 @@ def test_an_unknown_group_is_refused():
         backup_group_label("no_backup")
 
 
+def test_the_retired_flat_weekly_group_is_refused():
+    with pytest.raises(ValueError, match="not a Longhorn backup group"):
+        backup_group_label("weekly-backup")
+
+
 def test_a_shard_outside_the_week_is_refused():
     assert weekly_backup_group(6) == "weekly-backup-d6"
     with pytest.raises(ValueError, match="outside 0-6"):
@@ -86,7 +91,6 @@ def test_the_bare_names_are_the_live_ones():
             "label_prefix",
             "default_group",
             "no_backup_group",
-            "weekly_legacy_group",
             "b2_target",
             "r2_target",
         )
@@ -94,7 +98,6 @@ def test_the_bare_names_are_the_live_ones():
         "label_prefix": "recurring-job-group.longhorn.io/",
         "default_group": "default",
         "no_backup_group": "no-backup",
-        "weekly_legacy_group": "weekly-backup",
         "b2_target": "default",
         "r2_target": "r2",
     }

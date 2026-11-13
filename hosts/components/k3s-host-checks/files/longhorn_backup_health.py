@@ -171,7 +171,7 @@ def _parse_volume_rows(raw: str) -> list[tuple[str, str, str, str]]:
 # so. Issue #1061 has the per-line analysis.
 #
 # The one thing that is NOT a failure is rc == 0 with empty output: that is the ordinary answer
-# for eight of the nine tier selectors and for the r2 volume set, and flagging it would
+# for seven of the eight tier selectors and for the r2 volume set, and flagging it would
 # false-DOWN a healthy cluster on every tick.
 def _fetch_text(problems: list[tuple[int, str]], what: str, *args: str) -> str | None:
     """Output of one kubectl fetch, or None having appended a problem naming `what` and the rc.
@@ -406,7 +406,6 @@ def main(now: float | None = None) -> int:
                 "and hour; disabling that tier's first-run grace"
             )
     daily_run_hhmm = run_hhmm[backups.DAILY_JOB]
-    legacy_run_hhmm = cluster_state.legacy_run_time(run_hhmm)
 
     # One fetch feeds checks 2 to 5. On a failed fetch each of them is skipped rather than fed
     # an empty list, so the one fetch problem is the one thing reported.
@@ -459,17 +458,9 @@ def main(now: float | None = None) -> int:
             )
             for shard in range(backups.WEEKLY_SHARDS)
         ],
-        (
-            backups.group_label(backups.WEEKLY_LEGACY_GROUP) + "=enabled",
-            WEEKLY_MAX_AGE_S,
-            "weekly-legacy",
-            "__no_job__",
-            legacy_run_hhmm,
-            "*",
-        ),
     ]
     # The whole loop is skipped when the backup list fetch failed: every tier is matched
-    # against those rows, so feeding it an empty list would report all nine tiers' volumes as
+    # against those rows, so feeding it an empty list would report all eight tiers' volumes as
     # uncovered over one unread fetch. The fetch's own problem is already in `problems`.
     coverage_rows = [(b.volume, b.created, b.job) for b in backup_list or []]
     # Check 11's scope: the weekly-shard volumes on an armed target, as volume -> claim. The

@@ -363,21 +363,11 @@ def test_a_role_command_no_copy_installs_is_flagged():
         )
 
 
-def test_an_import_guarded_by_import_error_is_clean(tmp_path):
+def test_an_import_guarded_by_import_error_is_flagged(tmp_path):
     checker = _checker()
     module = tmp_path / "importer.py"
     module.write_text(
         "try:\n    import yaml\nexcept (ImportError, OSError):\n    yaml = None\n",
-        encoding="utf-8",
-    )
-    assert checker.walk(module, [tmp_path]) == []
-
-
-def test_an_import_guarded_by_another_exception_is_flagged(tmp_path):
-    checker = _checker()
-    module = tmp_path / "importer.py"
-    module.write_text(
-        "try:\n    import yaml\nexcept ValueError:\n    yaml = None\n",
         encoding="utf-8",
     )
     assert checker.walk(module, [tmp_path]) == ["yaml"]

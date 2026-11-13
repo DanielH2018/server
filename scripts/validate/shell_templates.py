@@ -89,16 +89,14 @@ def template_context(path: Path, overrides: dict | None = None) -> dict:
     component = path.parents[1]
     if component.parent == COMPONENTS:
         spec = yaml_fast.safe_load((component / "component.yml").read_text()) or {}
-        # A component renders over its own defaults/main.yml and the defaults of its `role:`,
-        # as the host renderer does (renderer_lib/host_sources.py:role_sources).
-        role = spec.get("role")
-        own = role_defaults(component)
-        defaults = role_defaults(ROLES / "setup" / role) if role else {}
         return render_context(
             None,
             component_host(component.name),
             overrides=overrides,
-            component_defaults={**own, **defaults, **(spec.get("defaults") or {})},
+            component_defaults={
+                **role_defaults(component),
+                **(spec.get("defaults") or {}),
+            },
         )
     return render_context(path, overrides=overrides)
 

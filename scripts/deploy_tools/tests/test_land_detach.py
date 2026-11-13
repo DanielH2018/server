@@ -31,7 +31,7 @@ import pytest
 from deploy_tools.land_lib import land_probe
 from deploy_tools.land_lib import detach
 
-from lib.exit_codes import LAND_BAD_ARGS, LAND_GAVE_UP
+from lib.exit_codes import LAND_GAVE_UP
 from lib.git_testing import scrubbed_env
 from lib.proc_testing import fake_bin, path_with
 
@@ -131,15 +131,6 @@ def test_detach_returns_at_once_and_names_the_wait(tmp_path):
     assert f"wait: cc-wait land 939 --log {log}" in result.stdout
     assert "VERDICT:" not in result.stdout
     assert detach.recorded_pid(log) is not None
-
-
-def test_await_verdict_is_refused_and_names_its_replacement(tmp_path):
-    """Retired: the wait is cc-wait's. A caller still passing it must hear what replaced it."""
-    result = _run(tmp_path, "--detach", "--await-verdict")
-
-    assert result.returncode == LAND_BAD_ARGS
-    assert "cc-wait land 939" in result.stderr
-    assert _logs(tmp_path) == []
 
 
 def test_detach_resolves_since_from_origin_master_itself(tmp_path):
