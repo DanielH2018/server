@@ -17,16 +17,14 @@ Secret values a caller does not override render as `STUB` (the `DECIDED:` rule i
 from functools import cache
 from pathlib import Path
 
-from lib.ansible_jinja_env import template_env
 from lib.render_context import render_context
-from lib.render_guard import render_or_error
 from validate.setup_templates import (
     HOST_RENDER_CONTEXT,
     COMPONENTS,
     component_context,
-    discover_templates,
-    template_loader,
+    standalone_templates,
 )
+from validate.validate_lib.shipped_render import render_shipped
 
 
 def role_context(role_dir: Path, overrides: dict | None = None) -> dict:
@@ -46,21 +44,20 @@ def render_setup_texts(
 ) -> tuple[tuple[str, str, str], ...]:
     """(component, template name, rendered TEXT) for every template under `components`, uncached.
 
-    The template set is `validate/setup_templates.py:discover_templates`, so what a guard here
-    covers cannot drift from what that gate renders. Raises on a render failure rather than
-    skipping it: a template that stopped rendering would otherwise drop out of every census
-    built on this. `components` is a parameter so a test can point it at a `tmp_path` tree.
+    The template set is `validate/setup_templates.py:standalone_templates`, the gate's own set
+    less the partials a sibling template loads, so each text is one the package renders. Raises
+    on a render failure rather than skipping it: a template that stopped rendering would
+    otherwise drop out of every census built on this. `components` is a parameter so a test can point it at a `tmp_path` tree.
     """
     contexts: dict[Path, dict] = {}
     texts = []
-    for tpl in discover_templates(components):
+    for tpl in standalone_templates(components):
         directory = tpl.parents[1]
         if directory not in contexts:
             contexts[directory] = component_context(
                 directory, {**HOST_RENDER_CONTEXT, **(overrides or {})}
             )
-        root, name = template_loader(tpl)
-        rendered, err = render_or_error(template_env(root), name, contexts[directory])
+        rendered, err = render_shipped(tpl, contexts[directory])
         if rendered is None:
             raise AssertionError(f"{directory.name}/{tpl.name}: {err}")
         texts.append((directory.name, tpl.name, rendered))
@@ -104,9 +101,7 @@ def render_component_text(
     assert (directory / name).is_file(), (
         f"no such component template: {directory / name}"
     )
-    rendered, err = render_or_error(
-        template_env(directory), name, role_context(directory, overrides)
-    )
+    rendered, err = render_shipped(directory / name, role_context(directory, overrides))
     if rendered is None:
         raise AssertionError(f"{component}/{name}: {err}")
     return rendered

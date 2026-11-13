@@ -173,13 +173,19 @@ def dump_numbered(text: str) -> None:
         print(f"  {i:3d}| {line}", file=sys.stderr)
 
 
-def make_env(dirs, undefined_cls=StubUndefined) -> Environment:
-    """The Jinja Environment shared by the three render guards.
+def make_env(dirs=(), undefined_cls=StubUndefined) -> Environment:
+    """The one Jinja Environment factory the render guards and the renderer build on.
 
     Carries the given template dirs on the loader, the stub-undefined class, and the whitespace
-    flags matching Ansible's Templar so rendered output matches a real deploy. Callers register any
-    Ansible filter/test shims (the compose guard's ``hash`` filter, the shell guard's ``search``
-    test) on the returned env.
+    flags matching Ansible's Templar so rendered output matches a real deploy. It registers no
+    filter: ``lib.ansible_jinja_env.register_ansible_filters(make_env(...))`` adds the Ansible
+    ones, and ``template_env`` does that over a template directory and ``ansible/templates/``.
+
+    With no ``dirs`` the environment has an empty loader, which is the form a test takes to
+    render a template's text or a task's expression through ``from_string``. A bare
+    ``jinja2.Environment()`` has neither the whitespace flags nor the filters, and the
+    ``tests-build-no-bare-jinja-environment`` row of
+    ``scripts/tests/test_census_rows_test_renders.py`` refuses one in a test.
     """
     return Environment(
         loader=FileSystemLoader([str(d) for d in dirs]),

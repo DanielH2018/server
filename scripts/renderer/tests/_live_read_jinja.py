@@ -24,7 +24,7 @@ from jinja2 import Environment, meta, nodes
 from py_table import py_table
 from scrape_jobs import scrape_jobs
 
-from lib.ansible_jinja_env import make_ansible_env
+from lib.ansible_jinja_env import make_env, register_ansible_filters
 
 LOOKUPS = frozenset({"lookup", "query", "q"})
 # The two variables that hold other variables by name.
@@ -81,7 +81,7 @@ class Reader:
         self.accepted: list[str] = []
         self.vars_names: set[str] = set()
         self.problems: list[str] = []
-        env: Environment = make_ansible_env()
+        env: Environment = register_ansible_filters(make_env())
         # `find_undeclared_variables` compiles, and compiling refuses an unknown filter or
         # test. The census renders nothing, and an inventory value may name a filter only a
         # setup role's play loads, so every name passes.

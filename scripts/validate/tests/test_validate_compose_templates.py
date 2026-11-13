@@ -178,6 +178,19 @@ def test_a_packaged_service_without_a_digest_is_flagged(tmp_path):
     assert err and "no '@sha256:' digest" in err
 
 
+def test_a_packaged_service_the_package_would_ship_broken_is_flagged(tmp_path):
+    """The package drops the include's last newline, which joins two keys into invalid YAML."""
+    tree = tmp_path / "svc"
+    tree.mkdir()
+    (tree / "head.j2").write_text("services:\n  svc:\n    container_name: svc\n")
+    (tree / "compose.yaml.j2").write_text(
+        "{% include 'head.j2' %}    image: busybox:stable@sha256:" + "ab" * 32 + "\n"
+        "    cap_drop: [ALL]\n    security_opt: [no-new-privileges:true]\n"
+    )
+    err = vct.check_component_service("daniel-pi", {"name": "svc"}, tmp_path)
+    assert err and "invalid YAML" in err
+
+
 def test_a_packaged_service_with_no_template_is_flagged(tmp_path):
     err = vct.check_component_service("daniel-pi", {"name": "gone"}, tmp_path)
     assert err and "no hosts/components/pi-compose/services/gone/" in err

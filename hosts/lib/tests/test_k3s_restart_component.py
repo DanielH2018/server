@@ -13,7 +13,7 @@ import jinja2
 import pytest
 import yaml
 
-from lib.ansible_jinja_env import make_ansible_env
+from lib.ansible_jinja_env import make_env, register_ansible_filters
 from lib.repo_paths import REPO
 from renderer.renderer_lib import host as host_mode
 from renderer.renderer_lib.cluster import RenderRefused
@@ -98,7 +98,7 @@ def test_daniel_box_skips_the_server_restart_guard_and_the_retired_deploy_lock(p
 
 
 def test_an_agent_host_render_adds_the_guard(package):
-    env = make_ansible_env(undefined_cls=jinja2.StrictUndefined)
+    env = register_ansible_filters(make_env(undefined_cls=jinja2.StrictUndefined))
     template = env.from_string(
         (COMPONENT / "units/homelab-k3s-restart.service.j2").read_text()
     )
@@ -123,7 +123,7 @@ def test_the_timer_carries_the_window_and_the_two_accuracy_settings(package):
 
 
 def test_a_host_without_a_window_fails_the_render():
-    env = make_ansible_env(undefined_cls=jinja2.StrictUndefined)
+    env = register_ansible_filters(make_env(undefined_cls=jinja2.StrictUndefined))
     template = env.from_string(
         (COMPONENT / "units/homelab-k3s-restart.timer.j2").read_text()
     )

@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 """Render a Jinja-templated shell script, then lint the output with `bash -n` and shellcheck.
 
-The render half is `lib.ansible_jinja_env`, the environment every render guard shares;
-`render_template` is re-exported here because this module is where the shell guard's callers
-already reach for it. The lint half wraps the two external linters and returns error strings
+The render half is `shipped_render.render_shipped`, beside this module. The lint half wraps the two external linters and returns error strings
 rather than raising, so a caller can report every failing template in one pass.
 
 `scripts/validate/shell_templates.py` is the entry point that sweeps the tree with these.
@@ -20,12 +18,9 @@ from pathlib import Path
 # scripts/ root here, the same way its siblings reach it.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from lib.ansible_jinja_env import render_template
-
 __all__ = [
     "bash_syntax_check",
     "find_shellcheck",
-    "render_template",
     "shellcheck_batch",
     "shellcheck_check",
 ]
