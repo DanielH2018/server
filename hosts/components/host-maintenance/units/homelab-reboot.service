@@ -10,4 +10,6 @@ SyslogLevel=notice
 SyslogIdentifier=weekly-restart
 Environment=PATH=/usr/sbin:/usr/bin:/sbin:/bin
 ExecStart=/usr/lib/homelab/homelab-reboot
-LoadCredential=healthchecks_ping_key:/run/credstore/healthchecks_ping_key
+# Import, not Load: Load fails the unit with 243/CREDENTIALS on a missing file, and a missing ping
+# key must skip only the ping, not the reboot.
+ImportCredential=healthchecks_ping_key

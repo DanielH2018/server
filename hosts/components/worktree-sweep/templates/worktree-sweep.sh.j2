@@ -17,7 +17,7 @@
 # branch deletion failed (#4445). `$rc` on the ping URL is Healthchecks.io's exit-status
 # endpoint: 0 is a success ping and anything else is a failure, so a failed sweep pages at once
 # and a sweep that never ran pages on silence. The key arrives as the systemd credential
-# `healthchecks_ping_key`, which the unit loads from /run/credstore. daniel-server's package
+# `healthchecks_ping_key`, which the unit imports from /run/credstore. daniel-server's package
 # retires the old key file, so the credential is the one source both hosts carry (#6815).
 # Without a key the script sends no ping. The check is named for the host:
 # `<host>-worktree-sweep`.
