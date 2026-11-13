@@ -151,7 +151,9 @@ walks the routing tree to prove the alerts reach the mute.
 `HostUpdateStale` per entry of `observability_expected_hosts`, each from the shape in
 `tests/rules/fixtures/host-update-stale.yaml`, which `host-checks.test.yaml` fires.
 `ansible/tests/services/test_host_plane_rule_literals.py` holds both sets to their sources and
-prints the rule a new entry needs. `docs/host-packages.md` is the runbook for both pages. The
+prints the rule a new entry needs. The same module fails a host whose package enables
+`homelab-updater.timer` with no `observability_expected_hosts` entry, so every armed host
+pages when its updates stop. `docs/host-packages.md` is the runbook for both pages. The
 group also carries one `WiredLinkDown` warning per node whose host_vars set
 `k3s_node_static_link`, reading that link's carrier and operstate (#5124). The same test
 module holds that set to host_vars, so a node that pins a new link needs a rule edit too.

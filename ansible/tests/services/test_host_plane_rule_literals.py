@@ -232,8 +232,9 @@ def test_every_host_that_arms_its_updater_is_expected_is_clean():
 
 
 def test_a_host_that_arms_its_updater_and_is_not_expected_is_flagged():
-    expected = load_defaults(ROLE)["observability_expected_hosts"]
-    assert unexpected_armed_hosts(_armed_hosts() | {"daniel-new"}, expected) == [
+    armed = _armed_hosts()
+    expected = {host: {} for host in armed}
+    assert unexpected_armed_hosts(armed | {"daniel-new"}, expected) == [
         "daniel-new enables homelab-updater.timer and observability_expected_hosts does not list it"
     ]
 
