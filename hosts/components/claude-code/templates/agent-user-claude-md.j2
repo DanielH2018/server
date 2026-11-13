@@ -49,11 +49,11 @@ GitHub compares a pushed branch with the default branch. A branch based behind m
 
 ## Land a PR with the repo's own command
 
-You can merge your own PR, and you may arm GitHub's auto-merge on it with
-`gh pr merge --auto --squash <n>`: no ruleset requires a review. You have no sudo, so you
-cannot deploy it. Land it with the command the repo's `land-after-merge` skill gives,
-`land.sh --pr <n> --arm-merge --await-merge --detach && cc-wait land <n>`, whether or not you
-armed auto-merge. As this user, `land.sh` hands the PR to `homelab-claude-land@<n>.service`,
+You cannot merge a PR yourself: only the operator's admin role and Renovate may update
+master, and GitHub's auto-merge applies no bypass, so an armed PR stays `BLOCKED`. You have
+no sudo, so you cannot deploy it either. Land it with the command the repo's
+`land-after-merge` skill gives,
+`land.sh --pr <n> --arm-merge --await-merge --detach && cc-wait land <n>`. As this user, `land.sh` hands the PR to `homelab-claude-land@<n>.service`,
 which lands it as the operator and reports that landing's verdict and exit code as its own. It
 refuses `--tags`, `--since` and `--subject`, because the unit decides what deploys.
 
@@ -63,8 +63,7 @@ that changes a module the landing code imports, such as one under `scripts/lib/`
 code decides whether the next PR lands. When it refuses one,
 leave the PR open, tell the operator it needs their review, and stop. Once they approve the PR's
 head commit on GitHub, run the same command again. A push after their approval needs a new
-approval. Do not arm auto-merge on a PR the lander refused: the operator allows it, but the
-refusal is the operator asking to see that change first.
+approval.
 {% endif %}
 {% if claude_code_agent_operator_config or claude_code_agent_dotfiles %}
 

@@ -9,9 +9,12 @@ homelab-updater accepts as reconciled, and a failed run is what it holds the hos
 Run: uv run pytest hosts/lib/tests/test_reconcile_ufw_arm.py
 """
 
+import json
+
 import pytest
 from _reconcile_arms import base, metrics, red
 from _reconcile_host import V1, Node
+from lib.proc_testing import run
 
 ARM = "reconcile_lib/ufw.py"
 LAN = "allow from 192.0.2.0/24 to any port 22 proto tcp"
@@ -263,16 +266,55 @@ def test_a_legacy_entry_naming_an_adopted_spec_never_deletes_the_keep_rule(node)
     adopted_spec_survives(node)
 
 
+REMOVE_LEGACY = """
+import json, sys
+sys.path.insert(0, sys.argv[1])
+from reconcile_lib import ufw
+rules, legacy, current = json.loads(sys.argv[2])
+sys.exit(0 if ufw.remove_legacy(rules, legacy, [tuple(c) for c in current]) else 1)
+"""
+
+
+def remove_legacy(node: Node, rules: list, legacy: list, current: list) -> None:
+    """Run step 4 alone, from the reconcile beside `node.script`, against the stub ufw."""
+    argv, env = node.command()
+    args = json.dumps([rules, legacy, current])
+    result = run([argv[0], "-c", REMOVE_LEGACY, str(node.script.parent), args], env=env)
+    assert result.returncode == 0, result.stderr
+    node.state = json.loads((node.stub / "state.json").read_text())
+
+
+def step_4_skips_an_adopted_spec(node: Node) -> None:
+    # Step 2 relabels the adopted rule before step 4 reads `ufw show added`, so a full run never
+    # shows step 4 the legacy pair; only a direct call reaches the declared-spec guard.
+    have(node, ("limit 22/tcp", "homelab:keep:ssh-limit"))
+    legacy = {"spec": "limit 22/tcp", "comment": "", "replaced_by": "ssh-limit"}
+    current = [["limit 22/tcp", ""], ["limit 22/tcp", "homelab:keep:ssh-limit"]]
+
+    remove_legacy(node, [SSH_LIMIT], [legacy], current)
+
+    assert ("limit 22/tcp", "homelab:keep:ssh-limit") in added(node)
+
+
+def test_step_4_never_deletes_a_legacy_spec_a_declaration_shares(node):
+    step_4_skips_an_adopted_spec(node)
+
+
 def test_red_a_legacy_step_that_deletes_the_adopted_spec_removes_the_keep_rule(
     tmp_path,
 ):
     red(
         tmp_path,
-        adopted_spec_survives,
+        step_4_skips_an_adopted_spec,
         ARM,
-        'if entry["spec"] in declared or (',
-        "if (",
+        'entry["spec"] in declared',
+        "False",
     )
+
+
+def test_a_red_fixture_whose_anchor_is_gone_fails(tmp_path):
+    with pytest.raises(pytest.fail.Exception, match="update the red fixture"):
+        red(tmp_path, step_4_skips_an_adopted_spec, ARM, "no such anchor", "")
 
 
 def test_an_uncommented_rule_no_legacy_entry_names_is_left_alone(node):

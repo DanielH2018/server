@@ -30,7 +30,7 @@
 # keyless inhibit would mute the census while a renamed series empties another host's vector, so
 # a dead exporter pages twice there, the safe direction. This is A5's ruling too (storage.yaml).
 # The "dead exporter" cases in hosts.test.yaml pin it: only the two floors fire. Read the
-# decision at m6-status/a1.md before adding an A1 rule that fires on a dead scrape.
+# decision in m6-retire-kuma.md, A1 hosts, before adding an A1 rule that fires on a dead scrape.
 #
 # THE MISSING-DATA ARMS start from `up == 1`. The bridge paged "metric unavailable" when a
 # series was absent, which a dead exporter also caused. Each `unless on (origin, instance)` arm

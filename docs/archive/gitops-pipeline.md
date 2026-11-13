@@ -1,10 +1,13 @@
 # The GitOps pipeline
 
+> Archived on 2026-11-12 (#8164). [Deploying a change](../deploying.md) holds what stays true
+> of this page, and [Landing a merged PR](../landing.md) holds the CI-gating rule.
+
 How a merged change reaches the hosts and the cluster.
 
 H7.52 retired `gitops-deploy.timer` and its service. The deployer's record, its rules and the
-incidents behind them are archived in [The GitOps deployer](archive/gitops-deployer.md) and
-[the archived role page](archive/gitops-deploy-role.md). H7.53 deleted its code.
+incidents behind them are archived in [The GitOps deployer](gitops-deployer.md) and
+[the archived role page](gitops-deploy-role.md). H7.53 deleted its code.
 
 !!! warning "A merge is not a deploy"
     `promote` and Flux apply every k8s change after master CI, an image-pin bump and a
@@ -16,7 +19,7 @@ incidents behind them are archived in [The GitOps deployer](archive/gitops-deplo
 
 Flux follows the promoted artifact and applies every service's render, so no Ansible play
 deploys a workload.
-[The Flux deploy plane](flux-deploy-plane.md) has what it runs and what it reports.
+[The Flux deploy plane](../flux-deploy-plane.md) has what it runs and what it reports.
 
 `homelab-checkout-sync.timer` fast-forwards daniel-box's primary checkout to the newest green
 master commit. It applies nothing. `hosts/components/checkout-sync/component.yml` holds its
@@ -36,7 +39,7 @@ image bump. `scripts/lib/k8s_roles.py` collects the ones declaring `false` into 
 The host-package builder on daniel-box applies a change under `hosts/`:
 `homelab-builder.timer` builds each changed package from the newest green master commit,
 `homelab-repo-sign.service` signs and publishes it, and each host's `homelab-updater.timer`
-installs it. [Host packages](host-packages.md) is the runbook. One change needs two paths: a
+installs it. [Host packages](../host-packages.md) is the runbook. One change needs two paths: a
 key rotation commits the new keyring under `hosts/keys/`, and only a `homelab_builder` apply
 rewrites the `archive-key.fpr` the builder checks it against. The runbook names that apply.
 

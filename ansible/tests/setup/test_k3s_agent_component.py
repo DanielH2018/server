@@ -8,12 +8,15 @@ Every failure here is silent until that start: a drop-in that leaves stdout in t
 a crash loop's reason, and a file with no activation is never reported pending.
 """
 
+import base64
 import dataclasses
 import os
 import shutil
 
 import pytest
 from _helpers import load_yaml
+from _readonly_kubeconfig import UNIT as KUBECONFIG_UNIT
+from _readonly_kubeconfig import run_kubeconfig, written_kubeconfig
 from _wifi_fallback import WIFI_FILE, WIFI_RENDERED, installed_wifi_file
 from lib import yaml_fast
 from lib.estate import REPO_INVENTORY
@@ -28,6 +31,7 @@ CONFIG = "/etc/rancher/k3s/config.yaml.d/50-homelab.yaml"
 STARTUP_FILES = {DROPIN, CONFIG, "/etc/rancher/k3s/registries.yaml"}
 LOGROTATE = "/etc/logrotate.d/k3s-agent"
 TMPFILES = "/usr/lib/tmpfiles.d/homelab-k3s-agent.conf"
+AGENT_CA = "/var/lib/rancher/k3s/agent/server-ca.crt"
 
 
 @pytest.fixture(scope="module")
@@ -130,6 +134,50 @@ def test_the_longhorn_packages_and_the_inotify_key_ship_in_the_package(package):
         package.activations["/etc/multipath/conf.d/50-homelab-longhorn.conf"]
         == "reload:multipathd.service"
     )
+
+
+def test_the_kubeconfig_oneshot_names_the_server_and_the_ca_the_agent_fetched(
+    package, tmp_path
+):
+    """An agent has no admin kubeconfig and no apiserver on 127.0.0.1:6443."""
+    pem = "-----BEGIN CERTIFICATE-----\nQ0E=\n-----END CERTIFICATE-----\n"
+    result = run_kubeconfig(package, tmp_path, AGENT_CA, pem)
+    assert result.returncode == 0, result.stderr
+    _, config = written_kubeconfig(tmp_path)
+    assert config["clusters"][0]["cluster"] == {
+        "server": "https://10.0.0.215:6443",
+        "certificate-authority-data": base64.b64encode(pem.encode()).decode(),
+    }
+
+
+def test_the_kubeconfig_oneshot_waits_for_the_join_and_follows_the_token(package):
+    (output,) = [o for o in package.outputs if o["keys"] == ["k3s_readonly_token"]]
+    assert output["dependents"] == ["homelab-k3s-kubeconfig.service"]
+    unit = text(package, KUBECONFIG_UNIT)
+    assert (
+        f"LoadCredential=k3s_readonly_token:/run/homelab-secrets/{output['destination']}\n"
+        in unit
+    )
+    # A rebuild installs the package before the join, and a failed unit would hold the host.
+    assert f"ConditionPathExists={AGENT_CA}\n" in unit
+    assert (
+        "/usr/lib/systemd/system/multi-user.target.wants/homelab-k3s-kubeconfig.service"
+        in package.links
+    )
+
+
+def test_the_shells_name_the_kubeconfig_as_they_do_on_the_server(package):
+    """The zshenv block is a hand copy of k3s-server's, and the line arm cannot borrow it."""
+    server = host_mode.render_host("daniel-box")
+
+    def zshenv(node) -> list[dict]:
+        return [e for e in node.lines if e["path"] == "/etc/zsh/zshenv"]
+
+    assert zshenv(package) == zshenv(server) != []
+    profile = "/etc/profile.d/k3s-kubeconfig.sh"
+    assert package.files[profile] == server.files[profile]
+    # The arm creates a missing /etc/zsh 0700, so zsh has to install the file first.
+    assert "zsh" in package.depends
 
 
 def test_the_pin_ships_with_its_linkdown_keys_and_never_applies_itself(package):

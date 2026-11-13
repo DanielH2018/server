@@ -25,8 +25,8 @@ Secret holds.
   entry stays in the set because
   `ansible/tests/k8s/test_shed_set_is_derived_from_tier.py::test_never_shed_matches_the_untiered_roles_that_never_prune`
   holds the set equal to the untiered roles that set `flux_prune: false`.
-- **The identity's name and namespace are a mirrored pair.** `setup/k3s` keeps
-  `k3s_readonly_sa_name` and `k3s_readonly_sa_namespace` for the kubeconfig and the audit
+- **The identity's name and namespace are a mirrored pair.** `hosts/components/k3s-server/defaults/main.yml`
+  keeps `k3s_readonly_sa_name` and `k3s_readonly_sa_namespace` for the kubeconfig and the audit
   policy, and this role's template reads `cluster_base_readonly_sa_name` and
   `cluster_base_readonly_sa_namespace`.
   `ansible/tests/k8s/test_cluster_base_mirrors_the_k3s_identity.py::test_each_mirrored_pair_is_equal`
@@ -42,4 +42,4 @@ Secret holds.
   `ansible/tests/k8s/test_flux_priority_classes_come_from_cluster_base.py::test_every_flux_priority_class_is_built_in_or_rendered_here`
   holds that, because the hand apply of step 2 is what lets Flux's pods admit.
 - **The role's templates carry the `DECIDED:` markers** about `globalDefault` and
-  PodDisruptionBudgets; they moved with `templates/priorityclass.yaml.j2` from `setup/k3s`.
+  PodDisruptionBudgets; they moved here with `templates/priorityclass.yaml.j2` from the k3s setup role, since deleted.
