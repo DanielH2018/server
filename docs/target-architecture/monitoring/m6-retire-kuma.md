@@ -58,78 +58,3485 @@ C deletes Kuma). *Open questions* proposes splitting it in the slice index.
 
 ## Status by batch
 
-Each batch, and each Phase B or Phase C PR, records its soak reads, cutovers and other
-results in its own file under `docs/target-architecture/monitoring/m6-status/`. This
-section transcludes the files in batch order. *Recording a batch's results*, under
-*Steps, as PRs*, says what goes in a file.
+Each batch, and each Phase B or Phase C PR, has its soak reads, cutovers and other results
+below, in batch order. M6 is done, so this section is a closed record. Until 2026-11-12
+each record lived in its own file under `m6-status/`, so that parallel PRs did not
+conflict over one block (#6656).
 
---8<-- "target-architecture/monitoring/m6-status/a1.md"
+### A1 hosts
 
---8<-- "target-architecture/monitoring/m6-status/a2.md"
+A1's shadow rules are the 33 rules of `hosts.yaml`. The `hosts` group first evaluated at
+2026-10-23T19:15:47Z, so the soak window starts there. The first soak read was not clean:
+[#6621](https://github.com/DanielH2018/server/issues/6621) found 921 minutes in which the Memory
+tile read DOWN with no matching shadow alert. [#6650](https://github.com/DanielH2018/server/pull/6650)
+traced every one of them to the `claude-rc.service` crash loop on daniel-box (2026-10-26 00:23 to
+2026-10-30 14:38 UTC). Its cgroup existed for one second per start, so the `claude-rc` series
+appeared and vanished, and a bare `for: 10m` reset on every reappearance.
+`ClaudeCgroupNotReporting` now wraps its condition in `max_over_time((...)[5m:1m])` and keeps
+`for: 10m`. The tuned rule has been live since 2026-10-30 at 19:37Z.
 
---8<-- "target-architecture/monitoring/m6-status/a3.md"
+The operator ruled on 2026-10-31 (comment on #6621) that A1's Cutover-a proceeds on #6650's 168h
+replay plus the live window of the tuned rule, as for A2 ([#6628](https://github.com/DanielH2018/server/issues/6628)).
+Any unexplained minute in either blocks.
 
---8<-- "target-architecture/monitoring/m6-status/a4.md"
+**The re-read of the soak, 2026-10-31T11:30Z.** The read repeated #6650's queries over
+`[168h:1m]` (M1 convention 6 with M2's 8-minute margin), mapping each tile to the `hosts.yaml`
+rules that port its bridge row:
 
---8<-- "target-architecture/monitoring/m6-status/a5.md"
+- Root Disk: `HostDiskFull`, and `HostMetricsMissing` and `HostCoverageShortfall` with
+  `arm=~"disk.*"`.
+- Memory: `HostMemoryHigh` and `ClaudeCgroup*`, and `HostMetricsMissing` and
+  `HostCoverageShortfall` with `arm="memory"`.
+- Host Temperature: `HostTemperature*`, `CPUThermalThrottled` and `PiUndervoltage`, and
+  `HostMetricsMissing` and `HostCoverageShortfall` with `arm="thermal-throttle"`.
+- UPS Battery Health: `UPS*`.
+- Pi Pressure is B8's tile. A1 owns its Prometheus half: `PiLoadHigh`, `PiMemoryLow`,
+  `PiDiskFull`, `PiFilesystemReadOnly` and `PiMetricsMissing`.
 
---8<-- "target-architecture/monitoring/m6-status/a6.md"
+Prometheus's oldest sample was 21.5 days old, so retention covered the window.
+`increase(prometheus_rule_evaluation_failures_total{rule_group=~".*;hosts"}[168h])` was 0.
 
---8<-- "target-architecture/monitoring/m6-status/a7.md"
+| Tile | Samples | DOWN min | Firing min | Q1 strict | Q1 ±8m | Q2 strict | Q2 ±8m |
+|---|---|---|---|---|---|---|---|
+| Root Disk | 10033 | 0 | 0 | 0 | 0 | 0 | 0 |
+| Memory | 10033 | 1325 | 421 | 921 | 651 | 17 | 0 |
+| Host Temperature | 10038 | 0 | 0 | 0 | 0 | 0 | 0 |
+| UPS Battery Health | 10038 | 0 | 0 | 0 | 0 | 0 | 0 |
+| Pi Pressure | 10038 | 50 | 59 | 3 | 0 | 12 | 2 |
 
---8<-- "target-architecture/monitoring/m6-status/b0.md"
+The counts equal #6650's. Prometheus does not re-evaluate stored `ALERTS` under a changed rule,
+so the replay still shows the untuned rule's 421 firing minutes. Every Q1 minute is explained:
 
---8<-- "target-architecture/monitoring/m6-status/b1.md"
+- **Memory Q1, 921 strict minutes.** All 921 fall within 15 minutes of a gap in daniel-box's
+  `claude-rc` series (921 of 921 covered, 0 uncovered). The five latest DOWN minutes sit at 14:29
+  to 14:39 on 2026-10-30, inside the loop's tail, because `claude-rc.service` restored at
+  14:38:30. A `[52h:1m]` window ending 2026-10-26T00:20Z, before the loop, reads Q1 0. #6650's
+  backtest of the tuned rule gives Q1 0 for the whole 168h.
+- **Memory Q2, 17 strict minutes.** One- to five-minute edges inside the same loop, where the
+  bridge's sample caught the cgroup and pushed up while the rule was still firing. The ±8m margin
+  absorbs all 17.
+- **Pi Pressure Q1, 3 strict minutes (2026-10-26 04:35 to 04:37).** The tail of one Pi load
+  episode. `PiLoadHigh` cleared at 04:34, and the tile held the bridge's DOWN push until the
+  next cycle.
+- **Pi Pressure Q2, 12 strict and 2 ±8m minutes.** The 2 are 2026-10-26 03:33 and 03:34, where
+  `PiLoadHigh` crossed 1.5 per core before the bridge's first DOWN cycle at 03:41. `b8.md`
+  records the same episode.
+- **Root Disk, Host Temperature, UPS Battery Health.** No DOWN minute and no shadow alert in 168h.
 
---8<-- "target-architecture/monitoring/m6-status/b2.md"
+**The live window of the tuned rule, 2026-10-30T19:37Z to 2026-10-31T11:30Z (`[954m:1m]`).** All
+five tiles read 936 samples, 0 DOWN minutes and 0 firing minutes. Q1 and Q2 are 0, strict and
+±8m, for all five. `ALERTS{alertname="ClaudeCgroupNotReporting"}` has no pending or firing
+sample, so the tuned rule stayed quiet rather than merely unfired. The 18 minutes without a tile
+sample are five gaps of 3, 2, 5, 3 and 5 minutes, in the hours starting 19:37, 20:37, 22:37,
+00:37 and 02:37Z. `up{job="uptime-kuma"}` never read 0, and the Kuma pod started at 02:42:44Z.
 
---8<-- "target-architecture/monitoring/m6-status/b3.md"
+**The cgroup arms.** H7.40 slice 1 (2026-10-31, about 02:00Z) runs both `claude-rc.service` and
+`homelab-claude-rc.service` on daniel-box. The `claude-rc` and `fleet` series on daniel-box, and
+`fleet` on daniel-server, report in 600 of 600 minutes over 10 hours. The packaged unit
+crash-loops beside the Ansible-era one (477 restarts, each exiting 1 with `This folder is already
+served by a terminal claude remote-control`), and `claude-cgroup-metrics.sh` prefers
+`claude-rc.service`'s cgroup, which is why the series is steady. [#6703](https://github.com/DanielH2018/server/issues/6703)
+tracks it. A restart in which the two units swap the cgroup the writer reads would flap the
+series again, and `ClaudeCgroupNotReporting` would then page.
 
---8<-- "target-architecture/monitoring/m6-status/b4.md"
+**The deployed rules, read at 11:31Z.** `kubectl get configmap -n observability prometheus-rules -o jsonpath='{.data.hosts\.yaml}'`
+is byte-identical to `hosts.yaml` on master. All 33 rules carry `shadow: "true"`,
+`prometheus_rule_group_rules` for the group reads 33, and no A1 alert was firing.
 
---8<-- "target-architecture/monitoring/m6-status/b5.md"
+A1's cutover is three stacked PRs that merge in this order, not the plan's single Cutover-a.
+uptime-kuma and monitor-bridge are both `owner: flux`, so no deploy orders a tile deletion
+before a row deletion, and the batch uses the owner-independent fallback of *When D5 flips a
+role M6 edits*, as A2 to A5 did:
 
---8<-- "target-architecture/monitoring/m6-status/b6a.md"
+1. Cutover-a1, [#6704](https://github.com/DanielH2018/server/pull/6704): an exclusion in the
+   `CHECKS` loop of `static-monitors.yaml.j2` deletes the four tiles. Every rule stays shadow.
+   Its live read is `probe.py metric 'monitor_status{monitor_name=~"Root Disk|Memory|Host Temperature|UPS Battery Health"}'`,
+   which must return no series. Pi Pressure keeps its tile for B8.
+2. Cutover-a2, [#6706](https://github.com/DanielH2018/server/pull/6706): the four bridge rows, their check bodies and their env keys go, and the
+   four push tokens enter `PENDING_RETIREMENT`. It merges only after the read above passes.
+3. Cutover-b, the PR that adds this paragraph: the 28 shadow rules of `hosts.yaml` that A1 owns drop `shadow`, and the
+   `kuma-cutover` group loses A1's four terms. `PiMetricsMissing`'s undervoltage arm becomes its
+   own rule, `PiUndervoltageMissing`. `test_alertmanager_routing.py` moves the rules to `PAGING`:
+   `HostDiskFull` and the five `UPS*` rules as critical alerts to Discord and email, the rest as
+   warnings to Discord.
 
---8<-- "target-architecture/monitoring/m6-status/b6b.md"
+**The five Pi pressure rules stay shadow.** `PiLoadHigh`, `PiMemoryLow`, `PiDiskFull`,
+`PiFilesystemReadOnly` and `PiMetricsMissing` are the Prometheus half of `pi_pressure`, and B8's
+`Pi Pressure` tile counts them. B8 cuts that row over and drops their `shadow`. A1 therefore adds
+no `CheckWithoutPager` term for Pi Pressure, and deletes nothing those rules read.
 
---8<-- "target-architecture/monitoring/m6-status/b6c.md"
+**The undervoltage arm.** `PiMetricsMissing` held an `undervoltage` arm that is check_host_temp's:
+the bridge paged `no undervoltage alarm sensor scraped (Pi node-exporter blind?)` while the Pi's
+scrape was up. Left in a rule that stays shadow until B8, that page would have no pager after
+Cutover-a2 deleted the row. Cutover-b moves the arm into `PiUndervoltageMissing` (same
+expression, `for: 10m`, `severity: warning`, `service: daniel-pi`, no `shadow`) and leaves
+`PiMetricsMissing` its four other arms. The arm never fired in the 168h window (`ALERTS` for
+`PiMetricsMissing{arm="undervoltage"}` has no sample, pending or firing).
 
---8<-- "target-architecture/monitoring/m6-status/b7.md"
+**Severity of the tiles against their rules.** Root Disk and UPS Battery Health were `critical`
+tiles on the email tier. `HostDiskFull` and the five `UPS*` rules are `critical`, so they keep
+Discord and email. Memory and Host Temperature were not on the tier, and their rules are
+`warning`. Root Disk's missing-metric arms (`HostMetricsMissing` and `HostCoverageShortfall` with
+`arm=~"disk.*"`) are `warning`, so they page Discord alone where the tile mailed too.
 
---8<-- "target-architecture/monitoring/m6-status/b8.md"
+**Inhibit decision: A1 needs none.** The plan turns the bridge's `EXPORTER_DEPENDENT` map into an
+inhibit sourced on `ScrapeTargetDown`, which A3's Cutover-b made live. The shadow PR wrote the
+rules so that nothing remains for it to hold:
 
---8<-- "target-architecture/monitoring/m6-status/b9.md"
+- Every missing-data arm (`HostMetricsMissing`, `HostTemperatureNotReporting`,
+  `ClaudeCgroupNotReporting`, `PiUndervoltageMissing`, `UPSSensorAbsent`) starts from `up == 1`,
+  so it fires only while the scrape succeeds.
+- Every threshold arm reads a series that a dead scrape drops, so it goes quiet.
+- `ClaudeCgroupNotReporting` holds its arm for 5 minutes after the last `up == 1` sample. That
+  hold ends before `ScrapeTargetDown`'s `for: 10m` fires.
+- `HostCoverageShortfall` and `HostTemperatureCoverageShortfall` do fire beside
+  `ScrapeTargetDown`, because they count hosts. Neither carries `job` or `instance`, so an
+  `equal: [job, instance]` inhibit cannot match them. A keyless inhibit would mute the census
+  while a renamed series empties another host's vector. A dead exporter pages twice there, the
+  safe direction, and A5 ruled the same way for its two census rules.
 
---8<-- "target-architecture/monitoring/m6-status/pr-b-1.md"
+A promtool case in `hosts.test.yaml` pins the claim: with the node and node-pi scrapes at `up 0`
+and every other series absent, only the two coverage floors fire. A `# DECIDED:` marker in the
+header of `hosts.yaml` records it.
 
---8<-- "target-architecture/monitoring/m6-status/pr-b-2.md"
+**Soak effect.** `renderer_lib/soak.py:longest_for` counts the `for:` of every unshadowed
+`critical` rule against its `service` label. Read on the tree of Cutover-a1 and on the tree of
+Cutover-b, the map differs by one key. `nut-exporter: 600` is new, from the five `UPS*` rules
+(`for: 10m`). `HostDiskFull` has no `for:`, and every other A1 rule is `warning`, so the other
+keys do not move. `nut-exporter` is a published tag, so a promote scoped to it waits 600s plus
+the scrape and evaluation margin, up from the 120s floor that rules with a templated `service`
+give every tag. A fleet-wide promote already waits on `deploy-pipeline`'s 900s, so its wait does
+not move. `test_lander_deadlines_cover_the_soak.py` and the `Lander deadlines cover the soak`
+hook pass.
 
---8<-- "target-architecture/monitoring/m6-status/pr-b-4.md"
+The two-hour no-pager bound counts from the moment the `uptime-kuma` Kustomization reports
+Cutover-a1's merge commit, because Kuma stops paging the four checks then and every A1 rule is
+still shadow. It ends when the `observability` Kustomization reports Cutover-b's merge commit.
+Cutover-a2's apply falls inside it. `CheckWithoutPager` pages critical two hours after the last
+`monitor_status` sample of any of the four tiles. If the bound is exceeded, revert Cutover-a2
+first when it has merged, so the bridge pushes again, and then Cutover-a1, so the tiles return.
+Reverting Cutover-a1 alone after Cutover-a2 restores tiles that no push reaches, and they go
+DOWN. Both reverts worked only until the A1 token PR,
+[#6949](https://github.com/DanielH2018/server/pull/6949), retired the keys.
 
---8<-- "target-architecture/monitoring/m6-status/pr-b-5.md"
+**Token PR.** [#6949](https://github.com/DanielH2018/server/pull/6949) retired this batch's push
+tokens, and the operator's commit removed the keys from `secrets.yml` on 2026-11-02. A revert of
+a cutover above no longer brings back a working tile, because no token is left for it to push
+with.
 
---8<-- "target-architecture/monitoring/m6-status/pr-b-6.md"
+### A2 containers
 
---8<-- "target-architecture/monitoring/m6-status/pr-b-7.md"
+A2's soak read, [#6622](https://github.com/DanielH2018/server/issues/6622), recorded in
+[#6630](https://github.com/DanielH2018/server/pull/6630), and its cutover-time re-read,
+[#6628](https://github.com/DanielH2018/server/issues/6628). Every minute is explained. The
+container-checks group loaded at 2026-10-23T18:19:47Z, which is the first sample of
+`prometheus_rule_group_rules` for the group. Each tile's alerts are the ones the shadow PR
+`8dc305303` wrote for it: the tile's own alert, plus `CAdvisorCoverageShortfall` with that tile's
+`arm`. "Strict" counts same-minute coincidence, and "±8m" is M1 convention 6's tolerance, as the
+queries in `m2-first-bridge-family.md` (*Verification*) write it.
 
---8<-- "target-architecture/monitoring/m6-status/pr-b-10.md"
+**The operator's ruling on 2026-10-30.** Cutover-a does not wait for a full 168h live soak of the
+tuned `ContainerCPUThrottled`. It proceeds on [#6630](https://github.com/DanielH2018/server/pull/6630)'s replay over stored series plus the live
+window available at cutover time
+([the ruling](https://github.com/DanielH2018/server/issues/6628#issuecomment-6534675658)). Before
+Cutover-a, both reads below run again at cutover time, and any unexplained minute in either
+blocks the cutover.
 
---8<-- "target-architecture/monitoring/m6-status/pr-c-0.md"
+**The 168h read of the three tiles.** It ran over `[168h:1m] @ 1793398800`, which ends at
+2026-10-30T22:20:00Z. Its DOWN, firing, Q1 and Q2 counts equal [#6630](https://github.com/DanielH2018/server/pull/6630)'s read at
+18:21 UTC. Each tile's sample count is 5 lower. The 4 hours the window dropped were fully
+sampled, and the 4 hours it added hold the 5-minute gap the live read below explains.
+`increase(prometheus_rule_evaluation_failures_total{rule_group=~".*container-checks"}[168h])` is
+0 at the same end, so the zeros below are evaluations that stayed quiet, not failures.
 
---8<-- "target-architecture/monitoring/m6-status/pr-c-1.md"
+| Tile | Samples | DOWN min | Firing min | Q1 strict | Q1 ±8m | Q2 strict | Q2 ±8m |
+|---|---|---|---|---|---|---|---|
+| k3s Container Restarts | 10046 | 0 | 0 | 0 | 0 | 0 | 0 |
+| k3s Container OOM | 10051 | 0 | 0 | 0 | 0 | 0 | 0 |
+| k3s CPU Throttling | 10051 | 21 | 5 | 21 | 16 | 5 | 0 |
 
---8<-- "target-architecture/monitoring/m6-status/pr-c-2.md"
+The CPU tile's minutes are [#6630](https://github.com/DanielH2018/server/pull/6630)'s three episodes, all under the rule as deployed before
+[#6630](https://github.com/DanielH2018/server/pull/6630). Prometheus does not re-evaluate stored `ALERTS` under a changed rule, so these counts
+stay the same until the episodes leave the window.
 
---8<-- "target-architecture/monitoring/m6-status/pr-c-3.md"
+- The 16 Q1 ±8m minutes are E1 (2026-10-29 01:44–54) and E2 (03:16–20). A dip of one or two
+  minutes reset the old rule's `for: 15m` on `kustomize-controller-755dcfc6dc-fg8sv`. [#6630](https://github.com/DanielH2018/server/pull/6630)'s
+  `max_over_time(...[5m:1m])` closes both. Its replay of the tuned rule leaves 0 Q1 ±8m minutes
+  over the same series.
+- The 5 Q2 strict minutes are the old rule firing on `fg8sv` at 2026-10-29 21:32–36, six
+  minutes before E3's DOWN. They fall inside ±8m.
 
---8<-- "target-architecture/monitoring/m6-status/pr-c-4.md"
+**The live read of the tuned rule.** [#6630](https://github.com/DanielH2018/server/pull/6630) merged at 2026-10-30T18:40:25Z. Prometheus reloaded
+its rules at 18:38:16, before the merge, and next at 18:53:16
+(`prometheus_config_last_reload_success_timestamp_seconds`), so the tuned rule went live at
+18:53:16. The live `prometheus-rules` ConfigMap carries the `max_over_time` expression. The read
+ran over `[3h:1m]`, the whole hours since the deploy, and over `[206m:1m]`, which starts at
+18:54. Both end at 2026-10-30T22:20:00Z.
 
---8<-- "target-architecture/monitoring/m6-status/pr-c-5.md"
+The tile has no sample at 20:34–20:38, which is the 5 minutes the sample counts miss. Uptime
+Kuma restarted then. Its pod `uptime-kuma-67dcd4d546-7xtwh` started at 20:33:52
+(`kube_pod_start_time` = 1793392432), rolled by A3's Cutover-a1 (`bc0b08115`, merged 20:26:50).
+Kuma's exporter rebuilt its tiles gradually, from 11 `monitor_status` series at 20:34 to 70 at
+20:40, and the CPU tile came back at 20:39. Prometheus kept evaluating rules through the gap,
+because `Watchdog` has a sample in every minute. In those 5 minutes the tuned rule never fired.
+The bridge's only `cpu` line in the window is a `streak 1/3` at 20:38:47, so it pushed no
+DOWN for Kuma to store.
+Q1 cannot see a minute with no tile sample, so the bridge's log is what covers the gap.
 
---8<-- "target-architecture/monitoring/m6-status/pr-c-6.md"
+| Window | Samples | DOWN min | Firing min | Q1 strict | Q1 ±8m | Q2 strict | Q2 ±8m |
+|---|---|---|---|---|---|---|---|
+| `[3h:1m]` | 175 | 0 | 0 | 0 | 0 | 0 | 0 |
+| `[206m:1m]` | 201 | 0 | 0 | 0 | 0 | 0 | 0 |
 
---8<-- "target-architecture/monitoring/m6-status/pr-c-7.md"
+The window held two throttling episodes, and neither side paged either one:
+
+- `fg8sv` was pending from 19:56:54 to 20:04:54, 9 minutes, under `for: 15m`. The bridge logged
+  no streak line for it.
+- `uptime-kuma-67dcd4d546-7xtwh` was pending from 20:36:54 to 20:44:54, 9 minutes. The bridge
+  logged one `throttling streak 1/3` line for the pod at 20:38:47 and nothing after it.
+  This is the restarted Kuma pod's start-up CPU.
+
+The live window is short, and it holds no episode long enough to page either side. It confirms
+that the tuned rule does not fire where the bridge stays quiet. That E1 and E2 now page rests on
+the replay, as the ruling accepts.
+
+A2's soak read of the shadow PR, [#6622](https://github.com/DanielH2018/server/issues/6622):
+A2's shadow PR is `8dc3053034`. Prometheus first evaluated the `container-checks` group at
+2026-10-23T18:19:47Z, so the soak window starts there. The read used M1 convention 6's two
+queries with M2's 8-minute margin (*Which soak minutes count as explained* in M2). It mapped
+each tile to its own alert plus `CAdvisorCoverageShortfall` with that tile's `arm`. Over
+`[168h:1m]`, read on 2026-10-30 at 18:21Z, k3s Container Restarts and k3s Container OOM
+returned no minutes for either query. k3s CPU Throttling returned 16 minutes for query 1 and
+none for query 2. The 16 minutes are two kustomize-controller episodes on 2026-10-29, from 01:44
+to 01:54 and from 03:16 to 03:20. In both, a dip in the 15m-window condition shorter than one
+bridge cycle reset `ContainerCPUThrottled`'s `for: 15m`, so they are misses.
+[#6630](https://github.com/DanielH2018/server/pull/6630) tunes the rule: its condition sits
+inside `max_over_time(...[5m:1m])`, so a sub-cycle dip no longer resets the hold. The PR's
+figures for the tuned rule are a replay over stored series, which convention 6 does not accept
+as a soak.
+
+The tuned rule's live soak, [#6648](https://github.com/DanielH2018/server/issues/6648): #6630
+merged as `4a871e9140`. Its `promote` run (41109931254) ran from 18:47:44Z to 18:55:05Z, and
+`prometheus_config_last_reload_success_timestamp_seconds` records one reload inside it, at
+2026-10-30T18:53:16Z. The tuned rule's soak window starts there. No later commit changes
+`container-checks.yaml`, so the reloads after 18:53Z leave the rule as #6630 deployed it. Over
+`[3h:1m]`, and over `[200m:1m]` to cover the window from 18:55Z, read on 2026-10-30 at 22:15Z,
+both queries returned no minutes for k3s CPU Throttling, with and without the 8-minute margin.
+Kuma read DOWN in no minute of the window, and the tile reported 195 of 200 minutes.
+`ContainerCPUThrottled` fired in no minute. It went pending for 9 minutes on
+`kustomize-controller-755dcfc6dc-fg8sv` and for 9 on `uptime-kuma-67dcd4d546-7xtwh`, both under
+its `for: 15m`, and `probe.py alerts --check cpu` listed no bridge DOWN in the last day. The
+group's evaluation failures over the window were 0, and retention covered 20.9 days.
+
+The window holds no throttling episode, so it shows that the tuned rule does not fire with Kuma
+up. It does not yet show that the rule catches an episode of E1's or E2's shape live. The
+operator ruled on 2026-10-30 that Cutover-a does not wait for the full 168h; see the ruling
+above.
+[#6628](https://github.com/DanielH2018/server/issues/6628) tracks the full-length live soak.
+
+A2's cutover is three stacked PRs that merge in this order, not the plan's single Cutover-a.
+uptime-kuma and monitor-bridge are both `owner: flux`, so no deploy orders a tile deletion
+before a row deletion, and the batch uses the owner-independent fallback of *When D5 flips a
+role M6 edits*, as A3 and A4 did:
+
+1. Cutover-a1, [#6682](https://github.com/DanielH2018/server/pull/6682): an exclusion in the
+   `CHECKS` loop of `static-monitors.yaml.j2` deletes the three tiles. Every rule stays shadow.
+   Its live read is `probe.py metric 'monitor_status{monitor_name=~"k3s Container Restarts|k3s Container OOM|k3s CPU Throttling"}'`,
+   which must return no series.
+2. Cutover-a2, [#6684](https://github.com/DanielH2018/server/pull/6684): the three bridge rows,
+   their check bodies and helpers, the coverage verdict, the cAdvisor selector builder and their
+   env keys go, and the three push tokens enter `PENDING_RETIREMENT`. It merges only after the
+   read above passes.
+3. Cutover-b, the PR that adds this paragraph: the four `container-checks.yaml` rules drop
+   `shadow`, and the `kuma-cutover` group loses A2's three terms. `test_alertmanager_routing.py`
+   moves the four rules from the blackhole to `PAGING`, all as warnings to Discord.
+
+The tuned `ContainerCPUThrottled` was live on 2026-10-31 at 00:17Z. The `prometheus-rules`
+ConfigMap's `container-checks.yaml` is byte-identical to the one on master, carries the
+`max_over_time(...[5m:1m])` form, and still has `shadow: "true"` on all four rules. The
+operator's ruling above lets Cutover-a proceed on that. Both soak reads run again at the moment
+Cutover-a1 merges, as the ruling requires, and an unexplained minute in either blocks it.
+
+The plan names no inhibit for A2, and this batch adds none. The three per-pod rules read
+counters that a dead `kubernetes-cadvisor` scrape leaves empty, so they go quiet instead of
+paging beside `ScrapeTargetDown`. `CAdvisorCoverageShortfall` is the one rule that fires on a
+dead scrape, because its `or vector(0)` arm reads an empty vector as zero pods. It pages beside
+`ScrapeTargetDown{job="kubernetes-cadvisor"}`, which is the double page the plan accepts as the
+safe direction until an inhibit lands; the two share a 10-minute `for:`, so neither fires
+first. An inhibit on `ScrapeTargetDown` would need `equal: [job, instance]` to stay narrow,
+and the census carries neither label. Without `equal`, one node's dead cAdvisor would mute the
+census while a selector break empties the other node's vector, which is the fault the census
+exists to catch. None of A2's rules is critical, so dropping `shadow` leaves
+`renderer_lib/soak.py:longest_for` unchanged.
+
+The two-hour no-pager bound counts from the moment the `uptime-kuma` Kustomization reports
+Cutover-a1's merge commit, because Kuma stops paging the three checks then and every A2 rule is
+still shadow. It ends when the `observability` Kustomization reports Cutover-b's merge commit.
+Cutover-a2's apply falls inside it. `CheckWithoutPager` pages critical two hours after the last
+`monitor_status` sample of any of the three tiles. If the bound is exceeded, revert Cutover-a2
+first when it has merged, so the bridge pushes again, and then Cutover-a1, so the tiles return.
+Reverting Cutover-a1 alone after Cutover-a2 restores tiles that no push reaches, and they go
+DOWN. Both reverts worked only until the A2 token PR,
+[#6949](https://github.com/DanielH2018/server/pull/6949), retired the keys.
+
+**The cutover-time re-read, 2026-10-31.** The ruling requires both soak reads to run again
+before Cutover-a1 merges. They ran with the queries this record already uses, at about 00:54Z,
+before [#6682](https://github.com/DanielH2018/server/pull/6682) merged. The first table
+re-runs the recorded 168h read pinned at `@ 1793398800`. Every count equals the recorded one,
+which shows the queries are the recorded ones.
+
+| Tile | Samples | DOWN min | Firing min | Q1 strict | Q1 ±8m | Q2 strict | Q2 ±8m |
+|---|---|---|---|---|---|---|---|
+| k3s Container Restarts | 10046 | 0 | 0 | 0 | 0 | 0 | 0 |
+| k3s Container OOM | 10051 | 0 | 0 | 0 | 0 | 0 | 0 |
+| k3s CPU Throttling | 10051 | 21 | 5 | 21 | 16 | 5 | 0 |
+
+The second table is the same `[168h:1m]` window ending at about 00:54Z. Restarts and OOM have
+5 fewer samples because the window slid 4 hours and the Uptime Kuma restart at 20:33 left a
+5-minute gap. The CPU tile's Q1 counts are unchanged. Its firing and Q2 strict counts each rose
+by 2, and its Q2 ±8m count rose from 0 to 2.
+
+| Tile | Samples | DOWN min | Firing min | Q1 strict | Q1 ±8m | Q2 strict | Q2 ±8m |
+|---|---|---|---|---|---|---|---|
+| k3s Container Restarts | 10041 | 0 | 0 | 0 | 0 | 0 | 0 |
+| k3s Container OOM | 10046 | 0 | 0 | 0 | 0 | 0 | 0 |
+| k3s CPU Throttling | 10046 | 21 | 7 | 21 | 16 | 7 | 2 |
+
+The live window of the tuned rule runs from its deploy at 18:53:16Z on 2026-10-30. Over
+`[6h:1m]` (350 samples) and `[364m:1m]` (354 samples), both ending at about 00:54Z, all three
+tiles have 0 DOWN minutes, 0 Q1 strict and 0 Q1 ±8m. Restarts and OOM have 0 firing minutes.
+The CPU tile has 2 firing, 2 Q2 strict and 2 Q2 ±8m minutes, the pair explained below. The
+missing minutes are the two Kuma restarts, at 20:33 and 23:19.
+
+Every Q1 minute is one already recorded. The 16 within ±8m are E1 and E2, and the other 5 match
+the 21:32-36 firing on 2026-10-29. No Q1 minute is unexplained.
+
+The two new Q2 minutes are 23:37:54Z and 23:38:54Z on 2026-10-30. `ContainerCPUThrottled`
+fired on `homelab/uptime-kuma-7b98fc5554-xklfl` while the CPU tile was up.
+
+- The pod started at 23:19:57Z, a new Kuma pod beside the earlier `67dcd4d546`.
+- The rule went pending at 23:22:54Z and fired after its `for: 15m`.
+- The bridge logged `throttling streak 1/3` at 23:24:40Z and `2/3` at 23:29:44Z, and no `3/3`.
+  `probe.py alerts --check cpu --days 1` lists no DOWN.
+- The bridge's third sample, at about 23:34:45Z, read clean, so its streak stopped at 2/3. The
+  rule's `max_over_time(...[5m:1m])` kept the alert up for about 4 to 5 minutes after the raw
+  condition cleared, which is the 5m hold the rule's comment documents.
+
+This is a rule-side extra page for one of Kuma's own pod restarts, not a missed outage. The
+raw per-minute condition was not recomputed, so the explanation is consistent with the
+evidence rather than proven. The operator treated the pair as explained on 2026-10-31 and
+proceeded with Cutover-a1.
+
+**Token PR.** [#6949](https://github.com/DanielH2018/server/pull/6949) retired this batch's push
+tokens, and the operator's commit removed the keys from `secrets.yml` on 2026-11-02. A revert of
+a cutover above no longer brings back a working tile, because no token is left for it to push
+with.
+
+### A3 scrape
+
+A3's soak read, [#6620](https://github.com/DanielH2018/server/issues/6620), recorded in
+[#6645](https://github.com/DanielH2018/server/pull/6645): every minute is explained, with no rule
+change. The read found one shape the tile pages and no A3 rule did: a scrape target that flaps
+without holding `up == 0` for 10 minutes. [#6626](https://github.com/DanielH2018/server/issues/6626)
+closed it with `ScrapeTargetFlapping` ([#6640](https://github.com/DanielH2018/server/pull/6640)),
+which unblocked the cutover, described after the read. The shadow rules loaded at
+2026-10-23T18:23:32Z, which is the first sample of `prometheus_rule_group_rules` for the `scrape-targets` and `log-pipeline` groups.
+The read ran M1 convention 6's two queries per tile over `[168h:1m] @ 1793384612`, which ends at
+2026-10-30T18:23:32Z. Each tile's alerts are the ones the shadow PR `dae51d452` wrote for it.
+`ScrapeTargetDown` is split by `origin`, the same selector monitor-bridge's two checks use, and
+`ScrapeTargetsMissing` counts for both scrape tiles.
+
+- **Scrape Targets.** Query 1 returned 0 minutes and query 2 returned 0.
+- **Cluster Scrape Targets.** Query 1 returned 20 minutes and query 2 returned 12.
+    - 6 query-1 minutes are the tile's trailing edge. A tile reads DOWN until the bridge's next
+      push, and the bridge pushes every 300 s (`INTERVAL`). The last firing samples are at
+      2026-10-25 14:32, 2026-10-26 04:35 and 2026-10-29 13:04, and the tile read DOWN at most
+      4 minutes longer each time (14:34–36, 04:37 and 13:06–07).
+    - 14 query-1 minutes (2026-10-26 03:58–04:07 and 04:28–31) are daniel-pi failing before its
+      unplanned reboot at 04:32:54. load1 reached 20.8 and MemAvailable fell to 99 MB. Its four
+      exporters failed scrapes for 1 to 4 minutes at a time from 03:31. `check_cluster_targets`
+      keeps one down streak for the whole check, so three 300 s cycles that each caught one of
+      the Pi's exporters down paged the tile. No single series held `up == 0` for
+      `ScrapeTargetDown`'s 10 minutes until alloy-pi's run from 04:21. Kuma's `Pi Pressure`
+      tile read DOWN from 03:43 to 03:47 and from 03:53 to 04:37, and `Daniel Pi Recovery` from
+      03:59 to 04:36, so the host fault had a live pager throughout. Their shadow successors,
+      `PiLoadHigh` (03:37 to 04:33) and `PiRecoveryFailed` (03:58 to 04:35), fired too. A target
+      that flaps on a healthy host would have no pager after Cutover-a, which is why Cutover-a
+      waited on [#6626](https://github.com/DanielH2018/server/issues/6626), closed by
+      [#6640](https://github.com/DanielH2018/server/pull/6640).
+    - 5 query-2 minutes are the rule's leading edge (2026-10-25 14:26, 2026-10-30 12:36–39). The
+      rule's `for: 10m` pages before the bridge's three-cycle streak
+      (`CLUSTER_TARGETS_CONSECUTIVE`).
+    - 7 query-2 minutes are a monitor-bridge restart clearing the tile while prowlarr's
+      exportarr sidecar still read `up == 0` (2026-10-25 22:49–51 and 2026-10-30 12:52–55). The
+      new bridge pods started at 22:47:21 and 12:50:31. A restart resets the in-memory streak,
+      so the first cycle pushes `up`. The rule kept firing until prowlarr's new pod replaced
+      the target, at 22:49:28 and 12:52:38.
+- **Log Shipper Dropped Entries.** Query 1 returned 6 minutes and query 2 returned 0. The
+  episode is the Pi's Alloy backlog after its reboot. Over two hours the Pi's Alloy dropped
+  35,938 entries as `ingester_error`, and Loki discarded 56,494 as `too_far_behind`.
+    - 3 minutes (2026-10-26 04:38–40) are the leading edge. Both rules went pending at 04:35:39
+      and fired after their `for: 5m`, at 04:40:39 and 04:41:39. The bridge pushed DOWN on its
+      first breaching cycle, and the tile read it at 04:37:09.
+    - 3 minutes (05:36–38) are the trailing edge. The last firing sample is 05:34:39, and the
+      tile read up at 05:38:09, inside one `INTERVAL`.
+
+The `Cluster Scrape Targets` tile has no samples at 2026-10-25 07:39–47 (the weekly reboot),
+2026-10-25 13:14–16 and 18:08–10, 2026-10-28 00:44–53 and 01:27–30, and 2026-10-29 21:32–38.
+Query 2 counts a shadow alert that fires while the tile has no sample, and it counted none in
+those gaps. `Watchdog` has a sample in every minute of four of the gaps, so Prometheus was
+evaluating rules there. It has 2 samples in the reboot gap's 8 minutes and none at 2026-10-28
+00:44–53, so neither side was read for most of those two gaps.
+
+A3's cutover is three stacked PRs that merge in this order, not the plan's single Cutover-a.
+uptime-kuma and monitor-bridge are both `owner: flux`, so no deploy orders a tile deletion
+before a row deletion, and the batch uses the owner-independent fallback of *When D5 flips a
+role M6 edits*:
+
+1. Cutover-a1, [#6651](https://github.com/DanielH2018/server/pull/6651): an exclusion in the
+   `CHECKS` loop of `static-monitors.yaml.j2` deletes the three tiles. Every rule stays shadow.
+   Its live read is `probe.py metric 'monitor_status{monitor_name=~"Scrape Targets|Cluster Scrape Targets|Log Shipper Dropped Entries"}'`,
+   which must return no series.
+2. Cutover-a2, [#6652](https://github.com/DanielH2018/server/pull/6652): the three bridge rows,
+   their check bodies and their env keys go, and the push tokens enter `PENDING_RETIREMENT`. It
+   merges only after the read above passes.
+3. Cutover-b, [#6653](https://github.com/DanielH2018/server/pull/6653): the A3 rules drop `shadow`, `BlackboxExporterDown` goes live with its
+   inhibit on `ScrapeTargetDown{job="blackbox-ingress"}`, `LokiHomelabDown` is deleted, and the
+   `kuma-cutover` group loses A3's three terms.
+
+The two-hour no-pager bound counts from the moment the `uptime-kuma` Kustomization reports
+Cutover-a1's merge commit, because Kuma stops paging the three checks then and every A3 rule is
+still shadow. It ends when the `observability` Kustomization reports Cutover-b's merge commit.
+Cutover-a2's apply falls inside it. `CheckWithoutPager` pages critical two hours after the last
+`monitor_status` sample of any of the three tiles. If the bound is exceeded, revert Cutover-a2
+first when it has merged, so the bridge pushes again, and then Cutover-a1, so the tiles return.
+Reverting Cutover-a1 alone after Cutover-a2 restores tiles that no push reaches, and they go
+DOWN. Both reverts worked only until the A3 token PR,
+[#6949](https://github.com/DanielH2018/server/pull/6949), retired the keys.
+
+Cutover-b leaves `FluxControllerDown`'s `up == 0` arm in `flux.yaml` shadow, and
+`ScrapeTargetDown{job="flux"}` pages a dead controller after 10 minutes in the meantime. The
+operator ruled on 2026-10-30 that a follow-up drops the label together with task 6's flux
+inhibit ([#6654](https://github.com/DanielH2018/server/issues/6654)).
+
+**Token PR.** [#6949](https://github.com/DanielH2018/server/pull/6949) retired this batch's push
+tokens, and the operator's commit removed the keys from `secrets.yml` on 2026-11-02. A revert of
+a cutover above no longer brings back a working tile, because no token is left for it to push
+with.
+
+### A4 edge
+
+A4's soak read, [#6623](https://github.com/DanielH2018/server/issues/6623): A4's shadow PR is
+`e79316c0bf`. Prometheus first evaluated the `edge` group at 2026-10-23T18:32:32Z, so the soak
+window starts there. The read used M1 convention 6's two queries with M2's 8-minute margin
+(*Which soak minutes count as explained* in M2). It mapped each tile to the `edge.yaml` rules
+that port its bridge row. `EdgeMetricsMissing` counts for every tile except Traefik 421. Over
+`[168h:1m]`, read on 2026-10-30 at 18:42Z, query 1 returned 20 minutes for Traefik Latency and
+none for the other four tiles. Query 2 returned none for any tile. The 20 minutes are four
+single-cycle bridge episodes: sonarr on 2026-10-27 at 00:27, and jellyfin on 2026-10-29 at
+21:52 and on 2026-10-30 at 00:59 and 14:54. The bridge's `traefik_latency` row has no streak, so
+it pages on one bad sample, and `TraefikBackendSlow` held `for: 5m`. M2's duration query, with
+the per-backend condition as the arm, counted 2, 4, 4 and 5 bad minutes. The first three are
+below the rule's `for:`, so they are explained. The fourth is a miss: the condition held from
+14:45 to 14:48, failed for 3 minutes, then held from 14:52 to 14:54, and each dip reset the
+hold. [#6629](https://github.com/DanielH2018/server/pull/6629) tunes the rule to fire when its condition held in at least 5 of the last 10
+minutes, without a `for:`, and adds rule tests for both shapes, built from jellyfin's counters.
+Replayed over the same `[168h:1m]`, the tuned rule reads true for jellyfin from 14:52 to 14:56
+and nowhere else, which the 8-minute margin matches to Kuma's 14:55 to 14:59 DOWN minutes. That
+count is a projection. Prometheus does not re-evaluate stored `ALERTS` under a changed rule, so
+a re-run of query 1 over the same window still returns 20. Jellyfin's bursts, which may be
+streams, are filed as [#6649](https://github.com/DanielH2018/server/issues/6649). The Traefik
+5xx episode on 2026-10-25 from 14:22 to 14:26 is covered, because `TraefikBackend5xx` fired
+from 14:23 to 14:25. Kuma held every A4 tile at status 3 (maintenance) from 07:30 to 08:16 that
+day, which neither query counts. A4's Cutover-a waits until the tuned rule is live in the
+`prometheus-rules` ConfigMap.
+
+The tuned rule was live in the `prometheus-rules` ConfigMap on 2026-10-30 at 22:18Z:
+`edge.yaml` there carries `count_over_time(` in `TraefikBackendSlow` and `shadow: "true"` on all
+seven rules. That met the condition above.
+
+A4's cutover is three stacked PRs that merge in this order, not the plan's single Cutover-a.
+uptime-kuma and monitor-bridge are both `owner: flux`, so no deploy orders a tile deletion
+before a row deletion, and the batch uses the owner-independent fallback of *When D5 flips a
+role M6 edits*, as A3 did:
+
+1. Cutover-a1, [#6668](https://github.com/DanielH2018/server/pull/6668): an exclusion in the
+   `CHECKS` loop of `static-monitors.yaml.j2` deletes the five tiles. Every rule stays shadow.
+   Its live read is `probe.py metric 'monitor_status{monitor_name=~"TLS Cert Expiry|Traefik 5xx|Traefik Latency|Traefik 404 Flood|Traefik 421"}'`,
+   which must return no series.
+2. Cutover-a2, [#6670](https://github.com/DanielH2018/server/pull/6670): the five bridge rows,
+   their check bodies, the latency verdict and their env keys go, and the five push tokens enter
+   `PENDING_RETIREMENT`. It merges only after the read above passes.
+3. Cutover-b, the PR that adds this record: the seven `edge.yaml` rules drop `shadow`, and the
+   `kuma-cutover` group loses A4's five terms. `test_alertmanager_routing.py` moves the edge
+   rules from no expected outcome to `PAGING`: `CertExpiringSoon` is critical (Discord and
+   email) and the other six are warnings (Discord).
+
+The plan names no inhibit for A4. `EdgeMetricsMissing`'s second arm requires `up == 1`, so a
+failed `traefik-k8s` scrape stays `ScrapeTargetDown`'s page and no pair of A4 rules pages one
+fault twice. Dropping `shadow` from the critical `CertExpiringSoon` (`for: 10m`) raises
+traefik's soak wait from 300 s to 600 s, which `test_lander_deadlines_cover_the_soak.py` covers.
+
+The two-hour no-pager bound counts from the moment the `uptime-kuma` Kustomization reports
+Cutover-a1's merge commit, because Kuma stops paging the five checks then and every A4 rule is
+still shadow. It ends when the `observability` Kustomization reports Cutover-b's merge commit.
+Cutover-a2's apply falls inside it. `CheckWithoutPager` pages critical two hours after the last
+`monitor_status` sample of any of the five tiles. If the bound is exceeded, revert Cutover-a2
+first when it has merged, so the bridge pushes again, and then Cutover-a1, so the tiles return.
+Reverting Cutover-a1 alone after Cutover-a2 restores tiles that no push reaches, and they go
+DOWN. Both reverts worked only until the A4 token PR,
+[#6949](https://github.com/DanielH2018/server/pull/6949), retired the keys.
+
+**Token PR.** [#6949](https://github.com/DanielH2018/server/pull/6949) retired this batch's push
+tokens, and the operator's commit removed the keys from `secrets.yml` on 2026-11-02. A revert of
+a cutover above no longer brings back a working tile, because no token is left for it to push
+with.
+
+### A5 storage
+
+A5's soak read, [#6624](https://github.com/DanielH2018/server/issues/6624): A5's shadow PR is
+`7d360df099`. Prometheus first evaluated the `storage` group at 2026-10-23T18:48:47Z, so the soak
+window starts there. The read used M1 convention 6's two queries with M2's 8-minute margin
+(*Which soak minutes count as explained* in M2). It mapped each tile to the `storage.yaml` rules
+that port its bridge row, with `LonghornVolumesMissing` counted for both Longhorn tiles. Over
+`[168h:1m]`, read at 2026-10-30T18:58Z, query 1 returned 5 minutes for k3s PVC Fullness and
+none for the other four tiles, and query 2 returned none for any tile. The 5 minutes are one single-cycle bridge episode on
+2026-10-30 at 11:33. At that sample daniel-box's kubelet scrape read `up=1` but carried none of
+its 28 claims' volume stats, so the claim count fell from 43 to 15 and valheim-server reported no
+free bytes. The bridge pages its free-space floor on one sample, and Kuma held DOWN until the next
+push at 11:38. `PVCFreeFloorUnmonitored` (`for: 5m`) and `PVCCoverageShortfall` (`for: 15m`) saw
+their conditions hold for 1 minute each, so the episode is one the rules drop by design. The
+2026-10-25 DOWN runs from 14:17 to 14:21 and from 14:27 to 14:31 are covered, because
+`PVCFreeFloorUnmonitored` fired from 14:20 to 14:28 while daniel-box's kubelet target was down.
+`LonghornVolumeDegraded` went pending on many claims during the 2026-10-25 reboot and on
+2026-10-28 at 00:54 and 01:29, for at most 4 minutes each. It never fired, and the bridge
+recorded no `longhorn_volumes` DOWN. No minute is unexplained, so no rule changes and Cutover-a
+is not blocked by the soak.
+
+A5's cutover is three stacked PRs that merge in this order, not the plan's single Cutover-a.
+uptime-kuma and monitor-bridge are both `owner: flux`, so no deploy orders a tile deletion
+before a row deletion, and the batch uses the owner-independent fallback of *When D5 flips a
+role M6 edits*, as A2, A3 and A4 did:
+
+1. Cutover-a1, [#6694](https://github.com/DanielH2018/server/pull/6694): an exclusion in the
+   `CHECKS` loop of `static-monitors.yaml.j2` deletes the five tiles. Every rule stays shadow.
+   Its live read is `probe.py metric 'monitor_status{monitor_name=~"Longhorn Volume Redundancy|k3s PVC Fullness|Longhorn Snapshot Headroom|Kubelet CSI Mount Read-Only|etcd DB Size"}'`,
+   which must return no series.
+2. Cutover-a2, [#6695](https://github.com/DanielH2018/server/pull/6695): the five bridge rows,
+   `checks/storage.py` and `checks/cluster_etcd.py`, the Longhorn, PVC and snapshot verdicts and
+   the env keys go, and the five push tokens enter `PENDING_RETIREMENT`. It merges only after the
+   read above passes.
+3. Cutover-b, the PR that adds this paragraph: the ten `storage.yaml` rules drop `shadow`, and
+   the `kuma-cutover` group loses A5's five terms. `test_alertmanager_routing.py` moves the ten
+   rules to `PAGING`, all as critical alerts to Discord and email.
+
+**The re-read of the soak, 2026-10-31.** The read above was repeated at 01:32Z with the same
+queries (M1 convention 6 with M2's 8-minute margin, each tile mapped to the `storage.yaml` rules
+that port its row, `LonghornVolumesMissing` counted for both Longhorn tiles) over `[168h:1m]`.
+Prometheus's oldest sample was 21.1 days old, so retention covered the window, and the window
+began after the `storage` group first evaluated. `increase(prometheus_rule_evaluation_failures_total{rule_group=~".*storage"}[168h])`
+was 0.
+
+| Tile | Samples | DOWN min | Firing min | Q1 strict | Q1 ±8m | Q2 strict | Q2 ±8m | Bridge DOWN episodes, 8d |
+|---|---|---|---|---|---|---|---|---|
+| Longhorn Volume Redundancy | 10042 | 0 | 0 | 0 | 0 | 0 | 0 | none |
+| k3s PVC Fullness | 10042 | 15 | 9 | 11 | 5 | 5 | 0 | 3 |
+| Longhorn Snapshot Headroom | 10042 | 0 | 0 | 0 | 0 | 0 | 0 | none |
+| Kubelet CSI Mount Read-Only | 10042 | 0 | 0 | 0 | 0 | 0 | 0 | none |
+| etcd DB Size | 10043 | 0 | 0 | 0 | 0 | 0 | 0 | none |
+
+The 5 Q1 ±8m minutes of `k3s PVC Fullness` are the single-cycle episode of 2026-10-30 at 11:33
+that the entry above records. A `[60m:1m]` window ending at 12:00 on that day holds all 5, and
+the 5 DOWN minutes in it have no firing alert. `PVCFreeFloorUnmonitored` and
+`PVCCoverageShortfall` held their conditions for 1 minute each (`count_over_time` of the rules'
+own expressions over `[40m:1m]` ending at 11:50), under their `for:` of 5 and 15 minutes. The
+2026-10-25 episodes (DOWN 14:17-21 and 14:27-31) leave 0 Q1 ±8m minutes, because
+`PVCFreeFloorUnmonitored` fired from 14:20 to 14:28. The 6 Q1 strict minutes
+there fall inside that firing run, and the other 5 are the 11:33 episode. No minute is unexplained.
+
+The 38 minutes each tile lacks (10042 of 10080 samples) are Uptime Kuma restarts, which Q1
+cannot see. The bridge's own DOWN episodes cover them: `probe.py alerts --check <name> --days 8`
+lists none for `longhorn_volumes`, `snapshot_headroom`, `kubelet_plugin_readonly` and
+`etcd_db_size`, and the three for `pvc_fullness` are the ones above plus 2026-10-23 12:41,
+which is before the window.
+
+**The deployed rules, read at 01:33Z.** `kubectl get configmap -n observability prometheus-rules -o jsonpath='{.data.storage\.yaml}'`
+is byte-identical to `storage.yaml` on master. All 10 rules carry `shadow: "true"`,
+`prometheus_rule_group_rules` for the group reads 10, and no A5 alert was firing.
+
+**Inhibit decision: A5 needs none.** The plan assigns A5 no inhibit, and its row says only that
+all ten rules are critical and that Longhorn's `state` label is selected explicitly. Each rule's
+behaviour on a dead scrape decides whether a double page is possible:
+
+- `LonghornVolumeDegraded`, `LonghornSnapshotNearCap`, `KubeletCSIMountReadOnly`,
+  `EtcdDBNearQuota`, `PVCFull` and `PVCBelowFreeFloor` compare series values, so a dead scrape
+  leaves them empty and quiet.
+- `LonghornVolumesMissing` has `absent(up{job="longhorn"})` for a job that left
+  `prometheus.yml`, and requires `up == 1` for the missing-series arm, so a failed scrape stays
+  `ScrapeTargetDown`'s page.
+- `LonghornSnapshotCapUnmonitored` joins the capacity series to the snapshot series, so a dead
+  `longhorn` scrape empties both sides and the rule stays quiet.
+- `PVCFreeFloorUnmonitored` and `PVCCoverageShortfall` do fire beside `ScrapeTargetDown` when
+  a kubelet target dies, because their conditions are an `absent()` and a `count() or vector(0)`.
+  Over the 168 hours, `ScrapeTargetDown` for `kubernetes-kubelet` fired for 3 minutes and
+  `PVCFreeFloorUnmonitored` for 9, all in the 2026-10-25 episode. `PVCCoverageShortfall` never
+  fired.
+
+An inhibit for those two does not narrow cleanly. Neither rule carries `job` or `instance`
+(`absent()` and `count()` drop them), so `equal: [job, instance]` cannot match. Without `equal`,
+one dead kubelet target would mute the claim census while a selector break empties the other
+node's vector, which is the fault the census exists to catch. The bridge row made the same call
+on purpose: it had no `EXPORTER_DEPENDENT` entry for the kubelet job, so that a dead kubelet job
+kept paging the census. The result is two critical pages for one dead kubelet target, the
+direction the plan accepts until an inhibit lands, and the Kuma side paged twice here too (the
+PVC tile and Scrape Targets). `PVCFreeFloorUnmonitored` (`for: 5m`) fires first, and
+`ScrapeTargetDown` (`for: 10m`) second.
+
+**Soak effect.** Unlike A2's four warnings, all ten A5 rules are `critical`, and
+`renderer_lib/soak.py:longest_for` counts an unshadowed critical rule's `for:` against its
+`service` label. Read before and after this PR with `longest_for()`, the map gains `longhorn: 900`
+(`LonghornVolumeDegraded`, `LonghornVolumesMissing`, `LonghornSnapshotNearCap` and
+`LonghornSnapshotCapUnmonitored` hold 15m) and `etcd: 300`, and no existing key changes. `etcd`
+names no tag, so nothing reads it. `longhorn` is a published tag, so a promote scoped to that
+tag waits 900s plus the scrape and evaluation margin, up from the 120s floor that rules with a
+templated `service` give every tag. A fleet-wide promote already waits on `deploy-pipeline`'s
+900s, so its wait does not move. The `Lander deadlines cover the soak` hook and
+`test_lander_deadlines_cover_the_soak.py` pass.
+
+The two-hour no-pager bound counts from the moment the `uptime-kuma` Kustomization reports
+Cutover-a1's merge commit, because Kuma stops paging the five checks then and every A5 rule is
+still shadow. It ends when the `observability` Kustomization reports Cutover-b's merge commit.
+Cutover-a2's apply falls inside it. `CheckWithoutPager` pages critical two hours after the last
+`monitor_status` sample of any of the five tiles. If the bound is exceeded, revert Cutover-a2
+first when it has merged, so the bridge pushes again, and then Cutover-a1, so the tiles return.
+Reverting Cutover-a1 alone after Cutover-a2 restores tiles that no push reaches, and they go
+DOWN. Both reverts worked only until the A5 token PR,
+[#6949](https://github.com/DanielH2018/server/pull/6949), retired the keys.
+
+**Token PR.** [#6949](https://github.com/DanielH2018/server/pull/6949) retired this batch's push
+tokens, and the operator's commit removed the keys from `secrets.yml` on 2026-11-02. A revert of
+a cutover above no longer brings back a working tile, because no token is left for it to push
+with.
+
+### A6 bridge exporter
+
+A6's shadow PRs A6-1 to A6-6 landed on 2026-10-23. A6-7r landed on 2026-10-31 as `0c085f613c`, which ran the three gate rows as ordinary rows and deleted `gates.py`. The cutover is three stacked PRs, which this record describes after the soak reads below: Cutover-1a (A6-7a1, the tiles), Cutover-1b (A6-7b, the rules page) and Cutover-2 (A6-7a2, the push path). A6-8 and A6-9 follow them. The first soak read found a blocker for A6-7a (below), and the operator's 2026-11-02 ruling waives the 7-day read that cleared it.
+
+**The soak read, 2026-10-31T17:54Z.** The read ran M1 convention 6's two queries over `[168h:1m]` ending at that time, with M2's 8-minute margin (*Which soak minutes count as explained* in M2). Each tile maps to the one `bridge-exporter.yaml` rule that selects its row's `check`. `increase(prometheus_rule_evaluation_failures_total{rule_group=~".*bridge-exporter"}[168h])` is 0, `prometheus_rule_group_rules` for the group is 20, and the deployed `prometheus-rules` ConfigMap's `bridge-exporter.yaml` is byte-identical to master. `homelab_check_success` has been exported since before the window starts. All 19 bridge tiles read 1 when the queries ran.
+
+| Tile | Rule | DOWN min | Firing min | Q1 | Q2 |
+|---|---|---|---|---|---|
+| WAN Reachable | `WANUnreachable` | 0 | 0 | 0 | 0 |
+| Discord Delivery | `DiscordDeliveryFailing` | 0 | 0 | 0 | 0 |
+| R2 Free Tier Headroom | `R2FreeTierHeadroomLow` | 0 | 0 | 0 | 0 |
+| Cloudflare IP Drift | `CloudflareIPRangesDrifted` | 0 | 0 | 0 | 0 |
+| Healthchecks.io Console Drift | `HealthchecksConsoleDrifted` | 1042 | 1042 | 0 | 0 |
+| B2 Reachable | `B2Unreachable` | 0 | 1 | 0 | 1 |
+| B2 Free Tier Headroom | `B2FreeTierHeadroomLow` | 0 | 1 | 0 | 1 |
+| Arr Queue Warnings | `ArrQueueNeedsReview` | 1365 | 1372 | 0 | 0 |
+| GitOps Deploy — Alive | `GitOpsDeployerNotTicking` | 0 | 0 | 0 | 0 |
+| GitOps Deploy — Status | `GitOpsDeployerParked` | 1605 | 1617 | 0 | 0 |
+| etcd Restore Drill | `EtcdRestoreDrillFailing` | 0 | 0 | 0 | 0 |
+| Home Assistant Automations | `HomeAssistantAutomationsStalled` | 0 | 0 | 0 | 0 |
+| n8n Prod Workflows | `N8nWorkflowsFailing` | 0 | 0 | 0 | 0 |
+| Bazarr Health | `BazarrHealthDegraded` | 0 | 0 | 0 | 0 |
+| Prowlarr Indexers | `ProwlarrIndexersFailing` | 34 | 30 | 5 | 1 |
+| SMART Data / Health | `SmartHealthFailing` | 5 | 1 | 5 | 1 |
+| k3s Speedtest | `SpeedtestDegraded` | 0 | 0 | 0 | 0 |
+| Swallowed Push Verdicts | `SwallowedPushVerdicts` | 0 | 0 | 0 | 0 |
+| **Host Packages — Status** | **none** | 364 | 0 | **364** | 0 |
+| Prometheus Reachable | none (the Watchdog covers it) | 0 | 0 | 0 | 0 |
+
+**Host Packages — Status has no rule.** `check_table.py` carries a 20th row, `host_packages`, which H3.5c added (`ce390940b4`) after this plan was written. `bridge-exporter.yaml` has 18 row rules and none selects `check="host_packages"`, and this plan never mentions the row. Its tile read DOWN for 364 minutes in the window (a 5.8-hour `no-green` episode on 2026-10-28 and two single-cycle `canary` episodes on 2026-10-29), and no shadow alert covers any of them. The row is also still a member of `PROM_DEPENDENT` and of `EXPORTER_DEPENDENT["node"]`, which A6-7r's text says A1 to A5 and B8 emptied. A6-7a's bijection test fails on it, and A6-9's count of 19 tokens is 20.
+
+**The 10 minutes of Prowlarr Indexers and SMART Data / Health query 1 are one event, 2026-10-28 00:53 to 00:57.** Prometheus recorded no sample of any target from 00:39:49 to 00:52:42, a 13-minute gap in `up{job="monitor-bridge"}`. The bridge log shows the first of the row's two down cycles ("down streak 1/2") fell inside that gap, and the second cycle ("2 cycles") was the only one Prometheus saw. Kuma paged the row for 5 minutes. The rule's `for: 5m` saw one cycle (the gauge held 0 for five samples), went pending at 00:55 and cleared at 00:58 without firing. The Watchdog covers a Prometheus outage, so the alerting plane was blind rather than wrong.
+
+**The `for: 5m` margin is thin for a one-cycle blip.** A `startup_grace` row's gauge holds 0 for one 300s cycle, which is five or six 1-minute samples. At 2026-10-28 01:29 to 01:34 six samples satisfied `for: 5m`, and `SmartHealthFailing` and `ProwlarrIndexersFailing` fired for 1 minute at 01:35 while Kuma read up (the bridge's grace held that cycle, and Kuma was refusing connections from 01:27 to 01:30). At 00:53 five samples did not satisfy it. Whether a single blip fires is therefore a matter of scrape alignment. A6-7b should decide whether the family's `for:` is 5m or longer before it drops `shadow`.
+
+**The other query 2 minutes** (`B2Unreachable` and `B2FreeTierHeadroomLow`, one minute each at 2026-10-25 07:46) follow the weekly reboot. Kuma's tiles have no series from 07:39 to 07:47, and the bridge's WAN probe logged `Try again` at 07:40, so the gate rows exported 0 for three samples.
+
+**The operator's rulings, 2026-10-31.** Both follow from the read above.
+
+- `host_packages` gets a shadow rule, `HostPackageBuilderStalled`, and its 7-day soak starts when that rule's `observability` apply lands. A6-7r keeps the row's `prometheus` gate and its `node` exporter suppression, and A6-7a waits for the soak.
+- The `startup_grace` family's rules move from `for: 5m` to `for: 10m`, two bridge cycles, while still shadow, so the soak measures the final rule. The 168-hour read above measured the `for: 5m` rules, and the family's 7-day soak restarts at the same apply.
+
+**Status at the 2026-10-31 read.** Query 1 had 364 minutes with no covering rule (Host Packages) and 10 minutes explained by a Prometheus outage. A6-7b was not to proceed until `HostPackageBuilderStalled` and the `for: 10m` family had a clean 7-day read from the apply that shipped them.
+
+**The operator's ruling, 2026-11-02.** Operator ruling 2026-11-02: cut over on a 48h soak read. The ruling waives the 7-day read above, and the read below stands in for it. The cutover PRs each say so in their bodies.
+
+**The 48-hour read, 2026-10-31T19:22Z to 2026-11-02T19:25Z.** The verdict is CLEAN-WITH-NOTES. It used M1 convention 6's two queries with M2's 8-minute margin, over the window that begins at the apply that shipped `HostPackageBuilderStalled` and the `for: 10m` family.
+
+- Query 1 misses: 0 for every rule.
+- One true positive: `GitOpsDeployerParked` fired for 157 minutes on 2026-11-01 and matches its tile.
+- Three 2-minute false positives at the weekly reboot on Sunday 2026-11-01, 07:43 to 07:44Z: `B2Unreachable`, `B2FreeTierHeadroomLow` and `HostPackageBuilderStalled`. The two B2 rules also read one minute at the weekly reboot in the 2026-10-31 read above.
+- 19 of 20 tiles map one to one to a rule. `Prometheus Reachable` has no rule by design: Cutover-2 retires that gate, and the Watchdog covers a dead Prometheus.
+- `prometheus_rule_group_rules{rule_group=~".*bridge-exporter"}` reads 21, which is the 20 rules of the first read plus `HostPackageBuilderStalled`. The group had 0 rule evaluation failures over the window.
+
+**Required change folded in: `for: 10m` on the three reboot rules.** The three false positives are 2-minute dips, so Cutover-1b gives `B2Unreachable`, `B2FreeTierHeadroomLow` and `HostPackageBuilderStalled` a `for: 10m`. That matches the five `startup_grace` rows that carry `for: 10m` from the 2026-10-31 ruling. It lands in the PR that drops their `shadow`, so none of them pages unshadowed without it. The promtool cases hold a 2-minute dip quiet and fire on a 10-minute outage.
+
+## The cutover, three stacked PRs
+
+The three PRs each change one pager side only, and they merge in this order. The rules page comes before the push stop, as in the B2, B4, B6b and B6c stacks, because the push stop removes nothing a pager reads. Every PR uses `Refs` only and fills the repo's PR template.
+
+1. **Cutover-1a, the tiles go** (branch `m6-a6-cutover-1a-tiles-go`, applied by `uptime-kuma`'s Flux promotion). The `CHECKS` loop of `static-monitors.yaml.j2` excludes all 20 rows, so Uptime Kuma declares no monitor-bridge tile. The 19 tiles that have a rule and `Prometheus Reachable` all go. `status-page-sync-configmap.yaml.j2` stops pinning bridge tiles into groups, and `uptime_kuma_k8s_status_page_groups` loses the four groups only bridge tiles filled (`Services`, `Observability`, `Backups & Storage` and `Media Automation`). Every `bridge-exporter.yaml` rule stays `shadow`, so this PR adds no pager and removes 20. The bridge keeps pushing into the deleted tokens until Cutover-2, and a push into a deleted token returns 404, which the bridge logs as `push failed`.
+2. **Cutover-1b, the rules page** (branch `m6-a6-cutover-1b-rules-page`, applied by `observability`'s Flux promotion). Every `bridge-exporter.yaml` rule drops `shadow`, the three reboot rules gain `for: 10m`, and the `kuma-cutover` group loses A6's 19 terms.
+3. **Cutover-2, the push path goes** (branch `m6-a6-cutover-2-push-stops`, applied by `monitor-bridge`'s Flux promotion). The bridge stops pushing, the `prometheus` row goes, and the 20 push tokens enter `PENDING_RETIREMENT`.
+
+**The two-hour no-pager bound.** The tiles stop paging when the `uptime-kuma` Kustomization reports Cutover-1a's merge commit, and that apply opens the window. The `observability` Kustomization reporting Cutover-1b's merge commit closes it. `CheckWithoutPager` pages critical two hours after a tile's last `monitor_status` sample, so Cutover-1b has to apply within two hours of Cutover-1a's apply. Cutover-2's `monitor-bridge` apply falls outside the window. If Cutover-1b has not applied within two hours, revert Cutover-1a: every rule is still `shadow`, so the revert restores Kuma as the only pager, and the tiles go green on the next push because the 20 tokens stay in `secrets.yml` until A6-9.
+
+**What the tiles' removal moved in the tests (Cutover-1a).** Measured on master: 27 monitors, 27 push tiles and 31 declarations. On the branch: 7 of each monitor and push tile, and 11 declarations. The floors that counted the tiles fall to one below the new count: the status-page census (`>= 27` to `>= 6`), the declaration index (`> 29` to `> 9`), the renderer's index (`> 24` to `> 6`), and the push-tile census in `test_kuma_push_token_format.py` and `test_kuma_push_resend_beats.py` (`>= 19` to `>= 6`). `Swallowed Push Verdicts` was the non-vacuity anchor of five tests, and `Status Page Sync` replaces it. `KNOWN_IDS` drops the two bridge tiles it named. `EMAIL_TIER` is empty, because the six tiles that mailed were bridge tiles. `test_bridge_push_monitors_share_one_interval` and `test_non_bridge_push_monitors_keep_their_own_interval` are deleted: with no bridge tile declared, the first asserts over an empty set and the second needs 20 tiles to move with the variable. `uptime_kuma_k8s_bridge_push_interval` stays, with no tile reading it, until C-1 deletes the role. `test_the_deleted_a6_tiles_are_not_declared` fails if a template declares any of the 20 tiles again, and `test_no_tile_carries_a_monitor_bridge_push_token` fails if any tile accepts one of the bridge's 20 tokens again.
+
+**Cutover-1b in the tree.** All 21 `bridge-exporter.yaml` rules drop `shadow`: the 19 row rules, `MonitorBridgeDown` and `BridgeCheckStale`. The `kuma-cutover` group loses A6's 19 `CheckWithoutPager` terms (`n8n Prod Workflows`, `Bazarr Health`, `Prowlarr Indexers`, `SMART Data / Health`, `k3s Speedtest`, `Swallowed Push Verdicts`, `WAN Reachable`, `Discord Delivery`, `R2 Free Tier Headroom`, `Cloudflare IP Drift`, `Healthchecks.io Console Drift`, `B2 Reachable`, `B2 Free Tier Headroom`, `Arr Queue Warnings`, `GitOps Deploy — Alive`, `GitOps Deploy — Status`, `etcd Restore Drill`, `Home Assistant Automations` and `Host Packages — Status`) and keeps B9's six. `Prometheus Reachable` had no term. `test_alertmanager_routing.py` moves the 21 rules into `PAGING`, and `test_alertmanager_routing_a6_bridge.py` holds the non-vacuity cases: eight rules are `critical` and mail as well as post, the other 13 post to Discord alone, and a rule that regains `shadow` walks to the blackhole.
+
+**The `for: 10m` on the three reboot rules.** `B2Unreachable`, `B2FreeTierHeadroomLow` and `HostPackageBuilderStalled` gain `for: 10m`. `test_bridge_grace_rules.py` names the three rows in `REBOOT_ROWS` and derives every other rule's `for:` from the `gate` column as before. `test_bridge_b2_rules.py` requires the B2 gate and its dependent to carry the same `for:`, because a dependent with a shorter one pages before its inhibit source exists. The promtool cases hold a 2-minute dip quiet, hold a 9-minute outage quiet, and fire both B2 rules and the host-packages rule at the 10-minute evaluation. Every `exp_labels` block lost its `shadow: "true"`.
+
+**Soak effect.** `renderer_lib/soak.py:longest_for` counts critical rules that are not `shadow`. `B2Unreachable` and `B2FreeTierHeadroomLow` are `critical`, not `warning`, so the `for: 10m` is not free. Printing `longest_for()` on Cutover-1a's tree and on Cutover-1b's tree gives these differences, all new keys: `b2` 600, `monitor-bridge` 600, `scrutiny` 600, and `discord`, `r2` and `wan` 0. `b2`, `discord`, `r2` and `wan` name no deploy tag, so they lengthen no promotion's soak. `monitor-bridge` and `scrutiny` are deploy tags. Their 600 seconds come from `MonitorBridgeDown`, `BridgeCheckStale` and `SmartHealthFailing`, which already carried `for: 10m` as shadow rules and count once they drop `shadow`. `HostPackageBuilderStalled` is `warning` and adds nothing. `test_lander_deadlines_cover_the_soak.py` passes on this tree.
+
+**Cutover-2 in the tree.** The bridge stops pushing, and the 20 `monitor_bridge_*_push_token` keys enter `PENDING_RETIREMENT` in `scripts/secrets_mgmt/pending_retirement.py` (they leave `standalone_secret_keys.json`). The `prometheus` gate row and `checks/cluster.py` are deleted. `host_packages` keeps `gate="prometheus"` as the label of the `EXPORTER_DEPENDENT` suppression, and `check.run_once` now runs the exporter-health probe once per cycle, before the first row, when an enabled row sits under that map. `run_once(cfg, src, checks, only, export)` loses its `sink` and `dry_run` arguments, `Sink` and `bridge.net.push` are deleted, and so are `Check.token`, `apply_startup_grace`, `GRACE_CYCLES`, `KUMA_URL` and the `KUMA_PUSH_*` env keys. The `startup_grace` value stays in the `gate` column and now means the row's rule carries `for: 10m`. A gate row that reads down exports 0 for its dependents with a message that names the alert (`GATE_SKIP`). `static-monitors.yaml.j2` loses the `CHECKS` loop, and `check_table.py` keeps the retired `token`, `kuma_id`, `display`, `description` and `status_group` fields until A6-8.
+
+**What Cutover-2 moved in the tests.** `test_check.py`, `test_check_cli.py`, `test_check_exporters.py`, `test_verdict_export.py` and `_fake_sources.py` drop the sink and the push assertions and read the exporter's records instead (`FakeExport.records`). `test_check_streaks.py` loses the grace tests and keeps `down_streak`. `test_check_table.py` pins that the env Secret renders no `KUMA_*` key and no `GRACE_CYCLES`, and requires the table to keep at least 19 rows. `secret_checks.py` drops the rule-5 named member that counted `lookup('vars', check.token)` in the env Secret, because no such use remains. `test_k8s_lookup_readers.py` and `test_secret_consumer_census.py` state the cross-role lookup mechanism with the crowdsec allowlist and a fixture tree, since uptime-kuma no longer reads the check table. `test_census_rows_roles.py` deletes the `kuma-callers-read-the-entry-port` row, whose last real subject was the bridge's `KUMA_URL`, and `test_scrape_jobs_derive_from_containers_list.py` drops the bridge from its Kuma-caller cases. `test_secret_consumers.py` expects the 20 tokens to resolve no consumer.
+
+**Left after A6-8.** The `netpol_from` entry `monitor-bridge` on uptime-kuma's `containers_list` entry in `daniel-box.yml` allows an ingress nothing dials now. The change is an inventory edit, which the deployer classes as broad, so it does not ride a Flux-promoted PR. `uptime_kuma_k8s_bridge_push_interval` has no template reader and waits for C-1, which deletes the role. The `py_table` filter has no template caller left either, only the docs fragments and the check-table test, so a later PR decides whether it stays.
+
+**The pending-retirement module came back for A6, and A6-9 deleted it.** B6c's token PR (`057aa76f95`) deleted `scripts/secrets_mgmt/pending_retirement.py` with its readers, and Cutover-2 restored them for the bridge's 20 tokens. A6-9 applies the same deletion again: the module, its readers in `consumers.py`, `cluster_vars.py` and `cluster_vars_check.py`, its `HOST_INPUTS` entry and the keep-on-write tests.
+
+**Revert order.** Revert Cutover-2 first, then Cutover-1b, then Cutover-1a. Reverting Cutover-2 alone makes the bridge push again, into tiles that no longer exist, so it logs `push failed` and pages nothing.
+
+**A6-8 and A6-9, the code half.** The operator waived the one-week revert window for the token retirements on 2026-11-02, so this PR carries both. A6-8 deletes the `token`, `kuma_id`, `display`, `description` and `status_group` fields from `PushCheck` and from all 19 rows of `check_table.py`, with the `DECIDED` marker on spelled-out tokens. The rules in `bridge-exporter.yaml` already carry their own `description` annotation (21 of 21), so no description moves. `fragments_bridge.py` renders the `bridge-checks` table as check, gate, critical and runbook, and the gate-set rows name the gate by its row name. The `monitor-bridge-checks.md` bullets are titled by check name. `test_bridge_size_cap.py` holds the bridge's `files/` at 8,000 lines: the residual measured 7,836 lines over 39 modules with `deploy_pipeline.py` included, and the plan rounds up to the next 500. A6-9 adds the 20 `monitor_bridge_*_push_token` names to `git_dates.RETIRED`, deletes `PENDING_RETIREMENT` and its readers, and removes the `PREFIX_EXCEPTION_CONSUMERS` entry for `monitor_bridge_cloudflare_drift_push_token`, which was its only member.
+
+**The operator's commit for A6-9.** The 20 keys are in `ansible/vars/secrets.yml`, `ansible/secret_rotation.yml` and the cluster file (`cluster-vars.source` and `cluster-vars.sops.env`). None is in a host store (`ansible/vars/hosts/*.sops.yaml`). The commit removes them from the store and the registry, regenerates the cluster files with `cluster_vars.py write`, and regenerates the doc fragments (`secret-tiers` and the three `bridge-*` fragments). The checks that stay red until then: `test_no_listed_departure_is_back_in_the_store`, `test_the_committed_cluster_files_pass_check`, `test_uptime_kuma_is_a_consumer_iff_a_tile_exists` and `test_every_committed_fragment_matches_what_the_generator_writes_now`.
+
+### A7 log arm
+
+A7's soak read, [#6721](https://github.com/DanielH2018/server/issues/6721): A7's shadow PR is
+`c3d768d3f8`, which added `WorkloadLogErrors` to `homelab-logs.yaml`. The Loki ruler's
+`homelab-logs` group predates the rule, so the group's first evaluation does not date the
+rule. `loki_prometheus_rule_group_rules` for the group went from 4 to 5 at 2026-10-23T20:07Z,
+which is when the ruler first evaluated `WorkloadLogErrors`. The `Workload Log Errors` tile's
+first `monitor_status` sample is 2026-10-22T00:56Z, before the rule. The `[168h:1m]` window,
+read at 2026-10-31T15:43Z, therefore starts at 2026-10-24T15:44Z, after both, and runs the full
+168 hours.
+
+The read used M1 convention 6's two queries with M2's 8-minute margin (*Which soak minutes
+count as explained* in M2). The tile maps to one rule, `WorkloadLogErrors`, the rule the shadow
+PR's comment names as the port of the row's log-pattern arm. The rule is a Loki rule, so its
+firing history is not in Prometheus `ALERTS`. The read follows M5's method instead and
+evaluates the rule's expression as a Loki metric query with `probe.py loki-query --json`, in
+eight one-day chunks of `--step 1m`. Loki reported an `execTime` of 6.3 to 7.9 seconds per
+chunk. A minute counts as
+firing when the expression held for that minute and the 5 minutes before it, which is the
+rule's `for: 5m`. The ruler evaluates every 5 minutes at its own offset, so a live alert can
+start and end under 5 minutes later than the reconstruction, which is inside the margin.
+
+Prometheus's oldest sample was 21.7 days old, so retention covered the window.
+`increase(loki_prometheus_rule_evaluation_failures_total[168h])` for the group was 0. The
+deployed `loki-homelab-rules` ConfigMap's `homelab-logs.yaml` is byte-identical to master.
+
+| Tile | Samples | DOWN min | Firing min | Q1 strict | Q1 ±8m | Q2 strict | Q2 ±8m | Bridge DOWN episodes, 8d |
+|---|---|---|---|---|---|---|---|---|
+| Workload Log Errors | 10031 | 86 | 84 | 6 | 0 | 4 | 0 | 2 |
+
+The window holds two episodes, and the tile and the rule agree on both:
+
+- **karakeep, 2026-10-26.** The tile read DOWN from 13:25 to 13:54. The rule's expression
+  held from 13:17 to 13:50 at 22 to 24 lines per hour, so the reconstructed alert fired from
+  13:22 to 13:50. `probe.py alerts --check workload_log_errors --days 8` lists the bridge
+  episode as 13:23 to 13:49, "fatal log lines in 1h: karakeep (24)".
+- **bazarr, 2026-10-30.** The tile read DOWN from 01:10 to 02:05. The expression held from
+  01:04 to 02:03 at 24 and then 40 lines per hour, so the alert fired from 01:09 to 02:03. The
+  bridge episode is 01:09 to 02:00, "fatal log lines in 1h: bazarr (40)".
+
+The 6 strict Q1 minutes are the tails of the two episodes: 13:51 to 13:54 on 10-26 and 02:04 to
+02:05 on 10-30. The bridge pushes once per 300-second cycle, so the tile holds its last DOWN
+push until the next cycle reports the hour clean. The 4 strict Q2 minutes are the heads: 13:22
+to 13:24 on 10-26 and 01:09 on 10-30. The rule's one-minute reconstruction crosses the
+threshold before the bridge's next cycle pushes DOWN, and Kuma's scrape adds up to a minute. The
+margin absorbs all 10 minutes, so no minute is unexplained.
+
+The tile lacks 49 of 10080 samples, in 12 runs of 1 to 8 minutes. Uptime Kuma's
+`process_start_time_seconds` changed 11 times in the window, and `up{job="uptime-kuma"}` read 0
+for 3 minutes, so the gaps are Kuma restarts and scrape misses. Q1 cannot see them. No run falls
+within 8 minutes of either episode. The closest, 2026-10-29 21:33 to 21:37, ends more than 3
+hours before the bazarr episode. The bridge's own DOWN episodes cover the gaps, and the two episodes above are
+the only ones `probe.py alerts` lists for `workload_log_errors` over 8 days.
+
+No minute is unexplained, so no rule changes, and the soak does not block Cutover-a. Two of M5's
+costs still apply to Cutover-b: the alert never reaches Prometheus `ALERTS`, so the health gate
+cannot see it, and every rule edit restarts Loki.
+
+A7's cutover is three stacked PRs that merge in this order, not the plan's single Cutover-a.
+uptime-kuma, monitor-bridge and loki-homelab are all `owner: flux`, so no deploy orders a tile
+deletion before a row deletion, and the batch uses the owner-independent fallback of *When D5
+flips a role M6 edits*, as A1 to A5 did:
+
+1. Cutover-a1, [#6748](https://github.com/DanielH2018/server/pull/6748): an exclusion in the
+   `CHECKS` loop of `static-monitors.yaml.j2` deletes the `Workload Log Errors` tile. The rule
+   stays shadow. Its live read is
+   `probe.py metric 'monitor_status{monitor_name="Workload Log Errors"}'`, which must return no
+   series.
+2. Cutover-a2, [#6755](https://github.com/DanielH2018/server/pull/6755): the
+   `workload_log_errors` row, `check_workload_log_errors`, `with_log_errors`,
+   `verdicts/cluster.py`, `log_error_counts` and the five `LOG_ERROR_*` keys go, and the push
+   token enters `PENDING_RETIREMENT`. It merges only after the read above passes.
+3. Cutover-b, the PR that adds this paragraph: `WorkloadLogErrors` drops `shadow`, and the
+   `kuma-cutover` group loses A7's one term. `test_alertmanager_routing.py` moves the rule to
+   `PAGING` as a warning, which posts to Discord and does not mail.
+
+**Cutover-b applies two roles, not `loki-homelab` alone.** The plan says `land.sh` deploys
+`loki-homelab` alone. `CheckWithoutPager` holds an `absent_over_time` term for the tile, and
+Prometheus cannot read a Loki rule's `shadow` label, so the term cannot expire by itself. If
+Cutover-b left it, the term would page critical two hours after Cutover-a1's apply, beside a
+rule that pages now. Cutover-b therefore edits `observability` (the term and its promtool cases)
+as well as `loki-homelab`, and both are flux-owned, so the merge is the apply for both.
+
+**The re-read of the soak, 2026-10-31.** The read above was repeated at 16:08Z with the same
+method (M1 convention 6 with M2's 8-minute margin; the tile from `probe.py metric
+'monitor_status{monitor_name="Workload Log Errors"}[168h:1m]'`, the rule's expression from eight
+one-day `probe.py loki-query --json --step 1m` chunks of 6.0 to 7.3 seconds each, a minute firing
+when the expression held for it and the 5 minutes before it). The window began 2026-10-24
+16:09Z, after the group first evaluated the rule. The counts equal the entry above: 10031 tile
+samples, 86 DOWN minutes, 84 firing minutes, Q1 6 strict and 0 within 8 minutes, Q2 4 strict and
+0 within 8 minutes. The two episodes are the same, karakeep on 2026-10-26 and bazarr on
+2026-10-30, and `probe.py alerts --check workload_log_errors --days 8` still lists only those.
+Prometheus's oldest sample was 21.7 days old, and
+`increase(loki_prometheus_rule_evaluation_failures_total[168h])` was 0.
+
+**The deployed rule, read at 16:10Z.** `kubectl get configmap -n homelab loki-homelab-rules -o
+jsonpath='{.data.homelab-logs\.yaml}' | sha256sum` equals the hash of `homelab-logs.yaml` on
+master. `WorkloadLogErrors` carries `shadow: "true"`, and `loki_prometheus_rule_group_rules` for
+`homelab-logs` reads 9.
+
+**Inhibit decision: A7 needs none.** The plan assigns A7 no inhibit. A Loki outage leaves the
+rule quiet, because `count_over_time` over no stream is an empty vector, and
+`LokiPodLogsSilent` and `LokiHomelabMetricsMissing` page that outage on their own. A container
+that crash-loops while logging panic lines can fire `K8sContainerCrashLooping` and
+`WorkloadLogErrors` for one fault. The direction is accepted, as the Kuma side also paged twice
+there (Workload Health and Workload Log Errors).
+
+**Soak effect: none.** The rule is a warning in a Loki rule file, and
+`renderer_lib/soak.py:longest_for` reads only the observability rule directory and counts only
+critical or `verify` alerts. `longest_for()` on #6755's tree and on this tree is equal over its
+19 keys.
+
+**How the paging is verified.** Prometheus's `ALERTS` never holds this alert, so `probe.py health
+loki-homelab` and `probe.py monitors` cannot see it, and no `probe.py` subcommand reads
+Alertmanager. After the `loki-homelab` Kustomization reports Cutover-b's commit and the pod is
+Ready, read these in order:
+
+1. `kubectl get configmap -n homelab loki-homelab-rules -o jsonpath='{.data.homelab-logs\.yaml}' | sha256sum`
+   equals the hash of `homelab-logs.yaml` on master, and the output has no `shadow` under
+   `WorkloadLogErrors`.
+2. `probe.py metric 'loki_prometheus_rule_group_rules{rule_group=~".*homelab-logs"}'` still reads
+   9, and `probe.py metric 'increase(loki_prometheus_rule_evaluation_failures_total[30m])'`
+   reads 0 once the group has evaluated.
+3. `probe.py metric 'loki_prometheus_rule_group_last_evaluation_timestamp_seconds'` is within 5
+   minutes of now, which shows the new pod is evaluating.
+4. `probe.py metric 'increase(loki_prometheus_notifications_errors_total[1h])'` and
+   `loki_prometheus_notifications_dropped_total` read 0.
+
+These show that the rule is loaded, unshadowed and evaluating, and that the ruler can send. They
+do not show a page, because Alertmanager's `/api/v2/alerts` lists the alert only while it fires,
+and `alertmanager_alerts{state="active"}` counts it only then. The routing from labels to Discord
+is `test_alertmanager_routing.py`'s proof (it fails when `shadow` returns), and the first real
+burst is the end-to-end one. No synthetic burst is run in production. If a burst happens
+during the window, `probe.py metric 'alertmanager_alerts{state="active"}'` rises by one and the
+Discord channel carries `WorkloadLogErrors`.
+
+**Loki's restart.** Every edit to `homelab-logs.yaml` rolls Loki alone (the rules ConfigMap
+moves the Deployment's restart checksum, and Alloy does not mount it). The Deployment is
+`Recreate`. `up{job="loki-homelab"}[10d:1m]` shows a single missing or zero sample at
+2026-10-23 20:06, 2026-10-24 03:17 and 2026-10-25 18:07. Each follows the merge of a rules edit
+(20:00, 03:10 and 17:53) by 6 to 14 minutes, which is Flux's promotion delay, so the restart
+costs about one minute of scrape at 1-minute resolution. The ruler's next evaluation follows
+within its 5-minute interval.
+The ruler holds a pending alert in memory, so a restart during a burst can
+re-arm the 5-minute `for:`; this is expected from the design and was not measured.
+
+**The two-hour bound.** The check has no live pager from the moment the `uptime-kuma`
+Kustomization reports #6748's merge commit. `CheckWithoutPager` pages critical 2 hours after the
+tile's last sample, so Cutover-b must be applied, by the `loki-homelab` and `observability`
+Kustomizations both reporting its commit, within 2 hours of that moment. #6755's apply falls
+inside the window.
+
+**If Cutover-b has not been applied within two hours, revert in reverse order.** Revert
+Cutover-b alone to restore `shadow` and the `CheckWithoutPager` term. Then revert #6755 so the
+row pushes again, and then #6748 so the tile returns. Reverting #6748 alone after #6755 restores
+a tile that no push reaches, and it goes DOWN. The reverts worked only until A7's token PR
+([#6949](https://github.com/DanielH2018/server/pull/6949)) retired `monitor_bridge_k8s_workloads_push_token`.
+
+**Token PR.** [#6949](https://github.com/DanielH2018/server/pull/6949) retired this batch's push
+tokens, and the operator's commit removed the keys from `secrets.yml` on 2026-11-02. A revert of
+a cutover above no longer brings back a working tile, because no token is left for it to push
+with.
+
+### B0 shared library
+
+B0, the shared host-check library: [#6022](https://github.com/DanielH2018/server/pull/6022). It
+merged on 2026-10-23 at `ea83541c9`. `hosts/components/check-lib/files/homelab-check-lib.sh`
+carries `boot_grace_active`, `wan_reachable`, `reachout_verdict` and `write_check_textfile`, M3's
+atomic textfile write. The library moved from `initial_setup` into its own host component when
+H7.55b deleted the setup roles.
+
+### B1 k3s crons
+
+B1's soak read, [#6722](https://github.com/DanielH2018/server/issues/6722): B1's shadow PR
+merged as `b1adf776c1` at 2026-10-23T19:48Z. The `host-checks` group predates B1, so its first
+evaluation does not mark the start of B1's rules. `prometheus_rule_group_rules` for the group
+rose in one step by at least 11 rules, B1's eleven, to 30 or more at 2026-10-23T19:54Z, so B1's
+rules first evaluated then. The read
+used M1 convention 6's two queries over `[168h:1m]` ending at 2026-10-31T15:44Z, with M2's
+8-minute margin (*Which soak minutes count as explained* in M2). The window starts at
+2026-10-24T15:44Z, after B1's first evaluation, so every tile has the full 168 hours.
+Prometheus's oldest sample was 21.7 days old, and
+`increase(prometheus_rule_evaluation_failures_total{rule_group=~".*;host-checks"}[168h])` was 0.
+
+Each tile maps to the `Failed` and `NotReporting` pair that the shadow PR's rule comment in
+`host-checks.yaml` assigns to its producer, by the `check` label the producer writes:
+
+- `k3s Longhorn Backup`: `LonghornBackupHealthFailed`, `LonghornBackupHealthNotReporting`.
+- `Off-box etcd Snapshot`: `EtcdSnapshotOffboxFailed`, `EtcdSnapshotOffboxNotReporting`.
+- `Manifest Prune Drift`: `ManifestPruneCheckFailed`, `ManifestPruneCheckNotReporting`.
+- `Release Staleness Drift`: `ReleaseStalenessCheckFailed`,
+  `ReleaseStalenessCheckNotReporting`.
+- `Live Object Drift`: `LiveDriftCheckFailed`, `LiveDriftCheckNotReporting`.
+
+| Tile | Samples | DOWN min | Shadow firing min | Q1 strict | Q1 ±8m | Q2 strict | Q2 ±8m |
+|---|---|---|---|---|---|---|---|
+| k3s Longhorn Backup | 10010 | 7 | 7 | 0 | 0 | 0 | 0 |
+| Off-box etcd Snapshot | 7940 | 0 | 0 | 0 | 0 | 0 | 0 |
+| Manifest Prune Drift | 8577 | 1136 | 1189 | 1 | 0 | 54 | 27 |
+| Release Staleness Drift | 9851 | 30 | 30 | 0 | 0 | 0 | 0 |
+| Live Object Drift | 7792 | 598 | 648 | 1 | 0 | 51 | 27 |
+
+Q1 ±8m is 0 for all five tiles. Every firing minute belongs to a `Failed` rule. No
+`NotReporting` rule fired, so every producer wrote its textfile within its deadline all week.
+The episodes, all times UTC:
+
+- **k3s Longhorn Backup, 2026-10-25 14:24 to 14:30.** `longhorn-backup-health` logged
+  `status=down backup target list fetch failed (rc=124): kubectl timed out after 30s` at 14:23.
+  The tile and `LonghornBackupHealthFailed` cover the same 7 minutes.
+- **Release Staleness Drift, 2026-10-25 19:01 to 19:30.** `release-staleness-check` logged
+  `git fetch origin master failed … cannot lock ref 'refs/remotes/origin/master'` at 19:00. The
+  tile and `ReleaseStalenessCheckFailed` cover the same 30 minutes.
+- **Manifest Prune Drift, 2026-10-25 05:16 to 18:10 and 2026-10-29 05:16 to 12:16.** Both
+  episodes open with `status=down deployed code differs from the repo` for the
+  `/opt/live-drift-check` and `/opt/longhorn-backup-health` host libraries.
+  `ManifestPruneCheckFailed` fired from 05:17 on 2026-10-25, one minute after the tile went
+  DOWN, so 1 Q1 strict minute falls inside the margin. On 2026-10-29 the alert and the tile
+  start in the same minute.
+- **Live Object Drift, 2026-10-25 05:46 to 16:40.** `live-drift-check` logged `status=down 1
+  with no apply baseline` for `configmap homelab/registry-gc-ghcr-mirror-keep` at 05:45.
+  `LiveDriftCheckFailed` fired from 05:47, one minute after the tile went DOWN, so 1 Q1 strict
+  minute falls inside the margin.
+
+All 54 Q2 ±8m minutes, 27 for each drift tile, fall where the tile had no `monitor_status`
+series at all. Q2 strict and Q2 ±8m count those minutes, because a missing series is not DOWN.
+A `[168h:1m]` query split each tile's Q2 ±8m minutes by tile state: 0 while the tile read up,
+and 27 while the tile was absent. The minutes run from 07:47 to 13:32 on 2026-10-25, inside two
+Uptime Kuma restarts. Kuma's `process_start_time_seconds` moved to 07:41:23 and to 13:14:04:
+
+- At 07:44, `count(monitor_status)` fell from 91 to 16. Prometheus itself had no samples from
+  07:40 to 07:42, and the tiles of the weekly reboot window read maintenance (3) up to 07:39.
+  The two drift tiles returned at 08:11, still DOWN.
+- At 13:15, `count(monitor_status)` fell from 84 to 6, while `up{job="uptime-kuma"}` read 1.
+  The two drift tiles returned at 13:41, still DOWN.
+
+A push tile has no series after a Kuma restart until its producer's next push. Both tiles read
+DOWN on either side of each gap, and the drift that the rule reported continued through it. Q2
+counts these minutes as a shadow alert firing while Kuma read up, but Kuma read nothing. The
+rule was right, and the tile was blind. The same restarts explain the samples each tile lacks
+from 10080. The daily tiles lack the most, because each waits up to a day for its next push.
+
+**`KumaDown` has no Kuma tile, so it was read against its own input.** It replaces the
+Healthchecks.io `uptime-kuma-alive` ping, not a tile. Over the same window, `KumaDown` never
+went firing. `up{job="uptime-kuma"} == 0` held for 2 minutes on 2026-10-28 at 01:28 and for 1
+minute on 2026-10-29 at 21:33, both under the rule's `for: 5m`. `absent(up{job="uptime-kuma"})`
+read true for 4 minutes on 2026-10-25 from 07:40 and for 8 minutes on 2026-10-28 from 00:45.
+`absent(up{job="prometheus"})` read true for 3 of the first and 7 of the second, so Prometheus
+was not running then and evaluated nothing. The minute left over in each span is under `for: 5m`.
+
+**The deployed rules, read at 15:47Z.** `kubectl get configmap -n observability
+prometheus-rules -o jsonpath='{.data.host-checks\.yaml}'` is byte-identical to `host-checks.yaml`
+on master. All eleven B1 rules carry `shadow: "true"`, and no B1 alert was pending or firing.
+
+No minute is unexplained, so no rule changes. The soak does not block Cutover-a, which B1 runs
+as Cutover-1a (*Every other producer* in M6).
+
+**The soak re-read, 2026-10-31T19:02Z.** The read of the cutover PRs repeated the queries above
+over `[168h:1m]` ending at 19:02Z (window start 2026-10-24T19:03Z, after B1's first evaluation),
+with the same tile-to-rule mapping and M2's 8-minute margin. Prometheus's oldest sample was 19.5
+days old, and `increase(prometheus_rule_evaluation_failures_total{rule_group=~".*;host-checks"}[168h])`
+was 0. Q1 ±8m is 0 for all five tiles, and Q1 strict and Q2 strict equal the 15:44Z read, so no
+new minute exists:
+
+| Tile | Samples | DOWN min | Shadow firing min | Q1 strict | Q1 ±8m | Q2 strict | Q2 ±8m |
+|---|---|---|---|---|---|---|---|
+| k3s Longhorn Backup | 10006 | 7 | 7 | 0 | 0 | 0 | 0 |
+| Off-box etcd Snapshot | 7743 | 0 | 0 | 0 | 0 | 0 | 0 |
+| Manifest Prune Drift | 8380 | 1136 | 1189 | 1 | 0 | 54 | 25 |
+| Release Staleness Drift | 9837 | 30 | 30 | 0 | 0 | 0 | 0 |
+| Live Object Drift | 7595 | 598 | 648 | 1 | 0 | 51 | 25 |
+
+The two drift tiles' Q2 ±8m minutes (25 each, against 27 in the earlier read, because the
+window now starts 3 hours later) are all minutes with no tile series, 07:48 to 13:32 on
+2026-10-25 inside the two Kuma restarts above. The three daily tiles have no sample after 12:36Z
+today, and Kuma's `process_start_time_seconds` is 17:16Z, the same restart gap: a push tile has
+no series until its producer's next push. The deployed `host-checks.yaml` was byte-identical to
+master at 19:02Z, with no B1 alert pending or firing and every B1 rule `shadow: "true"`.
+
+B1's cutover is three stacked PRs that merge in this order (*Every other producer* in M6):
+
+1. Cutover-1a, the PR that adds this paragraph: the five tiles (`longhorn-backup`,
+   `etcd-snapshot-offbox`, `manifest-prune-check`, `release-staleness-check` and
+   `live-drift-check`) leave `static-monitors.yaml.j2`, and their status-page patterns leave the
+   `uptime-kuma` defaults. Every rule stays shadow. The five producers keep pushing into deleted
+   tokens until Cutover-2, and `KUMA_RETIRING_TAGS` already lists all five tags
+   (`longhorn-backup-health`, `etcd-snapshot-offbox`, `manifest-prune-check`,
+   `release-staleness-check`, `live-drift-check`), so their refused pushes do not page. Its live
+   read is `probe.py metric 'monitor_status{monitor_name=~"k3s Longhorn Backup|Off-box etcd Snapshot|Manifest Prune Drift|Release Staleness Drift|Live Object Drift"}'`,
+   which must return no series. The five push tokens (`longhorn_backup_push_token`,
+   `etcd_snapshot_push_token`, `manifest_prune_push_token`, `release_staleness_push_token` and
+   `live_drift_push_token`) enter `PENDING_RETIREMENT` here and not in Cutover-2. The tiles were
+   their only cluster renders, so `cluster_vars.py check` refuses the keys in the cluster file
+   from this PR on, and the k3s scripts keep pushing into them until Cutover-2. B1's token PR,
+   [#6949](https://github.com/DanielH2018/server/pull/6949), retired the keys.
+2. Cutover-1b, the PR that adds this item: the ten k3s-cron rules and `KumaDown` drop `shadow`,
+   and the `kuma-cutover` group loses B1's five terms. `test_alertmanager_routing_b1_k3s_crons.py`
+   pins the outcome: `LonghornBackupHealth*`, `EtcdSnapshotOffbox*` and `KumaDown` are critical,
+   so they post to Discord and mail, and the other six rules are warnings that post to Discord
+   alone. The tiles had the same severities (the two critical tiles were on the email tier).
+   It is stacked and green before Cutover-1a merges, and it lands as soon as Cutover-1a's live
+   read passes.
+3. Cutover-2, the PR that adds this item: the five producers stop pushing to Kuma. The four
+   shell scripts lose `kuma_push`, the token read and the `uptime-kuma-alive` ping, and
+   `live_drift_check.py` loses its push. `health-crons.yml` removes the two Kuma credential files
+   (`kuma-push.env` and `live-drift-check.env`) instead of rendering them. The monitor-bridge
+   `uptime-kuma-alive` Healthchecks.io entry goes, and `HC_ROUTED_TAGS` drops
+   `longhorn-backup-health`. The k3s setup role is a hand apply, so the operator runs
+   `k3s-bringup.yml --tags "backup-health,etcd-snapshot,manifest-prune,release-staleness,live-drift"`
+   after the merge (the exact lines are under *Operator steps* in the PR body). One behaviour
+   ends with the push: the Kuma-only "Not a recovery" re-notify of `release-staleness-check` on a
+   changed stale set. D6.17 disarms that check, so the loss is accepted.
+
+**Operator-only, before Cutover-1a merges: pause `uptime-kuma-alive` in the Healthchecks.io
+console.** The plan places the pause before Cutover-1b, but that is too late. From Cutover-1a's
+apply, `longhorn-backup-health.sh` pushes into a deleted token, Kuma answers 404 as JSON,
+`kuma_push` sets `KUMA_PUSH_OK=0`, and the script pings `uptime-kuma-alive/fail` every 10
+minutes. Healthchecks.io would then page "Kuma is dead" for a healthy Kuma. The pause also keeps
+Kuma's real death from paging from both Healthchecks.io and a live `KumaDown`. From the pause to
+Cutover-1b's deploy nothing watches Kuma, which is the safe direction. Pause immediately before
+Cutover-1a merges, so that window stays short. Cutover-2 removes the ping and the
+entry, and the operator deletes the check in the console afterwards (*`KumaDown` replaces
+`uptime-kuma-alive`* in M6).
+
+**Inhibit decision: B1 adds one.** A3's Cutover-b has landed, so the plan's condition holds.
+`KumaDown` (critical, `for: 5m`) and `ScrapeTargetDown{job="uptime-kuma"}` (warning, `for: 10m`)
+both read `up{job="uptime-kuma"} == 0`, so one dead Kuma would page twice. The inhibit in
+`alertmanager-secret.yaml.j2` takes `alertname="KumaDown"` as the source and
+`alertname="ScrapeTargetDown"` with `job="uptime-kuma"` as the target, with `equal: [job,
+instance]`, the form `FluxControllerDown` uses. `equal` matters for the `absent()` arm: it
+carries no `instance`, so it holds no scrape page, and `ScrapeTargetDown` cannot fire without an
+`up` series. `test_alertmanager_kuma_inhibit.py` pins the five cases, including the rejecting
+ones (another instance, another job, another alert for the job, the `absent()` arm). Both rules
+are live in this PR, as inhibition runs before routing. C-1a deletes the inhibit with `KumaDown`.
+
+**Soak effect.** `renderer_lib/soak.py:longest_for` counts the `for:` of every unshadowed
+`critical` rule against its `service` label. The ten k3s-cron rules carry `service: daniel-box`
+and no `for:`. `KumaDown` has `service: uptime-kuma` and `for: 5m`, so the `uptime-kuma` tag's
+soak wait gains 300s. `test_lander_deadlines_cover_the_soak.py` passes.
+
+The two-hour no-pager bound counts from the moment the `uptime-kuma` Kustomization reports
+Cutover-1a's merge commit. It ends when the `observability` Kustomization reports Cutover-1b's.
+`CheckWithoutPager` pages critical once the last `monitor_status` sample of a B1 tile is older
+than its term's range: 2h for k3s Longhorn Backup, 2h10m for Release Staleness Drift and 50h10m
+for the three daily tiles. The daily tiles are therefore covered by the hand-kept two-hour bound
+alone. If the bound is exceeded, revert Cutover-2 first if it merged, then Cutover-1b,
+then Cutover-1a.
+
+**Token PR.** [#6949](https://github.com/DanielH2018/server/pull/6949) retired this batch's push
+tokens, and the operator's commit removed the keys from `secrets.yml` on 2026-11-02. A revert of
+a cutover above no longer brings back a working tile, because no token is left for it to push
+with.
+
+### B2 initial_setup
+
+Soak read, [#6723](https://github.com/DanielH2018/server/issues/6723): B2's shadow PR merged
+as `0ed30cfdec` at 2026-10-23T20:42Z. Prometheus first evaluated the `initial-setup-checks`
+group at 2026-10-23T20:46:47Z
+(`min_over_time(timestamp(prometheus_rule_group_last_evaluation_timestamp_seconds{rule_group=~".*;initial-setup-checks"})[21d:1m])`).
+That is 186.9 hours before the read, so the read covers a full `[168h:1m]` window. The window
+ended at 2026-10-31T15:45Z and started at 2026-10-24T15:45Z, after the first evaluation. The
+read used M1 convention 6's two queries with M2's 8-minute margin (*Which soak minutes count as
+explained* in M2). Prometheus's oldest sample was 21.66 days old, the group held 12 rules, and
+`increase(prometheus_rule_evaluation_failures_total{rule_group=~".*;initial-setup-checks"}[168h])`
+was 0.
+
+Each tile maps to the `<Check>Failed` and `<Check>NotReporting` pair that sits under its
+`# Kuma tile "…"` comment in `initial-setup-checks.yaml`. The two Loki Read Route tiles share
+alert names, so the read splits them by `service` (`daniel-box` or `daniel-server`).
+`HostCheckOverdue` is not counted, because an inhibit mutes it beside every pair.
+
+| Tile | Samples | DOWN min | Shadow firing min | Q1 strict | Q1 ±8m | Q2 strict | Q2 ±8m | Q2 ±8m, tile reading up |
+|---|---|---|---|---|---|---|---|---|
+| Docs Refresh | 7762 | 2776 | 4143 | 1 | 0 | 1368 | 1345 | 0 |
+| Homelab Evals | 306 | 0 | 10058 | 0 | 0 | 10058 | 10058 | 305 |
+| Secret Rotation | 6836 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| Setup Plane Drift (agent hosts) | 7143 | 354 | 391 | 0 | 0 | 37 | 22 | 0 |
+| Loki Read Route (daniel-box) | 9739 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| Loki Read Route (daniel-server) | 9738 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+
+Q1 ±8m is 0 for all six tiles. Docs Refresh's one strict Q1 minute is 2026-10-27T06:18Z,
+the recovery edge of a DOWN run. The run at 06:17:13 logged `status=up`, and its textfile write
+cleared `DocsRefreshFailed` one evaluation before Kuma's next sample read the up push. The
+margin absorbs it.
+
+**Q2 counts minutes in which the tile had no series.** Q2 subtracts `monitor_status == 0`. A
+push tile reports no `monitor_status` series after a Kuma restart until its next push, so Q2
+also counts those minutes. The last column requires `monitor_status == 1` instead. Docs Refresh
+and Setup Plane Drift have no Q2 minute in which the tile read up, so their 1345 and 22 minutes
+are failures that the shadow rule kept firing on while Kuma reported nothing. Two cases show
+it:
+
+- Docs Refresh's run at 2026-10-31T06:28:49Z failed its test suite. The textfile reads 0, and
+  the tile had no series at the read. The window therefore ends inside a real DOWN, which the
+  margin's caveat about the last 8 minutes does not affect.
+- Setup Drift's push at 2026-10-25T13:20 got `http=404 by=kuma`, logged as `push failed`,
+  while the tile was missing.
+
+**Q1 cannot see a DOWN that Kuma never recorded,** and the slow tiles lack many samples. Homelab
+Evals has 306 of 10080. The producers' own syslog closes that gap.
+`probe.py loki-query --since 7d '{program=~"secret-rotation-audit|eval-run|docs-refresh|setup-drift-check"} |~ "status=(down|up)" !~ "push failed"'`
+returns 6 Docs Refresh DOWN lines and 13 Setup Drift DOWN lines. It returns none for the eval
+sweep or the secret audit. The witness tag `loki-read-route-health` has no `status=down` line
+in the 7 days. For each of the 19 DOWN lines, `ALERTS{alertname="<Check>Failed",alertstate="firing"} @ <line + 300s>`
+returned the alert. The Docs Refresh lines record failed suites on 2026-10-25, 10-29 and
+10-31, failed shard-weight refreshes on 10-25 and 10-29, and failed generators on 10-26. The
+Setup Drift lines are 2026-10-25 08:20 to 14:21: daniel-server ran an old render of
+`aide-check.sh.j2` and `rkhunter-check.sh.j2`. `min_over_time(homelab_check_success{check=~"secret-rotation-audit|loki-read-route-health"}[168h])`
+is 1 for all three series.
+
+**Homelab Evals: a test run's leaked verdict, not a rule fault.** `EvalSweepFailed` fired for
+10058 of the 10080 minutes, 305 of them while the tile read up. The tile's samples run from
+2026-10-25 02:29:20 to 07:34:20, so `monitor_status == 1` holds for 310 one-minute steps,
+02:30 to 07:39, the last five from Prometheus's lookback. The alert fired in all of them except
+02:30 to 02:34. The tile has had no series since the weekly reboot. The rule read
+`eval-run.prom` correctly, but test runs wrote that file and the sweep did not:
+
+- The sweep runs weekly, on Sunday at 02:00. `changes(homelab_check_last_run_timestamp_seconds{check="eval-run",origin="daniel-box"}[8d])`
+  was 159.
+- The journal holds one sweep in the 8 days, from 02:22 to 02:28:44 on 2026-10-25, with
+  `status=up`. Its write (`last_run` 1792895324) read 1 from 02:30 to 02:33.
+- Writes at 02:33:50, 02:34:16, 02:52:58 and 03:34:56 have no `eval-run` journal line. The
+  02:33:50 write set success back to 0, and the 03:34:56 write is the 0 that nothing has
+  overwritten since.
+- The 22 window minutes in which the alert did not fire have four causes:
+    - 2026-10-24 22:23, 1 minute: a leaked write of 1.
+    - 2026-10-25 02:30 to 02:34, 5 minutes: the sweep's real 1.
+    - 2026-10-25 07:40 to 07:45, 6 minutes: the weekly reboot. Prometheus evaluated the group
+      209 times that hour, against 240 in a normal hour.
+    - 2026-10-28 00:45 to 00:54, 10 minutes: an evaluation gap, with 221 and 212 evaluations
+      in the two hours that hold it. The textfile read 0 throughout.
+- daniel-server also exports `eval-run`, last written at 2026-10-25T00:43:16Z. No sweep runs
+  on daniel-server.
+- The writes stopped once the test leak guard covered every child process.
+  `f0f97fcbcc` ([#6191](https://github.com/DanielH2018/server/issues/6191),
+  2026-10-25T03:23Z) pointed `TEXTFILE_DIR` at a temp directory. `9fb68d9650`
+  ([#6238](https://github.com/DanielH2018/server/issues/6238), 2026-10-29) carried it into
+  children given a hand-built `env=`. `changes(...[6d])` is 0 on both nodes.
+- docs-refresh's file changed 14 times in 168 hours, which is its twice-daily schedule, so the
+  leak did not reach it inside the window.
+
+The rule is correct, so B2 changes no rule. The leaked daniel-server file gives
+`HostCheckOverdue` a false page at 2026-11-01T06:43Z, and nothing overwrites it. It is filed as
+[#6735](https://github.com/DanielH2018/server/issues/6735).
+
+**The soak does not block Cutover-a.** For B2 that is the plan's Cutover-1a, which deletes the
+six tiles with every rule still shadow. Every Q1 minute is covered, and every Q2 minute is
+explained. One condition applies to Cutover-1b, which drops `shadow` within two hours of
+Cutover-1a. It must not merge while
+`homelab_check_success{check="eval-run",origin="daniel-box"}` holds the leaked 0, or
+`EvalSweepFailed` pages Discord on a test verdict. The weekly sweep at 2026-11-01T02:00Z
+overwrites the file. Open B2's window after that run reads 1, or after a sweep run by hand
+does.
+
+**The soak re-read and the gate, 2026-11-01T13:12Z.** The combined window's cutover PRs repeated
+the queries above over `[168h:1m]` ending at 13:12Z (window start 2026-10-25T13:12Z, after the
+group's first evaluation), with the same tile-to-rule mapping and M2's 8-minute margin.
+Prometheus's oldest sample was 22 days old. Every tile except Homelab Evals read up when the queries ran, and Homelab Evals has no
+series for the reason above.
+
+| Tile | Samples | DOWN min | Shadow firing min | Q1 strict | Q1 ±8m | Q2 strict | Q2 ±8m |
+|---|---|---|---|---|---|---|---|
+| Docs Refresh | 6992 | 2702 | 3907 | 1 | 0 | 1206 | 1184 |
+| Homelab Evals | 308 | 0 | 9425 | 0 | 0 | 9425 | 9425 |
+| Secret Rotation | 5886 | 0 | 0 | 0 | 0 | 0 | 0 |
+| Setup Plane Drift (agent hosts) | 6193 | 62 | 99 | 0 | 0 | 37 | 22 |
+| Loki Read Route (daniel-box) | 9583 | 0 | 0 | 0 | 0 | 0 | 0 |
+| Loki Read Route (daniel-server) | 9583 | 0 | 0 | 0 | 0 | 0 | 0 |
+
+Q1 ±8m is 0 for all six tiles. The window has no new kind of minute, and a second read over the
+20 hours since the earlier read's end (2026-10-31T15:45Z) shows the only new Q2 minutes:
+
+- **Docs Refresh, 63 minutes from 2026-10-31T17:27Z to 18:28Z.** `DocsRefreshFailed` kept
+  firing on the failed run of 06:28Z, which the earlier read records as a real DOWN. Kuma
+  restarted at 15:06Z, so the tile had no series until the 18:28Z run logged `status=up`
+  (`docs-refresh: status=up regenerated, committed, PR opened for docs-refresh/2026-10-31-1828`).
+  The textfile cleared the rule at the same run.
+- **Homelab Evals, 541 minutes ending 2026-11-01T02:27Z.** The leaked 0 that the earlier read
+  describes held until the weekly sweep overwrote it. The tile still has no series.
+
+**The gate b2.md set for the window holds.** The sweep of 2026-11-01 ran at 02:00Z.
+`homelab_check_last_run_timestamp_seconds{check="eval-run",origin="daniel-box"}` reads 1793500032
+(02:27:12Z) and `homelab_check_success{check="eval-run",origin="daniel-box"}` reads 1. The
+journal line is `eval-run: status=up regenerated, committed, PR opened for
+evals-history/2026-11-01-0227`. `EvalSweepFailed` and every other B2 alert are quiet, so
+Cutover-1b drops `shadow` from rules that read the verdicts the producers hold today.
+
+**`HostCheckOverdue{check="eval-run",origin="daniel-server"}` does not block B2.** The warning is
+firing because daniel-server's leaked `eval-run.prom` (last written 2026-10-25T00:43:16Z, value 0)
+is older than the generic deadman's limit, which is [#6735](https://github.com/DanielH2018/server/issues/6735).
+It is a live rule with no `shadow` label, so it pages today, and neither cutover PR changes
+that. The two `EvalSweep*` rules pin `origin="daniel-box"` in every selector, so none of the
+twelve B2 rules reads this series. The inhibit that mutes `HostCheckOverdue` beside a `NotReporting`
+pair uses `equal: [check, origin]`, so it covers the daniel-box series only. The page clears
+when #6735 removes the leaked file.
+
+**The deployed state, read at 13:20Z.** `kubectl get configmap -n observability prometheus-rules
+-o jsonpath='{.data.initial-setup-checks\.yaml}'` is byte-identical to the file on master, and
+the live `monitor-bridge-script-verdicts-logs` ConfigMap's `KUMA_RETIRING_TAGS` block is
+identical to master's, which lists `docs-refresh`, `eval-run`, `secret-rotation-audit`,
+`setup-drift-check` and `loki-read-route-health`.
+
+B2 cuts over in the combined window of B2, B4 and B6b (*No-pager windows* in M6, amended by the
+Cutover-1a PR that adds this paragraph). The window has four stacked PRs:
+
+1. Cutover-1a deletes the six tiles (`docs-refresh`, `homelab-eval-sweep`, `secret-rotation`,
+   `setup-drift-check`, `loki-read-route-daniel-box` and `loki-read-route-daniel-server`) with
+   every rule still shadow. The producers keep pushing into deleted tokens until Cutover-2, and
+   `KUMA_RETIRING_TAGS` lists their five tags. The live read is
+   `probe.py metric 'monitor_status{monitor_name=~"Docs Refresh|Homelab Evals|Secret Rotation|Setup Plane Drift .*|Loki Read Route .*"}'`,
+   which must return no series after the `uptime-kuma` promote. The six tokens
+   (`docs_refresh_push_token`, `homelab_eval_push_token`, `secret_rotation_push_token`,
+   `setup_drift_push_token`, `loki_route_witness_push_token` and
+   `loki_route_witness_daniel_server_push_token`) enter `PENDING_RETIREMENT` here.
+2. Cutover-1b drops `shadow` from the twelve rules and removes the six `CheckWithoutPager` terms.
+3. The setup-plane Cutover-2 stops the pushes. Each producer keeps its textfile verdict and its
+   syslog `status=` line and loses its push. On daniel-box the four producers ship in
+   `homelab-daniel-box` (the `docs-refresh`, `eval-sweep`, `secret-rotation` and
+   `loki-route-witness` components), so the host's `homelab-updater.timer` installs them and
+   `land.sh` waits for that host. daniel-server's setup-drift check and Loki witness are
+   `initial_setup` tasks in `tasks/crons.yml`, which also deletes the two retired env files.
+   `narrow_setup.py` maps a `crons.yml` change to every tag in that file, and
+   `setup_reach_hosts.py` owes the role on daniel-server and daniel-pi, so the tick records an
+   `initial_setup` `manual_plane` line for both hosts. On the Pi the apply finds no env file to
+   delete. `secret_rotation.py audit` loses its push arm, and the wrapper asks for `--verdict`;
+   `--push` stayed an alias until the token PR deleted it, because the wrapper and the script
+   reach daniel-box on different planes. A failed weekly `secret-rotate` no longer pages at once
+   through the shared tile: one that leaves a dirty tree, an unpushed commit or an unlanded
+   branch pages through the daily audit, and one that reverts pages once its token goes
+   overdue. The component and package `credentials:` lists keep the six keys, because
+   `host_secrets.py check` pins them to each host's SOPS file.
+4. B2's token PR, [#6949](https://github.com/DanielH2018/server/pull/6949), retired the keys.
+
+**Cutover-1b, the rules page.** The combined window's second PR drops `shadow` from the twelve rules in `initial-setup-checks.yaml` and
+removes the six `CheckWithoutPager` terms of B2 (Docs Refresh, Secret Rotation, Setup Plane Drift, Homelab Evals and the two Loki Read Route tiles). Every rule file is `files/rules/initial-setup-checks.yaml`.
+All twelve are `warning`, which posts to Discord alone, the channel mix the six tiles had. The routing test is `ansible/tests/services/test_alertmanager_routing_b2_b4_b6b.py`.
+
+**Inhibits.** None is added. The generic `HostCheckOverdue` deadman is already muted beside every `<Check>NotReporting` pair by the inhibit on `equal: [check, origin]`, and that inhibit's source is the rule whichever of `shadow` it carries. `HostCheckOverdue{check="eval-run",origin="daniel-server"}` is a different series ([#6735](https://github.com/DanielH2018/server/issues/6735)) and stays a live page until the leaked file goes. No B2 rule overlaps a scrape-target page: the checks read textfile verdicts, and a dead `node` exporter is `ScrapeTargetDown`'s alone.
+
+The no-pager bound is 2 hours from Cutover-1a's `uptime-kuma` apply. Cutover-1b is `observability`,
+which Flux applies through `promote`, so it waits out Sunday 02:05 to 08:15 UTC like the rest of
+the window.
+
+**Token PR.** [#6949](https://github.com/DanielH2018/server/pull/6949) retired this batch's push
+tokens, and the operator's commit removed the keys from `secrets.yml` on 2026-11-02. A revert of
+a cutover above no longer brings back a working tile, because no token is left for it to push
+with.
+
+### B3 gitops_deploy
+
+Soak read, [#6724](https://github.com/DanielH2018/server/issues/6724): B3's shadow PR merged as
+`f4a0d6b49` at 2026-10-23T22:01Z. Prometheus first evaluated the `gitops-checks` group at
+2026-10-23T22:06:48Z, so the window starts there. The read used M1 convention 6's two queries
+with M2's 8-minute margin (*Which soak minutes count as explained* in M2), over `[168h:1m]` ending
+at 2026-10-31T15:42Z. That window starts at 2026-10-24T15:42Z, after the group's first evaluation,
+so neither tile has a short window. Prometheus's oldest sample was 21.7 days old, and
+`increase(prometheus_rule_evaluation_failures_total{rule_group=~".*gitops-checks"}[168h])` was 0.
+
+The shadow PR's `# Kuma tile "…"` comments map each tile to a pair of rules in `gitops-checks.yaml`:
+
+- GitHub Ruleset Drift maps to `GitHubRulesetDrift` and `GitHubRulesetDriftNotReporting`.
+- GitHub Interaction Limit maps to `GitHubInteractionLimitNotArmed` and
+  `GitHubInteractionLimitNotReporting`.
+
+The group's two GitOps tick rules shadowed the "GitOps Deploy — Alive" tile, which is not B3's,
+so the read leaves them out. H7.52 deleted them with the deployer's timer. Two later commits
+edited the file: `dc172c803` reworded two descriptions, and `119f1d645` added the two tick rules.
+No B3 rule's `expr` changed after the first evaluation.
+
+| Tile | Samples | DOWN min | Shadow firing min | Q1 strict | Q1 ±8m | Q2 strict | Q2 ±8m |
+|---|---|---|---|---|---|---|---|
+| GitHub Ruleset Drift | 7003 | 0 | 0 | 0 | 0 | 0 | 0 |
+| GitHub Interaction Limit | 6963 | 0 | 0 | 0 | 0 | 0 | 0 |
+
+Neither tile read DOWN in the window, and no B3 rule fired or went pending:
+`count_over_time(ALERTS{alertname=~"GitHub.*"}[168h])` returned no series. Every Q1 and Q2 column
+is therefore 0 by construction. Both producers reported success for the whole window:
+`homelab_check_success` for each check has 10068 samples and none of them is 0.
+
+**The missing samples are Kuma restarts, not lost verdicts.** Each tile lacks about 3,100 of
+10,080 minutes, and Q1 cannot see a minute with no `monitor_status` sample. After a restart, Kuma
+exports no status for a push tile until that tile's next push, and these tiles are pushed once a
+day, at 06:40 and 06:50. Each gap opens at a restart of the `uptime-kuma` process and closes at
+the next daily push:
+
+| Kuma restart | Ruleset Drift resumes | Interaction Limit resumes |
+|---|---|---|
+| 2026-10-25 07:41 | 10-26 06:41 (1381 min) | 10-26 06:51 (1391 min) |
+| 2026-10-28 00:51 | 10-28 06:41 (356 min) | 10-28 06:51 (366 min) |
+| 2026-10-29 21:32 | 10-30 06:41 (548 min) | 10-30 06:51 (558 min) |
+| 2026-10-30 20:33 | 10-31 06:41 (606 min) | 10-31 06:51 (616 min) |
+| 2026-10-31 12:36 | open at the read (186 min) | open at the read (186 min) |
+
+The sample counts reconcile: 7003 + 2891 + 186 = 10080 for Ruleset Drift, and 6963 + 2931 + 186 =
+10080 for Interaction Limit. The window's six other restarts fall inside a gap that was already
+open. The gaps did not hide a DOWN, for three reasons:
+
+- Each script calls `write_check_textfile` in the same `push()` call that sends the Kuma push, so
+  `homelab_check_success` carries the verdict Kuma would have received. It read 1 at every
+  minute, gaps included.
+- `homelab_check_last_run_timestamp_seconds` changed 7 times for each check, once a day. The
+  timers rerun every 30 minutes while red, so a red run would have added changes. The largest
+  `time() - homelab_check_last_run_timestamp_seconds` in the window was 24 hours, under the
+  90000s deadline.
+- The longest gap is 23 hours, under the tiles' 90000s interval, so Kuma's own no-push deadline
+  could not expire inside one.
+
+**The deployed rules.** `prometheus_rule_group_rules` for `gitops-checks` read 6, the rule count
+of `gitops-checks.yaml` on master, and no B3 alert was firing. The ConfigMap itself was not read:
+`kubectl` has no working kubeconfig for the reading user on daniel-server or daniel-box.
+
+No minute is unexplained, so no rule changes, and the soak does not block Cutover-a. B3 takes the
+non-bridge form of *Order*, so its Cutover-a is the plan's Cutover-1a (the tiles go), followed by
+Cutover-1b (the rules drop `shadow`) and Cutover-2 (the pushes stop). The soak saw no DOWN, so
+the rules' firing side rests on `tests/rules/gitops-checks.test.yaml`, which fires each of the
+four rules.
+
+**The cutover is three stacked PRs.** B3 takes the non-bridge form of *Order*, and its tiles are
+hand-written keys of the static-monitors Secret, so Cutover-1a deletes them outright and needs no
+exclusion in the `CHECKS` loop:
+
+1. Cutover-1a, the tiles go: `github-ruleset-drift.json` and `github-interaction-limit.json`
+   leave `static-monitors.yaml.j2`, and the two `^github-…$` patterns leave the status-page
+   groups. Every B3 rule stays `shadow`. `ruleset_drift_push_token` and
+   `interaction_limit_push_token` enter `PENDING_RETIREMENT` in this PR, because the cluster
+   file holds both keys for the tile render and `cluster_vars.py check` refuses a key that no
+   cluster render references (`test_the_committed_cluster_files_pass_check` reads red without
+   the entries). The scripts still render the tokens from `secrets.yml` until Cutover-2.
+2. Cutover-1b, the rules page: the four B3 rules drop `shadow`, and `kuma-cutover` loses B3's two
+   `[50h10m]` terms.
+3. Cutover-2, the push stops: both scripts drop `kuma_push`, `PUSH_URL` and the push token, and
+   keep `write_check_textfile`. The tick applies it, as `gitops_deploy` is a setup role the
+   deployer applies itself (`setup_routing.py --host daniel-box` routes it with `on_tick_host:
+   true`).
+
+**The re-read of the soak, 2026-10-31T19:02Z.** The read above was repeated with the same queries
+(M1 convention 6 with M2's 8-minute margin, each tile mapped to its rule pair by the
+`# Kuma tile "…"` comments) over `[168h:1m]`. Prometheus's oldest sample was 19.5 days old, and
+`increase(prometheus_rule_evaluation_failures_total{rule_group=~".*gitops-checks"}[168h])` was 0.
+
+| Tile | Samples | DOWN min | Shadow firing min | Q1 strict | Q1 ±8m | Q2 strict | Q2 ±8m |
+|---|---|---|---|---|---|---|---|
+| GitHub Ruleset Drift | 6803 | 0 | 0 | 0 | 0 | 0 | 0 |
+| GitHub Interaction Limit | 6763 | 0 | 0 | 0 | 0 | 0 | 0 |
+
+The sample counts are 200 below the table above because this window ends 200 minutes later and the
+2026-10-31 12:36 restart gap was still open: the last sample of both tiles is 12:35Z. A Kuma
+process also started at about 17:16Z, so the tiles do not re-export until the 06:41 and 06:51 pushes
+on 2026-11-01. `count_over_time(ALERTS{alertname=~"GitHub.*"}[168h])` returned no series, and
+`min_over_time(homelab_check_success{check=~"github-.*"}[168h])` read 1 for both checks. No Q1
+minute is new, so nothing blocks Cutover-1a.
+
+**The deployed state, read at 19:02Z.** `kubectl get configmap -n observability prometheus-rules`
+holds `gitops-checks.yaml` byte-identical to master, with all six rules `shadow: "true"`, and
+`prometheus_rule_group_rules` reads 6. `kuma-cutover.yaml` differs from master by the
+`Host Packages — Status` term alone, which another batch added and `observability` had not yet
+applied. B3's two terms are live. `monitor-bridge-script-verdicts-logs` holds `github-ruleset-drift`
+and `github-interaction-limit` in `KUMA_RETIRING_TAGS`, so the *Order* gate (the entries deployed
+before Cutover-1a) is met.
+
+**Cutover-1a's live read needs a discriminator.** `monitor_status{monitor_name=~"GitHub (Ruleset
+Drift|Interaction Limit)"}` returns nothing now, from the restart gap, so a bare empty read after
+the merge proves nothing. The read that does is the three together:
+
+- The `uptime-kuma` Kustomization reports Cutover-1a's merge commit.
+- At the next 06:40 and 06:50 run, `journalctl -t github-ruleset-drift` and `-t
+  github-interaction-limit` show `push failed (… by=kuma …)`, which Kuma answers for a token that
+  no live monitor holds.
+- `monitor_status` for both names stays empty after 06:52Z.
+
+**The no-pager bound.** `uptime-kuma` and `observability` are both `owner: flux`, so the merge is
+the apply. The two hours count from the moment the `uptime-kuma` Kustomization reports Cutover-1a's
+merge commit, because Kuma stops paging the two checks then and every B3 rule is still shadow. They
+end when the `observability` Kustomization reports Cutover-1b's merge commit. The `CheckWithoutPager`
+terms are `[50h10m]` and the tiles are silent until 06:41 on 2026-11-01, so for B3 the bound rests
+on whoever merges, not on the alert. If the bound is exceeded, revert Cutover-1b when it has
+merged, then Cutover-2 when it has merged, so the scripts push again, then Cutover-1a, so the
+tiles return.
+
+**Cutover-1b: the rules page.** The four B3 rules (`GitHubRulesetDrift`,
+`GitHubRulesetDriftNotReporting`, `GitHubInteractionLimitNotArmed` and
+`GitHubInteractionLimitNotReporting`) drop `shadow`, and `kuma-cutover.yaml` loses B3's two
+`[50h10m]` terms with their promtool series and expected alerts. All four rules are `warning`, so
+Alertmanager posts them to Discord alone, the channel mix both tiles had.
+The group's two GitOps tick rules kept `shadow`, because they shadowed the `GitOps Deploy — Alive`
+tile, which is not B3's. H7.52 deleted them with the deployer's timer.
+
+**Inhibit decision: B3 adds none.** The plan turns `EXPORTER_DEPENDENT` into an inhibit sourced on
+`ScrapeTargetDown`. B3 needs none, because both rule shapes already hold on a dead exporter:
+
+- A failure rule (`homelab_check_success == 0`) has no series once the `node` target is down, so
+  it cannot fire.
+- A NotReporting rule carries `unless on (origin) (up{job="node"} == 0)`, which holds it while the
+  exporter is down. Its `absent_over_time` arm needs a 25-hour silence on top of that.
+
+A dead `node` exporter on daniel-box therefore pages as `ScrapeTargetDown` alone.
+
+**Soak effect: none.** `renderer_lib/soak.py:longest_for` counts the `for:` of every unshadowed
+critical rule. The four rules are warnings and carry no `for:`, so the map is unchanged.
+
+**Routing.** `test_alertmanager_routing_b3_gitops.py` is a sibling of the routing module, which is
+at its line cap. It walks the four rules through the rendered routing tree: each reaches Discord
+alone, muted for the weekly reboot. The two `GitOpsTick*` rules walk to the blackhole. A B3 rule
+that regains `shadow` also walks to the blackhole and fails the test (`1 failed, 7 passed` with
+`shadow` restored on `GitHubRulesetDrift`).
+
+**Cutover-2: the push stops.** `github-ruleset-drift.sh` and `github-interaction-limit.sh` drop
+the `kuma-push-lib.sh` source, `KUMA_HOST`, `KUMA_RESOLVE_IP`, `PUSH_URL` and the push token. Each
+keeps `write_check_textfile`, and each logs `status=<up|down> <message>` under its own syslog tag.
+The ruleset script already did. The interaction-limit script gains the line, because `kuma_push`
+logged only a failed push and the journal is the host-side record of a clean run. Both templates
+render no secret now, so their two install tasks lose `no_log`, and the two timers' unit
+descriptions read `textfile verdict`. The timers keep their `kuma-check-` names, because a rename
+would orphan the installed units.
+
+**Which plane applies it.** `gitops_deploy` is a setup role the tick applies itself on daniel-box
+(`setup_routing.py --host daniel-box` reads `on_tick_host: true`). A template change in the role
+reads `broad_setup` with `broad_manual` false, so the tick fast-forwards and runs
+`initial_setup.yml --tags gitops_deploy` before `land.sh` deploys any k8s role. Nothing here needs
+a hand apply, and daniel-server and daniel-pi run neither timer.
+
+**How to verify the push stopped.** Three reads, in this order. `rootq` cannot print either script,
+because neither is on its path allowlist.
+
+1. The tick record on daniel-box shows `gitops_deploy` applied at Cutover-2's merge commit, and
+   no `gitops_deploy` entry stays in `owed.jsonl` or `hold_sha`.
+2. After the next 06:40 and 06:50 run, `journalctl -t github-ruleset-drift` and
+   `journalctl -t github-interaction-limit` show one `status=up` line each and no `push failed`
+   line, where Cutover-1a's runs showed `push failed (... by=kuma ...)`. The
+   interaction-limit line is also the proof that the new script ran: the old script logged
+   nothing for a clean run.
+3. `homelab_check_last_run_timestamp_seconds` for both checks advances to that run, and
+   `homelab_check_success` reads 1.
+
+**Test changes that follow the push.** The two script harnesses read the verdict back from the
+journal line a `logger` stub records, in place of a stubbed `kuma_push`.
+`test_neither_producer_pushes_to_kuma` in `test_gitops_check_rule_literals.py`, which C-6 retired, held both rendered
+scripts to no Kuma library, `kuma_push` or push URL, with a red case for a pushing script. It also
+found a `kuma_push` word in a comment of this PR's first draft. The two scripts leave the census of
+secret-bearing host scripts, so the named member of three censuses moves to `registry-gc.sh`: the
+secret-path census, the protected-bash hook test and the no-`no_log` census. The census floor in
+`test_secret_bearing_host_scripts_are_not_world_readable.py` drops from 5 to 3.
+
+**Token PR.** `ruleset_drift_push_token` and `interaction_limit_push_token` stayed in
+`PENDING_RETIREMENT` from Cutover-1a until
+[#6949](https://github.com/DanielH2018/server/pull/6949) retired both keys and deleted the two
+entries in the same commit. The operator's commit removed the keys from `secrets.yml` on
+2026-11-02.
+
+### B4 other setup roles
+
+Soak read, [#6725](https://github.com/DanielH2018/server/issues/6725): B4's shadow PR is
+[#6052](https://github.com/DanielH2018/server/pull/6052), merged as `b063f17f1`. Prometheus
+first evaluated the `other-setup-checks` group at 2026-10-23T22:50:48Z, more than 168h before
+the read, so every tile has a full window. The read used M1 convention 6's two queries with
+M2's 8-minute margin (*Which soak minutes count as explained* in M2) over `[168h:1m]`, ending
+at 2026-10-31T15:40Z. Each tile was mapped to its rules by the `# Kuma tile "…"` comment above
+them in `other-setup-checks.yaml`. The two UPS tiles share their alert names, so each also
+selects its host's `service` label. Prometheus's oldest sample was 21.7 days old, so retention
+covered the window. `increase(prometheus_rule_evaluation_failures_total{rule_group=~".*;other-setup-checks"}[168h])`
+was 0, and `prometheus_rule_group_rules` read 16.
+
+| Tile | Samples | DOWN min | Shadow firing min | Q1 strict | Q1 ±8m | Q2 strict | Q2 ±8m |
+|---|---|---|---|---|---|---|---|
+| UPS Secondary (daniel-box) | 10010 | 18 | 14 | 10 | 2 | 6 | 6 |
+| UPS Secondary (daniel-server) | 10010 | 0 | 0 | 0 | 0 | 0 | 0 |
+| Fake Remux Scan | 10010 | 0 | 0 | 0 | 0 | 0 | 0 |
+| Fake Remux Replace | 10025 | 0 | 20 | 0 | 0 | 20 | 20 |
+| MKV Attachment Repair | 10025 | 180 | 179 | 1 | 0 | 0 | 0 |
+| etcd Restore Drill (full) | no series | — | 10063 | — | — | 10063 | 10063 |
+| etcd Restore Drill (egress fence) | no series | — | 10063 | — | — | 10063 | 10063 |
+| Renovate Notifier — Alive | 5628 | 0 | 0 | 0 | 0 | 0 | 0 |
+| Renovate Agent — Alive | 6061 | 0 | 0 | 0 | 0 | 0 | 0 |
+
+**UPS Secondary (daniel-box), 2 Q1 ±8m minutes: Kuma held the tile DOWN after the check
+recovered.** The minutes are 2026-10-25 14:39 and 14:40. The 14:22 run of
+`ups-secondary-health` timed out reaching upsd's ClusterIP and wrote `success 0`. The 14:30 run
+wrote `success 1` and logged `status=up`, with no `push failed` line under its tag.
+`UpsSecondaryFailed` fired from 14:24 to 14:31, so the rule tracked the producer's verdict
+exactly. Kuma logged "No heartbeat in the time window" for the tile at 14:30:01 and read DOWN
+until the 14:40 push landed at 14:41. M2's margin assumes a 300s push cadence, and this producer
+pushes every 600s, so the Kuma-side hold runs 2 minutes past the margin. The fault itself was
+the 2026-10-25 daniel-box disruption that A5 and B8 record: A5's kubelet target went down from
+14:20 to 14:28, and B8's Traefik stall ran from 14:25 to 14:28. The daniel-server watchdog
+reaches upsd locally and stayed up throughout.
+
+**The two Q2 episodes fall inside the weekly reboot.** `UpsSecondaryFailed` for daniel-box
+fired from 2026-10-25 07:46 to 07:51, and `FakeRemuxReplaceFailed` fired from 07:52 to 08:11.
+Kuma read status 3 (maintenance) on every B4 tile from 07:31 to 08:21, and query 2's `== 0`
+test counts that as up. The UPS run at 07:40 found no route to upsd while the cluster
+rebooted, and the 07:50 run passed. The reconciler's 07:40 run failed with `No route to host`,
+the heartbeats at 07:50 and 08:00 read that state, and the reconciler passed at 08:00:05.
+Alertmanager's `weekly-reboot` interval covers Sunday 07:25 to 08:15 UTC, and every route a B4
+rule takes after its cutover carries it: both `severity="critical"` routes and the default
+Discord route. So the rules page nobody in that window, which matches what Kuma did.
+
+**MKV Attachment Repair's 180 DOWN minutes are a real fault both sides saw.** From 2026-10-30
+01:21 to 04:20, the repair sweep reported `ffprobe` failures on a batch of newly imported files
+and repaired them over successive runs. `MkvAttachmentRepairFailed` fired for 179 of the 180
+minutes. The one strict Q1 minute is the onset at 01:21, which the margin covers.
+
+**The drill tiles have no `monitor_status` series, so their Q1 cannot be read.** Kuma exports a
+push tile's gauge only after a heartbeat in the running pod's lifetime. The uptime-kuma pod
+started six times in the window, at 2026-10-25 07:41 and 13:14, 10-28 00:44, 10-29 21:32,
+10-30 20:33 and 10-31 15:06. The monthly drill last pushed on 2026-10-01, before both the
+window and Prometheus's retention. Neither drill has written a textfile yet either. Both
+`NotReporting` rules fired for the whole window (10063 minutes, which excludes the minutes the
+`node` scrape was down) through their `absent_over_time` arm. The rule file's header records
+this as expected until the 2026-11-01 11:20 UTC run writes its first file. The runner on
+daniel-server, `/usr/local/bin/etcd-restore-drill-vm`, was installed on 2026-10-24. It sources
+`homelab-check-lib.sh`, calls `write_check_textfile` and renders `DEADLINE_S=3024000`, so that
+run writes both files.
+
+**The renovate tiles' missing minutes are Kuma restarts, not missed beats.** Each gap in their
+series starts at one of the Kuma pod starts above and ends at the tile's next daily push: about
+13:05 for the notifier and about 11:08 for the agent. Query 1 cannot see those minutes, but the
+producers' `homelab_check_last_run_timestamp_seconds` shows a run every day. The longest gap
+between runs was about 24.5 hours for the agent, under its 28-hour deadline, and under 36 hours
+for the notifier. Neither tile could have gone DOWN unseen, and neither `NotReporting` rule
+fired. The 55 to 70 minutes the 10-minute tiles lack are the same restarts, and each of those
+tiles returned at its next push within 10 minutes. `97ca99188` added the disarm clause to
+`RenovateAgentNotReporting` on 2026-10-30, inside the window; the rule was quiet before and
+after.
+
+No minute is a miss, so no rule changes.
+
+**The deployed rules, read at 15:49Z.** `kubectl get configmap -n observability prometheus-rules -o jsonpath='{.data.other-setup-checks\.yaml}'`
+is byte-identical to `other-setup-checks.yaml` on master. The only B4 alerts firing were the two
+drill `NotReporting` rules.
+
+**The soak does not block Cutover-1a for the seven 10-minute and daily tiles. The drill pair
+holds the whole cutover until the 2026-11-01 run is read.** M6's *Order* deletes the drill
+tiles only together with the five `[2h]` tiles, so Cutover-1a removes all nine tiles at once.
+Cutover-1b must then follow inside the two-hour bound and drop the drill rules' `shadow`. Before
+the first drill run, those two rules are firing, and `EtcdRestoreDrillNotReporting` is
+critical, so dropping `shadow` would page Discord and email at once. Cutover-1a therefore waits
+until after 2026-11-01 11:20 UTC, and this read is the gate:
+
+- `homelab_check_last_run_timestamp_seconds{check=~"etcd-restore-drill-vm|etcd-restore-drill-egress-fence",origin="daniel-server"}`
+  returns two series.
+- `ALERTS{alertname=~"EtcdRestoreDrill.*"}` is empty, or its `Failed` alert matches a DOWN on
+  the drill's own Kuma tile.
+
+**The soak re-read and the gate, 2026-11-01T13:12Z.** The combined window's cutover PRs repeated
+the queries above over `[168h:1m]` ending at 13:12Z (window start 2026-10-25T13:12Z, after the
+group's first evaluation), with the same tile-to-rule mapping and M2's 8-minute margin.
+Prometheus's oldest sample was 22 days old.
+
+| Tile | Samples | DOWN min | Shadow firing min | Q1 strict | Q1 ±8m | Q2 strict | Q2 ±8m |
+|---|---|---|---|---|---|---|---|
+| UPS Secondary (daniel-box) | 9983 | 18 | 8 | 10 | 2 | 0 | 0 |
+| UPS Secondary (daniel-server) | 9983 | 0 | 0 | 0 | 0 | 0 | 0 |
+| Fake Remux Scan | 9982 | 0 | 0 | 0 | 0 | 0 | 0 |
+| Fake Remux Replace | 9990 | 0 | 20 | 0 | 0 | 20 | 20 |
+| MKV Attachment Repair | 9990 | 180 | 179 | 1 | 0 | 0 | 0 |
+| etcd Restore Drill (full) | 112 | 111 | 10065 | 0 | 0 | 9954 | 9946 |
+| etcd Restore Drill (egress fence) | 112 | 0 | 9954 | 0 | 0 | 9954 | 9954 |
+| Renovate Notifier — Alive | 4666 | 0 | 0 | 0 | 0 | 0 | 0 |
+| Renovate Agent — Alive | 5043 | 0 | 0 | 0 | 0 | 0 | 0 |
+
+The two Q1 ±8m minutes of UPS Secondary (daniel-box) are 2026-10-25 14:39 and 14:40, the Kuma hold
+that the earlier read explains. The 10-minute producer pushes past M2's margin. MKV Attachment
+Repair's 180 DOWN minutes are the 2026-10-30 `ffprobe` fault, with one strict Q1 minute at the
+onset. The window no longer holds 2026-10-25's 07:46 to 07:51 `UpsSecondaryFailed` episode, so
+that tile's Q2 reads 0 here.
+
+**Fake Remux Replace's 20 Q2 minutes are this morning's weekly reboot, not the 10-25 episode.**
+`FakeRemuxReplaceFailed` fired from 2026-11-01T07:51:30Z to 08:10:30Z
+(`min_over_time(timestamp(ALERTS{alertname=~"FakeRemuxReplace.*",alertstate="firing"})[168h:1m])`
+and the matching `max_over_time`). The reboot cron fires at 07:30Z, Kuma's maintenance window
+covers the same period, and Alertmanager's `weekly-reboot` interval (Sunday 07:25 to 08:15 UTC)
+mutes every route the rule takes after its cutover. The shape matches the earlier read's 10-25
+episode.
+
+**The drill ran at 2026-11-01T11:20Z and failed, and the gate's second clause holds.**
+
+- Both textfiles exist. `homelab_check_last_run_timestamp_seconds{check=~"etcd-restore-drill-vm|etcd-restore-drill-egress-fence",origin="daniel-server"}`
+  returns two series, 1793532060 (11:21:00Z) and 1793532042 (11:20:42Z).
+- `EtcdRestoreDrillNotReporting` and `EtcdRestoreDrillEgressFenceNotReporting` fired from the
+  window's start to 11:20Z because the monthly runner had written no file yet, the expected state
+  the rule file's header records. The rules read the right series, and both cleared when the run
+  wrote its files. The monthly tile has no `monitor_status` series for the same reason, so Q2
+  counts every one of those minutes.
+- The egress fence passed: `homelab_check_success{check="etcd-restore-drill-egress-fence"}` reads 1.
+  The full drill failed: `homelab_check_success{check="etcd-restore-drill-vm"}` reads 0, the journal
+  line is `etcd-restore-drill-vm: status=down run=20261101T112001Z full restore drill FAILED (exit
+  1): etcd-restore-drill: scratch server exited during startup`, and the `etcd Restore Drill (full)`
+  tile reads DOWN since 11:21Z. `EtcdRestoreDrillFailed` (shadow, critical) fires beside it, so
+  the rule and the tile agree. That is the gate's second clause, a `Failed` alert that matches a
+  DOWN on the drill's own tile.
+- The fault is real and is not a rule fault. The restore stage completed, then the scratch
+  `k3s server` exited with `cannot use public IP 127.0.0.1 with endpoint reconciler`
+  (`scripts/backup/etcd_restore_drill.sh` starts it with `--advertise-address 127.0.0.1`, and the
+  k3s version the guest runs rejects a loopback address). [#6846](https://github.com/DanielH2018/server/issues/6846)
+  owns it.
+
+B4 therefore joins the window, with one consequence recorded here. Cutover-1b drops `shadow` from
+`EtcdRestoreDrillFailed`, which is critical, so it pages Discord and email at the merge and keeps
+firing until a drill run passes. The drill runs monthly, so that is the first of December unless
+the operator runs it by hand after #6846 is fixed. Kuma's tile is DOWN today for the same cause.
+
+**The deployed state, read at 13:20Z.** `other-setup-checks.yaml` in the live `prometheus-rules`
+ConfigMap is byte-identical to master's file, and `KUMA_RETIRING_TAGS` in the live monitor-bridge
+ConfigMap is identical to master's, which lists `ups-secondary-health`, `fake-remux-health` and
+`etcd-restore-drill-vm`. The renovate pair lists nothing, because a unit's `curl` logs no
+`push failed` line.
+
+B4 cuts over in the combined window of B2, B4 and B6b. The window has four stacked PRs:
+
+1. Cutover-1a deletes all nine tiles with every rule still shadow, and carries the renovate pair's
+   Cutover-2 (*Order* in M6). The notifier and agent units lose the `ExecStartPost` beat, their
+   `KUMA_PUSH_URL` lines, and the agent's crash-report push, so a beat into a deleted tile cannot
+   fail the unit. The tick applies it on daniel-box. Its live read is
+   `probe.py metric 'monitor_status{monitor_name=~"UPS Secondary .*|Fake Remux .*|MKV Attachment Repair|etcd Restore Drill.*|Renovate .* — Alive"}'`,
+   which must return no series after the `uptime-kuma` promote. Nine push tokens enter
+   `PENDING_RETIREMENT`: `ups_secondary_push_token`, `ups_secondary_daniel_server_push_token`,
+   `monitor_bridge_fake_remux_push_token`, `monitor_bridge_fake_remux_replace_push_token`,
+   `mkv_attachment_repair_push_token`, `etcd_drill_full_push_token`, `etcd_drill_fence_push_token`,
+   `monitor_bridge_renovate_alive_push_token` and `renovate_agent_kuma_push_token`.
+2. Cutover-1b drops `shadow` from the sixteen rules and removes the seven `CheckWithoutPager`
+   terms, which closes the drills' window with the five `[2h]` terms.
+3. The setup-plane Cutover-2 stops the remaining pushes, from the UPS secondary watchdog, the
+   three fake-remux heartbeats and the etcd drill orchestrator. Each keeps its textfile verdict
+   and its syslog line. The UPS watchdog ships in both cluster nodes' host packages (the
+   `nut-secondary` component), so each host's `homelab-updater.timer` installs it. The
+   `nut_host` role is emptied and its template edit reaches no other host, so it owes no
+   `manual_plane` line. The tick applies `fake_remux` on daniel-box. The drill's change narrows
+   to `hypervisor-etcd-drill` and reaches daniel-server and daniel-pi, because the role's
+   defaults changed, so the tick records a `hypervisor` `manual_plane` line for both. The
+   daniel-server apply deletes the retired `etcd-drill-kuma-push.env`; on the Pi the role's
+   install path is gated off and the apply changes nothing. The packages' `credentials:` lists
+   keep both UPS keys, because `host_secrets.py check` pins them to each host's SOPS file.
+4. B4's token PR, [#6949](https://github.com/DanielH2018/server/pull/6949), retired the keys.
+
+**Cutover-1b, the rules page.** The combined window's second PR drops `shadow` from the sixteen rules in `other-setup-checks.yaml` and
+removes the seven `CheckWithoutPager` terms of B4 (the two UPS secondaries, the three fake_remux tiles and the two renovate tiles; the drill tiles had no term). Every rule file is `files/rules/other-setup-checks.yaml`.
+The four UPS rules, `EtcdRestoreDrillFailed` and `EtcdRestoreDrillNotReporting` are `critical`, so they mail as well as post; the other ten are `warning`. **`EtcdRestoreDrillFailed` fires at the merge**: the 2026-11-01 drill failed ([#6846](https://github.com/DanielH2018/server/issues/6846)) and keeps the verdict at 0 until a run passes. The rule is a deliberate page, since Kuma's tile is DOWN for the same cause. The drills' window closes with this PR, because the five `[2h]` terms that bounded it leave together with the drill rules' `shadow`.
+
+**Inhibits.** None is added, for the reasons under B2. The renovate pair has a `NotReporting` rule only, and the deadman inhibit covers it. `UpsSecondary*` reads the secondary watchdog's own verdict and overlaps none of A1's `UPS*` rules, which read the UPS itself.
+
+The no-pager bound is 2 hours from Cutover-1a's `uptime-kuma` apply. Cutover-1b is `observability`,
+which Flux applies through `promote`, so it waits out Sunday 02:05 to 08:15 UTC like the rest of
+the window.
+
+**Token PR.** [#6949](https://github.com/DanielH2018/server/pull/6949) retired this batch's push
+tokens, and the operator's commit removed the keys from `secrets.yml` on 2026-11-02.
+
+### B5 Pi
+
+B5's soak read, [#6726](https://github.com/DanielH2018/server/issues/6726): B5's shadow PR is
+`ef12dd28e1`, committed at 2026-10-23T21:42Z. Prometheus first evaluated the `pi-checks` group
+at 2026-10-23T21:53:48Z
+(`min_over_time(timestamp(prometheus_rule_group_last_evaluation_timestamp_seconds{rule_group=~".*;pi-checks"})[21d:1m])`).
+That is more than 168 hours before the read, so both tiles get the full window. The read used
+M1 convention 6's two queries over `[168h:1m]` ending at 2026-10-31T15:42Z, with M2's 8-minute
+margin (*Which soak minutes count as explained* in M2). The window starts at
+2026-10-24T15:42Z.
+
+Each tile maps to the two rules that the `pi-checks.yaml` comments name for it:
+
+- "Daniel Pi SD Health" maps to `PiSdHealthFailed` and `PiSdHealthNotReporting`.
+- "Daniel Pi Recovery" maps to `PiRecoveryFailed` and `PiRecoveryNotReporting`.
+
+Prometheus's oldest sample was 21.7 days old, so retention covered the window.
+`increase(prometheus_rule_evaluation_failures_total{rule_group=~".*pi-checks"}[168h])` was 0.
+`prometheus_rule_group_rules` for the group read 4.
+
+| Tile | Samples | DOWN min | Shadow firing min | Q1 strict | Q1 ±8m | Q2 strict | Q2 ±8m |
+|---|---|---|---|---|---|---|---|
+| Daniel Pi SD Health | 10036 | 0 | 0 | 0 | 0 | 0 | 0 |
+| Daniel Pi Recovery | 10036 | 107 | 107 | 1 | 0 | 1 | 0 |
+
+The ±8m columns use `last_over_time(ALERTS{...}[17m:1m] offset -8m)` for Q1 and
+`min_over_time(monitor_status{...}[17m:1m] offset -8m) == 0` for Q2. Every firing minute was
+`PiRecoveryFailed`. Neither `NotReporting` rule fired, and no SD Health rule fired.
+
+The Recovery tile's 107 DOWN minutes form three episodes. `PiRecoveryFailed` fired across each
+one, and `probe.py alerts --pi --check recovery --days 8 --raw` holds the producer's message for
+every cycle:
+
+- **2026-10-24, DOWN 18:56 to 20:00 (65 min), firing 18:57 to 20:00.** Every cycle from 18:55
+  to 19:55 reads `not running: pi-canary []; restart FAILED: pi-canary`. `49848cf98` (18:48)
+  ran the Pi's first Compose service, `pi-canary`, and the canary failed to start.
+  `b17385f09` (committed 19:39) raised its memory reservation to the daemon's 6 MiB floor. The
+  episode ended at 20:00, after the Pi's updater timer installed that change. This was a real
+  fault that both planes paged.
+- **2026-10-25, DOWN 20:17 to 20:20 (4 min), firing 20:17 to 20:21.** One cycle at 20:15 reads
+  `not running: wg-easy [status=created ...]; restarted: wg-easy`. The restart took, and the
+  rule fires on a restart by design (the `# DECIDED:` marker in
+  `hosts/components/pi-heartbeats/templates/pi-recovery-health.sh.j2`).
+- **2026-10-26, DOWN 03:59 to 04:36 (38 min), firing 03:59 to 04:36.** The cycles read
+  `not running: autoheal [... error=failed to create task for container: AlreadyExists ...];
+  restart FAILED: autoheal`. This is the Pi overload that B8's read records, which ended when
+  the Pi rebooted at 04:32:54. `up{job="node-pi"}` read 0 for single minutes in that span.
+  Loki holds no DOWN line from the producer after 04:18. The producer kept running, because
+  `homelab_check_last_run_timestamp_seconds` advanced every 5 minutes from 04:05:08 to
+  04:35:11. Its lines from 04:20 to 04:30 did not reach Loki during the overload. The textfile
+  read `homelab_check_success` 0 until the 04:35 run, so the rule and the tile cleared together
+  at 04:36.
+
+The one strict Q1 minute is 2026-10-24 18:56. The producer wrote its first DOWN at 18:55:18,
+and Kuma took the push immediately. The rule fired one minute later, after the next `node-pi`
+scrape and rule evaluation. The one strict Q2 minute is 2026-10-25 20:21. Kuma took the 20:20
+`up` push before Prometheus scraped the new textfile. Both minutes are the scrape and evaluation
+lag that the margin absorbs, so Q1 ±8m and Q2 ±8m are 0.
+
+Kuma exported no sample for either tile for 44 minutes (10036 of 10080), and Q1 cannot see
+those minutes. Its scrape target read `up` 0 for 3 minutes and was missing for 12, and the
+other gaps are minutes when the scrape answered without the tiles' series. Other tiles show the
+same gaps: Daniel Pi Host has 10025 samples. `probe.py alerts --pi --check sd --days 8` lists
+no DOWN for `pi-sd-health`, and the Recovery episodes above are the only three for
+`pi-recovery-health`.
+
+**The deployed rules, read at 15:42Z.** All four rules carry `shadow: "true"`, and none was
+firing (`ALERTS{alertname=~"PiRecovery.*|PiSdHealth.*"}` returned no series).
+`homelab_check_success` read 1 for both checks, and `homelab_check_deadline_seconds` read 900,
+which matches the rules' 900-second literals.
+
+**Inhibit decision: B5 needs none.** The plan's B5 row assigns no inhibit, and no B5 rule
+double-pages a dead Pi. Both `NotReporting` rules carry
+`unless on (origin) (up{job="node-pi"} == 0)`. Both `Failed` rules read
+`homelab_check_success`, and that series leaves with the dead scrape. `PiHostDown` therefore
+pages alone.
+
+No minute is unexplained, so no rule changes. **The soak does not block Cutover-a.** B5 is a
+heartbeat batch, and the plan names its tile deletion Cutover-1a (*Cutover-1a, the tiles go*).
+
+### B5 cutover record
+
+B5 cuts over in three stacked PRs: Cutover-1a ([#6778](https://github.com/DanielH2018/server/pull/6778))
+deletes the two tiles, Cutover-1b drops `shadow` from the four rules, and Cutover-2 drops the
+push from the Pi package's two heartbeats.
+
+**The soak, re-read before Cutover-1a.** The same queries ran over `[168h:1m]` ending at
+2026-10-31T19:02Z, so the window starts at 2026-10-24T19:02Z. The ±8m columns use M2's
+`[16m:1m] offset -8m` form (*Which soak minutes count as explained* in M2), where the read above
+used `[17m:1m]`. The strict columns do not depend on that form, so compare the two tables by
+those.
+
+| Tile | Samples | DOWN min | Shadow firing min | Q1 strict | Q1 ±8m | Q2 strict | Q2 ±8m |
+|---|---|---|---|---|---|---|---|
+| Daniel Pi SD Health | 10032 | 0 | 0 | 0 | 0 | 0 | 0 |
+| Daniel Pi Recovery | 10032 | 100 | 101 | 0 | 0 | 1 | 0 |
+
+No new episode started. The later window start cuts off the first six minutes of the 2026-10-24
+canary episode, which removes the one strict Q1 minute (18:56) and seven DOWN minutes. The
+Recovery tile's three episodes are the ones above. `probe.py alerts --pi --check recovery --days 8`
+lists the same three. Its SD-health twin timed out reading Loki (exit 75, unreadable), so the SD
+tile's clean read rests on the metric: 0 DOWN minutes, no firing minute, and no `PiSdHealth*`
+series in `ALERTS`.
+
+**The deployed rules matched master.** `pi-checks.yaml` in the live `prometheus-rules` ConfigMap
+is byte-identical to the file on master, all four rules carry `shadow: "true"`, and none was
+firing. `up{job="node-pi"}` carries `origin="daniel-pi"`, so the `unless on (origin)` guard of
+both `NotReporting` rules matches. The live monitor-bridge carries `pi-sd-health` and
+`pi-recovery-health` in `KUMA_RETIRING_TAGS`.
+
+**Inhibit decision: none, and Cutover-1b adds none.** B8 added an inhibit of `PiPortDead` by
+`PiHostDown` because `PiPortDead` has no `up` gate. B5 has no such rule:
+
+- Both `NotReporting` rules carry `unless on (origin) (up{job="node-pi"} == 0)`.
+- Both `Failed` rules read `homelab_check_success`, which goes stale with the dead scrape. The
+  exporter-down case in `pi-checks.test.yaml` now holds all four rules quiet while `up` reads 0.
+- A dead Pi therefore pages as `PiHostDown` alone.
+- `PiRecoveryFailed` and `PiPortDead` can fire together when a container dies on a live Pi. They
+  report different facts (what died and whether its restart took, against a refused port), and
+  `PiRecoveryFailed` is a warning that posts to Discord alone. An inhibit between them would hide
+  the recovery heartbeat's message.
+
+**Channel mix.** `PiSdHealthFailed` and `PiSdHealthNotReporting` are critical, so they post to
+Discord and mail, as the tag-severity critical tile did. `PiRecoveryFailed` and
+`PiRecoveryNotReporting` are warnings, so they post to Discord alone, as the tile did.
+`test_alertmanager_routing_b5_pi.py` holds both outcomes and a shadowed copy's walk to the
+blackhole.
+
+**The no-pager bound.** B5's checks have no live pager from Cutover-1a's `uptime-kuma` apply to
+Cutover-1b's `observability` apply. If Cutover-1b has not applied within two hours of Cutover-1a's
+apply, revert Cutover-1a. The two `[2h]` `CheckWithoutPager` terms are the backstop, and
+Cutover-1b removes them with their promtool cases.
+
+**The revert order.** Revert Cutover-2 first and wait for the Pi to install the revert, because
+the Pi must push again before its tiles exist. Then revert Cutover-1b, which restores `shadow`
+and the two terms. Then revert Cutover-1a, which restores the tiles. Reverting Cutover-1a while
+Cutover-1b is live restores a second pager. Reverting it while Cutover-2 is live restores tiles
+that nothing pushes to, and both go DOWN within ten minutes.
+
+### B5 Cutover-2 record
+
+Cutover-2 removes the Kuma push, the token read and the push-library source from `pi-sd-health`
+and `pi-recovery-health`, and removes both tags from `HC_ROUTED_TAGS`. It deploys `monitor-bridge`
+(Flux applies the merge) and the `homelab-daniel-pi` package (the Pi's `homelab-updater.timer`
+installs it).
+
+**Host secrets.** The package's `credentials:` listed `pi_sd_health_push_token` and
+`pi_recovery_push_token` until the token PR, and the Pi's SOPS file held both. `host_secrets.py check` pins
+the list to the file, and changing the file takes the operator's `host_secrets.py sync daniel-pi`.
+B5's token PR, [#6949](https://github.com/DanielH2018/server/pull/6949), removed both keys from the list and the
+file in that one step. No unit loads either credential after Cutover-2.
+
+**The gap between the two applies.** The Pi's `health.log` lines for a lost push read
+`push failed (status=down: ...)`, with no `by=kuma`. `parse_push_line` reads them as `swallowed`,
+not `rejected`, so `KUMA_RETIRING_TAGS` exempts none of them, and `HC_ROUTED_TAGS` was the only
+exemption. Once `monitor-bridge` applies Cutover-2 and before the Pi installs the package, a Pi
+cycle that ends `down` pages `Swallowed Push Verdicts`, if that line is the newest `pi-*` line
+in the 3-hour window and a sibling tag landed. The page clears when the Pi installs the package,
+because the new lines read `status=down ...` and parse as runs. The window is the time from
+`monitor-bridge`'s apply to the Pi's install: the updater fires every 15 minutes, outside
+23:00 to 00:59 and 04:00 to 05:59, after the builder publishes the package. Land Cutover-2 while
+the last `pi-recovery-health` and `pi-sd-health` lines read `status=up`, and outside those two
+blackout windows.
+
+**How to verify the Pi applied it.** `scripts/deploy_tools/land_lib/host_wait.py:wait_for_hosts`
+waits on the first two reads, and `land.sh` ends `deferred` when it cannot wait:
+
+1. `homelab_host_applied_info{origin="daniel-pi"}` carries a `sha` that is the merge commit or
+   descends from it, and `homelab_host_reconcile_ok{origin="daniel-pi"}` reads 1.
+2. `homelab_host_update_success_timestamp_seconds{origin="daniel-pi"}` is newer than the
+   merge.
+3. `homelab_check_last_run_timestamp_seconds{check=~"pi-sd-health|pi-recovery-health"}` is newer
+   than that update time, so the new scripts ran after the install.
+4. `ssh daniel-pi tail -n 2 /var/log/pi-health/health.log` shows `status=` lines and no
+   `push failed`. `ssh daniel-pi grep -c kuma_push /usr/lib/homelab/pi-sd-health` prints 0.
+5. `Swallowed Push Verdicts` is not paging, and `ALERTS{alertname=~"PiSdHealth.*|PiRecovery.*"}`
+   returns no series while both checks read 1.
+
+**The revert.** Reverting Cutover-2 restores the push, the token read and both `HC_ROUTED_TAGS`
+entries. The Pi's SOPS file held both tokens until the token PR, so the revert needed no operator step. Revert it
+before Cutover-1b and Cutover-1a, and wait for the Pi to install the revert first (the revert
+order above).
+
+**Token PR.** [#6949](https://github.com/DanielH2018/server/pull/6949) retired this batch's push
+tokens. On 2026-11-02 the operator's commit removed the keys from `secrets.yml`, from the
+package's `credentials:` and, through `host_secrets.py sync daniel-pi`, from the Pi's SOPS file.
+A revert of a cutover above no longer brings back a working tile, because no token is left for
+it to push with.
+
+### B6a host crons
+
+B6a's soak read, [#6727](https://github.com/DanielH2018/server/issues/6727): B6a's shadow PR
+merged as `ef7c4c4964` at 2026-10-23T19:21Z. The `host-checks` group predates B6a, so its
+first evaluation does not mark the start of B6a's rules. `prometheus_rule_group_rules` for the
+group rose in one step from 15 to 19, B6a's four rules, between 19:33Z and 19:34Z, so B6a's
+rules first evaluated then. B1's step to 30 came later, at 19:54Z. The read used M1
+convention 6's two queries over `[168h:1m]` ending at 2026-10-31T16:07Z, with M2's 8-minute
+margin (*Which soak minutes count as explained* in M2). The window starts at
+2026-10-24T16:07Z, after B6a's first evaluation, so both tiles have the full 168 hours.
+Prometheus's oldest sample was 21.7 days old, and
+`increase(prometheus_rule_evaluation_failures_total{rule_group=~".*;host-checks"}[168h])` was 0.
+
+Each tile maps to the `Failed` and `NotReporting` pair that the shadow PR's rule comment in
+`host-checks.yaml` assigns to its producer, by the `check` label the producer writes:
+
+- `Artifacts Peer Sync`: `ArtifactsSyncFailed`, `ArtifactsSyncNotReporting`
+  (`check="sync-artifacts"`).
+- `k3s Telemetry OTLP Door`: `OtlpDoorClosed`, `OtlpDoorNotReporting`
+  (`check="claude-otel-health"`).
+
+| Tile | Samples | DOWN min | Shadow firing min | Q1 strict | Q1 ±8m | Q2 strict | Q2 ±8m |
+|---|---|---|---|---|---|---|---|
+| Artifacts Peer Sync | 10040 | 0 | 0 | 0 | 0 | 0 | 0 |
+| k3s Telemetry OTLP Door | 10010 | 0 | 0 | 0 | 0 | 0 | 0 |
+
+Neither tile read DOWN, and no B6a rule fired or went pending. `ALERTS` holds no series for
+any of the four rules over the window. The same read returns 1189 firing minutes for B1's
+`ManifestPruneCheckFailed` and 648 for `LiveDriftCheckFailed`, so `ALERTS` records shadow
+rules. The empty result means B6a's rules were quiet, not that the read misses them.
+
+**The rules read the live series.** A clean soak would also follow from a selector that
+matches nothing, so the rules' inputs were read directly:
+
+- `homelab_check_success{origin="daniel-box"}` holds 10068 one-minute samples for each check,
+  and none of them is anything but 1. The producers reported success all week, which agrees
+  with the tiles.
+- The largest age of `homelab_check_last_run_timestamp_seconds` over the window was 539s for
+  `sync-artifacts`, against the rule's 900s deadline, and 839s for `claude-otel-health`,
+  against 1500s.
+- Each textfile series is absent for 12 minutes, the same 12 minutes in which daniel-box's
+  `node` scrape had no `up` series. No absence outside that scrape gap remains, and 12
+  minutes is under both `absent_over_time` windows.
+- The red/green shapes for the four rules are in `host-checks.test.yaml`, which the shadow PR
+  added.
+
+**The samples each tile lacks from 10080 are maintenance and Kuma restarts.** Neither can
+hide a failure, because the producer's verdict was 1 throughout:
+
+- Both tiles read maintenance (3) on 2026-10-25 only: `Artifacts Peer Sync` for 44 minutes
+  from 07:26 to 08:15, and `k3s Telemetry OTLP Door` for 39 minutes from 07:31 to 08:20. That
+  is the weekly reboot window. Q1 counts only 0, so these minutes are not DOWN.
+- `Artifacts Peer Sync` had no `monitor_status` series for 40 minutes, and `k3s Telemetry OTLP
+  Door` for 70. `process_start_time_seconds{job="uptime-kuma"}` changed 11 times in the
+  window. Every absent minute falls within 30 minutes of a Kuma restart, or while Kuma's
+  scrape read 0 or had no `up` series. A push tile has no series after a restart until the
+  producer's next push, and the crons push every 5 and every 10 minutes, so 30 minutes covers
+  each gap. The OTLP tile lacks more because its cron runs half as often.
+
+**A stale `sync-artifacts` series from daniel-server is outside the mapping.** A selector
+without `origin` also returns `homelab_check_success{check="sync-artifacts",origin="daniel-server"}`.
+Its last run timestamp is 2026-10-25T02:23Z, and it has no sample after 2026-10-29T02:17Z.
+That is the stale check file daniel-server held until the role's removal task existed
+([#6355](https://github.com/DanielH2018/server/issues/6355)). All four rules select
+`origin="daniel-box"`, so the series never reached them.
+
+**The deployed rules, read at 16:09Z.** `kubectl get configmap -n observability
+prometheus-rules -o jsonpath='{.data.host-checks\.yaml}'` on daniel-box has the same SHA-256 as
+`host-checks.yaml` on master. All four B6a rules carry `shadow: "true"`.
+
+No minute is unexplained, so no rule changes. The soak does not block Cutover-a, which B6a
+runs as Cutover-1a (*Every other producer* in M6).
+
+B6a's cutover is Cutover-1a, Cutover-1b and Cutover-2. The first two are PRs of their own, and
+Cutover-2 rides in H7.40 slice 4's PR. `uptime-kuma` and `observability` are both `owner: flux`, so a merge is the apply and
+*The cutover order*'s `land.sh` lines do not hold for them:
+
+1. Cutover-1a, `m6-b6a-cutover-1a-tiles-go`: `claude-otel-health.json` and `artifacts-sync.json`
+   leave `static-monitors.yaml.j2`, with their two status-page patterns. `artifacts_sync_push_token`
+   and `claude_otel_push_token` enter `PENDING_RETIREMENT`, because no cluster render references
+   them once the tiles go. Every B6a rule stays shadow. Its live read is
+   `probe.py metric 'monitor_status{monitor_name=~"Artifacts Peer Sync|k3s Telemetry OTLP Door"}'`,
+   which must return no series.
+2. Cutover-1b, the PR that adds this section: the four `host-checks.yaml` rules drop `shadow`,
+   and the `kuma-cutover` group loses B6a's two terms.
+3. Cutover-2, in [#6788](https://github.com/DanielH2018/server/pull/6788): it drops the push from
+   `sync-artifacts.sh.j2` and `claude-otel-health.sh.j2`. See *Cutover-2 waits for H7.40 slice 4*
+   and *Cutover-2: the push stops* below.
+
+**The re-read of the soak, 2026-10-31T19:02Z.** The read above was repeated with the same
+queries (M1 convention 6 with M2's 8-minute margin, each tile mapped to its rule pair by the
+`check` label) over `[168h:1m]`. The window starts at 2026-10-24T19:02Z, after B6a's rules first
+evaluated at 2026-10-23T19:34Z. Prometheus's oldest sample was older than the window, and
+`increase(prometheus_rule_evaluation_failures_total{rule_group=~".*;host-checks"}[168h])` was 0.
+
+| Tile | Samples | DOWN min | Shadow firing min | Q1 strict | Q1 ±8m | Q2 strict | Q2 ±8m |
+|---|---|---|---|---|---|---|---|
+| Artifacts Peer Sync | 10036 | 0 | 0 | 0 | 0 | 0 | 0 |
+| k3s Telemetry OTLP Door | 10006 | 0 | 0 | 0 | 0 | 0 | 0 |
+
+No Q1 minute is new or unexplained. `ALERTS` holds no series for the four rules.
+`homelab_check_success{check=~"sync-artifacts|claude-otel-health",origin="daniel-box"}` holds
+10068 one-minute samples for each check, and none of them differs from 1. The largest age of
+`homelab_check_last_run_timestamp_seconds` over the window was 539s for `sync-artifacts` and 839s
+for `claude-otel-health`, against the rules' 900s and 1500s deadlines.
+
+**The deployed rules, read at 19:02Z.** `kubectl get configmap -n observability prometheus-rules`
+holds a `host-checks.yaml` with the same SHA-256 as master's, and 32 `shadow: "true"` labels on
+both sides. Its `kuma-cutover.yaml` lacks A6's `Host Packages — Status` term, which master gained
+in `4ad2c4091d`, so the live bundle lags master by that one commit. B6a's two terms are on both
+sides. `monitor-bridge`'s `verdicts/logs.py` ConfigMap on the cluster lists `sync-artifacts` and
+`claude-otel-health` in `KUMA_RETIRING_TAGS`, so the exclusion is deployed ahead of Cutover-1a, as
+*Order* requires.
+
+**Inhibit decision: none.** Both NotReporting rules carry `unless on (origin) (up{job="node"} ==
+0)`, and a dead node exporter leaves each Failed rule no series, so `ScrapeTargetDown` stays the
+one page. Kuma's two tiles had no exporter suppression either.
+
+**Soak effect: none.** All four rules are `warning`, and `renderer_lib/soak.py:longest_for` counts
+only critical rules, so Cutover-1b adds no wait to any promotion.
+
+**Routing.** `test_alertmanager_routing_b6a_host_crons.py` is a sibling of the routing module,
+which is at its line cap. It walks the four rules through the rendered routing tree: each
+reaches Discord alone, muted for the weekly reboot. A rule that regains `shadow` walks to the
+blackhole and fails it. The main module's `test_host_sets_names_every_host_check_rule` now lists
+the four among the paging host-plane rules.
+
+**The two-hour no-pager bound** counts from the moment the `uptime-kuma` Kustomization reports
+Cutover-1a's merge commit, because Kuma stops paging both checks then and every B6a rule is still
+shadow. It ends when the `observability` Kustomization reports Cutover-1b's merge commit.
+`CheckWithoutPager` pages critical two hours after the last `monitor_status` sample of either
+tile. If Cutover-1b has not deployed within two hours, revert Cutover-1a. Its rules are still
+shadow, so the revert restores Kuma as the only pager, and the tiles go green on the crons' next
+push because both tokens stayed in `secrets.yml` until B6a's token PR. If Cutover-2 has merged by
+then, revert it first, so the crons push again.
+
+**Cutover-2 waits for H7.40 slice 4.** The plan's plane for Cutover-2 is the tick: `claude_code`
+routes to `initial_setup.yml` (`setup_routing.py --host daniel-box`), and on this tree the two
+crons are still tasks of `roles/setup/claude_code/tasks/node_crons.yml`, which
+`claude_code_packaged_hosts` does not exclude. [#6678](https://github.com/DanielH2018/server/issues/6678)
+(H7.40 slice 4) moves exactly those two crons into `hosts/components/claude-code/`. Cutover-2
+edits `sync-artifacts.sh.j2` and `telemetry-health.sh.j2`, which that slice moves, so it is not
+written in parallel. After slice 4 the crons ship in `homelab-daniel-box`, and Cutover-2's plane
+becomes that package (the builder publishes it and the host's updater installs it), not the
+tick. Until Cutover-2 lands, both crons push into deleted tokens: `kuma_push` logs `push failed`,
+and `KUMA_RETIRING_TAGS` keeps `swallowed_verdicts` from paging it. No step depends on a tile's
+interval, so the delay leaves no check unpaged, but it misses the plan's "land Cutover-2 the same
+day".
+
+**Cutover-2: the push stops.** The two producers are timers in daniel-box's host package, moved
+there by H7.40's fourth slice ([#6788](https://github.com/DanielH2018/server/pull/6788)), so
+this Cutover-2 rides in that PR instead of editing the cron scripts a second time. Cutover-1a
+([#6784](https://github.com/DanielH2018/server/pull/6784)) deleted both tiles, and Cutover-1b
+([#6787](https://github.com/DanielH2018/server/pull/6787)) made the four rules page.
+`sync-artifacts` and `claude-otel-health` drop the `kuma-push-lib.sh` source, the push URL and
+the token. Each keeps `write_check_textfile` and logs `status=<up|down> <message>` under its own
+syslog tag. The sync script did not log a clean run before, and the heartbeat did not either,
+because `kuma_push` logged only a failed push, so the journal line is new for both.
+
+Neither unit loads a credential now, so `package.yml` drops `artifacts_sync_push_token` and
+`claude_otel_push_token` from `credentials:`, and the SOPS file needs no `host_secrets.py sync`.
+Both keys stayed in `PENDING_RETIREMENT` until B6a's token PR retired them.
+
+**Which plane applies it.** The merge changes the `homelab-daniel-box` package, so daniel-box's
+updater installs the two rewritten units and scripts, and `land.sh` waits for that apply. No
+tick and no hand apply is involved.
+
+**How to verify the push stopped.** After the package installs and the next run of each timer:
+
+1. `journalctl -t sync-artifacts` and `journalctl -t claude-otel-health` show a `status=up` line
+   and no `push failed (... by=kuma ...)` line. Cutover-1a's runs showed that line, because the
+   pushes went into a deleted token.
+2. `homelab_check_success` for both checks stays 1, and `homelab_check_last_run_timestamp_seconds`
+   advances to that run.
+3. `unitq cat homelab-sync-artifacts.service` and `unitq cat homelab-claude-otel-health.service`
+   show no `LoadCredential=` line.
+
+**The test.** `test_neither_producer_pushes_to_kuma` in
+`hosts/lib/tests/test_claude_artifacts_node_timers.py`, which C-6 retired, held both shipped scripts to no Kuma library, `kuma_push` or push URL. Its red case is
+`test_a_script_that_pushes_to_kuma_is_flagged`. The two script tests read the verdict back from
+the journal line a `logger` stub records, in place of a stubbed `kuma_push`.
+
+**Token PR.** [#6949](https://github.com/DanielH2018/server/pull/6949) retired this batch's push
+tokens, and the operator's commit removed the keys from `secrets.yml` on 2026-11-02. A revert of
+a cutover above no longer brings back a working tile, because no token is left for it to push
+with.
+
+### B6b pod producers
+
+B6b's soak read, [#6728](https://github.com/DanielH2018/server/issues/6728): B6b's shadow PR
+merged as `9ebb51406c` at 2026-10-23T21:15Z. Prometheus first evaluated the `pod-producers` group
+at 2026-10-23T21:22:47Z. The read used M1 convention 6's two queries over `[168h:1m]` ending at
+2026-10-31T16:08Z, with M2's 8-minute margin (*Which soak minutes count as explained* in M2). The
+window starts at 2026-10-24T16:08Z, after the group's first evaluation, so every tile has the
+full 168 hours. All five tiles read up when the queries ran. Prometheus's oldest sample was 21.7
+days old, and
+`increase(prometheus_rule_evaluation_failures_total{rule_group=~".*;pod-producers"}[168h])` was 0.
+
+Each tile maps to the rules that the shadow PR's comments in `pod-producers.yaml` assign to its
+producer. The three sidecar tiles share `CrowdSecJobsExporterAbsent` and take
+`CrowdSecJobStale` by the `check` label the sidecar exports:
+
+- `CrowdSec Remote Allowlist`: `CrowdSecRemoteAllowlistFailed`,
+  `CrowdSecJobStale{check="crowdsec-remote-allowlist"}`, `CrowdSecJobsExporterAbsent`.
+- `CrowdSec AppSec`: `CrowdSecAppSecVerifyFailed`,
+  `CrowdSecJobStale{check="crowdsec-appsec-verify"}`, `CrowdSecJobsExporterAbsent`.
+- `CrowdSec Home Allowlist`: `CrowdSecHomeAllowlistFailed`,
+  `CrowdSecJobStale{check="crowdsec-home-allowlist"}`, `CrowdSecJobsExporterAbsent`.
+- `Configarr Sync`: `ConfigarrSyncFailed`, `ConfigarrHealthNotReporting`.
+- `Janitorr Errors`: `JanitorrErrorsFound`, `JanitorrHealthNotReporting`.
+
+| Tile | Samples | DOWN min | Shadow firing min | Q1 strict | Q1 ±8m | Q2 strict | Q2 ±8m |
+|---|---|---|---|---|---|---|---|
+| CrowdSec Remote Allowlist | 10040 | 291 | 240 | 69 | 40 | 18 | 0 |
+| CrowdSec AppSec | 9986 | 0 | 0 | 0 | 0 | 0 | 0 |
+| CrowdSec Home Allowlist | 10034 | 15 | 15 | 0 | 0 | 0 | 0 |
+| Configarr Sync | 10015 | 0 | 0 | 0 | 0 | 0 | 0 |
+| Janitorr Errors | 10010 | 0 | 0 | 0 | 0 | 0 | 0 |
+
+Every firing minute belongs to a `Failed` rule. `CrowdSecJobStale` never fired: the largest
+value of the job's age minus its deadline over the window was negative for all three jobs.
+The two `NotReporting` rules never fired: the oldest successful run either CronJob reached was
+833 seconds, against the rules' 1800. `CrowdSecJobsExporterAbsent` never fired:
+`absent(up{job="crowdsec-jobs"})` held for 4 minutes on 2026-10-25 from 07:40 and 8 minutes on
+2026-10-28 from 00:45, under its `for: 10m`, both inside spans when Prometheus itself had no
+samples. The episodes, all times UTC:
+
+- **CrowdSec Remote Allowlist and CrowdSec Home Allowlist, 2026-10-25 from 14:16.** Both jobs
+  logged `kubectl … failed rc=1: Error from server (ServiceUnavailable)` while the API server
+  was out. Remote Allowlist's tile and alert cover 14:16 to 14:30. Home Allowlist's cover 14:17
+  to 14:31.
+- **CrowdSec Remote Allowlist, fourteen episodes from 2026-10-30 17:21 to 2026-10-31 15:40.**
+  Each run logged `status=down remote-ips at cap (8)`, with the address it could not add.
+  [#6709](https://github.com/DanielH2018/server/issues/6709) owns that fault: the allowlist
+  spends its cap on home addresses that `home-ips` already covers. In each episode the alert
+  starts and ends one minute after the tile, so 14 Q1 strict and 13 Q2 strict minutes fall
+  inside the margin.
+
+**The 40 Q1 ±8m minutes are pushes Kuma rejected.** They run from 21:09 to 21:48 on 2026-10-30,
+inside one DOWN span of the Remote Allowlist tile from 20:51 to 22:30. The job reported
+`status=up remote-ips: 8 live` at every run from 21:00 to 21:50, and the sidecar exported
+`homelab_check_success` 1, so `CrowdSecRemoteAllowlistFailed` resolved at 21:01 and fired again
+at 21:57. Kuma kept the tile DOWN because it rejected all 12 pushes from 21:00 to 21:56 with
+HTTP 404 and `SQLITE_CONSTRAINT: UNIQUE constraint failed: stat_hourly.monitor_id,
+stat_hourly.timestamp`. Each rejected insert named monitor 480, the Remote Allowlist tile, and
+the hour bucket 21:00Z. Kuma's own log has the same error, for that monitor and that bucket only.
+The rejections began 26 minutes after a Kuma restart at 20:33:53. They ended at the hour: the
+22:00 push landed. The tile showed a stale DOWN, and the rule read the job correctly. Swallowed
+Push Verdicts stayed up by design, because it does not count a rejected push from a tag in
+`KUMA_RETIRING_TAGS`, and the one lost `down` push at 21:56 was followed by the 22:00 push,
+which landed.
+
+**The 5 remaining Q2 strict minutes are a Kuma restart.** Kuma restarted at 01:06:10 on
+2026-10-31, and the Remote Allowlist tile had no `monitor_status` series from 01:07 to 01:10.
+`CrowdSecRemoteAllowlistFailed` kept firing through 01:11 for the at-cap episode that started at
+00:46. A missing series is not DOWN, so Q2 strict counts those minutes, and the margin covers
+them. Kuma restarted 11 times in the window, which explains the samples each tile lacks from
+10080.
+
+**Both sides were blind on 2026-10-28 from 00:40 to 00:52.** The Home Allowlist job logged
+`status=down` at 00:41 and 00:46, because cluster DNS lookups timed out. Its pushes failed with
+`URLError`, and Prometheus kept no samples from 00:40 to 00:52. Neither query can see those runs,
+and neither side reported them.
+
+**The Configarr Sync and Janitorr Errors rows are clean but do not show coverage.** Neither tile
+nor verdict went down all week, so their 0s test nothing. Over the window the verdict series
+`kube_configmap_annotations` held 5067 minute-samples for `configarr-health-verdict` and 4931 for
+`janitorr-health-verdict`, of 10080. Over `[24h:1m]` it held 706 and 669 of 1440, and the
+control, `pi-peer-backup-verdict`, held 1440. Each gap starts at a Flux server-side apply of the
+role's Kustomization and ends at the reader's next `*/10` run. On 2026-10-31, configarr applied
+at 15:17:18, 15:27:13 and 16:03:57, and its series was missing from 15:17 to 15:19, from 15:27 to
+15:29, and from 16:04 to 16:09. The readers write the annotations with `kubectl patch`, which
+records them under the field manager `kubectl-patch`. Flux strips fields owned by kubectl
+managers on each apply. pi-peer-backup sends its PATCH with curl and loses nothing.
+`ConfigarrSyncFailed` and `JanitorrErrorsFound` have no `for:`, so a real `down` verdict would be
+visible only until the next Flux apply, and the rule would flap or miss it. The fix is in the two
+readers, not in a rule. [#6746](https://github.com/DanielH2018/server/issues/6746) tracks it.
+
+**The deployed rules, read at 16:11Z.** `kubectl get configmap -n observability
+prometheus-rules -o jsonpath='{.data.pod-producers\.yaml}'` is byte-identical to
+`pod-producers.yaml` on master. All ten B6b rules carry `shadow: "true"`, and no B6b alert was
+pending or firing.
+
+No Q1 minute is unexplained, so no rule changes. The soak does not block Cutover-a, which B6b
+runs as Cutover-1a (*Every other producer* in M6), for the three crowdsec tiles. It does block
+Cutover-1a for Configarr Sync and Janitorr Errors until
+[#6746](https://github.com/DanielH2018/server/issues/6746) lands and a fresh read shows their
+verdict series present every minute, as the control's is.
+
+**The soak re-read and the gate, 2026-11-01T13:12Z.** The combined window's cutover PRs repeated
+the queries above over `[168h:1m]` ending at 13:12Z (window start 2026-10-25T13:12Z, after the
+group's first evaluation), with the same tile-to-rule mapping and M2's 8-minute margin.
+Prometheus's oldest sample was 22 days old, and all five tiles read up when the queries ran.
+
+| Tile | Samples | DOWN min | Shadow firing min | Q1 strict | Q1 ±8m | Q2 strict | Q2 ±8m |
+|---|---|---|---|---|---|---|---|
+| CrowdSec Remote Allowlist | 10015 | 392 | 345 | 75 | 40 | 28 | 0 |
+| CrowdSec AppSec | 9945 | 0 | 0 | 0 | 0 | 0 | 0 |
+| CrowdSec Home Allowlist | 10007 | 15 | 15 | 0 | 0 | 0 | 0 |
+| Configarr Sync | 9988 | 0 | 0 | 0 | 0 | 0 | 0 |
+| Janitorr Errors | 9983 | 0 | 0 | 0 | 0 | 0 | 0 |
+
+Q1 ±8m is 40 for CrowdSec Remote Allowlist alone, the same 40 minutes of 2026-10-30 21:09 to 21:48
+that the earlier read attributes to pushes Kuma rejected (the `stat_hourly` constraint error).
+A read over the 20 hours since the earlier read's end shows 4 strict Q1 and 5 strict Q2 minutes
+for that tile, all inside the margin: the sidecar logged `remote-ips at cap` through 2026-10-31
+18:40Z, and [#6709](https://github.com/DanielH2018/server/issues/6709) closed at 18:54Z. The
+sidecar has logged no `status=down` line since 18:40Z.
+
+**The gate for Configarr Sync and Janitorr Errors holds.** The earlier read held their cutover
+until [#6746](https://github.com/DanielH2018/server/issues/6746) landed and the verdict series
+was present every minute, as the control's is. The fix merged as `e97ecb9a81` at
+2026-10-31T19:16Z (the readers now patch with `--field-manager=configarr-health` and
+`--field-manager=janitorr-health`).
+
+- Over `[17h:1m]` (window start 2026-10-31T20:16Z), the count of minutes in which
+  `kube_configmap_annotations{configmap="pi-peer-backup-verdict"}` exists and the configarr or
+  janitorr verdict does not is empty for both. The control and the two series are present in the
+  same minutes, which is the parity the earlier read asked for.
+- Over `[18h:1m]` the same count is 5 for configarr and 7 for janitorr, all before 20:16Z, so the
+  fix went live between 19:16Z and 20:16Z. Flux's applies of the role's Kustomization since then
+  have not removed a verdict.
+- Over `[6h:1m]` each of the two holds 358 of 360 minutes, and the control and
+  `up{job="kube-state-metrics"}` hold the same 358, so the 2 missing minutes are common to every
+  series and are not a Flux apply. They fall in the 07:15Z to 08:15Z hour of this morning's
+  weekly reboot.
+- The issue's own verify-by is a 24-hour window that starts after the fix's promote. It cannot be
+  complete before 2026-11-02T20:16Z. The parity read above is the evidence this gate uses, and
+  the 24-hour read stays open for the issue.
+
+**CrowdSec v1.8.2 ([#6812](https://github.com/DanielH2018/server/issues/6812)) did not disturb the
+sidecar.** The `crowdsec` pod started at about 07:37Z today (the weekly reboot) and runs 2 of 2
+containers with 0 restarts. All three jobs export `homelab_check_success` 1, with last runs 131,
+190 and 790 seconds old against their deadlines. `up{job="crowdsec-jobs"}` was 0 for one minute
+in the last 18 hours, under `CrowdSecJobsExporterAbsent`'s `for: 10m`, and no
+`CrowdSec*`, `Configarr*` or `Janitorr*` alert was pending or firing in that time.
+
+**The deployed state, read at 13:20Z.** `pod-producers.yaml` in the live `prometheus-rules`
+ConfigMap is byte-identical to master's file, and `KUMA_RETIRING_TAGS` in the live monitor-bridge
+ConfigMap is identical to master's, which lists `crowdsec-remote-allowlist`,
+`crowdsec-appsec-verify`, `crowdsec-home-allowlist`, `configarr-health` and `janitorr-health`.
+
+B6b cuts over in the combined window of B2, B4 and B6b. The window has four stacked PRs:
+
+1. Cutover-1a deletes the five tiles (`crowdsec-remote-allowlist`, `crowdsec-appsec`,
+   `crowdsec-home-allowlist`, `configarr` and `monitor-bridge-janitorr`) with every rule still
+   shadow. The pods keep pushing into deleted tokens until Cutover-2. Its live read is
+   `probe.py metric 'monitor_status{monitor_name=~"CrowdSec .*|Configarr Sync|Janitorr Errors"}'`,
+   which must return no series after the `uptime-kuma` promote. The pods' own Secrets still
+   render the five tokens, so none enters `PENDING_RETIREMENT`.
+2. Cutover-1b drops `shadow` from the nine rules and removes the five `CheckWithoutPager` terms.
+3. The Flux-plane Cutover-2 stops the pushes from the crowdsec sidecar and the two CronJobs.
+4. B6b's token PR, [#6949](https://github.com/DanielH2018/server/pull/6949), retired the keys.
+
+Flux does not promote on Sunday between 02:05 and 08:15 UTC, so a Flux-owned half that merges in
+that span waits for 08:15Z, and a revert waits with it.
+
+**Cutover-1b, the rules page.** The combined window's second PR drops `shadow` from the nine rules in `pod-producers.yaml` and
+removes the five `CheckWithoutPager` terms of B6b (the three CrowdSec tiles, Configarr Sync and Janitorr Errors). Every rule file is `files/rules/pod-producers.yaml`.
+`CrowdSecAppSecVerifyFailed`, `CrowdSecJobStale` and `CrowdSecJobsExporterAbsent` are `critical`; the other six are `warning`.
+
+**Inhibits.** None is added. `CrowdSecJobsExporterAbsent` fires on `absent(up{job="crowdsec-jobs"})` and `ScrapeTargetDown` on `up == 0`, so one dead exporter never fires both arms. The two CronJob rules end in `unless on () (up{job="kube-state-metrics"} == 0)`, which leaves a dead kube-state-metrics to `ScrapeTargetDown`.
+
+The no-pager bound is 2 hours from Cutover-1a's `uptime-kuma` apply. Cutover-1b is `observability`,
+which Flux applies through `promote`, so it waits out Sunday 02:05 to 08:15 UTC like the rest of
+the window.
+
+**Cutover-2, the Flux-plane producers.** The combined window's last B6b PR stops the pushes.
+The crowdsec-jobs sidecar no longer imports `kuma_push` or reads a push URL: `Job.exports`
+replaces `Job.push_env`, and `run_job` prints the verdict and records it for `/metrics`. The
+`crowdsec-jobs` Secret (`jobs-secret.yaml.j2`) is gone. The `configarr-health` and
+`janitorr-health` readers log `status=<up|down>` and patch the verdict ConfigMap, and their
+`health-secret.yaml.j2` files and `KUMA_PUSH_URL` variables are gone. The three producers
+leave uptime-kuma's `netpol_from` list in `daniel-box.yml`, since none dials Kuma now.
+
+`kuma_push.py` stays in the two health ConfigMaps, because `host_lib.py` imports it at module
+level; no reader calls it. The five keys (`crowdsec_remote_allowlist_push_token`,
+`monitor_bridge_appsec_push_token`, `monitor_bridge_home_allowlist_push_token`,
+`monitor_bridge_configarr_push_token`, `monitor_bridge_janitorr_push_token`) enter
+`PENDING_RETIREMENT`, and `B6B_TILE_DELETED_PUSH_TOKENS` is deleted. B6b's token PR,
+[#6949](https://github.com/DanielH2018/server/pull/6949), retired the keys.
+
+The five tags stay in `KUMA_RETIRING_TAGS` until C-7, because pods that ran before the apply may
+still hold a log line from a refused push. The readers' `status=` lines still count as landed
+siblings in `swallowed_verdicts`; that is harmless, since the check pages only on a failed push.
+
+**Token PR.** [#6949](https://github.com/DanielH2018/server/pull/6949) retired this batch's push
+tokens, and the operator's commit removed the keys from `secrets.yml` on 2026-11-02. A revert of
+a cutover above no longer brings back a working tile, because no token is left for it to push
+with.
+
+### B6c registry GC
+
+B6c joined M6 on 2026-11-02 (#6926). D5's registry PRs retired the push store's GC phase
+only, and the mirror phases of `registry-gc.sh` kept pushing to the `Registry GC` tile, so
+C-1a's gate could never clear while the plan left the push to D5.
+
+**The shadow PR** is the PR that adds this file. It changes four things:
+
+- `registry-gc.sh.j2` sources `homelab-check-lib.sh` and calls
+  `write_check_textfile registry-gc` in `finish`, before the push and on every run, with a
+  `DEADLINE_S` of 612000, the tile's interval. A run with no token or a refused push still
+  writes the file.
+- `rules/registry.yaml` gains `RegistryGcFailed` and `RegistryGcNotReporting`, both
+  `warning` and `shadow: "true"`, with promtool cases in `registry.test.yaml`.
+- `KUMA_RETIRING_TAGS` gains `registry-gc`.
+- `kuma-cutover.yaml` gains the `[340h10m]` term for `Registry GC`.
+
+The tick applies the script change (`k8s_host_files`), and Flux applies the two k8s halves
+through `promote`. NotReporting fires in shadow from its deploy until the first Sunday run
+writes the file.
+
+**Still to come, in order:**
+
+1. The soak read, one week after the first Sunday run that writes the textfile.
+2. Cutover-1a: delete `registry-gc.json` and the `^registry-gc$` status-page pattern from
+   `uptime-kuma`, and move `registry_gc_push_token` to `PENDING_RETIREMENT`. The tag must
+   have been in the deployed `KUMA_RETIRING_TAGS` for a week first.
+3. Cutover-1b: drop `shadow` from both rules and remove the `Registry GC` term.
+4. Cutover-2: drop the push, `PUSH_TOKEN`, `KUMA_HOST` and the `kuma-push-lib.sh` source from
+   `registry-gc.sh.j2`. The healthchecks.io dead-man stays.
+   `.claude/hooks/tests/test_block_protected_bash.py` asserts the token in the script's
+   protected paths, so the same PR updates it. With no token in the render, the script is no
+   longer a STUB, and `probe.py applied` compares it (#6917).
+5. The token PR retires `registry_gc_push_token`. C-1a waits for it. The operator waived the
+   week after Cutover-1b on 2026-11-02, because Cutover-1a (#6963), Cutover-1b (#6965) and
+   Cutover-2 (#6972) had all landed. It is the last retirement the plans schedule, so it also
+   deletes `scripts/secrets_mgmt/pending_retirement.py`, its readers in `consumers.py`,
+   `cluster_vars.py` and `cluster_vars_check.py`, its `HOST_INPUTS` entry in
+   `scripts/renderer/renderer_lib/host_inputs.py`, and the tests that hold it. M5's plan
+   scheduled that deletion for its PR 5. #6371 closed with the clause moved here.
+
+**Cutover-1a, the tile goes** (branch `m6-b6c-cutover-1a-tiles-go`). It deletes the `registry-gc`
+declaration from `static-monitors.yaml.j2` and the `^registry-gc$` status-page pattern.
+"Backups & Storage" keeps `match: []`, because four monitor-bridge rows pin themselves into it.
+`registry_gc_push_token` enters `PENDING_RETIREMENT`, because no cluster render references it
+once the tile goes. `registry-gc.sh.j2` keeps pushing into the deleted token until Cutover-2.
+`KUMA_RETIRING_TAGS` lists `registry-gc`, so `swallowed_verdicts` does not page the refused push.
+Both rules stay `shadow`, so this PR adds no pager and removes one.
+
+**What the tile's removal moved in the tests.** The floors that counted the tile fell by one:
+the monitor census (`>= 28` to `>= 27`), the declaration index (`> 30` to `> 29`), the renderer's
+index (`> 25` to `> 24`), and the three push-tile or token-name floors (`>= 20` to `>= 19`). The
+tile was a named member of two censuses, so `GATED_MEMBERS` swaps it for `aide-daniel-pi.json`,
+`_INCIDENT_TILE` becomes `aide-daniel-pi`, and `KNOWN_IDS` drops it. The worst-run guard read the
+tile's interval twice. It now reads the script's `DEADLINE_S`, which the same guard already
+equated to the rule literals. `test_the_deleted_b6c_tile_is_not_declared` fails if the tile is
+declared again.
+
+**The gates are not read, and cannot pass yet.** Read on 2026-11-02 at 18:29Z:
+
+- `homelab_check_last_run_timestamp_seconds{check="registry-gc",origin="daniel-box"}` reads
+  1793643955 (2026-11-02T18:25:55Z) and `homelab_check_success` reads 1. The textfile exists, but
+  it came from a run outside the Sunday 04:20 schedule. The first scheduled run that writes it is
+  2026-11-08, so the soak read is due on or after 2026-11-15.
+- The live `monitor-bridge-script-verdicts-logs` ConfigMap lists `registry-gc` in
+  `KUMA_RETIRING_TAGS`. #6931 landed on 2026-11-02, so the tag has been deployed for a week on
+  2026-11-09 at the earliest, and Cutover-1a waits for that.
+- `monitor_status{monitor_name="Registry GC"}` reads 1, and `ALERTS{alertname=~"RegistryGc.*"}` is
+  empty. The tile is live and both rules are quiet.
+
+The operator reads the soak, with M2's 8-minute margin over `[168h:1m]`, before merging. The
+two-hour no-pager bound counts from the `uptime-kuma` apply of this PR. It ends at the
+`observability` apply of Cutover-1b. If Cutover-1b has not applied by then, revert this PR. Its
+rules are still `shadow`, so the revert restores Kuma as the only pager, and the tile goes green
+on the next push because the token stays in `secrets.yml` until the token PR. A Cutover-2 that
+has merged is reverted first, so the cron pushes again.
+
+**Cutover-1b, the rules page** (branch `m6-b6c-cutover-1b-rules-page`, stacked on Cutover-1a).
+`RegistryGcFailed` and `RegistryGcNotReporting` drop `shadow`, and the `kuma-cutover` group
+loses B6c's `Registry GC` term. The group stays, because B9's six terms and Phase A's terms
+remain. Both rules are `warning`, which posts to Discord alone, the channel mix the tile had.
+
+**Routing.** `test_alertmanager_routing_b6c_registry_gc.py` is a sibling of the routing module,
+which is at its line cap. It walks both rules through the rendered routing tree: each reaches
+Discord alone, muted for the weekly reboot. A rule that regains `shadow` walks to the blackhole
+and fails it. The main module's censuses read no `registry.yaml` rule, so none needs a row.
+
+**Inhibits: none added.** `RegistryGcNotReporting` ends in `unless on (origin) (up{job="node"}
+== 0)`, and a dead node exporter leaves `RegistryGcFailed` no series, so `ScrapeTargetDown`
+stays the one page. The generic `HostCheckOverdue` deadman is already muted beside the
+`NotReporting` pair by the inhibit on `equal: [check, origin]`.
+
+**Soak effect: none.** Both rules are `warning` and carry no `verify` label, so neither the
+health gate nor the soak reads them, and `renderer_lib/soak.py:longest_for` counts critical
+rules only. A firing `RegistryGcFailed` therefore does not block `registry`'s `promote`.
+
+**Precondition.** `RegistryGcNotReporting` pages when the textfile is older than 612000s, which
+is 7 days 2 hours. The file was last written 2026-11-02T18:25:55Z, so it ages out at
+2026-11-09T20:25Z unless a run refreshes it. The scheduled run of 2026-11-08 04:20 comes first.
+A merge before a file exists at all pages at once, because the rule's absent arm fires on no
+series.
+
+**Cutover-2, the push stops** (branch `m6-b6c-cutover-2-setup-plane`, stacked on Cutover-1b).
+`registry-gc.sh.j2` loses `PUSH_TOKEN`, `KUMA_HOST`, `KUMA_RESOLVE_IP`, the `kuma-push-lib.sh`
+source and the push call. It keeps the textfile write and the healthchecks.io dead-man.
+
+**Which plane applies it.** `k8s_host_files` is a setup role, and `setup_routing.py --host
+daniel-box` places it on the tick (`initial_setup.yml --tags k8s_host_files`, `on_tick_host`
+true). `deploy_changes.setup_tags_for` maps the script's path to `k8s_host_files`, with
+`broad_setup` set and `broad_manual` clear. No hand apply is owed, and the playbook entry is
+gated to daniel-box, so no other host owes the role.
+
+**Four things follow from a render that holds no token.**
+
+- `tasks/registry.yml` loses the script task's `no_log` and the three tasks that recorded the
+  script's SHA-256, because the render holds no STUB now and `probe.py applied` hashes it. The
+  old record file stays on daniel-box, and nothing reads it.
+- The script was the last secret-bearing host script, so the census behind the hook's arm 2
+  (`secret_bearing_host_paths`) is empty. The hook's tests run over a fixture checkout whose
+  Ansible tree installs a script with a fake token. Each flagged and clean pair stays.
+- These assertions retired because their subject is gone: `MUST_FIND`'s `registry-gc.sh` entry and
+  its test, `test_tiering_the_address_did_not_drop_its_script_from_the_census`, the
+  `len(census) >= 1` line of the world-readable test, `KNOWN_SECRET_SCRIPTS` with
+  `test_the_census_finds_the_known_members`, and the two hook tests that derived a set from the
+  hook's own tree (`..._in_a_subdirectory_of_the_hooks_checkout_...` and `..._in_no_checkout_...`).
+  `test_the_k8s_host_files_apply_writes_the_sha256_record` retired with the record task.
+- The push corpus of `test_cron_scripts_publish_via_pr.py` falls from 5 to 4 templates. Its named
+  members become the aide and rkhunter checks, and `_MIN_CORPUS` stays 3.
+
+**How to verify.** After the tick applies it and the next run: `journalctl -t registry-gc` shows
+no `push failed` line, `probe.py applied` reads `/usr/local/bin/registry-gc.sh` as `ok`, and
+`homelab_check_last_run_timestamp_seconds{check="registry-gc"}` advances. The token PR retires
+`registry_gc_push_token`.
+
+**The token PR, the last retirement.** The agent's half adds `registry_gc_push_token` to
+`scripts/secrets_mgmt/git_dates.py:RETIRED` and drops it from `CROSS_HOST_PUSH_TOKENS`. It deletes
+`PENDING_RETIREMENT` with `scripts/secrets_mgmt/pending_retirement.py`, the three readers, the
+`HOST_INPUTS` entry and the `pending` seam on `cluster_vars.write`. Three tests retire with
+their subject: `test_a_write_keeps_a_pending_retirement_key_and_drops_an_ordinary_one`,
+`test_a_retired_key_has_left_the_pending_allowance` and
+`test_consumer_tags_registry_gc_token_is_manual`. The operator's commit removes the key from
+`secrets.yml`, its row in `ansible/secret_rotation.yml` and its line in the cluster files. With
+the key gone, `git grep -n registry_gc_push_token -- ansible/roles ':!*/tests/*'` returns
+nothing, which is C-1a's quoted gate.
+
+### B7 pods
+
+B7's soak read, [#6729](https://github.com/DanielH2018/server/issues/6729): B7's shadow PR
+committed to master as `8f78be9641` at 2026-10-24T03:10Z. The `pods` group is new in that PR,
+so its first evaluation marks the start of B7's Prometheus rules: 2026-10-24T03:16:49Z, read from
+`min_over_time(timestamp(prometheus_rule_group_last_evaluation_timestamp_seconds{rule_group=~".*;pods"})[200h:1m])`.
+The read used M1 convention 6's two queries over `[168h:1m]` ending at 2026-10-31T16:22Z, with
+M2's 8-minute margin (*Which soak minutes count as explained* in M2). The window starts at
+2026-10-24T16:22Z, after the first evaluation, so every tile has the full 168 hours.
+Prometheus's oldest sample was 21.7 days old, and
+`increase(prometheus_rule_evaluation_failures_total{rule_group=~".*;pods"}[168h])` was 0.
+
+Each tile maps to the rules that `pods.yaml`'s rule comments assign to its producer. The two
+cloudflare-ddns tiles split by the `deployment` label:
+
+- `Arr Auto-Block`: `ArrAutoBlockFailing`, `AutofixBridgeDown`, `AutofixBridgeStale`.
+- `Cloudflare DDNS Direct`: `CloudflareDdnsUnavailable{deployment="cloudflare-ddns-direct"}`,
+  plus the LogQL rule `CloudflareDdnsDirectUpdateSilent` in loki-homelab's `homelab-logs.yaml`.
+- `Cloudflare DDNS Proxied`: `CloudflareDdnsUnavailable{deployment="cloudflare-ddns-proxied"}`,
+  plus the LogQL rule `CloudflareDdnsProxiedUpdateSilent`.
+- `WG Pi Peer Backup`: `PiPeerBackupFailed`, `PiPeerBackupNotReporting`.
+
+| Tile | Samples | DOWN min | Shadow firing min | Q1 strict | Q1 ±8m | Q2 strict | Q2 ±8m |
+|---|---|---|---|---|---|---|---|
+| Arr Auto-Block | 10042 | 0 | 1 | 0 | 0 | 1 | 1 |
+| Cloudflare DDNS Direct | 10036 | 2 | 0 | 2 | 2 | 0 | 0 |
+| Cloudflare DDNS Proxied | 10036 | 7 | 0 | 7 | 7 | 0 | 0 |
+| WG Pi Peer Backup | 7602 | 0 | 0 | 0 | 0 | 0 | 0 |
+
+The firing column counts `ALERTS` in Prometheus. The two LogQL rules never reach `ALERTS` (M5
+open question 1), so each was replayed through `probe.py loki-query` at a 1-minute step over the
+7 days. Neither expression held at any step. The same replay with the range cut to `[10m]`
+returned a hit for the proxied pod at 2026-10-28T00:49Z, mid-window, which shows the replay reads
+the whole week. Both Deployments kept at least one available replica all week, so
+`CloudflareDdnsUnavailable` had nothing to fire on.
+
+Q1 ±8m is 0 for Arr Auto-Block and WG Pi Peer Backup. The 9 Q1 minutes of the two cloudflare-ddns
+tiles fall in two episodes, all times UTC:
+
+- **Both cloudflare-ddns tiles, 2026-10-25 08:19 to 08:20.** The weekly reboot's maintenance
+  window held both tiles at maintenance (3) until 08:18. Kuma logged `Monitor #381 'Cloudflare
+  DDNS Proxied': Failing: No heartbeat in the time window` at 08:17:41, and the same for #388
+  Direct at 08:17:44. Both pods had logged `already up to date` and `Successfully sent a ping to
+  Uptime Kuma` at 08:14:48, inside the tiles' 360-second interval, and logged both again at
+  08:19:48. The tiles read up from 08:21. No other tile went DOWN at 08:19. The two drift tiles
+  that read DOWN then were in B1's real drift episode. The updaters ran every 5 minutes through
+  the episode, so the tile measured Kuma's maintenance exit rather than the producer. The LogQL
+  rules read the update line, which never stopped for 15 minutes.
+- **Cloudflare DDNS Proxied, 2026-10-30 15:18 to 15:22.** The proxied pod logged `Cloudflare
+  trace IPv4 detection timed out before any endpoint returned a valid response` and `No valid
+  IPv4 addresses were detected` at 15:16:47. favonia pinged Kuma with the failure, so the tile
+  read DOWN. The next cycle, at 15:21:42, logged `already up to date`. One failed cycle is the
+  shape the LogQL rule deliberately does not page: its 15-minute window needs three failed cycles
+  in a row, where the tile pages on one (*B7, the pods* in M6, and the rule's comment in
+  `homelab-logs.yaml`). The direct pod's cycles succeeded through the same minutes.
+
+The one Q2 minute is `ArrAutoBlockFailing` at 2026-10-25 07:46. The rule was right, and the tile
+had no data. The node reboot restarted autofix-bridge at 07:39:48. Its first cycle, at 07:39:53,
+logged `DOWN autofix-bridge error: <urlopen error [Errno -3] Try again>`, a DNS failure before
+the cluster's resolver was back. All three attempts to push that DOWN failed, the last at
+07:40:58. Kuma was restarting then, as `process_start_time_seconds` moving to 07:41:23 shows.
+`homelab_check_success` read 0 from 07:44 to 07:46, and the 07:45:58 cycle logged `OK queue
+clean (Sonarr, Radarr)`. The tile had no series from 07:40 to 07:46 and read maintenance from
+07:47, so Q2 counts the minute against a tile that read nothing. Q2 ±8m restricted to minutes
+the tile read up is 0.
+
+The episode needs no rule change for Cutover-1b. `ArrAutoBlockFailing` is `warning`, so once it
+drops `shadow` it takes the default Discord route. In `alertmanager-secret.yaml.j2` that route
+carries `mute_time_intervals: [weekly-reboot]`, as every paging route except the Watchdog does.
+The mute derives from the reboot cron's group vars and spans Sunday 07:25 to 08:15 UTC: a
+5-minute lead before the 07:30 cron, a 5-minute shutdown delay and a 40-minute recovery
+allowance. 2026-10-25 was a Sunday, so the 07:46 alert falls inside the mute, and live it would
+have paged nobody, as Kuma's maintenance window paged nobody.
+`ansible/tests/services/test_alertmanager_reboot_mute.py` holds the mute equal to Kuma's window.
+A failed cycle outside the reboot window pages on one sample, which matches the tile's
+`max_retries` of 0.
+
+The samples each tile lacks from 10080 are Kuma's. `process_start_time_seconds{job="uptime-kuma"}`
+moved eleven times in the window, and Prometheus itself had no samples from 07:40 to 07:42 on
+2026-10-25 and from 00:46 to 00:52 on 2026-10-28. A push tile has no series after a Kuma restart
+until its producer's next push. The 5-minute producers lose a minute or two per restart. WG Pi
+Peer Backup's CronJob succeeds once a night at about 04:00, so each restart blanks that tile
+until the next run. The five gaps begin at 07:40 on 2026-10-25, 00:45 on 2026-10-28, 21:33 on
+2026-10-29, 20:35 on 2026-10-30 and 12:37 on 2026-10-31. Together they hold the tile's missing
+2476 minutes. Through them the producer kept working.
+`changes(kube_cronjob_status_last_successful_time{cronjob="pi-peer-backup"}[168h])` is 7, the
+age of the last success never exceeded 86433 seconds, and the verdict annotation never read
+`down`. Arr Auto-Block's 44 maintenance minutes are the weekly reboot window, not DOWN.
+
+**The deployed rules, read at 16:22Z.** `kubectl get configmap -n observability
+prometheus-rules -o jsonpath='{.data.pods\.yaml}'` is byte-identical to `pods.yaml` on master,
+and `prometheus_rule_group_rules` reads 6 for the group. The `homelab-logs.yaml` key of `kubectl
+get configmap -n homelab loki-homelab-rules` is byte-identical to master. All eight B7 rules carry
+`shadow: "true"`, and no B7 alert was pending or firing.
+
+No minute is unexplained, so no rule changes. The soak does not block Cutover-a, which B7 runs
+as Cutover-1a (*Every other producer* in M6).
+
+### B7 cutover
+
+B7's cutover is three stacked PRs, all `owner: flux` roles, so each merge is the apply once
+Flux reports the commit: Cutover-1a ([#6779](https://github.com/DanielH2018/server/pull/6779),
+the four tiles go), Cutover-1b
+([#6786](https://github.com/DanielH2018/server/pull/6786), the rules page) and Cutover-2 (this
+PR, the push stops). The record sits in the last PR so that the first two stay free of
+conflicts on this file.
+
+**The soak re-read, 2026-10-31T19:02Z.** The read repeated the one above with the same method
+(M1 convention 6 with M2's 8-minute margin, the tiles mapped to the same rules) over
+`[168h:1m]`, so the window began 2026-10-24T19:02Z, after the `pods` group first evaluated. The
+counts equal the first read's.
+
+| Tile | Samples | DOWN min | Shadow firing min | Q1 strict | Q1 ±8m | Q2 strict | Q2 ±8m |
+|---|---|---|---|---|---|---|---|
+| Arr Auto-Block | 10037 | 0 | 1 | 0 | 0 | 1 | 1 |
+| Cloudflare DDNS Direct | 10035 | 2 | 0 | 2 | 2 | 0 | 0 |
+| Cloudflare DDNS Proxied | 10035 | 7 | 0 | 7 | 7 | 0 | 0 |
+| WG Pi Peer Backup | 7442 | 0 | 0 | 0 | 0 | 0 | 0 |
+
+Every Q1 and Q2 minute is one of the episodes above, and the last 170 minutes hold no DOWN
+minute on any of the four tiles. Kuma restarted again at 17:16:31Z, after the first read
+(`process_start_time_seconds` moved 12 times in the window), which accounts for the lower
+sample counts. The two LogQL rules were replayed through `probe.py loki-query --json --step 1m`
+in eight one-day chunks, and neither held at any step. The control is the proxied expression cut
+to `[10m]`, which held for 3 steps in the chunk containing 2026-10-28T00:49Z.
+
+**Live state before Cutover-1a.** The `pods.yaml` and `homelab-logs.yaml` keys of the deployed
+ConfigMaps hashed equal to master, and every B7 rule carried `shadow`. The live
+`monitor-bridge-script-verdicts-logs` ConfigMap hashed equal to `verdicts/logs.py` on master,
+which lists `pi-peer-backup` in `KUMA_RETIRING_TAGS`, so the *Order* gate for Cutover-1a held.
+
+**No new page in the gap.** `WorkloadLogErrors` pages on more than 20 lines an hour that match
+`(?i)(panic:|fatal|traceback|out of memory)` for one container. The lines the three pushers
+write into a deleted token are `push failed (...)` from `kuma_push.py` and favonia's `Failed to
+send HTTP(S) request to Uptime Kuma`. Neither holds a pattern word, and the pattern matched
+none of the three containers' lines over the 24 hours before Cutover-1a.
+
+**Inhibit decision.** `AutofixBridgeDown` inhibits `ScrapeTargetDown{job="autofix-bridge"}` with
+no `equal` list, in `alertmanager-secret.yaml.j2`, because both read `up == 0` for the one job
+and A3's task 6 defers the inhibit to this batch's Cutover-1b. `test_alertmanager_autofix_inhibit.py`
+holds it. No other inhibit: a dead cloudflare-ddns pod fires `CloudflareDdnsUnavailable` and
+`K8sDeploymentZeroAvailable`, as the tile and that rule paged together before, and the
+`PiPeerBackup` pair has nothing to hold. The `.+NotReporting` inhibit of `HostCheckOverdue`
+cannot catch `PiPeerBackupNotReporting`, which carries neither `check` nor `origin`.
+
+**Soak effect.** `longest_for()` gains `autofix-bridge` and `cloudflare-ddns` at 600 seconds each
+at Cutover-1b. The other 19 keys are unchanged.
+
+**How paging is verified.** The four Prometheus rules through `ALERTS`, `probe.py health
+autofix-bridge` and `probe.py health cloudflare-ddns`. The two Loki rules never reach `ALERTS`,
+so the check is A7's list: the ConfigMap hash, `loki_prometheus_rule_group_rules` at 9, no
+evaluation failures, a fresh last-evaluation timestamp and no notification errors. Loki and
+Alertmanager each restart once at Cutover-1b.
+
+**The no-pager bound and the revert order.** The window opens when the `uptime-kuma` Kustomization
+reports Cutover-1a and closes when `observability` and `loki-homelab` report Cutover-1b. If
+Cutover-1b has not deployed within two hours, revert Cutover-1a. `CheckWithoutPager` names the
+three short-interval tiles two hours after their last sample and `WG Pi Peer Backup` after
+120h10m, so the guard is a backstop for that tile, not its bound. After Cutover-2 merges, revert
+in reverse order: Cutover-2, Cutover-1b, then Cutover-1a. Reverting Cutover-1a alone after
+Cutover-2 restores tiles that no push reaches. All three reverts worked only until the token PR.
+
+**Cutover-2.** autofix-bridge stops pushing and drops the `kuma_push.py` staging entry, which
+C-3a requires. The two cloudflare-ddns Deployments drop favonia's Kuma ping setting and the
+Secret's two token keys. pi-peer-backup keeps its verdict line, its ConfigMap export and its
+Healthchecks.io ping, and drops the Kuma request and the `push_url` key. The four tokens
+(`arr_autoblock_push_token`, `cloudflare_ddns_direct_push_token`,
+`cloudflare_ddns_proxied_push_token` and `monitor_bridge_pi_peers_push_token`) join
+`PENDING_RETIREMENT`, and the three that `standalone_secret_keys.json` listed leave it. B7's token PR,
+[#6949](https://github.com/DanielH2018/server/pull/6949), retired the keys. `pi-peer-backup` stays in `KUMA_RETIRING_TAGS` until C-7, and the
+uptime-kuma `netpol_from` entries for the four callers stay until C-1 removes the callers policy.
+
+**Token PR.** [#6949](https://github.com/DanielH2018/server/pull/6949) retired this batch's push
+tokens, and the operator's commit removed the keys from `secrets.yml` on 2026-11-02. A revert of
+a cutover above no longer brings back a working tile, because no token is left for it to push
+with.
+
+### B8 probes
+
+Soak read, [#6625](https://github.com/DanielH2018/server/issues/6625): B8's
+shadow PR merged as `50f2b2c410` at 2026-10-23T19:28Z. Prometheus first scraped the
+`blackbox-extra` job at 19:39:56Z, so the window starts there. The read used M1
+convention 6's two queries over `[168h:1m]` ending at 2026-10-30T19:39:56Z, with M2's
+8-minute margin (*Which soak minutes count as explained* in M2). Each tile was mapped to its shadow rule by the
+target's `service` label. Loki maps to M5's `LokiHomelabDown`, and Pi Pressure maps to
+`PiPortDead` plus A1's Prometheus half of the row: `PiLoadHigh`, `PiMemoryLow`,
+`PiDiskFull`, `PiFilesystemReadOnly` and `PiMetricsMissing` in `hosts.yaml`.
+`PiUndervoltage` belongs to `check_host_temp`, so it is not part of the mapping.
+
+- Query 1 returned no minutes for 14 of the 15 tiles. SLZB-06M Coordinator read DOWN
+  for 38 minutes, and `ExtraProbeFailed` covered every one.
+- Pi Pressure read DOWN for 50 minutes, all on 2026-10-26 from 03:43 to 04:37. Every
+  bridge cycle in that span blamed load5, and the port arm read "2 pi port(s)
+  listening", so `PiPortDead` alone covers none of them. With A1's rules counted, 3
+  minutes remain, 04:35 to 04:37. The Pi rebooted at 04:32:54
+  (`node_boot_time_seconds`), so load5 fell to 0.17 per core and `PiLoadHigh`
+  cleared. The tile held the bridge's last DOWN push until the next 300s cycle, which
+  the margin absorbs.
+- Query 2 found three episodes. On 2026-10-23 from 19:42 to 19:58, the Email-to-RSS
+  probe failed over IPv6 (`probe_ip_protocol` 6) while Kuma read up. `efd7fda5a0`
+  set `preferred_ip_protocol: ip4` and committed at 19:52:54, and the probe read 4
+  and up from 19:59. That episode was a fault in the probe, fixed in the window.
+- On 2026-10-25 from 14:25 to 14:28, the four `.local.`
+  probes behind Traefik (livesync, scrutiny, homelab-mcp, the edge all-clear) and
+  all 26 `blackbox-ingress` targets timed out at 9.5s. M4's live
+  `IngressProbeFailed` and `IngressProbeFailedCritical` fired for 19 of those
+  targets, and A4's read records Traefik 5xx in the same window. Kuma's tiles declare
+  no `timeout` and retry twice, so Kuma tolerated the stall. The stall was a real edge
+  fault, not a rule defect.
+- The third episode is `PiLoadHigh` on 2026-10-26 at 03:33 and 03:34, outside the
+  margin. Load5 crossed 1.5 per core between 03:31 and 03:34 and fell back. The
+  bridge's first DOWN cycle came at 03:41, so its 300s samples missed the crossing.
+  The rule has no `for:`, which matches the bridge's single-sample page.
+
+No minute is unexplained, so no rule changes, and the soak does not block Cutover-a.
+
+B8's cutover is three stacked PRs that merge in this order, not the plan's single Cutover-a.
+uptime-kuma and monitor-bridge are both `owner: flux`, so no deploy orders a tile deletion
+before a row deletion, and the batch uses the owner-independent fallback of *When D5 flips a
+role M6 edits*, as A1 to A5 did:
+
+1. Cutover-a1, [#6711](https://github.com/DanielH2018/server/pull/6711): the 14 hand-written
+   tiles leave `static-monitors.yaml.j2`, and an exclusion in its `CHECKS` loop drops `Pi
+   Pressure`. Every rule stays shadow. Its live read is `probe.py metric 'monitor_status{monitor_name=~"..."}'`
+   over the 15 names, which must return no series.
+2. Cutover-a2, [#6712](https://github.com/DanielH2018/server/pull/6712): the `pi_pressure` row,
+   `check_pi_pressure`, `with_pi_ports`, the two Pi verdicts, the `PI_*` keys and
+   `EXPORTER_DEPENDENT["node-pi"]` go, and `monitor_bridge_pi_push_token` enters
+   `PENDING_RETIREMENT`. It merges only after the read above passes.
+3. Cutover-b, the PR that adds this paragraph: the four `extra-probes.yaml` rules and the five Pi
+   pressure rules in `hosts.yaml` drop `shadow`, and the `kuma-cutover` group loses B8's 15
+   terms. `PiHostDown` gains an Alertmanager inhibit on `PiPortDead`.
+
+**The re-read of the soak, 2026-10-31T13:35Z.** The read above was repeated with the same
+queries (M1 convention 6 with M2's 8-minute margin, each tile mapped to its rule by the target's
+`service` label) over `[168h:1m]`. Prometheus's oldest sample was 21.6 days old, and
+`increase(prometheus_rule_evaluation_failures_total{rule_group=~".*(extra-probes|hosts|scrape-targets)"}[168h])`
+was 0 for all three groups. The window starts at 2026-10-24T13:35Z, after `blackbox-extra`
+first scraped, so the 2026-10-23 Email-to-RSS IPv6 episode is no longer in it.
+
+| Tile | Samples | DOWN min | Shadow firing min | Q1 strict | Q1 ±8m | Q2 strict | Q2 ±8m |
+|---|---|---|---|---|---|---|---|
+| Daniel Pi Host | 10062 | 0 | 0 | 0 | 0 | 0 | 0 |
+| Daniel Pi WG Easy | 10059 | 0 | 0 | 0 | 0 | 0 | 0 |
+| k3s LiveSync | 10065 | 0 | 2 | 0 | 0 | 2 | 2 |
+| k3s Mosquitto (VIP) | 10061 | 0 | 0 | 0 | 0 | 0 | 0 |
+| k3s Jellyfin (VIP) | 10060 | 0 | 0 | 0 | 0 | 0 | 0 |
+| SLZB-06M Coordinator | 10064 | 38 | 38 | 0 | 0 | 0 | 0 |
+| k3s nut (upsd) | 10059 | 0 | 0 | 0 | 0 | 0 | 0 |
+| k3s homelab-mcp (edge gate) | 10065 | 0 | 2 | 0 | 0 | 2 | 2 |
+| Loki | 10065 | 0 | 0 | 0 | 0 | 0 | 0 |
+| k3s Scrutiny | 10065 | 0 | 2 | 0 | 0 | 2 | 2 |
+| iCal Proxy k8s | 10065 | 0 | 0 | 0 | 0 | 0 | 0 |
+| Pi-hole k8s DNS | 10065 | 0 | 0 | 0 | 0 | 0 | 0 |
+| Email-to-RSS (Worker) | 10059 | 0 | 0 | 0 | 0 | 0 | 0 |
+| Homelab Edge (all-clear) | 10057 | 0 | 1 | 0 | 0 | 1 | 1 |
+| Pi Pressure | 10034 | 50 | 59 | 3 | 0 | 12 | 2 |
+
+Q1 ±8m is 0 for all 15 tiles. The 3 strict Q1 minutes of Pi Pressure sit inside 2026-10-26 04:30
+to 04:38, the span above where the Pi rebooted at 04:32:54. SLZB-06M's 38 DOWN minutes are all
+inside `ExtraProbeFailed` (strict Q1 0). The Q2 minutes are the 2026-10-25 14:25 to 14:28 Traefik
+edge stall on the four `.local.` probes (a `[90m:1m]` window ending 15:00 holds all 7) and
+`PiLoadHigh` at 03:33 and 03:34 on 2026-10-26 (a `[6m:1m]` window ending 03:36 holds both).
+
+**Loki maps to `ScrapeTargetDown`, not `LokiHomelabDown`.** The mapping above names
+`LokiHomelabDown`, which A3's Cutover-b replaced with `ScrapeTargetDown` (`service:
+loki-homelab`, `for: 10m`, no `shadow`). The Loki row uses that rule with `job="loki-homelab"`.
+Without the job selector the rule's `alloy` target adds 3 Q2 minutes, which belong to the
+alloy scrape on daniel-server and not to the Loki tile. Loki has no `shadow` to drop, so only its
+`CheckWithoutPager` term goes.
+
+**The deployed rules, read at 13:36Z.** `kubectl get configmap -n observability prometheus-rules`
+holds `extra-probes.yaml`, `hosts.yaml` and `kuma-cutover.yaml` byte-identical to master.
+`prometheus_rule_group_rules` reads 5, 34 and 1, and no B8 shadow alert was firing.
+
+**Inhibit decision: B8 adds one.** The plan turns `EXPORTER_DEPENDENT` into an inhibit sourced on
+`ScrapeTargetDown`, with `equal: [job, instance]`. For B8 that cannot match, and the rules that
+need it are few:
+
+- The five Pi pressure rules and `PiUndervoltage` read series that a dead scrape drops, or start
+  from `up == 1`, so a dead Pi leaves them quiet beside `ScrapeTargetDown`.
+- `PiPortDead` has no `up` gate, because a blackbox probe's `probe_success` exists while the
+  target is down. It fires once per published port (alloy and wg-easy), 10 minutes after the Pi
+  dies. The bridge's port arm sat inside `pi_pressure`, which `EXPORTER_DEPENDENT["node-pi"]`
+  suppressed while the Pi's exporter was down, so the host paged alone. Without an inhibit a dead
+  Pi pages two more groups than Kuma's three tiles did (`group_by: [alertname, service]`).
+- `PiHostDown` (`up{job="node-pi"} == 0`, `for: 2m`) fires first and carries `instance` `<pi>:9100`,
+  where `PiPortDead` carries `<pi>:<port>` and a different `job`. No `equal` list can match, and
+  the estate has one Pi, so the inhibit has none.
+
+The rule is `source_matchers: alertname="PiHostDown"`, `target_matchers: alertname="PiPortDead"`.
+`ExtraProbeFailed{service="wg-easy"}` is not held, because Kuma's WG Easy tile paged beside the
+ping tile. The change is in `alertmanager-secret.yaml.j2`, so the Alertmanager Secret changes and
+Alertmanager rolls when `observability` applies. `test_alertmanager_pi_inhibit.py` evaluates the
+rendered rule: it accepts a held port and rejects the rule with its source removed (`2 failed, 3
+passed`).
+
+**Soak effect: none.** `renderer_lib/soak.py:longest_for` counts the `for:` of every unshadowed
+critical rule against its `service` label. `ExtraProbeFailedCritical` is the one B8 rule that is
+critical, and it carries no literal `service`, so it counts under the `None` key at 120 seconds.
+Read before and after this PR with `longest_for()`, the map is identical, because other rules
+already put `None` at 120. The `Lander deadlines cover the soak` hook and
+`test_lander_deadlines_cover_the_soak.py` pass.
+
+**Routing.** `test_alertmanager_routing_b8_probes.py` is a sibling of the routing module, which is
+at its line cap. It walks the five `extra-probes` rules through the rendered routing tree:
+`ExtraProbeFailedCritical` reaches Discord and email, and the others reach Discord alone, all
+muted for the weekly reboot. A rule that regains `shadow` walks to the blackhole and fails it.
+A1's `test_alertmanager_routing_a1_hosts.py` now expects the five Pi pressure rules in the paging
+set.
+
+The two-hour no-pager bound counts from the moment the `uptime-kuma` Kustomization reports
+Cutover-a1's merge commit, because Kuma stops paging the 15 checks then and every B8 rule is
+still shadow. It ends when the `observability` Kustomization reports Cutover-b's merge commit.
+Cutover-a2's apply falls inside it. `CheckWithoutPager` pages critical two hours after the last
+`monitor_status` sample of any of the 15 tiles. If the bound is exceeded, revert Cutover-a2 first
+when it has merged, so the bridge pushes again, and then Cutover-a1, so the tiles return.
+Reverting Cutover-a1 alone after Cutover-a2 restores a Pi Pressure tile that no push reaches, and
+it goes DOWN. Both reverts worked only until B8's token PR,
+[#6949](https://github.com/DanielH2018/server/pull/6949), retired the key.
+
+**Token PR.** [#6949](https://github.com/DanielH2018/server/pull/6949) retired this batch's push
+tokens, and the operator's commit removed the keys from `secrets.yml` on 2026-11-02. A revert of
+a cutover above no longer brings back a working tile, because no token is left for it to push
+with.
+
+### B9 integrity scans
+
+B9's soak read, [#6730](https://github.com/DanielH2018/server/issues/6730): B9's shadow PR
+merged as `ab283899e` at 2026-10-24T23:17Z. The `host-checks` group predates B9, so its first
+evaluation does not mark the start of B9's rules. `prometheus_rule_group_rules` for the group
+rose from 37 to 57 at 2026-10-24T23:38Z. That step equals the 20 alerts `ab283899e` added, and
+twelve of them are B9's, so B9's rules first evaluated then. The read ended at
+2026-10-31T16:18Z, 160.7 hours after the first evaluation. All six tiles therefore have a
+160-hour window, not 168. The read used M1 convention 6's two queries over `[160h:1m]`, with
+M2's 8-minute margin (*Which soak minutes count as explained* in M2). Prometheus's oldest
+sample was 21.7 days old, and
+`increase(prometheus_rule_evaluation_failures_total{rule_group=~".*;host-checks"}[160h])` was 0.
+The B9 rules in `host-checks.yaml` are unchanged since `ab283899e`.
+
+The shadow PR's rule comment in `host-checks.yaml` gives each host the `Failed` and
+`NotReporting` pair for each scan, keyed by `service` (the host):
+
+- `AIDE Integrity (<host>)`: `AideCheckFailed` and `AideCheckNotReporting`.
+- `rkhunter Scan (<host>)`: `RkhunterScanFailed` and `RkhunterScanNotReporting`.
+
+| Tile | Samples | DOWN min | Shadow firing min | Q1 strict | Q1 ±8m | Q2 strict | Q2 ±8m |
+|---|---|---|---|---|---|---|---|
+| AIDE Integrity (daniel-box) | 2694 | 0 | 1645 | 0 | 0 | 1645 | 1645 |
+| rkhunter Scan (daniel-box) | 2609 | 0 | 4409 | 0 | 0 | 4409 | 4409 |
+| AIDE Integrity (daniel-server) | 2713 | 0 | 0 | 0 | 0 | 0 | 0 |
+| rkhunter Scan (daniel-server) | 2610 | 0 | 0 | 0 | 0 | 0 | 0 |
+| AIDE Integrity (daniel-pi) | 0 | 0 | 9574 | 0 | 0 | 9574 | 9574 |
+| rkhunter Scan (daniel-pi) | 2587 | 0 | 9574 | 0 | 0 | 9574 | 9574 |
+
+**Q1 is 0 for every tile, but the zero proves little.** No tile read DOWN for a single minute,
+because a weekly push tile cannot read DOWN inside this window:
+
+- Uptime Kuma restarted ten times in the window. `process_start_time_seconds{job="uptime-kuma"}`
+  moved on 2026-10-25 at 07:41, 13:14 and 18:08, on 2026-10-28 at 00:51, on 2026-10-29 at 21:32,
+  on 2026-10-30 at 20:33 and 23:19, and on 2026-10-31 at 01:06, 02:42 and 12:36.
+- After a restart, a push tile has no `monitor_status` series until its producer's next push. Its
+  626400s or 612000s timer also starts again from the restart. The longest gap between two
+  restarts was about 2.3 days, so no tile ever reached its interval without a push.
+- That is why each tile holds at most 2713 samples of 9600 minutes. Every AIDE tile lost its series
+  at the 2026-10-28 restart and every rkhunter tile at the 2026-10-29 restart, and none returned
+  before its next weekly run.
+
+Q2 strict and Q2 ±8m are equal, because no tile read DOWN, so the margin matches nothing. Every Q2
+minute is a `NotReporting` rule. No `Failed` rule fired, because every scan that wrote a
+textfile wrote `homelab_check_success` 1. Each scheduled run reconciles as follows:
+
+| Run (UTC) | Host | Journal `status=` line | Tile returns | Textfile `last_run` | Rule |
+|---|---|---|---|---|---|
+| AIDE, Mon 2026-10-26 03:00 | daniel-server | 03:30:38 `status=up`, run 30m | 03:32, up | 03:30:38 | quiet |
+| AIDE, Mon 2026-10-26 03:00 | daniel-box | 03:49:17 `status=up`, run 48m | 03:51, up | 03:49:17, first write | `NotReporting` clears 03:50 |
+| AIDE, Mon 2026-10-26 03:00 | daniel-pi | not shipped to Loki | no push | none | `NotReporting` firing |
+| rkhunter, Wed 2026-10-28 02:00 | daniel-server | 02:02:09 `status=up`, run 2m | 02:03, up | 02:02:09 | quiet |
+| rkhunter, Wed 2026-10-28 02:00 | daniel-box | 02:02:38 `status=up`, run 2m | 02:04, up | 02:02:38, first write | `NotReporting` clears 02:04 |
+| rkhunter, Wed 2026-10-28 02:00 | daniel-pi | not shipped to Loki | 02:26, up | none | `NotReporting` firing |
+
+The episodes, all times UTC:
+
+- **daniel-box, both tiles: the rule fired from deploy until the first run.** The textfile series
+  for `aide-check` first appeared at 2026-10-26 03:50 and for `rkhunter-check` at 2026-10-28
+  02:04. Both were the first scheduled runs after the tick put the new scripts on the host. The
+  shadow PR's rule comment states this behaviour: "Each NotReporting rule fires from its deploy
+  until the scan's first run writes the file, up to a week". All 1645 and 4409 minutes fall where
+  the tile had no series, so Kuma read nothing while the rule fired.
+- **daniel-server never fired.** Its `aide-check` and `rkhunter-check` series already existed at
+  the window's start. Their `last_run` was 2026-10-24 21:25:47, a run by hand before the merge,
+  so the deadline held until the scheduled runs replaced it.
+- **daniel-pi, both tiles: no textfile in the whole window.** Prometheus has no `aide-check` or
+  `rkhunter-check` series with `origin="daniel-pi"`. `node_textfile_mtime_seconds{job="node-pi"}`
+  lists five files, and neither scan's file is one of them. The collector itself works, because
+  `pi-sd-health` and `pi-recovery-health` reach Prometheus. Until 2026-10-31 the Pi ran both scans
+  from `initial_setup`'s cron, and the new scripts reach the Pi only by an operator-run apply that
+  did not happen. The rkhunter tile read up for 2587 minutes from 2026-10-28 02:26, so the old
+  script ran and pushed to Kuma but wrote no textfile. Those 2587 minutes are the only Q2 minutes
+  in the batch while a tile read up. The rule was right, because nothing reported to Prometheus.
+- **daniel-pi AIDE: the Monday run left no trace, which is inferred, not shown.** The tile's last
+  sample was 2026-10-21 21:57, reading up, and no push reached Kuma afterwards. The 2026-10-26
+  run started at 03:00. B8's read records the Pi's load5 above 1.5 per core from 03:31 and the bridge
+  blaming load5 until 04:37, and `node_boot_time_seconds` dates a reboot at 04:32:54. The Pi's
+  journal is not shipped to Loki (`config.alloy.j2`), so no log line confirms that the reboot
+  cut the scan short. Kuma read nothing for the whole week, while `AideCheckNotReporting` fired.
+
+**The Pi's scripts are packaged since 2026-10-31.** `1a218aeb9` (2026-10-31T13:48Z) added the
+`integrity-scans` component to the Pi's package. The Pi reports version `0.6508+g1a218aeb941a`,
+and its `homelab-aide-check.timer` and `homelab-rkhunter-check.timer` were activated at 14:27Z.
+The component renders the role's scripts with `initial_setup_host_lib_dir: /usr/lib/homelab`.
+The same package's `kuma-push` and `pi-heartbeats` components install `kuma-push-lib.sh` and
+`homelab-check-lib.sh` there, so both `source` lines resolve in the render. No Pi run of the
+packaged scripts has happened yet. The first AIDE run is Monday 2026-11-02 at 03:00, and the
+first rkhunter run is Wednesday 2026-11-04 at 02:00. This session had no ssh route to the Pi,
+so nothing on the host was read directly.
+
+**The deployed rules, read at 16:18Z.** `kubectl` has no kubeconfig on daniel-server, so the
+ConfigMap was not compared byte for byte. `prometheus_rule_group_rules` for `host-checks` reads
+75. The two firing B9 alerts, `AideCheckNotReporting` and `RkhunterScanNotReporting` for
+`daniel-pi`, carry `shadow="true"`. All twelve B9 rules in `host-checks.yaml` carry
+`shadow: "true"`.
+
+No Q1 minute needs explaining, and no rule changes. The soak does not block Cutover-1a for the
+four daniel-box and daniel-server tiles. **It blocks Cutover-1a for the two daniel-pi tiles.**
+Cutover-1a deletes all six tiles. The Pi's `Failed` rules have never had a series to read, so
+after the cutover a Pi rkhunter warning or a failed AIDE run would page nobody. Only
+`NotReporting` would fire, and it is already firing. The block clears when the Pi's `aide-check`
+and `rkhunter-check` series exist and both Pi `NotReporting` rules have cleared. The earliest
+reads that can show this follow the runs on 2026-11-02 and 2026-11-04.
+[#6750](https://github.com/DanielH2018/server/issues/6750) holds that re-read.
+
+#### The tag PR
+
+B9's shadow PR (`ab283899e`) added no tag, so *The cutover order* gives B9 a separate PR. Branch
+`m6-b9-kuma-retiring-tags` ([#7067](https://github.com/DanielH2018/server/pull/7067)) adds `aide-check` and `rkhunter-check` to `KUMA_RETIRING_TAGS` in
+`monitor-bridge/files/verdicts/logs.py`, with a case in `test_check_swallowed_verdicts.py`, and
+deploys `monitor-bridge`. Cutover-1a waits a week after that deploy.
+
+The exemption covers a `rejected` push line from either tag, which is what a scan logs while it
+pushes into a tile that Cutover-1a deleted. It does not cover a lost `status=down` push, which
+still pages. The Pi ships only `health.log` to Loki, and its refused-push lines carry no
+`by=kuma`, so the exemption covers daniel-box and daniel-server and none of the Pi's lines.
+
+#### The daniel-pi re-read, 2026-11-02
+
+The re-read for [#6750](https://github.com/DanielH2018/server/issues/6750) ran from
+2026-11-02T18:48Z to 18:53Z. The Pi's first packaged AIDE run was the scheduled one at 03:00. The
+operator started the Pi's first packaged rkhunter run by hand, ahead of its Wednesday slot.
+
+| Check on daniel-pi | `homelab_check_success` | `last_run` (UTC) | `NotReporting` rule | Kuma tile |
+|---|---|---|---|---|
+| `aide-check` | 1 | 2026-11-02 05:39:11 | `AideCheckNotReporting` cleared 05:40 | up |
+| `rkhunter-check` | 1 | 2026-11-02 18:46:14 | `RkhunterScanNotReporting` cleared 18:47 | up |
+
+- **Both series exist.** `homelab_check_success{check=~"aide-check|rkhunter-check",origin="daniel-pi"}`
+  reads 1 for each check, from `job="node-pi"`. Both `last_run` timestamps fall on 2026-11-02, so
+  each series came from a packaged run. The old cron scripts wrote no textfile.
+- **Both rules have cleared.** `ALERTS{alertname=~"AideCheck.*|Rkhunter.*",service="daniel-pi"}`
+  returned no series at 18:48:08Z and again at 18:53:29Z. `probe.py alerts --pi` dates the last
+  firing episodes as ending at 05:40 for AIDE and 18:47 for rkhunter, one evaluation after each
+  textfile's first write. The operator's comment on #6750 reads `RkhunterScanNotReporting` still
+  firing at "~18:50Z". That comment was posted at 18:47:28Z, so its read came before the 18:47
+  evaluation that cleared the rule, and the two reads agree. Each
+  rule shows a five-minute gap on 2026-11-01 between 07:39 and 07:44. Both rules have that gap,
+  and no Pi textfile existed then, so the gap is not a clearance.
+- **Both tiles read up.** `monitor_status` reads 1 for `AIDE Integrity (daniel-pi)` and
+  `rkhunter Scan (daniel-pi)`, and `min_over_time` over the last 13 hours is 1 for both. The AIDE
+  tile had no series in the 48 hours before 04:48, so its series came from the 05:39 run's push.
+  The rkhunter tile has read up since the old script's
+  push on 2026-10-28.
+- **The rkhunter run's journal**, as the operator read it, ends
+  `status=up scan completed: 0 warnings, 0 suspect files, 0 possible rootkits (exit 0, run 24m)`.
+  At its start, `rkhunter --update` logged `Invalid WEB_CMD configuration option: Relative
+  pathname: "/bin/false"`, from the distribution's `/etc/rkhunter.conf`. The unit's `ExecStartPre=-`
+  discards that exit code, so the scan verdict is unaffected.
+  [#6964](https://github.com/DanielH2018/server/issues/6964) holds that.
+  This session had no ssh route to the Pi and read no journal itself.
+
+**The Pi block on Cutover-1a has cleared.** Both conditions above hold: the Pi's `aide-check` and
+`rkhunter-check` series exist, and both Pi `NotReporting` rules have cleared. The Pi's `Failed`
+rules have a series to read, so after the cutover a Pi rkhunter warning or a failed AIDE run
+fires `RkhunterScanFailed` or `AideCheckFailed`. B9's soak no longer blocks Cutover-1a for any of
+its six tiles.
+
+#### Cutover-1a, the tiles go
+
+Cutover-1a is branch `m6-b9-cutover-1a-tiles`, tracked by
+[#7062](https://github.com/DanielH2018/server/issues/7062). It deletes the six
+`AIDE Integrity (<host>)` and `rkhunter Scan (<host>)` declarations from
+`static-monitors.yaml.j2` and the `^aide-` and `^rkhunter-` status-page patterns. The twelve B9
+rules stay `shadow`, so this PR removes six pagers and adds none. Cutover-1b adds them.
+
+The six tokens enter `PENDING_RETIREMENT`, because no cluster render references them once the
+tiles go: `aide_daniel_box_push_token`, `aide_daniel_server_push_token`,
+`aide_daniel_pi_push_token`, `rkhunter_daniel_box_push_token`, `rkhunter_daniel_server_push_token`
+and `rkhunter_daniel_pi_push_token`. A6's Cutover-2 restored the module the same way. Each host
+package keeps its token as a credential, and each scan keeps pushing into the deleted token until
+Cutover-2.
+
+What the removal moved in the tests:
+
+- The census floors fall to one, because `Status Page Sync` is the only push tile left.
+  `GATED_MEMBERS` and `_INCIDENT_TILE` name it, and `KNOWN_IDS` swaps the three scan ids for
+  `discord`.
+- `test_aide_check.py` and `test_rkhunter_check.py` lose their tile-gating tests, and their
+  deadline test reads the script's `DEADLINE_S` where it read the tile's `interval`. The
+  `PUSH_TOKENS` map keeps the one-token-per-host test.
+- `test_integrity_scan_rule_literals.py` stops comparing `DEADLINE_S` to a tile. The helper
+  The setup-plane helper that rendered a Kuma tile for a guard had no other reader, so it goes
+  with its census entry.
+- `test_the_deleted_b9_tiles_are_not_declared` fails if a scan tile returns.
+
+**The tag precondition is waived.** *The cutover order* gives B9 a separate PR that adds
+`aide-check` and `rkhunter-check` to `KUMA_RETIRING_TAGS` and deploys `monitor-bridge`, and
+Cutover-1a waits a week after that deploy. At `15e4275491` the set in
+`monitor-bridge/files/verdicts/logs.py` listed neither tag. That PR is
+[#7067](https://github.com/DanielH2018/server/pull/7067), and the operator waived its week on
+2026-11-03, so Cutover-1a follows its deploy at once. Without the tags, a push refused by a
+deleted token reads as `rejected` and pages Swallowed Push Verdicts. The scans push weekly (AIDE
+on Monday 03:00, rkhunter on Wednesday 02:00), so the refusal is in the read window for a few
+hours after each run, until Cutover-2 stops the push on that host.
+
+The reads on 2026-11-03 at 19:21Z. `monitor_status{monitor_name=~"AIDE.*|rkhunter.*"}` returns no
+data, because Kuma's restarts dropped the weekly tiles' series (the issue's 7-day read still
+finds all six). `ALERTS{alertname=~"AideCheck.*|Rkhunter.*"}` returns no data, so no B9 rule is
+firing.
+
+The two-hour no-pager bound counts from the `uptime-kuma` apply of this PR and ends at the
+`observability` apply of Cutover-1b. If Cutover-1b has not applied by then, revert this PR. The
+rules are still `shadow`, so the revert restores Kuma as the only pager, and each tile recovers
+on the scan's next push because the tokens stay in `secrets.yml` until the token PR.
+
+#### Cutover-1b, the rules page
+
+Cutover-1b is branch `m6-b9-cutover-1b-rules-page`, stacked on Cutover-1a. It drops `shadow` from
+the twelve rules in `host-checks.yaml`: `AideCheckFailed`, `AideCheckNotReporting`,
+`RkhunterScanFailed` and `RkhunterScanNotReporting` for each host. All twelve are `warning`, which
+posts to Discord alone, the channel the six tiles used. `land.sh` deploys `observability` alone.
+
+B9's six `CheckWithoutPager` terms were the last ones in the `kuma-cutover` group, because A6's
+Cutover-1b and B6c's removed theirs. The plan's rule for the last term applies: this PR deletes
+`files/rules/kuma-cutover.yaml`, its promtool test, its `observability_rule_groups` entry and the
+test lists that named it. The routing test loses its `check-without-pager` case, and the
+`TextfileCollectorError` and `ComposeUpFailed` rules are the host group's only shadow rules left.
+`test_host_sets_names_every_host_check_rule` pins that set exactly, so a B9 rule that regains
+`shadow` fails it, and it asserts that each B9 rule walks to Discord alone.
+
+The group's `unless on() (up{job="uptime-kuma"} == 0)` clause goes with the file. C-1a's scope in
+the plan lists that clause as a reader of the scrape job, so C-1a has nothing to carry there.
+
+#### Cutover-2, the push stops
+
+Cutover-2 is branch `m6-b9-cutover-2-push-stops`, stacked on Cutover-1b. It is a host-package
+change: `aide-check.sh.j2` and `rkhunter-check.sh.j2` are inputs of the `integrity-scans`
+component, so the change reaches each host only in a new version of its package. `land.sh` waits
+for all three hosts. The Pi's `homelab-updater.timer` skips 23:00 to 00:59 and 04:00 to 05:59 UTC.
+
+What the diff does:
+
+- Both scripts drop the `kuma-push-lib.sh` source, the push target, the credential and env-file
+  token read, and the push with its "token not set" branch. Each keeps its `status=` journal line
+  and its textfile write, which `AideCheck*` and `RkhunterScan*` read.
+- Both service units lose `LoadCredential=` and the `homelab-secrets.service` ordering, and their
+  `Description=` no longer says the scan pushes.
+- The component's contract drops the push from its scope and evidence lines.
+- The package specs keep `credentials:` for all six tokens, because `host_secrets.py check` pins
+  the list to each host's SOPS file, which only the operator's `host_secrets.py sync` changes. B9's
+  token PR removes the keys from both in one step. The two `*-kuma-push.env.j2` templates stay for
+  the same PR.
+- The `kuma-push` component stays, because C-3a deletes it. C-3a waits for this PR's package on all
+  three hosts, and its precondition read quotes each host's installed version:
+  `dpkg-query -W -f '${Version}' homelab-<host>`.
+- The AIDE and rkhunter test helpers read a run's verdict from the logged `status=` line where
+  they read the push stub. `test_the_rendered_script_carries_no_kuma_push` fails on the master
+  scripts (`redproof origin/master` reports RED) and passes on the new ones.
+  `test_cron_scripts_publish_via_pr.py` re-decides its corpus anchor: no `.sh.j2` push script is
+  left, so it names authelia's config-secret and loki-homelab's `config.alloy`, with a floor of 2.
+
+From Cutover-1a to the package install on a host, the scan pushes into a deleted token and
+`kuma_push` logs `push failed`. The plan's *B9's tags* paragraph says `KUMA_RETIRING_TAGS` should
+exempt `aide-check` and `rkhunter-check` first, and it does not (see Cutover-1a above).
+
+#### The token PR
+
+The token PR is branch `m6-b9-tokens`, tracked by
+[#7062](https://github.com/DanielH2018/server/issues/7062). The operator waived the
+token-retirement week on 2026-11-03, as for A6, so it follows Cutover-2 at once. It retires the six
+per-host push tokens: `aide_daniel_box_push_token`, `aide_daniel_server_push_token`,
+`aide_daniel_pi_push_token`, `rkhunter_daniel_box_push_token`, `rkhunter_daniel_server_push_token`
+and `rkhunter_daniel_pi_push_token`.
+
+The code half deletes `scripts/secrets_mgmt/pending_retirement.py` with its readers and its
+keep-on-write tests, the last retirement the plans schedule, and adds the six names to
+`git_dates.RETIRED`. Each host package loses the two scan tokens from `credentials:`. The two
+`*-kuma-push.env.j2` templates and the guards that rendered them go, along with the six names in
+`CROSS_HOST_PUSH_TOKENS`. The `legacy:` entries of the `integrity-scans` component stay, so a host
+still removes the env files an earlier apply wrote.
+
+Each host's SOPS file holds its own two keys and none of the other hosts', read with
+`secretq has` on 2026-11-03. daniel-box holds `aide_daniel_box_push_token` and
+`rkhunter_daniel_box_push_token`, daniel-server holds the two `daniel_server` keys, and daniel-pi
+holds the two `daniel_pi` keys. `cluster-vars.source` holds all six. The operator removes the keys
+from the three host SOPS files with `host_secrets.py sync`, and from `secrets.yml`,
+`secret_rotation.yml`, the secret-tiers fragment and the cluster file, in a commit on this branch.
+
+### PR B-1, with B-1d and B-1e
+
+PR B-1, `probe.py health` reads the alert plane: [#5339](https://github.com/DanielH2018/server/pull/5339).
+It merged on 2026-10-16 at `ba681c934`, after C7's amendment for Open question 4 and the slice
+index's M6 split landed in #5323. On master the gate passed homepage (Ansible-owned, referenced to
+`applied_at`), speedtest (`owner: flux`, referenced to its Kustomization's revision) and
+netpol-baseline (no route, so the probe half is skipped), each with 0 gated alerts.
+
+PR B-1d, the drill rule: [#5406](https://github.com/DanielH2018/server/pull/5406). It merged on
+2026-10-17 at `c9943f04e` and settled with `observability`. `probe.py health littlelink` then
+exited 1 and named `HealthGateDrill{severity=critical} firing since 2026-10-17T14:11:13Z`. In the
+15 minutes after the rule went live, Alertmanager sent no Discord or email notification, and its
+webhook rate matched the two hours before. PR B-1e, the drill's removal:
+[#5411](https://github.com/DanielH2018/server/pull/5411). It merged at `f8e28584f` and settled with
+`observability`, and `probe.py health littlelink` exited 0 again. littlelink's `applied_at` read
+`2026-10-16T23:03:57Z` at all three reads, so the drill holds. D5's flux PR for littlelink no
+longer waits on M6 (Open question 12).
+
+C7's content-digest reference: [#5369](https://github.com/DanielH2018/server/pull/5369). It amends
+C1, C6 and C7, and the operator accepted the amendment on 2026-10-17. It merged at `2226b7b61` and
+settled with `observability`. Every flux tag's `gotk_resource_info` carries `content_digest`, and
+peanut's reference stayed at `2026-10-17T14:00:54Z` while three later commits landed.
+
+### PR B-2
+
+PR B-2, `probe.py monitors` and `probe.py alerts` on `ALERTS`, postflight's Kuma checks, and
+`kuma-drift` deleted: [#6829](https://github.com/DanielH2018/server/pull/6829). It merged on
+2026-11-01 at `05ede55db`. On 2026-11-12 `probe.py --help` printed no `kuma-drift` line, and
+`probe.py monitors` printed `0 paging alert(s) firing` and exited 0.
+
+- **`monitors`** rolls up `ALERTS{alertstate="firing"}` by severity and `service`, then lists
+  active silences. A missing Watchdog exits 75. Shadow alerts print under their own heading and
+  do not change the exit code, because five fired on 2026-11-01 while Kuma read 35/35 up.
+- **`monitors` also reads Alertmanager's active alerts**, and folds in the ones `ALERTS`
+  lacks. The loki-homelab ruler sends its alerts to Alertmanager directly, so a reader of
+  `ALERTS` alone missed `LokiPiLogsSilent` while it fired on 2026-11-01. `alerts` has no
+  history for them, because Alertmanager keeps none.
+- **`monitors` keeps one Kuma arm**, `monitor_status{job="uptime-kuma"} != 1`, because A6's
+  bridge rows, B2, B4, B5, B6b and B9 still page through Kuma. The arm is not in the plan's
+  B-2 row. C-1, which deletes the `uptime-kuma` scrape, removes it with `format_kuma` and its
+  two tests in `scripts/diagnostics/tests/test_probe_monitors.py`.
+- **`firing_ingress.py` is deleted**, because the rollup reads the same `ALERTS` series. The
+  plan's tree predates the module.
+- **`kuma_pi.py` is deleted** with `kuma_live.py` and `kuma_table_loop.py`, because
+  `kuma-drift --pi` was its only caller.
+- **postflight** checks `up{job="alertmanager"} == 1` and the Watchdog firing as one §9.1
+  check. `check_kuma_scrape` stays until C-1.
+
+### PR B-4
+
+PR B-4 ([#6798](https://github.com/DanielH2018/server/issues/6798)) replaces Homepage's
+Uptime-Kuma tile with an Alertmanager tile in the same grid slot. The tile is a
+`prometheusmetric` widget with three blocks, each read from Prometheus `ALERTS`:
+
+- **Critical** counts firing `severity="critical"` alerts.
+- **Warning** counts firing `severity="warning"` alerts.
+- **Watchdog** counts the firing Watchdog, so it reads 1 while the alert plane evaluates.
+
+The two severity counts drop `shadow="true"` and `drill="true"`, the two matchers the routing
+tree sends to its blackhole receiver. The tile links to `https://alertmanager.local.<domain>`,
+the `two_factor` UI from B-6b. The widget names its blocks with `label:`, so the two Kuma
+heading renames in `custom.css.j2` are deleted rather than moved. Homepage no longer calls
+`homepage_href('uptime-kuma', domain)`, which C-1a needs gone.
+
+Before the merge, `probe.py metric` returned 0, 0 and 1 for the three queries. The Homepage
+pod reaches Prometheus through the `prometheus-callers` NetworkPolicy, which names
+`app=homepage` in the `homelab` namespace on port 9090; the Headlamp tile already reads the same
+ClusterIP. The verify-by read through the `homelab-ui` MCP server waits for the promotion.
+
+### PR B-5
+
+B-5 ([#6819](https://github.com/DanielH2018/server/issues/6819)) changes two Grafana boards
+in the `observability` role.
+
+- `Apps/uptime-kuma-monitors.json` is deleted, with its line in
+  `observability_dashboard_folders`.
+- `Infrastructure/alert-history.json` reads Prometheus's `ALERTS` series instead of the Loki
+  reconstruction of Kuma DOWN pushes. Every panel filters on firing state, leaves out
+  `Watchdog`, and groups by `service` through a `$service` variable built on
+  `label_values(ALERTS, service)`. The two tables carry the `shadow` label, so an alert whose
+  batch has not cut over stays visible and reads as not paged by Alertmanager.
+- `ansible/tests/services/test_alert_history_board_reads_alerts.py` holds every panel query to
+  that shape. It replaces the test that parsed the bridge's DOWN line out of the old board.
+
+The board's history spans Prometheus's 30-day retention, not Loki's 744 hours. Kuma episodes
+from before a batch's cutover show only as far back as its shadow rule has fired.
+
+Before the PR, the panel queries ran read-only against live Prometheus through
+`probe.py metric`. Every `ALERTS` series carried a non-empty `service` label
+(`count(ALERTS{service=""})` returned no data).
+
+Nothing in B-5 stops or mutes a Kuma tile or push.
+
+The post-apply read is owed at landing. It is a `uv run pytest -m ui -k grafana` run or a
+`homelab-ui` render of the board after Flux applies `observability`, quoted here.
+
+### PR B-6a and B-6b
+
+B-6a ([#6689](https://github.com/DanielH2018/server/issues/6689)) wrote the `two_factor` rule
+for `alertmanager.local` with `group:admins` as its subject, and the `deny` rule after it, in
+`ansible/roles/k8s/authelia/templates/config-secret.yaml.j2`.
+
+B-6b ([#6690](https://github.com/DanielH2018/server/issues/6690)) adds the UI route,
+`ansible/roles/k8s/observability/templates/alertmanager-ingressroute.yaml.j2`, and sets
+`--web.external-url=https://alertmanager.local.<domain>` on the Deployment. The route shares
+its host with the GET-only read door from
+[#6691](https://github.com/DanielH2018/server/issues/6691), which outranks it on the door's two
+paths. Its verify-by read, a test silence created and expired through the UI, waits for the
+promotion.
+
+### PR B-7
+
+PR B-7, the docs, skills, agents and evals that still pointed a reader at Kuma: the PR that
+adds this record, [#7058](https://github.com/DanielH2018/server/pull/7058), for [#7052](https://github.com/DanielH2018/server/issues/7052). It deploys
+nothing. Each item of *Phase B* item 8, and what changed:
+
+- **The root `CLAUDE.md` *Where to Look* rows.** No change. `git grep -n -i kuma -- CLAUDE.md`
+  returns nothing, because B-2 had already edited the *Claude tooling* bullet.
+- **`.claude/skills/add-secret/SKILL.md`.** The 32-hex Kuma push-token bullet is replaced by a
+  rule never to add a push token, pointing at ADR 0026's producer recipes. The `auto` tier
+  example says the remaining push tokens are the only `auto` entries.
+- **`.claude/skills/new-container/SKILL.md`.** No change. It does not name Kuma.
+- **`.claude/skills/homelab-review/accepted-designs.md`.** The "down = no heartbeat" bullet now
+  names the alert-plane deadmen (`<Check>NotReporting`, `HostCheckOverdue`,
+  `BridgeCheckStale`). The Pi bullet names B8's `PiHostDown` and `PiPortDead` and A1's Pi rules
+  instead of static Kuma labels, and drops `HOST_METRIC_ORIGIN_EXCLUDE`, which no file in the
+  tree holds. `uptime-kuma-data` stays in the no-backup bullet, because the claim exists until
+  C-2b deletes it.
+- **The three reviewer agents.**
+    - `homelab-backup-observability-reviewer.md` describes one alert plane, the producer
+      recipes and the deadmen, and its method checks the rules directory before it reports a
+      missing monitor.
+    - `homelab-cicd-reviewer.md` names the secret-rotation audit timer and
+      `SecretRotationAuditFailed` in place of the daily Kuma push.
+    - `homelab-container-reviewer.md` is unchanged. Its one mention is the
+      AutoKuma macro the Pi compose files inline, which the plan's census allowlist keeps.
+      [#7210](https://github.com/DanielH2018/server/issues/7210) later deleted the macro and
+      the mention.
+- **`.claude/hooks/hooklib/service_lines.py`.** Two docstrings change: the release-staleness
+  verdict sits beside a textfile metric, and `ReleaseStalenessCheckNotReporting` pages a dead
+  cron. The `--kuma` flag the cron passes to `probe.py releases` is a live CLI flag, so it
+  stays.
+- **The eval cases.** `homelab-backup-observability-reviewer/001` grades a missing
+  blackbox-ingress probe instead of a missing Kuma monitor; `kuma: false` stays its opt-out
+  until C-4a renames the key. `002-kuma-push-no-retries` is replaced by `002-wan-gate-no-for`,
+  which grades the deliberate absence of a `for:` on `WANUnreachable`. The two
+  `homelab-cicd-reviewer` cases quote the alloy compose file's live label. `evals/history.json`
+  keeps the old case id as history, because the eval-run cron owns that file.
+- **`ansible/roles/k8s/homelab-mcp/CLAUDE.md`.** The `/health` router now exists for the
+  `blackbox-extra` job's `http_body_ok` probe, not for a Kuma tile.
+- **The ADR (C-0).** No change. ADR 0026 was written and accepted on 2026-10-24.
+
+The same PR adds a *Token PR* line to each of the 15 batch records that
+[#6949](https://github.com/DanielH2018/server/pull/6949) covered
+([#6950](https://github.com/DanielH2018/server/issues/6950)). It also re-checked the comment
+halves of [#6821](https://github.com/DanielH2018/server/issues/6821) and
+[#6882](https://github.com/DanielH2018/server/issues/6882). Outside history, generated pages and
+tests, no comment still names `probe.py kuma-drift` or a Loki-reading `probe.py alerts`, so
+nothing changed there. Their C-1a halves, `format_kuma` and the `KUMA_QUERY` arm of
+`scripts/diagnostics/probe_lib/monitors.py`, wait for C-1a.
+
+**Files B-7 did not reword.** About 35 hand-written `docs/` pages still name Kuma, among them
+`docs/monitor-bridge-checks.md`, `docs/k3s-node-plane-crons-and-incidents.md` and
+`docs/healthchecks-io-deadman.md`. Item 8 does not list them, and no other M6 PR row does.
+[#7056](https://github.com/DanielH2018/server/issues/7056) tracks the sweep, after C-1 and C-3a.
+
+`ansible/roles/k8s/monitor-bridge/files/bridge/common.py` is one of the files #6821 names. Two of
+its docstrings still say the bridges push to Kuma and that Kuma forwards to Discord. B-7 left
+them, because the file ships in the monitor-bridge and autofix-bridge builds. Both roles are
+flux-owned, so a docstring edit would roll two workloads in a PR that otherwise deploys nothing.
+[#7060](https://github.com/DanielH2018/server/issues/7060) rewords them in the next real edit to
+the file.
+
+### PR B-10
+
+PR B-10, triage's poller drops its Kuma source:
+[#6997](https://github.com/DanielH2018/server/pull/6997). It merged on 2026-11-02 at `589c932c8`.
+It was held until A6's Cutover-1b was live, so that every Kuma pager had an `ALERTS` rule and the
+`ALERTS` path saw each fall the Kuma path saw. [#6876](https://github.com/DanielH2018/server/pull/6876)
+named the poller as a Kuma consumer.
+
+The PR removes `KUMA_QUERY`, `KUMA_UP_QUERY`, `kuma_up_keys`, the `kuma` arm of `unknown_sources`
+and of `down_keys`, and the `kuma_up` argument of `step` from
+`hosts/components/claude-code/files/claude_triage_poll.py`. Recovery is now generic: a key that is
+not firing and whose source is not unknown recovers. The first successful poll on the new code
+therefore drops every `kuma:` key in `poll-state.json` and opens no episode for it.
+
+**Only daniel-box carries the poller.** The component's `when:` gates `claude_triage_poll.py` on
+`claude_code_triage_enabled`, which `ansible/inventory/host_vars/daniel-box.yml` sets true and
+`hosts/components/claude-code/defaults/main.yml` leaves false. A render of both host packages
+before the change put the file in `homelab-daniel-box` and not in `homelab-daniel-server`. Item 9's
+**Order** and C-1a's precondition once said "both hosts". They now say daniel-box, because
+daniel-server has no poller to read the scrape job that C-1a deletes.
+
+C-1a's precondition asked for daniel-box applied and a journal of `homelab-claude-triage-poll`
+on daniel-box with no `uptime-kuma` query. It held before C-1a merged: *PR C-1a and C-1b*
+records 667 `query=` lines after 2026-11-03 00:50:25Z and no `uptime-kuma` line.
+
+### PR C-0
+
+PR C-0, the ADR: [#6091](https://github.com/DanielH2018/server/pull/6091). It merged on 2026-10-24
+at `d0d4fc140`. The operator accepted ADR 0026, and
+`docs/adr/0026-one-alert-plane-on-prometheus-and-alertmanager.md` reads `status: Accepted`.
+
+### PR C-1a and C-1b
+
+#### PR C-1a
+
+[#7077](https://github.com/DanielH2018/server/pull/7077), from [#7061](https://github.com/DanielH2018/server/issues/7061), deletes
+`KumaDown` with its inhibit, Prometheus's `uptime-kuma` scrape job and its credential,
+`check_kuma_scrape`, the two `job="uptime-kuma"` rows in `files/rules/scrape-targets.yaml`, and
+the Kuma read in `probe.py monitors`.
+
+**The operator waived the Phase A week on 2026-11-03.** C-1a's precondition asked for a week of
+Phase A with no Kuma page. The operator waived it as they waived the token week on 2026-11-02.
+Every other precondition held, and these reads ran on 2026-11-03 at about 23:08Z.
+
+The gate has two halves ([#7075](https://github.com/DanielH2018/server/issues/7075)). The instant
+read returns the one tile:
+
+```console
+$ probe.py metric 'count by (monitor_type, monitor_name) (monitor_status)'
+monitor_name=Status Page Sync, monitor_type=push = 1
+```
+
+`prod` holds `a4d5def5fa`, and the file declares one monitor at that commit:
+
+```console
+$ kubectl -n flux-system get ocirepository homelab \
+    -o 'jsonpath={.status.artifact.metadata.org\.opencontainers\.image\.revision}'
+master@sha1:a4d5def5fa1e3416f6db889c7e6dee589e811aff
+$ git show a4d5def5fa:ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2 \
+    | grep -E '\.json: \|$' | grep -vE '^ +(discord|email|tag-[a-z]+)\.json:'
+  status-page-sync.json: |
+```
+
+**The triage poller has not read Kuma since B-10 installed.** Its last `uptime-kuma` line is
+2026-11-03 at 00:50:25Z. A 7-day read is not clean, because the lines before that are the old
+poller's. Since then the journal holds 667 `query=` lines and no `uptime-kuma` line. daniel-box
+runs `homelab-daniel-box` `0.6730+g35edf86f1457`, whose commit descends from B-10's `589c932c85`.
+
+**Homepage has no Kuma read left.** Its Kustomization reports the digest that holds `a4d5def5fa`,
+and `git grep uptime-kuma a4d5def5fa -- ansible/roles/k8s/homepage` returns nothing.
+
+**The cluster file does not change.** `cluster_vars.py check` reads clean, because
+`uptime-kuma/templates/secret.yaml.j2` still renders `prometheus_kuma_api_key` for the maintenance
+sync. C-1a therefore needs no operator `cluster_vars.py write`. C-5 retires the key.
+
+**The render drops no object.** `prometheus-scrape-credentials` loses one key and stays, so the
+PR carries no `Removes-Object:` line.
+
+The two post-promotion reads follow once `promote` moves `prod` to a commit that holds C-1a. C-1b's
+preconditions quote them again.
+
+#### PR C-1b
+
+C-1b empties the `uptime-kuma` render down to its two claims. The PR body quotes its
+preconditions, its render and its `Removes-Object:` lines. The post-promotion read has not run:
+it needs `promote` to move `prod` to a commit that holds C-1b.
+
+**Files the plan does not list.** Each one pinned a deleted template, the deleted task, or a reader
+that went with them:
+
+- `uptime-kuma/defaults/main.yml` shrinks to the claims, because the renderer refuses
+  `flux_prepull_timeout` on a render with no workload.
+- `scripts/renderer/renderer_lib/task_inputs.py` drops `kuma_declarations`, and
+  `secret_checks.py`'s rule 5 names a different member.
+- `scripts/secrets_mgmt/consumers.py` no longer names `uptime-kuma` as a token's consumer, and
+  `kuma_status_page_sync_push_token` moves from tier `auto` to `assisted` until C-5.
+- `deploy_cross_role.py`'s k8s table loses `uptime-kuma` from the `kuma_push.py` row, which the
+  plan gave to C-3a. The row's other two members stay for C-3a.
+- `python-liquid` leaves the dev dependencies with the two tests that used it.
+- `test_cron_scripts_publish_via_pr.py`: the push corpus falls to one template, because the
+  Authelia bypass held the other `api/push` literal.
+- `test_host_maintenance.py` takes over the reboot timer's assertion from
+  `test_maintenance_window.py`, because the timer outlives the Kuma window.
+
+**The plan's precondition grep names more than the plan predicted.** The other hits are comments,
+the entry itself, C-2b's `k8s_host_files` task, C-7's `KumaNotificationDropped`, C-3a's push
+library, an inert exclusion regex in `edge.yaml` and the disarmed `render_records` role. None
+reads the entry's `port` or `hostname`, and the full cluster render passes.
+
+**The prepull Kustomization leaves two objects behind.** The render drops
+`flux/uptime-kuma-prepull.yaml`, so the root prunes that Kustomization under `deletionPolicy:
+Orphan`. The Job `prepull-uptime-kuma-dd816639` and the ConfigMap `prepull-uptime-kuma-41b32c91`
+stay in `flux-system`. The plan's post-promotion read does not see them. The operator deletes them
+with the claims after C-2b.
+
+### PR C-2a and C-2b
+
+#### PR C-2a
+
+[#7087](https://github.com/DanielH2018/server/pull/7087), from
+[#7086](https://github.com/DanielH2018/server/issues/7086), deletes `uptime-kuma` from the bespoke
+policies and from ical-proxy's `netpol_from`.
+
+**One PR holds the order.** `netpol-baseline` renders all five grants, including ical-proxy's fence
+through `networkpolicy-callers.yaml.j2`. No workload role's render moves, so *the roles first* has
+nothing to order.
+
+**Three of the four bespoke policies held a grant.** `networkpolicy-jellyfin.yaml.j2` leaves `:8096`
+open to every source and never named Kuma as a peer. It held only a comment about Kuma's VIP tile,
+and that comment is what C-2a deletes there.
+
+#### PR C-2b
+
+The branch `worktree-fanout-7095`, from
+[#7095](https://github.com/DanielH2018/server/issues/7095), deletes the role directory, its
+`containers_list` entry, and `k8s_host_files/tasks/uptime-kuma.yml` with its import.
+
+**`ls` cannot answer the staging-directory read.** `/etc/rancher/k3s/manifests` is mode 0700, so
+`ls` as the operator's account answers `Permission denied`. `rootq stat` lists the path by name and
+runs as root. It answers `refused: /etc/rancher/k3s/manifests/autokuma-claims does not exist`,
+while its control `/etc/rancher/k3s/manifests/registry-jobs` prints a stat line.
+
+**The claims leave the no-backup list with the entry.** `longhorn-reconcile` then moves each
+`longhorn`-class volume from `no-backup` to `default`, and `daily-backup` backs up a detached
+volume because `allow-recurring-job-while-volume-detached` is `true`. The operator's delete
+therefore belongs before the first 03:30 UTC after the promotion.
+
+### PR C-3a and C-3b
+
+#### C-3a, the push libraries
+
+The reads ran at base `764b603be` on 2026-11-04 at about 16:30Z. [#7109](https://github.com/DanielH2018/server/issues/7109)
+holds the rulings.
+
+- **The filename grep.** `git grep -l kuma_push.py -- ansible hosts scripts ':!*/tests/*'` listed
+  only files this PR edits or deletes.
+- **Read 1.** Every check the plan names reports a run after its batch's Cutover-2, except
+  `aide-check`. The operator waived that one on 2026-11-04, because read 3 finds no installed
+  AIDE script that sources the library. Its next run is 2026-11-09 03:00.
+- **Read 2.** The `git grep -n kuma-push-lib` over templates, files and `hosts` printed no
+  script that sources the library. Each hit is a comment, the library, its component or a
+  `legacy:` row.
+- **Read 3.** On each host the grep listed the library's own copies, including the Python
+  `kuma_push.py` copies under `/opt` and `/usr/lib/homelab/builder` on daniel-box, and
+  comment-only hits in `homelab-check-lib.sh`, `setup-drift-lib.sh` and
+  `etcd-drill-guest-run.sh`. On the Pi it also matched `/usr/lib/homelab/manifest.json`, the
+  package manifest that names the library's path. Four retained daniel-box release trees under
+  `/opt/homelab/releases/k3s-disk-health/` still hold the `source` line.
+  `/opt/homelab/current/k3s-disk-health` points at `45a8eb0ef73d`, which does not.
+- **Unreadable scripts.** `github-ruleset-drift.sh`, `github-interaction-limit.sh` and
+  `registry-gc.sh` on daniel-box return `Permission denied`, so the rendered source stands in
+  for them. `git grep -c kuma-push-lib` over those three and `eval-run` exits 1, which means no
+  hit.
+- **Package versions.** daniel-box and daniel-server run `0.6733+ge35604c7d422` and daniel-pi
+  runs `0.6738+g53142821af01`. B9's Cutover-2, `35edf86f1`, is an ancestor of both SHAs.
+
+Two changes went beyond the plan's list, and the plan now names both. `render_records.py` read
+`kuma_push` through the re-export, which the filename grep cannot see. The dropped record task
+would have left the `kuma-push-lib` fragment behind as permanent drift, so the absent task removes
+it too.
+
+### PR C-4a and C-4b
+
+#### PR C-4a
+
+[#7121](https://github.com/DanielH2018/server/pull/7121), from
+[#7115](https://github.com/DanielH2018/server/issues/7115), renames the `kuma:` key to `probe:` on
+15 entries and feeds the `blackbox-ingress` job from `ingress_probe_targets`. Its base is
+`936338336`, which is after C-2b.
+
+**The render read.** The job's rendered targets match the base: `diff` exits 0, with 26 targets on
+each side. The reworded job comment renders into `prometheus.yml`, so `checksum/config` moves and
+the promotion rolls Prometheus once. The `probe_success` count after promotion has no recorded read
+yet. To take it, run `count(probe_success{job="blackbox-ingress"})` and expect 26.
+
+**The narrowing read.** `deploy_tags.py narrow` did not refuse. It names the 15 renamed entries'
+own tags, `ingress_probes.py -> observability`, and this readers line:
+
+```text
+narrow: containers_list readers of kuma,probe on 15 entries -> longhorn-reconcile,observability via ansible/inventory/host_vars/daniel-box.yml
+```
+
+**`longhorn-reconcile` is a reader the plan does not predict.** Its `defaults/main.yml` calls
+`tier_backup_claims`, `longhorn_weekly_claims` and `longhorn_nobackup_claims`, and none of them has
+a `FILTER_FIELDS` row. `containers.reader_reads` therefore returns `None` for that file, so any
+field edit reaches the tag. The plan's "No template reads a whole entry" does not cover a role's
+defaults. [#7120](https://github.com/DanielH2018/server/issues/7120) holds the follow-up.
+
+**`has_ingress_route` is a second reader the plan does not list.**
+`scripts/diagnostics/probe_lib/health_alerts.py` read the opt-out through `kuma_ingress_monitors`.
+On that filter it would return True for all 8 `probe: false` entries, so C-4a moved it too.
+
+**The `id` and `name` overrides moved verbatim, and nothing reads them.**
+[#7119](https://github.com/DanielH2018/server/issues/7119) holds their removal.
+
+#### PR C-4b
+
+[#7835](https://github.com/DanielH2018/server/issues/7835) deletes
+`ansible/filter_plugins/kuma_monitors.py`, its import and its `kuma_ingress_monitors`
+registration in `scripts/lib/ansible_jinja_env.py`. D6 had already deleted
+`narrow_lib/containers.py`, so no `FILTER_FIELDS` row was left to remove. The plugin's other
+filter, `kuma_malformed_push_tokens`, had no caller left, so it went with the file. The census
+row's allowlist loses C-4b's two entries, which closes exit criterion 3's C-4b wait.
+
+### PR C-5
+
+Tracked by [#7173](https://github.com/DanielH2018/server/issues/7173). C-5 retires four keys:
+`kuma_status_page_sync_push_token`, `prometheus_kuma_api_key`, `uptime_kuma_password` and
+`uptime_kuma_username`. A `git grep` on 2026-11-05 found no reader of any of them. `secretq keys`
+on the same day found none of them in a host SOPS file or the cluster file, so the operator's
+`cluster_vars.py write` is expected to change nothing.
+
+The operator runs `host_secrets.py check` rather than `host_secrets.py sync`. `sync` re-encrypts
+even with an unchanged key set, and a host file ships in its host package, so committing one
+would make the landing wait on that host for no change in content. Without a host file in the
+commit, the PR waits on no host package.
+
+The code half adds the four names to `git_dates.RETIRED`. It deletes
+`sops_io.malformed_push_tokens` and `cluster_vars.py`'s `_push_token` refusal, as the plan assigns,
+and `rotation_tools.decrypted_values`, because `audit`'s shape check was its only caller. `audit`
+therefore no longer decrypts anything.
+
+`render_records_push_token` stays. `ansible/roles/setup/render_records/templates/config.env.j2`
+still renders it, and `consumers.py:CROSS_HOST_PUSH_TOKENS` still names it. R4 owns its removal,
+in the secrets commit that follows its role deletion (`docs/target-architecture/render/r4-delete-k8s-ansible-path.md`,
+*The push token leaves after the role*). After C-5, `grep -c '_push_token:'` prints 1 for both
+`ansible/secret_rotation.yml` and `ansible/vars/secrets.yml`, so exit criterion 2 holds only once
+R4's commit lands. [#7178](https://github.com/DanielH2018/server/issues/7178) tracks that.
+
+### PR C-6
+
+Tracked by [#7191](https://github.com/DanielH2018/server/issues/7191). The reads ran on 2026-11-05
+at base `decdee190`, with daniel-box on `0.6776+gc0f46a5e9157`, daniel-server on
+`0.6760+g46a2bc43e376` and daniel-pi on `0.6769+g7f3ec44c07c3`.
+
+- **The absent tasks.** `ls` reports no such file for `/usr/local/lib/kuma-push-lib.sh` and
+  `/var/lib/homelab/setup-deployed-manifest.d/kuma-push-lib` on all three hosts. It also reports
+  no such file for `kuma_push.py` in every `/opt` consumer directory on daniel-box and
+  daniel-server, read by name. `/opt/containerd` denies the `find`, and it holds no consumer.
+- **The `legacy:` entries.** `ls` reports no such file for each path C-6 deletes, on every host,
+  and `systemctl list-unit-files` prints no `kuma-check-loki-read-route` or
+  `kuma-check-secret-rotation-audit` unit on daniel-box. C-6 deletes the secret-rotation entries.
+  It keeps the three `kuma-check-loki-read-route` units and their down marker in
+  `hosts/components/loki-route-witness/component.yml`, against the plan's list. daniel-server
+  still runs them from the `initial_setup` role, and reconcile retires them through these entries
+  when daniel-server's package takes the component. Without them that move would leave the old
+  timer running, with the entry for its script deleting the script under it.
+- **Exit criterion 3.** The precondition grep lists only the allowlist's identifier holders and
+  the two generated records. C-4b's three entries stay until D6.
+
+The census found far more than the plan's budget: 553 lines in 208 files, against about 100
+lines. C-6 reworded what the plan assigns to it, which leaves `hosts/` holding only the Pi compose
+files and rootq. The remaining 167 files sit in `_PROSE_HOLDERS`, each with its reason.
+[#7194](https://github.com/DanielH2018/server/issues/7194) owns those, and
+[#7195](https://github.com/DanielH2018/server/issues/7195) owns the redaction rules.
+
+### PR C-7
+
+The deletion lands in [#7146](https://github.com/DanielH2018/server/issues/7146), read at base
+`9d64d9f1c8`. Its PR quotes the `git grep` from C-6's precondition, restricted to the C-7 files,
+and the grep matches nothing. The plan's C-7 step records what those reads changed.
 
 ## Goal and exit criterion
 
@@ -1241,7 +4648,7 @@ Kuma still pages for every unmigrated batch until C-1, so it keeps a watcher unt
       2026-10-31; the plan's `for: 5m`, (`GRACE_CYCLES` − 1) × 300s, was one cycle). The bridge holds a down row `up` for its first down cycle and pushes `down` on the
       second, so `for: 10m` needs the same two down cycles. A gauge that reads 0 for one
       300s cycle spans five to seven 1-minute samples, so `for: 5m` fired on a one-cycle
-      blip or not by scrape alignment (`m6-status/a6.md`). The exported value is taken before
+      blip or not by scrape alignment (*Status by batch*, A6). The exported value is taken before
       the grace from A6-1 on, so the grace never applies twice. A6-7a deletes `apply_startup_grace` and the `grace_streaks`
       field of `State`.
     - **Each in-body streak stays, and its rule has no `for:`.** A rule's `for:` holds the whole
@@ -2190,15 +5597,9 @@ that removes the last term deletes the group, and a PR that adds a term to a mis
 re-creates it, with its test, in about 40 lines (*No-pager windows*).
 
 **Recording a batch's results.** A soak read, a cutover stack, a no-pager bound or any other
-result goes in the batch's own file under `m6-status/`: `a1.md` to `b9.md` for the Phase A
-batches, and `pr-b-1.md` to `pr-c-7.md` for the Phase B and Phase C PRs. Replace the file's
-"Nothing recorded." line and keep its heading. Do not edit *Status by batch* or the
-introduction to record a result. The section already transcludes every file, so a PR that
-writes only its own file merges beside another batch's PR without a conflict. The issue
-that asks for a soak read names the file, and so does the PR that records it. A new batch
-or PR, such as a split one, adds its file and its `--8<--` line in table order in the same
-PR. `ansible/tests/repo/test_m6_status_records.py` fails when a batch in the table has no
-transcluded file, or when the includes leave table order.
+result went under the batch's own heading in *Status by batch*. While M6 ran, each heading
+was a separate file under `m6-status/`, so that a PR recording one batch merged beside
+another batch's PR without a conflict. M6 is done, and #8164 folded the files into this page.
 
 **Every token PR, and C-5, is one commit with four parts.** The operator removes the keys
 from `ansible/vars/secrets.yml` with `sops` (**operator-only**). In the same commit the agent
@@ -3609,7 +7010,7 @@ netpol-baseline flipped last in Wave D (#5833), both before C-1. Not adversarial
 
 ### Amendment for host_packages and a flux-owned bridge (2026-10-31)
 
-The A6 soak read of 2026-10-31 (`m6-status/a6.md`) found three facts the plan did not know.
+The A6 soak read of 2026-10-31 (*Status by batch*, A6) found three facts the plan did not know.
 The operator ruled on two of them the same day. Not adversarially reviewed.
 
 - **A 20th bridge row, `host_packages`.** H3.5c added it after this plan was written. It is

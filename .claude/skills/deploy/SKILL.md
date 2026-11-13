@@ -1,13 +1,13 @@
 ---
 name: deploy
-description: Apply a change through the path that owns it — `land.sh`, `promote` and Flux for a k3s workload, a host package for anything under `hosts/` and the Pi, and `hosts/bootstrap-host.sh` for a host bring-up. No script deploys a workload by hand. Use when the user wants to deploy or redeploy a service, asks for `deploy.sh`, or to check a k8s manifest change before it merges (`prek` vs the renderer vs the render-diff gates).
+description: Apply a change through the path that owns it — `land.sh`, `promote` and Flux for a k3s workload, a host package for anything under `hosts/` and the Pi, and `hosts/bootstrap-host.sh` for a host bring-up. No script deploys a workload by hand. Use when the user wants to deploy or redeploy a service, asks for a deploy script, or to check a k8s manifest change before it merges (`prek` vs the renderer vs the render-diff gates).
 allowed-tools: Bash, Glob
 ---
 
 Apply a change through the path that owns it.
 
 **No script deploys a workload by hand.** Every `cluster/services.yml` entry is `platform: k8s`,
-which Flux applies. H7.53 deleted `scripts/deploy.sh` with the GitOps deployer.
+which Flux applies.
 
 **First, determine what the change touches:**
 

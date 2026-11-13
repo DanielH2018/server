@@ -12,6 +12,7 @@ import pytest
 from _reconcile_component import render_reconcile
 
 from lib.repo_paths import REPO
+from lib.systemd_timer import timeout_start_s
 from renderer.renderer_lib import host as host_mode
 
 UPDATER_SCRIPT = REPO / "hosts" / "lib" / "homelab-updater"
@@ -22,9 +23,6 @@ KEYRING = "/usr/share/keyrings/homelab-archive-keyring.gpg"
 KEYRING_FILE = REPO / "hosts" / "keys" / "homelab-archive-keyring.gpg"
 RECONCILE_SERVICE = "/usr/lib/systemd/system/homelab-reconcile.service"
 WAIT_SERVICE = "/usr/lib/systemd/system/homelab-reconcile-wait.service"
-
-_SPAN = re.compile(r"(\d+)\s*(h|min|m|s)?")
-_UNITS = {"h": 3600, "min": 60, "m": 60, "s": 1, None: 1}
 
 
 @pytest.fixture(scope="module")
@@ -76,15 +74,6 @@ def test_the_package_ships_the_committed_keyring_unchanged(package):
 def test_the_package_ships_no_enable_link(package):
     # A host arms its updater by shipping the link in its own package (H3, *Shared names*).
     assert package.links == {}
-
-
-def timeout_start_s(unit: str) -> int:
-    """The unit's `TimeoutStartSec=` in seconds, from a systemd time span like `1h 20min`."""
-    (value,) = re.findall(r"^TimeoutStartSec=(.+)$", unit, re.MULTILINE)
-    spans = _SPAN.findall(value)
-    if not spans or _SPAN.sub("", value).strip():
-        raise ValueError(f"TimeoutStartSec={value} is not a span this test reads")
-    return sum(int(number) * _UNITS[suffix or None] for number, suffix in spans)
 
 
 def lock_timeout_s(script: str | None = None) -> int:

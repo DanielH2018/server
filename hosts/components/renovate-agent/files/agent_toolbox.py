@@ -6,8 +6,7 @@ A test replaces one field of `AgentTools` and never a module attribute, which is
 `monkeypatch.setattr` on the entry module would pin its name into the test.
 
 **This module names `renovate_agent` and `run_worktree` nowhere**, at import time or later,
-which is what makes it the leaf both of them import. Same shape and same reasoning as
-`gitops_deploy`'s `deploy_toolbox.DeployTools`.
+which is what makes it the leaf both of them import.
 
 Stdlib only, like the rest of the agent.
 """

@@ -7,6 +7,8 @@ added 80-109 s to the longest leg of the PR. A job of its own that needs only `p
 Run: uv run pytest ansible/tests/repo/test_ci_k3s_download_job_off_critical_path.py
 """
 
+import pytest
+from _actions_expressions import condition, interpolate
 from _helpers import REPO
 from lib import yaml_fast
 
@@ -14,6 +16,7 @@ CI_WORKFLOW = REPO / ".github" / "workflows" / "ci.yml"
 CASES_ENTRY = "scripts/validate/host_package_cases.py"
 DOWNLOAD_FLAG = "--k3s-download"
 GATING_JOB = "host_packages"
+BUILD_JOB = "host_packages_build"
 GATE_JOB = "prek"
 HANDOFF_ARTIFACT = "host-packages-build"
 IMAGE_SCRIPT = "hosts/lib/tests/container/build-image.sh"
@@ -59,6 +62,44 @@ def test_the_k3s_download_job_needs_only_prove_and_the_build():
         needs = [needs]
     assert set(needs) == {"prove", "host_packages_build"}, (
         f"{job_id} needs {needs}; waiting on {GATING_JOB} puts it back on the critical path"
+    )
+
+
+@pytest.mark.parametrize(
+    ("event", "build", "changed", "cases", "runs"),
+    [
+        ("pull_request", "success", "false", "false", False),
+        ("push", "success", "false", "false", False),
+        ("pull_request", "success", "true", "false", True),
+        ("pull_request", "success", "false", "true", True),
+        ("workflow_dispatch", "success", "false", "false", True),
+        ("pull_request", "failure", "true", "true", False),
+    ],
+)
+def test_the_k3s_download_job_takes_a_runner_only_when_the_build_has_work_for_it(
+    event, build, changed, cases, runs
+):
+    """A job that only skips its steps still holds one of the 20 runner slots (docs/ci-throughput.md)."""
+    job_id, job = _download_job()
+    github = {"event_name": event}
+    render = {"render": {"outputs": {"changed": changed, "cases": cases}}}
+    run_cases = interpolate(
+        _jobs()[BUILD_JOB]["outputs"]["run-cases"], {"github": github, "steps": render}
+    )
+    context = {
+        "github": github,
+        "needs": {
+            # `prove` runs on a push alone; an unproven push leaves `proven` false.
+            "prove": {
+                "result": "success" if event == "push" else "skipped",
+                "outputs": {"proven": "false" if event == "push" else ""},
+            },
+            BUILD_JOB: {"result": build, "outputs": {"run-cases": run_cases}},
+        },
+    }
+    assert condition(job, context) is runs, (
+        f"{job_id} {'skips' if runs else 'starts a runner'} on a {event} with build={build},"
+        f" changed={changed}, cases={cases}"
     )
 
 

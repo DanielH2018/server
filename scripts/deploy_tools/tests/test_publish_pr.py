@@ -86,7 +86,7 @@ def test_a_failed_push_deletes_the_dead_local_branch():
 
 
 def test_the_local_master_is_reset_before_the_pr_is_opened():
-    """A local master one commit ahead breaks gitops-deploy's --ff-only once the squash lands."""
+    """A local master one commit ahead parks homelab-checkout-sync once the squash lands."""
     rec = Recorder()
     _publish(rec)
     assert rec.calls.index(("git", "reset", "--hard", "HEAD~1")) < rec.calls.index(
@@ -107,8 +107,8 @@ def test_the_local_master_is_reset_before_the_pr_is_opened():
 def test_a_failed_reset_reports_master_still_ahead_and_stops_before_the_pr():
     """A reset failure (index lock, tree dirtied between the guard and here) must not be
     swallowed: pressing on would report "PR opened ... with auto-merge" while master is
-    still one commit ahead of origin, and gitops-deploy's --ff-only parks silently once the
-    squash lands under a new SHA."""
+    still one commit ahead of origin, and homelab-checkout-sync refuses the checkout (reason
+    `ancestry`) once the squash lands under a new SHA."""
     rec = Recorder({"git reset": cp(1, err="Unable to create '.git/index.lock'")})
     out = _publish(rec)
     assert out.rc == publish_pr.PUBLISH_PUSHED_NO_PR

@@ -82,6 +82,9 @@ _DRAFT_ARM = "github.event.pull_request.draft != true"
 # The build arm of the jobs that read the build's artifacts. The build runs on a dispatch, so the
 # arm holds unless the build itself failed, and that failure already reds the sweep.
 _BUILD_ARM = "needs.host_packages_build.result == 'success'"
+# The work arm of a job that runs only when the build has cases for it. The build's `run-cases`
+# output is true on a dispatch; test_ci_k3s_download_job_off_critical_path.py evaluates it.
+_RUN_CASES_ARM = "needs.host_packages_build.outputs.run-cases == 'true'"
 
 _EVENT_TERM = re.compile(r"github\.event_name\s*(==|!=)\s*'([a-z_]+)'")
 
@@ -139,6 +142,7 @@ def _job_runs_on_dispatch(condition: str | None) -> bool:
         .replace(_PROOF_ARM, "true")
         .replace(_DRAFT_ARM, "true")
         .replace(_BUILD_ARM, "true")
+        .replace(_RUN_CASES_ARM, "true")
         .replace("!cancelled()", "true")
     )
     return truthy(condition, "workflow_dispatch")

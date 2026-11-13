@@ -52,7 +52,6 @@ KNOWN_GROUPS = frozenset(
     {
         longhorn_backups.DEFAULT_GROUP,
         longhorn_backups.NO_BACKUP_GROUP,
-        longhorn_backups.WEEKLY_LEGACY_GROUP,
         *(longhorn_backups.weekly_shard_group(shard) for shard in _SHARDS),
     }
 )
@@ -137,7 +136,6 @@ NAMES = {
     "label_prefix": longhorn_backups.GROUP_LABEL_PREFIX,
     "default_group": longhorn_backups.DEFAULT_GROUP,
     "no_backup_group": longhorn_backups.NO_BACKUP_GROUP,
-    "weekly_legacy_group": longhorn_backups.WEEKLY_LEGACY_GROUP,
     "b2_target": longhorn_backups.B2_TARGET,
     "r2_target": longhorn_backups.R2_TARGET,
 }

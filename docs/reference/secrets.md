@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/secrets.py
-generated_at: 2026-11-13 00:39 UTC
-generated_sha: 4815c0d91
+generated_at: 2026-11-12 18:17 UTC
+generated_sha: 3febc5ec5
 ---
 
 !!! warning "Generated file — do not edit"
@@ -128,7 +128,7 @@ lives in a third-party system; rotate there first.
 | `coinmarket_api_key` | 2026-08-30 | 2027-08-29 | 290 |
 | `crowdsec_discord_webhook_url` | 2026-03-17 | 2027-03-14 | 122 |
 | `crowdsec_mapquest_api_key` | 2026-04-05 | 2027-03-28 | 136 |
-| `discord_alert_webhook` | 2026-10-04 | 2027-09-29 | 321 |
+| `gitops_deploy_discord_webhook` | 2026-10-04 | 2027-09-07 | 299 |
 | `healthchecks_discord_webhook_url` | 2026-04-17 | 2027-04-05 | 144 |
 | `homelab_builder_github_token` | 2026-05-31 | 2027-05-21 | 190 |
 | `karakeep_gemini_api_key` | 2026-04-17 | 2027-03-21 | 129 |

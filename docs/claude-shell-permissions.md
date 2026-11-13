@@ -100,7 +100,7 @@ neither the age key that decrypts the become password nor the repo owner's `gh` 
 (`docs/claude-agent-user.md`, *What the `claude` user cannot do*). A session that still runs as
 `sys_user` holds both, and that user can read everything under its home. With the age key, such a session can decrypt every
 secret in `ansible/vars/secrets.yml`. With the token, it can merge its own PR through the
-REST endpoint, which is how `land.sh` merges every landing, or arm GitHub's auto-merge on it.
+REST endpoint, which is how `land.sh` merges every landing.
 The master CI gate's `pull_request` rule refuses a direct push to master from any token, so
 every change reaches master as a PR. The GitOps deployer then applies master with `become`. So
 for a `sys_user` session the boundary is the permission layer this page describes, plus the PR

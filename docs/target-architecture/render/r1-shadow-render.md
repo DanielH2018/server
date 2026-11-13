@@ -212,7 +212,7 @@ a shadow, and Ansible stays the only writer to the cluster.
       deferral on any doubt, never the whole play (#4333)` explains why. The tick
       fast-forwards and runs no playbook. It records a `k8s_unapplied` line for every declared
       service and writes no receipt, so `land.sh` reports `needs-manual-apply`.
-      [The GitOps pipeline page](../../gitops-pipeline.md), *A deploy-plane change is narrowed
+      [The GitOps pipeline page](../../archive/gitops-pipeline.md), *A deploy-plane change is narrowed
       before it is applied*, says the same.
     - A change under `ansible/roles/k8s/<role>/` that is not an image-pin bump goes into
       `ChangeSet.k8s`, which defers and records a line for that role.

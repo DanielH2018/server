@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/backlog.py
-generated_at: 2026-11-13 00:39 UTC
-generated_sha: 4815c0d91
+generated_at: 2026-11-12 18:17 UTC
+generated_sha: 3febc5ec5
 ---
 
 !!! warning "Generated file — do not edit"
@@ -17,33 +17,24 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | # | Severity | Kind | Domain | Finding | First seen | Re-observed | Claim | Verify-by |
 |---|---|---|---|---|---|---|---|---|
 | [#5126](https://github.com/DanielH2018/server/issues/5126) | high | gap | security | The DanielClaudeBot account reads as nonexistent on GitHub, so agent PRs are invisible and cannot land | 2026-10-15 | 0 | - | - |
-| [#8201](https://github.com/DanielH2018/server/issues/8201) | high | gap | home-assistant | The Cast connect-back loop runs for hours and makes the bedroom display dismiss fail | 2026-11-12 | 0 | - | - |
-| [#8212](https://github.com/DanielH2018/server/issues/8212) | high | gap | backup-observability | daniel-server mounted four Longhorn volumes on stale iSCSI sessions after the 2026-11-11 reboot, and no alert fired — *no vetted remediation* | 2026-11-12 | 0 | - | ✓ |
-| [#8268](https://github.com/DanielH2018/server/issues/8268) | high | gap | cicd | A host package's new tmpfiles.d directory is not created until the host reboots | 2026-11-12 | 0 | - | - |
 | [#7490](https://github.com/DanielH2018/server/issues/7490) | medium | gap | cicd | The Pi's reconcile reaches its 30-minute timeout and holds its updates | 2026-11-06 | 0 | - | ✓ |
 | [#7688](https://github.com/DanielH2018/server/issues/7688) | medium | gap | cicd | Fix the pytest shard 5 and host_tools_arm64 CI flakes | 2026-11-08 | 0 | - | ✓ |
 | [#7718](https://github.com/DanielH2018/server/issues/7718) | medium | gap | cicd | Measure the pytest shard spread on a real CI run of the rebalanced runner table | 2026-11-09 | 0 | worktree-orchestrator-wave20 | ✓ |
+| [#8036](https://github.com/DanielH2018/server/issues/8036) | medium | improvement | cicd | gitops_deploy_discord_webhook keeps the deleted deployer's name, which #8028 asked to drop | 2026-11-12 | 0 | - | - |
 | [#8055](https://github.com/DanielH2018/server/issues/8055) | medium | gap | cicd | DEPLOY_HOLD stateful=crowdsec-verify holds promotion of #8052 (headlamp, netpol-baseline, observability) | 2026-11-12 | 0 | - | ✓ |
+| [#8074](https://github.com/DanielH2018/server/issues/8074) | medium | gap | docs | The agent user's memory store diverged from the operator's; flipping claude_code_user back would sync the stale copy over daniel-server | 2026-11-12 | 0 | worktree-orchestrator-wave20 | ✓ |
+| [#8089](https://github.com/DanielH2018/server/issues/8089) | medium | gap | - | A fresh host's distro users can take the uids a host package's sysusers.d declares | 2026-11-12 | 0 | worktree-orchestrator-wave20 | ✓ |
+| [#8100](https://github.com/DanielH2018/server/issues/8100) | medium | gap | - | Host packages declare fixed uids in Ubuntu's dynamic system-uid range, so a user created before bootstrap step 5 takes them | 2026-11-12 | 0 | - | ✓ |
+| [#8116](https://github.com/DanielH2018/server/issues/8116) | medium | gap | security | secret_bearing_host_paths walks role tasks/ files, so the secret-bearing host-path census is empty | 2026-11-12 | 0 | worktree-fanout-8103 | ✓ |
+| [#8117](https://github.com/DanielH2018/server/issues/8117) | medium | gap | cicd | cron_targets walks role tasks/ files, so the cron PATH/KUBECONFIG rules check nothing | 2026-11-12 | 0 | - | ✓ |
 | [#8119](https://github.com/DanielH2018/server/issues/8119) | medium | gap | - | Bootstrap step 5 never checks that sysusers gave each declared user its declared uid | 2026-11-12 | 0 | - | ✓ |
-| [#8190](https://github.com/DanielH2018/server/issues/8190) | medium | addition | container | Add Lidarr so the music pipeline can fill navidrome's library | 2026-11-12 | 0 | - | - |
-| [#8191](https://github.com/DanielH2018/server/issues/8191) | medium | addition | network | Exempt navidrome's /rest/ Subsonic API from Authelia so music apps work off-LAN | 2026-11-12 | 0 | - | - |
-| [#8202](https://github.com/DanielH2018/server/issues/8202) | medium | improvement | home-assistant | Home Assistant's runtime-error alert pushes twice for each Cast device fault | 2026-11-12 | 0 | - | - |
-| [#8213](https://github.com/DanielH2018/server/issues/8213) | medium | gap | cicd | No page fires when daniel-box or daniel-server stops taking host-package updates | 2026-11-12 | 0 | - | ✓ |
-| [#8214](https://github.com/DanielH2018/server/issues/8214) | medium | gap | backup-observability | daniel-server gets no page at Longhorn's 75 percent scheduling floor, and its root grows 3.4 GB a day | 2026-11-12 | 0 | - | ✓ |
-| [#8215](https://github.com/DanielH2018/server/issues/8215) | medium | gap | backup-observability | The b2-budget over-budget verdict has no reader | 2026-11-12 | 0 | - | ✓ |
-| [#8216](https://github.com/DanielH2018/server/issues/8216) | medium | gap | cicd | Thirteen findings from the 2026-10-10 review return 404 with the hidden bot account, so the register no longer tracks them | 2026-11-12 | 0 | - | ✓ |
-| [#8218](https://github.com/DanielH2018/server/issues/8218) | medium | improvement | backup-observability | Nothing escalates a warning alert that fires for days | 2026-11-12 | 0 | - | ✓ |
-| [#8243](https://github.com/DanielH2018/server/issues/8243) | medium | gap | security | GitHub-side controls for the guardrails plan: D12 master ruleset, D13 dotfiles rulesets, Renovate floor | 2026-11-12 | 0 | - | - |
-| [#8250](https://github.com/DanielH2018/server/issues/8250) | medium | addition | security | Audit and acknowledge guardrail changes on the Claude hosts (#967 slice 2, host half) | 2026-11-12 | 0 | - | - |
-| [#8259](https://github.com/DanielH2018/server/issues/8259) | medium | gap | security | The triage restart allowlist must exclude routed alerts' workloads, not just critical probes | 2026-11-12 | 0 | - | ✓ |
-| [#8261](https://github.com/DanielH2018/server/issues/8261) | medium | gap | cicd | land.sh on daniel-server cannot read Flux, so its promotion wait never resolves | 2026-11-12 | 0 | worktree-bridge-cse_01U9VNvodhLK7ePbAkfv9pgZ | ✓ |
-| [#8267](https://github.com/DanielH2018/server/issues/8267) | medium | gap | cicd | A host package's new tmpfiles line is not applied on install, so navidrome's subPath directory never appeared | 2026-11-12 | 0 | - | - |
-| [#8269](https://github.com/DanielH2018/server/issues/8269) | medium | gap | cicd | DEPLOY_HOLD stateful=navidrome at aafaeb70 holds promotion after PR 8194 brought navidrome back | 2026-11-12 | 0 | - | ✓ |
-| [#8280](https://github.com/DanielH2018/server/issues/8280) | medium | gap | cicd | A fresh landing started from a checkout older than the slot-held rule takes two of the three live-landing slots — *no vetted remediation* | 2026-11-13 | 0 | - | ✓ |
 | [#4435](https://github.com/DanielH2018/server/issues/4435) | low | improvement | cicd | Decide whether to move scripts/ into an installable homelab package | 2026-10-11 | 0 | - | ✓ |
 | [#6292](https://github.com/DanielH2018/server/issues/6292) | low | improvement | container | Retire sonarr-air-date-guard once Sonarr v5 stable ships its air-date Release Profile rule | 2026-10-25 | 0 | - | ✓ |
+| [#7175](https://github.com/DanielH2018/server/issues/7175) | low | gap | backup-observability | H2.8c: read whether native etcd retention prunes the retired cron's S3 objects | 2026-11-05 | 0 | - | ✓ |
 | [#7194](https://github.com/DanielH2018/server/issues/7194) | low | improvement | docs | Reword the Kuma history that M6's census row holds on its allowlist | 2026-11-05 | 0 | worktree-orchestrator-wave20 | ✓ |
+| [#7195](https://github.com/DanielH2018/server/issues/7195) | low | improvement | security | Retire the Alloy and probe.py push-URL redaction once R4 retires the last push token | 2026-11-05 | 0 | worktree-orchestrator-wave20 | ✓ |
 | [#7220](https://github.com/DanielH2018/server/issues/7220) | low | improvement | docs | Delete the lock-retired lint rule once no branch predates the G2 flip | 2026-11-05 | 0 | - | ✓ |
+| [#7232](https://github.com/DanielH2018/server/issues/7232) | low | improvement | docs | Read the G3 freshness measurement and bring the operator the decision | 2026-11-05 | 0 | - | ✓ |
 | [#7320](https://github.com/DanielH2018/server/issues/7320) | low | improvement | docs | Test comments and role tests still describe Kuma as live | 2026-11-05 | 0 | worktree-orchestrator-wave20 | ✓ |
 | [#7620](https://github.com/DanielH2018/server/issues/7620) | low | gap | cicd | Snapshot and prepull objects orphaned by tags retired before #7485 are still live | 2026-11-08 | 0 | - | ✓ |
 | [#7645](https://github.com/DanielH2018/server/issues/7645) | low | gap | security | Record what sudo-rs does with the timestamp drop-in at the first 26.04 host upgrade | 2026-11-08 | 0 | - | ✓ |
@@ -53,68 +44,17 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | [#7989](https://github.com/DanielH2018/server/issues/7989) | low | gap | cicd | Install the commit-msg prek shim in existing checkouts and the agent's clone | 2026-11-11 | 0 | worktree-orchestrator-wave20 | ✓ |
 | [#7990](https://github.com/DanielH2018/server/issues/7990) | low | improvement | docs | Mark the attribution-emoji and agent tools-key memories as enforced | 2026-11-11 | 0 | worktree-orchestrator-wave20 | ✓ |
 | [#8018](https://github.com/DanielH2018/server/issues/8018) | low | gap | cicd | Cap live landers per orchestrator and measure the core call rate under load | 2026-11-12 | 0 | - | ✓ |
+| [#8033](https://github.com/DanielH2018/server/issues/8033) | low | improvement | cicd | Rename the SOPS key gitops_deploy_discord_webhook to a name without the deleted deployer | 2026-11-12 | 0 | - | ✓ |
 | [#8080](https://github.com/DanielH2018/server/issues/8080) | low | gap | cicd | Confirm hosted Renovate regenerates actions.lock on its first Actions bump | 2026-11-12 | 0 | - | ✓ |
-| [#8137](https://github.com/DanielH2018/server/issues/8137) | low | gap | docs | Session-health banner blames the deleted GitOps tick and a land.sh exit 4 for a dirty primary checkout | 2026-11-12 | 0 | - | ✓ |
-| [#8138](https://github.com/DanielH2018/server/issues/8138) | low | improvement | docs | artifacts_platform_services may duplicate names containers_list already carries | 2026-11-12 | 0 | - | ✓ |
-| [#8141](https://github.com/DanielH2018/server/issues/8141) | low | gap | docs | Seven k8s role comments still name the deleted ansible/roles/setup roles | 2026-11-12 | 0 | - | ✓ |
-| [#8144](https://github.com/DanielH2018/server/issues/8144) | low | improvement | security | rootq's hex matches form and exempt k3s-manifest rows lost their only caller, probe.py applied | 2026-11-12 | 0 | - | ✓ |
-| [#8145](https://github.com/DanielH2018/server/issues/8145) | low | gap | - | No shipped script deletes the .subset-copy trees claude-dotfiles-sync renames | 2026-11-12 | 0 | - | ✓ |
-| [#8147](https://github.com/DanielH2018/server/issues/8147) | low | gap | cicd | await_merge's per-poll CI read polls a rate-limited API at its normal cadence | 2026-11-12 | 1 | - | ✓ |
-| [#8150](https://github.com/DanielH2018/server/issues/8150) | low | gap | docs | arr-notification CLAUDE.md still describes the deleted Ansible seed task | 2026-11-12 | 0 | - | ✓ |
-| [#8151](https://github.com/DanielH2018/server/issues/8151) | low | gap | docs | Code comments and the session-health message still name the deleted GitOps tick as a live job | 2026-11-12 | 0 | - | ✓ |
-| [#8157](https://github.com/DanielH2018/server/issues/8157) | low | improvement | - | Drop the moved_from keys once every host holds its users in the 900-949 band | 2026-11-12 | 0 | - | ✓ |
-| [#8162](https://github.com/DanielH2018/server/issues/8162) | low | improvement | docs | Five comments still name the deleted Ansible plane and the Alertmanager poll source | 2026-11-12 | 0 | - | ✓ |
-| [#8164](https://github.com/DanielH2018/server/issues/8164) | low | improvement | docs | Archive the setup-role loop measurement and fold the 34 m6-status shards, gitops-pipeline.md and ansible/README.md's runbook | 2026-11-12 | 0 | worktree-orchestrator-wave20 | ✓ |
-| [#8166](https://github.com/DanielH2018/server/issues/8166) | low | improvement | docs | Claude rules, skills, agents and hooks in the server repo still describe an Ansible homelab | 2026-11-12 | 0 | worktree-orchestrator-wave20 | ✓ |
-| [#8168](https://github.com/DanielH2018/server/issues/8168) | low | improvement | cicd | Delete dead migration paths in scripts and hosts/lib: setup-role defaults, the deployer's guarded import, --await-verdict, the weekly-legacy tier | 2026-11-12 | 0 | worktree-orchestrator-wave20 | ✓ |
-| [#8169](https://github.com/DanielH2018/server/issues/8169) | low | gap | docs | deploy-ui's nothing-to-deploy hint and six docstrings still name the deployer or setup roles as live | 2026-11-12 | 0 | worktree-orchestrator-wave20 | ✓ |
-| [#8171](https://github.com/DanielH2018/server/issues/8171) | low | improvement | cicd | Delete the fan-out forwarding shims fanout_probe.py, fanout_review.py and fanout_place.py | 2026-11-12 | 0 | - | ✓ |
-| [#8174](https://github.com/DanielH2018/server/issues/8174) | low | improvement | cicd | Renderer: reduce checksum_annotation to one argument and pin jellyfin and media-volume through k8s_primary_node | 2026-11-12 | 0 | worktree-orchestrator-wave20 | ✓ |
-| [#8175](https://github.com/DanielH2018/server/issues/8175) | low | gap | docs | README layout block, the generated-page banner and seven doc lines still describe the Ansible tree as live | 2026-11-12 | 0 | worktree-orchestrator-wave20 | ✓ |
-| [#8179](https://github.com/DanielH2018/server/issues/8179) | low | improvement | docs | Re-anchor the ~80 tests that assert target-architecture plan text to ADRs or docs/reference pages | 2026-11-12 | 0 | - | ✓ |
-| [#8180](https://github.com/DanielH2018/server/issues/8180) | low | improvement | docs | Archive the finished target-architecture plans under History, add a what-we-built page, keep the plan paths | 2026-11-12 | 0 | - | ✓ |
-| [#8181](https://github.com/DanielH2018/server/issues/8181) | low | improvement | cicd | Collapse the inventory emulation: a cluster-level services variable, an explicit hosts map instead of hostvars and hosts.ini, and no platform key | 2026-11-12 | 0 | - | ✓ |
-| [#8182](https://github.com/DanielH2018/server/issues/8182) | low | improvement | cicd | Render guards through strict_env, collapse make_env and make_ansible_env, and narrow ansible_bool | 2026-11-12 | 0 | - | ✓ |
-| [#8183](https://github.com/DanielH2018/server/issues/8183) | low | improvement | cicd | Move ansible/tests/setup/ (101 host-package test files) to hosts/tests/ | 2026-11-12 | 0 | - | ✓ |
-| [#8184](https://github.com/DanielH2018/server/issues/8184) | low | improvement | cicd | Rename step 1: resolve lookup('file', playbook_dir ...) relative to the role across every template | 2026-11-12 | 0 | - | ✓ |
-| [#8185](https://github.com/DanielH2018/server/issues/8185) | low | improvement | cicd | Rename step 2: move ansible/filter_plugins/ into a plain package the renderer registers, and delete FilterModule and filter_errors.py | 2026-11-12 | 0 | - | ✓ |
-| [#8186](https://github.com/DanielH2018/server/issues/8186) | low | improvement | cicd | Rename step 3: rename the ansible/ tree to names that say what it holds, move every path consumer, and record the ADR | 2026-11-12 | 0 | - | ✓ |
-| [#8187](https://github.com/DanielH2018/server/issues/8187) | low | gap | docs | artifacts and cluster-base docs still name Ansible and the deleted setup/k3s role, and Kuma is missing from the retired-services list | 2026-11-12 | 0 | worktree-orchestrator-wave20 | ✓ |
-| [#8192](https://github.com/DanielH2018/server/issues/8192) | low | addition | container | Add slskd so Lidarr can download from Soulseek over the VPN | 2026-11-12 | 0 | - | - |
-| [#8193](https://github.com/DanielH2018/server/issues/8193) | low | addition | container | Turn on navidrome scrobbling and Lidarr import lists for music discovery | 2026-11-12 | 0 | - | - |
-| [#8195](https://github.com/DanielH2018/server/issues/8195) | low | gap | cicd | The static-ratchet hook's gate misses .github/actions/*/action.yml, which its workflow census rows read | 2026-11-12 | 0 | - | ✓ |
-| [#8196](https://github.com/DanielH2018/server/issues/8196) | low | gap | backup-observability | etcd restore drill timer has no next run: a runtime drop-in replaced its monthly schedule | 2026-11-12 | 0 | - | ✓ |
-| [#8204](https://github.com/DanielH2018/server/issues/8204) | low | improvement | home-assistant | bedroom_display_show re-casts the dashboard on every Cast socket reconnect | 2026-11-12 | 0 | - | - |
-| [#8205](https://github.com/DanielH2018/server/issues/8205) | low | improvement | home-assistant | Two Home Assistant docs name a renamed automation and a retired network mode | 2026-11-12 | 0 | - | - |
-| [#8206](https://github.com/DanielH2018/server/issues/8206) | low | addition | home-assistant | No alert fires on a Home Assistant Cast heartbeat-loop storm | 2026-11-12 | 0 | - | - |
-| [#8207](https://github.com/DanielH2018/server/issues/8207) | low | gap | cicd | claude-land@ reaches the cluster without setting KUBECONFIG | 2026-11-12 | 0 | - | ✓ |
-| [#8208](https://github.com/DanielH2018/server/issues/8208) | low | gap | cicd | Record a D7 supersession whose T has its own change and settles good | 2026-11-12 | 0 | - | ✓ |
-| [#8217](https://github.com/DanielH2018/server/issues/8217) | low | gap | cicd | Make a red() fixture's vanished anchor fail instead of passing — *no vetted remediation* | 2026-11-12 | 0 | worktree-orchestrator-wave20 | ✓ |
-| [#8219](https://github.com/DanielH2018/server/issues/8219) | low | gap | backup-observability | No check catches a failed systemd unit that declares no verdict of its own | 2026-11-12 | 0 | - | ✓ |
-| [#8220](https://github.com/DanielH2018/server/issues/8220) | low | improvement | container | The pod-shell macro sets fsGroup with no change policy, so janitorr walks the media volume on every mount | 2026-11-12 | 0 | - | ✓ |
-| [#8221](https://github.com/DanielH2018/server/issues/8221) | low | gap | docs | Four files cite a root CLAUDE.md heading, Adding a New Service, that does not exist | 2026-11-12 | 0 | - | ✓ |
-| [#8222](https://github.com/DanielH2018/server/issues/8222) | low | gap | docs | The etcd-restore runbook points at a k3s role that holds neither the version pin nor the S3 credentials file | 2026-11-12 | 0 | - | ✓ |
-| [#8223](https://github.com/DanielH2018/server/issues/8223) | low | improvement | cicd | promote moves prod, superseding, last-good and held by the mutable sha tag, not by the digest decide verified | 2026-11-12 | 0 | - | ✓ |
-| [#8224](https://github.com/DanielH2018/server/issues/8224) | low | improvement | container | Prometheus, Alertmanager, Grafana, Loki and Tempo have a readiness probe and no liveness probe | 2026-11-12 | 0 | - | ✓ |
-| [#8225](https://github.com/DanielH2018/server/issues/8225) | low | gap | container | system-upgrade-controller runs BestEffort at the homelab-critical priority class | 2026-11-12 | 0 | - | ✓ |
-| [#8226](https://github.com/DanielH2018/server/issues/8226) | low | improvement | container | The collector and CoreDNS image pins carry a tag and no digest | 2026-11-12 | 0 | - | ✓ |
-| [#8227](https://github.com/DanielH2018/server/issues/8227) | low | gap | cicd | probe.py cannot read the cluster or the Pi from a session on daniel-server | 2026-11-12 | 0 | - | ✓ |
-| [#8228](https://github.com/DanielH2018/server/issues/8228) | low | gap | docs | The Ubuntu 26.04 upgrade has no tracking issue, no etcd snapshot step for daniel-box and an unproven Pi rollback | 2026-11-12 | 0 | - | ✓ |
-| [#8229](https://github.com/DanielH2018/server/issues/8229) | low | gap | backup-observability | The UPS forced-shutdown drill was never run, and the rule that made it a precondition for arming was deleted, not met | 2026-11-12 | 0 | - | ✓ |
-| [#8230](https://github.com/DanielH2018/server/issues/8230) | low | improvement | docs | The plan-archive and tree-rename sequence lacks three edges: the in-progress slices, the scripts packaging decision and a fan-out freeze | 2026-11-12 | 0 | - | ✓ |
-| [#8231](https://github.com/DanielH2018/server/issues/8231) | low | improvement | security | The route test exempts any route whose match contains ClientIP( from its Authelia assertion | 2026-11-12 | 0 | - | ✓ |
-| [#8233](https://github.com/DanielH2018/server/issues/8233) | low | gap | cicd | The reconcile-size census sits at its ceiling, 1400 of 1400, and nothing says what happens at the next line | 2026-11-12 | 0 | - | ✓ |
-| [#8234](https://github.com/DanielH2018/server/issues/8234) | low | gap | backup-observability | daniel-pi runs saturated: load at 4.7 times its cores, memory down to 12 percent, and a critical SD-health page on 2026-11-12 — *no vetted remediation* | 2026-11-12 | 0 | - | ✓ |
-| [#8235](https://github.com/DanielH2018/server/issues/8235) | low | gap | backup-observability | probe.py alerts says Prometheus keeps 30 days, and the size cap holds 22.6 | 2026-11-12 | 0 | - | ✓ |
-| [#8236](https://github.com/DanielH2018/server/issues/8236) | low | gap | docs | docs/k3s-upgrade.md says a k3s bump runs by hand and, 31 lines later, that merging the pin upgrades both nodes | 2026-11-12 | 0 | - | ✓ |
-| [#8237](https://github.com/DanielH2018/server/issues/8237) | low | gap | cicd | findings.py open warns on every call that the Project Server Issue Tracking is not found | 2026-11-12 | 0 | - | ✓ |
-| [#8238](https://github.com/DanielH2018/server/issues/8238) | low | gap | cicd | A read-only agent has no way to read GitHub: one hook blocks gh in favour of ghread, and the read-only guard refuses ghread | 2026-11-12 | 0 | - | ✓ |
-| [#8239](https://github.com/DanielH2018/server/issues/8239) | low | gap | docs | Fourteen findings were closed as not planned outside findings.py with no reason, and nothing reports such a close | 2026-11-12 | 0 | - | ✓ |
-| [#8252](https://github.com/DanielH2018/server/issues/8252) | low | gap | backup-observability | wg-easy's ExtraProbeFailed flaps with PiLoadHigh, so triage cannot route it | 2026-11-12 | 0 | - | ✓ |
-| [#8254](https://github.com/DanielH2018/server/issues/8254) | low | improvement | cicd | bootstrap_drill's placeholder_problems is never run by check | 2026-11-12 | 0 | - | ✓ |
-| [#8257](https://github.com/DanielH2018/server/issues/8257) | low | gap | cicd | Merge pacing's cap of 2 assumes one ci.yml sweep fits the 20-job pool; uncontended width and arm-runner pooling are unmeasured | 2026-11-12 | 0 | - | ✓ |
-| [#8263](https://github.com/DanielH2018/server/issues/8263) | low | improvement | cicd | Delete the stale ansible/collections/ from both primary checkouts, then drop its last three excludes | 2026-11-12 | 0 | - | ✓ |
-| [#8266](https://github.com/DanielH2018/server/issues/8266) | low | improvement | cicd | ci_verdict.py says a later master push cancels the earlier run, but ci.yml groups master pushes by SHA — *no vetted remediation* | 2026-11-12 | 0 | - | ✓ |
+| [#8091](https://github.com/DanielH2018/server/issues/8091) | low | improvement | cicd | role_paths, a digest-pin glob and two comments still treat ansible/roles/setup as live | 2026-11-12 | 0 | worktree-orchestrator-wave20 | ✓ |
+| [#8103](https://github.com/DanielH2018/server/issues/8103) | low | gap | cicd | Readers still glob roles/**/tasks/*.yml, which matches nothing since H7.55 | 2026-11-12 | 0 | worktree-orchestrator-wave20 | ✓ |
+| [#8106](https://github.com/DanielH2018/server/issues/8106) | low | gap | docs | Runbooks and docs still say deploy.sh refuses or exits 5, and claude-tooling documents a deleted probe subcommand | 2026-11-12 | 0 | - | ✓ |
+| [#8107](https://github.com/DanielH2018/server/issues/8107) | low | gap | docs | The claude-code component's files and sudoers headers cite the deleted claude_code role's tasks/*.yml | 2026-11-12 | 0 | - | ✓ |
+| [#8108](https://github.com/DanielH2018/server/issues/8108) | low | gap | docs | 48 role CLAUDE.md files say deploy.sh refuses the role, and k8s role comments cite tasks/main.yml | 2026-11-12 | 0 | - | ✓ |
+| [#8111](https://github.com/DanielH2018/server/issues/8111) | low | gap | backup-observability | No test holds the JSON-map shape of Longhorn's default-replica-count Setting | 2026-11-12 | 0 | - | ✓ |
+| [#8114](https://github.com/DanielH2018/server/issues/8114) | low | gap | docs | Mark H7 DONE with its seven exit readings | 2026-11-12 | 0 | - | ✓ |
+| [#8115](https://github.com/DanielH2018/server/issues/8115) | low | gap | cicd | Record D7's exit pair at the next natural superseding promotion | 2026-11-12 | 0 | - | ✓ |
+| [#8118](https://github.com/DanielH2018/server/issues/8118) | low | improvement | cicd | ansible/tests readers still walk role tasks/ directories that no role has | 2026-11-12 | 0 | - | ✓ |
 
 ## Deferred, by date
 
@@ -123,7 +63,10 @@ Open findings carrying a `not-before:` label, soonest first. `findings.py next` 
 | Not before | State | # | Finding |
 |---|---|---|---|
 | 2026-11-16 | withheld | [#7688](https://github.com/DanielH2018/server/issues/7688) | Fix the pytest shard 5 and host_tools_arm64 CI flakes |
+| 2026-11-19 | withheld | [#8115](https://github.com/DanielH2018/server/issues/8115) | Record D7's exit pair at the next natural superseding promotion |
+| 2026-11-21 | withheld | [#7175](https://github.com/DanielH2018/server/issues/7175) | H2.8c: read whether native etcd retention prunes the retired cron's S3 objects |
 | 2026-11-22 | withheld | [#7490](https://github.com/DanielH2018/server/issues/7490) | The Pi's reconcile reaches its 30-minute timeout and holds its updates |
+| 2026-12-05 | withheld | [#7232](https://github.com/DanielH2018/server/issues/7232) | Read the G3 freshness measurement and bring the operator the decision |
 | 2026-12-15 | withheld | [#4435](https://github.com/DanielH2018/server/issues/4435) | Decide whether to move scripts/ into an installable homelab package |
 | 2027-01-04 | withheld | [#7220](https://github.com/DanielH2018/server/issues/7220) | Delete the lock-retired lint rule once no branch predates the G2 flip |
 | 2027-02-01 | withheld | [#6292](https://github.com/DanielH2018/server/issues/6292) | Retire sonarr-air-date-guard once Sonarr v5 stable ships its air-date Release Profile rule |
@@ -134,15 +77,8 @@ Open findings with an open "blocked by" issue. `findings.py next` withholds each
 
 | # | Blocked by | Finding |
 |---|---|---|
-| [#8179](https://github.com/DanielH2018/server/issues/8179) | #8164 | Re-anchor the ~80 tests that assert target-architecture plan text to ADRs or docs/reference pages |
-| [#8180](https://github.com/DanielH2018/server/issues/8180) | #8179 | Archive the finished target-architecture plans under History, add a what-we-built page, keep the plan paths |
-| [#8181](https://github.com/DanielH2018/server/issues/8181) | #8174 | Collapse the inventory emulation: a cluster-level services variable, an explicit hosts map instead of hostvars and hosts.ini, and no platform key |
-| [#8182](https://github.com/DanielH2018/server/issues/8182) | #8174 | Render guards through strict_env, collapse make_env and make_ansible_env, and narrow ansible_bool |
-| [#8184](https://github.com/DanielH2018/server/issues/8184) | #8181, #8182 | Rename step 1: resolve lookup('file', playbook_dir ...) relative to the role across every template |
-| [#8185](https://github.com/DanielH2018/server/issues/8185) | #8181, #8182 | Rename step 2: move ansible/filter_plugins/ into a plain package the renderer registers, and delete FilterModule and filter_errors.py |
-| [#8186](https://github.com/DanielH2018/server/issues/8186) | #8180, #8183, #8184, #8185 | Rename step 3: rename the ansible/ tree to names that say what it holds, move every path consumer, and record the ADR |
-| [#8192](https://github.com/DanielH2018/server/issues/8192) | #8190 | Add slskd so Lidarr can download from Soulseek over the VPN |
-| [#8193](https://github.com/DanielH2018/server/issues/8193) | #8190 | Turn on navidrome scrobbling and Lidarr import lists for music discovery |
+| [#8036](https://github.com/DanielH2018/server/issues/8036) | #8033 | gitops_deploy_discord_webhook keeps the deleted deployer's name, which #8028 asked to drop |
+| [#8119](https://github.com/DanielH2018/server/issues/8119) | #8100 | Bootstrap step 5 never checks that sysusers gave each declared user its declared uid |
 
 ## Settled findings — do not re-flag
 
@@ -240,7 +176,6 @@ Findings closed with `findings.py close --accepted` (true, and the operator chos
 | [#3244](https://github.com/DanielH2018/server/issues/3244) | accepted | inject-nested-docs head form left facts.md out of 4 of 132 payloads with no later delivery | Operator decision 2026-10-02: 4 facts.md misses in 132 head-form payloads is an acceptable residual; the editing-rule gating works as designed. |
 | [#3964](https://github.com/DanielH2018/server/issues/3964) | refuted | Cut the issue-fanout skill's Agent() fallback to one paragraph | Its precondition failed: the Agent() fallback ran on 2026-10-09 (session 4bc48d84, worktree issue-fanout-2026-10-09-wave1, 14 Agent worktrees), so the fallback is in use and cannot be retired. Evidence is in the issue thread. |
 | [#7164](https://github.com/DanielH2018/server/issues/7164) | accepted | H6.7's PR reordered the plan's exit criterion with no operator ruling | Operator ruled 2026-11-05: H6.7 may land before H6.6. PR 7156's rewrite of the exit criterion stands; record H6.6's pre-upgrade state after H6.7's restart so it cannot falsely satisfy Exit 2. |
-| [#7232](https://github.com/DanielH2018/server/issues/7232) | accepted | Read the G3 freshness measurement and bring the operator the decision | Operator declined G3 on 2026-11-12: post-G2 share 0.53 vs G1 0.675, above the 0.34 build threshold |
 | [#7505](https://github.com/DanielH2018/server/issues/7505) | accepted | Write the Pi rebuild runbook now every Pi package step is live | The operator ruled on 2026-11-08 not to run the Pi rebuild drill. The runbook in docs/break-glass.md (#7518) stays undrilled, and that page's drill table already marks it No. |
 
 ### network

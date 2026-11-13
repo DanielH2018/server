@@ -72,7 +72,6 @@ def test_run_times_come_from_the_first_two_fields_of_each_jobs_cron():
     times = state.run_times(crons)
     assert times["daily-backup"] == "3:30"
     assert times["weekly-backup-d6"] == "4:15"
-    assert state.legacy_run_time(times) == "4:15"
 
 
 def test_a_missing_or_malformed_cron_is_none_for_that_job_only():
@@ -81,5 +80,3 @@ def test_a_missing_or_malformed_cron_is_none_for_that_job_only():
     assert times["daily-backup"] is None
     assert times["weekly-backup-d0"] is None
     assert times["weekly-backup-d1"] == "4:15"
-    assert state.legacy_run_time(times) == "4:15"
-    assert state.legacy_run_time(state.run_times({})) is None

@@ -314,7 +314,7 @@ control plane down rather than always doing so:
 To see what a candidate tag selects before running it, add `--list-tasks`. A backup-target change
 is a PR to the `longhorn-backup` role, which Flux applies, and the BackupTarget break-glass in
 `docs/break-glass.md` covers the cases a PR cannot reach; the read-only kubeconfig is
-`homelab-k3s-kubeconfig.service`'s, in daniel-box's package.
+`homelab-k3s-kubeconfig.service`'s, in daniel-box's and daniel-server's packages.
 
 The weekly `etcd restore drill` cron is gated on `k3s_etcd_restore_drill_armed` and runs
 `--list-only` on this host, because a full etcd restore cannot pass beside a live k3s. Its

@@ -10,7 +10,7 @@ import subprocess
 # Reach the sibling package directories: a directly-invoked script gets only its own
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting. Both inserts are
 # relative to THIS file, so `clean-one` imports the `lib.worktrees` sitting beside the copy of
-# fanout_place.py it was started from (the primary checkout's, see `remote_clean_command`).
+# fanout.py it was started from (the primary checkout's, see `remote_clean_command`).
 # Never change either to an absolute path.
 import sys as _sys
 from pathlib import Path as _Path
@@ -383,7 +383,7 @@ def remote_clean_command(
     silently falling through to that stale state.
 
     The `clean-one` leg runs the PRIMARY checkout's copy of this script
-    (`{REPO}/scripts/dev/fanout_place.py`), on every host and for every repo. It used to run
+    (`{REPO}/scripts/dev/fanout.py place`), on every host and for every repo. It used to run
     the batch worktree's own copy for the homelab repo (Ruling E), on the theory that the
     primary checkout there lags. That froze the merge judgement at whatever the batch was
     launched from: a batch started before #6552 kept running the `clean-one` that has no
@@ -474,19 +474,17 @@ def remote_clean_command(
             repo instead of the shared primary checkout, where `branch -D` and `worktree
             remove` would hit whatever every other live session is doing.
         target: the repo the batch works, which names its default branch.
-        script_root: the checkout whose `fanout_place.py` the `clean-one` leg runs, defaulting
+        script_root: the checkout whose `fanout.py` the `clean-one` leg runs, defaulting
             to `REPO`. A seam for the same reason as `repo`: a test that executes the chain
             points it at a scratch checkout.
     """
     wt, branch = b.worktree, b.branch
     repo = repo or target.checkout
-    # DECIDED: both legs run the `fanout_place.py` shim, not `fanout.py place`, from the PRIMARY
-    # checkout. A batch launched before #4346 has no `fanout.py`; the shim exists in old and new
-    # checkouts alike. The worktree's own copy is not run: it is frozen at the batch's launch
-    # and kept every squash-merged batch launched before #6552 (#6571). Full reasoning in this
-    # function's docstring.
+    # DECIDED: the `clean-one` leg runs the PRIMARY checkout's `fanout.py place`, not the batch
+    # worktree's own copy, which is frozen at the batch's launch and kept every squash-merged
+    # batch launched before #6552 (#6571). Full reasoning in this function's docstring.
     clean_one_leg = (
-        f"python {script_root or REPO}/scripts/dev/fanout_place.py clean-one {wt} {branch}"
+        f"python {script_root or REPO}/scripts/dev/fanout.py place clean-one {wt} {branch}"
         + ("" if target.is_server else f" --repo {target.repo}")
     )
     gone_branch = f'echo "removed: {wt} (already gone)"'

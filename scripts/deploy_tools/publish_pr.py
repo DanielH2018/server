@@ -4,13 +4,13 @@
 The unattended crons that commit -- docs-refresh and eval-run -- each
 carried this sequence inline, byte for byte, in a template. A repository ruleset rejects every direct write to master, so the only way a cron
 lands anything is: put the commit on a fresh branch, push that, take the commit back off
-the local master so gitops-deploy's ``--ff-only`` still succeeds when the squash lands
+the local master so ``homelab-checkout-sync`` can still fast-forward it once the squash lands
 under a new SHA, open the PR, and hand it to a detached ``land.py`` that merges it.
 
 WHY A LANDING AND NOT GITHUB'S AUTO-MERGE. When this was written, a ruleset blocked every
-auto-merged PR, because auto-merge never applies a bypass (#3609, #3911). That block is gone
-since 2026-10-11, and the landing stays because it merges at the head SHA it read green and
-then deploys the merge. ``land.py --arm-merge --await-merge`` waits for CI and merges through
+auto-merged PR, because auto-merge never applies a bypass (#3609, #3911). Ruleset 27167149
+blocks it again, and the landing also merges at the head SHA it read green and then deploys
+the merge. ``land.py --arm-merge --await-merge`` waits for CI and merges through
 the REST endpoint, pinned to that SHA. ``--detach`` matters as much as the merge. The callers hold the git-tree lock on
 fd 9 and read this script's output through a pipe, so a landing that inherited either would
 keep the lock for the whole CI wait. The detached landing closes every inherited descriptor
@@ -282,8 +282,8 @@ def publish(
         )
 
     # The branch is on origin. Take the commit off the local master BEFORE opening the PR:
-    # once the squash lands under a new SHA, a local master that is one commit ahead makes
-    # gitops-deploy's --ff-only refuse, and that parked the deployer twice during diagnosis.
+    # once the squash lands under a new SHA, a local master one commit ahead is no ancestor of
+    # origin/master, and homelab-checkout-sync refuses it (reason `ancestry`) until cleared.
     # HEAD~1, not origin/master: this undoes exactly the one commit the caller made.
     # origin/master is only as fresh as the last fetch, which the callers do not do, so
     # resetting to it could discard something else or move master backwards.

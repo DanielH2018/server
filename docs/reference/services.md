@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/service_catalog.py
-generated_at: 2026-11-13 00:39 UTC
-generated_sha: 4815c0d91
+generated_at: 2026-11-12 15:10 UTC
+generated_sha: 0d7821e53
 ---
 
 !!! warning "Generated file — do not edit"
@@ -62,7 +62,7 @@ generated_sha: 4815c0d91
 | monitor-bridge | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | no PVC (stateless) | n/a: applied by Flux, through `promote` (`platform: k8s`); `land.sh` gates the rollout |
 | mosquitto | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | no backup (StorageClass longhorn-nobackup) | n/a: applied by Flux, through `promote` (`platform: k8s`); `land.sh` gates the rollout |
 | n8n | k8s | <span class="fqdn" data-host="n8n">n8n.&lt;domain&gt;</span> · <span class="fqdn" data-host="n8n.local">n8n.local.&lt;domain&gt;</span> | Authelia two_factor | weekly -> B2 (default target) | n/a: applied by Flux, through `promote` (`platform: k8s`); `land.sh` gates the rollout |
-| navidrome | k8s | <span class="fqdn" data-host="navidrome">navidrome.&lt;domain&gt;</span> · <span class="fqdn" data-host="navidrome.local">navidrome.local.&lt;domain&gt;</span> | Authelia one_factor | weekly -> B2 (default target); not Longhorn (media-local) | n/a: applied by Flux, through `promote` (`platform: k8s`); `land.sh` gates the rollout |
+| navidrome | k8s | <span class="fqdn" data-host="navidrome">navidrome.&lt;domain&gt;</span> · <span class="fqdn" data-host="navidrome.local">navidrome.local.&lt;domain&gt;</span> | Authelia one_factor | weekly -> B2 (default target) | n/a: applied by Flux, through `promote` (`platform: k8s`); `land.sh` gates the rollout |
 | netpol-baseline | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | no PVC (stateless) | n/a: applied by Flux, through `promote` (`platform: k8s`); `land.sh` gates the rollout |
 | node-exporter | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | no PVC (stateless) | n/a: applied by Flux, through `promote` (`platform: k8s`); `land.sh` gates the rollout |
 | nut | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | no PVC (stateless) | n/a: applied by Flux, through `promote` (`platform: k8s`); `land.sh` gates the rollout |

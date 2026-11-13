@@ -1,7 +1,7 @@
 ---
 # Template for a new host's host_vars. Copy to `<hostname>.yml` and edit — Ansible only
 # loads a host_vars file whose name matches an inventory hostname, so this one is inert.
-# Full walkthrough: ansible/README.md §4. Defaults quoted below come from
+# Full walkthrough: docs/host-bring-up.md §4. Defaults quoted below come from
 # inventory/group_vars/all.yml; anything already correct there can simply be left out.
 #
 # Never put a secret here — inventory/ is NOT SOPS-auto-encrypted and NOT hook-guarded

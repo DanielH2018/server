@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/crons.py
-generated_at: 2026-11-13 00:39 UTC
-generated_sha: 4815c0d91
+generated_at: 2026-11-12 18:40 UTC
+generated_sha: 65e094073
 ---
 
 !!! warning "Generated file — do not edit"
@@ -62,7 +62,7 @@ generated_sha: 4815c0d91
 | homelab-pi-watchdog-health.timer | `OnCalendar=*:0/5` | daniel-pi | `ubuntu` | read the script | `hosts/components/pi-heartbeats/units/homelab-pi-watchdog-health.timer` |
 | homelab-reboot.timer | `OnCalendar=Sun *-*-* 07:30:00 UTC` | daniel-box, daniel-pi, daniel-server | `root` | yes (reboot) | `hosts/components/host-maintenance/units/homelab-reboot.timer.j2` |
 | homelab-registry-gc.timer | `OnCalendar=Sun *-*-* 04:20:00` | daniel-box | `root` | read the script | `hosts/components/registry-gc/units/homelab-registry-gc.timer` |
-| homelab-renovate-agent.timer | `OnCalendar=*-*-* 06:00:00 America/Chicago` | daniel-box (no enable link) | `renovate-agent` | read the script | `hosts/components/renovate-agent/templates/homelab-renovate-agent.timer.j2` |
+| homelab-renovate-agent.timer | `OnCalendar=*-*-* 06:00:00 America/Chicago` | daniel-box | `renovate-agent` | read the script | `hosts/components/renovate-agent/templates/homelab-renovate-agent.timer.j2` |
 | homelab-renovate-notify.timer | `OnCalendar=*-*-* 13:00:00` | daniel-box | `ubuntu` | read the script | `hosts/components/renovate-notify/units/homelab-renovate-notify.timer` |
 | homelab-rkhunter-check.timer | `OnCalendar=Wed *-*-* 02:00:00` | daniel-box, daniel-pi, daniel-server | `root` | read the script | `hosts/components/integrity-scans/units/homelab-rkhunter-check.timer` |
 | homelab-secret-rotation-audit.timer | `OnCalendar=*-*-* 08:30:00` | daniel-box | `ubuntu` | read the script | `hosts/components/secret-rotation/units/homelab-secret-rotation-audit.timer` |

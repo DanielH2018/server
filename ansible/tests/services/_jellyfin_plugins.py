@@ -21,6 +21,8 @@ follow it.
 import ast
 import re
 
+import pytest
+
 from _k8s_render import render_role_template, rendered_docs
 from lib import yaml_fast
 
@@ -155,7 +157,7 @@ def without_assignment(installer: str, name: str) -> str:
         ]:
             del lines[node.lineno - 1 : node.end_lineno]
             return "".join(lines)
-    raise AssertionError(f"the script assigns no {name}, so there is nothing to remove")
+    pytest.fail(f"the script assigns no {name}, so there is nothing to remove")
 
 
 def compares_against(installer: str, name: str) -> bool:

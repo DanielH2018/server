@@ -67,6 +67,6 @@ shared conventions.
   the Kustomization because `ansible/roles/k8s/tdarr/defaults/main.yml:flux_prepull_timeout`
   is set (`scripts/renderer/renderer_lib/prepull.py`), and `tdarr` depends on it. Its Job
   copies the Deployment's placement. That is why the Deployment carries a required node
-  affinity to `inventory_hostname`, the node the `media-data` PV already pins it to: the
+  affinity to `k8s_primary_node`, the node the `media-data` PV already pins it to: the
   renderer refuses a pre-pull for a workload that names no node.
   `ansible/tests/services/test_tdarr_prepulls_its_image.py` holds both halves.

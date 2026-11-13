@@ -13,8 +13,8 @@ import pytest
 import _k8s_render
 from lib import render_context as rc
 
-# Inventory keys that read a name only Ansible or a setup role defines (#7845).
-ALWAYS_UNDEFINED = frozenset({"k8s_no_mutate", "claude_code_watch_uids"})
+# Inventory keys that read a name only Ansible defines (#7845).
+ALWAYS_UNDEFINED = frozenset({"k8s_no_mutate"})
 
 
 @dataclass
@@ -48,7 +48,7 @@ def spied() -> Spied:
     return seen
 
 
-def test_no_k8s_render_context_drops_k8s_no_mutate_or_claude_code_watch_uids(spied):
+def test_no_k8s_render_context_drops_k8s_no_mutate(spied):
     dropped = {
         key: reason
         for _, keys in spied.resolves

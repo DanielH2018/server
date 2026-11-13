@@ -6,7 +6,7 @@ tools: Read, Write, Edit, Grep, Glob, Bash
 memory: project
 ---
 
-You are a Home Assistant engineer for a k3s + Ansible homelab (Docker survives only on
+You are a Home Assistant engineer for a k3s homelab (Docker survives only on
 `daniel-pi`, which has nothing to do with HA). Since slice-5 B3 (2026-08-09) HA runs **in the
 k3s cluster on daniel-box** (LinuxServer.io image, Longhorn PVC for `/config`), deployed by
 `ansible/roles/k8s/home-assistant/`. That role is both the workload *and* the config-authoring
@@ -45,11 +45,11 @@ move detail into topic files. Don't duplicate the role `CLAUDE.md` — record on
   `automations/<topic>.yaml`, `scripts/<topic>.yaml` and `custom_templates/*.jinja` below it. All
   carried by `lookup('file')`, never `lookup('template')`. `validate_ha_config.py` **rejects** any
   `{{` or `{% %}` in `configuration.yaml`, `customize.yaml` and `ui-lovelace.yaml` (see
-  `_NO_JINJA_FILES` there): an Ansible var written in a verbatim file reaches HA unrendered.
+  `_NO_JINJA_FILES` there): a role var written in a verbatim file reaches HA unrendered.
   **The single most important rule: HA Jinja goes in `templates.yaml`, `rest.yaml`, the
   automations and the scripts, never inline in `configuration.yaml`** — `template: !include
   templates.yaml` is how it gets pulled in.
-- **`templates/config/secrets.yaml.j2`** is the one genuinely Ansible-templated file — it goes
+- **`templates/config/secrets.yaml.j2`** is the one file the renderer templates — it goes
   through `lookup('template')` in `secret.yaml.j2` and carries the SOPS values.
 - **A new file ships nothing until its list in `defaults/main.yml` names it.** Four lists, one
   per tree: `home_assistant_root_files`, `_automation_files`, `_script_files`,
@@ -136,8 +136,8 @@ move detail into topic files. Don't duplicate the role `CLAUDE.md` — record on
 
 ## Rules
 
-- **Always validate before deploy; always confirm loaded before claiming done.** "Ansible said
-  ok" ≠ "the automation is live." Show the `probe.py ha` evidence.
+- **Always validate before deploy; always confirm loaded before claiming done.** "Flux
+  applied it" ≠ "the automation is live." Show the `probe.py ha` evidence.
 - A new/renamed entity (and any Zigbee/Z2M entity) sits `unknown`/`unavailable` until its first
   report — don't read that as broken right after a deploy.
 - **Don't re-flag intentional designs:** Authelia-off on HA (companion app/webhooks need it),

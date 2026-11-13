@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/scripts.py
-generated_at: 2026-11-13 00:39 UTC
-generated_sha: 4815c0d91
+generated_at: 2026-11-13 00:56 UTC
+generated_sha: d26cf3211
 ---
 
 !!! warning "Generated file — do not edit"
@@ -466,7 +466,7 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/backup/longhorn_reap.py` | backup | Delete Longhorn Backup and Snapshot objects that no RecurringJob will ever prune. | backups.py (a person runs it) | — | — |
 | `scripts/dev/new_k8s_service.py` | dev | Scaffold a k3s service role from its name, image and port, instead of copying a sibling. | no automated caller in the tree | `test_new_k8s_service.py` | — |
 | `scripts/dev/pipeline_timeline.py` | dev | Join each merged PR's stage timestamps into one row, and keep a dated snapshot of them. | no automated caller in the tree | `test_pipeline_timeline.py` | — |
-| `scripts/diagnostics/postflight.py` | diagnostics | Verify the post-deploy setup that Ansible can't do (ansible/README.md §9). | no automated caller in the tree | `test_postflight.py` | — |
+| `scripts/diagnostics/postflight.py` | diagnostics | Verify the post-deploy setup that Ansible can't do (docs/host-bring-up.md §9). | no automated caller in the tree | `test_postflight.py` | — |
 | `scripts/dev/pr_changed_files.sh` | dev | List the files a pull request changes, and say whether its scoped CI run can be trusted. | no automated caller in the tree | — | — |
 | `scripts/backup/prune_backups.py` | backup | Drain stranded Longhorn volume prefixes straight out of B2, with credentials from SOPS. | no automated caller in the tree | — | — |
 | `scripts/validate/refresh_vendored_schemas.py` | validate | Re-download the vendored JSON schemas this repo checks rendered config against. | no automated caller in the tree | `test_refresh_vendored_schemas.py` | — |

@@ -25,19 +25,19 @@ from renderer.renderer_lib.ordering import Ordering
 _TDARR = K8S_ROLES / "tdarr"
 
 
-def test_the_media_volume_pins_tdarrs_claim_to_the_play_host() -> None:
-    # media-volume pins the local PV to its `inventory_hostname`, on the claim tdarr mounts.
-    # Rendered at a sentinel host, so a PV pinned to a literal name or to any other variable
+def test_the_media_volume_pins_tdarrs_claim_to_the_primary_node() -> None:
+    # media-volume pins the local PV to `k8s_primary_node`, on the claim tdarr mounts.
+    # Rendered with a sentinel node, so a PV pinned to a literal name or to any other variable
     # renders something other than the sentinel and fails here.
     pv = yaml_fast.safe_load(
         render_role_template(
-            "media-volume", "pv.yaml.j2", {"inventory_hostname": "sentinel-node"}
+            "media-volume", "pv.yaml.j2", {"k8s_primary_node": "sentinel-node"}
         )
     )
     terms = pv["spec"]["nodeAffinity"]["required"]["nodeSelectorTerms"]
     assert [v for t in terms for e in t["matchExpressions"] for v in e["values"]] == [
         "sentinel-node"
-    ], "media-volume no longer pins the PV to the play host"
+    ], "media-volume no longer pins the PV to the primary node"
     assert (
         pv["spec"]["claimRef"]["name"] == load_defaults(_TDARR)["tdarr_k8s_media_claim"]
     )

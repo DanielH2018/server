@@ -1,12 +1,12 @@
 """A systemd timer's triggers read from its unit text, and a daily `OnCalendar=` expanded.
 
-Two readers share it: `test_renderer_host_update_limits.py`, which bounds the longest gap
-between two updater fires, and the landing's host wait (`land_lib/host_wait.py`), which needs
-the fires after a merge. Both read the timer as the host renderer emits it, so neither asks
-systemd on the machine it runs on.
+Three readers share it: `test_renderer_host_update_limits.py`, which bounds the longest gap
+between two updater fires, the landing's host wait (`land_lib/host_wait.py`), which needs the
+fires after a merge, and `test_updater_package.py`, which reads `TimeoutStartSec=`. Each reads
+the unit as the host renderer emits it, so none asks systemd on the machine it runs on.
 
 Only the forms the host packages use are read. Anything else raises `ValueError`, so a
-schedule neither reader can expand fails rather than reads as some other schedule.
+schedule no reader can expand fails rather than reads as some other schedule.
 
 Typical usage example:
 

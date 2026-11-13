@@ -162,17 +162,16 @@ the hook-install task does not remove the hook. A broken hook refuses every agen
 - **Its token is a classic `public_repo` token.** GitHub does not support fine-grained tokens
   for a collaborator on another personal account's repo. The token is stored in SOPS as
   `claude_code_agent_gh_token`, so `ansible/secret_rotation.yml` tracks it.
-- **No ruleset requires a review, and both accounts can auto-merge.** The "master review gate"
-  ruleset (24514824, created 2026-10-05) required one approving review on a PR to master. The
-  operator deleted it on 2026-10-11, and the same day chose that PRs from the operator's account
-  and from DanielClaudeBot auto-merge once CI is green. The branch fence therefore excludes
-  master, and the "master CI gate" ruleset carries a `pull_request` rule with zero approvals.
-  That rule makes every change to master arrive as a PR, from any account, and needs no bypass,
-  so GitHub's auto-merge can satisfy it.
-- **The landing policy does not bind an auto-merge.** `land_lib/policy.py` refuses an agent PR
-  that changes an approval-list path, but it runs only inside `land.sh`. DanielClaudeBot can
-  arm GitHub's auto-merge on its own PR, and that merge skips the policy. The operator accepted
-  this on 2026-10-11.
+- **No ruleset requires a review.** The "master review gate" ruleset (24514824, created
+  2026-10-05) required one approving review on a PR to master, and the operator deleted it on
+  2026-10-11. The "master CI gate" ruleset carries a `pull_request` rule with zero approvals,
+  which makes every change to master arrive as a PR, from any account.
+- **Only the admin role and Renovate update master.** Ruleset 27167149, created 2026-11-13
+  under dotfiles#967 D12, restricts updates to master and bypasses `RepositoryRole:5` and
+  `Integration:2740`. DanielClaudeBot can therefore merge nothing itself, and GitHub's
+  auto-merge, which applies no bypass, leaves a PR from either account `BLOCKED`. Every agent
+  PR reaches master through `homelab-claude-land@`, so `land_lib/policy.py` sees each one.
+  `github-ruleset-drift.sh` pins the ruleset.
 - **To restore the review gate,** create a ruleset on `refs/heads/master` with one
   `pull_request` rule: `required_approving_review_count: 1`, `dismiss_stale_reviews_on_push:
   true` and `require_last_push_approval: true`. Its bypass actors were
@@ -182,9 +181,9 @@ the hook-install task does not remove the hook. A broken hook refuses every agen
 - **`land.sh` merges every PR directly.** `land.sh --arm-merge` waits for CI, then merges
   through the REST endpoint, pinned to the head SHA it checked. It arms no auto-merge, because
   auto-merge merges whatever head is green when CI finishes, not the head the policy checked.
-- **Renovate's `platformAutomerge` is off.** It went off while the fence covered master, when
-  GitHub's auto-merge could not merge any PR. Renovate's own merge call lands an automerge on
-  its next run rather than the moment CI passes.
+- **Renovate's `platformAutomerge` is off.** GitHub's auto-merge applies no bypass, so it
+  cannot merge past the update restriction. Renovate's own merge call, as a bypass actor,
+  lands an automerge on its next run rather than the moment CI passes.
 - **The "agent branch fence" ruleset restricts branch writes.** It restricts creating, updating
   and deleting every branch except `refs/heads/master` and `refs/heads/worktree-claude+**`. The
   admin role and Renovate bypass it. The master CI gate's `pull_request` rule keeps master to

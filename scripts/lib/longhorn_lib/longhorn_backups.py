@@ -47,13 +47,11 @@ LIST_ARGS = ("get", RESOURCE, "-o", "json")
 
 # A volume joins a RecurringJob group through a `<prefix><group>=enabled` label. `default` is
 # Longhorn's implicit group, covering every volume with no group of its own; `no-backup` is the
-# opt-out group and names no RecurringJob; `weekly-backup` is the pre-shard weekly group, still
-# read as a tier. The weekly tier has one shard per weekday, so no day's deletions reach the B2
-# transaction cap.
+# opt-out group and names no RecurringJob. The weekly tier has one shard per weekday, so no
+# day's deletions reach the B2 transaction cap.
 GROUP_LABEL_PREFIX = "recurring-job-group.longhorn.io/"
 DEFAULT_GROUP = "default"
 NO_BACKUP_GROUP = "no-backup"
-WEEKLY_LEGACY_GROUP = "weekly-backup"
 WEEKLY_SHARDS = 7
 
 # The daily RecurringJob, which selects the `default` group. The weekly jobs are named for their

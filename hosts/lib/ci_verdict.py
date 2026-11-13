@@ -71,6 +71,24 @@ CI_GATE_NEEDS_JOBS = frozenset(
         "host_tools_arm64",
     }
 )
+# The check-run name of the job that builds the host packages and says whether the jobs below
+# have anything to run.
+CI_BUILD_JOB = "build the host packages (render, nfpm, lint)"
+# The gate needs that read the build's artifacts. Each may skip at job level when the build
+# succeeded and had no work for it, and the gate's script passes that skip from the build's
+# outputs. A check-run does not carry a job output, so `jobs_verdict` leans on the workflow:
+# beside a build that succeeded, such a job skips only when the build had no work for it. A run
+# cancelled in the instant between the build's last step and these jobs' `if:` would read the
+# same, and the gate job's own conclusion then decides once it exists.
+CI_BUILD_READER_JOBS = frozenset(
+    {
+        "host_packages (24.04, 3.12)",
+        "host_packages (26.04, 3.14)",
+        "host_packages_bootstrap (24.04, 3.12)",
+        "host_packages_bootstrap (26.04, 3.14)",
+        "host_tools_arm64",
+    }
+)
 
 
 def _run_state(run: dict) -> str:
@@ -96,6 +114,8 @@ def jobs_verdict(check_runs: list[dict]) -> str:
     `proven` was true, and a check-run cannot show that output itself. `prove` is skipped on a
     run that is not a push. A cancelled or failed `prove` (a runner fault) runs every dependent
     whatever `proven` says, so they must all pass.
+    A `CI_BUILD_READER_JOBS` job that skipped beside a build that succeeded also passes: the
+    build had no work for it.
     Fail-closed: any failure is `fail`, a missing or unfinished job is
     `pending`, and a skipped job without that proof is `pending`, so the gate job's own
     conclusion decides it.
@@ -117,6 +137,7 @@ def jobs_verdict(check_runs: list[dict]) -> str:
     prove = states.get(CI_PROVE_JOB)
     if prove is None or "pending" in prove:
         return "pending"
+    built = "pass" in states.get(CI_BUILD_JOB, set())
     skipped = 0
     for name in CI_GATE_NEEDS_JOBS:
         job = states.get(name)
@@ -124,6 +145,8 @@ def jobs_verdict(check_runs: list[dict]) -> str:
             return "pending"
         # A draft run's skip beside the ready run's pass on the same head is a pass (#5563).
         if "skipped" in job and "pass" not in job:
+            if built and name in CI_BUILD_READER_JOBS:
+                continue
             skipped += 1
     if not skipped:
         return "pass"

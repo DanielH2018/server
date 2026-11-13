@@ -206,9 +206,6 @@ def parse_args(argv: list[str] | None, description: str) -> Options:
         help="land from a detached checkout of origin/master this run makes and removes, "
         "for a checkout whose landing code master has changed",
     )
-    # Retired, and kept only so a caller still passing it hears what replaced it rather than
-    # argparse's bare "unrecognized arguments".
-    parser.add_argument("--await-verdict", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument(
         "--log-dir",
         default="",
@@ -226,11 +223,6 @@ def parse_args(argv: list[str] | None, description: str) -> Options:
         parser.error(
             "--regate re-runs the gates for a merged PR and nothing else; drop "
             "--arm-merge, --await-merge, --tags, --detach and --fresh"
-        )
-    if ns.await_verdict:
-        parser.error(
-            "--await-verdict is retired; wait with cc-wait instead: "
-            f"land.sh --pr {ns.pr} ... --detach && cc-wait land {ns.pr}"
         )
     return Options(
         pr=ns.regate or ns.pr,

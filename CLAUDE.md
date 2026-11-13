@@ -14,12 +14,12 @@ regenerates it.
 
 **A new service is a k3s role under `ansible/roles/k8s/<name>/`** unless it must run on the Pi.
 daniel-box and daniel-server have no Docker, so a Compose service there deploys nothing. The
-Pi's services are not Ansible roles: `ansible/inventory/host_vars/daniel-pi.yml` lists them.
+Pi's services are `compose_services` entries in `ansible/inventory/host_vars/daniel-pi.yml`.
 A service's config lives in the tree that deploys it: if a k3s workload reads it, it is under
 its role.
 
-**A k8s service deploys through `promote` and Flux, never through Ansible**, and no playbook
-remains to run. A host's setup plane ships in its host package. `docs/deploying.md` says which
+**A k8s service deploys through `promote` and Flux.** A host's setup plane ships in its host
+package. `docs/deploying.md` says which
 path applies a change. Run the repo's Python tools through `uv run`.
 
 ## Where to Look (task → start here)
@@ -53,8 +53,9 @@ that says not to merge, such as a fan-out batch with a review phase, wins over t
 
 ### The procedure
 
-Take the `land.sh` command from the `land-after-merge` skill. Do not hand-poll CI. Arm GitHub's
-auto-merge only on your own PR that you were asked to ship.
+Take the `land.sh` command from the `land-after-merge` skill. Do not hand-poll CI. Do not arm
+GitHub's auto-merge: master's update restriction leaves an armed PR `BLOCKED`
+(`docs/landing.md`).
 
 A `cancelled` CI run means *no verdict for this SHA*, never *this SHA is bad*.
 `docs/landing.md` owns the rule, and `hosts/lib/ci_verdict.py:_CI_NO_VERDICT_CONCLUSIONS` lists

@@ -89,7 +89,7 @@ and upstream facts through `gh`.
   applies the role, and it is one of
   `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_changes.py:_BROAD_MANUAL_PREFIXES`.
   So the tick fast-forwards a change to the role and records `k3s` as a `manual_plane` line,
-  as [GitOps pipeline](../../gitops-pipeline.md), *A role only a hand can apply is recorded,
+  as [GitOps pipeline](../../archive/gitops-pipeline.md), *A role only a hand can apply is recorded,
   not parked*, describes. That section prints the narrowed pair:
   `k3s-bringup.yml --tags kubeconfig`, then
   `gitops_state.py clear-owed manual_plane k3s --applied kubeconfig`.

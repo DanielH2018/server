@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/hosts.py
-generated_at: 2026-11-13 00:39 UTC
-generated_sha: 4815c0d91
+generated_at: 2026-11-12 18:40 UTC
+generated_sha: 65e094073
 ---
 
 !!! warning "Generated file — do not edit"
