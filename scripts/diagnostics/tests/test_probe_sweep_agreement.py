@@ -31,7 +31,7 @@ from lib.exit_codes import (
 from lib.repo_paths import REPO
 
 import local_sweep
-from local_sweep import Check, Sweep
+from local_sweep import SUITE_STEP, Check, Sweep
 
 NOW = 1794585600.0  # 2026-11-13 16:00 UTC
 SHA = "0ef9986e19be3fc3703f44ae084f8cab81243e48"
@@ -59,15 +59,23 @@ def _rows(sweep: Sweep, at: float = NOW - 60, pid: int = 2058159):
     return _lines(local_sweep.report(sweep), at, pid)
 
 
-def _check_run(run_id: int, name: str, conclusion: str | None) -> dict:
+def _check_run(run_id: int, name: str, conclusion: str | None, steps=()) -> dict:
     status = "completed" if conclusion else "in_progress"
-    return {"id": run_id, "name": name, "status": status, "conclusion": conclusion}
+    return {
+        "id": run_id,
+        "name": name,
+        "status": status,
+        "conclusion": conclusion,
+        "steps": [{"name": step, "conclusion": ended} for step, ended in steps],
+    }
 
 
-def _runs(hooks="success", pytest_shard="success", gate="success", also=()):
+def _runs(hooks="success", pytest_shard="success", gate="success", also=(), steps=()):
     """One commit's check-runs. `pytest_shard` is what shard 3 concluded.
 
-    `also` is more check-runs of the commit, as (id, name, conclusion).
+    Args:
+        also: More check-runs of the commit, as (id, name, conclusion).
+        steps: Shard 3's steps as (name, conclusion), which only a run's jobs carry.
     """
     runs = [_check_run(1, HOOKS, hooks)]
     if pytest_shard == "skipped":
@@ -78,6 +86,7 @@ def _runs(hooks="success", pytest_shard="success", gate="success", also=()):
                 10 + shard,
                 f"pytest (shard {shard} of 6)",
                 pytest_shard if shard == 3 else "success",
+                steps if shard == 3 else (),
             )
             for shard in range(1, 7)
         ]
@@ -141,8 +150,33 @@ def test_the_covered_jobs_are_the_ones_the_sweep_runs_and_their_names_match_ci()
         ),
         # Any conclusion the gate would not pass is red, not only `failure`.
         (_runs(pytest_shard="neutral"), {"hooks": "pass", "pytest": "fail"}),
+        # The suite passed, and the job failed in its shard-weight step, which no sweep runs.
+        (
+            _runs(
+                pytest_shard="failure",
+                steps=[(SUITE_STEP, "success"), ("Check the weights", "failure")],
+            ),
+            {"hooks": "pass", "pytest": "pass"},
+        ),
+        # The job failed while it set the runner up, so the suite never ran.
+        (
+            _runs(
+                pytest_shard="failure",
+                steps=[("Install sops", "failure"), (SUITE_STEP, "skipped")],
+            ),
+            {"hooks": "pass", "pytest": "none"},
+        ),
     ],
-    ids=["proven", "skipped", "cancelled", "rerun", "proven-and-ran", "neutral"],
+    ids=[
+        "proven",
+        "skipped",
+        "cancelled",
+        "rerun",
+        "proven-and-ran",
+        "neutral",
+        "failed-after-the-suite",
+        "failed-before-the-suite",
+    ],
 )
 def test_a_commits_check_runs_reduce_to_one_verdict_per_covered_job(runs, verdicts):
     assert sweep_agreement.hosted(runs) == verdicts
