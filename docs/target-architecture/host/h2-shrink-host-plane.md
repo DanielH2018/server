@@ -2,7 +2,7 @@
 
 Status: IN PROGRESS. Merged: H2.1 ([#5335](https://github.com/DanielH2018/server/pull/5335)), H2.2a ([#6079](https://github.com/DanielH2018/server/pull/6079)), H2.2b ([#6085](https://github.com/DanielH2018/server/pull/6085)), H2.2c and H2.3f ([#7008](https://github.com/DanielH2018/server/pull/7008)), H2.3a ([#5349](https://github.com/DanielH2018/server/pull/5349)), H2.3b ([#6083](https://github.com/DanielH2018/server/pull/6083)), H2.3c ([#6086](https://github.com/DanielH2018/server/pull/6086)), H2.3d ([#6105](https://github.com/DanielH2018/server/pull/6105), with the gate fix [#6119](https://github.com/DanielH2018/server/pull/6119)), H2.3e ([#6123](https://github.com/DanielH2018/server/pull/6123)), H2.4b ([#5711](https://github.com/DanielH2018/server/pull/5711)), H2.4c ([#5753](https://github.com/DanielH2018/server/pull/5753)) and H2.7 ([#5387](https://github.com/DanielH2018/server/pull/5387)). H2.5b to H2.5d merged as configarr ([#5576](https://github.com/DanielH2018/server/pull/5576), [#5619](https://github.com/DanielH2018/server/pull/5619)), janitorr ([#5602](https://github.com/DanielH2018/server/pull/5602), [#5706](https://github.com/DanielH2018/server/pull/5706)) and qbittorrent ([#5612](https://github.com/DanielH2018/server/pull/5612), [#5678](https://github.com/DanielH2018/server/pull/5678)) PRs; which PR carries which step is not recorded.
 
-H2.8a merged as [#7043](https://github.com/DanielH2018/server/pull/7043). H2.8b merged as [#7176](https://github.com/DanielH2018/server/pull/7176). Not merged: H2.8c. None of H2.4a, H2.5a and H2.6 has a PR of its own. H2.4a and H2.5a are finished: each `netpol_from` grant they planned landed in its CronJob's commit, H2.4b to H2.5d. H2.6 is dropped, because registry GC is D5's (*Steps, as PRs*).
+H2.8a merged as [#7043](https://github.com/DanielH2018/server/pull/7043). H2.8b merged as [#7176](https://github.com/DanielH2018/server/pull/7176). H2.8c is done: its reading, recorded under [#7175](https://github.com/DanielH2018/server/issues/7175), found that native retention prunes the script's objects. None of H2.4a, H2.5a and H2.6 has a PR of its own. H2.4a and H2.5a are finished: each `netpol_from` grant they planned landed in its CronJob's commit, H2.4b to H2.5d. H2.6 is dropped, because registry GC is D5's (*Steps, as PRs*).
 
 PR H2.1, the censuses: [#5335](https://github.com/DanielH2018/server/pull/5335). It merged at
 `7d9901058` and deployed nothing. It adds the flux-ownership, retired-cron and reaper-CronJob
@@ -1546,6 +1546,10 @@ change at merge time*).
     - If one remains, the same PR records that native retention does not prune them.
       **Operator-only**, root: delete those `offbox-*` objects with `k3s etcd-snapshot
       delete`, using the restore credentials that *Restores keep a host credential* names.
+    - **Done, 2026-11-13.** The read came early: the bucket held 28 S3 entries on 2026-11-12,
+      so the next native snapshot tested retention. At 00:00 UTC on 2026-11-13 the oldest script
+      object (2026-10-25 02:45) was pruned and the count stayed 28. Native retention prunes the
+      script's objects, and no operator delete is owed. `docs/k3s-etcd-restore.md` records it.
 
 ## Verification
 

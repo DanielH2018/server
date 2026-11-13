@@ -164,6 +164,14 @@ reproduce: objects that exist live but are not declared, and anything created ou
 <!-- Generated from etcd-snapshot-retention in the k3s-server component; edit that. -->
 --8<-- "assets/generated/fragments/etcd-offbox-retention.md"
 
+Native retention counts every S3 entry under the `offbox-daniel-box` name prefix, including the
+objects the retired 02:45 UTC upload cron wrote, and it prunes the oldest first. H2.8c read this
+on production on 2026-11-13. Before the 00:00 UTC native snapshot, the bucket held 28 S3 entries,
+the oldest being the 2026-10-25 02:45 script object. After it, the bucket again held 28: that
+object was gone, and the oldest entry was the 2026-10-26 02:45 script object. The eleven script
+objects left age out one per native snapshot, the last (2026-11-05 02:45) about 2026-11-18 12:00
+UTC. No operator `k3s etcd-snapshot delete` is needed for them.
+
 Check 12 of `longhorn-backup-health` watches the upload. It reports DOWN when the newest ready S3
 snapshot is older than the schedule's period plus two hours (14 hours), when none exists, or
 when the drop-in's `etcd-s3` is false, missing or unreadable.
