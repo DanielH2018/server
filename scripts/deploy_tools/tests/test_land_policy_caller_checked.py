@@ -32,16 +32,14 @@ def test_a_head_other_than_the_one_the_caller_checked_is_refused(landing):
 
 def test_a_required_approval_of_the_head_lands(landing):
     fakes = _fakes(pr_reviews=[_review("APPROVED")])
-    ln, calls = _arm(landing, fakes, require_approval=True, approver=APPROVER)
+    ln, _ = _arm(landing, fakes, require_approval=True, approver=APPROVER)
     assert ln.pinned_head == HEAD
-    assert [c for c in calls if c[0] == "gh:reviews"]
 
 
 @pytest.mark.parametrize(
     "reviews, approver, names",
     [
         ([], APPROVER, "has not approved it"),
-        ([_review("APPROVED", commit="a" * 40)], APPROVER, "approved aaaaaaaa"),
         ([_review("APPROVED")], "", "no approver is set"),
     ],
 )

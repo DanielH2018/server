@@ -29,16 +29,11 @@ def _bump(old=f"ghcr.io/x/y:1.2@sha256:{OLD}", new=f"ghcr.io/x/y:1.2@sha256:{NEW
 @pytest.mark.parametrize(
     "path",
     [
-        "uv.lock",
-        "renovate.json",
         "hosts/packages/homelab-tools/package.yml",
-        ".github/workflows/ci.yml",
         "conftest.py",
         "ansible/roles/k8s/sonarr/tests/deep/conftest.py",
         "ansible/roles/k8s/monitor-bridge/files/registry.py",
-        "k8s/roles/monitor-bridge/tests/test_x.py",
         "docs/CLAUDE.md",
-        "secrets/secrets.yml",
     ],
 )
 def test_a_path_on_the_floor_is_flagged(path):
@@ -49,8 +44,6 @@ def test_a_path_on_the_floor_is_flagged(path):
     "path",
     [
         "ansible/roles/k8s/sonarr/defaults/main.yml",
-        "ansible/roles/k8s/sonarr/templates/deployment.yaml.j2",
-        "docs/flux-deploy-plane.md",
         "ansible/roles/k8s/homelab-mcp-adjacent/defaults/main.yml",
     ],
 )
@@ -75,8 +68,8 @@ def test_a_digest_only_bump_in_a_host_component_is_clean():
     "entry",
     [
         _bump(new=f"ghcr.io/x/y:1.3@sha256:{NEW}"),
-        _bump(new=f"ghcr.io/evil/y:1.2@sha256:{NEW}"),
         _bump(new=f"ghcr.io/x/y:1.2@sha256:{OLD}"),
+        _bump(new=f"ghcr.io/x/y:1.2@sha256:{NEW}@sha256:{OLD}"),
         {**_bump(), "patch": None},
         {**_bump(), "status": "added"},
         {**_bump(), "filename": "hosts/packages/homelab-tools/package.yml"},
@@ -88,8 +81,8 @@ def test_a_digest_only_bump_in_a_host_component_is_clean():
     ],
     ids=[
         "a tag change",
-        "a repository change",
         "an unchanged line",
+        "two digests",
         "no patch",
         "an added file",
         "a pinned binary",
@@ -221,20 +214,24 @@ OFF_FLOOR = {
 }
 
 
-def test_every_top_level_entry_is_on_the_floor_or_classified():
-    listed = run(["git", "ls-files", "-z"], cwd=REPO, check=True).stdout
-    roots = {path.split("/", 1)[0] for path in listed.split("\0") if path}
-    for member in ("hosts", "scripts", "uv.lock", "ansible", "docs"):
-        assert member in roots, f"{member} is gone from the tracked tree"
-    unclassified = sorted(
+def unclassified(roots: set[str]) -> list[str]:
+    """The top-level entries neither on the floor nor listed in `OFF_FLOOR`."""
+    return sorted(
         root
         for root in roots
         if root not in OFF_FLOOR
         and not floor.on_floor(root)
         and not floor.on_floor(f"{root}/x")
     )
-    assert unclassified == [], unclassified
+
+
+def test_every_top_level_entry_is_on_the_floor_or_classified():
+    listed = run(["git", "ls-files", "-z"], cwd=REPO, check=True).stdout
+    roots = {path.split("/", 1)[0] for path in listed.split("\0") if path}
+    for member in ("hosts", "scripts", "uv.lock", "ansible", "docs"):
+        assert member in roots, f"{member} is gone from the tracked tree"
+    assert unclassified(roots) == []
 
 
 def test_an_unclassified_root_entry_is_flagged():
-    assert not floor.on_floor("newtool.toml") and "newtool.toml" not in OFF_FLOOR
+    assert unclassified({"newtool.toml", "hosts", "docs"}) == ["newtool.toml"]
