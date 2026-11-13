@@ -2,7 +2,7 @@
 
 No live volume carries `recurring-job-group.longhorn.io/weekly-backup` (0 of 44 on 2026-11-13),
 and the PR for #8168 deleted the backup-health reader of it. The job neither migrates nor names
-the label. The tokens are built from parts so these files do not match their own census.
+the label. The census skips this file, which names the label it forbids.
 
 Run: uv run pytest k8s/roles/longhorn-reconcile/tests/test_longhorn_reconcile_no_flat_weekly.py
 """
@@ -28,6 +28,7 @@ def _role_files() -> list[Path]:
         ["git", "ls-files", "--", str(ROLE.relative_to(REPO))], cwd=REPO, check=True
     ).stdout
     files = [REPO / line for line in out.splitlines()]
+    files = [path for path in files if path != Path(__file__).resolve()]
     names = {path.name for path in files}
     assert {"longhorn_reconcile.py", "CLAUDE.md"} <= names, names
     return files
