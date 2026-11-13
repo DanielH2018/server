@@ -24,6 +24,11 @@ Amends [ADR-0019](0019-fact-support-stops-at-the-repo-store.md): fact support co
 stands. Amends [ADR-0023](0023-fact-support-is-a-diff-notice.md): the notice stays
 advisory until G9's measurement passes, and G9 records the flip in its own ADR.
 
+G9's measurement ran on 2026-11-13 and failed its first threshold: 3 of the 48 moved rows
+that nobody edited left a false sentence, against the 20% the gate needed. The gate is not
+built. Where this record says the gate, the advisory notice does that job, and no ADR
+takes over the `DECIDED:` marker on the notice step. G11 no longer waits on G9.
+
 Slices G6 to G11 under `docs/target-architecture/docs-guard/` carry the work.
 
 ## Context

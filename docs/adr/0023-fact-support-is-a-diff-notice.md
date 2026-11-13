@@ -36,8 +36,11 @@ The plan named this record ADR-0020. D1's ADR took 0020 first, and ADR-0021 and 
 followed it, so this record takes the next free number.
 
 Amended by [ADR-0031](0031-each-kind-of-fact-has-one-stateless-detector.md). The operator
-ruled on 2026-11-13 that the notice may block again once slice G9 measures its yield. Until
-G9's own ADR records that flip, the notice never blocks a merge.
+ruled on 2026-11-13 that the notice may block again once slice G9 measures its yield. G9
+measured it the same day and stopped: 3 of the 48 moved rows that nobody edited left a
+false sentence, against the 20% the gate needed. The notice never blocks a merge, as this
+record decided. [G9](../target-architecture/docs-guard/g9-blocking-gate.md) holds the
+rows and the rule that reopens the question.
 
 ## Context
 
