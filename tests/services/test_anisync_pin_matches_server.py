@@ -23,11 +23,7 @@ so an assertion names the value the pod receives rather than a line of `deployme
 Run: uv run pytest tests/services/test_anisync_pin_matches_server.py
 """
 
-from _helpers import (
-    image_tag,
-    load_defaults,
-    K8S_ROLES,
-)
+from _helpers import image_tag, load_defaults, K8S_ROLES
 from _jellyfin_plugins import PLUGIN_ROOT, plugin_constants, script, version_tuple
 
 JELLYFIN = K8S_ROLES / "jellyfin"

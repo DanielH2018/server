@@ -36,11 +36,7 @@ import re
 from pathlib import Path
 
 
-from _helpers import (
-    K8S_ROLES,
-    REPO,
-    SHARED_TPL,
-)
+from _helpers import K8S_ROLES, REPO, SHARED_TPL
 
 # `run_as_user=0` anywhere in a hardened_security_context() call, tolerant of whitespace and of
 # whichever other arguments sit around it. Deliberately textual, matching the guard it protects.

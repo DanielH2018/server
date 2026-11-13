@@ -15,11 +15,7 @@ clear in December unless both are.
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from lib.repo_paths import (
-    ALL_VARS,
-    K8S_ROLES,
-    LONGHORN_BACKUP_ROLE,
-)
+from lib.repo_paths import ALL_VARS, K8S_ROLES, LONGHORN_BACKUP_ROLE
 from _helpers import load_yaml
 
 PI_PEER_DEFAULTS = K8S_ROLES / "pi-peer-backup/defaults/main.yml"

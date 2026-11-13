@@ -17,11 +17,7 @@ Run: uv run pytest tests/k8s/test_traefik_crds.py
 import shutil
 from pathlib import Path
 
-from _helpers import (
-    image_tag,
-    load_defaults,
-    K8S_ROLES,
-)
+from _helpers import image_tag, load_defaults, K8S_ROLES
 from _k8s_render import rendered_docs
 from lib import yaml_fast
 

@@ -1,12 +1,7 @@
 """The shared readers in `_helpers.py` behave the way the guards built on them assume."""
 
 import pytest
-from _helpers import (
-    K8S_ROLES,
-    REPO,
-    image_tag,
-    SECRETS,
-)
+from _helpers import K8S_ROLES, REPO, image_tag, SECRETS
 
 
 def test_the_roots_point_at_the_real_tree():

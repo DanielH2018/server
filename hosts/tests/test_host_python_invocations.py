@@ -19,10 +19,7 @@ from _helpers import REPO as _REPO
 
 from lib import role_installs
 from lib.k8s_roles import is_manifest_template
-from lib.repo_paths import (
-    ALL_VARS,
-    K8S_ROLES,
-)
+from lib.repo_paths import ALL_VARS, K8S_ROLES
 
 
 _SEARCH_ROOTS = [

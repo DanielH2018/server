@@ -32,10 +32,7 @@ import json
 
 import pytest
 
-from _helpers import (
-    REPO,
-    K8S_ROLES,
-)
+from _helpers import REPO, K8S_ROLES
 from _helpers import load_defaults
 from lib import yaml_fast
 from lib.repo_paths import K3S_HOST_CHECKS

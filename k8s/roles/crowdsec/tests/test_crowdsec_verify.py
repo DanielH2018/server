@@ -23,11 +23,7 @@ import crowdsec_verify as cv
 from _k8s_render import render_role_template
 from lib import yaml_fast
 from lib.k8s_roles import K8S_ROLES
-from lib.repo_paths import (
-    HOST_LIB_FILES,
-    SCRIPTS,
-    SECRETS,
-)
+from lib.repo_paths import HOST_LIB_FILES, SCRIPTS, SECRETS
 from renderer import shadow_diff
 from renderer.renderer_lib import cluster
 from renderer.renderer_lib.context import load_stubs

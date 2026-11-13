@@ -19,10 +19,7 @@ from pathlib import Path
 
 import pytest
 
-from _helpers import (
-    load_defaults,
-    K8S_ROLES,
-)
+from _helpers import load_defaults, K8S_ROLES
 from _k8s_render import rendered_texts
 from renderer.template_filters.grafana_dashboards import grafana_deploy_annotated
 from lib import yaml_fast

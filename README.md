@@ -32,12 +32,12 @@ work already executed.
 ## Repository layout
 
 ```
-ansible/          # Render inputs for the k8s roles; no playbook   ← EDIT HERE
-  k8s/roles/          # One role per k8s workload (manifests rendered from templates)
+k8s/              # Render inputs for the k8s workloads   ← EDIT HERE
+  roles/              # One role per k8s workload (manifests rendered from templates)
   templates/          # Shared Jinja partials the k8s roles include
-  inventory/          # group_vars/all.yml, host_vars/<host>.yml (one file per host)
-  vars/secrets.yml    # SOPS-encrypted secrets
-  tests/              # Tests over the roles, their renders and the deploy path
+inventory/        # group_vars/all.yml, host_vars/<host>.yml (one file per host)
+secrets/          # SOPS-encrypted secrets.yml, its .sops.yaml and the rotation register
+tests/            # Tests over the roles, their renders and the deploy path
 cluster/          # services.yml: one entry per k8s deploy tag
 hosts/            # Host packages and the setup plane each one ships
   components/         # Units, timers and scripts a host package installs; the Pi's
@@ -129,7 +129,7 @@ that no package can do is verified by
 ## Cross-cutting systems
 
 - **Secrets** — `secrets/secrets.yml`, encrypted with SOPS + age (`.sops.yaml`
-  auto-encrypts anything under `vars/`/`secrets/`). Decrypted at runtime via the
+  auto-encrypts any YAML under `secrets/`). Decrypted at runtime via the
   `community.sops` lookup. Edit with `sops secrets/secrets.yml`. **Never commit
   plaintext secrets** — gitleaks runs pre-commit. The age private key is backed up
   out-of-band (single point of recovery).

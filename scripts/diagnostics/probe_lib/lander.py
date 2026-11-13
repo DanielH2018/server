@@ -42,10 +42,7 @@ from diagnostics.probe_lib.host_reader import (
 )
 from lib import yaml_fast
 from lib.exit_codes import PROBE_FAILED, PROBE_OK
-from lib.repo_paths import (
-    REPO,
-    INVENTORY,
-)
+from lib.repo_paths import REPO, INVENTORY
 from lib.systemd_timer import span_s
 
 NAME = "claude-fanout-server-lander"

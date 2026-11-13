@@ -14,10 +14,7 @@ while the WAN tile stayed green, so the outage would be reported by nothing at a
 import re
 
 from lib import yaml_fast
-from _helpers import (
-    ALL_VARS,
-    K8S_ROLES,
-)
+from _helpers import ALL_VARS, K8S_ROLES
 
 CONFIG_IO = K8S_ROLES / "monitor-bridge/files/bridge/config_io.py"
 

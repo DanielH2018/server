@@ -63,10 +63,7 @@ Run: uv run pytest tests/repo/test_guard_tests_read_renders_not_templates.py
 import functools
 from pathlib import Path
 
-from lib.repo_paths import (
-    REPO,
-    TESTS,
-)
+from lib.repo_paths import REPO, TESTS
 
 from _render_gate import sibling_sources, template_source_reads
 

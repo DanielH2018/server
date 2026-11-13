@@ -24,12 +24,7 @@ import json
 
 import pytest
 
-from _helpers import (
-    REPO,
-    image_tag,
-    load_defaults,
-    K8S_ROLES,
-)
+from _helpers import REPO, image_tag, load_defaults, K8S_ROLES
 from _jellyfin_plugins import (
     PLUGIN_ROOT,
     compares_against,

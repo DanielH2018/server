@@ -76,10 +76,7 @@ from lib.progress import OnChange
 from deploy_tools.land_lib.tools import gate_snapshot
 from lib import yaml_fast
 from lib.git import git as run_git
-from lib.repo_paths import (
-    REPO,
-    K8S_ROLES,
-)
+from lib.repo_paths import REPO, K8S_ROLES
 from lib.systemd_timer import timer_settings
 
 # The renderer's host mode, run from a gate snapshot's root. A daniel-pi render takes about

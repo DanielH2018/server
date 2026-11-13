@@ -29,11 +29,7 @@ import re
 import pytest
 
 from lib import yaml_fast
-from _helpers import (
-    image_tag,
-    load_defaults,
-    K8S_ROLES,
-)
+from _helpers import image_tag, load_defaults, K8S_ROLES
 from _jellyfin_plugins import padded, version_tuple
 
 JELLYFIN = K8S_ROLES / "jellyfin"

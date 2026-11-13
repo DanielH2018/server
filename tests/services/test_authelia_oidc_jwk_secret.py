@@ -17,10 +17,7 @@ PR 7 moved it out of authelia-config. Three things have to agree for the portal 
 from typing import cast
 
 import pytest
-from _helpers import (
-    load_defaults,
-    K8S_ROLES,
-)
+from _helpers import load_defaults, K8S_ROLES
 from _k8s_render import render_role_template
 from renderer.renderer_lib.environment import evaluate, renderer_env
 

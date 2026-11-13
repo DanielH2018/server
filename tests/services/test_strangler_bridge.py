@@ -17,10 +17,7 @@ from lib.k8s_roles import resolved_manifest_files
 from lib import yaml_fast
 from jinja2 import ChainableUndefined
 from lib.guard_jinja_env import template_env
-from _helpers import (
-    K8S_ROLES,
-    SHARED_TPL,
-)
+from _helpers import K8S_ROLES, SHARED_TPL
 from lib.render_guard import k8s_services
 from lib.repo_paths import ALL_VARS
 

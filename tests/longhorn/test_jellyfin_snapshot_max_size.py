@@ -20,10 +20,7 @@ import re
 
 import pytest
 
-from _helpers import (
-    load_defaults,
-    K8S_ROLES,
-)
+from _helpers import load_defaults, K8S_ROLES
 from _jinja_env import render_expr
 from renderer import shadow_diff
 from renderer.renderer_lib import cluster

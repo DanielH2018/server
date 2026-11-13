@@ -24,10 +24,7 @@ for why each value is what it is.
 import functools
 
 import jinja2
-from _helpers import (
-    load_defaults,
-    K8S_ROLES,
-)
+from _helpers import load_defaults, K8S_ROLES
 from _k8s_render import rendered_docs
 from lib import yaml_fast
 from lib.guard_jinja_env import make_env, register_ansible_filters

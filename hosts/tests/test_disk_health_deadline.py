@@ -20,10 +20,7 @@ from jinja2 import StrictUndefined
 
 from lib.guard_jinja_env import template_env
 from lib.render_guard import render_or_error
-from lib.repo_paths import (
-    K3S_HOST_CHECKS,
-    K8S_ROLES,
-)
+from lib.repo_paths import K3S_HOST_CHECKS, K8S_ROLES
 from _shell_render import render_shell_script, shell_template_path
 from lib.estate import role_defaults
 from validate.shell_templates import template_context

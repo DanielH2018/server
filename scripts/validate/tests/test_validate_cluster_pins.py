@@ -209,7 +209,7 @@ def test_the_real_tree_overrides_no_pin():
     ("path", "text"),
     [
         (
-            "ansible/k3s-bringup.yml",
+            "k8s/k3s-bringup.yml",
             "- hosts: k3s\n  vars:\n    k3s_longhorn_version: v1.11.0\n",
         ),
         (
@@ -226,13 +226,13 @@ def test_the_real_tree_overrides_no_pin():
             "k8s/roles/system-upgrade/tasks/x.yml",
             "- set_fact:\n    k3s_longhorn_version: v1.11.0\n",
         ),
-        ("ansible/site.yml", "- hosts: all\n  vars: {k3s_longhorn_version: v1.11.0}\n"),
+        ("k8s/site.yml", "- hosts: all\n  vars: {k3s_longhorn_version: v1.11.0}\n"),
         (
-            "ansible/site.yml",
+            "k8s/site.yml",
             '- hosts: all\n  vars: {note: "#1", k3s_longhorn_version: v1.11.0}\n',
         ),
         (
-            "ansible/site.yml",
+            "k8s/site.yml",
             '- hosts: all\n  vars: {note: "see #1", k3s_longhorn_version: v1.11.0}\n',
         ),
         (
@@ -240,7 +240,7 @@ def test_the_real_tree_overrides_no_pin():
             '[k3s]\ndaniel-box note="a #b" k3s_longhorn_version=v1.11.0\n',
         ),
         (
-            "ansible/site.yml",
+            "k8s/site.yml",
             "- hosts: all\n  vars: {note: 'it''s #1', k3s_longhorn_version: v1.11.0}\n",
         ),
         (

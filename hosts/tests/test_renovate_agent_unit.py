@@ -23,10 +23,7 @@ import re
 
 import pytest
 from lib import yaml_fast
-from _helpers import (
-    REPO,
-    K8S_ROLES,
-)
+from _helpers import REPO, K8S_ROLES
 from _setup_render import COMPONENTS, render_component_text
 
 NAME = "renovate-agent"

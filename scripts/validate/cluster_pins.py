@@ -94,8 +94,8 @@ class Pin:
 
     @property
     def role_dir(self) -> str:
-        """The role directory holding the pin, `ansible/roles/<tree>/<role>/`."""
-        return "/".join(self.path.split("/")[:4]) + "/"
+        """The role directory holding the pin, `k8s/roles/<role>/`."""
+        return "/".join(self.path.split("/")[:3]) + "/"
 
 
 def version(pin: Pin) -> tuple[int, int, int]:

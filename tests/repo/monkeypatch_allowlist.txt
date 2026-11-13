@@ -56,4 +56,4 @@ scripts/validate/tests/test_bootstrap_case_concurrent.py 6
 scripts/validate/tests/test_host_package_cases_concurrent.py 3
 scripts/validate/tests/test_validate_k8s_manifests.py 1
 scripts/validate/tests/test_validate_shell_templates.py 2
-scripts/validate/tests/test_validate_unit_templates.py 3
+scripts/validate/tests/test_validate_unit_templates.py 5

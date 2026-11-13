@@ -31,10 +31,7 @@ from lib.k8s_roles import (
     SHARED_MANIFEST_DEFAULTS,
     shared_default_templates,
 )
-from _helpers import (
-    K8S_ROLES,
-    SHARED_TPL,
-)
+from _helpers import K8S_ROLES, SHARED_TPL
 from _k8s_render import render_role_template
 from _role_census import role_dirs
 

@@ -120,7 +120,7 @@ def test_every_annotation_comment_in_role_defaults_is_read():
     ]
     defaults = sorted(
         str(p.relative_to(_REPO))
-        for p in (_REPO / "k8s/roles").glob("*/*/defaults/main.yml")
+        for p in (_REPO / "k8s/roles").glob("*/defaults/main.yml")
     )
     scanned = [rel for rel in defaults if any(p.search(rel) for p in patterns)]
     assert TRAEFIK_DEFAULTS in scanned

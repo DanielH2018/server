@@ -30,6 +30,9 @@ from secrets_mgmt.rotation_tools import RotationTools
 # `rotation_tools.SECRETS_FILE` is the absolute spelling of this same file, for the callers
 # that open it rather than ask git about it.
 SECRETS_GIT_PATH = "secrets/secrets.yml"
+# The directory every SOPS file sat under before ADR 0030 renamed it to `secrets/`. The walks
+# read a file's history across the rename, so its older revisions are read at this path.
+PRE_RENAME_DIR, RENAMED_DIR = "ansible/vars/", "secrets/"
 
 # new name -> the name the same secret was stored under before it was renamed.
 #
@@ -320,15 +323,26 @@ def ciphertext_at(
     return {k: str(v) for k, v in data.items() if k != "sops"}
 
 
-def _revisions(tools: RotationTools, path: str = SECRETS_GIT_PATH) -> list[list[str]]:
-    """Every commit that touched `path`, newest first, as [sha, "YYYY-MM-DD"]."""
-    return [
-        line.split(" ", 1)
-        for line in tools.git(
-            "log", "--format=%H %ad", "--date=short", "--", path
-        ).splitlines()
-        if line
-    ]
+def _revisions(
+    tools: RotationTools, path: str = SECRETS_GIT_PATH
+) -> list[tuple[str, str, str]]:
+    """Every commit that touched `path`, newest first, as (sha, "YYYY-MM-DD", path at sha).
+
+    A commit from before ADR 0030's rename touched the file at its `ansible/vars/` path.
+    """
+    paths = [path]
+    if path.startswith(RENAMED_DIR):
+        paths.append(PRE_RENAME_DIR + path.removeprefix(RENAMED_DIR))
+    out = tools.git(
+        "log", "--no-renames", "--name-only", "--format=@%H %ad", "--date=short",
+        "--", *paths,
+    )  # fmt: skip
+    revs: list[tuple[str, str, str]] = []
+    for block in out.split("@")[1:]:
+        head, *names = [line for line in block.splitlines() if line]
+        sha, day = head.split(" ", 1)
+        revs.append((sha, day, path if path in names or not names else names[0]))
+    return revs
 
 
 def ciphertext_rotation_dates(
@@ -383,11 +397,11 @@ def _rotation_walk(
     found: dict[str, tuple[str, str]] = {}
     if not revs:
         return found
-    tracked = set(ciphertext_at(revs[0][0], tools, path))
+    tracked = set(ciphertext_at(revs[0][0], tools, revs[0][2]))
     newer: dict[str, str] = {}
     newer_rev = newer_day = ""
-    for rev, day in revs:
-        current = ciphertext_at(rev, tools, path)
+    for rev, day, at in revs:
+        current = ciphertext_at(rev, tools, at)
         reencrypt = guard and _is_whole_file_reencrypt(newer, current)
         for name, value in newer.items():
             if name in found:
@@ -458,8 +472,8 @@ def advance_last_rotated(
 def historical_names(tools: RotationTools) -> set[str]:
     """Every key any committed revision of secrets.yml has held. Names only, never values."""
     names: set[str] = set()
-    for rev, _day in _revisions(tools):
-        names |= set(ciphertext_at(rev, tools))
+    for rev, _day, at in _revisions(tools):
+        names |= set(ciphertext_at(rev, tools, at))
     return names
 
 

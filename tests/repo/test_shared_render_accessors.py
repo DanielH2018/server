@@ -23,10 +23,7 @@ from _compose_render import (
     render_role_template,
     render_texts,
 )
-from _helpers import (
-    load_defaults,
-    K8S_ROLES,
-)
+from _helpers import load_defaults, K8S_ROLES
 from _k8s_render import (
     BUILD_ROLES,
     IMAGE_BUILDER_CALLER_VARS,

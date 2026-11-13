@@ -16,10 +16,7 @@ Run: uv run pytest hosts/tests/test_claude_pipeline_timeline.py
 import re
 
 from _agent_package import render_daniel_server_with
-from _helpers import (
-    load_yaml,
-    REPO,
-)
+from _helpers import load_yaml, REPO
 from _setup_render import CLAUDE_CODE, render_component_text
 from lib.repo_paths import HOST_VARS
 

@@ -6,10 +6,7 @@ Run: uv run pytest hosts/components/claude-code/tests/test_takeover_check_instal
 import shutil
 
 import pytest
-from _helpers import (
-    REPO,
-    K8S_ROLES,
-)
+from _helpers import REPO, K8S_ROLES
 from _setup_render import CLAUDE_CODE, render_component_text
 from lib import yaml_fast
 from lib.proc_testing import run as run_proc

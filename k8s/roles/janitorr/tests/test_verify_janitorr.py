@@ -21,10 +21,7 @@ import verify_janitorr
 from flux_job_connect import open_url
 from lib import yaml_fast
 from lib.k8s_roles import K8S_ROLES
-from lib.repo_paths import (
-    HOST_LIB_FILES,
-    SECRETS,
-)
+from lib.repo_paths import HOST_LIB_FILES, SECRETS
 from renderer import shadow_diff
 from renderer.renderer_lib import cluster
 from renderer.renderer_lib.context import load_stubs

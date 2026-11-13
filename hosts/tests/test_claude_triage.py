@@ -14,10 +14,7 @@ import json
 import re
 
 import pytest
-from _helpers import (
-    REPO,
-    K8S_ROLES,
-)
+from _helpers import REPO, K8S_ROLES
 from _k8s_render import render_role_template
 from _setup_render import CLAUDE_CODE, render_component_text, role_context
 from deploy_tools.land_lib import policy

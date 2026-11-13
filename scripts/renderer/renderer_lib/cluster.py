@@ -58,12 +58,7 @@ from lib.k8s_roles import (
 )
 from lib.k8s_context import resolve_vars
 from lib.render_guard import SHARED_TPL, StrictChainableUndefined, k8s_services
-from lib.repo_paths import (
-    JOB_FILES,
-    K8S_ROLES,
-    K8S_SERVICES,
-    INVENTORY,
-)
+from lib.repo_paths import JOB_FILES, K8S_ROLES, K8S_SERVICES, INVENTORY
 from renderer.renderer_lib.bundle import (
     KUSTOMIZATION,
     SHARED_KINDS,

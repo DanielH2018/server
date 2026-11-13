@@ -20,10 +20,7 @@ Run: uv run pytest hosts/tests/test_nut_host_secondary.py
 """
 
 from lib import yaml_fast
-from _helpers import (
-    ALL_VARS,
-    K8S_ROLES,
-)
+from _helpers import ALL_VARS, K8S_ROLES
 
 from _shell_render import rendered_shell_text
 from lib.proc_testing import run

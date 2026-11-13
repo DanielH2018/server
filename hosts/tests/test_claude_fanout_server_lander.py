@@ -18,10 +18,7 @@ Run: uv run pytest hosts/tests/test_claude_fanout_server_lander.py
 import re
 
 from _agent_package import render_daniel_server_with
-from _helpers import (
-    load_yaml,
-    REPO,
-)
+from _helpers import load_yaml, REPO
 from _setup_render import CLAUDE_CODE, render_component_text
 from fanout_lib import autoland
 from lib.repo_paths import HOST_VARS

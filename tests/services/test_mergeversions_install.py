@@ -27,11 +27,7 @@ import re
 
 import pytest
 
-from _helpers import (
-    REPO,
-    load_defaults,
-    K8S_ROLES,
-)
+from _helpers import REPO, load_defaults, K8S_ROLES
 from _jellyfin_plugins import (
     PLUGIN_ROOT,
     compares_against,

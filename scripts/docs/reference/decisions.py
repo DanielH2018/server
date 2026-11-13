@@ -406,17 +406,16 @@ def _pointer_resolves(row: dict[str, str], pointer: str, root: Path) -> bool:
     `k8s/roles/<role>/`, and to nothing for a marker anywhere else — a marker in
     `scripts/` has no role to point at, so the phrase there is itself the defect. `ADR-NNNN`
     resolves to the `docs/adr/NNNN-*.md` file, whatever its slug. A repo path resolves against
-    `root`, then against the marker's own directory, so `templates/foo.j2` written from inside
-    a role still counts.
+    `root`, then against the marker's own directory and its parent, so `templates/foo.j2`
+    written from inside a role, or `tests/test_x.py` from a component's `files/`, still counts.
     """
     if pointer == "this role's CLAUDE.md":
         match = _ROLE_DIR_RE.match(row["path"])
         return bool(match) and (root / match.group(1) / "CLAUDE.md").is_file()
     if pointer.startswith("ADR-"):
         return any((root / "docs" / "adr").glob(f"{pointer[4:]}-*.md"))
-    return (root / pointer).exists() or (root / row["path"]).parent.joinpath(
-        pointer
-    ).exists()
+    here = (root / row["path"]).parent
+    return any(base.joinpath(pointer).exists() for base in (root, here, here.parent))
 
 
 def find_unresolved_pointers(
