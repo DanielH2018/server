@@ -282,6 +282,14 @@ spec:
               port: 3000
             initialDelaySeconds: 20
             periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 6
           # 2Gi, raised from 512Mi on 2026-08-30 after measuring what rendering these
           # dashboards actually costs. Idle is ~390 MiB, but a browser opening four of
           # them OOMKilled the container (exit 137) at 512Mi and again at 1Gi, six
