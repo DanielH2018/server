@@ -92,6 +92,10 @@ BORN_FENCED_ROLES = {
     # every ingress name, but the baseline fences ingress only, so the label does not touch
     # those probes. From M4's PR 3, up{job="blackbox-ingress"} shows the caller gets through.
     "blackbox-exporter",
+    # The music library manager. Its own NetworkPolicy admits traefik and prowlarr, whose
+    # Application Sync writes indexers in. It dials prowlarr, qBittorrent and MusicBrainz, which
+    # is egress and unenforced here, so the label fences only its ingress.
+    "lidarr",
 }
 
 LABEL = ("netpol-baseline", "enforced")

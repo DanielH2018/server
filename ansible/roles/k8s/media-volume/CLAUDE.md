@@ -1,7 +1,7 @@
-# media-volume — the shared media library, one filesystem for eight workloads
+# media-volume — the shared media library, one filesystem for nine workloads
 
-Declares `media-data`, the volume eight media-stack roles mount. The seven that write mount it
-at `/data`, and they must all see **one** filesystem or sonarr/radarr imports silently become
+Declares `media-data`, the volume nine media-stack roles mount. The eight that write mount it
+at `/data`, and they must all see **one** filesystem or *arr imports silently become
 copies instead of hardlinks. navidrome mounts only `media/music`, read-only. No route — infra
 role, no Deployment of its own.
 
@@ -17,8 +17,8 @@ role, no Deployment of its own.
   reaches the cluster when `promote` publishes and verifies the next bundle. The claim carries
   `kustomize.toolkit.fluxcd.io/prune: disabled`, so neither a revert nor a removal from the
   bundle can delete it.
-- **Must run before any role that mounts `media-data`** — the eight mounters (`sonarr`,
-  `qbittorrent`, `radarr`, `bazarr`, `jellyfin`, `tdarr`, `janitorr`, `navidrome`) each carry
+- **Must run before any role that mounts `media-data`** — the nine mounters (`sonarr`,
+  `qbittorrent`, `radarr`, `bazarr`, `jellyfin`, `tdarr`, `janitorr`, `navidrome`, `lidarr`) each carry
   `depends_on: [media-volume]` on their `containers_list` entry, and every pair is pinned by
   `ansible/tests/deploy/test_k8s_toposort.py::test_documented_pairwise_ordering_survives_an_adversarial_list`.
 - **Storage:** a **static local PV** (`media-local` StorageClass) at `media_volume_host_path`

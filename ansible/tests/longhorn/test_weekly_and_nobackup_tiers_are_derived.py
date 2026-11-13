@@ -40,6 +40,7 @@ _REPLACED_WEEKLY = {
     "homelab/wg-easy-config": 4,
     "homelab/n8n-files": 5,
     "homelab/pi-peer-backup-data": 6,
+    "homelab/lidarr-config": 6,
 }
 
 _REPLACED_NOBACKUP = frozenset(
