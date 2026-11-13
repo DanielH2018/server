@@ -4,7 +4,7 @@
   so it lists only the callers the baseline does not already admit, plus traefik where a role
   states its complete caller set on purpose (the *arr headers say why).
 
-  The caller list is data on the service's `containers_list` entry, `netpol_from:`, so each
+  The caller list is data on the service's `services` entry, `netpol_from:`, so each
   caller's reason sits beside it as a YAML comment. `homepage_widget: true` on the entry adds
   homepage, and every caller passes the list through the `netpol_callers` filter so the key
   reaches both renderers. Two places render it:

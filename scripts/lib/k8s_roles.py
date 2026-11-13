@@ -173,7 +173,7 @@ def k8s_autodeploy_denylist(ansible_dir: Path | str) -> list[str]:
 
 
 # Helper roles, included by service roles rather than deployed on their own. They have no
-# containers_list entry because they are not services, so the platform check below would always
+# service entry because they are not services, so the entry check below would always
 # fail for them.
 #
 # volume-snapshot applies one Longhorn Snapshot CR per claim, built inline and piped to `kubectl
@@ -274,15 +274,10 @@ def non_manifest_documents(docs) -> list:
 
 
 def k8s_entries(services: Path = K8S_SERVICES) -> dict[str, dict]:
-    """The `platform: k8s` entries of the service list `services`, keyed by service name."""
-    from lib.ansible_inventory import containers_entries_in
-    from lib.render_guard import load_yaml
+    """The entries of the service list `services`, keyed by service name."""
+    from lib.render_guard import k8s_services
 
-    return {
-        e["name"]: e
-        for e in containers_entries_in(load_yaml(services))
-        if e.get("platform") == "k8s"
-    }
+    return {e["name"]: e for e in k8s_services(services)}
 
 
 def k8s_tags(services: Path = K8S_SERVICES) -> set[str]:

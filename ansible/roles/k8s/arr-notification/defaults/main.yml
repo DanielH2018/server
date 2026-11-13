@@ -2,10 +2,10 @@
 # Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
 # Declared false because this role renders no manifest and starts no workload: it is a shared
 # include the *arr roles call after their own deploy, so there is nothing here for `rollout
-# status` to gate. It is also not a containers_list entry, so a promoted bump would match no
+# status` to gate. It is also not a services entry, so a promoted bump would match no
 # play and deploy nothing while reporting success.
 k8s_autodeploy: false
-k8s_autodeploy_reason: "renders no manifest and starts no workload — a shared include the *arr roles call after their own deploy, so there is no workload for rollout status to gate; not a containers_list entry, so a promoted bump matches no play and deploys nothing while reporting success"
+k8s_autodeploy_reason: "renders no manifest and starts no workload — a shared include the *arr roles call after their own deploy, so there is no workload for rollout status to gate; not a services entry, so a promoted bump matches no play and deploys nothing while reporting success"
 
 # The caller passes arr_notification_app (sonarr | radarr). Everything below has a default.
 #

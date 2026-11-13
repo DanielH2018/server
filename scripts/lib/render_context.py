@@ -8,13 +8,15 @@ checks a value no deploy produces (failure class 2 in ``docs/failure-classes.md`
 
 The layers, weakest first::
 
-    BASE_CONTEXT stubs < role defaults < all.yml < host_vars < playbook_dir < overrides
+    BASE_CONTEXT stubs < role defaults < all.yml < host_vars < services, hosts < overrides
 
 Role defaults are Ansible's weakest real layer, so an inventory key of the same name wins.
 ``homelab-render host`` renders a component of a host package, which has no role, and passes
 its ``component.yml`` ``defaults:`` map as ``component_defaults``, at the role defaults' place.
-``overrides`` is what a caller supplies that no file holds: a stub a linter needs to be
-plausible, a value a caller role passes to a shared template, a ``container_item``.
+``services`` is ``cluster/services.yml``'s entries, every k8s service, whichever host renders.
+``hosts`` maps each host to its literal host_vars values (`_hosts`). ``overrides`` is what a
+caller supplies that no file holds: a stub a linter needs to be plausible, a value a caller
+role passes to a shared template, a ``container_item``.
 
 Typical usage example:
 
@@ -45,6 +47,7 @@ from lib.render_guard import (
     StubUndefined,
     host_files,
     host_layer,
+    k8s_services,
     load_yaml,
 )
 
@@ -140,7 +143,8 @@ def render_context(
             _host_layer(inventory, host) if host_vars is None else host_vars,
         ),
         "playbook_dir": str(ANSIBLE),
-        "hostvars": _hostvars(inventory),
+        "services": k8s_services(inventory.services),
+        "hosts": _hosts(inventory),
         **overrides,
     }
     raw = {key: value for key, value in raw.items() if key not in withhold}
@@ -165,30 +169,30 @@ def _host_layer(inventory: Inventory, host: str | None) -> dict:
     return host_layer(inventory.host_vars, host) if host else {}
 
 
-# The host_vars `hostvars` carries for each host, each only while its value holds no Jinja.
-_HOSTVARS_KEYS = (
+# The host_vars `hosts` carries for each host, each only while its value holds no Jinja.
+_HOSTS_KEYS = (
     "server_ip",
     "compose_services",
     "claude_agent_ssh_login_enabled",
 )
 
 
-def _hostvars(inventory: Inventory) -> dict[str, dict]:
-    """Each host's literal values of ``_HOSTVARS_KEYS``, as Ansible's ``hostvars`` has them.
+def _hosts(inventory: Inventory) -> dict[str, dict]:
+    """Each host's literal values of ``_HOSTS_KEYS``, keyed by host name.
 
     ``group_vars``' ``k8s_pi_client_ip`` reads the Pi's address this way (#3719), and
     observability's ``alloy-pi`` scrape job and artifacts' service index read the Pi's
     ``compose_services`` (#3860, H5.1), so a strict render needs both. A value goes in only while
     it holds no Jinja: here it would resolve against the rendered host's context, so a Pi value
     such as ``"{{ server_ip }}"`` would come out as daniel-box's address. A caller needing more
-    passes its own ``hostvars``.
+    passes its own ``hosts``.
     """
     found = {}
     for path in host_files(inventory.host_vars):
         layer = host_layer(path.parent, path.stem)
         literal = {
             key: layer[key]
-            for key in _HOSTVARS_KEYS
+            for key in _HOSTS_KEYS
             if key in layer and not _holds_jinja(layer[key])
         }
         if literal:

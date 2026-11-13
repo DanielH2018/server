@@ -5,8 +5,7 @@ groups it doesn't cover. See repo-root `CLAUDE.md`.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
-- **Applied by:** Flux, through `promote` (`platform: k8s`); `land.sh --tags=headlamp` gates
-  the rollout
+- **Applied by:** Flux, through `promote`; `land.sh --tags=headlamp` gates the rollout
 - **Images:** `ghcr.io/headlamp-k8s/headlamp` (`headlamp_k8s_image`), `alpine`
   (`headlamp_k8s_netpol_probe_image`)
 - **Route:** `headlamp.<domain>` · `headlamp.local.<domain>`, Authelia one_factor
@@ -66,7 +65,7 @@ trust in Authelia (`hosts/components/k3s-server/`), the Authelia client, and the
   (here, Authelia's client, and each issuer's `audiences` in the API server's auth
   config), the issuer URL (here, and one of that config's `jwt` issuers), and the group
   (`headlamp_k8s_oidc_group`, and that config's groups prefix plus the Authelia group).
-  ENFORCED: `ansible/tests/setup/test_k3s_oidc_trusts_authelia.py`.
+  ENFORCED: `hosts/tests/test_k3s_oidc_trusts_authelia.py`.
 - **The issuer is the PUBLIC name**, `auth.<domain>`, and one value serves both hostnames:
   Headlamp builds one provider at server start while Authelia's `iss` follows the request host.
   The API server trusts both Authelia issuers (`k3s_oidc_issuer_urls`), so the choice is not a
@@ -93,7 +92,7 @@ trust in Authelia (`hosts/components/k3s-server/`), the Authelia client, and the
   sample. Charts are off per browser too, in localStorage; no IaC can pre-enable them.
 
 ## Notable
-- Flux applies the role (`platform: k8s`).
+- Flux applies the role (its entry is in `cluster/services.yml`).
 - Ships a **negative** self-test: the `headlamp-verify` Job in `templates/verify/` must FAIL to
   reach headlamp from a non-traefik pod, proving `networkpolicy.yaml.j2` fences it. The Job runs
   `files/headlamp_verify.py`: traefik's port must answer, as the control, so a failure is

@@ -195,7 +195,7 @@ groups:
       # rule for each scan it schedules; daniel-pi schedules no AIDE scan
       # (integrity_scans_aide_unscheduled_hosts in hosts/components/integrity-scans/component.yml). A NotReporting rule's two literals equal the DEADLINE_S its script
       # renders, which equalled the deleted tile's interval:
-      # ansible/tests/setup/test_integrity_scan_rule_literals.py pins them. daniel-pi's rules read
+      # hosts/tests/test_integrity_scan_rule_literals.py pins them. daniel-pi's rules read
       # the `node-pi` job. Every tile notified Discord only, so the rules are `warning`. Each
       # NotReporting rule fires from its deploy until the scan's first run writes the file, up to
       # a week.
@@ -363,7 +363,7 @@ groups:
       # retention). A file that vanishes after a run pages from its deadline until 28 days after
       # its last sample; a cron that stops but leaves its file pages through the stale arm for as
       # long as it stays stopped. Both literals of each NotReporting rule
-      # equal the script's DEADLINE_S, and ansible/tests/setup/test_host_maintenance.py pins
+      # equal the script's DEADLINE_S, and hosts/tests/test_host_maintenance.py pins
       # them to it and the rule set to the hosts that run each cron.
       - alert: AptAutoremoveFailed
         expr: homelab_check_success{check="apt-autoremove",origin="daniel-box"} == 0
@@ -798,7 +798,7 @@ groups:
       # timer's flag false stops it, and the rule then fires on purpose: delete the rule in the
       # same PR. Each deadline is the one the service renders through
       # hosts/components/claude-code/templates/timer-textfile.j2, and
-      # ansible/tests/setup/test_claude_timer_rule_literals.py pins both literals to it.
+      # hosts/tests/test_claude_timer_rule_literals.py pins both literals to it.
       - alert: ClaudeCloneSyncNotReporting
         expr: |
           (
@@ -994,7 +994,7 @@ groups:
       # One rule per inventory host, so `service` stays a literal. The updater writes
       # homelab_host_reconcile_ok 0 on every run while the host holds, so the rule pages a hold
       # that stands for 15 minutes, not one failed run.
-      # ansible/tests/services/test_host_plane_rule_literals.py holds the set to hosts.ini.
+      # ansible/tests/services/test_host_plane_rule_literals.py holds the set to host_vars.
       #
       # Convention 5 (m1-alertmanager.md) does not bind the host-plane rules, because the `node`
       # and `node-pi` jobs both carry `origin`. They meet it anyway: neither pages on `up`, and

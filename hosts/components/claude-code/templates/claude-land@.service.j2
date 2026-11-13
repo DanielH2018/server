@@ -42,7 +42,7 @@ TimeoutStartSec=19h
 # Fits inside what TimeoutStartSec leaves after the flock wait below, so land.sh ends a long
 # promotion wait `deferred` before systemd kills it with no verdict (#5199). It must also leave
 # land-wait room for `verify`'s wait on the rendered soak plus promote's `render`, `images`
-# and `publish`, after the merge and CI waits: ansible/tests/setup/test_lander_deadlines_cover_the_soak.py
+# and `publish`, after the merge and CI waits: hosts/tests/test_lander_deadlines_cover_the_soak.py
 # renders the published bundle and fails when it does not (#5427). `images` counts since
 # published tags build images (#5466). 21600 since code-server's 4500s pre-pull joined
 # the soak (#5512), 25200 once D5.20's verify Kustomizations joined it as well, and 28800
@@ -55,7 +55,7 @@ Environment=LAND_DEADLINE=41460
 # rather than giving up on a promotion nothing has failed: the first poll inside the window
 # adds its remaining length to the cap, up to this. It is the window's full length,
 # VERIFY_CAP_S plus weekly_reboot_mute_recovery_minutes, and
-# ansible/tests/setup/test_lander_deadlines_cover_the_soak.py derives it from the schedule (#5457).
+# hosts/tests/test_lander_deadlines_cover_the_soak.py derives it from the schedule (#5457).
 Environment=LAND_WINDOW_GRACE=22200
 # One of the agent's landings at a time, so a second waits for the first's landing rather than
 # racing it. Interactive sessions and renovate-agent's lander do not take

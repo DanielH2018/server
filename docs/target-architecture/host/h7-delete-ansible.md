@@ -520,7 +520,7 @@ waived, so the status is DONE. Each reading uses the commands its observation na
 - **Contract checks derive from setup tasks.**
   `test_setup_cron_roles_have_a_contract.py` (deleted, #8027) derives the cron-installing set from `tasks/`, and `ansible/tests/repo/test_role_claude_md.py`
   requires a `CLAUDE.md` per setup role. Both pass vacuously once the roles are gone.
-  `ansible/tests/setup/` holds 114 tracked files.
+  `hosts/tests/` holds 114 tracked files.
 - **Docs that name the playbooks.** `git grep -l 'ansible-playbook' -- ':!docs/archive'`
   prints 144 files. Outside `docs/archive/`, `docs/target-architecture/` and
   `docs/reference/`, 22 pages under `docs/` name a bring-up playbook or `ansible-playbook`,
@@ -528,7 +528,7 @@ waived, so the status is DONE. Each reading uses the commands its observation na
   `docs/k3s-etcd-restore.md`. Root `CLAUDE.md`, four skills (`add-secret`, `deploy`,
   `ha-edit-automation`, `new-k8s-service`) and the `CLAUDE.md` files of `k8s/deploy-ui`,
   `k8s/headlamp` and `k8s/nut` name them too. `docs/failure-classes.md` cites no test under
-  `ansible/tests/setup/`.
+  `hosts/tests/`.
 - **The NUT drill powers off both nodes.** `ansible/roles/k8s/nut/CLAUDE.md` says the
   manual drill "actually powers BOTH nodes off now that daniel-box is armed".
 
@@ -1880,7 +1880,7 @@ rule of its own, and it names the set. `host_secrets.py check` finds its hosts f
 
 Each per-role PR follows H3's handoff rule. It adds the component, deletes the role's tasks
 for that component, lists the Ansible-era paths, units, crons and ufw rules as legacy
-entries, and retargets that role's tests in `ansible/tests/setup/` at the rendered
+entries, and retargets that role's tests in `hosts/tests/` at the rendered
 component. It `git mv`s every template, file and default the component renders. The PR
 that moves a role's last component empties the role, as *Roles are emptied before H7.20a*
 describes, and never edits a bring-up playbook. H7.20a deletes the role directories.
@@ -3350,7 +3350,7 @@ the `manual_plane` clearing, and *Rollback*'s
     - **H7.20a** the playbooks, `bring-up.sh`, every emptied role directory under
       `ansible/roles/setup/` and `ansible/roles/containers/`, and the runbook roles' tasks,
       with every test whose subject it deletes, `test_pi_escalation_timeout.py` and the
-      remaining modules under `ansible/tests/setup/` that test only Ansible mechanics among
+      remaining modules under `hosts/tests/` that test only Ansible mechanics among
       them. It also deletes `scripts/deploy_tools/setup_lib/setup_gates.py` with the censuses that
       read it, H3.2's two-writer census and its ufw and line-arm rows and the setup census,
       whose subject the PR deletes. It merges only after daniel-box shows the version from
@@ -3417,7 +3417,7 @@ the `manual_plane` clearing, and *Rollback*'s
           the three cluster templates, `render_context.py:_HOSTVARS_KEYS`, H5's helper in
           `scripts/lib/ansible_inventory.py` with `health_docker.py:declared_on_pi`, the
           recovery heartbeat's watch set, and H5's service-list census in
-          `ansible/tests/setup/`. Two greps at the PR's base are the census of record:
+          `hosts/tests/`. Two greps at the PR's base are the census of record:
           `git grep -n compose_services`, because H5 makes every reader of the union name
           both keys, and `git grep -n -F "hostvars['daniel-pi'].containers_list"`;
         - rewrites H5's census to assert that no `host_vars` file defines
@@ -3972,7 +3972,7 @@ progress.
   playbooks go. Until then, *Rollback* says where each command runs. Each host installs only
   its own package, and the `preinst` refuses a hostname mismatch.
 - **Failure class 8, prose that nothing re-derives.** Every setup role's `CLAUDE.md` holds
-  ENFORCED citations into `ansible/tests/setup/`. Each per-role PR rewrites or archives that
+  ENFORCED citations into `hosts/tests/`. Each per-role PR rewrites or archives that
   doc, and reads G1's notice for any other section whose cited atom moved.
 
 ## Tests and docs that change in the same PR
@@ -3982,7 +3982,7 @@ progress.
   subject touches as edited, archived or exempt in the PR body. A generated page under
   `docs/reference/` is never hand-edited; its generator changes in H7.18a.
 - **Every per-role PR:**
-    - that role's modules in `ansible/tests/setup/` retarget the rendered component or are
+    - that role's modules in `hosts/tests/` retarget the rendered component or are
       deleted, if they test only Ansible mechanics;
     - its `CLAUDE.md` moves into the component's `CLAUDE.md` or into `docs/`, and an
       emptied role keeps a stub `CLAUDE.md` that points at the component;

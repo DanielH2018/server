@@ -24,7 +24,7 @@ stdout. A pod's output reaches Loki, and a render's output reaches the transcrip
 ## Removing a key from a Secret template
 
 Removing a key from a `secret.yaml.j2` removes it live only when Flux owns the key. For a role
-with a `platform: k8s` entry, Flux's server-side apply removes a key it
+with a `cluster/services.yml` entry, Flux's server-side apply removes a key it
 no longer applies, and it takes over the `kubectl-client-side-apply` and `kubectl-patch` field
 managers. A key that any other field manager holds stays live, so patch it out and verify.
 `docs/target-architecture/deploy/d3-secrets.md` has the evidence, at step D3.5.

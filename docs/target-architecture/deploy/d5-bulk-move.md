@@ -699,7 +699,7 @@ own-window roles' (*Waves and windows*).
           `test_the_namespace_is_applied_before_its_limitrange` and
           `test_the_namespace_apply_reports_changed_per_line`;
         - `ansible/tests/deploy/test_k8s_dry_run.py:test_namespace_apply_is_guarded`;
-        - `ansible/tests/setup/test_k3s_control_plane_hardening.py`'s
+        - `hosts/tests/test_k3s_control_plane_hardening.py`'s
           `test_both_namespaces_carry_the_psa_labels` and
           `test_namespace_apply_reports_a_label_change_as_changed`.
 - **Pre-apply live reads.** R3 removes all three: pi-peer-backup's host key, n8n's digest and
@@ -1194,7 +1194,7 @@ parks the tick (Baseline). So D5.1h creates the role alone, before any row moves
 
 - **What it holds.** `ansible/roles/setup/k8s_host_files/` with a `tasks/main.yml` that
   includes no task file yet, its `CLAUDE.md` with the Autonomous-role contract, the
-  `StrictUndefined` render test in `ansible/tests/setup/` with its red fixture (*Host-side
+  `StrictUndefined` render test in `hosts/tests/` with its red fixture (*Host-side
   rows*), and the `initial_setup.yml` entry, gated to daniel-box. Nothing else rides in the
   PR.
 - **Before the merge.** `probe.py gitops-state` shows `behind_since` and `hold_sha` empty, and
@@ -2255,7 +2255,7 @@ one task file per source role, in a conversion PR before that role flips:
   `include_vars` another role's defaults.
     - **A variable both sides read stays in the k8s role, with a test-held copy.** The k8s
       role's defaults keep it, the moved task's `vars:` hold a copy under the k8s role's own
-      name, and a test in `ansible/tests/setup/` holds each pair equal. A task file with
+      name, and a test in `hosts/tests/` holds each pair equal. A task file with
       several tasks puts the copies in one `block:`'s `vars:`. The copy never goes in
       `k8s_host_files`' defaults: role defaults are play-wide in `initial_setup.yml`, so a
       defaults copy of a key another setup role names is a cross-role read, which
@@ -2271,7 +2271,7 @@ one task file per source role, in a conversion PR before that role flips:
       which `ansible/roles/k8s/media-volume/templates/pv.yaml.j2` and the directory task both
       read. The task's owner reads `puid` and `pgid` from `group_vars/all.yml`, the shared-key
       case above, so the same PR copies them into the task's `vars:` as pairs too.
-    - A test in `ansible/tests/setup/` renders every template in `k8s_host_files` with that
+    - A test in `hosts/tests/` renders every template in `k8s_host_files` with that
       role's defaults and `group_vars`, under `StrictUndefined`, through
       `scripts/lib/ansible_jinja_env.py`. Its red half is a fixture template that reads a
       variable defined only in a `roles/k8s/` defaults file. D5.1h lands it while the role
@@ -3950,7 +3950,7 @@ includes valheim's initContainer.
       `probe.py takeover` command and the operator's `flux diff kustomization` command, and
       `docs/claude-tooling.md`'s probe list gains the subcommand.
     - D5.1h: the role's `CLAUDE.md` with the Autonomous-role contract, the `StrictUndefined`
-      render test and the pair test in `ansible/tests/setup/`. The **operator-only** clear
+      render test and the pair test in `hosts/tests/`. The **operator-only** clear
       stays in this plan's *The `k8s_host_files` role enters the setup plane once* section
       and in [#5337](https://github.com/DanielH2018/server/pull/5337)'s body.
       `docs/gitops-pipeline.md`'s *When a tick parks* holds the general procedure for a
@@ -4703,7 +4703,7 @@ Fixed:
   D2 to point its sentence at this gate.
 - D5-R3-10: each conversion PR moves the sources into `k8s_host_files` and the variables into
   its defaults or `group_vars/all.yml`, with no cross-role `include_vars`. A `StrictUndefined`
-  render test in `ansible/tests/setup/` has a red half for an unresolved variable.
+  render test in `hosts/tests/` has a red half for an unresolved variable.
 - D5-R3-11: the soak writes `failed-services:` to its termination message, the post names the
   Job and prints the read command, and the runbook reads it before the reset prunes the Job.
   The branch rule names a soak-named snapshot role as Branch 1.

@@ -68,11 +68,10 @@ from deploy_tools import tag_rule
 from deploy_tools.promote_lib.prune import ReadError
 from lib import removes_object, yaml_fast
 from lib.cli_help import ArgumentParser
-from lib.ansible_inventory import K8S_HOST
 from renderer.renderer_lib.targets import render_targets
 from lib.git import git, git_env, git_stdout
 from lib.k8s_roles import role_dirs
-from lib.render_guard import containers_entries
+from lib.render_guard import k8s_services
 from lib.repo_paths import FILTER_PLUGINS, REPO
 from renderer.renderer_lib.bundle import DIGESTS, SHARED_KINDS
 from renderer.renderer_lib.cluster import NAMESPACE_ROLE_VARS
@@ -87,10 +86,10 @@ from renderer.renderer_lib.ordering import (
 if str(FILTER_PLUGINS) not in _sys.path:
     _sys.path.insert(0, str(FILTER_PLUGINS))
 
-from toposort import K8S_APPLIES_LAST, build_k8s_dep_map, filter_by_platform
+from toposort import K8S_APPLIES_LAST, build_k8s_dep_map
 
 CLEAN, REFUSED, UNJUDGED = 0, 1, 2
-HOST_VARS = Path("ansible/inventory/host_vars/daniel-box.yml")
+SERVICES = Path("cluster/services.yml")
 GROUP_VARS = Path("ansible/inventory/group_vars/all.yml")
 K8S_ROLES = "ansible/roles/k8s/"
 FLUX_PLANE = "flux"
@@ -271,7 +270,7 @@ def snapshot(
     tree: Path,
     roles: Iterable[str] = (),
     python: str = sys.executable,
-    targets: Callable[[str, Path, Path], list[str]] = render_targets,
+    targets: Callable[[Path, Path], list[str]] = render_targets,
 ) -> Snapshot:
     """Render `tree` with its own renderer and read what the gate judges.
 
@@ -285,16 +284,16 @@ def snapshot(
 
     Args:
         roles: The tags to render, or none for every render target of `tree`.
-        targets: How the render targets are found when `roles` is empty, called with the
-            host, `tree`'s host_vars directory and its k8s roles directory. A test narrows
+        targets: How the render targets are found when `roles` is empty, called with
+            `tree`'s service list and its k8s roles directory. A test narrows
             it to keep the no-roles path without rendering every tag.
 
     Raises:
         RenderFailed: The render exited non-zero.
     """
-    k8s = filter_by_platform(containers_entries(tree / HOST_VARS), "k8s")
+    k8s = k8s_services(tree / SERVICES)
     names = {e["name"] for e in k8s}
-    roles = list(roles) or targets(K8S_HOST, tree / HOST_VARS.parent, tree / K8S_ROLES)
+    roles = list(roles) or targets(tree / SERVICES, tree / K8S_ROLES)
     with tempfile.TemporaryDirectory(prefix="cross-plane-") as out:
         # DECIDED: both sides run under the PR's interpreter, not each commit's own `uv run
         # --frozen` environment. A dependency bump that changes the render is then invisible

@@ -1,4 +1,4 @@
-"""The k8s services a host renders, derived from its `containers_list` and the role files.
+"""The k8s services the cluster renders, derived from `cluster/services.yml` and the role files.
 
 A service renders when its role has something to render: its own manifest template, a shared
 default its entry earns, or a vendored manifest. `render_targets` keeps a tag Flux owns,
@@ -13,8 +13,8 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 from pathlib import Path
 
 from lib.k8s_roles import MANIFEST_TEMPLATE_GLOB, SHARED_DEFAULT_TRIGGERS
-from lib.render_guard import containers_entries, entry_platform, entry_tags
-from lib.repo_paths import HOST_VARS, K8S_ROLES
+from lib.render_guard import entry_tags, k8s_services
+from lib.repo_paths import K8S_ROLES, K8S_SERVICES
 from renderer.renderer_lib.bundle import PATCHES_DIR
 
 # A role's vendored files sit in these subdirectories of `files/` and keep them under
@@ -44,21 +44,15 @@ def renders(entry: dict, roles: Path = K8S_ROLES) -> bool:
 
 
 def render_targets(
-    host: str,
-    host_vars: Path = HOST_VARS,
+    services: Path = K8S_SERVICES,
     roles: Path = K8S_ROLES,
 ) -> list[str]:
-    """The sorted service names `host` renders, each its own tag.
+    """The sorted service names the cluster renders, each its own tag.
 
-    Empty for a host whose `host_vars` file is missing: that host declares no services.
+    Empty when the service list `services` is missing.
     """
-    path = host_vars / f"{host}.yml"
-    if not path.exists():
-        return []
     return sorted(
         entry["name"]
-        for entry in containers_entries(path)
-        if entry_platform(entry) == "k8s"
-        and entry["name"] in entry_tags(entry)
-        and renders(entry, roles)
+        for entry in k8s_services(services)
+        if entry["name"] in entry_tags(entry) and renders(entry, roles)
     )

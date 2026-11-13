@@ -19,8 +19,8 @@
 # 99-homelab-dns.yaml carries `manual:systemd-networkd.service`, because `netplan apply` reconfigures
 # the link an SSH session rides on. A change goes live at the next boot.
 #
-# ENFORCED: hosts/lib/tests/test_box_k3s_host_half.py, ansible/tests/setup/test_node_resolv_order.py
-# and ansible/tests/setup/test_netplan_dns_overrides.py.
+# ENFORCED: hosts/lib/tests/test_box_k3s_host_half.py, hosts/tests/test_node_resolv_order.py
+# and hosts/tests/test_netplan_dns_overrides.py.
 component: pi-resolver
 files:
   - {src: "component:templates/resolv.conf.j2", dst: /etc/resolv.conf}

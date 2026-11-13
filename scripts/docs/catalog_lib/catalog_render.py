@@ -54,8 +54,6 @@ tr:hover td { background: var(--surface0); }
   display: inline-block; border-radius: 0.35rem; padding: 0.1rem 0.5rem;
   font-size: 0.8rem; font-weight: 600; color: var(--crust);
 }
-.badge-k8s { background: var(--blue); }
-.badge-docker { background: var(--mauve); }
 .badge-auth { background: var(--green); }
 .badge-noauth { background: var(--yellow); }
 .badge-unknown { background: var(--red); }
@@ -66,10 +64,6 @@ tr:hover td { background: var(--surface0); }
 
 def _badge(text: str, cls: str) -> str:
     return f'<span class="badge {cls}">{html.escape(text)}</span>'
-
-
-def _platform_badge(platform: str) -> str:
-    return _badge(platform, "badge-k8s" if platform == "k8s" else "badge-docker")
 
 
 def _auth_badge(tier: str) -> str:
@@ -112,8 +106,8 @@ def render_markdown(rows: list[ServiceRow]) -> str:
     parts.append("# Services\n")
     parts.append(f"{len(rows)} service(s) declared across {len(hosts)} host(s).\n")
 
-    header = "| Service | Platform | Route | Auth | Backup tier | Auto-deploy |"
-    divider = "|---|---|---|---|---|---|"
+    header = "| Service | Route | Auth | Backup tier | Auto-deploy |"
+    divider = "|---|---|---|---|---|"
 
     for host in hosts:
         host_rows = sorted((r for r in rows if r.host == host), key=lambda r: r.name)
@@ -124,7 +118,6 @@ def render_markdown(rows: list[ServiceRow]) -> str:
         for row in host_rows:
             cells = (
                 row.name,
-                row.platform,
                 # Markdown only. The stored value stays plain text for render_html and
                 # every text consumer; only the docs site can resolve these into links.
                 linkify_fqdns(row.route),
@@ -179,7 +172,6 @@ def render_html(rows: list[ServiceRow]) -> str:
         body = "".join(
             "<tr>"
             f"<td>{html.escape(r.name)}</td>"
-            f"<td>{_platform_badge(r.platform)}</td>"
             f'<td class="muted">{html.escape(r.route)}</td>'
             f"<td>{_auth_badge(r.auth_tier)}</td>"
             f'<td class="muted">{html.escape(r.backup_tier)}</td>'
@@ -189,7 +181,7 @@ def render_html(rows: list[ServiceRow]) -> str:
         )
         sections.append(
             f'<h2>{html.escape(host)} <span class="muted">({len(host_rows)} services)</span></h2>'
-            "<table><thead><tr><th>Service</th><th>Platform</th><th>Route</th>"
+            "<table><thead><tr><th>Service</th><th>Route</th>"
             "<th>Auth</th><th>Backup tier</th><th>Auto-deploy</th></tr></thead>"
             f"<tbody>{body}</tbody></table>"
         )

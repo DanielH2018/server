@@ -202,7 +202,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    global_vars, host_vars = load_inventory()
+    global_vars, host_vars, k8s = load_inventory()
     local_hostname = socket.gethostname()
     longhorn_namespace = global_vars.get("k8s_longhorn_namespace", "longhorn-system")
     try:
@@ -219,7 +219,7 @@ def main(argv: list[str] | None = None) -> int:
         return INFRA_MAP_LIVE_UNREADABLE
     generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     model = build_model(
-        global_vars, host_vars, live, generated_at, load_roles(), cluster
+        global_vars, host_vars, live, generated_at, load_roles(), cluster, k8s
     )
 
     if args.json:

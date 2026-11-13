@@ -39,7 +39,7 @@ dri_device_plugin_count: 4
 # SYSTEM_UPGRADE_JOB_TTL_SECONDS_AFTER_FINISH (900) ages its Plan Jobs out on their own.
 # Each namespace gets a Role in templates/admission-reaper-rbac.yaml.j2.
 # DECIDED: the add-on sweep stays in this role rather than a role of its own. It runs the same
-# script on the same schedule, and a second role would add a containers_list entry and an image
+# script on the same schedule, and a second role would add a services entry and an image
 # pin for one more predicate. It runs as its own CronJob and ServiceAccount in kube-system; the
 # cronjob template's DECIDED note says why. Rationale in this role's CLAUDE.md.
 dri_device_plugin_reaper_job_namespaces: [kube-system, longhorn-system]

@@ -1,6 +1,6 @@
 """publish_pr.py: the sequence three crons run, executed rather than grepped.
 
-The textual guards in ansible/tests/setup/test_cron_scripts_publish_via_pr.py pinned four
+The textual guards in hosts/tests/test_cron_scripts_publish_via_pr.py pinned four
 properties of the inline block -- a PR is opened, only the run's branch is pushed, the failure
 text is kept, and the local master is reset after the push. Each has an executing test here.
 """

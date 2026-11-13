@@ -17,9 +17,7 @@ from collections.abc import Mapping
 
 from renderer.renderer_lib.targets import render_targets
 from lib import yaml_fast
-from lib.ansible_inventory import K8S_HOST
 from lib.exit_codes import RENDER_OK
-from lib.repo_paths import HOST_VARS
 from render_share import placeholder_renderer
 from renderer import homelab_render
 from renderer.renderer_lib.bundle import CLUSTER_VARS_FILE, KUSTOMIZATION
@@ -118,9 +116,7 @@ def test_no_two_render_targets_render_one_object(tmp_path):
     found = owners(directories)
     # A walk that reached nothing would pass, so the render must hold every target and
     # objects from two named roles.
-    assert set(render_targets(K8S_HOST, HOST_VARS)) <= {
-        split_kind(d)[0] for d in directories
-    }
+    assert set(render_targets()) <= {split_kind(d)[0] for d in directories}
     assert ("v1", "Namespace", "", "observability") in found
     assert any(k[1] == "Middleware" for k in found)
     assert collisions(found) == {}

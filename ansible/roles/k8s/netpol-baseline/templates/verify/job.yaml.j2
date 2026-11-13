@@ -93,7 +93,7 @@
 {%   if t.expect is defined %}
 {#     A row with `service_port` dials the Service port, which its Service maps to a different
        pod port; `port` is still the pod port the fence names (defaults/main.yml). #}
-{%     set port = t.service_port if t.service_port is defined else t.port if t.port is defined else containers_list | entry_port(t.service) %}
+{%     set port = t.service_port if t.service_port is defined else t.port if t.port is defined else services | entry_port(t.service) %}
 {%     if t.plane == 'flux-system' %}
 {%       set hint = 'Either ' ~ t.policy ~ ' no longer fences pod port ' ~ t.port ~ ', or another policy in flux-system admits this namespace. This role has no lever for either.' %}
 {%     else %}

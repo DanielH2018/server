@@ -323,7 +323,5 @@ def test_an_empty_k8s_service_read_is_flagged(tmp_path):
 
 
 def test_a_non_empty_k8s_service_read_is_clean(tmp_path):
-    sha = _repo_with_services(
-        tmp_path, "containers_list:\n  - name: registry\n    platform: k8s\n"
-    )
+    sha = _repo_with_services(tmp_path, "containers_list:\n  - name: registry\n")
     assert land_flux.k8s_tags_at(tmp_path, sha) == {"registry"}

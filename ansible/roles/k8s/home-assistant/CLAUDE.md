@@ -6,8 +6,7 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
-- **Applied by:** Flux, through `promote` (`platform: k8s`); `land.sh --tags=home-assistant`
-  gates the rollout
+- **Applied by:** Flux, through `promote`; `land.sh --tags=home-assistant` gates the rollout
 - **Images:** `lscr.io/linuxserver/homeassistant` (`home_assistant_k8s_image`), `alpine`
   (`home_assistant_k8s_init_image`)
 - **Route:** `home-assistant.<domain>` · `home-assistant.local.<domain>`, no Authelia
@@ -22,7 +21,7 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   macro tests, `sanctioned_writers.yml` and the skills all anchor here, and its ConfigMap
   ships `files/` into the cluster. Edit HA config HERE, then merge; `promote` applies it.
 - **Flux applies it, not Ansible** (D5.11, an own-window flip). Its `containers_list` entry
-  is `platform: k8s`, so nothing applies it by hand, and a
+  is in `cluster/services.yml`, so nothing applies it by hand, and a
   merged change reaches the cluster when `promote` publishes and verifies the next bundle. The
   Deployment is `Recreate`, so a
   change that rolls it takes HA down for the length of the pod restart, about 2 minutes. The

@@ -102,7 +102,7 @@ The exit criterion has five parts, all observed together:
       per host, because a shared token would let either host's `up` mask the other's `down`.
     - Each tile is a push tile with `interval` `nut_host_watchdog_interval_minutes * 60 * 2`
       (1200 s) and `max_retries: 0`, so a missing push turns it DOWN after 20 minutes.
-    - `ansible/tests/setup/test_nut_host_secondary.py:TILES` maps each host to its tile and
+    - `hosts/tests/test_nut_host_secondary.py:TILES` maps each host to its tile and
       token.
 - **The watchdog script.** `ups-secondary-health.sh.j2` sources
   `/usr/local/lib/kuma-push-lib.sh` and exits 1 if it is missing. It reads its token from
@@ -1169,7 +1169,7 @@ and before the slice closes.
   The strict render succeeds with every secret stripped, and the watchdog unit loads
   `kuma_push_token` alone. A fixture template that reads a SOPS key inside the packaged branch
   is flagged: the host-mode render raises and names the key.
-- *One template source (H4.3b3).* A test in `ansible/tests/setup/` asserts that daniel-box's
+- *One template source (H4.3b3).* A test in `hosts/tests/` asserts that daniel-box's
   role render and daniel-server's component render resolve the same two template files under
   `ansible/roles/setup/nut_host/templates/`. It also asserts that daniel-box's render of
   each is byte-identical to its render at the merge base, which catches whitespace that the
@@ -1472,13 +1472,13 @@ and before the slice closes.
     - `hosts/lib/tests/` covers the udev reconciler arm, with the no-rule and dropped-rule
       cases.
 - **H4.3b2:** red fixtures for the guard reader in the two-writer census
-  (`ansible/tests/setup/`), in `scripts/deploy_tools/tests/` for `land_reach`, and in
+  (`hosts/tests/`), in `scripts/deploy_tools/tests/` for `land_reach`, and in
   `scripts/docs/tests/` for the glance line.
-- **H4.3b3:** `ansible/tests/setup/` gains the one-template-source test, and
+- **H4.3b3:** `hosts/tests/` gains the one-template-source test, and
   `hosts/lib/tests/` the packaged-render test. `test_nut_host_secondary.py` keeps its
   textual assertions, which hold on the daniel-box branch.
 - **H4.3c:**
-    - `ansible/tests/setup/test_nut_host_secondary.py` keeps its daniel-box assertions.
+    - `hosts/tests/test_nut_host_secondary.py` keeps its daniel-box assertions.
       `test_the_usb_half_is_confined_to_the_ups_host` becomes the assertion that no
       `nut_host` task writes under `/etc/udev/rules.d/` or runs `udevadm`.
     - Component tests in `hosts/lib/tests/` cover the daniel-server half: the host name and

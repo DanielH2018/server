@@ -28,7 +28,7 @@ from _infra_map import (
     ROLES,
     WORKLOADS,
     container,
-    docker_host,
+    plain_host,
     live_ok,
     model_for,
     pi_host,
@@ -61,50 +61,49 @@ def test_resolve_vars_survives_a_reference_cycle():
 
 
 def test_declared_services_defaults_to_docker_platform():
-    hv = docker_host([{"name": "sonarr", "port": 8989, "networks": ["media"]}])
-    (service,) = g.declared_services("daniel-server", hv, GLOBALS)
+    hv = pi_host([{"name": "sonarr", "port": 8989, "networks": ["media"]}])
+    (service,) = g.declared_services("daniel-pi", hv, GLOBALS)
     assert service["platform"] == "docker"
     assert service["networks"] == ["media"]
     assert service["namespace"] is None
 
 
 def test_declared_services_resolves_k8s_hostname_and_namespace():
-    hv = docker_host(
-        [
-            {
-                "name": "authelia",
-                "platform": "k8s",
-                "hostname": "auth{{ k8s_hostname_suffix }}",
-                "port": 9091,
-            }
-        ]
-    )
-    (service,) = g.declared_services("daniel-box", hv, GLOBALS)
+    entry = {
+        "name": "authelia",
+        "hostname": "auth{{ k8s_hostname_suffix }}",
+        "port": 9091,
+    }
+    (service,) = g.declared_services("daniel-box", plain_host(), GLOBALS, [entry])
+    assert service["platform"] == "k8s"
     assert service["hostname"] == "auth-k8s"
     assert service["namespace"] == "homelab"
 
 
 def test_declared_services_gives_namespace_owner_its_own_namespace():
     """observability is one entry that owns the whole observability namespace."""
-    hv = docker_host([{"name": "observability", "platform": "k8s", "port": 3000}])
-    (service,) = g.declared_services("daniel-box", hv, GLOBALS)
+    entry = {"name": "observability", "port": 3000}
+    (service,) = g.declared_services("daniel-box", plain_host(), GLOBALS, [entry])
     assert service["namespace"] == "observability"
 
 
 def test_declared_services_omits_hostname_for_unrouted_services():
     """No port means no Traefik route — showing a hostname would invent one."""
-    hv = docker_host([{"name": "autoheal"}])
-    (service,) = g.declared_services("daniel-server", hv, GLOBALS)
+    (service,) = g.declared_services(
+        "daniel-pi", pi_host([{"name": "autoheal"}]), GLOBALS
+    )
     assert service["hostname"] is None
 
 
-def test_declared_services_tolerates_a_missing_containers_list():
-    assert g.declared_services("daniel-server", {}, GLOBALS) == []
+def test_declared_services_gives_a_host_that_runs_no_service_list_none():
+    assert g.declared_services("daniel-server", {}, GLOBALS, [{"name": "x"}]) == []
 
 
 def test_declared_services_skips_entries_without_a_name():
-    hv = docker_host([{"port": 80}, {"name": "real"}])
-    assert [s["name"] for s in g.declared_services("h", hv, GLOBALS)] == ["real"]
+    hv = pi_host([{"port": 80}, {"name": "real"}])
+    assert [s["name"] for s in g.declared_services("daniel-pi", hv, GLOBALS)] == [
+        "real"
+    ]
 
 
 def test_match_k8s_workloads_takes_the_service_and_its_helpers():
@@ -300,19 +299,19 @@ def test_build_model_reports_both_hosts_even_with_no_live_data():
 
 def test_build_model_counts_routed_and_sso_gated_services():
     host_vars = {
-        "daniel-box": docker_host([]),
-        "daniel-server": docker_host(
+        "daniel-box": plain_host(),
+        "daniel-server": plain_host(),
+        "daniel-pi": pi_host(
             [
                 {"name": "sonarr", "port": 8989, "use_authelia": True},
                 {"name": "autoheal"},
             ]
         ),
-        "daniel-pi": pi_host([]),
     }
     model = g.build_model(GLOBALS, host_vars, {}, "now", ROLES)
-    server = next(h for h in model["hosts"] if h["name"] == "daniel-server")
-    assert server["routed_count"] == 1
-    assert server["authelia_count"] == 1
+    pi = next(h for h in model["hosts"] if h["name"] == "daniel-pi")
+    assert pi["routed_count"] == 1
+    assert pi["authelia_count"] == 1
 
 
 #
@@ -420,7 +419,7 @@ def test_group_services_covers_every_service_exactly_once():
 
 
 def test_every_inventory_host_has_a_plane_and_a_role():
-    """`HOSTS` is read from hosts.ini; a host added there must be described here too, or
+    """`HOSTS` is read from host_vars; a host added there must be described here too, or
     the live collector's `HOST_PLANE[host]` raises on it."""
     from infra_map.constants import HOST_PLANE, HOST_ROLE
 

@@ -13,9 +13,6 @@ exercised with the same shape it is deployed with (port, hostname, networks,
 use_authelia). Commented-out services are skipped automatically (they are not in
 the parsed list).
 
-A Docker entry in ``containers_list`` is a failure: H5.12 deleted ``ansible/roles/containers/``,
-so nothing deploys one.
-
 Run directly (``python3 scripts/validate/compose_templates.py``) or via the
 ``validate-compose-templates`` prek hook. Exits non-zero if any template fails to
 render or produces invalid YAML.
@@ -38,7 +35,6 @@ from validate.validate_lib.ok_lines import ok_printer
 from lib import yaml_fast
 from lib.cli_help import answer_help
 from validate.validate_lib.shipped_render import render_shipped
-from lib.ansible_inventory import containers_entries_in
 from lib.render_context import render_context
 from lib.repo_paths import REPO
 from lib.render_guard import (
@@ -234,20 +230,6 @@ def find_missing_no_new_privileges(docs, exempt=frozenset()) -> list:
     return missing
 
 
-def undeployed_docker_entries(containers: list[dict]) -> list[str]:
-    """Names of the Docker entries in a host's `containers_list`, which nothing deploys.
-
-    H5.12 deleted `ansible/roles/containers/`, the Ansible Compose path, so only a `platform:
-    k8s` entry has a deploy path; validate/k8s_manifests.py owns those. A Pi service belongs in
-    `compose_services`.
-    """
-    return [
-        ci["name"]
-        for ci in containers
-        if ci.get("name") and ci.get("platform") != "k8s"
-    ]
-
-
 def check_component_service(
     host: str, ci: dict, root: Path = COMPONENT_SERVICES
 ) -> str | None:
@@ -275,7 +257,7 @@ def _check_rendered(
     ctx = render_context(None, host=host, overrides={"container_item": ci})
     # A template reads its OWN entry through `container_item`; leaving the lists in would let
     # one render against another service's entry.
-    ctx.pop("containers_list", None)
+    ctx.pop("services", None)
     ctx.pop("compose_services", None)
     rendered, err = render_shipped(tpl, ctx)
     if rendered is None:
@@ -336,8 +318,7 @@ def main(argv: Sequence[str] = (), host_vars_dir: Path = HOST_VARS) -> int:
     Args:
         argv: The command-line arguments. `-v` or `--verbose` also lists each clean
             template as an `[ok]` line; by default only failures and the summary print.
-        host_vars_dir: The inventory's `host_vars` directory; `cluster/services.yml` beside
-            the inventory supplies the k8s host's `containers_list`.
+        host_vars_dir: The inventory's `host_vars` directory.
 
     Returns:
         0 if every template rendered and parsed as YAML, 1 if any failed or no host_vars
@@ -354,17 +335,7 @@ def main(argv: Sequence[str] = (), host_vars_dir: Path = HOST_VARS) -> int:
     checked = 0
     for host_file in host_files:
         host_vars = host_layer(host_file.parent, host_file.stem)
-        containers = containers_entries_in(host_vars)
-
-        for name in undeployed_docker_entries(containers):
-            failures += 1
-            print(
-                f"  [FAIL] {host_file.stem}: {name}: a Docker containers_list entry, which "
-                "nothing deploys since H5.12; a Pi service belongs in compose_services",
-                file=sys.stderr,
-            )
-
-        # The Pi package's services (H5): a Docker platform of their own, so none is k8s.
+        # The Pi package's services (H5).
         packaged = host_vars.get("compose_services") or []
         if packaged:
             print(f"== {host_file.name} ({len(packaged)} packaged services) ==")

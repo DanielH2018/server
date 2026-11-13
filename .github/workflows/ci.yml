@@ -1325,7 +1325,6 @@ jobs:
           EVENT: ${{ github.event_name }}  # via env, never interpolated into the shell
           CASE_INPUTS: |
             ansible/inventory/host_vars/_example.yml
-            ansible/inventory/hosts.ini
             docs/host-packages.md
             hosts/bootstrap-host.sh
             hosts/lib/tests/container/

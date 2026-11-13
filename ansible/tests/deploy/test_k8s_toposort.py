@@ -46,9 +46,10 @@ import random
 from pathlib import Path
 
 import pytest
-from lib.render_guard import containers_entries
+from lib.render_guard import k8s_services
+from lib.repo_paths import K8S_SERVICES
 
-from _helpers import ANSIBLE, HOST_VARS
+from _helpers import ANSIBLE
 from _k8s_render import rendered_docs
 from toposort import (
     K8S_CRD_EDGE_EXEMPT,
@@ -59,14 +60,10 @@ from toposort import (
 
 
 def _k8s_entries(path: Path) -> list[dict]:
-    return [c for c in containers_entries(path) if c.get("platform") == "k8s"]
+    return k8s_services(path)
 
 
-def _host_files() -> list[Path]:
-    return sorted(p for p in HOST_VARS.glob("*.yml") if not p.name.startswith("_"))
-
-
-HOSTS_WITH_K8S = [p for p in _host_files() if _k8s_entries(p)]
+SERVICE_FILES = [K8S_SERVICES]
 
 
 def _roles_rendering_traefik_crds() -> set[str]:
@@ -98,7 +95,7 @@ def _sorted_names(entries: list[dict]) -> list[str]:
     return [c["name"] for c in toposort_containers(entries, dep_map)]
 
 
-@pytest.fixture(params=HOSTS_WITH_K8S, ids=lambda p: p.stem)
+@pytest.fixture(params=SERVICE_FILES, ids=lambda p: p.stem)
 def host(request):
     entries = _k8s_entries(request.param)
     return request.param, entries, _index(entries)
@@ -348,7 +345,7 @@ def test_an_applies_last_role_listed_first_still_sorts_after_a_new_entry(host):
         pytest.skip("host deploys no K8S_APPLIES_LAST role")
     by_name = {c["name"]: c for c in entries}
     others = [c for c in entries if c["name"] not in K8S_APPLIES_LAST]
-    scaffolded = {"name": "widget", "platform": "k8s", "port": 8080}
+    scaffolded = {"name": "widget", "port": 8080}
     adversarial = [*(by_name[n] for n in last), *others, scaffolded]
 
     order = _sorted_names(adversarial)
@@ -392,8 +389,7 @@ def _applies_last_ahead_of(
 
 APPLIES_LAST_PAIRS: list[tuple[Path, str]] = [
     (path, c["name"])
-    for path in HOSTS_WITH_K8S
-    if any(c["name"] in K8S_APPLIES_LAST for c in _k8s_entries(path))
+    for path in SERVICE_FILES
     for c in _k8s_entries(path)
     if c["name"] not in K8S_APPLIES_LAST
 ]

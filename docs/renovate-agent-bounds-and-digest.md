@@ -20,7 +20,7 @@ worktree rules, what the Discord digest measures, and the exit codes behind the 
 `component.yml` names each module in `files:`. The list is not derived from the directory, so a
 module in `files/` and not on the list is one the host never receives.
 ENFORCED:
-`ansible/tests/setup/test_renovate_agent_modules_are_shipped.py::test_every_shipped_module_is_installed`.
+`hosts/tests/test_renovate_agent_modules_are_shipped.py::test_every_shipped_module_is_installed`.
 
 ## The lander
 
@@ -88,7 +88,7 @@ The session reads third-party text: release notes, changelogs and PR bodies. It 
 - **Deployer holds.** The wrapper reads no hold. `land.sh`, run by the lander as the operator,
   refuses a landing under `DEPLOY_HOLD`.
 
-ENFORCED: `ansible/tests/setup/test_renovate_agent_identity.py`, which also runs the prompt's
+ENFORCED: `hosts/tests/test_renovate_agent_identity.py`, which also runs the prompt's
 `systemctl` commands through the repo's own PreToolUse:Bash dispatcher.
 
 ## Arming it
@@ -294,7 +294,7 @@ traceback that says what broke. ENFORCED:
 `hosts/components/renovate-agent/tests/test_crash_report.py::test_a_crash_posts_the_exception_text_to_discord_and_the_runs_file`.
 
 **The unit and `config.env` carry no Kuma push.** ENFORCED:
-`ansible/tests/setup/test_renovate_agent_unit.py::test_the_unit_and_its_config_make_no_kuma_push`.
+`hosts/tests/test_renovate_agent_unit.py::test_the_unit_and_its_config_make_no_kuma_push`.
 
 The verdict's deadline is 28h, not the 25h the other daily checks use, because the verdict lands
 at the end of the run: a fast run followed by one that draws the full jitter and runs to the

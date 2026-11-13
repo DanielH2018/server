@@ -247,7 +247,7 @@ It replaced the `node-exporter` container on 2026-09-18 (#2005; the retired role
 `git show 2460d0675fd748e70fcbcde87185371ffd62402b:ansible/roles/containers/archive/node-exporter/`).
 The trade was one containerd shim, about 5 MB, off a host that keeps 10-25 MB free — and this
 was the one container whose host form changes no decision.
-`ansible/tests/setup/test_pi_node_exporter_host_unit.py` holds the unit to the archived
+`hosts/tests/test_pi_node_exporter_host_unit.py` holds the unit to the archived
 compose's collector set with the textfile collector on, the directory to M3's contract, and the
 version to the cluster DaemonSet's.
 

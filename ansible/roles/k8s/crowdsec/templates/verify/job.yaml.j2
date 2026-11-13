@@ -104,7 +104,7 @@ template:
                 key: lapi_password
           # daniel-pi's address, the client address Traefik sees for the Pi's probe.
           - name: BAN_IP
-            value: "{{ hostvars['daniel-pi'].server_ip }}"
+            value: "{{ hosts['daniel-pi'].server_ip }}"
           # The decision outlives the window, and the script lifts it the moment it ends.
           - name: BAN_DURATION
             value: 15m

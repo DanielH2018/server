@@ -104,7 +104,7 @@ shell** spawns sessions **on demand** up to `--capacity`, so only it lets the ph
 ## Activating it
 
 `claude_code_rc_enabled: true` enables and starts the host; back to `false` stops **and** disables
-it and its restart timer, which is the rollback. `ansible/tests/setup/test_claude_rc_unit.py` pins both directions.
+it and its restart timer, which is the rollback. `hosts/tests/test_claude_rc_unit.py` pins both directions.
 
 One prerequisite Ansible cannot check, the trust dialog, is in `docs/claude-code-rc-caps.md`. **Re-run that check after a Claude Code upgrade or spawn-mode change.**
 
@@ -126,13 +126,13 @@ directory.
   lets the operator and each agent user start. The StopFailure hook in the dotfiles repo runs as
   a user that cannot read the webhook, so it starts the instance, named by the error cause in
   `[a-z0-9_]+`. `claude_code_stop_alert_enabled: false` removes the unit, the rule and the
-  webhook file. ENFORCED: `ansible/tests/setup/test_claude_stop_alert.py`.
+  webhook file. ENFORCED: `hosts/tests/test_claude_stop_alert.py`.
 - **A timer that stops firing pages through a textfile, because `OnFailure=` sees only a failed
   run** (#6165). The clone, dotfiles and memory syncs, the triage poller and the fan-out server
   lander write `<unit>.prom` from the `ExecStartPost=` in `templates/timer-textfile.j2`.
   Observability's `host-checks.yaml` pages a stale file as `Claude<Check>NotReporting` on each
   host that arms the timer. The deadline derives from the timer's period, which must stay
-  `<N>min`. ENFORCED: `ansible/tests/setup/test_claude_timer_rule_literals.py`. A timer's flag
+  `<N>min`. ENFORCED: `hosts/tests/test_claude_timer_rule_literals.py`. A timer's flag
   set false makes its rule fire, so the PR that disarms a timer deletes its rule.
   `claude-rc-restart` writes no file: a weekly try-restart whose miss only delays adopting an
   auto-update would page from the install until its first run. `claude-cgroup-metrics` writes
@@ -140,9 +140,9 @@ directory.
 
 ## Traps already paid for
 
-`ansible/tests/setup/test_claude_rc_unit.py` enforces every unit-shape rule here;
-`ansible/tests/setup/test_claude_login_slice_caps.py` and
-`ansible/tests/setup/test_claude_fleet_slice_cap.py` enforce the two slice planes.
+`hosts/tests/test_claude_rc_unit.py` enforces every unit-shape rule here;
+`hosts/tests/test_claude_login_slice_caps.py` and
+`hosts/tests/test_claude_fleet_slice_cap.py` enforce the two slice planes.
 
 - **`--spawn=` must be passed explicitly**, or Claude Code asks on stdin and the host hangs,
   never connected, while the unit reads `active`.
@@ -198,7 +198,7 @@ sessions waited five hours, until the operator ran `claude agents`.
   session down when it finished or stopped.
 - **The role enables the unit and never starts it.** Its job is the next boot.
   `claude_code_bg_resume_enabled: false` stops, disables and removes it, and no session dies.
-  ENFORCED: `ansible/tests/setup/test_claude_bg_resume_unit.py`.
+  ENFORCED: `hosts/tests/test_claude_bg_resume_unit.py`.
 - **To see what it would do,** run `uv run --no-project /usr/local/lib/claude-bg-resume/bg_session_resume.py
   --claude ~/.local/bin/claude --dry-run`. On a running box it prints 0 sessions. After a boot,
   `journalctl -b -u homelab-claude-bg-resume` shows what it respawned.

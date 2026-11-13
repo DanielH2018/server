@@ -15,7 +15,7 @@ Accepted.
 
 ## Context
 
-`homelab-render` rebuilds Ansible's variable precedence, `hostvars` and `include_role` vars, and
+`homelab-render` rebuilds Ansible's variable precedence, a `hosts` map and `include_role` vars, and
 it reuses ansible-core's filters. R4.7 deletes the k8s play, and with it the Ansible render that
 `shadow_diff.py compare` reads. R4.8 reimplements the filters, and H7 removes ansible-core, which
 removes the filters' parity oracle. Nothing but the code would then define the Jinja the renderer accepts,
@@ -126,9 +126,9 @@ The layers, weakest first:
 A value resolves after the layers merge, so a default that names a variable reads the winning
 layer's value.
 
-`hostvars` holds every host in `hosts.ini`. The rendered host's entry is the rendered context.
-Another host's entry holds its `hosts.ini` inline variables under its own `host_vars` file, each
-resolved against that host's variables.
+`hosts` holds one entry per `host_vars` file, with that host's literal `server_ip`,
+`compose_services` and `claude_agent_ssh_login_enabled`. `services` holds every entry of
+`cluster/services.yml`.
 
 An undefined variable fails the render and the error names it. `default` is the way to read a
 name that may be absent.
@@ -138,14 +138,10 @@ name that may be absent.
 Each of these fails the render or changes nothing the tree holds, so a template cannot rely on the
 Ansible behaviour.
 
-- `hostvars[<another host>]` holds no `group_vars` key. Ansible's holds them, and reading one
-  fails the render.
+- `hosts[<host>]` holds no `group_vars` key and no other host_vars key, where Ansible's
+  `hostvars` holds every variable. Reading one fails the render.
 - An include var does not reach a template. The renderer takes no value from a role's `tasks/`.
   Ansible's does.
-- A `hosts.ini` inline value that `ast.literal_eval` accepts, such as `ansible_port=22` or
-  `x='"b"'`, fails the read and the error names the host. Ansible reads the int `22` and the
-  string `b`. `Host.settings` holds only strings, so such a value goes in the host's `host_vars`
-  file.
 
 ## Consequences
 

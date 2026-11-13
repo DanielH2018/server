@@ -27,7 +27,7 @@ TimeoutStartSec=150
 # 10 minutes later tries again. The deployer and the tree jobs take the same lock.
 # Deliberately WITHOUT --no-python-downloads, like gitops-deploy.service: a missing interpreter
 # must not stop the sync, because every landing tool refuses to work from a stale checkout.
-# ansible/tests/setup/test_host_python_invocations.py pins the exemption.
+# hosts/tests/test_host_python_invocations.py pins the exemption.
 ExecStart=/usr/bin/flock -n -E 75 {{ server_git_tree_lock }} /usr/bin/uv run --no-project --python {{ host_python_version }} /usr/lib/homelab/checkout-sync/checkout_sync.py
 SuccessExitStatus=75
 ExecStopPost=/bin/sh -c 'test "$EXIT_STATUS" = 75 && echo "homelab-checkout-sync: skipped, {{ server_git_tree_lock }} was held" || true'

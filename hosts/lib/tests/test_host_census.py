@@ -16,7 +16,7 @@ import pytest
 from lib import yaml_fast
 from lib.repo_paths import REPO
 
-NOT_HOSTS = frozenset({"components", "keys", "lib", "packages", "__pycache__"})
+NOT_HOSTS = frozenset({"components", "keys", "lib", "packages", "tests", "__pycache__"})
 KNOWN_HOSTS = frozenset({"daniel-box", "daniel-server", "daniel-pi"})
 ROOTS = "scripts/validate/validate_lib/package_roots.py"
 GATE = "hosts/lib/builder_rollout_gate.py"

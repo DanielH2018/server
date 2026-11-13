@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/hosts.py
-generated_at: 2026-11-12 18:40 UTC
-generated_sha: 65e094073
+generated_at: 2026-11-13 03:04 UTC
+generated_sha: 62b768e65
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: 65e094073
 
 # Hosts
 
-3 host(s) in `ansible/inventory/hosts.ini`.
+3 host(s) in `ansible/inventory/host_vars/`.
 
 
 ## daniel-box
@@ -34,7 +34,7 @@ Raspberry Pi, and the only remaining Docker host. LAN-only utilities.
 |---|---|
 | LAN address | `10.0.0.139` |
 | Host package | `homelab-daniel-pi` (24 components) |
-| Services declared | 0 |
+| Services declared | 4 |
 | Has Docker | yes |
 
 ## daniel-server

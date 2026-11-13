@@ -6,7 +6,7 @@ inventory itself. ``gen_doc_fragments`` read ``all.yml`` and two host_vars files
 helper named ``role_defaults``, ``fragment_readers.host_has_docker`` and
 ``reference/hosts._flag`` each re-implemented host-over-group precedence, and
 ``gen_role_glance``, ``glance_facts``, ``service_catalog`` and ``reference/networking``
-each walked ``containers_list`` through a different helper. ``Estate`` is that reading
+each walked the service list through a different helper. ``Estate`` is that reading
 done once; a generator asks it for values and only renders.
 
 THE PRECEDENCE RULE LIVES HERE, ONCE. ``inventory_layers`` is the order Ansible applies,
@@ -35,10 +35,9 @@ from functools import cached_property
 from pathlib import Path
 from typing import Literal
 
-from lib.ansible_inventory import K8S_HOST, PI_HOST, Host, containers_entries_in
-from lib.ansible_inventory import inventory_hosts
-from lib.render_guard import host_files, host_layer, load_yaml
-from lib.repo_paths import ALL_VARS, HOST_VARS, HOSTS_INI
+from lib.ansible_inventory import K8S_HOST
+from lib.render_guard import host_files, host_layer, k8s_services, load_yaml
+from lib.repo_paths import ALL_VARS, HOST_VARS, K8S_SERVICES
 
 __all__ = [
     "PLANE_HOSTS",
@@ -50,7 +49,7 @@ __all__ = [
 ]
 
 # The host whose host_vars a plane's templates render with when the caller names none. Every
-# k8s role deploys from daniel-box's `containers_list`, so its host_vars are the k8s plane's.
+# k8s role renders with daniel-box's host_vars, the group_vars `k8s_primary_node`.
 # A setup role runs on several hosts and a Pi compose role on the host that lists it, so
 # neither plane has one host: a setup template renders with the group layer the hosts share,
 # and the compose validator passes each host it renders for.
@@ -65,13 +64,13 @@ class Inventory:
         all_vars: The group_vars file every host shares.
         host_vars: The directory holding one ``<host>.yml`` per inventory host.
         plane_hosts: The host each plane renders with when the caller names none.
-        hosts_ini: The inventory file naming each host and its groups.
+        services: The k8s service list, ``cluster/services.yml``.
     """
 
     all_vars: Path = ALL_VARS
     host_vars: Path = HOST_VARS
     plane_hosts: dict[str, str] = field(default_factory=lambda: dict(PLANE_HOSTS))
-    hosts_ini: Path = HOSTS_INI
+    services: Path = K8S_SERVICES
 
 
 REPO_INVENTORY = Inventory()
@@ -108,21 +107,12 @@ class Estate:
         self._own: dict[str, dict] = {}
 
     @cached_property
-    def hosts(self) -> list[Host]:
-        """Every host ``hosts.ini`` declares, in file order."""
-        return inventory_hosts(self.inventory.hosts_ini)
-
-    @cached_property
     def group_vars(self) -> dict:
         """``group_vars/all.yml``, the layer every host shares."""
         return load_yaml(self.inventory.all_vars)
 
-    def hosts_in(self, group: str) -> list[str]:
-        """The hosts ``hosts.ini`` lists under `group`, in file order."""
-        return [h.name for h in self.hosts if group in h.groups]
-
-    def host_vars_hosts(self) -> list[str]:
-        """Every host with a host_vars file, sorted; ``_example.yml`` is not a host."""
+    def hosts(self) -> list[str]:
+        """Every host, one per host_vars file, sorted; ``_example.yml`` is not a host."""
         return [p.stem for p in host_files(self.inventory.host_vars)]
 
     def own_vars(self, host: str) -> dict:
@@ -160,15 +150,11 @@ class Estate:
             return "group"
         return None
 
-    def entries(self, host: str) -> list[dict]:
-        """`host`'s named ``containers_list`` entries."""
-        return containers_entries_in(self.own_vars(host))
+    @cached_property
+    def services(self) -> list[dict]:
+        """Every k8s service's entry, in ``cluster/services.yml`` order."""
+        return k8s_services(self.inventory.services)
 
     def k8s_entries(self) -> dict[str, dict]:
-        """The ``platform: k8s`` entries of the k8s plane's host, keyed by service name."""
-        host = self.inventory.plane_hosts.get("k8s", K8S_HOST)
-        return {e["name"]: e for e in self.entries(host) if e.get("platform") == "k8s"}
-
-    def pi_entries(self, host: str = PI_HOST) -> list[dict]:
-        """The Docker host's Docker entries; the platform default there is Docker."""
-        return [e for e in self.entries(host) if e.get("platform", "docker") != "k8s"]
+        """Every k8s service's entry, keyed by service name."""
+        return {e["name"]: e for e in self.services}

@@ -140,7 +140,7 @@ uid.
 - **The approval list covers the socket's four files.** #6350 expected the sudo grant's
   entries to cover it, and they cover only the script. The helper, the client and the two unit
   templates are listed in `hosts/components/claude-code/templates/claude-land-approval-paths.j2` and in `FLOOR` in
-  `ansible/tests/setup/test_claude_lander.py`.
+  `hosts/tests/test_claude_lander.py`.
 - **To take it back:** set `claude_code_rootq_socket_enabled: false`, or
   `claude_code_rootq_enabled: false`, in the host's host_vars. The next package version drops
   the socket, its units, the helper and the client, and `claude-agent-setup` drops the agent

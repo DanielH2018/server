@@ -18,7 +18,7 @@ from renderer.renderer_lib import images
 def _image_line(tmp_path: Path, name: str) -> str:
     """The unwrapped Image(s) line `stale_k8s_docs` writes for a copy of the live role `name`.
 
-    The copy's entry carries no `owner`, so `platform: k8s` alone must select the GHCR repository.
+    The copy's entry carries no `owner`, so a service-list entry alone must select the GHCR repository.
     """
     assert name in images.builder_roles(), f"{name} builds no image"
     entry = dict(g.Estate().k8s_entries()[name])
@@ -26,10 +26,9 @@ def _image_line(tmp_path: Path, name: str) -> str:
     roles = tmp_path / "roles"
     # The whole role, so its `k8s/image-builder` include and build context come along.
     shutil.copytree(g.K8S_ROLES / name, roles / name)
-    (tmp_path / "daniel-box.yml").write_text(
-        yaml.safe_dump({"containers_list": [entry]})
-    )
-    estate = g.Estate(Inventory(host_vars=tmp_path))
+    services = tmp_path / "services.yml"
+    services.write_text(yaml.safe_dump({"containers_list": [entry]}))
+    estate = g.Estate(Inventory(services=services))
     g.stale_k8s_docs(write=True, estate=estate, k8s_roles=roles)
     doc = (roles / name / "CLAUDE.md").read_text()
     block = doc.split(g.END)[0].split(g.BEGIN)[-1]

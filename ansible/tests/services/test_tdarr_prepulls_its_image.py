@@ -77,11 +77,9 @@ def test_under_flux_the_prepull_job_pulls_tdarrs_image_onto_the_media_node(
         if d.get("kind") == "Deployment"
     ]
     # media-volume pins the PV to its play host (the test above), which is the host whose
-    # containers_list deploys it.
+    # service list deploys it.
     media_host = "daniel-box"
-    assert "media-volume" in [
-        e["name"] for e in host_context(media_host)["containers_list"]
-    ]
+    assert "media-volume" in [e["name"] for e in host_context(media_host)["services"]]
     job_terms = pod_spec(job)["affinity"]["nodeAffinity"][
         "requiredDuringSchedulingIgnoredDuringExecution"
     ]["nodeSelectorTerms"]

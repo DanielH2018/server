@@ -8,7 +8,7 @@
     hostname           Host label, WITHOUT the domain. ONE name per service, the
                        unsuffixed one.
     port               Service port to route to
-    authelia           attach the forward-auth Middleware (containers_list use_authelia)
+    authelia           attach the forward-auth Middleware (services use_authelia)
     extra_middlewares  additional Middleware names, applied after the standard two
 
   The TLS block is explicit rather than relying on the TLSStore default. Omitting it makes

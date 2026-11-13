@@ -5,7 +5,7 @@
   NO PLAIN ROLE CALLS THIS MACRO. Plain roles ship no Service template at all:
   the renderer renders `ansible/templates/service-default.yaml.j2` for them,
   which is the one caller of the plain form. That file reads the name, the port, and
-  the optional `service_port_name` / `service_extra_ports` off the role's containers_list entry.
+  the optional `service_port_name` / `service_extra_ports` off the role's services entry.
   To change what a plain role's Service looks like, change that file, not a role.
 
   The macro's other callers are the roles whose Service needs something the entry cannot say:
@@ -45,10 +45,10 @@
     port_name  Set when a caller's Service needs a NAMED port rather than the bare port list
                every other role uses. Omit to get the plain form. home-assistant, homelab-mcp
                and zigbee2mqtt need one and reach it through `service_port_name` on their
-               containers_list entry; nut-exporter and pihole-exporter pass it directly.
+               services entry; nut-exporter and pihole-exporter pass it directly.
     extra_ports  Additional ports as [{name, port}] — a sidecar's, typically. sonarr, radarr
                and prowlarr carry the exportarr port this way, through `service_extra_ports`
-               on their containers_list entry. Kubernetes REJECTS
+               on their services entry. Kubernetes REJECTS
                a Service that mixes named and unnamed ports, and it rejects it at apply time,
                after every repo-side check has read green. So passing extra_ports forces the
                primary port to be named too (`http` unless port_name says otherwise) rather than

@@ -18,7 +18,11 @@ from lib.estate import Estate, Inventory
 def estate(tmp_path: Path) -> Estate:
     host_vars = tmp_path / "host_vars"
     host_vars.mkdir()
-    (tmp_path / "hosts.ini").write_text("[homeservers]\nbox\npi\nbare\n")
+    (tmp_path / "services.yml").write_text(
+        yaml.safe_dump(
+            {"containers_list": [{"name": "web"}, {"name": "db"}, {"port": 1}]}
+        )
+    )
     (tmp_path / "all.yml").write_text(
         yaml.safe_dump({"port": 1, "has_docker": False, "alias": "{{ sys_user }}"})
     )
@@ -26,11 +30,6 @@ def estate(tmp_path: Path) -> Estate:
         yaml.safe_dump(
             {
                 "port": 2,
-                "containers_list": [
-                    {"name": "web", "platform": "k8s"},
-                    {"name": "old", "platform": "docker"},
-                    {"platform": "k8s"},
-                ],
             }
         )
     )
@@ -38,7 +37,7 @@ def estate(tmp_path: Path) -> Estate:
         yaml.safe_dump(
             {
                 "has_docker": True,
-                "containers_list": [{"name": "wg"}, {"name": "x", "platform": "k8s"}],
+                "compose_services": [{"name": "wg"}],
             }
         )
     )
@@ -46,7 +45,7 @@ def estate(tmp_path: Path) -> Estate:
         Inventory(
             all_vars=tmp_path / "all.yml",
             host_vars=host_vars,
-            hosts_ini=tmp_path / "hosts.ini",
+            services=tmp_path / "services.yml",
             plane_hosts={"k8s": "box"},
         )
     )
@@ -72,13 +71,11 @@ def test_source_names_the_layer_a_value_comes_from(estate):
 def test_a_host_without_a_host_vars_file_reads_the_group_layer(estate):
     assert estate.own_vars("bare") == {}
     assert estate.vars("bare")["port"] == 1
-    assert estate.hosts_in("homeservers") == ["box", "pi", "bare"]
-    assert estate.host_vars_hosts() == ["box", "pi"]
+    assert estate.hosts() == ["box", "pi"]
 
 
-def test_entries_split_by_platform_and_drop_the_unnamed(estate):
-    assert list(estate.k8s_entries()) == ["web"]
-    assert [e["name"] for e in estate.pi_entries("pi")] == ["wg"]
+def test_k8s_entries_are_the_named_services_keyed_by_name(estate):
+    assert list(estate.k8s_entries()) == ["web", "db"]
 
 
 def test_role_vars_lets_the_inventory_override_a_role_default(estate, tmp_path):

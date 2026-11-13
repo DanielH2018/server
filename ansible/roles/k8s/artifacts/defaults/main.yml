@@ -68,7 +68,7 @@ artifacts_peer_sources:
     path: /home/ubuntu/.claude/artifacts
     stars_path: /home/ubuntu/.claude/artifact-stars.txt
 
-# Platform components the index names beside the containers_list services. Longhorn is the
+# Platform components the index names beside the k8s services. Longhorn is the
 # reason this list exists: it is the most-discussed subject in the corpus and matched nothing
 # without it.
 artifacts_platform_services:
@@ -78,7 +78,7 @@ artifacts_platform_services:
   - coredns
   - unbound
   - cert-manager
-  # traefik's flip adds a `traefik-crds` containers_list entry. Naming it here first keeps that
+  # traefik's flip adds a `traefik-crds` services entry. Naming it here first keeps that
   # flip from moving this role's render while artifacts gains `dependsOn: [traefik]`, which CI's
   # cross-plane gate refuses in one PR (arm 2, #5720). Once the entry exists, this line is
   # redundant, and dropping it moves nothing, because the list is deduplicated.
@@ -88,7 +88,7 @@ artifacts_platform_services:
 # kopia retirement is only findable by service if the name is still recognised. Retiring a
 # service should add its name here rather than dropping it from the index.
 # prometheus, tempo and otel-collector are live in the observability namespace, but they are
-# absent from containers_list for the same reason, so they belong here.
+# absent from services for the same reason, so they belong here.
 artifacts_retired_services:
   - beszel
   - calibre

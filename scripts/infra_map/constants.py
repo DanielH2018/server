@@ -19,14 +19,13 @@ from lib.repo_paths import REPO as REPO_ROOT  # noqa: F401 -- re-exported
 
 DEFAULT_OUTPUT = Path.home() / ".claude" / "artifacts" / "homelab-infra-map.html"
 
-# Every inventory host, in hosts.ini order. HOST_PLANE and HOST_ROLE below state what each
+# Every inventory host, sorted. HOST_PLANE and HOST_ROLE below state what each
 # one is, and test_every_inventory_host_has_a_plane_and_a_role holds them to this list.
 HOSTS = host_names()
 
-# What each host actually is. Stated rather than inferred from the platform keys
-# in its ``containers_list``: daniel-server has no Docker and an empty list, so
-# inference would fall through to "docker", ssh it for a binary that is not there, and
-# render a healthy k3s agent as an unreachable Docker box.
+# What each host actually is. Stated rather than inferred from the services it lists:
+# daniel-server lists none, so inference would fall through to "docker", ssh it for a
+# binary that is not there, and render a healthy k3s agent as an unreachable Docker box.
 HOST_PLANE = {
     "daniel-box": "k8s",
     "daniel-server": "k8s",

@@ -19,7 +19,7 @@ WAN outage. These properties keep it from being decorative or from breaking the 
   * the docker.io mirror has the same zero TTL, unrendered replica count and weekly prune
     (#6536). A TTL counts from the fetch, so it dropped an image a pod still ran.
 
-The `registries.yaml` half is `ansible/tests/setup/test_k3s_registries_mirror_ghcr.py`, and the
+The `registries.yaml` half is `hosts/tests/test_k3s_registries_mirror_ghcr.py`, and the
 NetworkPolicy half is in `ansible/tests/k8s/test_registry_netpol_grants_follow_the_pinned_node.py`.
 """
 

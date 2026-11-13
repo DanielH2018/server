@@ -131,7 +131,7 @@ read the table, so the `manual_plane` ledger class, the narrowed apply, the `hol
 and `land.sh`'s host reach all see the consumers. `narrow_setup.role_tags` diffs the shipped files
 beside the consumer role's own directory, so the consumer narrows to the block that installs the
 file. The table is static because every caller passes paths alone, and
-`ansible/tests/setup/test_setup_cross_role_files.py` fails when it differs from the cross-role
+`hosts/tests/test_setup_cross_role_files.py` fails when it differs from the cross-role
 `files/` and `tasks/` references in the setup roles' tasks.
 
 The table also records a `defaults/` file whose variable another setup role reads.
@@ -215,7 +215,7 @@ applied. D6.15 removed the `narrow` subcommand. The two rules below remain in
 - **A setup role that calls a filter is outside both runs**, because `deploy.yml` applies no
   setup role. The deployer reads those callers from
   `deploy_cross_role.SETUP_ROLES_CALLING_FILTER_PLUGINS`, a static table that
-  `ansible/tests/setup/test_setup_cross_role_reads.py` holds to the tree. A plugin change joins
+  `hosts/tests/test_setup_cross_role_reads.py` holds to the tree. A plugin change joins
   the setup plane beside the deploy plane. The tick applies an `initial_setup.yml` caller such as
   `gitops_deploy`, and records a `k3s-bringup.yml` caller such as `k3s` as a `manual_plane` line.
   `narrow_setup.plugin_tags` narrows each caller to the readers of the vars key whose value calls
@@ -354,7 +354,7 @@ of the file reaches another host. Three rows show the three outcomes:
   host is daniel-box, so the file owes no line.
 
 A shipped file with no row takes no broad arm and writes no line, and `land.sh` alone names its
-hosts. `ansible/tests/setup/test_setup_cross_role_files.py` fails on a literal `src:` copy that
+hosts. `hosts/tests/test_setup_cross_role_files.py` fails on a literal `src:` copy that
 has no row.
 
 A moved `secrets.yml` or inventory key owes the same lines (#6968). `route_key_readers` makes
@@ -859,7 +859,7 @@ the old units on a non-deployer host. One alerts and the other reconciles:
   the public repo closed to anyone but a collaborator. To change or clear it, edit the default;
   `none` clears it with a DELETE on the next run. A missing token, a failed PUT and a stored value
   that differs from the declared one all record DOWN with `UNVERIFIED` or `NOT applied`, never
-  `armed`. `ansible/tests/setup/test_github_interaction_limit.py` drives each branch.
+  `armed`. `hosts/tests/test_github_interaction_limit.py` drives each branch.
 
 **One marker module, shipped from one source.** `files/gitops_markers.py` holds the state
 directory, the `MARKERS` table, the parsers for the `behind_since` and `contention_since` line

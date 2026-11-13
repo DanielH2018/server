@@ -2,7 +2,7 @@
 """The fixture host the bootstrap cases build, from `docs/host-packages.md`, *Adding a host* (H7.15d).
 
 `apply_walkthrough` makes a checkout take a host the way the walkthrough's step 1 lists: the
-package spec from the page's own YAML block, the inventory line, the `host_vars` copy and the
+package spec from the page's own YAML block, the `host_vars` copy and the
 `HOSTS` entry. `bootstrap_case.py` then runs `bootstrap-host.sh --local-build` on a container of
 that name, so the script itself renders and builds the three packages and apt simulates the
 install. A walkthrough whose file list stops rendering or building fails that case.
@@ -26,7 +26,6 @@ from validate.validate_lib.host_container import CaseFailed
 FIXTURE_HOST = "daniel-fixture"
 WALKTHROUGH = "docs/host-packages.md"
 SCRIPT = "hosts/bootstrap-host.sh"
-HOSTS_INI = "ansible/inventory/hosts.ini"
 EXAMPLE_VARS = "ansible/inventory/host_vars/_example.yml"
 # An address no host holds, for the example file's placeholder. Nothing dials it in a render.
 FIXTURE_IP = "10.0.0.250"
@@ -61,16 +60,6 @@ def apply_walkthrough(tree: Path, host: str = FIXTURE_HOST) -> None:
     spec = tree / "hosts" / host / "package.yml"
     spec.parent.mkdir()
     spec.write_text(walkthrough_spec((tree / WALKTHROUGH).read_text(), host))
-
-    inventory = tree / HOSTS_INI
-    inventory.write_text(
-        _replace_one(
-            inventory.read_text(),
-            r"^\[homeservers\]\n",
-            f"[homeservers]\n{host} ansible_connection=ssh\n",
-            f"{HOSTS_INI}'s group header",
-        )
-    )
 
     host_vars = tree / EXAMPLE_VARS
     copy = host_vars.with_name(f"{host}.yml")

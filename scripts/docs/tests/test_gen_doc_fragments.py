@@ -355,18 +355,13 @@ def test_deadman_cadences_fails_on_a_missing_variable_rather_than_guessing():
 
 
 def test_host_has_docker_lets_host_vars_override_group_vars(tmp_path):
-    hosts = tmp_path / "hosts.ini"
-    hosts.write_text(
-        "[homeservers]\nbox  ansible_connection=local\npi ansible_host=10.0.0.9\n"
-        "# a comment\n[other]\nstray\n"
-    )
     host_vars = tmp_path / "host_vars"
     host_vars.mkdir()
+    (host_vars / "box.yml").write_text("server_ip: 10.0.0.1\n")
     (host_vars / "pi.yml").write_text("has_docker: true\n")
+    (host_vars / "_example.yml").write_text("has_docker: true\n")
     (tmp_path / "all.yml").write_text("has_docker: false\n")
-    inventory = Inventory(
-        all_vars=tmp_path / "all.yml", host_vars=host_vars, hosts_ini=hosts
-    )
+    inventory = Inventory(all_vars=tmp_path / "all.yml", host_vars=host_vars)
     assert readers.host_has_docker(Estate(inventory)) == {
         "box": False,
         "pi": True,

@@ -40,7 +40,8 @@ from docs.catalog_lib.route_facts import (
 )
 from lib.cli_help import ArgumentParser
 from lib.estate import Estate, Inventory
-from lib.repo_paths import HOST_VARS, K8S_ROLES
+from lib.ansible_inventory import K8S_HOST
+from lib.repo_paths import K8S_ROLES, K8S_SERVICES
 
 # The macro applies these to every route it renders, in this order. Read from
 # ansible/templates/ingressroute.yml.j2 rather than assumed; see _baseline_middlewares.
@@ -51,42 +52,40 @@ _QUOTED_RE = re.compile(r"['\"]([^'\"]+)['\"]")
 
 
 def build_rows(
-    host_vars: Path = HOST_VARS,
+    services: Path = K8S_SERVICES,
     k8s_roles: Path = K8S_ROLES,
     group_vars: Path = GROUP_VARS,
 ) -> list[dict[str, str]]:
     """One row per k8s service that declares a route."""
-    estate = Estate(Inventory(host_vars=host_vars))
+    estate = Estate(Inventory(services=services))
+    host = K8S_HOST
     rows = []
-    for host in estate.host_vars_hosts():
-        for entry in estate.entries(host):
-            if entry.get("platform") != "k8s":
-                continue
-            name = entry["name"]
-            templates = ingressroute_templates(k8s_roles / str(name), entry)
-            if not templates:
-                continue
-            text = "\n".join(p.read_text() for p in templates)
+    for entry in estate.services:
+        name = entry["name"]
+        templates = ingressroute_templates(k8s_roles / str(name), entry)
+        if not templates:
+            continue
+        text = "\n".join(p.read_text() for p in templates)
 
-            middlewares = [_ALWAYS]
-            if entry.get("use_authelia"):
-                middlewares.append("authelia")
-            match = _EXTRA_MW_RE.search(text)
-            if match:
-                middlewares.extend(_QUOTED_RE.findall(match.group(1)))
+        middlewares = [_ALWAYS]
+        if entry.get("use_authelia"):
+            middlewares.append("authelia")
+        match = _EXTRA_MW_RE.search(text)
+        if match:
+            middlewares.extend(_QUOTED_RE.findall(match.group(1)))
 
-            label = str(entry.get("hostname", name))
-            reach = reachability(k8s_roles / str(name), group_vars, entry)
-            rows.append(
-                {
-                    "name": str(name),
-                    "host": host,
-                    "hostname": label,
-                    "reach": "LAN only" if reach == LAN else "LAN + public",
-                    "route": route_cell(label, reach),
-                    "middlewares": ", ".join(f"`{m}`" for m in middlewares),
-                }
-            )
+        label = str(entry.get("hostname", name))
+        reach = reachability(k8s_roles / str(name), group_vars, entry)
+        rows.append(
+            {
+                "name": str(name),
+                "host": host,
+                "hostname": label,
+                "reach": "LAN only" if reach == LAN else "LAN + public",
+                "route": route_cell(label, reach),
+                "middlewares": ", ".join(f"`{m}`" for m in middlewares),
+            }
+        )
     return rows
 
 
@@ -148,13 +147,13 @@ def main(argv: list[str] | None = None) -> int:
     """
     parser = ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--out", type=Path, required=True, help="output file path")
-    parser.add_argument("--host-vars", type=Path, default=HOST_VARS)
+    parser.add_argument("--services", type=Path, default=K8S_SERVICES)
     parser.add_argument("--k8s-roles", type=Path, default=K8S_ROLES)
     args = parser.parse_args(argv)
 
     from lib.docs_provenance import finish_generator
 
-    rows = build_rows(args.host_vars, args.k8s_roles)
+    rows = build_rows(args.services, args.k8s_roles)
     return finish_generator(
         "docs.reference.networking", args.out, rows, render_markdown, "route"
     )

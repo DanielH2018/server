@@ -5,8 +5,7 @@ daniel-box since E3 (2026-08-12). See repo-root `CLAUDE.md` for shared conventio
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
-- **Applied by:** Flux, through `promote` (`platform: k8s`); `land.sh --tags=homepage` gates
-  the rollout
+- **Applied by:** Flux, through `promote`; `land.sh --tags=homepage` gates the rollout
 - **Images:** `ghcr.io/gethomepage/homepage` (`homepage_k8s_image`), `alpine`
   (`homepage_k8s_init_image`)
 - **Route:** `homepage.<domain>` · `homepage.local.<domain>`, Authelia one_factor
@@ -15,7 +14,7 @@ daniel-box since E3 (2026-08-12). See repo-root `CLAUDE.md` for shared conventio
 
 - **Depends on:** traefik, authelia
 - **Flux applies it, not Ansible** (D5.7, the third Wave A PR). Its `containers_list` entry is
-  `platform: k8s`, so nothing applies it by hand, and a merged change reaches the cluster when
+  in `cluster/services.yml`, so nothing applies it by hand, and a merged change reaches the cluster when
   `promote` publishes and verifies the next bundle. Its image-bump PRs therefore draw no
   `land-wait` and no `probe.py health` run. authelia and traefik are flux-owned too, so the
   Kustomization lists them in `dependsOn`, and Flux applies this tag only after their

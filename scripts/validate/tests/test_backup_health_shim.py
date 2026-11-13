@@ -159,7 +159,7 @@ def _run_rendered_shim(
 
     script = rendered
     # The shared check library is stubbed: the real file is absent on a CI runner, and its
-    # textfile cases are in ansible/tests/setup/test_k3s_cron_textfiles.py. The stub records the
+    # textfile cases are in hosts/tests/test_k3s_cron_textfiles.py. The stub records the
     # success flag (the second argument) as the run's verdict. boot_grace_active is a shell
     # FUNCTION bash resolves at call time, so the stub shadows the real one.
     check_lib = tmp_path / "homelab-check-lib.sh"

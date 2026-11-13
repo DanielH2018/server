@@ -88,10 +88,9 @@ def _stale_sonarr_fixture(tmp_path: Path) -> tuple[Path, Callable[..., list[str]
     for name in ("sonarr", "media-volume"):
         shutil.copytree(g.K8S_ROLES / name, roles / name)
     entry = g.Estate().k8s_entries()["sonarr"]
-    (tmp_path / "daniel-box.yml").write_text(
-        yaml.safe_dump({"containers_list": [entry]})
-    )
-    estate = g.Estate(Inventory(host_vars=tmp_path))
+    services = tmp_path / "services.yml"
+    services.write_text(yaml.safe_dump({"containers_list": [entry]}))
+    estate = g.Estate(Inventory(host_vars=tmp_path, services=services))
     doc = roles / "sonarr" / "CLAUDE.md"
     text = doc.read_text()
     assert "`land.sh --tags=sonarr`" in text

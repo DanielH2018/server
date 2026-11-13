@@ -52,7 +52,7 @@ local=/local.{{ domain }}/
 # in the cluster but its name falls through to the local.<domain> wildcard above, resolves to
 # daniel-server, and the Docker Traefik answers its own 404 — which reads like a broken route
 # rather than a missing DNS record.
-{% for name in hostvars[k8s_primary_node].containers_list | default([]) | lan_hostnames('k8s') %}
+{% for name in services | lan_hostnames %}
 address=/{{ name }}.local.{{ domain }}/{{ k3s_metallb_ingress_vip }}
 {% endfor %}
 
@@ -61,7 +61,7 @@ address=/{{ name }}.local.{{ domain }}/{{ k3s_metallb_ingress_vip }}
 # which force-upgrades any *.<domain> name to HTTPS and breaks the Pi's plain-HTTP services
 # (SSL_ERROR_RX_RECORD_TOO_LONG). `.lan` sidesteps HSTS entirely. Reach the Pi's LAN-bound
 # services at daniel-pi.lan:<port>. IP via hostvars since the Pi isn't the host running Pi-hole.
-host-record=daniel-pi.lan,{{ hostvars['daniel-pi'].server_ip }}
+host-record=daniel-pi.lan,{{ hosts['daniel-pi'].server_ip }}
 
 # The two cluster nodes, under BOTH the `.lan` name and the bare hostname. Until this
 # existed, `daniel-box` resolved nowhere on the LAN. daniel-box reaches daniel-server
@@ -81,8 +81,8 @@ host-record=daniel-pi.lan,{{ hostvars['daniel-pi'].server_ip }}
 # /etc/hosts still wins for a node's own name (`127.0.1.1 daniel-box`, files before dns in
 # nsswitch), so a node keeps resolving itself to loopback and the sweep's self-detection is
 # untouched.
-host-record=daniel-box.lan,daniel-box,{{ hostvars['daniel-box'].server_ip }}
-host-record=daniel-server.lan,daniel-server,{{ hostvars['daniel-server'].server_ip }}
+host-record=daniel-box.lan,daniel-box,{{ hosts['daniel-box'].server_ip }}
+host-record=daniel-server.lan,daniel-server,{{ hosts['daniel-server'].server_ip }}
 
 # Conditional forwarding for LAN reverse-DNS. Without it Pi-hole answers PTR only for the
 # `host-record=` names above, so every other LAN device — phones, laptops, anything holding a

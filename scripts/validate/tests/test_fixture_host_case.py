@@ -16,7 +16,7 @@ from renderer.renderer_lib import host as host_mode
 from validate.validate_lib import fixture_host_case as case
 from validate.validate_lib.host_container import CaseFailed
 
-FILES = (case.WALKTHROUGH, case.HOSTS_INI, case.EXAMPLE_VARS, case.SCRIPT)
+FILES = (case.WALKTHROUGH, case.EXAMPLE_VARS, case.SCRIPT)
 
 
 @pytest.fixture
@@ -40,12 +40,11 @@ def test_a_page_without_the_block_is_flagged():
         case.walkthrough_spec("# A page\n\n## Adding a host\n\nNo block.\n", "x")
 
 
-def test_the_file_list_adds_the_host_to_the_inventory_the_vars_and_the_script(tree):
+def test_the_file_list_adds_the_host_to_the_package_the_vars_and_the_script(tree):
     case.apply_walkthrough(tree)
 
     host = case.FIXTURE_HOST
     assert (tree / "hosts" / host / "package.yml").is_file()
-    assert f"\n{host} ansible_connection=ssh\n" in (tree / case.HOSTS_INI).read_text()
     host_vars = tree / "ansible/inventory/host_vars" / f"{host}.yml"
     assert f"server_ip: {case.FIXTURE_IP}\n" in host_vars.read_text()
     assert f'{host}"\n' in (tree / case.SCRIPT).read_text()
@@ -75,9 +74,7 @@ def test_the_walkthrough_host_renders_with_the_real_renderer(tree):
     package = host_mode.render_host(
         case.FIXTURE_HOST,
         hosts_root=hosts_root,
-        inventory=Inventory(
-            host_vars=inventory / "host_vars", hosts_ini=inventory / "hosts.ini"
-        ),
+        inventory=Inventory(host_vars=inventory / "host_vars"),
     )
 
     assert package.name == f"homelab-{case.FIXTURE_HOST}"

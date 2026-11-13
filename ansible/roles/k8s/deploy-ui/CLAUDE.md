@@ -12,14 +12,13 @@ repo's first Traefik→host route. Two facts follow:
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
-- **Applied by:** Flux, through `promote` (`platform: k8s`); `land.sh --tags=deploy-ui` gates
-  the rollout
+- **Applied by:** Flux, through `promote`; `land.sh --tags=deploy-ui` gates the rollout
 - **Route:** `deploy.local.<domain>` (LAN only), Authelia two_factor
 - **Claims:** none (no PVC)
 <!-- /generated_from -->
 
 - **Flux applies it, not Ansible** (D5.6, the second Wave A PR). Its `containers_list` entry
-  is `platform: k8s`, so nothing applies it by hand, and a
+  is in `cluster/services.yml`, so nothing applies it by hand, and a
   merged change reaches the cluster when `promote` publishes and verifies the next bundle.
 - **Where the task went.** Its `manifests_rollout: ''` default has
   nothing

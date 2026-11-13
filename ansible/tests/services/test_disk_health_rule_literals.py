@@ -3,7 +3,7 @@
 `files/rules/host-checks.yaml` is plain YAML, so the rule carries the deadline as a literal
 twice: the `> 1500` of the stale-file arm and the `[1500s]` window of the absent_over_time arm.
 The script renders DEADLINE_S from `k3s_disk_health_cron_minute`, and
-`ansible/tests/setup/test_disk_health_deadline.py` holds that derivation. A cron moved to a
+`hosts/tests/test_disk_health_deadline.py` holds that derivation. A cron moved to a
 slower cadence without the rule would page on every healthy gap, and one moved faster would
 leave the rule slower than the dead-man (M1 convention 1).
 

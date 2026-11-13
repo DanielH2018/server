@@ -398,7 +398,7 @@ still running no longer holds your PR. Waiting on the tip cost six landings in t
 
 ## The promotion wait
 
-Every `containers_list` entry is `platform: k8s`, so `promote`
+Every `containers_list` entry is in `cluster/services.yml`, so `promote`
 and Flux apply every tag, and a change to a host's package waits for that host
 (`scripts/deploy_tools/land_lib/host_wait.py:wait_for_hosts`). A `--tags` value that names no k8s
 entry at the merge commit ends the landing `deploy-failed` with the cause `tag-miss`, because
@@ -523,7 +523,7 @@ Instead it reads the cluster every 30 seconds:
   A branch update starts that chain again and gives the wait one more budget, so the
   deadline counts two merge budgets. It and every bound above it rose by 8340s, to 41460
   (#7129).
-  `ansible/tests/setup/test_lander_deadlines_cover_the_soak.py` renders the published bundle
+  `hosts/tests/test_lander_deadlines_cover_the_soak.py` renders the published bundle
   and fails once a newly published tag outgrows that headroom (#5427).
   Inside the no-promotion window around the weekly reboot, `decide` defers every promotion (D5.2b2),
   so a landing that merges as the window opens waits up to 22200 seconds before any

@@ -234,6 +234,10 @@ def test_a_non_line_numbered_span_is_flagged_as_no_citation(line):
             ["ansible/tests/k8s/test_x.py"],
         ),
         ("ENFORCED: `ansible/tests/_helpers.py:27`", ["ansible/tests/_helpers.py"]),
+        (
+            "pinned by `hosts/tests/test_aide_check.py::test_x`",
+            ["hosts/tests/test_aide_check.py"],
+        ),
     ],
 )
 def test_a_guard_path_citation_is_clean(line, expected):

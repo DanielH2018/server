@@ -7,13 +7,12 @@ Secret holds.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
-- **Applied by:** Flux, through `promote` (`platform: k8s`); `land.sh --tags=cluster-base`
-  gates the rollout
+- **Applied by:** Flux, through `promote`; `land.sh --tags=cluster-base` gates the rollout
 - **Route:** none (no `templates/ingressroute.yaml.j2`)
 - **Claims:** none (no PVC)
 <!-- /generated_from -->
 
-- **Flux applies it, not Ansible** (H1.2). Its `containers_list` entry is `platform: k8s`
+- **Flux applies it, not Ansible** (H1.2). Its `containers_list` entry is in `cluster/services.yml`
   from its first commit. A rebuilt cluster applies it by hand before it installs Flux, as step 2 of
   `docs/longhorn-disaster-recovery.md`'s *Procedure (fresh host, total loss)*.
 - **The tag renders `prune: false`** (`flux_prune: false`, with the `DECIDED:` marker beside it
