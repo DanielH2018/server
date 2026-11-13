@@ -152,7 +152,15 @@ The table of subcommands is generated from the `add_parser` calls in `findings_l
 `findings_lib/plans.py`, the parsing in `findings_lib/issue_model.py`, and the `gh` calls in
 `findings_lib/gh_calls.py`. Every write command has a dry-run mode that plans and writes nothing.
 
-Three design rules hold across the subcommands, and no docstring states them:
+Four design rules hold across the subcommands, and no docstring states them:
+
+- **The register is the operator's issues only.** Any collaborator can open a
+  `claude`-labelled issue, and `next`, `show` and `claim` hand its body to a session as work
+  (dotfiles#967 slice 1). Every list skips an issue another account opened, and names each
+  skipped issue and its author on stderr. Reading one such issue by number exits with an
+  error. `REGISTER_AUTHOR` in `findings_lib/issue_model.py` names the account. Issues that
+  DanielClaudeBot files are skipped too, so a session running as the `claude` agent user
+  files findings that `next` does not offer.
 
 - **A claim that reads stale the moment it lands is worse than no claim.** It reads as
   protection while `next` re-offers the issue and `reap` releases it. So `claim` checks the

@@ -80,7 +80,17 @@ for _d in DOMAINS:
 # renaming them would have turned that move into a rewrite. The underscore still carries what
 # it did before — internal to the findings modules, not an API another script may import.
 # Conventions for a new module: docs/python-code-organization.md.
-_LIST_FIELDS = "number,title,state,stateReason,labels,body,createdAt,closedAt,url,comments,blockedBy"
+_LIST_FIELDS = "number,title,state,stateReason,labels,body,createdAt,closedAt,url,comments,blockedBy,author"
+# The one account whose issues a session takes as work (dotfiles#967 slice 1). Any collaborator
+# can open a `claude`-labelled issue, and its body would reach a session as instructions.
+REGISTER_AUTHOR = "DanielH2018"
+
+
+def issue_author(issue: dict) -> str:
+    """The login that opened ``issue``, or an empty string when gh returned none."""
+    return str((issue.get("author") or {}).get("login") or "")
+
+
 # `\s*$` rather than `$`: a body fetched from the API can carry CRLF line endings, and
 # `re.M`'s `$` matches before the `\n` but not before the `\r`.
 _FP_RE = re.compile(r"^Fingerprint: `([0-9a-f]{12})`\s*$", re.M)
