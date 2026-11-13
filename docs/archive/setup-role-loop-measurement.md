@@ -138,7 +138,7 @@ The harness and the probe leave two differences unmeasured, and neither applies 
   failed 2 live-service UI tests and nothing else. The modules that fail only under the loop:
     - `ansible/tests/deploy/`: `test_setup_role_playbooks_agree` (2),
       `test_setup_roles_the_tick_host_skips` (1).
-    - `ansible/tests/setup/`: `test_gitops_deploy_reaps_on_non_deployer` (1),
+    - `hosts/tests/`: `test_gitops_deploy_reaps_on_non_deployer` (1),
       `test_initial_setup_roles_are_visible_to_the_deployer` (1),
       `test_k3s_host_has_no_docker` (1), `test_nut_host_secondary` (1),
       `test_setup_handlers_resolve` (3).

@@ -2,7 +2,7 @@
 
 Headlamp does not authorise anything under OIDC — it forwards the browser's `id_token` and the
 API SERVER decides — so every value here is correct only relative to something outside this
-role. `ansible/tests/setup/test_k3s_oidc_trusts_authelia.py` owns the API server's half.
+role. `hosts/tests/test_k3s_oidc_trusts_authelia.py` owns the API server's half.
 
 `test_k8s_manifests_rbac.py` owns the RBAC grants these logins land on.
 """

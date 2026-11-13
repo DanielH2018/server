@@ -8,7 +8,7 @@
 # `type: Directory`, so it must exist before the pod starts on a rebuilt daniel-box: a missing path
 # leaves the pod in ContainerCreating. kubelet would create it as root, and the build runs as
 # {{ sys_user }}. Its path equals `docs_host_site_dir` in ansible/roles/k8s/docs/defaults/main.yml
-# (ansible/tests/setup/test_docs_refresh_site_dir.py holds the two equal).
+# (hosts/tests/test_docs_refresh_site_dir.py holds the two equal).
 #
 # The second line is the commit-failure stamp directory. It sits outside the checkout because an
 # untracked file inside it parks the deployer. /var/lib/homelab is root-owned 0755.

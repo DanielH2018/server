@@ -1,0 +1,273 @@
+"""Guards on the weekly rkhunter scan's textfile verdict (#4598).
+
+The cron used to pipe `rkhunter --check` into `logger`, so the pipeline's status was logger's and
+a scan that failed outright read the same as one that passed. rkhunter-check.sh writes a textfile
+verdict and holds four properties. It pushed to one Kuma tile per host until M6 batch B9's
+Cutover-2, so a test says "pushes DOWN" for a run whose logged status is `down`:
+
+A SCAN THAT DID NOT COMPLETE PUSHES DOWN. rkhunter exits 1 on a warning and on an error alike, so
+the script reads completion from the log this run wrote, and a log left from last week reads as
+no scan at all.
+
+ANY WARNING, SUSPECT FILE OR POSSIBLE ROOTKIT PUSHES DOWN (#4638). The warnings every host raised
+every week are allowlisted in rkhunter.conf.local, so a healthy week has none; the script's
+`DECIDED:` marker has the evidence.
+
+ONE TOKEN PER HOST. A shared token would let one host's `up` cover another whose scan stopped.
+
+THE DEADLINE COVERS A WEEK. The producer is a weekly cron, so a shorter deadline fires DOWN
+with nothing wrong, and one past two weeks lets a second missed run go unreported.
+
+Run: uv run pytest hosts/tests/test_rkhunter_check.py
+"""
+
+import os
+import re
+
+from _aide_check_run import LOGGER_STUB, verdict_of
+from _helpers import REPO
+from _host_packages import HOSTS, shipped_text
+from _shell_render import render_shell_script
+from lib.proc_testing import fake_bin, run, write_exec
+from test_aide_check import _textfile, push_markers
+
+SCRIPT = ("components", "integrity-scans", "rkhunter-check.sh.j2")
+TIMER = "/usr/lib/systemd/system/homelab-rkhunter-check.timer"
+WEEK_S = 7 * 24 * 3600
+# 2026-09-30 02:02:01 UTC, the run the stale log below records.
+LAST_WEEK = 1790733721
+
+# The real library, so the scan writes its textfile under TEXTFILE_DIR rather than the host's
+# own directory, which node_exporter scrapes.
+REAL_CHECK_LIB = "/usr/lib/homelab/homelab-check-lib.sh"
+CHECK_LIB = (
+    REPO / "hosts" / "components" / "check-lib" / "files" / "homelab-check-lib.sh"
+)
+REAL_LOG = "RKHUNTER_LOG=/var/log/rkhunter.log"
+REAL_RKHUNTER = "/usr/bin/nice -n19 /usr/bin/ionice -c3 /usr/bin/rkhunter"
+
+# The account-change warning daniel-box logged the week the claude user was added.
+WARNINGS = """\
+[02:02:01]   Checking for passwd file changes                 [ Warning ]
+[02:02:01] Warning: User 'claude' has been added to the passwd file.
+"""
+
+
+def _log(rootkits: str = "0", suspect: str = "0", warnings: str = "") -> str:
+    """The tail of /var/log/rkhunter.log, shaped as daniel-server wrote it on 2026-09-30."""
+    return (
+        warnings
+        + "[02:02:01] System checks summary\n"
+        + "[02:02:01] =====================\n"
+        + "[02:02:01] File properties checks...\n"
+        + "[02:02:01] Files checked: 142\n"
+        + (f"[02:02:01] Suspect files: {suspect}\n" if suspect else "")
+        + "[02:02:01] Rootkit checks...\n"
+        + "[02:02:01] Rootkits checked : 498\n"
+        + (f"[02:02:01] Possible rootkits: {rootkits}\n" if rootkits else "")
+        + "[02:02:01] The system checks took: 1 minute and 57 seconds\n"
+        + "[02:02:01] Info: End date is Wed Sep 30 02:02:01 AM UTC 2026\n"
+    )
+
+
+STDOUT = "Warning: User 'claude' has been added to the passwd file.\n"
+ERROR_STDOUT = "Invalid option specified: --bogus\n"
+
+
+def _run_check(
+    tmp_path,
+    stdout: str,
+    rc: int,
+    log: str | None,
+    stale_log: str | None = None,
+):
+    """Render rkhunter-check.sh and run it with rkhunter stubbed.
+
+    The stub prints `stdout`, writes `log` to the log path when it is not None, and exits `rc`.
+    `stale_log` is a log already on disk from the previous week's run, the one a failed run leaves behind. Only
+    absolute paths are repointed. Returns (exit code, the verdict as a [status, message] pair
+    read from the `status=` line the script logs, or None when it logged none, logged lines,
+    whether rkhunter ran).
+    """
+    body = render_shell_script(
+        *SCRIPT,
+        overrides={"domain": "example.test", "k3s_metallb_ingress_vip": "10.0.0.240"},
+    )
+    for needle in (REAL_LOG, REAL_RKHUNTER, REAL_CHECK_LIB):
+        assert needle in body, (
+            f"{needle} is no longer in rkhunter-check.sh; this harness repoints it"
+        )
+
+    log_path = tmp_path / "rkhunter.log"
+    if stale_log is not None:
+        log_path.write_text(stale_log)
+        os.utime(log_path, (LAST_WEEK, LAST_WEEK))
+    (tmp_path / "stdout").write_text(stdout)
+    write_log = ""
+    if log is not None:
+        (tmp_path / "log-src").write_text(log)
+        write_log = f"cp {tmp_path / 'log-src'} {log_path}\n"
+    rkhunter = write_exec(
+        tmp_path / "rkhunter",
+        f'touch "$RKH_RAN"\n{write_log}cat {tmp_path / "stdout"}\nexit {rc}\n',
+    )
+    body = (
+        body.replace(REAL_CHECK_LIB, str(CHECK_LIB))
+        .replace(REAL_LOG, f"RKHUNTER_LOG={log_path}")
+        .replace(REAL_RKHUNTER, str(rkhunter))
+    )
+    script = write_exec(tmp_path / "rkhunter-check.sh", body)
+    logged, ran = (tmp_path / n for n in ("logged", "ran"))
+    textfile_dir = tmp_path / "textfile"
+    textfile_dir.mkdir(exist_ok=True)
+    result = run(
+        [str(script)],
+        env={
+            **os.environ,
+            "TEXTFILE_DIR": str(textfile_dir),
+            "LOGGER_OUT": str(logged),
+            "RKH_RAN": str(ran),
+        },
+        stub_bin=fake_bin(tmp_path / "bin", logger=LOGGER_STUB),
+    )
+    lines = logged.read_text().splitlines() if logged.exists() else []
+    return result.returncode, verdict_of(lines, "rkhunter-check"), lines, ran.exists()
+
+
+def test_a_clean_scan_pushes_up(tmp_path):
+    """The accept half of the DOWN arms below: a scan with nothing to report must not page.
+
+    It passes on the pre-#4638 script too, by design. It goes red if a new DOWN arm misfires on
+    a clean log, such as the Suspect files count check or the first-warning lookup. Whether a
+    real host's routine warnings are suppressed is rkhunter.conf.local's job, and a stubbed
+    rkhunter cannot exercise it. Only a real scan on a host after the apply can.
+    """
+    code, pushed, _, _ = _run_check(tmp_path, "", rc=0, log=_log())
+    assert pushed[0] == "up", pushed
+    assert "0 warnings, 0 suspect files, 0 possible rootkits (exit 0" in pushed[1], (
+        pushed[1]
+    )
+    assert code == 0
+
+
+def test_a_warning_pushes_down_naming_the_first(tmp_path):
+    """rkhunter exits 1 on a warning, and the scan still completed."""
+    code, pushed, logged, _ = _run_check(
+        tmp_path, STDOUT, rc=1, log=_log(warnings=WARNINGS)
+    )
+    assert pushed[0] == "down", pushed
+    assert "1 warnings, 0 suspect files, 0 possible rootkits (exit 1" in pushed[1]
+    assert "User 'claude' has been added to the passwd file." in pushed[1], pushed[1]
+    assert code == 1
+    assert (
+        "rkhunter: Warning: User 'claude' has been added to the passwd file." in logged
+    )
+
+
+def test_each_verdict_is_written_to_the_textfile_with_the_tiles_deadline(tmp_path):
+    """The liveness path that outlives Kuma (#6168): clean writes 1, a warning writes 0."""
+    for name, rc, log, success in (
+        ("clean", 0, _log(), "1"),
+        ("warning", 1, _log(warnings=WARNINGS), "0"),
+    ):
+        root = tmp_path / name
+        root.mkdir()
+        _run_check(root, "", rc=rc, log=log)
+        series = _textfile(root, "rkhunter-check")
+        assert series["homelab_check_success"] == success, name
+        assert series["homelab_check_deadline_seconds"] == "612000"
+
+
+def test_a_suspect_file_pushes_down(tmp_path):
+    _, pushed, _, _ = _run_check(tmp_path, "", rc=1, log=_log(suspect="1"))
+    assert pushed[0] == "down", pushed
+    assert "suspect file found" in pushed[1], pushed[1]
+
+
+def test_an_error_exit_that_writes_no_log_pushes_down(tmp_path):
+    code, pushed, logged, _ = _run_check(tmp_path, ERROR_STDOUT, rc=1, log=None)
+    assert pushed[0] == "down", pushed
+    assert "rkhunter exited 1" in pushed[1]
+    assert "Invalid option specified: --bogus" in pushed[1], pushed[1]
+    assert code == 1
+    # The durable record of the verdict, which Loki keeps.
+    assert any(line.startswith("rkhunter-check: status=down ") for line in logged), (
+        logged
+    )
+
+
+def test_last_weeks_log_does_not_pass_for_this_run(tmp_path):
+    """A run that dies before rkhunter rewrites its log leaves last week's complete summary."""
+    code, pushed, _, _ = _run_check(
+        tmp_path, ERROR_STDOUT, rc=1, log=None, stale_log=_log()
+    )
+    assert pushed[0] == "down", pushed
+    assert "wrote no summary" in pushed[1], pushed[1]
+    assert code == 1
+
+
+def test_a_possible_rootkit_pushes_down(tmp_path):
+    code, pushed, _, _ = _run_check(
+        tmp_path, STDOUT, rc=1, log=_log(rootkits="1", warnings=WARNINGS)
+    )
+    assert pushed[0] == "down", pushed
+    assert "possible rootkit found" in pushed[1], pushed[1]
+    assert code == 1
+
+
+def test_a_summary_missing_a_count_pushes_down(tmp_path):
+    """A count the tile pages on is unreadable, so the scan cannot read as clean."""
+    for missing in ({"rootkits": ""}, {"suspect": ""}):
+        _, pushed, _, _ = _run_check(tmp_path, "", rc=0, log=_log(**missing))
+        assert pushed[0] == "down", (missing, pushed)
+        assert "lacks a Possible rootkits or Suspect files count" in pushed[1], pushed[
+            1
+        ]
+
+
+def test_the_ssh_root_setting_follows_the_main_sshd_config():
+    """rkhunter reads PermitRootLogin from the main sshd_config only (#4638).
+
+    daniel-box's and daniel-server's main files carry the line and daniel-pi's does not, though
+    all three harden a drop-in, so the setting follows the main file rather than the config path.
+    """
+    expected = {"daniel-box": "no", "daniel-server": "no", "daniel-pi": "unset"}
+    assert set(expected) == set(HOSTS)
+    for host, value in expected.items():
+        shipped = shipped_text(host, "/etc/rkhunter.conf.local")
+        assert f"\nALLOW_SSH_ROOT_USER={value}\n" in shipped, (host, shipped)
+
+
+def test_the_rendered_script_carries_no_kuma_push():
+    """M6 batch B9's Cutover-2: the push, its token read and its library are gone."""
+    assert push_markers(render_shell_script(*SCRIPT)) == []
+
+
+def test_the_scan_logs_its_verdict_and_still_runs_without_a_credential(tmp_path):
+    """No unit loads a credential, so a run has no token and still reports."""
+    _, verdict, _, ran = _run_check(tmp_path, "", rc=0, log=_log())
+    assert ran, "rkhunter did not run"
+    assert verdict is not None and verdict[0] == "up", verdict
+
+
+def test_the_timer_runs_a_slot_it_missed():
+    """A weekly slot missed while the timer is stopped would otherwise wait a week (#7920)."""
+    for host in HOSTS:
+        assert re.search(r"^Persistent=true$", shipped_text(host, TIMER), re.M), host
+
+
+def test_the_push_deadline_covers_one_week_and_not_two():
+    """The producer is homelab-rkhunter-check.timer (integrity-scans component), weekly on Wednesday."""
+    for host in HOSTS:
+        on_calendar = re.search(r"^OnCalendar=(.+)$", shipped_text(host, TIMER), re.M)
+        assert on_calendar and re.fullmatch(
+            r"Wed \*-\*-\* \d\d:\d\d:\d\d", on_calendar[1]
+        ), (
+            f"{host}: this test reads the timer as weekly; give it the new period if that changes"
+        )
+    body = render_shell_script(*SCRIPT)
+    [deadline] = re.findall(r"^\s*DEADLINE_S=(\d+)$", body, re.M)
+    assert WEEK_S < int(deadline) < 2 * WEEK_S, (
+        f"DEADLINE_S {deadline}s must exceed the timer's weekly period, and stay "
+        "under two so a second missed run cannot pass unreported"
+    )

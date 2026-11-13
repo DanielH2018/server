@@ -164,7 +164,7 @@ carries the CoreDNS port in the same PR as the `k3s_version` move:
    Deployment, Service and RBAC templates, with each `%{...}%` placeholder written as the value
    k3s substitutes on this cluster.
 3. Move the excerpt and its label in
-   `ansible/tests/setup/test_coredns_image_follows_bundled_manifest.py` to the new tag. The test
+   `hosts/tests/test_coredns_image_follows_bundled_manifest.py` to the new tag. The test
    fails until the label equals `k3s_version` and the pin equals the excerpt's image.
 4. Read the image the new pod runs for a uid change. The Deployment pins
    `runAsUser: 65532` beside `runAsNonRoot`, so an image whose `USER` moved refuses to start.

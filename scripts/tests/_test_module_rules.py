@@ -31,6 +31,7 @@ _TEST_ROOTS = (
     "evals/",
     "hosts/components/",
     "hosts/lib/",
+    "hosts/tests/",
 )
 
 

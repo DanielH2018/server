@@ -65,7 +65,7 @@ trust in Authelia (`hosts/components/k3s-server/`), the Authelia client, and the
   (here, Authelia's client, and each issuer's `audiences` in the API server's auth
   config), the issuer URL (here, and one of that config's `jwt` issuers), and the group
   (`headlamp_k8s_oidc_group`, and that config's groups prefix plus the Authelia group).
-  ENFORCED: `ansible/tests/setup/test_k3s_oidc_trusts_authelia.py`.
+  ENFORCED: `hosts/tests/test_k3s_oidc_trusts_authelia.py`.
 - **The issuer is the PUBLIC name**, `auth.<domain>`, and one value serves both hostnames:
   Headlamp builds one provider at server start while Authelia's `iss` follows the request host.
   The API server trusts both Authelia issuers (`k3s_oidc_issuer_urls`), so the choice is not a

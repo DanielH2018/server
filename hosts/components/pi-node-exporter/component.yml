@@ -7,7 +7,7 @@
 #
 # - The binary is homelab-tools' `node-exporter`, at /usr/lib/homelab/bin/node-exporter. The
 #   version is the cluster DaemonSet's, held equal by
-#   ansible/tests/setup/test_pi_node_exporter_host_unit.py. Ubuntu's prometheus-node-exporter is
+#   hosts/tests/test_pi_node_exporter_host_unit.py. Ubuntu's prometheus-node-exporter is
 #   1.7.0, five minors behind, so the upstream release stays the source.
 # - The unit ships at /usr/lib/systemd/system/node_exporter.service under the name of the
 #   Ansible-era copy in /etc/systemd/system. That copy shadows the packaged one, so the legacy

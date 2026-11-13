@@ -24,7 +24,7 @@ the bundle from GHCR. A bad apply here stops name resolution, and host probes st
   (`docs/k3s-upgrade.md`).
 - **`coredns_image` is a pin, not a Renovate target.** The k3s addon stopped reconciling the
   image when the marker went in. `renovate.json` disables Renovate for this key.
-  `ansible/tests/setup/test_coredns_image_follows_bundled_manifest.py` holds the pin to an
+  `hosts/tests/test_coredns_image_follows_bundled_manifest.py` holds the pin to an
   excerpt of the bundled manifest, labelled with the k3s version it came from.
 - **The ConfigMap declares only `Corefile`.** k3s's node controller writes `NodeHosts` and
   keeps writing it, so Flux must never declare that key.

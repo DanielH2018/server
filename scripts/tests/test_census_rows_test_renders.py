@@ -208,9 +208,9 @@ ROWS = (
         must_find=frozenset(
             {
                 "ansible/tests/deploy/test_tree_lock_single_definition.py",
-                "ansible/tests/setup/test_host_python_invocations.py",
+                "hosts/tests/test_host_python_invocations.py",
                 "evals/tests/test_eval_cases.py",
-                "ansible/tests/setup/test_claude_agent_ssh_login.py",
+                "hosts/tests/test_claude_agent_ssh_login.py",
                 "ansible/tests/k8s/_manifest_guards.py",
             }
         ),

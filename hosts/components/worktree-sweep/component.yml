@@ -38,7 +38,7 @@
 #   `journalctl -t worktree-sweep` for the removal or branch deletion that failed.
 #
 # ENFORCED: hosts/lib/tests/test_worktree_sweep_component.py, and
-# ansible/tests/setup/test_worktree_sweep_cron_reports_its_exit.py, which runs the rendered script.
+# hosts/tests/test_worktree_sweep_cron_reports_its_exit.py, which runs the rendered script.
 files:
   - {src: templates/worktree-sweep.sh.j2, dst: /usr/lib/homelab/worktree-sweep, mode: "0755"}
   - {src: units/homelab-worktree-sweep.service.j2, dst: /usr/lib/systemd/system/homelab-worktree-sweep.service}

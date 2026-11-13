@@ -1,6 +1,6 @@
 """The rendered `secret-rotation` component: the daily audit (H7.10c).
 
-The script's behaviour is run against stubs in `ansible/tests/setup/`. These tests hold what the
+The script's behaviour is run against stubs in `hosts/tests/`. These tests hold what the
 move added: the units that run the script, which load no credential since M6 batch B2's
 Cutover-2 dropped the Kuma push, the enable links, the legacy entries that retire the Ansible-era
 crons and timer, and the Autonomous-role contract.

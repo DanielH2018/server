@@ -454,7 +454,7 @@ are pinned in `ansible/tests/services/test_storage_rule_literals.py`, which also
 `PVCBelowFreeFloor` to the transient valheim declares, `LonghornSnapshotNearCap` to the
 jellyfin snapshot cap, and `LonghornVolumeDegraded` to `longhorn_robustness.SAFE_ROBUSTNESS`.
 The `DECIDED:` marker for the 3 GiB free-bytes floor sits there too.
-`ansible/tests/setup/test_etcd_quota_and_its_monitor_agree.py` holds `EtcdDBNearQuota`'s
+`hosts/tests/test_etcd_quota_and_its_monitor_agree.py` holds `EtcdDBNearQuota`'s
 quota to the one k3s runs. The reasoning behind each rule (the one-hot `state` label, the
 `max by` that reads a doubled scrape once, the claim census, why an absent etcd series is
 `ScrapeTargetDown`'s) is in `ansible/roles/k8s/observability/files/rules/storage.yaml`.
