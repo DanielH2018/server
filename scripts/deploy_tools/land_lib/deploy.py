@@ -39,8 +39,9 @@ def no_tag_outcome(ln: Landing, scope: str = "no service tag") -> NoReturn:
     its own wording, because a refused broad derivation is not the same fact and an operator
     reading `reaches no service tag` about a 330-file PR goes looking for a different bug.
 
-    A host-only change ends `nothing-to-deploy`: its host package ships it, and the host wait
-    has already covered the hosts whose package the PR changed.
+    Runs before the host wait. A PR that changes a host's package and owes no plane never gets
+    here: `deploy_phase` returns, and the host wait ends it `settled`. So `nothing-to-deploy`
+    means the PR changed no host package either.
     """
     pr = ln.opts.pr
     if ln.plane:

@@ -249,8 +249,8 @@ VERDICT_HINTS: dict[str, tuple[str, str]] = {
     ),
     "nothing-to-deploy": (
         "none",
-        "Nothing deployed to the cluster. A host-only change ships in its host package; "
-        "when the PR changed one, this landing waited for the host to apply it.",
+        "Nothing deployed: the PR changed no service and no host package. A PR that changes "
+        "a host package waits for that host to apply it and ends settled instead.",
     ),
     "unhealthy": (
         "bad",
