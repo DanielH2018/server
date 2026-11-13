@@ -66,8 +66,8 @@ def test_the_package_marks_exactly_the_startup_files_for_the_agent(package):
     }
     assert marked == STARTUP_FILES
     assert package.policies[UNIT] == "windowed"
-    for quiet in (LOGROTATE, TMPFILES):
-        assert quiet in package.files and quiet not in package.activations
+    assert LOGROTATE in package.files and LOGROTATE not in package.activations
+    assert package.activations[TMPFILES] == "tmpfiles"
 
 
 def test_the_drop_in_logs_both_streams_and_runs_a_bare_agent(package):

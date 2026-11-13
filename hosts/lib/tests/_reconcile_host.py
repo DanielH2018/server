@@ -22,6 +22,7 @@ COMMANDS = (
     "crontab",
     "systemctl",
     "sysctl",
+    "systemd-tmpfiles",
     "sshd",
     "fail2ban-client",
     "rsyslogd",

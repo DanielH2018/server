@@ -51,7 +51,8 @@ def verbs(node: Node) -> list[list[str]]:
     return [
         argv
         for argv in changing
-        if argv[0] in ("sysctl", "sshd", "fail2ban-client", "rsyslogd", "ufw")
+        if argv[0]
+        in ("sysctl", "systemd-tmpfiles", "sshd", "fail2ban-client", "rsyslogd", "ufw")
         or argv[:2] in (["systemctl", "reload"], ["systemctl", "try-restart"])
         or argv[:2] == ["systemctl", "restart"]
     ]
