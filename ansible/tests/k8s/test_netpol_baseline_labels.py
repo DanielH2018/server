@@ -86,7 +86,7 @@ BORN_FENCED_ROLES = {
     # takes no connection at all, and its one outbound call is to the API server, which is
     # egress. The DaemonSet sits in kube-system, which no baseline selects, so it stays unlabelled.
     "dri-device-plugin",
-    # The ingress probes (docs/target-architecture/monitoring/m4-blackbox-ingress.md). It
+    # The ingress probes (ADR-0026). It
     # departs from this set's preamble twice. Traefik never calls it, since it has no route;
     # its only caller is the prometheus pod, which the baseline already admits. And it dials
     # every ingress name, but the baseline fences ingress only, so the label does not touch
@@ -105,7 +105,7 @@ SLICE_3_WORKLOADS = {
     ("observability", "tempo"),
     ("observability", "kube-state-metrics"),
     ("observability", "otel-collector"),
-    # The M1 alert plane's Alertmanager (docs/target-architecture/monitoring/m1-alertmanager.md).
+    # The M1 alert plane's Alertmanager (ADR-0026).
     ("observability", "alertmanager"),
 }
 

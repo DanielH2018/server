@@ -1,7 +1,6 @@
 """The `promote` workflow's window-end cron run reaches a move of `prod`, and the reset skips the window.
 
-D5.2b2 (docs/target-architecture/deploy/d5-bulk-move.md, *No promotion runs into the weekly
-reboot*). Inside the weekly reboot's no-promotion window `decide` ends `deferred`, and the
+Inside the weekly reboot's no-promotion window `decide` ends `deferred`, and the
 `schedule:` run at the window's end is what promotes the commits merged during it. That run
 skips render, images and publish, so the jobs after them need conditions of their own.
 If one is missing, the run decides and never moves `prod`, and CI stays green. The

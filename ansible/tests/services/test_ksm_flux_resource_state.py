@@ -3,8 +3,8 @@
 Both failures are quiet. A kind the config reads without a list/watch grant makes the collector
 log RBAC errors every resync and export nothing for that kind, so gotk_resource_info simply has
 no series. A Kustomization `revision` read from `status.lastAppliedRevision`, the field upstream's
-example reads, carries `prod@sha256:<digest>`, which names no commit, and every reader contracts.md
-C6 sends to the label would then find no `master@sha1:<sha>` to match.
+example reads, carries `prod@sha256:<digest>`, which names no commit, and every reader of the
+label would then find no `master@sha1:<sha>` to match.
 
 The config is read back out of the rendered Deployment argument, not the defaults variable, so a
 template that stops passing it fails here too.
@@ -108,7 +108,7 @@ def test_a_flux_kind_without_a_grant_is_flagged() -> None:
 
 def test_the_kustomization_revision_reads_the_origin_field() -> None:
     assert _reads_origin_revision(_config(_docs())), (
-        "gotk_resource_info's Kustomization revision must name a commit (contracts.md C6)"
+        "gotk_resource_info's Kustomization revision must name a commit (ADR-0020)"
     )
 
 

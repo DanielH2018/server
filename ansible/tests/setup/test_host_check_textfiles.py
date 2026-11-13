@@ -1,6 +1,6 @@
 """The B2 host checks write a homelab_check_* textfile and push to nothing (M6 batch B2).
 
-docs/target-architecture/monitoring/m6-retire-kuma.md, batch B2: docs-refresh, the eval sweep and the
+ADR-0026 records the decision. Docs-refresh, the eval sweep and the
 secret-rotation audit each write `<check>.prom` through
 homelab-check-lib.sh, which the rules in `initial-setup-checks.yaml` read. (The Loki witness's
 cases are in test_loki_route_witness.py.) Each case runs the rendered script, or the rendered

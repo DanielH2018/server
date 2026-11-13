@@ -4,7 +4,7 @@
 again before its reset. A superseding T resets to the live `last-good` when the superseded
 run's `settle` moved it after T's `tag` read it (#6268). `tag` reads DEPLOY_HOLD again just before it moves `prod`. The cases
 run each step's own `run:` under the fakes of `test_promote_settle.py`, as clean/flagged
-pairs. docs/target-architecture/deploy/d7-superseding-promotions.md has the design.
+pairs. ADR-0020 records when a promotion supersedes another.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_promote_settle_owner.py
 """

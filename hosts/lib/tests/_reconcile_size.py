@@ -1,8 +1,8 @@
 """Count the source lines of `hosts/lib/homelab-reconcile` and of the modules only it imports.
 
-Exit observation 7 of `docs/target-architecture/host/h7-delete-ansible.md` bounds the host
-plane's second mechanism by this count. A source line is a line holding at least one token
-that is not a comment, and that is not part of a docstring. Blank lines, comments and docstrings
+ADR-0029 bounds the host plane's second mechanism by this count. A source line is a line
+holding at least one token that is not a comment, and that is not part of a docstring. Blank
+lines, comments and docstrings
 do not count, and tests are not counted because they live under `hosts/lib/tests/`.
 
 A module counts when reconcile imports it, directly or through another counted module, and no

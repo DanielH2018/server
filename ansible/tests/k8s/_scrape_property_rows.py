@@ -241,9 +241,9 @@ SCRAPE_PROPERTIES = (
     Property(
         name="prometheus-admits-the-soak-job",
         reason=(
-            "D5.3's soak Job runs in flux-system and reads M2's homelab:pod_service:info and "
-            "the critical alerts from Prometheus on 9090 (d5-bulk-move.md, *Reaching "
-            "Prometheus*). Its name moves with each revision's SHA, so the peer selects the "
+            "The soak Job runs in flux-system and reads M2's homelab:pod_service:info and "
+            "the critical alerts from Prometheus on 9090 (ADR-0020). Its name moves with each "
+            "revision's SHA, so the peer selects the "
             "pod label `app: soak`. The namespaceSelector and the podSelector must be sibling "
             "keys of ONE from item, so they AND. As two items they OR: the namespaceSelector "
             "alone admits every pod in flux-system, and the podSelector alone admits an "

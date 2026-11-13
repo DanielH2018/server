@@ -4,7 +4,7 @@ observability's `prometheus.yaml.j2` renders two scrape jobs for blackbox_export
 (one target per hand-written non-push tile that has a probe) and `blackbox-pi-ports` (one
 `tcp_connect` target per container the Pi publishes a port for). These guards render both from the
 real inventory and hold each to the thing it replaces
-(docs/target-architecture/monitoring/m6-retire-kuma.md, "B0, B5, B7 and B8"). Cutover-a1 deleted
+(ADR-0026). Cutover-a1 deleted
 the tiles, so the target addresses, modules and tiers are literals here, copied from the deleted
 tiles' declarations (`git show 50f2b2c410:ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2`).
 

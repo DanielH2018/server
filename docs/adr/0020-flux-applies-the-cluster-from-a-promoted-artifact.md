@@ -122,6 +122,47 @@ their objects carry the tag's name and no emptied template reaches them at a ret
 - `promote` defers a promotion that the weekly reboot window would cut short
   (`scripts/deploy_tools/promote_lib/reboot_window.py`).
 
+**The soak Job draws one Grafana deploy marker per soaked promotion.** The soak
+(`scripts/renderer/job_files/flux_soak.py`) prints an `event=deploy` line, and Grafana's "Flux deploys" annotation query reads it from
+Loki. A soak that passes prints it with `result=ok`. A soak that fails prints it with
+`result=fail`, the failed services in `services=` and `duration_s`. A soak that errors
+prints it with `result=fail` and `services=flux`. Flux has applied the revision in every
+case, so the dashboards mark it, and the annotation's title tells a failure from a pass
+([#6164](https://github.com/DanielH2018/server/issues/6164)).
+`scripts/renderer/tests/test_flux_soak.py` holds this paragraph to what the soak prints.
+
+**`land.sh` waits on the cluster, never on one `promote` run.** GitHub can evict a queued
+run, and a later run can promote a newer commit. After merging M, `promote.py land-wait M`
+takes M's changed set from two `digests.json` files: M's own, and the one on the newest
+published ancestor of M's first parent. A missing or unreadable file counts as every name
+changed. Every landing reaches the wait, and the changed set names the tags its health gate and
+its `source=promote` annotation cover. The wait ends in one of three ways:
+
+- `settled`: every Kustomization in the set, and `homelab`, is Ready at a revision R that
+  descends from M or equals it, and `flux/soak` reads `success` on R.
+- `deploy-failed` with cause `promote-held`: `DEPLOY_HOLD` reads anything but `none`.
+- `gave-up` with cause `promote-timeout`: the wait reaches twice the promote timeout.
+
+**A later promotion can supersede one still in `verify`.** `SUPERSEDE` in
+`scripts/deploy_tools/promote.py` turns this on. `decide` promotes T over an in-flight P only
+when all of the following hold:
+
+- `DEPLOY_HOLD` reads `none`.
+- `prod` is not the digest tagged `superseding`, so at most one supersession happens per
+  verification.
+- P has no failure yet.
+- T's own change is disjoint from P's set.
+- Neither change touches `longhorn`, `flux` or `cluster-vars`, or was widened.
+- No hold without a reset is involved.
+- T is outside the reboot window.
+
+T's verification takes its changed set against P's base, so one verification covers both
+commits, and `last-good` moves once, to T. P's `verify` prints `superseded` once `prod` no
+longer names P. Its `settle` writes nothing: `settle` writes `last-good`, the hold or the reset
+only while `prod` still names its own digest. Before `land-wait` reports a `flux/soak` failure on R,
+it re-reads `homelab`. A move to a descendant of R may be a supersession, so the wait goes
+on.
+
 **Deploys depend on GitHub and GHCR.** The artifact lives in GHCR and `promote` runs in GitHub
 Actions. Break-glass promotion covers an outage of either (`docs/break-glass.md`). It needs an
 operator-held key pair and keeps the in-cluster registry in service. The `flux-deletion-drill`

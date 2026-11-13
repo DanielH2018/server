@@ -2,9 +2,8 @@
 
 Each test drives the real tools: `dpkg-deb` builds the fixture packages, `apt-ftparchive`
 writes the indexes and the `Release`, and `gpg` signs with a throwaway ed25519 key generated
-once per module. Only the paths and the clock are the test's. The cases are the *Signer
-refusal* and *Valid-Until* items of docs/target-architecture/host/h3-pi-pilot.md,
-*Verification*.
+once per module. Only the paths and the clock are the test's. The cases cover the signer's
+refusal rule and its Valid-Until rule.
 
 Run: uv run pytest hosts/lib/tests/test_repo_signer.py
 """

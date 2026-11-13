@@ -373,8 +373,7 @@ PROPERTIES = (
                 "nothing to read there. `OnFailure` restarts it in place, which would put a "
                 "restarting pod outside the workload-service mapping. Keep Never, or add the "
                 "Job hop to files/rules/workload-service.yaml first; "
-                "docs/target-architecture/monitoring/m2-first-bridge-family.md, 'The "
-                "workload-service mapping', has the reasoning."
+                "ansible/roles/k8s/observability/CLAUDE.md, 'Alert plane', has the reasoning."
             ),
             select=_job_pod_specs,
             offence=_restart_policy_offence,

@@ -1,7 +1,6 @@
 """R3's live-read census: no name a render target's task sets reaches a template it reads.
 
-Target slice R3's exit check 3 (`docs/target-architecture/render/r3-remove-live-reads.md`,
-*The census*). The census computes three sets from the tree:
+ADR-0020 records the decision. The census computes three sets from the tree:
 
 - **Set by tasks:** every `set_fact` key and `register` name in every task file a render
   target's `tasks/main.yml` reaches. No render target holds one on the tree, because

@@ -1,9 +1,9 @@
 """The persisted-output census: every output a package persists is on one named list (H4.3a).
 
-C5 admits a persisted output only for a consumer that must start before the decrypt can run
-(`docs/target-architecture/host/h4-secrets-unit.md`, *Persisted outputs*). The list has one
-member, daniel-server's `upsmon.conf`. A package that persists anything else fails here and
-names the output. A listed member that no package renders fails too, so a renamed output
+A package persists a decrypted output only for a consumer that must start before the
+decrypt can run (ADR-0022's H4 amendment). The list has one member, daniel-server's
+`upsmon.conf`. A package that persists anything else fails here and names the output. A
+listed member that no package renders fails too, so a renamed output
 cannot shrink the census to nothing.
 
 Run: uv run pytest hosts/lib/tests/test_persisted_outputs_census.py

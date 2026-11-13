@@ -4,8 +4,7 @@ The script tests run `registry_verify.main` against local ports: a small in-memo
 stands in for the push store, an HTTP server stands in for a port that answers, and a port
 nothing listens on stands in for one the fence refuses. The render tests copy the registry
 role and render the copy, so the Jobs are checked as Flux receives them and a policy-only
-edit can be made without touching the tree. The plan is
-docs/target-architecture/deploy/d5-bulk-move.md.
+edit can be made without touching the tree. ADR-0020 records the decision.
 
 Run: uv run pytest ansible/roles/k8s/registry/tests/test_registry_verify.py
 """

@@ -131,9 +131,9 @@ def test_a_comment_naming_a_reaper_is_clean(tmp_path: Path) -> None:
 
 # ── The CronJob arm: no k8s CronJob runs a reaper ────────────────────────────────────────
 #
-# H2 moves host crons into CronJobs (docs/target-architecture/host/h2-shrink-host-plane.md,
-# *The reapers stay unscheduled*), so a schedule can arrive in a rendered manifest as well as
-# in a unit template. A CronJob that names the reaper in its command is caught directly. One that
+# Host crons moved into CronJobs (ADR-0029), so a schedule can arrive in a rendered manifest,
+# as well as in a unit template. A CronJob that names the reaper in its command is caught directly.
+# One that
 # runs a script from a mounted ConfigMap names it only in that ConfigMap's data, so the arm
 # reads the data of every ConfigMap the CronJob mounts, through a `configMap` volume or a
 # `projected` source.

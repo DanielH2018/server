@@ -1,9 +1,7 @@
 """The generated `dependsOn`, the per-tag kinds and the reserved tag names (D4.2, D5.1a1).
 
 Most fixtures hand `bundle_files` a fixture `Ordering`, so no role renders. The reserved-name
-refusal and the cycle refusal run the real CLI on littlelink and bento-pdf. The plans are
-docs/target-architecture/deploy/d4-ordering.md, *The renderer writes `dependsOn`*, and
-d5-bulk-move.md, *Prune exemptions, digests and the collision census*.
+refusal and the cycle refusal run the real CLI on littlelink and bento-pdf.
 
 Run: uv run pytest scripts/renderer/tests/test_renderer_bundle_ordering.py
 """

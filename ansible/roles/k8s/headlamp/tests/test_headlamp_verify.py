@@ -3,8 +3,7 @@
 The script tests run `headlamp_verify.main` against local ports: an HTTP server stands in for a
 port that answers, and a port nothing listens on stands in for one the fence refuses. The render
 tests render the tree through `render_tag`, so the Job is checked as Flux receives it in
-`headlamp-verify`, and render a copy with the policy edited for the rename test. The plan is
-docs/target-architecture/deploy/d5-bulk-move.md, *A verify conversion lands as inert code*.
+`headlamp-verify`, and render a copy with the policy edited for the rename test.
 
 Run: uv run pytest ansible/roles/k8s/headlamp/tests/test_headlamp_verify.py
 """

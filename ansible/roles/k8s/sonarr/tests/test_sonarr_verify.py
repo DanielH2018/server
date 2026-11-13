@@ -3,8 +3,7 @@
 The render tests render the role's `templates/verify/` through `render_tag`, so the Job is
 checked as Flux receives it in `sonarr-verify`. The script tests run the rendered ConfigMap's
 two files, the script and its `flux_job_connect.py` copy, as the Job's container runs them,
-against a local HTTP server that answers like sonarr's API. The plan is
-docs/target-architecture/deploy/d5-bulk-move.md, *A verify conversion lands as inert code*.
+against a local HTTP server that answers like sonarr's API. ADR-0020 records the decision.
 
 Run: uv run pytest ansible/roles/k8s/sonarr/tests/test_sonarr_verify.py
 """

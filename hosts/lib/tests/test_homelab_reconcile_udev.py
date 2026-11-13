@@ -1,7 +1,7 @@
 """`hosts/lib/homelab-reconcile`'s udev arm (H4.3b1).
 
-Each test is one of H4's *Verification* reconcile cases (docs/target-architecture/host/
-h4-secrets-unit.md), run against the stub `udevadm` of `_reconcile_host.py`.
+Each test is a reconcile case of ADR-0022's H4 amendment, run against the stub `udevadm` of
+`_reconcile_host.py`.
 
 Run: uv run pytest hosts/lib/tests/test_homelab_reconcile_udev.py
 """
