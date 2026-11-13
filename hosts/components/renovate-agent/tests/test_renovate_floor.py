@@ -10,7 +10,14 @@ Run: uv run pytest hosts/components/renovate-agent/tests/test_renovate_floor.py
 import pytest
 import renovate_floor as floor
 from _helpers import REPO
+from deploy_tools.land_lib import policy
+from deploy_tools.land_lib.pr_json import parse_file
 from lib.proc_testing import run
+
+FLOOR_FILE = (
+    REPO / "hosts" / "components" / "renovate-agent" / "files" / "t2-approval-floor"
+)
+FLOOR = floor.read_floor(str(FLOOR_FILE))
 
 OLD = "a" * 64
 NEW = "b" * 64
@@ -31,24 +38,24 @@ def _bump(old=f"ghcr.io/x/y:1.2@sha256:{OLD}", new=f"ghcr.io/x/y:1.2@sha256:{NEW
     [
         "hosts/packages/homelab-tools/package.yml",
         "conftest.py",
-        "ansible/roles/k8s/sonarr/tests/deep/conftest.py",
-        "ansible/roles/k8s/monitor-bridge/files/registry.py",
+        "k8s/roles/sonarr/tests/deep/conftest.py",
+        "k8s/roles/monitor-bridge/files/registry.py",
         "docs/CLAUDE.md",
     ],
 )
 def test_a_path_on_the_floor_is_flagged(path):
-    assert floor.floor_hits([{"status": "modified", "filename": path}]) == [path]
+    assert floor.floor_hits([{"status": "modified", "filename": path}], FLOOR) == [path]
 
 
 @pytest.mark.parametrize(
     "path",
     [
-        "ansible/roles/k8s/sonarr/defaults/main.yml",
-        "ansible/roles/k8s/homelab-mcp-adjacent/defaults/main.yml",
+        "k8s/roles/sonarr/defaults/main.yml",
+        "k8s/roles/homelab-mcp-adjacent/defaults/main.yml",
     ],
 )
 def test_a_path_off_the_floor_is_clean(path):
-    assert floor.floor_hits([{"status": "modified", "filename": path}]) == []
+    assert floor.floor_hits([{"status": "modified", "filename": path}], FLOOR) == []
 
 
 def test_a_rename_out_of_the_floor_is_flagged():
@@ -57,11 +64,11 @@ def test_a_rename_out_of_the_floor_is_flagged():
         "filename": "docs/x.toml",
         "previous_filename": "prek.toml",
     }
-    assert floor.floor_hits([entry]) == ["prek.toml"]
+    assert floor.floor_hits([entry], FLOOR) == ["prek.toml"]
 
 
 def test_a_digest_only_bump_in_a_host_component_is_clean():
-    assert floor.floor_hits([_bump()]) == []
+    assert floor.floor_hits([_bump()], FLOOR) == []
 
 
 @pytest.mark.parametrize(
@@ -91,7 +98,7 @@ def test_a_digest_only_bump_in_a_host_component_is_clean():
     ],
 )
 def test_a_change_that_is_not_digest_only_is_flagged(entry):
-    assert floor.floor_hits([entry]) != []
+    assert floor.floor_hits([entry], FLOOR) != []
 
 
 def test_a_branch_only_renovate_pushed_to_passes():
@@ -221,8 +228,8 @@ def unclassified(roots: set[str]) -> list[str]:
         root
         for root in roots
         if root not in OFF_FLOOR
-        and not floor.on_floor(root)
-        and not floor.on_floor(f"{root}/x")
+        and not floor.on_floor(root, FLOOR)
+        and not floor.on_floor(f"{root}/x", FLOOR)
     )
 
 
@@ -236,3 +243,32 @@ def test_every_top_level_entry_is_on_the_floor_or_classified():
 
 def test_an_unclassified_root_entry_is_flagged():
     assert unclassified({"newtool.toml", "hosts", "docs"}) == ["newtool.toml"]
+
+
+def _tracked() -> list[str]:
+    listed = run(["git", "ls-files", "-z"], cwd=REPO, check=True).stdout
+    return [path for path in listed.split("\0") if path]
+
+
+def test_both_landers_read_the_floor_file_alike():
+    """The host lander cannot import land_lib, so the two matchers must agree on every path."""
+    entries = policy.read_approval_paths(str(FLOOR_FILE))
+    paths = _tracked() + ["conftest.py", "a/b/c/d/conftest.py", "docs/x.md"]
+    host = {p for p in paths if floor.on_floor(p, FLOOR)}
+    land = {p for p in paths if policy.listed(p, entries)}
+    assert host == land
+    assert "hosts/components/renovate-agent/files/t2-approval-floor" in host
+
+
+def test_a_conftest_planted_at_a_new_depth_needs_approval_through_land_sh():
+    entries = policy.read_approval_paths(str(FLOOR_FILE))
+    planted = "k8s/roles/sonarr/templates/deep/new/conftest.py"
+    files = [parse_file({"status": "added", "filename": planted})]
+    assert policy.approval_hits(files, entries) == [planted]
+
+
+def test_an_empty_floor_file_is_refused(tmp_path):
+    empty = tmp_path / "floor"
+    empty.write_text("# only a comment\n\n")
+    with pytest.raises(ValueError, match="names no path"):
+        floor.read_floor(str(empty))

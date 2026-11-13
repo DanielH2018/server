@@ -8,8 +8,8 @@ which is every interactive session and renovate-agent's lander:
   branch fence", ruleset 24517167), so this keeps the lander to the branches the fence gives
   the agent. The policy binds only a landing: the agent's account can also arm GitHub's
   auto-merge, which skips it, by the operator's choice on 2026-10-11.
-- `LAND_APPROVAL_PATHS`: a file of path prefixes, one per line. A PR changing a path under one
-  of them is refused. Those are the paths that widen the agent's own authority: its roles, its
+- `LAND_APPROVAL_PATHS`: a file of path entries, one per line, each a prefix or, holding `*`,
+  a glob over the whole path (`listed`). A PR changing a path under one of them is refused. Those are the paths that widen the agent's own authority: its roles, its
   credentials, the rulesets' drift checks and this code. A PR changing a module this landing
   process has imported is refused the same way, and so is a new file that would shadow one
   and any compiled module file; see `gate_hits`. So is a change that can run code on import
@@ -41,6 +41,7 @@ import sys as _sys
 from importlib import machinery
 from collections.abc import Callable, Iterable, Mapping
 from pathlib import Path as _Path
+from pathlib import PurePosixPath as _PurePosixPath
 from types import ModuleType
 from typing import NoReturn
 
@@ -118,8 +119,25 @@ def branch_problems(view: PrView, prefix: str) -> list[str]:
     return problems
 
 
+def listed(path: str, entries: list[str]) -> bool:
+    """Whether `path` is under one of the approval-path `entries`.
+
+    A plain entry is a path prefix. An entry holding `*` is a glob over the whole path, where
+    `**` spans directories, so `**/conftest.py` matches one at any depth. The T2 approval floor
+    (`hosts/components/renovate-agent/files/t2-approval-floor`) carries such entries, and
+    `renovate_floor.py:on_floor` matches the same way.
+    """
+    for entry in entries:
+        if "*" in entry:
+            if _PurePosixPath(path).full_match(entry):
+                return True
+        elif path.startswith(entry):
+            return True
+    return False
+
+
 def approval_hits(files: list[PrFile], prefixes: list[str]) -> list[str]:
-    """Each changed path under an approval prefix, in order, without duplicates.
+    """Each changed path under an approval entry, in order, without duplicates.
 
     A renamed file is checked under its old path too, so a rename out of a listed directory
     still needs approval.
@@ -127,7 +145,7 @@ def approval_hits(files: list[PrFile], prefixes: list[str]) -> list[str]:
     hits: list[str] = []
     for entry in files:
         for name in (entry.get("filename"), entry.get("previous_filename")):
-            if name and name not in hits and name.startswith(tuple(prefixes)):
+            if name and name not in hits and listed(name, prefixes):
                 hits.append(name)
     return hits
 

@@ -236,8 +236,9 @@ variable unset and never sees this.
 **A lander unit can set a landing policy, which `--arm-merge` checks before any merge call.**
 `land_lib/policy.py` owns the rules, and two settings switch them on.
 `LAND_REQUIRE_BRANCH_PREFIX` requires a head branch in this repo, under the prefix, targeting
-`master`. `LAND_APPROVAL_PATHS` names a file of path prefixes, and a PR changing a path under
-one is refused, renamed files included. The same setting refuses a PR that changes a module the
+`master`. `LAND_APPROVAL_PATHS` names a file of path entries, and a PR changing a path under
+one is refused, renamed files included. An entry holding `*` is a glob over the whole path, so
+the T2 approval floor's `**/conftest.py` matches one at any depth. The same setting refuses a PR that changes a module the
 landing process has imported. It also refuses a change that can run code on import with no import
 line of its own: a non-empty `__init__.py`, an `__init__.py` leaving a directory that still holds
 Python files, a symlink, an added `__main__.py`, a module beside a directory of the same name, and

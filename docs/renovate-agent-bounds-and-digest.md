@@ -42,7 +42,11 @@ the landing. It never reads the PR title, because the session can edit a title. 
 rule's unit-name pattern to the PR numbers the script accepts.
 
 **The floor decides which landings need the operator's approval** (dotfiles#967 slice 1).
-`renovate_floor.FLOOR` lists the paths a session, a host package or the landing itself runs:
+`files/t2-approval-floor`, installed at `/usr/lib/homelab/t2-approval-floor`, is the one list
+every T2 lander reads (A5a). A lander that sets `LAND_APPROVAL_PATHS` to it reads it through
+`land_lib/policy.py`, and a test holds the two matchers equal over every tracked path. A
+missing or empty file refuses the landing. `homelab-claude-land@`, the T1 lander for the
+phone host's sessions, keeps its own narrower list. The floor lists the paths a session, a host package or the landing itself runs:
 `hosts/`, the secrets, the interpreter pins, `.github/`, `.claude/`, `scripts/`, every
 `conftest.py` and `CLAUDE.md`, and each role's `tests/` and `files/`. A plain entry is a path
 prefix, and an entry holding `*` is a glob over the whole path. A PR changing a floor path
