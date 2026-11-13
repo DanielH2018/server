@@ -181,6 +181,7 @@ nav:
       - "ADR-0027 Fan-out batches stay on host cgroups": adr/0027-fanout-batches-stay-on-host-cgroups.md
       - "ADR-0028 The cluster render supports a closed Jinja subset": adr/0028-the-renderer-supports-a-closed-jinja-subset.md
       - "ADR-0029 Each host is configured by its own package, and Ansible is gone": adr/0029-each-host-is-configured-by-its-own-package-not-ansible.md
+      - "ADR-0030 The ansible/ tree is renamed for what it holds": adr/0030-the-ansible-tree-is-renamed-for-what-it-holds.md
       # The long-form documents three of the records above compress. They sit under Decisions
       # rather than in a section of their own: each one is the working-out behind a single
       # ADR, and a reader who wants that depth arrives from the record, not from a

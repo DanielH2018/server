@@ -274,14 +274,17 @@ truth, with a reason beside each entry. It holds:
 - `.github/`
 - `hosts/components/host-hardening/` and `hosts/components/sshd/`, which hold the sudo cache,
   ssh and the operator's login
-- `ansible/.sops.yaml` and `ansible/vars/secrets.yml`
+- `ansible/.sops.yaml` and `ansible/vars/secrets.yml`, and their paths after
+  [ADR-0030](adr/0030-the-ansible-tree-is-renamed-for-what-it-holds.md)'s rename,
+  `secrets/.sops.yaml` and `secrets/secrets.yml`
 - alert-triggered triage: every `templates/claude-triage*` template, which includes the pins
   template that sets the run's caps, the rule `templates/50-claude-triage.rules.j2`,
   `files/claude_triage_run.py` and `files/claude_triage_poll.py`, all under
   `hosts/components/claude-code/`. The operator added them on 2026-10-15. Later slices let
   a triage run land its own fixes with nobody watching, so it must not be able to raise its own
   caps.
-- `ansible/roles/k8s/cluster-base/`, the agent's read-only cluster RBAC. The operator added it
+- `ansible/roles/k8s/cluster-base/` and its path after the rename, `k8s/roles/cluster-base/`,
+  the agent's read-only cluster RBAC. The operator added it
   on 2026-10-16 (H1 Open question 7). Before H1, that RBAC applies only through
   `k3s-bringup.yml`, which the operator runs by hand. Once Flux applies `cluster-base` on
   merge, this entry holds a change under that directory for the operator. It does not cover a

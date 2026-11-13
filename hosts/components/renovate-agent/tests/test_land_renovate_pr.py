@@ -62,8 +62,11 @@ def test_a_renovate_pr_touching_no_denied_role_passes_every_check():
             {"files": [{"path": "ansible/roles/k8s/authelia/defaults/main.yml"}]},
             "authelia",
         ),
+        # The tree after ADR 0030's rename, which the installed lander must also refuse.
+        ({"files": [{"path": "k8s/roles/authelia/defaults/main.yml"}]}, "authelia"),
         ({"files": []}, "cap"),
         ({"files": [{"path": "ansible/inventory/group_vars/all.yml"}]}, "inventory"),
+        ({"files": [{"path": "inventory/group_vars/all.yml"}]}, "inventory"),
         (
             {
                 "statusCheckRollup": [
