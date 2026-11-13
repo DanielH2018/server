@@ -1,7 +1,7 @@
 """The CI contexts a promotion requires, read from the checkout, and `promote.py ci-verdict`.
 
 `decide` reduces each candidate's check-runs with the shared `ci_verdict` (`hosts/lib/`) over
-the contexts `read_ci_contexts` returns, so a promotion, a GitOps tick and the host packages'
+the contexts `read_ci_contexts` returns, so a promotion, `homelab-checkout-sync` and the host packages'
 builder agree on what green means. `ci_check` prints that reduction for one commit, for the render job's re-check of a
 dispatched `sha`. `promote.py` re-exports all three names.
 """

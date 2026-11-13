@@ -14,12 +14,12 @@
 # templates from. {{ server_git_tree_lock }} is what makes those mutually exclusive.
 # Without it a `git pull` mid-run would leave this committing a tree it never read.
 #
-# IT DOES NOT PULL. gitops-deploy already fast-forwards this checkout, and it CI-gates the
-# range first: a commit whose master CI is red or pending is refused, and a failed health
-# gate parks the SHA in hold_sha. A bare pull here would take the lock correctly and still
-# skip all of that, fast-forwarding onto a commit the tick would have refused -- and the
-# next deploy renders templates from that tree. The tick runs 48 times a day to this
-# script's twice, so reading whatever it has already admitted costs at most one interval.
+# IT DOES NOT PULL. homelab-checkout-sync already fast-forwards this checkout, and it CI-gates
+# the tip first: a commit whose master CI is red or pending is refused. A bare pull here would
+# take the lock correctly and still skip that, fast-forwarding onto a commit checkout-sync
+# would have refused -- and the next promotion renders templates from that tree.
+# checkout-sync runs every 10 minutes to this script's twice a day, so reading whatever it has
+# already admitted costs at most one interval.
 #
 # WHY IT COMMITS. The generated pages are reviewable in a diff and survive the pod. The
 # alternative -- rendering at serve time -- is always current and completely invisible: a
@@ -239,9 +239,8 @@ keep_failure_log() {
 # `git diff --cached --name-status --no-renames`, captured BEFORE the commit.
 #
 # `git reset` alone -- all this path used to do -- unstages and nothing else, leaving every
-# regenerated page MODIFIED in the primary checkout. deploy_git.py reads any porcelain output as
-# dirty and gitops_deploy.py takes its healthy-skip path, still writing last_run, so ONE failed
-# commit here parks every deploy on the box behind a green deployer. Four commit failures are on
+# regenerated page MODIFIED in the primary checkout. homelab-checkout-sync reads any porcelain
+# output as dirty and refuses, so ONE failed commit here parks the checkout behind origin/master. Four commit failures are on
 # record (2026-08-25 twice, 08-27, 09-04) and a human cleaned up each time before the next run.
 #
 # A newly generated page needs `rm`, not `git checkout HEAD --`: it has no HEAD version, the
@@ -280,7 +279,7 @@ EOF
   # restore above already covers it, because it arrives in $1 like any other staged path. This
   # check is what says the restore WORKED, and a check scoped to the two doc trees would report
   # "tree restored" over a weights table left modified under scripts/dev/ — which parks the
-  # GitOps deployer exactly as a leftover page does (#2274).
+  # `homelab-checkout-sync` exactly as a leftover page does (#2274).
   [ -z "$(git status --porcelain -- docs/reference docs/assets/generated \
     scripts/dev/pytest_shard_weights.json scripts/dev/pytest_shard_runner_weights.json)" ] || rc=1
   return "$rc"

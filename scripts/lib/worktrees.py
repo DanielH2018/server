@@ -196,7 +196,7 @@ def merged_layer(
 # A stale "no" can only keep a tree a little longer, the safe direction for a pruner.
 #
 # It lives in the git common dir, never in a working tree: one untracked file in the primary
-# checkout parks the GitOps deployer. Every reader treats a missing or unreadable file as empty.
+# checkout parks `homelab-checkout-sync`. Every reader treats a missing or unreadable file as empty.
 VERDICT_CACHE = "claude-merged-verdicts.json"
 # Newest kept. A key a moved base has orphaned is never asked again, so age is the right drop.
 VERDICT_CACHE_CAP = 4000

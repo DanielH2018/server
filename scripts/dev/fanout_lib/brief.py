@@ -119,7 +119,7 @@ def _snapshot_root(batch: str, target: Target) -> str:
 def lands(host: str, repo: str = SERVER) -> bool:
     """Whether a batch in `repo` on `host` lands its own PR with `land.sh`.
 
-    Only this repo's batches on the deploy host do. `land.sh` and the GitOps deployer serve
+    Only this repo's batches on the deploy host do. `land.sh` serves
     this repo alone, and another repo lands through its own tooling, run by the orchestrator.
     `status` and `.claude/hooks/fanout-stop.py` read the same answer: the first from this
     function, the second from whether the brief carries the `land.sh` command.

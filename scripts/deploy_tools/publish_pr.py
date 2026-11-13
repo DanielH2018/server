@@ -117,8 +117,8 @@ FAILURE_TAIL = 400
 OPEN_PR_UNKNOWN = "unknown"
 
 # `lib.git.git` has no default timeout, and the callers hold the git-tree lock
-# while this runs -- the GitOps deployer waits only `flock -w 180` for that lock. git sets no
-# connect timeout of its own, so a blackholed origin would park the deployer rather than skip a
+# while this runs -- `homelab-checkout-sync` takes the same lock with `flock -n`. git sets no
+# connect timeout of its own, so a blackholed origin would hold the lock and make it skip a
 # run. 30s is well under both that wait and the 60s bound `lib.gh.gh` puts on the PR lookup
 # beside it.
 LS_REMOTE_TIMEOUT_S = 30.0

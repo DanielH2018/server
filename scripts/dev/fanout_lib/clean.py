@@ -388,7 +388,7 @@ def remote_clean_command(
     primary checkout there lags. That froze the merge judgement at whatever the batch was
     launched from: a batch started before #6552 kept running the `clean-one` that has no
     `landed`, so every squash-merged batch read "not merged into origin/master" for as long
-    as it stood (#6571). The GitOps deployer fast-forwards the primary checkout on both hosts,
+    as it stood (#6571). `homelab-checkout-sync` fast-forwards the primary checkout on both hosts,
     so the primary is the copy that carries the current fix. A host whose primary lacks the
     script fails loudly (`python: can't open file`, exit 2, reported as `failed`) rather than
     keeping the tree silently. It runs from the primary checkout's cwd (`cd {REPO}`) so a
@@ -465,7 +465,7 @@ def remote_clean_command(
     fetches its own default branch, and runs THIS repo's primary copy of the script with
     `--repo`, since the batch's worktree carries no copy at all. That primary copy is current
     enough: `launch` pins such a batch to the host it runs on, which is the deploy host,
-    whose checkout the GitOps tick keeps at `origin/master`.
+    whose checkout `homelab-checkout-sync` keeps at `origin/master`.
 
     Args:
         b: the batch to clean, as recorded in the run manifest.

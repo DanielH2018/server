@@ -161,7 +161,7 @@ def test_a_deployer_only_banner_names_probe_landing(monkeypatch, capsys):
     run_main = _run_main(
         monkeypatch,
         '{"source":"startup"}',
-        parked=["  ✗ the GitOps deployer has not fast-forwarded for 40 min ..."],
+        parked=["  ✗ homelab-checkout-sync has not fast-forwarded for 40 min ..."],
     )
     assert run_main() == 0
     context = json.loads(capsys.readouterr().out)["hookSpecificOutput"][

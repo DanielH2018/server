@@ -2,7 +2,7 @@
 """Fast-forward daniel-box's primary checkout to the newest green first-parent commit of master.
 
 `homelab-checkout-sync.service` runs this as `sys_user` every 10 minutes, inside `flock` on the
-git-tree lock, so it never runs beside the GitOps deployer's tick or another tree job. The design
+git-tree lock, so it never runs beside another tree job. The design
 is docs/target-architecture/host/h7-delete-ansible.md, *The deployer retires last, and
 checkout-sync replaces its fast-forward* (H7.51). The run:
 

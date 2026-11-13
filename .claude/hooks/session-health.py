@@ -116,7 +116,7 @@ PRIMARY_DIRTY_LIMIT = 8
 # load-bearing, not a nicety: a plain `git status` refreshes and WRITES `.git/index` in the tree
 # it reads. Without the flag a SessionStart hook running in a worktree would write the shared
 # checkout's index — the one thing the isolation guard exists to prevent — and could collide on
-# `index.lock` with the deployer's own `merge --ff-only`, which holds
+# `index.lock` with homelab-checkout-sync's own `merge --ff-only`, which holds
 # the git-tree lock and knows nothing about this hook. The flag is global to git, so
 # it comes before the subcommand. A constant rather than an inline argv so a test can assert the
 # shape without patching `lib.git.git`.
@@ -149,8 +149,8 @@ def dirty_primary_lines(porcelain, path):
     if len(entries) > PRIMARY_DIRTY_LIMIT:
         shown += f", +{len(entries) - PRIMARY_DIRTY_LIMIT} more"
     return [
-        f"  ✗ primary checkout {path} is dirty — the GitOps tick skips every run while it is, "
-        f"so nothing deploys and land.sh fails with exit 4 naming YOUR tree: {shown}"
+        f"  ✗ primary checkout {path} is dirty — homelab-checkout-sync refuses to fast-forward it "
+        f"while it is, so the checkout lags origin/master: {shown}"
     ]
 
 

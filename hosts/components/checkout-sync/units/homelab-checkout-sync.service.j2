@@ -21,10 +21,10 @@ Environment=PYTHONDONTWRITEBYTECODE=1
 # This host's journald stores notice and above (MaxLevelStore=notice).
 SyslogLevel=notice
 SyslogIdentifier=homelab-checkout-sync
-# Well under the deployer's 180s lock wait, so a slow walk cannot hold the tree from a tick.
+# Well under the 10-minute timer interval, so a slow walk cannot hold the tree from the next run.
 TimeoutStartSec=150
 # -n: a run that finds the tree lock held skips with 75 rather than waiting, and the next run
-# 10 minutes later tries again. The deployer and the tree jobs take the same lock.
+# 10 minutes later tries again. Every tree job takes the same lock.
 # Deliberately WITHOUT --no-python-downloads, like gitops-deploy.service: a missing interpreter
 # must not stop the sync, because every landing tool refuses to work from a stale checkout.
 # hosts/tests/test_host_python_invocations.py pins the exemption.
