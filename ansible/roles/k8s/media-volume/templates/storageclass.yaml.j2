@@ -5,7 +5,7 @@
 #
 # WaitForFirstConsumer is not a formality for a local volume: it makes the scheduler bind the
 # claim only once it knows which node the consuming pod lands on, so a pod that cannot run on
-# {{ inventory_hostname }} fails as Pending rather than binding first and mounting nothing.
+# {{ k8s_primary_node }} fails as Pending rather than binding first and mounting nothing.
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
 metadata:

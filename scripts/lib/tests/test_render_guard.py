@@ -11,6 +11,7 @@ import pytest
 
 import render_guard
 from render_guard import (
+    BASE_CONTEXT,
     HOST_VARS,
     HOST_VARS_IN_TREE,
     SERVICES_IN_TREE,
@@ -21,7 +22,7 @@ from render_guard import (
     service_records_at_or_none,
     service_tags_at_or_none,
 )
-from repo_paths import ANSIBLE, INVENTORY, ROLES
+from repo_paths import ALL_VARS, ANSIBLE, INVENTORY, ROLES
 from lib import yaml_fast
 from lib.git_testing import commit, init_repo
 
@@ -258,3 +259,7 @@ def test_load_yaml_raises_the_one_parse_failure_for_an_impossible_date(tmp_path)
     path.write_text("d: 2026-13-45\n")
     with pytest.raises(yaml_fast.UnparsableYaml):
         load_yaml(path)
+
+
+def test_no_base_stub_shadows_a_group_vars_value():
+    assert BASE_CONTEXT.keys() & load_yaml(ALL_VARS).keys() == set()

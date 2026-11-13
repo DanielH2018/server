@@ -27,10 +27,10 @@ spec:
     spec:
 {{ pod_shell('homelab-best-effort') }}
       # Pinned to the node media-data's local PV names (k8s/media-volume pins it to the same
-      # `inventory_hostname`), so the pin moves no pod: tdarr could run nowhere else. It is
+      # `k8s_primary_node`), so the pin moves no pod: tdarr could run nowhere else. It is
       # written here because the tdarr-prepull Job copies this pod's placement and cannot read
       # a PV's, and the renderer refuses a pre-pull for a workload that names no node.
-{{ node_affinity_required(inventory_hostname) }}
+{{ node_affinity_required(k8s_primary_node) }}
       # The file-mode half of the GPU wiring (D2) — the device plugin below handles the cgroup
       # half. Same pair as jellyfin; see that role for why the GID lives in host_vars.
       securityContext:
@@ -106,13 +106,13 @@ spec:
             # node would need an apiKey. The env value outranks the config file.
             - name: auth
               value: "false"
-            # Follows the host — so it registers as `daniel-box`
+            # The primary node's name, so it registers as `daniel-box`
             # where the seeded database was written by a node called `daniel-server`.
             # Measured after the move: `/api/v2/get-nodes` returns exactly ONE node, unpaused, so
             # the rename did not strand a second registration. Worth re-checking if node-assigned
             # work ever appears stuck, since that is where a stale ID would show up.
             - name: nodeID
-              value: "{{ inventory_hostname }}"
+              value: "{{ k8s_primary_node }}"
           volumeMounts:
             - name: tdarr-server
               mountPath: /app/server

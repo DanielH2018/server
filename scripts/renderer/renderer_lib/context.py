@@ -33,13 +33,17 @@ from lib.estate import REPO_INVENTORY, Inventory
 from lib.k8s_context import resolve_vars
 from lib.render_context import render_context
 from lib.render_guard import StrictChainableUndefined, load_yaml
-from lib.repo_paths import ANSIBLE, FILTER_PLUGINS, REPO
+from lib.repo_paths import ANSIBLE, FILTER_PLUGINS
 
 # Ansible loads a filter plugin by file path; a script reaches it through this insert.
 if str(FILTER_PLUGINS) not in _sys.path:
     _sys.path.insert(0, str(FILTER_PLUGINS))
 
 from toposort import build_k8s_dep_map, filter_by_platform, toposort_containers
+
+
+# Host_vars keys only a host component reads; each reads a name only that component defines.
+HOST_COMPONENT_VARS = frozenset({"claude_code_watch_uids"})
 
 
 def load_stubs(path: Path) -> dict:
@@ -78,10 +82,6 @@ def template_context(
     # variable whose value names an undefined one is left undefined rather than resolved to
     # STUB or None, so a template that reads it stops the render. Not `strict=True`: a built-image
     # pin reads `k8s_built_image_tags`, which `task_inputs` derives per role after this layer.
-    # `base`: a name no layer holds that `claude_code_watch_uids` reads (#7845).
-    claude = load_yaml(REPO / "hosts/components/claude-code/defaults/main.yml")
-    uid = claude["claude_code_login_uid"]
-    base = {"claude_code_login_uid": uid}
 
     def resolve(overrides: dict) -> dict:
         return render_context(
@@ -89,8 +89,9 @@ def template_context(
             host,
             overrides,
             inventory=inventory,
-            base=base,
+            base={},
             undefined_cls=StrictChainableUndefined,
+            withhold=HOST_COMPONENT_VARS,
         )
 
     first = resolve(stubs)
@@ -98,7 +99,6 @@ def template_context(
     # `containers_list` resolves against the view too.
     view = k8s_containers_list(first["containers_list"])
     ctx = resolve({**stubs, "containers_list": view})
-    ctx["inventory_hostname"] = host
     ctx["hostvars"] = inventory_hostvars(ctx, host, stubs, inventory)
     return ctx
 
