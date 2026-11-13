@@ -101,7 +101,6 @@ def _declared_values(prefix):
         ("scripts/dev/findings.py", "FINDINGS_"),
         ("scripts/dev/fact_status.py", "FACT_STATUS_"),
         ("scripts/deploy_tools/runbook_gates.py", "RUNBOOK_GATES_"),
-        ("scripts/deploy_tools/local_sweep.py", "SWEEP_"),
         ("scripts/secrets_mgmt/secret_rotation.py", "SECRET_ROTATION_"),
         ("scripts/backup/b2_drain.py", "B2_DRAIN_"),
         ("scripts/infra_map/gen_infra_map.py", "INFRA_MAP_"),
