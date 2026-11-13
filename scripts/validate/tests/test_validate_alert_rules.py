@@ -480,8 +480,8 @@ def _tree_with_a_job_service_alert(tmp_path, target_labels):
     )
     (rules_dir / "alerting-meta.yaml").write_text(yaml.safe_dump(rules))
     (tests_dir / "alerting-meta.test.yaml").write_text(yaml.safe_dump(tests))
-    part = "alerting-meta.escalation.test.yaml"
-    (tests_dir / part).write_text((alert_rules.RULE_TESTS_DIR / part).read_text())
+    for part in alert_rules.RULE_TESTS_DIR.glob("alerting-meta.*.test.yaml"):
+        (tests_dir / part.name).write_text(part.read_text())
     found = alert_rules.rendered_files()
     config = yaml_fast.safe_load(found["prometheus.yml"])
     config["scrape_configs"].append(

@@ -4,7 +4,7 @@
 # The interval is file-wide, and a 50h case at alerting-meta.test.yaml's 1m step is 3,000
 # steps, so every eval time and input series here steps by whole hours.
 # `alert_conventions.rule_test_stem` counts these cases toward alerting-meta with the main
-# file's. Each case feeds a healthy Alertmanager scrape, because AlertmanagerMetricsMissing is a
+# file's, whose zero-series case covers this file too. Each case feeds a healthy Alertmanager scrape, because AlertmanagerMetricsMissing is a
 # warning and would otherwise escalate beside the alert under test.
 #
 # The input is ALERTS itself, the series Prometheus writes for every rule's pending and firing
@@ -14,30 +14,6 @@ rule_files:
   - ../../files/rules/alerting-meta.yaml
 evaluation_interval: 1h
 tests:
-  # No input at all: the zero-series case every test file carries. AlertmanagerMetricsMissing
-  # fires through its first arm, and nothing has held long enough to escalate.
-  - interval: 1h
-    input_series: []
-    alert_rule_test:
-      - eval_time: 1h
-        alertname: AlertmanagerMetricsMissing
-        exp_alerts:
-          - exp_labels:
-              job: alertmanager
-              severity: warning
-              service: observability
-            exp_annotations:
-              summary: Prometheus has lost Alertmanager's scrape job or its delivery counter.
-              description: >-
-                Either no up{job="alertmanager"} series exists, so the alertmanager job is gone
-                from prometheus.yml, or the scrape works and
-                alertmanager_notifications_failed_total is gone, as after an upgrade that
-                renamed it. AlertmanagerNotificationsFailing cannot fire until the series is
-                back.
-      - eval_time: 1h
-        alertname: WarningUnresolved
-        exp_alerts: []
-
   # A warning that fires for 60 hours escalates once it has held 48, and not before. The
   # original name and service move to escalated_from and escalated_service, and its other
   # labels stay.
