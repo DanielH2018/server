@@ -70,9 +70,7 @@ _UNIT = r"[A-Za-z0-9@_.:-]+\.(?:service|timer|socket|path)"
 ACTION = re.compile(
     rf"none|sysctl|tmpfiles|modules-load|reboot|(?:try-restart|reload|manual):{_UNIT}"
 )
-# The directories systemd-tmpfiles reads. A file there gets the `tmpfiles` action whether or not
-# its entry names one, so a new line applies on the install that ships it, not at the next boot
-# (#8267).
+# A file here gets the `tmpfiles` action unasked, so a new line applies on install (#8267).
 TMPFILES_DIRS = ("/usr/lib/tmpfiles.d/", "/etc/tmpfiles.d/")
 # The shapes `hosts/lib/reconcile_lib/ufw.py` reads.
 UFW_ID = re.compile(r"[a-z0-9][a-z0-9-]*")
@@ -109,19 +107,15 @@ def add_activation(package: Package, directory: Path, dst: str, action: object) 
     """Record `action` for the file at `dst`; None records nothing outside tmpfiles.d.
 
     Raises:
-        RenderRefused: `action` is not one reconcile knows, or a tmpfiles.d file names one
-            other than `tmpfiles`, or another file names `tmpfiles`.
+        RenderRefused: `action` is not one reconcile knows, or `tmpfiles` is not exactly
+            the action of a tmpfiles.d file.
     """
-    if dst.startswith(TMPFILES_DIRS):
-        if action not in (None, "tmpfiles"):
-            raise RenderRefused(
-                f"{directory}: {dst} is a tmpfiles.d file, so its action is tmpfiles, "
-                f"not {action!r}"
-            )
-        action = "tmpfiles"
-    elif action == "tmpfiles":
+    tmpfiles = dst.startswith(TMPFILES_DIRS)
+    action = "tmpfiles" if tmpfiles and action is None else action
+    if (action == "tmpfiles") != tmpfiles:
         raise RenderRefused(
-            f"{directory}: {dst} activate 'tmpfiles' is for tmpfiles.d files"
+            f"{directory}: {dst} activate {action!r}: 'tmpfiles' is for tmpfiles.d files, "
+            "and a tmpfiles.d file takes no other action"
         )
     if action is None:
         return
