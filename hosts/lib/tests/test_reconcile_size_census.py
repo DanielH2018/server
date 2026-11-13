@@ -45,7 +45,10 @@ def over_ceiling(lib: Path, ceiling: int) -> str | None:
         return None
     parts = ", ".join(f"{name}={lines}" for name, lines in counted.items())
     return (
-        f"reconcile has {total} source lines, over its ceiling of {ceiling} ({parts})"
+        f"reconcile has {total} source lines, over its ceiling of {ceiling} ({parts}). "
+        "Raising the ceiling is an operator ruling (ADR-0029): in this PR the operator "
+        "rules whether to cut reconcile, to raise the ceiling in ADR-0029 with a reason, "
+        "or to switch the host plan to ansible-pull."
     )
 
 
