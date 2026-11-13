@@ -93,29 +93,27 @@ def test_the_expansion_finds_the_matrix_legs_it_must():
 
 
 def test_a_skipped_dependent_can_only_mean_the_tree_was_proven():
-    """The one case `jobs_verdict` cannot tell from the gate: `prove` succeeded with
-    `proven=false` and every dependent skipped. A check-run does not carry a job output, so the
-    reader leans on the workflow: each dependent skips only on `proven == 'true'`. The two jobs
-    that read the build's artifacts also skip when the build did not succeed, and the build's own
-    check-run then carries that verdict."""
+    """The cases `jobs_verdict` cannot tell from the gate, because a check-run does not carry a
+    job output. The reader leans on the workflow for both.
+
+    `prove` succeeded with `proven=false` and every dependent skipped: each dependent skips
+    only on `proven == 'true'`. A job that reads the build's artifacts skipped beside a build
+    that succeeded: it also skips when the build did not succeed, where the build's own
+    check-run carries that verdict, and when the build's output gave it no work, and on nothing
+    else. `test_ci_skip_proven_master.py` pins such a job's whole condition."""
     jobs = _jobs()
+    (build_id,) = [i for i, j in jobs.items() if j.get("name") == CI_BUILD_JOB]
     for job_id in _gate_job()["needs"]:
         if job_id == "prove":
             continue
         job = jobs[job_id]
-        # `host_tools_arm64` and `host_packages` also wait for `host_packages_build`; each
-        # skips when that does, or when it did not succeed.
         needs = [job["needs"]] if isinstance(job["needs"], str) else job["needs"]
         assert needs[0] == "prove", job_id
         assert set(needs[1:]) <= set(_gate_job()["needs"]), job_id
-        condition = (
-            str(job["if"])
-            .strip()
-            .removeprefix("${{")
-            .removesuffix("}}")
-            .strip()
-            .removesuffix(" && needs.host_packages_build.result == 'success'")
-        )
+        if build_id in needs:
+            continue
+        condition = str(job["if"]).strip().removeprefix("${{").removesuffix("}}")
+        condition = condition.strip()
         # The draft arm adds no skip `jobs_verdict` can see: a draft PR's head is never a
         # master commit, and the gate skips with its dependents there (#5563).
         assert condition == (
