@@ -62,7 +62,7 @@ wrong is worth more than the record of one that did not.
 | [0015](0015-d2-for-hand-authored-diagrams.md) | A hand-drawn diagram is D2 source in the repo, not Mermaid in the page | Accepted | 2026-08-24 |
 | [0016](0016-code-scanning-stays-on-default-setup.md) | Code scanning stays on default setup, and false positives are removed in code | Superseded by ADR-0024 | 2026-09-02 |
 | [0017](0017-the-tree-lock-guards-the-tree-not-the-cluster.md) | The tree lock guards the tree, and per-service locks guard the cluster | Superseded by ADR-0029 | 2026-09-11 |
-| [0018](0018-the-repository-stays-public-and-ci-stays-hosted.md) | The repository stays public, and CI stays on GitHub-hosted runners | Accepted | 2026-09-28 |
+| [0018](0018-the-repository-stays-public-and-ci-stays-hosted.md) | The repository stays public, and CI stays on GitHub-hosted runners | Superseded by ADR-0032 | 2026-09-28 |
 | [0019](0019-fact-support-stops-at-the-repo-store.md) | Fact support stops at the repo store, and the lock carries its own retirement test | Accepted | 2026-10-10 |
 | [0020](0020-flux-applies-the-cluster-from-a-promoted-artifact.md) | Flux applies the cluster from a promoted artifact | Accepted | 2026-10-12 |
 | [0021](0021-the-host-package-builder-trusts-master-plus-green-ci.md) | The host-package builder trusts master plus green CI, and checks no signature | Accepted | 2026-10-14 |
@@ -76,6 +76,7 @@ wrong is worth more than the record of one that did not.
 | [0029](0029-each-host-is-configured-by-its-own-package-not-ansible.md) | Each host is configured by its own package, and Ansible is gone | Accepted | 2026-11-12 |
 | [0030](0030-the-ansible-tree-is-renamed-for-what-it-holds.md) | The ansible/ tree is renamed for what it holds, after its installed readers accept both paths | Accepted | 2026-11-13 |
 | [0031](0031-each-kind-of-fact-has-one-stateless-detector.md) | Each kind of documented fact has one home and one stateless detector | Accepted | 2026-11-13 |
+| [0032](0032-cis-heavy-jobs-may-run-on-runner-pods.md) | CI's two heavy jobs may run on runner pods, and the repository stays public | Accepted | 2026-11-13 |
 
 ## The long-form behind a record
 
