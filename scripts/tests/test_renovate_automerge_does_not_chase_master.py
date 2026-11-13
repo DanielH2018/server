@@ -29,15 +29,15 @@ from _renovate import _PACKAGE_RULES, _REPO, _resolve_setting
 # of resolving against a path no rule was written for.
 CHASED = {
     "nginxinc/nginx-unprivileged": (
-        "ansible/roles/k8s/docs/defaults/main.yml",
+        "k8s/roles/docs/defaults/main.yml",
         "digest",
     ),
     "lscr.io/linuxserver/radarr": (
-        "ansible/roles/k8s/radarr/defaults/main.yml",
+        "k8s/roles/radarr/defaults/main.yml",
         "patch",
     ),
     "ghcr.io/headlamp-k8s/headlamp": (
-        "ansible/roles/k8s/headlamp/defaults/main.yml",
+        "k8s/roles/headlamp/defaults/main.yml",
         "minor",
     ),
 }

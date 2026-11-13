@@ -1,7 +1,7 @@
 """block-protected-bash's third arm: a read-only agent may not write through Bash (#4617).
 
 Split out of `block-protected-bash.py`, which sat near its 600-line cap
-(`ansible/tests/_ratchet.py`). `block-protected-bash.py`'s `decision` calls
+(`tests/_ratchet.py`). `block-protected-bash.py`'s `decision` calls
 `read_only_decision` before its other two arms and hands it that file's `written_paths`, so
 the redirect detector stays one function shared by three callers.
 """

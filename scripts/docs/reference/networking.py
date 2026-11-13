@@ -40,11 +40,11 @@ from docs.catalog_lib.route_facts import (
 )
 from lib.cli_help import ArgumentParser
 from lib.estate import Estate, Inventory
-from lib.ansible_inventory import K8S_HOST
+from lib.inventory_lists import K8S_HOST
 from lib.repo_paths import K8S_ROLES, K8S_SERVICES
 
 # The macro applies these to every route it renders, in this order. Read from
-# ansible/templates/ingressroute.yml.j2 rather than assumed; see _baseline_middlewares.
+# k8s/templates/ingressroute.yml.j2 rather than assumed; see _baseline_middlewares.
 _ALWAYS = "rate-limit"
 
 _EXTRA_MW_RE = re.compile(r"extra_middlewares\s*=\s*\[([^\]]*)\]")

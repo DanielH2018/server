@@ -56,7 +56,7 @@ def test_daniel_box_retires_the_old_uv_copy(box):
 
 def test_every_setup_role_reader_names_the_packaged_uv():
     readers = subprocess.run(
-        ["git", "grep", "-l", OLD_UV, "--", "ansible/roles", "scripts/backup"],
+        ["git", "grep", "-l", OLD_UV, "--", "k8s/roles", "scripts/backup"],
         capture_output=True,
         text=True,
         check=False,

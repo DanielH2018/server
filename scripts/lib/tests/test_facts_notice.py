@@ -126,7 +126,7 @@ def test_the_revision_backend_finds_this_repos_docs():
     with Tree(REPO, "HEAD") as tree:
         docs = tree.docs()
         assert len(docs) >= 75
-        assert {"CLAUDE.md", "ansible/roles/k8s/home-assistant/CLAUDE.md"} <= set(docs)
+        assert {"CLAUDE.md", "k8s/roles/home-assistant/CLAUDE.md"} <= set(docs)
         assert tree.sections("CLAUDE.md")
 
 

@@ -110,7 +110,7 @@ def refusals(
             )
         elif tag in roles:
             found.append(
-                f"{tag} leaves the bundle while ansible/roles/k8s/{tag}/ stays. Restore its "
+                f"{tag} leaves the bundle while k8s/roles/{tag}/ stays. Restore its "
                 "containers_list entry, or remove the role with it to retire the service "
                 "(docs/flux-deploy-plane.md, *Retiring a flux-owned service*)."
             )

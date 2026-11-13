@@ -1,0 +1,78 @@
+# nut-exporter — UPS variables as Prometheus series
+
+DRuggeri's nut_exporter as a NUT network client. It dials upsd on the `nut` ClusterIP, reads the
+UPS variables, and serves them as `network_ups_tools_*` on `:9199`. One Deployment, one Service,
+no volume, no route, no secret.
+
+## At a glance
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in k8s/roles/longhorn-reconcile/defaults/main.yml. -->
+- **Applied by:** Flux, through `promote`; `land.sh --tags=nut-exporter` gates the rollout
+- **Image:** `ghcr.io/druggeri/nut_exporter` (`nut_exporter_k8s_image`)
+- **Route:** none (no `templates/ingressroute.yaml.j2`)
+- **Claims:** none (no PVC)
+<!-- /generated_from -->
+
+- **Flux applies it, not Ansible** (D5.5, the first Wave A PR). Its `containers_list` entry
+  is in `cluster/services.yml`, so nothing applies it by hand, and a
+  merged change reaches the cluster when `promote` publishes and verifies the next bundle. Its
+  image-bump PRs therefore draw no `land-wait` and no `probe.py health` run.
+- **Where the task went.** Flux applies the same render, and the
+  Kustomization's `wait` replaces the rollout wait.
+  `k8s_autodeploy` no longer gates an apply, because the deployer skips the tag. It still
+  decides whether Renovate automerges the image bump.
+
+## Why it exists separately from `nut`
+
+Before this role, UPS state reached Grafana only as `hass_*` series — Prometheus scraped Home
+Assistant's `/api/prometheus`, and HA's NUT integration was the only thing talking to upsd. That
+routes a power-loss signal through a workload the UPS itself protects. These series do not.
+
+It is **not** a sidecar in the nut pod, deliberately. That pod is `privileged`, holds the UPS's
+USB device, is pinned to daniel-server for that reason, uses `Recreate`, and is the pod half of
+the emergency-shutdown chain. A sidecar would inherit all of it and would restart the shutdown
+chain on every exporter image bump. This pod holds no device, so it can schedule on either node
+and its `k8s_autodeploy` stance is `true` where `nut`'s is `false`.
+
+## It holds no credential, and that is upsd's design
+
+upsd permits reading variables anonymously; authentication gates the upsmon roles and instant
+commands, not `LIST VAR`. Confirmed on daniel-server 2026-09-10 — `upsc apc-ups@127.0.0.1`
+returns every variable with no credentials — and the nut pod's own livenessProbe already relies
+on it. So there is no `upsd.users` entry for this workload and nothing to rotate. Do not add one
+on the assumption that a scrape must authenticate.
+
+## Two things that bite
+
+**The UPS reading is on `/ups_metrics`, not `/metrics`.** `/metrics` is the exporter's own Go and
+process registry and carries no UPS variable at all, so a scrape job pointed there succeeds and
+returns nothing useful. The `nut` scrape job renders from the `metrics` item on this role's
+`containers_list` entry in `cluster/services.yml`. That item sets `path`
+accordingly and passes `ups=` in `params`. The exporter fails a scrape outright if it discovers
+several UPS devices and has not been told which, so naming it means a second UPS cannot
+silently blank the job. The same item holds the `:9199` port, which the Deployment and Service
+read back through `metrics_port('nut')`.
+
+**The probes are `tcpSocket` for two separate reasons.** Probing `/ups_metrics` would crash-loop
+this pod whenever upsd is unreachable, turning a metrics gap into a second outage — Prometheus
+already reports that as `up == 0`. Probing `/metrics` would trip
+`tests/k8s/_scrape_property_rows.py`, which refuses a kubelet httpGet on a
+metrics route below a 300s period after node-exporter's probes produced 97% of the namespace's
+Loki ingest.
+
+## Which variables
+
+`nut_exporter_k8s_variables` in `defaults/main.yml`, stated in full rather than defaulted:
+upstream's default omits `battery.runtime`, which is the one an operator reads during an outage.
+A variable this UPS does not report is simply absent from the output, not an error.
+
+`ups.status` is the one that is not a number. It renders as
+`network_ups_tools_ups_status{flag="OL"} 1`, with a forced 0 for every flag in the exporter's
+`--nut.statuses` default the UPS is not asserting — so `flag="OB"` is a real 0/1 series rather
+than one that exists only during an outage.
+
+## NetworkPolicy
+
+The pod carries `netpol-baseline: enforced`, which is what admits Prometheus to it. Its outbound
+call to upsd is admitted by the `app: nut-exporter` podSelector in
+`netpol-baseline/templates/networkpolicy-nut.yaml.j2` — a podSelector and not an ipBlock, because
+pod → ClusterIP → pod traffic keeps the caller's pod IP and never arrives as a node address.

@@ -107,9 +107,7 @@ def test_the_arm_census_is_the_hooks_that_were_merged():
 
 
 def test_accept_a_write_to_a_sops_file_asks(sandbox, monkeypatch, capsys):
-    out = dispatch(
-        "sed -i s/a/b/ ansible/vars/secrets.yml", sandbox, monkeypatch, capsys
-    )
+    out = dispatch("sed -i s/a/b/ secrets/secrets.yml", sandbox, monkeypatch, capsys)
     assert out["permissionDecision"] == "ask"
     assert out["permissionDecisionReason"].startswith("[block-protected-bash] ")
     assert "SOPS-encrypted" in out["permissionDecisionReason"]
@@ -142,12 +140,12 @@ def test_accept_a_command_naming_a_role_file_injects_its_docs(
     sandbox, monkeypatch, capsys
 ):
     out = dispatch(
-        "cat ansible/roles/k8s/home-assistant/defaults/main.yml",
+        "cat k8s/roles/home-assistant/defaults/main.yml",
         sandbox,
         monkeypatch,
         capsys,
     )
-    assert "ansible/roles/k8s/home-assistant/CLAUDE.md" in out["additionalContext"]
+    assert "k8s/roles/home-assistant/CLAUDE.md" in out["additionalContext"]
 
 
 def test_reject_a_command_naming_no_path_injects_nothing(sandbox, monkeypatch, capsys):
@@ -177,13 +175,13 @@ def test_a_deny_still_carries_the_context_arm_s_injection(sandbox, monkeypatch, 
     """A denied command still gets its docs. One
     object carries both keys; dropping the context on a deny would be a silent loss."""
     out = dispatch(
-        "ssh daniel-server 'git log -1 ansible/roles/k8s/home-assistant/defaults/main.yml'",
+        "ssh daniel-server 'git log -1 k8s/roles/home-assistant/defaults/main.yml'",
         sandbox,
         monkeypatch,
         capsys,
     )
     assert out["permissionDecision"] == "deny"
-    assert "ansible/roles/k8s/home-assistant/CLAUDE.md" in out["additionalContext"]
+    assert "k8s/roles/home-assistant/CLAUDE.md" in out["additionalContext"]
 
 
 # ── the rewrite ──────────────────────────────────────────────────────────────────────

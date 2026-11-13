@@ -64,10 +64,10 @@ artifact, and marks [ADR-0010](../../adr/0010-pull-based-gitops-over-argo-and-fl
       `origin`, and no setup-drift rule fires.
     - The two host-plane pages that rode the k8s modules still fire. A Pi container role's
       `tasks/` change pages the tasks channel once, and a broad setup range that carries
-      `ansible/vars/secrets.yml` pages the secrets alert once. D6.1's two tick tests pin
+      `secrets/secrets.yml` pages the secrets alert once. D6.1's two tick tests pin
       both. D6.5 changes no secret, so its merge tick sends no page (#4609).
 3. **The ADR is accepted.** ADR-0010's status names its successor.
-   `ansible/tests/repo/test_adr_links.py` passes, and the `mkdocs.yml` nav lists the new ADR.
+   `tests/repo/test_adr_links.py` passes, and the `mkdocs.yml` nav lists the new ADR.
 4. **The docs describe the Flux path.**
     - Root `CLAUDE.md`'s *After a PR Merges* and *When to wait* describe landing through
       `promote`.
@@ -137,13 +137,13 @@ reader that D6 does not delete.
       bumps` and passes that to `tools.emit_deploy_annotation`. `deploy_io.emit_deploy_annotation`'s
       docstring says "Only the k8s auto-deploy path and the broad arm call this". The setup
       applies are recorded by `state.record_receipt` and were never annotated.
-      `ansible/tests/deploy/test_deploy_annotations.py` pins the emitter's name and its
+      `tests/deploy/test_deploy_annotations.py` pins the emitter's name and its
       swallowed failure in `deploy_io.py`.
     - **The annotation chain is host syslog.** Two emitters write a `deploy-annotation`
       line through `logger`: `deploy_io.emit_deploy_annotation` and `deploy.sh`'s
       `deploy_lib/playbook.py:annotate`. Alloy ships host syslog to loki-homelab, and
       `scripts/renderer/template_filters/grafana_dashboards.py` adds one query to every provisioned
-      dashboard, `ansible/roles/k8s/observability/defaults/main.yml:observability_deploy_annotation_expr`,
+      dashboard, `k8s/roles/observability/defaults/main.yml:observability_deploy_annotation_expr`,
       which reads `{job="syslog"} |= "event=deploy" | logfmt`. The comment above that key
       names `deployer_lib/deploy_io.py` and "the emit_deploy_annotation comments", and
       records the reason for syslog: "No Grafana API call, so no pinned ClusterIP and no
@@ -193,7 +193,7 @@ reader that D6 does not delete.
       `deploy_config.py`.
     - Beyond `files/`: the role's `config.env` template, `templates/gitops-deploy.service.j2`
       (its timeout derives from the k8s timeouts), `defaults/main.yml`
-      (`gitops_deploy_k8s_*`), and `ansible/inventory/host_vars/daniel-box.yml`
+      (`gitops_deploy_k8s_*`), and `inventory/host_vars/daniel-box.yml`
       (`gitops_deploy_k8s_autodeploy_enabled`, `gitops_deploy_k8s_autodeploy_pilot`).
 - **The deployer installs its own code file by file.** `tasks/code.yml`'s "Install deployer
   Python files" task copies one file per loop item. The file says "A copy loop removes nothing
@@ -234,7 +234,7 @@ reader that D6 does not delete.
 - **Readers of `k8s_deferred` and `k8s_unapplied` outside the deployer's modules:**
     - monitor-bridge's `files/checks/gitops.py`, plus `files/gitops_markers.py` and
       `files/gitops_ledger.py`. Those two were generated copies that
-      `scripts/dev/gen_gitops_markers.py` wrote and a test in `ansible/tests/deploy/`
+      `scripts/dev/gen_gitops_markers.py` wrote and a test in `tests/deploy/`
       checked. #7961 deleted all three;
     - `ansible/roles/setup/deploy_ui/files/deploy_ui_reads.py` and
       `ansible/roles/setup/renovate_agent/files/agent_logic.py`;
@@ -246,19 +246,19 @@ reader that D6 does not delete.
 
 ### How the deployer routes a deploy-plane path
 
-`deploy_changes.py:_BROAD_DEPLOY_PREFIXES` lists `ansible/templates/`, `ansible/inventory/`,
+`deploy_changes.py:_BROAD_DEPLOY_PREFIXES` lists `k8s/templates/`, `inventory/`,
 `ansible/deploy.yml`, `ansible/pre_tasks/`, `ansible/tasks/`, `ansible/post_tasks/`,
 `scripts/renderer/template_filters/` and `ansible.cfg`. Measured with
 `deploy_changes.services_from_changed_paths`:
 
-- `group_vars/all.yml`, `host_vars/daniel-pi.yml`, a template under `ansible/templates/`,
+- `group_vars/all.yml`, `host_vars/daniel-pi.yml`, a template under `k8s/templates/`,
   `deploy.yml`, `tasks/k8s_batch.yml`, `template_filters/toposort.py` and `ansible.cfg` each give
   `broad=True, broad_deploy=True` and no setup role.
-- `ansible/roles/k8s/bento-pdf/templates/deployment.yaml.j2` gives `k8s={'bento-pdf'}`.
+- `k8s/roles/bento-pdf/templates/deployment.yaml.j2` gives `k8s={'bento-pdf'}`.
 - `deploy_handlers.py` hands `cs.broad_deploy` to `deploy_narrow.plan`, which plans a
   narrowed `deploy.yml` apply.
 - No setup role reads an inventory change through the tick. `narrow_setup.py` greps
-  `ansible/inventory/` only to find where a defaults key is overridden.
+  `inventory/` only to find where a defaults key is overridden.
 - A setup template changed beside an inventory key routes to its role.
   `services_from_changed_paths` on `ansible/roles/setup/initial_setup/templates/setup-drift-check.sh.j2`
   together with `group_vars/all.yml` gives `broad_setup=True, setup_roles={'initial_setup'}`,
@@ -281,9 +281,9 @@ reader that D6 does not delete.
     - `scripts/dev/k8s_autodeploy_counts.py` imports `SHARED_ROLES` and
       `k8s_autodeploy_denylist`. `scripts/docs/gen_doc_fragments.py`'s `_autodeploy_coverage`
       lists the plugin path as a source.
-    - `ansible/tests/deploy/_autodeploy.py` imports `is_leftover_dir` and
+    - `tests/deploy/_autodeploy.py` imports `is_leftover_dir` and
       `k8s_autodeploy_denylist`, and
-      `ansible/tests/deploy/test_renovate_automerge_follows_the_autodeploy_denylist.py` imports
+      `tests/deploy/test_renovate_automerge_follows_the_autodeploy_denylist.py` imports
       `_denylist` from it.
     - `deploy_cross_role.SETUP_ROLES_CALLING_FILTER_PLUGINS` routes the plugin path to
       `gitops_deploy`.
@@ -309,7 +309,7 @@ reader that D6 does not delete.
     - Its docstring says an empty list does not mean "nothing is denied". The caller,
       `land_renovate_pr.py:main`, refuses with "the deployer's denylist is empty" when the
       key is missing or empty.
-    - `ansible/inventory/host_vars/daniel-box.yml` sets `renovate_agent_enabled: true`, so
+    - `inventory/host_vars/daniel-box.yml` sets `renovate_agent_enabled: true`, so
       the lander is armed.
     - The unit `renovate-agent-land@.service.j2` runs the lander as `sys_user` through `uv
       run --no-project` from `/opt/renovate-agent/`, so only the lander's own directory is
@@ -410,8 +410,8 @@ reader that D6 does not delete.
       whose source is gone reads as drift.
 - **The push tokens.** `live_drift_push_token`, `manifest_prune_push_token` and
   `release_staleness_push_token`:
-    - `grep -c '^<name>:' ansible/vars/secrets.yml` prints 1 for each, and
-      `ansible/secret_rotation.yml` lists each.
+    - `grep -c '^<name>:' secrets/secrets.yml` prints 1 for each, and
+      `secrets/secret_rotation.yml` lists each.
     - `scripts/secrets_mgmt/secret_rotation.py:cmd_sync` adds back a `secrets.yml` key that
       the registry lacks.
     - Their consumers are uptime-kuma's `static-monitors.yaml.j2`, the k3s role's
@@ -484,9 +484,9 @@ These facts come from the D2, D4 and D5 plans, because their code does not exist
   false`, and the default deletion policy follows `prune`, so deleting their Kustomizations
   deletes nothing under either policy.
 - **No k8s role renders a CRD at `70591c307`.** `git grep -l 'kind: CustomResourceDefinition'
-  -- ansible/roles/k8s` prints nothing.
+  -- k8s/roles` prints nothing.
 - **media-volume renders a static PersistentVolume and its StorageClass.**
-  `ansible/roles/k8s/media-volume/templates/pv.yaml.j2` renders the PersistentVolume
+  `k8s/roles/media-volume/templates/pv.yaml.j2` renders the PersistentVolume
   `media-data` with `persistentVolumeReclaimPolicy: Retain` and a `claimRef` by name, and
   `storageclass.yaml.j2` renders `media-local`. The PVC comes from the role's `k8s_claims`.
   Seven roles mount the claim. C3 exempts only PVCs and Namespaces from prune.
@@ -500,7 +500,7 @@ These facts come from the D2, D4 and D5 plans, because their code does not exist
     - class 3, "Empty is read as clean", applies to a check left with nothing to inspect;
     - class 8 is "Prose asserts facts nothing re-derives".
 
-  `ansible/tests/repo/test_failure_class_detectors.py` fails until a deleted cited test
+  `tests/repo/test_failure_class_detectors.py` fails until a deleted cited test
   leaves the table.
 - **The `facts-lint-changed` hook runs `vanished-identifier`,** which fails a commit while any
   section still names an identifier the branch deleted.
@@ -518,7 +518,7 @@ These facts come from the D2, D4 and D5 plans, because their code does not exist
 - **How ADRs work.**
     - `docs/adr/index.md` says an ADR is never rewritten. A superseding ADR sets the old one's
       status to `Superseded by ADR-NNNN`.
-    - `ansible/tests/repo/test_adr_links.py` checks the `governs:` markers in both directions,
+    - `tests/repo/test_adr_links.py` checks the `governs:` markers in both directions,
       the index row, and that the nav lists every ADR.
     - The highest number at `70591c307` is 0019. G2 writes an ADR amending 0019, and D3 or H4
       amends 0003, so D6 takes the next free number when it merges.
@@ -611,7 +611,7 @@ tick applies nothing for a `_BROAD_DEPLOY_PREFIXES` path. The tick that fast-for
 still runs the old code, so D6.1 carries no such path:
 
 - **The cluster half** reaches the cluster through the renderer and `promote`, because the
-  renderer reads `ansible/inventory/` and `ansible/templates/`.
+  renderer reads `inventory/` and `k8s/templates/`.
 - **The Pi half** stays a hand deploy with `-e target=daniel-pi`, as `log_pi_changes` records
   at the baseline.
 - **The setup plane** is unchanged. No setup role reads an inventory path through the tick at
@@ -622,7 +622,7 @@ still runs the old code, so D6.1 carries no such path:
 `ChangeSet.broad_deploy` stays, because `deploy_lib/tags.py` and `land_tags.py` read it for
 the Pi. The tick fast-forwards past such a path the way it passes a docs-only one. It writes
 no ledger line, because no apply is owed on this host. A deployer test asserts that an
-`ansible/inventory/` change runs no `deploy.yml`.
+`inventory/` change runs no `deploy.yml`.
 
 ### `land.sh`'s k8s tags after D6
 
@@ -641,7 +641,7 @@ three sources fill that list, and D6 deletes the k8s half of each:
   refuses a broad range, `_narrowed` runs `deploy_tags.py narrow`, which is
   `narrow_lib/broad.py:narrow_cmd`. D6.3 narrows `changed` to the Pi and removes `narrow`.
 
-A path under `ansible/templates/`, or a renderer-read key under `ansible/inventory/`, maps to
+A path under `k8s/templates/`, or a renderer-read key under `inventory/`, maps to
 no tag in the first two sources. At `70591c307` the tick then applies `deploy.yml`, and
 `land_tags.self_applied_playbooks` adds `ansible/deploy.yml` for `cs.broad_deploy`, so the
 landing waits on the tick's receipt for it. From D6.1 the tick applies no `deploy.yml` for
@@ -682,7 +682,7 @@ nothing there. The kept arms keep their own count (*The render-diff gates after 
       `-snapshot` or `-verify` from a directory name to find its tag. C3 *Reserved names*
       makes the strip unambiguous, because no deploy tag ends in a reserved suffix.
       pihole's second instance in `cluster/pihole-deferred/` therefore counts for
-      `pihole`. An edit to one entry's `depends_on:` under `ansible/inventory/` moves only
+      `pihole`. An edit to one entry's `depends_on:` under `inventory/` moves only
       the dependent's `flux/<tag>.yaml`, and it changes only the dependent tag's footprint.
     - **`cluster-vars` counts for every substituting tag.** A substituting tag is one with a
       directory whose placeholder key set is non-empty, the set C1 calls *the one source*.
@@ -928,7 +928,7 @@ and in `renovate.json` would hide the deletion inside a rename.
 
 - D6.2a moves `is_leftover_dir` into `scripts/lib/k8s_roles.py`, so one definition remains.
 - D6.2a moves the denylist derivation (`k8s_autodeploy_denylist` and `SHARED_ROLES`) into the
-  same module, and repoints `ansible/tests/deploy/_autodeploy.py` and
+  same module, and repoints `tests/deploy/_autodeploy.py` and
   `scripts/dev/k8s_autodeploy_counts.py` at it.
 - The Renovate readers keep their meaning. `renovate.json`, `pending_logic.py` and
   `land_renovate_pr.py:DENIED_SLUG` stay as they are.
@@ -1025,7 +1025,7 @@ play has no job left, and R4 deletes it with the play.
       deferring a file. Examples are the flux role dropping `sync.yaml.j2` from
       `manifests_deferred_files`, netpol-baseline moving its observability NetworkPolicies
       back, or pihole moving instance 2's Deployment back
-      (`ansible/roles/k8s/pihole/tasks/main.yml`).
+      (`k8s/roles/pihole/tasks/main.yml`).
       Under the default policy, the `-deferred` finalizer would race `<tag>`'s adoption of the
       same objects. A deleted allow policy opens a deny window, which breaks policies-first
       ordering, and a deleted pihole Deployment is a DNS outage. Under `Orphan`, `<tag>` adopts
@@ -1115,7 +1115,7 @@ deploy-tag set.
   `Removes-Object:` trailer, so an accidental drop fails at pull-request time.
 
 D6.7's PR body records the count of handbacks, retirements and renames from D2 to D5 with
-`git log -S 'owner: flux' -- ansible/inventory/host_vars/`. If any handback in that count was
+`git log -S 'owner: flux' -- inventory/host_vars/`. If any handback in that count was
 a live rollback that the census would now refuse, the operator decides in that PR's review
 whether D6.7 merges or D6 ends with `Orphan` and the two-step retirement.
 
@@ -1389,19 +1389,19 @@ than writing a second.
 - ansible/roles/setup/k3s/files/{live_drift_check,manifest_declares}.py
 - scripts/diagnostics/probe_lib/releases{,_render,_diff,_format,_consumers,_retired}.py
   scripts/diagnostics/probe_lib/health.py           - release_expected_restarts
-  ansible/inventory/group_vars/all.yml              setup_drift_check_hosts + daniel-box
-  ansible/roles/k8s/observability/files/rules/host-checks.yaml
+  inventory/group_vars/all.yml              setup_drift_check_hosts + daniel-box
+  k8s/roles/observability/files/rules/host-checks.yaml
                                                     + daniel-box's setup-drift arm (D6.5)
   scripts/renderer/                                 deletionPolicy default for <tag> except flux;
                                                     prune marker on PersistentVolume, StorageClass;
                                                     + the drill script and its prune-drill fixture tree
 + .github/workflows/flux-deletion-drill.yml         the kind deletion drill (D6.7a);
                                                     + two break-glass cases (D6.7c)
-  ansible/roles/k8s/flux/                           + the break-glass public-key Secret and
+  k8s/roles/flux/                           + the break-glass public-key Secret and
                                                     source form (D6.7c)
   docs/break-glass.md                               item 8; + the GitHub-unreachable
                                                     scenario (D6.7c)
-  ansible/roles/k8s/observability/defaults/main.yml the annotation comment names three
+  k8s/roles/observability/defaults/main.yml the annotation comment names three
                                                     sources (D6.1); no new query (#5425)
 + docs/adr/<next free>-the-cluster-deploys-from-a-ci-rendered-artifact-through-flux.md
   docs/adr/0010-pull-based-gitops-over-argo-and-flux.md   status: Superseded by ADR-NNNN
@@ -1418,7 +1418,7 @@ Each deletion PR removes one coherent subject and states the census rows it remo
   citations in the same PR (`.claude/rules/python-layout.md`, *A check retires when its
   subject does*).
 - **Failure classes.** A deleted test cited in `docs/failure-classes.md` forces an edit to
-  that table, because `ansible/tests/repo/test_failure_class_detectors.py` fails until the
+  that table, because `tests/repo/test_failure_class_detectors.py` fails until the
   edit is made.
 - **The two-writer rule (C4).** No PR here changes ownership of a live object, so the rule has
   nothing to check. D6.3's census enforces the end state.
@@ -1797,9 +1797,9 @@ The steps merged in this order.
           replaces `return deploy_broad_k8s.apply_broad_k8s(...)`: it fires the tasks page,
           then `alert_secrets_deferred`, and returns 0;
         - delete `deploy_io.emit_deploy_annotation` and its `deploy_toolbox` field, and the
-          deployer half of `ansible/tests/deploy/test_deploy_annotations.py`. Rewrite that
+          deployer half of `tests/deploy/test_deploy_annotations.py`. Rewrite that
           module's docstring, which names `gitops_deploy.py` as an emitter, and the comment
-          above `ansible/roles/k8s/observability/defaults/main.yml:observability_deploy_annotation_expr`,
+          above `k8s/roles/observability/defaults/main.yml:observability_deploy_annotation_expr`,
           which names `deploy_io.py`. Both then name `deploy.sh` and `promote.py land-wait`
           (*Grafana's deploy markers after D6*).
     - **Add two tick tests** to
@@ -1809,7 +1809,7 @@ The steps merged in this order.
           wg-easy's, fast-forwards, sets the `tasks` slot to the origin and posts one Discord
           message naming the role. A second tick at the same origin posts nothing. The clean
           half changes the same role's `templates/` instead, and pages no tasks channel;
-        - a broad setup range, a setup role's template plus `ansible/vars/secrets.yml`, sets
+        - a broad setup range, a setup role's template plus `secrets/secrets.yml`, sets
           the `secrets` slot to the origin and posts one secrets message. The test is
           parametrized over the success exit and the failure arm, so both call sites are
           pinned. The clean half is the same range without `secrets.yml`, which posts no
@@ -1867,7 +1867,7 @@ The steps merged in this order.
           The pilot field stays unread until D6.2a deletes it with the host key that sets it;
         - the defaults `gitops_deploy_k8s_autodeploy_enabled`,
           `gitops_deploy_k8s_autodeploy_pilot` and `gitops_deploy_k8s_autodeploy_denylist`, and
-          the two `ansible/inventory/host_vars/daniel-box.yml` keys that override the first two;
+          the two `inventory/host_vars/daniel-box.yml` keys that override the first two;
         - in `gitops_deploy.py`, `K8S_AUTODEPLOY_ENABLED`, `K8S_AUTODEPLOY_ENABLED_IN_FILE`,
           `K8S_AUTODEPLOY_DENYLIST` and the fail-closed disarm;
         - `reconcile_denylist`, its callee `deploy_io.py:k8s_declarations_at`, and the
@@ -1879,7 +1879,7 @@ The steps merged in this order.
     - **Its own tick runs the old deployer, so the PR carries no deploy-plane path.** The tick
       that fast-forwards D6.1 still runs the code D6.1 replaces, which applies `deploy.yml`
       for a `_BROAD_DEPLOY_PREFIXES` path and writes a hold on failure. At `70591c307`,
-      `deploy_changes.services_from_changed_paths(['ansible/inventory/host_vars/daniel-box.yml'])`
+      `deploy_changes.services_from_changed_paths(['inventory/host_vars/daniel-box.yml'])`
       returns `broad=True, broad_deploy=True`. That is why the `daniel-box.yml` keys wait for
       D6.2a. The PR body quotes `services_from_changed_paths` over the PR's own changed paths,
       with `broad_deploy=False`.
@@ -1903,12 +1903,12 @@ The steps merged in this order.
         - retire D3.4's interim `cluster-vars` rule in `land-wait`, with its test;
         - drop the `cs.broad_deploy` term from `land_tags.self_applied_playbooks`;
         - add four landing tests in `scripts/deploy_tools/tests/`:
-            - a PR whose only path is under `ansible/templates/` reaches `land-wait`, and
+            - a PR whose only path is under `k8s/templates/` reaches `land-wait`, and
               its `source=promote` line names the changed set of a fixture pair of
               `digests.json` files;
             - a PR whose only path is in the shared `manifests` role does the same;
             - a PR whose only path is one entry's `depends_on:` under
-              `ansible/inventory/` waits on the dependent tag, whose footprint differs in
+              `inventory/` waits on the dependent tag, whose footprint differs in
               the fixture pair through its `flux/<tag>.yaml` alone;
             - a failed `digests.json` read makes `land-wait` wait on every flux-owned tag
               and say so on the verdict line. If D2.3 already pins this, the PR quotes
@@ -2101,7 +2101,7 @@ The steps merged in this order.
       2026-11-06 ruling (*D2's ownership readers after D6*).
     - Keep `land_reach.py` and its note in `land_tags.py`.
     - Add the census row: every k8s `containers_list` entry carries `owner: flux`. It goes in
-      the census tables under `ansible/tests/repo/`, with a red and a green fixture. It finds
+      the census tables under `tests/repo/`, with a red and a green fixture. It finds
       its subject by pattern, so it also names members it must find, `bento-pdf` and `flux`,
       and a floor on the count of k8s entries, the count D5 ends with
       (`.claude/rules/python-layout.md`, *A check that finds its subject by pattern names a
@@ -2112,7 +2112,7 @@ The steps merged in this order.
     - **Root `CLAUDE.md`.** Edit the `deploy.sh` exit-3 bullet of *When to wait*, because
       `deploy.sh` now refuses every k8s tag.
     - **Test.** In `scripts/deploy_tools/tests/`, a range over `gh`'s 100-file page that
-      holds an `ansible/templates/` path reaches `land-wait` with the changed set of a
+      holds an `k8s/templates/` path reaches `land-wait` with the changed set of a
       fixture pair of `digests.json` files, and ends without `needs-manual-apply`. Its red half is
       the tree before this PR, where `derive_from_diff` dies with "deploy it by hand".
       D6.1's four landing tests stay green, and the PR body quotes them.
@@ -2128,7 +2128,7 @@ The steps merged in this order.
       carries the host as `origin`, so the template's message and the Kuma tile need no
       edit. B2's setup-drift rules stay daniel-server's alone in this PR, and D6.5 adds the
       box's arm (*The setup-drift reader covers daniel-box*).
-    - **The PR names a hand apply on daniel-box.** It changes `ansible/inventory/group_vars/all.yml`
+    - **The PR names a hand apply on daniel-box.** It changes `inventory/group_vars/all.yml`
       and a test, and no file of `initial_setup`.
       `deploy_changes.services_from_changed_paths` reads that pair as `broad=True,
       broad_deploy=True` with no setup role, so the tick applies nothing on the box
@@ -2222,7 +2222,7 @@ The steps merged in this order.
       that the line differs from what was applied, and the session stops. It never runs
       `--tags k3s`. If the line names the whole role anyway, the session follows D6.5b's
       whole-role procedure.
-    - **No secrets page on the merge tick.** D6.5 leaves `ansible/vars/secrets.yml` alone,
+    - **No secrets page on the merge tick.** D6.5 leaves `secrets/secrets.yml` alone,
       because B1 already removed the three tokens. An earlier draft removed them here, which
       sent the tick through `handle_broad` and D6.1's secrets page.
     - **Until the apply,** the old units keep running against code that is still in the tree.
@@ -2298,7 +2298,7 @@ The steps merged in this order.
     - **Route every k8s role path to `cs.flux`.** The `at.plane == "k8s"` branch of
       `services_from_changed_paths` adds the role to `cs.flux` with no ownership read, and
       `deploy_inventory.service_owners` goes. D2's `cs.flux` test becomes: a path under any
-      `ansible/roles/k8s/<role>/` lands in `cs.flux` and in no other set. Its red half runs
+      `k8s/roles/<role>/` lands in `cs.flux` and in no other set. Its red half runs
       the test against a branch that adds nothing. The path then lands in no set, and the
       test fails (*D2's ownership readers after D6*).
     - Rewrite the prose that names those symbols: `deploy_cross_role.py`'s module docstring,
@@ -2306,7 +2306,7 @@ The steps merged in this order.
       that names `deploy_cross_role.K8S_ROLES_IMPORTING_SETUP_FILES`.
     - the cross-role files census (deleted by H7.53) loses its k8s table.
     - **Test.** In `scripts/deploy_tools/tests/`, a PR whose only path is under
-      `ansible/roles/k8s/bento-pdf/templates/` reaches `land-wait` with `bento-pdf` after
+      `k8s/roles/bento-pdf/templates/` reaches `land-wait` with `bento-pdf` after
       `ChangeSet.k8s` is gone. `land_tags.derive` reads no `ChangeSet`, so the `cs.flux` route
       cannot turn this test red, and the routing test covers the route. Its red half is a
       `declared` set without `bento-pdf`, where the landing names no tag. D6.1's and D6.3's
@@ -2453,9 +2453,9 @@ git grep -n -w -e deploy_k8s -e deploy_broad_k8s -e deploy_k8s_owed -e deploy_re
   -- ansible scripts .claude ':!ansible/roles/setup/gitops_deploy/tasks/code.yml' \
   | grep -v '/tests/' | grep -c .                      # 0, the observability comment included
 ./scripts/deploy.sh --tags bento-pdf; echo "exit=$?"   # exit=5, names promote
-uv run pytest ansible/tests/repo -k census             # D6.3's owner row passes
+uv run pytest tests/repo -k census             # D6.3's owner row passes
 # After D6.3, the first landing of a flux-owned tag that settles: land-wait's marker.
-uv run pytest ansible/tests/deploy/test_deploy_annotations.py   # deploy.sh and land-wait
+uv run pytest tests/deploy/test_deploy_annotations.py   # deploy.sh and land-wait
 journalctl -t deploy-annotation --since today | grep -c 'source=promote'   # 1 or more
 # After D6.4, the first settled landing of a direct role PR and of a broad PR (a template
 # or a shared role): each marker names a non-empty services= list.
@@ -2496,7 +2496,7 @@ find /var/lib/renovate-agent-land -name '*.verdict' -newer /opt/renovate-agent/l
   | xargs grep -H .
 
 # Exit 3 and 4.
-uv run pytest ansible/tests/repo/test_adr_links.py ansible/tests/repo/test_documented_paths_exist.py
+uv run pytest tests/repo/test_adr_links.py tests/repo/test_documented_paths_exist.py
 uv run mkdocs build --strict --site-dir /tmp/d6-site
 
 # Exit 5.
@@ -2532,7 +2532,7 @@ gh run view <databaseId> --log | grep -E 'case=(as-rendered|red-half|inventory-p
   channel once. Its red half is a handler without the direct `alert_deferred` call, the plan
   as first written, where the test fails. Its clean half, a `templates/` change of the same
   role, pages nothing.
-- **The secrets-page tick test (D6.1).** A broad setup range carrying `ansible/vars/secrets.yml`
+- **The secrets-page tick test (D6.1).** A broad setup range carrying `secrets/secrets.yml`
   pages the secrets alert once, on the success exit and on the failure arm. Its red half is
   a `handle_broad` tail without `alert_secrets_deferred`, where the test fails. Its clean
   half, the same range without `secrets.yml`, pages nothing.
@@ -2543,7 +2543,7 @@ gh run view <databaseId> --log | grep -E 'case=(as-rendered|red-half|inventory-p
   the cluster does not hold, and the job fails unless source-controller refuses it.
 - **The object-loss check without its exemption (D6.7b).** Its red half is a dropped
   Kustomization in the handback's shape with no trailer, which the exemption passed.
-- **The `cs.flux` routing test (D6.4).** Every `ansible/roles/k8s/<role>/` path lands in
+- **The `cs.flux` routing test (D6.4).** Every `k8s/roles/<role>/` path lands in
   `cs.flux`. Its red half is a k8s branch that adds nothing, which leaves the path in no
   set.
 - **The lander's denylist source (D6.2a).** The agreement test's red half flips a fixture
@@ -2810,16 +2810,16 @@ Each risk names the failure class from `docs/failure-classes.md` where one fits.
       without arm 1, and in `docs/flux-deploy-plane.md`, the module's new name;
     - root `CLAUDE.md`'s *After a PR Merges — Pull, Deploy, Verify* and *When to wait*;
     - the deleted tests under `ansible/roles/setup/gitops_deploy/tests/` and
-      `ansible/tests/deploy/`, arm 1's tests in `scripts/validate/tests/`, and the kept arms'
+      `tests/deploy/`, arm 1's tests in `scripts/validate/tests/`, and the kept arms'
       tests renamed with the module;
     - `scripts/deploy_tools/tests/test_reach.py`, for `Reach.touched`;
     - `test_denylist_parsers_agree.py`, whose import follows
       `declared_denylist` into `deploy_phases.py`;
     - the two tick tests in `test_gitops_deploy_main_branches.py`, the promotion half of
       D2's `cs.flux` test, and the deployer half of
-      `ansible/tests/deploy/test_deploy_annotations.py`, with its docstring;
+      `tests/deploy/test_deploy_annotations.py`, with its docstring;
     - the comment above
-      `ansible/roles/k8s/observability/defaults/main.yml:observability_deploy_annotation_expr`,
+      `k8s/roles/observability/defaults/main.yml:observability_deploy_annotation_expr`,
       which names the three sources that remain (*Grafana's deploy markers after D6*);
     - the regenerated monitor-bridge copy of `gitops_markers.py`.
 - **D6.2a:**
@@ -2859,14 +2859,14 @@ Each risk names the failure class from `docs/failure-classes.md` where one fits.
     - `monitor_bridge_healthchecks_expected`, the deadman fragments and
       `docs/healthchecks-io-deadman.md`, for the `manifest-prune-check` slug that the disarmed
       timer stops pinging;
-    - `scripts/secrets_mgmt/` tests for `CROSS_HOST_PUSH_TOKENS`, `ansible/secret_rotation.yml`
+    - `scripts/secrets_mgmt/` tests for `CROSS_HOST_PUSH_TOKENS`, `secrets/secret_rotation.yml`
       and D3's cluster file.
 - **D6.5b:**
     - the k3s role's `CLAUDE.md` *Layout*;
     - `docs/k8s-manifest-cycle-record.md`;
     - the render_records role's `CLAUDE.md`, which names `probe.py releases` as its reader;
     - `docs/failure-classes.md`;
-    - the tests in `ansible/roles/setup/k3s/tests/`, `ansible/tests/k8s/` and
+    - the tests in `ansible/roles/setup/k3s/tests/`, `tests/k8s/` and
       `scripts/diagnostics/tests/`.
 - **D6.4:** the tests in `scripts/deploy_tools/tests/` for the deleted modules,
   `test_setup_cross_role_files.py`, D2's `cs.flux` test rewritten as the routing test, and
@@ -3112,7 +3112,7 @@ listed after the findings.
   token, and D6.5 removes the four stamp fragments.
     - **Correction to the required fix:** the tick does not apply a `setup_drift_check_hosts`
       edit through `initial_setup`.
-      `deploy_changes.services_from_changed_paths(['ansible/inventory/group_vars/all.yml'])`
+      `deploy_changes.services_from_changed_paths(['inventory/group_vars/all.yml'])`
       returns `broad=True, broad_deploy=True` with no setup role at `70591c307`. D6.5a
       therefore names a hand apply of `--tags setup_drift`.
 - **D6-R1-06 (high): deleting D2's skips put flux tags back into the old paths.** Fixed by
@@ -3255,8 +3255,8 @@ round 2's choice to switch `<tag>-deferred`.
   D6.7 switches every `<tag>` except `flux`. `flux` and every `<tag>-deferred` keep `Orphan`,
   with `flux` and `flux-deferred` as named members of the narrowed renderer test.
     - Evidence for keeping `-deferred` on `Orphan`: pihole defers instance 2's Deployment
-      (`ansible/roles/k8s/pihole/tasks/main.yml`), and netpol-baseline defers its
-      observability NetworkPolicies (`ansible/roles/k8s/netpol-baseline/CLAUDE.md`). A
+      (`k8s/roles/pihole/tasks/main.yml`), and netpol-baseline defers its
+      observability NetworkPolicies (`k8s/roles/netpol-baseline/CLAUDE.md`). A
       finalizer racing `<tag>`'s adoption would cause a DNS gap or a deny window.
     - The tag rule refuses any bundle without `flux`, and the rename procedure refuses
       `flux`.
@@ -3295,7 +3295,7 @@ round 2's choice to switch `<tag>-deferred`.
   pull requests against the base render. D6.7b's fixtures include a refused commit followed
   by an unrelated one.
 - **D6-R10-06 (medium): the static media PersistentVolume was not prune-exempt.** Fixed.
-  `ansible/roles/k8s/media-volume/templates/pv.yaml.j2` renders it with `Retain`, and C3
+  `k8s/roles/media-volume/templates/pv.yaml.j2` renders it with `Retain`, and C3
   exempts only PVCs and Namespaces. Open question 12 requests the C3 amendment for
   PersistentVolumes and StorageClasses, with a fallback refusal in the tag rule. *Risks* and
   the rename procedure name the case.
@@ -3404,7 +3404,7 @@ shared push file".
 - **D6-C1-03 (medium): D6.1's own merge tick ran the pre-D6.1 deployer on a deploy-plane
   path, after D6.0's check.** Fixed by both of the finding's remedies.
     - **Confirmed.**
-      `deploy_changes.services_from_changed_paths(['ansible/inventory/host_vars/daniel-box.yml'])`
+      `deploy_changes.services_from_changed_paths(['inventory/host_vars/daniel-box.yml'])`
       returns `broad=True, broad_deploy=True` at `70591c307`.
     - The two `daniel-box.yml` keys move to D6.2a, whose tick runs D6.1's code. D6.1's PR
       body quotes `services_from_changed_paths` over its own paths with `broad_deploy=False`.
@@ -3581,7 +3581,7 @@ scope, and this round refutes none of it.
       records D2's remaining gap, a promotion that no `land-wait` follows, as a lasting
       limit. D6.3 keeps `land-wait` and its annotation, and states that `land-wait` then
       receives every k8s tag the PR touches. D6.1 rewrites the comment above
-      `ansible/roles/k8s/observability/defaults/main.yml:observability_deploy_annotation_expr`,
+      `k8s/roles/observability/defaults/main.yml:observability_deploy_annotation_expr`,
       which names the deleted `deploy_io.py` emitter.
     - **Ripple.** The Baseline gains the syslog chain, the `event=landing` stream and the
       GitHub-hosted runners. The changes also touch D6.1's and D6.3's steps, Exit 1's grep

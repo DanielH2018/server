@@ -67,7 +67,7 @@ from pathlib import Path
 
 from land_lib.detach import _VERDICT_LINE, default_log_dir, error_in, verdict_in
 from lib import yaml_fast
-from lib.ansible_inventory import LANDING_HOST, host_vars_file
+from lib.inventory_lists import LANDING_HOST, host_vars_file
 from lib.repo_paths import HOST_LIB_FILES, REPO
 
 from diagnostics.probe_lib.promote_state import (
@@ -187,7 +187,7 @@ def deploy_ui_url(host_vars: Path | None = None) -> str:
     The address is the IP, not the hostname. The unit binds `DEPLOY_UI_BIND={{ server_ip }}`
     only, and on daniel-box itself `/etc/hosts` resolves `daniel-box` to 127.0.1.1, where
     nothing listens. The IP is read rather than typed because host_vars is its one source
-    (`ansible/tests/repo/test_lan_facts_have_one_source.py`).
+    (`tests/repo/test_lan_facts_have_one_source.py`).
 
     Args:
         host_vars: the host_vars file to read; the GitOps host's when omitted.

@@ -90,9 +90,7 @@ def test_the_service_loads_no_credential_and_the_script_reads_none(package):
 def test_the_tmpfiles_file_creates_the_directory_docs_mounts_and_the_stamp_directory(
     package,
 ):
-    docs = yaml_fast.safe_load(
-        (REPO / "ansible/roles/k8s/docs/defaults/main.yml").read_text()
-    )
+    docs = yaml_fast.safe_load((REPO / "k8s/roles/docs/defaults/main.yml").read_text())
     tmpfiles = _text(package, TMPFILES)
     assert site_dir_problems(tmpfiles, docs["docs_host_site_dir"], _user()) == []
     assert "/var/lib/homelab/docs-refresh.d" in tmpfiles_paths(tmpfiles)

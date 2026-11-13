@@ -7,7 +7,7 @@ Stub values are never secrets, so a stub render needs no age key.
   sentinel `homelab_secret_stubs: true`, and nothing else. No template reads a live fact, so
   the file pins none. The file is a function of the git tree alone, so an agent, CI and the
   operator write the same bytes for one commit. It reads only the key NAMES of
-  `ansible/vars/secrets.yml`. SOPS leaves them in plaintext, so nothing is decrypted, and no
+  `secrets/secrets.yml`. SOPS leaves them in plaintext, so nothing is decrypted, and no
   value of that file reaches the output.
 - `digest DIR` prints one sha256 line per directory under `DIR/cluster/`, then a `total` line.
   R1's determinism tests write the same lines in CI with `renderer_lib/shadow.py`'s
@@ -52,7 +52,7 @@ import yaml
 
 from lib import yaml_fast
 from lib.cli_help import ArgumentParser
-from lib.repo_paths import ANSIBLE
+from lib.repo_paths import SECRETS as SECRETS_DIR
 from lib.exit_codes import SHADOW_OK, SHADOW_REFUSED
 from renderer.renderer_lib.cluster import (
     RenderError,
@@ -79,7 +79,7 @@ from renderer.template_filters.secret_stubs import (
     homelab_stub_keys,
 )
 
-SECRETS = ANSIBLE / "vars" / "secrets.yml"
+SECRETS = SECRETS_DIR / "secrets.yml"
 SENTINEL = "homelab_secret_stubs"
 
 _HEADER = (

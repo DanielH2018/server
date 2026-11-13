@@ -88,7 +88,7 @@ def test_a_changed_value_moves_only_its_own_ciphertext(sops_tree):
     assert check_tree(tree, EXPECTED, _no_base) == []
 
 
-def test_write_from_outside_ansible_encrypts_to_the_cluster_rule(sops_tree, tmp_path):
+def test_write_from_outside_secrets_encrypts_to_the_cluster_rule(sops_tree, tmp_path):
     """sops resolves `.sops.yaml` from its working directory, which `--config` overrides.
 
     The working directory holds no `.sops.yaml` above it, so an encrypt without `--config`
@@ -204,7 +204,7 @@ def test_a_manifest_encrypted_by_the_generic_rule_is_flagged(sops_tree):
     manifest = tree.manifests / "acct.number-secret.sops.yaml"
     plaintext = sops_tree.decrypt(manifest)
     manifest.write_text(
-        sops_tree.encrypt_to(plaintext, str(tree.ansible / "vars" / "x.yaml"), "yaml")
+        sops_tree.encrypt_to(plaintext, str(tree.secrets_dir / "x.yaml"), "yaml")
     )
     found = check_tree(tree, EXPECTED, _no_base)
     assert any("acct.number-secret.sops.yaml is encrypted to 1" in p for p in found)

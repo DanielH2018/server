@@ -17,7 +17,7 @@ The end is exclusive, so the scheduled run that fires at the end promotes rather
 `weekly_reboot_mute_lead_minutes` opens the mute 10 minutes before the reboot, inside every
 window, so it shortens none of them.
 
-THE INPUTS are the reboot cron's own variables in `ansible/inventory/group_vars/all.yml`, read
+THE INPUTS are the reboot cron's own variables in `inventory/group_vars/all.yml`, read
 from the checkout the way `bundle_census.published_tags` reads the inventory, so moving the
 reboot moves the window. `promote.yml`'s `schedule:` cron is a literal GitHub reads, so a test
 derives it here (`end_cron`) and fails when the two differ.

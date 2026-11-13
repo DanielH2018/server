@@ -1,6 +1,6 @@
 # Valheim modding, and the boot traps behind the server's rules
 
-`ansible/roles/k8s/valheim/CLAUDE.md` is the role doc, and it keeps the rules: plugins are
+`k8s/roles/valheim/CLAUDE.md` is the role doc, and it keeps the rules: plugins are
 baked into an image, `valheim_k8s_bepinex` is derived, and pod Ready proves nothing about
 mods. This page is the working-out — how each rule was learned, what a failing mod looks like
 in the log, and the traps the first k3s boot turned up. A session reads it when it adds or

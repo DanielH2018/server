@@ -12,7 +12,7 @@ and the swallowing case renders to output with the evidence already deleted. Nei
 to the render-then-lint validators beside this one.
 
 It is also the only validator scoped to every `.j2` in the tree. compose_templates.py covers
-the Pi's compose files, k8s_manifests.py `roles/k8s/**`, shell_templates.py `*.sh.j2` and
+the Pi's compose files, k8s_manifests.py `k8s/roles/**`, shell_templates.py `*.sh.j2` and
 unit_templates.py the systemd units — but a `${#` collision bites any template that carries
 shell, including a ConfigMap's embedded script and a compose `healthcheck.test`.
 
@@ -37,7 +37,7 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 from lib.cli_help import answer_help
-from lib.repo_paths import ANSIBLE, REPO
+from lib.repo_paths import K8S, REPO
 
 # The collision itself. Deliberately narrow: `${` on its own is ordinary Jinja-safe shell, and
 # the compose `$$`-escaping rule is validate/compose_templates.py's job.
@@ -86,16 +86,9 @@ def find_collisions(text: str) -> list[tuple[int, str]]:
     ]
 
 
-def templates(root: Path = ANSIBLE) -> list[Path]:
-    """Every Jinja template under `root`, sorted, minus the vendored collections.
-
-    `ansible/collections/` is the galaxy-installed third-party tree — gitignored, left behind
-    in the primary checkouts by the retired `ansible-galaxy collection install`, and holding
-    ~19 upstream test fixtures this repo cannot edit. Scanning it would make the hook's
-    verdict depend on whether a checkout still holds it.
-    """
-    vendored = root / "collections"
-    return sorted(p for p in root.rglob("*.j2") if not p.is_relative_to(vendored))
+def templates(root: Path = K8S) -> list[Path]:
+    """Every Jinja template under `root`, sorted."""
+    return sorted(root.rglob("*.j2"))
 
 
 def main(argv: Sequence[str] = ()) -> int:

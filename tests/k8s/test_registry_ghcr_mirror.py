@@ -1,0 +1,390 @@
+"""The registry role's ghcr.io pull-through mirror (D5 Open question 2, ruled 2026-10-16).
+
+The mirror gives a node a LAN copy of a flux-owned GHCR image, so nut can cold-start during a
+WAN outage. These properties keep it from being decorative or from breaking the push store:
+
+  * the mirror is its OWN Deployment. A registry with `REGISTRY_PROXY_REMOTEURL` refuses every
+    manifest Put and Delete, so the setting on the push store would break every image-builder
+    push and registry-gc.sh's untag DELETEs. And a mirror inside the push store's pod could be
+    collected only by scaling that pod, which the operator ruled out on #5680;
+  * it keeps the address every consumer names: the loopback hostPort on the registry node, and
+    the pinned ClusterIP through a Service that routes each port to one Deployment by name;
+  * its TTL is zero. The 168h default drops nut's image a week after its last rebuild;
+  * it binds neither the push store's port nor the baked config's debug port :5001, which the
+    two containers would otherwise both claim in the shared pod netns;
+  * its store is its own claim. Every ghcr.io image in the cluster pulls through it and none
+    expires, so on the push store's claim it would fill the volume and fail every build;
+  * its weekly prune keeps untagged revisions. The push store's `--delete-untagged` would
+    delete every digest-pinned image the mirror caches (#5541);
+  * the docker.io mirror has the same zero TTL, unrendered replica count and weekly prune
+    (#6536). A TTL counts from the fetch, so it dropped an image a pod still ran.
+
+The `registries.yaml` half is `hosts/tests/test_k3s_registries_mirror_ghcr.py`, and the
+NetworkPolicy half is in `tests/k8s/test_registry_netpol_grants_follow_the_pinned_node.py`.
+"""
+
+import functools
+import re
+
+import pytest
+
+from lib import yaml_fast
+from lib.repo_paths import REPO
+from renderer.renderer_lib import host as host_mode
+from _manifest_guards import K8S, _render, _role_context
+from _shell_render import rendered_shell_text
+
+ROLE = "registry"
+CTX = _role_context(ROLE, domain="example.com")
+
+
+GC_COMPONENT = REPO / "hosts" / "components" / "registry-gc"
+GC_JOB_DIR = "/etc/rancher/k3s/manifests/registry-jobs"
+
+
+@functools.cache
+def _box_package() -> host_mode.Package:
+    return host_mode.render_host("daniel-box")
+
+
+def _docs(template: str) -> list[dict]:
+    # A GC Job renders only in host mode, which reads the prune script from the component.
+    if template.endswith("gc-job.yaml.j2"):
+        name = template.removesuffix(".j2")
+        rendered = _box_package().files[f"{GC_JOB_DIR}/{name}"][0].decode()
+    else:
+        rendered = _render(K8S / ROLE / "templates" / template, **CTX)
+    return [d for d in yaml_fast.safe_load_all(rendered) if d]
+
+
+def _deployments() -> dict[str, dict]:
+    return {
+        d["metadata"]["name"]: d
+        for template in (
+            "deployment.yaml.j2",
+            "ghcr-mirror.yaml.j2",
+            "dockerhub-mirror.yaml.j2",
+        )
+        for d in _docs(template)
+        if d["kind"] == "Deployment"
+    }
+
+
+def _pod(deployment: dict) -> dict:
+    return deployment["spec"]["template"]["spec"]
+
+
+def _env(container: dict) -> dict[str, str]:
+    return {e["name"]: str(e["value"]) for e in container.get("env", [])}
+
+
+def _mirror(name: str = "ghcr-mirror") -> dict:
+    mirrors = [
+        c
+        for c in _pod(_deployments()[name])["containers"]
+        if "REGISTRY_PROXY_REMOTEURL" in _env(c)
+    ]
+    assert len(mirrors) == 1, (
+        f"expected exactly one container proxying in {name}, found {[c['name'] for c in mirrors]}"
+    )
+    return mirrors[0]
+
+
+def test_one_container_mirrors_ghcr_with_no_expiry():
+    env = _env(_mirror())
+    # ghcr.io itself is reached through the ghcr-resume sidecar, which the next test pins.
+    port = CTX["registry_k8s_ghcr_resume_port"]
+    assert env["REGISTRY_PROXY_REMOTEURL"] == f"http://127.0.0.1:{port}", env
+    # distribution's proxyregistry.go reads only a duration that is not > 0 as "never expire";
+    # an unset TTL is the 168h default.
+    assert env.get("REGISTRY_PROXY_TTL") in {"0", "0s"}, env
+
+
+def test_the_mirror_reaches_ghcr_through_a_loopback_resume_sidecar():
+    """distribution never resumes a cut blob, so a sidecar in its pod does it for them (#6401).
+
+    The sidecar binds the pod's loopback, so nothing outside the pod reaches an unauthenticated
+    relay to ghcr.io, and it runs the role's own script from a ConfigMap the pod mounts.
+    """
+    pod = _pod(_deployments()["ghcr-mirror"])
+    (resume,) = [c for c in pod["initContainers"] if c["name"] == "ghcr-resume"]
+    env = _env(resume)
+    assert env["LISTEN_HOST"] == "127.0.0.1", env
+    assert env["LISTEN_PORT"] == str(CTX["registry_k8s_ghcr_resume_port"]), env
+    assert env["UPSTREAM"] == "https://ghcr.io", env
+    assert "ports" not in resume, resume["ports"]
+    (mount,) = resume["volumeMounts"]
+    assert resume["command"][-1] == f"{mount['mountPath']}/ghcr_resume_proxy.py"
+    (volume,) = [v for v in pod["volumes"] if v["name"] == mount["name"]]
+    (configmap,) = [d for d in _docs("ghcr-mirror.yaml.j2") if d["kind"] == "ConfigMap"]
+    assert volume["configMap"]["name"] == configmap["metadata"]["name"]
+    script = (K8S / ROLE / "files" / "ghcr_resume_proxy.py").read_text()
+    assert configmap["data"] == {"ghcr_resume_proxy.py": script}
+
+
+def test_the_resume_sidecar_listens_before_the_mirror_starts():
+    """distribution's NewApp panics when REGISTRY_PROXY_REMOTEURL refuses a dial (#7792).
+
+    As a peer container the sidecar raced the mirror, which restarted on every rollout and failed
+    the registry health gate. A native sidecar's startupProbe holds every regular container until
+    it passes, so the probe must dial the port the mirror's remote names.
+    """
+    # fact: k8s/roles/registry/CLAUDE.md#Notable
+    pod = _pod(_deployments()["ghcr-mirror"])
+    assert "ghcr-resume" not in {c["name"] for c in pod["containers"]}
+    (resume,) = [c for c in pod["initContainers"] if c["name"] == "ghcr-resume"]
+    assert resume["restartPolicy"] == "Always", resume
+    dial = " ".join(resume["startupProbe"]["exec"]["command"])
+    port = CTX["registry_k8s_ghcr_resume_port"]
+    assert f"('127.0.0.1', {port})" in dial, dial
+
+
+def test_the_mirror_is_its_own_deployment():
+    """The operator's ruling on #5680: the mirror's GC must never scale the push store.
+
+    A mirror container inside deploy/registry's pod can only be taken offline by scaling that
+    Deployment, so the push store's pod must carry no proxy container at all.
+    """
+    deployments = _deployments()
+    (push,) = _pod(deployments["registry"])["containers"]
+    proxied = sorted(k for k in _env(push) if k.startswith("REGISTRY_PROXY_"))
+    assert not proxied, f"the push store carries {proxied}; it would refuse every push"
+    (mirror,) = [
+        c
+        for c in _pod(deployments["ghcr-mirror"])["containers"]
+        if "REGISTRY_PROXY_REMOTEURL" in _env(c)
+    ]
+    assert mirror == _mirror(), mirror["name"]
+
+
+def test_the_mirror_renders_no_replica_count():
+    """registry-gc.sh scales deploy/ghcr-mirror to zero for the prune. A rendered `replicas`
+    would give the apply, and later Flux, a claim on the field that restores the pod mid-GC."""
+    assert "replicas" not in _deployments()["ghcr-mirror"]["spec"]
+
+
+def test_the_mirror_answers_on_the_address_consumers_name():
+    """daniel-box's registries.yaml names `localhost:<port>`, so the mirror keeps the loopback
+    hostPort on the registry node. Moving either is a setup-plane change on every node."""
+    pod = _pod(_deployments()["ghcr-mirror"])
+    assert pod["nodeSelector"] == {"kubernetes.io/hostname": CTX["k8s_registry_node"]}
+    (port,) = _mirror()["ports"]
+    assert (
+        port["hostPort"]
+        == port["containerPort"]
+        == CTX["k8s_registry_ghcr_mirror_port"]
+    )
+    assert port["hostIP"] == CTX["k8s_registry_host_ip"], port
+
+
+def test_the_mirror_binds_its_own_ports():
+    env = _env(_mirror())
+    port = CTX["k8s_registry_ghcr_mirror_port"]
+    assert port != CTX["k8s_registry_port"], port
+    assert env["REGISTRY_HTTP_ADDR"].rsplit(":", 1)[1] == str(port), env
+    # :5001 is the baked config's debug address, which the push store's container holds.
+    debug = env.get("REGISTRY_HTTP_DEBUG_ADDR", ":5001").rsplit(":", 1)[1]
+    assert debug not in {"5001", str(CTX["k8s_registry_port"]), str(port)}, env
+    container_ports = {p["containerPort"] for p in _mirror()["ports"]}
+    assert container_ports == {port}, container_ports
+
+
+def test_the_mirror_stores_on_its_own_claim():
+    """Every ghcr.io image pulls through the mirror and none expires, so it gets its own volume.
+
+    On the push store's claim the cache would fill it, and the mirror's GC would have to take
+    the push store offline to collect it.
+    """
+    pod = _pod(_deployments()["ghcr-mirror"])
+    volumes = {
+        v["name"]: v["persistentVolumeClaim"]["claimName"]
+        for v in pod["volumes"]
+        if "persistentVolumeClaim" in v
+    }
+    mirror = {volumes[m["name"]] for m in _mirror().get("volumeMounts", [])}
+    assert mirror == {CTX["registry_k8s_ghcr_mirror_claim"]}, mirror
+    assert CTX["registry_k8s_claim"] not in mirror, mirror
+
+
+def test_the_dockerhub_mirror_proxies_docker_hub_with_no_expiry_or_replica_count():
+    """A TTL counts from the fetch, so any TTL drops an image a pod still runs (#6536).
+
+    The weekly GC bounds the store instead, and it scales the Deployment to zero, so a rendered
+    `replicas` would let Flux restore the pod mid-GC.
+    """
+    env = _env(_mirror("dockerhub-mirror"))
+    assert env["REGISTRY_PROXY_REMOTEURL"] == "https://registry-1.docker.io", env
+    assert env.get("REGISTRY_PROXY_TTL") in {"0", "0s"}, env
+    assert "replicas" not in _deployments()["dockerhub-mirror"]["spec"]
+
+
+def test_the_dockerhub_mirror_has_its_own_ports_address_and_claim():
+    """It answers where registries.yaml names it and shares no port or claim with the others."""
+    pod = _pod(_deployments()["dockerhub-mirror"])
+    assert pod["nodeSelector"] == {"kubernetes.io/hostname": CTX["k8s_registry_node"]}
+    mirror = _mirror("dockerhub-mirror")
+    port = CTX["k8s_registry_dockerhub_mirror_port"]
+    (bound,) = mirror["ports"]
+    assert bound["hostPort"] == bound["containerPort"] == port, bound
+    assert bound["hostIP"] == CTX["k8s_registry_host_ip"], bound
+    env = _env(mirror)
+    assert env["REGISTRY_HTTP_ADDR"] == f":{port}", env
+    debug = env["REGISTRY_HTTP_DEBUG_ADDR"]
+    assert debug.startswith("127.0.0.1:"), debug
+    taken = {
+        str(CTX[k])
+        for k in (
+            "k8s_registry_port",
+            "k8s_registry_ghcr_mirror_port",
+            "registry_k8s_ghcr_mirror_debug_port",
+            "registry_k8s_ghcr_resume_port",
+        )
+    } | {"5001"}
+    assert taken.isdisjoint({str(port), debug.rsplit(":", 1)[1]}), (port, debug)
+    claims = {
+        v["persistentVolumeClaim"]["claimName"]
+        for v in pod["volumes"]
+        if "persistentVolumeClaim" in v
+    }
+    assert claims == {CTX["registry_k8s_dockerhub_mirror_claim"]}, claims
+    declared = {c["name"] for c in CTX["k8s_claims"]}
+    assert CTX["registry_k8s_dockerhub_mirror_claim"] in declared, declared
+
+
+# Each mirror store's GC: (its Job template, the deployment it collects, its claim's key, its
+# keep-revisions key).
+_STORES = {
+    "ghcr-mirror": (
+        "ghcr-mirror-gc-job.yaml.j2",
+        "registry_k8s_ghcr_mirror_claim",
+        "registry_k8s_ghcr_mirror_keep_revisions",
+    ),
+    "dockerhub-mirror": (
+        "dockerhub-mirror-gc-job.yaml.j2",
+        "registry_k8s_dockerhub_mirror_claim",
+        "registry_k8s_dockerhub_mirror_keep_revisions",
+    ),
+}
+
+
+def _gc_jobs() -> dict[str, dict]:
+    return {
+        d["metadata"]["name"]: d
+        for template, _, _ in _STORES.values()
+        for d in _docs(template)
+        if d["kind"] == "Job"
+    }
+
+
+def test_only_the_mirror_stores_have_a_gc_job():
+    """The push store's GC is retired (D5, Wave D's registry bullet): under Flux its scale-down
+    of deploy/registry would be a second writer on a field Flux renders."""
+    templates = sorted(
+        p.name
+        for base in (K8S / ROLE, GC_COMPONENT)
+        for p in (base / "templates").glob("*gc-job.yaml.j2")
+    )
+    assert templates == [
+        "dockerhub-mirror-gc-job.yaml.j2",
+        "ghcr-mirror-gc-job.yaml.j2",
+    ]
+    assert set(_gc_jobs()) == {
+        "registry-gc-ghcr-mirror",
+        "registry-gc-dockerhub-mirror",
+    }
+
+
+def _job_claims(job: dict) -> set[str]:
+    return {
+        v["persistentVolumeClaim"]["claimName"]
+        for v in job["spec"]["template"]["spec"]["volumes"]
+        if "persistentVolumeClaim" in v
+    }
+
+
+@pytest.mark.parametrize("store", sorted(_STORES))
+def test_the_mirror_gc_job_collects_the_mirror_store_without_delete_untagged(store):
+    """A digest-pinned pull is cached as a revision with no tag, so --delete-untagged on the
+    mirror's store would delete nearly every cached image (#5541)."""
+    _, claim, keep = _STORES[store]
+    job = _gc_jobs()[f"registry-gc-{store}"]
+    assert _job_claims(job) == {CTX[claim]}, job
+    (gc,) = job["spec"]["template"]["spec"]["containers"]
+    assert gc["args"][0] == "garbage-collect", gc["args"]
+    assert "--delete-untagged" not in gc["args"], gc["args"]
+    (prune,) = job["spec"]["template"]["spec"]["initContainers"]
+    assert prune["command"] == ["sh", "/prune/ghcr-mirror-prune.sh"], prune
+    assert _env(prune)["KEEP_NEWEST"] == str(CTX[keep])
+
+
+@pytest.mark.parametrize("store", sorted(_STORES))
+def test_the_mirror_prune_reads_an_optional_keep_set_and_the_script_verbatim(store):
+    """registry-gc.sh deletes the keep set before each run, so a missing one must start the prune
+    with no file (which prunes nothing) rather than block the pod or reuse an old set."""
+    template, _, _ = _STORES[store]
+    job = _gc_jobs()[f"registry-gc-{store}"]
+    volumes = {v["name"]: v for v in job["spec"]["template"]["spec"]["volumes"]}
+    assert volumes[f"{store}-keep"]["configMap"] == {
+        "name": f"registry-gc-{store}-keep",
+        "optional": True,
+    }, volumes[f"{store}-keep"]
+    (script,) = [
+        d
+        for d in _docs(template)
+        if d["kind"] == "ConfigMap"
+        and d["metadata"]["name"]
+        == volumes[f"{store}-prune-script"]["configMap"]["name"]
+    ]
+    source = (GC_COMPONENT / "files" / "ghcr-mirror-prune.sh").read_text()
+    assert script["data"]["ghcr-mirror-prune.sh"] == source
+
+
+def test_the_service_routes_each_port_to_one_deployment_by_name():
+    """One Service fronts both Deployments, so agents keep the pinned ClusterIP.
+
+    The EndpointSlice controller leaves a pod out of a port whose NAMED targetPort it does not
+    declare. A numeric targetPort, or a name both pods declare, would send part of the push
+    traffic to the mirror pod or the reverse.
+    """
+    (service,) = _docs("service.yaml.j2")
+    assert service["spec"]["clusterIP"] == CTX["k8s_registry_cluster_ip"], service
+    selector = service["spec"]["selector"]
+    deployments = _deployments()
+    for name, deployment in deployments.items():
+        labels = deployment["spec"]["template"]["metadata"]["labels"]
+        assert selector.items() <= labels.items(), (name, selector, labels)
+    routed = {}
+    for port in service["spec"]["ports"]:
+        target = port["targetPort"]
+        assert isinstance(target, str), f"targetPort {target!r} is not a port name"
+        declaring = {
+            name: p["containerPort"]
+            for name, d in deployments.items()
+            for c in _pod(d)["containers"]
+            for p in c.get("ports", [])
+            if p.get("name") == target
+        }
+        assert len(declaring) == 1, (target, declaring)
+        ((owner, container_port),) = declaring.items()
+        assert container_port == port["port"], (target, container_port, port)
+        routed[port["port"]] = owner
+    assert routed == {
+        CTX["k8s_registry_port"]: "registry",
+        CTX["k8s_registry_ghcr_mirror_port"]: "ghcr-mirror",
+        CTX["k8s_registry_dockerhub_mirror_port"]: "dockerhub-mirror",
+    }, routed
+
+
+def test_registry_gc_applies_the_mirror_manifests_the_deploy_stages():
+    """Each mirror's Job is its own file, which the script reads at GC time (#1669)."""
+    reads = re.findall(
+        r"^(?:MIRROR|DOCKERHUB)_JOB_MANIFEST=(\S+)$",
+        rendered_shell_text("components", "registry-gc", "registry-gc.sh.j2"),
+        re.MULTILINE,
+    )
+    assert len(reads) == 2, reads
+    installed = _box_package().files
+    for read in reads:
+        assert read in installed, (
+            f"the package ships no {read}, the file the script applies"
+        )

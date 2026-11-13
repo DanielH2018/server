@@ -55,7 +55,7 @@ read `none` and `last-good` matched `prod`. The full readings are on #5222.
 
 All six exit criteria hold. The drill is criterion 4. The suites under *Verification* cover
 the rest, and at `551fbf84c` they read `5268 passed`: `scripts/renderer/tests`,
-`ansible/tests/deploy`, `scripts/dev/tests`, `scripts/deploy_tools/tests`,
+`tests/deploy`, `scripts/dev/tests`, `scripts/deploy_tools/tests`,
 `scripts/validate/tests` and the text and roles census rows.
 
 Depends on: [D2](d2-first-leaf.md), with two exceptions. PR D4.0 depends on nothing, and it
@@ -89,7 +89,7 @@ the other. The second adds an edge in the same commit as a change to the depende
    edges, plus the renderer-rule edges that *Design* lists. A `Census` row finds no
    `dependsOn:` in any role template or shared template.
 2. **Order no longer rests on list position.** `DOCUMENTED_ORDERINGS` in
-   `ansible/tests/deploy/test_k8s_toposort.py` names the three new constraints and pihole
+   `tests/deploy/test_k8s_toposort.py` names the three new constraints and pihole
    before pihole-exporter, and each pair survives that file's adversarial list. Every k8s
    entry sorts before netpol-baseline on an adversarial list. No entry is listed after
    netpol-baseline, and the scaffolder inserts a new entry ahead of it.
@@ -129,10 +129,10 @@ the other. The second adds an edge in the same commit as a change to the depende
 - **How the play orders roles.** `ansible/deploy.yml` builds the map with
   `scripts/renderer/template_filters/toposort.py:build_k8s_dep_map`, from the full `containers_list`,
   and sorts with `toposort_containers`, a stable sort. Its comment says the sort is a no-op on
-  the live inventory, which `ansible/tests/deploy/test_k8s_toposort.py` checks.
+  the live inventory, which `tests/deploy/test_k8s_toposort.py` checks.
 - **How the play batches and drains.** `ansible/deploy.yml` includes `tasks/k8s_batch.yml`
   once per slice of `containers_list | batch(k8s_rollout_batch_width)`, and
-  `ansible/inventory/group_vars/all.yml:k8s_rollout_batch_width` is 5. `k8s_batch.yml` runs
+  `inventory/group_vars/all.yml:k8s_rollout_batch_width` is 5. `k8s_batch.yml` runs
   every role in the batch, then includes `k8s/manifests` `drain.yml` once. A role's rollout
   therefore completes only at the end of its batch.
 - **Three kinds of edge.**
@@ -143,7 +143,7 @@ the other. The second adds an edge in the same commit as a change to the depende
     - An entry's own `depends_on` adds edges. traefik declares `depends_on: [crowdsec]`,
       pihole-exporter declares `[pihole]`, and janitorr declares
       `[media-volume, sonarr, radarr, jellyfin]`.
-- **What the toposort tests already pin.** In `ansible/tests/deploy/test_k8s_toposort.py`:
+- **What the toposort tests already pin.** In `tests/deploy/test_k8s_toposort.py`:
     - `test_shuffled_list_still_sorts_to_respect_every_edge` checks the traefik, authelia and
       crowdsec edges on a seeded shuffle.
     - `test_crowdsec_still_needs_the_crd_edge_exemption` checks that crowdsec still renders a
@@ -172,7 +172,7 @@ the other. The second adds an edge in the same commit as a change to the depende
     - the `toposort.py:build_k8s_dep_map` docstring, which says "Two of the three real
       ordering constraints are mechanically derivable";
     - the header comment above `containers_list` in
-      `ansible/inventory/host_vars/daniel-box.yml`, which names the traefik-CRD and
+      `inventory/host_vars/daniel-box.yml`, which names the traefik-CRD and
       authelia-middleware edges and calls list order "only the toposort's tiebreak";
     - section 2 of `.claude/skills/new-k8s-service/SKILL.md`, which says "Where in the list
       doesn't matter" and lists the two derived edges;
@@ -216,7 +216,7 @@ the other. The second adds an edge in the same commit as a change to the depende
       advertises. Neither has an edge to it. dri-device-plugin is simply listed earlier.
 - **The survey's diagram reads "netpol-baseline ─▶ traefik-crds ─▶ volume-claim ─▶
   services".** Neither `traefik-crds` nor `volume-claim` is a deploy tag at `70591c307`.
-  Claims render inside each role (`ansible/roles/k8s/manifests/CLAUDE.md`). The incident
+  Claims render inside each role (`k8s/roles/manifests/CLAUDE.md`). The incident
   record puts netpol-baseline last, and this plan follows the incident record.
 - **The deferred applies.** Three roles pass `manifests_deferred_files`:
     - pihole applies `deployment-2.yaml` only after instance 1 is serving. Both instances once
@@ -231,9 +231,9 @@ the other. The second adds an edge in the same commit as a change to the depende
   fourth caller: its `sync.yaml.j2` is a `manifests_deferred_files` entry, staged in
   `manifests_deferred_dir_name: flux-sync` (D1 *Design*). C3's list of deferred applies names
   only the first three. No tag name ends in `-deferred` at `70591c307`:
-  `grep -c 'name: .*-deferred$'` prints 0 for each file under `ansible/inventory/host_vars/`.
+  `grep -c 'name: .*-deferred$'` prints 0 for each file under `inventory/host_vars/`.
 - **netpol-baseline's probe tests its deferred policies.** In
-  `ansible/roles/k8s/netpol-baseline/tasks/main.yml`, the role applies its main manifests,
+  `k8s/roles/netpol-baseline/tasks/main.yml`, the role applies its main manifests,
   then the observability policies, then runs its probe Job. The comment on the second apply
   says it is "Applied before the probes, because the slice-3 probe tests these exact
   policies". The `prometheus` and `loki` rows of `netpol_baseline_probe_targets` name
@@ -249,10 +249,10 @@ the other. The second adds an edge in the same commit as a change to the depende
   the deploy to the PR's own files and deploys that role's tag (`docs/landing.md`).
 - **No template reads `depends_on`, and D2's census row names only `owner`.**
   `narrow_lib/containers.py` holds no `depends_on` at `70591c307`. Six role templates
-  mention `depends_on` (`grep -rln depends_on ansible/roles/*/*/templates ansible/templates`),
+  mention `depends_on` (`grep -rln depends_on k8s/roles/*/templates k8s/templates`),
   each in a YAML comment and none inside a Jinja expression. D2.1 adds the `owner` exclusion
   to `narrow_lib/containers.py` and does not name a set. D2's `Census` row in
-  `ansible/tests/repo/test_census_rows_roles.py` checks that no Jinja expression reads
+  `tests/repo/test_census_rows_roles.py` checks that no Jinja expression reads
   `owner`, with a red fixture that reads `entry.owner` (D2 *Design*). It checks no other
   field.
 - **How Flux checks a dependency**, read through `gh` from kustomize-controller v1.9.6's
@@ -321,12 +321,12 @@ the other. The second adds an edge in the same commit as a change to the depende
   of the `--concurrent` workers until it passes or times out. Every Kustomization on the
   source reconciles each revision, so an unchanged one that is unhealthy holds a worker too.
 - **Role rollout budgets differ.**
-  `ansible/roles/k8s/manifests/defaults/main.yml:manifests_rollout_timeout_default` is 600s.
+  `k8s/roles/manifests/defaults/main.yml:manifests_rollout_timeout_default` is 600s.
   Five roles pass a larger `manifests_rollout_timeout`:
     - sonarr and radarr 660s (`sonarr_k8s_rollout_timeout`, `radarr_k8s_rollout_timeout`);
     - prowlarr 780s (`prowlarr_k8s_rollout_timeout`);
     - valheim 1800s (`valheim_k8s_rollout_timeout`);
-    - tdarr 3000s (`ansible/roles/k8s/tdarr/defaults/main.yml:tdarr_k8s_rollout_timeout`).
+    - tdarr 3000s (`k8s/roles/tdarr/defaults/main.yml:tdarr_k8s_rollout_timeout`).
       tdarr's `CLAUDE.md` gives the reason: a cold pull of the 1432 MiB image took 25m37s on
       2026-10-08. A pre-pull task in its `tasks/main.yml` shortens the downtime, and the
       3000s budget stays as its backstop. tdarr has a hostname and `use_authelia: true`.
@@ -339,7 +339,7 @@ the other. The second adds an edge in the same commit as a change to the depende
   a drill commit and the `promote` run that follows it is likely, and `decide` then promotes
   a later commit (C2).
 - **Shared macros reach both planes.** bento-pdf's render reads eight shared templates under
-  `ansible/templates/`: `workload-shell.yml.j2`, `container-resources.yml.j2`,
+  `k8s/templates/`: `workload-shell.yml.j2`, `container-resources.yml.j2`,
   `security-context.yml.j2`, `pod-affinity.yml.j2`, `ingressroute.yml.j2`, `service.yml.j2`,
   `ingressroute-default.yaml.j2` and `service-default.yaml.j2`. authelia's and traefik's
   Deployments import `workload-shell.yml.j2` and `container-resources.yml.j2` too. 48 k8s
@@ -584,7 +584,7 @@ hop to every chain.
   at 5.5 hours for that reason, and at the cap `settle` writes the hold like any other
   timeout.
     - **Three limits move with the derived timeout.**
-      `ansible/tests/repo/test_promote_workflow_verify.py` holds them against each other:
+      `tests/repo/test_promote_workflow_verify.py` holds them against each other:
       `verify`'s `timeout-minutes` must exceed the derived timeout, `decide`'s in-flight wait
       (`scripts/deploy_tools/promote_lib/verify_promotion.py:IN_FLIGHT_WAIT_S`) must cover
       `verify`'s and `settle`'s `timeout-minutes`, and the `promote` job's `timeout-minutes`
@@ -708,7 +708,7 @@ Flux half after CI. Usually that costs a hold and a retry. In the policies-first
   renderer stamps `checksum/restart` only on a flux-owned tag's restart targets, so judging
   it would refuse every flip.
 - **A shared-template change exits by copy and migrate.** A change to a macro under
-  `ansible/templates/` moves the render of every role that imports it, on both planes. Arm 1
+  `k8s/templates/` moves the render of every role that imports it, on both planes. Arm 1
   refuses it whenever a flux-owned importer depends on an Ansible-owned one, and bento-pdf
   and authelia both import `workload-shell.yml.j2`. The standard exit is a split:
     1. Add the changed macro under a new name, and move the dependency's plane to it. Land
@@ -738,25 +738,25 @@ Flux half after CI. Usually that costs a hold and a retry. In the policies-first
 
 CI runs it in the `hooks` job for pull requests only, with the PR's base SHA, because a full
 sweep has no diff to judge. The step's condition must stay compatible with
-`ansible/tests/repo/test_ci_dispatch_sweeps_everything.py`, which guards the scoping
+`tests/repo/test_ci_dispatch_sweeps_everything.py`, which guards the scoping
 conditions of dispatch runs.
 
 ### Tree diff
 
 ```diff
-  ansible/roles/k8s/netpol-baseline/tasks/main.yml + drain include first (D4.0)
+  k8s/roles/netpol-baseline/tasks/main.yml + drain include first (D4.0)
   scripts/renderer/template_filters/toposort.py               + K8S_APPLIES_LAST, edges in build_k8s_dep_map
-  ansible/inventory/host_vars/daniel-box.yml       netpol-baseline comment (D4.0);
+  inventory/host_vars/daniel-box.yml       netpol-baseline comment (D4.0);
                                                    configarr, jellyfin, tdarr depends_on,
                                                    any entry after netpol-baseline moves ahead,
                                                    header comment names K8S_APPLIES_LAST (D4.1);
                                                    texbrain owner: flux (D4.5);
                                                    texbrain depends_on (D4.6 to D4.8)
   ansible/deploy.yml                               dependency-map comment (D4.1)
-  ansible/roles/k8s/configarr/tasks/main.yml       comment names the second drain
-  ansible/tests/deploy/test_k8s_toposort.py        five DOCUMENTED_ORDERINGS rows, K8S_APPLIES_LAST test,
+  k8s/roles/configarr/tasks/main.yml       comment names the second drain
+  tests/deploy/test_k8s_toposort.py        five DOCUMENTED_ORDERINGS rows, K8S_APPLIES_LAST test,
                                                    _derived_traefik_edge skips K8S_APPLIES_LAST
-  ansible/tests/repo/test_census_rows_roles.py     D2's row reads DEPLOY_MECHANICS_FIELDS (D4.1)
+  tests/repo/test_census_rows_roles.py     D2's row reads DEPLOY_MECHANICS_FIELDS (D4.1)
   scripts/deploy_tools/narrow_lib/containers.py    + DEPLOY_MECHANICS_FIELDS (owner, depends_on)
   scripts/dev/new_k8s_service.py                   append_entry inserts before K8S_APPLIES_LAST
   .claude/skills/new-k8s-service/SKILL.md          section 2 names K8S_APPLIES_LAST (D4.1)
@@ -775,7 +775,7 @@ conditions of dispatch runs.
     - Add the drain include as the first task of netpol-baseline's `tasks/main.yml`.
       Rewrite the inventory comment above netpol-baseline's entry and the role's
       `CLAUDE.md` to say that the drain keeps it off a shared drain, not its batch position.
-    - Test in `ansible/tests/deploy/`: netpol-baseline's first task includes `k8s/manifests`
+    - Test in `tests/deploy/`: netpol-baseline's first task includes `k8s/manifests`
       with `tasks_from: drain.yml`, ahead of every task that applies or reads live state.
       netpol-baseline is a named member. The red half is a fixture role whose drain comes
       after its apply.
@@ -791,7 +791,7 @@ conditions of dispatch runs.
       sits after it. If the list is clean, the step moves nothing and the PR body says so.
     - Add `DEPLOY_MECHANICS_FIELDS` to `narrow_lib/containers.py`, holding `owner` and
       `depends_on`, and have the narrowing drop every member. Widen D2's `owner` row in
-      `ansible/tests/repo/test_census_rows_roles.py` to read that set: no Jinja expression
+      `tests/repo/test_census_rows_roles.py` to read that set: no Jinja expression
       reads any member. `depends_on` is a named member the row must find in the set, and a
       template that reads `entry.depends_on` is a second red fixture beside D2's
       `entry.owner`.
@@ -843,15 +843,15 @@ conditions of dispatch runs.
           Kustomization and the applies-last tag's own `-deferred`;
         - a fixture tag named `fixture-deferred` fails the render, and a plain fixture tag
           passes.
-    - A `Census` row in `ansible/tests/repo/test_census_rows_text.py`:
-        - **Selector:** the tracked files under `ansible/roles/*/*/templates/` and
-          `ansible/templates/`. No k8s role applies a static manifest from `files/` at
+    - A `Census` row in `tests/repo/test_census_rows_text.py`:
+        - **Selector:** the tracked files under `k8s/roles/*/templates/` and
+          `k8s/templates/`. No k8s role applies a static manifest from `files/` at
           `70591c307`, so templates are the only place a hand-written edge would take effect
           outside the renderer. The row's reason says so.
         - **Out of selector, with reasons:** the vendored `gotk-components.yaml` from D1,
           whose CRD schema names `dependsOn`, and `docs/`, whose pages show examples.
-        - **Named members:** `ansible/templates/networkpolicy.yml.j2`,
-          `ansible/roles/k8s/netpol-baseline/templates/networkpolicy.yaml.j2`, and the flux
+        - **Named members:** `k8s/templates/networkpolicy.yml.j2`,
+          `k8s/roles/netpol-baseline/templates/networkpolicy.yaml.j2`, and the flux
           role's root Kustomization template from D1.
         - **Red fixture:** a role template that holds a `dependsOn:` line.
     - **Live effect.** At this point every toposort edge of a flux-owned tag names an
@@ -993,11 +993,11 @@ conditions of dispatch runs.
 uv run python scripts/renderer/homelab_render.py cluster --out /tmp/d4 \
   --role bento-pdf --role texbrain
 grep -A4 dependsOn /tmp/d4/flux/*.yaml
-uv run pytest scripts/renderer/tests ansible/tests/repo/test_census_rows_text.py
+uv run pytest scripts/renderer/tests tests/repo/test_census_rows_text.py
 
 # Exits 2 and 3, with the scaffolder and the mechanics-field census.
-uv run pytest ansible/tests/deploy scripts/dev/tests \
-  ansible/tests/repo/test_census_rows_roles.py
+uv run pytest tests/deploy scripts/dev/tests \
+  tests/repo/test_census_rows_roles.py
 
 # Exit 4, after D4.6 merges as commit E. Every commit reading uses the origin field: the
 # plain lastAppliedRevision and artifact.revision print prod@sha256:<digest>, no commit.
@@ -1215,12 +1215,12 @@ Each bound below says how long a PR can be reverted alone.
 
 ## Tests and docs that change in the same PR
 
-- D4.0: the drain test in `ansible/tests/deploy/`. The inventory comment above
+- D4.0: the drain test in `tests/deploy/`. The inventory comment above
   netpol-baseline's entry and the netpol-baseline role's `CLAUDE.md` name the drain.
 - D4.1, tests:
     - the five `DOCUMENTED_ORDERINGS` rows, the `K8S_APPLIES_LAST` test and the
-      `_derived_traefik_edge` skip in `ansible/tests/deploy/test_k8s_toposort.py`;
-    - D2's `owner` row in `ansible/tests/repo/test_census_rows_roles.py`, widened to
+      `_derived_traefik_edge` skip in `tests/deploy/test_k8s_toposort.py`;
+    - D2's `owner` row in `tests/repo/test_census_rows_roles.py`, widened to
       `DEPLOY_MECHANICS_FIELDS`, with the `entry.depends_on` red fixture;
     - the `append_entry` test in `scripts/dev/tests/`.
 - D4.1, docs and comments. Each names `K8S_APPLIES_LAST` and the new declared `depends_on`
@@ -1245,7 +1245,7 @@ Each bound below says how long a PR can be reverted alone.
 - D4.4: tests in `scripts/validate/tests/`. `docs/landing.md` says what the gate refuses, how
   to split the PR, the copy-and-migrate exit with its measured cost, the `settled` rule, and
   the handback exit.
-- D4.5: `ansible/roles/k8s/texbrain/CLAUDE.md`.
+- D4.5: `k8s/roles/texbrain/CLAUDE.md`.
 - D4.9: the promtool test beside the rule. `docs/flux-deploy-plane.md` gains the rule, the
   gap the ceiling cannot see, and the shed bound.
 

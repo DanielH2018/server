@@ -5,7 +5,7 @@ Longhorn holds every PVC in the cluster, supports **no downgrade**, and since v1
 verification, not a single version bump.
 
 The install path is Flux. The `longhorn` role vendors upstream's `deploy/longhorn.yaml` at the
-pinned version, byte for byte, under `ansible/roles/k8s/longhorn/files/upstream/`, and the
+pinned version, byte for byte, under `k8s/roles/longhorn/files/upstream/`, and the
 `longhorn` Kustomization applies it. That is the same manifest upstream's supported upgrade path
 applies for a minor bump. Everything below therefore goes through the merge of the pin — a hand-run
 `kubectl apply` would deploy the same manifest while leaving the repo as a stale source of truth.
@@ -31,7 +31,7 @@ kubeconfig: gate 2 reads the restore drill's stamp from its ConfigMap, and a Con
 ruled 2026-10-16), so `land.sh --arm-merge --await-merge` runs
 `runbook_gates.py longhorn-upgrade` before it merges a PR that changes `k3s_longhorn_version`.
 `scripts/deploy_tools/land_lib/pin_gate.py` owns the check. The pin is `k3s_longhorn_version` in
-`ansible/roles/k8s/longhorn/defaults/main.yml`. Before the gates, it refuses in three cases:
+`k8s/roles/longhorn/defaults/main.yml`. Before the gates, it refuses in three cases:
 
 - on any host but daniel-box;
 - while `DEPLOY_HOLD` reads anything but `none`, empty and missing included;
@@ -64,25 +64,25 @@ merges it outside `land.sh`, runs `land.sh --regate <pr>` for it, then clears th
 
 ## Per-hop procedure
 
-1. **Bump and refresh.** Set `k3s_longhorn_version` in `ansible/roles/k8s/longhorn/defaults/main.yml`
+1. **Bump and refresh.** Set `k3s_longhorn_version` in `k8s/roles/longhorn/defaults/main.yml`
    to the latest patch of the *next* minor. Never skip a minor. Then, in the same PR, refresh the
    vendored copy:
    ```bash
    uv run python scripts/dev/vendor_manifest.py longhorn
    ```
    The command fetches the file at the new version, writes it under
-   `ansible/roles/k8s/longhorn/files/upstream/`, rewrites the pin's `fetched_url` and `sha256`, and
+   `k8s/roles/longhorn/files/upstream/`, rewrites the pin's `fetched_url` and `sha256`, and
    prints each object the old file declared and the new one lacks. The tag renders `prune: false`,
    so an object that upstream removed stays live. Name each one in the PR body and say how it is
    removed (an **operator-only** delete).
 2. **Re-sync the StorageClass.** Diff the new version's `longhorn-storageclass` ConfigMap, which sits in
    the vendored `longhorn.yaml`, against
-   `ansible/roles/k8s/longhorn/files/patches/longhorn-storageclass.yaml`. Carry over any new
+   `k8s/roles/longhorn/files/patches/longhorn-storageclass.yaml`. Carry over any new
    parameters, and update the provenance in its header. **Never** paste `numberOfReplicas` back in —
    `default-replica-count` is the single source of truth.
-   `ansible/tests/longhorn/test_longhorn_storageclass.py` fails if the parameter reappears, and
+   `tests/longhorn/test_longhorn_storageclass.py` fails if the parameter reappears, and
    fails if the patched class differs from upstream's in anything but that parameter. Apply the same
-   diff to `ansible/roles/k8s/longhorn/templates/storageclass-nobackup.yaml.j2`.
+   diff to `k8s/roles/longhorn/templates/storageclass-nobackup.yaml.j2`.
 3. **Merge through `land.sh`.** The merge is the apply.
    On daniel-box, run the command the `land-after-merge` skill gives for this PR. `land.sh` runs
    the gates above, posts `homelab/upgrade-gates`, merges, and follows the merge until `promote`
@@ -115,7 +115,7 @@ merges it outside `land.sh`, runs `land.sh --regate <pr>` for it, then clears th
    role's defaults), so Longhorn upgrades the engines of healthy volumes by itself, three per
    node at a time. A read-only `kubectl -n longhorn-system get settings.longhorn.io
    concurrent-automatic-engine-upgrade-per-node-limit -o jsonpath='{.value}'` printed `3` on
-   2026-10-22, and `ansible/tests/longhorn/test_engine_upgrade_limit_is_positive.py` fails a
+   2026-10-22, and `tests/longhorn/test_engine_upgrade_limit_is_positive.py` fails a
    render that sets it to `0`. Wait until the previous engine image holds zero references
    before starting the next hop, because otherwise engine lag compounds across hops:
    ```bash
@@ -177,7 +177,7 @@ Check `Ready` for the actual health signal; the other conditions are advisory.
 ## Staying current afterwards
 
 Renovate tracks the pin (`renovate.json`, the annotation manager for
-`ansible/roles/k8s/longhorn/defaults/main.yml`) with `automerge: false`, in a `Longhorn (manual — …)`
+`k8s/roles/longhorn/defaults/main.yml`) with `automerge: false`, in a `Longhorn (manual — …)`
 group of its own that names the merge gate above. Land its PR through `land.sh`. A Renovate PR that jumps
 more than one minor is not directly mergeable, because Longhorn supports one minor per hop.
 Treat that PR as the signal to take the next minor through the per-hop procedure above. A PR

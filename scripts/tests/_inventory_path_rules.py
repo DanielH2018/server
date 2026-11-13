@@ -21,16 +21,15 @@ from lib.repo_paths import REPO
 
 # The `lib.repo_paths` names a test module reads the tree through, each with the segments it
 # stands for. A chain's segments start with those, so `INVENTORY / "group_vars/all.yml"` spells
-# the same path as `REPO / "ansible/inventory/group_vars/all.yml"`. `_REPO` and `REPO_ROOT` are the
+# the same path as `REPO / "inventory/group_vars/all.yml"`. `_REPO` and `REPO_ROOT` are the
 # spellings `local_repo_roots` leaves behind. A module's aliases of these are resolved per
 # module.
 _PATH_ANCHORS = {
     "REPO": (),
     "_REPO": (),
     "REPO_ROOT": (),
-    "ANSIBLE": ("ansible",),
-    "ROLES": ("ansible", "roles"),
-    "INVENTORY": ("ansible", "inventory"),
+    "K8S_ROLES": ("k8s", "roles"),
+    "INVENTORY": ("inventory",),
     "K3S_SERVER": ("hosts", "components", "k3s-server"),
     "K3S_HOST_CHECKS": ("hosts", "components", "k3s-host-checks"),
 }
@@ -77,7 +76,7 @@ def _module_file(
     """The first-party file `import <dotted>` loads from `importer`, or None.
 
     pytest prepends a test module's own directory, so that is searched first, then the role's
-    `files/` that `ansible/roles/conftest.py` adds for a test under a role's `tests/`, then
+    `files/` that `k8s/conftest.py` adds for a test under a role's `tests/`, then
     the `pythonpath` roots. A file in `sources` counts as present. Every directory searched
     is in the repo, so whatever resolves is first-party.
     """
@@ -239,7 +238,7 @@ def _local_anchors(
 ) -> dict[str, Segments]:
     """The anchors plus every name `tree` binds to a path in the repo, at any scope.
 
-    `from _helpers import ROLES as _ROLES` binds an alias, and `K3S = REPO / "hosts" /
+    `from _helpers import and `K3S = REPO / "hosts" /
     "components" / "k3s-server"` binds a name a later chain is rooted at (#4135). The bindings resolve to a fixed
     point, so a name bound through another local resolves too. A name bound to two different
     things anywhere in the module is dropped, because the walk does not know which scope a
@@ -331,7 +330,7 @@ def inline_inventory_paths(
     module's text in place of the file on disk. A chain counts only for the
     segments it spells itself, so `K3S_SERVER / "templates"` passes. Only the outermost chain is
     read, so one expression is one hit. A repo-relative STRING
-    (`"ansible/inventory/group_vars/all.yml"`) is not a chain and not a hit: the deploy
+    (`"inventory/group_vars/all.yml"`) is not a chain and not a hit: the deploy
     classifiers' tests hand those to the code under test as inputs.
     """
     tree = parse(source)
@@ -365,7 +364,7 @@ def inline_inventory_paths(
         spelled_from, segments = chain
         # A module binding its own `INVENTORY` hides every chain built from it, so the binding
         # is a hit too: the two-step build is how #4139's review found one the row passed.
-        if segments == ["ansible", "inventory"] and spelled_from < 2:
+        if segments == ["inventory"] and spelled_from < 2:
             found.append(f"{ast.unparse(node)} (import INVENTORY from lib.repo_paths)")
             continue
         found += [

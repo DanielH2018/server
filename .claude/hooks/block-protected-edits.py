@@ -18,7 +18,7 @@ Two classes, both always a mistake in this repo:
      lost at the next run. Scoped to the two generated trees and keyed off the
      `generated_from:` provenance banner a generator stamps.
 
-  2. A SOPS-encrypted file (e.g. `ansible/vars/secrets.yml`) — editing the ciphertext
+  2. A SOPS-encrypted file (e.g. `secrets/secrets.yml`) — editing the ciphertext
      corrupts it, and pasting a plaintext secret in risks committing it. You must go
      through `sops`. (`.claude/rules/secrets.md`.) Detection is CONTENT-based, not
      path-based: `host_vars/*.yml` / `group_vars/all.yml` contain the substring
@@ -26,7 +26,7 @@ Two classes, both always a mistake in this repo:
      MAC field — NOT a bare ciphertext substring, so a file that merely *mentions* the
      marker (a doc, a test, this hook) is not misclassified. The MAC is a `mac:` metadata
      line in the YAML and JSON forms, and a line opening with `sops_mac=` in the dotenv
-     form, which SOPS writes for the cluster file `ansible/vars/cluster-vars.sops.env`.
+     form, which SOPS writes for the cluster file `secrets/cluster-vars.sops.env`.
 
 Reads the hook JSON on stdin. Emits a PreToolUse "deny" decision when the target is
 one of the above; otherwise no output -> normal permission flow. The hook can only

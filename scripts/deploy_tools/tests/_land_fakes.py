@@ -32,7 +32,7 @@ MERGE_SHA = "0123456789abcdef0123456789abcdef01234567"
 # The commit `last-good` names unless a test says otherwise.
 LAST_GOOD = "1" * 40
 # Where every faked pin lives; the gate reads only the value.
-PIN_FILE = "ansible/roles/k8s/system-upgrade/defaults/main.yml"
+PIN_FILE = "k8s/roles/system-upgrade/defaults/main.yml"
 
 
 # A real directory, because the pipeline refuses a primary checkout that is not one. Made
@@ -215,7 +215,7 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
         "files,changedFiles",
         [
             {
-                "files": [{"path": "ansible/roles/k8s/sonarr/defaults/main.yml"}],
+                "files": [{"path": "k8s/roles/sonarr/defaults/main.yml"}],
                 "changedFiles": 1,
             }
         ],

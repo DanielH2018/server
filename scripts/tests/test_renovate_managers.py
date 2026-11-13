@@ -141,10 +141,10 @@ _CONTROL_PLANE_DEFAULTS = SYSTEM_UPGRADE_DEFAULTS.relative_to(REPO).as_posix()
 
 
 def test_control_plane_version_pins_are_tracked() -> None:
-    """Every `*_version:` pin in roles/k8s/system-upgrade/defaults must be matched by a customManager.
+    """Every `*_version:` pin in k8s/roles/system-upgrade/defaults must be matched by a customManager.
 
     k3s and system-upgrade-controller are pinned here, and the k8s-images manager one directory over
-    scans roles/k8s/*/defaults and matches `_image:` keys, so neither its file patterns nor the
+    scans k8s/roles/*/defaults and matches `_image:` keys, so neither its file patterns nor the
     per-image coverage test above can see these. Widening that test's glob would NOT have caught
     it — these are version vars, not image vars — which is why this is a separate guard.
 
@@ -209,20 +209,20 @@ def test_coredns_allowed_versions_skip_the_upstream_stray_tags() -> None:
 # is built from, and Renovate's built-in dockerfile manager already watches those
 # (test_every_dockerfile_is_renovate_visible asserts it sees them).
 REGISTRY_BUILT_IMAGES = {
-    "n8n_k8s_image",  # ansible/roles/k8s/n8n/templates/Dockerfile.j2
-    "n8n_k8s_runners_image",  # ansible/roles/k8s/n8n/templates/Dockerfile-runners.j2
-    "ical_proxy_k8s_image",  # ansible/roles/k8s/ical-proxy/templates/Dockerfile.j2
-    "code_server_k8s_image",  # ansible/roles/k8s/code-server/templates/Dockerfile.j2
-    "homelab_mcp_k8s_image",  # ansible/roles/k8s/homelab-mcp/templates/Dockerfile.j2
-    # ansible/roles/k8s/karakeep/templates/Dockerfile.j2 — a chown layer over the pinned uv
+    "n8n_k8s_image",  # k8s/roles/n8n/templates/Dockerfile.j2
+    "n8n_k8s_runners_image",  # k8s/roles/n8n/templates/Dockerfile-runners.j2
+    "ical_proxy_k8s_image",  # k8s/roles/ical-proxy/templates/Dockerfile.j2
+    "code_server_k8s_image",  # k8s/roles/code-server/templates/Dockerfile.j2
+    "homelab_mcp_k8s_image",  # k8s/roles/homelab-mcp/templates/Dockerfile.j2
+    # k8s/roles/karakeep/templates/Dockerfile.j2 — a chown layer over the pinned uv
     # base so the time-tagger runs as uid 1000. Its FROM is watched like the rest; the
     # pip pins the container installs at boot sit in deployment-time-tagger.yaml.j2 and have
     # their own regex manager.
     "karakeep_k8s_tagger_image",
-    "nut_k8s_image",  # ansible/roles/k8s/nut/templates/Dockerfile.j2
-    "pi_peer_backup_k8s_image",  # ansible/roles/k8s/pi-peer-backup/templates/Dockerfile.j2
-    "terraria_k8s_image",  # ansible/roles/k8s/terraria/templates/Dockerfile.j2
-    # ansible/roles/k8s/valheim/templates/Dockerfile.j2 — the BepInEx plugin DLLs. Its FROM is
+    "nut_k8s_image",  # k8s/roles/nut/templates/Dockerfile.j2
+    "pi_peer_backup_k8s_image",  # k8s/roles/pi-peer-backup/templates/Dockerfile.j2
+    "terraria_k8s_image",  # k8s/roles/terraria/templates/Dockerfile.j2
+    # k8s/roles/valheim/templates/Dockerfile.j2 — the BepInEx plugin DLLs. Its FROM is
     # watched like the rest; the MOD versions inside it are Thunderstore releases Renovate has
     # no manager for, and valheim/CLAUDE.md carries the by-hand bump procedure instead.
     "valheim_k8s_mods_image",
@@ -260,7 +260,7 @@ def test_every_k8s_role_image_is_renovate_tracked() -> None:
     # registry_k8s_image and registry_k8s_netpol_probe_image
     # (hosts/components/registry-gc/defaults/main.yml) sit outside the k8s role defaults, so a
     # role-defaults-only glob would leave them matched by no manager and by no test.
-    defaults = sorted((_REPO / "ansible/roles/k8s").glob("*/defaults/main.yml"))
+    defaults = sorted((_REPO / "k8s/roles").glob("*/defaults/main.yml"))
     assert defaults, "no k8s role defaults found"
     defaults.append(_REPO / "hosts/components/registry-gc/defaults/main.yml")
     defaults.append(ALL_VARS)
@@ -321,7 +321,7 @@ def test_disabling_currentvalue_rule_scoped_to_its_files() -> None:
     # scoped to the compose plane — this is precisely what the un-scoped rule got wrong.
     assert (
         _is_disabled_by_packagerule(
-            "latest", "ansible/roles/k8s/littlelink/defaults/main.yml", fake_rules
+            "latest", "k8s/roles/littlelink/defaults/main.yml", fake_rules
         )
         is None
     )
@@ -350,7 +350,7 @@ IMAGE_LITERAL_ALLOWLIST: frozenset[str] = frozenset({"rancher/k3s-upgrade"})
 def test_no_literal_image_lines_in_k8s_templates() -> None:
     """No k8s deployment template hard-codes an `image:` ref outside a Jinja variable."""
     literal_re = re.compile(r'^\s*image:\s*(?!["\']?\{\{)(?P<ref>\S.*)$')
-    templates = sorted((_REPO / "ansible/roles/k8s").glob("*/templates/*.j2"))
+    templates = sorted((_REPO / "k8s/roles").glob("*/templates/*.j2"))
     assert templates, "no k8s templates found"
     offenders = []
     for f in templates:
@@ -453,7 +453,7 @@ def test_every_k8s_image_file_gets_pin_digests_from_a_package_rule(
         _file_pattern_to_regex(p) for p in _k8s_image_manager()["managerFilePatterns"]
     ]
     files = [f for f in tracked if any(p.search(f) for p in patterns)]
-    assert "ansible/roles/k8s/loki-homelab/defaults/main.yml" in files, (
+    assert "k8s/roles/loki-homelab/defaults/main.yml" in files, (
         "the k8s-images manager no longer scans a known role's defaults; this census is empty"
     )
     uncovered = [f for f in files if _pin_digest_rule_for(f) is None]

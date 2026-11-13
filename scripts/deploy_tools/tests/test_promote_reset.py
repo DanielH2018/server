@@ -54,7 +54,7 @@ def test_the_reset_moves_prod_under_a_settled_hold(world):
     with `prod` on `last-good` it moves nothing. The settled stateful hold is the one that
     moves `prod`. That the reset ignores the reboot window is a property of the workflow:
     its jobs need none of the jobs that read the window
-    (`ansible/tests/repo/test_promote_workflow_schedule.py`).
+    (`tests/repo/test_promote_workflow_schedule.py`).
     """
     c1, t = _verified(world)
     world.run.hold = f"{t} stateful=bento-pdf"

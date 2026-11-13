@@ -18,7 +18,7 @@ import sys as _sys
 from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
-from lib.ansible_inventory import host_names
+from lib.inventory_lists import host_names
 from lib.git import git
 
 from .atoms import Ambiguous, backrefs, hash_atom
@@ -59,7 +59,7 @@ _FENCE_MARK = re.compile(r"```")
 
 _DATE_CLAIM = re.compile(r"\bverified\b[^.\n]{0,40}\b\d{4}-\d{2}-\d{2}\b", re.I)
 
-INVENTORY_REL = "ansible/inventory/host_vars"
+INVENTORY_REL = "inventory/host_vars"
 RETIRED_LOCK_REL = "docs/facts.lock"
 
 

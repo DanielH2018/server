@@ -18,11 +18,11 @@ support only in one of these five shapes:
 
 ```text
 # a repo path; a directory keeps its trailing slash
-ansible/roles/k8s/traefik/
+k8s/roles/traefik/
 # a Python symbol
 scripts/lib/kubectl.py:kubectl
 # a YAML key
-ansible/roles/k8s/traefik/defaults/main.yml:traefik_k8s_https_port
+k8s/roles/traefik/defaults/main.yml:traefik_k8s_https_port
 # a test node
 scripts/lib/tests/test_kubectl.py::test_asking_for_staging_against_a_prod_kubectl_is_flagged
 # a DECIDED: marker, cited by text prefix
@@ -33,7 +33,7 @@ A test node must carry `# fact: <doc>#<heading>` in its body, or the lint warns 
 support points one way. The examples are fenced because the lint reads every `CLAUDE.md`:
 unfenced, each one would be support for this section rather than an illustration of the
 form. The fence hides them from this lint only:
-`ansible/tests/repo/test_documented_paths_exist.py::test_every_cited_test_exists` reads
+`tests/repo/test_documented_paths_exist.py::test_every_cited_test_exists` reads
 every line of every doc, fenced or not, so the test node in the example names a real test,
 and renaming that test fails the guard here.
 
@@ -58,7 +58,7 @@ The notice compares cited atoms only, so a sentence that cites nothing can go st
 row to show it. Some lint rules therefore read the prose itself.
 
 - `retired-host` (error) flags a host-shaped word that names no file in
-  `ansible/inventory/host_vars/`. The rule derives the host prefix from the inventory, never
+  `inventory/host_vars/`. The rule derives the host prefix from the inventory, never
   from a list. A word inside a path or a longer name, such as `/srv/artifacts/daniel-box-claude`
   or the domain `daniel-hunter.com`, is not a host mention.
 - `version-as-fact` (warning) flags a backticked `image:tag` span whose image the tree pins.
@@ -129,7 +129,7 @@ continuation lines and nested bullets with it; a history paragraph ends at the n
 `docs/adr/0023-fact-support-is-a-diff-notice.md` records why the notice replaced the stored
 hashes and their blocking test. A moved atom gets a notice and never blocks a merge. `lint`
 still blocks, through two checks.
-`ansible/tests/repo/test_every_section_lints_clean.py` fails CI on any error rule in any
+`tests/repo/test_every_section_lints_clean.py` fails CI on any error rule in any
 section, except `vanished-identifier`, which needs a range. The `facts-lint-changed` prek hook
 lints the sections the branch edits, and runs `vanished-identifier` over every section. It
 fires on a commit that touches a `CLAUDE.md` or any non-Markdown file other than the paths the

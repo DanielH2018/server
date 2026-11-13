@@ -275,7 +275,7 @@ def stock_uv_cache(cases, clone: Path, kit: Path, uv: str, run=run_logged) -> No
     """
     found = re.search(
         r'^host_python_version: "(.*)"$',
-        (clone / "ansible/inventory/group_vars/all.yml").read_text(),
+        (clone / "inventory/group_vars/all.yml").read_text(),
         re.MULTILINE,
     )
     expect(

@@ -1,7 +1,7 @@
 """Censuses of the pytest-only modules: the render-and-path shared-helper rules, one row each.
 
 A test module renders Jinja and finds the repo root through the shared helpers, never by hand:
-its Jinja environment comes from `lib.ansible_jinja_env`, the repo root from `lib.repo_paths`,
+its Jinja environment comes from `lib.guard_jinja_env`, the repo root from `lib.repo_paths`,
 and a shell template's text from `_shell_render`. Each rule was a test in
 `test_tests_share_render_and_path_helpers.py` until #3430. The detectors are in
 `_render_helper_rules.py`, and the census is `_test_module_rules.pytest_only_modules`, shared
@@ -23,7 +23,7 @@ from _test_module_rules import MODULE_FLOOR, pytest_only_modules
 from lib.repo_paths import REPO
 
 # The sibling module the sibling-import red subject reads, at the path it resolves to.
-_SIBLINGS = {REPO / "ansible/tests/x/_drill.py": 'HOSTS = REPO / "hosts"\n'}
+_SIBLINGS = {REPO / "tests/x/_drill.py": 'HOSTS = REPO / "hosts"\n'}
 
 ROWS = (
     Census(
@@ -31,7 +31,7 @@ ROWS = (
         reason=(
             "A bare `jinja2.Environment()` has none of Ansible's whitespace flags or filters, "
             "so a `{% for %}` leaves a blank line per iteration and `| bool` fails or means "
-            "Python's `bool()`. Use `lib.ansible_jinja_env.register_ansible_filters(make_env())` "
+            "Python's `bool()`. Use `lib.guard_jinja_env.register_ansible_filters(make_env())` "
             "(pass `make_env` `undefined_cls=` for a strict render) or `_jinja_env.jinja_env` for a "
             "structure-valued expression. `liquid.Environment` is another language."
         ),
@@ -47,7 +47,7 @@ ROWS = (
         green=(
             Subject(
                 "a.py",
-                "from lib.ansible_jinja_env import make_env, register_ansible_filters\n"
+                "from lib.guard_jinja_env import make_env, register_ansible_filters\n"
                 "register_ansible_filters(make_env())\n",
             ),
             Subject("b.py", "import liquid\nliquid.Environment()\n"),
@@ -57,20 +57,20 @@ ROWS = (
         must_find=frozenset(
             {
                 ".claude/hooks/tests/test_hook_scripts_executable.py",
-                "ansible/roles/k8s/monitor-bridge/tests/test_check_ha.py",
-                "ansible/tests/k8s/_manifest_guards.py",
-                "ansible/tests/longhorn/_restore_drill.py",
-                "ansible/tests/longhorn/test_longhorn_reap_guard.py",
-                "ansible/tests/staging/test_staging_network.py",
+                "k8s/roles/monitor-bridge/tests/test_check_ha.py",
+                "tests/k8s/_manifest_guards.py",
+                "tests/longhorn/_restore_drill.py",
+                "tests/longhorn/test_longhorn_reap_guard.py",
+                "tests/staging/test_staging_network.py",
                 "scripts/docs/tests/test_mkdocs_repo_links.py",
             }
         ),
         allow={
-            "ansible/tests/_jinja_env.py": (
+            "tests/_jinja_env.py": (
                 "the sanctioned expression helper itself: `jinja_env` is the "
                 "NativeEnvironment every other test borrows"
             ),
-            "ansible/roles/k8s/home-assistant/tests/jinja_harness.py": (
+            "k8s/roles/home-assistant/tests/jinja_harness.py": (
                 "renders Home Assistant's Jinja, not Ansible's; Ansible's filters would be "
                 "wrong there"
             ),
@@ -126,7 +126,7 @@ ROWS = (
             "`Path(__file__)` arithmetic "
             "evaluated at the module (#4135). A chain counts only for the segments it spells "
             'itself, so `K3S_SERVER / "templates"` passes. A module binding its own `INVENTORY` is a '
-            'hit too. A repo-relative string such as `"ansible/inventory/group_vars/all.yml"` '
+            'hit too. A repo-relative string such as `"inventory/group_vars/all.yml"` '
             "is not a chain, which is how the deploy classifiers' tests pass those as inputs. "
             "A name imported from a first-party module takes that module's binding "
             "(`from _restore_drill import K3S`), and an imported module's `m.__file__` is "
@@ -135,9 +135,9 @@ ROWS = (
         files=pytest_only_modules,
         offence=lambda s: inline_inventory_paths(s.text, REPO / s.rel, _SIBLINGS),
         red=(
-            Subject("a.py", 'REPO / "ansible/inventory/group_vars/all.yml"\n'),
-            Subject("b.py", 'ANSIBLE / "inventory" / "group_vars" / "all.yml"\n'),
-            Subject("c.py", 'Path(REPO) / "ansible/inventory/host_vars" / name\n'),
+            Subject("a.py", 'REPO / "inventory/group_vars/all.yml"\n'),
+            Subject("b.py", 'INVENTORY / "group_vars" / "all.yml"\n'),
+            Subject("c.py", 'Path(REPO) / "inventory/host_vars" / name\n'),
             Subject(
                 "d.py", '_REPO / "hosts/components" / "k3s-server/defaults/main.yml"\n'
             ),
@@ -146,7 +146,7 @@ ROWS = (
                 'REPO / "hosts" / "components" / "k3s-server" / "defaults" / "main.yml"\n',
             ),
             # A local INVENTORY shadowing the repo_paths one, and a chain built from it.
-            Subject("f.py", 'INVENTORY = ANSIBLE / "inventory"\n'),
+            Subject("f.py", 'INVENTORY = REPO / "inventory"\n'),
             Subject("g.py", 'INVENTORY / "group_vars" / "all.yml"\n'),
             # The k3s component directories and files/, however the chain is rooted (#4133).
             Subject("h.py", 'REPO / "hosts" / "components" / "k3s-host-checks"\n'),
@@ -154,7 +154,8 @@ ROWS = (
                 "i.py", 'REPO / "hosts/components/k3s-host-checks/files" / "x.py"\n'
             ),
             Subject(
-                "j.py", 'v.ANSIBLE.parent / "hosts/components/k3s-server" / "units"\n'
+                "j.py",
+                'v.K8S_ROLES.parent.parent / "hosts/components/k3s-server" / "units"\n',
             ),
             # A path built in two steps (#4135). The first step of `l.py` is a hit on its
             # own; `k.py`'s owns nothing, so only resolving HOSTS makes it red.
@@ -169,21 +170,21 @@ ROWS = (
             ),
             # A root outside the anchor set, evaluated from the module's own location.
             Subject(
-                "ansible/roles/k8s/x/tests/test_y.py",
+                "k8s/roles/x/tests/test_y.py",
                 "ROLE = Path(__file__).resolve().parents[1]\n"
                 'ROLE.parents[2] / "inventory" / "host_vars" / "daniel-box.yml"\n',
             ),
             # A root bound in a sibling module, which owns nothing until the import resolves.
             Subject(
-                "ansible/tests/x/test_y.py",
+                "tests/x/test_y.py",
                 "from _drill import HOSTS\n"
                 'HOSTS / "components" / "k3s-server" / "defaults" / "main.yml"\n',
             ),
             # A root computed from another module's file: monitor-bridge's `files/check.py`.
             Subject(
-                "ansible/roles/k8s/monitor-bridge/tests/test_y.py",
+                "k8s/roles/monitor-bridge/tests/test_y.py",
                 "import check\n"
-                "Path(check.__file__).resolve().parents[5]"
+                "Path(check.__file__).resolve().parents[4]"
                 ' / "hosts/components/k3s-server" / "defaults" / "main.yml"\n',
             ),
         ),
@@ -191,9 +192,9 @@ ROWS = (
             Subject(
                 "a.py", "from lib.repo_paths import ALL_VARS\nALL_VARS.read_text()\n"
             ),
-            Subject("b.py", 'classify(["ansible/inventory/group_vars/all.yml"])\n'),
+            Subject("b.py", 'classify(["inventory/group_vars/all.yml"])\n'),
             Subject("c.py", 'tmp_path / "inventory" / "group_vars" / "all.yml"\n'),
-            Subject("d.py", 'REPO / "ansible" / "templates"\n'),
+            Subject("d.py", 'REPO / "k8s" / "templates"\n'),
             Subject("e.py", 'K3S_SERVER / "templates" / "config.yaml.j2"\n'),
             # A local alias of a constant spells nothing past it.
             Subject("f.py", 'K3S = K3S_HOST_CHECKS\nK3S / "templates"\n'),
@@ -207,11 +208,11 @@ ROWS = (
         # #4002, #4133 and #4135 converted, are in the census the row reads.
         must_find=frozenset(
             {
-                "ansible/tests/deploy/test_tree_lock_single_definition.py",
+                "tests/deploy/test_tree_lock_single_definition.py",
                 "hosts/tests/test_host_python_invocations.py",
                 "evals/tests/test_eval_cases.py",
                 "hosts/tests/test_claude_agent_ssh_login.py",
-                "ansible/tests/k8s/_manifest_guards.py",
+                "tests/k8s/_manifest_guards.py",
             }
         ),
         allow={

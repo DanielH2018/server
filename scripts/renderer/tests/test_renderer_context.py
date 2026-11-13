@@ -7,7 +7,7 @@ import jinja2
 import pytest
 import yaml
 
-from lib.ansible_jinja_env import template_env
+from lib.guard_jinja_env import template_env
 from lib.estate import Inventory
 from lib.render_guard import StrictChainableUndefined, host_files, host_layer, load_yaml
 from lib.repo_paths import HOST_VARS, K8S_ROLES, K8S_SERVICES

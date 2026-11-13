@@ -103,7 +103,7 @@ Every check pages through Alertmanager, and Uptime Kuma is retired.
   under a size cap, and its tests shrink with it.
 - **An alert that has a runbook links it.** An alert whose description cites a `docs/` page
   also sets `runbook_url` to that page on the docs site, and
-  `ansible/roles/k8s/observability/files/alertmanager/homelab.tmpl` prints it as the
+  `k8s/roles/observability/files/alertmanager/homelab.tmpl` prints it as the
   notification's `Runbook:` line, so a reader on a phone can open it.
 - **To reverse,** write a superseding ADR. A Phase A batch reverts by its two PRs while its
   token PR has not landed. Phase C reverts as the M6 plan's *Rollback* section orders.

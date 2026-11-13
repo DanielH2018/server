@@ -9,7 +9,7 @@ The file rules:
 - The file lists come from `resolved_manifest_files`, or from the role's own
   `manifests_files` and `manifests_secret_files` where it sets them.
 - A basename the role ships no template for renders from the shared default in
-  `ansible/templates/`, `service.yaml` and `ingressroute.yaml`.
+  `k8s/templates/`, `service.yaml` and `ingressroute.yaml`.
 - Each `k8s_claims` entry renders `claim-default.yaml.j2` to `claim-<name>.yaml`.
 - A prune-armed role renders every one of those through `role-labelled.yaml.j2`, which stamps
   `homelab/role` on each document.
@@ -26,7 +26,7 @@ Service carries beside it.
 
 A role's vendored files are no template, and `attach_vendored` adds them to `DIR/cluster/<tag>/`
 byte for byte after every pass that edits rendered text (H1.1a). `rendered_docs()` in
-`ansible/tests/_k8s_render.py` reads `render_tag`'s output, which holds none of them, so the
+`tests/_k8s_render.py` reads `render_tag`'s output, which holds none of them, so the
 fleet guards never read them; H1's *Vendored upstream manifests* names the guards that bypasses and why it is accepted.
 
 A value a role task computes, such as a content tag or a script checksum, comes from
@@ -46,8 +46,8 @@ import jinja2
 
 from renderer.renderer_lib.targets import render_targets, vendored_paths
 from lib import yaml_fast
-from lib.ansible_inventory import K8S_HOST
-from lib.ansible_jinja_env import ansible_bool
+from lib.inventory_lists import K8S_HOST
+from lib.guard_jinja_env import ansible_bool
 from lib.estate import REPO_INVENTORY, Inventory
 from lib.k8s_roles import (
     CLAIM_TEMPLATE,
@@ -58,7 +58,7 @@ from lib.k8s_roles import (
 )
 from lib.k8s_context import resolve_vars
 from lib.render_guard import SHARED_TPL, StrictChainableUndefined, k8s_services
-from lib.repo_paths import ANSIBLE, JOB_FILES, K8S_ROLES, K8S_SERVICES
+from lib.repo_paths import JOB_FILES, K8S_ROLES, K8S_SERVICES, INVENTORY
 from renderer.renderer_lib.bundle import (
     KUSTOMIZATION,
     SHARED_KINDS,
@@ -94,7 +94,7 @@ from renderer.template_filters.toposort import K8S_APPLIES_LAST, build_k8s_dep_m
 LABEL_WRAPPER = SHARED_TPL / "role-labelled.yaml.j2"
 FLUX_DEFAULTS = K8S_ROLES / "flux" / "defaults" / "main.yml"
 FLUX_JOB_CONNECT = JOB_FILES / "flux_job_connect.py"
-GROUP_VARS = ANSIBLE / "inventory" / "group_vars" / "all.yml"
+GROUP_VARS = INVENTORY / "group_vars" / "all.yml"
 # Each group variable naming a namespace that a role creates, mapped to that role. A deferred
 # document in that namespace gives `<tag>-deferred` an edge to the role (D4.2).
 NAMESPACE_ROLE_VARS = {"k8s_observability_namespace": "observability"}

@@ -128,7 +128,7 @@ def test_a_guarded_script_a_role_names_is_a_deploy_gate(tmp_path):
     (scripts / "dev" / "pkg" / "leaf.py").write_text(
         '"""Summary."""\nif __name__ == "__main__":\n    print(1)\n'
     )
-    files = repo / "ansible" / "roles" / "k8s" / "svc" / "files"
+    files = repo / "k8s" / "roles" / "svc" / "files"
     files.mkdir(parents=True)
     (files / "run.yml").write_text('- args: ["python", "scripts/dev/pkg/leaf.py"]\n')
     assert sc.classify(repo, scripts)["leaf.py"][0] == "gate"
@@ -137,7 +137,7 @@ def test_a_guarded_script_a_role_names_is_a_deploy_gate(tmp_path):
 def test_a_path_keying_a_roles_python_table_is_not_an_invocation(tmp_path):
     """A dict keyed by module paths names files as data, never as an argv element."""
     repo, scripts = _package(tmp_path, '"""Summary."""\n')
-    files = repo / "ansible" / "roles" / "k8s" / "svc" / "files" / "pkg"
+    files = repo / "k8s" / "roles" / "svc" / "files" / "pkg"
     files.mkdir(parents=True)
     (files / "table.py").write_text('TABLE = {"scripts/dev/pkg/leaf.py": "svc"}\n')
     assert sc.classify(repo, scripts)["leaf.py"][0] != "gate"

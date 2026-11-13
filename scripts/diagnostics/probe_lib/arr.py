@@ -72,7 +72,7 @@ def resolve_arr_ip(app, cluster=DEFAULT_CLUSTER):
     NetworkPolicy's enforcement, not routing. Host-originated traffic apparently doesn't pass
     through the destination node's own NetworkPolicy iptables the same way same-node traffic
     does. This will flip on the next reschedule; a real fix needs a NetworkPolicy ipBlock for
-    the node (ansible/roles/k8s/*/templates/), out of scope here.
+    the node (k8s/roles/*/templates/), out of scope here.
     """
     return resolve_service_ip(app, cluster)
 

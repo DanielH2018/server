@@ -33,7 +33,7 @@ class Fakes:
 def build_tools(f: Fakes) -> tuple[RotationTools, list]:
     """A `RotationTools` answering from `f`, and the call record every fake appends to."""
     calls: list[tuple] = []
-    log = "\n".join("%s %s" % (sha, day) for sha, day, _ in f.history)
+    log = "\n".join("@%s %s" % (sha, day) for sha, day, _ in f.history)
     blobs = {sha: values for sha, _, values in f.history}
 
     def git(*args: str) -> str:

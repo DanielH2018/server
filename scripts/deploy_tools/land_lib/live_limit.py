@@ -59,7 +59,7 @@ SERIAL = "serial"
 SERIAL_ROLES = frozenset(
     {key.removeprefix("k3s_").removesuffix("_version") for key in PINS} | {"flux"}
 )
-CLUSTER_VARS_PREFIX = "ansible/vars/cluster-vars."
+CLUSTER_VARS_PREFIX = "secrets/cluster-vars."
 
 
 def kind(paths: Iterable[str]) -> str:

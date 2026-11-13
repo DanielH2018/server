@@ -95,7 +95,7 @@ def test_a_pr_that_moves_no_bundle_tag_waits_on_homelab_and_writes_no_annotation
     assert _gated(calls) == []
 
 
-SERVICE_MANIFEST = "ansible/roles/k8s/bento-pdf/templates/deployment.yaml.j2"
+SERVICE_MANIFEST = "k8s/roles/bento-pdf/templates/deployment.yaml.j2"
 
 
 def test_a_service_manifest_pr_reaches_land_wait_and_settles_on_its_verdict(
@@ -144,9 +144,7 @@ def test_a_templates_only_pr_reaches_land_wait_and_gates_the_changed_set(
             P: digests(authelia="a1", bento_pdf="b1", texbrain="t"),
         },
     )
-    rc, out, calls = _land(
-        land_run_main, ["ansible/templates/workload-shell.yml.j2"], sim
-    )
+    rc, out, calls = _land(land_run_main, ["k8s/templates/workload-shell.yml.j2"], sim)
     assert "VERDICT: settled" in out, out
     assert rc == 0
     assert [c[1] for c in calls if c[0] == "land_wait"] == [(MERGE_SHA, [])]
@@ -168,7 +166,7 @@ def test_a_range_over_the_file_page_with_a_template_settles_on_the_changed_set(
     )
     rc, out, calls = _land(
         land_run_main,
-        ["ansible/templates/claim-default.yaml.j2"],
+        ["k8s/templates/claim-default.yaml.j2"],
         sim,
         changed_files=137,
     )
@@ -191,7 +189,7 @@ def test_a_manifests_only_pr_reaches_land_wait_and_gates_the_changed_set(
         },
     )
     rc, out, calls = _land(
-        land_run_main, ["ansible/roles/k8s/volume-snapshot/tasks/main.yml"], sim
+        land_run_main, ["k8s/roles/volume-snapshot/tasks/main.yml"], sim
     )
     assert "VERDICT: settled" in out, out
     assert rc == 0
@@ -209,9 +207,7 @@ def test_an_inventory_depends_on_edit_waits_on_the_dependent_tag(land_run_main):
             P: digests(bento_pdf="b", texbrain="t"),
         },
     )
-    rc, out, calls = _land(
-        land_run_main, ["ansible/inventory/host_vars/daniel-box.yml"], sim
-    )
+    rc, out, calls = _land(land_run_main, ["inventory/host_vars/daniel-box.yml"], sim)
     assert "VERDICT: settled" in out, out
     assert rc == 0
     assert sim.annotations == _annotation("texbrain")
@@ -232,9 +228,7 @@ def test_a_failed_digests_read_waits_on_every_flux_owned_tag_and_says_so(
             P: digests(authelia="a", bento_pdf="b", texbrain="t"),
         },
     )
-    rc, out, calls = _land(
-        land_run_main, ["ansible/templates/workload-shell.yml.j2"], sim
-    )
+    rc, out, calls = _land(land_run_main, ["k8s/templates/workload-shell.yml.j2"], sim)
     assert "VERDICT: settled" in out, out
     assert rc == 0
     assert "land-wait waited on every Kustomization: M's digests.json" in out

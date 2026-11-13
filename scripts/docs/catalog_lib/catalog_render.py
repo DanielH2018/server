@@ -195,7 +195,7 @@ def render_html(rows: list[ServiceRow]) -> str:
 </head>
 <body>
 <h1>Homelab Service Catalog</h1>
-<p class="subtitle">Generated statically from ansible/inventory and ansible/roles/k8s —
+<p class="subtitle">Generated statically from inventory and k8s/roles —
 never from a live deploy. "unknown" means the fact genuinely cannot be derived from the
 repo alone; see scripts/docs/service_catalog.py's FIELD NOTES for why.</p>
 <div class="stats">{stats}</div>

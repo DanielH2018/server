@@ -34,7 +34,7 @@ desktop, so your real ISP IP is never exposed to anything.
 ### One ingress IP
 
 Pi-hole's `local.<domain>` wildcard answers the cluster ingress VIP for everything
-(`pihole_wildcard_ip = k3s_metallb_ingress_vip` in `ansible/roles/k8s/pihole/templates/configmap.yaml.j2`).
+(`pihole_wildcard_ip = k3s_metallb_ingress_vip` in `k8s/roles/pihole/templates/configmap.yaml.j2`).
 
 - **Let Pi-hole resolve** and you need no per-service mapping at all, because one wildcard covers
   every `.local` name.
@@ -200,7 +200,7 @@ together.
 ---
 
 ## Server-side networking (already handled — don't undo)
-wg-easy is a **k8s workload on `daniel-box`** (`roles/k8s/wg-easy`, entry in
+wg-easy is a **k8s workload on `daniel-box`** (`k8s/roles/wg-easy/`, entry in
 `host_vars/daniel-box.yml`), reached on `51820/udp` — the router forward was moved to this
 node with the rest of the edge.
 
@@ -224,7 +224,7 @@ Pi's LAN-only wg-easy is the only Docker copy left, and it isn't on this path.
 
 ## Retired: the server's bcrypt admin auth
 
-**HISTORY — the server's bcrypt admin auth.** The server's wg-easy entry carried `password_hash: "{{ wg_easy_password_hash }}"`, which fed the compose `PASSWORD_HASH` env from 2026-07-04 and closed an admin UI that was otherwise unauthenticated to every `monitoring`-net neighbour. The k3s migration retired that mechanism on 2026-08-14, because the k8s wg-easy v15 keeps credentials in its own SQLite DB. The operator removed `wg_easy_password_hash` from `ansible/vars/secrets.yml` and the rotation registry on 2026-08-24 (review M-7), so do not reintroduce that var name expecting it to exist.
+**HISTORY — the server's bcrypt admin auth.** The server's wg-easy entry carried `password_hash: "{{ wg_easy_password_hash }}"`, which fed the compose `PASSWORD_HASH` env from 2026-07-04 and closed an admin UI that was otherwise unauthenticated to every `monitoring`-net neighbour. The k3s migration retired that mechanism on 2026-08-14, because the k8s wg-easy v15 keeps credentials in its own SQLite DB. The operator removed `wg_easy_password_hash` from `secrets/secrets.yml` and the rotation registry on 2026-08-24 (review M-7), so do not reintroduce that var name expecting it to exist.
 
 The bcrypt `$`-doubling note still applies to any `PASSWORD_HASH` that someone adds to the Pi's
 service file, which would be the only use of that variable. The service file's header says how.
@@ -256,7 +256,7 @@ the package, and `homelab-compose.service` runs the project.
 - **Where it lives.** The service file is
   `hosts/components/pi-compose/services/wg-easy/compose.yaml.j2`, and its header holds the
   notes that the deleted role's `CLAUDE.md` carried. The entry is in `compose_services` in
-  `ansible/inventory/host_vars/daniel-pi.yml`.
+  `inventory/host_vars/daniel-pi.yml`.
 - **What did not move.** The WireGuard port is still `51822/udp` on every interface, the admin
   UI is still the Pi's LAN address on `51821/tcp`, and the generated client configs still name
   `wireguard.<domain>:51822`. The Pi's `ufw` needs no rule for either port, because Docker's `nat`

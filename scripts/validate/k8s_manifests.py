@@ -31,7 +31,7 @@ rendered and which are exempt), ``k8s_context`` (Ansible's variable semantics), 
 (the strict loaders, the ``lookup()`` stub and the claim names). The two rule modules
 only this validator imports sit in ``validate_lib/``: ``k8s_schema`` (the OpenAPI and
 vendored-CRD checks) and ``k8s_net_rules`` (the two semantic rules no schema can make). The
-filter registration every render guard shares is ``lib.ansible_jinja_env``. This module keeps
+filter registration every render guard shares is ``lib.guard_jinja_env``. This module keeps
 ``check_template``, the per-template render other guards call, and ``main()``, and re-exports
 every moved name so an existing importer keeps working.
 """
@@ -80,7 +80,7 @@ from validate.validate_lib.k8s_schema import (
     normalise_octal,
     schema_error,
 )
-from lib.ansible_jinja_env import (
+from lib.guard_jinja_env import (
     register_ansible_filters,
     template_env,
 )
@@ -93,7 +93,6 @@ from lib.k8s_yaml import (
 )
 from lib.render_guard import (
     ALL_VARS,
-    ANSIBLE,
     BASE_CONTEXT,
     SHARED_TPL,
     dump_numbered,
@@ -106,7 +105,6 @@ from lib.render_guard import (
 # anchors from `lib.render_guard`, and everything the six `lib.k8s_*` modules were split into.
 __all__ = [
     "ALL_VARS",
-    "ANSIBLE",
     "BASE_CONTEXT",
     "CALLER_RENDERED_ROLES",
     "HTTPS_ENTRYPOINT",
@@ -387,7 +385,7 @@ def main(argv: Sequence[str] = (), render: Callable | None = None) -> int:
     # report coverage is to name what was not covered. A CRD count that jumps means a new
     # custom resource arrived with nothing checking its shape. This should read 0 — a CRD kind
     # reaching here means no vendored schema matched it, which the
-    # `rendered-kinds-have-vendored-schemas` row of ansible/tests/k8s/test_rendered_properties.py
+    # `rendered-kinds-have-vendored-schemas` row of tests/k8s/test_rendered_properties.py
     # fails on.
     if skipped_kinds:
         total = sum(skipped_kinds.values())

@@ -69,7 +69,7 @@ UID_BY_PLUGIN = {
 # file does), so re-running this script reproduces the committed bytes. Bump a revision
 # deliberately, in its own commit, and read the diff.
 DASHBOARDS = {"node-exporter-full": (1860, 45)}
-OUTDIR = Path("ansible/roles/k8s/observability/files/dashboards")
+OUTDIR = Path("k8s/roles/observability/files/dashboards")
 
 # Grafana folder (subdir) each community board is provisioned into; default is the General
 # root. Keeps a re-fetch writing to the same folder the boards live in, so it doesn't

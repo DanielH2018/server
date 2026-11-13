@@ -157,7 +157,7 @@ def outside_secrets(tag: str, roles: Path = K8S_ROLES) -> dict[str, frozenset[st
     """Each Secret another role renders that `tag`'s pods read, mapped to the keys it holds.
 
     The map is `tag`'s `manifests_outside_secrets`, `{name, keys}` per Secret, where `keys`
-    are `ansible/vars/secrets.yml` key names. It is empty for a tag with no role directory,
+    are `secrets/secrets.yml` key names. It is empty for a tag with no role directory,
     such as a test's fixture tag.
 
     Raises:
@@ -278,7 +278,7 @@ def sops_secrets(sops: Mapping[str, str | None], keys: Iterable[str]) -> dict[st
 
     Args:
         sops: Each entry's sentinel render, as `PlaceholderRender.sops_manifests` holds it.
-        keys: The key names of `ansible/vars/secrets.yml`.
+        keys: The key names of `secrets/secrets.yml`.
     """
     sentinels = Sentinels(keys)
     found: dict[str, set] = {}
@@ -308,8 +308,8 @@ def restart_values(
         directories: The tag's placeholder-form directories, each file name to its text.
         targets: Each workload name mapped to the input kinds it admits, as
             `restart_targets` returns them.
-        keys: The key names of `ansible/vars/secrets.yml`.
-        source: Each key in `ansible/vars/cluster-vars.source` mapped to its digest.
+        keys: The key names of `secrets/secrets.yml`.
+        source: Each key in `secrets/cluster-vars.source` mapped to its digest.
         sops: The tag's `render_sops_manifests` entries mapped to their sentinel renders.
         outside: Each Secret another role renders mapped to its keys, as `outside_secrets`
             returns them.

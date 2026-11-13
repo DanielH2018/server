@@ -204,7 +204,7 @@ The exit criterion has two parts:
   from the Kopia endpoint` runs `regex_search` over `longhorn_b2_endpoint`, and the task after
   it fails the play when the result is empty. That task's message already names the way out:
   "Set k3s_longhorn_b2_region explicitly in host_vars". `docs/break-glass.md` publishes the
-  B2 target URL, region included. `grep -c '^<key>:' ansible/vars/secrets.yml` prints 1 for
+  B2 target URL, region included. `grep -c '^<key>:' secrets/secrets.yml` prints 1 for
   each of `longhorn_b2_endpoint`, `longhorn_b2_bucket` and `r2_bucket`. Both credential
   templates, `longhorn-b2-secret.yaml.j2` and `longhorn-r2-secret.yaml.j2`, put their values
   under `data:` through `b64encode`.
@@ -291,7 +291,7 @@ The exit criterion has two parts:
       on a failed read as well, so it cannot tell a failed read from a disarm.
     - The deployer routes a change to the two key files differently. Measured at
       `70591c307` with `deploy_changes.py:services_from_changed_paths`:
-      `ansible/inventory/group_vars/all.yml` returns `broad_deploy=True` with an empty
+      `inventory/group_vars/all.yml` returns `broad_deploy=True` with an empty
       `setup_roles`, so it leaves no owed line and re-renders no `setup/k3s` file.
       `ansible/roles/setup/k3s/defaults/main.yml` returns `setup_roles={'deploy_ui', 'k3s'}`,
       which is the `manual_plane` line for `k3s`.
@@ -312,10 +312,10 @@ The exit criterion has two parts:
       `server.yml` renders. `scripts/lib/render_context.py:render_context` layers only a
       role's own defaults, `group_vars/all.yml` and host_vars, so a k8s role cannot read
       `setup/k3s`'s defaults. The comment above `headlamp_k8s_crd_api_groups` in
-      `ansible/roles/k8s/headlamp/defaults/main.yml` says the same of
+      `k8s/roles/headlamp/defaults/main.yml` says the same of
       `k3s_readonly_crd_api_groups`.
     - Two tests read the identity template where it sits.
-      `ansible/tests/k8s/test_k8s_manifests_rbac.py` renders
+      `tests/k8s/test_k8s_manifests_rbac.py` renders
       `K3S_ROLE / "templates" / "readonly-rbac.yaml.j2"` with `K3S_DEFAULT_VALUES`.
       `scripts/deploy_tools/tests/test_narrow_setup.py:test_the_real_k3s_role_still_maps_readonly_rbac_to_kubeconfig`
       asserts that `readonly-rbac.yaml.j2` and `k3s_readonly_crd_api_groups` map to the
@@ -331,7 +331,7 @@ The exit criterion has two parts:
   `templates/*.j2`. `run_health` passes a role that declares no rollout-checkable workload,
   with exit 0, under a `DECIDED` marker (#3596).
 - **Rollout timeouts are per role, through include vars.**
-  `ansible/roles/k8s/manifests/defaults/main.yml:manifests_rollout_timeout_default` is `600s`.
+  `k8s/roles/manifests/defaults/main.yml:manifests_rollout_timeout_default` is `600s`.
   sonarr, radarr, tdarr, valheim and prowlarr pass `manifests_rollout_timeout` as an
   `include_role` `vars:` entry, taken from a role key such as `sonarr_k8s_rollout_timeout`. A
   Flux-born role has no tasks file, so its override has to be a defaults key.
@@ -362,7 +362,7 @@ The exit criterion has two parts:
   "runs exactly as before, which is every interactive session". `docs/longhorn-upgrade.md`
   says gate 2 reads the restore drill's stamp, which exists only on daniel-box.
 - **Renovate.** In `renovate.json`:
-    - the `# renovate:` annotation manager covers `ansible/roles/k8s/*/defaults/main.yml` and
+    - the `# renovate:` annotation manager covers `k8s/roles/*/defaults/main.yml` and
       `ansible/roles/setup/*/defaults/main.yml`;
     - the k8s image manager matches any `_image:` key in k8s role defaults and in
       `inventory/group_vars/all.yml`;
@@ -390,18 +390,18 @@ The exit criterion has two parts:
   `hosts/components/claude-code/templates/claude-land-approval-paths.j2` carries
   `DECIDED a floor, not every path that widens the agent's authority`.
 - **`containers_list` is everywhere.**
-    - It is in `ansible/inventory/host_vars/daniel-box.yml` (56 entries),
+    - It is in `inventory/host_vars/daniel-box.yml` (56 entries),
       `daniel-server.yml` (empty) and `daniel-pi.yml` (4 entries, which H5 moves). The
-      counts come from `scripts/lib/ansible_inventory.py:containers_entries_in` over each
+      counts come from `scripts/lib/inventory_lists.py:containers_entries_in` over each
       file.
     - `git grep -l containers_list` lists 426 tracked files, 422 of them outside the
       generated `docs/reference/`.
     - The shared loaders are `scripts/lib/render_guard.py:containers_entries`,
-      `scripts/lib/ansible_inventory.py:containers_entries_in` and
+      `scripts/lib/inventory_lists.py:containers_entries_in` and
       `scripts/lib/render_context.py`.
     - `ansible/preflight.yml` asserts `containers_list is defined` for every host, and its
       fresh-host GitOps warning reads the list's length.
-      `ansible/inventory/host_vars/_example.yml` carries `containers_list: []`.
+      `inventory/host_vars/_example.yml` carries `containers_list: []`.
 - **Flux takes over kubectl's fields, on every apply.** The design records, as validated,
   that Flux's first reconcile takes over every `kubectl-*` field manager by prefix and strips
   `last-applied-configuration`. The upstream code, read through `gh api` on 2026-10-11, says
@@ -430,7 +430,7 @@ The exit criterion has two parts:
 
 ### Six Flux-born tags
 
-Each tag is a k8s role under `ansible/roles/k8s/<tag>/`. Its `containers_list` entry carries
+Each tag is a k8s role under `k8s/roles/<tag>/`. Its `containers_list` entry carries
 `owner: flux` from its first commit. Adding that entry reaches every reader of the list until
 D6.12 (*Steps*, *Rules for every PR from H1.2 on*). Ansible never reaches it, and the PR that adds it
 deletes the `setup/k3s` tasks that wrote the same objects. That is C4 applied to a setup
@@ -471,7 +471,7 @@ writer.
     - **The five plumbing tags are never shed.** `service_tier.py` gains `NEVER_SHED`, a
       named set of their names, and `shed_entries` drops each member. The exclusion sits in
       `shed_entries`, not in `scripts/lib/service_tiers.py:shed_set`, so the probe and
-      `ansible/tests/k8s/test_shed_set_is_derived_from_tier.py:_tiered_dependencies_on_shed`
+      `tests/k8s/test_shed_set_is_derived_from_tier.py:_tiered_dependencies_on_shed`
       read one answer.
     - **The set cannot drift.** A test holds `NEVER_SHED` equal to the set of untiered k8s
       entries whose role defaults set `flux_prune: false`. A plumbing tag therefore cannot
@@ -479,7 +479,7 @@ writer.
       tag.
     - **Why untiered only.** `shed_entries` already keeps every tiered entry. D5 sets
       `flux_prune: false` on `traefik-crds`, the tag that carries traefik's CRDs, whose entry
-      declares traefik's `tier: home-edge` in `ansible/inventory/host_vars/daniel-box.yml`,
+      declares traefik's `tier: home-edge` in `inventory/host_vars/daniel-box.yml`,
       and on `flux`, whose entry D1 gives `tier: platform`. Neither is a shed candidate, so neither joins `NEVER_SHED`, and
       neither PR needs a shed ruling or an order against H1.1d. An untiered tag that a
       later slice exempts from pruning fails the test until its PR adds it to `NEVER_SHED`
@@ -493,7 +493,7 @@ writer.
       zero replicas stops cluster DNS, and Flux cannot then fetch the bundle that restores it.
     - **Rejected: a `tier:`.** `tier: platform` makes `tier_priority_class` derive
       `homelab-critical`, and
-      `ansible/tests/k8s/test_priority_class_is_derived_from_tier.py:_CLASS_AT_DERIVATION`
+      `tests/k8s/test_priority_class_is_derived_from_tier.py:_CLASS_AT_DERIVATION`
       compares each tiered role's class with exact equality. CoreDNS keeps
       `system-cluster-critical` (*CoreDNS without a host read*), so a tier would either lower
       its class or record a class it does not run at.
@@ -746,10 +746,10 @@ After H1, merging a pin is the upgrade. Two pieces move the runbook gates to the
   that does not substitute skips the escape, so a `${` in the reconcile script or an
   upstream file reaches the cluster unchanged.
 - **The fleet guards do not read the vendored files (H1.1a).**
-  `ansible/tests/_k8s_render.py:rendered_docs` renders each role's `templates/*.j2`, so the
+  `tests/_k8s_render.py:rendered_docs` renders each role's `templates/*.j2`, so the
   verbatim files and the kustomize patches stay outside it. The render-time guards never see
   the upstream workloads: the `_SYSTEM_TIER` priority-class guard, the non-root and uid
-  guards of `ansible/tests/k8s/test_container_security_context.py`, the strategy guard,
+  guards of `tests/k8s/test_container_security_context.py`, the strategy guard,
   `shell_offences`, the volume-name guard, and the `pods-disable-service-link-env-vars` and
   `rendered-kinds-have-vendored-schemas` rows.
     - **Why that is accepted.** At `70591c307`, `Install Longhorn` and `Install MetalLB` apply
@@ -761,7 +761,7 @@ After H1, merging a pin is the upgrade. Two pieces move the runbook gates to the
       targets resolve the vendored workloads by name. The takeover census and the diff before
       each flip show every field that changes.
     - **Source-tree guards still read them.**
-      `ansible/tests/k8s/test_namespace_resource_defaults.py:test_no_resourcequota_is_declared_anywhere`
+      `tests/k8s/test_namespace_resource_defaults.py:test_no_resourcequota_is_declared_anywhere`
       runs `git grep` over `ansible/`. H1.3 and H1.5a therefore grep their vendored file for
       each kind such a guard forbids, and strip or exempt each match in the same PR.
     - The templated objects of the same roles join `rendered_docs()` like any template. Each
@@ -773,7 +773,7 @@ Each key goes to exactly one place, decided by who reads it. The one exception i
 mirrored pair, two keys with different names that a test holds equal:
 
 - **Read only by objects that move:** the k8s role's defaults, under the name it has at
-  `70591c307`. Renovate's annotation manager covers `ansible/roles/k8s/*/defaults/main.yml`,
+  `70591c307`. Renovate's annotation manager covers `k8s/roles/*/defaults/main.yml`,
   so `k3s_longhorn_version` and `k3s_metallb_version` stay tracked after they move.
   `k3s_readonly_crd_api_groups` moves to `cluster-base` in H1.2, and the headlamp comment
   that mirrors it names the new place.
@@ -1050,26 +1050,26 @@ refreshes the templates by hand, and the test below ties them to the version.
   reads them. H1.4 gives each guard one answer, read from k3s's manifest at `v1.37.1+k3s1`
   through `gh api` on 2026-10-11:
     - The Deployment calls `spec_shell('RollingUpdate', max_unavailable=1)` and `pod_shell`,
-      because `ansible/tests/k8s/test_workload_shell_uses_the_macros.py:shell_offences`
+      because `tests/k8s/test_workload_shell_uses_the_macros.py:shell_offences`
       requires both. `spec_shell` writes `revisionHistoryLimit: 3` over upstream's `0`. That
       is a spec field, so nothing rolls for it.
     - **Operator-visible:** `pod_shell` takes the literal `system-cluster-critical`, and
-      `ansible/tests/k8s/test_pod_template_hygiene.py:_SYSTEM_TIER` gains a
+      `tests/k8s/test_pod_template_hygiene.py:_SYSTEM_TIER` gains a
       `("coredns", "deployment.yaml.j2")` row with its reason. CoreDNS outranks every homelab
       tier as k3s ships it, and every tier and Flux itself resolve names through it. The
       literal passes
-      `ansible/tests/k8s/test_priority_class_is_derived_from_tier.py:test_no_tiered_role_passes_pod_shell_a_literal_class`,
+      `tests/k8s/test_priority_class_is_derived_from_tier.py:test_no_tiered_role_passes_pod_shell_a_literal_class`,
       which reads tiered roles only, because the entry stays untiered (*Six Flux-born tags*).
     - `pod_shell` writes `enableServiceLinks: false`, which the
       `pods-disable-service-link-env-vars` row requires and upstream lacks.
     - Upstream asserts no `runAsNonRoot`, so
-      `ansible/tests/k8s/test_container_security_context.py:test_every_container_asserts_non_root_or_is_allowlisted`
+      `tests/k8s/test_container_security_context.py:test_every_container_asserts_non_root_or_is_allowlisted`
       needs a decision. H1.4 reads the uid that the pinned image declares. A non-root uid is
       pinned beside `runAsNonRoot`, as D1 pins Flux's. A root uid takes a `_ROOT_ALLOWED` row
       with its reason. The container keeps upstream's `drop: [all]` and `NET_BIND_SERVICE`,
       which binding port 53 needs.
     - `config-volume` and `custom-config-volume` are not in
-      `ansible/tests/k8s/test_volume_names_descriptive.py:GENERIC`, so both names stay. Every
+      `tests/k8s/test_volume_names_descriptive.py:GENERIC`, so both names stay. Every
       kind is in a core group, so the schema row passes.
 - **The takeover rolls the pod, so H1.4 lands in a window.** `enableServiceLinks: false`, and
   any uid pin, change the pod template, so the single replica rolls at the promote with a DNS
@@ -1298,12 +1298,12 @@ moves the Pi's entries from the first key to the second. The removal of the Pi's
 ### File tree
 
 ```diff
-+ ansible/roles/k8s/cluster-base/
-+ ansible/roles/k8s/metallb/            (files/upstream/metallb-native.yaml, vendored)
-+ ansible/roles/k8s/coredns/            (templates derived from k3s's manifests/coredns.yaml; tests/)
-+ ansible/roles/k8s/longhorn/           (files/upstream/longhorn.yaml, vendored; tests/)
-+ ansible/roles/k8s/longhorn-reconcile/ (files/longhorn_reconcile.py; tests/)
-+ ansible/roles/k8s/longhorn-backup/    (templates/longhorn-backuptarget-default.yaml.j2, new)
++ k8s/roles/cluster-base/
++ k8s/roles/metallb/            (files/upstream/metallb-native.yaml, vendored)
++ k8s/roles/coredns/            (templates derived from k3s's manifests/coredns.yaml; tests/)
++ k8s/roles/longhorn/           (files/upstream/longhorn.yaml, vendored; tests/)
++ k8s/roles/longhorn-reconcile/ (files/longhorn_reconcile.py; tests/)
++ k8s/roles/longhorn-backup/    (templates/longhorn-backuptarget-default.yaml.j2, new)
 + ansible/roles/setup/k3s/tasks/longhorn-host.yml   (the three host tasks, moved from longhorn.yml in H1.5a)
 + scripts/dev/vendor_manifest.py
 + scripts/dev/takeover_census.py        (H1.1j)
@@ -1323,14 +1323,14 @@ moves the Pi's entries from the first key to the second. The removal of the Pi's
   ansible/roles/setup/k3s/templates/etcd-snapshot-offbox.sh.j2     (--etcd-s3-region reads k3s_etcd_s3_region, H1.7b)
   ansible/roles/setup/k3s/tasks/health-crons.yml  (b2-budget drops --retain)
   scripts/diagnostics/probe_lib/                  (b2-budget reads the live weekly retain)
-  ansible/inventory/host_vars/daniel-box.yml      (- containers_list, H1.9)
+  inventory/host_vars/daniel-box.yml      (- containers_list, H1.9)
   ansible/preflight.yml                           (assert narrowed, H1.9)
   scripts/deploy_tools/promote.py                 (forward-only hold, upgrade-gates status, backstop, excused failures)
   scripts/deploy_tools/land_lib/                  (unconditional pin gate, land rule, --regate)
   scripts/diagnostics/probe_lib/health.py         (vendored targets, the new checks)
   scripts/diagnostics/probe_lib/landing_blockers.py   (lists the break-glass annotation)
   scripts/renderer/renderer_lib/secret_checks.py  (+ PLACEHOLDER_KIND_EXEMPT, H1.7b, as R2 assigns)
-  ansible/roles/k8s/headlamp/defaults/main.yml    (comment names cluster-base)
+  k8s/roles/headlamp/defaults/main.yml    (comment names cluster-base)
   docs/adr/0007-backup-tiering-r2-daily-b2-weekly.md   (amended, operator-only, H1.7a and H1.7b)
   renovate.json                                   (k3s, MetalLB and Longhorn rules split; coredns pin disabled)
 ```
@@ -1416,7 +1416,7 @@ moves the Pi's entries from the first key to the second. The removal of the Pi's
       text below describes the guard as it was built.
 - **An added entry reaches readers of the list until D6.12.** H1.2, H1.3, H1.4, H1.5a,
   H1.6 and H1.7b each add one entry to `containers_list` in
-  `ansible/inventory/host_vars/daniel-box.yml`, and the tick applies that file as a
+  `inventory/host_vars/daniel-box.yml`, and the tick applies that file as a
   deploy-plane change.
     - **The baseline.** At `70591c307`,
       `scripts/deploy_tools/narrow_lib/containers.py:changed_fields` returns None when the
@@ -1691,7 +1691,7 @@ gates on it. Each estimate counts hand-written lines, tests included.
       before the guard stops the play. The k3s pin stays a hand apply outside the guard's
       scope, as it is at `70591c307`, and a downgrade across a minor stays the operator's
       call under `docs/k3s-upgrade.md`'s *Rollback*.
-    - The write-verb census is a `Census` row of `ansible/tests/repo/test_census_rows_roles.py`,
+    - The write-verb census is a `Census` row of `tests/repo/test_census_rows_roles.py`,
       starting with every task file allowlisted. Later PRs shrink the allowlist.
     - A test keeps the map honest. Every row names a task that exists in the role, and every
       writer task the census flags outside `storage_smoke.yml` and `agent_verify.yml` has a
@@ -1722,7 +1722,7 @@ gates on it. Each estimate counts hand-written lines, tests included.
       pair `cluster_base_readonly_sa_name` and `cluster_base_readonly_sa_namespace`, which
       the moved template reads, and the test that holds each equal to its `k3s_` twin.
     - Retarget the two tests that read the template in `setup/k3s`:
-      `ansible/tests/k8s/test_k8s_manifests_rbac.py` renders it from `cluster-base` with that
+      `tests/k8s/test_k8s_manifests_rbac.py` renders it from `cluster-base` with that
       role's defaults, and
       `test_narrow_setup.py:test_the_real_k3s_role_still_maps_readonly_rbac_to_kubeconfig`
       takes a real-tree pair that stays in `setup/k3s`: `readonly-kubeconfig.j2` and
@@ -1767,7 +1767,7 @@ gates on it. Each estimate counts hand-written lines, tests included.
       `kubectl-client-side-apply` owns live (Baseline). Otherwise the flip removes them and
       rolls the `controller` and every `speaker` pod.
     - Move the `k3s_metallb_pool` exemption in
-      `ansible/tests/repo/test_lan_facts_have_one_source.py` from `setup/k3s`'s defaults to
+      `tests/repo/test_lan_facts_have_one_source.py` from `setup/k3s`'s defaults to
       the `metallb` role's defaults, which become the pool's definition site.
     - Verify the VIPs from a host that is not the announcer, because ETP-Local VIPs have
       blacked out with every host-local probe green.
@@ -1924,7 +1924,7 @@ gates on it. Each estimate counts hand-written lines, tests included.
   besides that role's files, its vendored file and docs, so the census change cannot ride
   with the bump. A dependency edge that names H1.8, such as "H1.1a to H1.8", covers both.
     - **H1.8a The census.** Shrink the census allowlist to the two final files. The PR
-      changes only `ansible/tests/repo/test_census_rows_roles.py`.
+      changes only `tests/repo/test_census_rows_roles.py`.
     - **H1.8b The bump, after H1.8a.** Land the next Longhorn release step through the gate,
       with `land.sh` and no `k3s-bringup.yml`. The step is the next patch in the pinned minor
       if upstream has shipped one, or else the next minor (*Goal and exit criterion*). With
@@ -1960,7 +1960,7 @@ git merge-base --is-ancestor <merge-sha> <S>
 uv run python scripts/diagnostics/probe.py landing
 
 # Exit part 2, after H1.8a: the census over setup/k3s.
-uv run pytest ansible/tests/repo/test_census_rows_roles.py
+uv run pytest tests/repo/test_census_rows_roles.py
 ```
 
 The expected results are:
@@ -2079,7 +2079,7 @@ subject's tests.
   `files/upstream/longhorn.yaml` fails publish and names DaemonSet `longhorn-manager`. A
   fixture `longhorn-backup` render without BackupTarget `default` fails and names it, and so
   does a fixture `cluster-base` render without PriorityClass `homelab-critical`.
-- *PriorityClasses before Flux (H1.2).* A test in `ansible/tests/k8s/` renders the `flux`
+- *PriorityClasses before Flux (H1.2).* A test in `tests/k8s/` renders the `flux`
   and `cluster-base` tags. Every `priorityClassName` in the `flux` render is either a
   Kubernetes built-in class or a PriorityClass in the `cluster-base` render, and the test
   asserts that it found `homelab-critical`. A fixture `flux` render naming a class that
@@ -2119,7 +2119,7 @@ subject's tests.
       target. The same stub without the annotation stays clean, with `default` named in the
       `DISARMED` note.
 - *No Flux-born key on the host plane (H1.7b).* A `Census` row of
-  `ansible/tests/repo/test_census_rows_roles.py`. A fixture setup template that reads
+  `tests/repo/test_census_rows_roles.py`. A fixture setup template that reads
   `k3s_longhorn_backup_armed` while `longhorn-backup`'s defaults define it is flagged. The
   tree at H1.7b is clean, and the row asserts that it found both named members in
   `longhorn-backup`'s defaults.
@@ -2188,7 +2188,7 @@ subject's tests.
   change`, its three named members. None of them may carry `longhorn` or `longhorn_backup`.
   A fixture copy with one task tagged `longhorn` fails.
 - *Shed disposition (H1.1d, H1.2, H1.4).* In
-  `ansible/tests/k8s/test_shed_set_is_derived_from_tier.py`:
+  `tests/k8s/test_shed_set_is_derived_from_tier.py`:
     - a fixture untiered entry named in `NEVER_SHED` is absent from `shed_entries`, and a
       fixture untiered plumbing entry outside it is present;
     - a fixture role tree in which an untiered role sets `flux_prune: false` and
@@ -2201,7 +2201,7 @@ subject's tests.
 - *Engine-upgrade limit (H1.5b).* A fixture render with the
   `concurrent-automatic-engine-upgrade-per-node-limit` Setting at `0` is flagged, and the
   real render at `3` is clean. A render without that Setting fails.
-- *CoreDNS fleet guards (H1.4).* `uv run pytest ansible/tests/k8s` passes over the derived
+- *CoreDNS fleet guards (H1.4).* `uv run pytest tests/k8s` passes over the derived
   templates with one `_SYSTEM_TIER` row added and at most one `_ROOT_ALLOWED` row.
 - *Publish census floor (H1.9).* A fixture with the `owner` keys removed, read through an
   unchanged `owner: flux` selector, fails publish because `longhorn` is missing.
@@ -2423,7 +2423,7 @@ subject's tests.
 
 ## Tests and docs that change in the same PR
 
-- **H1.1d:** `ansible/tests/k8s/test_shed_set_is_derived_from_tier.py`, the module docstring
+- **H1.1d:** `tests/k8s/test_shed_set_is_derived_from_tier.py`, the module docstring
   of `scripts/renderer/template_filters/service_tier.py` for `shed_entries`, and the module docstring of
   `scripts/diagnostics/probe_lib/shed_set.py`, which says a service leaves the set only by
   gaining a `tier:`.
@@ -2434,11 +2434,11 @@ subject's tests.
   gains `tasks/stale-checkout-check.yml`.
 - **Readers of a deleted task file or a deleted task.** The census below ran
   `git grep -l` on each deleted basename and `git grep -F` on each deleted task name that a
-  test loads, over `ansible/tests`, `ansible/roles/setup/k3s/tests`,
+  test loads, over `tests`, `ansible/roles/setup/k3s/tests`,
   `scripts/deploy_tools/tests` and `scripts/tests` at `70591c307`. Each PR re-runs it at
   its base for the tasks it deletes.
     - *H1.4.*
-        - `ansible/tests/deploy/test_conditional_register_consumers.py:test_the_widened_rule_would_have_caught_the_coredns_read`
+        - `tests/deploy/test_conditional_register_consumers.py:test_the_widened_rule_would_have_caught_the_coredns_read`
           asserts one `Read the live Corefile` task with `check_mode: false` in the real
           `coredns.yml`. H1.4 deletes that task. The anchor takes a fixture instead: the
           two tasks `Read the live Corefile` and `Point cluster DNS at Pi-hole first`, as
@@ -2446,7 +2446,7 @@ subject's tests.
           behaviour, which needs no real file. `_KNOWN_TASK_FILES` drops
           `setup/k3s/tasks/coredns.yml`, which then holds no consumer of a conditional
           register.
-        - `ansible/tests/deploy/test_retried_commands_survive_check_mode.py:NON_RETRIED_READS_THAT_MUST_OPT_OUT`
+        - `tests/deploy/test_retried_commands_survive_check_mode.py:NON_RETRIED_READS_THAT_MUST_OPT_OUT`
           loses its `coredns.yml` row. The bounded read carries `retries` and `until`, so
           the retry census in the same module reads it directly. The same module's list
           that names `Verify cluster DNS resolves through the configured upstream` loses
@@ -2455,14 +2455,14 @@ subject's tests.
         - `hosts/tests/test_k3s_stage_gates.py:test_the_coredns_probe_name_defaults_to_a_real_name`
           guards the probe's name variable. It goes with the probe, and so does the
           variable `k3s_coredns_probe_name` unless the per-key census finds another reader.
-    - *H1.5a.* `ansible/tests/longhorn/test_longhorn_control_plane_resources.py` loads
+    - *H1.5a.* `tests/longhorn/test_longhorn_control_plane_resources.py` loads
       `Install Longhorn` and `Give longhorn-manager a memory request so it leaves
       BestEffort`. `test_manager_patch_runs_after_longhorn_is_installed` is deleted,
       because a kustomize patch applies with the object it patches and has no order.
       `test_manager_patch_sets_a_request_and_no_limit` and
       `test_manager_patch_names_the_longhorn_manager_container` retarget to the `longhorn`
       role's manager patch.
-    - *H1.5b.* `ansible/tests/longhorn/test_snapshot_data_integrity_patch_is_a_json_map.py`
+    - *H1.5b.* `tests/longhorn/test_snapshot_data_integrity_patch_is_a_json_map.py`
       reads its Setting patch from a task in `longhorn.yml`. It retargets to the rendered
       Setting object in the `longhorn` role.
     - *H1.6.*
@@ -2471,7 +2471,7 @@ subject's tests.
         - `ansible/roles/setup/k3s/tests/test_longhorn_group_labels.py` loads the label tasks
           from `longhorn.yml` and `longhorn-weekly-shard.yml`. Its label cases move to
           `longhorn-reconcile`'s tests, against `files/longhorn_reconcile.py`.
-        - `ansible/tests/longhorn/test_daily_group_membership_is_the_r2_list.py:test_the_reconcile_returns_only_the_unlisted_volumes_to_default`
+        - `tests/longhorn/test_daily_group_membership_is_the_r2_list.py:test_the_reconcile_returns_only_the_unlisted_volumes_to_default`
           loads `Return volumes to the default` from `longhorn.yml`. It retargets to the
           reconcile script's default-group rule.
         - `test_conditional_register_consumers.py:_KNOWN_TASK_FILES` drops
@@ -2486,7 +2486,7 @@ subject's tests.
           loses its real-tree member. No surviving file of the role has the
           include-with-`apply:` shape, so the case moves to the fixture role tree that its
           neighbouring cases build.
-        - `ansible/tests/longhorn/test_every_longhorn_pvc_has_a_tier.py` names a line range
+        - `tests/longhorn/test_every_longhorn_pvc_has_a_tier.py` names a line range
           of `longhorn.yml` in its docstring and in its failure message. Both name the
           `longhorn-reconcile` role instead.
     - *H1.7b.* `_KNOWN_TASK_FILES` drops `setup/k3s/tasks/longhorn-backup.yml`. The two cases
@@ -2501,21 +2501,21 @@ subject's tests.
       `ansible/roles/setup/claude_code/tasks/agent.yml`;
     - `docs/gitops-pipeline.md`, whose `--tags kubeconfig` example names a tag that keeps
       only its host half;
-    - `ansible/tests/k8s/test_k8s_manifests_rbac.py`, which renders the identity template
+    - `tests/k8s/test_k8s_manifests_rbac.py`, which renders the identity template
       from `cluster-base`;
     - `scripts/deploy_tools/tests/test_narrow_setup.py`, whose real-tree case takes
       `readonly-kubeconfig.j2` and `k3s_readonly_kubeconfig_server`;
-    - `ansible/tests/k8s/test_priorityclass_omits_defaulted_fields.py`, whose `TEMPLATE`
+    - `tests/k8s/test_priorityclass_omits_defaulted_fields.py`, whose `TEMPLATE`
       names `setup/k3s/priorityclass.yaml.j2`, and
-      `ansible/tests/k8s/test_pod_template_hygiene.py`, whose `_PRIORITYCLASS_TEMPLATE` and
+      `tests/k8s/test_pod_template_hygiene.py`, whose `_PRIORITYCLASS_TEMPLATE` and
       module docstring read the tier names from that template. Both render it from
       `cluster-base`;
     - the comments that name either template's old path: above
       `scripts/dev/new_k8s_service.py:PRIORITY_CLASSES`, in
       `scripts/diagnostics/probe_lib/health_cronjob.py`, and in a reason string of
-      `ansible/tests/k8s/_edge_property_rows.py`;
+      `tests/k8s/_edge_property_rows.py`;
     - the comment above `headlamp_k8s_crd_api_groups` in
-      `ansible/roles/k8s/headlamp/defaults/main.yml`, which names `cluster-base`'s defaults;
+      `k8s/roles/headlamp/defaults/main.yml`, which names `cluster-base`'s defaults;
     - `docs/longhorn-disaster-recovery.md`, `docs/break-glass.md` and the header of
       `storage_smoke.yml`, which gain the bring-up order with its hand apply of
       `cluster-base`, its `--skip-tags kubeconfig` first run, its `sops-age` step, its
@@ -2531,27 +2531,27 @@ subject's tests.
       `scripts/deploy_tools/tests/test_land_reads_the_tick_receipt.py` writes
       `readonly-rbac.yaml.j2` into a synthetic tree, and the two `gitops_deploy` tests
       `test_gitops_deploy_broad_park.py` and `test_gitops_deploy_setup_narrow.py` pass its
-      path to a stubbed tick. `ansible/tests/repo/test_guard_tests_read_renders_not_templates.py`
+      path to a stubbed tick. `tests/repo/test_guard_tests_read_renders_not_templates.py`
       holds `longhorn-recurringjob.yaml.j2` inside a source string that it feeds to the guard.
     - A docstring in
       `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_defer.py` and the module
       docstring of `scripts/deploy_tools/narrow_setup.py` describe a past
       `readonly-rbac.yaml.j2` case, and they stay.
 - **H1.3:**
-    - `ansible/tests/k8s/test_k8s_manifests_metallb.py`, which renders `metallb-pool.yaml.j2`
+    - `tests/k8s/test_k8s_manifests_metallb.py`, which renders `metallb-pool.yaml.j2`
       with `k3s_metallb_pool` from `setup/k3s`'s defaults, and whose
       `test_metallb_version_still_supports_the_metallb_io_annotations` reads
       `k3s_metallb_version`. Both read the `metallb` role;
-    - `ansible/tests/k8s/test_vip_pins.py`, which renders the pool template through
+    - `tests/k8s/test_vip_pins.py`, which renders the pool template through
       `rendered_setup_text`, and the docstring of
-      `ansible/tests/services/test_pihole_redundancy.py`, which names it;
-    - `ansible/tests/repo/test_lan_facts_have_one_source.py`, whose exemption for the pool's
+      `tests/services/test_pihole_redundancy.py`, which names it;
+    - `tests/repo/test_lan_facts_have_one_source.py`, whose exemption for the pool's
       address range moves to the `metallb` role's defaults;
-    - the reason string in `ansible/tests/k8s/_edge_property_rows.py` that names
+    - the reason string in `tests/k8s/_edge_property_rows.py` that names
       `k3s_metallb_version`.
 - **H1.7b, the RecurringJob template's readers:**
-  `ansible/tests/longhorn/test_daily_group_membership_is_the_r2_list.py` (`RECURRING_JOB`),
-  `ansible/tests/longhorn/test_longhorn_reap_opt_out_groups.py`
+  `tests/longhorn/test_daily_group_membership_is_the_r2_list.py` (`RECURRING_JOB`),
+  `tests/longhorn/test_longhorn_reap_opt_out_groups.py`
   (`RECURRING_JOB_TEMPLATE`), `scripts/docs/catalog_lib/catalog_backup.py` and
   `scripts/docs/fragments_lib/fragments_storage.py` read `longhorn-recurringjob.yaml.j2`
   from `setup/k3s`. The PR repoints each one to `longhorn-backup`.
@@ -2562,8 +2562,8 @@ subject's tests.
   `k3s_longhorn_b2_region`. H1.4 deletes the first two set_facts, and H1.7b deletes the third.
 - **H1.4:**
     - `hosts/tests/test_coredns_image_follows_bundled_manifest.py`;
-    - `ansible/tests/k8s/test_pod_template_hygiene.py:_SYSTEM_TIER`, which gains the CoreDNS
-      row, and `ansible/tests/k8s/test_container_security_context.py:_ROOT_ALLOWED` if the
+    - `tests/k8s/test_pod_template_hygiene.py:_SYSTEM_TIER`, which gains the CoreDNS
+      row, and `tests/k8s/test_container_security_context.py:_ROOT_ALLOWED` if the
       image runs as root;
     - `docs/k3s-upgrade.md`, whose `--tags coredns` step becomes the CoreDNS pin move and
       gains the break-glass;
@@ -2572,7 +2572,7 @@ subject's tests.
 - **H1.3 to H1.7b:** `docs/longhorn-disaster-recovery.md`, `docs/break-glass.md` and the
   header of `storage_smoke.yml`, for the bring-up step each PR changes. H1.5a, H1.5b, H1.6
   and H1.7b also open, narrow and close the Longhorn window's step 1 and step 7a there.
-- **H1.5a:** `ansible/roles/k8s/longhorn-ui/CLAUDE.md`, which says `roles/setup/k3s`
+- **H1.5a:** `k8s/roles/longhorn-ui/CLAUDE.md`, which says `roles/setup/k3s`
   installs Longhorn, and the per-hop procedure of `docs/longhorn-upgrade.md`.
 - **H1.2, H1.3, H1.5b and H1.7b:** `scripts/validate/refresh_vendored_schemas.py`, whose
   `CORE_GROUP_FILES` gains `scheduling.k8s.io` in H1.2 and whose `VENDORED` gains each CRD
@@ -2603,7 +2603,7 @@ subject's tests.
       red;
     - the tests that read the tier lists from `setup/k3s`'s defaults, among them the label
       cases that H1.6 moved from `ansible/roles/setup/k3s/tests/test_longhorn_group_labels.py`
-      to `longhorn-reconcile`'s tests, and the tier tests under `ansible/tests/longhorn/`;
+      to `longhorn-reconcile`'s tests, and the tier tests under `tests/longhorn/`;
     - `docs/adr/0007-backup-tiering-r2-daily-b2-weekly.md`, the **operator-only** amendment
       of *Governs* and the new consequence.
 - **H1.7b:**
@@ -2761,7 +2761,7 @@ subject's tests.
       states where `compose_services` lives after Ansible."
     - R4's ownership predicate reads every entry of `cluster/services.yml`.
     - H7 names that removal in its own steps, because its keep-list keeps
-      `ansible/inventory/` whole.
+      `inventory/` whole.
 5. **Secrets in a BackupTarget URL.** R2's rule 3 confines placeholders to `kind: Secret`, but
    each BackupTarget URL holds a bucket name. *Resolved by R2's Open questions 10:* R2
    accepted a `(key, kind)` frozenset, `PLACEHOLDER_KIND_EXEMPT`, with the members
@@ -2781,7 +2781,7 @@ subject's tests.
    H1.1g rewrites the three rule descriptions to match. **Ruled 2026-10-16: accepted.**
    Merging the pin is the upgrade. Automerge stays off for these rules, so the operator
    still chooses when each upgrade happens, at merge time rather than in a later hand step.
-7. **The approval floor.** `ansible/roles/k8s/cluster-base/` holds the agent's read-only RBAC,
+7. **The approval floor.** `k8s/roles/cluster-base/` holds the agent's read-only RBAC,
    and it now applies on merge. *Resolution:* whether that path joins the lander's approval
    floor in `claude-land-approval-paths.j2` is an **operator-only** decision, taken before
    H1.2. **Ruled 2026-10-16: it joins.** Before H1 the RBAC lives in
@@ -2969,7 +2969,7 @@ as noted under X-06. The parts that belong to other slices are cross-slice notes
   and H1 adopts that form.
 - **X-10 (high)** The arm and schedule keys moved to `group_vars/all.yml`, and nothing
   re-rendered the host cron that bakes them. *Confirmed:* at `70591c307`,
-  `services_from_changed_paths(['ansible/inventory/group_vars/all.yml'])` returns
+  `services_from_changed_paths(['inventory/group_vars/all.yml'])` returns
   `broad_deploy=True` with an empty `setup_roles`. `longhorn-backup-health.sh.j2` exports the
   four keys, and `health-crons.yml` bakes the fifth into `--retain`. *Fixed:* the first
   option. H1.7a makes the reader take the arm state from each BackupTarget's live URL and
@@ -3010,7 +3010,7 @@ fixed. Each confirmation was measured at `70591c307` or from the upstream source
       renders `cluster-base` and applies it server-side under kustomize-controller's field
       manager. This matches R4's bootstrap step 1.
     - H1.2 writes the order into the three DR documents.
-    - A red proof in `ansible/tests/k8s/` ties every `priorityClassName` in the `flux` render
+    - A red proof in `tests/k8s/` ties every `priorityClassName` in the `flux` render
       to a class in the `cluster-base` render.
 - **H1-R10-02 (high)** The upgrade-gates check did not fit C2's newest-commit promotion, and
   "one bump per revision" was false. *Confirmed* against C2's `decide`. *Fixed:*
@@ -3240,7 +3240,7 @@ file. Each claim was checked against the tree at `70591c307`, against upstream c
   and keys. *Confirmed* by a grep for each moved basename and key. *Fixed:*
     - The test lists for H1.2, H1.3 and H1.7b name every reader.
     - H1.3 also moves the `k3s_metallb_pool` exemption in
-      `ansible/tests/repo/test_lan_facts_have_one_source.py`, which the finding did not name.
+      `tests/repo/test_lan_facts_have_one_source.py`, which the finding did not name.
     - A new rule makes every template move run `git grep -l <basename>` and list each
       reader it repoints.
     - *Refuted for one file:* `test_guard_tests_read_renders_not_templates.py` does not
@@ -3286,7 +3286,7 @@ or against a read-only live read on 2026-10-11, before the fix.
 - **H1-C3-02 (medium)** The templated `coredns` role trips the fleet guards, and the vendored
   files bypass them unseen. *Confirmed:* k3s's manifest sets `system-cluster-critical`,
   `revisionHistoryLimit: 0`, no `enableServiceLinks` and no `runAsNonRoot`.
-  `ansible/tests/_k8s_render.py:rendered_docs` renders `templates/*.j2` only. *Fixed:*
+  `tests/_k8s_render.py:rendered_docs` renders `templates/*.j2` only. *Fixed:*
     - *CoreDNS without a host read* gives each guard one answer: the shell macros, an
       **operator-visible** `_SYSTEM_TIER` row, `enableServiceLinks: false` and a measured
       uid decision. The pod template always changes, so H1.4 always lands in a window.
@@ -3446,7 +3446,7 @@ None was refuted.
 - **H1-I1-05 (medium)** The `NEVER_SHED` equality test fails on D5's `flux_prune: false`
   for traefik and `flux`. *Confirmed:* D5 sets `flux_prune: false` on both, and nothing
   orders that against H1.1d. *Fixed by narrowing the test, not by a new marker:* the
-  traefik entry in `ansible/inventory/host_vars/daniel-box.yml` declares
+  traefik entry in `inventory/host_vars/daniel-box.yml` declares
   `tier: home-edge`, and D1 gives the `flux` entry `tier: platform`. `shed_entries` already
   keeps every tiered entry. The test therefore compares `NEVER_SHED` with the untiered k8s
   entries whose role sets `flux_prune: false`. Neither D5 PR needs a shed ruling, and
@@ -3591,7 +3591,7 @@ entry below gives the evidence.
       hand lists.
 - **H1-F1-03 (medium)** Tests that load deleted task files or tasks were missing from the
   same-PR lists. *Confirmed:* every test the finding names loads the file or task it names.
-  The census, run over `ansible/tests`, `ansible/roles/setup/k3s/tests`,
+  The census, run over `tests`, `ansible/roles/setup/k3s/tests`,
   `scripts/deploy_tools/tests` and `scripts/tests`, found five more readers:
     - `test_retried_commands_survive_check_mode.py:NON_RETRIED_READS_THAT_MUST_OPT_OUT`
       names `Read the live Corefile`, and the same module names the DNS probe task (H1.4);

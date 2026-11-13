@@ -5,7 +5,7 @@
 a package that names a credential needs the `secrets-unit` component and a ciphertext. So the
 fixture lays a `hosts/` tree under `tmp_path` that links the repo's own `components/` and `lib/`
 directories, lists the components under test, and carries a placeholder ciphertext. No real key,
-ciphertext or value is read: the renderer reads the key NAMES of `ansible/vars/secrets.yml` only.
+ciphertext or value is read: the renderer reads the key NAMES of `secrets/secrets.yml` only.
 """
 
 from pathlib import Path
@@ -27,7 +27,8 @@ def render_fixture(tmp_path: Path, components: tuple[str, ...]) -> host_mode.Pac
     root = tmp_path / "hosts"
     (root / HOST).mkdir(parents=True)
     # A `shared` entry resolves against the tree's root, one level above `hosts/`.
-    (tmp_path / "ansible").symlink_to(REPO / "ansible")
+    for name in ("k8s", "inventory", "secrets"):
+        (tmp_path / name).symlink_to(REPO / name)
     (root / "components").symlink_to(REPO / "hosts" / "components")
     (root / "lib").symlink_to(REPO / "hosts" / "lib")
     spec = {"components": [*BASE, *components]}

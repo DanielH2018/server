@@ -48,7 +48,7 @@ def _pr(number=5001, **over):
         "baseRefName": "master",
         "author": {"login": "DanielH2018"},
         "body": CLEAN_BODY,
-        "files": [{"path": "ansible/roles/k8s/sonarr/defaults/main.yml"}],
+        "files": [{"path": "k8s/roles/sonarr/defaults/main.yml"}],
     }
     return {**pr, **over}
 
@@ -182,7 +182,7 @@ def test_a_pr_that_is_not_the_batchs_own_clean_pr_never_lands(tmp_path, over):
         ".github/workflows/ci.yml",
         ".claude/settings.json",
         "hosts/components/claude-code/component.yml",
-        "ansible/vars/secrets.yml",
+        "secrets/secrets.yml",
         "uv.lock",
     ],
 )

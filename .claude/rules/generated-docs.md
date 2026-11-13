@@ -2,7 +2,7 @@
 paths:
   - "docs/**"
   - "scripts/docs/**"
-  - "ansible/roles/**/CLAUDE.md"
+  - "k8s/roles/**/CLAUDE.md"
 ---
 
 # Generated docs fragments and `## At a glance` blocks
@@ -29,7 +29,7 @@ or, for a claim's tier, its StorageClass or the `longhorn-reconcile` role's
 `gen_role_glance.py --fix` on that commit. It rewrites the block and fails once like a
 formatter, so stage the rewritten doc and commit again. `scripts/docs/tests/test_gen_role_glance.py` is the CI backstop for a commit that
 skipped the hook. The docs-refresh cron does not run the generator: a write under
-`ansible/roles/` is outside the paths the cron stages, so it would leave the primary checkout
+`k8s/roles/` is outside the paths the cron stages, so it would leave the primary checkout
 dirty.
 
 **What the cron DOES stage is a closed list, and a generator outside it dirties the tree.**

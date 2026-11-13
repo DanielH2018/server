@@ -25,7 +25,7 @@ loaders for `!!python/name:` — keeps doing that and does not come through here
 already call `yaml.load(..., Loader=...)` with a loader of their own.
 
 NOT REACHABLE FROM A ROLE'S `files/`. A role ships only its own `files/` directory, so
-the cluster-side modules under `ansible/roles/*/files/` cannot import this and still
+the cluster-side modules under `k8s/roles/*/files/` cannot import this and still
 call `yaml.safe_load`. They are not a CI cost and are deliberately left alone.
 """
 

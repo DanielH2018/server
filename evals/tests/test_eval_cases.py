@@ -13,13 +13,12 @@ from pathlib import Path
 from lib.repo_paths import REPO
 
 CASES_DIR = Path(__file__).parent.parent / "cases"
-# Any role path, cited bare, under `ansible/` or under `$HOME/server/`. The path ends on a name
-# character, so a `:14` line suffix, trailing punctuation and a `roles/containers/**` glob stay
-# out of it. Group 1 is the `<tree>/<role>` pair; group 2 is the marker, when it follows the
-# path (after an optional `:N` or `:N-M`).
+# Any k8s role path, cited bare or under `$HOME/server/`. The path ends on a name character, so
+# a `:14` line suffix and trailing punctuation stay out of it. Group 1 is the role; group 2 is
+# the marker, when it follows the path (after an optional `:N` or `:N-M`).
 NEW_ROLE_MARKER = "(a new role, not yet merged)"
 _ROLE_PATH_RE = re.compile(
-    r"(?<![\w-])(?:ansible/)?roles/((?:k8s|setup|containers)/[a-z0-9][a-z0-9_-]*)"
+    r"(?<![\w-])k8s/roles/([a-z0-9][a-z0-9_-]*)"
     r"(?:/[A-Za-z0-9_.-]*[A-Za-z0-9_-])*(?::\d+(?:-\d+)?)?( "
     + re.escape(NEW_ROLE_MARKER)
     + r")?"
@@ -89,7 +88,7 @@ def _strings(value: object) -> Iterator[str]:
 
 
 def cited_role_paths(obj: dict) -> tuple[set[str], set[str]]:
-    """Every `ansible/roles/...` path a case cites, and the roles it marks as new.
+    """Every `k8s/roles/...` path a case cites, and the roles it marks as new.
 
     A role counts as marked when any one citation under it carries the marker, so a case need
     not repeat the marker on every line that names the same fixture.
@@ -101,25 +100,23 @@ def cited_role_paths(obj: dict) -> tuple[set[str], set[str]]:
             path = re.sub(
                 r":\d+(?:-\d+)?$", "", m.group(0).removesuffix(m.group(2) or "")
             )
-            paths.add("ansible/" + path[path.index("roles/") :])
+            paths.add(path[path.index("k8s/roles/") :])
             if m.group(2):
                 marked.add(m.group(1))
     return paths, marked
 
 
 def missing_role_paths(obj: dict, root: Path = REPO) -> set[str]:
-    """README rule 1: a cited `ansible/roles/...` path must exist under `root`.
+    """README rule 1: a cited `k8s/roles/...` path must exist under `root`.
 
     The one exemption is a fixture for a role that does not exist yet: the case marks the role
-    `(a new role, not yet merged)` and `ansible/roles/<tree>/<role>` is absent. A marker on a
+    `(a new role, not yet merged)` and `k8s/roles/<role>` is absent. A marker on a
     role that does exist is a stale fixture, so it exempts nothing.
     """
     paths, marked = cited_role_paths(obj)
-    new_roles = {r for r in marked if not (root / "ansible/roles" / r).exists()}
+    new_roles = {r for r in marked if not (root / "k8s/roles" / r).exists()}
     return {
-        p
-        for p in paths
-        if not (root / p).exists() and "/".join(p.split("/")[2:4]) not in new_roles
+        p for p in paths if not (root / p).exists() and p.split("/")[2] not in new_roles
     }
 
 
@@ -217,42 +214,31 @@ def test_all_case_files_valid():
         assert not problems, f"{f}: {problems}"
 
 
-def test_retired_container_role_is_flagged():
-    """H5.12 deleted `roles/containers/`, so every Compose role path a case cites is missing."""
-    case = {
-        "input": "# ansible/roles/containers/common/tasks/docker_deploy.yml",
-        "rubric": "Renovate must not track `roles/containers/**`.",
-    }
-    assert missing_role_paths(case) == {
-        "ansible/roles/containers/common/tasks/docker_deploy.yml"
-    }
-
-
 def test_missing_role_path_is_flagged():
     case = {
-        "input": "# ansible/roles/k8s/grafana/defaults/main.yml:12",
-        "rubric": "see $HOME/server/ansible/roles/k8s/homepage/templates/configmap.yaml.j2.",
+        "input": "# k8s/roles/grafana/defaults/main.yml:12",
+        "rubric": "see $HOME/server/k8s/roles/homepage/templates/configmap.yaml.j2.",
     }
     assert missing_role_paths(case) == {
-        "ansible/roles/k8s/grafana/defaults/main.yml",
-        "ansible/roles/k8s/homepage/templates/configmap.yaml.j2",
+        "k8s/roles/grafana/defaults/main.yml",
+        "k8s/roles/homepage/templates/configmap.yaml.j2",
     }
 
 
 def test_marked_path_under_an_absent_role_is_not_flagged():
     case = {
-        "input": "# ansible/roles/k8s/ledger/templates/deployment.yaml.j2:14 (a new role, not yet merged)",
-        "rubric": "ansible/roles/k8s/ledger/defaults/main.yml has no backup tier.",
+        "input": "# k8s/roles/ledger/templates/deployment.yaml.j2:14 (a new role, not yet merged)",
+        "rubric": "k8s/roles/ledger/defaults/main.yml has no backup tier.",
     }
     assert missing_role_paths(case) == set()
 
 
 def test_marker_on_a_role_that_exists_exempts_nothing():
     case = {
-        "input": "# ansible/roles/k8s/homepage/templates/configmap.yaml.j2 (a new role, not yet merged)"
+        "input": "# k8s/roles/homepage/templates/configmap.yaml.j2 (a new role, not yet merged)"
     }
     assert missing_role_paths(case) == {
-        "ansible/roles/k8s/homepage/templates/configmap.yaml.j2"
+        "k8s/roles/homepage/templates/configmap.yaml.j2"
     }
 
 
@@ -263,18 +249,18 @@ def test_no_case_cites_a_missing_role_path():
     paths, _ = cited_role_paths(
         cited[CASES_DIR / "homelab-cicd-reviewer/002-frozenset-latest-accepted.json"]
     )
-    assert "ansible/roles/k8s/littlelink/defaults/main.yml" in paths
+    assert "k8s/roles/littlelink/defaults/main.yml" in paths
     _, marked = cited_role_paths(
         cited[CASES_DIR / "homelab-container-reviewer/001-named-volume-unbacked.json"]
     )
-    assert "k8s/notesdb" in marked
+    assert "notesdb" in marked
     missing = {
         str(f.relative_to(CASES_DIR)): sorted(missing_role_paths(obj))
         for f, obj in cited.items()
         if missing_role_paths(obj)
     }
     assert not missing, (
-        f"cases cite ansible/roles/ paths that do not exist: {missing}. Rebuild the case from the "
+        f"cases cite k8s/roles/ paths that do not exist: {missing}. Rebuild the case from the "
         "live file (evals/README.md, rule 4), or, for a fixture of a role that does not exist "
         f"yet, follow one citation of it with '{NEW_ROLE_MARKER}' (rule 1)."
     )

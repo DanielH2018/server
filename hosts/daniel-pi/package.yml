@@ -5,7 +5,7 @@
 #
 # Since H4.5 it ships the secrets unit too. The unit decrypts the two push tokens into
 # /run/credstore, and the two token heartbeats load them from there. The interim files under
-# /etc/homelab/interim/ stay until H4.6. ansible/vars/hosts/daniel-pi.sops.yaml carries every key
+# /etc/homelab/interim/ stay until H4.6. secrets/hosts/daniel-pi.sops.yaml carries every key
 # this tree names, and `host_secrets.py sync daniel-pi` rewrites it (operator-only).
 #
 # Since H5.14 it ships crowdsec's edge probe timer. D5's first crowdsec conversion installed that

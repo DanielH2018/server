@@ -16,9 +16,9 @@ from lib.renovate_annotations import is_annotation_manager
 
 # The file each pin lives in, which a rule's matchFileNames is matched against.
 PIN_FILES = {
-    "k3s-io/k3s": "ansible/roles/k8s/system-upgrade/defaults/main.yml",
-    "metallb/metallb": "ansible/roles/k8s/metallb/defaults/main.yml",
-    "longhorn/longhorn": "ansible/roles/k8s/longhorn/defaults/main.yml",
+    "k3s-io/k3s": "k8s/roles/system-upgrade/defaults/main.yml",
+    "metallb/metallb": "k8s/roles/metallb/defaults/main.yml",
+    "longhorn/longhorn": "k8s/roles/longhorn/defaults/main.yml",
     "coredns/coredns": "hosts/packages/homelab-tools/package.yml",
 }
 DEP_TYPE = next(m for m in _CONFIG_MANAGERS if is_annotation_manager(m))[
@@ -69,7 +69,7 @@ def test_the_k3s_pin_names_its_hand_apply():
 
 
 def test_the_coredns_image_in_a_k8s_role_is_disabled():
-    path = "ansible/roles/k8s/coredns/defaults/main.yml"
+    path = "k8s/roles/coredns/defaults/main.yml"
     dep = "rancher/mirrored-coredns-coredns"
     assert _setting("enabled", dep, path, "docker") is False
 

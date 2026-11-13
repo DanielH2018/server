@@ -1,7 +1,7 @@
 """Whether `probe.py health <tag>` runs from a checkout older than the tag's k8s role (#5909).
 
 The resolver in health.py reads a role's workloads from the role's manifests in THIS checkout.
-A checkout that predates the role has no `roles/k8s/<tag>/`, so the resolver returns None and
+A checkout that predates the role has no `k8s/roles/<tag>/`, so the resolver returns None and
 `run_health` guesses a workload named after the tag in the default namespace. For `metallb`,
 whose workloads are `metallb-system/controller` and `metallb-system/speaker`, that guess
 printed "no Deployment or DaemonSet in this namespace" and exited 1 against a healthy cluster:

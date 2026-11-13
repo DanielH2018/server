@@ -25,7 +25,7 @@ def _capture(monkeypatch):
     that reaches for `Popen` is seen by the same seam as one that reaches for `run` -- both
     spellings answer the same questions here, which checkout and which working directory.
     One patch rather than two also keeps this file inside its entry in
-    ansible/tests/repo/monkeypatch_allowlist.txt, which only ever falls.
+    tests/repo/monkeypatch_allowlist.txt, which only ever falls.
     """
     seen = {}
 

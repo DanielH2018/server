@@ -74,8 +74,8 @@ def test_classify_records_the_derived_tags(landing):
 
 _NEW_ROLE_PR = {
     "files": [
-        {"path": "ansible/roles/k8s/pihole-exporter/tasks/main.yml"},
-        {"path": "ansible/inventory/host_vars/daniel-box.yml"},
+        {"path": "k8s/roles/pihole-exporter/tasks/main.yml"},
+        {"path": "inventory/host_vars/daniel-box.yml"},
     ],
     "changedFiles": 2,
 }
@@ -141,7 +141,7 @@ def test_an_unreadable_merge_commit_says_so_and_falls_back_to_this_checkout(
 
 def _role_pr(role: str) -> dict:
     return {
-        "files": [{"path": f"ansible/roles/k8s/{role}/tasks/main.yml"}],
+        "files": [{"path": f"k8s/roles/{role}/tasks/main.yml"}],
         "changedFiles": 1,
     }
 

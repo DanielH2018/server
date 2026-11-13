@@ -270,7 +270,7 @@ ssh_guest() {
 # working one from the host: `virsh nwfilter-dumpxml` lists it either way, and whether it is
 # attached to the live tap device is not in that output. Reachability from the far side is the
 # only signal that separates the two — which is the failure the fence was added after (the inert
-# ufw `route deny`, #508). ansible/tests/staging/test_staging_egress_fence.py holds the filter's
+# ufw `route deny`, #508). tests/staging/test_staging_egress_fence.py holds the filter's
 # SHAPE; this leg is the half that measures whether it FIRES. It replaces
 # scripts/diagnostics/staging_egress_probe.py, which dialled these same targets from the
 # persistent daniel-stage guest and was retired with it (#2941, restored here as #2943).

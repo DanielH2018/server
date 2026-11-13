@@ -65,11 +65,10 @@ def _census(
     files: dict[str, str] | None = None,
 ) -> Census:
     """The census over a tree with one render target, `widget`."""
-    ansible = tmp_path / "ansible"
-    role = ansible / "roles" / "k8s" / "widget"
+    role = tmp_path / "k8s" / "roles" / "widget"
     written = {
-        ansible / "inventory" / "group_vars" / "all.yml": "{}\n",
-        ansible / "inventory" / "host_vars" / "daniel-box.yml": "{}\n",
+        tmp_path / "inventory" / "group_vars" / "all.yml": "{}\n",
+        tmp_path / "inventory" / "host_vars" / "daniel-box.yml": "{}\n",
         role / "tasks" / "main.yml": tasks,
         role / "defaults" / "main.yml": defaults,
         **{role / "templates" / name: text for name, text in templates.items()},
@@ -79,7 +78,7 @@ def _census(
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text)
     (tmp_path / "shared").mkdir()
-    tree = Tree(ansible=ansible, shared=tmp_path / "shared")
+    tree = Tree(root=tmp_path, shared=tmp_path / "shared")
     return census(tree, ["widget"], FIXTURE_DERIVED, {"widget": {}})
 
 

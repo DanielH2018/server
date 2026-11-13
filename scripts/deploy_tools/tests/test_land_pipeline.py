@@ -395,7 +395,7 @@ def test_the_real_classifier_derives_a_tag_from_a_real_path(land_run):
         pull_ref_rc=1,
         gh_views={
             "files,changedFiles": {
-                "files": [{"path": "ansible/roles/k8s/sonarr/defaults/main.yml"}],
+                "files": [{"path": "k8s/roles/sonarr/defaults/main.yml"}],
                 "changedFiles": 1,
             }
         },

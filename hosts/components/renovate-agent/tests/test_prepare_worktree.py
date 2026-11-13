@@ -6,7 +6,7 @@ It must also reclaim a directory git has no worktree record of, which is what a 
 leaves behind and what stopped the agent for two days from 2026-09-08 (issue #1477).
 
 Every boundary comes through `agent_toolbox.AgentTools`, so nothing here patches a module
-attribute — see that class's docstring and `ansible/tests/repo/monkeypatch_allowlist.txt`.
+attribute — see that class's docstring and `tests/repo/monkeypatch_allowlist.txt`.
 
 Run: uv run pytest hosts/components/renovate-agent/tests/test_prepare_worktree.py
 """

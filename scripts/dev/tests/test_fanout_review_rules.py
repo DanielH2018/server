@@ -27,7 +27,7 @@ def _reviewer_prompt(tmp_path, changed):
 def test_a_range_touching_secrets_puts_the_secrets_rule_in_the_reviewers_prompt(
     tmp_path,
 ):
-    pipeline, prompt = _reviewer_prompt(tmp_path, ["ansible/vars/x.yml"])
+    pipeline, prompt = _reviewer_prompt(tmp_path, ["secrets/x.yml"])
     assert pipeline.rules["secrets.md"][1] in prompt
 
 

@@ -22,7 +22,7 @@ _mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_mod)
 
 _TARGET = "  ✗ target loki [loki:3100] down"
-_SESSION = "  • worktree-other-branch — ansible/roles/k8s/x/tasks/main.yml"
+_SESSION = "  • worktree-other-branch — k8s/roles/x/tasks/main.yml"
 _UNLABELLED = "WARN: this worktree's name (bridge-abc123) was generated. Label it."
 _REMOVABLE = "  ↳ worktree-merged-branch is merged and ready to remove"
 _FANOUT = "  ↳ fan-out batch 1345 runs on daniel-server (worktree-fanout-1345)"

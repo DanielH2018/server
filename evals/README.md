@@ -223,9 +223,9 @@ and re-running it, not by reasoning:
    it scores **3/3**. Cases citing retired roles (`k8s/kopia`) or roles that never existed
    (`k8s/longhorn` — the real files are under `hosts/components/k3s-server/templates/`) were corrected for the
    same reason. H5.12 deleted `roles/containers/`, so a cited `roles/containers/<x>` path is now
-   always missing. A fixture for a service that does not exist yet goes under `roles/k8s/`,
+   always missing. A fixture for a service that does not exist yet goes under `k8s/roles/`,
    marked "(a new role, not yet merged)".
-   `test_no_case_cites_a_missing_role_path` holds every other cited `ansible/roles/...` path to
+   `test_no_case_cites_a_missing_role_path` holds every other cited `k8s/roles/...` path to
    the tree. A path that does not exist passes only when one citation under its role carries that
    marker and the role directory is absent; a marker on a role that exists exempts nothing.
 2. **Pre-supply anything an earlier step would have gathered.** `012` asked for the step-3 dispatch
@@ -247,11 +247,11 @@ and re-running it, not by reasoning:
    a `rate-limit@file` middleware that left with the Docker edge, or an automation stripped of the
    20s delay that makes it correct. Three cases now quote the live file they cite (the whitelist,
    the image pin and the automation). The other three are fixtures for a new role, so each now
-   names a `roles/k8s/` path marked "(a new role, not yet merged)". This rule is a
+   names a `k8s/roles/` path marked "(a new role, not yet merged)". This rule is a
    diagnosis, not yet a measurement: the sweep deleted its per-run output, so the next hermetic
    sweep is what confirms it. Of the sweep's two 1/3 cases, `008` was missing the `findings.py
    list` output its skill's priming step asks for, and now carries it. `006` cited
-   `roles/k8s/traefik/templates/middleware.yaml.j2`, which does not exist, for an orphaned
+   `k8s/roles/traefik/templates/middleware.yaml.j2`, which does not exist, for an orphaned
    compression middleware; compression is attached entrypoint-wide in `dynamic.yaml.j2`, so the
    finding was false against any live file. #4020 replaced it with an open, true finding on a
    live file: bazarr hand-writes the NetworkPolicy that prowlarr, which its header calls the same
@@ -261,7 +261,7 @@ and re-running it, not by reasoning:
    change rebuilt eight cases that passed the sweep but cited retired `roles/containers/` roles,
    and one of them, `homelab-review/002`, also carried a settled "Pi images are unpinned"
    decision that the Pi's digest pins had made false. #4045 widened the check from Compose role
-   names to every cited `ansible/roles/` path and rebuilt the six cases citing five paths that no
+   names to every cited `k8s/roles/` path and rebuilt the six cases citing five paths that no
    longer existed. Three were path-only repoints in synthesis cases, where the path is a label: the
    Authelia session secret, the homepage widget file, and `grafana-data` in `k8s/observability`.
    The two `ha-review` cases now name `files/automations/lighting.yaml` and the live actuator

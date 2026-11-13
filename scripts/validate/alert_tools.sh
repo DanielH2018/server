@@ -56,8 +56,8 @@ if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
 fi
 
 repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-defaults="$repo/ansible/roles/k8s/observability/defaults/main.yml"
-loki_defaults="$repo/ansible/roles/k8s/loki-homelab/defaults/main.yml"
+defaults="$repo/k8s/roles/observability/defaults/main.yml"
+loki_defaults="$repo/k8s/roles/loki-homelab/defaults/main.yml"
 # --path-format=absolute because a main checkout's common dir is otherwise the relative `.git`.
 # Under a git hook GIT_DIR overrides -C, and it names a directory of this same clone.
 common_dir="$(git -C "$repo" rev-parse --path-format=absolute --git-common-dir)"

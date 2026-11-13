@@ -1,0 +1,141 @@
+"""#8218: a warning that fires for 48 hours escalates to a critical, unless it holds by design.
+
+`WarningUnresolved` (`alerting-meta.yaml`) selects firing warnings from `ALERTS`, the series
+Prometheus writes for every rule's alerts with the rule's labels. Its promtool test feeds
+`ALERTS` directly, so this module holds the real rules' labels to that selector: every paging
+warning escalates except the rules that carry `escalate: "false"`. It also walks the rendered
+Alertmanager config, so an escalation pages Discord and email, and the HostCheckOverdue
+duplicate stays inhibited after it escalates.
+
+Run: uv run pytest tests/services/test_warning_escalation_exemptions.py
+"""
+
+import re
+
+from lib import yaml_fast
+from _helpers import K8S_ROLES
+from test_alertmanager_host_check_inhibit import (
+    MATCHER,
+    _matcher,
+    inhibit_rules,
+    inhibited,
+)
+from test_alertmanager_routing import reached, route_tree
+
+RULES = K8S_ROLES / "observability" / "files" / "rules"
+ESCALATION = "WarningUnresolved"
+HOLDS_BY_DESIGN = {"DeployHoldActive", "FanoutSlotsIdleWithFreeWork", "FluxSuspended"}
+SELECTOR = re.compile(r"ALERTS\{([^}]*)\}")
+
+
+def alert_rules() -> list[dict]:
+    return [
+        rule
+        for path in sorted(RULES.glob("*.yaml"))
+        for group in yaml_fast.safe_load(path.read_text())["groups"]
+        for rule in group["rules"]
+        if "alert" in rule
+    ]
+
+
+def escalation_rule() -> dict:
+    [rule] = [r for r in alert_rules() if r["alert"] == ESCALATION]
+    return rule
+
+
+def escalates(rule: dict) -> bool:
+    """Whether the ALERTS series of `rule`, firing, matches the escalation's selector."""
+    selectors = {
+        s
+        for s in SELECTOR.findall(escalation_rule()["expr"])
+        if 'alertname="Watchdog"' not in s
+    }
+    [selector] = selectors
+    series = {"alertname": rule["alert"], "alertstate": "firing", **rule["labels"]}
+    return all(_matcher(m.strip(), series) for m in selector.split(","))
+
+
+def escalated(source: dict[str, str]) -> dict[str, str]:
+    """The labels WarningUnresolved fires with for the warning `source`."""
+    return {
+        **source,
+        **escalation_rule()["labels"],
+        "alertname": ESCALATION,
+        "escalated_from": source["alertname"],
+        "escalated_service": source["service"],
+    }
+
+
+def test_every_paging_warning_escalates_but_those_that_hold_by_design():
+    warnings = [
+        r
+        for r in alert_rules()
+        if r["labels"]["severity"] == "warning" and "shadow" not in r["labels"]
+    ]
+    assert {"DocsRefreshFailed", "EvalSweepFailed", "HostCheckOverdue"} <= {
+        r["alert"] for r in warnings if escalates(r)
+    }
+    assert {r["alert"] for r in warnings if not escalates(r)} == HOLDS_BY_DESIGN
+
+
+def test_shadow_criticals_and_the_escalation_itself_never_escalate():
+    rules = alert_rules()
+    assert [r["alert"] for r in rules if "shadow" in r["labels"] and escalates(r)] == []
+    assert [
+        r["alert"]
+        for r in rules
+        if r["labels"]["severity"] != "warning" and escalates(r)
+    ] == []
+
+
+def test_an_escalation_pages_discord_and_email():
+    target = escalated(
+        {
+            "alertname": "DocsRefreshFailed",
+            "severity": "warning",
+            "service": "daniel-box",
+        }
+    )
+    assert [r["receiver"] for r in reached(route_tree(), target)] == [
+        "discord",
+        "email",
+    ]
+
+
+def sample(matchers: list[str]) -> dict[str, str]:
+    """One label set the `*_matchers` list selects."""
+    labels = {}
+    for matcher in matchers:
+        found = MATCHER.match(matcher)
+        assert found, matcher
+        name, op, value = found.groups()
+        assert op == "=" or (op == "=~" and value.startswith(".+")), matcher
+        labels[name] = "Sample" + value[2:] if op == "=~" else value
+    return labels
+
+
+def test_every_inhibited_warning_stays_inhibited_once_it_escalates():
+    warnings = {r["alert"] for r in alert_rules() if escalates(r)}
+    held = set()
+    for rule in inhibit_rules():
+        target = {"alertname": "SomeWarning", "severity": "warning", "service": "x"}
+        target |= sample(rule["target_matchers"])
+        if target["alertname"] == ESCALATION or (
+            target["alertname"] != "SomeWarning" and target["alertname"] not in warnings
+        ):
+            continue
+        source = sample(rule["source_matchers"])
+        for label in rule.get("equal", []):
+            source[label] = target[label] = target.get(label, f"same-{label}")
+        assert inhibited(escalated(target), [source]), rule
+        held.add(target["alertname"])
+    assert {"HostCheckOverdue", "ScrapeTargetDown", "PiPortDead", "SomeWarning"} <= held
+
+
+def test_an_escalation_with_another_equal_label_still_pages():
+    pair = {"severity": "warning", "service": "daniel-box", "origin": "daniel-box"}
+    source = {"alertname": "AideCheckNotReporting", "check": "aide-check", **pair}
+    target = escalated({"alertname": "HostCheckOverdue", "check": "aide-check", **pair})
+    other = escalated({"alertname": "HostCheckOverdue", "check": "unpaired", **pair})
+    assert inhibited(target, [source])
+    assert not inhibited(other, [source])

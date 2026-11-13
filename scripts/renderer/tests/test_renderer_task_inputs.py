@@ -1,6 +1,6 @@
 """`task_inputs` reads a role's defaults, and each content tag equals image-builder's expression.
 
-Each content tag is held equal to image-builder's expression evaluated with the same variables, through the helper `ansible/tests/deploy/test_image_builder_content_tag.py`
+Each content tag is held equal to image-builder's expression evaluated with the same variables, through the helper `tests/deploy/test_image_builder_content_tag.py`
 uses. A check on the real tree renders it with a fresh stub file.
 
 Run: uv run pytest scripts/renderer/tests/test_renderer_task_inputs.py

@@ -102,7 +102,7 @@ def test_a_pinned_row_is_clean():
 
 
 def test_the_real_registry_still_pins_the_secret():
-    # Non-vacuity: the gate reads `ansible/secret_rotation.yml`, and that file must keep
+    # Non-vacuity: the gate reads `secrets/secret_rotation.yml`, and that file must keep
     # carrying the row this script exists for.
     assert gates.not_pinned(yaml_fast.safe_load(gates.REGISTRY.read_text())) == []
 

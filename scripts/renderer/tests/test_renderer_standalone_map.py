@@ -46,7 +46,7 @@ def test_a_map_missing_a_standalone_key_is_flagged(render, known_keys):
 
 def test_a_mapped_key_absent_from_the_secrets_file_is_flagged(render, known_keys):
     assert coverage_problems(read_guard_map(), render, known_keys - {"email"}) == [
-        "email is in the map and not in ansible/vars/secrets.yml"
+        "email is in the map and not in secrets/secrets.yml"
     ]
 
 

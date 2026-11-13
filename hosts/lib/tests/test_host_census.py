@@ -21,7 +21,7 @@ KNOWN_HOSTS = frozenset({"daniel-box", "daniel-server", "daniel-pi"})
 ROOTS = "scripts/validate/validate_lib/package_roots.py"
 GATE = "hosts/lib/builder_rollout_gate.py"
 SCRIPT = "hosts/bootstrap-host.sh"
-SOPS = "ansible/.sops.yaml"
+SOPS = "secrets/.sops.yaml"
 NEW_HOST = "daniel-new"
 
 
@@ -53,15 +53,13 @@ def _script_hosts(path: Path) -> set[str]:
 def has_own_creation_rule(rules: list[dict], host: str) -> bool:
     """Whether the first rule matching `host`'s SOPS file is one that matches no other host's.
 
-    SOPS takes the first match, and the generic rule matches every per-host path too, so a rule
-    placed after it never applies.
+    SOPS takes the first match, so a rule shared with another host would encrypt this host's
+    file to that host's key.
     """
-    path = f"vars/hosts/{host}.sops.yaml"
+    path = f"hosts/{host}.sops.yaml"
     for rule in rules:
         if re.search(rule["path_regex"], path):
-            return not re.search(
-                rule["path_regex"], "vars/hosts/no-such-host.sops.yaml"
-            )
+            return not re.search(rule["path_regex"], "hosts/no-such-host.sops.yaml")
     return False
 
 
@@ -89,7 +87,9 @@ def census_problems(tree: Path) -> list[str]:
 
 
 def _rule(host: str) -> str:
-    return f'  - path_regex: vars/hosts/{host}\\.sops\\.yaml$\n    age: "age1new"\n'
+    return (
+        f'  - path_regex: (^|secrets/)hosts/{host}\\.sops\\.yaml$\n    age: "age1new"\n'
+    )
 
 
 def _edit_sub(tree: Path, relative: str, pattern: str, replacement: str) -> None:
@@ -101,7 +101,7 @@ def _edit_sub(tree: Path, relative: str, pattern: str, replacement: str) -> None
     path.write_text(changed)
 
 
-GENERIC_RULE = r"^  - path_regex: \.\*\(vars\|secrets\)"
+GENERIC_RULE = r"^  - path_regex: \(\^\|secrets/\)\(cluster-manifests/\)\?"
 
 
 @pytest.fixture
@@ -128,9 +128,7 @@ def _add_script(tree: Path) -> None:
 
 
 def _add_rule(tree: Path) -> None:
-    _edit_sub(
-        tree, SOPS, GENERIC_RULE, _rule(NEW_HOST) + "  - path_regex: .*(vars|secrets)"
-    )
+    _edit_sub(tree, SOPS, GENERIC_RULE, _rule(NEW_HOST) + r"\g<0>")
 
 
 ADDS = {"NAMED": _add_named, "CANARY_ORDER": _add_canary, "HOSTS": _add_script}
@@ -166,17 +164,6 @@ def test_a_host_missing_from_a_set_is_flagged_and_the_set_named(fixture_tree, le
 def test_a_host_with_no_creation_rule_is_flagged(fixture_tree):
     for add in ADDS.values():
         add(fixture_tree)
-
-    assert census_problems(fixture_tree) == [
-        f"{NEW_HOST}: no creation rule of its own in {SOPS}"
-    ]
-
-
-def test_a_creation_rule_after_the_generic_rule_is_flagged(fixture_tree):
-    for add in ADDS.values():
-        add(fixture_tree)
-    sops = fixture_tree / SOPS
-    sops.write_text(sops.read_text().rstrip("\n") + "\n" + _rule(NEW_HOST))
 
     assert census_problems(fixture_tree) == [
         f"{NEW_HOST}: no creation rule of its own in {SOPS}"

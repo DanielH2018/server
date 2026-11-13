@@ -496,7 +496,7 @@ def main(
 
     Every keyword argument is one of this module's own probes, and its default is that
     probe. A test passes a fake instead of monkeypatching the module attribute: the
-    monkeypatch ratchet (ansible/tests/_ratchet.py) caps a test module at zero patches on a
+    monkeypatch ratchet (tests/_ratchet.py) caps a test module at zero patches on a
     first-party module, and each probe reads live state (stdin, this checkout's git, the
     machine's worktrees, `.claude/fanout`) that would make an assertion depend on the host.
     `deadline` is the seconds all of them together may take; a test passes a short one.

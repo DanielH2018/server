@@ -313,7 +313,7 @@ def _reading_helpers(tree: ast.Module) -> dict[str, _ReadingHelper]:
 
     A read inside such a helper is invisible to the clauses above — the parameter shadows the
     name the caller passed, so `_source_read_calls` drops the binding — and the call site names
-    no `*.sh.j2` of its own. `ansible/tests/deploy/test_setup_drift_check.py` was the live
+    no `*.sh.j2` of its own. `tests/deploy/test_setup_drift_check.py` was the live
     instance: a module-level `_CHECK` path, a local `_source(path)` that stripped comments out
     of `path.read_text()`, and four tests asserting on the result. It read a source through two
     directory-wide conversions and the rule never saw it (#3220). So the helper's own read is

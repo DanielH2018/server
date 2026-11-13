@@ -192,12 +192,12 @@ def test_check_template_catches_the_real_typo_class(tmp_path):
     )
     out_dir = tmp_path / "out"
     out_dir.mkdir()
-    orig_ansible = v.ANSIBLE
-    v.ANSIBLE = tmp_path
+    orig_repo = v.REPO
+    v.REPO = tmp_path
     try:
         err = v.check_template(broken, {}, out_dir, "systemd-analyze")
     finally:
-        v.ANSIBLE = orig_ansible
+        v.REPO = orig_repo
     assert err is not None
     assert "systemd-analyze verify" in err
 
@@ -213,12 +213,12 @@ def test_check_template_passes_a_clean_render(tmp_path):
     )
     out_dir = tmp_path / "out"
     out_dir.mkdir()
-    orig_ansible = v.ANSIBLE
-    v.ANSIBLE = tmp_path
+    orig_repo = v.REPO
+    v.REPO = tmp_path
     try:
         err = v.check_template(clean, {}, out_dir, "systemd-analyze")
     finally:
-        v.ANSIBLE = orig_ansible
+        v.REPO = orig_repo
     assert err is None
 
 

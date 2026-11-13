@@ -14,7 +14,7 @@ import pytest
 from validate import render_diff_gates as gate
 
 ROLES = ("headlamp",)
-ROLE = "ansible/roles/k8s/headlamp"
+ROLE = "k8s/roles/headlamp"
 DEFERRED = "headlamp-deferred"
 TEMPLATE = "rbac-observability.yaml.j2"
 

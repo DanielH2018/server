@@ -29,7 +29,7 @@ GH_TIMEOUT_S = 60.0
 # Paths whose change widens what this command or the lander may do, or that the landing path
 # imports. A PR touching one is left for a person, the way `homelab-claude-land@`'s approval
 # list leaves it. `scripts/deploy_tools/` is the whole tree because land.sh imports await_ci.py and the rest
-# of it, not only land*. `ansible/vars/` holds the
+# of it, not only land*. `secrets/` holds the
 # secrets and the generated cluster file, and `.claude/` holds the repo's hooks and settings.
 OWN_PATHS = (
     "scripts/deploy_tools/",
@@ -38,7 +38,7 @@ OWN_PATHS = (
     ".github/",
     ".claude/",
     "hosts/components/claude-code/",
-    "ansible/vars/",
+    "secrets/",
     "pyproject.toml",
     "uv.lock",
     "uv.toml",

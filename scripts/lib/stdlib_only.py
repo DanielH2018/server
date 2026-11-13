@@ -47,7 +47,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from lib import repo_paths, role_installs
-from lib.repo_paths import REPO, ROLE_MODULES, ROLES
+from lib.repo_paths import K8S_ROLES, REPO, ROLE_MODULES
 
 HOOKS = REPO / ".claude" / "hooks"
 WAIT_SOURCES = REPO / ".claude" / "wait-sources"
@@ -431,7 +431,7 @@ def colliding_basenames() -> frozenset[str]:
         if name.isupper()
         and isinstance(value, Path)
         and value.is_dir()
-        and value.resolve().is_relative_to(ROLES)
+        and value.resolve().is_relative_to(K8S_ROLES)
     }
     for directory in role_dirs:
         for child in directory.glob("*.py"):
@@ -479,7 +479,11 @@ def walk(path: Path, dirs: list[Path]) -> list[str]:
         # host has exactly one candidate and `sys.path` order is not a question.
         if resolved is not None and resolved[0].is_relative_to(role_installs.stage()):
             continue
-        if resolved is None or top in colliding or resolved[0].is_relative_to(ROLES):
+        if (
+            resolved is None
+            or top in colliding
+            or resolved[0].is_relative_to(K8S_ROLES)
+        ):
             bad.append(module)
     return sorted(set(bad))
 

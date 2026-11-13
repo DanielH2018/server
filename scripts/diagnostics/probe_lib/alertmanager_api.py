@@ -2,7 +2,7 @@
 
 Two readers: `probe.py health <tag>` names the silence or inhibition on a gated alert, and
 `probe.py monitors` lists the active silences and the alerts `ALERTS` lacks. Both read through Alertmanager's GET-only LAN
-door (`ansible/roles/k8s/observability/templates/alertmanager-read-ingressroute.yaml.j2`),
+door (`k8s/roles/observability/templates/alertmanager-read-ingressroute.yaml.j2`),
 which admits `/api/v2/alerts` and `/api/v2/silences` alone. The design is answer 2 of
 docs/target-architecture/monitoring/alertmanager-ui-and-readers.md.
 

@@ -2,7 +2,7 @@
 
 Companion to logic.py beside it, which holds the strays classifier and the shared pieces
 both reapers use. Split out because one module cannot hold both and stay under the 600-line cap
-`ansible/tests/repo/test_module_length_ratchet.py` enforces; the selection still has exactly one
+`tests/repo/test_module_length_ratchet.py` enforces; the selection still has exactly one
 implementation, and it is this one.
 
 Both selectors answer a different question from `classify_backups`, over a population that

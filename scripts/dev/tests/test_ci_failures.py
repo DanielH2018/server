@@ -103,10 +103,7 @@ def _pytest_job(job_id: int, *modules: str, job: str = "pytest") -> dict:
             "##[group]Run uv run pytest",
             "##[endgroup]",
             "=== short test summary info ===",
-            *(
-                f"FAILED ansible/tests/repo/{m}.py::test_case - assert 1 == 2"
-                for m in modules
-            ),
+            *(f"FAILED tests/repo/{m}.py::test_case - assert 1 == 2" for m in modules),
             "##[error]Process completed with exit code 1.",
         ),
     )
@@ -168,7 +165,7 @@ def test_render_diff_pr_body_echo_is_clean(tmp_path):
     )
     judge["lines"] += [
         "",
-        "FAILED ansible/tests/repo/test_quoted_in_pr_body.py::test_echoed - assert 1 == 2",
+        "FAILED tests/repo/test_quoted_in_pr_body.py::test_echoed - assert 1 == 2",
         "",
         *_stamped("##[endgroup]", "##[error]Process completed with exit code 1."),
     ]
@@ -212,13 +209,13 @@ def test_only_a_failed_steps_log_counts(tmp_path):
         "pytest",
         _step(
             "Run the flaky retry",
-            "FAILED ansible/tests/repo/test_in_a_passing_step.py::test_case - assert 1 == 2",
+            "FAILED tests/repo/test_in_a_passing_step.py::test_case - assert 1 == 2",
             number=3,
             conclusion="success",
         ),
         _step(
             "Run the suite",
-            "FAILED ansible/tests/repo/test_in_the_failed_step.py::test_case - assert 1 == 2",
+            "FAILED tests/repo/test_in_the_failed_step.py::test_case - assert 1 == 2",
         ),
     )
     out = _survey(tmp_path, _run(43000000003, _attempt(job))).stdout
@@ -236,7 +233,7 @@ def test_log_with_terminal_escapes_is_read_and_not_echoed(tmp_path):
         "pytest",
         _step(
             "Run the suite",
-            "\x1b[31mFAILED\x1b[0m ansible/tests/repo/test_coloured.py::test_case - assert 0",
+            "\x1b[31mFAILED\x1b[0m tests/repo/test_coloured.py::test_case - assert 0",
         ),
     )
     out = _survey(tmp_path, _run(43000000004, _attempt(coloured))).stdout
@@ -344,6 +341,5 @@ def test_each_red_attempt_names_its_failed_steps(tmp_path):
     ), f"run 42041106424 does not name its failed step:\n{section}"
     assert "test_named" not in updater, f"another run's row leaked in:\n{section}"
     assert (
-        "pytest / Run the suite / ansible/tests/repo/test_named.py"
-        in (by_run["47000000001"])
+        "pytest / Run the suite / tests/repo/test_named.py" in (by_run["47000000001"])
     ), section

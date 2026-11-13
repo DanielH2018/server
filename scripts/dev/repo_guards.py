@@ -58,7 +58,7 @@ def covers(guard: str, module: str) -> bool:
 # The guards no hook runs; `guards()` adds every hook file a listed directory does not hold.
 LISTED = (
     # The first set (#5077).
-    "ansible/tests/repo",
+    "tests/repo",
     "scripts/docs/tests",
     # The census and structure tests behind 15 failed runs in the week to 2026-11-06 (#7438).
     "scripts/lib/tests/test_entry_points_answer_help.py",

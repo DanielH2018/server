@@ -693,7 +693,7 @@ own (*The promotion wait*).
 One thing sits in the position of needing a hand:
 
 - **A rotated secret** has no path to match: a secret's value lives in no role's template, so
-  `ansible/vars/secrets.yml` derives zero tags however many roles consume it. Run
+  `secrets/secrets.yml` derives zero tags however many roles consume it. Run
   `uv run python scripts/secrets_mgmt/secret_rotation.py consumers <secret>` for who holds a
   stale copy and the repair command per plane.
 

@@ -3,9 +3,9 @@
 # upgrade constraints and does not support arbitrary version skips.
 #
 # The k3s pin (`k3s_version`, `k3s_install_script_url`, `k3s_install_script_sha256`) is the
-# `system-upgrade` role's (roles/k8s/system-upgrade/defaults/main.yml, H6.1b), because that role
+# `system-upgrade` role's (k8s/roles/system-upgrade/defaults/main.yml, H6.1b), because that role
 # drives the SUC Plans that upgrade k3s.
-# The Longhorn pin, k3s_longhorn_version, is the `longhorn` role's (roles/k8s/longhorn/defaults/main.yml).
+# The Longhorn pin, k3s_longhorn_version, is the `longhorn` role's (k8s/roles/longhorn/defaults/main.yml).
 
 # The k3s server's flags are `k3s_server_config` in hosts/components/k3s-server/component.yml
 # since H6.4b, with the reason for each flag, the peer-URL trap among them. The package renders
@@ -94,7 +94,7 @@
 # leak path for them to close.
 #
 # A privileged init container is the rejected alternative: privilege is concentrated in exactly
-# one component (roles/k8s/dri-device-plugin) and qbittorrent — which handles arbitrary torrent
+# one component (k8s/roles/dri-device-plugin) and qbittorrent — which handles arbitrary torrent
 # payloads — is the worst place to add a second.
 #
 # The flag is `kubelet-arg` in `k3s_server_config` (hosts/components/k3s-server/component.yml).
@@ -108,7 +108,7 @@
 # The identity's objects are the cluster-base role's (H1.2), and its template reads the mirrored
 # pair cluster_base_readonly_sa_name and cluster_base_readonly_sa_namespace. The two keys here
 # stay for the host files, which write the kubeconfig and the audit policy.
-# ansible/tests/k8s/test_cluster_base_mirrors_the_k3s_identity.py holds each pair equal, so a
+# tests/k8s/test_cluster_base_mirrors_the_k3s_identity.py holds each pair equal, so a
 # rename changes both sides in one PR.
 k3s_readonly_sa_name: homelab-readonly
 k3s_readonly_sa_namespace: kube-system

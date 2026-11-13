@@ -152,7 +152,7 @@ def run(
         env: The child's environment. Defaults to this process's, extended rather than
             replaced, so a caller wanting the real `PATH` and one extra variable passes
             `{**os.environ, "X": "1"}` — or `scrubbed_env(X="1")` where the child runs git.
-            `ansible/tests/leakguard.py` still adds `TEXTFILE_DIR` to a replacement.
+            `tests/leakguard.py` still adds `TEXTFILE_DIR` to a replacement.
         stub_bin: A directory of fake binaries, put in FRONT of the environment's `PATH`.
             Pass what `fake_bin` returned. Handling the prefix here is the reason a caller
             never spells `os.pathsep` out.

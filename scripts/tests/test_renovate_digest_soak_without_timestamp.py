@@ -35,19 +35,19 @@ from _renovate import _REPO, _resolve_setting
 # rule was written for. cloudflare-ddns is a Docker Hub image on `latest`: it has no
 # timestamp because its tag names no version, not because of its registry.
 HELD_PINS = {
-    "lscr.io/linuxserver/qbittorrent": "ansible/roles/k8s/qbittorrent/defaults/main.yml",
-    "ghcr.io/schaka/janitorr": "ansible/roles/k8s/janitorr/defaults/main.yml",
-    "favonia/cloudflare-ddns": "ansible/roles/k8s/cloudflare-ddns/defaults/main.yml",
+    "lscr.io/linuxserver/qbittorrent": "k8s/roles/qbittorrent/defaults/main.yml",
+    "ghcr.io/schaka/janitorr": "k8s/roles/janitorr/defaults/main.yml",
+    "favonia/cloudflare-ddns": "k8s/roles/cloudflare-ddns/defaults/main.yml",
 }
 
 # The version bumps #3370 found held, as package -> the file carrying the pin. Named for the
 # same reason as HELD_PINS. crane is on gcr.io, the third registry with no timestamps.
 HELD_VERSION_PINS = {
-    "lscr.io/linuxserver/bazarr": "ansible/roles/k8s/bazarr/defaults/main.yml",
-    "lscr.io/linuxserver/sonarr": "ansible/roles/k8s/sonarr/defaults/main.yml",
-    "lscr.io/linuxserver/homeassistant": "ansible/roles/k8s/home-assistant/defaults/main.yml",
-    "ghcr.io/raydak-labs/configarr": "ansible/roles/k8s/configarr/defaults/main.yml",
-    "gcr.io/go-containerregistry/crane": "ansible/roles/k8s/registry/defaults/main.yml",
+    "lscr.io/linuxserver/bazarr": "k8s/roles/bazarr/defaults/main.yml",
+    "lscr.io/linuxserver/sonarr": "k8s/roles/sonarr/defaults/main.yml",
+    "lscr.io/linuxserver/homeassistant": "k8s/roles/home-assistant/defaults/main.yml",
+    "ghcr.io/raydak-labs/configarr": "k8s/roles/configarr/defaults/main.yml",
+    "gcr.io/go-containerregistry/crane": "k8s/roles/registry/defaults/main.yml",
 }
 
 OPTIONAL = "timestamp-optional"
@@ -104,7 +104,7 @@ def test_a_non_docker_version_bump_in_a_k8s_role_still_requires_a_timestamp() ->
         _resolve_setting(
             "minimumReleaseAgeBehaviour",
             "ruff",
-            "ansible/roles/k8s/code-server/defaults/main.yml",
+            "k8s/roles/code-server/defaults/main.yml",
             "minor",
             "pypi",
         )
@@ -116,7 +116,7 @@ def test_a_non_docker_version_bump_in_a_k8s_role_still_requires_a_timestamp() ->
 
 _DIGEST_RULE = {
     "matchManagers": ["custom.regex"],
-    "matchFileNames": ["ansible/roles/k8s/**"],
+    "matchFileNames": ["k8s/roles/**"],
     "matchUpdateTypes": ["digest", "pinDigest"],
     "minimumReleaseAge": "3 days",
 }

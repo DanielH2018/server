@@ -87,7 +87,7 @@ def test_the_real_volume_fragment_carries_every_tier_with_its_known_members():
 def test_the_volume_fragment_names_the_reconcile_defaults_as_its_tier_source():
     # The tier lists moved to longhorn-reconcile in H1.7a.
     _, sources = FRAGMENTS["longhorn-volume-shards"]()
-    assert "ansible/roles/k8s/longhorn-reconcile/defaults/main.yml" in sources
+    assert "k8s/roles/longhorn-reconcile/defaults/main.yml" in sources
 
 
 # --- deadman-graces -------------------------------------------------------------------------

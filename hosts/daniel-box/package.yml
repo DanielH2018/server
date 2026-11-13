@@ -1,7 +1,7 @@
 # daniel-box's host package. H6.2 shipped `reconcile` only. H6.3b adds the windowed k3s restart
 # (docs/target-architecture/host/h6-k3s-suc.md, *Steps, as PRs*, item 7) and, with it, the first
 # credential: the secrets unit decrypts `k3s_readonly_token` into /run/credstore, and
-# homelab-k3s-restart loads it to read the API. ansible/vars/hosts/daniel-box.sops.yaml carries
+# homelab-k3s-restart loads it to read the API. secrets/hosts/daniel-box.sops.yaml carries
 # every key this tree names, and `host_secrets.py sync daniel-box` rewrites it (operator-only).
 #
 # H7.33 adds the UPS secondary (hosts/components/nut-secondary): its upsmon.conf output reads
@@ -10,8 +10,8 @@
 # points (~45 W). Without the secondary, a power cut hard-cuts etcd, Longhorn's primary
 # replicas, Traefik, Prometheus and LAN DNS at battery end. Arming a further host is not a lone
 # edit: it needs an ONBATT delay that rides out a blip (nut_onbatt_shutdown_delay in
-# roles/k8s/nut/defaults/main.yml) and the console-attended `upsmon -c fsd` drill from
-# roles/k8s/nut/CLAUDE.md, because a broken chain looks like a working one while mains is up.
+# k8s/roles/nut/defaults/main.yml) and the console-attended `upsmon -c fsd` drill from
+# k8s/roles/nut/CLAUDE.md, because a broken chain looks like a working one while mains is up.
 #
 # Since H7.29 it ships the first three subjects of initial_setup, the same components as daniel-pi
 # and daniel-server: apt's unattended upgrades, the sshd drop-ins and the kernel, journald, limits
@@ -50,7 +50,7 @@
 # homelab-k3s-restart does it once per changed hash of the files the component marks
 # `manual:k3s.service`. H6.4a is forward-only.
 #
-# The restart window is `k3s_restart_window` in ansible/inventory/host_vars/daniel-box.yml, which
+# The restart window is `k3s_restart_window` in inventory/host_vars/daniel-box.yml, which
 # sits above the component's defaults (H3, *Component variables*). A package-level `defaults:` map
 # reaches only the package's own files, never a component's.
 description: daniel-box's homelab host package
@@ -195,7 +195,7 @@ legacy:
   - {path: /etc/homelab/cert-expiry-webhook.env}
   # H7.48: the absent arms k8s_host_files held for the k8s roles' retired host halves. The cron
   # files are H2's retired health readers and drift checks, whose CronJobs or monitor-bridge
-  # checks replaced them. ansible/tests/repo/_retired_cron_row.py holds the crons and fragments
+  # checks replaced them. tests/repo/_retired_cron_row.py holds the crons and fragments
   # to this list. Reconcile removes a directory only when it is empty, so the readers' code
   # directories under /opt, /var/lib/crowdsec-home-allowlist and observability's dashboard
   # staging trees under /etc/rancher/k3s are not listed: nothing names their files, and an

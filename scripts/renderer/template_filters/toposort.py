@@ -55,7 +55,7 @@ def toposort_containers(containers_list, deps_map):
 # emit one from a file inside the role.
 #
 # This scan is the SECOND of the two routed tests below, not the only one. It is not sufficient
-# alone: 16 roles' IngressRoute is rendered from `ansible/templates/`, and a route rendered
+# alone: 16 roles' IngressRoute is rendered from `k8s/templates/`, and a route rendered
 # from there leaves no string in the role, so a scan-only derivation would drop the traefik
 # edge for all 16 and apply their routes before the CRDs exist. The entry's `hostname` is the
 # first test and the one that covers them.
@@ -97,7 +97,7 @@ def _entry_is_routed(container):
 
     The `hostname` key is the declaration: `ingressroute()` takes it as the host label, and an
     entry carrying one is a service someone reaches through the edge. It is the only routed
-    test that survives a route rendered from `ansible/templates/ingressroute-default.yaml.j2`,
+    test that survives a route rendered from `k8s/templates/ingressroute-default.yaml.j2`,
     which leaves nothing in the role for `_role_renders_traefik_crd` to find (#3043).
 
     It also claims an edge the templates never did, for a role whose route lives in traefik's

@@ -1,0 +1,174 @@
+#!/usr/bin/env python3
+"""The GPU extended-resource name is written out in three places that must agree.
+
+`devic.es/dri` is what the dri-device-plugin DaemonSet advertises and what jellyfin and tdarr
+request in their pod specs. observability's `K8sExtendedResourceMissing` rule watches it too, in
+the sanitised form kube-state-metrics gives the `resource` label, `devic_es_dri`. Those are
+independent string literals in three roles that happen to match, so the coupling gets a test
+instead of a variable.
+
+What goes wrong without it is quiet in both directions. Rename the plugin's resource and the
+consumers' pods stay Pending with an unschedulable message naming a resource nobody grep'd for.
+Rename it in the rule only, and the rule pages "advertised by no node" on a healthy cluster.
+
+The plugin's and the consumers' names are read from the rendered manifests, not from a role's
+defaults or a template's text. A pod spec that stopped using its `*_dri_resource` variable, or a
+plugin whose `--device` config changed while a comment still said `devic.es/dri`, would both pass
+a source scan. The rule's name stays a source read, because the rule file is carried verbatim.
+
+Run: uv run pytest tests/services/test_dri_resource_name_agrees.py
+"""
+
+import re
+from itertools import pairwise
+
+from _helpers import K8S_ROLES
+from _k8s_render import pod_spec, rendered_docs
+from lib import yaml_fast
+
+# The roles whose rendered Deployment must request the render node. Restated here so a consumer
+# that stops requesting it fails loudly rather than dropping out of the comparison.
+_CONSUMERS = ("jellyfin", "tdarr")
+
+_PLUGIN_ROLE = "dri-device-plugin"
+# generic-device-plugin's `--domain` default. The DaemonSet passes no `--domain`, and both nodes'
+# allocatable list `devic.es/dri` (kubectl get nodes, 2026-10-01), which is how this was read.
+_PLUGIN_DEFAULT_DOMAIN = "devic.es"
+
+_RULES = K8S_ROLES / "observability" / "files" / "rules" / "k8s-workloads.yaml"
+_RULE = "K8sExtendedResourceMissing"
+
+
+def extended_resources(doc: dict) -> set[str]:
+    """Every domain-qualified resource a workload's containers set a limit on."""
+    spec = pod_spec(doc)
+    return {
+        name
+        for container in (spec.get("containers") or [])
+        + (spec.get("initContainers") or [])
+        for name in ((container.get("resources") or {}).get("limits") or {})
+        if "/" in name
+    }
+
+
+def advertised_resources(args: list[str]) -> set[str]:
+    """The resource names a generic-device-plugin container advertises, from its args."""
+    domain = _PLUGIN_DEFAULT_DOMAIN
+    devices = []
+    for flag, value in pairwise(args):
+        if flag == "--domain":
+            domain = value
+        elif flag == "--device":
+            devices.append(yaml_fast.safe_load(value)["name"])
+    return {f"{domain}/{device}" for device in devices}
+
+
+def test_advertised_resources_reads_the_device_name_and_honours_a_domain():
+    device = "name: dri\ngroups:\n  - count: 4\n"
+    assert advertised_resources(["--device", device]) == {"devic.es/dri"}
+    assert advertised_resources(["--domain", "squat.ai", "--device", device]) == {
+        "squat.ai/dri"
+    }
+
+
+def _consumer_names() -> dict[str, set[str]]:
+    names: dict[str, set[str]] = {}
+    for role, _tpl, doc in rendered_docs():
+        if role in _CONSUMERS and doc.get("kind") == "Deployment":
+            names.setdefault(role, set()).update(extended_resources(doc))
+    for role in _CONSUMERS:
+        assert names.get(role), (
+            f"the rendered {role} Deployment requests no extended resource, so the GPU "
+            f"comparison below would pass over nothing"
+        )
+    return names
+
+
+def _consumer_name() -> str:
+    names = _consumer_names()
+    requested = set().union(*names.values())
+    assert len(requested) == 1, (
+        f"the GPU consumers disagree on the extended-resource name: {names}, so there is no "
+        f"single name to compare against"
+    )
+    return requested.pop()
+
+
+def test_every_consumer_requests_the_same_resource_name():
+    names = _consumer_names()
+    assert len(set().union(*names.values())) == 1, (
+        f"the GPU consumers disagree on the extended-resource name: {names}. A consumer "
+        f"requesting a name no node advertises sits Pending, and the scheduler message is the "
+        f"only place the mismatch appears."
+    )
+
+
+def ksm_label(resource: str) -> str:
+    """A resource name as kube-state-metrics writes its `resource` label: every character
+    outside [a-zA-Z0-9_] becomes `_`."""
+    return re.sub(r"[^a-zA-Z0-9_]", "_", resource)
+
+
+def _rule_watched(rules_text: str) -> set[str]:
+    """The `resource` values the extended-resource rule's expression matches."""
+    doc = yaml_fast.safe_load(rules_text)
+    exprs = [
+        str(rule.get("expr", ""))
+        for group in doc["groups"]
+        for rule in group["rules"]
+        if rule.get("alert") == _RULE
+    ]
+    assert exprs, f"{_RULES} holds no {_RULE} rule; point this test at its new home"
+    return set(re.findall(r'resource="([^"]+)"', exprs[0]))
+
+
+def _plugin_advertised() -> set[str]:
+    advertised: set[str] = set()
+    for role, _tpl, doc in rendered_docs():
+        if role == _PLUGIN_ROLE and doc.get("kind") == "DaemonSet":
+            for container in pod_spec(doc).get("containers") or []:
+                advertised |= advertised_resources(container.get("args") or [])
+    return advertised
+
+
+def rule_problems(watched: set[str], advertised: set[str]) -> list[str]:
+    """A problem unless the rule watches exactly the sanitised names the plugin advertises."""
+    want = {ksm_label(name) for name in advertised}
+    if watched != want:
+        return [
+            f"{_RULE} matches resource={sorted(watched)}, and kube-state-metrics labels what "
+            f"the plugin advertises as {sorted(want)}. The rule would read a healthy cluster "
+            f"as a deregistered plugin."
+        ]
+    return []
+
+
+def test_the_rule_watches_the_sanitised_name_the_plugin_advertises_is_clean():
+    advertised = _plugin_advertised()
+    assert advertised, f"the rendered {_PLUGIN_ROLE} DaemonSet advertises nothing"
+    assert rule_problems(_rule_watched(_RULES.read_text()), advertised) == []
+
+
+def test_a_rule_watching_the_unsanitised_name_is_flagged():
+    text = _RULES.read_text().replace(
+        'resource="devic_es_dri"', 'resource="devic.es/dri"'
+    )
+    problems = rule_problems(_rule_watched(text), _plugin_advertised())
+    assert len(problems) == 1 and "devic.es/dri" in problems[0], problems
+
+
+def test_the_plugin_advertises_the_name_the_consumers_request():
+    advertised: set[str] = set()
+    for role, _tpl, doc in rendered_docs():
+        if role == _PLUGIN_ROLE and doc.get("kind") == "DaemonSet":
+            for container in pod_spec(doc).get("containers") or []:
+                advertised |= advertised_resources(container.get("args") or [])
+    assert advertised, (
+        f"the rendered {_PLUGIN_ROLE} DaemonSet passes no --device, so it advertises nothing"
+    )
+    consumer_name = _consumer_name()
+    assert consumer_name in advertised, (
+        f"the dri-device-plugin DaemonSet advertises {sorted(advertised)}, not the "
+        f"{consumer_name!r} the GPU workloads request. It is what makes the resource exist; if "
+        f"it advertises something else, every consumer stays Pending."
+    )

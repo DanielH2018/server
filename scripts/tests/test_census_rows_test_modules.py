@@ -10,7 +10,7 @@ docstring said a reader needs before changing the rule.
 Every row in both files reads one census, `pytest_only_modules()`: each tracked module
 `is_pytest_only` accepts under a `testpaths` root. The three files each had their own walk; this is the render-and-path file's,
 the widest of them. It drops none of the other two's modules. It adds `evals/tests/` and
-`scripts/conftest.py` to the git rules, and `scripts/conftest.py`, `ansible/tests/leakguard.py`
+`scripts/conftest.py` to the git rules, and `scripts/conftest.py`, `tests/leakguard.py`
 and home-assistant's `jinja_harness.py` to the proc_testing rules.
 
 Run: uv run pytest scripts/tests/test_census_rows_test_modules.py
@@ -79,7 +79,7 @@ ROWS = (
         min_matches=MODULE_FLOOR,
         must_find=frozenset(
             {
-                "ansible/tests/_ci_scoping.py",
+                "tests/_ci_scoping.py",
                 ".claude/hooks/tests/test_rules_globs_match_a_tracked_file.py",
                 "hosts/components/renovate-agent/tests/test_prepare_worktree.py",
                 "scripts/deploy_tools/tests/test_land_tools.py",
@@ -160,7 +160,7 @@ ROWS = (
             {
                 ".claude/hooks/tests/conftest.py",
                 "hosts/tests/test_github_ruleset_drift.py",
-                "ansible/tests/staging/_fence_probe.py",
+                "tests/staging/_fence_probe.py",
                 "scripts/deploy_tools/tests/test_land_detach.py",
                 "scripts/validate/tests/test_vale_sync_guard.py",
             }
@@ -170,7 +170,7 @@ ROWS = (
                 "the exec bit IS the subject: `hook_files` must read a hook committed WITHOUT "
                 "it, so the fixture writes one file with the bit and one without"
             ),
-            "ansible/tests/leakguard.py": (
+            "tests/leakguard.py": (
                 "the pytest plugin that installs the session-wide recording shims before the "
                 "first test runs; it is the layer `lib.proc_testing`'s stubs are prepended over"
             ),
@@ -233,8 +233,8 @@ ROWS = (
         must_find=frozenset(
             {
                 ".claude/hooks/tests/test_hook_scripts_executable.py",
-                "ansible/tests/_helpers.py",
-                "ansible/tests/repo/test_testpaths_covers_every_test_file.py",
+                "tests/_helpers.py",
+                "tests/repo/test_testpaths_covers_every_test_file.py",
                 "scripts/deploy_tools/tests/test_land_tools.py",
                 "scripts/lib/tests/test_git.py",
             }
@@ -276,7 +276,7 @@ ROWS = (
         must_find=frozenset({"hosts/lib/tests/test_host_package_builder_refusals.py"}),
         allow={
             SELF: "the row's own pattern and subjects name the directory",
-            "ansible/tests/services/test_alert_runbook_urls.py": (
+            "tests/services/test_alert_runbook_urls.py": (
                 "its `CITED_PAGE` pattern excludes a design-doc citation from the runbook "
                 "rule, and its fixture is an alert description; it reads no plan"
             ),
@@ -316,5 +316,5 @@ def test_the_census_hook_gate_matches_every_module_the_census_reads():
         if hook.get("id") == "static-ratchet-tests-test-modules"
     )
     census = pytest_only_modules()
-    assert "ansible/tests/k8s/_manifest_guards.py" in census
+    assert "tests/k8s/_manifest_guards.py" in census
     assert [path for path in census if not re.search(gate, path)] == []

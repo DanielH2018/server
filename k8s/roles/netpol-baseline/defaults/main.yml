@@ -1,0 +1,246 @@
+---
+# The activation lever, and the rollback lever: set false and redeploy. NOT a deletion —
+# `kubectl apply` does not prune, so removing this role's template would leave the live policy
+# enforcing with nothing in the repo describing it.
+netpol_baseline_enforced: true
+
+# `label`     — the policy selects only pods carrying `netpol-baseline: enforced`
+# `namespace` — the policy selects every pod EXCEPT those carrying `netpol-baseline-exempt`.
+#               Not a bare `podSelector: {}`: see the template for why.
+#
+# Setting `label` and redeploying is the rollback lever for `namespace`. Every workload still
+# carries its opt-in label, so nothing else has to move.
+netpol_baseline_scope: namespace
+
+# The workloads that opt OUT under namespace scope, by `app` label. Each owns a NetworkPolicy
+# TIGHTER than this baseline, and policies are additive: selecting one here would ADD traefik,
+# prometheus and both node CIDRs on top of its own allow-list.
+#
+# Read as an exact set, in both directions, by the `exempt` check of the verify Job — a name missing
+# from the cluster is a widening about to happen, and a name in the cluster but not here is a pod
+# fenced by nothing at all. `tests/k8s/test_netpol_baseline_labels.py` pins the same set
+# against the rendered templates; the gate exists because the templates and the cluster can
+# disagree.
+netpol_baseline_exempt_workloads:
+  - flaresolverr    # k8s/roles/prowlarr/templates/networkpolicy-flaresolverr.yaml.j2 (app=prowlarr, :8191)
+  - headlamp        # k8s/roles/headlamp/templates/networkpolicy.yaml.j2
+  - n8n             # k8s/roles/n8n/templates/networkpolicy.yaml.j2 (live name `n8n-broker`)
+  - registry        # k8s/roles/registry/templates/networkpolicy.yaml.j2
+  - ghcr-mirror     # k8s/roles/registry/templates/ghcr-mirror.yaml.j2
+  - dockerhub-mirror  # k8s/roles/registry/templates/dockerhub-mirror.yaml.j2
+  # k8s/roles/karakeep/templates/networkpolicy-chrome.yaml.j2 (app=karakeep, :9222).
+  # Exempt because the baseline admits every port and this one is unauthenticated DevTools.
+  - karakeep-chrome
+
+# The node-side bridge addresses, for traffic that arrives with a node IP: containerd image
+# pulls, hostPort paths, and the three host crons that dial traefik. These are /32 HOST
+# addresses on purpose — see the plan's Global Constraints for why a /16 here would silently
+# cancel the whole policy. Sourced from group_vars' `k3s_cni0_gateways` (verified per node
+# with `ip -4 -o addr show cni0`) rather than repeated here — loki-homelab's monitoring route
+# and this role's own mosquitto/nut policies all admit the same two addresses.
+netpol_baseline_node_cidrs: "{{ k3s_cni0_gateways }}"
+
+# Every source admitted to traefik's :8443 (the https entrypoint's POD port) by
+# networkpolicy-traefik.yaml.j2. Cloudflare's published ranges, so a public `Host(x.<domain>)`
+# is reachable only through Cloudflare's edge; the LAN and the WireGuard client range, which
+# reach the `.local.` names direct; and the whole pod CIDR, because in-cluster callers of a
+# `.local.` route (monitor-bridge, homepage's widgets, ~14 roles) reach the
+# VIP as their own 10.42.x.y address. Composed here rather than in the template so a test can
+# read the list by name and a fifth source is a one-line change.
+#
+# `cloudflare_ips` is the same list traefik's forwardedHeaders.trustedIPs reads, so a Cloudflare
+# range change needs a netpol-baseline deploy as well as traefik's — monitor-bridge's
+# cloudflare_ips_drift check names both when it alarms.
+#
+# Only the IPv4 members are admitted. The cluster is single-stack IPv4, so an IPv6 ipBlock
+# fences nothing, and kube-router logs one "Ignoring IPv6 source IP blocks" warning per IPv6
+# CIDR on every policy sync: 29,400 of daniel-box's 39,444 k3s.log lines on 2026-10-28 (#6495).
+# traefik's trustedIPs still reads the full list. A colon appears only in an IPv6 CIDR.
+netpol_baseline_traefik_https_sources: "{{ (cloudflare_ips | reject('search', ':') | list) + [lan_subnet, wg_client_subnet, k3s_pod_cidr] }}"
+
+# Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
+k8s_autodeploy: true
+k8s_autodeploy_reason: "renders NetworkPolicies plus one verify Job and pins no image; Flux applies it, and the Job fails the revision if the live exempt set has drifted"
+
+# The observability namespace fence. It carries its OWN enforcement flag and its
+# OWN node-CIDR list, deliberately: the shared netpol_baseline_node_cidrs is read by the 16
+# homelab workloads, and widening it would re-scope all of them.
+netpol_baseline_obs_enforced: true
+
+# Observability's own scope lever, separate from netpol_baseline_scope for the same reason its
+# enforcement flag and node-CIDR list are separate: the two namespaces are rolled out and rolled
+# back independently. Same two values, same meaning.
+netpol_baseline_obs_scope: namespace
+
+# Observability's expected exempt set, reconciled against the cluster by the same gate the
+# homelab baseline gets. Empty, and empty deliberately. Most workloads here have no bespoke
+# policy, so exempting one leaves it fenced by NOTHING. The three that do (prometheus, loki,
+# alertmanager) carry additive grants to named homelab callers, so exempting one of them drops
+# the baseline's traefik, intra-namespace and node-CIDR peers and cuts its in-namespace callers.
+# An exemption here is a widening or a breakage, never the narrower fence it is in homelab.
+# Declared as a variable rather than hardcoding `== []` in the assert so that adding an
+# observability exemption is one edit in the same place as the homelab one, and so the failure
+# message can name what was expected.
+netpol_baseline_obs_exempt_workloads: []
+
+# All four node addresses, where the homelab list carries only the two cni0 /32s: the cni0 pair
+# (`k3s_cni0_gateways`) followed by the flannel.1 pair (`k3s_flannel_node_ips`), both from
+# group_vars/all.yml. The callers each entry admits, in that order:
+#   - daniel-box cni0: otelq's loopback path when loki/prometheus/tempo land on daniel-box, and
+#     the API server's proxy for Headlamp's Prometheus plugin under the same condition.
+#   - daniel-server cni0: otelq's loopback path when loki/prometheus/tempo land on daniel-server.
+#   - daniel-box flannel.1: the observability cron, and the API server's proxy for Headlamp's
+#     Prometheus plugin, when prometheus is cross-node.
+#   - daniel-server flannel.1: no caller nameable today; deliberate over-inclusion.
+#
+# The cni0 pair is load-bearing on BOTH nodes, not just daniel-box's: loki, prometheus and tempo
+# each publish a loopback hostPort for `otelq` (a workstation host process — see
+# observability/CLAUDE.md), a hostPort binds only on the node the pod is actually scheduled to,
+# and all three are unpinned single-replica Deployments — so whichever node one lands on is where
+# otelq's loopback path, and therefore that node's own cni0, originates. Trimming either cni0
+# entry on the reasoning that "daniel-server has no caller nameable today" breaks otelq the
+# moment that pod reschedules there.
+#
+# prometheus has no node pin, so it can also land on daniel-server. When it does, the observability
+# health cron — installed on daniel-box only (`services` in cluster/services.yml; no
+# entry, and no `delegate_to`, for daniel-server) — calling its ClusterIP is cross-node. A
+# cross-node host->pod packet arrives as the SENDING node's flannel.1,
+# so that caller needs daniel-box's own flannel.1, not daniel-server's.
+#
+# Only the daniel-server flannel.1 entry has no caller nameable today — kept anyway as deliberate
+# over-inclusion, at the same trust level the homelab baseline already grants its own node
+# bridges, and to cover a future cross-node host caller running on daniel-server.
+netpol_baseline_obs_node_cidrs: "{{ k3s_cni0_gateways + k3s_flannel_node_ips }}"
+
+# The probe's target table. ONE list, read by both halves of the probe, so the two cannot
+# disagree: the verify Job's `gate` initContainer reads it, and its `legs` container dials
+# one leg per row that has an `expect`. A row is gated whether or not it is dialled.
+#
+# Columns:
+#   service — the Service name. It is the name the gate reads and the name the leg dials. It is
+#             not always the pod label (scrutiny's pods are `app: scrutiny-web`).
+#   plane   — `homelab`, `observability` or `flux-system`. It picks the namespace, through
+#             netpol_baseline_probe_namespaces, and the lever: a homelab row runs only while
+#             netpol_baseline_enforced is true, an observability row only while
+#             netpol_baseline_obs_enforced is. A flux-system row has no lever and always runs,
+#             because the flux role owns that namespace's fence and this role never renders it.
+#   port    — the POD port, from the target's own NetworkPolicy `port:`. A dialled row may omit
+#             it when `service` names a services entry; the Job then reads the entry's
+#             `port` through `entry_port`, so the row follows the entry rather than copying it
+#             (#3867). The lookup sits in the template because role defaults
+#             resolve without this repo's template filters in the render guards.
+#   service_port — the port the leg dials, for a Service that does NOT map its port to the pod
+#             port 1:1. Absent on every row whose Service does, and the leg then dials `port`.
+#             The fence is enforced on the pod port after the Service's DNAT, so `port` stays
+#             the pod port the policy names, and `service_port` is only how the leg reaches it.
+#             Read it from the Service's `spec.ports`, never from the pod.
+#   expect  — `refused` (an inverted leg), `open` (the connection must succeed), or absent (the
+#             gate checks the row, and no leg dials it).
+#   policy  — the policy file that owns the fence, printed in the failure message.
+#
+# A WRONG PORT ON A `refused` ROW FAILS SILENTLY GREEN. A port nothing listens on makes `nc` fail,
+# which is the PASS branch of an inverted leg. The gate proves the Service has a ready backend; it
+# does not prove the port is the one that backend serves. Re-check a port against its source
+# whenever you touch its row. A Service port the Service does not declare fails the same way, so
+# a `service_port` row dials only a port an in-namespace caller is proven to reach.
+#
+# The verify pod is `app: netpol-baseline-verify`. No caller list in the repo names that label, so
+# every `refused` row must refuse it. Its `netpol-probe: control` label admits it to speedtest:80,
+# the sentinel, and to nothing else.
+#
+# terraria is ABSENT while `terraria_k8s_replicas` is 0. Its EndpointSlice is empty then, so its
+# row would fail the gate on every full `deploy.yml`.
+#
+# DECIDED: terraria's row stays a hand toggle and is not derived from `terraria_k8s_replicas`
+# (#3848). Its `expect: open` leg opens a TCP connection to :7777, and on 1.4.5.7 a bare TCP
+# connect can crash the server (#822). Scaling to 1 is only the first step of #822's restore
+# checklist, so a row that followed the replica count would dial a server that is not yet safe
+# to dial, on every netpol-baseline deploy. Add the row once the image is past 1.4.5.7:
+# `{service: terraria, plane: homelab, port: 7777, expect: open, policy: networkpolicy-terraria.yaml.j2}`.
+# `tests/k8s/test_netpol_probe_targets.py` fails if the row is present while the count is 0.
+netpol_baseline_probe_targets:
+  # The namespace baseline: an app with no in-cluster caller. The probe's HTTPS liveness leg
+  # reaches the same app through traefik, which is the allowed path.
+  - {service: littlelink, plane: homelab, port: 3000, expect: refused, policy: networkpolicy.yaml.j2}
+  # Per-workload caller lists: each admits named callers, and this pod is none of them.
+  - {service: sonarr, plane: homelab, port: 8989, expect: refused, policy: "sonarr's netpol_from (cluster/services.yml)"}
+  - {service: radarr, plane: homelab, port: 7878, expect: refused, policy: "radarr's netpol_from (cluster/services.yml)"}
+  - {service: prowlarr, plane: homelab, port: 9696, expect: refused, policy: prowlarr/templates/networkpolicy-prowlarr.yaml.j2}
+  - {service: qbittorrent, plane: homelab, port: 8080, expect: refused, policy: qbittorrent/templates/networkpolicy.yaml.j2}
+  # Cross-namespace callers. Ports from observability/templates/prometheus.yaml.j2 and loki.yaml.j2.
+  # grafana and tempo admit only the intra-namespace `podSelector: {}` peer, which a probe in the
+  # homelab namespace cannot exercise. They are gated so the observability plane is proved up.
+  # prometheus-callers admits crowdsec's verify Job, `crowdsec-verify`, from homelab alone.
+  - {service: prometheus, plane: observability, port: 9090, expect: refused, policy: networkpolicy-prometheus.yaml.j2}
+  - {service: loki, plane: observability, port: 3100, expect: refused, policy: networkpolicy-loki.yaml.j2}
+  # Two policies select alertmanager and either could widen it. The observability baseline
+  # admits traefik, its own namespace and the node CIDRs. alertmanager-callers admits
+  # loki-homelab from homelab alone, so its namespace and pod selectors written as two list
+  # items would admit this probe pod too.
+  - {service: alertmanager, plane: observability, port: 9093, expect: refused, policy: "networkpolicy-observability.yaml.j2 or networkpolicy-alertmanager.yaml.j2"}
+  - {service: grafana, plane: observability}
+  - {service: tempo, plane: observability}
+  # The infra tier.
+  - {service: authelia, plane: homelab, port: 9091, expect: refused, policy: "authelia's netpol_from (cluster/services.yml)"}
+  # The LAPI, which admits crowdsec's verify Job, `crowdsec-verify`, and traefik's precheck Job,
+  # `traefik-precheck`, by label beside the agents.
+  - {service: crowdsec, plane: homelab, port: 8080, expect: refused, policy: networkpolicy-crowdsec.yaml.j2}
+  - {service: nut, plane: homelab, port: 3493, expect: refused, policy: networkpolicy-nut.yaml.j2}
+  - {service: mosquitto, plane: homelab, port: 1883, expect: refused, policy: networkpolicy-mosquitto.yaml.j2}
+  # The admin API, which admits pihole-exporter and pihole's gravity Job by label. :53 is open
+  # to every source, so only the web port can show the fence going red.
+  - {service: pihole, plane: homelab, port: 80, expect: refused, policy: networkpolicy-pihole.yaml.j2}
+  # One target per fencing shape the last rollout slice introduced: a fan-in app
+  # (home-assistant), a cross-namespace one (loki-homelab), a sub-workload behind a
+  # parent (karakeep-meilisearch), and one whose Service name differs from its pod label
+  # (scrutiny, pods `app: scrutiny-web`), the mistake most likely to select nothing.
+  - {service: home-assistant, plane: homelab, port: 8123, expect: refused, policy: "home-assistant's netpol_from (cluster/services.yml)"}
+  - {service: loki-homelab, plane: homelab, port: 3100, expect: refused, policy: networkpolicy-loki-homelab.yaml.j2}
+  - {service: scrutiny, plane: homelab, port: 8080, expect: refused, policy: "scrutiny's netpol_from, pod label scrutiny-web"}
+  - {service: karakeep-meilisearch, plane: homelab, port: 7700, expect: refused, policy: "karakeep's netpol_fences (cluster/services.yml)"}
+  # The flux-system fence: upstream's `allow-egress`, kept in the flux role's vendored
+  # files/gotk-components.yaml, admits ingress only from pods in flux-system, and
+  # flux-allow-prometheus admits Prometheus to 8080 alone. Each Service maps port 80 to a
+  # NAMED target port, so these rows dial 80 and name the pod port behind it:
+  # source-controller and notification-controller map 80 to `http` (9090), webhook-receiver
+  # maps 80 to `http-webhook` (9292). source-controller's 80 is the one kustomize-controller
+  # fetches every artifact through, and notification-controller's is the one every event
+  # reaches it on. The controllers' 8080 has no Service, so no row dials it; the `flux` scrape
+  # job's `up` series is its positive control.
+  - {service: source-controller, plane: flux-system, port: 9090, service_port: 80, expect: refused, policy: "flux's allow-egress (flux/files/gotk-components.yaml)"}
+  - {service: notification-controller, plane: flux-system, port: 9090, service_port: 80, expect: refused, policy: "flux's allow-egress (flux/files/gotk-components.yaml)"}
+  - {service: webhook-receiver, plane: flux-system, port: 9292, service_port: 80, expect: refused, policy: "flux's allow-egress (flux/files/gotk-components.yaml)"}
+  # The sentinel. The probe's control leg dials it with a retry, outside the table, so the row
+  # has no `expect`.
+  - {service: speedtest, plane: homelab}
+
+# The namespace each plane's Services live in. The readiness gate reads a row's EndpointSlice
+# there, and the Job dials a row outside its own namespace as `<service>.<namespace>`.
+netpol_baseline_probe_namespaces:
+  homelab: "{{ k8s_namespace }}"
+  observability: "{{ k8s_observability_namespace }}"
+  flux-system: flux-system
+
+# The rows whose lever is on, plus the flux-system rows, which have none. The gate loops this
+# and the Job renders from it, so a plane with its lever off is neither gated nor dialled.
+netpol_baseline_probe_active: >-
+  {{ netpol_baseline_probe_targets
+     | selectattr('plane', 'in',
+                  (['homelab'] if netpol_baseline_enforced | bool else [])
+                  + (['observability'] if netpol_baseline_obs_enforced | bool else [])
+                  + ['flux-system'])
+     | list }}
+
+manifests_rollout: ""
+
+# The observability namespace's baseline and its three caller policies, which the armed
+# apply's `-n homelab` refuses (#3575). The renderer writes them to
+# `cluster/netpol-baseline-deferred/`, which Flux applies after every other tag's
+# Kustomization.
+manifests_deferred_files:
+  - networkpolicy-observability.yaml
+  - networkpolicy-prometheus.yaml
+  - networkpolicy-loki.yaml
+  - networkpolicy-alertmanager.yaml
+
+manifests_deferred_dir_name: netpol-baseline-observability

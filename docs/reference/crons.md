@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/crons.py
-generated_at: 2026-11-13 18:17 UTC
-generated_sha: c9de2bd37
+generated_at: 2026-11-13 20:48 UTC
+generated_sha: 24dddf5c4
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: c9de2bd37
 
 # Scheduled jobs
 
-56 job(s) scheduled by the host packages' timers.
+58 job(s) scheduled by the host packages' timers.
 
 !!! warning "The state column is a heuristic"
     It is judged from the command text, and nothing in a unit declares its own blast radius. A job that runs a wrapper script reads as "read the script" rather than being guessed at. Treat it as a pointer, not an authority.
@@ -59,6 +59,7 @@ generated_sha: c9de2bd37
 | homelab-loki-route-witness.timer | `OnCalendar=*-*-* *:23:00` | daniel-box, daniel-server | `ubuntu` | read the script | `hosts/components/loki-route-witness/units/homelab-loki-route-witness.timer` |
 | homelab-longhorn-backup-health.timer | `OnCalendar=*:00/10` | daniel-box | `ubuntu` | yes (backup) | `hosts/components/k3s-host-checks/units/homelab-longhorn-backup-health.timer.j2` |
 | homelab-mkv-attachment-repair.timer | `OnCalendar=*:0/15:00` | daniel-box | `ubuntu` | read the script | `hosts/components/fake-remux/units/homelab-mkv-attachment-repair.timer.j2` |
+| homelab-pi-audit-health.timer | `OnCalendar=*:0/5` | daniel-pi | `ubuntu` | read the script | `hosts/components/pi-heartbeats/units/homelab-pi-audit-health.timer` |
 | homelab-pi-gz-integrity.timer | `OnCalendar=*-*-* 01:40:00, OnActiveSec=1min` | daniel-pi | `ubuntu` | read the script | `hosts/components/pi-heartbeats/units/homelab-pi-gz-integrity.timer` |
 | homelab-pi-recovery.timer | `OnCalendar=*:0/5` | daniel-pi | `ubuntu` | read the script | `hosts/components/pi-heartbeats/units/homelab-pi-recovery.timer` |
 | homelab-pi-sd-health.timer | `OnCalendar=*:0/5` | daniel-pi | `ubuntu` | read the script | `hosts/components/pi-heartbeats/units/homelab-pi-sd-health.timer` |
@@ -70,6 +71,7 @@ generated_sha: c9de2bd37
 | homelab-rkhunter-check.timer | `OnCalendar=Wed *-*-* 02:00:00` | daniel-box, daniel-pi, daniel-server | `root` | read the script | `hosts/components/integrity-scans/units/homelab-rkhunter-check.timer` |
 | homelab-secret-rotation-audit.timer | `OnCalendar=*-*-* 08:30:00` | daniel-box | `ubuntu` | read the script | `hosts/components/secret-rotation/units/homelab-secret-rotation-audit.timer` |
 | homelab-sync-artifacts.timer | `OnCalendar=*-*-* *:00/5:00` | daniel-box | `ubuntu` | read the script | `hosts/components/claude-code/units/homelab-sync-artifacts.timer.j2` |
+| homelab-systemd-units.timer | `OnCalendar=*:0/5` | daniel-box, daniel-pi, daniel-server | `root` | read the script | `hosts/components/host-maintenance/units/homelab-systemd-units.timer` |
 | homelab-updater-poll.timer | `OnBootSec=15min, OnUnitActiveSec=15min` | daniel-pi | `root` | read the script | `hosts/components/pi-updater-poll/units/homelab-updater-poll.timer` |
 | homelab-updater.timer | `OnBootSec=5min, OnUnitActiveSec=5min` | daniel-box, daniel-server | `root` | read the script | `hosts/packages/homelab-updater/package.yml` |
 | homelab-updater.timer | `OnCalendar=*-*-* 03:05:00` | daniel-pi | `root` | read the script | `hosts/packages/homelab-updater/package.yml` |

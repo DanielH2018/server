@@ -75,7 +75,7 @@ source /usr/lib/homelab/homelab-check-lib.sh || {
 # the normal gap, the second is a slot that a boot grace or a failed run skips, and the 300s covers
 # cron start jitter, the 1m `node` scrape and the 1m rule evaluation. Rendered from the cron's own
 # minute, read as `*/N`. Any other shape has no single period, so the render fails rather than
-# publish a deadline shorter than the real gap. ansible/tests/services/test_b1_rule_literals.py
+# publish a deadline shorter than the real gap. tests/services/test_b1_rule_literals.py
 # pins the rule's literal to this value.
 {% set _every_n = k3s_longhorn_backup_health_cron_minute | string | regex_replace('^[*]/([0-9]+)$', '\\1') %}
 {% if _every_n.isdigit() and '*/' ~ _every_n == k3s_longhorn_backup_health_cron_minute | string %}

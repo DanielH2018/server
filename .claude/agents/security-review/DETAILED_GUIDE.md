@@ -21,16 +21,16 @@ This guide defines the security standards for this homelab. The `/security-revie
 
 - **Plaintext values** in any committed `.yml`, `.env`, `.j2`, or script file where a secret is expected
 - **Hardcoded credentials** in `docker-compose.yml.j2` templates (passwords, API keys, tokens)
-- **Unencrypted files** inside `ansible/vars/` or `ansible/inventory/` — these must be SOPS-encrypted
+- **Unencrypted files** inside `secrets/` or `inventory/` — these must be SOPS-encrypted
 - **`.env` files** checked into git that contain real values instead of placeholders
 - **Git history** exposure — check if a secret was ever committed even if later removed
 
 ### Standards for this project
 
-- All secrets live in `ansible/vars/secrets.yml`, encrypted with SOPS + age
+- All secrets live in `secrets/secrets.yml`, encrypted with SOPS + age
 - Templates reference secrets as `{{ variable_name }}` — never inline values
 - The `.sops.yaml` rule auto-encrypts any `.yml`/`.yaml` in `vars/` or `secrets/` directories
-- Edit secrets only via `sops ansible/vars/secrets.yml`
+- Edit secrets only via `sops secrets/secrets.yml`
 - Tasks that handle credentials must set `no_log: true`
 
 ### Remediation pattern
@@ -77,7 +77,7 @@ environment:
 
 - There is ONE edge (the cluster's k8s Traefik) and ONE LAPI. The Docker Traefik role was archived
   at Phase F (2026-08-13). Confirm the bouncer middleware is attached entrypoint-wide in
-  `roles/k8s/traefik/templates/static-config.yaml.j2`. A middleware that fails to construct is not a
+  `k8s/roles/traefik/templates/static-config.yaml.j2`. A middleware that fails to construct is not a
   partial failure: Traefik 404s every router referencing it, so "the edge is down" and "the WAF is off"
   look different, but "the plugin silently disabled itself" (unwritable `/plugins-storage`) looks like
   neither.
@@ -142,12 +142,12 @@ These risks are minimal in an infrastructure repo but apply to:
 
 | Path | What to look for |
 |------|-----------------|
-| `ansible/vars/secrets.yml` | Must be SOPS-encrypted (first line should be `sops:`) |
-| `ansible/roles/k8s/*/templates/*.j2` | **Main surface.** No hardcoded secrets; also privileged/hostPath/hostNetwork pods, over-broad RBAC, missing `securityContext`, secrets in env/ConfigMaps, IngressRoutes skipping the `authelia` middleware |
+| `secrets/secrets.yml` | Must be SOPS-encrypted (first line should be `sops:`) |
+| `k8s/roles/*/templates/*.j2` | **Main surface.** No hardcoded secrets; also privileged/hostPath/hostNetwork pods, over-broad RBAC, missing `securityContext`, secrets in env/ConfigMaps, IngressRoutes skipping the `authelia` middleware |
 | `hosts/components/k3s-server/` | Cluster RBAC, the read-only ServiceAccount |
 | `hosts/components/pi-compose/services/*/compose.yaml.j2` | No hardcoded secrets (daniel-pi tier); a secret arrives through `compose.env` |
-| `ansible/inventory/group_vars/all.yml` | No secrets, only non-sensitive vars |
-| `ansible/inventory/host_vars/` | No secrets |
+| `inventory/group_vars/all.yml` | No secrets, only non-sensitive vars |
+| `inventory/host_vars/` | No secrets |
 | `scripts/*.py` | Input sanitisation, no hardcoded credentials |
 | `.env` files (if any) | Must not contain real values |
 | `.gitignore` | Ensure `*.env`, `secrets/`, and runtime data are excluded |

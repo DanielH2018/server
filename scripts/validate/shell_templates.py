@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Render every Jinja-templated shell script under ansible/roles/ and hosts/components/, then lint.
+"""Render every Jinja-templated shell script under k8s/roles/ and hosts/components/, then lint.
 
 Renders with stubbed vars, then lints with `bash -n` + shellcheck. The prek
 `bash-syntax-check` / shellcheck hooks gate plain shell files (via identify's
@@ -14,7 +14,7 @@ Ansible's precedence does (`lib.render_context`). A host component's template ta
 `component.yml` `defaults:` in the same place, and the host whose package lists the component,
 as the host renderer does. The defaults are not optional: StubUndefined
 iterates empty, so a `{% for %}` over a list a role declares renders its whole body away and
-both linters sweep what is left. `ansible/tests/_shell_render.py` renders through this module
+both linters sweep what is left. `tests/_shell_render.py` renders through this module
 for the same reason in reverse — a guard asserting on a rendered script must assert on the
 script this gate lints (#3178).
 
@@ -48,12 +48,9 @@ from validate.validate_lib.ok_lines import ok_printer
 from lib.cli_help import answer_help
 from lib.estate import role_defaults
 from lib.render_context import render_context
-from lib.render_guard import (
-    REPO,
-    dump_numbered,
-)
+from lib.render_guard import dump_numbered
 from lib import yaml_fast
-from lib.repo_paths import ROLES
+from lib.repo_paths import K8S_ROLES, REPO
 from validate.validate_lib.shipped_render import render_shipped
 from validate.validate_lib.shell_lint import (
     bash_syntax_check,
@@ -81,7 +78,7 @@ def template_context(path: Path, overrides: dict | None = None) -> dict:
     linters swept the remainder as if the loop were not there (#3178). `render_context` lays
     the defaults under the inventory and expands them.
 
-    Exposed so `ansible/tests/_shell_render.py` renders a script with the context this gate
+    Exposed so `tests/_shell_render.py` renders a script with the context this gate
     lints it in — one render, two consumers, no second stub set to drift (#3178). `overrides`
     go over the stubs, for a guard that needs a value the inventory does not hold.
     """
@@ -110,8 +107,8 @@ def component_host(name: str) -> str | None:
 
 
 def discover_templates() -> list[Path]:
-    """Return every *.sh.j2 under ansible/roles/ and under a host component's templates/."""
-    return sorted(ROLES.rglob("*.sh.j2")) + sorted(
+    """Return every *.sh.j2 under k8s/roles/ and under a host component's templates/."""
+    return sorted(K8S_ROLES.rglob("*.sh.j2")) + sorted(
         COMPONENTS.glob("*/templates/*.sh.j2")
     )
 
@@ -189,7 +186,8 @@ def main(
     templates = discover_templates()
     if not templates:
         print(
-            f"No *.sh.j2 templates found under {ROLES} or {COMPONENTS}", file=sys.stderr
+            f"No *.sh.j2 templates found under {K8S_ROLES} or {COMPONENTS}",
+            file=sys.stderr,
         )
         return 1
 

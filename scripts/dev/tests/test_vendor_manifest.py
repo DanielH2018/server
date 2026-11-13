@@ -1,6 +1,6 @@
 """`vendor_manifest.py`: the refresh against a fake fetcher, and its removed-object report.
 
-The pin check itself is `ansible/tests/k8s/test_vendored_manifests_match_their_pins.py`.
+The pin check itself is `tests/k8s/test_vendored_manifests_match_their_pins.py`.
 
 Run: uv run pytest scripts/dev/tests/test_vendor_manifest.py
 """
@@ -35,7 +35,7 @@ demo_vendored_manifests:
 
 
 def _role(tmp_path, body=OLD):
-    role = tmp_path / "k8s" / "demo"
+    role = tmp_path / "demo"
     (role / "defaults").mkdir(parents=True)
     (role / "files" / "upstream").mkdir(parents=True)
     (role / "files" / "upstream" / "demo.yaml").write_bytes(body)

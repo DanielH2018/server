@@ -38,7 +38,7 @@ source /usr/lib/homelab/homelab-check-lib.sh || {
 
 # The longest legitimate gap between two textfile writes: a day plus an hour.
 # `k3s_daily_check_deadline_s` names it in defaults/main.yml, and
-# ansible/tests/services/test_b1_rule_literals.py pins the rule's literal to this value.
+# tests/services/test_b1_rule_literals.py pins the rule's literal to this value.
 DEADLINE_S={{ k3s_daily_check_deadline_s }}
 TEXTFILE_DIR=${TEXTFILE_DIR:-/var/lib/node-exporter-textfile}
 

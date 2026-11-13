@@ -1,0 +1,92 @@
+# zigbee2mqtt — Zigbee coordinator bridge (SLZB-06M → MQTT)
+
+Zigbee2MQTT 2.x bridging the network-attached SLZB-06M coordinator into MQTT/Home Assistant.
+See repo-root `CLAUDE.md` for shared conventions.
+
+## At a glance
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in k8s/roles/longhorn-reconcile/defaults/main.yml. -->
+- **Applied by:** Flux, through `promote`; `land.sh --tags=zigbee2mqtt` gates the rollout
+- **Images:** `ghcr.io/koenkk/zigbee2mqtt` (`zigbee2mqtt_k8s_image`), `alpine`
+  (`zigbee2mqtt_k8s_init_image`)
+- **Route:** `zigbee2mqtt.<domain>` · `zigbee2mqtt.local.<domain>`, Authelia one_factor
+- **Claim:** `zigbee2mqtt-data` (daily -> R2)
+<!-- /generated_from -->
+
+- **Host: daniel-box (k8s), since 2026-08-09 — slice 5, B2.** The Docker role this config came
+  from is gone; this role's Secret renders `templates/config/configuration.yaml.j2`. Edit Z2M
+  config HERE, then merge; `promote` applies it.
+- **Port:** 8080 · reaches the coordinator at `tcp://{{ slzb_ip }}:6638`, broker at the
+  in-cluster `mosquitto` Service name
+- **Flux applies it, not Ansible** (D5.10, an own-window flip). Its `containers_list` entry
+  is in `cluster/services.yml`, so nothing applies it by hand, and a
+  merged change reaches the cluster when `promote` publishes and verifies the next bundle. mosquitto
+  is Flux-owned too, so the
+  Kustomization depends on it. The Deployment is `Recreate` and the SLZB-06M coordinator
+  accepts one client, so a change that rolls the pod drops every Zigbee device from MQTT until
+  the new pod connects.
+- **The `zigbee2mqtt-snapshot` Job snapshots `zigbee2mqtt-data` before each revision applies**
+  (D5.2a). The zigbee2mqtt Kustomization depends on `zigbee2mqtt-snapshot`, so a revision
+  applies only after the snapshot is ready; `docs/flux-deploy-plane.md` lists the Job's checks.
+  A failed revision that changes zigbee2mqtt writes the stateful hold, and `promote` does not
+  reset `prod`. A volume revert is not the default answer to that hold here: the coordinator's
+  NVRAM holds the network key and frame counters, so a reverted volume can silence paired
+  devices, which is why `k8s_autodeploy` is false. Weigh a forward fix before the revert runbook in
+  `docs/volume-snapshot-drills.md`. `k8s_autodeploy: false` still stops Renovate automerging
+  the image bump.
+- **The network key and MQTT credentials substitute from `homelab-cluster-vars`.**
+  `zigbee_network_key`, `mqtt_username` and `mqtt_password` are `${<key>}` placeholders in the
+  published render. Flux substitutes the values from the `homelab-cluster-vars` Secret. A
+  rotation reaches the cluster only through `cluster_vars.py write`.
+- **Where the task went.** Its pre-apply snapshot through
+  `k8s/volume-snapshot` became the `zigbee2mqtt-snapshot` Job, and the Kustomization's `wait`
+  replaces the rollout wait.
+
+## Notable
+- **Network coordinator, not USB.** The SLZB-06M is reached as `serial.port: tcp://<ip>:6638`,
+  `adapter: ember` (Silabs EFR32 EmberZNet). No `network_mode: host`, no `devices:`.
+- **`configuration.yaml` is templated** (`data/configuration.yaml`) and is the Ansible source
+  of truth — overwritten on deploy. The **Zigbee network identity is pinned**
+  (`network_key` from SOPS `zigbee_network_key`, `pan_id`/`ext_pan_id` from host_vars) so a
+  redeploy can NEVER regenerate it and un-pair every device. Do not switch these to GENERATE.
+- **Device/pairing state is Z2M-owned, NOT templated:** `data/database.db`,
+  `coordinator_backup.json`, `devices.yaml`, `groups.yaml`. All on the `zigbee2mqtt-data`
+  Longhorn PVC, backed up daily to R2 (the tier is in the generated block above; Kopia
+  stopped covering this at the cutover). Losing the PVC = re-pair everything. **Friendly names** (renamed 2026-06-18:
+  Lamp / Left Light / Right Light / Tap Dial / Aqara FP300) live here too — set via the Z2M UI or
+  the `zigbee2mqtt/bridge/request/device/rename` MQTT request `{"from":"<ieee>","to":"<name>"}`.
+  **Per-device settings** (exposed as HA number/select entities) are also Z2M-owned device state —
+  e.g. the FP300 presence tuning (`presence_detection_options`/`motion_sensitivity`/`absence_delay_timer`,
+  see the home-assistant role CLAUDE.md). Re-apply via `zigbee2mqtt/<name>/set` after a re-pair.
+- **Renaming a device keeps its HA entity_ids (sticky, IEEE-based unique_id) but MOVES its raw MQTT
+  topic** to `zigbee2mqtt/<new name>`. So a rename is zero-cascade for entities
+  referenced by `entity_id` (e.g. the bulbs in the `light.bedroom_lights` group, the Tap Dial's
+  `sensor.0x…_battery`) — only consumers of the *raw topic* break. The Tap Dial automation
+  (`bedroom_tap_dial_control`) triggers on `zigbee2mqtt/Tap Dial` (the raw topic) and was the one
+  edit needed. Entity_ids stay IEEE-based until separately renamed in the HA UI (display names follow
+  the Z2M name regardless).
+- **HA discovery on** (`homeassistant.enabled: true`) — paired devices auto-appear in HA via
+  the MQTT integration; no per-device HA config.
+- **Availability tracking on (since 2026-06-18).** `availability.enabled: true` (off by default
+  in Z2M 2.x) publishes `online`/`offline` to `zigbee2mqtt/<device>/availability` and adds
+  `availability_topic` to the HA discovery configs, so a dropped device's HA entities go
+  `unavailable` — consumed by HA's `bedroom_sensor_offline_alert`. `active.timeout` (10 min) =
+  mains/routed devices (the Hue bulbs), actively pinged; `passive.timeout` (60 min) = battery
+  end-devices (FP300, Tap Dial), judged on last-seen only since pinging a sleeping radio drains it.
+  60 min is a STARTING POINT (Z2M default is 1500 min/25h): the Tap Dial self-reports every
+  ~7-18 min and the FP300 is very chatty, so 60 min catches a real dropout within the hour without
+  false offline alerts. Tune per observed cadence. Verify after deploy (from daniel-box):
+  `kubectl -n homelab logs deploy/zigbee2mqtt | grep "/availability'"` should show `online` publishes.
+- **Coordinator monitored at the infra level (since 2026-06-18).** A blackbox_exporter
+  `tcp_connect` probe of `{{ slzb_ip }}:6638`, the `zigbee2mqtt` target of the `blackbox-extra`
+  job in `k8s/roles/observability/templates/prometheus.yaml.j2`, which the
+  `ExtraProbeFailed` rule pages. It pages even if
+  HA/MQTT are down, catching an `EHOSTUNREACH` like the 2026-06-18 accidental unplug, which a
+  pod-level health check misses (Z2M stays running while it crash-loops against an unreachable
+  radio). HA layers a second,
+  software-side alert on `binary_sensor.zigbee2mqtt_bridge_connection_state` (the home-assistant role's
+  `zigbee_bridge_offline` automation, fed by Z2M's MQTT Last-Will).
+- **Pairing is closed by default** (no `permit_join` in 2.x). Enable join from the Z2M UI
+  (`zigbee2mqtt.<domain>`) when adding devices, then disable.
+
+## Editing
+- Z2M cfg: `templates/config/configuration.yaml.j2` (rendered into the k8s Secret by `k8s/roles/zigbee2mqtt/`)

@@ -13,7 +13,7 @@ import yaml
 
 from lib import yaml_fast
 from lib.exit_codes import RENDER_OK
-from lib.repo_paths import ANSIBLE
+from lib.repo_paths import K8S_ROLES
 from renderer import homelab_render
 from renderer.renderer_lib.placeholders import references
 from renderer.renderer_lib.restart import (
@@ -28,9 +28,9 @@ CONFIG_MAP = "autofix-bridge-script"
 CONFIG_MAP_FILE = "script-configmap.yaml"
 # The three modules the pod imports, each key with the file it must equal.
 MODULES = {
-    "autofix.py": ANSIBLE / "roles/k8s/autofix-bridge/files/autofix.py",
-    "bridge_common.py": ANSIBLE / "roles/k8s/monitor-bridge/files/bridge/common.py",
-    "jobs_metrics.py": ANSIBLE / "roles/k8s/crowdsec/files/jobs_metrics.py",
+    "autofix.py": K8S_ROLES / "autofix-bridge/files/autofix.py",
+    "bridge_common.py": K8S_ROLES / "monitor-bridge/files/bridge/common.py",
+    "jobs_metrics.py": K8S_ROLES / "crowdsec/files/jobs_metrics.py",
 }
 ALL = frozenset({"ConfigMap", "Secret"})
 

@@ -137,11 +137,11 @@ For each PR read the file list and the diff — `gh pr diff <n> --name-only`, th
 | Files | Class | Handling |
 |---|---|---|
 | `uv.lock` | lock file maintenance | merge; nothing to deploy |
-| `ansible/roles/k8s/*/defaults/main.yml` | k8s image pin | merge, land with the role's tag |
+| `k8s/roles/*/defaults/main.yml` | k8s image pin | merge, land with the role's tag |
 | same, **title or branch** carries `(manual — k8s_autodeploy: false, …)` — the branch slugifies it to `k8s_autodeploy-false`, and for a single-dependency group that can be the only place it lands (#2641). `groupSingleUpdates: true` on every rule carrying the marker puts it in the title of a PR raised since #2646 (the denylist and base-image rules) or #2654 (the per-package rules); a PR raised before that still titles bare | k8s image pin marked `k8s_autodeploy: false` | nothing to finish; merge through `land.sh`, which deploys it from the merge commit — a bare merge leaves it to the drift monitor (#1886). **An interactive session's job only**: the unattended `renovate_agent` leaves this class open and names the `land.sh` command in its digest, because the denial reason is that a failed deploy here (authelia, traefik, crowdsec) is one `probe.py health` cannot see, so a person is the review (#1939). A title whose parenthetical ENDS with `; k8s_autodeploy: false` after its own work order (`crowdsec bouncer plugin`, `meilisearch`, `karakeep time-tagger pip deps`, `n8n`) is a per-package rule on a denied role (#1963): the work order in front of the marker decides the handling — *When to stop and say so* below — and the marker only says who may land it |
-| `ansible/inventory/group_vars/all.yml`, same title | a cross-role image pin (`crowdsec_k8s_image`, read by crowdsec, traefik and authelia) | same as the row above: `promote` re-renders every tag reading the key, and `land.sh` gates the tags the promotion's changed set names |
+| `inventory/group_vars/all.yml`, same title | a cross-role image pin (`crowdsec_k8s_image`, read by crowdsec, traefik and authelia) | same as the row above: `promote` re-renders every tag reading the key, and `land.sh` gates the tags the promotion's changed set names |
 | `hosts/components/*/defaults/main.yml` | host plane | often `manual —`; check the rule |
-| `ansible/roles/k8s/*/templates/Dockerfile*.j2` | in-cluster-built image | merge, land, then verify the pod took the rebuild |
+| `k8s/roles/*/templates/Dockerfile*.j2` | in-cluster-built image | merge, land, then verify the pod took the rebuild |
 | `hosts/components/pi-compose/services/*/compose.yaml.j2` | a Pi Compose image pin | autoheal's and docker-proxy's digest bumps automerge, and the Pi's updater installs the next package. A `pi image wg-easy (manual — …)` or `grafana/alloy (manual — lockstep …)` PR waits for a person: land it through `land.sh`, which waits for the Pi to install the package, then read the running image with `ssh daniel-pi "docker inspect <service> --format '{{.Image}}'"` and compare it with the digest in the service's `compose.yaml.j2`. `docker ps --format '{{.Image}}'` is no substitute, because it prints the tag and the Pi's local `latest` can point at an older image than the running one (#7089) |
 | `prek.toml`, `.github/workflows/*` | tooling | merge; CI is the only consumer |
 | `.github/workflows/*`, title `CI runner image` | CI runner image | the PR run proves almost nothing about it — sweep the branch first, §3 *A runner-image bump* |
@@ -166,7 +166,7 @@ pin. A title reading `Update n8n (manual — append
 each resolved version to base-pin-history.tsv; lockstep: app + task runners; k8s_autodeploy: false)` names its group,
 and the group name is the work order — here, resolve each new digest to its
 `org.opencontainers.image.version` label and append a row to
-`ansible/roles/k8s/n8n/base-pin-history.tsv`, whose header carries the commands. A digest
+`k8s/roles/n8n/base-pin-history.tsv`, whose header carries the commands. A digest
 bump changes no version string, so the diff alone cannot tell an upgrade from a downgrade: PR
 #1440 proposed a lockstep downgrade through nine green checks (issue #1493).
 
@@ -336,7 +336,7 @@ covering all of them costs one lock acquisition instead of three.
 - **An upstream version bump:** ask the app. `kubectl -n homelab logs deploy/<svc> | grep -i version`,
   or the service's own version endpoint.
 - **A built image** (`Dockerfile*.j2`): confirm the pod resolved the digest the registry serves.
-  The `built-images-pull-always` row of `ansible/tests/k8s/_workload_property_rows.py` guards
+  The `built-images-pull-always` row of `tests/k8s/_workload_property_rows.py` guards
   the usual cause.
 - **A plugin or extension:** confirm the host loaded it, not just that the file is on disk.
 
@@ -384,7 +384,7 @@ branch writes — then read that key's value **on master**, because a three-dot 
    residue and three more were overtaken, `renovate/prek` writing `prek==0.5.0` against a
    master already on 0.5.2.
 2. **A bump for a dependency master no longer has.** `renovate/k8s-image-grafanapromtail` bumps
-   `grafana/promtail` in `ansible/roles/k8s/loki-homelab/defaults/main.yml`; that file pins
+   `grafana/promtail` in `k8s/roles/loki-homelab/defaults/main.yml`; that file pins
    `grafana/alloy` now, and no k8s role pins promtail at all. The bump has nothing to land on.
 3. **A pending update that lost its dashboard entry.** The dependency still exists in the tree
    and master's pin is behind what the branch writes. This is the only class that costs

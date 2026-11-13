@@ -11,7 +11,7 @@ entry.
 
 **First, determine what the change touches:**
 
-- Role under `ansible/roles/k8s/<service>/`, an inventory value or a shared template → **k3s
+- Role under `k8s/roles/<service>/`, an inventory value or a shared template → **k3s
   workload** (this is nearly everything). It lands through `land.sh`, `promote` and Flux.
 - Entry in `compose_services` in `host_vars/daniel-pi.yml`, or anything under `hosts/` → **host
   package**. For the Pi's docker-proxy, wg-easy, alloy and autoheal, the `homelab-daniel-pi`
@@ -87,5 +87,5 @@ changes nothing else `nothing-to-deploy`.
 
 ```bash
 # Edit encrypted secrets
-sops ansible/vars/secrets.yml
+sops secrets/secrets.yml
 ```

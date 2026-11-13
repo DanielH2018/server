@@ -8,7 +8,7 @@ library, so the file the case reads is the file the collector would. Only the WA
 probes, `uv`, `git`, `curl` and `logger` are stubs, and no Kuma credential file exists in the
 harness, so every case also proves that a host without one still writes its verdict.
 The deadline literals are pinned to the
-render in ansible/tests/services/test_b1_rule_literals.py.
+render in tests/services/test_b1_rule_literals.py.
 """
 
 import hashlib

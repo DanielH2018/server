@@ -1,6 +1,6 @@
 // Grafana Alloy on daniel-pi. Ships this host's CONTAINER logs to loki-homelab, which is the
 // cluster's general-purpose log store and already holds both k3s nodes' pod logs (shipped by
-// the cluster's own Alloy DaemonSet, roles/k8s/loki-homelab).
+// the cluster's own Alloy DaemonSet, k8s/roles/loki-homelab).
 //
 // Scope is deliberately two sources. This is a Zero 2 W with 456 MB of RAM and measurable CPU
 // pressure at idle, so every target costs something real — see the resource notes in

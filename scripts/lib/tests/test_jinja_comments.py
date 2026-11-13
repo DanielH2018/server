@@ -3,14 +3,12 @@
 Run: uv run pytest scripts/lib/tests/test_jinja_comments.py
 """
 
-from pathlib import Path
-
 from lib.jinja_comments import strip_jinja_comments
-from lib.repo_paths import ANSIBLE
+from lib.repo_paths import K8S, SHARED_TPL
 
 # A template that must stay in the census, so a glob that stops matching fails loudly
 # rather than passing over nothing.
-SHARED_INGRESSROUTE = ANSIBLE / "templates" / "ingressroute.yml.j2"
+SHARED_INGRESSROUTE = SHARED_TPL / "ingressroute.yml.j2"
 
 
 def test_a_comment_is_blanked():
@@ -44,7 +42,7 @@ def test_an_unterminated_comment_is_left_as_written():
 
 def test_every_comment_free_template_in_the_tree_is_untouched():
     """The property that makes this safe to add in front of an existing text reader."""
-    templates = sorted(Path(ANSIBLE).rglob("*.j2"))
+    templates = sorted(K8S.rglob("*.j2"))
     assert SHARED_INGRESSROUTE in templates
     checked = 0
     for tmpl in templates:
@@ -57,7 +55,7 @@ def test_every_comment_free_template_in_the_tree_is_untouched():
 
 
 def test_every_template_in_the_tree_keeps_its_line_count():
-    templates = sorted(Path(ANSIBLE).rglob("*.j2"))
+    templates = sorted(K8S.rglob("*.j2"))
     assert SHARED_INGRESSROUTE in templates
     for tmpl in templates:
         text = tmpl.read_text()

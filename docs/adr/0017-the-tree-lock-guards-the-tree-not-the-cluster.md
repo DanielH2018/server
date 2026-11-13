@@ -66,7 +66,7 @@ locks inside the tree lock it already holds.
 
 **A snapshot is safe because rendered manifests are a function of the commit.** Every template
 `src` is a tracked path, and the per-host variables the render also reads come from the same
-tree. `roles/k8s/manifests` already records the commit in
+tree. `k8s/roles/manifests/` already records the commit in
 `/var/lib/homelab/k8s-releases.d/<svc>.json`, so the release record names exactly what the
 snapshot rendered.
 

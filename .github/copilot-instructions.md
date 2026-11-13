@@ -10,10 +10,10 @@ packages that configure each host.
 > follow `CLAUDE.md`.
 
 ## Repository Structure
-- **Host bring-up**: `hosts/bootstrap-host.sh` brings a host up, and the host packages under `hosts/` carry its setup plane. `ansible/` holds no playbook for it.
-- **Roles**: Located in `ansible/roles/`. New services are k3s workloads under `ansible/roles/k8s/`; the Pi's Docker services live in `hosts/components/pi-compose/services/`.
-- **Inventory**: Host-specific variables are in `ansible/inventory/host_vars`. Shared variables are in `ansible/inventory/group_vars`.
-- **Secrets**: Sensitive data is in `ansible/vars/secrets.yml` (SOPS-encrypted).
+- **Host bring-up**: `hosts/bootstrap-host.sh` brings a host up, and the host packages under `hosts/` carry its setup plane.
+- **Roles**: Located in `k8s/roles/`. New services are k3s workloads under `k8s/roles/`; the Pi's Docker services live in `hosts/components/pi-compose/services/`.
+- **Inventory**: Host-specific variables are in `inventory/host_vars`. Shared variables are in `inventory/group_vars`.
+- **Secrets**: Sensitive data is in `secrets/secrets.yml` (SOPS-encrypted).
 - **Rendered output**: the Pi's Compose project is rendered into its host package from `hosts/components/pi-compose/` — never edit it on the host.
 
 ## Development Guidelines
@@ -27,13 +27,13 @@ packages that configure each host.
   (`.claude/skills/new-k8s-service/SKILL.md`).
 - A Docker service on `daniel-pi` follows the `new-container` skill
   (`.claude/skills/new-container/SKILL.md`): a `compose_services` entry in
-  `ansible/inventory/host_vars/daniel-pi.yml` and a
+  `inventory/host_vars/daniel-pi.yml` and a
   `hosts/components/pi-compose/services/<name>/compose.yaml.j2`.
-- Put any secrets in `ansible/vars/secrets.yml` (edit via `sops`) and reference them
+- Put any secrets in `secrets/secrets.yml` (edit via `sops`) and reference them
   as `{{ variable_name }}` in templates.
 
 ### Variables and Secrets
 - Use Jinja2 templating (`{{ var }}`) for variables.
-- **Encryption**: Use `sops` with `age` for encrypting sensitive files. Per the `.sops.yaml` configuration, any `.yml` or `.yaml` files inside a `vars/` or `secrets/` directory will be encrypted.
+- **Encryption**: Use `sops` with `age` for encrypting sensitive files. Per the `.sops.yaml` configuration, any `.yml` or `.yaml` file under `secrets/` is encrypted.
 - **Editing Secrets**: To edit an encrypted file, use the command `sops path/to/encrypted/file.yml`.
-- **Decryption**: Flux decrypts the cluster's own SOPS file with the cluster's age key, and each host decrypts its own per-host file under `ansible/vars/hosts/` with that host's key (ADR 0022, ADR 0029).
+- **Decryption**: Flux decrypts the cluster's own SOPS file with the cluster's age key, and each host decrypts its own per-host file under `secrets/hosts/` with that host's key (ADR 0022, ADR 0029).

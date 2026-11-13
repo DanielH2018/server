@@ -291,7 +291,7 @@ def test_a_rate_limited_post_retries_once_after_a_short_wait(
 
 def test_a_header_listing_every_tag_splits_across_messages_that_each_fit(tmp_path):
     """A widened or broad revision names every tag; the header must still post whole."""
-    tags = sorted(p.name for p in (REPO / "ansible" / "roles" / "k8s").iterdir())
+    tags = sorted(p.name for p in (REPO / "k8s" / "roles").iterdir())
     assert len(tags) >= 60
     target = _bundle({t: "x" for t in tags} | {"sonarr": "s2"}, a=SONARR_SNAP)
     found = stateful.record(target, json.loads(target["digests.json"]), None, DIGEST)

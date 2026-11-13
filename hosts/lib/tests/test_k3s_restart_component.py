@@ -13,7 +13,7 @@ import jinja2
 import pytest
 import yaml
 
-from lib.ansible_jinja_env import make_env, register_ansible_filters
+from lib.guard_jinja_env import make_env, register_ansible_filters
 from lib.repo_paths import REPO
 from renderer.renderer_lib import host as host_mode
 from renderer.renderer_lib.cluster import RenderRefused
@@ -186,7 +186,7 @@ def test_a_daniel_box_package_without_the_link_leaves_the_updater_unarmed(tmp_pa
     hosts = tmp_path / "hosts"
     shutil.copytree(REPO / "hosts", hosts)
     # Sources outside hosts/ resolve against the root's parent.
-    for name in ("ansible", "scripts", "docs"):
+    for name in ("k8s", "inventory", "secrets", "scripts", "docs"):
         (tmp_path / name).symlink_to(REPO / name)
     spec_path = hosts / "daniel-box/package.yml"
     spec = yaml.safe_load(spec_path.read_text())

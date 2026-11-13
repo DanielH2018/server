@@ -17,7 +17,7 @@ from deploy_tools.land_lib.outcome import Outcome
 
 OLD = "a" * 40
 # What master changed since the PR's tested base, none of it a path the PR changes.
-MASTER_MOVED = [".claude/hooks/session-health.py", "ansible/tests/_ratchet.py"]
+MASTER_MOVED = [".claude/hooks/session-health.py", "tests/_ratchet.py"]
 DOCS_ONLY = [{"status": "modified", "filename": "docs/landing.md"}]
 # What `gh api -X PUT …/merge` writes to stderr when a required check has not finished.
 RULE_VIOLATION = (

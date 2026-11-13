@@ -12,13 +12,11 @@ HEADROOM = f"1\n12884901888\n1\n12884901888\n0\n{HOST_KEY}\n"
 # The shape: three issues under one domain label, two batches, one shared script.
 ALERTS = "scripts/diagnostics/probe_lib/alerts.py"
 ISSUES = [
-    Issue(
-        1780, "bridge", f"`{ALERTS}` and ansible/roles/k8s/monitor-bridge/", ("claude",)
-    ),
+    Issue(1780, "bridge", f"`{ALERTS}` and k8s/roles/monitor-bridge/", ("claude",)),
     Issue(
         1784,
         "discord",
-        "ansible/roles/k8s/monitor-bridge/defaults/main.yml",
+        "k8s/roles/monitor-bridge/defaults/main.yml",
         ("claude",),
     ),
     Issue(1782, "probe", f'  File "{ALERTS}", line 336, in run_alerts', ("claude",)),

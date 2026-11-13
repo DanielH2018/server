@@ -1,0 +1,406 @@
+---
+# The observability plane: the Claude Code telemetry stack (collector, Tempo, Loki) and the
+# cluster's metrics plane (Prometheus, kube-state-metrics, Grafana).
+#
+# Claude Code runs on the daniel-box HOST and exports to localhost:4317 — that endpoint is
+# fixed by the chezmoi settings template, which enables telemetry on every host except
+# daniel-pi and states the intent plainly: "Every host exports to localhost:4317 and every
+# host keeps its own data."
+
+# Pinned, Renovate-tracked.
+observability_k8s_collector_image: otel/opentelemetry-collector-contrib:0.161.0@sha256:fd328de2552466ad78385e1b1289c3f2402b1c45f265b252aab1955b42845ac1
+observability_k8s_loki_image: grafana/loki:3.7.9@sha256:0db216b630ae1f348a1584c67f3cead8b4c1fc839169a39501db664744158e28
+observability_k8s_prometheus_image: prom/prometheus:v3.15.0@sha256:efd719c99d83b060d9daefdcf00360461adf279f45ef5391f8d111892118753e
+# scripts/validate/alert_tools.sh reads this tag, as it reads the Prometheus one above, to
+# provision amtool for the validate-alert-rules hook, so the Alertmanager this role runs and the
+# amtool CI checks its config with move in one Renovate bump.
+observability_k8s_alertmanager_image: prom/alertmanager:v0.34.2@sha256:39d8bb3966c694a124428a3a88fbcffd40bd069129ecd47c059f8a3f17c55f3b
+# Grafana 12 removed Angular, so every `graph` panel must be converted to `timeseries` and
+# deployed before a major bump, not alongside it.
+#
+# DECIDED: grafana-data stays on longhorn-nobackup (operator declined a backup 2026-08-21);
+# dashboards and datasources are provisioned from git.
+# Grafana's schema migrations are one-way, which is tolerable because of that: the DB holds
+# only preferences, version history and annotations. Recovery is deleting the PVC.
+observability_k8s_grafana_image: grafana/grafana:13.2.4@sha256:dbbc38ea21103cefb50396340cd88afec779c7e070b0a7bf5a75b4ce46651d3f
+
+# The budget of the observability-prepull Kustomization, whose Job pulls Grafana's image onto
+# its node before the observability Kustomization applies
+# (scripts/renderer/renderer_lib/prepull.py). Grafana is `Recreate`, so without it the
+# dashboards are down for the whole pull. MEASURED 2026-10-22 (#5867): the pinned amd64 image is
+# 482.3 MB from Docker Hub, which served a 420 MB layer at 23.5-25.2 MB/s on daniel-box, about
+# 20s for the image. 600s covers it down to 0.8 MB/s. The Job has no deadline, so a pull slower
+# still costs that revision its verdict, the Job keeps pulling, and Flux applies observability
+# on a later retry.
+flux_prepull_timeout: 600s
+# The Job pulls for Grafana alone (#5875). The role's other images are under 115 MB, their
+# Deployments pin no node, and grafana/loki, grafana/tempo and kube-state-metrics carry no `sh`
+# for the Job's no-op script, so a pre-pull of the whole role could neither place nor run.
+flux_prepull_workloads: [grafana]
+# Distinct from the metrics-server k3s already bundles: that serves the
+# resource-metrics API for `kubectl top`/HPA, while this exports kube_pod_status_ready and
+# kube_deployment_status_* — the only readiness signal the seven routeless workloads have.
+observability_k8s_kube_state_metrics_image: registry.k8s.io/kube-state-metrics/kube-state-metrics:v2.20.0@sha256:42cfe3723a5f058171c627537fb57a3ea0f26e4380fa18555a95cb1a1b4cfc5b
+
+# kube-state-metrics' custom-resource-state config for the Flux kinds. It produces
+# gotk_resource_info, one series per Kustomization and OCIRepository, which the Flux
+# controllers do not export themselves (docs/flux-deploy-plane.md).
+#
+# kube-state-metrics.yaml.j2 passes it inline as --custom-resource-state-config through
+# to_json, not as a ConfigMap. The config then lives in the pod template, so a change here
+# rolls kube-state-metrics through the apply, and the role gains no ConfigMap key for
+# test_observability_config_rolls_one_workload.py to track.
+#
+# The metric name, the labels and `exported_namespace` follow fluxcd/flux2-monitoring-example,
+# so upstream Flux boards and rules read these series unchanged, with one exception: a
+# Kustomization's `revision` reads status.lastAppliedOriginRevision (`master@sha1:<sha>`), the
+# field contracts.md C6 names, where upstream reads lastAppliedRevision (`prod@sha256:<digest>`),
+# which names no commit. A second addition, `content_digest`, reads the annotation the renderer
+# stamps on Kustomization `<tag>` (bundle.py:CONTENT_DIGEST). It is the digest of the tag's own
+# rendered directory, so it holds across a master commit that moves `revision` without touching
+# the tag, and C7's flux reference time matches on it (#5338). A change to the tag adds one
+# short-lived series: the root Kustomization `homelab` stamps the new annotation and the tag's
+# own Kustomization reports the new revision, in either order.
+#
+# kube-state-metrics drops a label whose path is absent. The flux role omits spec.suspend
+# unless its suspend lever is on, so `suspended` is absent rather than "false" on an object
+# Flux is reconciling, and a rule reading it matches suspended="true".
+#
+# Each kind here needs list and watch in the ClusterRole in kube-state-metrics.yaml.j2.
+observability_ksm_flux_resource_state:
+  kind: CustomResourceStateMetrics
+  spec:
+    resources:
+      - groupVersionKind: {group: kustomize.toolkit.fluxcd.io, version: v1, kind: Kustomization}
+        metricNamePrefix: gotk
+        metrics:
+          - name: resource_info
+            help: The current state of a Flux Kustomization.
+            each:
+              type: Info
+              info:
+                labelsFromPath:
+                  name: [metadata, name]
+            labelsFromPath:
+              exported_namespace: [metadata, namespace]
+              ready: [status, conditions, "[type=Ready]", status]
+              suspended: [spec, suspend]
+              revision: [status, lastAppliedOriginRevision]
+              content_digest: [metadata, annotations, homelab/content-digest]
+              source_name: [spec, sourceRef, name]
+      - groupVersionKind: {group: source.toolkit.fluxcd.io, version: v1, kind: OCIRepository}
+        metricNamePrefix: gotk
+        metrics:
+          - name: resource_info
+            help: The current state of a Flux OCIRepository.
+            each:
+              type: Info
+              info:
+                labelsFromPath:
+                  name: [metadata, name]
+            labelsFromPath:
+              exported_namespace: [metadata, namespace]
+              ready: [status, conditions, "[type=Ready]", status]
+              suspended: [spec, suspend]
+              revision: [status, artifact, revision]
+              url: [spec, url]
+
+# Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
+# Observability: the Claude Code telemetry stack (collector/Loki/Prometheus/Grafana/Tempo/
+# kube-state-metrics/Alertmanager) — a broken deploy blinds this whole diagnostic surface with nothing else
+# watching it. ALSO Recreate + a PVC on each stateful sub-service (loki-data, grafana-data,
+# prometheus-data, tempo-data, alertmanager-data) — several independently migrating-state-shaped Deployments behind
+# one role, which compounds the risk across more than one component at once.
+k8s_autodeploy: false
+k8s_autodeploy_reason: "observability — the cluster metrics plane and Claude Code's own telemetry stack, one sub-image per workload across several Deployments. ALSO each stateful component (loki/grafana/prometheus/tempo/alertmanager) is Recreate + its own PVC — compounding, not single-component. COUPLING NOTE for a future promotion: UI-edited Grafana dashboards live only in the PVC until an export script round-trips them to git; a revert discards unsaved edits"
+
+# longhorn-nobackup, NOT longhorn. Two reasons, either sufficient on its own:
+#   - Volume: Loki with content logging on grows fast, and Prometheus TSDB is high-churn.
+#     Both are bulky, regenerable state.
+#   - Sensitivity: content logging is ON, so Loki holds prompts, responses and tool output
+#     verbatim. The default class would copy transcript-grade data into B2 automatically.
+observability_storage_class: longhorn-nobackup
+observability_loki_storage: 10Gi
+observability_prometheus_storage: 12Gi
+# Grafana keeps only its own SQLite (users, prefs, starred dashboards). Datasources and
+# dashboards are provisioned from ConfigMaps, so this volume is small and losing it costs
+# nothing but UI state — it is on the no-backup class for that reason, not just size.
+# allowUiUpdates is true, so a UI-edited board DOES live only here until
+# scripts/grafana/export_grafana_dashboards.py round-trips it into the git tree — git is the
+# backup, the export is the save step.
+observability_grafana_storage: 1Gi
+# Alertmanager's silences and notification log. Small, and on the no-backup class: losing it
+# costs only those two, and the cost is one re-sent notification per open alert.
+observability_alertmanager_storage: 1Gi
+
+# The role's claims, which the renderer renders (#3387). Each names `namespace` because the claims
+# live beside their workloads in k8s_observability_namespace, not in the shared k8s_namespace.
+# No `k8s_autodeploy_snapshot_pvcs` here, so the claims are applied by the directory apply,
+# after 00-namespace.yaml creates the namespace on a fresh cluster.
+k8s_claims:
+  - name: loki-data
+    storage_class: "{{ observability_storage_class }}"
+    size: "{{ observability_loki_storage }}"
+    namespace: "{{ k8s_observability_namespace }}"
+  - name: prometheus-data
+    storage_class: "{{ observability_storage_class }}"
+    size: "{{ observability_prometheus_storage }}"
+    namespace: "{{ k8s_observability_namespace }}"
+  - name: grafana-data
+    storage_class: "{{ observability_storage_class }}"
+    size: "{{ observability_grafana_storage }}"
+    namespace: "{{ k8s_observability_namespace }}"
+  - name: tempo-data
+    storage_class: "{{ observability_storage_class }}"
+    size: "{{ observability_tempo_storage }}"
+    namespace: "{{ k8s_observability_namespace }}"
+  - name: alertmanager-data
+    storage_class: "{{ observability_storage_class }}"
+    size: "{{ observability_alertmanager_storage }}"
+    namespace: "{{ k8s_observability_namespace }}"
+
+# OTLP gRPC, bound to loopback ON THE NODE via hostPort. Deliberately not a MetalLB VIP:
+# with content logging on, this must not be reachable from the LAN. Loopback is the whole
+# access control, exactly as the chezmoi bundle intends. daniel-box's package timer
+# homelab-claude-otel-health probes this door from its twins claude_code_otlp_host_ip and
+# claude_code_otlp_port, held equal by hosts/lib/tests/test_claude_artifacts_node_timers.py.
+observability_otlp_port: 4317
+observability_otlp_host_ip: 127.0.0.1
+# Query-side twin of observability_otlp_host_ip, for Loki/Prometheus/Tempo. `otelq` is a
+# host process and hardcodes 127.0.0.1 on 3100/9090/3200, so a ClusterIP-only Service is
+# unreachable to it. Loopback is load-bearing for the same reason as the collector's:
+# these backends hold prompts, responses and tool output verbatim, so the node-side
+# listener must never bind 0.0.0.0.
+observability_query_host_ip: 127.0.0.1
+
+# Pinned ClusterIPs for the three query backends. These are the addresses they already
+# hold; declaring them makes an existing allocation explicit rather than requesting a
+# change, so an apply is a no-op.
+#
+# They are pinned because they are quoted as constants outside this repo. Loki, Prometheus
+# and Tempo are single-replica Deployments with no nodeSelector, publishing their query
+# ports on a hostPort bound to observability_query_host_ip — so only the node they happen to
+# run on answers on loopback. When all three reschedule to the other node, every host-side
+# query tool breaks while the telemetry itself stays healthy. `otelq` and `otel-sweep`
+# (chezmoi: home/dot_local/bin/) try loopback first and these addresses second, which works
+# from either node. That fallback is only sound while the addresses cannot be reassigned
+# under it, which is what pinning buys.
+#
+# spec.clusterIP is immutable: changing a value here is rejected on apply, and actually
+# moving one means deleting the Service and updating the constants in both repos together.
+observability_loki_cluster_ip: 10.43.99.158
+observability_prometheus_cluster_ip: 10.43.39.218
+observability_tempo_cluster_ip: 10.43.4.147
+
+# 744h (31d). Retention matters more here than in a normal log store: every prompt and
+# response is retained verbatim for this window.
+observability_loki_retention: 744h
+# Dashboard folders, each with the boards it provisions. The folders are the subdirectories of
+# k8s/roles/observability/files/dashboards, which is the single source of truth for the JSON.
+# templates/grafana-dashboards.yaml.j2 renders one ConfigMap per folder holding the boards listed
+# here, so a board on disk that is not listed reaches no Grafana, and a listed board with no file
+# fails the render. tests/services/test_dashboard_configmaps.py holds the lists to the
+# files, and names the entry a new board needs.
+# DECIDED: this map has no folder-level prune, and that is deliberate (operator 2026-08-28).
+# Dropping a folder here removes its volume and volumeMount from grafana.yaml.j2 (both
+# rendered by `{% for folder in observability_dashboard_folders %}`, at the volumeMounts and volumes
+# blocks) but leaves the live grafana-dashboards-<folder> ConfigMap behind. That orphan is INERT:
+# the mount is by explicit per-folder volume name, so an unlisted ConfigMap is never mounted and
+# never reaches Grafana. Adding a prune would trade an inert orphan for deletion behaviour that
+# can remove a live ConfigMap — a worse failure than the one it closes, and the reason the
+# 2026-08-28 review's fix-skeptic pass rejected it. Reopen only with a case where the orphan is
+# reachable, not merely present.
+observability_dashboard_folders:
+  AI:
+    - claude-code-host-cgroups.json
+    - claude-code-pipeline-health-cost-by-host.json
+    - claude-code-usage-observability.json
+  Apps:
+    - exportarr-arr-stack.json
+    - home-assistant-overview.json
+    - speedtest-tracker.json
+    - terraria-player-stats.json
+    - valheim-player-stats.json
+  Infrastructure:
+    - alert-history.json
+    - docker-and-system-monitoring.json
+    - hardware-thermal.json
+    - host-jobs.json
+    - landings.json
+    - longhorn-storage.json
+    - node-exporter-full.json
+    - ups-power-battery.json
+  Logs:
+    - logs.json
+    - loki-internals.json
+  Networking:
+    - traefik-custom.json
+  Security:
+    - crowdsec-details-per-machine.json
+    - crowdsec-insight.json
+    - crowdsec-overview.json
+    - lapi-metrics.json
+
+# ── deploy annotations ────────────────────────────────────────────────────────────────────────
+# Two sources mark a deploy. `promote.py land-wait` (promote_lib/wait.py:annotate_promotion,
+# through flux_host.py) calls `logger` on the host, and this query reads its syslog lines,
+# plus the lines deploy.sh wrote before H7.53c deleted it. The soak Job prints a line for every
+# promotion that passes its soak, which `observability_flux_deploy_annotation_expr` reads. Alloy
+# ships both to loki-homelab, and every dashboard gets one annotation query per source injected
+# at render time by the grafana_deploy_annotated filter (scripts/renderer/template_filters/grafana_dashboards.py).
+# No Grafana API call, so no pinned ClusterIP and no standing write credential. Every line carries
+# `result=ok|fail|rollback` (hosts/lib/host_lib.py:deploy_event, #6164), and the marker's title
+# shows it, so a failed deploy draws a marker that says so.
+#
+# The uid MUST equal the `loki-homelab` datasource uid in templates/grafana.yaml.j2. A wrong one
+# does not error: Grafana renders the annotation query against nothing and the board shows no
+# deploy markers, silently. tests/deploy/test_deploy_annotations.py holds the two in lockstep.
+observability_loki_homelab_uid: bf4q19tuivta8e
+# `|= "event=deploy"` before `| logfmt`, in that order: the line filter runs first and is far
+# cheaper than parsing every syslog line in the window.
+observability_deploy_annotation_expr: '{job="syslog"} |= "event=deploy" | logfmt'
+# A Flux promotion's deploy line comes from the soak Job, which prints it on stdout when it
+# passes (scripts/renderer/job_files/flux_soak.py:main), so Alloy ships it under the
+# cluster pods' job. A LogQL log query has one stream selector, so this is a second annotation
+# query rather than a widening of the one above. The renderer names the Job's one container
+# `soak`, and the selector scopes a dashboard load to the soak's own lines.
+observability_flux_deploy_annotation_expr: >-
+  {job="k8s", namespace="flux-system", container="soak"} |= "event=deploy" | logfmt
+
+observability_prometheus_retention: 30d
+# DECIDED: the size cap binds before the 30d time cap; read
+# (time() - prometheus_tsdb_lowest_timestamp_seconds)/86400 before any retention claim.
+#
+# Deliberately well under observability_prometheus_storage (12Gi), not close to it. What the cap
+# counts is persisted blocks PLUS the WAL and the m-mapped head chunks; what it does NOT cover is
+# compaction, which needs room for the output block alongside its inputs. Sizing it near the
+# volume is how a size-capped Prometheus still fills its disk; the ~58% ratio below is the
+# thing to hold, not the absolute.
+#
+# Raising it does not defer a cardinality problem. With the four control-plane jobs at a 1m
+# scrape interval, 30 days costs ~6.6GB (1957.7 samples/s x 1.297 bytes/sample = 219 MB/day).
+# The model matches measured history: an earlier 5,734 samples/s predicts 642 MB/day, and the
+# blocks grew at 695 MB/day — 8% agreement.
+observability_prometheus_retention_size: 7GB
+
+# Traces. Claude Code emits spans only with both CLAUDE_CODE_ENHANCED_TELEMETRY_BETA
+# and OTEL_TRACES_EXPORTER set — the chezmoi settings template already sets both, so this is
+# purely a matter of giving them somewhere to land.
+# Tempo 3.0 removed the ingester module and replaced the compactor with
+# backend_scheduler/backend_worker; tempo.yaml.j2 carries both changes and says why. 3.0 refuses
+# vParquet3 and earlier blocks, so the instance must already write vParquet4 (read
+# /status/config).
+observability_k8s_tempo_image: grafana/tempo:3.1.1@sha256:64e2fbd56d9c2b3412a4b430a58ea59e91a670b1e75f920a0c702213ad145044
+observability_tempo_storage: 5Gi
+# 720h (30d) — the same window as the Prometheus retention, a day under Loki's 744h. Its own
+# variable rather than a shared one because spans are per-turn and far bulkier than counters,
+# so this is the value most likely to need cutting first if the PVC fills.
+observability_tempo_retention: 720h
+
+# How often Alertmanager re-sends the always-firing Watchdog alert to its Healthchecks.io check,
+# in whole seconds. alertmanager-secret.yaml.j2 renders it as the Watchdog route's
+# `repeat_interval`, so no reader parses a duration string. The check's 600s period must stay
+# well above it, or one late send pages. The M1 slice plan
+# (docs/target-architecture/monitoring/m1-alertmanager.md) sizes the check.
+observability_alertmanager_watchdog_repeat_seconds: 60
+
+# Prometheus's rule groups. Each name is one file, files/rules/<name>.yaml, holding one group of
+# that name, and prometheus-rules.yaml.j2 carries each listed file into the prometheus-rules
+# ConfigMap. A rule file this list does not name never reaches Prometheus, so add the group
+# here in the commit that adds its file; scripts/validate/alert_rules.py fails until they agree.
+observability_rule_groups:
+  - alerting-meta
+  - workload-service
+  - k8s-workloads
+  - k8s-services
+  - loki-homelab
+  - flux
+  - ingress-probes
+  - host-checks
+  - initial-setup-checks
+  - gitops-checks
+  - pi-checks
+  - other-setup-checks
+  - deploy-pipeline
+  - gate-jobs
+  - registry
+  - bridge-exporter
+  - container-checks
+  - scrape-targets
+  - log-pipeline
+  - edge
+  - storage
+  - hosts
+  - extra-probes
+  - pod-producers
+  - pods
+  - k3s-upgrade
+
+# The hosts whose homelab-updater must report, each with the scrape job that reads its node
+# exporter and the age in seconds past which its last successful update pages. host-checks.yaml
+# carries one literal HostUpdateStale rule per entry, because a rule file is never Jinja, and
+# tests/services/test_host_plane_rule_literals.py holds the rules equal to this map.
+# scripts/renderer/tests/test_renderer_host_update_limits.py fails a limit shorter than the
+# longest gap between two of the host's updater fires plus the updater's TimeoutStartSec, read
+# from the rendered timer and its drop-in. A host that ships homelab-docker-engine.timer also
+# needs the gap that the engine run's mask opens: the run can hold the updater masked for its
+# whole TimeoutStartSec (#6613). daniel-pi runs H3.13's daily drop-in, which fires at 03:05 after
+# the 00:30 engine run ends, so its limit covers one day plus one updater run. daniel-pi joined in
+# H3.9c (docs/target-architecture/host/h3-pi-pilot.md, *Steps*, H3.9c). daniel-box and
+# daniel-server ship no drop-in, so the shared 5-minute schedule needs 3360s: 5 minutes, 60s of
+# randomized delay and the 50-minute timeout. Their 3600s adds 4 minutes over that (#8213).
+observability_expected_hosts:
+  daniel-box: {job: node, limit_seconds: 3600}
+  daniel-pi: {job: node-pi, limit_seconds: 90000}
+  daniel-server: {job: node, limit_seconds: 3600}
+
+# The telemetry workloads, as the {kind, name} pairs `manifests_self_rollouts` reads. The renderer stamps `checksum/restart` on each one's pod template
+# (scripts/renderer/renderer_lib/restart.py), so a Secret or ConfigMap change rolls the
+# workload that reads it.
+#
+# `restart_on` is the Ansible release record's field, and the renderer ignores it for a
+# self-rollout entry (restart.py). Every entry is `[]`: a `secret` trigger would hold a reader
+# to a roll that another Secret file's edit never made. A ConfigMap is hashed into its own pod
+# template (`checksum/config`), so the apply moves the pod template and rolls the pod by
+# itself; kube-state-metrics renders no ConfigMap at all, and every input it does have already
+# lives in the pod template.
+#
+# `restart_secrets` names the rendered Secret files a workload's pod reads. prometheus
+# file-mounts `prometheus-scrape-credentials`, grafana reads `grafana-admin` through
+# `env.valueFrom`, and alertmanager file-mounts `alertmanager-config`, its whole config. The
+# renderer derives the restart from the Secrets the pod template names, so an alertmanager
+# config edit rolls alertmanager alone. The key stays as the declaration
+# tests/services/test_observability_config_rolls_one_workload.py holds equal to the
+# Secrets each pod reads. `origin-pull-secret.yaml` restarts nothing, because only a Traefik
+# middleware reads it.
+observability_stabilise_workloads:
+  - { kind: deploy, name: loki, restart_on: [] }
+  - kind: deploy
+    name: prometheus
+    restart_on: []
+    restart_secrets: [scrape-credentials-secret.yaml]
+  - { kind: deploy, name: kube-state-metrics, restart_on: [] }
+  - { kind: deploy, name: tempo, restart_on: [] }
+  - { kind: daemonset, name: otel-collector, restart_on: [] }
+  - kind: deploy
+    name: grafana
+    restart_on: []
+    restart_secrets: [grafana-secret.yaml]
+  - kind: deploy
+    name: alertmanager
+    restart_on: []
+    restart_secrets: [alertmanager-secret.yaml]
+
+# The entry's `port` is Grafana's, whose Service grafana.yaml renders itself.
+manifests_exclude_files: [service.yaml]
+
+# The shared role waits on ONE Deployment in {{ k8s_namespace }}; this role has several,
+# in a different namespace.
+manifests_rollout: ''
+
+# The workloads the renderer's restart annotation targets. `namespace` is load-bearing:
+# the fingerprints default to k8s_namespace, and these workloads live in
+# k8s_observability_namespace.
+manifests_self_rollouts: >-
+  {{ observability_stabilise_workloads
+     | map('combine', {'namespace': k8s_observability_namespace}) | list }}

@@ -442,7 +442,7 @@ def test_help_carries_the_docstring_summary(capsys, make_tools):
 # The fan-out's file-level collision check groups by these.
 def test_cited_paths_finds_files_and_drops_line_numbers_directories_and_hosts():
     body = (
-        f"see `{'scripts/diagnostics/probe_lib/alerts.py'}:42`, `ansible/roles/k8s/monitor-bridge/`, "
+        f"see `{'scripts/diagnostics/probe_lib/alerts.py'}:42`, `k8s/roles/monitor-bridge/`, "
         "`.claude/hooks/block-footguns.py`, docs.local.example.com/reference/services.md, "
         "https://github.com/DanielH2018/server/issues/1790, and/or 1.5x"
     )

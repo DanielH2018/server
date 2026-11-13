@@ -152,7 +152,7 @@ def test_main_prints_each_error_as_a_fail_line_on_stderr(tmp_path):
             tmp_path / "scripts" / package,
             ignore=shutil.ignore_patterns("tests", "__pycache__"),
         )
-    role = tmp_path / "ansible/roles/k8s/observability"
+    role = tmp_path / "k8s/roles/observability"
     (role / "templates").mkdir(parents=True)
     (role / "templates/grafana.yaml.j2").write_text(
         "datasources:\n  - name: Prometheus\n    uid: prometheus\n"
@@ -169,7 +169,7 @@ def test_main_prints_each_error_as_a_fail_line_on_stderr(tmp_path):
         [sys.executable, str(tmp_path / "scripts/validate/grafana_dashboard_uids.py")]
     )
     assert run.returncode == 1, run.stdout + run.stderr
-    path = "ansible/roles/k8s/observability/files/dashboards/board.json"
+    path = "k8s/roles/observability/files/dashboards/board.json"
     assert re.search(
         rf"^\s*\[FAIL\] {re.escape(path)}: datasource uid 'not-provisioned'",
         run.stderr,

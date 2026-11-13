@@ -124,7 +124,7 @@ def _flip(**kwargs: object) -> Fakes:
     fakes = Fakes(
         gh_views={
             "files,changedFiles": {
-                "files": [{"path": "ansible/inventory/host_vars/daniel-box.yml"}],
+                "files": [{"path": "inventory/host_vars/daniel-box.yml"}],
                 "changedFiles": 1,
             }
         },

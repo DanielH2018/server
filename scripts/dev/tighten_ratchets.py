@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Lower every ratchet allowlist entry to what its file is today.
 
-The two lists are `ansible/tests/repo/module_length_allowlist.txt` and
-`ansible/tests/repo/monkeypatch_allowlist.txt`, and an entry has to MATCH its file (the
-`DECIDED:` marker in `ansible/tests/_ratchet.py`). So every PR that shrinks a listed file
+The two lists are `tests/repo/module_length_allowlist.txt` and
+`tests/repo/monkeypatch_allowlist.txt`, and an entry has to MATCH its file (the
+`DECIDED:` marker in `tests/_ratchet.py`). So every PR that shrinks a listed file
 also edits that file's line: 70 commits did in the 30 days to 2026-09-28, 49 of them only
 lowering or deleting. This writes that edit instead.
 
@@ -25,13 +25,13 @@ Typical usage example:
 import sys as _sys
 from pathlib import Path as _Path
 
-# `scripts` for the `lib.yaml_fast` import `_helpers` makes, and `ansible/tests` for
+# `scripts` for the `lib.yaml_fast` import `_helpers` makes, and `tests` for
 # `_ratchet_census` and `_ratchet` themselves. Both are pytest `pythonpath` entries, which a
 # direct invocation never reads.
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
-from lib.repo_paths import ANSIBLE_TESTS
+from lib.repo_paths import TESTS
 
-_sys.path.insert(0, str(ANSIBLE_TESTS))
+_sys.path.insert(0, str(TESTS))
 
 
 from _helpers import REPO

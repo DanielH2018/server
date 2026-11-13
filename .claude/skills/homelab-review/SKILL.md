@@ -53,7 +53,7 @@ order:
    cross-cutting stances would have nowhere to go. This step and `.claude/agents/skeptic.md`
    both name that slug, and no skill, agent or eval case carries a retired spelling of it
    (ENFORCED by two rows of
-   `ansible/tests/repo/test_census_rows_text.py::test_census_row_holds_on_the_tree`:
+   `tests/repo/test_census_rows_text.py::test_census_row_holds_on_the_tree`:
    `review-surfaces-name-the-standing-slug` and
    `review-surfaces-carry-no-retired-standing-slug`).
    A slug the store does not hold primes nothing, and the harness reports no error for it.
@@ -73,7 +73,7 @@ order:
    one section per domain, and the register `findings.py close --accepted`/`--refuted` writes,
    rendered by the docs-refresh cron. Each reviewer agent reads its own domain from both
    before it flags. The `agents-carry-no-inline-reflag-list` row of
-   `ansible/tests/repo/test_census_rows_text.py` keeps the inline copies from coming back.
+   `tests/repo/test_census_rows_text.py` keeps the inline copies from coming back.
 
 **Item 1's file missing from the store stops the run.** Name the missing slug to the operator and
 wait. A missing file is not an error the harness reports, so a run that skips it proceeds unprimed
@@ -139,7 +139,7 @@ see the `dispatching-parallel-agents` skill; 4–6 parallel reviewers is normal 
 must include:
 - its **scope** (the area's surface);
 - the **repo conventions** — nearly every service is a k3s workload, so cite the
-  `ansible/roles/k8s/<svc>/templates/` source; for the Pi's Docker services cite
+  `k8s/roles/<svc>/templates/` source; for the Pi's Docker services cite
   `hosts/components/pi-compose/services/<svc>/compose.yaml.j2`, never the rendered project
   (which is untracked and exists only on the Pi);
 - its **domain don't-re-flag list** (from step 2) + the verify-first discipline;
@@ -488,7 +488,7 @@ control is the "fires on nothing" case the repo warns about, and it reads exactl
   **a census or schema check already covers it** (`_k8s_render`'s censuses, and
   `validate-k8s-manifests`' strict OpenAPI validation, are the usual coverers here). Drop the
   check's `ENFORCED` citation in the prose in the same PR, or
-  `ansible/tests/repo/test_documented_paths_exist.py::test_every_cited_test_exists` fails on the
+  `tests/repo/test_documented_paths_exist.py::test_every_cited_test_exists` fails on the
   dangling node id. Say in the PR body which of the two conditions applied and where the coverage
   now sits; "it still passes" is not a reason to keep a check, because a check over a subject that
   no longer exists passes by construction.

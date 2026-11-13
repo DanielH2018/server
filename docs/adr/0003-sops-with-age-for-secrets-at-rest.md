@@ -37,15 +37,15 @@ decrypt without a human present — the deploy runs from a timer.
 
 ## Decision
 
-Secrets live in `ansible/vars/secrets.yml`, encrypted with SOPS to age recipients.
-`ansible/.sops.yaml` lists the recipients and auto-encrypts anything under a `vars/` or
+Secrets live in `secrets/secrets.yml`, encrypted with SOPS to age recipients.
+`secrets/.sops.yaml` lists the recipients and auto-encrypts anything under a `vars/` or
 `secrets/` directory. At deploy time the `community.sops.sops_decrypt` lookup decrypts values
 in place.
 
 Multi-recipient is OR: any listed key decrypts the whole file, which is what lets a new host
 be onboarded by adding its public key rather than by re-keying anything.
 
-Rotation is tracked separately in `ansible/secret_rotation.yml` — a **plaintext** registry of
+Rotation is tracked separately in `secrets/secret_rotation.yml` — a **plaintext** registry of
 names, tiers and dates, never values — with a daily cron pushing a monitor.
 
 ## Consequences
@@ -54,7 +54,7 @@ names, tiers and dates, never values — with a daily cron pushing a monitor.
 procedure: run `hosts/bootstrap-host.sh` on the new host to generate its key, add the public key to
 `.sops.yaml`, `sops updatekeys` from a host that can already decrypt, commit, pull.
 
-**`git diff ansible/vars/secrets.yml` prints plaintext credentials.** `.gitattributes` sets
+**`git diff secrets/secrets.yml` prints plaintext credentials.** `.gitattributes` sets
 `diff=sops`, so git decrypts before diffing. The committed blob stays encrypted — this is a
 review-hygiene trap, not a repo defect, and the driver is worth keeping because an encrypted
 diff is unreadable. But the plaintext reaches the terminal, the scrollback and any agent
@@ -75,7 +75,7 @@ under Flux.
 **A direct edit to `secrets.yml` is denied by a hook**, because an editor that writes
 plaintext over an encrypted file destroys it silently.
 
-**`ansible/inventory/` is neither auto-encrypted nor hook-guarded.** A secret pasted into
+**`inventory/` is neither auto-encrypted nor hook-guarded.** A secret pasted into
 `host_vars` or `group_vars` commits in plaintext, and nothing stops it.
 
 **Keys with no references are not necessarily orphaned.** Five of eight apparently unused
@@ -84,4 +84,4 @@ deletion list.
 
 ## Governs
 
-No single line. `governs:` is empty; the decision is expressed by `ansible/.sops.yaml`.
+No single line. `governs:` is empty; the decision is expressed by `secrets/.sops.yaml`.

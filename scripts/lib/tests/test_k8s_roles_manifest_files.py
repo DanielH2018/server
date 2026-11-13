@@ -5,7 +5,7 @@ the shared default the renderer would render for a basename the role ships no te
 A shape it fails to read returns fewer names, the harness renders one manifest fewer,
 and every guard built on the corpus passes with less coverage than yesterday.
 
-Most roles pass no list, and `ansible/tests/k8s/test_derived_manifest_files.py` covers the
+Most roles pass no list, and `tests/k8s/test_derived_manifest_files.py` covers the
 derivation they get. A list a role does pass comes in three shapes, and the third is the one a
 YAML load cannot reach: authelia, navidrome and traefik build theirs with a folded `>-` Jinja
 expression.

@@ -92,7 +92,7 @@ from fragments_lib import (
 from lib import yaml_fast
 from lib.cli_help import ArgumentParser
 from lib.docs_provenance import write_if_body_changed
-from lib.ansible_inventory import (
+from lib.inventory_lists import (
     PI_HOST,
     PI_HOST_VARS,
     pi_entries_in,
@@ -113,7 +113,7 @@ SELF = "scripts/docs/gen_doc_fragments.py"
 DEFAULT_OUT_DIR = "docs/assets/generated/fragments"
 
 SECRET_ROTATION = REPO / "scripts/secrets_mgmt/secret_rotation.py"
-SECRET_REGISTRY = REPO / "ansible/secret_rotation.yml"
+SECRET_REGISTRY = REPO / "secrets/secret_rotation.yml"
 PI_PEER_ROLE = K8S_ROLES / "pi-peer-backup"
 REGISTRY_ROLE = K8S_ROLES / "registry"
 OBSERVABILITY_ROLE = K8S_ROLES / "observability"
@@ -152,8 +152,8 @@ def _longhorn() -> tuple[str, list[str]]:
         **estate.role_vars(LONGHORN_BACKUP_ROLE),
     }
     return render_longhorn_tiers(resolved_tier_lists(merged)), [
-        "ansible/roles/k8s/longhorn-backup/defaults/main.yml",
-        "ansible/roles/k8s/longhorn-reconcile/defaults/main.yml",
+        "k8s/roles/longhorn-backup/defaults/main.yml",
+        "k8s/roles/longhorn-reconcile/defaults/main.yml",
     ]
 
 
@@ -165,7 +165,7 @@ def _autodeploy_coverage() -> tuple[str, list[str]]:
 
 
 def _crowdsec_agent_liveness() -> tuple[str, list[str]]:
-    source = "ansible/roles/k8s/crowdsec/templates/node-agent-daemonset.yaml.j2"
+    source = "k8s/roles/crowdsec/templates/node-agent-daemonset.yaml.j2"
     text = (REPO / source).read_text()
     after_probe = text[text.index("livenessProbe:") :]
     period_line = next(
@@ -187,7 +187,7 @@ def _traefik_ports() -> tuple[str, list[str]]:
     d = Estate().role_vars(TRAEFIK_ROLE)
     return render_traefik_ports(
         d["traefik_k8s_http_port"], d["traefik_k8s_https_port"]
-    ), ["ansible/roles/k8s/traefik/defaults/main.yml"]
+    ), ["k8s/roles/traefik/defaults/main.yml"]
 
 
 def deadman_inputs(
@@ -214,13 +214,13 @@ def deadman_inputs(
 def _deadman() -> tuple[str, list[str]]:
     return render_deadman_cadences(*deadman_inputs()), [
         "hosts/components/k3s-host-checks/defaults/main.yml",
-        "ansible/roles/k8s/pi-peer-backup/defaults/main.yml",
-        "ansible/roles/k8s/registry/defaults/main.yml",
-        "ansible/roles/k8s/observability/defaults/main.yml",
+        "k8s/roles/pi-peer-backup/defaults/main.yml",
+        "k8s/roles/registry/defaults/main.yml",
+        "k8s/roles/observability/defaults/main.yml",
         "hosts/components/host-maintenance/defaults/main.yml",
         "hosts/components/worktree-sweep/defaults/main.yml",
-        "ansible/inventory/group_vars/all.yml",
-        "ansible/inventory/host_vars/",
+        "inventory/group_vars/all.yml",
+        "inventory/host_vars/",
         *(f"hosts/{h}/package.yml" for h in hosts_listing_component("worktree-sweep")),
     ]
 
@@ -252,12 +252,12 @@ def _secrets() -> tuple[str, list[str]]:
     return render_secret_tiers(
         module_constant(SECRET_ROTATION, "TIER_DAYS"),
         registry_counts(SECRET_REGISTRY),
-    ), ["scripts/secrets_mgmt/secret_rotation.py", "ansible/secret_rotation.yml"]
+    ), ["scripts/secrets_mgmt/secret_rotation.py", "secrets/secret_rotation.yml"]
 
 
 def _record_keys() -> tuple[str, list[str]]:
     return render_record_keys(registry_record_keys(SECRET_REGISTRY)), [
-        "ansible/secret_rotation.yml"
+        "secrets/secret_rotation.yml"
     ]
 
 

@@ -238,7 +238,7 @@ def test_a_prose_mention_is_not_an_invocation(tmp_path):
     """Every CLAUDE.md and half the role defaults cite these scripts in backticks."""
     repo, scripts = _repo(tmp_path)
     _write(
-        tmp_path / "ansible" / "roles" / "r" / "templates" / "notes.yml",
+        tmp_path / "k8s" / "roles" / "r" / "templates" / "notes.yml",
         "- name: See `uv run python scripts/lonely.py` for detail\n",
     )
     assert sc.classify(repo, scripts)["lonely.py"][0] == "adhoc"
@@ -248,7 +248,7 @@ def test_a_printed_message_naming_a_script_is_not_an_invocation(tmp_path):
     """deploy.sh prints the prune_worktrees command when the lock is busy."""
     repo, scripts = _repo(tmp_path)
     _write(
-        tmp_path / "ansible" / "hand.sh",
+        tmp_path / "k8s" / "hand.sh",
         'echo "try uv run python scripts/lonely.py" >&2\n',
     )
     assert sc.classify(repo, scripts)["lonely.py"][0] == "adhoc"
@@ -358,11 +358,11 @@ def test_a_path_outside_scripts_is_still_not_a_reference(tmp_path):
     """The RED half: widening the directory group must not widen what counts as a script.
 
     `*` on the segment makes the pattern accept any depth under `scripts/`. It must still
-    reject a same-shaped path rooted anywhere else, or every `ansible/roles/x/files/y.py`
+    reject a same-shaped path rooted anywhere else, or every `k8s/roles/x/files/y.py`
     would start reading as an invocation of a first-party script.
     """
     assert sc.ARGV_RE.fullmatch("scripts/deep/nested/buried.py")
-    assert not sc.ARGV_RE.fullmatch("ansible/roles/r/files/buried.py")
+    assert not sc.ARGV_RE.fullmatch("k8s/roles/r/files/buried.py")
     assert not sc.ARGV_RE.fullmatch("other/scripts/deep/buried.py")
 
 
@@ -394,7 +394,7 @@ def test_no_two_scripts_share_a_basename():
     undecidable for exactly the colliding names this test forbids. So uniqueness is the
     invariant, and this is where it is enforced. Sibling, different invariant, keep apart:
     the `no-two-import-roots-share-a-module-basename` row of
-    `ansible/tests/repo/test_census_rows_python.py` forbids one NAME at two
+    `tests/repo/test_census_rows_python.py` forbids one NAME at two
     import roots (`pythonpath`, role `files/`, test-inserted `scripts/<dir>`) — sys.path
     shadowing, so every root but top level only.
     """

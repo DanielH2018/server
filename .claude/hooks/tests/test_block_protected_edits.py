@@ -132,7 +132,7 @@ def test_nonexistent_file_does_not_crash():
 
 def test_blocks_the_real_secrets_file():
     # integration: the repo's actual encrypted secrets file must be blocked.
-    assert classify("ansible/vars/secrets.yml", REPO) is not None
+    assert classify("secrets/secrets.yml", REPO) is not None
 
 
 # settings.json always invokes the PRIMARY checkout's copy of the hook, so repo_root

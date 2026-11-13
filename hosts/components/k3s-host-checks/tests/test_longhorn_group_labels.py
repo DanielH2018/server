@@ -3,7 +3,7 @@
 The label TASKS that took their labels from the `longhorn_groups` filters moved to the
 `longhorn-reconcile` role's `files/longhorn_reconcile.py` at H1.6, and the two R2 routing tasks
 followed at H1.7a. Their typed-out cases moved with them
-(`ansible/roles/k8s/longhorn-reconcile/tests/`). What stays here is the filters the reconcile
+(`k8s/roles/longhorn-reconcile/tests/`). What stays here is the filters the reconcile
 ConfigMap and the RecurringJob template still call, and the templates that write the
 BackupTarget names (the `longhorn-backup` role's, since H1.7b). The expectations are typed out,
 not built from the module's constants: an expectation derived from the same constant as the
@@ -13,7 +13,7 @@ render would follow a rename and pass.
 import pytest
 
 from lib import yaml_fast
-from lib.ansible_jinja_env import make_env, register_ansible_filters
+from lib.guard_jinja_env import make_env, register_ansible_filters
 from renderer.template_filters.longhorn_groups import (
     backup_group_label,
     longhorn_backup_name,

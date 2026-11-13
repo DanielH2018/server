@@ -19,7 +19,7 @@ the k8s tags it names (target slice D2): `DIR/flux/<tag>.yaml`,
 `DIR/flux/<kind>.yaml` and `DIR/cluster/<kind>/`. A render that names no such tag writes no
 bundle. `cluster --shared-only` writes the shared kinds, a root listing them and
 `digests.json`, and no tag: the publish job's call when no tag is flux-owned (D3.3a). The
-`cluster-vars` kind copies the cluster file `ansible/vars/cluster-vars.sops.env` byte for
+`cluster-vars` kind copies the cluster file `secrets/cluster-vars.sops.env` byte for
 byte, and a render that cannot read it writes nothing. The `soak` kind judges `--revision`,
 by default `HEAD`, the commit the publish job checks out. `renderer_lib/bundle.py` holds the
 writer, `SHARED_KINDS` and the footprint rules. Every `cluster` render refuses a deploy tag
@@ -27,7 +27,7 @@ named `homelab` or after a `SHARED_KINDS` member, the names of Kustomizations th
 deploy tag's (C3 *Reserved names*).
 
 A published tag whose role lists `render_sops_manifests` gets a byte copy of each SOPS manifest
-under `ansible/vars/cluster-manifests/` in `DIR/cluster/<tag>/`, and `decryption` on its
+under `secrets/cluster-manifests/` in `DIR/cluster/<tag>/`, and `decryption` on its
 Kustomization (D3.3c); a manifest without the substitute-disabled annotation fails the render.
 One with snapshot claims gets its snapshot Job in `DIR/cluster/<tag>-snapshot/` (`snapshot.py`).
 One whose role sets `flux_prepull_timeout` gets its pre-pull Jobs in `DIR/cluster/<tag>-prepull/`
@@ -40,7 +40,7 @@ consumer's ref reads in the same render (`renderer_lib/images.py`, D5.4a1). A fu
 writes all ten. `--all-images` writes all ten whatever `--role` names, or beside `--shared-only`,
 which the publish job passes because its `images` job builds every context (#5374, #5593).
 In both modes, every flux-owned tag's restart targets get `checksum/restart`, hashed from the
-placeholder-form documents and `ansible/vars/cluster-vars.source`
+placeholder-form documents and `secrets/cluster-vars.source`
 (`renderer_lib/restart.py`), and its claims and Namespaces the prune label (`prune_label.py`).
 
 `host --host NAME` renders `hosts/NAME/package.yml` into `DIR/hosts/NAME/`, and `package --name
@@ -78,7 +78,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 from lib import yaml_fast
 from lib.cli_help import ArgumentParser
 from lib.exit_codes import RENDER_FAILED, RENDER_OK, RENDER_REFUSED
-from lib.repo_paths import ANSIBLE, K8S_ROLES
+from lib.repo_paths import K8S_ROLES, SECRETS as SECRETS_DIR
 from renderer.renderer_lib import secret_checks
 from renderer.renderer_lib.bundle import (
     CLUSTER_DIR,
@@ -129,13 +129,13 @@ from renderer.template_filters.secret_stubs import (
     homelab_unstubbed_keys,
 )
 
-SECRETS = ANSIBLE / "vars" / "secrets.yml"
+SECRETS = SECRETS_DIR / "secrets.yml"
 # The cluster file `cluster_vars.py write` keeps. The bundle's copy keeps its basename.
-CLUSTER_FILE = ANSIBLE / "vars" / CLUSTER_VARS_FILE
+CLUSTER_FILE = SECRETS_DIR / CLUSTER_VARS_FILE
 # Each cluster key's ciphertext digest, which `checksum/restart` hashes in place of a value.
-SOURCE_FILE = ANSIBLE / "vars" / "cluster-vars.source"
+SOURCE_FILE = SECRETS_DIR / "cluster-vars.source"
 # The SOPS manifests `cluster_vars.py write` keeps, one per `render_sops_manifests` entry.
-MANIFESTS_DIR = ANSIBLE / "vars" / "cluster-manifests"
+MANIFESTS_DIR = SECRETS_DIR / "cluster-manifests"
 
 
 def secret_keys(secrets: Path = SECRETS) -> list[str]:
@@ -223,7 +223,7 @@ def stamp_restarts(
         placeholder: A placeholder render holding every flux-owned tag of `rendered`. The
             value is hashed from it, so both modes stamp the same value.
         owned: The flux-owned tags.
-        keys: The key names of `ansible/vars/secrets.yml`.
+        keys: The key names of `secrets/secrets.yml`.
         source: `source_digests`.
 
     Raises:

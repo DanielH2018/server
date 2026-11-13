@@ -35,9 +35,7 @@ from lib.systemd_timer import (
 )
 from renderer.renderer_lib import host as host_mode
 
-DEFAULTS = (
-    REPO / "ansible" / "roles" / "k8s" / "observability" / "defaults" / "main.yml"
-)
+DEFAULTS = REPO / "k8s" / "roles" / "observability" / "defaults" / "main.yml"
 UNITS = PurePosixPath("/usr/lib/systemd/system")
 TIMER = UNITS / "homelab-updater.timer"
 SERVICE = UNITS / "homelab-updater.service"
@@ -212,14 +210,7 @@ def test_a_trigger_this_test_cannot_bound_is_flagged():
 
 
 RULES = (
-    REPO
-    / "ansible"
-    / "roles"
-    / "k8s"
-    / "observability"
-    / "files"
-    / "rules"
-    / "host-checks.yaml"
+    REPO / "k8s" / "roles" / "observability" / "files" / "rules" / "host-checks.yaml"
 )
 ENGINE_UNITS = REPO / "hosts" / "components" / "pi-docker" / "units"
 UPDATER_UNITS = REPO / "hosts" / "packages" / "homelab-updater" / "units"

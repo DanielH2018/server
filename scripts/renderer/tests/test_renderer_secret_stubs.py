@@ -8,7 +8,7 @@ import re
 import pytest
 
 from lib import yaml_fast
-from lib.repo_paths import ANSIBLE
+from lib.repo_paths import SECRETS as SECRETS_DIR
 from renderer.template_filters.secret_stubs import (
     NEVER_STUB,
     homelab_secret_stub,
@@ -16,7 +16,7 @@ from renderer.template_filters.secret_stubs import (
     homelab_unstubbed_keys,
 )
 
-SECRETS = ANSIBLE / "vars" / "secrets.yml"
+SECRETS = SECRETS_DIR / "secrets.yml"
 GA = "google_assistant_service_account"
 DNS_LABEL = re.compile(r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$")
 

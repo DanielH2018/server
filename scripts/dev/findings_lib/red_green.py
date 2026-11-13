@@ -39,12 +39,8 @@ def suite_covered(path: str, repo: Path = REPO) -> bool:
         return True
     if p.parent.as_posix() == ".claude/hooks":
         return p.suffix == ".py"
-    if (
-        p.parts[:2] == ("ansible", "roles")
-        and len(p.parts) > 5
-        and p.parts[4] == "files"
-    ):
-        return (repo / Path(*p.parts[:4]) / "tests").is_dir()
+    if p.parts[:2] == ("k8s", "roles") and len(p.parts) > 4 and p.parts[3] == "files":
+        return (repo / Path(*p.parts[:3]) / "tests").is_dir()
     return False
 
 

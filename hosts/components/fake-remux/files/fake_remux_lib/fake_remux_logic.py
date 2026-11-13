@@ -1,7 +1,7 @@
 """Pure decision core for the fake-remux host scan (fake_remux_scan.py).
 
 Split from the I/O shell so it stays stdlib-only (runs via `uv run --no-project --python <pin>`,
-host_python_version in ansible/inventory/group_vars/all.yml) and fully
+host_python_version in inventory/group_vars/all.yml) and fully
 unit-testable without HTTP or ffprobe. The shell reads Sonarr's library, runs the host's ffprobe,
 and hands the results here to decide which "remux"-quality files are actually re-encodes.
 

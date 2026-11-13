@@ -208,7 +208,7 @@ def _unreachable(app, detail):
 # well as system/status did: both are authenticated reads.
 #
 # Kept in step with the three `ingressroute-monitoring.yaml.j2` templates by
-# ansible/tests/k8s/test_arr_monitoring_routes_admit_postflight.py — a prefix edited on one
+# tests/k8s/test_arr_monitoring_routes_admit_postflight.py — a prefix edited on one
 # side alone breaks the fallback.
 ARR_MONITORED_PATH = {
     "sonarr": "/api/v3/queue",

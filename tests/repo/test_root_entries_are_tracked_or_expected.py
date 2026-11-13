@@ -1,0 +1,78 @@
+"""Every entry at the repo root is tracked by git or in the set the root ignore expects.
+
+`.gitignore` opens with `/*` and allow-lists each tracked root entry by name, so a new
+root-level file is invisible to `git status` and never reaches a commit. A tool's output
+directory left untracked at the root parks the deployer (repo CLAUDE.md, *Pre-commit Hooks*: "one untracked file parks the deployer"). The
+inverse also hides: a tool that writes a root file nobody expects, e.g. a `.pytest_cache` or
+a `site/` from a bare `mkdocs build`, sits there ignored and unexplained.
+
+Run: uv run pytest tests/repo/test_root_entries_are_tracked_or_expected.py
+"""
+
+from _helpers import REPO
+from lib.proc_testing import run
+from lib.worktree_label import write_label
+
+# Root entries the ignore rule is expected to hide. Each is a tool's own working state.
+EXPECTED_IGNORED = frozenset(
+    {
+        ".git",
+        ".venv",  # uv's environment
+        ".fanout",  # the issue-fanout bus (scripts/dev/fanout_*.py)
+        ".remember",  # the remember plugin's session store
+        ".pytest_cache",
+        ".ruff_cache",
+        ".ansible",  # ansible's own tmp/collections cache when it runs from the root
+        # A checkout that ran ansible before #6217 removed ansible.cfg's `log_path` keeps its
+        # file until initial_setup's `ansible-log` tasks delete it, and a run that sets
+        # ANSIBLE_LOG_PATH to this name writes one again.
+        "ansible.log",
+        "site",  # a bare `mkdocs build` (the cron builds to a temp dir)
+        # the prek `mkdocs-strict` hook builds here and leaves it, on purpose (prek.toml)
+        ".mkdocs-strict-check",
+        ".mypy_cache",
+        ".superpowers",  # SDD task specification directories
+        ".claim",  # scripts/dev/label_worktree.py names a generated worktree here
+        # The tree ADR 0030 renamed. A checkout from before the rename keeps its gitignored
+        # leftovers (collections/, a stale tests/setup/) here after the tracked files move.
+        "ansible",
+    }
+)
+
+
+def _tracked_root_entries() -> set[str]:
+    listed = run(["git", "ls-files", "-z"], cwd=REPO, check=True).stdout
+    return {rel.split("/", 1)[0] for rel in listed.split("\0") if rel}
+
+
+def unexpected(root_entries: set[str], tracked: set[str]) -> list[str]:
+    return sorted(root_entries - tracked - EXPECTED_IGNORED)
+
+
+def test_every_root_entry_is_tracked_or_expected():
+    tracked = _tracked_root_entries()
+    assert {
+        "k8s",
+        "inventory",
+        "secrets",
+        "tests",
+        "scripts",
+        "pyproject.toml",
+    } <= tracked
+    on_disk = {p.name for p in REPO.iterdir()}
+    assert unexpected(on_disk, tracked) == [], (
+        "root entries git neither tracks nor this guard expects — add the file to "
+        "`.gitignore`'s allow-list and commit it, or name it in EXPECTED_IGNORED with a reason"
+    )
+
+
+def test_a_worktree_label_is_an_expected_root_entry(tmp_path):
+    write_label(tmp_path, "Tune the hallway lights")
+    on_disk = {p.name for p in tmp_path.iterdir()}
+    assert on_disk
+    assert unexpected(on_disk | {"scripts"}, {"scripts"}) == []
+
+
+def test_a_stray_root_entry_is_flagged():
+    assert unexpected({"scripts", ".venv", "stray.txt"}, {"scripts"}) == ["stray.txt"]
+    assert unexpected({"scripts", ".venv"}, {"scripts"}) == []

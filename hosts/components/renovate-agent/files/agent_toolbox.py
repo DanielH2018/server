@@ -2,7 +2,7 @@
 """Every process boundary the agent crosses, as one injectable object.
 
 A test replaces one field of `AgentTools` and never a module attribute, which is what
-`ansible/tests/repo/test_module_length_ratchet.py` requires of a module under test — a
+`tests/repo/test_module_length_ratchet.py` requires of a module under test — a
 `monkeypatch.setattr` on the entry module would pin its name into the test.
 
 **This module names `renovate_agent` and `run_worktree` nowhere**, at import time or later,

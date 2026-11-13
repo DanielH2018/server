@@ -148,7 +148,7 @@ def _ssh_hosts() -> tuple[str, ...] | None:
     if str(_SCRIPTS) not in sys.path:
         sys.path.insert(0, str(_SCRIPTS))
     try:
-        from lib.ansible_inventory import host_names
+        from lib.inventory_lists import host_names
 
         return host_names()
     except Exception:

@@ -123,7 +123,7 @@ def pod_selector(workload):
     select `app: pihole`, and each therefore read the union of the two instances' pods. The pod
     template is where the discriminating label can live — pihole's carries `instance: pihole` /
     `instance: pihole-2` for exactly that reason
-    (`roles/k8s/pihole/templates/deployment.yaml.j2`), and the pihole web Service already
+    (`k8s/roles/pihole/templates/deployment.yaml.j2`), and the pihole web Service already
     selects on it. k8s requires `spec.template.metadata.labels` to be a superset of
     `spec.selector.matchLabels`, so this is never wider than the selector.
 

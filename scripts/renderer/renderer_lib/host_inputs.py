@@ -12,7 +12,7 @@ render opens and fails on one under no member.
 
 HOST_INPUTS = (
     "hosts/",
-    "ansible/inventory/",
+    "inventory/",
     "cluster/services.yml",  # every template's `services` (`render_guard.k8s_services`)
     "scripts/lib/",
     "scripts/renderer/",
@@ -20,10 +20,10 @@ HOST_INPUTS = (
     "pyproject.toml",
     "uv.lock",
     # Host mode removes its key names (`host.secret_names`).
-    "ansible/vars/secrets.yml",
+    "secrets/secrets.yml",
     # The ciphertext a host package carries (`host_outputs.finish`): a change to a host's file
     # changes that host's package (H4.2, H4.5).
-    "ansible/vars/hosts/",
+    "secrets/hosts/",
     # The drill script daniel-server's hypervisor component ships (`host_sources.SHARED_FILES`).
     "scripts/backup/etcd_restore_drill.sh",
     # Past the plan's list, found by the audit test: `homelab_render.py` imports it at load, for

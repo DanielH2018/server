@@ -16,7 +16,7 @@ import shlex
 import sys
 
 import pytest
-from _helpers import ANSIBLE
+from _helpers import REPO
 from _setup_render import COMPONENTS, render_component_text
 from lib import yaml_fast
 from lib.proc_testing import run
@@ -28,7 +28,7 @@ UNIT = "homelab-renovate-agent.service.j2"
 LANDER = "renovate-agent-land@.service.j2"
 PROMPT = "prompt.txt.j2"
 CONFIG_ENV = "config.env.j2"
-HOOKS = ANSIBLE.parent / ".claude" / "hooks"
+HOOKS = REPO / ".claude" / "hooks"
 
 GH = "renovate_agent_gh_token"
 CLAUDE = "renovate_agent_claude_oauth_token"
@@ -258,7 +258,7 @@ def guard_decision(command: str) -> str | None:
     payload = {
         "tool_name": "Bash",
         "tool_input": {"command": command},
-        "cwd": str(ANSIBLE.parent),
+        "cwd": str(REPO),
     }
     verdicts = [
         verdict

@@ -9,7 +9,7 @@ longhorn_backup_health_logic.py holds every threshold and decides up-or-down, an
 what makes the decisions unit-testable without a cluster.
 
 Runs on daniel-box via `uv run --no-project --python <pin>` (host_python_version in
-ansible/inventory/group_vars/all.yml). The Healthchecks.io ping key stays in the templated wrapper, which
+inventory/group_vars/all.yml). The Healthchecks.io ping key stays in the templated wrapper, which
 sources it from an 0640 env file at runtime, and never appears here.
 
 Usage: longhorn_backup_health.py   (takes no arguments; -h/--help prints this text)

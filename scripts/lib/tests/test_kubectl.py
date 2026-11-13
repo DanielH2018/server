@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 from lib import kubectl as kubectl_lib
-from lib.ansible_inventory import host_names
+from lib.inventory_lists import host_names
 from lib.repo_paths import REPO
 
 PROD_NODES = {

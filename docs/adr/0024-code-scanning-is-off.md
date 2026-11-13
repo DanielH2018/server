@@ -48,7 +48,7 @@ required check names it.
 - **The `# DECIDED:` markers that ADR-0016 governs stay.** Each states a TLS floor
   explicitly. That is correct code with or without a scanner.
 - **Comments that name a CodeQL rule as the reason for a code shape describe history.**
-  Nothing re-checks them. Examples are in `ansible/tests/repo/test_census_rows_python.py` and
+  Nothing re-checks them. Examples are in `tests/repo/test_census_rows_python.py` and
   `scripts/deploy_tools/land_lib/land_tags.py`.
 - **To reverse:** run `gh api -X PATCH repos/DanielH2018/server/code-scanning/default-setup
   -f state=configured` as the operator, then supersede this ADR. Alerts dismissed before

@@ -103,7 +103,7 @@ Host → ClusterIP callers targeting a **fenced** pod:
 1. `hosts/components/fake-remux` → sonarr, from daniel-box. sonarr's own Ansible
    verify tasks were a second caller until sonarr's Flux flip (D5.20) moved the reads in-cluster.
    It is same-node and stays that way: sonarr is pinned to daniel-box by the `media-data` PV's
-   *required* `nodeAffinity` (`roles/k8s/media-volume/templates/pv.yaml.j2`).
+   *required* `nodeAffinity` (`k8s/roles/media-volume/templates/pv.yaml.j2`).
 2. **containerd on daniel-server → `registry`, cross-node, and working.**
    `hosts/components/k3s-agent/templates/registries.yaml.j2` renders
    `endpoint: http://{{ k8s_registry_cluster_ip }}:{{ k8s_registry_port }}`, installed by
@@ -115,7 +115,7 @@ A third targets `prometheus` in `observability`, which no policy selects until s
 below.
 
 **The census method that missed one, and why.** Two passes used
-`grep -rn clusterIP --include='*.j2' --include='*.yml' ansible/roles/`, on the reasoning that a host
+`grep -rn clusterIP --include='*.j2' --include='*.yml' k8s/roles/`, on the reasoning that a host
 caller cannot use cluster DNS and must resolve a ClusterIP first. That is true but insufficient: the
 registry caller references the **variable** `k8s_registry_cluster_ip`, whose name does not contain
 the string `clusterIP`, so the grep cannot see it. The earlier draft compounded this by dismissing
@@ -123,7 +123,7 @@ registry's one hit as "a static Service field, not a caller" — which closed th
 the variable to its host consumer.
 
 For slices 3–5, grep for the variables too (`_cluster_ip`, `_clusterip`), and check
-`hosts/components/**` as well as `roles/k8s/**` — a host caller is more likely to live in host setup than
+`hosts/components/**` as well as `k8s/roles/**` — a host caller is more likely to live in host setup than
 in a workload role.
 
 **Slice 3 found two more gaps in the same census, worth folding into the method for slices 4–5.**
@@ -139,15 +139,15 @@ instances" in "Slice 3 specifics" above. Resolve the env value the manifest actu
 Service name a role's own template happens to use.
 
 **Warning for slice 3, where that stops being true — corrected below.**
-`roles/k8s/observability/templates/telemetry-health.sh.j2` resolves `prometheus`'s ClusterIP at runtime
+`k8s/roles/observability/templates/telemetry-health.sh.j2` resolves `prometheus`'s ClusterIP at runtime
 (`kubectl get svc prometheus -o jsonpath='{.spec.clusterIP}'`, then curls it). An earlier draft of
 this section claimed the cron installing it "runs from a host cron on both nodes." **That is false,
 verified:** `observability` appears in `containers_list` only in `cluster/services.yml`;
-`daniel-server.yml` has no entry, and the cron task in `roles/k8s/observability/tasks/main.yml` has no
+`daniel-server.yml` has no entry, and the cron task in `k8s/roles/observability/tasks/main.yml` has no
 `delegate_to`. The cron installs and fires from daniel-box alone.
 
 That does not remove the cross-node exposure, it relocates it. `prometheus` has **no node pin** —
-`roles/k8s/observability/templates/prometheus.yaml.j2` sets no `nodeSelector`, `nodeAffinity` or
+`k8s/roles/observability/templates/prometheus.yaml.j2` sets no `nodeSelector`, `nodeAffinity` or
 `nodeName` — so the moment `prometheus` lands on daniel-server, the daniel-box cron's call becomes
 cross-node, silently and without a deploy to blame it on. By slice 2's own evidence ("Answers from
 slice 2" above, the `registry`/`flannel.1` finding), a cross-node host→pod packet arrives as the
@@ -274,7 +274,7 @@ port."* Both halves of that question are wrong.
   so the sidecar crash-looped on "connection refused," which made the whole pod unready, which
   pulled authelia out of its Service endpoints, which **broke SSO on every protected route for
   ~17 minutes**, while the authelia container itself stayed healthy throughout. Find them with
-  `grep -rl crowdsec-agent ansible/roles/k8s --include='*.j2'` — here: traefik, authelia, and the
+  `grep -rl crowdsec-agent k8s/roles --include='*.j2'` — here: traefik, authelia, and the
   node-agent DaemonSet.
 
 **Two callers the review caught before deploy, both confirmed live afterwards.**

@@ -23,7 +23,7 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
-from lib.ansible_inventory import PI_HOST  # noqa: F401  (re-exported as core.PI_HOST)
+from lib.inventory_lists import PI_HOST  # noqa: F401  (re-exported as core.PI_HOST)
 from lib.exit_codes import PROBE_UNREADABLE, PROBE_USAGE_ERROR
 from lib.repo_paths import REPO
 
@@ -180,15 +180,13 @@ def loki_endpoint(
 # claude_ha_token lives in the SOPS-encrypted secrets file (repo-root relative).
 SECRETS_PATH = os.path.join(
     REPO,
-    "ansible",
-    "vars",
+    "secrets",
     "secrets.yml",
 )
 
 # Inventory group vars (plaintext) — source of the domain and the MetalLB ingress VIP.
 GROUP_VARS_PATH = os.path.join(
     REPO,
-    "ansible",
     "inventory",
     "group_vars",
     "all.yml",
@@ -197,9 +195,8 @@ GROUP_VARS_PATH = os.path.join(
 # observability role defaults (plaintext) — source of that stack's pinned Loki ClusterIP.
 OBSERVABILITY_DEFAULTS_PATH = os.path.join(
     REPO,
-    "ansible",
-    "roles",
     "k8s",
+    "roles",
     "observability",
     "defaults",
     "main.yml",
@@ -482,7 +479,7 @@ def sops_extract(key_name):
 # so `probe.py ha get error_log` prints a live HA API credential into whatever reads its stdout.
 #
 # Redaction happens HERE rather than upstream because probe.py cannot fix HA's logger. The Alloy
-# stage in `roles/k8s/loki-homelab` keeps the token out of Loki; this keeps it out of THIS tool's
+# stage in `k8s/roles/loki-homelab` keeps the token out of Loki; this keeps it out of THIS tool's
 # output, including for the records Loki already holds until its 744h retention expires.
 #
 # Only the token is replaced, never the surrounding record: `docs/platform.md` tells the operator
@@ -531,7 +528,7 @@ SECRET_NAME_PARTS = (
 _SECRET_QUERY_NAMES = frozenset({"key", "rsskey", "pass", "torrentpass", "code"})
 
 # Subsonic credentials: user, token, salt and password. They are redacted under `/rest/` only,
-# because a bare `p=` is pagination on other paths. The Alloy stages in `roles/k8s/loki-homelab`
+# because a bare `p=` is pagination on other paths. The Alloy stages in `k8s/roles/loki-homelab`
 # redact the same names for new records; test_alloy_redacts_access_log_query_credentials.py
 # fails when the two sets differ.
 SUBSONIC_REST_PARAMS = ("u", "t", "s", "p")

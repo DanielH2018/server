@@ -2,7 +2,7 @@
 // run of it against the live Prometheus:
 //
 //   scripts/validate/alert_tools.sh pint --no-color --config scripts/validate/pint/live.hcl \
-//     lint ansible/roles/k8s/observability/files/rules/
+//     lint k8s/roles/observability/files/rules/
 //
 // pint reports a metric Prometheus has never held as a `promql/series` bug, which fails the run.
 //

@@ -6,7 +6,7 @@ r"""The `bash-pretool.py` arm that routes bare python/pytest through `uv run`.
 WHY THE REWRITE EXISTS. This repo is 3.14-only (`requires-python = ">=3.14"`) and uses PEP
 758 syntax — unparenthesized `except OSError, yaml.YAMLError:` — in 8 files, among them
 `scripts/diagnostics/probe.py`, `scripts/renderer/template_filters/toposort.py` and
-`ansible/roles/k8s/monitor-bridge/files/check.py`. Ubuntu's `/usr/bin/python3` is 3.12, which
+`k8s/roles/monitor-bridge/files/check.py`. Ubuntu's `/usr/bin/python3` is 3.12, which
 cannot *parse* those files, so a bare `pytest` reports a SyntaxError that reads like a repo bug
 and is really an interpreter bug. CLAUDE.md already says to run everything through `uv run`; a
 session ran the suite bare anyway, which is what this arm makes structurally impossible rather

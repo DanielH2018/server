@@ -31,7 +31,7 @@ from _live_read_jinja import Reader, references, role_path_value, template_looku
 
 from renderer.renderer_lib.targets import render_targets
 from lib import yaml_fast
-from lib.ansible_inventory import K8S_HOST
+from lib.inventory_lists import K8S_HOST
 from lib.k8s_roles import (
     CLAIM_TEMPLATE,
     SHARED_MANIFEST_DEFAULTS,
@@ -39,7 +39,7 @@ from lib.k8s_roles import (
     resolved_manifest_files,
 )
 from lib.render_guard import SHARED_TPL, host_layer, k8s_services
-from lib.repo_paths import ANSIBLE, K8S_ROLES
+from lib.repo_paths import K8S_ROLES, REPO
 from renderer import shadow_diff
 from renderer.renderer_lib.cluster import LABEL_WRAPPER, tag_context
 from renderer.renderer_lib.task_inputs import (
@@ -49,7 +49,7 @@ from renderer.renderer_lib.task_inputs import (
     render_defaults,
 )
 
-IMAGE_BUILDER = "k8s/image-builder"
+IMAGE_BUILDER = "image-builder"
 # The image-builder template the build context renders from. Its sibling `build-job.yaml.j2`
 # is a one-off Job image-builder's own task applies, so the render never reads it.
 CONTEXT_TEMPLATE = "context-configmap.yaml.j2"
@@ -84,20 +84,20 @@ class Tree:
     """The Ansible tree the census reads: the repo's, or a test fixture's.
 
     Attributes:
-        ansible: The playbook directory, which holds `roles/` and `inventory/`.
+        root: The repository root, which holds `k8s/roles/` and `inventory/`.
         host: The inventory host of the k8s entries.
         shared: The shared templates directory a role's templates import from.
         always: Templates every tag's render reads, whatever its file list.
     """
 
-    ansible: Path = ANSIBLE
+    root: Path = REPO
     host: str = K8S_HOST
     shared: Path = SHARED_TPL
     always: tuple[Path, ...] = ()
 
     @property
     def roles(self) -> Path:
-        return self.ansible / "roles"
+        return self.root / "k8s" / "roles"
 
 
 @dataclass
@@ -160,18 +160,18 @@ def _tasks(nodes_: list | None) -> Iterator[dict]:
 
 def _rel(tree: Tree, path: Path) -> str:
     return (
-        str(path.relative_to(tree.ansible))
-        if path.is_relative_to(tree.ansible)
+        str(path.relative_to(tree.root))
+        if path.is_relative_to(tree.root)
         else str(path)
     )
 
 
 def _role_of(tree: Tree, path: Path) -> Path | None:
-    """The role directory `path` sits in, `roles/<plane>/<name>`, or None for a play file."""
+    """The role directory `path` sits in, `k8s/roles/<name>`, or None for a play file."""
     if not path.is_relative_to(tree.roles):
         return None
     parts = path.relative_to(tree.roles).parts
-    return tree.roles / parts[0] / parts[1] if len(parts) > 2 else None
+    return tree.roles / parts[0] if len(parts) > 1 else None
 
 
 def _include_file(tree: Tree, current: Path, target: str) -> Path:
@@ -180,7 +180,7 @@ def _include_file(tree: Tree, current: Path, target: str) -> Path:
         target = target.replace("{{ role_path }}", str(role))
     if "{{" in target or "{%" in target:
         raise CensusError(f"{_rel(tree, current)}: cannot resolve include {target!r}")
-    bases = [current.parent, *([role / "tasks"] if role else []), tree.ansible]
+    bases = [current.parent, *([role / "tasks"] if role else []), tree.root]
     for base in bases:
         candidate = (base / target).resolve()
         if candidate.is_file():
@@ -250,8 +250,8 @@ def walk_roles(tree: Tree, tags: list[str]) -> _Walk:
     """
     walk = _Walk()
     for tag in tags:
-        walk.roles.add(tree.roles / "k8s" / tag)
-        main = tree.roles / "k8s" / tag / "tasks" / "main.yml"
+        walk.roles.add(tree.roles / tag)
+        main = tree.roles / tag / "tasks" / "main.yml"
         if main.is_file():
             _walk_file(tree, main, tags, walk)
     _read_builds(tree, walk)
@@ -299,7 +299,7 @@ def definitions(tree: Tree, walk: _Walk) -> dict[str, list[tuple[str, object]]]:
         for layer in ("defaults", "vars"):
             for path in sorted((role / layer).glob("*.yml")):
                 add(_rel(tree, path), _mapping(path))
-    inventory = tree.ansible / "inventory"
+    inventory = tree.root / "inventory"
     for path in sorted((inventory / "group_vars").glob("*.yml")):
         add(_rel(tree, path), _mapping(path))
     add(
@@ -326,9 +326,9 @@ def tag_templates(
     `resolved_manifest_files` decides the file list, so a one-off `-job.yaml` is outside it.
     The role's deferred files, its image contexts and the tree's `always` templates join it.
     """
-    role = tree.roles / "k8s" / tag
+    role = tree.roles / tag
     templates = role / "templates"
-    files, secret = resolved_manifest_files(tag, tree.roles / "k8s", entry)
+    files, secret = resolved_manifest_files(tag, tree.roles, entry)
     sources = set()
     for name in files | secret | _deferred(role):
         own = templates / f"{name}.j2"
@@ -372,7 +372,7 @@ def census(
 
     Args:
         tree: The Ansible tree.
-        tags: The render targets, each a role under `roles/k8s/`.
+        tags: The render targets, each a role under `k8s/roles/`.
         derived: The names the renderer computes from the tree.
         entries: Each tag's service entry, which decides its shared defaults.
 
@@ -381,7 +381,7 @@ def census(
     """
     walk = walk_roles(tree, tags)
     result = Census(set_by_tasks=walk.set_by_tasks, derived=derived)
-    services = k8s_services(tree.ansible.parent / "cluster" / "services.yml")
+    services = k8s_services(tree.root / "cluster" / "services.yml")
     reader = Reader(services)
     pending: list[tuple[str, str]] = []
 

@@ -148,7 +148,7 @@ def deadman_crons(
 ) -> list[tuple[str, str, str]]:
     """(slug, cron, source) per Healthchecks.io slug, assembled from the variables that set it.
 
-    Shared with ansible/tests/services/test_monitor_bridge_healthchecks_expected.py, which holds
+    Shared with tests/services/test_monitor_bridge_healthchecks_expected.py, which holds
     monitor-bridge's console expectations to these same crons.
 
     `has_docker` is `{host: bool}` over every host. The weekly reboot

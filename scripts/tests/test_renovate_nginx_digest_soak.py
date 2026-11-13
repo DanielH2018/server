@@ -27,8 +27,8 @@ from _renovate import _REPO, _resolve_setting
 # derived from the rule, so a renamed var or a moved pin fails as a missing member instead of
 # leaving the rule matching nothing (the pattern-census rule in .claude/rules/python-layout.md).
 NGINX_ALPINE_PINS = {
-    "nginx": "ansible/roles/k8s/freshrss/defaults/main.yml",
-    "nginxinc/nginx-unprivileged": "ansible/roles/k8s/docs/defaults/main.yml",
+    "nginx": "k8s/roles/freshrss/defaults/main.yml",
+    "nginxinc/nginx-unprivileged": "k8s/roles/docs/defaults/main.yml",
 }
 
 # A k8s digest pin outside the exception, to prove the 3-day soak is still the plane's
@@ -36,7 +36,7 @@ NGINX_ALPINE_PINS = {
 # never minimumReleaseAge.
 CONTROL_PIN = (
     "ghcr.io/flaresolverr/flaresolverr",
-    "ansible/roles/k8s/prowlarr/defaults/main.yml",
+    "k8s/roles/prowlarr/defaults/main.yml",
 )
 
 NGINX_SOAK = "1 day"
@@ -103,19 +103,19 @@ def test_a_k8s_digest_outside_the_exception_still_soaks_three_days() -> None:
 
 _DIGEST_RULE = {
     "matchManagers": ["custom.regex"],
-    "matchFileNames": ["ansible/roles/k8s/**"],
+    "matchFileNames": ["k8s/roles/**"],
     "matchUpdateTypes": ["digest", "pinDigest"],
     "minimumReleaseAge": DIGEST_SOAK,
 }
 _NGINX_RULE = {
     "matchManagers": ["custom.regex"],
     "matchDatasources": ["docker"],
-    "matchFileNames": ["ansible/roles/k8s/freshrss/defaults/main.yml"],
+    "matchFileNames": ["k8s/roles/freshrss/defaults/main.yml"],
     "matchPackageNames": ["nginx"],
     "matchUpdateTypes": ["digest", "pinDigest"],
     "minimumReleaseAge": NGINX_SOAK,
 }
-_FRESHRSS_DEFAULTS = "ansible/roles/k8s/freshrss/defaults/main.yml"
+_FRESHRSS_DEFAULTS = "k8s/roles/freshrss/defaults/main.yml"
 
 
 def test_the_exception_after_the_digest_rule_wins() -> None:

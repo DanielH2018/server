@@ -17,7 +17,7 @@ CREDENTIALS stay with the caller. The drain reads them from the environment beca
 with `sops`. This module never reads either source.
 
 NOT THE BRIDGE. monitor-bridge authorizes against B2 with its own client in
-`ansible/roles/k8s/monitor-bridge/files/checks/b2.py`, on purpose: its gate needs a billed HTTP
+`k8s/roles/monitor-bridge/files/checks/b2.py`, on purpose: its gate needs a billed HTTP
 error kept apart from an unbilled transport failure, which `B2Error` merges. The `DECIDED:`
 marker on `b2_authorize_data` there has the reasoning (#3766).
 """

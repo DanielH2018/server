@@ -58,8 +58,8 @@ def _pin_declared(monkeypatch):
 
 def test_small_pr_scopes_to_its_services():
     files = [
-        "ansible/roles/k8s/sonarr/templates/deployment.yaml.j2",
-        "ansible/roles/k8s/radarr/tasks/main.yml",
+        "k8s/roles/sonarr/templates/deployment.yaml.j2",
+        "k8s/roles/radarr/tasks/main.yml",
         "docs/index.md",
     ]
     tags, source = land_tags.derive(files, changed_files=3)
@@ -73,7 +73,7 @@ def test_truncated_file_list_is_flagged_and_falls_back():
     The tags returned alongside `fallback` are empty on purpose -- a partial list is worse than
     none, because it looks like an answer.
     """
-    files = [f"ansible/roles/k8s/sonarr/f{i}.yaml" for i in range(100)]
+    files = [f"k8s/roles/sonarr/f{i}.yaml" for i in range(100)]
     tags, source = land_tags.derive(files, changed_files=137)
     assert source == "fallback"
     assert tags == []
@@ -103,8 +103,8 @@ def test_a_build_role_pulls_in_the_workload_that_runs_its_image():
     The n8n role builds its own images, so the Dockerfiles derive the workload's tag directly.
     """
     files = [
-        "ansible/roles/k8s/n8n/templates/Dockerfile.j2",
-        "ansible/roles/k8s/n8n/templates/Dockerfile-runners.j2",
+        "k8s/roles/n8n/templates/Dockerfile.j2",
+        "k8s/roles/n8n/templates/Dockerfile-runners.j2",
     ]
     tags, source = land_tags.derive(files, changed_files=2)
     assert source == "pr"
@@ -114,40 +114,40 @@ def test_a_build_role_pulls_in_the_workload_that_runs_its_image():
 def test_an_ordinary_role_is_not_widened():
     """The reject half. A deriver that widened everything would pass the test above."""
     tags, source = land_tags.derive(
-        ["ansible/roles/k8s/sonarr/templates/deployment.yaml.j2"], changed_files=1
+        ["k8s/roles/sonarr/templates/deployment.yaml.j2"], changed_files=1
     )
     assert source == "pr"
     assert tags == ["sonarr"]
 
 
 _PR_617_FILES = [
-    "ansible/roles/k8s/artifacts/defaults/main.yml",
-    "ansible/roles/k8s/autofix-bridge/defaults/main.yml",
-    "ansible/roles/k8s/docs/defaults/main.yml",
-    "ansible/roles/k8s/headlamp/defaults/main.yml",
-    "ansible/roles/k8s/home-assistant/defaults/main.yml",
-    "ansible/roles/k8s/homepage/defaults/main.yml",
-    "ansible/roles/k8s/jellyfin/defaults/main.yml",
-    "ansible/roles/k8s/karakeep/defaults/main.yml",
-    "ansible/roles/k8s/volume-snapshot/defaults/main.yml",
-    "ansible/roles/k8s/volume-snapshot/tasks/main.yml",
-    "ansible/roles/k8s/volume-snapshot/tasks/release_stamp.yml",
-    "ansible/roles/k8s/media-volume/defaults/main.yml",
-    "ansible/roles/k8s/monitor-bridge/defaults/main.yml",
-    "ansible/roles/k8s/n8n/defaults/main.yml",
-    "ansible/roles/k8s/netpol-baseline/defaults/main.yml",
-    "ansible/roles/k8s/peanut/defaults/main.yml",
-    "ansible/roles/k8s/prowlarr/defaults/main.yml",
-    "ansible/roles/k8s/qbittorrent/defaults/main.yml",
-    "ansible/roles/k8s/registry/defaults/main.yml",
-    "ansible/roles/k8s/scrutiny/defaults/main.yml",
-    "ansible/roles/k8s/sonarr/defaults/main.yml",
-    "ansible/roles/k8s/terraria-stats/defaults/main.yml",
-    "ansible/roles/k8s/traefik/defaults/main.yml",
-    "ansible/roles/k8s/valheim-stats/defaults/main.yml",
-    "ansible/roles/k8s/zigbee2mqtt/defaults/main.yml",
+    "k8s/roles/artifacts/defaults/main.yml",
+    "k8s/roles/autofix-bridge/defaults/main.yml",
+    "k8s/roles/docs/defaults/main.yml",
+    "k8s/roles/headlamp/defaults/main.yml",
+    "k8s/roles/home-assistant/defaults/main.yml",
+    "k8s/roles/homepage/defaults/main.yml",
+    "k8s/roles/jellyfin/defaults/main.yml",
+    "k8s/roles/karakeep/defaults/main.yml",
+    "k8s/roles/volume-snapshot/defaults/main.yml",
+    "k8s/roles/volume-snapshot/tasks/main.yml",
+    "k8s/roles/volume-snapshot/tasks/release_stamp.yml",
+    "k8s/roles/media-volume/defaults/main.yml",
+    "k8s/roles/monitor-bridge/defaults/main.yml",
+    "k8s/roles/n8n/defaults/main.yml",
+    "k8s/roles/netpol-baseline/defaults/main.yml",
+    "k8s/roles/peanut/defaults/main.yml",
+    "k8s/roles/prowlarr/defaults/main.yml",
+    "k8s/roles/qbittorrent/defaults/main.yml",
+    "k8s/roles/registry/defaults/main.yml",
+    "k8s/roles/scrutiny/defaults/main.yml",
+    "k8s/roles/sonarr/defaults/main.yml",
+    "k8s/roles/terraria-stats/defaults/main.yml",
+    "k8s/roles/traefik/defaults/main.yml",
+    "k8s/roles/valheim-stats/defaults/main.yml",
+    "k8s/roles/zigbee2mqtt/defaults/main.yml",
     "hosts/components/k3s-server/defaults/main.yml",
-    "ansible/tests/k8s/test_base_images_digest_pinned.py",
+    "tests/k8s/test_base_images_digest_pinned.py",
     "docs/claude-tooling.md",
     "scripts/diagnostics/probe.py",
     "scripts/diagnostics/probe_lib/releases.py",
@@ -171,7 +171,7 @@ def test_pr_617_derives_its_services_and_not_the_shared_roles():
 
 
 def test_a_shared_role_with_callers_derives_no_tag_of_its_own():
-    files = ["ansible/roles/k8s/volume-snapshot/tasks/main.yml"]
+    files = ["k8s/roles/volume-snapshot/tasks/main.yml"]
     tags, source = land_tags.derive(files, changed_files=1)
     assert (tags, source) == ([], "pr")
     assert land_tags.plane_note(files) == ""
@@ -183,7 +183,7 @@ def test_an_ordinary_service_role_is_neither_dropped_nor_reported():
     A splitter that called every role shared would derive no tags at all and report a full deploy on
     every landing.
     """
-    files = ["ansible/roles/k8s/sonarr/templates/deployment.yaml.j2"]
+    files = ["k8s/roles/sonarr/templates/deployment.yaml.j2"]
     tags, _ = land_tags.derive(files, changed_files=1)
     assert tags == ["sonarr"]
     assert land_tags.plane_note(files) == ""
@@ -214,8 +214,8 @@ def test_a_secrets_rotation_is_flagged():
     only signal.
     """
     files = [
-        "ansible/secret_rotation.yml",
-        "ansible/vars/secrets.yml",
+        "secrets/secret_rotation.yml",
+        "secrets/secrets.yml",
         "prek.toml",
         "scripts/secrets_mgmt/secret_rotation.py",
         "scripts/secrets_mgmt/test_secret_rotation.py",
@@ -239,12 +239,12 @@ def test_a_pr_without_secrets_is_clean():
 
     A rule that fired on every landing would make `needs-manual-apply` the normal verdict and train
     the operator to ignore it. The registry is the near miss worth pinning:
-    `ansible/secret_rotation.yml` carries names, dates and tiers but no values, so a registry-only
+    `secrets/secret_rotation.yml` carries names, dates and tiers but no values, so a registry-only
     change deploys nothing and needs nothing.
     """
     files = [
-        "ansible/secret_rotation.yml",
-        "ansible/roles/k8s/sonarr/templates/deployment.yaml.j2",
+        "secrets/secret_rotation.yml",
+        "k8s/roles/sonarr/templates/deployment.yaml.j2",
     ]
     assert land_tags.plane_note(files) == ""
 
@@ -257,8 +257,8 @@ def test_a_secrets_rotation_beside_a_service_is_flagged():
     survive a non-empty tag list.
     """
     files = [
-        "ansible/vars/secrets.yml",
-        "ansible/roles/k8s/sonarr/templates/deployment.yaml.j2",
+        "secrets/secrets.yml",
+        "k8s/roles/sonarr/templates/deployment.yaml.j2",
     ]
     tags, _ = land_tags.derive(files, changed_files=2)
     assert tags == ["sonarr"]
@@ -267,7 +267,7 @@ def test_a_secrets_rotation_beside_a_service_is_flagged():
 
 def test_a_check_table_change_lands_with_its_own_role_alone():
     tags, source = land_tags.derive(
-        ["ansible/roles/k8s/monitor-bridge/files/check_table.py"], changed_files=1
+        ["k8s/roles/monitor-bridge/files/check_table.py"], changed_files=1
     )
     assert source == "pr"
     assert tags == ["monitor-bridge"]
@@ -278,7 +278,7 @@ def test_a_check_table_change_lands_with_its_own_role_alone():
 # A comment-only edit to a k8s role's `defaults/` renders the same manifests (#4460), so the
 # landing derives no tag for it and gates no workload that did not change.
 
-_SONARR_DEFAULTS = "ansible/roles/k8s/sonarr/defaults/main.yml"
+_SONARR_DEFAULTS = "k8s/roles/sonarr/defaults/main.yml"
 
 
 def _show(texts):
@@ -311,7 +311,7 @@ def test_a_comment_line_inside_a_block_scalar_is_content():
 
 def test_an_unusable_range_reads_only_docs_as_quiet():
     """No range, or a malformed one, keeps every defaults path loud."""
-    files = [_SONARR_DEFAULTS, "ansible/roles/k8s/sonarr/CLAUDE.md"]
+    files = [_SONARR_DEFAULTS, "k8s/roles/sonarr/CLAUDE.md"]
     for range_ in ("", "..", "abc", "..def", "ghi.."):
         assert land_tags.quiet_paths(files, range_) == {files[1]}, range_
 

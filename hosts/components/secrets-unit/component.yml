@@ -10,7 +10,7 @@
 #     and one row per `outputs:` entry with its template, destination, owner, group, mode,
 #     `persist` flag, dependents and key list;
 #   - /usr/lib/homelab/secrets/<host>.sops.yaml, the host's ciphertext from
-#     ansible/vars/hosts/<host>.sops.yaml;
+#     secrets/hosts/<host>.sops.yaml;
 #   - /usr/lib/homelab/secret-templates/, where each declared output installs;
 #   - `secrets_inputs_sha256` in the manifest, which reconcile compares.
 #

@@ -12,9 +12,9 @@ recovered by *Recovering Flux by hand*.
 ## What runs
 
 - **Three controllers, at the release `flux_version` names** in
-  `ansible/roles/k8s/flux/defaults/main.yml`. helm-controller and the image-automation
+  `k8s/roles/flux/defaults/main.yml`. helm-controller and the image-automation
   controllers are not installed, because nothing here uses them.
-- **Flux applies them**, from `ansible/roles/k8s/flux/`'s render under the tag `flux`
+- **Flux applies them**, from `k8s/roles/flux/`'s render under the tag `flux`
   (its entry is in `cluster/services.yml`). The Kustomization `flux` applies the components at `prune: false`, and
   `flux-deferred` applies the sync objects at `prune: true`. No local script applies the
   tag.
@@ -29,12 +29,12 @@ recovered by *Recovering Flux by hand*.
 
 Renovate opens a manual PR for a new `fluxcd/flux2` release, because its hosted app can bump
 `flux_version` but cannot run `flux install`. The PR is finished by regenerating the vendored
-file at the new release. Until then, the header test in `ansible/tests/k8s/test_flux_role.py`
+file at the new release. Until then, the header test in `tests/k8s/test_flux_role.py`
 fails, because the file's first line still names the old release. Land the finished PR with
 `land.sh`; `promote` publishes it, and the Kustomization `flux` rolls the controllers. A
 release that breaks the controllers is the first branch of *Recovering Flux by hand*.
 
-A regenerated `ansible/roles/k8s/flux/files/gotk-components.yaml` also runs CI's
+A regenerated `k8s/roles/flux/files/gotk-components.yaml` also runs CI's
 `sops-manifest-type-proof` job, which applies the file to a kind cluster. The bump PR shows
 whether the new controllers still deliver an all-digit SOPS manifest value as a string
 (*SOPS manifests* below).
@@ -56,12 +56,12 @@ netpol-baseline's probe Job tests the fence live on every netpol-baseline deploy
 source-controller, notification-controller and webhook-receiver from the `homelab` namespace,
 and each connection must be refused. Each of those Services maps port 80 to a named pod port,
 so the probe dials 80. The table row also names the pod port behind it, 9090 for the two
-controllers and 9292 for webhook-receiver. `ansible/roles/k8s/netpol-baseline/CLAUDE.md` has
+controllers and 9292 for webhook-receiver. `k8s/roles/netpol-baseline/CLAUDE.md` has
 the table.
 
 ## Metrics
 
-Two sources put Flux in the metrics plane, both in `ansible/roles/k8s/observability/`.
+Two sources put Flux in the metrics plane, both in `k8s/roles/observability/`.
 
 - **The `flux` scrape job** reads each controller's `http-prom` port (8080) every minute. It
   finds the pods by discovery, because no Service exposes that port. It drops every series
@@ -112,7 +112,7 @@ evaluations from 02:49:45Z to 02:53:45Z.
 
 ## Alerts
 
-The `flux` rule group, `ansible/roles/k8s/observability/files/rules/flux.yaml`, pages through
+The `flux` rule group, `k8s/roles/observability/files/rules/flux.yaml`, pages through
 M1's Alertmanager. Every rule carries `service="flux"`.
 
 - **`FluxControllerDown`, critical.** Two rules share the name.
@@ -158,14 +158,14 @@ M1's Alertmanager. Every rule carries `service="flux"`.
       ends. The suspended Kustomization then does not retry.
 
 notification-controller's Discord alerts stay as a second channel beside these.
-`ansible/roles/k8s/observability/tests/rules/flux.test.yaml` fires each rule and holds a
+`k8s/roles/observability/tests/rules/flux.test.yaml` fires each rule and holds a
 case one evaluation short of each hold. A lost `gotk_resource_info` leaves `FluxNotReady`'s
 readiness arms and `FluxSuspended` quiet ([#4809](https://github.com/DanielH2018/server/issues/4809)).
 
 ### The deploy-pipeline alerts
 
 The `deploy-pipeline` rule group,
-`ansible/roles/k8s/observability/files/rules/deploy-pipeline.yaml`, pages on `promote`'s own
+`k8s/roles/observability/files/rules/deploy-pipeline.yaml`, pages on `promote`'s own
 state. monitor-bridge reads that state each 300-second cycle and serves it as five gauges, one
 series each, which the `deploy-pipeline` scrape job collects:
 
@@ -209,7 +209,7 @@ gate (D2 Open question 12).
   read that failed. A failed scrape of the job pages as `ScrapeTargetDown` since M6's batch A3,
   so this rule leaves that case alone.
 
-`ansible/roles/k8s/observability/tests/rules/deploy-pipeline.test.yaml` fires each alert and
+`k8s/roles/observability/tests/rules/deploy-pipeline.test.yaml` fires each alert and
 keeps each one silent in the case D2's plan names.
 
 ## A `containers_list` change reaches Flux
@@ -352,7 +352,7 @@ Three things hold the ruling on the tree:
   request, and `promote.py check-bundle --against-prod` applies the same rule before any push:
 
   ```text
-  arm 6: nut leaves the bundle while ansible/roles/k8s/nut/ stays. Restore its containers_list
+  arm 6: nut leaves the bundle while k8s/roles/nut/ stays. Restore its containers_list
   entry, or remove the role with it to retire the service (docs/flux-deploy-plane.md, *Retiring
   a flux-owned service*).
   ```
@@ -373,7 +373,7 @@ ClusterRole `flux-view-flux-system` carries the label
 `watch` on six Flux API groups to `view`, which that identity binds. No change to
 `k3s_readonly_crd_api_groups` is needed. The operator accepted the aggregation on 2026-10-12.
 
-Two guards in `ansible/tests/k8s/test_aggregated_clusterroles.py` keep the grant from
+Two guards in `tests/k8s/test_aggregated_clusterroles.py` keep the grant from
 widening unseen. Every ClusterRole that aggregates into `view`, `edit` or `admin` must be on
 that module's allowlist with a reason. `flux-view-flux-system` must stay read-only on exactly
 its six groups, so a Flux upgrade that widens it fails CI.
@@ -593,7 +593,7 @@ to fetch the commit that fixes it. In this order:
   owner would stay on every field, and a later commit that removed one would never take
   effect.
 
-`ansible/tests/repo/test_flux_recovery_runbook.py` fails this section on a suspend or a resume
+`tests/repo/test_flux_recovery_runbook.py` fails this section on a suspend or a resume
 without `--field-manager=homelab-operator`, on a server-side apply without
 `--force-conflicts`, and on a hand-apply branch whose apply precedes its `DEPLOY_HOLD` step.
 
@@ -622,7 +622,7 @@ step 6 applies. The Ansible k8s play creates neither object.
    `prod`'s commit (step 2 reads it):
 
     ```bash
-    grep -E '^k3s_longhorn_(backup|r2)_armed:' ansible/roles/k8s/longhorn-backup/defaults/main.yml
+    grep -E '^k3s_longhorn_(backup|r2)_armed:' k8s/roles/longhorn-backup/defaults/main.yml
     ```
 
     If an arm PR must merge, it merges and promotes now, and the hold its verify leaves is
@@ -757,7 +757,7 @@ Every hand apply in steps 3, 5, 6 and 9 is
 file. That is the root's own field manager, so the root and the `flux` tag adopt each object
 without a conflict.
 
-`ansible/tests/repo/test_flux_bootstrap_section.py` fails this section when the root's apply
+`tests/repo/test_flux_bootstrap_section.py` fails this section when the root's apply
 comes before the restore step, when a hand apply lacks `--field-manager=kustomize-controller`,
 and when step 2 names `reset_to_last_good` without its condition and the recorded exception.
 It also runs R4's PR 7b `awk` program over this file and fails unless the program exits 0 with
@@ -1237,7 +1237,7 @@ promotion verifying across the reboot would therefore hold.
 - **The window.** It opens T's own derived verify timeout before the reboot, and it closes when
   M2's mute ends. The reboot is the cron's fire plus `weekly_reboot_shutdown_delay_minutes`,
   and the mute ends `weekly_reboot_mute_recovery_minutes` after the reboot. `decide` reads the
-  `weekly_reboot_*` variables from `ansible/inventory/group_vars/all.yml` in its checkout.
+  `weekly_reboot_*` variables from `inventory/group_vars/all.yml` in its checkout.
   At the committed schedule, the window closes at 08:15 UTC on Sunday and opens between about
   02:05 and 07:30, depending on T.
 - **Which timeout `decide` reads.** It is T's own, from `verify_promotion.expected_set`, the
@@ -1290,7 +1290,7 @@ only after its dependencies finish, so the wait sums four terms, with the soak b
 The root `homelab`'s 5-minute `timeout` is the floor of the first two terms. The flux role
 leaves `--requeue-dependency` at its default, and
 `scripts/deploy_tools/tests/test_chained_timeout.py` fails a vendored install or role default
-that sets it. `ansible/tests/k8s/test_flux_role.py` holds `chained_timeout.CONCURRENT` equal to
+that sets it. `tests/k8s/test_flux_role.py` holds `chained_timeout.CONCURRENT` equal to
 the `--concurrent` the role renders, less the soak's worker.
 A `dependsOn` naming a Kustomization the bundle does not hold, or a cycle, fails `verify`
 with no verdict, and `settle` holds it as `<T> unverified`.
@@ -1299,7 +1299,7 @@ with no verdict, and `settle` holds it as `<T> unverified`.
 `verify` job that its own `timeout-minutes` stops leaves no verdict, and `settle` writes
 `<T> unverified`, which names no Kustomization. At the cap `verify` prints `failed` with the
 names that never passed, and `settle` writes that hold like any other timeout. Three limits
-are sized from the cap, and `ansible/tests/repo/test_promote_workflow_verify.py` holds them
+are sized from the cap, and `tests/repo/test_promote_workflow_verify.py` holds them
 against each other:
 
 | Limit | Value | Why |
@@ -1361,7 +1361,7 @@ without `--role` renders every tag. That bundle holds the shared kinds and a roo
 and no tag, so the first decryption of the cluster file gets a revision of its own. Both
 branches pass `--all-images`, because the `images` job refuses a render without
 `images/tags.json` and `publish` needs that job (#5593).
-`ansible/tests/repo/test_promote_workflow_bundle.py` fails a no-tag branch without
+`tests/repo/test_promote_workflow_bundle.py` fails a no-tag branch without
 `--shared-only` or `--all-images`.
 
 After the census, the step `ciphertext` runs `cluster_vars.py check --ciphertext-only` on
@@ -1445,7 +1445,7 @@ placeholder gets both fields, one without gets neither and keeps `${HOME}` as wr
 
 The renderer generates every `dependsOn` from its own dependency map, and no template
 writes one. The `no-template-hand-writes-depends-on` row of
-`ansible/tests/repo/test_census_rows_text.py` fails a template that does.
+`tests/repo/test_census_rows_text.py` fails a template that does.
 `scripts/renderer/renderer_lib/cluster.py:bundle_ordering` builds the map with `build_k8s_dep_map` over the full k8s
 `containers_list`, so a `--role` render gives a tag
 the same toposort edges as a full one. The `<tag>-deferred` edges come from the tags the
@@ -1537,7 +1537,7 @@ Two tests keep the annotation honest:
 
 R2's multi-line keys, `SOPS_MANIFEST_KEYS`, reach the cluster as SOPS-encrypted Secret
 manifests rather than as placeholders. `cluster_vars.py write` (operator-only) keeps one per
-`render_sops_manifests` entry under `ansible/vars/cluster-manifests/`, named
+`render_sops_manifests` entry under `secrets/cluster-manifests/`, named
 `<tag>.<entry stem>.sops.yaml`.
 
 - **The copy is byte for byte.** For a published tag whose role lists
@@ -1598,7 +1598,7 @@ census fails a bundle that lacks either. Each member needs a footprint rule in
 `postBuild` names:
 
 - `cluster/cluster-vars/` holds `cluster-vars.sops.env`, a byte copy of the cluster file
-  `ansible/vars/cluster-vars.sops.env`, and a `kustomization.yaml` whose `secretGenerator`
+  `secrets/cluster-vars.sops.env`, and a `kustomization.yaml` whose `secretGenerator`
   makes `homelab-cluster-vars` in `flux-system` from it, with no name suffix.
 - `flux/cluster-vars.yaml` sets the same fields as a tag's Kustomization, no `postBuild`, and
   `decryption` with provider `sops` and the Secret `sops-age`, the cluster's age key.
@@ -1715,7 +1715,7 @@ gate's name.
 - **source**: the gate judges each Kustomization document in `flux/<tag>.yaml` against its
   own `spec.path` directory, so `<tag>-deferred` is judged against
   `cluster/<tag>-deferred/` (#5172). A document with no `postBuild` applies a directory that
-  holds no `${K}` whose `K` is a key name of `ansible/vars/secrets.yml`. Flux would not substitute such a reference.
+  holds no `${K}` whose `K` is a key name of `secrets/secrets.yml`. Flux would not substitute such a reference.
   The gate pairs each `$$` first, as Flux does, so `$${K}` and a shell `${HOME}` pass. A
   document with `postBuild` may name in `substituteFrom` only a Secret that a `secretGenerator` in
   the bundle makes. The `cluster-vars` kind generates `homelab-cluster-vars`, the one Secret
@@ -1723,7 +1723,7 @@ gate's name.
   holds no Kustomization, and a document whose `spec.path` is not a directory under
   `cluster/`.
 - **host**: every `Host(...)` in an IngressRoute ends in `.<domain>`, the literal that
-  `ansible/inventory/group_vars/all.yml` defines. A `${domain}`, a `stub-domain` and a
+  `inventory/group_vars/all.yml` defines. A `${domain}`, a `stub-domain` and a
   hand-written host each fail. While bento-pdf is published, its `.local.` route is the
   gate's named member, and the gate fails when that route holds no matching Host rule.
 - **no-stub**: no file in the bundle holds an R1 stub value, `stub-<key>` for a key name of
@@ -1770,7 +1770,7 @@ under *Rules for every Job Flux applies (D5.1a3)*.
 
 **A CronJob that a gate Job cannot copy is gated on its schedule.** The restore drill is one:
 a copy of it runs a real restore beside the scheduled one. Such a role goes in
-`UNGATED_BY_DESIGN` in `ansible/tests/deploy/test_cronjob_only_roles_include_the_gate.py`, and
+`UNGATED_BY_DESIGN` in `tests/deploy/test_cronjob_only_roles_include_the_gate.py`, and
 its CronJob carries the annotation `homelab/gate: schedule`. That test holds the two sets
 equal. `probe.py health` passes a marked CronJob with no Job for one schedule period after Flux
 first applied the revision, and fails it after that
@@ -1901,7 +1901,7 @@ from. The Job's exit is the `flux/soak` status. The design is D5's *The soak as 
   docs-only commit still has an empty changed set. `homelab_render.py cluster --revision`
   names R, and defaults to the checkout's `HEAD`, which the publish job pins.
 - **W.** The ConfigMap's `services.json` maps each published tag to the longest `for:` among
-  the critical or `verify="true"` rules under `ansible/roles/k8s/observability/files/rules/`
+  the critical or `verify="true"` rules under `k8s/roles/observability/files/rules/`
   that can fire for it, and to the namespaces its tag renders into. A rule with no static
   `service` label counts for every tag. The fleet W is the map's largest entry plus the
   scrape and evaluation allowance.

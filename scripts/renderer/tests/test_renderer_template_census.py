@@ -1,6 +1,6 @@
 """Every filter and test name the k8s templates use resolves in the renderer's environment.
 
-The census parses each template under the k8s roles' `templates/` and `ansible/templates/`
+The census parses each template under the k8s roles' `templates/` and `k8s/templates/`
 through `renderer_lib.environment.renderer_env`, the environment `render_tag` renders with. A
 name the environment lacks would otherwise surface only when a render first reaches that
 template.

@@ -10,13 +10,12 @@ from pathlib import Path
 
 import pytest
 from lib import yaml_fast
-from lib.k8s_roles import is_leftover_dir, k8s_autodeploy_denylist
-from lib.repo_paths import ANSIBLE as _ANSIBLE
+from lib.k8s_roles import K8S_ROLES, is_leftover_dir, k8s_autodeploy_denylist
 
 
 def _role(tmp_path: Path, name: str, body: str | None) -> Path:
-    """Create a role dir under tmp_path/roles/k8s, optionally with a defaults/main.yml."""
-    role = tmp_path / "roles" / "k8s" / name
+    """Create a role dir under tmp_path, optionally with a defaults/main.yml."""
+    role = tmp_path / name
     role.mkdir(parents=True)
     if body is not None:
         defaults = role / "defaults"
@@ -153,7 +152,7 @@ def test_permission_denied_raises(tmp_path: Path) -> None:
 
 def test_a_dangling_symlink_raises(tmp_path: Path) -> None:
     _role(tmp_path, "denied", _OK)
-    roles_dir = tmp_path / "roles" / "k8s"
+    roles_dir = tmp_path
     (roles_dir / "ghost").symlink_to(roles_dir / "nonexistent-target")
     with pytest.raises(ValueError, match=r"ghost.*not a directory.*symlink"):
         k8s_autodeploy_denylist(str(tmp_path))
@@ -162,14 +161,14 @@ def test_a_dangling_symlink_raises(tmp_path: Path) -> None:
 def test_a_non_directory_dotfile_is_skipped(tmp_path: Path) -> None:
     """Editor/VCS cruft (a stray .gitkeep etc.) is not a role and must not raise."""
     _role(tmp_path, "denied", _OK)
-    (tmp_path / "roles" / "k8s" / ".gitkeep").write_text("")
+    (tmp_path / ".gitkeep").write_text("")
     assert k8s_autodeploy_denylist(str(tmp_path)) == ["denied"]
 
 
 def test_a_stray_pycache_directory_is_skipped(tmp_path: Path) -> None:
-    """A stray __pycache__ (or dotdir) under roles/k8s/ is not a role and must not raise."""
+    """A stray __pycache__ (or dotdir) under k8s/roles/ is not a role and must not raise."""
     _role(tmp_path, "denied", _OK)
-    (tmp_path / "roles" / "k8s" / "__pycache__").mkdir()
+    (tmp_path / "__pycache__").mkdir()
     assert k8s_autodeploy_denylist(str(tmp_path)) == ["denied"]
 
 
@@ -181,12 +180,12 @@ def test_an_empty_result_raises(tmp_path: Path) -> None:
 
 def test_a_missing_roles_directory_raises(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="no such directory"):
-        k8s_autodeploy_denylist(str(tmp_path))
+        k8s_autodeploy_denylist(tmp_path / "absent")
 
 
 def test_the_real_repo_derives_a_plausible_denylist() -> None:
     """Sanity-check against the live tree, by property rather than by restating the list."""
-    denied = k8s_autodeploy_denylist(str(_ANSIBLE))
+    denied = k8s_autodeploy_denylist()
     assert denied == sorted(set(denied)), "duplicated or unsorted"
     # Roles whose exclusion is load-bearing: losing the ingress or auth plane removes the
     # sonarr and speedtest are asserted OUT of this list below, not just dropped, so a re-denial
@@ -238,17 +237,15 @@ def test_the_real_repo_derives_a_plausible_denylist() -> None:
     # Every derived name must be a real role that really says false — catches a filter that
     # invents, mangles or mis-cases names.
     for role in denied:
-        data = yaml_fast.safe_load(
-            (_ANSIBLE / "roles/k8s" / role / "defaults/main.yml").read_text()
-        )
+        data = yaml_fast.safe_load((K8S_ROLES / role / "defaults/main.yml").read_text())
         assert data["k8s_autodeploy"] is False
     # The named-role assertions above move WITH a bulk flip — flip sonarr/etc to true and
     # they simply stop being asserted, not caught. This count is what actually catches that:
-    # it is derived independently, by walking roles/k8s/ in this test rather than trusting
+    # it is derived independently, by walking k8s/roles/ in this test rather than trusting
     # the filter's own count, so a bulk flip of several roles to true shrinks it and fails
     # here even though every assertion above still passes. Do not remove or loosen this floor
     # to "simplify" the test — it is the one assertion that can't move with the thing it checks.
-    k8s_roles_dir = _ANSIBLE / "roles/k8s"
+    k8s_roles_dir = K8S_ROLES
     actually_false = [
         role_dir.name
         for role_dir in sorted(k8s_roles_dir.iterdir())

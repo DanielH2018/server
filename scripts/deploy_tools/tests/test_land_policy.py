@@ -48,7 +48,7 @@ def _fakes(branch=None, head_again=HEAD, arm=None, **fields) -> Fakes:
 
 
 def _approval_paths(
-    tmp_path, text="hosts/components/claude-code/\nansible/vars/secrets.yml\n"
+    tmp_path, text="hosts/components/claude-code/\nsecrets/secrets.yml\n"
 ):
     path = tmp_path / "approval-paths"
     path.write_text(text)
@@ -109,11 +109,11 @@ REFUSALS = {
                 {
                     "status": "renamed",
                     "filename": "docs/s.yml",
-                    "previous_filename": "ansible/vars/secrets.yml",
+                    "previous_filename": "secrets/secrets.yml",
                 }
             ]
         },
-        "ansible/vars/secrets.yml",
+        "secrets/secrets.yml",
     ),
     # Not on the approval list: the landing process imported it, which is what refuses it.
     "a module the landing imports": (
