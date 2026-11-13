@@ -177,8 +177,10 @@ not evidence of the end state.
 
 **Run `uv run python scripts/diagnostics/probe.py b2-budget` after adding a volume or changing a shard.** It
 re-derives the projection from one listing of the live bucket (~10 Class C) and exits non-zero if
-a shard is over budget. Nothing else announces the drift, because the cost grows quietly with
-stored blocks rather than with anything a deploy touches.
+a shard is over budget. The cost grows quietly with stored blocks rather than with anything a
+deploy touches, so the daily `b2-budget` timer runs the same projection. Checks 9 and 10 of
+backup health read its journal: an `OVER BUDGET:` line, or no `budget per day:` summary line
+inside 26h, turns the check DOWN.
 
 ### What a deletion cost, after it happened
 

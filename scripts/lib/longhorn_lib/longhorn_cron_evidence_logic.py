@@ -11,8 +11,8 @@ separate arms because silence and a bad verdict are different faults with differ
   docs/target-architecture/host/h2-shrink-host-plane.md). Its arm reads the CronJob Longhorn
   creates for it, that CronJob's newest Job, and the Job's pod log. The pod log is the evidence,
   because longhorn-manager logs a per-volume failure and can still finish the Job as succeeded.
-- The **B2 deletion accounting** is a host cron. Its arm reads the `b2-deletions` journal tag,
-  the cron file and the cron's fire stamp.
+- The **B2 deletion accounting** and the **B2 budget listing** are host timers. Each one's arm
+  reads its journal tag (`b2-deletions`, `b2-budget`), its timer file and its fire stamp.
 
 Rank 4 throughout, where `_fetch_text` uses rank 1 for a failed kubectl read. That asymmetry is
 deliberate: a failed backup-plane read means the backups are unreadable, while everything here
@@ -227,56 +227,90 @@ def check_trim(
     return problems
 
 
-# ── the B2 deletion accounting: a host cron ─────────────────────────────────────────────────
+# ── the B2 host crons: the deletion accounting and the budget listing ────────────────────
 
 
-def check_deletion_evidence(
-    deletion_lines: list[str] | None, window_hours: int
-) -> list[tuple[int, str]]:
-    """Check 9's B2 arm: whether the deletion accounting reported an UNPRICED deletion.
+class CronLines(NamedTuple):
+    """The two line shapes check 9 and check 10 read in one host cron's journal tag.
 
-    The cron writes its verdict through `logger`, and nothing read it until this check (#2418).
-    `deletion_lines` are the `b2-deletions` journal lines over the last `window_hours`, or None
-    when the read itself failed.
+    Attributes:
+        completed: matches the line every COMPLETED run prints, and nothing a run that died
+            prints (#2545).
+        marker: the literal a bad verdict carries.
+        meaning: what the marker means, for the problem text.
     """
-    if deletion_lines is None:
+
+    completed: re.Pattern
+    marker: str
+    meaning: str
+
+
+# Matched as written against what the probe prints, and pinned by the coupling tests in
+# scripts/lib/tests/test_longhorn_backup_health_cron_evidence.py.
+CRON_LINES = {
+    # `deletions_summary_line` and `deletions_declined_line` in probe_lib/b2_ledger.py.
+    "b2-deletions": CronLines(
+        re.compile(
+            r"b2-deletions: charged \d+, skipped \d+, unpriced \d+|b2-deletions: declined: "
+        ),
+        "UNPRICED",
+        "Class C spent that no later run can price",
+    ),
+    # The last row `format_backup_budget` in probe_lib/longhorn_budget.py appends.
+    "b2-budget": CronLines(
+        re.compile(r"budget per day: \d+ Class C \(cap \d+"),
+        "OVER BUDGET:",
+        "a weekly shard's next prune is projected past B2's daily Class C cap",
+    ),
+}
+
+
+def check_cron_evidence(
+    tag: str, lines: list[str] | None, window_hours: int
+) -> list[tuple[int, str]]:
+    """Check 9's B2 arm: whether the cron logging under `tag` reported its bad-verdict marker.
+
+    `lines` are the tag's journal lines over the last `window_hours`, or None when the read
+    itself failed.
+    """
+    shape = CRON_LINES[tag]
+    if lines is None:
         return [
             (
                 4,
-                "could not read the b2-deletions journal — an UNPRICED deletion has no reader",
+                f"could not read the {tag} journal — a {shape.marker.rstrip(':')} "
+                "verdict has no reader",
             )
         ]
-    # The whole window is searched, not just the newest run, for two reasons. `logger` writes
-    # one journal entry per line and probe.py's UNPRICED report is a multi-line block, so
-    # "the newest run" cannot be reconstructed from the lines alone. And an unpriced deletion
-    # is a permanent EVENT rather than a current state — the transactions it spent cannot be
-    # recovered by any later run — so the right behaviour is to report it once and let it age
-    # out of the window, which it does on its own.
-    unpriced = [line for line in deletion_lines if "UNPRICED" in line]
-    if unpriced:
+    # The whole window is searched, not just the newest run: `logger` writes one entry per line,
+    # so "the newest run" cannot be rebuilt from the lines. An UNPRICED deletion is an event and
+    # ages out of the window; an OVER BUDGET projection clears within one window of a clean run.
+    hits = [line for line in lines if shape.marker in line]
+    if hits:
         return [
             (
                 4,
-                f"b2-deletions reported UNPRICED in the last {window_hours}h "
-                f"(Class C spent that no later run can price): {unpriced[0].strip()[:160]}",
+                f"{tag} reported {shape.marker.rstrip(':')} in the last {window_hours}h "
+                f"({shape.meaning}): {hits[0].strip()[:160]}",
             )
         ]
     return []
 
 
 # One period of the timer. Its `OnCalendar=` has an hour and a minute and NO weekday, so it fires once a day. If it gains a weekday, this constant and the window guard
-# in `check_deletion_liveness` change together — a weekly cron is legitimately silent for six
+# in `check_cron_liveness` change together — a weekly cron is legitimately silent for six
 # days and the guard would have to compare against its own period instead.
 _CRON_PERIOD_S = 86400
 
-# `b2-deletions: charged 3, skipped 0, unpriced 0` and `b2-deletions: declined: ...` —
-# `deletions_summary_line` and `deletions_declined_line` in
-# `scripts/diagnostics/probe_lib/b2_ledger.py`, matched as written. A completed run prints
-# exactly one of them.
-_DELETIONS_SUMMARY_RE = re.compile(
-    r"b2-deletions: charged \d+, skipped \d+, unpriced \d+"
-)
-_DELETIONS_DECLINED_RE = re.compile(r"b2-deletions: declined: ")
+
+def cron_completed(tag: str, lines: list[str]) -> bool:
+    """Whether the window holds the line a COMPLETED run of the cron logging under `tag` prints.
+
+    Any line at all is not enough (#2545): the unit sends both streams to the journal, so a run
+    that logged a traceback and exited non-zero would otherwise read as alive.
+    """
+    completed = CRON_LINES[tag].completed
+    return any(completed.search(line) for line in lines)
 
 
 class CronState(NamedTuple):
@@ -290,7 +324,7 @@ class CronState(NamedTuple):
         unreadable: the file exists but could not be stat'd — a permissions change, most
             likely. Distinct from a missing file because "the cron is gone" and "I could not
             look" have different fixes, and folding them sends whoever is paged to the wrong one.
-        expected: whether this host installs the cron at all. The B2-accounting cron is gated
+        expected: whether this host installs the cron at all. The B2 timers are gated
             on `has_repo_checkout` and a host without a checkout never gets one.
         fired_stamp: the file the cron line itself touches before it runs its job.
             `/etc/cron.d` is 0700 root on these hosts (initial_setup's CIS hardening), so the
@@ -309,23 +343,7 @@ class CronState(NamedTuple):
     fired_at: float | None = None
 
 
-def deletions_have_spoken(lines: list[str]) -> bool:
-    """Whether the window holds a line a COMPLETED `b2-deletions` run writes.
-
-    `probe.py b2-deletions` ends every run that completes with one of two fixed shapes —
-    `deletions_summary_line` for a run that classified, `deletions_declined_line` for a
-    disarmed backup target (`scripts/diagnostics/probe_lib/b2_ledger.py`). Judging on those
-    rather than on any line at all is #2545: the cron pipes both streams through `logger`, so a
-    run that logged a traceback and exited non-zero used to read as alive here, and check 9
-    stayed quiet too because a traceback carries no `UNPRICED`.
-    """
-    return any(
-        _DELETIONS_SUMMARY_RE.search(line) or _DELETIONS_DECLINED_RE.search(line)
-        for line in lines
-    )
-
-
-def check_deletion_liveness(
+def check_cron_liveness(
     lines: list[str] | None,
     cron: CronState,
     window_hours: int,
@@ -349,7 +367,7 @@ def check_deletion_liveness(
     """
     if window_hours * 3600 < _CRON_PERIOD_S:
         return None
-    if not cron.expected or (lines and deletions_have_spoken(lines)):
+    if not cron.expected or (lines and cron_completed(cron.tag, lines)):
         return None
     if lines is None:
         # Check 9 already reports the failed journal read, and it is the same fault. A second
@@ -407,21 +425,22 @@ def cron_state(tag: str, path: str, expected: bool, fired_stamp: str) -> CronSta
     )
 
 
-def check_deletions(
+def check_cron(
     journal,
     window_hours: int,
-    deletion: CronState,
+    cron: CronState,
     now_s: float,
 ) -> list[tuple[int, str]]:
-    """Checks 9 and 10 for the B2 deletion accounting, over ONE journal read.
+    """Checks 9 and 10 for one B2 host cron, over ONE journal read.
 
     `journal(tag)` is `host_lib.journal_reader`'s bound reader: the lines that tag logged in
     the window, or None when the read itself failed. The two arms share the read because they
     are two questions about the same lines — what the cron said, and whether it said anything.
+    `cron.tag` must be a key of `CRON_LINES`.
     """
-    lines = journal(deletion.tag)
-    problems = check_deletion_evidence(lines, window_hours)
-    liveness = check_deletion_liveness(lines, deletion, window_hours, now_s)
+    lines = journal(cron.tag)
+    problems = check_cron_evidence(cron.tag, lines, window_hours)
+    liveness = check_cron_liveness(lines, cron, window_hours, now_s)
     if liveness:
         problems.append(liveness)
     return problems
