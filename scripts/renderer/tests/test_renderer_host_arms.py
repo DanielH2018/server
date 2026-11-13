@@ -120,7 +120,7 @@ def test_a_tmpfiles_d_file_naming_another_action_fails_the_render(hosts):
 
 
 def test_the_tmpfiles_action_on_a_file_outside_tmpfiles_d_fails_the_render(hosts):
-    with pytest.raises(RenderRefused, match="activate 'tmpfiles'"):
+    with pytest.raises(RenderRefused, match=r"'tmpfiles' is for tmpfiles\.d files"):
         _render(hosts, _entry("tmpfiles"))
 
 

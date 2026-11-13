@@ -15,7 +15,6 @@ from pathlib import PurePosixPath
 import pytest
 
 from renderer.renderer_lib import host as host_mode
-from renderer.renderer_lib.host_arms import TMPFILES_DIRS
 from renderer.renderer_lib.host_manifest import MANIFEST
 
 HOSTS = ("daniel-box", "daniel-server", "daniel-pi")
@@ -25,6 +24,7 @@ BASE = {"root", "adm", SYS_USER}
 HOME = PurePosixPath("/home") / SYS_USER
 SYSUSERS = "/usr/lib/sysusers.d/homelab.conf"
 HOMELAB_UIDS = range(900, 950)
+TMPFILES_DIRS = ("/usr/lib/tmpfiles.d/", "/etc/tmpfiles.d/")
 
 Files = dict[str, tuple[bytes, int]]
 
@@ -33,7 +33,7 @@ def tmpfiles_lines(files: Files) -> list[list[str]]:
     return [
         line.split()
         for dst, (body, _mode) in files.items()
-        if dst.startswith(("/usr/lib/tmpfiles.d/", "/etc/tmpfiles.d/"))
+        if dst.startswith(TMPFILES_DIRS)
         for line in body.decode().splitlines()
         if line.strip() and not line.lstrip().startswith("#")
     ]
