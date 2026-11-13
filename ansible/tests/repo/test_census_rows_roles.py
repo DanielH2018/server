@@ -244,13 +244,15 @@ ROWS = (
                 '          env:\n            - name: TZ\n              value: "{{ tz }}"\n',
             ),
         ),
-        # 12 calls across 11 templates when the row landed (2026-10-09); qbittorrent has two.
+        # 12 calls across 11 templates when the row landed (2026-10-09). qbittorrent's second,
+        # its WireGuard sidecar's, now sits in the shared wireguard-sidecar.yml.j2.
         min_matches=12,
         must_find=frozenset(
             {
                 "ansible/roles/k8s/qbittorrent/templates/deployment.yaml.j2",
                 "ansible/roles/k8s/home-assistant/templates/deployment.yaml.j2",
                 "ansible/templates/arr-deployment.yml.j2",
+                "ansible/templates/wireguard-sidecar.yml.j2",
             }
         ),
     ),

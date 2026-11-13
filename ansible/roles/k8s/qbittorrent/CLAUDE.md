@@ -1,6 +1,8 @@
 # qbittorrent — torrent client behind a WireGuard sidecar
 
-qBittorrent with a `wireguard` sidecar that tunnels all egress through Mullvad.
+qBittorrent with a `wireguard` sidecar that tunnels all egress through Mullvad. The sidecar
+renders from the shared `ansible/templates/wireguard-sidecar.yml.j2`, so a change to it reaches
+every pod that tunnels through Mullvad.
 
 This file holds the rules; `docs/qbittorrent-vpn-and-prefs.md` holds the record — the two outages,
 how the gate was measured, LinuxServer's modcache behaviour line by line, the cross-role rollout-gate
