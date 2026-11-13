@@ -113,8 +113,8 @@ that bite from a config edit alone.
 - **The tile list is CURATED, not a census of what is routed.** Nine link tiles were added on
   2026-09-09 and removed again the same day at the operator's request. They are routed and
   reachable; they are simply not wanted on the dashboard. Do not "restore" them by comparing
-  `services.yaml.j2` against `containers_list`. `navidrome` and `livesync` are absent for a
-  different reason — navidrome is scaled to 0 replicas and livesync has no IngressRoute at all.
+  `services.yaml.j2` against `containers_list`. `livesync` is absent for a different reason: it
+  has no IngressRoute at all.
 - **The image ships a render of `/` made with no settings, and only a startup hook replaces
   it.** `next build` bakes the page, nothing expires it, and the pod serves it at 1/1 with
   `probe.py health homepage` exiting 0. The `lifecycle.postStart` hook in

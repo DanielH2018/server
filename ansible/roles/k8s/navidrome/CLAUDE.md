@@ -50,11 +50,14 @@ until 2026-11-12, and unparked with an empty library for the music pipeline to f
   `/rest/` has no unguessable id to key on as Jellyfin's `/Videos/<GUID>/` row does. If a
   first library sync gets a phone banned, unban it as `ansible/roles/k8s/crowdsec/CLAUDE.md`
   describes before reaching for a whitelist.
-- **`ND_ENABLEEXTERNALSERVICES` is `"false"`**, which is load-bearing for the network posture:
-  it disables both the GitHub release check and the metadata agents, so the pod opens no
-  outbound connection at all — that's what puts it in `netpol-baseline`'s `BORN_FENCED_ROLES`.
-  Turning it on for Last.fm or ListenBrainz takes the role out of that list in
-  `ansible/tests/k8s/test_netpol_baseline_labels.py` (`docs/networkpolicy-default-deny.md`).
+- **External services are on for ListenBrainz and Deezer only.** `ND_ENABLEEXTERNALSERVICES`
+  also turns on the anonymous insights collector and the Last.fm agent, so the deployment sets
+  both off. Last.fm needs an API account and two secrets that this setup does not have.
+- **Each user turns on scrobbling in the UI:** Personal settings, ListenBrainz, then paste the
+  user token from listenbrainz.org/settings. Nothing about it is in git.
+- **It stays in `BORN_FENCED_ROLES`** (`ansible/tests/k8s/test_netpol_baseline_labels.py`).
+  Traefik is still its only caller; its calls to ListenBrainz and Deezer are egress, which
+  kube-router does not enforce on this cluster (`docs/networkpolicy-default-deny.md`).
 - **The route is gated on the replica count.** `defaults/main.yml` lists `ingressroute.yaml` in
   `manifests_files` only while `navidrome_k8s_replicas` is above 0. Traefik re-reads every
   IngressRoute on each config refresh and logs `no servers found for homelab/navidrome`
