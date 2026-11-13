@@ -8,7 +8,7 @@
 # host keeps its own data."
 
 # Pinned, Renovate-tracked.
-observability_k8s_collector_image: otel/opentelemetry-collector-contrib:0.161.0
+observability_k8s_collector_image: otel/opentelemetry-collector-contrib:0.161.0@sha256:fd328de2552466ad78385e1b1289c3f2402b1c45f265b252aab1955b42845ac1
 observability_k8s_loki_image: grafana/loki:3.7.9@sha256:0db216b630ae1f348a1584c67f3cead8b4c1fc839169a39501db664744158e28
 observability_k8s_prometheus_image: prom/prometheus:v3.15.0@sha256:efd719c99d83b060d9daefdcf00360461adf279f45ef5391f8d111892118753e
 # scripts/validate/alert_tools.sh reads this tag, as it reads the Prometheus one above, to

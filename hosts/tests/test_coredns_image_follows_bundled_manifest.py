@@ -31,6 +31,13 @@ _EXCERPT = """\
         imagePullPolicy: IfNotPresent
 """
 
+# The index digest of each image an excerpt has named, read from the registry by hand
+# (docs/k3s-upgrade.md). Keyed by image, so an excerpt naming a new tag fails until its
+# digest is recorded here.
+_DIGESTS = {
+    "rancher/mirrored-coredns-coredns:1.14.7": "sha256:7efd3c635b03efd68c4e8398fc45f0d993d0e9ab016f72c1cefb0fd6d01aa286",
+}
+
 _IMAGE_LINE = re.compile(r'image:\s*"?([^"\s]*coredns[^"\s]*)"?')
 
 
@@ -42,18 +49,29 @@ def _bundled_image(excerpt: str) -> str:
 
 
 def problems(
-    k3s_version: str, label: str, excerpt: str, pin: str, rendered_image: str
+    k3s_version: str,
+    label: str,
+    excerpt: str,
+    pin: str,
+    rendered_image: str,
+    digests: dict[str, str] = _DIGESTS,
 ) -> list[str]:
-    """Why the pin is not the bundled image, or an empty list."""
+    """Why the pin is not the bundled image at its recorded digest, or an empty list."""
     out = []
     if label != k3s_version:
         out.append(
             f"the excerpt is labelled {label} but k3s_version is {k3s_version}: port the new "
             "manifest's image line into the excerpt, then move the pin"
         )
-    if pin != _bundled_image(excerpt):
+    image = _bundled_image(excerpt)
+    if image not in digests:
         out.append(
-            f"coredns_image is {pin} but the excerpt's image is {_bundled_image(excerpt)}"
+            f"no digest is recorded for {image}: add the tag's index digest to _DIGESTS "
+            "(docs/k3s-upgrade.md has the command)"
+        )
+    elif pin != f"{image}@{digests[image]}":
+        out.append(
+            f"coredns_image is {pin} but the excerpt's image is {image}@{digests[image]}"
         )
     if rendered_image != pin:
         out.append(f"the rendered Deployment runs {rendered_image}, not {pin}")
@@ -88,6 +106,40 @@ def test_a_label_behind_k3s_version_is_flagged():
 def test_a_pin_that_differs_from_the_excerpt_is_flagged():
     image = _bundled_image(_EXCERPT)
     got = problems("v", "v", _EXCERPT, "rancher/mirrored-coredns-coredns:1.14.4", image)
+    assert any("coredns_image is" in p for p in got)
+
+
+def test_the_bundled_tag_at_its_recorded_digest_is_clean():
+    image = _bundled_image(_EXCERPT)
+    pin = f"{image}@{_DIGESTS[image]}"
+    assert problems("v", "v", _EXCERPT, pin, pin) == []
+
+
+def test_the_bundled_tag_at_another_digest_is_flagged():
+    pin = f"{_bundled_image(_EXCERPT)}@sha256:{'a' * 64}"
+    got = problems("v", "v", _EXCERPT, pin, pin)
+    assert any("coredns_image is" in p for p in got)
+
+
+def test_the_bundled_tag_without_a_digest_is_flagged():
+    pin = _bundled_image(_EXCERPT)
+    got = problems("v", "v", _EXCERPT, pin, pin)
+    assert any("coredns_image is" in p for p in got)
+
+
+def test_an_excerpt_tag_with_no_recorded_digest_is_flagged():
+    # The RED case for a k3s bump that moved the excerpt and the pin's tag, not the digest.
+    excerpt = _EXCERPT.replace("1.14.7", "1.14.8")
+    pin = (
+        f"rancher/mirrored-coredns-coredns:1.14.8@{_DIGESTS[_bundled_image(_EXCERPT)]}"
+    )
+    got = problems("v", "v", excerpt, pin, pin)
+    assert any("no digest is recorded" in p for p in got)
+
+
+def test_a_digest_on_the_pin_with_another_tag_is_flagged():
+    pin = f"rancher/mirrored-coredns-coredns:1.14.4@sha256:{'a' * 64}"
+    got = problems("v", "v", _EXCERPT, pin, pin)
     assert any("coredns_image is" in p for p in got)
 
 
