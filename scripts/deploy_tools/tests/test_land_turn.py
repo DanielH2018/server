@@ -4,12 +4,14 @@ Run: uv run pytest scripts/deploy_tools/tests/test_land_turn.py
 """
 
 import os
+import subprocess
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
 from _land_fakes import Fakes
-from deploy_tools.land_lib import merge, turn
+from deploy_tools.land_lib import line, merge, turn
 from deploy_tools.land_lib.outcome import Outcome
 from lib.exit_codes import CI_RED
 from lib.proc_testing import fake_bin, path_with
@@ -40,6 +42,7 @@ def _landing(landing, polls=(OPEN, MERGED), start=OPEN, **fakes_or_opts):
         k: fakes_or_opts.pop(k)
         for k in (
             "turn",
+            "line",
             "await_ci",
             "gh_merge_rc",
             "master_runs",
@@ -66,6 +69,10 @@ def _land(ln) -> None:
     """The merge wait as the pipeline runs it."""
     with turn.held(ln) as take_turn:
         merge.await_merge(ln, take_turn)
+
+
+def _first_gh(calls) -> int:
+    return next(i for i, (name, _, _) in enumerate(calls) if name == "gh")
 
 
 def _order(calls) -> list[str]:
@@ -117,6 +124,75 @@ def test_the_merge_wait_gets_a_whole_budget_after_the_wait_for_the_turn(landing)
     # 4s for the turn, then polls at 4s and 6s inside the budget and the end at 8s.
     assert exc.value.verdict == "merge-timeout"
     assert "still OPEN after 8s" in exc.value.error
+
+
+def _line_calls(calls) -> list[tuple[str, ...]]:
+    return [args for name, args, _ in calls if name == "line"]
+
+
+def test_a_draft_stands_in_the_line_while_it_waits_and_leaves_with_the_turn(landing):
+    ln, calls = _landing(landing, turn=[False, False, True])
+    _land(ln)
+    assert _line_calls(calls) == [
+        ("join", "999", HEAD),
+        ("stand", "999", HEAD),
+        ("leave", "999"),
+    ]
+    # It left before it used the turn, so it is not in the line it reads as the holder.
+    assert calls.index(("line", ("leave", "999"), {})) < _first_gh(calls)
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        pytest.param({"head_runs": A_RUN}, id="a-head-with-a-run"),
+        pytest.param({"start": {**OPEN, "isDraft": False}}, id="a-ready-pr"),
+    ],
+)
+def test_a_head_that_is_no_untested_draft_waits_for_the_turn_outside_the_line(
+    landing, case
+):
+    ln, calls = _landing(landing, turn=[False, True], **case)
+    _land(ln)
+    assert _order(calls).count("try_turn") == 2
+    assert _line_calls(calls) == []
+
+
+def test_a_draft_the_holder_of_the_turn_merged_stops_waiting_and_merges_nothing(
+    landing, capsys
+):
+    ln, calls = _landing(
+        landing,
+        polls=(MERGED,),
+        start=(OPEN, MERGED),
+        turn=[False],
+        line=["", line.MERGED],
+        merge_poll=7,
+    )
+    _land(ln)
+    # No ready flip, no merge and no turn to give up: the holder did all three.
+    assert _order(calls) == ["try_turn", "try_turn"]
+    assert _line_calls(calls)[-1] == ("leave", "999")
+    out = capsys.readouterr().out
+    assert "the landing that holds the turn merged PR #999 with its own" in out
+    assert "merged after 7s, 7s of it waiting for the landing turn" in out
+
+
+def test_a_line_that_fails_leaves_the_landing_waiting_for_the_turn(landing, capsys):
+    ln, calls = _landing(landing, turn=[False, False, True], line=[OSError("no route")])
+    _land(ln)
+    assert _order(calls)[-2:] == ["merge", "release_turn"]
+    # One failure ends the landing's use of the line, so it is reported once.
+    assert _line_calls(calls) == [("join", "999", HEAD)]
+    out = capsys.readouterr().out
+    assert out.count("(no route); waiting for the turn without it") == 1
+
+
+def test_a_draft_that_takes_the_turn_at_once_never_touches_the_line(landing):
+    ln, calls = _landing(landing)
+    _land(ln)
+    assert _order(calls)[0] == "try_turn"
+    assert _line_calls(calls) == []
 
 
 def test_a_lock_that_cannot_be_opened_does_not_stop_the_landing(landing, capsys):
@@ -324,15 +400,6 @@ def test_the_lock_file_is_readable_by_every_user_whatever_the_umask(tmp_path):
     assert lock.stat().st_mode & 0o777 == 0o644
 
 
-@pytest.fixture
-def ssh_here(tmp_path, monkeypatch):
-    """An `ssh` that runs the command it is given on this host, in place of the turn host."""
-    stubs = fake_bin(
-        tmp_path / "bin", ssh='#!/usr/bin/env bash\nexec sh -c "${@: -1}"\n'
-    )
-    monkeypatch.setenv("PATH", path_with(stubs))
-
-
 def test_a_landing_on_another_host_holds_the_same_lock_over_ssh(tmp_path, ssh_here):
     lock = tmp_path / "turn.lock"
     give_up = turn.try_take_over_ssh(lock)
@@ -370,6 +437,50 @@ def test_a_landing_off_the_turn_host_takes_the_turn_over_ssh(
     _land(ln)
     assert turn.TURN_HOST in seen.read_text().splitlines()
     assert "took the landing turn after 0s" in capsys.readouterr().out
+
+
+def test_a_landing_off_the_turn_host_reaches_the_line_over_ssh(tmp_path, monkeypatch):
+    seen = tmp_path / "ssh-args"
+    stubs = fake_bin(
+        tmp_path / "bin",
+        ssh=f"#!/usr/bin/env bash\nprintf '%s\\n' \"$@\" > {seen}\n",
+    )
+    monkeypatch.setenv("PATH", path_with(stubs))
+    turn._line("daniel-server")("leave", "7")
+    args = seen.read_text().splitlines()
+    assert turn.TURN_HOST in args
+    assert args[-1].endswith(f"{line.DIR} leave 7")
+
+
+@pytest.mark.parametrize(
+    "source", [turn._HOLD, line._REMOTE], ids=["the-turn", "the-line"]
+)
+def test_what_runs_on_the_turn_host_compiles_under_a_hosts_own_python(source):
+    """The repo's Python is newer than a host's, and the formatter writes its syntax."""
+    system_python = Path("/usr/bin/python3")
+    assert system_python.exists(), "no system python3 to stand for the turn host's"
+    compiled = subprocess.run(
+        [
+            system_python,
+            "-c",
+            "import sys; compile(sys.argv[1], 'remote', 'exec')",
+            source,
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert compiled.returncode == 0, compiled.stderr
+
+
+@pytest.mark.parametrize("hostname", [turn.TURN_HOST, f"{turn.TURN_HOST}.lan"])
+def test_a_landing_on_the_turn_host_keeps_the_line_itself(
+    hostname, tmp_path, monkeypatch
+):
+    stubs = fake_bin(tmp_path / "bin", ssh="#!/usr/bin/env bash\nexit 255\n")
+    monkeypatch.setenv("PATH", path_with(stubs))
+    turn._line(hostname, tmp_path / "line")("join", "7", HEAD)
+    assert (tmp_path / "line" / "7").read_text().split() == [HEAD]
 
 
 @pytest.mark.parametrize("hostname", [turn.TURN_HOST, f"{turn.TURN_HOST}.lan"])
