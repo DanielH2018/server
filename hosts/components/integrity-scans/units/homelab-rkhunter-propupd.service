@@ -10,4 +10,5 @@ SyslogIdentifier=rkhunter-propupd
 Environment=PATH=/usr/sbin:/usr/bin:/sbin:/bin
 Nice=19
 IOSchedulingClass=idle
+StateDirectory=homelab-rkhunter-propupd
 ExecStart=/usr/lib/homelab/rkhunter-propupd

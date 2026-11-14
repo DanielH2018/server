@@ -3,13 +3,15 @@
 
 Issue #3123: sessions on each host read that host's own store, and on 2026-10-01 the two
 shared 2 file names out of 85 and 66, with daniel-server's index telling sessions to stay on
-master. The operator chose daniel-box as the source and an overwriting copy. Three things
+master. The operator chose daniel-box as the source and an overwriting copy. Four things
 decide whether the copy does that rather than something quieter or worse:
 
 1. Direction and `--delete`. Reversed, the copy overwrites the store sessions write; without
    `--delete`, the far store keeps every entry daniel-box archived, which is the defect.
 2. The empty-source guard. `--delete` from an empty or missing directory wipes the far store.
 3. The arming. True only on daniel-box, and false must remove the units, not leave a timer.
+4. The write bits. Without `--chmod=a-w` a session on the far host can write a memory, and
+   the next run deletes it without a message.
 
 Run: uv run pytest hosts/tests/test_claude_memory_sync.py
 """
@@ -73,6 +75,13 @@ def test_copy_runs_from_this_host_to_the_target_with_delete():
         "without --delete the far store keeps every entry this host archived"
     )
     assert "BatchMode=yes" in cmd, "a missing key must fail the unit, not prompt"
+
+
+def test_the_copy_leaves_the_far_store_without_a_write_bit():
+    assert " --chmod=a-w " in _exec_start(_render()), (
+        "without --chmod=a-w a session on the target can write a memory, and the next run "
+        "deletes it without a message"
+    )
 
 
 def test_copy_target_follows_the_variable():

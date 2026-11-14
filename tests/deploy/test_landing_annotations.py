@@ -55,6 +55,34 @@ def test_every_field_the_board_unwraps_is_one_the_ledger_writes():
     assert not missing, missing
 
 
+def _unwraps_that_keep_per_landing_labels(exprs: list[str]) -> list[str]:
+    """The `exprs` that unwrap a field without a `| keep <field>` stage just before it.
+
+    Without it every field logfmt extracts (`pr`, `sha`, ...) stays a label, so each landing
+    is its own series: the phases panel colours every landing apart, and a 7d range passes
+    Loki's 500-series cap and the medians panel reads No Data.
+    """
+    return [
+        e
+        for e in exprs
+        for field in re.findall(r"unwrap (\w+)", e)
+        if f"| keep {field} | unwrap {field}" not in e
+    ]
+
+
+def test_every_unwrap_collapses_to_one_series_per_field():
+    exprs = [e for e in _board_exprs() if "unwrap" in e]
+    assert len(exprs) >= 8, exprs
+    assert _unwraps_that_keep_per_landing_labels(exprs) == []
+
+
+def test_an_unwrap_that_keeps_per_landing_labels_would_be_caught():
+    planted = '{job="syslog"} | logfmt | unwrap total [$__range]'
+    assert _unwraps_that_keep_per_landing_labels([*_board_exprs(), planted]) == [
+        planted
+    ]
+
+
 def _labels_the_board_groups_by_but_the_ledger_omits(exprs: list[str]) -> set[str]:
     """The `sum by (x)` labels in `exprs` that no `key=` in a sample annotation supplies."""
     grouped = {

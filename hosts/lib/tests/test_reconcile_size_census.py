@@ -24,17 +24,20 @@ LIB = REPO / "hosts" / "lib"
 # 720 is the growth the slices state: about 100 source lines in H4.1b and 50 in H4.3b1's
 # udev arm, then 120 in H7.2a, 150 in H7.2b, 100 in H7.2c and 200 in H7.2d.
 # The 30% is headroom for fixes inside that scope, not room for another arm.
+# RULED_RAISE is the operator's 2026-11-14 ruling: +50 for #8651's batched dpkg and systemd
+# reads, which cut about 800 commands per reconcile run for 26 source lines.
 #
 # DECIDED: raising CEILING is an operator ruling, never part of an ordinary change. Crossing it
 # is the trigger to cut reconcile, to raise the ceiling in ADR-0029 with a reason, or
 # to switch the host plan to ansible-pull. The ceiling and its derivation are in ADR-0029.
 BASE_LINES = 326
 STATED_GROWTH = 720
-CEILING = 1400
+RULED_RAISE = 50
+CEILING = 1450
 
 
 def derived_ceiling() -> int:
-    return math.ceil((BASE_LINES + STATED_GROWTH) * 1.3 / 50) * 50
+    return math.ceil((BASE_LINES + STATED_GROWTH) * 1.3 / 50) * 50 + RULED_RAISE
 
 
 def over_ceiling(lib: Path, ceiling: int) -> str | None:
@@ -53,7 +56,7 @@ def over_ceiling(lib: Path, ceiling: int) -> str | None:
 
 
 def test_the_ceiling_is_the_derived_number():
-    assert CEILING == derived_ceiling() == 1400
+    assert CEILING == derived_ceiling() == 1450
 
 
 def test_reconcile_is_under_its_ceiling():

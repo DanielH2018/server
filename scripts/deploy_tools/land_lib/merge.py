@@ -58,6 +58,7 @@ at most (`stale_base.py`).
 
 import re
 import subprocess
+from collections.abc import Callable
 
 import sys as _sys
 from pathlib import Path as _Path
@@ -102,6 +103,9 @@ DRAFT_SKIPPED_GRACE_S = await_ci.DROPPED_PUSH_GRACE_S
 # A poll that pacing holds sleeps this many merge polls. On 2026-11-11 thirteen landers polling
 # every 30s spent the hourly quota, and a held lander cannot merge sooner for polling sooner.
 HELD_POLL_FACTOR = 4
+# Takes the landing turn (`turn.held`): whether the landing holds it, and the seconds the call
+# waited in line.
+type TakeTurn = Callable[[], tuple[bool, int]]
 
 
 def _reference_is_deliberate(prefix: str) -> bool:
@@ -445,28 +449,46 @@ def _mark_ready(ln: Landing) -> None:
     say(f"PR #{pr} was a draft; marked it ready")
 
 
-def _start_run(ln: Landing, in_turn: bool) -> str:
-    """Give a PR that has had no CI run its one run, for a landing with `LAND_QUEUE`.
+def _no_turn() -> tuple[bool, int]:
+    """`await_merge`'s `take_turn` for a caller that has no landing turn to offer."""
+    return False, 0
 
-    A draft is marked ready, because a draft's run runs no job and a draft cannot merge. A
-    landing that holds the landing turn (`turn.py`) then updates the PR's branch from master
-    when master is ahead of it. GitHub builds the tree a pull-request run tests when the PR's
-    branch is pushed. A ready flip does not build it again: PR #8551 was marked ready 16
-    minutes after its only push, and its run tested the master of the push. The update is a
-    push, so the run it starts tests the master of the turn.
 
-    The branch is left as it is, and the wait goes on as it does without a turn, for a head
-    with a CI run that ran jobs, a head that moved after the landing policy pinned it, a head
-    admitted on an approval, a PR GitHub reads as conflicting, and an update that fails.
+def _start_run(ln: Landing, take_turn: TakeTurn) -> tuple[str, bool, int]:
+    """Give a PR that has had no CI run its one run, unless `LAND_QUEUE=0`.
+
+    A head with no CI run that ran jobs takes the landing turn first (`turn.py`), so that the
+    run it is about to get tests the master its merge lands on. A draft is then marked ready,
+    because a draft's run runs no job and a draft cannot merge. With the turn, the PR's branch
+    is updated from master when master is ahead of it. GitHub builds the tree a pull-request
+    run tests when the PR's branch is pushed. A ready flip does not build it again: PR #8551
+    was marked ready 16 minutes after its only push, and its run tested the master of the
+    push. The update is a push, so the run it starts tests the master of the turn.
+
+    A head with a CI run that ran jobs keeps it and takes no turn here: `await_merge` takes
+    the turn once that head is green, so no landing holds the turn while a run that started
+    before it finishes. The branch is also left as it is for a head that moved after the
+    landing policy pinned it, a head admitted on an approval, a PR GitHub reads as
+    conflicting, and an update that fails.
 
     Returns:
-        The head the branch was updated from, or "" when it was not updated.
+        The head the branch was updated from, or "" when it was not updated; whether the
+        landing holds the turn; and the seconds it waited for it.
     """
-    view = ln.view("isDraft,state,mergeable,headRefOid")
-    head = view.get("headRefOid") or ""
-    if view.get("state") != "OPEN" or not head:
-        return ""
-    untested = not _ready_run_on(ln, head)
+
+    in_turn, queued = False, 0
+    # Read again after a wait in line, because the PR may have moved during it.
+    for _ in range(2):
+        view = ln.view("isDraft,state,mergeable,headRefOid")
+        head = view.get("headRefOid") or ""
+        if view.get("state") != "OPEN" or not head:
+            return "", in_turn, queued
+        untested = not _ready_run_on(ln, head)
+        if not untested or in_turn or queued:
+            break
+        in_turn, queued = take_turn()
+        if not queued:
+            break
     if view.get("isDraft") is True:
         _mark_ready(ln)
     if (
@@ -475,18 +497,18 @@ def _start_run(ln: Landing, in_turn: bool) -> str:
         or head == ln.approved_head
         or (ln.pinned_head and head != ln.pinned_head)
     ):
-        return ""
+        return "", in_turn, queued
     try:
         moved = stale_base.master_paths_since(ln, head)
         if moved:
             stale_base.update_branch(ln, head, moved)
     except Outcome as exc:
         say(f"{exc.error}; going on with the run the PR has")
-        return ""
-    return head if moved else ""
+        return "", in_turn, queued
+    return (head if moved else ""), in_turn, queued
 
 
-def await_merge(ln: Landing, in_turn: bool = False) -> None:
+def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
     """Poll until merged, merging directly once CI is green. Bail early on two dead ends.
 
     Only CONFLICTING may bail, and only on two consecutive polls: GitHub computes
@@ -503,10 +525,17 @@ def await_merge(ln: Landing, in_turn: bool = False) -> None:
     CI chain, so it gives the wait one more `merge_timeout` from there, and LAND_DEADLINE counts
     two. A green head also waits while master CI has a backlog (`pace.hold`). A held poll never
     ends the wait at `merge_timeout`: once held and unheld time reach it, the merge goes ahead
-    without pacing. A landing that holds the landing turn (`in_turn`, `turn.py`) is not paced:
-    no other landing with a turn merges ahead of it, and a paced holder would stop every
-    landing behind it. With `LAND_QUEUE`, the wait first gives a PR that has had no CI run
-    its one run (`_start_run`).
+    without pacing.
+
+    `take_turn` takes the landing turn (`turn.held`): it waits in line and returns whether
+    this landing holds the turn and the seconds that call waited. A head with no CI run takes
+    it before its one run (`_start_run`), and any other head on the first poll that reads it
+    green, so a landing never holds the turn while a run that started before it finishes. A
+    landing that holds the turn is not paced: no other landing with a turn merges ahead of
+    it, and a paced holder would stop every landing behind it. The seconds in line count as
+    waited, and the merge wait gets one `merge_timeout` after them. No update moves the end
+    of the wait past twice `merge_timeout`, so the turn wait, the merge wait and an update
+    together stay inside the two merge budgets LAND_DEADLINE counts.
     Without --arm-merge this only polls, for a PR merged some other way.
 
     A head whose every CI run skipped as a draft is named on the poll that first reads it. Once
@@ -525,6 +554,10 @@ def await_merge(ln: Landing, in_turn: bool = False) -> None:
     """
     o, t = ln.opts, ln.tools
     waited = 0
+    # The `waited + held` no update moves the end of the wait past.
+    wait_cap = 2 * o.merge_timeout
+    # Whether this landing holds the landing turn, and the seconds it stood in line for it.
+    in_turn, queued = False, 0
     conflicting = 0
     refused = OnChange(say)
     no_overlap = OnChange(say)
@@ -539,9 +572,10 @@ def await_merge(ln: Landing, in_turn: bool = False) -> None:
     # do so before the first poll.
     updated_from = ""
     if o.queue and ln.direct_merge_subject:
-        updated_from = _start_run(ln, in_turn)
+        updated_from, in_turn, queued = _start_run(ln, take_turn)
+        waited = queued
     # The `waited + held` at which the wait ends; the update after a green head moves it, once.
-    wait_ends_at = o.merge_timeout
+    wait_ends_at = waited + o.merge_timeout
     # The head the pin gate last passed, so a merge GitHub refuses and the wait retries runs
     # the gate and posts the status again only for a new head.
     gated_head = ""
@@ -635,6 +669,14 @@ def await_merge(ln: Landing, in_turn: bool = False) -> None:
             # never fire on a disarmed gate; a merge made some other way keeps the wait.
             if rc == CI_DISARMED and ln.direct_merge_subject:
                 ln.die(disarmed(f" at {head[:8]}", f"PR #{o.pr} not merged"), 1)
+            if rc == CI_GREEN and ln.direct_merge_subject and not in_turn:
+                in_turn, in_line = take_turn()
+                if in_line:
+                    # The PR may have moved while this landing stood in line, so read it again.
+                    queued += in_line
+                    waited += in_line
+                    wait_ends_at = min(waited + held + o.merge_timeout, wait_cap)
+                    continue
             hold = (
                 pace.hold(ln, held, waited)
                 if rc == CI_GREEN and ln.direct_merge_subject and not in_turn
@@ -653,7 +695,7 @@ def await_merge(ln: Landing, in_turn: bool = False) -> None:
                 if moved:
                     stale_base.update_branch(ln, head, moved)
                     updated_from = head
-                    wait_ends_at = waited + held + o.merge_timeout
+                    wait_ends_at = min(waited + held + o.merge_timeout, wait_cap)
                 else:
                     if head != gated_head:
                         gated_pins = pin_gate.gate_before_merge(ln, head)
@@ -704,5 +746,8 @@ def await_merge(ln: Landing, in_turn: bool = False) -> None:
             held += step
         else:
             waited += step
-    paced_note = f", {held}s of it held by pacing" if held else ""
-    say(f"merged after {waited + held}s{paced_note}")
+    notes = [
+        f"{queued}s of it waiting for the landing turn" if queued else "",
+        f"{held}s of it held by pacing" if held else "",
+    ]
+    say(", ".join([f"merged after {waited + held}s", *filter(None, notes)]))

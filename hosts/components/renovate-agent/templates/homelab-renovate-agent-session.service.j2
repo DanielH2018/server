@@ -1,0 +1,38 @@
+{% import 'templates/renovate-agent-pins.j2' as pins with context -%}
+# Shipped by the renovate-agent component. Started by the runner, which runs as the controller
+# and which polkit alone lets start it (50-renovate-agent-session.rules), never by a timer.
+[Unit]
+Description=One Renovate agent session (headless Claude over the open Renovate PRs)
+After=network-online.target homelab-secrets.service
+Wants=network-online.target homelab-secrets.service
+
+[Service]
+Type=oneshot
+User={{ pins.user }}
+# Group-readable for the controller, which reads the requests and output this unit writes
+# into the exchange directory through the session's group.
+UMask=0027
+WorkingDirectory=-{{ renovate_agent_clone_dir }}
+# The session's wall clock. systemd stops the whole unit at it, and the runner reads
+# Result=timeout and still posts a digest naming it.
+TimeoutStartSec={{ pins.session_timeout_s }}
+# The same environment as the runner's unit: a resume sets each again, and
+# test_session_resume.py holds both templates to renovate_agent.SESSION_ENV_KEYS.
+Environment=PATH={{ renovate_agent_home }}/.local/bin:/usr/bin:/bin
+Environment=HOME={{ renovate_agent_home }}
+Environment=PYTHONDONTWRITEBYTECODE=1
+# The repo's hook shim defaults to the operator's checkout and uv, which this user cannot read;
+# a guard that cannot start turns each Bash call into an `ask`, and nobody answers one here.
+# run_worktree.prepare_worktree syncs this tree's `.venv` before the session starts.
+Environment=RUN_HOOK_PROJECT_DIR={{ renovate_agent_clone_dir }}/.claude/worktrees/{{ renovate_agent_worktree }}
+Environment=RUN_HOOK_UV={{ renovate_agent_home }}/.local/bin/uv
+EnvironmentFile=/etc/renovate-agent/session.env
+# Only this script's own lines reach the journal: it captures the session's output and writes
+# it to a file the runner reads, so session text never becomes a syslog line (#967's I3, I6).
+SyslogLevel=notice
+NoNewPrivileges=yes
+ProtectHome=yes
+ProtectProc=invisible
+PrivateTmp=yes
+ExecStart={{ renovate_agent_home }}/.local/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }} \
+  /usr/lib/homelab/renovate-agent/renovate_session.py

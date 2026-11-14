@@ -8,70 +8,60 @@ OnFailure=homelab-alert@%n.service
 
 [Service]
 Type=oneshot
-# Its own user, not {{ sys_user }}: the session reads third-party release notes and PR text, so
-# it holds nothing that can reach master. No sudo, no read on /home/{{ sys_user }}, and a GitHub
-# token that cannot push or merge. The session nominates PRs; after it ends, the runner starts
-# renovate-agent-land@<n>.service for each, which runs land.sh as {{ sys_user }} on a PR it
-# re-checks itself.
-User={{ renovate_agent_user }}
-# `-`: on a rebuilt host the clone does not exist until the setup line below has run.
-WorkingDirectory=-{{ renovate_agent_clone_dir }}
+# The controller, not {{ sys_user }} and not the session's user (dotfiles#967's I1). It holds the
+# write token and the run's state, and polkit lets it alone start the session unit and each
+# renovate-agent-land@<n>.service; the session it starts runs as {{ pins.user }} and holds a
+# read-only token. The session's group lets it read the requests and output the session writes
+# into the exchange directory.
+User={{ pins.ctl_user }}
+SupplementaryGroups={{ pins.user }}
 # The runner's own RUN_TIMEOUT_S ({{ pins.run_timeout_s }}s), its deadline for the session and the
 # landings after it, should always trip first: the runner stops waiting and still posts a
-# digest naming why, where this ceiling
-# kills the whole cgroup and posts only the OnFailure alert. Keep this strictly above
-# RUN_TIMEOUT_S plus the two `gh pr list` censuses either side of it. A landing in flight runs
-# in the lander's own unit, so this kill no longer reaches an Ansible run.
+# digest naming why, where this ceiling kills the whole cgroup and posts only the OnFailure
+# alert. Keep this strictly above RUN_TIMEOUT_S plus the two `gh pr list` censuses either side of
+# it. A landing in flight runs in the lander's own unit, so this kill does not reach it.
 TimeoutStartSec={{ pins.unit_timeout }}
-# The user's own ~/.local/bin for `claude` and `uv`; systemd supplies a minimal PATH exactly as
-# cron does. `gh` and `git` are in /usr/bin.
-Environment=PATH={{ renovate_agent_home }}/.local/bin:/usr/bin:/bin
-Environment=HOME={{ renovate_agent_home }}
+# `gh` and `git` are in /usr/bin; the controller has no ~/.local/bin.
+Environment=PATH=/usr/bin:/bin
+Environment=HOME={{ pins.ctl_home }}
 Environment=PYTHONDONTWRITEBYTECODE=1
-# The repo's hook shim defaults to the operator's checkout and uv, which this user cannot read;
-# a guard that cannot start turns each Bash call into an `ask`, and nobody answers one here.
-# run_worktree.prepare_worktree syncs this tree's `.venv` before the session starts.
-Environment=RUN_HOOK_PROJECT_DIR={{ renovate_agent_clone_dir }}/.claude/worktrees/{{ renovate_agent_worktree }}
-Environment=RUN_HOOK_UV={{ renovate_agent_home }}/.local/bin/uv
-# The GitHub token and the Claude credential. Read by systemd as root, so the file is root 0600
-# and neither value appears in a unit line `systemctl show` publishes.
-EnvironmentFile=/etc/renovate-agent/session.env
+# The controller's own interpreter under its home, as the dotfiles mirror keeps one.
+Environment=UV_CACHE_DIR={{ pins.ctl_home }}/uv-cache
+Environment=UV_PYTHON_INSTALL_DIR={{ pins.ctl_home }}/python
+# The controller's write token. Read by systemd as root, so the file is root 0600 and the value
+# appears in no unit line `systemctl show` publishes.
+EnvironmentFile=/etc/renovate-agent/ctl.env
 # journald stores only notice+ on these hosts, and a unit's stdout logs at info by default —
-# so without this every wrapper line is discarded at the source and a post-mortem has nothing
+# so without this every runner line is discarded at the source and a post-mortem has nothing
 # to read. Same reasoning as gitops-deploy.service.
 SyslogLevel=notice
-# The user boundary does the containment; these close what a same-host user can still read.
-# ProtectHome hides every /home, ProtectProc hides other users' processes and their argv, and
-# NoNewPrivileges rules out a setuid binary. None of them stops a `systemctl start` of the
-# lander, which goes to systemd over D-Bus and is decided by polkit.
 NoNewPrivileges=yes
 ProtectHome=yes
 ProtectProc=invisible
 PrivateTmp=yes
 #
-# The agent's home and tooling, before each session, so a pin bump or a rebuilt host converges on
-# the next tick. `+` runs it as root outside the sandbox, because it reads the operator's copies
-# under ProtectHome's /home. `env -i` drops the unit's Environment= and the session's tokens.
+# The agent's home and tooling, the controller's home and the exchange directory, before each
+# run, so a pin bump or a rebuilt host converges on the next tick. `+` runs it as root outside the
+# sandbox, because it reads the operator's copies under ProtectHome's /home. `env -i` drops the
+# unit's Environment= and the token.
 ExecStartPre=+/usr/bin/env -i PATH=/usr/bin:/bin:/usr/sbin:/sbin /usr/lib/homelab/renovate-agent-setup
+ExecStartPre=/usr/lib/homelab/bin/uv python install --no-bin {{ host_python_version }}
 #
 # `-n`: never queue. Two of these overlapping would fight over the same worktree, and the timer
 # is daily, so a run still going when the next one fires means something is wrong and the second
-# should say so rather than wait. The lock sits in the user's own home: fs.protected_regular=2
-# refuses an O_CREAT open of another user's file in sticky /run/lock, and the old lock there
-# belongs to {{ sys_user }}.
-ExecStart=/usr/bin/flock -n {{ renovate_agent_home }}/run.lock \
-  {{ renovate_agent_home }}/.local/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }} \
+# should say so rather than wait. The lock sits in the controller's own home:
+# fs.protected_regular=2 refuses an O_CREAT open of another user's file in sticky /run/lock.
+ExecStart=/usr/bin/flock -n {{ pins.ctl_home }}/run.lock \
+  /usr/lib/homelab/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }} \
   /usr/lib/homelab/renovate-agent/renovate_agent.py
 # The same run's verdict for node_exporter's textfile collector (M6 batch B4). It runs only when
 # ExecStart exited 0. A crash or a blocked tree writes nothing: the rule reads that as silence,
 # OnFailure pages it, and the rules in other-setup-checks.yaml carry only a NotReporting arm for it.
 #
-# `+` runs this one line as root. This unit runs as renovate_agent_user, which has no write on
-# the textfile directory (root:{{ sys_user }}, 2775) and must not gain it: the session reads
-# third-party text, so giving it a group would widen the identity this role isolates. The line
-# writes one file and nothing else. `env -i PATH=/usr/bin:/bin` pins the command's environment,
-# because the unit's own `Environment=PATH` leads with the agent user's ~/.local/bin and `+` does
-# not drop `Environment=`: without the pin, `date` and `mktemp` would resolve there as root. It
+# `+` runs this one line as root. This unit runs as the controller, which has no write on the
+# textfile directory (root:{{ sys_user }}, 2775) and does not need it. The line writes one file
+# and nothing else. `env -i PATH=/usr/bin:/bin` pins the command's environment, because `+` does
+# not drop `Environment=`. It
 # is /bin/bash, not /bin/sh, since homelab-check-lib.sh is bash-shaped. Both write failures end in a logged line
 # and exit 0, so the unit never fails over its own telemetry. 100800 is the DEADLINE_S (28 h), and
 # hosts/tests/test_b4_rule_literals.py pins the rule's literal to it. `%%s` is systemd's escape

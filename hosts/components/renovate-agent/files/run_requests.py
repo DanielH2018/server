@@ -35,7 +35,7 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from agent_toolbox import AgentTools
+from agent_toolbox import AgentTools, start_unit
 
 REQUESTS_DIR = "requests"
 REQUEST_LOG = "requests.jsonl"
@@ -59,16 +59,39 @@ class Outcome:
     pr: int = 0
 
 
-def fresh_dir(state_dir: str) -> str:
-    """An empty requests directory for the next session; a leftover one is set aside, not read."""
-    path = os.path.join(state_dir, REQUESTS_DIR)
-    os.makedirs(state_dir, exist_ok=True)
+def fresh_dir(exchange_dir: str, name: str = REQUESTS_DIR) -> str:
+    """An empty `name` directory in the exchange for the next session; a leftover one is set aside.
+
+    The controller owns the exchange and the new directory, which is setgid and group-writable so
+    the session's group writes into it and the controller reads what it wrote. The session cannot
+    replace the directory, because only the controller may write the exchange itself.
+    """
+    path = os.path.join(exchange_dir, name)
+    os.makedirs(exchange_dir, exist_ok=True)
     if os.path.lexists(path):
         stale = f"{path}.stale-{int(time.time())}"
         os.rename(path, stale)
         shutil.rmtree(stale, ignore_errors=True)
-    os.mkdir(path, 0o700)
+    os.mkdir(path)
+    os.chmod(path, 0o2770)
     return path
+
+
+def read_untrusted(directory: str, name: str) -> str:
+    """The text of regular file `name` in `directory`, read as a request is; "" when it is absent.
+
+    The session wrote it, so a symlink, a FIFO, a device node or a file over `MAX_BYTES` raises
+    ValueError rather than being followed, blocking or read whole.
+    """
+    dir_fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        try:
+            os.stat(name, dir_fd=dir_fd, follow_symlinks=False)
+        except FileNotFoundError:
+            return ""
+        return _read(dir_fd, name).decode("utf-8", errors="replace")
+    finally:
+        os.close(dir_fd)
 
 
 def _read(dir_fd: int, name: str) -> bytes:
@@ -190,14 +213,14 @@ def _land(
     timeout: int,
 ) -> tuple[bool, bool, str]:
     """Start the lander for `pr`, wait for it, and grade how it ended."""
-    unit = f"renovate-agent-land@{pr}.service"
-    rc, _ = tools.run(["systemctl", "start", unit], timeout=timeout)
-    if rc == 124:
+    end = start_unit(f"renovate-agent-land@{pr}.service", tools, timeout)
+    if end.result == "deadline":
         # The lander keeps running in its own unit; only this wait ended.
         return False, False, "still running at the run's deadline"
-    _, result = tools.run(["systemctl", "show", "-p", "Result", "--value", unit])
     verdict = tools.read_file(os.path.join(VERDICT_DIR, f"{pr}.verdict"))
-    return grade(result.strip(), verdict[:4096])
+    if not verdict:
+        return False, False, "the lander's verdict file is missing, empty or unreadable"
+    return grade(end.result, verdict[:4096])
 
 
 def _land_all(

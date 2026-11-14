@@ -1,11 +1,22 @@
-{#- The Renovate agent's caps and permission mode: config.env.j2, homelab-renovate-agent.service.j2
-and prompt.txt.j2 import these as `pins`. A template's own assignment outranks every inventory
-value, so a PR that edits only host_vars cannot raise a run's PR count, spend or wall clock, or
-widen its permission mode. The host package renderer puts the inventory above a component's
+{#- The Renovate agent's caps, permission mode, users and controller paths: every template that
+names one imports these as `pins`. A template's own assignment outranks every inventory value, so
+a PR that edits only host_vars cannot raise a run's PR count, spend or wall clock, widen its
+permission mode, or move what the controller trusts. The host package renderer puts the inventory above a component's
 defaults, so a component default would pin nothing. This file is on the lander's approval list.
-Each value is a literal. hosts/tests/test_renovate_agent_unit.py holds them equal to the
+Each value is a literal. hosts/tests/test_renovate_agent_unit.py holds the caps equal to the
 component's defaults/main.yml, which the docs fragments read.
 -#}
+{#- Who runs what (dotfiles#967's I1): the controller runs the runner, holds the write token
+and the state, and alone may start the session and lander units; the session user runs claude.
+Both polkit rules key on these, so a host_vars edit cannot hand the session a start right. -#}
+{%- set user = "renovate-agent" -%}
+{%- set ctl_user = "renovate-agent-ctl" -%}
+{#- The controller's home: its interpreter, its run lock and the run record. A path the session
+could write here would hand the session code the controller runs with the write token. -#}
+{%- set ctl_home = "/var/lib/renovate-agent-ctl" -%}
+{#- Where the session's requests and output pass to the controller. The controller owns it and
+the session may write only its requests/ and out/ children. -#}
+{%- set exchange_dir = "/var/lib/renovate-agent-exchange" -%}
 {%- set max_prs = 3 -%}
 {%- set model = "opus" -%}
 {%- set permission_mode = "auto" -%}

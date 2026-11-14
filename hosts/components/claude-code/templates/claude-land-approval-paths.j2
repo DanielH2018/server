@@ -47,8 +47,8 @@ hosts/components/claude-code/templates/homelab-rootq@.service.j2
 hosts/components/claude-code/templates/claude-dotfiles-allowed-signers.j2
 hosts/components/claude-code/files/claude_dotfiles_mirror.py
 # The unattended Renovate agent's grant points (dotfiles#967 slice 1 and B1): the T2 floor, the
-# code that checks a PR against it and the lander unit and rule that land one; the runner that
-# carries out the session's requests and swaps in its read-only token; the token file, the config,
+# code that checks a PR against it and the lander unit and rule that land one; the runner, the
+# modules it imports and the session script; the token files, the configs,
 # the pins that set the caps and permission mode, the prompt, the unit and timer, the session's
 # Claude Code settings with the script and unit that install them, and the component that ships
 # them. Its defaults, tests and CLAUDE.md stay off.
@@ -59,7 +59,15 @@ hosts/components/renovate-agent/templates/renovate-agent-land@.service.j2
 hosts/components/renovate-agent/templates/50-renovate-agent-land.rules.j2
 hosts/components/renovate-agent/files/run_requests.py
 hosts/components/renovate-agent/files/renovate_agent.py
+hosts/components/renovate-agent/files/renovate_session.py
+hosts/components/renovate-agent/files/agent_toolbox.py
+hosts/components/renovate-agent/files/agent_logic.py
+hosts/components/renovate-agent/files/run_worktree.py
+hosts/components/renovate-agent/templates/homelab-renovate-agent-session.service.j2
+hosts/components/renovate-agent/templates/50-renovate-agent-session.rules.j2
 hosts/components/renovate-agent/templates/session.env.j2
+hosts/components/renovate-agent/templates/ctl.env.j2
+hosts/components/renovate-agent/templates/session.conf.j2
 hosts/components/renovate-agent/templates/config.env.j2
 hosts/components/renovate-agent/templates/renovate-agent-pins.j2
 hosts/components/renovate-agent/templates/prompt.txt.j2

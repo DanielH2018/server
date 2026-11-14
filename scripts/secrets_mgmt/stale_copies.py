@@ -24,12 +24,25 @@ from secrets_mgmt.consumers import HOST_PLANE, K8S_PLANE, tree_consumers
 from secrets_mgmt.host_secrets import tree_hosts, tree_keys
 from secrets_mgmt.rotation_tools import REPO
 
-# Copies of a secret that no deploy reaches, key -> who holds it. A rotation of one of these
+# Copies of a secret that no deploy reaches, key -> where they sit. A rotation of one of these
 # keys always owes a hand step; `docs/secret-rotation.md` gives each one's.
 OUTSIDE_THE_TREE: Mapping[str, str] = MappingProxyType(
     {
-        "radarr_api_key": "Bazarr's config on the bazarr-config PVC",
-        "sonarr_api_key": "Bazarr's config on the bazarr-config PVC",
+        "crowdsec_k8s_agent_password": "the CrowdSec LAPI's machine registrations",
+        "crowdsec_k8s_bouncer_api_key": "the CrowdSec LAPI's bouncer registration",
+        "lidarr_api_key": "Prowlarr's Lidarr application",
+        "livesync_db_password": "each Obsidian LiveSync client's plugin settings",
+        "livesync_sync_token": "each Obsidian LiveSync client's plugin settings",
+        "mqtt_password": "Home Assistant's MQTT integration",
+        "nut_ha_password": "Home Assistant's NUT integration",
+        "prowlarr_api_key": "the Prowlarr indexers in Sonarr, Radarr and Lidarr",
+        "qbittorrent_password": "the qBittorrent download client in Sonarr, Radarr and Lidarr",
+        "radarr_api_key": "Bazarr's config on the bazarr-config PVC and Prowlarr's Radarr "
+        "application",
+        "scrutiny_influxdb_admin_password": "InfluxDB's database, set at its first-run setup",
+        "scrutiny_influxdb_token": "InfluxDB's database, set at its first-run setup",
+        "sonarr_api_key": "Bazarr's config on the bazarr-config PVC and Prowlarr's Sonarr "
+        "application",
     }
 )
 
@@ -105,7 +118,7 @@ def unapplied_keys(
     for name in changed:
         why = []
         if name in OUTSIDE_THE_TREE:
-            why.append(f"{OUTSIDE_THE_TREE[name]} holds a copy no deploy reaches")
+            why.append(f"no deploy reaches its copy in {OUTSIDE_THE_TREE[name]}")
         k8s, hosts = readers[name]
         if not (k8s or hosts or why):
             why.append(

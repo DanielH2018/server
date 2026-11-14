@@ -196,19 +196,26 @@ and closed as not planned on 2026-11-02 (#6521).
   sleeps past it (#8147).
 - `LAND_PACE_MASTER_RUNS` sets the cap, and `0` turns pacing off.
 
-**With `LAND_QUEUE` set, a landing takes the landing turn before it merges.** One landing at a
-time holds the turn, across both hosts, from the start of its PR's CI run to its merge. The PR's run
-then tests the master the merge lands on, so master's own run proves the tree and skips its
-jobs. [CI throughput](ci-throughput.md) has the measurements and the plan this is slice B2 of.
+**A landing takes the landing turn before it merges.** One landing at a time holds the turn,
+across both hosts. A PR that has had no CI run gets its one run inside the turn, so the run
+tests the master the merge lands on, and master's own run proves the tree and skips its
+jobs. `LAND_QUEUE=0` turns the turn off for one landing.
+[CI throughput](ci-throughput.md) has the measurements and the plan this is slice B2 of.
 
-- The landing waits for the turn first, and prints `waiting for the landing turn` once.
+- A landing asks for the turn when it can use it, and prints `waiting for the landing turn`
+  once while it stands in line. A head that has had no CI run that ran jobs asks before
+  that run. Any other head asks on the first poll that reads it green. No landing holds the
+  turn while a run that started before it finishes, because every landing behind it would
+  wait for that run too.
 - It marks a draft PR ready. With the turn, it then updates the PR's branch from master when
   the head has had no CI run that ran jobs and master is ahead of it. GitHub builds the tree
   a pull-request run tests when the PR's branch is pushed, and a ready flip does not build it
   again, so a run that a ready flip starts tests the master of the last push. The update is
   a push, and the run it starts tests the master of the turn.
+- A landing that stood in line reads its PR again before it acts, because the PR may have
+  moved or merged in the meantime.
 - A head with a run that ran jobs keeps it, finished or not, and the stale-base rules above
-  judge it once it is green. A head the landing policy admitted on an approval is never
+  judge it once it is green. An update those rules make then runs inside the turn. A head the landing policy admitted on an approval is never
   updated, because the update voids the approval. An update that GitHub refuses does not
   stop the landing: the PR keeps the run the ready flip started.
 - A landing that holds the turn is not paced. No other landing with a turn merges ahead of
@@ -220,13 +227,16 @@ jobs. [CI throughput](ci-throughput.md) has the measurements and the plan this i
   ends with the landing's process, so a landing that dies gives it up: a holder killed with
   SIGKILL on daniel-server freed the lock on daniel-box within a second.
 - The turn is not a safety gate. A landing that waits `merge_timeout` for it, or that cannot
-  reach daniel-box, goes on without it, marks its draft ready and merges as a paced landing
-  does. The pre-merge wait can
-  therefore reach three times `merge_timeout`, and no lander with a `LAND_DEADLINE` sets
-  `LAND_QUEUE` yet.
-- A landing without `LAND_QUEUE` takes no turn and can move master under the holder. The
+  reach daniel-box, goes on without it, marks its draft ready and merges as a landing with
+  `LAND_QUEUE=0` does.
+- The wait for the turn counts as waited. The merge wait gets one `merge_timeout` after it,
+  and no branch update moves the end of the wait past twice `merge_timeout`. The pre-merge
+  wait therefore stays inside the two merge budgets the `LAND_DEADLINE` sizing below counts.
+  A landing that spent `merge_timeout` waiting for the turn merges a green head without
+  pacing, as a landing that pacing held that long does.
+- A landing with `LAND_QUEUE=0` takes no turn and can move master under the holder. The
   holder's merge then falls back to the stale-base rules above, and master's run sweeps in
-  full.
+  full. A merge made outside `land.sh` does the same.
 
 **A head whose only CI skipped as a draft is re-triggered once, then ends the wait if it skips again.** `ci.yml` runs
 no job on a draft, so the push's run skips every job, the `prek` gate included, and `await_ci`

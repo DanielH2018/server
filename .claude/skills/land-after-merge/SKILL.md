@@ -49,6 +49,13 @@ budget is spent the landing merges without pacing (#6466).
 `LAND_PACE_MASTER_RUNS` sets the cap and `0` turns pacing off; `land_lib/pace.py` owns
 the rule.
 
+**A landing waits for the landing turn before it merges.** One landing at a time, across
+daniel-box and daniel-server, holds the turn. A green PR asks for it and merges; the others
+print `waiting for the landing turn` once and stand in line. The wait is not a fault and
+spends no GitHub calls. A PR opened as a draft gets its one CI run inside its turn, on the
+master of that moment, so master's run for the merge skips its jobs. `LAND_QUEUE=0` turns the turn off for one
+landing; `land_lib/turn.py` owns the rule.
+
 `cc-wait` waits at most 570s per run. Exit 75 means the landing is still running: re-run only
 `cc-wait land <n>`, never `land.sh`, which would start a second landing. State `gave-up` (exit 3)
 is `land.sh`'s own give-up, a resume point for the whole command. State `deferred` (exit 4) is

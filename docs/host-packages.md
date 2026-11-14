@@ -238,8 +238,9 @@ its module in `hosts/lib/reconcile_lib/`.
 | `libvirt` | `libvirt:` with networks and network filters, each XML pinning its name and UUID | the objects, defined when their XML hash changes or libvirt lost them | a failed define | a removal that libvirt refuses |
 | `lines` | `lines:` with line or block edits and an optional `activate:` | one anchored line or one marker-delimited block per edit | an edit of an owned file that is not a conffile | none |
 
-Reconcile runs the users arm and then the line arm before it starts any unit, so a unit that
-runs as a new user starts, and the activation step reads the file the line arm edited. It runs
+Reconcile runs the users arm before `homelab-secrets`, so an output can belong to a user or
+group the same package version adds. It runs the line arm next, before it starts any unit, so the
+activation step reads the file the line arm edited. It runs
 the libvirt arm and then the UFW arm last. The line arm therefore edits `/etc/ufw/sysctl.conf`
 before an enable of UFW applies it.
 
