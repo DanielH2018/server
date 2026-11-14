@@ -19,22 +19,20 @@ and contract unchanged.
 - **Reaches:** `sonarr:8989` and `radarr:7878` (queue read, blocklist and search writes) and
   the *arr Discord webhook
 - **Depends on:** sonarr and radarr, at runtime
-- **Flux applies it, not Ansible** (D5.19, the first Wave D PR). Its `containers_list` entry
+- **Flux applies it.** Its `containers_list` entry
   is in `cluster/services.yml`, so nothing applies it by hand, and a
   merged change reaches the cluster when `promote` publishes and verifies the next bundle. The
   Deployment is `Recreate` with one
   replica, so a roll stops the loop until the new pod starts. It has no readinessProbe, so the
-  Kustomization's `wait` reads the pod Ready as soon as its container starts, as the Ansible
-  rollout wait did.
+  Kustomization's `wait` reads the pod Ready as soon as its container starts.
 - **The env Secret substitutes from `homelab-cluster-vars`.** The Discord webhook and
   the two *arr API keys are `${<key>}` placeholders in the published
   render. Flux substitutes the values from the `homelab-cluster-vars` Secret, which it
   decrypts from `secrets/cluster-vars.sops.env`. The Kustomization depends on
   `cluster-vars`, so a rotated value is live before autofix-bridge reconciles, and the restart
   checksum rolls the pod. A rotation reaches the cluster only through `cluster_vars.py write`.
-- **Where the task went.** The Kustomization's `wait` replaces the
-  rollout wait, and the restart checksum
-  replaces the shared restart.
+- **Its rollout.** The Kustomization's `wait` holds the rollout. The restart checksum the
+  renderer stamps on the Deployment rolls the pod.
 
 ## Autonomous-role contract (it changes state with no human in the loop)
 This is a **change-producing autonomous role**, so its authority is written down and a change

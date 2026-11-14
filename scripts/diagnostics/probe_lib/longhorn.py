@@ -11,7 +11,8 @@ Split again at 630 lines into three helper modules this one drives:
   - `longhorn_cluster.py`— the live Volume/Backup/PV/BackupTarget reads
 
 What stays here is the part that needs several of them at once: the two `run_*` subcommand
-entry points, which decrypt the B2 credentials, record the spend into `b2_ledger`, and print.
+entry points, which decrypt the B2 credentials, read the bucket from inventory, record the
+spend into `b2_ledger`, and print.
 b2_ledger imports this module back by module object, so no helper module may import it.
 """
 
@@ -72,7 +73,7 @@ def run_b2_budget(ns):
     lines = b2_longhorn_lines(
         core.sops_extract("longhorn_b2_key_id"),
         core.sops_extract("longhorn_b2_application_key"),
-        ns.bucket or core.sops_extract("longhorn_b2_bucket"),
+        ns.bucket or core.longhorn_b2_bucket(),
         ns.prefix,
         _stats=stats,
     )
@@ -113,17 +114,17 @@ def run_b2_longhorn(ns):
     Costs a handful of transactions (one listing, paged at 1000 objects) — negligible
     against the daily free allowance, but not free: don't put it in a loop.
     """
-    # Ahead of the credential read: --dry-run exists to describe the call WITHOUT making it,
-    # so it must not decrypt anything either.
+    # Ahead of the credential read: --dry-run describes the call without making it or
+    # decrypting anything.
     if ns.dry_run:
-        bucket = ns.bucket or "<longhorn_b2_bucket>"
+        bucket = ns.bucket or core.longhorn_b2_bucket()
         print(
             f"GET {B2_AUTHORIZE_URL} then b2_list_file_names "
             f"bucket={bucket} prefix={ns.prefix.rstrip('/')}/"
         )
         return 0
 
-    bucket = ns.bucket or core.sops_extract("longhorn_b2_bucket")
+    bucket = ns.bucket or core.longhorn_b2_bucket()
     stats = {}
     lines = b2_longhorn_lines(
         core.sops_extract("longhorn_b2_key_id"),

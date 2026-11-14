@@ -60,6 +60,17 @@ spec:
           env:
             - name: TZ
               value: "{{ tz }}"
+            # DECIDED: Z2M's in-process watchdog absorbs a coordinator socket reset (#8322).
+            # The SLZB drops the TCP link with `read ECONNRESET` and accepts a reconnect 2 s
+            # later, so a 3 s in-process restart replaces a container restart. The delays
+            # (minutes) sum to 48 s, inside the liveness window (3 x 30 s): the frontend is
+            # down while the watchdog waits, so a longer list would only end in a kubelet
+            # kill. A coordinator gone for minutes exhausts the list, and the container
+            # exits into kubelet's backoff and the crash-loop alert. Liveness stays because
+            # it is the only hang detection this pod has. The watchdog arms only after the
+            # first successful start, so a broker not ready at boot still exits.
+            - name: Z2M_WATCHDOG
+              value: "0.05,0.25,0.5"
           volumeMounts:
             - name: zigbee2mqtt-data
               mountPath: /app/data

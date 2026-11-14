@@ -2,9 +2,10 @@
 
 The Longhorn backup plane: the credential Secrets `longhorn-b2` and `longhorn-r2`, the
 BackupTargets `default` (B2) and `r2`, and the RecurringJobs `daily-backup` and
-`weekly-backup-d0` to `weekly-backup-d6`, and the `trim` RecurringJob (H1.7b, H2.2a). Which target a volume uses is `longhorn-reconcile`'s decision (H1.7a), and
-this role only declares the targets. It also renders `k3s-etcd-snapshot-s3-config` in
-`kube-system`, the Secret k3s reads for its native etcd snapshot uploads to R2 (H2.8a).
+`weekly-backup-d0` to `weekly-backup-d6`, and the `trim` RecurringJob. Which target a volume
+uses is `longhorn-reconcile`'s decision, and this role only declares the targets. It also
+renders `k3s-etcd-snapshot-s3-config` in `kube-system`, the Secret k3s reads for its native etcd
+snapshot uploads to R2.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in k8s/roles/longhorn-reconcile/defaults/main.yml. -->
@@ -13,7 +14,7 @@ this role only declares the targets. It also renders `k3s-etcd-snapshot-s3-confi
 - **Claims:** none (no PVC)
 <!-- /generated_from -->
 
-- **Flux applies it, not Ansible** (H1.7b). Its `containers_list` entry is in `cluster/services.yml` and
+- **Flux applies it.** Its `containers_list` entry is in `cluster/services.yml` and
   `depends_on: [longhorn]`, because `longhorn`'s vendored file defines the BackupTarget and
   RecurringJob CRDs. While `longhorn` is not Ready, this tag applies nothing, so a disarm PR promotes and does
   not reach the cluster. The BackupTarget break-glass below is the lever for that state.
@@ -28,7 +29,7 @@ this role only declares the targets. It also renders `k3s-etcd-snapshot-s3-confi
   over a secret. `scripts/renderer/renderer_lib/secret_checks.py:PLACEHOLDER_KIND_EXEMPT`
   admits the two bucket placeholders in a BackupTarget and nowhere else.
 - **A wrong region makes a target unreachable.** Nothing ties `k3s_longhorn_b2_region` to the
-  SOPS key `longhorn_b2_endpoint` any more. `probe.py health longhorn-backup` reports a target
+  SOPS key `longhorn_b2_endpoint`. `probe.py health longhorn-backup` reports a target
   with `status.available` false within one probe run.
 - **Five keys are read by no host file.** `k3s_longhorn_backup_armed`, `k3s_longhorn_r2_armed`,
   `k3s_longhorn_backup_cron`, `k3s_longhorn_weekly_backup_minute_hour` and
@@ -48,8 +49,8 @@ this role only declares the targets. It also renders `k3s-etcd-snapshot-s3-confi
   Flux enforces the blank on every reconcile. Arming unconditionally would resurrect a blanked
   target and restart the B2 transaction-cap spiral, so a blank survives every apply until the
   flag returns to `true`. The flag's comment in `defaults/main.yml` has the spiral's mechanism.
-  H1 never sets `flux_suspend` on this tag, and D5.1d refuses a render change to it during a
-  suspend.
+  This tag never sets `flux_suspend`, and `render_diff_gates.py` refuses a render change to a
+  tag that is suspended at the PR's base.
 - **Three cases defeat the normal path.** A disarm cannot promote while `DEPLOY_HOLD` holds
   anything but `none`, a spiral can outrun a merge, and a promoted disarm does not apply while
   `longhorn` is not Ready. `docs/break-glass.md` carries the **operator-only** BackupTarget
@@ -71,10 +72,9 @@ this role only declares the targets. It also renders `k3s-etcd-snapshot-s3-confi
 - **Flux declares three fields of `default`** (`backupTargetURL`, `credentialSecret`,
   `pollInterval`). longhorn-manager creates the object and writes the rest, and the render never
   takes those fields.
-- **The flat `weekly-backup` job is gone.** The seven weekday shards replaced it, and the task
-  that deleted it left with the file after a read-only `kubectl get recurringjobs` showed no
-  such job. Removing a job from this tag leaves it live (`flux_prune: false`), so the PR that
-  removes one carries an **operator-only** delete.
+- **No flat `weekly-backup` job exists.** The seven weekday shards carry the weekly tier.
+  Removing a job from this tag leaves it live (`flux_prune: false`), so the PR that removes one
+  carries an **operator-only** delete.
 - **On a new cluster, bootstrap step 6 applies this tag.** It creates both targets and their
   Secrets, and step 1 confirms that `prod`'s render arms both. Step 7 then forces the
   backupstore sync (`docs/flux-deploy-plane.md`, *Bootstrapping Flux on a rebuilt cluster*).
@@ -89,14 +89,13 @@ in the loop, and the contract is written here so a later edit cannot quietly wid
   `templates/storageclass-nobackup.yaml.j2`. Each `weekly-backup-d<N>` job backs up the volumes
   `longhorn-reconcile` labels with its shard. The jobs delete old backups through their `retain`
   counts, and only the backups of that job.
-- **The `trim` job is no backup tier.** It runs `filesystem-trim` at `k3s_longhorn_trim_cron`
-  (06:10 UTC) with `groups: []`, and a volume joins it through the per-job label
-  `recurring-job.longhorn.io/trim` that `longhorn-reconcile` sets. A `trim` group would read as
-  a backup tier to the restore drill and the reapers, and the `DECIDED:` marker in
-  `templates/longhorn-recurringjob.yaml.j2` says why. It deletes no backup. It replaced the host
-  trim cron at H2.2c. Its abort valve is longhorn-manager itself: the job runs inside the
-  manager, so a manager that is not ready runs no trim. Checks 9 and 10 of the
-  `k3s-host-checks` backup health read its pod log and its CronJob.
+- **The `trim` job is no backup tier.** It runs `filesystem-trim` at `k3s_longhorn_trim_cron` (06:10
+  UTC) with `groups: []`, and a volume joins it through the per-job label
+  `recurring-job.longhorn.io/trim` that `longhorn-reconcile` sets. A `trim` group would read as a
+  backup tier to the restore drill and the reapers, and the `DECIDED:` marker in
+  `templates/longhorn-recurringjob.yaml.j2` says why. It deletes no backup. Its abort valve is
+  longhorn-manager itself: the job runs inside the manager, so a manager that is not ready runs no
+  trim. Checks 9 and 10 of the `k3s-host-checks` backup health read its pod log and its CronJob.
 - **Arming.** `k3s_longhorn_backup_armed` and `k3s_longhorn_r2_armed` blank one target each. A
   retired flag existed for a cluster with no real credentials. No host set it, and staging, the
   one such cluster, was retired on 2026-09-29.

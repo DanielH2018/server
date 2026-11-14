@@ -26,7 +26,7 @@ until 2026-11-12, and unparked with an empty library for the music pipeline to f
   (D5.2a), so `k8s_autodeploy: true` lets Renovate automerge an image bump that migrates the
   index. A failed revision writes the stateful hold, and the operator reverts the claim
   through `docs/volume-snapshot-drills.md`.
-- **Flux applies it, not Ansible** (D5.8, Wave A'). Its `containers_list` entry is
+- **Flux applies it.** Its `containers_list` entry is
   in `cluster/services.yml`, so nothing applies it by hand, and a merged change reaches the cluster when
   `promote` publishes and verifies the next bundle. The Kustomization lists its dependencies
   (authelia, traefik, media-volume) in `dependsOn`, and its `wait` replaces the rollout wait.

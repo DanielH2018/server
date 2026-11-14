@@ -32,8 +32,8 @@ directory, never from the primary checkout: one untracked file in the primary pa
 lives in (`land_lib/own_checkout.py`). The next run removes a worktree whose landing has ended.
 
 THE UNIT SETS `LAND_REQUIRE_BRANCH_PREFIX` and `LAND_REQUIRE_AUTHOR`. With the prefix set,
-`land_lib/policy.py` also pins the merge to the head it checked, so a push after the checks fails
-the merge instead of landing unchecked.
+`land_lib/policy.py` also pins the merge to the head it checked, so a push after the checks
+fails the merge instead of landing unchecked.
 
 DECIDED: pace is 2 landings started per run (#5526: CI demand already exceeds the 20-runner
 cap). The rest wait for the next run, which logs them as `eligible, deferred`.
