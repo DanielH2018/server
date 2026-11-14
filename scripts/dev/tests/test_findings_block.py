@@ -4,6 +4,7 @@
 Run: uv run pytest scripts/dev/tests/test_findings_block.py
 """
 
+import dataclasses
 import json
 import subprocess
 from datetime import date
@@ -240,3 +241,96 @@ def test_a_failed_hint_lookup_still_files_the_finding(tmp_path, capsys, make_too
     assert findings.main(argv, tools) == 0
     assert any(c[:2] == ["issue", "create"] for c in calls.gh)
     assert "hint: could not look up" in capsys.readouterr().err
+
+
+def _fields_as_asked(tools):
+    """`tools` whose `issue view` answers only the fields its `--json` names, as real gh does."""
+
+    def gh_json(*argv, **kwargs):
+        value = tools.gh_json(*argv, **kwargs)
+        if list(argv[:2]) != ["issue", "view"] or "--json" not in argv:
+            return value
+        asked = argv[argv.index("--json") + 1].split(",")
+        return {k: v for k, v in value.items() if k in asked}
+
+    return dataclasses.replace(tools, gh_json=gh_json)
+
+
+PULL_REQUEST_8559 = {"number": 8559, "state": "OPEN", "isPullRequest": True}
+ISSUE_7178 = {"number": 7178, "state": "OPEN", "isPullRequest": False}
+
+
+def test_a_wait_on_an_open_pull_request_names_no_block_command(make_tools):
+    tools, _ = make_tools(Fakes(view={8559: PULL_REQUEST_8559}))
+    lines = blocker_hints(
+        "Once #8559 is on master, retire it.", 8560, [], _fields_as_asked(tools)
+    )
+    assert not [line for line in lines if "findings.py block" in line]
+
+
+def test_an_open_issue_beside_a_pull_request_keeps_its_block_hint(make_tools):
+    tools, _ = make_tools(Fakes(view={8559: PULL_REQUEST_8559, 7178: ISSUE_7178}))
+    body = "Once #8559 is on master and #7178 closes, retire it."
+    lines = blocker_hints(body, 8560, [], _fields_as_asked(tools))
+    assert any("`findings.py block 8560 --on 7178`" in line for line in lines)
+    assert not [line for line in lines if "--on 8559" in line]
+
+
+def test_open_hints_no_block_for_a_wait_on_a_pull_request(tmp_path, capsys, make_tools):
+    tools, calls = make_tools(Fakes(view={8559: PULL_REQUEST_8559}))
+    argv = _open_argv(tmp_path, "Once #8559 is on master, retire it.")
+    assert findings.main(argv, _fields_as_asked(tools)) == 0
+    assert any(c[:2] == ["issue", "create"] for c in calls.gh)
+    assert "--on 8559" not in capsys.readouterr().err
+
+
+# The fields `gh issue view --json` accepts, as gh 2.104.0 lists them on an unknown field.
+GH_ISSUE_VIEW_FIELDS = frozenset(
+    "assignees author blockedBy blocking body closed closedAt "
+    "closedByPullRequestsReferences comments createdAt id isPinned issueType labels "
+    "milestone number parent projectCards projectItems reactionGroups state stateReason "
+    "subIssues subIssuesSummary title updatedAt url".split()
+)
+
+
+def _fields_gh_knows(tools):
+    """`tools` whose `issue view` exits 1 on a `--json` field gh does not know, as gh does."""
+    answer = _fields_as_asked(tools).gh_json
+
+    def gh_json(*argv, **kwargs):
+        if list(argv[:2]) == ["issue", "view"] and "--json" in argv:
+            unknown = (
+                set(argv[argv.index("--json") + 1].split(",")) - GH_ISSUE_VIEW_FIELDS
+            )
+            if unknown:
+                raise subprocess.CalledProcessError(
+                    1, ["gh", *argv], stderr=f"Unknown JSON field: {unknown}"
+                )
+        return answer(*argv, **kwargs)
+
+    return dataclasses.replace(tools, gh_json=gh_json)
+
+
+def _recorded(number, state, kind):
+    """A `gh issue view --json number,state,url` answer; `kind` is `issues` or `pull`."""
+    url = f"https://github.com/DanielH2018/server/{kind}/{number}"
+    return {"number": number, "state": state, "url": url}
+
+
+@pytest.mark.parametrize("state", ["OPEN", "MERGED"])
+def test_a_wait_on_a_pull_request_gets_no_hint_from_real_gh_fields(state, make_tools):
+    tools, _ = make_tools(Fakes(view={8559: _recorded(8559, state, "pull")}))
+    body = "Once #8559 is on master, retire it."
+    assert blocker_hints(body, 8560, [], _fields_gh_knows(tools)) == []
+
+
+def test_an_issue_wait_keeps_its_block_hint_from_real_gh_fields(make_tools):
+    view = {
+        8559: _recorded(8559, "OPEN", "pull"),
+        7178: _recorded(7178, "OPEN", "issues"),
+    }
+    tools, _ = make_tools(Fakes(view=view))
+    body = "Once #8559 is on master and #7178 closes, retire it."
+    lines = blocker_hints(body, 8560, [], _fields_gh_knows(tools))
+    assert len(lines) == 1
+    assert "`findings.py block 8560 --on 7178`" in lines[0]

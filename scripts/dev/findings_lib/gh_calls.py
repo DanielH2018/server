@@ -290,7 +290,9 @@ def blocker_hints(
 
     `issue_model.waited_on` finds the references; this resolves each one. A slice code
     resolves to the issue whose title starts `<code>:`, the way slices are filed, and a code
-    with no such issue is skipped. Reads only, and only when the body names a wait.
+    with no such issue is skipped. A pull request is skipped too: `gh issue view` answers
+    for one, with a `/pull/` url, but GitHub's blocked-by relation takes issues only. Reads
+    only, and only when the body names a wait.
 
     Args:
         own: the finding's number, or a placeholder before it exists.
@@ -303,9 +305,11 @@ def blocker_hints(
         if str(n) in skip:
             continue
         issue = as_object(
-            tools.gh_json("issue", "view", str(n), "--json", "number,state"),
+            tools.gh_json("issue", "view", str(n), "--json", "number,state,url"),
             "gh issue view",
         )
+        if "/pull/" in str(issue.get("url", "")):
+            continue
         found.setdefault(n, (f"#{n}", str(issue.get("state"))))
     for code in codes[:SLICE_LOOKUP_CAP]:
         hits = as_object_list(
