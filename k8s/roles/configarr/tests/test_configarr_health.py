@@ -47,6 +47,7 @@ def _replies(replies: dict[str, tuple[int, str]]):
 
 
 def test_a_clean_run_logs_status_up_in_the_syslog_shape(capsys):
+    # fact: k8s/roles/configarr/CLAUDE.md#Editing
     kubectl = _replies({"get": (0, json.dumps(_JOBS)), "logs": (0, "Done\n")})
     assert _main(kubectl) == 0
     out = capsys.readouterr().out
@@ -129,6 +130,7 @@ def test_a_failed_export_exits_one_after_the_log_line(capsys):
 
 
 def test_the_reader_imports_from_the_pods_mounted_layout(tmp_path):
+    # fact: k8s/roles/configarr/CLAUDE.md#Editing
     [configmap] = yaml_fast.safe_load_all(
         render_role_template("configarr", "health-configmap.yaml.j2")
     )

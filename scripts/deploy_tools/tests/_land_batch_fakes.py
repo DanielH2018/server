@@ -9,7 +9,7 @@ import subprocess
 from itertools import pairwise
 from typing import Any
 
-from deploy_tools.land_lib import pr_json
+from deploy_tools.land_lib import batch, pr_json, turn
 from deploy_tools.land_lib.tools import CiVerdict
 from lib.exit_codes import CI_GREEN, CI_PENDING
 
@@ -194,3 +194,14 @@ class GitHub:
         if len(self._run) > 1:
             self._run.pop(0)
         return CiVerdict(*verdict)
+
+
+def land(ln) -> None:
+    """The merge wait as the pipeline runs it."""
+    with turn.held(ln) as take_turn:
+        batch.land(ln, take_turn)
+
+
+def answers(the_line, *prs) -> list[str]:
+    """What each PR's own landing reads in its place on its next poll."""
+    return [the_line("stand", pr, head_of(pr)) for pr in prs]

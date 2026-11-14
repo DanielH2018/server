@@ -298,6 +298,7 @@ def _render(out, tag, owned, source_file, cluster_file, stubs=None):
 def test_cloudflare_ddns_two_deployments_each_get_the_annotation(
     tmp_path, source_file, cluster_file
 ):
+    # fact: k8s/roles/cloudflare-ddns/CLAUDE.md#Notable
     out = tmp_path / "out"
     owned = {"cloudflare-ddns"}
     assert (

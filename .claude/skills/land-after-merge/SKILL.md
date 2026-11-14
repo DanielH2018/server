@@ -56,6 +56,14 @@ spends no GitHub calls. A PR opened as a draft gets its one CI run inside its tu
 master of that moment, so master's run for the merge skips its jobs. `LAND_QUEUE=0` turns the turn off for one
 landing; `land_lib/turn.py` owns the rule.
 
+**A draft that waits in line may be merged by the landing ahead of it.** The landing that
+holds the turn tests the drafts standing in line with its own in one CI run and merges them
+in order (`land_lib/batch.py`). Your landing then prints `the landing that holds the turn
+merged PR #N with its own` and goes on to the deploy and its verdict as usual. If that
+batch's run was red it prints `a batch that tested PR #N was not green; it lands alone` and
+gets a run of its own. Neither line is a fault. `LAND_BATCH=0` stops one landing forming a
+batch.
+
 `cc-wait` waits at most 570s per run. Exit 75 means the landing is still running: re-run only
 `cc-wait land <n>`, never `land.sh`, which would start a second landing. State `gave-up` (exit 3)
 is `land.sh`'s own give-up, a resume point for the whole command. State `deferred` (exit 4) is
@@ -137,7 +145,9 @@ outcome as logfmt for a script to read. `land.sh --help` lists the closed vocabu
 **`land.sh` deploys nothing itself.** It
 waits until a promotion covers the merge commit (`promote.py land-wait`) and then gates the
 k8s tags. A `deploy-failed` with cause `promote-held` means `DEPLOY_HOLD` holds
-promotion, and clearing it is **operator-only**: stop and name the hold. Cause
+promotion, and clearing it is **operator-only**: stop and name the hold. To resume once the
+operator clears it, or once a red master CI goes green, run `cc-wait landing-clear` in the
+background and re-run the same `land.sh` command when it ends 0. Cause
 `soak-failed` means the soak Job failed on the promoted revision, which `verify` holds next:
 report the services the printed `kubectl` command names, and stop. A
 `nothing-to-deploy` whose detail says a tag "is suspended" means Flux applies nothing for that

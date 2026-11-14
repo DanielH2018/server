@@ -28,17 +28,17 @@ it, only at the head the batch stacked, and only while master is the commit that
 stacked on (`stale_base.batch_tested`). A PR that was labelled and marked ready and then did
 not merge gets a full run before anything else lands it (`_full_run`).
 
-`LAND_BATCH=1` turns batches on for one landing, which is how the pilot runs. Without it a
-landing forms none, and it can still be a member of another landing's batch.
+`LAND_BATCH=0` turns batches off for one landing. Such a landing forms none, and it can
+still be a member of another landing's batch.
 
 A batch never makes a landing fail. A batch that cannot be formed, a run that is red and a
 member that cannot merge each leave the PRs concerned to land alone, as they would have
 without the batch. The holder's own landing goes on with its own PR either way.
 
 The time a batch takes. Its run counts in the holder's merge wait, which still ends inside
-two merge budgets. The members' merges come after that wait: up to `MEMBER_TIMEOUT_S` each,
-which `LAND_DEADLINE` does not count. A lander unit therefore needs its deadline sized
-before it sets `LAND_BATCH`.
+two merge budgets. The members' merges come out of what that wait left of those two budgets,
+up to `MEMBER_TIMEOUT_S` each, so a batch adds nothing to what `LAND_DEADLINE` counts. A
+member that would not fit lands alone.
 """
 
 import subprocess
@@ -165,7 +165,8 @@ def _members(ln: Landing) -> list[Member]:
     places = [row.split() for row in rows]
     # Another landing of this landing's own PR may stand in the line too.
     waiting = [p for p in places if len(p) == 2 and p[0] != ln.opts.pr]
-    if not waiting:
+    # `_merge_members` merges a member only inside this landing's two merge budgets.
+    if not waiting or ln.opts.merge_timeout < MEMBER_TIMEOUT_S:
         return []
     reads = live_limit.github_reads(ln.tools.gh_json)
     # DECIDED: the landing's code is compared with master here, once, and not again before a
@@ -356,6 +357,8 @@ def form(ln: Landing, head: str) -> int:
             waited, why = _await_run(ln, tip)
             if why:
                 say(f"the batch is not green: {why}; each of its PRs lands alone")
+                for member in members:
+                    _answer(ln, member, line.ALONE)
                 return waited
             _label(ln, pr)
         finally:
@@ -366,6 +369,15 @@ def form(ln: Landing, head: str) -> int:
     ln.tested_on, ln.tested_head, ln.batch = base, head, members
     say(f"the batch is green after {waited}s; merging {named} in that order")
     return waited
+
+
+def _answer(ln: Landing, member: Member, what: str) -> None:
+    """Write `what` into the member's place in the line, for its own landing to read."""
+    pr = member.ln.opts.pr
+    try:
+        turn.line_of(ln)("answer", pr, member.head, what)
+    except OSError as exc:
+        say(f"could not tell PR #{pr}'s landing that it is {what} ({exc})")
 
 
 def _merge_commit(ln: Landing) -> str:
@@ -418,17 +430,22 @@ def _merge_members(ln: Landing) -> None:
     if ln.batch and not ln.tested_on:
         say("the batch's run no longer stands, so its other PRs land alone")
         return
+    # What is left of the two merge budgets this landing's own wait could use, which is all
+    # `LAND_DEADLINE` counts for merging. A member's wait takes twice `MEMBER_TIMEOUT_S` when
+    # its branch is updated, so a member is merged only while that much is left.
+    left = 2 * ln.opts.merge_timeout - ln.merge_wait_s
     before = ln
     for member in ln.batch:
         pr = member.ln.opts.pr
-        why = _merge_member(ln, member, before)
+        if left < 2 * MEMBER_TIMEOUT_S:
+            why = f"this landing's merge budgets have {max(left, 0)}s left"
+        else:
+            why = _merge_member(ln, member, before)
         if why:
             say(f"PR #{pr} is not merged ({why}); it and the PRs after it land alone")
             return
-        try:
-            turn.line_of(ln)("answer", pr, member.head, line.MERGED)
-        except OSError as exc:
-            say(f"could not tell PR #{pr}'s landing that it merged ({exc})")
+        _answer(ln, member, line.MERGED)
+        left -= member.ln.merge_wait_s
         before = member.ln
 
 
@@ -441,7 +458,7 @@ def land(ln: Landing, take_turn: merge.TakeTurn) -> None:
 
     def take(draft: str) -> tuple[bool, int]:
         in_turn, waited = take_turn(draft)
-        if in_turn and draft and ln.opts.batch:
+        if in_turn and draft and ln.opts.batch and not ln.lands_alone:
             try:
                 ln.batched_s = form(ln, draft)
             except Exception as exc:

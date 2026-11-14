@@ -1,7 +1,8 @@
 # radarr — movie library manager
 
 Radarr, part of the *arr stack. Imports by hardlinking from `/data/torrents` into
-`/data/media`, so it mounts the whole `media-data` tree at `/data` — a hardlink only works
+`/data/media`, so it mounts the whole `media-data` tree at `/data`
+(`k8s/roles/radarr/defaults/main.yml:radarr_k8s_media_claim`) — a hardlink only works
 when both paths share one mount.
 
 ## At a glance

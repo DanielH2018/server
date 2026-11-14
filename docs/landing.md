@@ -228,11 +228,19 @@ jobs. `LAND_QUEUE=0` turns the turn off for one landing.
   drafts with its own, which is slice B3 of [CI throughput](ci-throughput.md). A landing
   whose place reads `merged` stops waiting, because the holder merged its PR. The line is
   no gate: a landing that cannot reach it waits for the turn without it.
-- With `LAND_BATCH=1`, a landing that takes the turn with a draft tests the drafts in the
-  line with its own in one CI run and merges them behind its own PR (`land_lib/batch.py`).
-  Its log names each PR it stacks, each one it leaves out with the reason, and each merge.
-  A landing whose PR another landing merged this way prints `the landing that holds the
-  turn merged PR #N with its own` and goes on to the deploy.
+- A landing that takes the turn with a draft tests the drafts in the line with its own in
+  one CI run and merges them behind its own PR (`land_lib/batch.py`). `LAND_BATCH=0` turns
+  that off for one landing. Its log names each PR it stacks, each one it leaves out with
+  the reason, and each merge. A landing whose PR another landing merged this way prints
+  `the landing that holds the turn merged PR #N with its own` and goes on to the deploy.
+  One whose batch was not green prints `a batch that tested PR #N was not green; it lands
+  alone`, leaves the line and gets a run of its own.
+- A PR lands on the fewest runs when it is opened as a draft. A draft's pushes start no
+  job, so its one full run is its batch's, shared with up to three other PRs, and master's
+  run after its merge skips. A PR opened ready has a run of its own at every push, never
+  stands in the line, and its merge starts a full master run whenever master moved since
+  that run. The operator ruled on 2026-11-14 that sessions and the fan-out open their PRs
+  as drafts (D9 in [CI throughput](ci-throughput.md)).
 - A head with a run that ran jobs keeps it, finished or not, and the stale-base rules above
   judge it once it is green. An update those rules make then runs inside the turn. A head the landing policy admitted on an approval is never
   updated, because the update voids the approval. An update that GitHub refuses does not
