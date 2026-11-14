@@ -98,6 +98,7 @@ def _make_db(path: Path, rows: int = 2000) -> None:
 
 def test_the_probe_reports_a_corrupt_database_as_bad(tmp_path: Path) -> None:
     """FLAGGED half of the program: overwritten pages are reported, never passed."""
+    # fact: k8s/roles/longhorn-restore-drill/CLAUDE.md#What the drill is and what it writes (the autonomous-role contract)
     root = tmp_path / "drill"
     root.mkdir()
     _make_db(root / "good.db")
