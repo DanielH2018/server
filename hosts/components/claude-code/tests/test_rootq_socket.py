@@ -100,9 +100,7 @@ def test_a_path_outside_the_allowlist_is_refused_with_rootqs_own_text(scratch) -
         answer = asked(scratch, line)
         assert answer["exit"] == 2, line
         assert answer["stdout"] == ""
-        assert answer["stderr"] == "refused: /etc/shadow is on the deny list" + (
-            " and not on the allowlist\n" if line.startswith("stat") else "\n"
-        )
+        assert answer["stderr"] == "refused: /etc/shadow is on the deny list\n"
     unlisted = asked(scratch, "sha256 /etc/passwd")
     assert unlisted["exit"] == 2
     assert "is not on the allowlist" in unlisted["stderr"]

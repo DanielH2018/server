@@ -69,16 +69,14 @@ a need appears.
   tier 2 prints. A path must resolve to itself, so a symlink, `..` or `//` is refused. Every
   directory above it must be root-owned and writable by root alone. It must also miss every
   pattern in `DENY`, an independent second layer. `/var/lib/gitops-deploy` is not listed,
-  because `sys_user` owns it and the caller already reads it.
-- **A DENY path answers `stat` alone, and only when `PATHS` names it.** The operator ruled
-  this on 2026-10-26 (#6369). `stat` of such a path prints its mode, type, owner and group,
-  plus `deny=yes`. It never prints size or mtime, because a size gives away a secret's
-  length. A missing one is refused with `does not exist`. `cat`, `sha256` and `matches` still
-  refuse every DENY path. DENY never widens what rootq reaches. rootq tests the allowlist
-  before it resolves a DENY path, so a DENY path off the list gets the same refusal whether
-  it exists or not. The one DENY entry in `PATHS` is the exact name
-  `/etc/claude-rc/alert-webhook.env`. `/etc/rancher/k3s/manifests/` is denied as a whole,
-  because it holds every staged role's `secret.yaml`.
+  because `sys_user` owns it and the caller already reads it. Each entry matches a file the
+  caller cannot read without root: the netplan files are 0600, `/etc/ufw/user.rules`, `user6.rules` and the k3s
+  units under `/etc/systemd/system` are 0640, `/etc/cron.d` is 0700, and
+  `/usr/lib/homelab/registry-gc.sh` is 0700 on daniel-box.
+- **rootq refuses every DENY path, for every verb.** It tests DENY before it resolves the
+  path, so a DENY path gets the same refusal whether it exists or not.
+  `/etc/rancher/k3s/manifests/` is denied as a whole, because it holds every staged role's
+  `secret.yaml`.
 - **rootq cannot stat a file in the agent user's home**, which root does not own. The role therefore makes `~/.config/gh` and `~/.config/homelab-ui`
   0710 under `claude_code_agent_operator_read`, so the operator account stats the 0600 token
   and login files as the operator, without listing either directory or reading either file.
