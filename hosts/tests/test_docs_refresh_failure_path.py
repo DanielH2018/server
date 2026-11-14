@@ -11,8 +11,9 @@ production code rather than a copy of its logic. Six behaviours, each with the h
 the test can go red:
 
 - **restore_generated_tree leaves the checkout clean**, for a modified page and for a newly
-  generated one — an untracked leftover parks the deployer exactly as a modified one does. The
-  rejecting half runs a bare `git reset` body against the same fixture and requires it dirty.
+  generated one — an untracked leftover parks `homelab-checkout-sync` exactly as a modified one
+  does. The rejecting half runs a bare `git reset` body against the same fixture and requires it
+  dirty.
 - **dirty_tree_status distinguishes this cron's own dirt from a human's**, via a stamp outside
   the repo. Path-based attribution cannot: a human running build_docs.py by hand dirties the
   same files.
@@ -157,9 +158,9 @@ def test_the_restore_leaves_no_modified_page_behind(tmp_path):
 def test_the_restore_leaves_no_untracked_page_behind(tmp_path):
     """A brand-new generated page has no HEAD version, so `git checkout HEAD --` fails on it.
 
-    Left there it is UNTRACKED, and `git status --porcelain` counts untracked — which parks the
-    deployer just as surely as the modified page above. This is the half a checkout-only fix
-    would miss.
+    Left there it is UNTRACKED, and `git status --porcelain` counts untracked — which parks
+    `homelab-checkout-sync` just as surely as the modified page above. This is the half a
+    checkout-only fix would miss.
     """
     repo, stamp = _tree(tmp_path), tmp_path / "stamp"
     staged = _stage_a_regeneration(repo, stamp)
@@ -192,9 +193,9 @@ def test_the_restore_does_not_touch_a_hand_edit_it_never_staged(tmp_path):
 def test_the_restore_reports_a_leftover_a_hook_wrote_after_git_add(tmp_path):
     """ACCEPT: the case that decides the check's scope.
 
-    prek's gen-doc-fragments hook regenerates the WHOLE fragment set, so it rewrites fragments
-    this run's generators never touched. That happens after `git add`, so the file is dirty, it
-    parks the deployer, and it is absent from the captured name-status by construction. A check
+    prek's gen-doc-fragments hook regenerates the WHOLE fragment set, so it rewrites fragments this
+    run's generators never touched. That happens after `git add`, so the file is dirty, it parks
+    `homelab-checkout-sync`, and it is absent from the captured name-status by construction. A check
     scoped to the staged paths would report `tree restored` over it.
     """
     repo, stamp = _tree(tmp_path), tmp_path / "stamp"
@@ -372,7 +373,7 @@ def test_the_failure_log_is_kept_outside_the_repo(tmp_path):
     """on_exit deletes the temp log and the suite output never reaches the cron's logger, so this copy is the record.
 
     Outside the checkout for the same reason as the stamp: a file written inside it is untracked
-    dirt, and a diagnostic that parks the deployer is not a diagnostic.
+    dirt, and a diagnostic that parks `homelab-checkout-sync` is not a diagnostic.
     """
     repo, stamp = _tree(tmp_path), tmp_path / "stamp"
     log = tmp_path / "commit.log"

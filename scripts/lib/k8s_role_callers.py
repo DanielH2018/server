@@ -103,7 +103,7 @@ def role_callers(repo: Path | str | None = None) -> dict[str, set[str]]:
     # DECIDED: a lookup into a DECLARED role is an edge too (authelia and traefik ->
     # crowdsec), rather than filtered out. Filtering would need the
     # walked tree's host_vars, which the throwaway tree a test walks does not have. The
-    # landing, the deployer, the broad narrowing and the `--tags` expansion stop at a declared
+    # landing, the broad narrowing and the `--tags` expansion stop at a declared
     # role, so they never read such an edge. `releases_consumers._closure` does not stop, and
     # it reads the edge only for a census role whose closure passes through crowdsec or
     # monitor-bridge.

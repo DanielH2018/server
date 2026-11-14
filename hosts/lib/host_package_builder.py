@@ -378,7 +378,7 @@ class Builder(RolloutGate):
         result = ci_verdict(runs, contexts)
         # DECIDED: only `pass` is cached. GitHub's check-runs API returns the latest run per
         # name, so `gh run rerun --failed` turns a red SHA green, and a cached `fail` would
-        # never see it while the deployer's gate, which caches nothing, deploys the SHA
+        # never see it while checkout-sync's gate, which caches nothing, takes the SHA
         # (#5786). Re-reading a fail costs one request per page of a red commit's runs, in a
         # walk that CI_ANCESTOR_WALK_MAX bounds.
         if result == "pass":

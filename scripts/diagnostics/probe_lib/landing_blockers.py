@@ -10,10 +10,10 @@ Every fact comes from a reader that already exists; this module only joins them:
   `deploy_git._CI_NO_VERDICT_CONCLUSIONS` is no verdict and a run in progress is pending.
   Neither is red, per `docs/landing.md`.
 - **Runs in flight.** deploy-ui's `/api/inflight`: every `land.sh` family on
-  the deployer's host. A run's `VERDICT:` line comes from `land_lib.detach.verdict_in` where
+  daniel-box. A run's `VERDICT:` line comes from `land_lib.detach.verdict_in` where
   its log is readable on this host, and from deploy-ui's `/api/log` tail elsewhere. That
   endpoint serves only the logs of runs deploy-ui started, so a terminal run's verdict shows
-  only on the deployer's host.
+  only on daniel-box.
 - **Last verdict.** The newest `land*.log` in `land_lib.detach.default_log_dir()`, as this
   process sees it: `$CLAUDE_JOB_DIR/tmp` when that variable is set, otherwise
   `/tmp/homelab-landings-<user>`. A log with no `VERDICT:` line reports its last `land:`
@@ -80,7 +80,7 @@ from diagnostics.probe_lib.promote_state import (
 _sys.path.insert(0, str(HOST_LIB_FILES))
 from ci_verdict import _CI_NO_VERDICT_CONCLUSIONS
 
-# deploy-ui's daemon on the deployer's host: `deploy_ui_port` in
+# deploy-ui's daemon on daniel-box: `deploy_ui_port` in
 # `hosts/components/deploy-ui/defaults/main.yml`. Its ufw rules admit every node IP, which
 # is what lets a session on daniel-server read it.
 DEPLOY_UI_PORT = 8790

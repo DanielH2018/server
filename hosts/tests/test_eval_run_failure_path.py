@@ -128,7 +128,7 @@ def test_the_restore_leaves_no_modified_history_behind(tmp_path):
 
 
 def test_the_old_reset_only_body_leaves_the_tree_dirty(tmp_path):
-    """REJECT: a bare `git reset` body against the same fixture, which is what parks the deployer.
+    """REJECT: a bare `git reset` body against the same fixture, which parks checkout-sync.
 
     `git reset` unstages and nothing else, so the file stays modified and `git status
     --porcelain` still prints it — the one thing gitops_deploy.py reads to decide it must skip.
@@ -176,7 +176,7 @@ def test_a_copy_that_failed_is_reported_as_a_lost_sweep(tmp_path):
         stamp,
     )
     assert run.stdout.startswith("SWEEP LOST"), run.stdout
-    # Losing the copy must not also park the deployer: the two outcomes are independent.
+    # Losing the copy must not also park `homelab-checkout-sync`: the two outcomes are independent.
     assert _porcelain(repo, stamp) == ""
 
 
@@ -192,7 +192,8 @@ def test_the_restore_leaves_no_untracked_history_behind(tmp_path):
     """A history.json with no HEAD version needs `rm`, not `git checkout HEAD --`.
 
     The checkout fails on it and leaves the file UNTRACKED, and `git status --porcelain` counts
-    untracked — so a checkout-only fix parks the deployer just as surely as a bare `git reset` does.
+    untracked — so a checkout-only fix parks `homelab-checkout-sync` just as surely as a bare `git
+    reset` does.
     """
     repo, stamp = _tree(tmp_path), tmp_path / "stamp"
     _bash(
@@ -214,7 +215,7 @@ def test_the_restore_reports_a_leftover_a_hook_wrote_after_git_add(tmp_path):
 
     prek's fixing hooks rewrite files after `git add` runs, and such a file is absent from the
     staged path by construction. A check scoped to evals/history.json would report `tree
-    restored` over exactly the leftover that keeps the deployer skipping.
+    restored` over exactly the leftover that keeps `homelab-checkout-sync` refusing.
     """
     repo, stamp = _tree(tmp_path), tmp_path / "stamp"
     _stage_a_sweep(repo, stamp)
@@ -343,8 +344,8 @@ def test_neither_cron_reads_the_exit_code_through_a_negation():
 def test_the_state_directory_is_created_outside_the_checkout():
     """The stamp directory is a unit-owned path under /var/lib/homelab, never inside $REPO.
 
-    A file recording a failure that itself parks the deployer would be the bug wearing the fix's
-    clothes.
+    A file recording a failure that itself parks `homelab-checkout-sync` would be the bug wearing
+    the fix's clothes.
     """
     assert 'STAMP_DIR="/var/lib/homelab/eval-run.d"' in SCRIPT
 

@@ -218,7 +218,7 @@ def read_check_pages(fetch_page: Callable[[str], object], key: str) -> list[dict
     GitHub answers a check-runs or combined-status GET with no `per_page` with one page of 30,
     so a failing entry past it read as green and the digest dropped a PR whose CI was failing
     (#6002). Both bodies carry `total_count` beside their list. The notifier
-    cannot import `deployer_lib`, so this is a copy, held equal by
+    cannot import `builder_ci_grade`, so this is a copy, held equal by
     `tests/test_renovate_notify.py`. `fetch_page(query)` returns the parsed body for the
     `?per_page=&page=` string this walk builds. A read short of `total_count` raises rather
     than returning a partial list: the run fails, which pages through `OnFailure=` and the

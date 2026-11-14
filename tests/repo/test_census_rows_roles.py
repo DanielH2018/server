@@ -61,8 +61,8 @@ def _shipped_py(subject: Subject) -> list[tuple[int, str]]:
 # put files on a host without a literal name to match. None of them ships a `.md` today — the two
 # globs in the tree take `*.json` and `*.pub`, the three `unarchive` tasks take remote tarballs,
 # and no task carries a directory `src:` — so the hole is latent rather than live. A `.md` added
-# under one of those globs would pass this row and be skipped by the deployer, which is the one
-# failure mode to check when a role starts globbing a directory that holds prose.
+# under one of those globs would pass this row and was skipped by the retired deployer, which is the
+# one failure mode to check when a role starts globbing a directory that holds prose.
 SHIPPED_MD = re.compile(
     r"""(?:src|dest)\s*:\s*['"]?\S*?(?P<a>[\w.-]+\.md)"""
     r"""|lookup\(\s*['"]file['"]\s*,\s*['"]?\S*?(?P<b>[\w.-]+\.md)"""
@@ -143,9 +143,9 @@ ROWS = (
     Census(
         name="no-role-ships-a-markdown-file",
         reason=(
-            "`deploy_logic.is_doc` reads every `.md` as prose no playbook applies, and the tick, "
-            "the deploy-plane narrowing and the setup-role narrowing all ask it. That is safe "
-            "only while a `.md` the deployer skips is also one no host receives. Rename the "
+            "The retired deployer's `deploy_logic.is_doc` read every `.md` as prose no playbook "
+            "applied, and its tick and both narrowings asked it. That was safe only while a "
+            "`.md` it skipped was also one no host received. Rename the "
             "shipped file, or give is_doc back a carve-out; this scan matches a literal basename "
             "and the comment above SHIPPED_MD names the glob shapes it cannot see."
         ),

@@ -122,7 +122,7 @@ def test_a_record_after_the_publish_gate_is_flagged():
     ],
 )
 def test_the_weights_table_is_named_wherever_the_doc_trees_are(marker, table):
-    """Both places name docs/reference; a weights table missing from either parks the deployer.
+    """Both places name docs/reference; a weights table missing from either parks checkout-sync.
 
     The `git add` is the issue's own first bullet. The porcelain check is one layer under it:
     the per-path restore already covers the table, and this is the check that says the restore
