@@ -95,12 +95,14 @@ def mismatch_fails_the_run(node: Node) -> None:
 
     assert result.returncode == 1
     assert "claude has uid 1000; the package declares 1001" in result.stderr
-    find = "find /home/claude /tmp /var/tmp /var/spool/cron/crontabs -xdev"
     assert "usermod -u 1001 claude;" in result.stderr
-    assert f"{find} -uid 1000 -exec chown -h 1001 {{}} +;" in result.stderr
+    assert (
+        "find /home/claude /tmp /var/tmp /var/spool/cron/crontabs -xdev -uid 1000"
+        " -exec chown -h 1001 {} +;" in result.stderr
+    )
     assert (
         "if claude's primary group is claude with gid 1000, also groupmod -g 1001 claude"
-        f" and {find} -gid 1000 -exec chown -h :1001 {{}} +;" in result.stderr
+        " and the same find with -gid 1000 -exec chown -h :1001 {} +;" in result.stderr
     )
     assert "then sudo /usr/lib/homelab/homelab-updater --clear-hold" in result.stderr
     assert node.applied()["result"]["ok"] is False

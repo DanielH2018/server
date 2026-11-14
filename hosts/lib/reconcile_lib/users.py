@@ -65,14 +65,8 @@ def check(user: dict) -> str:
         log(f"getent passwd {user['name']} failed: {found.stderr.strip()}", ERR)
         return "fault"
     if int(fields[2]) != user["uid"]:
-        name, old, new = user["name"], fields[2], user["uid"]
-        find = f"find {user['home']} /tmp /var/tmp /var/spool/cron/crontabs -xdev"
         log(
-            f"{name} has uid {old}; the package declares {new}. To move it, as root: stop every"
-            f" unit running as {name}; usermod -u {new} {name}; {find} -uid {old} -exec chown"
-            f" -h {new} {{}} +; if {name}'s primary group is {name} with gid {old}, also"
-            f" groupmod -g {new} {name} and {find} -gid {old} -exec chown -h :{new} {{}} +;"
-            " start the units again; then sudo /usr/lib/homelab/homelab-updater --clear-hold",
+            f"{user['name']} has uid {fields[2]}; the package declares {user['uid']}. To move it, as root: stop every unit running as {user['name']}; usermod -u {user['uid']} {user['name']}; find {user['home']} /tmp /var/tmp /var/spool/cron/crontabs -xdev -uid {fields[2]} -exec chown -h {user['uid']} {{}} +; if {user['name']}'s primary group is {user['name']} with gid {fields[2]}, also groupmod -g {user['uid']} {user['name']} and the same find with -gid {fields[2]} -exec chown -h :{user['uid']} {{}} +; start the units again; then sudo /usr/lib/homelab/homelab-updater --clear-hold",
             ERR,
         )
         return "fault"
