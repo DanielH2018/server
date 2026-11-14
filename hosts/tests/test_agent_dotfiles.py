@@ -194,8 +194,8 @@ def test_the_seed_answers_agent_true() -> None:
 def test_the_operator_reads_the_seed_only_under_operator_read(
     operator_read: bool, modes: tuple[str, str], tmp_path: Path
 ) -> None:
-    """`probe.py applied` reads seed.toml as the operator, since rootq refuses any path under
-    the agent-owned home (#6408). The False case holds the flag-off modes, so an expression
+    """The operator reads seed.toml directly, since rootq refuses any path under the
+    agent-owned home (#6408). The False case holds the flag-off modes, so an expression
     that always opens the seed fails it."""
     setup = agent_setup_script(tmp_path, claude_code_agent_operator_read=operator_read)
     dir_mode, seed_mode = modes

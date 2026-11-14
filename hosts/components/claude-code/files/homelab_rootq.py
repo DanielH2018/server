@@ -8,8 +8,7 @@ listed is refused. The verbs come in two tiers.
 
 Tier 1 never prints file content. Each takes a PATH on the PATHS list:
 
-  rootq stat PATH           mode, type, owner, group, size and mtime, from lstat; for a
-                            DENY path, mode, type, owner, group and `deny=yes` only
+  rootq stat PATH           mode, type, owner, group, size and mtime, from lstat
   rootq sha256 PATH         the file's SHA-256
   rootq matches PATH FILE   exit 0 when PATH is byte-identical to FILE in your checkout, else 1
 
@@ -26,8 +25,7 @@ Tier 2 prints, and only from fixed sources, each through the redaction filter:
 
 PATH is absolute, and it must resolve to itself: a symlink anywhere along it, `..`, `.`, `//`
 or a trailing slash is refused. It must match a PATHS entry, every directory above it must be
-root-owned and writable by root alone, and it must miss every DENY pattern. The one exception is `stat` of a DENY path PATHS names, which answers
-without size or mtime (#6369).
+root-owned and writable by root alone, and it must miss every DENY pattern.
 
 Output is filtered twice. Output that matches REFUSE, or that gives a credential-named key a
 literal value, is withheld whole. The rest is redacted by default: every value is replaced by
@@ -70,7 +68,8 @@ TIER1 = ("stat", "sha256", "matches")
 # DECIDED: the allowlist is deliberately minimal: the files #6323's sessions needed and the
 # operator named on 2026-10-25. To add a file, add an entry here plus a must-pass case and a
 # must-refuse neighbour case in tests/test_rootq.py. Each entry is a directory and a glob over
-# one file name, so `*` never crosses `/`, and the match runs on the resolved path.
+# one file name, so `*` never crosses `/`, and the match runs on the resolved path. An entry
+# earns its place only by matching a file the caller cannot read without root.
 # /var/lib/gitops-deploy's files are not here, though the operator named them: sys_user owns
 # that directory, so the caller already reads them without root, and the ancestor-owner rule
 # below would refuse every path in it anyway.
@@ -81,12 +80,6 @@ PATHS = (
     ("/etc/ufw", "user6.rules"),
     ("/usr/lib/homelab", "registry-gc.sh"),
     ("/etc/systemd/system", "*.service"),
-    ("/etc/systemd/system", "*.timer"),
-    # The polkit rules this role installs, fanout-alert, land and triage, which `probe.py
-    # applied claude_code` read as `unread` on 2026-10-25 (#6357): rules.d is 0750 root.
-    ("/etc/polkit-1/rules.d", "50-claude-*.rules"),
-    # DENY paths, so only `stat` answers them, and without size or mtime (#6369).
-    ("/etc/claude-rc", "alert-webhook.env"),
 )
 # The only files tier 2 prints. A new printing source needs a structural argument for why the
 # filter redacts it cleanly: netplan is YAML, whose every line is a key, a list item or a
@@ -293,15 +286,12 @@ def check_path(
     entries: tuple[tuple[str, str], ...],
     prefix: str,
     owners: frozenset[int],
-    verb: str = "",
 ) -> str:
     # DECIDED: the deny list goes first, so a denied path is refused as denied whatever else
-    # is wrong with it. The one exception is `stat` of a DENY path the list names (#6369).
-    # The list is tested before the path is resolved, so a DENY path off it draws the same
-    # refusal whether or not it exists: there is no existence oracle beyond the allowlist.
-    if denied(path) and not (verb == "stat" and listed(path, entries, prefix)):
-        tail = " and not on the allowlist" if verb == "stat" else ""
-        raise Refused(f"{path} is on the deny list{tail}")
+    # is wrong with it, for every verb. The list is tested before the path is resolved, so a
+    # DENY path draws the same refusal whether or not it exists: there is no existence oracle.
+    if denied(path):
+        raise Refused(f"{path} is on the deny list")
     if not PATH_SHAPE.fullmatch(path):
         raise Refused(
             "PATH must be absolute and use only letters, digits and . _ @ + : , = / -"
@@ -356,12 +346,9 @@ def read_file(path: str) -> bytes:
         os.close(fd)
 
 
-def describe(path: str, info: os.stat_result | None = None) -> str:
-    """Tier 1's stat: metadata only, from lstat. A DENY path's size is its secret's length.
-
-    INFO stands in for PATH's lstat, so a test can describe a path no test host holds.
-    """
-    info = info or os.lstat(path)
+def describe(path: str) -> str:
+    """Tier 1's stat: metadata only, from lstat."""
+    info = os.lstat(path)
     try:
         owner = pwd.getpwuid(info.st_uid).pw_name
     except KeyError:
@@ -372,8 +359,10 @@ def describe(path: str, info: os.stat_result | None = None) -> str:
         group = str(info.st_gid)
     kind = "file" if stat.S_ISREG(info.st_mode) else "other"
     mtime = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(info.st_mtime))
-    rest = "deny=yes" if denied(path) else f"size={info.st_size} mtime={mtime}"
-    return f"mode={stat.S_IMODE(info.st_mode):04o} type={kind} owner={owner} group={group} {rest}\n"
+    return (
+        f"mode={stat.S_IMODE(info.st_mode):04o} type={kind} owner={owner} group={group} "
+        f"size={info.st_size} mtime={mtime}\n"
+    )
 
 
 # ── Redaction ─────────────────────────────────────────────────────────────────────────────
@@ -658,7 +647,7 @@ def dispatch(verb: str, args: list[str], environ: dict[str, str]) -> int:
             raise Refused(
                 f"{verb} takes {'PATH HEX' if want == 2 else 'exactly one PATH'}"
             )
-        return tier1(verb, check_path(args[0], PATHS, prefix, owners, verb), args[1:])
+        return tier1(verb, check_path(args[0], PATHS, prefix, owners), args[1:])
     raise Refused(
         f"unknown verb {verb!r}; one of {' '.join([*TIER1, *COMMANDS, 'cat'])}"
     )
