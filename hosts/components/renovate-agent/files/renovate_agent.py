@@ -28,10 +28,8 @@ from __future__ import annotations
 import json
 import os
 import pwd
-import subprocess
 import sys
 import time
-from collections.abc import Mapping
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from agent_logic import (
@@ -44,10 +42,10 @@ from agent_logic import (
     resume_command,
     run_record,
 )
-from agent_toolbox import TOOLS, AgentTools, log, read_file
+from agent_toolbox import TOOLS, AgentTools, log, start_unit
 from host_lib import atomic_write, install_excepthook, parse_env_file
+from renovate_session import BLOCKED_FILE, OUTPUT_FILE, SESSION_ENV_FILE
 from run_requests import Outcome, carry_out, fresh_dir
-from run_worktree import prepare_worktree, worktree_is_reusable
 
 # The env override exists so the I/O shell can be exercised end-to-end against a throwaway
 # config before the timer is ever armed. Without it the only way to run this code is to deploy
@@ -63,12 +61,10 @@ RENOVATE_AUTHOR = "app/renovate"
 OPEN_PR_LIMIT = 200
 # One JSON line per tick under STATE_DIR, from agent_logic.run_record.
 RUNS_FILE = "runs.jsonl"
-# The unit's EnvironmentFile: the session's GitHub token and Claude credential, root 0600.
-SESSION_ENV_FILE = "/etc/renovate-agent/session.env"
-# The read-only token in SESSION_ENV_FILE that `session_env` hands the session as GH_TOKEN.
-SESSION_TOKEN_KEY = "RENOVATE_SESSION_GH_TOKEN"
-# Every other variable the unit sets for the session. A resume has to set each again, because
-# sudo resets the environment (#4603). test_session_resume.py holds this to the unit template.
+# The unit the session runs in; polkit lets this process's user start it.
+SESSION_UNIT = "homelab-renovate-agent-session.service"
+# Every other variable the session unit sets. A resume has to set each again, because sudo
+# resets the environment (#4603). test_session_resume.py holds this to both unit templates.
 SESSION_ENV_KEYS = (
     "PATH",
     "HOME",
@@ -162,65 +158,14 @@ def pr_states(
     return states
 
 
-def session_env(env: Mapping[str, str]) -> dict[str, str]:
-    """The runner's environment with `GH_TOKEN` swapped for the session's read-only token.
+def request_line(request: Outcome) -> str:
+    """The journal line for one request, in fixed words only.
 
-    The runner keeps its own token for the GitHub writes it makes on the session's behalf. A
-    missing read token raises, so a session never starts holding the runner's token.
+    The file name and a refusal's detail are session text. They stay in requests.jsonl, a file,
+    and never reach the journal, where loki-homelab's rules read them (#967's I3 and I6, #8676).
     """
-    if not env.get(SESSION_TOKEN_KEY):
-        raise RuntimeError(f"{SESSION_TOKEN_KEY} is unset; {SESSION_ENV_FILE} lacks it")
-    out = {k: v for k, v in env.items() if k != SESSION_TOKEN_KEY}
-    out["GH_TOKEN"] = env[SESSION_TOKEN_KEY]
-    return out
-
-
-def run_session(
-    cfg: dict[str, str], cwd: str, log_path: str, requests_dir: str
-) -> tuple[str, int, bool]:
-    """Run the headless Claude session in `cwd`, teeing its stdout to `log_path`.
-
-    `requests_dir` is outside the worktree, so it is added as a working directory: a headless
-    session has no one to approve a Write there, and its request files would never land.
-
-    stdin is /dev/null: without it Claude Code waits 3s for piped input on every start, and
-    under systemd there is no stdin to wait for.
-    """
-    prompt = read_file(cfg["PROMPT_FILE"])
-    if not prompt.strip():
-        raise RuntimeError(f"prompt file {cfg['PROMPT_FILE']} is empty or missing")
-    argv = [
-        cfg.get("CLAUDE_BIN", "claude"),
-        "-p",
-        prompt,
-        "--permission-mode",
-        cfg.get("PERMISSION_MODE", "auto"),
-        "--model",
-        cfg.get("MODEL", "opus"),
-        "--output-format",
-        "json",
-        "--max-budget-usd",
-        cfg.get("BUDGET_USD", "25"),
-        "--add-dir",
-        requests_dir,
-    ]
-    timeout = int(cfg.get("SESSION_TIMEOUT_S", "3600"))
-    log(f"starting session (timeout {timeout}s, budget ${cfg.get('BUDGET_USD', '25')})")
-    try:
-        p = subprocess.run(
-            argv,
-            cwd=cwd,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            stdin=subprocess.DEVNULL,
-            env=session_env(os.environ),
-        )
-    except subprocess.TimeoutExpired as e:
-        atomic_write(log_path, (e.stdout or "") if isinstance(e.stdout, str) else "")
-        return "", 124, True
-    atomic_write(log_path, p.stdout or "")
-    return p.stdout or "", p.returncode, False
+    done = "done" if request.done else "not done"
+    return f"request {request.action or 'refused'} #{request.pr} {done}"
 
 
 def landings(requests: list[Outcome]) -> list[str]:
@@ -250,10 +195,8 @@ def main(tools: AgentTools = TOOLS, config_path: str = CONFIG) -> int:
     host = os.uname().nodename
     webhook = cfg.get("DISCORD_WEBHOOK", "")
     state_dir = cfg.get("STATE_DIR", "/var/lib/renovate-agent")
-    repo_dir = cfg["REPO_DIR"]
-    branch = cfg.get("BRANCH", "worktree-renovate-auto")
     path = os.path.join(
-        repo_dir, ".claude", "worktrees", cfg.get("WORKTREE", "renovate-auto")
+        cfg["REPO_DIR"], ".claude", "worktrees", cfg.get("WORKTREE", "renovate-auto")
     )
     log_path = os.path.join(state_dir, "last_session.json")
     spool = discord_spool(state_dir)
@@ -272,23 +215,31 @@ def main(tools: AgentTools = TOOLS, config_path: str = CONFIG) -> int:
             )
         return 0
 
-    reusable, why = worktree_is_reusable(repo_dir, path, branch, tools, cfg["REPO"])
-    if not reusable:
-        # The previous tick left work in flight, so leave the tree alone — removing it is how
-        # unlanded work is lost. But it IS a unit failure: the tree stays blocked until a person
-        # clears it, and this skip repeated for five days behind a green Alive tile before
-        # #2014, because exit 0 let ExecStartPost beat. A `down` pushed here would be laundered
-        # by that same beat, so the exit code carries it: no beat, and OnFailure pages.
+    log(f"{gate.reason}; starting {SESSION_UNIT}")
+    requests_dir = fresh_dir(state_dir)
+    for name in (OUTPUT_FILE, BLOCKED_FILE):
+        if os.path.lexists(os.path.join(state_dir, name)):
+            os.unlink(os.path.join(state_dir, name))
+    wait = min(
+        int(cfg.get("SESSION_TIMEOUT_S", "2700")) + 300, int(deadline - time.time())
+    )
+    end = start_unit(SESSION_UNIT, tools, max(wait, 1))
+    why = tools.read_file(os.path.join(state_dir, BLOCKED_FILE)).strip()
+    if why:
+        # The previous tick left work in flight, so the session left the tree alone — removing
+        # it is how unlanded work is lost. But it IS a unit failure: the tree stays blocked until
+        # a person clears it, and this skip repeated for five days behind a green Alive tile
+        # before #2014, because exit 0 let ExecStartPost beat. A `down` pushed here would be
+        # laundered by that same beat, so the exit code carries it: no beat, and OnFailure pages.
         msg = f"renovate-agent: skipped on {host} — {why}. Clear it, then the next tick runs."
         log(msg)
         tools.discord_post(webhook, msg, USER_AGENT, log=log, spool_dir=spool)
         record_run(state_dir, run_record(int(time.time()), "blocked", why))
         return EXIT_WORKTREE_BLOCKED
-
-    log(f"{gate.reason}; preparing {path}")
-    prepare_worktree(repo_dir, path, branch, tools)
-    requests_dir = fresh_dir(state_dir)
-    stdout, rc, timed_out = run_session(cfg, path, log_path, requests_dir)
+    stdout = tools.read_file(os.path.join(state_dir, OUTPUT_FILE))
+    atomic_write(log_path, stdout)
+    timed_out = end.result in ("timeout", "deadline")
+    rc = 0 if end.result == "success" else max(end.status, 1)
     outcome = parse_run(stdout, rc, timed_out)
     census = {p.number for p in before}
     requests = carry_out(
@@ -301,10 +252,7 @@ def main(tools: AgentTools = TOOLS, config_path: str = CONFIG) -> int:
         deadline=deadline,
     )
     for request in requests:
-        log(
-            f"request {request.name or '-'}: {request.action or '?'} "
-            f"#{request.pr or '?'} {'done' if request.done else 'not done'}: {request.detail}"
-        )
+        log(request_line(request))
 
     after = open_prs(cfg["REPO"], tools)
     gone = sorted({p.number for p in before} - {p.number for p in after})

@@ -22,6 +22,7 @@ import subprocess
 import agent_logic
 import pytest
 import renovate_agent
+import renovate_session
 from lib.proc_testing import write_exec
 
 SESSION_ID = "6f1c2a9e-4b7d-4e2a-9c3f-0d8b5a7e1c42"
@@ -46,10 +47,16 @@ class _Host:
     origin/master, so the tick reaches `run_session`.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, state: pathlib.Path, output: str) -> None:
         self.posts: list[str] = []
+        self.state, self.output = state, output
 
     def run(self, argv, cwd=None, timeout=120, stdin_text=None):
+        if argv == ["systemctl", "start", renovate_agent.SESSION_UNIT]:
+            (self.state / renovate_session.OUTPUT_FILE).write_text(self.output)
+            return 0, ""
+        if argv[:2] == ["systemctl", "show"]:
+            return 0, "Result=success\nExecMainStatus=0\n"
         if argv[0] == "gh":
             return 0, json.dumps(
                 [
@@ -102,17 +109,14 @@ def _tick(tmp_path: pathlib.Path, summary: str) -> tuple[_Host, pathlib.Path]:
         "permission_denials": [],
         "terminal_reason": "completed",
     }
-    claude = write_exec(
-        tmp_path / "claude", f"cat <<'EOF'\n{json.dumps(result)}\nEOF\n"
-    )
     prompt = tmp_path / "prompt.txt"
     prompt.write_text("/renovate-prs\n")
     cfg = tmp_path / "config.env"
     cfg.write_text(
         f"REPO=o/r\nREPO_DIR={tmp_path}\nPROMPT_FILE={prompt}\n"
-        f"STATE_DIR={tmp_path}/state\nCLAUDE_BIN={claude}\n"
+        f"STATE_DIR={tmp_path}/state\nCLAUDE_BIN={tmp_path}/claude\n"
     )
-    host = _Host()
+    host = _Host(tmp_path / "state", json.dumps(result))
     tools = renovate_agent.AgentTools(
         run=host.run,
         discord_post=host.discord_post,
@@ -246,12 +250,14 @@ def test_the_resumed_claude_gets_the_units_credentials_and_hook_env(tmp_path) ->
     assert f"RUN_HOOK_PROJECT_DIR={worktree}" in lines
 
 
-def test_the_resume_carries_every_variable_the_unit_sets() -> None:
-    """A variable added to the unit but not to SESSION_ENV_KEYS would be lost on a resume."""
+@pytest.mark.parametrize(
+    "template",
+    ["homelab-renovate-agent.service.j2", "homelab-renovate-agent-session.service.j2"],
+)
+def test_the_resume_carries_every_variable_the_unit_sets(template) -> None:
+    """A variable added to a unit but not to SESSION_ENV_KEYS would be lost on a resume."""
     unit = (
-        pathlib.Path(renovate_agent.__file__).parents[1]
-        / "templates"
-        / "homelab-renovate-agent.service.j2"
+        pathlib.Path(renovate_agent.__file__).parents[1] / "templates" / template
     ).read_text()
     keys = re.findall(r"^Environment=([A-Z_]+)=", unit, re.MULTILINE)
     assert "RUN_HOOK_PROJECT_DIR" in keys
@@ -259,15 +265,3 @@ def test_the_resume_carries_every_variable_the_unit_sets() -> None:
     assert re.findall(r"^EnvironmentFile=(\S+)$", unit, re.MULTILINE) == [
         renovate_agent.SESSION_ENV_FILE
     ]
-
-
-def test_the_session_gets_the_read_only_token_as_gh_token() -> None:
-    env = renovate_agent.session_env(
-        {"GH_TOKEN": "write", "RENOVATE_SESSION_GH_TOKEN": "read", "PATH": "/bin"}
-    )
-    assert env == {"GH_TOKEN": "read", "PATH": "/bin"}
-
-
-def test_a_session_without_its_read_token_never_starts() -> None:
-    with pytest.raises(RuntimeError, match="RENOVATE_SESSION_GH_TOKEN is unset"):
-        renovate_agent.session_env({"GH_TOKEN": "write"})

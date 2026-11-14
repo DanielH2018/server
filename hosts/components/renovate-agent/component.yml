@@ -13,6 +13,7 @@ users:
   - {name: renovate-agent, uid: 901, home: /var/lib/renovate-agent, shell: /bin/bash, comment: Unattended Renovate agent}
 units:
   homelab-renovate-agent.service: {policy: manual}
+  homelab-renovate-agent-session.service: {policy: manual}
 outputs:
   # Readable by the agent, writable by root alone: a session steered by text it read could otherwise
   # raise its own budget or timeout, or point PROMPT_FILE at a prompt of its own for the next run.
@@ -37,6 +38,7 @@ files:
   # Root-owned: the agent's user runs these and the lander runs land_renovate_pr.py, and neither may
   # change what the other runs.
   - {src: files/renovate_agent.py, dst: /usr/lib/homelab/renovate-agent/renovate_agent.py, mode: "0755"}
+  - {src: files/renovate_session.py, dst: /usr/lib/homelab/renovate-agent/renovate_session.py}
   - {src: files/agent_toolbox.py, dst: /usr/lib/homelab/renovate-agent/agent_toolbox.py}
   - {src: files/run_worktree.py, dst: /usr/lib/homelab/renovate-agent/run_worktree.py}
   - {src: files/run_requests.py, dst: /usr/lib/homelab/renovate-agent/run_requests.py}
@@ -52,9 +54,11 @@ files:
   - {src: templates/renovate-agent-setup.sh.j2, dst: /usr/lib/homelab/renovate-agent-setup, mode: "0755", activate: "try-restart:homelab-renovate-agent-setup.service"}
   - {src: templates/homelab-renovate-agent-setup.service.j2, dst: /usr/lib/systemd/system/homelab-renovate-agent-setup.service}
   - {src: templates/homelab-renovate-agent.service.j2, dst: /usr/lib/systemd/system/homelab-renovate-agent.service}
+  - {src: templates/homelab-renovate-agent-session.service.j2, dst: /usr/lib/systemd/system/homelab-renovate-agent-session.service}
   - {src: templates/homelab-renovate-agent.timer.j2, dst: /usr/lib/systemd/system/homelab-renovate-agent.timer}
   - {src: "templates/renovate-agent-land@.service.j2", dst: "/usr/lib/systemd/system/renovate-agent-land@.service"}
   - {src: templates/50-renovate-agent-land.rules.j2, dst: /usr/share/polkit-1/rules.d/50-renovate-agent-land.rules}
+  - {src: templates/50-renovate-agent-session.rules.j2, dst: /usr/share/polkit-1/rules.d/50-renovate-agent-session.rules}
   # RenovateAgentNotReporting and HostCheckOverdue are plain YAML and cannot read
   # renovate_agent_enabled, so a disarmed agent says so here and both stay quiet on its check. Arming
   # drops the file from the next package version, which removes it.
