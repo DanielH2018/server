@@ -34,7 +34,8 @@ a session whose `Closing socket` line was missed. A heartbeat whose count is abo
 below the open sessions closes nothing, because the count cannot say which session is stale,
 and a wrong guess would bank the live player's hours on the stale one. Until the next
 heartbeat that settles it, the exporter caps `valheim_players_online` at the server's count
-and stops each open session's playtime at that player's last evidence. The live player's own
+and stops each open session's playtime at that player's last evidence, never below the
+value the counter already showed. The live player's own
 `Closing socket` then banks their hours, and the next count of 0 closes the stale session.
 Until #8528 the restart pattern searched
 for `Load world: `, a line this server never logs, so a missed disconnect left two players

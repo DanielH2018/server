@@ -203,6 +203,18 @@ def test_a_live_players_hours_never_land_on_a_stale_session():
     assert st.players["Bob"]["total_playtime"] == 600.0
 
 
+def test_a_partial_heartbeat_does_not_lower_the_live_players_counter():
+    st = stats.StatsState()
+    _connected(st, "111", "Ann", 0.0)
+    _connected(st, "222", "Bob", 3600.0)
+    st.apply("heartbeat", 2, 4200.0)
+    before = st.playtime("Ann", 7700.0)
+    st.apply("heartbeat", 1, 7800.0)
+    assert st.playtime("Ann", 7900.0) >= before
+    st.apply("disconnect", "111", 10000.0)
+    assert st.players["Ann"]["total_playtime"] == 10000.0
+
+
 def test_another_players_presence_is_not_banked_on_a_stale_session():
     st = stats.StatsState()
     _connected(st, "111", "Bob", 0.0)

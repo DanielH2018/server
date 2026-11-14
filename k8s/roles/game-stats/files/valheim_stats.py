@@ -159,6 +159,8 @@ class StatsState:
         # The last heartbeat counted more than 0 but fewer than the open sessions, so
         # which session is stale is unknown.
         self.ambiguous = False
+        # name -> highest playtime a read has returned for the open session.
+        self.exposed = {}
 
     def _player(self, name):
         return self.players.setdefault(
@@ -181,6 +183,7 @@ class StatsState:
             p["open_start"] = None
             p["last_seen"] = ts
             self.last_present.pop(name, None)
+            self.exposed.pop(name, None)
 
     def _close_stale(self, name, ts):
         """Closes a session whose disconnect was missed, at the last time it was seen.
@@ -192,6 +195,7 @@ class StatsState:
         p = self.players[name]
         end = min(ts, self._last_evidence(name))
         self.last_present.pop(name, None)
+        self.exposed.pop(name, None)
         p["total_playtime"] += max(0.0, end - p["open_start"])
         p["sessions"] += 1
         p["open_start"] = None
@@ -296,14 +300,19 @@ class StatsState:
         """Total playtime incl. the in-progress session so the counter ticks live.
 
         While the server's count is partial, an open session stops ticking at the
-        player's last evidence, so a stale session cannot run ahead and then fall back.
+        player's last evidence, so a stale session cannot run ahead of what was seen.
+        The counter never drops below a value this method already returned for the
+        session, because the live player cannot be told from the stale one and a
+        counter that falls back reads as a reset.
         """
         p = self.players[name]
         base = p["total_playtime"]
-        if p["open_start"] is not None:
-            end = min(now, self._last_evidence(name)) if self.ambiguous else now
-            base += max(0.0, end - p["open_start"])
-        return base
+        if p["open_start"] is None:
+            return base
+        end = min(now, self._last_evidence(name)) if self.ambiguous else now
+        value = max(base + max(0.0, end - p["open_start"]), self.exposed.get(name, 0.0))
+        self.exposed[name] = value
+        return value
 
 
 def render_metrics(state, now):
