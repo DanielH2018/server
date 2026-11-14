@@ -356,6 +356,8 @@ def form(ln: Landing, head: str) -> int:
             waited, why = _await_run(ln, tip)
             if why:
                 say(f"the batch is not green: {why}; each of its PRs lands alone")
+                for member in members:
+                    _answer(ln, member, line.ALONE)
                 return waited
             _label(ln, pr)
         finally:
@@ -366,6 +368,15 @@ def form(ln: Landing, head: str) -> int:
     ln.tested_on, ln.tested_head, ln.batch = base, head, members
     say(f"the batch is green after {waited}s; merging {named} in that order")
     return waited
+
+
+def _answer(ln: Landing, member: Member, what: str) -> None:
+    """Write `what` into the member's place in the line, for its own landing to read."""
+    pr = member.ln.opts.pr
+    try:
+        turn.line_of(ln)("answer", pr, member.head, what)
+    except OSError as exc:
+        say(f"could not tell PR #{pr}'s landing that it is {what} ({exc})")
 
 
 def _merge_commit(ln: Landing) -> str:
@@ -425,10 +436,7 @@ def _merge_members(ln: Landing) -> None:
         if why:
             say(f"PR #{pr} is not merged ({why}); it and the PRs after it land alone")
             return
-        try:
-            turn.line_of(ln)("answer", pr, member.head, line.MERGED)
-        except OSError as exc:
-            say(f"could not tell PR #{pr}'s landing that it merged ({exc})")
+        _answer(ln, member, line.MERGED)
         before = member.ln
 
 
@@ -441,7 +449,7 @@ def land(ln: Landing, take_turn: merge.TakeTurn) -> None:
 
     def take(draft: str) -> tuple[bool, int]:
         in_turn, waited = take_turn(draft)
-        if in_turn and draft and ln.opts.batch:
+        if in_turn and draft and ln.opts.batch and not ln.lands_alone:
             try:
                 ln.batched_s = form(ln, draft)
             except Exception as exc:

@@ -33,6 +33,8 @@ DIR = Path("/run/lock/homelab-land-line")
 FRESH_S = 120
 # What the holder of the turn writes into a place once it has merged that PR.
 MERGED = "merged"
+# What it writes once a batch that tested that PR was not green: the PR lands by itself.
+ALONE = "alone"
 _SSH_TIMEOUT_S = 30
 
 # One operation on the line, by name: its arguments as strings, its result as text.
@@ -206,6 +208,10 @@ class Place:
         """
         op, self._stood = ("stand" if self._stood else "join"), True
         return self._run(op, self._pr, self._head)
+
+    def answer(self) -> str:
+        """What the holder of the turn answered a landing that stood here; "" for any other."""
+        return self._run("stand", self._pr, self._head) if self._stood else ""
 
     def leave(self) -> None:
         """Give the place up, if this landing took it."""
