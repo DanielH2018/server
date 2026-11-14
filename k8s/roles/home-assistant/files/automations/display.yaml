@@ -13,7 +13,9 @@
     (FP300 illuminance > 60) and not in sleep mode. Only casts when the Hub is NOT already playing
     something (state != playing) so it never re-casts an already-shown dashboard (no flicker) nor
     overrides user-started media; re-establishes after an HA restart or when the Hub returns to its
-    ambient screen.
+    ambient screen. Holds off for 15 minutes after bedroom_display_dismiss runs, unless the room
+    reads above 200 lux, so daylight hovering around both lux thresholds cannot cast and dismiss
+    in turn.
   mode: single
   trigger:
     - platform: homeassistant
@@ -49,6 +51,14 @@
     - condition: numeric_state
       entity_id: sensor.aqara_fp300_illuminance
       above: 60
+    # Lights-off daylight swung the FP300 between 40 and 87 for 12 minutes and met both 30 s holds
+    # three times over (2026-11-12, #8411); the 50/60 gap is narrower than that noise. Above 200
+    # (lights on read ~600) is out of that band, so turning the lights on still casts at once.
+    - condition: template
+      value_template: >-
+        {% set dismissed = state_attr('automation.bedroom_display_dismiss', 'last_triggered') %}
+        {{ dismissed is none or now() - dismissed > timedelta(minutes=15)
+           or states('sensor.aqara_fp300_illuminance') | float(0) > 200 }}
     # The Hub must actually be reachable. When it's unavailable/unknown (powered off, off the
     # network, or its cast connection to HA is down), every re-cast fails — flooding the log with
     # pychromecast NotConnected errors on each attempt. Gate those states out so we only (re)cast
