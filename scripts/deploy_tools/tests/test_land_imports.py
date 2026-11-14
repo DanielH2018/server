@@ -18,6 +18,7 @@ MODULES = frozenset(
         "pace",
         "turn",
         "line",
+        "batch",
         "stale_base",
         "stuck_checks",
         "policy",
@@ -100,6 +101,18 @@ ALLOWED = {
     "turn": {"landing", "outcome", "line"},
     # The drafts whose landings wait for the turn, which its holder reads; boundaries only.
     "line": set(),
+    # The drafts in the line, tested with the turn holder's own in one run, then merged.
+    "batch": {
+        "landing",
+        "outcome",
+        "classify",
+        "gh_read",
+        "line",
+        "live_limit",
+        "merge",
+        "stale_base",
+        "turn",
+    },
     # The master CI backlog read that holds --await-merge's direct merge (#5526).
     "pace": {"landing", "outcome"},
     # The read that ends --await-merge on a check GitHub never finishes (#7996).
@@ -166,6 +179,7 @@ ALLOWED = {
     "pipeline": {
         "landing",
         "outcome",
+        "batch",
         "merge",
         "turn",
         "classify",
