@@ -256,34 +256,6 @@ def _fields_as_asked(tools):
     return dataclasses.replace(tools, gh_json=gh_json)
 
 
-PULL_REQUEST_8559 = {"number": 8559, "state": "OPEN", "isPullRequest": True}
-ISSUE_7178 = {"number": 7178, "state": "OPEN", "isPullRequest": False}
-
-
-def test_a_wait_on_an_open_pull_request_names_no_block_command(make_tools):
-    tools, _ = make_tools(Fakes(view={8559: PULL_REQUEST_8559}))
-    lines = blocker_hints(
-        "Once #8559 is on master, retire it.", 8560, [], _fields_as_asked(tools)
-    )
-    assert not [line for line in lines if "findings.py block" in line]
-
-
-def test_an_open_issue_beside_a_pull_request_keeps_its_block_hint(make_tools):
-    tools, _ = make_tools(Fakes(view={8559: PULL_REQUEST_8559, 7178: ISSUE_7178}))
-    body = "Once #8559 is on master and #7178 closes, retire it."
-    lines = blocker_hints(body, 8560, [], _fields_as_asked(tools))
-    assert any("`findings.py block 8560 --on 7178`" in line for line in lines)
-    assert not [line for line in lines if "--on 8559" in line]
-
-
-def test_open_hints_no_block_for_a_wait_on_a_pull_request(tmp_path, capsys, make_tools):
-    tools, calls = make_tools(Fakes(view={8559: PULL_REQUEST_8559}))
-    argv = _open_argv(tmp_path, "Once #8559 is on master, retire it.")
-    assert findings.main(argv, _fields_as_asked(tools)) == 0
-    assert any(c[:2] == ["issue", "create"] for c in calls.gh)
-    assert "--on 8559" not in capsys.readouterr().err
-
-
 # The fields `gh issue view --json` accepts, as gh 2.104.0 lists them on an unknown field.
 GH_ISSUE_VIEW_FIELDS = frozenset(
     "assignees author blockedBy blocking body closed closedAt "
@@ -334,3 +306,11 @@ def test_an_issue_wait_keeps_its_block_hint_from_real_gh_fields(make_tools):
     lines = blocker_hints(body, 8560, [], _fields_gh_knows(tools))
     assert len(lines) == 1
     assert "`findings.py block 8560 --on 7178`" in lines[0]
+
+
+def test_open_hints_no_block_for_a_wait_on_a_pull_request(tmp_path, capsys, make_tools):
+    tools, calls = make_tools(Fakes(view={8559: _recorded(8559, "OPEN", "pull")}))
+    argv = _open_argv(tmp_path, "Once #8559 is on master, retire it.")
+    assert findings.main(argv, _fields_gh_knows(tools)) == 0
+    assert any(c[:2] == ["issue", "create"] for c in calls.gh)
+    assert "--on 8559" not in capsys.readouterr().err
