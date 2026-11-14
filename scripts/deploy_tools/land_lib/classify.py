@@ -12,7 +12,7 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from deploy_tools.land_lib.landing import BRANCH, Classification, Landing
-from deploy_tools.land_lib.fresh import FRESH_FLAG
+from deploy_tools.land_lib.fresh import FRESH_FLAG, GradeFresh, grading_argv
 from deploy_tools.land_lib.own_checkout import OWN_CHECKOUT
 from deploy_tools.land_lib.outcome import Outcome, Verdict, say
 from deploy_tools.land_lib.land_tags import DeriveSource
@@ -54,9 +54,8 @@ def resolve(ln: Landing) -> None:
     ln.fetch_branch()
 
 
-def _stale_code_reason(ln: Landing, base: str) -> str:
-    """Why land.py's checkout lags `base`; "" when it carries every change to its code."""
-    stale = ln.tools.stale_code(base)
+def _stale_code_reason(stale: list[str] | None, base: str) -> str:
+    """Why land.py's checkout lags `base`, from `tools.stale_code`; "" when it does not."""
     if stale == []:
         return ""
     if stale:
@@ -74,7 +73,7 @@ def refuse_stale_code_before_merge(ln: Landing) -> None:
     """
     ln.fetch_branch()
     base = f"origin/{BRANCH}"
-    what = _stale_code_reason(ln, base)
+    what = _stale_code_reason(ln.tools.stale_code(base), base)
     if not what:
         return
     rerun = (
@@ -89,22 +88,39 @@ def refuse_stale_code_before_merge(ln: Landing) -> None:
 
 
 def refuse_stale_code(ln: Landing) -> None:
-    """Die when land.py's checkout lacks a master change to the code this landing runs.
+    """Move the grading to master's landing code when land.py's checkout lacks a change to it.
 
     The base is the merge commit's first parent: master as it stood before this PR. The PR's
     own changes are left out because the landers that ship PRs run from checkouts made before
     the merge: autoland's (`fanout_lib/autoland.py:prepare_checkout`) and the lander unit's,
-    the primary. Against the merge itself, every PR editing landing code would refuse there.
+    the primary. Against the merge itself, every PR editing landing code would be stale there.
     The cost: such a PR that also moves a layout is not caught landing from an older checkout.
-    DECIDED: refuse rather than re-exec from a fresh checkout, so `land.sh` keeps running the
-    release it ships with (#7820). The refusal names `--fresh`, the caller's opt-in to that
-    re-run (#7933), so no hand makes a checkout. A rebase merge of a PR that edits landing
-    code puts its earlier commits in the base and refuses too; land.sh squash-merges.
+    A rebase merge of a PR that edits landing code puts its earlier commits in the base and is
+    stale too; land.sh squash-merges.
+
+    DECIDED: after the merge, a stale checkout hands the grading to a fresh checkout without
+    asking (#8679). This reverses #7820's refusal that named `--fresh` (#7933): on 2026-11-14
+    three of one session's four landings ended `refused` here with the PR merged, and the
+    caller's answer was always that same `--fresh` re-run, which waited on master CI again.
+    Before the merge the landing still refuses (`refuse_stale_code_before_merge`). A lander
+    unit cannot take `--fresh`, and a comparison git could not make proves nothing, so both
+    still refuse here.
+
+    Raises:
+      GradeFresh: the checkout lags master; land.py runs the grading from a fresh checkout.
+      Outcome: `refused`, under a lander unit or when git could not compare.
     """
     base = f"{ln.merge_sha}^1"
-    what = _stale_code_reason(ln, base)
-    if not what:
+    stale = ln.tools.stale_code(base)
+    if stale == []:
         return
+    what = _stale_code_reason(stale, base)
+    if stale and not ln.opts.policy_active:
+        raise GradeFresh(
+            grading_argv(ln.opts, ln.opts.since or base),
+            f"this landing runs from {OWN_CHECKOUT}, and {what}. PR #{ln.opts.pr} is "
+            f"merged, so a checkout of origin/{BRANCH} grades it",
+        )
     # Quoted: zsh's extendedglob reads the `^` in `<sha>^1` as a glob and refuses the line.
     since = shlex.quote(ln.opts.since or base)
     rerun = f"land.sh --pr {ln.opts.pr} --since {since} {FRESH_FLAG}"

@@ -1,10 +1,14 @@
 """`land.sh --fresh`: land from a detached checkout of origin/master made for this run (#7933).
 
-`classify.refuse_stale_code` refuses a landing whose own code lags master. A checkout the caller
-makes by hand goes stale again as soon as master moves, and the `git -C <primary> worktree add`
-it took is a command a worktree-isolated session's guard refuses. `--fresh` makes that checkout
-inside the landing, from the primary so it shares the primary's refs, runs the `land.sh` in it
-with the same arguments minus `--fresh`, and removes it afterwards. The refusals name the flag.
+`classify.refuse_stale_code_before_merge` refuses a landing whose own code lags master, and
+names the flag. A checkout the caller makes by hand goes stale again as soon as master moves,
+and the `git -C <primary> worktree add` it took is a command a worktree-isolated session's
+guard refuses. `--fresh` makes that checkout inside the landing, from the primary so it shares
+the primary's refs, runs the `land.sh` in it with the same arguments minus `--fresh`, and
+removes it afterwards.
+
+After the merge, `classify.refuse_stale_code` raises `GradeFresh` instead, and land.py runs the
+merged PR's grading from the same kind of checkout without asking (#8679).
 
 The checkout's `land.sh` is a child process, not an exec, so this process outlives it and the
 `finally` removes the checkout whatever the child's exit code. Under `--detach`, land.py forks
@@ -19,6 +23,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
+from deploy_tools.land_lib.options import Options
 from lib.git import git as _git
 
 FRESH_FLAG = "--fresh"
@@ -39,6 +44,32 @@ def child_argv(argv: list[str], since: str) -> list[str]:
     if since and not any(a == "--since" or a.startswith("--since=") for a in out):
         out += ["--since", since]
     return out
+
+
+class GradeFresh(Exception):
+    """A merged PR whose grading moves to a fresh checkout, because this one lags master.
+
+    Attributes:
+      argv: the arguments for the fresh checkout's `land.sh`.
+    """
+
+    def __init__(self, argv: list[str], why: str) -> None:
+        super().__init__(why)
+        self.argv = argv
+
+
+def grading_argv(opts: Options, since: str) -> list[str]:
+    """`argv` that grades the merged PR `opts` names, with no flag that merges or forks.
+
+    Without `--await-merge`, the child's checkout is made after the merge, so it holds the
+    merge commit's parent and cannot find its own code stale again.
+    """
+    argv = ["--pr", opts.pr, "--since", since, "--ci-timeout", str(opts.ci_timeout)]
+    if opts.tags:
+        argv += ["--tags", opts.tags]
+    if opts.verdict_file:
+        argv += ["--verdict-file", opts.verdict_file]
+    return argv
 
 
 def land_fresh(

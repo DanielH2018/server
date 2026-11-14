@@ -126,8 +126,8 @@ ALLOWED = {
     "promotion": {"landing", "outcome"},
     "health_verdict": {"landing", "outcome", "promotion", "health_gate"},
     "own_checkout": set(),
-    # Makes a checkout and runs a child land.sh; it imports no phase.
-    "fresh": set(),
+    # Makes a checkout and runs a child land.sh; it imports no phase. `grading_argv` reads Options.
+    "fresh": {"options"},
     # The fork, the logfile and the verdict wait. It imports no phase: `land.py` hands it a
     # callable and it never knows what a landing is.
     "detach": set(),
