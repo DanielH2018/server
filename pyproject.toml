@@ -383,8 +383,8 @@ ignore_names = [
   "testworktree_*",
   # Module-level `pytestmark`, which pytest reads.
   "pytestmark",
-  # Parameters a fake's signature accepts because the real call passes them.
-  "server_hostname", "ua",
+  # Keyword a fake's signature accepts because the real call passes it.
+  "server_hostname",
   # Fields of a test dataclass, read through dataclasses.fields().
   "KUMA_URL", "NEW_SERVICE_TOKEN", "NEW_DISCORD_WEBHOOK_URL",
 ]
