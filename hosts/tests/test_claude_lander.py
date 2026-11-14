@@ -264,6 +264,10 @@ FLOOR = [
     "hosts/components/renovate-agent/files/renovate_agent.py",
     "hosts/components/renovate-agent/templates/session.env.j2",
     "hosts/components/renovate-agent/templates/config.env.j2",
+    "hosts/components/renovate-agent/templates/renovate-agent-pins.j2",
+    "hosts/components/renovate-agent/templates/prompt.txt.j2",
+    "hosts/components/renovate-agent/templates/homelab-renovate-agent.service.j2",
+    "hosts/components/renovate-agent/templates/homelab-renovate-agent.timer.j2",
     "hosts/components/renovate-agent/component.yml",
     "scripts/deploy_tools/land",
     "pyproject.toml",
@@ -357,7 +361,7 @@ def test_a_pr_changing_a_role_named_like_cluster_base_lands_without_the_operator
 OFF_THE_FLOOR = [
     "docs/landing.md",
     "hosts/components/claude-code/defaults/main.yml",
-    "hosts/components/renovate-agent/templates/prompt.txt.j2",
+    "hosts/components/renovate-agent/defaults/main.yml",
     "inventory/host_vars/daniel-box.yml",
 ]
 
