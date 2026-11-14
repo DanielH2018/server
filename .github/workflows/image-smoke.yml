@@ -3,8 +3,9 @@ name: image-smoke
 # Runs on EVERY PR (no `paths:` filter) on purpose: this is a required status check,
 # and a path-filtered workflow that never triggers would leave the PR's required check
 # stuck at "Expected — waiting for status". The job self-scopes instead — the
-# "Collect changed image refs" step diffs only the compose templates, so a PR that
-# touches none yields an empty list and the boot step is skipped (a fast green).
+# "Collect changed image refs" step diffs only the k8s role defaults and group_vars/all.yml,
+# so a PR that changes no image ref there yields an empty list and the boot step is skipped
+# (a fast green).
 #
 # workflow_dispatch takes an explicit list instead of the diff, for two jobs the PR trigger
 # cannot do. It is the only way to exercise a change to the check itself — a PR that edits this
