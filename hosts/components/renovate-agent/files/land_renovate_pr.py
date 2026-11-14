@@ -37,7 +37,7 @@ the environment RENOVATE_AGENT_REPO (default DanielH2018/server) and RENOVATE_AG
 /var/lib/renovate-agent-land/<pr-number>.verdict.
 Exit codes: land.sh's own on a landing, 64 for an argument that is not a PR number, 3 for a
 refusal before any merge: the lander's own, or a land.sh `refused` on a PR GitHub reports
-unmerged. The unit lists 3 in `SuccessExitStatus=`, so a refusal leaves it inactive rather than
+unmerged. A land.sh crash also prints `refused`, but its traceback keeps land.sh's exit 1. The unit lists 3 in `SuccessExitStatus=`, so a refusal leaves it inactive rather than
 failed and `SystemdUnitsFailed` pages only for a landing that went wrong.
 """
 
@@ -93,6 +93,8 @@ _SHA = re.compile(r"[0-9a-f]{40}")
 _K8S_ROLE = re.compile(r"^k8s/roles/([^/]+)/")
 _VERDICT = re.compile(r"^VERDICT: .*$", re.MULTILINE)
 _ROLE_LIST = re.compile(r"[a-z0-9_-]+(?:,[a-z0-9_-]+)*")
+# land.py prints `VERDICT: refused` for a crash too, then re-raises, so a traceback follows it.
+TRACEBACK = "Traceback (most recent call last):"
 
 
 def pr_number(arg: str) -> int | None:
@@ -284,6 +286,7 @@ def main(
     if (
         rc != 0
         and verdict.startswith("VERDICT: refused ")
+        and TRACEBACK not in out
         and unmerged(tools, repo, number)
     ):
         log(f"PR #{number} refused by land.sh before any merge")

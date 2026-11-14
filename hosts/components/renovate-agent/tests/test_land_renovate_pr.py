@@ -207,6 +207,18 @@ def test_a_land_sh_refusal_on_a_merged_or_unread_pr_keeps_its_exit(tmp_path, res
     assert rc == 1
 
 
+def test_a_land_sh_crash_on_an_unmerged_pr_keeps_its_exit(tmp_path):
+    out = (
+        "LAND-RESULT: verdict=refused cause=- exit=1 pr=3340 sha=- tags=0\n"
+        "VERDICT: refused (PR #3340 — the landing raised KeyError: 'files')\n"
+        "Traceback (most recent call last):\n"
+        '  File "land.py", line 332, in main\n'
+        "KeyError: 'files'\n"
+    )
+    rc, _ = _main(tmp_path, _Run(GOOD, land_out=out, land_rc=1))
+    assert rc == 1
+
+
 def test_a_failure_after_the_merge_keeps_land_sh_s_exit(tmp_path):
     out = "VERDICT: ci-red (master CI failed on abcdef12)\n"
     rc, result = _main(tmp_path, _Run(GOOD, land_out=out, land_rc=1))

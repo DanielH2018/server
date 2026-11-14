@@ -69,7 +69,8 @@ lists 3 in `SuccessExitStatus=`. A pre-merge refusal is an expected end, so it l
 inactive and `SystemdUnitsFailed` quiet (#8729). Two kinds count: the `REFUSED:` lines the lander
 writes itself, and a land.sh `VERDICT: refused` on a PR that GitHub's REST API reports unmerged. land.sh
 merges the PR itself, so nothing merges it after land.sh exits. A failed REST read keeps land.sh's
-exit 1, because a refusal can also come after the merge. Any other land.sh failure keeps its own
+exit 1, because a refusal can also come after the merge. A land.sh crash prints `VERDICT: refused`
+too, then its traceback, and the traceback keeps exit 1 so a broken deployer still fails the unit. Any other land.sh failure keeps its own
 nonzero exit and fails the unit.
 
 **The session nominates and the runner lands** (#967's I9, guardrails plan B2r). The session
