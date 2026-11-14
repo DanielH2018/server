@@ -55,7 +55,7 @@ def test_a_run_names_every_guard_and_returns_pytests_exit_code(code):
     assert kwargs["cwd"] == REPO
 
 
-def test_the_notice_follows_the_guards_and_changes_no_exit_code(capsys):
+def test_the_advice_follows_the_guards_and_changes_no_exit_code(capsys):
     def run(argv, **kwargs):
         return subprocess.CompletedProcess(argv, 0)
 
@@ -63,16 +63,17 @@ def test_the_notice_follows_the_guards_and_changes_no_exit_code(capsys):
     assert capsys.readouterr().out == "facts notice: 1 to re-read.\n"
 
 
-def test_a_notice_that_cannot_run_says_why_in_one_line(tmp_path):
-    no_base = repo_guards.reread_notice(tmp_path)
-    assert no_base == (
-        "facts notice skipped: no merge base with origin/master; is it fetched?"
-    )
+def test_advice_that_cannot_run_says_why_in_one_line_per_source(tmp_path):
+    assert repo_guards.advice(tmp_path).splitlines() == [
+        "facts notice skipped: no merge base with origin/master; is it fetched?",
+        "removed names skipped: no merge base with origin/master; is it fetched?",
+    ]
 
-    def crash(*args, **kwargs):
+    def crash(repo):
         raise KeyError("boom")
 
-    assert repo_guards.reread_notice(tmp_path, crash) == (
+    sources = (("facts notice", crash), ("removed names", lambda repo: ""))
+    assert repo_guards.advice(tmp_path, sources) == (
         "facts notice skipped: KeyError: 'boom'"
     )
 

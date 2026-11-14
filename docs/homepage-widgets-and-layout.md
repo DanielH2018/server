@@ -15,8 +15,9 @@ grid chain all failed.
 
 `custom.css.j2` instead makes the group a flex column, lets the wrapper grow as a block, then
 gives the list `height: calc(100% - 0.75rem)` and splits it into ten equal `minmax(0, 1fr)`
-tracks with the same `0.75rem` gap the Services grid uses. The calendar spans six tracks, the
-Deploy, Artifacts and Docs row spans two, and each link row takes one. With track
+tracks with the same `0.75rem` gap the Services grid uses. The calendar spans six tracks, each
+link row below it takes one, and the Deploy, Artifacts and Docs row at the bottom spans two.
+With track
 `t = (r - g) / 2`, six tracks and five gaps are three Services rows (`3r + 2g`), and two tracks
 plus a gap are one (`2t + g = r`). Nothing is a pixel constant, so it holds for wrapped titles
 and every width. A Services group that renders a different row count needs twice that many
@@ -25,7 +26,10 @@ tracks and a calendar `span` four fewer.
 From 1024px the Calendar group's grid is fifteen columns rather than five. A link spans three,
 so five still fill a row, and a Deploy, Artifacts or Docs tile spans five, so three fill the
 row. Those three tiles carry an `id:` starting `calendar-tool-`, which keeps them out of the
-icon-only rules, so they show a name and a description.
+icon-only rules, so they show a name and a description. At the same width each one is drawn
+as one large link centred in its card: a 48px icon, a larger name and description, and the
+whole card clickable. With no stats, a widget tile's top-aligned header left the card half
+empty.
 
 `Top Row` is ITSELF a `div.services-group` wrapping the two column groups, so a
 `:has(#my-calendar)` selector matches the outer group too and reaches the Services list — which

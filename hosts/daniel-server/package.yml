@@ -62,6 +62,12 @@ component: claude-code
 users:
   # The homelab band 900-949 sits below the uids Ubuntu hands out from 999 down (#8100).
   - {name: claude, uid: 900, home: /var/lib/claude, shell: /bin/bash, comment: Claude agent}
+# #8227: daniel-server's resolver has no record for the Pi, so `ssh daniel-pi` and `probe.py pi`
+# failed here for every user. The regexp anchors on the NAME, so a new Pi address rewrites the
+# line rather than adding a second one. The arm never removes a line: dropping this entry leaves
+# the live line until it is deleted by hand.
+lines:
+  - {path: /etc/hosts, line: "{{ hosts['daniel-pi'].server_ip }} daniel-pi", regexp: '^\S+\s+daniel-pi(\s|$)', mode: "0644"}
 components: [reconcile, secrets-unit, nut-secondary, apt-github-cli, unattended-upgrades, sshd, host-tuning, k3s-gates, k3s-agent, failure-alert, claude-code, sops, check-lib, hypervisor, fail2ban, integrity-scans, aide-scan, postfix, accounting, host-maintenance, ssh-firewall, worktree-sweep, uv, vale, worktree-holders, host-hardening, rsyslog-filter, loki-route-witness]
 units:
   k3s-agent.service: {policy: windowed}

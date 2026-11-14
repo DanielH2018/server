@@ -29,6 +29,12 @@ routed tenant of the retired Docker edge. See repo-root `CLAUDE.md` for shared c
   stays an exact Path.
 - **A stateless `RollingUpdate` Deployment with one replica.** The default surge starts the
   new pod before the old one stops, so a roll keeps one pod serving.
+- **Pinned to `k8s_primary_node` (daniel-box), not preferred.** `read_file` and `list_files`
+  serve the node's checkout of `k8s/`, `inventory/` and `tests/` through read-only hostPath
+  mounts under `/srv/homelab-src` (`homelab_mcp_source_dirs`). Only daniel-box's package ships
+  `checkout-sync`, so only its checkout stays at origin/master. A cordoned or down daniel-box
+  leaves the pod Pending rather than serving a stale tree
+  (`tests/services/test_homelab_mcp_source_mounts.py`).
 - **RBAC:** `templates/rbac.yaml.j2` grants a dedicated `homelab-mcp` ServiceAccount
   `get`/`list` on pods, `pods/log`, nodes, deployments and daemonsets — no `watch`, no
   secrets, no exec. Deliberately narrower than the shell's own read-only ServiceAccount.

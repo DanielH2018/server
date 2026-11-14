@@ -113,3 +113,33 @@ def test_k8s_default_image_ignores_removed_and_non_image_vars():
         '+cloudflare_ddns_k8s_cpu_limit: "500m"\n'
     )
     assert extract_changed_images(diff) == []
+
+
+def test_a_moved_defaults_file_with_identical_pins_selects_nothing():
+    """An unpaired move: the old path's lines all removed, the new path's all added (#8434)."""
+    diff = (
+        "diff --git a/ansible/roles/k8s/homepage/defaults/main.yml "
+        "b/ansible/roles/k8s/homepage/defaults/main.yml\n"
+        "deleted file mode 100644\n"
+        "--- a/ansible/roles/k8s/homepage/defaults/main.yml\n"
+        "+++ /dev/null\n"
+        "@@ -1,2 +0,0 @@\n"
+        "-homepage_k8s_image: ghcr.io/gethomepage/homepage:v1.4.0\n"
+        '-homepage_k8s_cache_image: "nginx:alpine"  # cache sidecar\n'
+        "diff --git a/k8s/roles/homepage/defaults/main.yml b/k8s/roles/homepage/defaults/main.yml\n"
+        "new file mode 100644\n"
+        "--- /dev/null\n"
+        "+++ b/k8s/roles/homepage/defaults/main.yml\n"
+        "@@ -0,0 +1,2 @@\n"
+        "+homepage_k8s_image: ghcr.io/gethomepage/homepage:v1.4.0\n"
+        '+homepage_k8s_cache_image: "nginx:alpine"  # cache sidecar\n'
+    )
+    assert extract_changed_images(diff) == []
+
+
+def test_a_comment_edit_on_an_image_line_selects_nothing():
+    diff = (
+        "-homepage_k8s_image: ghcr.io/gethomepage/homepage:v1.4.0  # dashboard\n"
+        '+homepage_k8s_image: "ghcr.io/gethomepage/homepage:v1.4.0"  # the dashboard\n'
+    )
+    assert extract_changed_images(diff) == []

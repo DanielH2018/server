@@ -365,29 +365,6 @@
                   color: emerald
                   params:
                       showName: true
-        # THE THREE TOOL TILES SIT DIRECTLY UNDER THE CALENDAR, in the Services row the calendar
-        # gave up on 2026-11-13. They are link-only like the personal links, but keep their name
-        # and description: custom.css.j2 excludes them from the icon-only rules by their `id:`
-        # prefix and spans each across a third of the row. Moved here from `Admin & Tools`,
-        # which leaves that group one row of four.
-        - Deploy:
-            id: calendar-tool-deploy
-            icon: mdi-rocket-launch
-            # LAN-only, like longhorn and the traefik dashboard this tile replaced: the queue page
-            # starts landings with land.sh, so it is behind Authelia on a name with no public route
-            # (hosts/components/deploy-ui/).
-            href: {{ services | homepage_href('deploy-ui', domain, lan=true) }}
-            description: Deploy queue
-        - Artifacts:
-            id: calendar-tool-artifacts
-            icon: mdi-file-document-multiple
-            href: {{ services | homepage_href('artifacts', domain) }}
-            description: Generated reports
-        - Docs:
-            id: calendar-tool-docs
-            icon: mdi-book-open-variant
-            href: {{ services | homepage_href('docs', domain) }}
-            description: Homelab reference
         # THE PERSONAL LINKS, as SERVICE tiles rather than bookmarks, and that is the only way
         # they reach this column. A bookmark group cannot be laid out inside `Top Row` at any
         # depth — nested under `Calendar:` and as a sibling of it were both tried, and homepage
@@ -455,6 +432,29 @@
             icon: /icons/tacticstools.png
             href: https://tactics.tools/
             description: tactics.tools
+        # THE THREE TOOL TILES COME LAST, in the column's bottom row, below the two link rows
+        # (operator's order, 2026-11-14). They are link-only like the personal links, but keep
+        # their name and description: custom.css.j2 excludes them from the icon-only rules by
+        # their `id:` prefix, spans each across a third of the row, and draws each as one large,
+        # centred link. The `-#rrggbb` suffix colours an `mdi-` icon.
+        - Deploy:
+            id: calendar-tool-deploy
+            icon: mdi-rocket-launch-#fb923c
+            # LAN-only, like longhorn and the traefik dashboard this tile replaced: the queue page
+            # starts landings with land.sh, so it is behind Authelia on a name with no public route
+            # (hosts/components/deploy-ui/).
+            href: {{ services | homepage_href('deploy-ui', domain, lan=true) }}
+            description: Deploy queue
+        - Artifacts:
+            id: calendar-tool-artifacts
+            icon: mdi-file-document-multiple-#38bdf8
+            href: {{ services | homepage_href('artifacts', domain) }}
+            description: Generated reports
+        - Docs:
+            id: calendar-tool-docs
+            icon: mdi-book-open-variant-#34d399
+            href: {{ services | homepage_href('docs', domain) }}
+            description: Homelab reference
 
 # `Admin & Tools` IS A LINK-ONLY GROUP, and the absence of `widget:` blocks is the point. It was
 # two groups of four until 2026-09-10, one of eight until 2026-11-13, and is now one row of four:
