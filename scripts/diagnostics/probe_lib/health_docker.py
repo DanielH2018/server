@@ -10,8 +10,6 @@ is a block tag or a typo and is the only absence the notifier may skip. Read tha
 before rewording either message.
 """
 
-import subprocess
-
 # `probe_lib` is a namespace package under `scripts/`, so reaching a sibling by package name
 # needs `scripts/` on sys.path — a module gets only its importer's path otherwise, and
 # pyproject's `pythonpath` is a pytest setting. This has to sit ABOVE the imports below.
@@ -29,35 +27,13 @@ from lib.inventory_lists import PI_HOST, PI_HOST_VARS, pi_entries_in
 from lib.kubectl import DEFAULT_CLUSTER, kubectl
 
 
-def inspect_ip_argv(container):
-    return [
-        "docker",
-        "inspect",
-        "-f",
-        "{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}",
-        container,
-    ]
-
-
-def parse_ip(inspect_output):
-    """First non-empty token of `docker inspect`'s IP list.
-
-    Host can reach any of a container's bridge IPs. None if the container has no
-    address.
-    """
-    for tok in inspect_output.split():
-        if tok:
-            return tok
-    return None
-
-
 def inspect_argv(container):
     return ["docker", "inspect", container]
 
 
 # DECIDED: the ClusterIP pair below stays here, not in health_kubectl.py. `k8s_service_ip_args`
-# and `resolve_service_ip` are kubectl by transport but Docker by role — they are the successor
-# to `inspect_ip_argv`/`resolve_ip`, answering the same question ("reach this service directly,
+# and `resolve_service_ip` are kubectl by transport but Docker by role — they answer the
+# question a container's `docker inspect` IP once answered ("reach this service directly,
 # bypassing Traefik and Authelia") for the workloads that left the Pi. Moving them would split
 # that pair across two modules and falsify health_kubectl.py's invariant: it imports no sibling
 # and runs no command, so every argument shape the gate depends on is assertable without a
@@ -68,8 +44,7 @@ def inspect_argv(container):
 def k8s_service_ip_args(service, namespace):
     """The kubectl arguments for a Service's ClusterIP.
 
-    The k8s analog of inspect_ip_argv, for apps (arr) that must be reached directly
-    rather than through k8s_endpoint.
+    For apps (arr) that must be reached directly rather than through k8s_endpoint.
     """
     return [
         "-n",
@@ -167,23 +142,6 @@ def resolve_service_ip(name, cluster=DEFAULT_CLUSTER):
     ip = out.stdout.strip()
     if not ip:
         raise SystemExit(f"{name} has no ClusterIP (does the Service exist?)")
-    return ip
-
-
-def resolve_ip(container):
-    """A Docker container's bridge IP.
-
-    daniel-pi is the only host that still has Docker — on either cluster node this raises
-    FileNotFoundError, so use resolve_service_ip.
-    """
-    out = subprocess.run(inspect_ip_argv(container), capture_output=True, text=True)
-    if out.returncode != 0:
-        raise core.Unreadable(
-            f"docker inspect {container} failed: {out.stderr.strip()}"
-        )
-    ip = parse_ip(out.stdout)
-    if not ip:
-        raise SystemExit(f"{container} has no container IP (is it running?)")
     return ip
 
 
