@@ -113,6 +113,7 @@ def test_a_ready_sibling_lets_instance_1_roll(capsys):
     ids=["no-slice", "placeholder", "not-ready", "terminating"],
 )
 def test_a_sibling_with_no_ready_endpoint_holds_instance_1(sibling, capsys):
+    # fact: k8s/roles/pihole/CLAUDE.md#The sibling guard and its break-glass
     kube = Slices([_list(READY)], [sibling])
     assert _main(kube) == 1
     assert (
@@ -131,6 +132,7 @@ def test_a_sibling_that_comes_back_inside_the_wait_lets_instance_1_roll():
 
 def test_a_first_apply_passes_without_reading_the_sibling(capsys):
     """No slice for `pihole`: pihole-2 exists only after `pihole-deferred`, which waits on `pihole`."""
+    # fact: k8s/roles/pihole/CLAUDE.md#The sibling guard and its break-glass
     kube = Slices([_list()], [_list()])
     assert _main(kube) == 0
     assert kube.reads == ["pihole"]
@@ -159,6 +161,7 @@ def test_an_api_error_fails_at_once(capsys):
 @pytest.mark.parametrize("status", [0, 429, 503], ids=["no-answer", "429", "503"])
 def test_a_transient_read_is_retried_inside_the_wait(status):
     """An API blip must not fail a guard whose sibling is serving: its name would not change."""
+    # fact: k8s/roles/pihole/CLAUDE.md#The sibling guard and its break-glass
     kube = Slices([_list(READY)], [_list(READY)], statuses=[200, status, status, 200])
     assert _main(kube) == 0
     assert kube.reads == ["pihole", "pihole-2-web", "pihole-2-web", "pihole-2-web"]
@@ -253,6 +256,7 @@ def test_the_guard_ships_its_identity_and_a_job_that_never_retries(guard_render)
 
 def test_the_guard_reads_the_two_single_instance_services(guard_tag, guard_render):
     """`pihole-dns` selects both instances, so instance 1's own endpoint would satisfy it."""
+    # fact: k8s/roles/pihole/CLAUDE.md#The sibling guard and its break-glass
     env = _env(_jobs(guard_render)["pihole-sibling-guard"])
     assert (env["GUARD_INSTANCE_SERVICE"], env["GUARD_SIBLING_SERVICE"]) == (
         "pihole",
@@ -304,6 +308,7 @@ def test_the_guard_renames_exactly_when_instance_1_rolls(
     case, stubs, guard_tag, tmp_path
 ):
     """An instance-2-only fix keeps the name, so a down pihole-2 cannot hold its own fix."""
+    # fact: k8s/roles/pihole/CLAUDE.md#The sibling guard and its break-glass
     edit, renames = EDITS[case]
     after = _render_copy(tmp_path, stubs, edit)
     # The edit reached the render: the gravity Job reads every roll input of both instances.

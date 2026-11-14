@@ -44,7 +44,6 @@ monitor_bridge_modules:
   - bridge/config.py
   - bridge/config_host.py
   - bridge/config_service.py
-  - bridge/config_cluster.py
   - bridge/config_io.py
   - bridge/net.py
   - bridge/sources.py

@@ -6,8 +6,10 @@ does not declare, which rolls the controller and every speaker pod at the promot
 refresh to a release that drops them would do the same on the next bump, so the check runs on the
 file, not only on the census before the flip.
 
-The role's two patches give the controller and the speaker a memory request, so neither pod
-runs BestEffort (#8326); the tests at the bottom hold each patch equal to its defaults key.
+The role's two patches give the controller and the speaker requests and a CPU limit, so neither
+pod runs BestEffort (#8326, #8542); the tests at the bottom hold each patch's memory request
+equal to its defaults key. tests/k8s/test_namespace_resource_defaults.py holds every key but
+the memory limit, which the operator ruled out on 2026-11-14.
 
 Run: uv run pytest tests/k8s/test_metallb_vendored_manifest.py
 """
@@ -74,7 +76,7 @@ def test_no_metallb_workload_runs_besteffort():
     assert besteffort_workloads(ROLE) == []
 
 
-def test_each_patch_requests_its_defaults_value_and_no_limit():
+def test_each_patch_requests_its_defaults_value():
     # fact: k8s/roles/metallb/CLAUDE.md#At a glance
     # A kustomize patch is copied verbatim and cannot read a variable.
     patches = _patches()
@@ -87,7 +89,7 @@ def test_each_patch_requests_its_defaults_value_and_no_limit():
             c["name"]
             for c in upstream[member]["spec"]["template"]["spec"]["containers"]
         }
-        assert container["resources"] == {"requests": {"memory": str(DEFAULTS[key])}}
+        assert container["resources"]["requests"]["memory"] == str(DEFAULTS[key])
 
 
 def test_the_unpatched_upstream_file_is_flagged(tmp_path):
