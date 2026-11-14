@@ -1,0 +1,16 @@
+# Shipped by homelab-daniel-box. Started by homelab-board-sync.timer.
+[Unit]
+Description=Resync the Project board with every open issue's state and labels
+After=network-online.target
+Wants=network-online.target
+OnFailure=homelab-alert@%n.service
+
+[Service]
+SyslogLevel=notice
+Type=oneshot
+User={{ sys_user }}
+WorkingDirectory=/home/{{ sys_user }}/server
+ExecStart=/home/{{ sys_user }}/.local/bin/uv run --quiet python scripts/dev/findings.py sync-board
+SyslogIdentifier=board-sync
+# Well under the hourly interval. A full catch-up of every open issue takes about two minutes.
+TimeoutStartSec=900

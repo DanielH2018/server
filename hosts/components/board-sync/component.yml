@@ -1,0 +1,38 @@
+# The Project board resync on daniel-box (#8702). homelab-board-sync.timer starts
+# homelab-board-sync.service every hour at :47, as sys_user, in the primary checkout. The service
+# runs `findings.py sync-board`, which makes each open issue's item on the Server Issue Tracking
+# board agree with the issue's state and labels (scripts/dev/findings_lib/board.py).
+#
+# findings.py syncs the board for every issue a subcommand writes, so a run only matters for the
+# changes findings.py never saw: a label edited in the GitHub UI, or a findings.py run as the
+# `claude` user, whose gh login cannot write a Project that DanielH2018 owns. The service uses
+# sys_user's own gh login, as docs-refresh does, and loads no credential.
+#
+# Autonomous-role contract (the timer writes the Project board with no human in the loop).
+#
+# - Scope / exclusions: one GitHub object, the Server Issue Tracking board. It adds an open issue
+#   the board lacks and writes its Status, Severity and Not before fields. It changes no issue,
+#   label or repository setting, and writes nothing under the checkout.
+# - Mode (explicit and reversible): the timer's enable link in this package arms it. Dropping the
+#   link from a package version, or reverting this component, stops the timer on the install that
+#   drops it, and `systemctl stop homelab-board-sync.timer` stops it until the next install.
+# - Authoritative sources: each issue's state and labels, and its open closing pull requests, as
+#   GitHub's GraphQL API returns them. The board is only ever written, never read as truth.
+# - Abort valves: a run that finds nothing to change sends one GraphQL read per 25 open issues and
+#   no mutation. `MUTATION_PAUSE_S` in board.py paces a catch-up under GitHub's secondary write
+#   limit, and reconcile's `hold_sha` holds a package that would change the unit.
+# - Required evidence, every run: the count line `<n> issues: <x> updated, <y> unchanged, <z>
+#   failed` in the journal under `board-sync`, then one line per item it changed or could not
+#   change. A failed item exits 1, and OnFailure= pages Discord through homelab-alert.
+# - Next-run review: a page names homelab-board-sync.service. Read `journalctl -t board-sync`.
+#   A `board has no "<field>" field` or `has no option` line means the board's schema moved, and
+#   recurs every hour until the board or board.py changes. Any other reason is gh or GitHub, and
+#   the next run retries it.
+#
+# ENFORCED: hosts/lib/tests/test_board_sync_component.py, which renders the package and holds the
+# unit, the timer, its enable link and this contract.
+files:
+  - {src: units/homelab-board-sync.service.j2, dst: /usr/lib/systemd/system/homelab-board-sync.service}
+  - {src: units/homelab-board-sync.timer, dst: /usr/lib/systemd/system/homelab-board-sync.timer}
+enable:
+  homelab-board-sync.timer: timers.target
