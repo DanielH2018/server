@@ -1,0 +1,22 @@
+# Gives the controller requests and limits, so its pod is Burstable rather than BestEffort, the
+# kubelet's first eviction under memory pressure (#8542). Upstream ships no `resources` and
+# metallb-system has no LimitRange. The 21.6-day peak (all Prometheus retained) was 77Mi working
+# set and under 2m CPU. The patch touches `resources` only: the controller writes the webhook's
+# `caBundle` and the `metallb-webhook-cert` Secret at runtime, and a patch must not declare either.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: controller
+  namespace: metallb-system
+spec:
+  template:
+    spec:
+      containers:
+        - name: controller
+          resources:
+            requests:
+              cpu: 10m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
