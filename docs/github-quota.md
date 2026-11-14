@@ -11,7 +11,7 @@ decision. The ledger records and refuses nothing.
 
 | Slice | What it delivers | State |
 |---|---|---|
-| 1 | A ledger that `ghread` and `lib/gh.py` record each call in, and `gh-quota status` | Built for `lib/gh.py`. `ghread`, `cc-wait` and the claude-guard rule are open in the dotfiles repo. |
+| 1 | A ledger that `ghread` and `lib/gh.py` record each call in, and `gh-quota status` | Deployed on 2026-11-14: [server#8717](https://github.com/DanielH2018/server/pull/8717) for the module and `lib/gh.py`, and [dotfiles#1336](https://github.com/DanielH2018/dotfiles/pull/1336) for `ghread`, `cc-wait` and the claude-guard rule. Its week of measurement ends on 2026-11-21. |
 | 2 | The session ceiling, the reserve and the write pace, enforced inside those two wrappers | Planned |
 | 3 | The REST readers that do not run `gh` record and obey the same ledger | Planned |
 | 4 | Identical reads from many sessions cost one GitHub call | Planned |
@@ -356,8 +356,14 @@ same PR.
 
 ### Slice 1: record, and read the record
 
-The module runs in `record` mode on both hosts. It refuses nothing. The half in this repo is
-built. The dotfiles half is open, so a session's `ghread` reads are not in the ledger yet.
+The module runs in `record` mode on both hosts. It refuses nothing. Both halves are deployed:
+`gh-quota mode` prints `record` on daniel-box and daniel-server, and a session's `ghread`
+reads appear in `gh-quota status --all` under its session id.
+
+A repo tool's calls join the ledger as its worktree picks up master. A session runs the
+`scripts/lib/gh.py` of its own branch, so a worktree cut before 2026-11-14 records nothing
+through it until it is rebased. `ghread` is installed per user, so its reads are counted for
+every session at once.
 
 ```diff
  hosts/components/
