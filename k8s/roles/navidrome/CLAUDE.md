@@ -22,11 +22,11 @@ until 2026-11-12, and unparked with an empty library for the music pipeline to f
   like the rest of the media volume.
 - **`navidrome-data`** (`navidrome_k8s_claim`), Longhorn, 2Gi — SQLite index and transcoding
   cache, sized as headroom rather than a measurement.
-- **The `navidrome-snapshot` Job snapshots `navidrome-data` before each revision applies**
-  (D5.2a), so `k8s_autodeploy: true` lets Renovate automerge an image bump that migrates the
+- **The `navidrome-snapshot` Job snapshots `navidrome-data` before each revision applies**,
+  so `k8s_autodeploy: true` lets Renovate automerge an image bump that migrates the
   index. A failed revision writes the stateful hold, and the operator reverts the claim
   through `docs/volume-snapshot-drills.md`.
-- **Flux applies it, not Ansible** (D5.8, Wave A'). Its `containers_list` entry is
+- **Flux applies it.** Its `containers_list` entry is
   in `cluster/services.yml`, so nothing applies it by hand, and a merged change reaches the cluster when
   `promote` publishes and verifies the next bundle. The Kustomization lists its dependencies
   (authelia, traefik, media-volume) in `dependsOn`, and its `wait` replaces the rollout wait.

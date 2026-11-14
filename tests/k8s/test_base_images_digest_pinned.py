@@ -20,7 +20,7 @@ references on the k8s plane.
 
 WHAT THAT COSTS, concretely. A tag-only reference means the bytes a run validates are not the
 bytes a later run gets. That weakens every read that assumes a name identifies bytes: a
-`--dry-run`, a digest in a rollback, an image the deployer thinks it already pinned. Leaving
+`--dry-run`, a digest in a rollback, an image a promotion records as already pinned. Leaving
 the most-frequently-re-pushed images unpinned undercuts all of them.
 
 WHY A DENYLIST OF REPOS rather than a rule about tag shape. "Is this tag an exact release?"

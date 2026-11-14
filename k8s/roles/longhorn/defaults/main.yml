@@ -52,8 +52,10 @@ k3s_longhorn_global_manager_replicas: 2
 # `system-managed-csi-components-resource-limits` Setting (templates/settings.yaml.j2).
 # longhorn-driver-deployer creates the Deployments at runtime with `resources: {}`, which gives
 # BestEffort QoS and oom_score_adj 1000, the same exposure as the manager above. Measured at the
-# OOM kill: a csi-* sidecar held 97 MB anon-rss. The request is roughly double that, for the same
-# reasons as the manager's.
+# OOM kill: a csi-* sidecar held 97 MB anon-rss. Over the 7 days to 2026-11-14 the four ran a p95
+# working set of 39-63Mi and a maximum of 65Mi, across 12 pods. The request covers the OOM-kill
+# reading rather than the p95, and changing it rolls the four Deployments once.
+# instance-manager runs with no memory request: Longhorn v1.13 has no setting for it (#8617).
 #
 # DECIDED: the Setting is the one writer. longhorn-manager's SettingController treats the Setting
 # as the source of truth for these four containers' `resources` and clears any field it does not
@@ -61,7 +63,7 @@ k3s_longhorn_global_manager_replicas: 2
 # Deployments, the manager cleared it, and each Deployment rolled about twice an hour. The driver
 # deployer also reads the Setting when it creates a Deployment, so a recreated one starts with
 # the request.
-k3s_longhorn_csi_sidecar_memory_request: 192Mi
+k3s_longhorn_csi_sidecar_memory_request: 96Mi
 
 # Memory REQUESTS only (no limit) for the longhorn-csi-plugin DaemonSet's three containers,
 # through the same Setting (#8326). The driver deployer creates the DaemonSet with no

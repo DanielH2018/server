@@ -1,14 +1,19 @@
 # Pi-hole DNS continuity record
 
-Two Pi-hole instances exist so a deploy never takes LAN DNS down. The sequencing that holds
-them apart, and the restart triggers each instance reads, are worked out here.
+Two Pi-hole instances exist so a deploy never takes LAN DNS down.
 `k8s/roles/pihole/CLAUDE.md` keeps the operating rules, within the inject hook's
 character budget, and a session reads this page when it edits that role.
 
-Both sections below describe the Ansible-era roll. pihole is flux-owned since its own-window
-flip, and those tasks (`roll_one.yml`, `apply_instance_2.yml`) are deleted; Flux orders the two
-instances with `dependsOn` and `wait: true`. The record stays because returning pihole to Ansible restores them
-(`docs/flux-deploy-plane.md`) and their derivations carry over.
+**The two instances roll in sequence, so one always serves DNS.** On 2026-09-28 (#2884) an
+image-pin bump changed both pod templates in the same second. The controller Recreate-cycled
+both instances, LAN DNS was down for 52s, and both new pods failed their image pull against the
+resolver they had just replaced. Instance 1 therefore renders into the `pihole` Kustomization
+and instance 2 into `pihole-deferred`. The renderer makes `pihole-deferred` depend on `pihole`
+(`scripts/renderer/renderer_lib/ordering.py`), and `wait: true` holds that dependency until
+instance 1 is Ready. Instance 2's pod template changes only after instance 1 serves.
+
+The two sections below record how the roll was sequenced by hand before Flux applied pihole.
+The tasks they name are deleted.
 
 ## Where the roll expectation for pihole-2 comes from
 
@@ -22,14 +27,12 @@ instances with `dependsOn` and `wait: true`. The record stays because returning 
   Deploy time is covered either way and more strictly: `roll_one.yml` blocks on pihole-2's
   `rollout status`, and `Verify both Pi-hole instances have a ready DNS endpoint` refuses fewer
   than two ready endpoints.
-  `rolled_by_role` and `tasks/rollout_amend.yml` were retired after the flip (#5819). A
-  return to Ansible that restores `roll_one.yml` also restores both, from the commit before
-  that retirement.
+  `rolled_by_role` and `tasks/rollout_amend.yml` were retired after the flip (#5819).
 
 ## Why each private restart waits for its own apply
 
-- **Each private restart needs the render AND the `changed` of the matching apply (#3127,
-  mirroring #3115).** `manifests_render is changed` compares rendered bytes, so a YAML-comment
+- **HISTORY — Each private restart needed the render AND the `changed` of the matching apply
+  (#3127, mirroring #3115).** `manifests_render is changed` compares rendered bytes, so a YAML-comment
   edit to a template used to roll the LAN resolvers while `kubectl apply` printed every object
   `unchanged`. The restart task in `roll_one.yml` now fires on `manifests_render is changed and
   manifests_apply is changed` for the shared files (both instances mount the ConfigMap), and for

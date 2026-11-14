@@ -73,8 +73,8 @@ def test_no_verdict_sha_does_not_resolve_to_an_unrelated_tip():
 
 
 def test_empty_required_set_refuses_rather_than_disarming():
-    """ci_verdict returns 'pass' on an empty required set -- that is the deployer's
-    deliberate disarm switch (deploy_logic.py:366), reachable only by an operator
+    """ci_verdict returns 'pass' on an empty required set -- that is its
+    deliberate disarm switch, reachable only by an operator
     emptying CI_CONTEXTS. Inheriting it here would turn a wait-for-green into an
     unconditional green."""
     try:
@@ -289,7 +289,7 @@ def _requests_for_a_wait(interval, walk_descendants, suites=(), budget=LAND_BUDG
 
 @pytest.mark.parametrize("suites", [(), (_actions_suite("queued"),)])
 def test_an_anonymous_wait_stays_well_under_the_hourly_quota(suites):
-    """#6148: an anonymous host shares 60 requests an hour with the deployer's gate."""
+    """#6148: an anonymous host shares 60 requests an hour across its anonymous readers."""
     interval = await_ci.poll_interval(20, False, LAND_BUDGET_S)
     code, requests = _requests_for_a_wait(interval, False, suites)
     assert code == 75

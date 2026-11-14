@@ -2,11 +2,12 @@
 
 n8n with an external task-runner sidecar. See repo-root `CLAUDE.md`.
 
-> **Migrated to k3s on 2026-08-06, and handed to Flux on its Wave C flip (#5546).** Flux
-> applies it through `promote`, and nothing applies it by hand. Its two images are built
-> from `templates/Dockerfile.j2`, `templates/Dockerfile-runners.j2` and
-> `templates/config/n8n-task-runners.json.j2`. The Docker role's compose template is gone, and
-> only git history has it; `containers/n8n/data` is on disk.
+Flux applies it through `promote`, and nothing applies it by hand. Its two images are built
+from `templates/Dockerfile.j2`, `templates/Dockerfile-runners.j2` and
+`templates/config/n8n-task-runners.json.j2`.
+
+**HISTORY —** n8n moved to k3s on 2026-08-06 (#5546). The Docker role's compose template is
+gone, and only git history has it; `containers/n8n/data` is on disk.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in k8s/roles/longhorn-reconcile/defaults/main.yml. -->
@@ -18,7 +19,7 @@ n8n with an external task-runner sidecar. See repo-root `CLAUDE.md`.
   target))
 <!-- /generated_from -->
 
-- **Flux applies it, not Ansible** (#5546, Wave C). Its `containers_list` entry is
+- **Flux applies it.** Its `containers_list` entry is
   in `cluster/services.yml`, so nothing applies it by hand. A merged change
   reaches the cluster when `promote` publishes and verifies the next bundle. `k8s_autodeploy: false`
   still stops Renovate's
@@ -41,9 +42,8 @@ n8n with an external task-runner sidecar. See repo-root `CLAUDE.md`.
   affinity would close that gap, at the cost of no failover while daniel-box is down; that
   is an operator choice this role has not made. `defaults/main.yml` has the measurements, and
   `docs/flux-deploy-plane.md`, *The pre-pull Job*, has the mechanism.
-- **Where the tasks went.** The builds became the `images` job, and the Kustomization's `wait` replaces the rollout
-  wait. The broker-isolation probe that followed them became the `n8n-verify` Job, and its
-  tasks were deleted.
+- **Its builds and checks.** The `images` job builds both images, and the Kustomization's
+  `wait` holds the rollout. The `n8n-verify` Job runs the broker-isolation probe.
 - **Base images:** each Dockerfile is `FROM` the upstream `:stable` channel tag with a digest
   beside it. Renovate bumps the digest, the tag holds the channel, and no `*_image:` var names
   an upstream image. A merged bump moves both content tags, and `promote` builds and rolls

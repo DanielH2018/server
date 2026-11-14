@@ -128,7 +128,10 @@ spec:
           # clipped them for no benefit on a node running ~1.5 of 24 cores. Throttled seconds
           # measured 0.0076/s on 2026-08-29 — small, but the ceiling bought nothing against
           # it. The request (50m) is what reserves capacity under contention and is unchanged.
-{{ container_resources(cpu_limit='1', mem_limit='256Mi', cpu_request='50m', mem_request='64Mi') }}
+          # Memory, 7 days to 2026-11-14: RSS peaked at 122Mi, and page cache grew to about
+          # 180Mi on both nodes until the 256Mi limit reclaimed it, which kept the working set
+          # at 96% of the limit. 384Mi puts that p95 (247Mi) at 64%; the request covers RSS.
+{{ container_resources(cpu_limit='1', mem_limit='384Mi', cpu_request='50m', mem_request='128Mi') }}
       volumes:
         - name: alloy-config
           configMap:

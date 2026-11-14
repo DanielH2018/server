@@ -89,7 +89,7 @@ admin reset-admin-password` from the `grafana-admin` Secret before every Grafana
 rotated `grafana_admin_password` changes `grafana-secret.yaml`, the annotation rolls grafana,
 and the initContainer writes the new password. grafana is `Recreate`, so no server holds the
 SQLite file while the CLI runs. The renderer's restart annotation rolls grafana when the
-Secret changes (D5.1e).
+Secret changes.
 
 Two kinds of ConfigMap carry no hash. Prometheus mounts `prometheus-rules`
 as a directory and runs with `--config.auto-reload`, so a rule edit reloads in place and never

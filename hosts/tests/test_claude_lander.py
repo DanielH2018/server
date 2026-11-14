@@ -353,7 +353,7 @@ def test_a_pr_changing_a_role_named_like_cluster_base_lands_without_the_operator
     )
 
 
-# Off the floor since 2026-10-10: the agent's own roles, the deployer and the inventory.
+# Off the floor since 2026-10-10: the agent's own roles, the landing doc and the inventory.
 OFF_THE_FLOOR = [
     "docs/landing.md",
     "hosts/components/claude-code/defaults/main.yml",

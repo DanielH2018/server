@@ -12,7 +12,7 @@ the bundle from GHCR. A bad apply here stops name resolution, and host probes st
 - **Claims:** none (no PVC)
 <!-- /generated_from -->
 
-- **Flux applies it, not Ansible** (H1.4). Its `containers_list` entry is in `cluster/services.yml`
+- **Flux applies it.** Its `containers_list` entry is in `cluster/services.yml`
   from its first commit. The `.skip` marker that stops k3s reconciling its addon is the
   `homelab-daniel-box` package's since H6.4a (`hosts/components/k3s-server/`). On a new
   cluster the marker goes back only once Deployment `coredns` exists: `docs/host-packages.md`,
