@@ -14,6 +14,7 @@ _LONGHORN_BACKUP_HEALTH = (
     "hosts/components/k3s-host-checks/files/longhorn_backup_health.py"
 )
 _TAKEOVER_CHECK = "hosts/components/claude-code/files/homelab-takeover-check.sh"
+_SUC_REHEARSAL = "hosts/components/hypervisor/files/suc-rehearsal-guest-run.sh"
 
 # ── No host script writes a cluster object ────────────────────────────────────────────
 
@@ -30,10 +31,10 @@ _WRITE_VERBS = frozenset(
         "set",
     }
 )
-# `kubectl`, or a shell variable holding it (`$KUBECTL`, `${KUBECTL}`), then any flags with
-# their values, then the subcommand. A `kubectl exec … -- cscli delete` names `exec`.
+# `kubectl`, or a shell variable or array holding it (`$KUBECTL`, `"${KUBECTL[@]}"`), then any
+# flags with their values, then the subcommand. A `kubectl exec … -- cscli delete` names `exec`.
 _SHELL_KUBECTL = re.compile(
-    r"(?:\bkubectl\b|\$\{?\w*KUBECTL\w*\}?)"
+    r"(?:\bkubectl\b|\$\{?\w*KUBECTL\w*(?:\[@\])?\}?\"?)"
     r"(?:\s+-{1,2}[\w-]+(?:=\S+|\s+(?!-|(?:"
     + "|".join(_WRITE_VERBS)
     + r")\b)[^\s;|&]+)?)*"
@@ -182,6 +183,7 @@ HOST_SCRIPT_WRITES = Census(
         Subject("registry-gc.sh.j2", "#!/bin/bash\n" + REGISTRY_GC_SCALE),
         Subject("x.sh.j2", "k3s kubectl -n homelab rollout restart deploy/x\n"),
         Subject("x.sh", "${KUBECTL} --namespace=homelab annotate pod x a=b\n"),
+        Subject("x.sh", 'retry "${KUBECTL[@]}" -n "$NS" delete pod x\n'),
         # A boolean flag must not swallow the verb as its value.
         Subject("x.sh", "kubectl --insecure-skip-tls-verify delete pod x\n"),
         Subject(
@@ -222,8 +224,12 @@ HOST_SCRIPT_WRITES = Census(
             "after the flip"
         ),
         _TAKEOVER_CHECK: (
-            "The one match is an `echo` reporting the exit code of a `--dry-run=server` "
-            "apply, which writes no object"
+            "Its one apply is `--dry-run=server`, which writes no object, and the other "
+            "match is an `echo` reporting that apply's exit code"
+        ),
+        _SUC_REHEARSAL: (
+            "It runs inside the throwaway drill guest that etcd-restore-drill-vm creates, and "
+            "its applies go to that guest's own k3s, which Flux does not manage"
         ),
     },
 )
