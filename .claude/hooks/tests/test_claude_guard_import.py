@@ -80,6 +80,7 @@ def test_bootstrap_raises_when_the_deploy_is_missing(tmp_path, monkeypatch):
     bootstrap added) so a prior successful import in this process can't mask the failure.
     """
     monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.delenv("CLAUDE_GUARD_HOME", raising=False)
     saved_path = list(sys.path)
     saved_modules = {
         name: mod
@@ -99,3 +100,30 @@ def test_bootstrap_raises_when_the_deploy_is_missing(tmp_path, monkeypatch):
             if name == "_claude_guard" or name.startswith("claude_guard"):
                 del sys.modules[name]
         sys.modules.update(saved_modules)
+
+
+@_runnable
+def test_the_env_var_names_the_copy_a_session_without_a_deploy_imports(tmp_path):
+    """Triage's session user has no deploy in its home; its unit names the controller's copy."""
+    env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
+    env["HOME"] = str(tmp_path)
+    env["CLAUDE_GUARD_HOME"] = str(_CLAUDE_GUARD_DIR)
+    env["PYTHONPATH"] = str(HOOKS)
+    proc = subprocess.run(
+        [
+            UV_BIN,
+            "run",
+            "--no-sync",
+            "--quiet",
+            "python",
+            "-c",
+            "import _claude_guard, claude_guard; print(claude_guard.__file__)",
+        ],
+        cwd=REPO,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout.strip().startswith(str(_CLAUDE_GUARD_DIR))
