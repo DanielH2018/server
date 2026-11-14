@@ -82,7 +82,7 @@ def test_a_template_in_the_manifest_does_not_hide_the_other_units_state(node):
     assert all("claude-land@.service" not in argv for argv in show_calls(node))
 
 
-def test_one_dpkg_call_asks_about_every_legacy_path_not_yet_retired(node):
+def test_a_run_after_every_legacy_entry_retired_asks_dpkg_nothing(node):
     for name in ("owned", "stray"):
         path = node.root / "usr/local/bin" / name
         path.parent.mkdir(parents=True, exist_ok=True)

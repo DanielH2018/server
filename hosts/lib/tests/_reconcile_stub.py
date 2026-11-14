@@ -211,7 +211,10 @@ def _show(units: dict, args: list[str]) -> int:
     if "--value" in names:
         (unit,) = [name for name in names if name != "--value"]
         known = units.get(unit)
-        print(known.get("invocation", "inv0") if known else "")
+        if "InvocationID" in args:
+            print(known.get("invocation", "inv0") if known else "")
+        else:
+            print(known["load"] if known else "not-found")
         return 0
     import fnmatch
 
