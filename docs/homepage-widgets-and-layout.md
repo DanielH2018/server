@@ -15,8 +15,9 @@ grid chain all failed.
 
 `custom.css.j2` instead makes the group a flex column, lets the wrapper grow as a block, then
 gives the list `height: calc(100% - 0.75rem)` and splits it into ten equal `minmax(0, 1fr)`
-tracks with the same `0.75rem` gap the Services grid uses. The calendar spans six tracks, the
-Deploy, Artifacts and Docs row spans two, and each link row takes one. With track
+tracks with the same `0.75rem` gap the Services grid uses. The calendar spans six tracks, each
+link row below it takes one, and the Deploy, Artifacts and Docs row at the bottom spans two.
+With track
 `t = (r - g) / 2`, six tracks and five gaps are three Services rows (`3r + 2g`), and two tracks
 plus a gap are one (`2t + g = r`). Nothing is a pixel constant, so it holds for wrapped titles
 and every width. A Services group that renders a different row count needs twice that many
