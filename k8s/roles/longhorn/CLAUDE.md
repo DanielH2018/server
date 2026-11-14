@@ -103,7 +103,10 @@ host probes stay green.
   holds the shape.
 - **Two kinds of Longhorn pod stay BestEffort, because Longhorn offers no knob for them.**
   longhorn-manager builds the engine-image DaemonSet with no `resources` and no setting that
-  sets them (#8500). The backup and trim Job pods are short-lived, and the RecurringJob
+  sets them (#8500).
+  `k8s/roles/longhorn/defaults/main.yml:DECIDED: accept BestEffort for the engine-image pods`
+  says why a second writer or a LimitRange is worse than an evicted pod its DaemonSet
+  recreates. The backup and trim Job pods are short-lived, and the RecurringJob
   controller builds their CronJobs with no `resources` either.
 - **The v1 instance-manager has a CPU request and no memory request** (#8617). longhorn-manager
   builds its pod with only the CPU requirement, and no Setting, annotation or CR field carries
