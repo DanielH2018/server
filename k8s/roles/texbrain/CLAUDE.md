@@ -30,7 +30,8 @@ Upstream publishes no container image, no tags and no releases while committing 
 Pinning it directly would mean a bare commit SHA that Renovate cannot offer an update for —
 the failure `renovate.json` already records for the shellcheck-py pin. The fork's CI pushes
 `:latest` on every merge to `main`, so the `:latest@sha256` pin here gets ordinary digest-bump
-PRs.
+PRs (`k8s/roles/texbrain/defaults/main.yml`,
+`scripts/tests/test_renovate_managers.py::test_every_k8s_role_image_is_renovate_tracked`).
 
 **To take a new upstream version:** merge `upstream/main` into the fork's `main`. Its CI
 rebuilds and pushes, and Renovate then opens the digest bump against
@@ -62,6 +63,7 @@ symptom shows up in this cluster, not in that repo:
   since the app cache is keyed by build version, and on a hard reload.
 
 ## Editing
-- Manifests: `templates/` · Image pin and resources: `defaults/main.yml`
+- Manifests: `k8s/roles/texbrain/templates/` · Image pin and resources:
+  `k8s/roles/texbrain/defaults/main.yml`
 - Verify: `uv run python scripts/diagnostics/probe.py health texbrain`, then open the page and
   compile a document — a 1/1 pod says nothing about whether the WebAssembly engine ran.

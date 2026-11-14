@@ -1,6 +1,7 @@
 # freshrss — RSS feed aggregator
 
-FreshRSS with a small nginx feed-cache sidecar. See repo-root `CLAUDE.md`.
+FreshRSS with a small nginx feed-cache Deployment beside it
+(`k8s/roles/freshrss/templates/deployment-feed-cache.yaml.j2`). See repo-root `CLAUDE.md`.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in k8s/roles/longhorn-reconcile/defaults/main.yml. -->
@@ -11,7 +12,7 @@ FreshRSS with a small nginx feed-cache sidecar. See repo-root `CLAUDE.md`.
 - **Claim:** `freshrss-config` (weekly -> B2 (default target))
 <!-- /generated_from -->
 
-- **The nginx sidecar is the feed cache.**
+- **The nginx Deployment `freshrss-feed-cache` is the feed cache.**
 - **Host: daniel-box (k8s), since 2026-08-05 — slice 2.** This role's ConfigMap embeds
   `files/nginx-feed-cache.conf`. Edit the cache conf / extensions HERE, then merge; `promote`
   applies it.
@@ -38,9 +39,9 @@ FreshRSS with a small nginx feed-cache sidecar. See repo-root `CLAUDE.md`.
   so an edit to `files/nginx-feed-cache.conf` reaches it.
 
 ## Notable
-- Bundles FreshRSS extensions shipped in `files/`: Karakeep button, Wallabag button,
-  ToggleSidebar.
-- The nginx sidecar (`files/nginx-feed-cache.conf`) proxies a **fixed set of upstreams**, one
+- Keeps the zips of three FreshRSS extensions in `files/`: Karakeep button, Wallabag button,
+  ToggleSidebar. No template ships them; the installed copies live on `freshrss-config`.
+- The nginx feed cache (`files/nginx-feed-cache.conf`) proxies a **fixed set of upstreams**, one
   `location` each. It is not a general outbound-feed proxy, so adding a feed means editing the
   nginx conf.
   - `/` caches `rachelbythebay.com` for 24h, because that site blocks readers that poll often.
@@ -62,4 +63,6 @@ FreshRSS with a small nginx feed-cache sidecar. See repo-root `CLAUDE.md`.
   `scripts/freshrss/scrape_feed.py`. The rules live only in FreshRSS's config volume.
 
 ## Editing
-- Extensions/cache: `files/` (the nginx conf is embedded into this role's ConfigMap)
+- Cache: `k8s/roles/freshrss/files/nginx-feed-cache.conf`, embedded into this role's ConfigMap
+  (`k8s/roles/freshrss/templates/configmap.yaml.j2`). The extension zips beside it in
+  `k8s/roles/freshrss/files/` reach no pod; the installed copies live on `freshrss-config`.

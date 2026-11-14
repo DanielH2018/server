@@ -1,8 +1,8 @@
 # tdarr — hardware-accelerated media transcoding
 
-Tdarr, transcoding through the node's Intel VAAPI device (`tdarr_k8s_dri_resource:
-devic.es/dri`, advertised by `k8s/dri-device-plugin`). See repo-root `CLAUDE.md` for
-shared conventions.
+Tdarr, transcoding through the node's AMD VAAPI device (`devic.es/dri`,
+`k8s/roles/tdarr/defaults/main.yml:tdarr_k8s_dri_resource`, advertised by
+`k8s/roles/dri-device-plugin/`). See repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in k8s/roles/longhorn-reconcile/defaults/main.yml. -->
@@ -15,12 +15,16 @@ shared conventions.
 
 - **`tdarr-server`** (3Gi, `longhorn`, backed up — the 204MB library/transcode
   DB) and `tdarr-configs` (1Gi, `longhorn` — flow/plugin definitions), kept separate so
-  the server DB's churn doesn't drag `logs/`/`transcode_cache/` onto Longhorn. Also
+  the server DB's churn doesn't drag `logs/`/`transcode_cache/` onto Longhorn
+  (`k8s/roles/tdarr/defaults/main.yml:tdarr_k8s_server_size`,
+  `k8s/roles/tdarr/defaults/main.yml:tdarr_k8s_configs_size`,
+  `k8s/roles/tdarr/defaults/main.yml:tdarr_k8s_storage_class`). Also
   mounts the shared `media-data` RWX volume, **read-write** — the one media consumer
-  that rewrites library files in place.
+  that rewrites library files in place (`k8s/roles/tdarr/templates/deployment.yaml.j2`).
 - **The snapshot/revert machinery works here, but a revert can't undo a completed transcode**: it rewrites the untranscoded original on
-  `media-data`, which is not reverted. Two claims also mean a failed deploy can revert
-  them to different points in time. Full reasoning in `defaults/main.yml`.
+  `media-data`, which is not reverted (`k8s/roles/tdarr/defaults/main.yml:k8s_autodeploy_snapshot_pvcs`).
+  Two claims also mean a failed deploy can revert them to different points in time. Full
+  reasoning in `k8s/roles/tdarr/defaults/main.yml:k8s_autodeploy_reason`.
 
 ## Notable
 - **The image pin carries a version tag, so a major release reads as one.** Upstream tags

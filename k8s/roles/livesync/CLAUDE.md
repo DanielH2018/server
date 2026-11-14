@@ -1,6 +1,7 @@
 # livesync — CouchDB for Obsidian LiveSync
 
-CouchDB backend for the Obsidian Self-hosted LiveSync plugin. See repo-root `CLAUDE.md`.
+CouchDB backend (`k8s/roles/livesync/templates/config/local.ini.j2`) for the Obsidian
+Self-hosted LiveSync plugin. See repo-root `CLAUDE.md`.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in k8s/roles/longhorn-reconcile/defaults/main.yml. -->

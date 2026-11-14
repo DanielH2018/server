@@ -63,6 +63,7 @@ def test_an_uncapped_volume_is_patched_to_the_rendered_cap(capsys):
 
 def test_a_second_run_changes_nothing(capsys):
     """`homelab/rerun-safe` names this test: the Job's second run reads twice and writes nothing."""
+    # fact: k8s/roles/jellyfin/CLAUDE.md#The snapshot-space cap on `jellyfin-config`
     world = World()
     assert jellyfin_snapshot_cap.main([], ENV, world) == 0
     first = list(world.calls)

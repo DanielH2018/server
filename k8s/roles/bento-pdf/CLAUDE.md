@@ -1,6 +1,7 @@
 # bento-pdf — browser-based PDF toolkit
 
-BentoPDF, a stateless client-side PDF editor. See repo-root `CLAUDE.md` for shared
+BentoPDF, a stateless client-side PDF editor
+(`k8s/roles/bento-pdf/defaults/main.yml:k8s_autodeploy_reason`). See repo-root `CLAUDE.md` for shared
 conventions.
 
 ## At a glance
@@ -22,11 +23,12 @@ conventions.
   `*.local.<domain>` wildcard cert covers it; a nested label would not.
 
 ## Notable
-- `bento_pdf_k8s_uid: 101` matches the upstream nginx-unprivileged image's own UID, and is
-  also used as `fsGroup` for nginx's `emptyDir` scratch dirs. An `emptyDir` has no mode
+- `k8s/roles/bento-pdf/defaults/main.yml:bento_pdf_k8s_uid`, 101, matches the upstream
+  nginx-unprivileged image's own UID, and is also used as `fsGroup` for nginx's `emptyDir`
+  scratch dirs (`k8s/roles/bento-pdf/templates/deployment.yaml.j2`). An `emptyDir` has no mode
   setting and mounts `0755` root-owned, so without the matching `fsGroup` the container hits
   `EPERM` on write.
-- Pinned the same image tag as the retired Docker role while both existed, so a behavior
+- **HISTORY —** Pinned the same image tag as the retired Docker role while both existed, so a behavior
   difference between the two was never the image. #2385 deleted that role from the tree.
 
 ## Editing

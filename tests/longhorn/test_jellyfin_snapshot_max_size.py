@@ -83,6 +83,7 @@ def test_the_cap_stays_legal_when_the_pvc_is_raised():
     A hardcoded cap passes the test above and fails the moment someone raises the PVC. The
     sizes below span the raise that already happened (3Gi to 8Gi) and two beyond it.
     """
+    # fact: k8s/roles/jellyfin/CLAUDE.md#The snapshot-space cap on `jellyfin-config`
     expression = load_defaults(JELLYFIN)["jellyfin_k8s_snapshot_max_size"]
     for size in ("3Gi", "8Gi", "16Gi", "64Gi"):
         _assert_cap_is_legal(expression, size)

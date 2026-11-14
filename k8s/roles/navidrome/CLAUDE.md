@@ -1,8 +1,11 @@
 # navidrome — Subsonic-compatible music server
 
-Navidrome serves the music library at `media/music` on the shared media volume to its web UI
-and to Subsonic clients. It was stood up 2026-09-02 for issue #803, parked at zero replicas
-until 2026-11-12, and unparked with an empty library for the music pipeline to fill.
+Navidrome serves the music library at `media/music`
+(`k8s/roles/navidrome/defaults/main.yml:navidrome_k8s_media_subpath`) on the shared media volume
+to its web UI and to Subsonic clients.
+
+**HISTORY —** It was stood up 2026-09-02 for issue #803, parked at zero replicas until
+2026-11-12, and unparked with an empty library for the music pipeline to fill.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in k8s/roles/longhorn-reconcile/defaults/main.yml. -->
@@ -76,7 +79,9 @@ until 2026-11-12, and unparked with an empty library for the music pipeline to f
 
 ## Parking it again
 Set `navidrome_k8s_replicas: 0`, drop `k8s_autodeploy_snapshot_pvcs` and turn
-`k8s_autodeploy` off (a snapshot-protected role must have a pod), and add `probe: false` to
-the `containers_list` entry so the derived ingress probe does not fire forever. Drop the
+`k8s_autodeploy` off (a snapshot-protected role must have a pod,
+`tests/longhorn/test_volume_revert_include.py::test_every_snapshot_role_restores_its_own_replicas`),
+and add `probe: false` to the `containers_list` entry so the derived ingress probe does not fire
+forever (`scripts/renderer/template_filters/ingress_probes.py:ingress_probe_targets`). Drop the
 entry's `metrics` item too, or the `navidrome` scrape job reads `up == 0` and pages. The route
-leaves with the replica count.
+leaves with the replica count (`k8s/roles/navidrome/defaults/main.yml:manifests_files`).
