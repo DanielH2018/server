@@ -71,10 +71,16 @@ TOKEN_CREDENTIAL = "claude_oauth_token"
 
 
 def build_argv(cfg: dict[str, str]) -> list[str]:
-    """The session's argv. The prompt is not in it: `claude -p` reads it from stdin."""
+    """The session's argv. The prompt is not in it: `claude -p` reads it from stdin.
+
+    `SETTINGS_FILE` is the packaged, root-owned settings file: the shared guard hooks and the deny
+    floor, which the session user cannot edit.
+    """
+    settings = cfg.get("SETTINGS_FILE")
     return [
         cfg.get("CLAUDE_BIN", "claude"),
         "-p",
+        *(["--settings", settings] if settings else []),
         "--model",
         cfg.get("MODEL", "opus"),
         "--permission-mode",

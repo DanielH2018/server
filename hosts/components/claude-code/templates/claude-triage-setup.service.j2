@@ -1,0 +1,20 @@
+{% import 'templates/claude-triage-pins.j2' as pins with context -%}
+# Shipped by the claude-code host component. Enabled at boot, and restarted by reconcile when the
+# setup script or the session's settings change. claude-triage@.service also runs the script
+# before each run; this unit gives an idle triage its directories, toolchain and clone.
+[Unit]
+Description=Give triage's controller its directories, the session's toolchain and the clone
+OnFailure=homelab-alert@%n.service
+# The first run installs Claude Code and clones the repo over HTTPS.
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+# Active after a clean run, so reconcile's try-restart reruns it when its inputs change.
+RemainAfterExit=yes
+SyslogLevel=notice
+ExecStart=/usr/bin/env -i PATH=/usr/bin:/bin:/usr/sbin:/sbin /usr/lib/homelab/claude-triage-setup
+
+[Install]
+WantedBy=multi-user.target
