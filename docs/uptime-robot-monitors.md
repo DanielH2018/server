@@ -4,17 +4,19 @@ Uptime Robot is the third alerting system in this homelab, alongside Alertmanage
 spine) and Healthchecks.io (off-site, dead-man's switches). It watches the public hostnames from
 outside the house, which is the one thing neither of the others can do.
 
-**Nothing here is managed by Ansible.** There is no provisioning task, no Terraform, no API key in
-SOPS — every monitor was created in the console by hand, and this file is the only record of what
-they are set to. That is a real gap and it is stated here rather than hidden: a monitor deleted or
-reconfigured in the console leaves no trace in git, and the repo keeps reading as though it exists.
+**Nothing here is managed as code.** There is no provisioning task and no Terraform. Every
+monitor was created in the console by hand, and this file is the only record of what they are
+set to. A monitor reconfigured in the console leaves no trace in git. A monitor deleted or
+paused there is what `probe.py uptime-robot` detects, once its API key exists (see *Checking
+the console against this file*).
 
 Changing anything below means opening <https://dashboard.uptimerobot.com> and editing it there.
 
-One half is checkable from here. `tests/repo/test_uptime_robot_keywords.py` parses the
-monitor table below and asserts, against the live public endpoint, that each documented keyword
-rule holds; it is marked `ui`, so it runs on demand (`uv run pytest -m ui -k uptime_robot`) and
-never in CI. It cannot see the console, so a monitor deleted there stays invisible to it.
+Two checks read the monitor table below. `tests/repo/test_uptime_robot_keywords.py` asserts,
+against the live public endpoint, that each documented keyword rule holds. It is marked `ui`,
+so it runs on demand (`uv run pytest -m ui -k uptime_robot`) and never in CI. It cannot see
+the console. `probe.py uptime-robot` reads the console through the API, and fails when a
+documented id is missing or paused.
 
 ## What is configured
 
@@ -87,7 +89,7 @@ returns Authelia's own `{"status":"OK"}`.
 
 **This is the failure the top of this file describes, arriving.** A monitor was deleted, nothing in
 the repo could notice, and two runbooks kept citing it for an unknown number of months. The id
-column in the table above exists so the next occurrence is one console glance to detect.
+column in the table above exists so `probe.py uptime-robot` detects the next occurrence.
 
 ## Why two monitors
 
@@ -134,13 +136,27 @@ and Uptime Robot fetches raw HTML without executing it, so the body is a shell w
 changes per request. `/api/health` answers a question instead, and `/api/state` on the same
 host returns the same `"status":"OK"` beside the session fields.
 
-## If this should stop being un-auditable
+## Checking the console against this file
 
-The way out is an `uptimerobot_api_key` in SOPS and a reconcile script under
-`scripts/diagnostics/`: monitors declared in the
-repo, the script asserting the console agrees. Uptime Robot's v3 API can list and update monitors,
-so the read half alone — a drift check that pages when the console stops matching this file — would
-close most of the gap without any write credential leaving the repo.
+`uv run python scripts/diagnostics/probe.py uptime-robot` lists the account's monitors through
+Uptime Robot's v2 `getMonitors` API. It exits 1 when a documented id no longer exists or is
+paused, and 75 when it could not read the API or got a partial page. A monitor that is down is
+not a failure here, because Uptime Robot pages on that itself. The table above is the oracle:
+`scripts/diagnostics/probe_lib/uptime_robot.py` parses it, and the keyword test reads the same
+rows.
 
-That is not built. Adding it is a decision about whether a fifth externally held credential is
-worth the audit trail, and it has not been made.
+The probe reads its key from the SOPS key `uptimerobot_api_key` and feeds it to curl on stdin.
+**That key is not in SOPS, and nothing runs the probe on a schedule.** Until both exist, a
+monitor deleted or paused in the console still goes unnoticed, as `803270234` did: the probe
+exits 75 with the decrypt error, and only when someone runs it. #8593 holds both operator steps,
+the key and the daily schedule.
+
+- **Use the read-only key.** Uptime Robot issues a read-only API key that serves every `get*`
+  method and changes nothing. The account's main key can edit and delete monitors, which this
+  check never needs.
+- **The probe is not scheduled.** It runs on demand, like the keyword test. A daily run with an
+  alert on failure needs the key somewhere an unattended job can read it.
+
+Managing the monitors as code is a further step that nothing here takes. It would mean a
+declared monitor list and a reconcile script that writes to the console, which needs the main
+key.

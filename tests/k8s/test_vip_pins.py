@@ -93,9 +93,9 @@ def _sentinel_metallb_pool() -> str:
     return "\n".join(texts)
 
 
-ANNOUNCING_NODES = _announcing_nodes(
-    rendered_k8s_text("metallb", "metallb-pool.yaml.j2")
-)
+def announcing_nodes() -> set[str]:
+    """The nodes the inventory render's L2Advertisements announce from."""
+    return _announcing_nodes(rendered_k8s_text("metallb", "metallb-pool.yaml.j2"))
 
 
 def test_announcement_and_the_primary_node_variable_agree():
@@ -111,8 +111,9 @@ def test_announcement_and_the_primary_node_variable_agree():
     `k8s_primary_node` renders the sentinel.
     """
     # fact: k8s/roles/metallb/CLAUDE.md#At a glance
-    assert len(ANNOUNCING_NODES) == 1, (
-        f"the L2Advertisements announce from {sorted(ANNOUNCING_NODES)}; the workload pins "
+    announcing = announcing_nodes()
+    assert len(announcing) == 1, (
+        f"the L2Advertisements announce from {sorted(announcing)}; the workload pins "
         "name one node, so the announcement must too"
     )
     sentinel = _announcing_nodes(_sentinel_metallb_pool())
@@ -179,7 +180,7 @@ def test_some_vip_services_exist():
 
 
 def test_vip_backed_workloads_are_pinned_to_the_announcing_node():
-    (node,) = ANNOUNCING_NODES
+    (node,) = announcing_nodes()
     offences = _pin_offences(rendered_docs(), node)
     assert offences == [], (
         f"MetalLB announces only from {node}, so a VIP-backed pod on the other node drops "

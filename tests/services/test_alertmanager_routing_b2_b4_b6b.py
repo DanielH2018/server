@@ -41,6 +41,7 @@ EXPECTED = {
         "EvalSweepNotReporting/daniel-box": DISCORD,
         "SecretRotationAuditFailed/daniel-box": DISCORD,
         "SecretRotationAuditNotReporting/daniel-box": DISCORD,
+        "RecoveryKitStale/daniel-box": DISCORD,
         "LokiReadRouteFailed/daniel-box": DISCORD,
         "LokiReadRouteNotReporting/daniel-box": DISCORD,
         "LokiReadRouteFailed/daniel-server": DISCORD,

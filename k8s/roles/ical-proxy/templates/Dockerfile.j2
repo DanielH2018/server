@@ -5,7 +5,7 @@
 # until 2026-08-19, one notch weaker.
 #
 # The digest is what makes the movement visible: Renovate's dockerfile manager raises a digest PR
-# when the tag re-points, and the merged commit lands under ansible/roles/k8s/**, which
+# when the tag re-points, and the merged commit lands under k8s/roles/**, which
 # gitops_deploy Discord-alerts for an operator to rebuild. Keep the tag alongside the digest — it
 # is what carries the 3.15 line, and dropping it would let a digest bump silently cross a minor.
 FROM python:3.15-slim@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928
@@ -13,7 +13,7 @@ WORKDIR /app
 # Pin to the versions uv.lock resolves for the `dev` group, so the runtime image matches what
 # test_app.py validates against (a bare `pip install flask requests` re-resolves to newest PyPI on
 # every weekly rebuild, certifying a flask the container never runs — 2026-07-18 review L1). Kept in
-# lockstep with uv.lock by ansible/tests/services/test_ical_proxy_pins_match_uv_lock.py.
+# lockstep with uv.lock by tests/services/test_ical_proxy_pins_match_uv_lock.py.
 RUN pip install flask==3.1.3 requests==2.34.2
 # Flat path: the k8s image-builder stages context files as ConfigMap keys, which cannot
 # contain '/'. (The retired Docker build staged app/ itself; nothing uses that shape now.)

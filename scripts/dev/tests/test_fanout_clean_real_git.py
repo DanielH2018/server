@@ -15,6 +15,7 @@ import pytest
 
 from fanout_lib.clean import clean_one
 from lib.git_testing import git, init_repo, scrub_process_git_env
+from lib.worktree_testing import ignore_foreign_slice_holds
 from lib.repo_paths import REPO as REPO_ROOT
 from lib.worktrees import Worktree, parse_worktree_list, remove
 
@@ -75,6 +76,7 @@ def test_a_present_merged_worktree_is_removed_and_its_branch_dropped(
     present and clean.
     """
     _scrub_git_env(monkeypatch)
+    ignore_foreign_slice_holds(monkeypatch)
     repo = tmp_path / "repo"
     _init_scratch_repo(repo)
     wt = tmp_path / "wt"
@@ -218,6 +220,7 @@ def test_a_merged_tree_holding_only_a_scratch_draft_is_removed(tmp_path, monkeyp
     """#4461: an agent's `.claude/scratch/` PR-body draft kept a merged fan-out tree as
     'uncommitted changes', and the kept tree held one of its host's batch slots."""
     _scrub_git_env(monkeypatch)
+    ignore_foreign_slice_holds(monkeypatch)
     repo, wt, tree = _merged_tree_under_the_repo_gitignore(tmp_path)
 
     state, why = clean_one(str(repo), tree, ask=lambda *a, **k: True, remover=remove)

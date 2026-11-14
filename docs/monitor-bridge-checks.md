@@ -130,8 +130,8 @@ checks each gate suppresses.
   is daniel-server, whose updater fires every 5 minutes. An absent unbuilt-since series pages too, and
   the oldest non-zero series is judged when a label change leaves two. Every message names the
   series' `reason` and `sha` labels, and `docs/host-packages.md`, *The builder's pages*, has the
-  fix for each reason. The query carries no `origin` matcher: `origin_sel()` pins daniel-server,
-  and only daniel-box runs the builder. Pure `host_packages()` and the arm pairs are unit-tested.)
+  fix for each reason. The query carries no `origin` matcher, because only
+  daniel-box runs the builder. Pure `host_packages()` and the arm pairs are unit-tested.)
 - **`b2_reachable`** (authenticates against B2's native API (`b2_authorize_account`, Basic auth with
   `B2_PROBE_KEY_ID` + the file-mounted `B2_PROBE_APPLICATION_KEY_FILE`), because Longhorn's own
   B2-backed backups need it. B2 caps Class B and Class C transactions separately, and

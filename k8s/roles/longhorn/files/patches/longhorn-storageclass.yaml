@@ -12,7 +12,7 @@
 # Everything else is verbatim from longhorn v1.13.0 deploy/longhorn.yaml, re-synced 2026-10-22.
 # v1.13.0 changed no class parameter. Keep it verbatim on a version bump
 # (docs/longhorn-upgrade.md, step 2), and do NOT paste numberOfReplicas back in:
-# ansible/tests/longhorn/test_longhorn_storageclass.py fails if it reappears.
+# tests/longhorn/test_longhorn_storageclass.py fails if it reappears.
 #
 # DECIDED: this ConfigMap patch is the only home of the class text. The class file that used to
 # sit in setup/k3s (files/longhorn-storageclass.yaml) is deleted with the tasks that applied it,

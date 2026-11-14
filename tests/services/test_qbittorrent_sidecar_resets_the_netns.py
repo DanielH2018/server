@@ -30,6 +30,7 @@ def _sidecar():
 
 
 def test_the_sidecar_runs_the_reset_before_init_and_keeps_init_as_pid_1():
+    # fact: k8s/roles/qbittorrent/CLAUDE.md#A VPN kill-switch outlives the container it fenced
     _spec, wg = _sidecar()
     command = " ".join(wg["command"])
     assert "netns-reset.sh && exec /init" in command, (

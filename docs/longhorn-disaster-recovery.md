@@ -66,9 +66,19 @@ bundle refreshed whenever the key backup is (or after a `secrets.yml` change), w
 ```bash
 git bundle create "homelab-$(date +%F).bundle" --all
 uv run python scripts/dev/findings.py export --out "homelab-register-$(date +%F).json"
+uv run python scripts/secrets_mgmt/recovery_kit.py record   # then commit secrets/recovery_kit.yml
 # recover: git clone homelab-YYYY-MM-DD.bundle server
 #   then, operator-only: sops -d needs the age key beside it, and prints every secret
 ```
+
+`recovery_kit.py record` writes the refresh date to `secrets/recovery_kit.yml`, the only
+record of the kit's age. The daily secret-rotation audit on daniel-box runs
+`recovery_kit.py check`, which reads down when the stamp is missing or older than
+`MAX_AGE_DAYS` in `scripts/secrets_mgmt/recovery_kit.py`. The audit writes that verdict to
+its own `recovery-kit` check, and `RecoveryKitStale` fires on it. The kit's verdict stays out
+of `SecretRotationAuditFailed`, so a stale kit cannot hide an overdue secret. A fresh `record`
+clears the alert at the next daily audit run. No CI check reads the stamp's age, so an old
+kit never turns a PR red.
 
 `secrets.yml` inside the bundle stays SOPS-encrypted — useless without the age key — so the
 bundle is no more sensitive than the GitHub repo; the age key is the part to protect.

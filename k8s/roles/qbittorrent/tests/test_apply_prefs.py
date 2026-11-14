@@ -74,6 +74,7 @@ def test_excluded_file_names_skip_fakes_and_keep_real_releases(
 ) -> None:
     # qBittorrent matches each pattern as a case-insensitive wildcard against the file
     # name; fnmatch on lowered strings is the same match for these `*.ext` patterns.
+    # fact: k8s/roles/qbittorrent/CLAUDE.md#Throughput settings live on the PVC, not in this role
     assert apply_prefs.DESIRED["excluded_file_names_enabled"] is True
     patterns = apply_prefs.EXCLUDED_FILE_NAMES
     matched = any(fnmatch.fnmatchcase(filename.lower(), p.lower()) for p in patterns)

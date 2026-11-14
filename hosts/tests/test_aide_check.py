@@ -38,13 +38,16 @@ from _setup_render import render_component_text
 from _shell_render import render_shell_script
 
 TIMER = "/usr/lib/systemd/system/homelab-aide-check.timer"
-# The hosts whose package lists aide-scan; daniel-pi's does not.
-AIDE_HOSTS = [host for host in HOSTS if TIMER in package(host).files]
+
+
+def aide_hosts() -> list[str]:
+    """The hosts whose package lists aide-scan; daniel-pi's does not."""
+    return [host for host in HOSTS if TIMER in package(host).files]
 
 
 def test_only_the_hosts_listing_aide_scan_ship_aide():
     """daniel-pi's scan outgrew its 456 MB and reset it twice on 2026-11-12 (#8084)."""
-    assert AIDE_HOSTS == ["daniel-box", "daniel-server"]
+    assert aide_hosts() == ["daniel-box", "daniel-server"]
     assert [path for path in package("daniel-pi").files if "aide" in path] == []
 
 
@@ -225,7 +228,7 @@ def test_the_include_pattern_skips_a_dotted_name_and_loads_a_plain_one():
 
 def test_the_exclusions_deploy_under_a_name_aide_loads():
     """From 2026-05-31 to 2026-10-20 the file was `98_aide_local.conf` and no rule in it ran."""
-    for host in AIDE_HOSTS:
+    for host in aide_hosts():
         dest = _aide_local_dest(host)
         assert DEBIAN_INCLUDE_NAME.match(dest.rsplit("/", 1)[1]), (
             f"{host}: {dest} fails aide.conf's include pattern, so AIDE never reads it"
@@ -278,13 +281,13 @@ def test_a_report_longer_than_a_pipe_buffer_logs_no_broken_pipe(tmp_path):
 
 def test_the_timer_runs_a_slot_it_missed():
     """daniel-pi's timer was stopped over the 2026-11-09 03:00 slot and never ran it (#7920)."""
-    for host in AIDE_HOSTS:
+    for host in aide_hosts():
         assert re.search(r"^Persistent=true$", shipped_text(host, TIMER), re.M), host
 
 
 def test_the_push_deadline_covers_one_week_and_not_two():
     """The producer is homelab-aide-check.timer (aide-scan component), weekly on Monday."""
-    for host in AIDE_HOSTS:
+    for host in aide_hosts():
         on_calendar = re.search(r"^OnCalendar=(.+)$", shipped_text(host, TIMER), re.M)
         assert on_calendar and re.fullmatch(
             r"Mon \*-\*-\* \d\d:\d\d:\d\d", on_calendar[1]

@@ -102,22 +102,41 @@ pull-request run makes, because the one run is still a pull-request run.
 The queue is never what makes a merge correct. When master moves between a PR's run and its
 merge, the trees differ, nothing is proven, and master's run sweeps in full as it did before.
 
+**D9, ruled by the operator on 2026-11-14: every landing forms a batch, and sessions and the
+fan-out open their PRs as drafts.** B3 saves runs only for a draft whose head has had no CI
+run, and sessions opened their PRs ready, so almost no landing could use it. Three
+measurements stand behind the ruling:
+
+- Four batches landed 11 PRs on 5 full runs on 2026-11-14. One at a time, those PRs cost
+  11 master runs.
+- Of the newest 800 pull-request runs up to 22:00 UTC that day, 476 ended green or red and
+  31 were red, which is 6.5%. A branch's first run was red 17 times in 260, also 6.5%. A
+  first run is red no more often than a later one, so a draft gives up little by having no
+  run when it is opened. At least four of the 31 were one flaky test (#8736).
+- At 6.5% a batch of four is red 24% of the time. A red batch costs its run and one run
+  for each member, so a PR in a batch of four costs about 0.5 full runs, against about 2
+  for a PR opened ready.
+
+The cost is the one this phase accepted when it gave each PR one run: the author of a draft
+gets no hosted verdict until the landing. With `LAND_BATCH=0` a landing forms no batch.
+Its draft still stands in the line, so another landing can stack it; `LAND_QUEUE=0` keeps a
+landing out of the turn and the line both.
+
 The slices:
 
 1. **B1, ended.** A shadow sweep of master, and replays of pull-request runs that hosted CI
    read red. *What the shadow sweep found* below has the result, which changed this plan.
 1. **R1, landed.** The shadow sweep's timer, its tool and its probe are deleted.
-1. **B2, in progress.** A queue of one. Every landing that merges its PR takes the landing
+1. **B2, landed.** A queue of one. Every landing that merges its PR takes the landing
    turn, marks a draft PR ready, updates its branch and merges after that one run
    ([Landing a merged PR](landing.md)). The turn spans both hosts, and `LAND_QUEUE=0` turns
-   it off for one landing. Two steps remain, and both wait for B3, because a queue of one
-   merges at most one untested head per CI run: sessions open their PRs as drafts, and the
-   fan-out stops marking a batch's PR ready before its landing.
-1. **B3, planned.** Batches of up to four. The queue opens one pull request that holds the
-   batch's heads stacked on master, and that PR's run is the batch's one full run. Its gate
-   rebuilds each stacked tree from master and the heads and records it on each head. Each
-   member then merges in turn, and its own run and master's prove the recorded tree and skip.
-   A red batch splits in half.
+   it off for one landing. Two steps remain, which D9 ruled on: sessions open their PRs as
+   drafts, and the fan-out stops marking a batch's PR ready before its landing.
+1. **B3, landed.** Batches of up to four. The landing that holds the turn opens one pull
+   request that holds the batch's heads stacked on master, and that PR's run is the batch's
+   one full run. Its gate rebuilds each stacked tree from master and the heads and records
+   it on each head. Each member then merges in turn, and its own run and master's prove the
+   recorded tree and skip. Every member of a red batch lands alone.
 1. **B4, planned.** The merge pacing is deleted, and so is the branch update that follows a
    green run on a stale base. A landing then takes its slot under the limit on live landings
    when it gets the turn, and the limit counts the landings of both hosts. That limit exists
@@ -182,8 +201,8 @@ B3 lands in four steps, each one exercised before the next:
    label only decides whether `prove` takes a runner, so an unlabelled PR run pays nothing.
    The question does not compare trees: the tree a pull-request run checks out is the
    merge GitHub built at the PR's last push, and the batch tested a different one. The
-   landing compares the recorded tree with `git merge-tree` of master and the head before
-   it merges, and master's run compares it again after.
+   landing merges a head a batch tested only while master is still the commit the batch
+   stacked it on, and master's run compares the tree again after.
 1. **The batch's gate records each member's tree (#8721).** On a PR from a `queue/` branch
    of this repository, the gate reads the member numbers from the PR's body, rebuilds each stacked
    tree from the run's base and the members' heads, and records a tree on a head only when
@@ -201,7 +220,7 @@ B3 lands in four steps, each one exercised before the next:
    push a `queue/` branch.
 1. **The landing that holds the turn forms the batch.** It lands in two parts.
 
-    - **The line.** A landing that waits for the turn with a draft that has had no CI run
+    - **The line (#8734).** A landing that waits for the turn with a draft that has had no CI run
       stands in the line: one file per PR in `/run/lock/homelab-land-line` on daniel-box,
       holding the head (`land_lib/line.py`). The landing refreshes its place on every poll
       and gives it up when the wait ends. A place that has gone two minutes without a
@@ -211,21 +230,80 @@ B3 lands in four steps, each one exercised before the next:
       waiting. A landing reads and answers only the places its own user wrote. For a
       landing on daniel-server that user is the one its ssh logs in as on daniel-box.
     - **The batch.** A landing with a draft that takes the turn stacks up to three more
-      drafts from the line behind its own, pushes the stack to `queue/<its PR>`, opens the
-      batch's pull request and waits for its run. On green it labels each member, marks it
-      ready, waits for the member's two short jobs and squash-merges the members in order.
-      It writes `merged` into each member's place, and that member's own landing then
-      follows the deploy as it does for a merge made elsewhere. A landing stacks only the
-      heads its own landing policy admits, and only landings of its own user, so no
-      landing merges a PR that its user could not have landed alone. A PR that changes a
-      forward-only pin, the `flux` role or cluster-vars lands alone, because the
-      cluster-pin gate refuses a pin bump that shares its PR.
+      drafts from the line behind its own (`land_lib/batch.py`). It builds the stack on
+      GitHub: a `queue/<its PR>` branch at master's tip, then one call to the `merges`
+      endpoint for each head. It opens the batch's pull request and waits for its run. On
+      green it labels and merges its own PR. It then takes each member in the order they
+      were stacked: it labels the member, marks it ready, waits for the member's two short
+      jobs and squash-merges it. It writes `merged` into each member's place, and that
+      member's own landing then follows the deploy as it does for a merge made elsewhere.
+      Every landing forms a batch this way since D9, and `LAND_BATCH=0` turns it off for
+      one landing.
 
-   Only a draft stands in the line. A ready flip is the one event that starts a member's
-   short labelled run, and a PR that is already ready has no flip left to make.
+      A landing stacks only the heads it would have been allowed to land. It runs its own
+      checks on each member, the landing policy included, and the member's own landing ran
+      its checks before it stood in the line. It stacks only landings of its own user. A
+      PR that changes a forward-only pin, the `flux` role or cluster-vars lands alone,
+      because the cluster-pin gate refuses a pin bump that shares its PR. A member merges
+      under its PR's title, whatever `--subject` its own landing was given.
+
+      A landing compares its own code with master once, when it forms the batch, and a
+      landing whose code is older forms none (`classify.code_lags_master`). It does not
+      compare again before a member's merge. Until the last member merges, master moves
+      only by the batch's own merges, and the batch's run tested those. On 2026-11-14 the
+      landing of PR 8550 compared before each member: its own merge changed
+      `scripts/renderer/renderer_lib/cluster.py`, which a landing imports, so it refused
+      the two PRs stacked behind it and they cost a second run.
+
+      The landing pushes nothing. A `merges` call makes a commit with two parents where
+      the squash merge makes one, and both make the same tree: for two open heads on
+      2026-11-14 the endpoint and the gate's own stack both gave `90a57d70` and
+      `fbc228e3`. A head that conflicts with the PRs before it answers HTTP 409 and is
+      left in the line.
+
+      A labelled run on a head that carries a record skips every job and compares no
+      tree, so the label is the dangerous part. Three rules hold it. A PR is labelled
+      only by the landing that is about to merge it. It is labelled only at the head the
+      batch stacked and only while master is the commit that head was stacked on, which
+      for a member is the commit the PR before it merged as
+      (`stale_base.batch_tested`). A PR that was labelled and marked ready and then did
+      not merge is converted to draft and back with no label, which starts a full run,
+      so no later landing merges it on the skipped one. A member whose head moved, whose
+      own landing left the line, or that master moved under is never labelled, and it
+      and the members after it land alone.
+
+      A batch never fails a landing. A batch that cannot be formed leaves the holder to
+      land its own PR as before, and a failure while the members merge ends the batch and
+      leaves the holder's deploy to go on. The members' merges come out of the two merge
+      budgets `LAND_DEADLINE` already counts for the holder's own wait, up to ten minutes
+      each. A member that no longer fits in what that wait left lands alone, so a batch
+      asks no lander unit for a longer deadline.
+
+   Only a draft whose head has had no CI run that ran jobs stands in the line. A ready flip
+   is the one event that starts a member's short labelled run, and a PR that is already
+   ready has no flip left to make. A green PR converted to draft does not qualify: its
+   landing marks it ready again and lands it alone, and that flip costs a full run. To put
+   such a PR in a batch, convert it to draft and then merge master into it
+   (`gh pr ready --undo <n>`, `gh pr update-branch <n>`), which gives it a head whose only
+   run skipped.
+
+   The first batch ran on 2026-11-14. The landing of PR 8546 stacked PRs 8547 and 8552
+   behind it. One run of 7 min 54 s tested the three, they merged within 90 seconds of
+   each other, and master's run after each merge took 13 to 17 seconds.
 1. **A red batch.** Every member of a red batch lands alone. With a red rate of 3.7% a batch
    of four is red about one time in seven, which is where the estimate of 0.3 to 0.4 runs a
    merge comes from.
+
+   The landing that held the turn writes `alone` into each member's place when the batch's
+   run is red or gives no verdict in 45 minutes. A member's own landing reads it on its next
+   poll, leaves the line, and waits on for the turn as a ready PR does. When it takes the
+   turn it forms no batch and gets its own run, which says whether it was the red one. A
+   place that carries an answer is not listed as waiting, so the next landing to take the
+   turn does not stack that PR again in the seconds before it leaves.
+
+   Without the answer the members stayed in the line, and each later landing stacked the
+   red one again: a batch of four whose last PR is red cost three red batches and four
+   runs alone. With it the same batch costs its one run and four runs alone.
 
 Four facts about the workflows shaped those steps:
 

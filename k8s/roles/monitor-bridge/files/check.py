@@ -15,8 +15,8 @@ A name the suite patches is read QUALIFIED from the module that binds it — `br
 — never from-imported, because a from-import copies the value in at import time and never sees
 the patch. Nothing here is a module table any more: the checks arrive as the `checks` argument
 and the queries through `src`, so a test states them instead of patching them. Enforced by
-ansible/tests/services/test_bridge_patch_boundary.py; the census of what is patched where is
-ansible/tests/services/test_monitor_bridge_modules.py.
+tests/services/test_bridge_patch_boundary.py; the census of what is patched where is
+tests/services/test_monitor_bridge_modules.py.
 
 Design: docs/monitor-bridge-internals.md.
 
@@ -112,10 +112,9 @@ def down_exporters(
 def _exporter_suppressed(src: Sources) -> set[str]:
     """The checks a dead exporter skips this cycle, or an empty set when the probe fails.
 
-    A BARE `up`, deliberately — no origin_sel(). PROM_ORIGIN resolves to origin="daniel-server",
-    while the `node` job labels each target with its own node name (daniel-box, daniel-server).
-    A pinned probe therefore saw one node exporter of three and missed a dead daniel-box one
-    (#2779). A failure to DETERMINE exporter health leaves the set empty: fail toward alerting,
+    A BARE `up`, deliberately, with no `origin` matcher. The `node` job labels each target with
+    its own node name (daniel-box, daniel-server), so a probe pinned to origin="daniel-server"
+    saw one node exporter of three and missed a dead daniel-box one (#2779). A failure to DETERMINE exporter health leaves the set empty: fail toward alerting,
     never masking.
     """
     # DECIDED: suppression stays keyed on the Prometheus `job`, so a dead exporter on ONE host

@@ -56,6 +56,14 @@ spends no GitHub calls. A PR opened as a draft gets its one CI run inside its tu
 master of that moment, so master's run for the merge skips its jobs. `LAND_QUEUE=0` turns the turn off for one
 landing; `land_lib/turn.py` owns the rule.
 
+**A draft that waits in line may be merged by the landing ahead of it.** The landing that
+holds the turn tests the drafts standing in line with its own in one CI run and merges them
+in order (`land_lib/batch.py`). Your landing then prints `the landing that holds the turn
+merged PR #N with its own` and goes on to the deploy and its verdict as usual. If that
+batch's run was red it prints `a batch that tested PR #N was not green; it lands alone` and
+gets a run of its own. Neither line is a fault. `LAND_BATCH=0` stops one landing forming a
+batch.
+
 `cc-wait` waits at most 570s per run. Exit 75 means the landing is still running: re-run only
 `cc-wait land <n>`, never `land.sh`, which would start a second landing. State `gave-up` (exit 3)
 is `land.sh`'s own give-up, a resume point for the whole command. State `deferred` (exit 4) is
@@ -162,8 +170,6 @@ Every measurement and incident behind the rules above, because they are read onc
 acted on rather than needed in every session: the merge and CI wait mechanics, the stale-tree
 retry arithmetic, the Pi's own deploy, the four shapes that need a hand, the annotation's
 fields and the Landings board. All of it is in [docs/landing.md](../../../docs/landing.md).
-This file was 418 lines and changed in 47 commits in the three months to 2026-09-30 — more than
-any other file under `.claude/` — because each of those measurements landed here (#2853).
 
 ## Before you start, and when to stop
 
