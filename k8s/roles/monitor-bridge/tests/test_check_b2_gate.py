@@ -31,6 +31,27 @@ def _arm_b2(cfg, key_id="kid", app_key="akey", interval=1800, transport_retry=30
     )
 
 
+_AUTH = {
+    "accountId": "a1",
+    "authorizationToken": "t",
+    "apiInfo": {
+        "storageApi": {"downloadUrl": "https://f000.example", "bucketName": "bkt"}
+    },
+}
+
+
+def _http_error(url, code, msg):
+    err = urllib.error.HTTPError(url, code, msg, email.message.Message(), None)
+    # Closed, as _get_json leaves a real one: an open HTTPError is a ResourceWarning at GC,
+    # which filterwarnings=error fails whichever test happens to be running then.
+    err.close()
+    return err
+
+
+def _not_found(url, headers=None):
+    raise _http_error(url, 404, 'download: {"code": "not_found", "status": 404}')
+
+
 def _cap_denial(cfg):
     """The exception a real transaction-cap breach raises.
 
@@ -39,17 +60,7 @@ def _cap_denial(cfg):
     to pick a cache TTL, so a test that fakes a 403 as a RuntimeError would exercise the transport
     path and prove the opposite of what it claims.
     """
-    err = urllib.error.HTTPError(
-        cfg.B2_PROBE_URL,
-        403,
-        "Forbidden: transaction_cap_exceeded",
-        email.message.Message(),
-        None,
-    )
-    # Closed, as _get_json leaves a real one: an open HTTPError is a ResourceWarning at GC,
-    # which filterwarnings=error fails whichever test happens to be running then.
-    err.close()
-    return err
+    return _http_error(cfg.B2_PROBE_URL, 403, "Forbidden: transaction_cap_exceeded")
 
 
 def test_b2_reachable_disabled_without_credentials(cfg):
@@ -61,12 +72,17 @@ def test_b2_reachable_disabled_without_credentials(cfg):
 @pytest.mark.parametrize(
     ("response", "ok", "must_contain"),
     [
-        pytest.param({"accountId": "a1"}, True, ("reachable",), id="ok_on_account_id"),
+        pytest.param(
+            {**_AUTH, "authorizationToken": None},
+            True,
+            ("reachable",),
+            id="ok_on_account_id",
+        ),
         # Version-tolerant: Backblaze publishes a v4 body example (accountId top-level) but none
         # for v3, so either field proves it's B2. Pinning one shape would page every cycle if it
         # moved.
         pytest.param(
-            {"authorizationToken": "t"},
+            {**_AUTH, "accountId": None},
             True,
             (),
             id="accepts_authorization_token_only",
@@ -79,7 +95,7 @@ def test_b2_reachable_disabled_without_credentials(cfg):
 )
 def test_b2_authorize(response, ok, must_contain, cfg):
     cfg = replace(cfg, B2_PROBE_KEY_ID="kid", B2_PROBE_APPLICATION_KEY="akey")
-    src = FakeSources(get_json=lambda url, headers=None: response)
+    src = FakeSources(get_json=lambda url, headers=None: response, get_bytes=_not_found)
     result_ok, msg = checks.b2.b2_authorize(cfg, src)
     assert result_ok is ok
     for s in must_contain:
@@ -136,9 +152,9 @@ def test_b2_reachable_reprobes_a_transport_failure_next_cycle(cfg):
         calls.append(url)
         if outcomes:
             raise outcomes.pop(0)
-        return {"accountId": "a1"}
+        return _AUTH
 
-    src = FakeSources(get_json=_flaky)
+    src = FakeSources(get_json=_flaky, get_bytes=_not_found)
     ok, msg = checks.b2.b2_reachable(cfg, src, now=10_000)
     assert ok is False and "name resolution" in msg
     # One cycle later the transport TTL has expired, so the gate re-probes and recovers — where a
@@ -160,11 +176,71 @@ def test_b2_reachable_reprobes_after_the_interval(cfg):
 
     def _ok(url, headers=None):
         calls.append(url)
-        return {"accountId": "a1"}
+        return _AUTH
 
-    src = FakeSources(get_json=_ok)
+    src = FakeSources(get_json=_ok, get_bytes=_not_found)
     checks.b2.b2_reachable(cfg, src, now=10_000)
     checks.b2.b2_reachable(cfg, src, now=10_000 + 1799)  # still cached
     assert len(calls) == 1
     checks.b2.b2_reachable(cfg, src, now=10_000 + 1801)  # interval elapsed
     assert len(calls) == 2
+
+
+def test_b2_reachable_reads_a_spent_class_b_cap_as_down(cfg):
+    # Authorizing is a Class C call, and B2 caps Class B separately: a spent Class B cap leaves
+    # authorize answering 200, so only the Class B call can see it.
+    cfg = _arm_b2(cfg)
+
+    def _class_b_capped(url, headers=None):
+        raise _cap_denial(cfg)
+
+    src = FakeSources(
+        get_json=lambda url, headers=None: _AUTH, get_bytes=_class_b_capped
+    )
+    ok, msg = checks.b2.b2_reachable(cfg, src, now=10_000)
+    assert ok is False
+    assert "Class B probe" in msg and "transaction_cap_exceeded" in msg
+    # Billed, so it holds the full interval like a Class C denial.
+    checks.b2.b2_reachable(cfg, src, now=10_000 + 1500)
+    assert len(src.queries("get_bytes")) == 1
+    assert src.queries("get_bytes") == [
+        "https://f000.example/file/bkt/%s" % checks.b2.B2_CLASS_B_PROBE_FILE
+    ]
+
+
+def _bare_404(url, headers=None):
+    raise _http_error(url, 404, "Not Found")
+
+
+@pytest.mark.parametrize(
+    ("auth", "download", "must_contain"),
+    [
+        pytest.param(
+            {"accountId": "a1", "authorizationToken": "t"},
+            _not_found,
+            "downloadUrl",
+            id="no_download_url_is_not_class_c_only",
+        ),
+        pytest.param(
+            _AUTH,
+            _bare_404,
+            "Class B probe",
+            id="a_404_without_not_found_is_not_b2",
+        ),
+        pytest.param(
+            _AUTH,
+            lambda url, headers=None: b"",
+            "must not exist",
+            id="the_probe_name_existing_is_down",
+        ),
+    ],
+)
+def test_b2_authorize_class_b_arm_is_flagged(auth, download, must_contain, cfg):
+    cfg = replace(cfg, B2_PROBE_KEY_ID="kid", B2_PROBE_APPLICATION_KEY="akey")
+
+    src = FakeSources(get_json=lambda url, headers=None: auth, get_bytes=download)
+    try:
+        ok, msg = checks.b2.b2_authorize(cfg, src)
+    except urllib.error.HTTPError as e:
+        ok, msg = False, str(e)
+    assert ok is False and must_contain in msg

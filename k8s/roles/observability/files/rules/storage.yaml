@@ -109,9 +109,13 @@ groups:
             {{ $labels.persistentvolumeclaim }} has {{ $value | humanize1024 }}B free, under the
             3 GiB its updater stages before swapping the install in. Expand the volume in its role.
       # A declared floor whose claim reports no free bytes is a breach, not silence: the arm above
-      # evaluates to nothing exactly when its input vanishes.
+      # evaluates to nothing exactly when its input vanishes. A valheim Deployment parked at zero
+      # replicas mounts no volume, so the kubelet reports nothing by design: the `unless` mutes
+      # the rule while kube-state-metrics reads zero replicas, and stays loud when it reads none.
       - alert: PVCFreeFloorUnmonitored
-        expr: absent(kubelet_volume_stats_available_bytes{persistentvolumeclaim="valheim-server"})
+        expr: >-
+          absent(kubelet_volume_stats_available_bytes{persistentvolumeclaim="valheim-server"})
+          unless on() (kube_deployment_spec_replicas{namespace="homelab",deployment="valheim"} == 0)
         for: 5m
         labels:
           severity: critical

@@ -152,22 +152,6 @@ def _primary_rollout_name(role: Path) -> str:
     return role.name
 
 
-def _primary_rollout_kind(role: Path) -> str:
-    """The kubectl kind of this role's primary rollout.
-
-    Mirrors `manifests_rollout_kind | default('deploy')`. Same regex-is-safe reasoning as
-    `_primary_rollout_name`: every role sets this to a literal.
-    """
-    match = re.search(
-        r"""^\s*manifests_rollout_kind:\s*(?:"([^"]*)"|'([^']*)'|(\S+))\s*$""",
-        _render_metadata_text(role),
-        re.MULTILINE,
-    )
-    if not match:
-        return "deploy"
-    return next(g for g in match.groups() if g is not None)
-
-
 _DEPLOYMENT_DOC = re.compile(
     r"^kind:\s*(Deployment|DaemonSet)\s*$\n\s*metadata:\s*$\n\s*name:\s*(.+?)\s*$",
     re.MULTILINE,

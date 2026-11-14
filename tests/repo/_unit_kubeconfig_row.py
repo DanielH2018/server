@@ -255,6 +255,7 @@ UNITS_REACHING_THE_CLUSTER_SET_KUBECONFIG = Census(
         _stripped(_CLAUDE_RC),
         # fanout.py imports its subcommand by name, and autoland runs `Path` parts naming land.sh.
         _stripped(_SERVER_LANDER),
+        _stripped(_LANDER),
     ),
     green=(
         Subject(_B2_BUDGET),
@@ -272,14 +273,10 @@ UNITS_REACHING_THE_CLUSTER_SET_KUBECONFIG = Census(
             "hosts/components/claude-code/templates/claude-bg-resume.service.j2",
             "hosts/components/claude-code/templates/claude-triage@.service.j2",
             _SERVER_LANDER,
+            _LANDER,
         }
     ),
     allow={
-        _LANDER: (
-            "land.py waits on Flux through lib.kubectl, whose find_kubeconfig falls back to the "
-            "kubeconfig under HOME, and the unit sets HOME. The unit is on the lander's "
-            "approval list, so adding KUBECONFIG waits on the operator (#8207)"
-        ),
         _LOKI_WITNESS: (
             "probe.py loki-labels reads Loki over HTTP and runs no kubectl. The row counts it "
             "because probe.py imports every subcommand, some of which reach lib.kubectl"

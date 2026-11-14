@@ -4,7 +4,7 @@
 Reads Terraria console lines already ingested into Loki, parses connection
 events (join / leave / server-restart), folds them into all-time per-player
 playtime + session counts kept in SQLite (the source of truth), and serves
-Prometheus metrics for Grafana. Stdlib only (python:3.14-alpine, no deps). The
+Prometheus metrics for Grafana. Stdlib only (python:3.15-alpine, no deps). The
 Terraria container is never touched. Deaths/chat are NOT emitted by the vanilla
 console (verified Phase 0, 2026-06-15) and are out of scope.
 

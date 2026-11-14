@@ -42,10 +42,10 @@ karakeep_k8s_rollout_timeout: "{{ manifests_rollout_timeout }}"
 # for a published tag alone, so an Ansible deploy ignores it.
 flux_prepull_timeout: 4500s
 karakeep_k8s_meili_image: getmeili/meilisearch:v1.55.0@sha256:ff546679970126f8822e15d1b6a06bfbff1f2ce2e43f810cfb5258012f92de5c
-# Built in-cluster. The base-image pin (uv `python3.14-bookworm-slim` digest) lives in
+# Built in-cluster. The base-image pin (uv `python3.15-trixie-slim` digest) lives in
 # `templates/Dockerfile.j2`'s `FROM` line, where Renovate's dockerfile manager reads it. All five
 # pinned pip deps below must resolve wheel-only under the base's interpreter, because
-# bookworm-slim ships no compiler and an sdist fallback crashloops the boot-time
+# trixie-slim ships no compiler and an sdist fallback crashloops the boot-time
 # `uv pip install`.
 #
 # `k8s_built_image_tags` is a play-scoped fact k8s/image-builder publishes, so the `.get` fallback
@@ -70,20 +70,21 @@ k8s_autodeploy_reason: "three reasons: (1) stateful — meilisearch migrates its
 # it is rebuilt by reindexing, and the COUPLING NOTE above records the desync a revert causes.
 k8s_autodeploy_snapshot_pvcs: [karakeep-data]
 
+# Each memory request below is its container's 7-day p95 working set on 2026-11-14 rounded
+# up to 64Mi: 946Mi for the app, 591Mi for chrome and 770Mi for meilisearch.
 karakeep_k8s_cpu_limit: "2"
 karakeep_k8s_mem_limit: 2048Mi
 karakeep_k8s_cpu_request: "100m"
-karakeep_k8s_mem_request: 128Mi
+karakeep_k8s_mem_request: 960Mi
 # Headless Chrome spikes, so a generous cap.
 karakeep_k8s_chrome_cpu_limit: "2"
 karakeep_k8s_chrome_mem_limit: 2048Mi
 karakeep_k8s_chrome_cpu_request: "100m"
-karakeep_k8s_chrome_mem_request: 128Mi
-# Mirrors resources('1.0', '1024M', '0.10', '128M').
+karakeep_k8s_chrome_mem_request: 640Mi
 karakeep_k8s_meili_cpu_limit: "1"
 karakeep_k8s_meili_mem_limit: 1024Mi
 karakeep_k8s_meili_cpu_request: "100m"
-karakeep_k8s_meili_mem_request: 128Mi
+karakeep_k8s_meili_mem_request: 832Mi
 # Mirrors resources('1.0', '512M', '0.05', '64M'). cpu 1.0 is deliberate: the boot-time
 # `uv pip install` plus the per-cycle tag burst CFS-throttled ~67% of periods at 0.5.
 karakeep_k8s_tagger_cpu_limit: "1"

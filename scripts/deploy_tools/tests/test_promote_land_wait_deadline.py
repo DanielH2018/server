@@ -7,11 +7,14 @@ test_promote_land_wait.py.
 Run: uv run pytest scripts/deploy_tools/tests/test_promote_land_wait_deadline.py
 """
 
+from datetime import UTC, datetime, timedelta
+
 import pytest
 
 import forge
 from flux_host import FluxHost
 from lib.repo_paths import REPO
+from deploy_tools.promote_lib import reboot_window
 from deploy_tools.promote_lib import verify_promotion as vp
 from deploy_tools.promote_lib import wait as promote_wait
 from deploy_tools.promote_lib import wait_reads
@@ -27,6 +30,8 @@ from _land_wait_fakes import (
     substituting_promote_timeout,
 )
 from _promote_fakes import FakeTransport, digest_of
+
+SUNDAY = datetime(2026, 10, 18, tzinfo=UTC)
 
 # -- the timeout against a substituting bundle (#5155) --------------------------------------
 
@@ -200,6 +205,24 @@ def test_the_live_reads_wire_the_in_flight_read_to_prod():
     transport = _prod_transport("t", "g", f"master@sha1:{P}")
     reads = wait_reads.live_wait_reads(_forge(transport), REPO, host=FluxHost())
     assert reads.in_flight() == P
+
+
+def test_the_live_reboot_read_takes_the_schedule_from_its_own_checkout(
+    tmp_path,
+):
+    schedule = reboot_window.read_schedule(REPO)
+    reboot = SUNDAY + timedelta(
+        days=schedule.weekday,
+        hours=schedule.hour,
+        minutes=schedule.minute + schedule.delay_min,
+    )
+    reads = wait_reads.live_wait_reads(
+        _forge(FakeTransport()), tmp_path, FluxHost(), now=lambda: reboot
+    )
+    assert reads.reboot_window() == (
+        schedule.recovery_min * 60,
+        reboot + timedelta(minutes=schedule.recovery_min),
+    )
 
 
 @pytest.mark.parametrize(

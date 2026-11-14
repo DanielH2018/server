@@ -12,7 +12,7 @@ Secret holds.
 - **Claims:** none (no PVC)
 <!-- /generated_from -->
 
-- **Flux applies it, not Ansible** (H1.2). Its `containers_list` entry is in `cluster/services.yml`
+- **Flux applies it.** Its `containers_list` entry is in `cluster/services.yml`
   from its first commit. A rebuilt cluster applies it by hand before it installs Flux, as step 2 of
   `docs/longhorn-disaster-recovery.md`'s *Procedure (fresh host, total loss)*.
 - **The tag renders `prune: false`** (`flux_prune: false`, with the `DECIDED:` marker beside it

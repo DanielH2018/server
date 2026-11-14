@@ -1,0 +1,24 @@
+---
+# Gives the manager DaemonSet's pre-pull-share-manager-image sidecar requests and limits
+# (#8543). Upstream ships it with no `resources`; it only runs `sleep infinity` so the kubelet
+# keeps the share-manager image on every node. The values are
+# k3s_longhorn_share_manager_pre_pull_resources in defaults/main.yml, held equal by
+# tests/longhorn/test_longhorn_control_plane_resources.py. It is its own file because
+# longhorn-manager.yaml names only the manager container, which stays request-only (#1243).
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: longhorn-manager
+  namespace: longhorn-system
+spec:
+  template:
+    spec:
+      containers:
+        - name: pre-pull-share-manager-image
+          resources:
+            requests:
+              cpu: 5m
+              memory: 8Mi
+            limits:
+              cpu: 50m
+              memory: 32Mi

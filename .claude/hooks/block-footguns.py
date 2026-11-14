@@ -280,11 +280,11 @@ def ci_dispatch_on_master_problem(stage: list[str]) -> str | None:
     The dispatch run lands as a second check suite on the same SHA. `ci_verdict` takes the
     worst conclusion over every required-name check-run and filters on no event, and GitHub's
     default `filter=latest` does not merge same-named runs across suites — so a red dispatch
-    beside a green push run reads as fail, and the deployer's walk stops at that SHA.
+    beside a green push run reads as fail, and checkout-sync's walk stops at that SHA.
 
     Denies the ABSENT ref as well as the explicit one: an empty `--ref` resolves to the default
     branch, which is master here. A dispatch of a real branch stays clean, because a branch SHA
-    is not one the deployer walks.
+    is not one checkout-sync walks.
 
     Out of scope, deliberately: the workflow's numeric id (a literal here would drift), the
     Actions UI button, and a raw `gh api .../dispatches` call. The issue that filed this

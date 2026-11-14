@@ -23,12 +23,10 @@ GOOD = {
     "state": "OPEN",
     "headRefName": "renovate/k8s-image-sonarr",
     "headRefOid": "c" * 40,
-    "files": [{"path": "ansible/roles/k8s/sonarr/defaults/main.yml"}],
+    "files": [{"path": "k8s/roles/sonarr/defaults/main.yml"}],
 }
 HEAD = GOOD["headRefOid"]
-REST_FILES = [
-    {"status": "modified", "filename": "ansible/roles/k8s/sonarr/defaults/main.yml"}
-]
+REST_FILES = [{"status": "modified", "filename": "k8s/roles/sonarr/defaults/main.yml"}]
 EVENTS = [
     {"activity_type": "push", "actor": {"login": "renovate[bot]"}, "after": HEAD},
     {"activity_type": "branch_creation", "actor": {"login": "renovate[bot]"}},
@@ -72,14 +70,8 @@ def test_a_renovate_pr_touching_no_denied_role_passes_every_check():
             },
             "k8s_autodeploy-false",
         ),
-        (
-            {"files": [{"path": "ansible/roles/k8s/authelia/defaults/main.yml"}]},
-            "authelia",
-        ),
-        # The tree after ADR 0030's rename, which the installed lander must also refuse.
         ({"files": [{"path": "k8s/roles/authelia/defaults/main.yml"}]}, "authelia"),
         ({"files": []}, "cap"),
-        ({"files": [{"path": "ansible/inventory/group_vars/all.yml"}]}, "inventory"),
         ({"files": [{"path": "inventory/group_vars/all.yml"}]}, "inventory"),
         ({"headRefOid": "c" * 39}, "head SHA"),
         ({"files": [{"path": f"f{i}"} for i in range(lander.FILE_CAP)]}, "cap"),
@@ -166,7 +158,7 @@ def test_the_denylist_comes_from_the_derivation_in_the_checkout(tmp_path, monkey
 
 
 def test_a_denied_role_from_the_derivation_refuses_the_pr(tmp_path):
-    files = [{"path": "ansible/roles/k8s/authelia/defaults/main.yml"}]
+    files = [{"path": "k8s/roles/authelia/defaults/main.yml"}]
     run = _Run({**GOOD, "files": files})
     rc, result = _main(tmp_path, run)
     assert rc == 3 and "authelia" in result

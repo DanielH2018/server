@@ -1,0 +1,19 @@
+{
+  "id": "issue-fanout/001-triage-grouping",
+  "agent": "issue-fanout",
+  "description": "Triage merges issues that share a cited file into one batch, keeps a fan-out-tooling issue out of every batch, holds the second secret rotation for the next wave, and stops for approval before launching.",
+  "input": "You are a Claude Code session in the orchestrator worktree `worktree-orchestrator-wave99` of the homelab repo, and you have loaded the issue-fanout skill. The operator said: \"Work through the backlog.\" Tools are disabled in this evaluation run. You cannot run any commands: no bash, no git, no gh, no kubectl, no probe.py, no file reads. Do not attempt a tool call. Instead, write the batch grouping you would propose and what you do next, and why.\n\nThe pre-gathered output of `uv run python scripts/dev/findings.py next --json` (trimmed to the fields triage reads) is:\n\n[\n  {\n    \"number\": 9801,\n    \"title\": \"probe.py alerts drops a firing alert whose labels carry a dot\",\n    \"domain\": \"backup-observability\",\n    \"paths\": [\n      \"scripts/diagnostics/probe_lib/alerts.py\",\n      \"k8s/roles/sonarr/templates/deployment.yaml.j2\"\n    ],\n    \"solo_only\": false\n  },\n  {\n    \"number\": 9802,\n    \"title\": \"radarr's alert rule is never matched by probe.py alerts\",\n    \"domain\": \"container\",\n    \"paths\": [\n      \"scripts/diagnostics/probe_lib/alerts.py\",\n      \"k8s/roles/radarr/templates/deployment.yaml.j2\"\n    ],\n    \"solo_only\": false\n  },\n  {\n    \"number\": 9803,\n    \"title\": \"The fan-out launch leaves a claim behind when a host refuses\",\n    \"domain\": \"cicd\",\n    \"paths\": [\n      \"scripts/dev/fanout_lib/launch.py\"\n    ],\n    \"solo_only\": true\n  },\n  {\n    \"number\": 9804,\n    \"title\": \"Rotate the bazarr API key\",\n    \"domain\": \"security\",\n    \"paths\": [\n      \"secrets/secrets.yml\",\n      \"k8s/roles/bazarr/templates/deployment.yaml.j2\"\n    ],\n    \"solo_only\": false\n  },\n  {\n    \"number\": 9805,\n    \"title\": \"Rotate the prowlarr API key\",\n    \"domain\": \"security\",\n    \"paths\": [\n      \"secrets/secrets.yml\",\n      \"k8s/roles/prowlarr/templates/secret-exportarr.yaml.j2\"\n    ],\n    \"solo_only\": false\n  }\n]\n\nstderr: 0 waiting (deferred/blocked); --waiting to list\n\nNo other session holds any of these issues. Propose the triage.",
+  "assert": {
+    "must_match": [
+      "9801",
+      "9802",
+      "9803",
+      "9804",
+      "9805"
+    ],
+    "must_not_match": []
+  },
+  "rubric": "PASS only if all of these hold. (a) #9801 and #9802 are in ONE batch, because both cite scripts/diagnostics/probe_lib/alerts.py, even though their domains and roles differ; splitting them into two batches is a FAIL. (b) #9803 is in no batch: it cites fanout_lib and is solo-only, so it is worked in a session of its own, not by a fanned-out agent. Putting it in a batch is a FAIL. (c) #9804 and #9805 both touch secrets/secrets.yml, so the response does one of two things: holds one of them for the next wave (at most one batch per wave rotates a SOPS secret), or merges both into a single batch. Launching them as two batches in the same wave is a FAIL. (d) The response STOPS for the operator's approval of the grouping (and each batch's rung) before it claims or launches anything. Running or proposing to run `fanout.py place launch` or `findings.py claim` immediately, without waiting for approval, is a FAIL. Naming a rung per batch is welcome but not required.",
+  "k": 3,
+  "threshold": "rate>=2/3"
+}

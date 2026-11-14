@@ -11,9 +11,9 @@ rule_files:
   - ../../files/rules/bridge-exporter.yaml
 evaluation_interval: 1m
 tests:
-  # THE WAN FAMILY (A6-3). Every gauge is 0 from the first sample, so the gate and its four
+  # THE WAN FAMILY (A6-3). Every gauge is 0 from the first sample, so the gate and its five
   # dependents all fire at once, with no `for:`. promtool does not run Alertmanager's inhibit
-  # rule, so all five reach exp_alerts; tests/services/test_bridge_wan_rules.py holds the
+  # rule, so all six reach exp_alerts; tests/services/test_bridge_wan_rules.py holds the
   # inhibit against the rule labels. Each dependent carries `requires: wan`, the gate does not.
   - interval: 1m
     input_series:
@@ -26,6 +26,8 @@ tests:
       - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="cloudflare_ips_drift"}
         values: "0x5"
       - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="healthchecks_drift"}
+        values: "0x5"
+      - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="domain_registration"}
         values: "0x5"
     alert_rule_test:
       - eval_time: 1m
@@ -42,9 +44,9 @@ tests:
               description: >-
                 Both WAN probe providers failed from monitor-bridge, so this house has no
                 working link or no DNS. The rows behind this gate (Discord delivery, R2
-                headroom, Cloudflare IP drift and Healthchecks.io console drift) are held by
-                the inhibit rule. Read the probe's failure messages in the monitor-bridge log
-                in the homelab namespace.
+                headroom, Cloudflare IP drift, Healthchecks.io console drift and the domain
+                registration read) are held by the inhibit rule. Read the probe's failure
+                messages in the monitor-bridge log in the homelab namespace.
       - eval_time: 1m
         alertname: DiscordDeliveryFailing
         exp_alerts:
@@ -113,6 +115,66 @@ tests:
                 docs/healthchecks-io-deadman.md and monitor_bridge_healthchecks_expected
                 together and redeploy monitor-bridge.
               runbook_url: https://docs.local.daniel-hunter.com/healthchecks-io-deadman/
+      - eval_time: 1m
+        alertname: DomainRegistrationUnreadable
+        exp_alerts:
+          - exp_labels:
+              job: monitor-bridge
+              instance: monitor-bridge.homelab.svc:9181
+              check: domain_registration
+              severity: warning
+              service: domain
+              requires: wan
+            exp_annotations:
+              summary: monitor-bridge cannot read the domain's registration expiry over RDAP.
+              description: >-
+                The registry's RDAP record did not answer or carries no expiration event, so
+                the days-left gauge holds its last read, or is absent after a restart. The
+                monitor-bridge log names the error. A failed read is retried every cycle.
+
+  # The registration's days left (#8519). 60 days fires nothing; 30 fires the warning alone; 10
+  # fires the warning and the page. Neither rule has a `for:`, so each fires at its first sample.
+  - interval: 1m
+    input_series:
+      - series: homelab_domain_registration_expiry_days{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181"}
+        values: "60 30 10"
+    alert_rule_test:
+      - eval_time: 0m
+        alertname: DomainRegistrationExpiringSoon
+        exp_alerts: []
+      - eval_time: 0m
+        alertname: DomainRegistrationExpiring
+        exp_alerts: []
+      - eval_time: 1m
+        alertname: DomainRegistrationExpiringSoon
+        exp_alerts:
+          - exp_labels:
+              job: monitor-bridge
+              instance: monitor-bridge.homelab.svc:9181
+              severity: warning
+              service: domain
+            exp_annotations:
+              summary: The domain registration expires in 45 days or fewer.
+              description: >-
+                The registry's RDAP record dates the domain's expiry 30 days out. Renew it at
+                the registrar, and turn on auto-renew if it is off.
+      - eval_time: 1m
+        alertname: DomainRegistrationExpiring
+        exp_alerts: []
+      - eval_time: 2m
+        alertname: DomainRegistrationExpiring
+        exp_alerts:
+          - exp_labels:
+              job: monitor-bridge
+              instance: monitor-bridge.homelab.svc:9181
+              severity: critical
+              service: domain
+            exp_annotations:
+              summary: The domain registration expires in 14 days or fewer.
+              description: >-
+                The registry's RDAP record dates the domain's expiry 10 days out. A lapse takes
+                down ACME renewal, every public route, the WireGuard endpoint name and the
+                alert plane's own notifications. Renew it at the registrar.
 
   # Every WAN-family row passes, so nothing fires. One dependent down with the gate up fires
   # that dependent alone: a dependent's rule does not read the gate.

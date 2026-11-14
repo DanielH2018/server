@@ -38,8 +38,7 @@ the Trakt and SSO-Auth decisions, and why the snapshot cap is the number it is.
   by hand and asserted after apply — a MetalLB misconfiguration otherwise moves the Service to an
   auto-assigned address with the pod still healthy. observability's
   `JellyfinLanAddressNotPinned` rule watches the same address from kube-state-metrics, at
-  `warning` with `verify="true"`, so the soak checks it on every revision. It replaces the
-  two Ansible tasks the flip deleted. Its address is a
+  `warning` with `verify="true"`, so the soak checks it on every revision. Its address is a
   literal, so moving the VIP is an edit to that rule too.
 
 ## Notable
@@ -78,8 +77,8 @@ the Trakt and SSO-Auth decisions, and why the snapshot cap is the number it is.
   installers against a seeded directory.
 - **`templates/verify/` holds jellyfin's two Jobs**, which the renderer emits into
   `jellyfin-verify`.
-  - `job.yaml.j2` runs `files/jellyfin_verify.py`, which replaced two of the retired
-    Ansible exec checks: the render node opens, and the library sits at the depth
+  - `job.yaml.j2` runs `files/jellyfin_verify.py`, which makes two checks: the render
+    node opens, and the library sits at the depth
     Jellyfin's database expects, with a real file readable. Its pod is built like jellyfin's, with
     the same device request, render group, PUID and both read-only `media-data` mounts, so it
     checks that wiring and not the live pod. It dials no Service and no API, so it needs no fence
