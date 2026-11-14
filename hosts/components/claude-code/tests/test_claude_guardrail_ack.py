@@ -70,6 +70,7 @@ def _run(
 
 
 def test_the_first_run_baselines_and_posts_nothing(tmp_path, tree):
+    # fact: hosts/components/claude-code/CLAUDE.md#Autonomous-role contract (`claude-guardrail-ack`, the post for each unexplained guardrail change)
     _, _, config = tree
     ok, line, posts = _run(tmp_path, config)
     assert (ok, posts) == (True, [])
@@ -77,6 +78,7 @@ def test_the_first_run_baselines_and_posts_nothing(tmp_path, tree):
 
 
 def test_a_hand_edit_to_a_hook_is_posted_with_its_secret_masked(tmp_path, tree):
+    # fact: hosts/components/claude-code/CLAUDE.md#Autonomous-role contract (`claude-guardrail-ack`, the post for each unexplained guardrail change)
     home, _, config = tree
     _run(tmp_path, config)
     bare = "Zx" * 20
@@ -92,6 +94,7 @@ def test_a_hand_edit_to_a_hook_is_posted_with_its_secret_masked(tmp_path, tree):
 
 
 def test_a_change_that_matches_the_dotfiles_main_render_is_not_posted(tmp_path, tree):
+    # fact: hosts/components/claude-code/CLAUDE.md#Autonomous-role contract (`claude-guardrail-ack`, the post for each unexplained guardrail change)
     home, _, config = tree
     _run(tmp_path, config)
     new = b"#!/bin/sh\nexit 1\n"
@@ -118,6 +121,7 @@ def _deb(path, version, content):
 def test_a_package_file_matching_its_md5_is_not_posted_and_a_drifted_one_is(
     tmp_path, tree
 ):
+    # fact: hosts/components/claude-code/CLAUDE.md#Autonomous-role contract (`claude-guardrail-ack`, the post for each unexplained guardrail change)
     _, package_file, config = tree
     _run(tmp_path, config)
     package_file.write_text("scripts/lib/\nscripts/deploy_tools/\n")
@@ -130,6 +134,7 @@ def test_a_package_file_matching_its_md5_is_not_posted_and_a_drifted_one_is(
 
 
 def test_a_hand_installed_package_change_is_posted_with_both_versions(tmp_path, tree):
+    # fact: hosts/components/claude-code/CLAUDE.md#Autonomous-role contract (`claude-guardrail-ack`, the post for each unexplained guardrail change)
     _, package_file, config = tree
     _run(tmp_path, config)
     package_file.write_text("scripts/lib/\nscripts/deploy_tools/\n")
@@ -180,6 +185,7 @@ def test_published_versions_skips_one_only_dpkg_status_lists():
 def test_claude_codes_own_model_write_is_quiet_and_a_permissions_change_is_posted(
     tmp_path, tree
 ):
+    # fact: hosts/components/claude-code/CLAUDE.md#Autonomous-role contract (`claude-guardrail-ack`, the post for each unexplained guardrail change)
     home, _, config = tree
     settings = home / "settings.json"
     _run(tmp_path, config)
@@ -193,6 +199,7 @@ def test_claude_codes_own_model_write_is_quiet_and_a_permissions_change_is_poste
 
 
 def test_a_failed_post_is_retried_on_the_next_run(tmp_path, tree):
+    # fact: hosts/components/claude-code/CLAUDE.md#Autonomous-role contract (`claude-guardrail-ack`, the post for each unexplained guardrail change)
     home, _, config = tree
     _run(tmp_path, config)
     (home / "hooks" / "new.sh").write_text("#!/bin/sh\n")
@@ -250,6 +257,7 @@ def copied(tmp_path, tree):
 def test_a_copy_of_a_published_package_file_is_not_posted_and_a_hand_edit_is(
     tmp_path, copied
 ):
+    # fact: hosts/components/claude-code/CLAUDE.md#Autonomous-role contract (`claude-guardrail-ack`, the post for each unexplained guardrail change)
     agent, package_file, _, config = copied
     _run(tmp_path, config)
     package_file.write_text("scripts/lib/\nscripts/deploy_tools/\n")
@@ -267,6 +275,7 @@ def test_a_copy_of_a_published_package_file_is_not_posted_and_a_hand_edit_is(
 def test_a_copy_of_a_hook_matching_the_render_at_its_source_is_not_posted(
     tmp_path, copied
 ):
+    # fact: hosts/components/claude-code/CLAUDE.md#Autonomous-role contract (`claude-guardrail-ack`, the post for each unexplained guardrail change)
     agent, _, home, config = copied
     _run(tmp_path, config)
     new = b"#!/bin/sh\nexit 1\n"

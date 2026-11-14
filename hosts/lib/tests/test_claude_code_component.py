@@ -91,6 +91,7 @@ def test_the_remote_control_host_ships_disabled_and_restarts_only_by_hand(
 
 
 def test_each_packaged_unit_names_its_packaged_sibling(package):
+    # fact: hosts/components/claude-code/CLAUDE.md#Autonomous-role contract (`claude-clone-sync`, `claude-dotfiles-sync`)
     rc = text(package, f"{UNITS}/homelab-claude-rc.service")
     assert "\nOnFailure=homelab-claude-rc-alert.service\n" in rc
     restart = text(package, f"{UNITS}/homelab-claude-rc-restart.service")

@@ -91,6 +91,7 @@ def agent(tmp_path: Path) -> Agent:
 def test_the_agent_variant_is_applied_in_two_passes_that_spare_the_role_owned_dirs(
     agent: Agent,
 ) -> None:
+    # fact: hosts/components/claude-code/CLAUDE.md#Autonomous-role contract (`claude-clone-sync`, `claude-dotfiles-sync`)
     result = agent.sync()
     assert result.returncode == 0, result.stderr
     home = agent.home
@@ -106,6 +107,7 @@ def test_the_agent_variant_is_applied_in_two_passes_that_spare_the_role_owned_di
 
 def test_a_source_without_the_agent_variant_is_refused(agent: Agent) -> None:
     """Applied anyway, it would write the operator's .gitconfig over the agent's identity."""
+    # fact: hosts/components/claude-code/CLAUDE.md#Autonomous-role contract (`claude-clone-sync`, `claude-dotfiles-sync`)
     result = agent.sync(is_agent="")
     assert result.returncode == 1
     assert "does not render the agent variant" in result.stderr
