@@ -53,7 +53,7 @@ def ci_verdict(check_runs: list[dict], required: frozenset[str]) -> str:
 
 
 def read_check_pages(fetch_page: Callable[[str], object], key: str) -> list[dict]:
-    """Every entry of `key` across a check-runs listing, walked as `deploy_git.read_check_pages`.
+    """Every entry of `key` across a paged check-runs listing, up to `_CHECK_PAGES_MAX` pages.
 
     GitHub pages the listing at 100 runs, so a failing re-run of a required check can sit on
     page 2 only (#5991). `fetch_page(query)` returns the parsed body for the `?per_page=&page=`

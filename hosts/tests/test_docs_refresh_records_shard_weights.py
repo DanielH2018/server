@@ -11,8 +11,8 @@ Three things have to hold together, and each has a way of failing that reads gre
   generated trees did not move, which is most runs, so a record after it never publishes.
 - Both weights tables are in the `git add`: the recorded one, and the runner-seconds one that
   `--refresh-runner` rewrites from CI's logs (#6178). Written and left unstaged, a table is a
-  modified file in the primary checkout, which `deploy_git.py` reads as dirty and which parks
-  every deploy.
+  modified file in the primary checkout, which `homelab-checkout-sync` reads as dirty and
+  which parks it.
 - `restore_generated_tree`'s per-tree check names them too. That check is what decides between
   `tree restored` and `TREE STILL DIRTY` after a failed commit, and it is path-scoped: scoped
   to the two doc trees it would report restored over a weights table left modified.

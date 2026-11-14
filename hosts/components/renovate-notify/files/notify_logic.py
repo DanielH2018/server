@@ -208,12 +208,12 @@ def parse_automerge(body: str) -> bool:
     return "Automerge**: Enabled" in (body or "")
 
 
-# The check-runs page walk's size and cap, equal to deploy_git's (a parity test holds them).
+# The check-runs page walk's size and cap, equal to builder_ci_grade's (a parity test holds them).
 CHECK_PAGE_SIZE, CHECK_PAGES_MAX = 100, 20
 
 
 def read_check_pages(fetch_page: Callable[[str], object], key: str) -> list[dict]:
-    """Every entry of `key` across a paged GitHub listing, walked as `deploy_git.read_check_pages`.
+    """Every entry of `key` across a paged GitHub listing, walked as `builder_ci_grade.read_check_pages`.
 
     GitHub answers a check-runs or combined-status GET with no `per_page` with one page of 30,
     so a failing entry past it read as green and the digest dropped a PR whose CI was failing

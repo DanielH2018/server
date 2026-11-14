@@ -7,7 +7,7 @@ state behind it once. This subcommand reads that state on demand, as one JSON do
 Every fact comes from a reader that already exists; this module only joins them:
 
 - **Master CI.** The newest `ci.yml` run on master, through `gh`. A conclusion in
-  `deploy_git._CI_NO_VERDICT_CONCLUSIONS` is no verdict and a run in progress is pending.
+  `ci_verdict._CI_NO_VERDICT_CONCLUSIONS` is no verdict and a run in progress is pending.
   Neither is red, per `docs/landing.md`.
 - **Runs in flight.** deploy-ui's `/api/inflight`: every `land.sh` family on
   daniel-box. A run's `VERDICT:` line comes from `land_lib.detach.verdict_in` where

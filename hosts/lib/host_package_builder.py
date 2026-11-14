@@ -292,7 +292,7 @@ class Builder(RolloutGate):
             if c.strip()
         )
         walk = self.config.get("CI_ANCESTOR_WALK_MAX", "").strip()
-        # An empty context set would grade every commit green (deploy_git.ci_verdict says so,
+        # An empty context set would grade every commit green (ci_verdict.ci_verdict says so,
         # and await_ci.py's DisarmedGateError refuses it), so refuse it before grading.
         if not contexts:
             raise Failure("ci", "CI_CONTEXTS in config.env is empty")

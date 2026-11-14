@@ -2,8 +2,8 @@
 
 One failed commit in this cron can park EVERY deploy on daniel-box. `git commit || git reset`
 unstages and nothing more, so the regenerated pages stay MODIFIED in the primary checkout;
-deploy_git.py reads any porcelain output as dirty and gitops_deploy.py takes its healthy-skip
-path, still writing `last_run`. Only a human cleaning the tree ends it.
+`homelab-checkout-sync` reads any porcelain output as dirty and refuses to fast-forward until a
+human cleans the tree.
 
 The functions below are executed, not pattern-matched. Each one is lifted out of the RENDERED
 template by name and sourced into a scratch git repository, so what these tests exercise is the

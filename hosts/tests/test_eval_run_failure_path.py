@@ -2,8 +2,8 @@
 
 This cron's commit-failure path must not park every deploy on daniel-box. `git commit || git
 reset` unstages and nothing more, so evals/history.json stays MODIFIED in the primary
-checkout, deploy_git.py reads the porcelain output as dirty, and gitops_deploy.py takes its
-healthy-skip path while still writing `last_run`. docs-refresh.sh carries the same fix, with
+checkout, and `homelab-checkout-sync` reads the porcelain output as dirty and refuses to
+fast-forward. docs-refresh.sh carries the same fix, with
 one difference the tests below pin: the staged file here is a week of paid API calls, not
 generator output, so it is copied outside the checkout before the tree is put back.
 
