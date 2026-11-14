@@ -38,7 +38,8 @@ serves read-only.
   `files/seed_lidarr_quality_profiles.py` at `/api/v1/qualityprofile`. It adopts Lidarr's shipped
   `Standard` (the lossy profile) and `Lossless` by name, creates one that is missing, and never
   deletes: `Any` stays. The script splits Lidarr's quality groups into single qualities, because
-  `allowed` belongs to a group and `MP3-320` shares one with `AAC-320`.
+  `allowed` belongs to a group and `MP3-320` shares one with `AAC-320`. To read what the
+  profiles hold, run `probe.py arr lidarr qualityprofile --json`.
 - **Lidarr has no Opus quality, and the lossy profile allows no Vorbis tier in its place.** The
   operator ruled on 2026-11-13 to drop the "Opus 192 and above" tier, and `AAC-VBR` stands for
   the AAC tier above `AAC-256`. A Lidarr that adds Opus is an edit to `lidarr_quality_profiles`.

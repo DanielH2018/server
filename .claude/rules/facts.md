@@ -33,7 +33,7 @@ k8s/roles/traefik/defaults/main.yml:traefik_k8s_https_port
 # a test node
 scripts/lib/tests/test_kubectl.py::test_asking_for_staging_against_a_prod_kubectl_is_flagged
 # a DECIDED: marker, cited by text prefix
-scripts/deploy_tools/land_lib/land_tags.py:DECIDED: fire on ANY change
+scripts/deploy_tools/land_lib/land_tags.py:DECIDED: name the changed keys
 ```
 
 A test node must carry `# fact: <doc>#<heading>` in its body, or the lint warns that the
@@ -89,6 +89,17 @@ row to show it. Some lint rules therefore read the prose itself.
   `monitor-bridge-script-` prefix a template joins to each module's name, never appears
   literally, so a doc naming one rendered ConfigMap reads as vanished. Name it as the tree
   spells it.
+- Two more classes of removed name are advice, not lint rules. `scripts/dev/repo_guards.py`
+  prints them after its guards as a `removed names:` list, and they change no exit code.
+  The first is a section of a live doc that names the identifier in backticks: any Markdown
+  file that is no instruction file and is outside the archive, the ADRs, the slice plans
+  and the generated pages (`scripts/lib/facts/citations.py:is_live_doc`). The second is a
+  full-line `#` or `//` comment that names an identifier the branch took out of code, when
+  only comments still hold it. A comment has no backticks, so its identifier needs an
+  underscore, a dot or two hyphens (`scripts/lib/facts/removed.py:comment_name`).
+  `scripts/lib/facts/lint.py:vanished_advice` builds the list. A class becomes an error
+  when fewer than one graded row in five is a false alarm;
+  `docs/target-architecture/docs-guard/g7-removed-names.md` holds the measured shares.
 
 A paragraph or bullet that opens with `**HISTORY —` is history, and every prose rule skips it.
 A sentence such as "it lived on the staging guest until 2026-09-28" is correct exactly because
@@ -104,7 +115,9 @@ continuation lines and nested bullets with it; a history paragraph ends at the n
   the fix is to take the deletion.
 - `fact_status.py report` reads git and the instructions log over `--days`
   (30 by default). It ranks every section that cites nothing by how
-  often its doc loaded. The counts come from `.claude/logs/instructions.log` in the
+  often its doc loaded. A section with no prose is not ranked: a title, a parent whose
+  text sits under its subheadings, or a rule's frontmatter
+  (`scripts/lib/facts/citations.py:has_prose`). The counts come from `.claude/logs/instructions.log` in the
   primary checkout and its rotated `.1`, so the span the report prints is usually days, not
   the window. Next, it ranks the docs delivered as a head by their `form=head` rows, which
   `inject-nested-docs.py` writes, rules included. That is the order a trim should follow.
@@ -136,6 +149,16 @@ continuation lines and nested bullets with it; a history paragraph ends at the n
   `scripts/dev/repo_guards.py` ends by printing the `reread` format, which lists only the
   sections whose prose the branch left unchanged. That is how the notice reaches the
   session that made the change, and it changes no exit code.
+- `fact_status.py mv <old> <new> [--root <dir>] [--dry-run]` rewrites the references a
+  rename left behind. To fix the `removed names:` list after a move, run it once per moved
+  file or directory. It rewrites the places that list reads: instruction files and live
+  docs outside history and generated blocks, and full-line comments in other tracked
+  files. Code and docstrings stay as they are. It refuses when `<old>` is still tracked
+  or `<new>` is not. Under a moved directory it rewrites a reference only when the path
+  that results is tracked, and it lists the rest as left. `--root` rewrites the Markdown
+  under a directory outside the repo, such as a memory store, in place of the repo: such
+  a store has no `git diff`, so run it with `--dry-run` first.
+  `scripts/lib/facts/renames.py:move` has the rules.
 
 `docs/adr/0023-fact-support-is-a-diff-notice.md` records why the notice replaced the stored
 hashes and their blocking test. A moved atom gets a notice and never blocks a merge. `lint`

@@ -23,7 +23,8 @@ made it, because what to stage and how to word it is the cron's business. It pri
 line to stdout that the caller can alert with, and its exit code says what state the
 tree is in:
 
-  0  branch pushed, PR opened, landing started; the local commit is gone
+  0  branch pushed, PR opened; the local commit is gone. Its landing started, or every
+     landing slot was busy and the next run's ``unlanded`` merges the PR once it is green
   1  the branch never reached origin -- the commit is still local on HEAD. Nothing to
      clean up on origin; the next run refuses on the dirty/ahead tree
   2  the branch IS on origin but the PR could not be opened or its landing could not be
@@ -84,6 +85,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from lib.cli_help import ArgumentParser
 
 from lib.exit_codes import (
+    LAND_GAVE_UP,
     PUBLISH_PUBLISHED,
     PUBLISH_PUSHED_NO_PR,
     PUBLISH_STILL_LOCAL,
@@ -332,6 +334,14 @@ def publish(
         "--await-merge",
         "--detach",
     )
+    # Busy slots leave the tree as published: `merge_if_stalled` in the next `unlanded` lands it.
+    if proc.returncode == LAND_GAVE_UP:
+        return PublishOutcome(
+            PUBLISH_PUBLISHED,
+            f"PR #{number} opened for {branch}; no landing started because every landing "
+            f"slot was busy, so the next run merges it once its checks are green",
+            branch,
+        )
     if proc.returncode != 0:
         return PublishOutcome(
             PUBLISH_PUSHED_NO_PR,

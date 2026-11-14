@@ -2,7 +2,7 @@
 """Split the pytest suite into N fixed shards of whole test modules, for CI's matrix.
 
 WHY. The `pytest` job is the pole of every CI run and a landing waits on it twice — once on
-the PR, once on the master merge commit that `land.sh` and the deployer's CI gate both read.
+the PR, once on the master merge commit that `land.sh` and checkout-sync's CI gate both read.
 Sharding across matrix jobs is the remaining lever.
 
 WHOLE MODULES, NEVER PART OF ONE. `--dist loadscope` in `addopts` keeps a module's tests on

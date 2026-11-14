@@ -73,10 +73,17 @@ defaults:
     # The image-gc pair starts image GC below Longhorn's 75% replica scheduling floor, which the
     # root filesystem shares: at the kubelet's 85 every superseded image stayed (#8307). The
     # kubelet refuses a low threshold not below the high one, so the pair moves together.
+    # system-reserved lowers node allocatable by memory pods use without requesting it (#8644),
+    # and also caps kubepods.slice at capacity minus the reserve; the k3s-server component's
+    # flag comment says how. Pod anon was 3.7 GB against the 29.0 GB cap. Sum at 2026-11-14:
+    # Longhorn instance-manager's 7-day p95 working set 1272 MiB, system.slice anon 0.65 GiB,
+    # user.slice anon 1.8 GiB.
     kubelet-arg:
       - allowed-unsafe-sysctls=net.ipv4.conf.all.src_valid_mark,net.ipv4.ip_forward
       - image-gc-high-threshold=65
       - image-gc-low-threshold=55
+      # DECIDED: user.slice counts. The Claude sessions there compete with pods for memory.
+      - system-reserved=memory=4Gi
   # Kubelet's graceful node shutdown (#8296), rendered into kubelet.conf.d. Without it every
   # shutdown of this node logs out Longhorn's iSCSI sessions under mounted ext4 filesystems:
   # open-iscsi's stop runs logout-all.sh while the pods still hold the mounts, and each of the

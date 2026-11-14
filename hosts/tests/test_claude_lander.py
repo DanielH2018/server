@@ -241,6 +241,8 @@ FLOOR = [
     "hosts/components/claude-code/templates/claude-triage",
     "hosts/components/claude-code/templates/50-claude-triage.rules.j2",
     "hosts/components/claude-code/files/claude_triage_run.py",
+    "hosts/components/claude-code/files/claude_triage_session.py",
+    "hosts/components/claude-code/files/claude-triage-settings.json",
     "hosts/components/claude-code/files/claude_triage_poll.py",
     # The root inspector joined the floor with its grant (#6323).
     "hosts/components/claude-code/files/homelab_rootq.py",
@@ -262,8 +264,24 @@ FLOOR = [
     "hosts/components/renovate-agent/templates/50-renovate-agent-land.rules.j2",
     "hosts/components/renovate-agent/files/run_requests.py",
     "hosts/components/renovate-agent/files/renovate_agent.py",
+    "hosts/components/renovate-agent/files/renovate_session.py",
+    "hosts/components/renovate-agent/files/agent_toolbox.py",
+    "hosts/components/renovate-agent/files/agent_logic.py",
+    "hosts/components/renovate-agent/files/run_worktree.py",
+    "hosts/components/renovate-agent/templates/homelab-renovate-agent-session.service.j2",
+    "hosts/components/renovate-agent/templates/50-renovate-agent-session.rules.j2",
     "hosts/components/renovate-agent/templates/session.env.j2",
+    "hosts/components/renovate-agent/templates/ctl.env.j2",
+    "hosts/components/renovate-agent/templates/session.conf.j2",
     "hosts/components/renovate-agent/templates/config.env.j2",
+    "hosts/components/renovate-agent/templates/renovate-agent-pins.j2",
+    "hosts/components/renovate-agent/templates/prompt.txt.j2",
+    "hosts/components/renovate-agent/templates/homelab-renovate-agent.service.j2",
+    "hosts/components/renovate-agent/templates/homelab-renovate-agent.timer.j2",
+    # The session's Claude Code settings and what installs them joined it on 2026-11-14 (#8392).
+    "hosts/components/renovate-agent/files/claude-settings.json",
+    "hosts/components/renovate-agent/templates/renovate-agent-setup.sh.j2",
+    "hosts/components/renovate-agent/templates/homelab-renovate-agent-setup.service.j2",
     "hosts/components/renovate-agent/component.yml",
     "scripts/deploy_tools/land",
     "pyproject.toml",
@@ -273,13 +291,9 @@ FLOOR = [
     ".github/",
     "hosts/components/host-hardening/",
     "hosts/components/sshd/",
-    "ansible/.sops.yaml",
-    "ansible/vars/secrets.yml",
-    # Each ansible/ entry also at its path after ADR 0030's rename, ahead of the rename.
     "secrets/.sops.yaml",
     "secrets/secrets.yml",
     # The agent's cluster RBAC joined the floor on 2026-10-16 (H1 Open question 7).
-    "ansible/roles/k8s/cluster-base/",
     "k8s/roles/cluster-base/",
 ]
 
@@ -331,9 +345,9 @@ def test_a_pr_changing_the_lander_needs_the_operator(path, tmp_path) -> None:
     ]
 
 
-# H1 creates cluster-base, so these paths do not exist yet and LANDER_FILES cannot hold them.
-CLUSTER_BASE_FILE = "ansible/roles/k8s/cluster-base/templates/readonly-rbac.yaml.j2"
-CLUSTER_BASE_SIBLING = "ansible/roles/k8s/cluster-baseline/templates/deployment.yaml.j2"
+# The RBAC template, and a role the tree does not hold whose name shares cluster-base's prefix.
+CLUSTER_BASE_FILE = "k8s/roles/cluster-base/templates/readonly-rbac.yaml.j2"
+CLUSTER_BASE_SIBLING = "k8s/roles/cluster-baseline/templates/deployment.yaml.j2"
 
 
 def test_a_pr_changing_cluster_base_needs_the_operator(tmp_path) -> None:
@@ -353,11 +367,11 @@ def test_a_pr_changing_a_role_named_like_cluster_base_lands_without_the_operator
     )
 
 
-# Off the floor since 2026-10-10: the agent's own roles, the deployer and the inventory.
+# Off the floor since 2026-10-10: the agent's own roles, the landing doc and the inventory.
 OFF_THE_FLOOR = [
     "docs/landing.md",
     "hosts/components/claude-code/defaults/main.yml",
-    "hosts/components/renovate-agent/templates/prompt.txt.j2",
+    "hosts/components/renovate-agent/defaults/main.yml",
     "inventory/host_vars/daniel-box.yml",
 ]
 
@@ -366,6 +380,30 @@ OFF_THE_FLOOR = [
 def test_a_pr_off_the_floor_lands_without_the_operator(path, tmp_path) -> None:
     assert (REPO / path).is_file(), f"{path} moved; update this list"
     assert policy.approval_hits([{"filename": path}], floor_prefixes(tmp_path)) == []
+
+
+# What the Renovate agent's package ships that may change without the operator, and why.
+RENOVATE_AGENT_SHIPPED_OFF_THE_FLOOR = {
+    # The disarmed marker only quiets two alerts; arming is the inventory flag's decision.
+    "templates/renovate-agent-disarmed.prom": "a metrics marker that grants nothing",
+}
+
+
+def test_every_file_the_renovate_agent_ships_is_on_the_floor(tmp_path) -> None:
+    """A file added to the package lands off the floor unless someone remembers the list."""
+    component = REPO / "hosts/components/renovate-agent"
+    spec = yaml_fast.safe_load((component / "component.yml").read_text())
+    shipped = {e["src"] for e in spec["files"] + spec["outputs"] if "src" in e}
+    assert "files/renovate_agent.py" in shipped and "templates/ctl.env.j2" in shipped
+    floor = floor_prefixes(tmp_path)
+    off = sorted(
+        src
+        for src in shipped
+        if not policy.approval_hits(
+            [{"filename": f"hosts/components/renovate-agent/{src}"}], floor
+        )
+    )
+    assert off == sorted(RENOVATE_AGENT_SHIPPED_OFF_THE_FLOOR)
 
 
 def profile_exports(lander_enabled: bool) -> dict[str, str]:

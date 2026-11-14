@@ -19,16 +19,15 @@ claims are unchanged.
   (weekly -> B2 (default target))
 <!-- /generated_from -->
 
-- **Flux applies it, not Ansible** (D5.19, the first Wave D PR). Its `containers_list` entry
+- **Flux applies it.** Its `containers_list` entry
   is in `cluster/services.yml`, so nothing applies it by hand, and a
   merged change reaches the cluster when `promote` publishes and verifies the next bundle. Both
   Deployments are `Recreate` over
   an RWO claim, so a roll stops the old pod before the new one starts and the exporter's
-  metrics gap for that interval, as they did under Ansible. `k8s_autodeploy: false` gates no
+  metrics gap for that interval. `k8s_autodeploy: false` gates no
   apply. It stops Renovate automerging the image bump.
-- **Where the task went.** The Kustomization's `wait` replaces the
-  rollout wait, and the
-  restart checksum the renderer stamps on each Deployment replaces the shared restart.
+- **Its rollout.** The Kustomization's `wait` holds the rollout. The restart checksum the
+  renderer stamps on each Deployment rolls the pods.
 
 - **Must sort AFTER `loki-homelab`**: `depends_on: [loki-homelab]` on the `containers_list`
   entry, pinned by
@@ -63,19 +62,19 @@ claims are unchanged.
   SQLite DB — irreplaceable, since Loki keeps 31 days and the exporter backfills only 28.
 - **What is Terraria's own** is `parse_line`, `StatsState`, and `Store`'s schema half — the
   `players` schema, `load_state` and `save`, over a `stats_lib.SqliteStore` subclass.
-- **It runs as many pods as the game server does**, reading `terraria_k8s_replicas` from
-  `inventory/group_vars/all.yml` — not from terraria's defaults, since a role default
-  does not cross a role boundary and `| default(1)` here would have rendered 1 forever
-  (#2877). observability's `terraria-stats` scrape job reads the same value, named by its
-  `replicas_var`, because a Service with no endpoint reads `up == 0` and pages the
-  scrape-target check.
-  `tests/services/test_terraria_stats_follows_the_server.py` holds the three renders
-  together. valheim-stats has no such knob.
+- **It runs while the game server does.** Neither Deployment renders `replicas:`; deploy.local's
+  Games panel starts and stops each exporter with its server, from the `game_servers` registry
+  in `inventory/group_vars/all.yml` (ADR-0033). The scrape job renders either way, and its
+  `ScrapeTargetDown` rule mutes while kube-state-metrics reads 0 replicas, because a Service
+  with no endpoint reads `up == 0`.
 
 ## valheim-stats
 
 Added 2026-08-13 with the Valheim reactivation, the same shape as terraria-stats.
 
+- **It runs while the valheim server does**, started and stopped with it from the Games panel,
+  as terraria-stats is. The claim stays, so the totals survive a stopped window and miss only
+  what the server did not log.
 - **Reads:** `{container="valheim"}` from `loki-homelab`. **Dashboard:**
   `Apps/valheim-player-stats.json` → "Valheim — Player Stats".
 - **Storage:** `valheim-stats-data` (`longhorn`, **backed up**), a `k8s_claims` entry

@@ -28,20 +28,9 @@ from typing import NamedTuple
 import jinja2
 
 from lib import yaml_fast
-from lib.render_guard import k8s_services
-from lib.repo_paths import INVENTORY, K8S_ROLES, K8S_SERVICES
+from lib.repo_paths import INVENTORY, K8S_ROLES
 from renderer.renderer_lib.jinja_aliases import Binding, judged_flows
 from renderer.renderer_lib.jinja_uses import Policy
-
-
-def _replicas_vars(services: Path = K8S_SERVICES) -> set[str]:
-    """Every `replicas_var` of a `metrics:` item in a k8s service's entry."""
-    return {
-        str(item["replicas_var"])
-        for entry in k8s_services(services)
-        for item in entry.get("metrics") or []
-        if isinstance(item, dict) and "replicas_var" in item
-    }
 
 
 class VarsLookupSite(NamedTuple):
@@ -60,19 +49,9 @@ class VarsLookupSite(NamedTuple):
 
 # The non-literal `vars` lookups that rule 5 does not count as a secret reference, for any of
 # its clauses. Each entry fails the check when its site has gone, or when a name its argument
-# can take is a secret key.
-NON_SECRET_VARS_LOOKUPS = frozenset(
-    {
-        # `lookup('vars', job.replicas_var) | int > 0` drops a scrape job whose workload is
-        # scaled to zero. `replicas_var` is a field of a service entry's `metrics:`
-        # list (scripts/renderer/template_filters/scrape_jobs.py), and names a replica count.
-        VarsLookupSite(
-            "k8s/roles/observability/templates/prometheus.yaml.j2",
-            "job.replicas_var",
-            _replicas_vars,
-        ),
-    }
-)
+# can take is a secret key. The tree holds no such lookup, so every non-literal `vars` lookup
+# is refused until an entry here names it.
+NON_SECRET_VARS_LOOKUPS: frozenset[VarsLookupSite] = frozenset()
 
 # The uses the alias clauses must find and accept on the real tree, as
 # `(template, key, form, count)`. It is empty: every alias the tree held was an alias of
@@ -82,9 +61,8 @@ NON_SECRET_VARS_LOOKUPS = frozenset(
 ALIAS_MEMBERS: tuple[tuple[str, str, str, int], ...] = ()
 
 # The bindings rule 5 must see and must not read as an alias, as `(template, name)`. The
-# `observability_prometheus_config` set block holds the non-literal `vars` lookup in
-# `NON_SECRET_VARS_LOOKUPS` and no key, so the lookup alone must not make it an alias of a
-# key: the Deployment hashes the block with `hash('sha1')`.
+# `observability_prometheus_config` set block holds no key, and the Deployment hashes the block
+# with `hash('sha1')`, so the hash must not make it an alias of one.
 NOT_ALIASES: tuple[tuple[str, str], ...] = (
     (
         "k8s/roles/observability/templates/prometheus.yaml.j2",

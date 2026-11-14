@@ -72,7 +72,9 @@ class Cause(StrEnum):
     GATE_* NAME A HEALTH GATE THAT GRADED NOTHING, beside `deferred` from step 6 (#7911).
     `gate-unreadable` is a gate that could not read its store, and `gate-stale` a gate whose
     tree was older than `origin/master`. Nothing gates health again after either, so
-    `land_probe` reads them as a give-up rather than a plain deferral.
+    `land_probe` reads them as a give-up rather than a plain deferral. A promotion wait that
+    found no kubectl or no readable kubeconfig ends `gate-unreadable` too: nothing it waits on
+    can be read until the host's setup is fixed.
     """
 
     TAG_MISS = "tag-miss"

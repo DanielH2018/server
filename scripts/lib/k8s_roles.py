@@ -58,7 +58,7 @@ __all__ = [
 def is_leftover_dir(path: Path | str) -> bool:
     """Whether `path` is a retired role's debris: no file left but compiled Python.
 
-    The deployer's fast-forward removes a retired role's tracked files, but a gitignored
+    checkout-sync's fast-forward removes a retired role's tracked files, but a gitignored
     `__pycache__/` left by a pytest run keeps `roles/<plane>/<role>/` on disk. A walker that
     read that shell as a role would render it, census it or credit it.
 

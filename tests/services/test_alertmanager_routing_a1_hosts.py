@@ -39,6 +39,7 @@ def test_every_a1_host_rule_pages():
         "HostMetricsMissing",
         "HostCoverageShortfall",
         "HostTemperatureCoverageShortfall",
+        "HostClockUnsynchronised",
         "PiUndervoltage",
         "PiUndervoltageMissing",
         "PiLoadHigh",

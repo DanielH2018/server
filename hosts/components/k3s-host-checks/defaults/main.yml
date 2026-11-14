@@ -98,9 +98,10 @@ k3s_b2_budget_cron_minute: "20"
 # Longhorn's daily backups against the free tier's 2500-transaction Class B/C ceiling.
 #
 # A PROXY, and the health script says so in its message: it counts Longhorn's own daily backups,
-# and cannot see the b2-usage rclone's share of the same account-wide cap. So the
-# budget is deliberately well under what Longhorn alone could consume — the headroom left over is
-# for the other consumer.
+# not the other callers of the same account-wide cap. Those are monitor-bridge's B2 checks
+# (authorize and bucket listing, held to B2_PROBE_INTERVAL_S), the two ledger crons above, and a
+# hand-run `probe.py b2-budget` or `b2_drain.py`. The budget reserves no share for them; where it
+# sits is set by the growth-tripwire reasoning below.
 #
 # Raising it is NOT silencing the warning — this arm counts backups, not what they cost, so a
 # threshold below the normal count fires every morning on a condition deliberately created, and

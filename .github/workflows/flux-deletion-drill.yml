@@ -26,9 +26,10 @@ name: Flux deletion drill
 #
 # The job holds no secret and no age key, never pushes to GHCR and reaches no homelab host.
 # The private keys are generated here and discarded with the runner; the kit's private half
-# never reaches CI. Not a required check (Open question 10 is the operator's decision). It runs
-# on every pull request and skips itself when no in-scope path changed, so a required context
-# would never stick at "Expected".
+# never reaches CI. The merge gate requires this check (`github_expected_ruleset_contexts` in
+# hosts/components/github-checks/defaults/main.yml, #6042). It runs on every pull request and
+# skips itself when no in-scope path changed, so the required context never sticks at
+# "Expected".
 
 on:
   pull_request:

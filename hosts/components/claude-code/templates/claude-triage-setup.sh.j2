@@ -1,0 +1,117 @@
+#!/bin/bash
+{% import 'templates/claude-triage-pins.j2' as pins with context -%}
+# Shipped by the claude-code host component as /usr/lib/homelab/claude-triage-setup.
+# claude-triage@.service runs it as root through `ExecStartPre=+` before each run, so a pin bump or
+# a rebuilt host converges on the next episode.
+#
+# Usage: claude-triage-setup [-h|--help]
+# Takes no arguments. Running it by hand as root applies every step below.
+#
+# Gives triage's controller, {{ pins.ctl_user }}, the directories, the session's toolchain and the
+# clone the session reads, and gives the session its read-only kubeconfig. The controller runs
+# every command that writes into what it owns. Root only reads the operator's copies, which the
+# controller cannot read, into a staging directory the controller then copies from. Every step is
+# idempotent.
+set -euo pipefail
+
+case "${1-}" in
+  -h | --help) awk 'NR > 1 && /^#/ { print; next } NR > 1 { exit }' "$0"; exit 0 ;;
+esac
+
+ctl={{ pins.ctl_user }}
+session={{ pins.session_user }}
+state={{ pins.state_dir }}
+tools={{ pins.tools_dir }}
+clone={{ pins.clone_dir }}
+operator=/home/{{ sys_user }}
+
+as_ctl() {
+  runuser -u "$ctl" -- env HOME="{{ pins.ctl_home }}" TMPDIR=/tmp PATH=/usr/bin:/bin "$@"
+}
+
+systemd-tmpfiles --create /usr/lib/tmpfiles.d/homelab-claude-triage.conf
+
+# The records a run wrote while triage ran as the agent, copied once. find does not follow links,
+# so a link the agent planted there is skipped rather than read as root.
+old={{ claude_code_agent_user_home }}/triage
+if [[ -d "$old" && ! -L "$old" && ! -e "$state/.copied-from-agent" ]]; then
+  for sub in inbox runs "done"; do
+    if [[ -d "$old/$sub" && ! -L "$old/$sub" ]]; then
+      find "$old/$sub" -maxdepth 1 -type f -name '*.json' \
+        -exec install -o "$ctl" -g "$ctl" -m 0640 -t "$state/$sub" {} +
+    fi
+  done
+  for name in shadow.jsonl poll-state.json; do
+    if [[ -f "$old/$name" && ! -L "$old/$name" ]]; then
+      install -o "$ctl" -g "$ctl" -m 0640 "$old/$name" "$state/$name"
+    fi
+  done
+  install -o "$ctl" -g "$ctl" -m 0640 /dev/null "$state/.copied-from-agent"
+fi
+
+# The session's kubeconfig: the operator's read-only one, root-owned, readable by the session's
+# group, outside every home the session writes. Copied on every run so a re-issued token reaches it.
+if [[ -f "$operator/.kube/config" ]]; then
+  install -o root -g "$session" -m 0640 "$operator/.kube/config" {{ pins.kubeconfig }}
+fi
+
+# The toolchain and the clone change only while no run holds the lock: a refresh under a live
+# session would reset the tree it reads. The runner starts this script before it takes the lock.
+exec 9>>"$state/run.lock"
+chown "$ctl:$ctl" "$state/run.lock"
+if ! flock -n 9; then
+  echo "claude-triage-setup: a run holds the lock; leaving the toolchain and the clone as they are"
+  exit 0
+fi
+
+stage=$(mktemp -d)
+trap 'rm -rf "$stage"' EXIT
+chmod 0755 "$stage"
+
+# Copies one operator file or tree to its destination under the controller's tools, when it exists.
+copy_from_operator() {
+  local source="$1" destination="$2" name
+  [[ -e "$source" ]] || return 0
+  name=$(basename "$source")
+  cp -RL --no-preserve=ownership "$source" "$stage/$name"
+  chmod -R a+rX "$stage/$name"
+  as_ctl cp -RT --remove-destination "$stage/$name" "$destination"
+  rm -rf "${stage:?}/$name"
+}
+
+as_ctl mkdir -p "$tools/.local/bin" "$tools/.local/share/claude-guard" \
+  "$tools/.local/share/claude-worktree" "$tools/.claude"
+copy_from_operator "$operator/.local/bin/uv" "$tools/.local/bin/uv"
+copy_from_operator "$operator/.local/bin/uvx" "$tools/.local/bin/uvx"
+copy_from_operator "$operator/.local/share/claude-guard/claude_guard" "$tools/.local/share/claude-guard/claude_guard"
+copy_from_operator "$operator/.local/share/claude-worktree/claude_worktree.py" "$tools/.local/share/claude-worktree/claude_worktree.py"
+copy_from_operator "$operator/.claude/hooks" "$tools/.claude/hooks"
+
+as_ctl env UV_PYTHON_INSTALL_DIR="$tools/python" "$tools/.local/bin/uv" python install {{ host_python_version }}
+
+# DECIDED: the install script is fetched unpinned, as the operator's install is. The controller
+# owns the binary and updates it here; the session runs it with DISABLE_AUTOUPDATER=1.
+if [[ ! -x "$tools/.local/bin/claude" ]]; then
+  curl -fsSL --retry 3 -o "$stage/claude-install.sh" https://claude.ai/install.sh
+  chmod 0644 "$stage/claude-install.sh"
+  (cd "$tools" && as_ctl env HOME="$tools" bash "$stage/claude-install.sh")
+elif ! as_ctl env HOME="$tools" "$tools/.local/bin/claude" update >/dev/null 2>&1; then
+  echo "claude-triage-setup: claude update failed; the session keeps the installed version"
+fi
+
+# The clone the session reads. Only the controller writes it, so a hard reset loses nothing.
+if [[ ! -d "$clone/.git" ]]; then
+  as_ctl git clone --quiet "https://github.com/{{ claude_code_agent_user_repo }}.git" "$clone"
+else
+  as_ctl git -C "$clone" fetch --quiet origin master
+  as_ctl git -C "$clone" reset --quiet --hard origin/master
+fi
+# The venv the project hooks run in; the session sets UV_NO_SYNC and never writes it.
+(cd "$clone" && as_ctl env UV_PYTHON_INSTALL_DIR="$tools/python" \
+  UV_CACHE_DIR="{{ pins.ctl_home }}/uv-cache" "$tools/.local/bin/uv" sync --frozen --quiet)
+
+# The session reads all of it through its group. A file uv hardlinked from the controller's cache,
+# or an installer moved into place, keeps the group and mode it was made with, which the setgid
+# directory cannot change, so both trees are regrouped and opened to the group on every run.
+as_ctl chgrp -R "$session" "$tools" "$clone"
+as_ctl chmod -R g+rX,g-w "$tools" "$clone"

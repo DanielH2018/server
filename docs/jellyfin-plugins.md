@@ -24,7 +24,7 @@ SSO-Auth was the other blocker and is gone; the section below has that decision.
 ## The five installed plugins
 
 - **`jellyfin-ani-sync`** syncs watch status to AniList but never a score, so it is safe alongside a
-  rating set by hand on AniList. Its zip is installed by a `python:3.14-alpine` init container —
+  rating set by hand on AniList. Its zip is installed by a `python:3.15-alpine` init container —
   `defaults/main.yml` explains the `unzip`/uid-ownership prerequisites.
 - **Intro Skipper** is a second init container of the same shape, into the same
   `/config/data/plugins`. Two things differ: its release line is per *Jellyfin* version — the

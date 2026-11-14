@@ -26,9 +26,6 @@ A `metrics` item is a mapping with these keys:
 - `path`: the `metrics_path`, when it is not `/metrics`.
 - `interval`: the job's `scrape_interval`, when it is not the global one.
 - `params`: the job's query `params`, a mapping of parameter name to a list of strings.
-- `replicas_var`: the variable holding the workload's replica count. The template drops the job
-  while that count is 0, because a Service with no endpoint reads `up == 0` and pages the
-  scrape-target check.
 
 A job needing auth, relabeling or pod discovery stays hand-written in the template. An unknown
 key raises rather than being ignored, so a `basic_auth:` written here fails the render instead of
@@ -39,7 +36,7 @@ prefixed with the filter's name.
 """
 
 _REQUIRED = ("job",)
-_OPTIONAL = ("port", "service", "path", "interval", "params", "replicas_var")
+_OPTIONAL = ("port", "service", "path", "interval", "params")
 
 
 def _items(entry):
@@ -92,7 +89,7 @@ def scrape_jobs(containers_list, namespace):
     """One plain scrape job per `metrics` item of `containers_list`, in list order.
 
     Each job is a dict with `job`, `target` (`<service>.<namespace>.svc:<port>`) and, when the
-    item sets them, `path`, `interval`, `params` and `replicas_var`.
+    item sets them, `path`, `interval` and `params`.
 
     Raises ValueError on a malformed item, or when two items name the same job.
     """
@@ -113,7 +110,7 @@ def scrape_jobs(containers_list, namespace):
                 "job": name,
                 "target": f"{service}.{namespace}.svc:{_port(entry, item)}",
             }
-            for key in ("path", "interval", "params", "replicas_var"):
+            for key in ("path", "interval", "params"):
                 if key in item:
                     job[key] = item[key]
             jobs.append(job)

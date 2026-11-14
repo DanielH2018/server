@@ -51,7 +51,6 @@ import hashlib
 import json
 import subprocess
 import sys
-import tarfile
 import tempfile
 from collections.abc import Callable, Collection, Iterable, Mapping
 from dataclasses import dataclass, field
@@ -69,7 +68,7 @@ from deploy_tools.promote_lib.prune import ReadError
 from lib import removes_object, yaml_fast
 from lib.cli_help import ArgumentParser
 from renderer.renderer_lib.targets import render_targets
-from lib.git import git, git_env, git_stdout
+from lib.git import extract, git_env, git_stdout
 from lib.k8s_roles import role_dirs
 from lib.render_guard import k8s_services
 from lib.repo_paths import REPO
@@ -367,23 +366,6 @@ def snapshot(
         tags=tags,
         role_names=frozenset(path.name for path in role_dirs(roles_dir)),
     )
-
-
-def extract(sha: str, dest: Path, paths: Iterable[str] = (), repo: Path = REPO) -> None:
-    """Unpack `git archive` of `sha` in `repo`, narrowed to `paths` when given, under `dest`.
-
-    A path `sha` does not hold is skipped, so a caller can name `hosts` for a commit before it.
-    """
-    dest.mkdir(parents=True, exist_ok=True)
-    if paths := list(paths):
-        held = git_stdout("ls-tree", "--name-only", sha, "--", *paths, cwd=repo).split()
-        if not (paths := [p for p in paths if p in held]):
-            return
-    with tempfile.TemporaryDirectory(prefix="cross-plane-tar-") as tmp:
-        tar_path = Path(tmp) / "tree.tar"
-        git("archive", "--format=tar", "-o", str(tar_path), sha, "--", *paths, cwd=repo)
-        with tarfile.open(tar_path) as tar:
-            tar.extractall(dest, filter="data")
 
 
 # The top-level trees a render reads. `extract` skips one a commit does not hold.

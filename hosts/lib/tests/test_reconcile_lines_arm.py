@@ -174,6 +174,30 @@ def test_edits_sharing_a_path_ask_dpkg_about_it_once_and_all_apply(node):
     assert len(node.calls("dpkg-query")) == 2  # the status read, then one conffile list
 
 
+def test_one_dpkg_call_asks_about_every_path_the_edits_name(node):
+    write(node, SYSCTL, "")
+    own(node, SYSCTL, conffile=True)
+    declare(node, SWAPPY, BLOCK)
+
+    assert node.run().returncode == 0
+    assert read(node, BLOCK["path"]) == WRAPPED
+    assert [c["argv"] for c in node.calls("dpkg")] == [
+        ["dpkg", "-S", SYSCTL, BLOCK["path"]]
+    ]
+
+
+def test_a_dpkg_that_cannot_answer_refuses_the_edit(node):
+    write(node, SYSCTL, "keep=1\n")
+    node.state["fail"].append("dpkg -S")
+    declare(node, SWAPPY)
+
+    result = node.run()
+
+    assert result.returncode == 1
+    assert f"dpkg -S cannot say which package owns {SYSCTL}; refusing" in result.stderr
+    assert read(node, SYSCTL) == "keep=1\n"
+
+
 def test_a_cached_refusal_still_refuses_every_edit_on_its_path(node):
     write(node, "/etc/demo/app.conf", "keep=1\n")
     own(node, "/etc/demo/app.conf", conffile=False)
