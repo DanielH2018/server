@@ -451,6 +451,8 @@ done
 # skip the WAL and check stale pages. For those it copies the database and its sidecars into the
 # pod's emptyDir and opens the copy read-write, which replays them the way the app does at
 # start. The restored volume itself stays mounted read-only. Only paths and verdicts are printed.
+# The emptyDir's sizeLimit is the candidates' actualSize cap, which bounds everything a candidate
+# holds, so a database and its sidecars always fit and never spill further onto the node.
 SQLITE_CHECK=$(cat <<'PY'
 import os, shutil, sqlite3, stat, sys
 from urllib.parse import quote
@@ -520,25 +522,29 @@ PY
 PROBE_SH='echo files=$(find /drill -type f | wc -l) bytes=$(find /drill -type f -exec cat {} + | wc -c); python3 -c "$SQLITE_CHECK" /drill /scratch'
 OVERRIDES=$(jq -nc --arg name "${DRILL}-probe" --arg image "{{ k3s_longhorn_restore_drill_image }}" \
   --arg claim "$DRILL" --arg sh "$PROBE_SH" --arg py "$SQLITE_CHECK" \
+  --arg scratch_limit "{{ k3s_longhorn_restore_drill_max_actual_bytes }}" \
   '{spec: {restartPolicy: "Never",
     containers: [{name: $name, image: $image, command: ["sh", "-c", $sh],
       env: [{name: "SQLITE_CHECK", value: $py}],
       volumeMounts: [{name: "d", mountPath: "/drill", readOnly: true},
                      {name: "scratch", mountPath: "/scratch"}]}],
     volumes: [{name: "d", persistentVolumeClaim: {"claimName": $claim}},
-              {name: "scratch", emptyDir: {}}]}}') \
+              {name: "scratch", emptyDir: {sizeLimit: $scratch_limit}}]}}') \
   || fail "could not build the probe pod spec"
 $KUBECTL -n "$PVC_NS" run "${DRILL}-probe" --restart=Never \
   --image={{ k3s_longhorn_restore_drill_image }} \
   --overrides="$OVERRIDES" >/dev/null 2>&1 || fail "could not create the probe pod"
 
+# `probe=<n>s` in the verdict line is the time the bound below limits, image pull included.
+PROBE_STARTED=$(date +%s)
 PROBE_DEADLINE=$(( $(date +%s) + 300 ))
 while :; do
   PHASE=$($KUBECTL -n "$PVC_NS" get pod "${DRILL}-probe" -o jsonpath='{.status.phase}' 2>/dev/null)
   [[ "$PHASE" == "Succeeded" || "$PHASE" == "Failed" ]] && break
-  (( $(date +%s) > PROBE_DEADLINE )) && fail "probe pod stuck in ${PHASE:-unknown} — could not read the restored volume"
+  (( $(date +%s) > PROBE_DEADLINE )) && fail "probe pod stuck in ${PHASE:-unknown} after probe=$(( $(date +%s) - PROBE_STARTED ))s — could not read the restored volume"
   sleep 5
 done
+PROBE_ELAPSED=$(( $(date +%s) - PROBE_STARTED ))
 
 PROBE=$($KUBECTL -n "$PVC_NS" logs "${DRILL}-probe" 2>&1)
 [[ "$PHASE" == "Succeeded" ]] || fail "probe pod ${PHASE}: ${PROBE:-<no logs>}"
@@ -624,4 +630,4 @@ else
 fi
 NOTE=""
 [[ -n "$DECLARED_EMPTY" && "$FILES" == "0" ]] && NOTE=" — declared may-be-empty, content assertions waived"
-echo "longhorn-restore-drill: PASS: ${PVC} restored from ${BACKUP} (files=${FILES}, bytes=${BYTES}, sqlite_ok=${SQLITE_CHECKED})${NOTE}"
+echo "longhorn-restore-drill: PASS: ${PVC} restored from ${BACKUP} (files=${FILES}, bytes=${BYTES}, sqlite_ok=${SQLITE_CHECKED}, probe=${PROBE_ELAPSED}s)${NOTE}"
