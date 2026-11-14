@@ -8,10 +8,10 @@ when the script exits.
 
 THE WAIT must outlast the longest hold of any holder, not a round number. A waiter that gives up
 early does not fail safe: it fires its unit's OnFailure= for ordinary contention AND skips the
-run. docs-refresh holds longest. The wait covers the sum of its `timeout` steps under the lock,
-plus headroom for its untimed generators, git and gh calls. ENFORCED by
-hosts/tests/test_tree_lock_wait_covers_holders.py, which reads each holder's bound from its
-RENDERED template and the wait from each caller's rendered script.
+run. docs-refresh holds longest: its `timeout` steps and build_docs.py's own time budget under
+the lock. The wait covers that sum plus headroom for publish_pr's per-call-bounded git and gh
+calls. ENFORCED by hosts/tests/test_tree_lock_wait_covers_holders.py, which reads each holder's
+bound from its RENDERED template and the wait from each caller's rendered script.
 
 The caller supplies `alert`, its own failure reporter: each script's alert records its own
 verdict. `job` names the script in the message, and `consequence` says what a skip costs that job.
@@ -20,7 +20,7 @@ Import it `with context`, or `server_git_tree_lock` renders empty and the lock i
 Named `.j2`, not `.sh.j2`: it is not a script, and validate/shell_templates.py lints every
 `*.sh.j2` as one.
 #}
-{% set git_tree_lock_wait_s = 3600 %}
+{% set git_tree_lock_wait_s = 10800 %}
 {% macro take_git_tree_lock(job, consequence='skipped') -%}
 exec 9>{{ server_git_tree_lock }}
 flock -w {{ git_tree_lock_wait_s }} 9 || { alert "{{ job }}: git-tree lock held >{{ git_tree_lock_wait_s // 60 }}m; {{ consequence }}"; exit 1; }
