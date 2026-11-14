@@ -85,6 +85,20 @@ See repo-root `CLAUDE.md` for shared conventions.
   radio). HA layers a second,
   software-side alert on `binary_sensor.zigbee2mqtt_bridge_connection_state` (the home-assistant role's
   `zigbee_bridge_offline` automation, fed by Z2M's MQTT Last-Will).
+- **Why the container restarts: three exit classes, read from Loki 2026-10-15 to 2026-11-14
+  (#8322).** Loki lines carry pod-local time from the `TZ` env; alerts are UTC.
+  - *Coordinator socket reset.* The SLZB drops the link with `Port Error: read ECONNRESET`, Z2M
+    logs `Adapter disconnected` and exits code 2, and the next start connects within 2 s. The
+    device stays up. 8 events. `Z2M_WATCHDOG` in `templates/deployment.yaml.j2` restarts the
+    stack in-process for these, so they no longer count as container restarts.
+  - *Coordinator off the network.* `read ETIMEDOUT`, then `connect EHOSTUNREACH` for 11 to 42
+    minutes, and a crash loop behind it (2026-10-18, 2026-10-27 twice, 2026-11-11). The SLZB's
+    own `uptime` (`http://<slzb_ip>/ha_sensors`) reset at the end of the 2026-11-11 outage, so
+    the device lost power or rebooted. Most of the restart count is these loops, and the fix is
+    on the device side: its power and switch port. `ExtraProbeFailed` pages for them.
+  - *Broker not ready at first start.* `MQTT failed to connect` (`ECONNREFUSED` or `connack
+    timeout`) right after a node event, one restart each. The watchdog arms only after a
+    successful first start, so it does not cover these.
 - **Pairing is closed by default** (no `permit_join` in 2.x). Enable join from the Z2M UI
   (`zigbee2mqtt.<domain>`) when adding devices, then disable.
 
