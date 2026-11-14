@@ -214,6 +214,7 @@
  "hosts/tests/test_aide_check_snapd_udev.py": 0.68,
  "hosts/tests/test_artifacts_sync_alerts_once_per_outage.py": 3.34,
  "hosts/tests/test_b4_rule_literals.py": 0.21,
+ "hosts/tests/test_board_sync_paging.py": 0.47,
  "hosts/tests/test_claude_agent_ssh_login.py": 1.14,
  "hosts/tests/test_claude_bg_resume_unit.py": 0.03,
  "hosts/tests/test_claude_cgroup_metrics.py": 0.07,
