@@ -336,8 +336,12 @@ data:
         scrape_interval: 1m
         metrics_path: /probe
         static_configs:
+          # The one Pi target in this job, so it alone takes the Pi's 30s budget through the
+          # per-target `__scrape_timeout__` (the pi-scrape-jobs-outlast-the-default-timeout
+          # property). At the 10s default, 374 of 375 failed probes in the 12 days to 2026-11-14
+          # stopped at blackbox's 9.5s cap with no HTTP status, while the Pi was loaded (#8252).
           - targets: ['http://{{ hosts['daniel-pi'].server_ip }}:51821']
-            labels: {service: wg-easy, module: http_2xx, page_tier: warning}
+            labels: {service: wg-easy, module: http_2xx, page_tier: warning, __scrape_timeout__: 30s}
           - targets: ['https://email-rss.{{ domain }}/admin/login']
             labels: {service: email-to-rss, module: http_2xx, page_tier: warning}
           - targets: ['http://ical-proxy.{{ k8s_namespace }}.svc.cluster.local:5000/calendar1.ics']

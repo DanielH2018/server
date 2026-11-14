@@ -12,7 +12,7 @@ role, no Deployment of its own.
 - **Claim:** `media-data` (not Longhorn (media-local))
 <!-- /generated_from -->
 
-- **Flux applies it, not Ansible** (#5652, Wave D). Its `containers_list` entry is
+- **Flux applies it.** Its `containers_list` entry is
   in `cluster/services.yml`, so nothing applies it by hand. A merged change
   reaches the cluster when `promote` publishes and verifies the next bundle. The claim carries
   `kustomize.toolkit.fluxcd.io/prune: disabled`, so neither a revert nor a removal from the
