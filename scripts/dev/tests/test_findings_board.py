@@ -10,6 +10,7 @@ import subprocess
 from dev.findings_lib.board import (
     DONE,
     IN_PROGRESS,
+    MUTATION_PAUSE_S,
     PROJECT_TITLE,
     TODO,
     sync_board,
@@ -134,10 +135,11 @@ def test_a_claimed_issue_on_the_board_moves_to_in_progress():
     assert '"o_prog"' in gh.mutations[0] and '"item7"' in gh.mutations[0]
 
 
-def test_an_issue_missing_from_the_board_is_added_then_written():
+def test_an_issue_missing_from_the_board_is_added_then_written_after_a_pause():
     gh = FakeGh([_issue(9, labels=["severity/medium"])])
+    pauses = []
 
-    outcomes = sync_board([9], None, gh=gh)
+    outcomes = sync_board([9], None, gh=gh, sleep=pauses.append)
 
     assert outcomes[9] == (
         "updated",
@@ -145,6 +147,7 @@ def test_an_issue_missing_from_the_board_is_added_then_written():
     )
     assert "addProjectV2ItemById" in gh.mutations[0]
     assert '"new_a9"' in gh.mutations[1]
+    assert pauses == [MUTATION_PAUSE_S]
 
 
 def test_a_cleared_label_clears_the_field():

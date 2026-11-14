@@ -23,6 +23,7 @@ Typical usage example:
 
 import json
 import subprocess
+import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
@@ -42,6 +43,9 @@ TODO, IN_PROGRESS, DONE = "Todo", "In Progress", "Done"
 CHUNK = 25
 # GitHub answered HTTP 502 to one request carrying 25 adds and to one carrying 75 field writes.
 MUTATIONS_PER_CALL = 10
+# Ten writes per eight seconds stays under GitHub's secondary limit of 80 content writes a
+# minute; a backfill of ~130 writes sent unpaced locked the account's GraphQL for minutes.
+MUTATION_PAUSE_S = 8.0
 
 UNCHANGED, UPDATED, FAILED = "unchanged", "updated", "failed"
 
@@ -251,6 +255,21 @@ def _field_write(board: Board, item: str, name: str, want: str | None) -> str:
     )
 
 
+def _paced(gh: Gh, sleep: Callable[[float], None]) -> Gh:
+    """``gh`` that waits `MUTATION_PAUSE_S` before every mutation request but the first."""
+    sent = False
+
+    def run(*argv: str, **kwargs):
+        nonlocal sent
+        if any(a.startswith("query=mutation") for a in argv):
+            if sent:
+                sleep(MUTATION_PAUSE_S)
+            sent = True
+        return gh(*argv, **kwargs)
+
+    return run
+
+
 def _write(gh: Gh, board: Board, plans: list[tuple[BoardIssue, list[str]]]) -> None:
     items = {issue.number: issue.item_id for issue, _ in plans if issue.item_id}
     adds = [
@@ -293,6 +312,7 @@ def sync_board(
     *,
     dry_run: bool = False,
     gh: Gh = real_gh,
+    sleep: Callable[[float], None] = time.sleep,
 ) -> dict[int, tuple[str, str]]:
     """Makes the board item of each issue in ``numbers`` agree with the issue.
 
@@ -304,6 +324,7 @@ def sync_board(
         repo: `owner/name`, or None for `PR_REPO`.
         dry_run: read and plan, write nothing.
         gh: runs one gh command; a test passes a fake.
+        sleep: the pause between mutation requests; a test passes a recorder.
 
     Returns:
         Issue number to `(outcome, detail)`. The outcome is `updated`, `unchanged` or
@@ -311,6 +332,7 @@ def sync_board(
         reports what it would update as `updated`.
     """
     owner, name = (repo or PR_REPO).split("/", 1)
+    gh = _paced(gh, sleep)
     outcomes: dict[int, tuple[str, str]] = {}
     ordered = sorted(set(numbers))
     for start in range(0, len(ordered), CHUNK):
