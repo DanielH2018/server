@@ -79,6 +79,7 @@ def _payload(recorded: list[str]) -> dict:
 
 
 def test_a_matching_readback_is_confirmed_and_a_number_is_sent_unquoted(tmp_path):
+    # fact: .claude/skills/z2m-device-setting/SKILL.md#2. Apply and confirm
     result, recorded = _run(
         tmp_path,
         ["Aqara FP300", "absence_delay_timer", "60"],
@@ -90,6 +91,7 @@ def test_a_matching_readback_is_confirmed_and_a_number_is_sent_unquoted(tmp_path
 
 
 def test_a_bare_word_is_sent_as_a_json_string(tmp_path):
+    # fact: .claude/skills/z2m-device-setting/SKILL.md#2. Apply and confirm
     result, recorded = _run(
         tmp_path,
         ["Aqara FP300", "motion_sensitivity", "high"],
@@ -100,6 +102,7 @@ def test_a_bare_word_is_sent_as_a_json_string(tmp_path):
 
 
 def test_a_different_readback_is_flagged(tmp_path):
+    # fact: .claude/skills/z2m-device-setting/SKILL.md#2. Apply and confirm
     result, _recorded = _run(
         tmp_path,
         ["Aqara FP300", "motion_sensitivity", "high"],
@@ -110,6 +113,7 @@ def test_a_different_readback_is_flagged(tmp_path):
 
 
 def test_no_readback_is_unconfirmed_not_rejected(tmp_path):
+    # fact: .claude/skills/z2m-device-setting/SKILL.md#2. Apply and confirm
     result, recorded = _run(
         tmp_path, ["Aqara FP300", "motion_sensitivity", "high"], state=""
     )

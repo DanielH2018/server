@@ -59,6 +59,7 @@ def test_merged_clean_unlocked_is_removable():
 
 
 def test_a_live_lock_wins_over_a_merged_branch():
+    # fact: .claude/skills/worktree-cleanup/SKILL.md#The pruner
     # a session may still be working past its own merge; the lock is how it says so
     tree = _tree(locked=True)
     tree.lock_reason = _live_lock_reason()
@@ -68,6 +69,7 @@ def test_a_live_lock_wins_over_a_merged_branch():
 
 
 def test_a_stale_lock_does_not_keep_a_merged_worktree():
+    # fact: .claude/skills/worktree-cleanup/SKILL.md#The pruner
     # Claude Code never releases the lock when a session ends, so obeying every lock
     # would keep every abandoned worktree forever
     tree = _tree(locked=True)
@@ -201,6 +203,7 @@ def _locked_paths(repo: Path) -> set[str]:
 def test_remove_refuses_a_tree_a_live_process_has_as_cwd_is_flagged(
     tmp_path, monkeypatch
 ):
+    # fact: .claude/skills/worktree-cleanup/SKILL.md#The pruner
     # #3910: a session deleted out from under itself loses every repo hook. The lock here
     # names no live owner, so classify() would call the tree REMOVABLE; the process is what
     # still uses it.

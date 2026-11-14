@@ -108,7 +108,7 @@ which only the operator can write. Step 6 tells you which case you are in.
 
 ## Done when
 - Step 4's `grep -c '^<name>: ENC\['` prints `1`, `secret_rotation.py audit`
-  shows it registered, and the change is committed. Report which template now references it and
+  shows it registered (`scripts/secrets_mgmt/secret_rotation.py:cmd_audit`), and the change is committed. Report which template now references it and
   which deploy tag would apply it.
 - For a cluster-referenced key, step 6's handoff is in the report, and no PR is open yet.
 
