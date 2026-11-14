@@ -556,6 +556,7 @@
  "scripts/deploy_tools/tests/test_verify_promotion_superseded.py": 0.0,
  "scripts/dev/tests/test_ci_failures.py": 10.61,
  "scripts/dev/tests/test_ci_failures_real_gh.py": 6.0,
+ "scripts/dev/tests/test_ci_slot_cost.py": 0.0,
  "scripts/dev/tests/test_facts_cli.py": 0.4,
  "scripts/dev/tests/test_fanout_abandon.py": 2.91,
  "scripts/dev/tests/test_fanout_autoland.py": 0.24,

@@ -89,6 +89,7 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))  # scripts/
 
+from ci_slot_cost import job_spans
 from fanout_lib import operator_waits
 from fanout_lib.ci_reruns import NO_RERUN, rerun_fields, rerun_line
 from fanout_lib.review.api import RECORD_NAME, SAVED_FORMAT
@@ -246,20 +247,15 @@ def ci_by_branch(runs: list[dict]) -> dict[str, dict]:
 
 def job_times(jobs: list[dict]) -> dict:
     """One run's longest runner wait and its span, in minutes, from its jobs' timestamps."""
-    waits, created, done = [], [], []
-    for job in jobs:
-        queued, started = _epoch(job.get("created_at")), _epoch(job.get("started_at"))
-        if queued is None or started is None:
-            continue
-        waits.append(started - queued)
-        created.append(queued)
-        if finished := _epoch(job.get("completed_at")):
-            done.append(finished)
-    if not waits:
+    spans = job_spans(jobs)
+    if not spans:
         return {"ci_queue_min": None, "ci_wall_min": None}
     return {
-        "ci_queue_min": round(max(waits) / 60, 1),
-        "ci_wall_min": round((max(done) - min(created)) / 60, 1) if done else None,
+        "ci_queue_min": round(max(s["started"] - s["queued"] for s in spans) / 60, 1),
+        "ci_wall_min": round(
+            (max(s["finished"] for s in spans) - min(s["queued"] for s in spans)) / 60,
+            1,
+        ),
     }
 
 
