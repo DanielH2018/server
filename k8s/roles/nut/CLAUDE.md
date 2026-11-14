@@ -89,7 +89,7 @@ lowbatt` raises FSD as soon as the UPS asserts LB (`battery.charge.low` 10,
 roughly 11 minutes for the poweroffs. `hosts/tests/test_nut_host_secondary.py` asserts the
 delay stays inside that band while a host beyond `ups_host` is armed.
 
-**Pinned ClusterIP.** The Service pins `spec.clusterIP` (H7.33), because daniel-box's package
+**Pinned ClusterIP.** The Service pins `spec.clusterIP`, because daniel-box's package
 renders the address literally into `upsmon.conf`. A Service recreate keeps the address. The
 package's copy is `nut_host_upsd_clusterip` in `hosts/components/nut-secondary/component.yml`,
 and `hosts/tests/test_nut_host_secondary.py` pins the two together.
