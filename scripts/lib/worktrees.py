@@ -24,6 +24,7 @@ import json
 import os
 import pwd
 import socket
+import subprocess
 import sys
 import time
 from collections.abc import Callable
@@ -59,7 +60,9 @@ __all__ = [
     "Worktree",
     "cherry_says_landed",
     "classify",
+    "contained_in_merged_pr",
     "default_ref",
+    "forge_says_landed",
     "forge_says_merged",
     "is_dirty",
     "is_merged",
@@ -156,12 +159,73 @@ def is_merged(
     return merged_layer(repo, head, branch, base=base) is not None
 
 
+# What GitHub's compare calls a base that is an ancestor of its head, or the same commit.
+CONTAINED = frozenset({"ahead", "identical"})
+
+
+def _forge_gh(*args: str, check: bool, cwd: str) -> subprocess.CompletedProcess[str]:
+    """`lib.gh.gh` on `forge_says_merged`'s executable: `GH_BIN` when set, which tests stub."""
+    env = dict(os.environ, GH_PROMPT_DISABLED="1", GH_NO_UPDATE_NOTIFIER="1")
+    return subprocess.run(
+        [os.environ.get("GH_BIN", "gh"), *args],
+        cwd=cwd,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=check,
+        timeout=10,
+    )
+
+
+def contained_in_merged_pr(repo: str, head: str, branch: str, run_gh=_forge_gh) -> bool:
+    """True when a merged PR for `branch` has a head containing `head`: no local commit is unlanded.
+
+    `forge_says_merged` matches the forge's merged head to the local tip exactly (Ruling 38).
+    That misses the batch `land.sh` landed after merging master into it on the remote: the
+    merged head is the local tip plus that merge commit, so the SHAs differ (#6365). GitHub's
+    compare answers `ahead` (or `identical`) when `head` is an ancestor of the merged head,
+    which proves every local commit was in the merged PR. A tip that was never pushed, or has
+    commits the merged head lacks, compares `diverged`, `behind` or 404, and a `gh` that fails
+    reads as not contained.
+
+    Still keyed on the SHA relation and never on "a merged PR exists under this name", so a
+    reused branch name cannot delete work that never landed.
+    """
+    if not head or not branch:
+        return False
+    try:
+        heads = run_gh(
+            "pr", "list", "--state", "merged", "--head", branch,
+            "--json", "headRefOid", "--jq", ".[].headRefOid",
+            check=False, cwd=repo,
+        )  # fmt: skip
+        if heads.returncode != 0:
+            return False
+        for merged_head in heads.stdout.split():
+            compared = run_gh(
+                "api", f"repos/{{owner}}/{{repo}}/compare/{head}...{merged_head}",
+                "--jq", ".status", check=False, cwd=repo,
+            )  # fmt: skip
+            if compared.returncode == 0 and compared.stdout.strip() in CONTAINED:
+                return True
+    except OSError, subprocess.TimeoutExpired:
+        return False
+    return False
+
+
+def forge_says_landed(repo: str, branch: str, head: str) -> bool:
+    """The ladder's forge layer: GitHub merged `head` itself, or a merged PR's head holds it."""
+    return forge_says_merged(repo, branch, head) or contained_in_merged_pr(
+        repo, head, branch
+    )
+
+
 def merged_layer(
     repo: str,
     head: str,
     branch: str = "",
     base: str = "origin/master",
-    forge: Callable[[str, str, str], bool] = forge_says_merged,
+    forge: Callable[[str, str, str], bool] = forge_says_landed,
 ) -> str | None:
     """The layer of is_merged's ladder that settled `head` as landed, or None when none did.
 
