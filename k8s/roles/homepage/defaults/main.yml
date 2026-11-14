@@ -13,9 +13,11 @@ k8s_autodeploy: true
 k8s_autodeploy_reason: "stateless RollingUpdate Deployment, no PVC (config is rendered templates, not runtime state), readinessProbe, digest-pinned image"
 
 homepage_k8s_cpu_limit: "500m"
-homepage_k8s_mem_limit: 256Mi
+# 7-day p95 working set 226Mi on 2026-11-14: the request is that p95 rounded up, and the
+# limit puts it at 59%.
+homepage_k8s_mem_limit: 384Mi
 homepage_k8s_cpu_request: "50m"
-homepage_k8s_mem_request: 32Mi
+homepage_k8s_mem_request: 256Mi
 
 # The PromQL behind the Headlamp tile's customapi widget (services.yaml.j2). It lives here
 # rather than inline because services.yaml.j2 renders it through `| urlencode` into a GET query
