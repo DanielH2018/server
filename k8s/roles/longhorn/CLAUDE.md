@@ -101,7 +101,8 @@ host probes stay green.
   holds the shape.
 - **Two kinds of Longhorn pod stay BestEffort, because Longhorn offers no knob for them.**
   longhorn-manager builds the engine-image DaemonSet with no `resources` and no setting that
-  sets them. The backup and trim Job pods are short-lived, created from the RecurringJobs.
+  sets them (#8500). The backup and trim Job pods are short-lived, and the RecurringJob
+  controller builds their CronJobs with no `resources` either.
 - **The engine-upgrade limit stays above 0.** Upstream ships `0`, which leaves engines on the old
   image after an upgrade, and this repo sets `3`.
   `tests/longhorn/test_engine_upgrade_limit_is_positive.py::test_a_zero_limit_is_flagged`
