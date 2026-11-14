@@ -227,6 +227,14 @@ B3 lands in four steps, each one exercised before the next:
       because the cluster-pin gate refuses a pin bump that shares its PR. A member merges
       under its PR's title, whatever `--subject` its own landing was given.
 
+      A landing compares its own code with master once, when it forms the batch, and a
+      landing whose code is older forms none (`classify.code_lags_master`). It does not
+      compare again before a member's merge. Until the last member merges, master moves
+      only by the batch's own merges, and the batch's run tested those. On 2026-11-14 the
+      landing of PR 8550 compared before each member: its own merge changed
+      `scripts/renderer/renderer_lib/cluster.py`, which a landing imports, so it refused
+      the two PRs stacked behind it and they cost a second run.
+
       The landing pushes nothing. A `merges` call makes a commit with two parents where
       the squash merge makes one, and both make the same tree: for two open heads on
       2026-11-14 the endpoint and the gate's own stack both gave `90a57d70` and
@@ -251,8 +259,17 @@ B3 lands in four steps, each one exercised before the next:
       minutes each, and `LAND_DEADLINE` does not count them. A lander unit needs its
       deadline sized before it sets `LAND_BATCH`.
 
-   Only a draft stands in the line. A ready flip is the one event that starts a member's
-   short labelled run, and a PR that is already ready has no flip left to make.
+   Only a draft whose head has had no CI run that ran jobs stands in the line. A ready flip
+   is the one event that starts a member's short labelled run, and a PR that is already
+   ready has no flip left to make. A green PR converted to draft does not qualify: its
+   landing marks it ready again and lands it alone, and that flip costs a full run. To put
+   such a PR in a batch, convert it to draft and then merge master into it
+   (`gh pr ready --undo <n>`, `gh pr update-branch <n>`), which gives it a head whose only
+   run skipped.
+
+   The first batch ran on 2026-11-14. The landing of PR 8546 stacked PRs 8547 and 8552
+   behind it. One run of 7 min 54 s tested the three, they merged within 90 seconds of
+   each other, and master's run after each merge took 13 to 17 seconds.
 1. **A red batch.** Every member of a red batch lands alone. With a red rate of 3.7% a batch
    of four is red about one time in seven, which is where the estimate of 0.3 to 0.4 runs a
    merge comes from.

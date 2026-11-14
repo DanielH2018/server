@@ -63,6 +63,13 @@ def _stale_code_reason(stale: list[str] | None, base: str) -> str:
     return f"git could not compare its landing code with {base}"
 
 
+def code_lags_master(ln: Landing) -> str:
+    """Why land.py's checkout lags a freshly fetched origin/master; "" when it does not."""
+    ln.fetch_branch()
+    base = f"origin/{BRANCH}"
+    return _stale_code_reason(ln.tools.stale_code(base), base)
+
+
 def refuse_stale_code_before_merge(ln: Landing) -> None:
     """Die before `await_merge` merges the PR when land.py's checkout lags origin/master.
 
@@ -71,14 +78,12 @@ def refuse_stale_code_before_merge(ln: Landing) -> None:
     fetch runs in the primary, and land.py's checkout reads it because it is a worktree of the
     primary and shares its refs.
     """
-    ln.fetch_branch()
-    base = f"origin/{BRANCH}"
-    what = _stale_code_reason(ln.tools.stale_code(base), base)
+    what = code_lags_master(ln)
     if not what:
         return
     rerun = (
         f"re-run the same land.sh command with `{FRESH_FLAG}`, which lands from a checkout "
-        f"of {base} it makes and removes itself"
+        f"of origin/{BRANCH} it makes and removes itself"
     )
     ln.die(
         f"this landing runs from {OWN_CHECKOUT}, and {what}. Nothing is merged; "

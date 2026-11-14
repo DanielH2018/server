@@ -406,14 +406,26 @@ def test_a_holder_that_does_not_merge_after_its_batch_gets_a_full_run(batch_of):
     assert _answers(the_line, "7") == [""]
 
 
-def test_a_member_is_not_merged_by_landing_code_older_than_masters(batch_of, capsys):
-    ln, hub, _ = batch_of(
+def test_landing_code_older_than_masters_forms_no_batch(batch_of):
+    # Master's landing code changed while this landing waited for the turn.
+    ln, hub, the_line = batch_of(
         drafts=("7",), fakes=Fakes(stale_code=["scripts/deploy_tools/land.py"])
     )
     _land(ln)
+    assert hub.stacked == {} and hub.batch_prs == []
     assert hub.merged == [OWN]
-    assert "7" not in hub.ever_labelled
-    assert "PR #7 is not merged" in capsys.readouterr().out
+    assert the_line("waiting", str(line.FRESH_S)).split() == ["7", head_of("7")]
+
+
+def test_a_member_merges_after_a_batch_merge_that_changed_landing_code(batch_of):
+    ln, hub, _ = batch_of(drafts=("7", "9"))
+    # The holder's own PR changes a module the landing runs, as PR 8550 did on 2026-11-14.
+    ln.tools = replace(
+        ln.tools,
+        stale_code=lambda base: ["scripts/lib/exit_codes.py"] if hub.merged else [],
+    )
+    _land(ln)
+    assert hub.merged == [OWN, "7", "9"]
 
 
 def test_a_label_github_refuses_leaves_the_member_to_land_alone(batch_of):
