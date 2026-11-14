@@ -682,7 +682,7 @@ The code is root-owned under `/opt/claude-triage`, like the runner's.
   | `K8sDeploymentZeroAvailable` | `triage` | A Deployment with no available replica |
   | `K8sContainerCrashLooping` | `triage` | A crash-looping container |
   | `ScrapeTargetDown` | `triage` | A scrape target |
-  | `ExtraProbeFailed:wg-easy` | `none` | wg-easy's probe, held out until its flap is fixed (#8252) |
+  | `ExtraProbeFailed:wg-easy` | `none` | wg-easy's probe, held out until its 30s probe timeout (#8252) runs a week with no fall (#8582) |
 
   The table replaced a `critical` severity floor (#8242). Every down-class alert is a
   `warning`, so from 2026-10-31 to 2026-11-12 the floor logged 168 skipped falls and opened
