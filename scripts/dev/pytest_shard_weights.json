@@ -294,6 +294,7 @@
  "hosts/tests/test_setup_render_matches_package.py": 0.04,
  "hosts/tests/test_ssh_rate_limit_lan_exempt.py": 0.0,
  "hosts/tests/test_systemd_units_check.py": 1.51,
+ "hosts/tests/test_tree_lock_wait_covers_holders.py": 0.19,
  "hosts/tests/test_ufw_sysctl_keeps_log_martians.py": 0.86,
  "hosts/tests/test_unattended_origins_pattern.py": 0.0,
  "hosts/tests/test_wan_probe_urls_match_the_bridge.py": 0.0,

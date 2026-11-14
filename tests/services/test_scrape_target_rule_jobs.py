@@ -40,13 +40,16 @@ def scrape_rules() -> list[dict]:
 def table(rules: list[dict]) -> tuple[dict[str, list[str]], set[str]]:
     """The named rules' jobs by service, and the jobs the catch-all excludes.
 
+    A trailing `unless` clause mutes some of a rule's series and names no job, so it is not read.
+
     Raises:
         AssertionError: a rule's expression is not `up{job...} == 0` in a form this reads.
     """
     named: dict[str, list[str]] = {}
     excluded: set[str] = set()
     for rule in rules:
-        selector, comparison = str(rule["expr"]).rsplit(" == ", 1)
+        head = str(rule["expr"]).split(" unless ", 1)[0]
+        selector, comparison = head.rsplit(" == ", 1)
         assert comparison == "0", rule["expr"]
         found = SELECTOR.match(selector)
         assert found, f"cannot read the selector {selector!r}"

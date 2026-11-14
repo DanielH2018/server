@@ -116,13 +116,13 @@ higher in the second half of September, when #2781's fault was live.
 
 ## The cost, measured
 
-The armed Renovate agent records `cost_usd` per session in `/var/lib/renovate-agent/runs.jsonl`:
+The armed Renovate agent records `cost_usd` per session in `/var/lib/renovate-agent-ctl/runs.jsonl`:
 
 ```text
 $ jq -s '[.[] | select(.result=="ran" or .result=="failed")] | {n: length,
     total: (map(.cost_usd // 0) | add), max: (map(.cost_usd // 0) | max),
     min: (map(.cost_usd//0)|min), turns_avg: ((map(.turns//0)|add)/length)}' \
-    /var/lib/renovate-agent/runs.jsonl
+    /var/lib/renovate-agent-ctl/runs.jsonl
 { "n": 7, "total": 6.1826, "max": 1.6138, "min": 0.4075, "turns_avg": 12.43 }
 ```
 

@@ -115,7 +115,9 @@ continuation lines and nested bullets with it; a history paragraph ends at the n
   the fix is to take the deletion.
 - `fact_status.py report` reads git and the instructions log over `--days`
   (30 by default). It ranks every section that cites nothing by how
-  often its doc loaded. The counts come from `.claude/logs/instructions.log` in the
+  often its doc loaded. A section with no prose is not ranked: a title, a parent whose
+  text sits under its subheadings, or a rule's frontmatter
+  (`scripts/lib/facts/citations.py:has_prose`). The counts come from `.claude/logs/instructions.log` in the
   primary checkout and its rotated `.1`, so the span the report prints is usually days, not
   the window. Next, it ranks the docs delivered as a head by their `form=head` rows, which
   `inject-nested-docs.py` writes, rules included. That is the order a trim should follow.

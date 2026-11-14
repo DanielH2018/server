@@ -45,6 +45,14 @@ how that sync behaves.
   create it root-owned in the agent's home. `claude-agent-setup`, which the claude-code host
   component ships, creates the directory (`2750 claude:ubuntu`, default ACL `g:ubuntu:rX`). The pod runs as `puid:pgid`, not root, so
   it reads that tree through the `ubuntu` group grant.
+- **Triage's report tree is a fourth source.** `artifacts_triage_dir`
+  (`/var/lib/claude-triage-ctl/reports`, set only while `claude_code_triage_enabled` is true)
+  mounts read-only at `/srv/artifacts/daniel-box-claude-triage`. The triage controller,
+  `claude-triage-ctl`, owns it, so a session as `claude` can neither fake nor redirect a report.
+  The claude-code component's triage tmpfiles entry creates it (`2750 claude-triage-ctl:ubuntu`),
+  and the pod reads it through the same group. The path equals `report_dir` in
+  `hosts/components/claude-code/templates/claude-triage-pins.j2`
+  (`hosts/tests/test_claude_triage.py::test_the_artifacts_pod_mounts_the_report_tree_the_host_creates`).
 
 ## The peer sync runs from daniel-box, and the direction is not arbitrary
 daniel-box's host package ships `/usr/lib/homelab/sync-artifacts` and

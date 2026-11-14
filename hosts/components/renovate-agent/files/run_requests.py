@@ -26,16 +26,14 @@ agent.
 
 from __future__ import annotations
 
-import errno
 import json
 import os
-import shutil
-import stat
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
 
 from agent_toolbox import AgentTools
+from host_lib import read_regular, start_unit
 
 REQUESTS_DIR = "requests"
 REQUEST_LOG = "requests.jsonl"
@@ -57,38 +55,6 @@ class Outcome:
     detail: str
     action: str = ""
     pr: int = 0
-
-
-def fresh_dir(state_dir: str) -> str:
-    """An empty requests directory for the next session; a leftover one is set aside, not read."""
-    path = os.path.join(state_dir, REQUESTS_DIR)
-    os.makedirs(state_dir, exist_ok=True)
-    if os.path.lexists(path):
-        stale = f"{path}.stale-{int(time.time())}"
-        os.rename(path, stale)
-        shutil.rmtree(stale, ignore_errors=True)
-    os.mkdir(path, 0o700)
-    return path
-
-
-def _read(dir_fd: int, name: str) -> bytes:
-    """The bytes of regular file `name` in `dir_fd`, or raise ValueError naming why not."""
-    try:
-        fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=dir_fd)
-    except OSError as exc:
-        if exc.errno == errno.ELOOP:
-            raise ValueError("a symlink") from exc
-        raise ValueError(f"cannot open it: {exc.strerror}") from exc
-    try:
-        mode = os.fstat(fd).st_mode
-        if not stat.S_ISREG(mode):
-            raise ValueError("not a regular file")
-        data = os.read(fd, MAX_BYTES + 1)
-    finally:
-        os.close(fd)
-    if len(data) > MAX_BYTES:
-        raise ValueError(f"over {MAX_BYTES} bytes")
-    return data
 
 
 def parse(data: bytes, census: set[int]) -> dict:
@@ -190,14 +156,14 @@ def _land(
     timeout: int,
 ) -> tuple[bool, bool, str]:
     """Start the lander for `pr`, wait for it, and grade how it ended."""
-    unit = f"renovate-agent-land@{pr}.service"
-    rc, _ = tools.run(["systemctl", "start", unit], timeout=timeout)
-    if rc == 124:
+    end = start_unit(f"renovate-agent-land@{pr}.service", tools.run, timeout)
+    if end.result == "deadline":
         # The lander keeps running in its own unit; only this wait ended.
         return False, False, "still running at the run's deadline"
-    _, result = tools.run(["systemctl", "show", "-p", "Result", "--value", unit])
     verdict = tools.read_file(os.path.join(VERDICT_DIR, f"{pr}.verdict"))
-    return grade(result.strip(), verdict[:4096])
+    if not verdict:
+        return False, False, "the lander's verdict file is missing, empty or unreadable"
+    return grade(end.result, verdict[:4096])
 
 
 def _land_all(
@@ -264,7 +230,7 @@ def carry_out(
                     )
                     continue
                 try:
-                    request = parse(_read(dir_fd, name), census)
+                    request = parse(read_regular(dir_fd, name, MAX_BYTES), census)
                 except ValueError as exc:
                     outcomes.append(Outcome(name, False, f"refused: {exc}"))
                     continue
