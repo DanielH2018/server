@@ -408,6 +408,7 @@ def test_the_real_classifier_derives_a_tag_from_a_real_path(land_run):
 
 def test_the_real_classifier_derives_nothing_from_a_docs_only_path(land_run):
     """The reject half: a path that maps to no role must not produce a tag."""
+    # fact: CLAUDE.md#When to wait
     fakes = Fakes(
         pull_ref_rc=1,
         gh_views={

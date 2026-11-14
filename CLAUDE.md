@@ -42,7 +42,8 @@ A task a skill covers routes through the skill listing; this table holds the res
 
 **A merge is followed through to a verified deploy, in the same session, without asking.**
 Merging is not shipping: `promote` and Flux apply every k8s change after master CI, and only
-`land.sh` reports whether the promotion settled and the changed workloads came up healthy.
+`land.sh` reports whether the promotion settled and the changed workloads came up healthy,
+as one of the verdicts in `scripts/deploy_tools/land_lib/outcome.py:Verdict`.
 The user asking for the change *is* the ask to deploy it. Stop only for a reason in *When to
 wait*, or for a command the harness refuses, and say which.
 
@@ -66,10 +67,12 @@ took effect, so exercise the thing you changed.
 
 ### When to wait
 
-Say which of these applies, then stop. `probe.py landing` reads `DEPLOY_HOLD` and master CI.
+Say which of these applies, then stop. `probe.py landing` reads `DEPLOY_HOLD` and master CI
+(`scripts/diagnostics/probe_lib/landing_blockers.py:run_landing`).
 
 - Master CI is red. Pending is not a reason to stop, because `land.sh` waits on it.
-- The change is docs- or tests-only: `land.sh` ends `nothing-to-deploy`.
+- The change is docs- or tests-only: `land.sh` ends `nothing-to-deploy`
+  (`scripts/deploy_tools/tests/test_land_pipeline.py::test_the_real_classifier_derives_nothing_from_a_docs_only_path`).
 - The `DEPLOY_HOLD` repository variable reads anything but `none`. Clearing the hold is the
   operator's decision.
 - A classifier denial. Report the denied command; do not reach for a bypass flag.
@@ -94,8 +97,10 @@ root-only host state on daniel-box or daniel-server, use `rootq`; a session has 
 
 Several sessions work this repo at once, each in its own `.claude/worktrees/<name>` checkout:
 one worktree and one PR per session. `EnterWorktree` derives the branch from the worktree name,
-prefixing `worktree-`. Before editing a file several sessions are near, run
-`uv run python .claude/hooks/session-health.py --sessions`.
+prefixing `worktree-`, which `scripts/lib/worktree_owner.py:branch_prefix` reads back. Before
+editing a file several sessions are near, run
+`uv run python .claude/hooks/session-health.py --sessions`
+(`.claude/hooks/session-health.py:print_all_sessions`).
 
 **In a worktree session or isolated subagent, the Claude Code binary refuses a Bash command it
 cannot verify stays inside the worktree** ("too complex to verify"), and no hook lifts it. Open
@@ -130,12 +135,14 @@ the `add-secret` skill; `.claude/rules/secrets.md` and `docs/secret-rotation.md`
 
 ## Pre-commit Hooks
 `prek run --all-files` checks lint, templates and secrets before a commit. **It does not run
-the suite**, except that at commit time it runs twenty-five static ratchet, lint and census test
-files through the `static-ratchet-tests` hooks. CI's `pytest` job runs the whole suite on every
-PR. To see a red test first, run `uv run pytest`, and run `uv run python
-scripts/dev/repo_guards.py` once before `gh pr create`. Its last lines are advice: each
-instruction section that cites code the branch changed and left unedited, and each name the
-branch removed that a doc or a comment still uses. Act on both. A fan-out batch runs named
+the suite**, except that at commit time the `static-ratchet-tests` hooks run the static
+ratchet, lint and census test files that `scripts/dev/repo_guards.py:hook_files` lists. CI's
+`pytest` job runs the whole suite on every PR. To see a red test first, run `uv run pytest`,
+and run `uv run python scripts/dev/repo_guards.py` once before `gh pr create`. Its last lines
+are advice (`scripts/dev/repo_guards.py:ADVICE`): each instruction section that cites code the
+branch changed and left unedited, and each name the branch removed that a doc or a comment
+still uses. Act on both. A fan-out batch runs named
 test paths instead of the whole suite.
 
-`.gitignore` denies every root-level file, and one untracked file parks `homelab-checkout-sync`.
+`.gitignore` denies every root-level file, and one untracked file parks `homelab-checkout-sync`
+(`hosts/lib/tests/test_checkout_sync.py::test_an_untracked_file_is_refused`).
