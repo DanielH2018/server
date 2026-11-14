@@ -47,7 +47,7 @@ The Games panel starts and stops the game servers with it, under ADR-0033.
   the DR order, before anything creates `homelab`, and a `homelab` object there would stall the
   bring-up (`tests/k8s/test_step6_tags_render_into_created_namespaces.py`).
 - **The operator mints the host's copy of the token.** It reads the token Secret, stores it in
-  daniel-box's host secrets, and deploy-ui loads it with `LoadCredential=` (**operator-only**).
+  daniel-box's host secrets, and deploy-ui imports it with `ImportCredential=` (**operator-only**).
   Deleting the Secret revokes the token.
 
 The daemon the route fronts ships in daniel-box's host package (`hosts/components/deploy-ui/`), which reaches the host when the builder publishes the next `homelab-daniel-box`.

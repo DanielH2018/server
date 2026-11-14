@@ -32,10 +32,6 @@ terraria_k8s_mem_limit: 2048Mi
 terraria_k8s_cpu_request: "250m"
 terraria_k8s_mem_request: 512Mi
 
-# terraria_k8s_replicas is NOT here: it lives in inventory (group_vars/all.yml), because
-# k8s/game-stats renders the terraria-stats exporter at the same count and role defaults do
-# not cross a role boundary.
-
 # The claim the renderer emits for this role, which the terraria Kustomization applies (#3387).
 k8s_claims:
   - name: "{{ terraria_k8s_claim }}"

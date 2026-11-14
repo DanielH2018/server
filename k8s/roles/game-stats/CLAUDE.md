@@ -62,23 +62,19 @@ claims are unchanged.
   SQLite DB — irreplaceable, since Loki keeps 31 days and the exporter backfills only 28.
 - **What is Terraria's own** is `parse_line`, `StatsState`, and `Store`'s schema half — the
   `players` schema, `load_state` and `save`, over a `stats_lib.SqliteStore` subclass.
-- **It runs as many pods as the game server does**, reading `terraria_k8s_replicas` from
-  `inventory/group_vars/all.yml` — not from terraria's defaults, since a role default
-  does not cross a role boundary and `| default(1)` here would have rendered 1 forever
-  (#2877). observability's `terraria-stats` scrape job reads the same value, named by its
-  `replicas_var`, because a Service with no endpoint reads `up == 0` and pages the
-  scrape-target check.
-  `tests/services/test_terraria_stats_follows_the_server.py` holds the three renders
-  together, for valheim-stats too.
+- **It runs while the game server does.** Neither Deployment renders `replicas:`; deploy.local's
+  Games panel starts and stops each exporter with its server, from the `game_servers` registry
+  in `inventory/group_vars/all.yml` (ADR-0033). The scrape job renders either way, and its
+  `ScrapeTargetDown` rule mutes while kube-state-metrics reads 0 replicas, because a Service
+  with no endpoint reads `up == 0`.
 
 ## valheim-stats
 
 Added 2026-08-13 with the Valheim reactivation, the same shape as terraria-stats.
 
-- **It runs as many pods as the game server does**, reading `valheim_k8s_replicas` from
-  `inventory/group_vars/all.yml`, which is 0 while the server is parked (2026-11-13).
-  observability's `valheim-stats` scrape job drops out at 0 through its `replicas_var`. The
-  claim stays, so the totals survive the parked window and miss only what the server did not log.
+- **It runs while the valheim server does**, started and stopped with it from the Games panel,
+  as terraria-stats is. The claim stays, so the totals survive a stopped window and miss only
+  what the server did not log.
 - **Reads:** `{container="valheim"}` from `loki-homelab`. **Dashboard:**
   `Apps/valheim-player-stats.json` → "Valheim — Player Stats".
 - **Storage:** `valheim-stats-data` (`longhorn`, **backed up**), a `k8s_claims` entry

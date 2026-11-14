@@ -11,5 +11,9 @@ d {{ pins.state_dir }}/runs 0750 {{ pins.agent_user }} {{ pins.agent_user }} -
 d {{ pins.state_dir }}/done 0750 {{ pins.agent_user }} {{ pins.agent_user }} -
 # The exchange with the session unit: the runner recreates its in/ and out/ on each run.
 d {{ pins.state_dir }}/session 0750 {{ pins.agent_user }} {{ pins.agent_user }} -
+# The controller's home and its report tree, which the artifacts pod mounts read-only. Group
+# sys_user and setgid, so the pod, which runs as the operator, reads every report.
+d {{ pins.ctl_home }} 2750 {{ pins.ctl_user }} {{ sys_user }} -
+d {{ pins.report_dir }} 2750 {{ pins.ctl_user }} {{ sys_user }} -
 # The poller appends to this log, so the units' umask never reaches one created before it.
 f {{ pins.state_dir }}/shadow.jsonl 0640 {{ pins.agent_user }} {{ pins.agent_user }} -
