@@ -164,6 +164,12 @@ directory.
 - **The background-shell pressure reaper is off** (`claude_code_rc_disable_bg_shell_pressure_reap`):
   Node reads the **cgroup**, so `free -m` reads clean while it kills backgrounded Bash tasks.
 - **The weekly restart uses `try-restart`**, which never starts a host kept stopped on purpose.
+- **A Python timer writes its verdict through
+  `hosts/lib/host_lib.py:write_check_textfile`.** node-exporter
+  drops every `homelab_check_*` series whose file omits the HELP and TYPE lines the other
+  check files declare. The file's mtime still reaches Prometheus, so the only symptom is the
+  check's `NotReporting` alert. The `host-check-textfiles-go-through-host-lib` row of
+  `tests/repo/test_census_rows_python.py` refuses a hand-written series.
 
 ## The fleet bound, and why it lives on `user.slice`
 
