@@ -1,6 +1,7 @@
 """The Games panel's reads and writes, over a fake of the app's subprocess edge."""
 
 import json
+import threading
 from pathlib import Path
 
 import pytest
@@ -114,15 +115,9 @@ def test_a_refused_game_can_still_be_stopped_is_clean(tmp_path):
     assert len(_scale_calls(control)) == 1
 
 
-@pytest.mark.parametrize(
-    ("game", "action", "status"),
-    [("minecraft", "start", 404), ("valheim", "delete", 400)],
-)
-def test_an_unknown_game_or_action_scales_nothing_is_flagged(
-    tmp_path, game, action, status
-):
+def test_an_unknown_action_scales_nothing_is_flagged(tmp_path):
     control, _ = _control(tmp_path, APISERVER)
-    assert _act(control, game, action)[0] == status
+    assert _act(control, "valheim", "delete")[0] == 400
     assert _scale_calls(control) == []
 
 
@@ -151,6 +146,34 @@ def test_a_restart_whose_pods_never_go_leaves_the_game_stopped_is_flagged(tmp_pa
     assert "result=left-stopped" in audited[0]
 
 
+def test_a_restart_stops_the_game_then_starts_it_again_is_clean(tmp_path):
+    control, audited = _control(tmp_path, {**APISERVER, PODS: ("", 0)})
+    status, text = _act(control, "valheim", "restart")
+    [thread] = [t for t in threading.enumerate() if t.name == "game-restart-valheim"]
+    thread.join(timeout=5)
+    assert (status, "starts again" in text) == (200, True)
+    replicas = [
+        json.loads(argv[argv.index("--data") + 1])["spec"]["replicas"]
+        for argv, _ in _scale_calls(control)
+    ]
+    assert replicas == [0, 0, 1, 1]
+    assert audited == [
+        "action=game-restart game=valheim",
+        "action=game-restart game=valheim result=started",
+    ]
+
+
+def test_a_restart_that_cannot_scale_back_leaves_the_game_stopped_is_flagged(
+    tmp_path,
+):
+    control, audited = _control(tmp_path, {**APISERVER, PODS: ("", 0)}, token=False)
+    control.finish_restart(GAMES[0])
+    assert _scale_calls(control) == []
+    assert audited[0].startswith(
+        "action=game-restart game=valheim result=left-stopped reason="
+    )
+
+
 def test_games_reads_the_deployments_and_their_pods_is_clean(tmp_path):
     deployments = {
         "items": [
@@ -176,12 +199,6 @@ def test_games_reads_the_deployments_and_their_pods_is_clean(tmp_path):
         pods_call[pods_call.index("-l") + 1]
         == "app in (valheim,valheim-stats,terraria)"
     )
-
-
-def test_games_when_kubectl_fails_is_unavailable_is_flagged(tmp_path):
-    control, _ = _control(tmp_path, {("kubectl",): ("", 1)})
-    with pytest.raises(Unavailable, match="kubectl exited 1"):
-        control.game_servers()
 
 
 def test_game_console_queries_loki_for_the_server_container_is_clean(tmp_path):

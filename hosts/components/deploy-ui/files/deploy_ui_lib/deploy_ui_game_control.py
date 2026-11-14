@@ -232,7 +232,10 @@ class GameControl:
         self.audit(f"action=game-{action} game={name}")
         if action == "restart":
             threading.Thread(
-                target=self.finish_restart, args=(game,), daemon=True
+                target=self.finish_restart,
+                args=(game,),
+                name=f"game-restart-{name}",
+                daemon=True,
             ).start()
             return 200, f"stopping {name}; it starts again once its pods are gone"
         return 200, f"{'starting' if replicas else 'stopping'} {name}"
