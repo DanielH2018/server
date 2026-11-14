@@ -70,12 +70,16 @@ claims are unchanged.
   `replicas_var`, because a Service with no endpoint reads `up == 0` and pages the
   scrape-target check.
   `tests/services/test_terraria_stats_follows_the_server.py` holds the three renders
-  together. valheim-stats has no such knob.
+  together, for valheim-stats too.
 
 ## valheim-stats
 
 Added 2026-08-13 with the Valheim reactivation, the same shape as terraria-stats.
 
+- **It runs as many pods as the game server does**, reading `valheim_k8s_replicas` from
+  `inventory/group_vars/all.yml`, which is 0 while the server is parked (2026-11-13).
+  observability's `valheim-stats` scrape job drops out at 0 through its `replicas_var`. The
+  claim stays, so the totals survive the parked window and miss only what the server did not log.
 - **Reads:** `{container="valheim"}` from `loki-homelab`. **Dashboard:**
   `Apps/valheim-player-stats.json` → "Valheim — Player Stats".
 - **Storage:** `valheim-stats-data` (`longhorn`, **backed up**), a `k8s_claims` entry

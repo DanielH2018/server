@@ -159,6 +159,18 @@ def test_a_promotion_timeout_is_deferred_with_promote_timeout(land_run):
     assert PROMOTE_TIMEOUT_NOTE in out
 
 
+def test_an_unreadable_cluster_is_deferred_with_gate_unreadable(land_run):
+    """#8295: `land_probe` reads the cause as a resume point; the timeout note would mislead."""
+    unreadable = WaitResult(
+        "gave-up", "gate-unreadable", "this host cannot read the cluster"
+    )
+    rc, out, _, _, logline = land_run([], _fakes(land_wait=[unreadable]))
+    assert rc == 75 and "VERDICT: deferred" in out
+    assert "cause=gate-unreadable" in logline
+    assert "this host cannot read the cluster" in out
+    assert PROMOTE_TIMEOUT_NOTE not in out
+
+
 def test_a_suspended_tag_is_nothing_to_deploy_without_a_gate(land_run):
     suspended = WaitResult("suspended", "promote-suspended", "bento-pdf is suspended")
     rc, out, _, calls, _ = land_run([], _fakes(land_wait=[suspended]))

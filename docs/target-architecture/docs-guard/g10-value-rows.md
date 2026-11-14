@@ -1,6 +1,6 @@
 # G10 — A row re-derives each stated value, and a hook rewrites it
 
-Status: PLANNED.
+Status: IN PROGRESS. Step 1, the registry and its check, is done.
 
 Depends on: the tree rename of
 [#8186](https://github.com/DanielH2018/server/issues/8186), which moves the test file this
@@ -31,9 +31,11 @@ Exit: a commit that changes the list the docs-refresh cron stages rewrites the c
 
 ## Design
 
-- A row names a value, how to read it from the tree, the docs it applies to, and one regex
-  with one capture group. A second phrasing of the same value gets its own row. A row may
-  carry a formatter for a number written as a word.
+- A row names the doc, one regex with one capture group, the file the value comes from,
+  and how to read it from that file. A second phrasing of the same value gets its own
+  row, and so does a second doc. A row may carry a formatter for a number written as a
+  word. `scripts/docs/doc_values.py` holds the rows and the check. It sits beside the
+  fragment generator, which calls its fixer from step 2 on.
 - The check compares each captured text with the tree's value. It keeps the existing rule
   that a row matching nothing fails, so a prose edit cannot turn a row into a check of
   nothing.
@@ -50,20 +52,27 @@ Exit: a commit that changes the list the docs-refresh cron stages rewrites the c
   numbers are values.
 
 ```diff
- scripts/docs/gen_doc_fragments.py
-+  VALUES: rows of (name, derive, docs, one capture regex, expected matches, formatter)
-+  the check fails a row that matches nothing; --fix refuses on too many matches
-+  FRAGMENTS += the slice status table
+ scripts/docs/
++  doc_values.py
++    VALUES: rows of (doc, one capture regex, source, read, expected matches, formatter)
++    stale(): fails a row that matches nothing
++    the fixer refuses on too many matches
+   gen_doc_fragments.py
++    --fix also runs the VALUES fixer
++    FRAGMENTS += the slice status table
  prek
-   regen-doc-fragments   also runs the VALUES fixer; files pattern from the rows
+   regen-doc-fragments   files pattern from the rows
 -test_docs_quote_current_values.py     its two rows move into VALUES
-+scripts/docs/tests/: every VALUES row matches the tree
++scripts/docs/tests/test_doc_values.py: every VALUES row matches the tree
 ```
 
 ## Steps, as PRs
 
 1. The registry and its check, with the two rows moved in and the old test file deleted.
-2. The fixer and the prek hook.
+   Done. A row holds four fields. The expected match count and the formatter arrive
+   with the step that reads them.
+2. The fixer and the prek hook, with the row for the count of paths the docs-refresh cron
+   stages.
 3. The slice status fragment.
 
 ## Verification

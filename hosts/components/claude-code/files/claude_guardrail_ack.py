@@ -35,7 +35,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from host_lib import discord_post, write_textfile
+from host_lib import discord_post, write_check_textfile
 
 CHECK = "claude-guardrail-ack"
 _SKIP_PARTS = {"__pycache__", ".pytest_cache"}
@@ -344,17 +344,12 @@ def main(argv: list[str]) -> int:
         ok, line = False, f"run failed: {exc}"
     print(f"status={'up' if ok else 'down'} {line}", flush=True)
     textfile_dir = os.environ.get("TEXTFILE_DIR", "/var/lib/node-exporter-textfile")
-    write_textfile(
+    write_check_textfile(
         f"{textfile_dir}/{CHECK}.prom",
-        "".join(
-            f'{name}{{check="{CHECK}"}} {value}\n'
-            for name, value in (
-                ("homelab_check_success", int(ok)),
-                ("homelab_check_last_run_timestamp_seconds", int(time.time())),
-                ("homelab_check_deadline_seconds", config["deadline_s"]),
-                ("homelab_check_duration_seconds", int(time.time() - started)),
-            )
-        ),
+        CHECK,
+        success=ok,
+        deadline_s=config["deadline_s"],
+        started=started,
     )
     return 0 if ok else 1
 

@@ -34,7 +34,8 @@
           # files/netns-reset.sh runs before the image's own /init on EVERY start of this
           # container. The pod netns outlives the container, so a restart inherits the dead
           # wg0, wg-quick's policy rules, the LAN routes and the kill-switch from the previous
-          # one, and the mod cannot bring a tunnel up behind them — the 2026-08-16 (9h) and
+          # one, and the mod cannot bring a tunnel up behind them; a failed tunnel start also
+          # deletes the pod's default route, which the reset restores — the 2026-08-16 (9h) and
           # 2026-09-13 (3.5d) deadlocks, cleared both times by a pod delete. The reset makes a
           # container restart equivalent to that delete, and gates {{ app }}'s uid off eth0
           # while the tunnel is down. `exec` keeps /init as PID 1, which s6 requires.

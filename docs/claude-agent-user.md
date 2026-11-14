@@ -274,15 +274,20 @@ truth, with a reason beside each entry. It holds:
 - `.github/`
 - `hosts/components/host-hardening/` and `hosts/components/sshd/`, which hold the sudo cache,
   ssh and the operator's login
-- `secrets/.sops.yaml` and `secrets/secrets.yml`, and their paths after
-  [ADR-0030](adr/0030-the-ansible-tree-is-renamed-for-what-it-holds.md)'s rename,
-  `secrets/.sops.yaml` and `secrets/secrets.yml`
+- `secrets/.sops.yaml` and `secrets/secrets.yml`
 - alert-triggered triage: every `templates/claude-triage*` template, which includes the pins
   template that sets the run's caps, the rule `templates/50-claude-triage.rules.j2`,
   `files/claude_triage_run.py` and `files/claude_triage_poll.py`, all under
   `hosts/components/claude-code/`. The operator added them on 2026-10-15. Later slices let
   a triage run land its own fixes with nobody watching, so it must not be able to raise its own
   caps.
+- the Renovate agent's grant points under `hosts/components/renovate-agent/`: the T2 floor
+  `files/t2-approval-floor`, the code that checks a PR against it and the lander unit and rule
+  that land one, the runner that carries out the session's requests and swaps in its
+  read-only token, the token and config templates, `templates/renovate-agent-pins.j2`, which
+  sets the caps and the permission mode as literals, the prompt, the unit and timer, and
+  `component.yml`. The operator added them on 2026-11-13 with the guardrails plan's B1. The
+  component's defaults, tests and `CLAUDE.md` stay off.
 - `k8s/roles/cluster-base/` and its path after the rename, `k8s/roles/cluster-base/`,
   the agent's read-only cluster RBAC. The operator added it
   on 2026-10-16 (H1 Open question 7). Before H1, that RBAC applies only through

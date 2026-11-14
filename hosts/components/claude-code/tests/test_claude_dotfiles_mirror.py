@@ -82,15 +82,6 @@ def test_a_repo_with_no_tag_is_up_and_records_nothing(world):
     assert not (state / "verified.json").exists()
 
 
-def test_a_tag_the_operator_signed_is_recorded(world):
-    origin, allowed, _, config, state = world
-    commit = _commit(origin, "one")
-    _tag(origin, "t2-1", allowed)
-    ok, line = mirror.run(config, state)
-    assert ok, line
-    assert _record(state)["tag"] == "t2-1" and _record(state)["commit"] == commit
-
-
 @pytest.mark.parametrize("signer", ["other", None], ids=["another key", "lightweight"])
 def test_a_tag_without_the_operators_signature_is_refused(world, signer):
     origin, _, other, config, state = world

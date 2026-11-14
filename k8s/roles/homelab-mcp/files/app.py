@@ -23,7 +23,7 @@ Environment:
     HOMELAB_HA_TOKEN    Home Assistant token for the HA tools
     HA_URL, PROMETHEUS_URL, LOKI_URL, CLAUDE_LOKI_URL, SCRUTINY_URL, KUBE_API_URL,
     DOCKER_PROXY_URL    base URLs of the services the read tools query
-    HOMELAB_FILE_ROOT   directory the file-read tool is jailed to (default /srv/ansible-src)
+    HOMELAB_FILE_ROOT   directory the file-read tool is jailed to (default /srv/homelab-src)
     CERT_EXPIRY_DOMAINS, CERT_EXPIRY_PORTS   zone suffixes and ports the cert_expiry tool may dial
 """
 
@@ -67,7 +67,7 @@ _SA_DIR = Path("/var/run/secrets/kubernetes.io/serviceaccount")
 DOCKER_PROXY = os.environ.get("DOCKER_PROXY_URL", "")
 SCRUTINY = os.environ.get("SCRUTINY_URL", "http://scrutiny:8080")
 HA = os.environ.get("HA_URL", "http://home-assistant:8123")
-FILE_ROOT = Path(os.environ.get("HOMELAB_FILE_ROOT", "/srv/ansible-src"))
+FILE_ROOT = Path(os.environ.get("HOMELAB_FILE_ROOT", "/srv/homelab-src"))
 FILE_MAX_BYTES = 256 * 1024
 # The external hostname Traefik forwards. Must be allowlisted or the MCP transport's
 # DNS-rebinding guard rejects the request with 421 before auth is ever checked.
@@ -402,7 +402,7 @@ def claude_code_events(limit: int = 100, hours: float = 24.0) -> list[dict]:
 
 @mcp.tool()
 def read_file(path: str) -> str:
-    """Read a text file under the ansible/ source tree (read-only, jailed).
+    """Read a text file under the mounted k8s/, inventory/ and tests/ trees (read-only, jailed).
 
     Rejects paths that escape the tree or name a secret/key file.
     """
@@ -418,7 +418,7 @@ def read_file(path: str) -> str:
 
 @mcp.tool()
 def list_files(directory: str = ".") -> list[dict]:
-    """List entries under the ansible/ source tree (jailed; secrets hidden)."""
+    """List entries under the mounted k8s/, inventory/ and tests/ trees (jailed; secrets hidden)."""
     resolved = safe_reads.resolve_within_jail(FILE_ROOT, directory)
     if not resolved.is_dir():
         raise ValueError("not a directory")

@@ -303,6 +303,9 @@ class Tools:
     wall_clock: Callable[[], float] = time.time
     # None means `host_wait`'s own, which imports this module and so cannot be named here.
     host_targets: Callable[[Path, str], list[Any]] | None = None
+    # Takes the landing turn without waiting: the call that gives it up, or None while another
+    # landing holds it. None here means `turn.try_take`, for the same reason.
+    try_turn: Callable[[], Callable[[], None] | None] | None = None
     wait_for_hosts: Callable[..., None] | None = None
 
 

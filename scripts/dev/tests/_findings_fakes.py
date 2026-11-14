@@ -17,7 +17,6 @@ pass while gh ran.
 fixture in conftest.py is how a test reaches it.
 """
 
-import json
 import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -138,11 +137,6 @@ class Fakes:
     # Answers the `pr list` key, for Task 5's `next`.
     prs: list[dict] = field(default_factory=list)
     url: str = CREATED_URL
-    # Keyed by the `issue create` / `issue close` pair `gh` is called with, the way
-    # `json_errors` is keyed, and CONSUMED on the first match rather than raised every time.
-    # That asymmetry is what `_create_with_optional_project` needs: its retry drops
-    # `--project` from an argv whose first two elements are still `issue create`, so an
-    # error that fired on every match would fail the retry the test exists to prove.
     # The claim-staleness read, as `facts(...)` builds it. Left None it ASSERTS rather than
     # answering "no worktrees, git ok" — that particular answer makes every claim read stale,
     # so a test that got it by default would pass for a reason it never stated. Same argument
@@ -154,43 +148,13 @@ class Fakes:
     # What the running-batch read answers, `{issue: BatchHold}`, filtered to the issues asked
     # about. Empty by default, so no test reads a real unit or opens an ssh connection.
     batch_holds: dict[int, BatchHold] = field(default_factory=dict)
-    # The board read's answer per issue number, as `board_answer(...)` builds it. Left None
-    # an `api graphql` read ASSERTS, so a test that reaches the board says what it holds.
-    board: dict[int, dict] | None = None
+    # Keyed by the `issue create` / `issue close` pair `gh` is called with, the way
+    # `json_errors` is keyed, and CONSUMED on the first match rather than raised every time,
+    # so a later call with the same pair answers normally.
     gh_errors: dict[str, BaseException] = field(default_factory=dict)
     # Keyed by the same `issue list` / `label list` / `issue view` pair `gh_json` dispatches
     # on, so a test can fail the issue read while the label read still answers.
     json_errors: dict[str, BaseException] = field(default_factory=dict)
-
-
-ADDED_ITEM = "ITEM-NEW"
-
-
-def graphql_kind(argv) -> str:
-    """Which board call an `api graphql` argv is: `read`, `add`, `set` or `clear`."""
-    query = next(a for a in argv if a.startswith("query="))
-    for kind, marker in (
-        ("add", "addProjectV2ItemById"),
-        ("set", "updateProjectV2ItemFieldValue"),
-        ("clear", "clearProjectV2ItemFieldValue"),
-    ):
-        if marker in query:
-            return kind
-    return "read"
-
-
-def _graphql_answer(f: "Fakes", argv) -> str:
-    kind = graphql_kind(argv)
-    if kind == "add":
-        return json.dumps(
-            {"data": {"addProjectV2ItemById": {"item": {"id": ADDED_ITEM}}}}
-        )
-    if kind != "read":
-        return json.dumps({"data": {}})
-    number = int(next(a for a in argv if a.startswith("number="))[len("number=") :])
-    if f.board is None or number not in f.board:
-        raise AssertionError(f"board read for #{number}; pass Fakes(board={{...}})")
-    return json.dumps(f.board[number])
 
 
 def facts(trees=(), *, dirty=False, merged=False, ok=True):
@@ -296,10 +260,6 @@ def build_tools(f: Fakes | None = None) -> tuple[FindingsTools, Calls]:
                 # Stamped as the operator's: `gh` posts as the authenticated account, so a
                 # comment this script wrote is one whose claim trailer counts.
                 issue.setdefault("comments", []).append(operator_comment(body))
-        if list(argv[:2]) == ["api", "graphql"]:
-            return subprocess.CompletedProcess(
-                list(argv), 0, _graphql_answer(f, argv), ""
-            )
         return subprocess.CompletedProcess(list(argv), 0, f"{f.url}\n", "")
 
     def worktree_facts(checkout=None):

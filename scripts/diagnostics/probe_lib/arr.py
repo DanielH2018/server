@@ -1,4 +1,4 @@
-"""`probe.py arr <app> <api-path>` — read-only *arr API GETs against sonarr/radarr/prowlarr.
+"""`probe.py arr <app> <api-path>` — read-only *arr API GETs against sonarr/radarr/prowlarr/lidarr.
 
 Split out of probe.py, which had grown to 1349 lines across thirteen subcommands.
 """
@@ -21,7 +21,7 @@ from diagnostics.probe_lib.health_docker import resolve_service_ip
 
 from lib.kubectl import DEFAULT_CLUSTER
 
-# Sonarr/Radarr speak /api/v3, Prowlarr /api/v1. The X-Api-Key comes from SOPS
+# Sonarr/Radarr speak /api/v3, Prowlarr and Lidarr /api/v1. The X-Api-Key comes from SOPS
 # and is fed to curl via stdin (arr_curl_config), never argv — same guard as ha.
 #
 # NB this deliberately does NOT go through k8s_endpoint (Traefik + Authelia), unlike
@@ -32,8 +32,9 @@ from lib.kubectl import DEFAULT_CLUSTER
 # Service DNS name — for the same reason. arr_url() therefore keeps an ip:port shape, with
 # the IP resolved from the Service's ClusterIP (resolve_arr_ip: a Service's ClusterIP does
 # not change across pod restarts/redeploys).
-ARR_PORTS = {"sonarr": 8989, "radarr": 7878, "prowlarr": 9696}
-ARR_API_VERSION = {"sonarr": "v3", "radarr": "v3", "prowlarr": "v1"}
+# lidarr mirrors ARR_PORTS / ARR_API_VERSIONS in k8s/roles/arr-notification/files/seed_arr_notification.py.
+ARR_PORTS = {"sonarr": 8989, "radarr": 7878, "prowlarr": 9696, "lidarr": 8686}
+ARR_API_VERSION = {"sonarr": "v3", "radarr": "v3", "prowlarr": "v1", "lidarr": "v1"}
 
 
 def arr_url(ip, app, path):
@@ -163,7 +164,7 @@ def format_arr_response(body, *, as_json=False, show_secrets=False):
 def run_arr(ns):
     """Read-only *arr API GET, resolved to the app's k8s Service ClusterIP.
 
-    sonarr/radarr/prowlarr run as k8s Deployments and have no Docker container to
+    sonarr/radarr/prowlarr/lidarr run as k8s Deployments and have no Docker container to
     `docker inspect` an IP from, so resolve_arr_ip resolves the current address at run
     time via kubectl — see the comment above ARR_PORTS for why this talks to the Service
     directly instead of going through k8s_endpoint like every other cluster subcommand.

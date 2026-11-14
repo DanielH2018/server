@@ -1,0 +1,19 @@
+---
+# Gives longhorn-ui a memory REQUEST (no limit) so its pods leave BestEffort, the kubelet's first
+# eviction under node memory pressure (#8326). Upstream ships the container with no `resources`.
+# The value is k3s_longhorn_ui_memory_request in defaults/main.yml; a kustomize patch is copied
+# verbatim and cannot read a variable, so tests/longhorn/test_longhorn_control_plane_resources.py
+# holds the two equal.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: longhorn-ui
+  namespace: longhorn-system
+spec:
+  template:
+    spec:
+      containers:
+        - name: longhorn-ui
+          resources:
+            requests:
+              memory: 16Mi

@@ -223,7 +223,8 @@ def _build_parser():
         "--days",
         type=float,
         default=7,
-        help="lookback window in days (default 7; Prometheus keeps 30)",
+        help="lookback window in days (default 7). Prometheus' size cap holds less than its "
+        "configured 30d, and a window past what it holds warns with the oldest sample's age",
     )
     al.add_argument(
         "--check", help="filter to alerts whose name or service contains this substring"

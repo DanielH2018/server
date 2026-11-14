@@ -2109,7 +2109,7 @@ jobs:
             echo "changed=true" >> "$GITHUB_OUTPUT"
           else
             echo "changed=false" >> "$GITHUB_OUTPUT"
-            echo "renovate.json untouched by this PR — it is validated on the merge to master."
+            echo "renovate.json untouched by this PR — the daily renovate-config-canary run validates master."
           fi
 
       # Semantic validation of renovate.json — the one dependency-management axis with no
