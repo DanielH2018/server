@@ -125,7 +125,8 @@ design is [the H4 plan](target-architecture/host/h4-secrets-unit.md), *The resta
   stays behind, and an `rmdir` in step 4 would fail the run and hold the host. The package lists
   only the files with fixed names, such as a lock file, and leaves the directory out. The operator
   removes the directory by hand if it matters. `hosts/tests/test_legacy_cache_directories.py`
-  refuses a `legacy:` path that is a cache directory or a directory directly inside one.
+  refuses a `legacy:` path that is `/var/cache` or any `.cache` directory, such as
+  `/var/lib/claude/.cache` in the agent user's home, or a directory directly inside one.
 - **A legacy template unit.** A `unit` entry such as `claude-land@.service` is disabled and its
   file removed, but never stopped, because `systemctl` refuses a template's own name. While any
   instance is active, activating or reloading, the entry stays and counts as drift, as a running

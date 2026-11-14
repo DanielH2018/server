@@ -13,13 +13,9 @@ from pathlib import PurePosixPath
 
 from _host_packages import HOSTS, package
 
-CACHE_ROOTS = (PurePosixPath("/var/cache"), PurePosixPath("/root/.cache"))
-
 
 def is_cache_root(path: PurePosixPath) -> bool:
-    if path in CACHE_ROOTS:
-        return True
-    return path.name == ".cache" and path.parent.parent == PurePosixPath("/home")
+    return path == PurePosixPath("/var/cache") or path.name == ".cache"
 
 
 def cache_directories(legacy: list[dict]) -> list[str]:
@@ -45,11 +41,13 @@ def test_a_tool_cache_directory_is_flagged():
         {"path": "/home/ubuntu/.cache/local-sweep"},
         {"path": "/var/cache/claude-agent-node"},
         {"path": "/root/.cache"},
+        {"path": "/var/lib/claude/.cache/uv"},
     ]
     assert cache_directories(legacy) == [
         "/home/ubuntu/.cache/local-sweep",
         "/var/cache/claude-agent-node",
         "/root/.cache",
+        "/var/lib/claude/.cache/uv",
     ]
 
 
