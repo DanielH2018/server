@@ -5,16 +5,16 @@
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: {{ cluster_base_games_sa_name }}
+  name: {{ deploy_ui_games_sa_name }}
   namespace: {{ k8s_namespace }}
 ---
 apiVersion: v1
 kind: Secret
 metadata:
-  name: {{ cluster_base_games_sa_name }}-token
+  name: {{ deploy_ui_games_sa_name }}-token
   namespace: {{ k8s_namespace }}
   annotations:
-    kubernetes.io/service-account.name: {{ cluster_base_games_sa_name }}
+    kubernetes.io/service-account.name: {{ deploy_ui_games_sa_name }}
 # Non-expiring, like the read-only token: the daemon has no way to mint a replacement. Revoke
 # by deleting this Secret and the ServiceAccount.
 type: kubernetes.io/service-account-token
@@ -22,7 +22,7 @@ type: kubernetes.io/service-account-token
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: {{ cluster_base_games_sa_name }}
+  name: {{ deploy_ui_games_sa_name }}
   namespace: {{ k8s_namespace }}
 rules:
   # DECIDED: deployments/scale only, on the game Deployments by name. Patch on `deployments`
@@ -41,13 +41,13 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: {{ cluster_base_games_sa_name }}
+  name: {{ deploy_ui_games_sa_name }}
   namespace: {{ k8s_namespace }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: {{ cluster_base_games_sa_name }}
+  name: {{ deploy_ui_games_sa_name }}
 subjects:
   - kind: ServiceAccount
-    name: {{ cluster_base_games_sa_name }}
+    name: {{ deploy_ui_games_sa_name }}
     namespace: {{ k8s_namespace }}

@@ -4,7 +4,7 @@ title: A game server's replica count is runtime state, set from deploy.local
 status: Accepted
 date: 2026-11-14
 governs:
-  - "k8s/roles/cluster-base/templates/games-panel-rbac.yaml.j2#DECIDED: deployments/scale only"
+  - "k8s/roles/deploy-ui/templates/games-rbac.yaml.j2#DECIDED: deployments/scale only"
 ---
 
 # ADR-0033: A game server's replica count is runtime state, set from deploy.local
@@ -68,14 +68,14 @@ manager. Flux's takeover leaves that manager alone, so the count survives the cu
 - **Terraria's start stays gated on issue #822.** Version 1.4.5.7 cannot stay up while
   anything opens a TCP connection to it. The panel refuses to start Terraria until that
   issue's restore checklist is done.
-- **cluster-base renders `prune: false`.** Removing the identity from the render leaves it
-  live. Revoking it means deleting the ServiceAccount and its token Secret by hand
-  (**operator-only**).
+- **The identity lives in the deploy-ui tag, not cluster-base.** A rebuilt cluster applies
+  cluster-base before anything creates `homelab`, so a `homelab` object there would stall the
+  bring-up. The deploy-ui tag prunes, so removing the identity from the render deletes it.
 - **The token is operator-minted.** The operator reads the token Secret, stores it in
   daniel-box's host secrets, and the deploy-ui unit loads it with `LoadCredential=`. It never
   lands in `~/.kube/config`, which `claude-agent-setup.sh` copies to the agent user.
 
 ## Governs
 
-- `k8s/roles/cluster-base/templates/games-panel-rbac.yaml.j2`, the
+- `k8s/roles/deploy-ui/templates/games-rbac.yaml.j2`, the
   `DECIDED: deployments/scale only` marker on the Role.

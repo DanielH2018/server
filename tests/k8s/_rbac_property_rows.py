@@ -81,7 +81,9 @@ def _identity_subject() -> dict:
 
 
 _ALL_VARS = load_yaml(ALL_VARS)
-GAMES_SA = _DEFAULTS["cluster_base_games_sa_name"]
+GAMES_SA = load_yaml(K8S_ROLES / "deploy-ui" / "defaults" / "main.yml")[
+    "deploy_ui_games_sa_name"
+]
 GAMES_NS = _ALL_VARS["k8s_namespace"]
 GAME_DEPLOYMENTS = frozenset(
     d for game in _ALL_VARS["game_servers"] for d in game["deployments"]
@@ -270,10 +272,10 @@ RBAC_PROPERTIES = (
         ),
         select=_games_identity_grants,
         offence=_games_grant_offence,
-        red=("cluster-base", _games_role([_scale_rule(resources=["deployments"])])),
+        red=("deploy-ui", _games_role([_scale_rule(resources=["deployments"])])),
         more_red=(
-            ("cluster-base", _games_role([_scale_rule(resourceNames=["traefik"])])),
-            ("cluster-base", _games_role([_scale_rule(resourceNames=[])])),
+            ("deploy-ui", _games_role([_scale_rule(resourceNames=["traefik"])])),
+            ("deploy-ui", _games_role([_scale_rule(resourceNames=[])])),
             (
                 "rogue-role",
                 binding_doc(
@@ -286,12 +288,12 @@ RBAC_PROPERTIES = (
                 ),
             ),
         ),
-        green=("cluster-base", _games_role([_scale_rule()])),
+        green=("deploy-ui", _games_role([_scale_rule()])),
         min_matches=2,
         must_find=frozenset(
             {
-                f"cluster-base:Role/{GAMES_SA}",
-                f"cluster-base:RoleBinding/{GAMES_SA}",
+                f"deploy-ui:Role/{GAMES_SA}",
+                f"deploy-ui:RoleBinding/{GAMES_SA}",
             }
         ),
     ),
