@@ -266,6 +266,8 @@ def test_automation_file_list_is_clean_when_it_matches_the_directory(tmp_path):
 def test_automation_file_list_flags_unlisted_file(tmp_path):
     # fact: k8s/roles/home-assistant/CLAUDE.md#The one convention that breaks edits
     # The file HA would merge but the ConfigMap would never carry.
+    # fact: .claude/skills/ha-edit-automation/SKILL.md#5. Deploy + confirm it loaded
+    # fact: .claude/agents/home-assistant-engineer.md#Method
     errors = _role_with_shipped_list(tmp_path, ["a.yaml"], ["a.yaml", "new.yaml"])
     assert errors and "new.yaml is not in home_assistant_automation_files" in errors[0]
 
@@ -298,6 +300,7 @@ def test_root_file_list_flags_unlisted_script(tmp_path):
 
 def test_template_file_list_flags_unlisted_macro(tmp_path):
     # A new .jinja that nothing lists would validate clean and never reach the pod.
+    # fact: .claude/skills/ha-edit-automation/SKILL.md#2. If it's math, put it in a tested macro — don't inline
     errors = _role_with_shipped_list(
         tmp_path,
         ["fan.jinja"],

@@ -32,6 +32,8 @@ def _tested_macros() -> set[str]:
 
 
 def test_every_macro_has_a_test():
+    # fact: .claude/skills/ha-edit-automation/SKILL.md#2. If it's math, put it in a tested macro — don't inline
+    # fact: .claude/agents/home-assistant-engineer.md#Method
     untested = sorted(_defined_macros() - _tested_macros())
     assert not untested, (
         "macros defined in custom_templates/*.jinja but never invoked via render_macro() in a "

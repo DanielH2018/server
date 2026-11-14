@@ -24,6 +24,7 @@ def _recorder_exclude() -> dict:
 
 
 def test_no_automation_or_script_domain_exclude():
+    # fact: .claude/skills/ha-edit-automation/SKILL.md#The live API
     domains = _recorder_exclude().get("domains") or []
     assert "automation" not in domains
     assert "script" not in domains

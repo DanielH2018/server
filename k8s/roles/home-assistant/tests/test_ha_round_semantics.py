@@ -6,6 +6,7 @@ from jinja_harness import _forgiving_round
 
 def test_half_rounds_to_even_not_away_from_zero():
     # Banker's rounding: ties go to the nearest EVEN integer.
+    # fact: .claude/skills/ha-edit-automation/SKILL.md#2. If it's math, put it in a tested macro — don't inline
     assert _forgiving_round(0.5) == 0
     assert _forgiving_round(1.5) == 2
     assert _forgiving_round(2.5) == 2
