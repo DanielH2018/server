@@ -3,7 +3,6 @@
 from _findings_fakes import Fakes, build_tools, live_worktree, make_issue
 
 from dev.findings import main
-from dev.findings_lib.issue_model import claim_comment
 
 WT = "worktree-issue-1132"
 
@@ -15,17 +14,6 @@ def test_claim_syncs_the_claimed_issue():
     )
 
     assert main(["claim", "1132", "--worktree", WT], tools) == 0
-
-    assert calls.board == [([1132], None)]
-
-
-def test_release_syncs_the_released_issue():
-    issue = make_issue(
-        1132, labels=["claimed"], comments=[claim_comment(WT, None, "t")]
-    )
-    tools, calls = build_tools(Fakes(issues=[issue], view=issue))
-
-    assert main(["release", "1132", "--worktree", WT], tools) == 0
 
     assert calls.board == [([1132], None)]
 

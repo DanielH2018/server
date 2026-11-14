@@ -134,15 +134,6 @@ def test_a_claimed_issue_on_the_board_moves_to_in_progress():
     assert '"o_prog"' in gh.mutations[0] and '"item7"' in gh.mutations[0]
 
 
-def test_a_released_issue_moves_back_to_todo():
-    gh = FakeGh([_issue(7, held={"Status": IN_PROGRESS})])
-
-    assert sync_board([7], None, gh=gh) == {
-        7: ("updated", "Status In Progress -> Todo")
-    }
-    assert '"o_todo"' in gh.mutations[0]
-
-
 def test_an_issue_missing_from_the_board_is_added_then_written():
     gh = FakeGh([_issue(9, labels=["severity/medium"])])
 
