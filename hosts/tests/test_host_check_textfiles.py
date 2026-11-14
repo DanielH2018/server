@@ -171,10 +171,11 @@ def test_a_down_exit_writes_success_zero_and_logs_its_status_line(tmp_path, chec
 # --- secret-rotation-audit: the audit's exit code is the verdict ------------------------------
 
 
-def _run_audit(tmp_path, audit_rc=0):
+def _run_audit(tmp_path, audit_rc=0, kit_rc=0):
     """Run the rendered wrapper in a scratch checkout with `uv` standing in for the audit.
 
-    The stub records its argv, so a case can read which flag the wrapper asked for.
+    The stub records its argv, so a case can read which flag the wrapper asked for. Asked for
+    `recovery_kit.py check`, it prints a reason and exits `kit_rc`.
     """
     repo = tmp_path / "server"
     (repo / "secrets").mkdir(parents=True)
@@ -182,7 +183,9 @@ def _run_audit(tmp_path, audit_rc=0):
     (repo / "secrets" / "secret_rotation.yml").write_text("b: 1\n")
     uv = write_exec(
         tmp_path / "uv",
-        '#!/usr/bin/env bash\necho "$*" >> "$UV_ARGV"\nexit $STUB_AUDIT_RC\n',
+        '#!/usr/bin/env bash\necho "$*" >> "$UV_ARGV"\n'
+        'case "$*" in *recovery_kit.py*) echo "the kit is stale"; exit $STUB_KIT_RC ;; esac\n'
+        "exit $STUB_AUDIT_RC\n",
     )
     body = _render("secret-rotation-audit.sh.j2")
     # The packaged script (H7.36) sources the check library from /usr/lib/homelab.
@@ -201,7 +204,10 @@ def _run_audit(tmp_path, audit_rc=0):
     )
     script = write_exec(tmp_path / "secret-rotation-audit.sh", body)
     textfile_dir, env = _env(
-        tmp_path, STUB_AUDIT_RC=str(audit_rc), UV_ARGV=str(tmp_path / "uv-argv")
+        tmp_path,
+        STUB_AUDIT_RC=str(audit_rc),
+        STUB_KIT_RC=str(kit_rc),
+        UV_ARGV=str(tmp_path / "uv-argv"),
     )
     # `gh` answers the token check.
     stubs = fake_bin(tmp_path / "bin", gh="exit 0\n")
@@ -222,6 +228,39 @@ def test_a_clean_audit_writes_success_one_and_exits_zero(tmp_path):
     assert code == 0
     # The audit is asked for its verdict, which no longer means a push.
     assert "secret_rotation.py audit --verdict" in (tmp_path / "uv-argv").read_text()
+
+
+def test_a_fresh_recovery_kit_is_clean(tmp_path):
+    textfile_dir, _ = _run_audit(tmp_path, kit_rc=0)
+
+    assert "secrets_mgmt/recovery_kit.py check" in (tmp_path / "uv-argv").read_text()
+    assert (
+        _series(textfile_dir, "recovery-kit")[
+            'homelab_check_success{check="recovery-kit"}'
+        ]
+        == "1"
+    )
+
+
+def test_a_stale_recovery_kit_is_flagged(tmp_path):
+    """The kit writes its own down verdict and leaves the audit's verdict and exit code alone."""
+    textfile_dir, code = _run_audit(tmp_path, audit_rc=0, kit_rc=1)
+
+    assert (
+        _series(textfile_dir, "recovery-kit")[
+            'homelab_check_success{check="recovery-kit"}'
+        ]
+        == "0"
+    )
+    assert "-t recovery-kit status=down the kit is stale" in _logged(tmp_path)
+    assert "--extra-down" not in (tmp_path / "uv-argv").read_text()
+    assert (
+        _series(textfile_dir, "secret-rotation-audit")[
+            'homelab_check_success{check="secret-rotation-audit"}'
+        ]
+        == "1"
+    )
+    assert code == 0
 
 
 def test_a_failed_audit_writes_success_zero_and_keeps_its_exit_code_for_the_timer(

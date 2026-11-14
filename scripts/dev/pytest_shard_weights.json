@@ -903,6 +903,7 @@
  "scripts/secrets_mgmt/tests/test_cluster_vars_write_refusals.py": 1.1,
  "scripts/secrets_mgmt/tests/test_departed_secrets_are_accounted_for.py": 1.75,
  "scripts/secrets_mgmt/tests/test_host_secrets.py": 2.38,
+ "scripts/secrets_mgmt/tests/test_recovery_kit.py": 0.0,
  "scripts/secrets_mgmt/tests/test_rotation_tools.py": 0.0,
  "scripts/secrets_mgmt/tests/test_secret_classify.py": 0.0,
  "scripts/secrets_mgmt/tests/test_secret_consumers.py": 0.1,

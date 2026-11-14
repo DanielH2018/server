@@ -116,6 +116,20 @@ groups:
             daniel-box's textfile collector, so nothing confirms secret rotation is being
             audited. Read `systemctl status homelab-secret-rotation-audit` on daniel-box,
             then /var/lib/node-exporter-textfile/secret-rotation-audit.prom on the host.
+      - alert: RecoveryKitStale
+        expr: homelab_check_success{check="recovery-kit",origin="daniel-box"} == 0
+        labels:
+          severity: warning
+          service: daniel-box
+        annotations:
+          summary: The off-site recovery kit is overdue for a refresh.
+          description: >-
+            The secret-rotation audit on daniel-box ran `recovery_kit.py check`, which found
+            secrets/recovery_kit.yml missing, unreadable, dated after today, or older than
+            MAX_AGE_DAYS. Run `uv run python scripts/secrets_mgmt/recovery_kit.py check` to read
+            which. Refresh the kit (docs/longhorn-disaster-recovery.md, The off-site recovery
+            kit), then run `recovery_kit.py record` and commit the stamp.
+          runbook_url: https://docs.local.daniel-hunter.com/longhorn-disaster-recovery/
       # Replaced the "Loki Read Route (daniel-box)" tile.
       - alert: LokiReadRouteFailed
         expr: homelab_check_success{check="loki-read-route-health",origin="daniel-box"} == 0
