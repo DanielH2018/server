@@ -20,7 +20,6 @@ from renderer.renderer_lib.cluster import RenderedTag
 from renderer.renderer_lib.placeholders import apply_placeholders, sentinel
 from renderer.renderer_lib.secret_checks import (
     CONFINED_TO_SECRET,
-    NON_SECRET_VARS_LOOKUPS,
     Violation,
     check,
     output_members,
@@ -76,14 +75,8 @@ def test_one_violation_alone_fails_the_check_is_flagged(keys, rule5_result):
     assert not report.ok()
 
 
-def test_rule5_finds_its_floor_named_members_and_allowlisted_site_is_clean(
-    keys, rule5_result
-):
+def test_rule5_finds_its_floor_and_named_members_is_clean(keys, rule5_result):
     assert rule5_members(rule5_result, keys) == []
-    (site,) = NON_SECRET_VARS_LOOKUPS
-    assert (site.template, site.argument) in rule5_result.lookup_sites
-    # Neither the lookup nor the hashed set block it sits in is a violation (#4952).
-    assert [v for v in rule5_result.violations if v.file == site.template] == []
 
 
 def _without(render, directory: str, file_part: str, old: str):

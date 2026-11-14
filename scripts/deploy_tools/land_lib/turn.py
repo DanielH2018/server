@@ -13,11 +13,19 @@ A landing on another host holds the same lock through an ssh session that lasts 
 the landing, so both hosts take turns with each other. Either way the lock ends with the
 landing's process, so a landing that dies gives the turn up.
 
+A landing asks for the turn when it is ready to use it (`merge.await_merge`): before the one
+run of a head that has had none, and otherwise once its head is green. It never holds the
+turn while a run that started before it finishes.
+
+A landing that waits with a draft stands in the line beside the lock (`line.py`), so the
+landing that holds the turn can test that draft's head with its own. A landing whose place
+reads `merged` stops waiting: the holder merged its PR.
+
 The turn is not a safety gate. A landing that cannot take it within `merge_timeout`, or
 cannot reach `TURN_HOST`, goes on without it and merges as a landing without the turn does.
-A landing without `LAND_QUEUE` takes no turn and can still move master.
 
-`LAND_QUEUE` turns it on, for a landing that merges its PR directly.
+Every landing that merges its PR directly takes the turn. `LAND_QUEUE=0` turns it off, and a
+landing run that way can still move master under the holder.
 """
 
 import contextlib
@@ -32,6 +40,7 @@ import sys as _sys
 from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
+from deploy_tools.land_lib import line
 from deploy_tools.land_lib.landing import Landing
 from deploy_tools.land_lib.outcome import say
 from lib.progress import OnChange
@@ -156,57 +165,95 @@ def try_take_over_ssh(
     raise OSError(f"ssh {host}: {why[-1] if why else 'no answer'}")
 
 
+def _is_turn_host(hostname: str) -> bool:
+    """Whether `hostname`, qualified or not, names the host that keeps the turn."""
+    return hostname.split(".")[0] == TURN_HOST
+
+
 def _taker(hostname: str) -> Callable[[], Callable[[], None] | None]:
-    """The call that takes the turn from the host named `hostname`, qualified or not."""
-    here = hostname.split(".")[0] == TURN_HOST
-    return try_take if here else try_take_over_ssh
+    """The call that takes the turn from the host named `hostname`."""
+    return try_take if _is_turn_host(hostname) else try_take_over_ssh
 
 
-def _wait(ln: Landing) -> Callable[[], None] | None:
-    """Poll for the turn for up to `merge_timeout`; None when the landing goes on without it."""
+def _line(hostname: str, directory: _Path = line.DIR) -> line.Line:
+    """The line for the turn, as the host named `hostname` reaches it."""
+    if _is_turn_host(hostname):
+        return line.here(directory)
+    return line.over_ssh(TURN_HOST, directory)
+
+
+def _wait(ln: Landing, draft: str) -> tuple[Callable[[], None] | None, int]:
+    """Poll for the turn for up to `merge_timeout`, standing in the line with `draft`.
+
+    Args:
+        draft: The head of a draft that has had no CI run, or "" for any other head.
+
+    Returns:
+        The call that gives the turn up, or None when the landing goes on without it, and the
+        seconds the wait took.
+    """
     o = ln.opts
     try_turn = ln.tools.try_turn or _taker(ln.tools.hostname())
+    place = line.Place(ln.tools.line or _line(ln.tools.hostname()), o.pr, draft, say)
     waiting = OnChange(say)
     waited = 0
-    while True:
-        try:
-            release = try_turn()
-        except OSError as exc:
-            say(
-                f"could not open the landing turn's lock ({exc}); going on without a turn"
+    try:
+        while True:
+            try:
+                release = try_turn()
+            except OSError as exc:
+                say(
+                    f"could not open the landing turn's lock ({exc}); going on without a "
+                    "turn"
+                )
+                return None, waited
+            if release:
+                say(f"took the landing turn after {waited}s")
+                return release, waited
+            if waited >= o.merge_timeout:
+                say(
+                    f"another landing has held the turn for {waited}s, reaching "
+                    f"merge_timeout={o.merge_timeout}s; going on without a turn"
+                )
+                return None, waited
+            if place.stand() == line.MERGED:
+                say(f"the landing that holds the turn merged PR #{o.pr} with its own")
+                return None, waited
+            waiting(
+                "waiting for the landing turn: another landing is between its CI run and "
+                "its merge (`probe.py landing` lists the landings in flight)"
             )
-            return None
-        if release:
-            say(f"took the landing turn after {waited}s")
-            return release
-        if waited >= o.merge_timeout:
-            say(
-                f"another landing has held the turn for {waited}s, reaching "
-                f"merge_timeout={o.merge_timeout}s; going on without a turn"
-            )
-            return None
-        waiting(
-            "waiting for the landing turn: another landing is between its CI run and its "
-            "merge (`probe.py landing` lists the landings in flight)"
-        )
-        ln.tools.sleep(o.merge_poll)
-        waited += o.merge_poll
+            ln.tools.sleep(o.merge_poll)
+            waited += o.merge_poll
+    finally:
+        place.leave()
 
 
 @contextlib.contextmanager
-def held(ln: Landing) -> Generator[bool]:
-    """Hold the landing turn for the merge wait, and give it up however that wait ends.
+def held(ln: Landing) -> Generator[Callable[[str], tuple[bool, int]]]:
+    """Offer the landing turn to the merge wait, and give it up however that wait ends.
 
     Yields:
-        Whether this landing holds the turn. False for a landing without `LAND_QUEUE`, for one
-        that merges nothing itself, and for one that waited `merge_timeout` without getting it.
+        The call that takes the turn. Its argument is the head of a draft that has had no CI
+        run, which stands in the line during the wait, or "" for any other head. It waits for
+        up to `merge_timeout` and returns whether this landing holds the turn and the seconds
+        that call waited. It asks once: a later call answers at once with what the first one
+        got. It never asks for a landing with `LAND_QUEUE=0` or for one that merges nothing
+        itself.
     """
-    if not (ln.opts.queue and ln.direct_merge_subject):
-        yield False
-        return
-    release = _wait(ln)
+    release: Callable[[], None] | None = None
+    asked = not (ln.opts.queue and ln.direct_merge_subject)
+
+    def take(draft: str) -> tuple[bool, int]:
+        nonlocal release, asked
+        if asked:
+            return release is not None, 0
+        asked = True
+        release, waited = _wait(ln, draft)
+        return release is not None, waited
+
     try:
-        yield release is not None
+        yield take
     finally:
         if release:
             release()

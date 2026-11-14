@@ -113,6 +113,30 @@ no internal race. `fanout.py place launch` takes those claims itself. The only r
 cost of losing is a duplicated triage rather than corruption. The read-back handles it —
 the session whose claim comment sorts first holds the issue, and the loser releases.
 
+## The Project board follows the issue
+
+The "Server Issue Tracking" Project shows every open finding. `findings_lib/board.py` derives
+three of its fields from the issue alone:
+
+- **Status** is `Done` once the issue is closed. It is `In Progress` while the issue carries
+  `claimed` or while an open pull request names it as closing. Otherwise it is `Todo`.
+- **Severity** is the `severity/<level>` label's level.
+- **Not before** is the `not-before:<date>` label's date.
+
+`findings.main` records every issue a subcommand writes to through `gh issue
+edit|close|reopen|create`. When the subcommand returns, `main` syncs those issues' board items
+and adds an issue the board lacks. So `claim` moves an issue to `In Progress`, and `release`,
+`reap`, `manual` and a stale-claim takeover move it back, with no per-command board code. A
+dry run writes nothing, so it syncs nothing. Another repo's register (`--repo`) has no board,
+so it is skipped.
+
+The issue stays the record: `next`, `claim` and the fan-out never read the board. A board
+write that fails therefore prints one warning naming the issues and leaves the exit code
+alone. `findings.py sync-board [<n> ...]` repairs the board, and with no numbers it checks
+every open issue. Use it after a label someone changed in the GitHub UI, or after a session
+whose gh token cannot reach the board. Writing the board needs the `project` scope on the gh
+token, which the `ubuntu` user's token carries.
+
 ## Staleness: a claim expires with its worktree, not with a pid
 
 A claim is reclaimable when either holds:

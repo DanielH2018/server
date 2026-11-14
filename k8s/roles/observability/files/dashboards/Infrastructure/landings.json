@@ -14,7 +14,7 @@
         "type": "loki",
         "uid": "bf4q19tuivta8e"
       },
-      "description": "Seconds spent in each phase, one point per landing. A tall wait_merge is PR CI or a PR nobody armed; a tall wait_ci is the master sweep; a tall deploy is rollout and stabilisation waits.",
+      "description": "Seconds spent in each phase, one colour per phase. A point is the longest landing in its interval, so on a wide range two landings close together show as one. `keep` drops the labels logfmt extracts, which otherwise make each landing its own series. A tall wait_merge is PR CI or a PR nobody armed; a tall wait_ci is the master sweep; a tall deploy is rollout and stabilisation waits.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -54,7 +54,7 @@
             "type": "loki",
             "uid": "bf4q19tuivta8e"
           },
-          "expr": "max_over_time({job=\"syslog\"} |= \"event=landing\" | logfmt | pr !~ \"^(939|999|999999|unknown)$\" | unwrap wait_merge [$__interval])",
+          "expr": "max_over_time({job=\"syslog\"} |= \"event=landing\" | logfmt | pr !~ \"^(939|999|999999|unknown)$\" | keep wait_merge | unwrap wait_merge [$__interval])",
           "legendFormat": "wait_merge",
           "refId": "A"
         },
@@ -63,7 +63,7 @@
             "type": "loki",
             "uid": "bf4q19tuivta8e"
           },
-          "expr": "max_over_time({job=\"syslog\"} |= \"event=landing\" | logfmt | pr !~ \"^(939|999|999999|unknown)$\" | unwrap wait_ci [$__interval])",
+          "expr": "max_over_time({job=\"syslog\"} |= \"event=landing\" | logfmt | pr !~ \"^(939|999|999999|unknown)$\" | keep wait_ci | unwrap wait_ci [$__interval])",
           "legendFormat": "wait_ci",
           "refId": "B"
         },
@@ -72,7 +72,7 @@
             "type": "loki",
             "uid": "bf4q19tuivta8e"
           },
-          "expr": "max_over_time({job=\"syslog\"} |= \"event=landing\" | logfmt | pr !~ \"^(939|999|999999|unknown)$\" | unwrap deploy [$__interval])",
+          "expr": "max_over_time({job=\"syslog\"} |= \"event=landing\" | logfmt | pr !~ \"^(939|999|999999|unknown)$\" | keep deploy | unwrap deploy [$__interval])",
           "legendFormat": "deploy",
           "refId": "C"
         },
@@ -81,7 +81,7 @@
             "type": "loki",
             "uid": "bf4q19tuivta8e"
           },
-          "expr": "max_over_time({job=\"syslog\"} |= \"event=landing\" | logfmt | pr !~ \"^(939|999|999999|unknown)$\" | unwrap total [$__interval])",
+          "expr": "max_over_time({job=\"syslog\"} |= \"event=landing\" | logfmt | pr !~ \"^(939|999|999999|unknown)$\" | keep total | unwrap total [$__interval])",
           "legendFormat": "total",
           "refId": "D"
         }
@@ -111,7 +111,56 @@
           },
           "unit": "s"
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "A"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "median wait_merge"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "B"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "median wait_ci"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "C"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "median deploy"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "D"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "median total"
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 5,
@@ -140,8 +189,9 @@
             "type": "loki",
             "uid": "bf4q19tuivta8e"
           },
-          "expr": "quantile_over_time(0.5, {job=\"syslog\"} |= \"event=landing\" | logfmt | pr !~ \"^(939|999|999999|unknown)$\" | unwrap wait_merge [$__range])",
+          "expr": "quantile_over_time(0.5, {job=\"syslog\"} |= \"event=landing\" | logfmt | pr !~ \"^(939|999|999999|unknown)$\" | keep wait_merge | unwrap wait_merge [$__range])",
           "legendFormat": "median wait_merge",
+          "queryType": "instant",
           "refId": "A"
         },
         {
@@ -149,8 +199,9 @@
             "type": "loki",
             "uid": "bf4q19tuivta8e"
           },
-          "expr": "quantile_over_time(0.5, {job=\"syslog\"} |= \"event=landing\" | logfmt | pr !~ \"^(939|999|999999|unknown)$\" | unwrap wait_ci [$__range])",
+          "expr": "quantile_over_time(0.5, {job=\"syslog\"} |= \"event=landing\" | logfmt | pr !~ \"^(939|999|999999|unknown)$\" | keep wait_ci | unwrap wait_ci [$__range])",
           "legendFormat": "median wait_ci",
+          "queryType": "instant",
           "refId": "B"
         },
         {
@@ -158,8 +209,9 @@
             "type": "loki",
             "uid": "bf4q19tuivta8e"
           },
-          "expr": "quantile_over_time(0.5, {job=\"syslog\"} |= \"event=landing\" | logfmt | pr !~ \"^(939|999|999999|unknown)$\" | unwrap deploy [$__range])",
+          "expr": "quantile_over_time(0.5, {job=\"syslog\"} |= \"event=landing\" | logfmt | pr !~ \"^(939|999|999999|unknown)$\" | keep deploy | unwrap deploy [$__range])",
           "legendFormat": "median deploy",
+          "queryType": "instant",
           "refId": "C"
         },
         {
@@ -167,8 +219,9 @@
             "type": "loki",
             "uid": "bf4q19tuivta8e"
           },
-          "expr": "quantile_over_time(0.5, {job=\"syslog\"} |= \"event=landing\" | logfmt | pr !~ \"^(939|999|999999|unknown)$\" | unwrap total [$__range])",
+          "expr": "quantile_over_time(0.5, {job=\"syslog\"} |= \"event=landing\" | logfmt | pr !~ \"^(939|999|999999|unknown)$\" | keep total | unwrap total [$__range])",
           "legendFormat": "median total",
+          "queryType": "instant",
           "refId": "D"
         }
       ],

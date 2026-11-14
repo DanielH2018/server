@@ -59,6 +59,24 @@ def test_the_daemon_runs_from_the_package_as_the_operator_on_the_hosts_address(
     assert "deploy-ui.service" in manifest["enable_links"]
 
 
+def test_the_unit_hands_the_daemon_the_games_their_token_loki_and_a_kubeconfig(
+    package, context
+):
+    unit = package.files[UNIT][0].decode()
+    games_file = f"{DEFAULTS['deploy_ui_dir']}/games.json"
+    games = json.loads(package.files[games_file][0])
+    assert games == context["game_servers"]
+    assert {"name": "valheim", "deployments": ["valheim", "valheim-stats"]} in games
+    assert f"Environment=DEPLOY_UI_GAMES_FILE={games_file}\n" in unit
+    assert "ImportCredential=games_panel_token\n" in unit
+    assert f"Environment=DEPLOY_UI_NAMESPACE={context['k8s_namespace']}\n" in unit
+    assert f"Environment=KUBECONFIG=/home/{context['sys_user']}/.kube/config\n" in unit
+    assert (
+        f"Environment=DEPLOY_UI_LOKI=https://loki-homelab.local.{context['domain']}\n"
+        in unit
+    )
+
+
 def test_a_changed_python_file_restarts_the_daemon_is_clean(package, manifest):
     # fact: hosts/components/deploy-ui/CLAUDE.md#Deploy
     code = [
@@ -93,11 +111,11 @@ def test_every_file_the_role_installed_is_handed_to_the_package(package, manifes
         f"/opt/deploy-ui/{name}"
         for name in ("gitops_hold.py", "gitops_ledger.py", "gitops_markers.py")
     }
-    assert sorted(f"/opt/deploy-ui{rel}" for rel in shipped if rel) == sorted(
+    assert {
         p
         for p in retired
         if p.startswith("/opt/deploy-ui/") and p not in no_longer_shipped
-    )
+    } <= {f"/opt/deploy-ui{rel}" for rel in shipped if rel}
     assert no_longer_shipped <= retired
 
 
