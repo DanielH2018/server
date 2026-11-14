@@ -91,6 +91,11 @@ real, and tears everything down.
   300-second bound plus a 600-second margin. The kubelet's SIGTERM at the deadline runs the
   script's `cleanup` through its TERM trap, within the 300-second grace period. ENFORCED:
   `tests/longhorn/test_longhorn_restore_drill_deadline.py::test_the_deadline_clears_the_restore_timeout_plus_the_probe_bound`.
+- **The probe's scratch emptyDir is capped.** Its `sizeLimit` is
+  `k8s/roles/longhorn-restore-drill/defaults/main.yml:k3s_longhorn_restore_drill_max_actual_bytes`,
+  the candidates' actualSize cap, which also bounds an operator-pinned run. A database copied
+  there for the read-write check therefore always fits. ENFORCED:
+  `tests/longhorn/test_longhorn_restore_drill_sqlite.py::test_the_scratch_copy_is_capped_at_the_candidate_size_cap`.
 - **The next run sweeps what a SIGKILL leaves.** A TERM pending while bash parses a `$(` runs no
   trap, so SIGKILL skips `cleanup`. Bash offers no setting that closes this race, and an OOM kill
   or a lost node skips `cleanup` the same way. The next run tears down each older leftover before
@@ -109,6 +114,10 @@ real, and tears everything down.
   `tests/longhorn/test_longhorn_restore_drill_state.py::test_a_volume_a_live_run_can_hold_is_not_swept`,
   `tests/longhorn/test_longhorn_restore_drill_state.py::test_a_leftover_that_cannot_be_removed_fails_the_run_before_any_restore`.
 - **Required evidence.** The pod log, with each verdict line prefixed `longhorn-restore-drill:`.
+  The `PASS:` line and the stuck-probe `FAIL:` line carry `probe=<n>s`, which is the time the
+  probe pod's 300-second bound limits, image pull included. Compare it against the bound for the
+  largest SQLite candidates before raising the bound. ENFORCED:
+  `tests/longhorn/test_longhorn_restore_drill_deadline.py::test_the_pass_line_reports_the_probe_time_the_bound_limits`.
   Read it with `probe.py loki-query '{container="longhorn-restore-drill"}'`. Backup health's check
   7 reads the stamp ConfigMap's `last-success`, and check 8 reads the per-volume keys, so a drill
   that stops running pages through the stamp and not through the log.
