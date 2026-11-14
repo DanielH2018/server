@@ -25,9 +25,9 @@ every such Job runs, and `flux_job_connect`, the text of the helper a Job script
 Service carries beside it.
 
 A role's vendored files are no template, and `attach_vendored` adds them to `DIR/cluster/<tag>/`
-byte for byte after every pass that edits rendered text (H1.1a). `rendered_docs()` in
-`tests/_k8s_render.py` reads `render_tag`'s output, which holds none of them, so the
-fleet guards never read them; H1's *Vendored upstream manifests* names the guards that bypasses and why it is accepted.
+byte for byte after every pass that edits rendered text (H1.1a). `rendered_docs()` holds none
+of them, so the fleet guards, except the per-container resources guard, never read them; H1's
+*Vendored upstream manifests* names the guards that bypasses and why it is accepted.
 
 A value a role task computes, such as a content tag or a script checksum, comes from
 `task_inputs.derived_facts` and goes in as a `set_fact` would, over every file layer.
