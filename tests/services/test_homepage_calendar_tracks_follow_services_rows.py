@@ -8,7 +8,7 @@ pod stays 1/1, so only this check or a look at the page catches it.
 
 Paired, per the repo's red-proof rule.
 
-Run: uv run pytest ansible/tests/services/test_homepage_calendar_tracks_follow_services_rows.py
+Run: uv run pytest tests/services/test_homepage_calendar_tracks_follow_services_rows.py
 """
 
 import re

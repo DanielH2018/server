@@ -1574,7 +1574,7 @@ groups:
             free and `uv run python scripts/dev/fanout.py place read` for the hosts' headroom,
             then launch, or record why the queue waits (`findings.py defer`).
       # HostUpdateStale: one rule per entry of observability_expected_hosts. Each entry's rule is
-      # the shape of tests/rules/fixtures/host-update-stale.yaml, and
+      # the shape of k8s/roles/observability/tests/rules/fixtures/host-update-stale.yaml, and
       # tests/services/test_host_plane_rule_literals.py prints the rule a new entry
       # needs.
       - alert: HostUpdateStale
