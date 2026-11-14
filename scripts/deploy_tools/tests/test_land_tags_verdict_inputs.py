@@ -151,7 +151,7 @@ def test_a_secrets_rotation_sends_every_k8s_reader_through_cluster_vars(files):
 
 def test_a_rotation_that_refreshed_every_copy_owes_no_hand():
     note = land_tags.plane_note(
-        ["secrets/secrets.yml"], "a1..b2", read_stale=lambda old, new: {}
+        ["secrets/secrets.yml"], "a1..b2", read_stale=lambda old, new, deployed: {}
     )
     assert note == ""
 
@@ -159,7 +159,7 @@ def test_a_rotation_that_refreshed_every_copy_owes_no_hand():
 def test_a_rotation_names_only_the_keys_left_stale():
     stale = {"sonarr_api_key": "Bazarr's config holds a copy no deploy reaches"}
     note = land_tags.plane_note(
-        ["secrets/secrets.yml"], "a1..b2", read_stale=lambda old, new: stale
+        ["secrets/secrets.yml"], "a1..b2", read_stale=lambda old, new, deployed: stale
     )
     assert "`sonarr_api_key`: Bazarr's config holds a copy" in note
     assert "regenerate it with `cluster_vars.py write`" not in note

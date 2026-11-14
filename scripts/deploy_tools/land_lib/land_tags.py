@@ -70,14 +70,17 @@ def declared_tags() -> set[str]:
     return {tag for entry in k8s_services() for tag in entry_tags(entry)}
 
 
-def plane_note(files, range_: str = "", /, *, read_stale=unapplied_keys) -> str:
+def plane_note(
+    files, range_: str = "", deployed: str = "", /, *, read_stale=unapplied_keys
+) -> str:
     """What this PR still needs a HUMAN to apply, or "" if nothing.
 
     A rotated secret is the one shape left. A secret's value lives in no role's template, so
     `secrets/secrets.yml` derives zero tags however many roles consume it. `range_` is the
     PR's own `<base>..<head>`: with it, the note names only the changed keys whose copies
     the landing leaves stale (`stale_copies.unapplied_keys`), and is "" when the PR
-    refreshed every copy it applies. `read_stale` answers that question; a test replaces it.
+    refreshed every copy it applies. `deployed` is the merge commit the landing applies, where
+    the copies and their readers are read; it defaults to the range's head. `read_stale` answers that question; a test replaces it.
     """
     # DECIDED: name the changed keys by comparing ciphertext across the PR's range, never by
     # decrypting. This contradicts the marker that fired on ANY change because naming the keys
@@ -91,7 +94,7 @@ def plane_note(files, range_: str = "", /, *, read_stale=unapplied_keys) -> str:
     if not (sep and old and new):
         return f"{_ROTATION_NOTE} {_K8S_READERS_NOTE}"
     try:
-        stale = read_stale(old, new)
+        stale = read_stale(old, new, deployed=deployed or None)
     except subprocess.CalledProcessError, OSError, ValueError, yaml.YAMLError:
         return f"{_ROTATION_NOTE} {_K8S_READERS_NOTE}"
     if not stale:

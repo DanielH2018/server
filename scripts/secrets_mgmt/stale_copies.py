@@ -60,29 +60,39 @@ def _host_readers(name: str, repo: str) -> set[str]:
     return named | census
 
 
-def unapplied_keys(old: str, new: str, repo: str = REPO) -> dict[str, str]:
-    """Each key `old..new` changed in secrets.yml that a landing of `new` leaves stale, with why.
+def unapplied_keys(
+    old: str, new: str, repo: str = REPO, *, deployed: str | None = None
+) -> dict[str, str]:
+    """Each key `old..new` changed in secrets.yml that deploying `deployed` leaves stale, with why.
 
-    A changed key is applied when every copy the tree holds is fresh at `new`. A k8s reader's
-    copy is fresh when `cluster-vars.source` records the digest of the key's new ciphertext,
-    because `promote` then applies the cluster file. A host's copy is fresh when its
-    `secrets/hosts/<host>.sops.yaml` ciphertext for the key changed in the range too, because
+    `old..new` is the PR's own range, so it names the keys this PR rotated and no other PR's.
+    `deployed` is the commit the landing applies, the merge commit, and defaults to `new`.
+    Every copy and every reader is read there, because a PR that merged in between can add
+    or remove a reader, or refresh a copy, that the PR's head does not hold.
+
+    A changed key is applied when every copy the tree holds is fresh at `deployed`. A k8s
+    reader's copy is fresh when `cluster-vars.source` records the digest of the key's
+    ciphertext, because `promote` then applies the cluster file. A host's copy is fresh when
+    its `secrets/hosts/<host>.sops.yaml` ciphertext for the key differs from `old`'s, because
     the landing waits on that host's package. A key in `OUTSIDE_THE_TREE`, or one no file in
     the tree reads, is never applied: whatever holds it is out of every deploy's reach.
 
-    The readers are counted at `new`, from its `k8s/` and `hosts/` unpacked into a scratch
+    The readers are counted from `deployed`'s `k8s/` and `hosts/`, unpacked into a scratch
     directory, so `repo`'s working tree may sit at any commit.
 
     Raises:
-        subprocess.CalledProcessError: `old` or `new` does not name a commit.
+        subprocess.CalledProcessError: `old`, `new` or `deployed` does not name a commit.
     """
-    for ref in (old, new):
+    deployed = deployed or new
+    for ref in (old, new, deployed):
         git("rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}", cwd=repo)
-    before, after = (_ciphertexts_at(repo, ref, _STORE) for ref in (old, new))
-    recorded = parse_source(_text_at(repo, new, _CLUSTER_SOURCE) or "")
+    before, after, landed = (
+        _ciphertexts_at(repo, ref, _STORE) for ref in (old, new, deployed)
+    )
+    recorded = parse_source(_text_at(repo, deployed, _CLUSTER_SOURCE) or "")
     changed = sorted(k for k, value in after.items() if before.get(k) != value)
     with tempfile.TemporaryDirectory(prefix="stale-copies-") as tree:
-        extract(new, _Path(tree), _READER_TREES, repo=repo)
+        extract(deployed, _Path(tree), _READER_TREES, repo=repo)
         readers = {
             name: (
                 K8S_PLANE in tree_consumers(name, tree).values(),
@@ -101,11 +111,12 @@ def unapplied_keys(old: str, new: str, repo: str = REPO) -> dict[str, str]:
                 "no file in the tree reads it, so whatever holds it is outside it"
             )
         line = recorded.get(name)
-        if k8s and (line is None or line.digest != digest(after[name])):
+        value = landed.get(name, after[name])
+        if k8s and (line is None or line.digest != digest(value)):
             why.append("the cluster file's copy is stale (`cluster_vars.py write`)")
         for host in sorted(hosts):
             path = f"secrets/hosts/{host}.sops.yaml"
-            copy = _ciphertexts_at(repo, new, path).get(name)
+            copy = _ciphertexts_at(repo, deployed, path).get(name)
             if copy is None or copy == _ciphertexts_at(repo, old, path).get(name):
                 why.append(
                     f"{host}'s host file is not synced (`host_secrets.py sync {host}`)"
