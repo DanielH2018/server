@@ -114,6 +114,7 @@ def test_the_loop_publishes_the_deploy_pipeline_gauges_after_the_checks_run():
 
 def test_once_publishes_nothing_and_reads_no_github():
     """`--once` is the hand-run beside the pod, so it neither serves nor reads the family."""
+    # fact: k8s/roles/monitor-bridge/CLAUDE.md#The two exporters
     wired = _silence([], DEPLOY_PIPELINE_GITHUB_TOKEN="read-only-token")
     assert cli.main(["--once"], **wired) == 0
     assert wired["exposition"].body() == b""
@@ -193,6 +194,7 @@ def test_check_flag_names_one_row_without_its_gate():
     """`--check b2_storage` alone runs that row: the gate it names is not in `only`, so it
     reads as up and does not run, which is the filter the operator asked for.
     """
+    # fact: k8s/roles/monitor-bridge/CLAUDE.md#Editing & testing
     ran = []
     wired = _silence(ran, names=("b2_reachable", "b2_storage", "n8n"))
     assert cli.main(["--once", "--check", "b2_storage"], **wired) == 0
@@ -233,6 +235,7 @@ def test_a_malformed_number_is_recorded_rather_than_raised():
 def test_a_rendered_key_missing_from_the_env_is_recorded_rather_than_defaulted():
     """A key the pod environment renders has no Python default since #3659, so its absence is a
     config fault main() reports, never a quiet fall back to a second copy of the value."""
+    # fact: k8s/roles/monitor-bridge/CLAUDE.md#Configuration is a parameter, not a module global
     env = bridge_env()
     del env["SCRUTINY_MAX_AGE_H"]
     cfg = load_config(env)
@@ -271,6 +274,7 @@ def test_a_malformed_http_timeout_reaches_the_same_report(monkeypatch):
 
 
 def test_main_reports_config_problems_and_exits_two(capsys):
+    # fact: k8s/roles/monitor-bridge/CLAUDE.md#Configuration is a parameter, not a module global
     ran = []
     wired = _silence(ran, SCRUTINY_MAX_AGE_H="ninety")
     assert cli.main(["--once"], **wired) == 2

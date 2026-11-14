@@ -112,6 +112,7 @@ JOBS_WITH_NO_BRIDGE_DEPENDENTS = {"node-pi"}
 
 def test_every_node_exporter_job_is_mapped_in_exporter_dependent():
     """The reject half: adding a node-exporter host fails here until its job is placed."""
+    # fact: k8s/roles/monitor-bridge/CLAUDE.md#Gates and hysteresis
     unmapped = (
         _node_exporter_jobs()
         - set(check.EXPORTER_DEPENDENT)

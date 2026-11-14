@@ -33,6 +33,7 @@ def _reads() -> list[tuple[str, str, bool]]:
 
 
 def test_no_rendered_key_carries_a_second_default_in_python():
+    # fact: k8s/roles/monitor-bridge/CLAUDE.md#Checks
     rendered = set(bridge_env())
     reads = _reads()
     # Named members, so a parser rename that empties `_reads()` fails here, not silently.
