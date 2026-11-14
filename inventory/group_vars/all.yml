@@ -47,7 +47,10 @@ domain: daniel-hunter.com
 # The B2 bucket Longhorn's `default` BackupTarget writes to, which `probe.py b2-longhorn` and
 # `b2-budget` list. A bucket name grants nothing without the key pair, and the BackupTarget CR
 # already shows it to the read-only ServiceAccount, so the probe reads it here with no age key
-# (#8355). The BackupTarget itself still substitutes the SOPS key of the same name.
+# (#8355).
+# DECIDED: two copies until the operator drops the SOPS twin (#8507). The BackupTarget
+# substitutes the SOPS key of the same name, so a bucket rename edits both, or the probe lists
+# the old bucket.
 longhorn_b2_bucket: daniel-server-kopia
 
 # Linux Vars
