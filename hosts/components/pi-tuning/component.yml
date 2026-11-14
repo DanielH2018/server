@@ -83,6 +83,9 @@ files:
   # to them until the operator removes the old files by hand (the PR body names them).
   - {src: templates/apt-daily-quiet-hour.conf, dst: /usr/lib/systemd/system/apt-daily.timer.d/50-homelab.conf}
   - {src: templates/apt-daily-upgrade-quiet-hour.conf, dst: /usr/lib/systemd/system/apt-daily-upgrade.timer.d/50-homelab.conf}
+  # needrestart without its kernel check, which held apt's lock for up to two minutes after every
+  # install (#8610). needrestart reads conf.d on every run, so no activation is needed.
+  - {src: templates/needrestart-homelab.conf, dst: /etc/needrestart/conf.d/50-homelab.conf}
 lines:
   # The GPU split and the watchdog dtparam. Bookworm moved the file to /boot/firmware; the Pi runs
   # Ubuntu 24.04, which has no /boot/config.txt.
