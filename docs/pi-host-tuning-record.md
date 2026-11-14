@@ -108,6 +108,23 @@ estimate. `test_the_whole_sd_copy_fits_under_the_log2ram_boot_guard` in
 `hosts/lib/tests/test_pi_tuning_component.py` sums the journal, pacct, auditd and sysstat caps
 and the measured rest of the tree against `SIZE`.
 
+**A smaller archive size needs a one-time vacuum by hand.** journald never resizes an archive
+it has written. It deletes the oldest only once `SystemMaxFiles` newer ones exist, so the
+2 MiB archives would stay for about 8 days at 4 a day. Until the count fills, the new 1 MiB
+archives add to them: 24 old archives plus 8 new ones is about 60 MB of journal. That brings
+the SD copy back near `SIZE`, and an unclean reset in that window can repeat the refusal.
+To clear the old archives, run these on the Pi once the package carrying the drop-in has
+installed. They need root, so they are operator-only:
+
+```bash
+sudo journalctl --vacuum-files=8
+sudo systemctl reload log2ram
+```
+
+The first keeps the 8 newest archives, about 2 days. The second runs log2ram's write, which
+rotates the journal and syncs the deletions to the card. Then check that
+`du -sh /var/hdd.log/journal` reads under 34 MB.
+
 ## Watchdog and debloat
 
 The hardware watchdog is `dtparam=watchdog=on` plus the `watchdog` daemon, which reboots the
