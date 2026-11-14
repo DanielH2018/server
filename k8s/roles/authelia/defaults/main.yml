@@ -14,11 +14,10 @@ k8s_autodeploy_reason: "platform — SSO/OIDC gate; a failed deploy locks out ac
 # `crowdsec` role: `crowdsec:8080` does not resolve there, the sidecar crashloops, and the
 # pod never reaches Ready — a false failure rather than a real one.
 #
-# DECIDED: separate from traefik_k8s_manage_crowdsec rather than one shared variable. A
-# shared one would live in group_vars/all.yml, an `inventory/` path the GitOps
-# deployer treats as broad — it defers and returns WITHOUT fast-forwarding, so the change
-# would need clearing by hand. The surfaces are asymmetric too: this pod carries only an
-# agent and PRODUCES signals, where Traefik carries a bouncer plugin and enforces bans.
+# DECIDED: separate from traefik_k8s_manage_crowdsec rather than one shared variable. The
+# surfaces are asymmetric: this pod carries only an agent and PRODUCES signals, where
+# Traefik carries a bouncer plugin and enforces bans. HISTORY — a shared variable would have
+# lived in group_vars/all.yml, which the retired GitOps deployer deferred as broad.
 #
 # Gating this out does NOT stop Authelia writing /var/log/authelia/authelia.log. Its config
 # names that path (config-secret.yaml.j2) and the emptyDir stays mounted; the init container
