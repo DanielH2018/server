@@ -757,6 +757,7 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
             held += step
         else:
             waited += step
+    ln.merge_wait_s = waited + held
     in_line = queued - ln.batched_s
     notes = [
         f"{in_line}s of it waiting for the landing turn" if in_line else "",

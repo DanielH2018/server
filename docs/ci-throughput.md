@@ -102,22 +102,41 @@ pull-request run makes, because the one run is still a pull-request run.
 The queue is never what makes a merge correct. When master moves between a PR's run and its
 merge, the trees differ, nothing is proven, and master's run sweeps in full as it did before.
 
+**D9, ruled by the operator on 2026-11-14: every landing forms a batch, and sessions and the
+fan-out open their PRs as drafts.** B3 saves runs only for a draft whose head has had no CI
+run, and sessions opened their PRs ready, so almost no landing could use it. Three
+measurements stand behind the ruling:
+
+- Four batches landed 11 PRs on 5 full runs on 2026-11-14. One at a time, those PRs cost
+  11 master runs.
+- Of the newest 800 pull-request runs up to 22:00 UTC that day, 476 ended green or red and
+  31 were red, which is 6.5%. A branch's first run was red 17 times in 260, also 6.5%. A
+  first run is red no more often than a later one, so a draft gives up little by having no
+  run when it is opened. At least four of the 31 were one flaky test (#8736).
+- At 6.5% a batch of four is red 24% of the time. A red batch costs its run and one run
+  for each member, so a PR in a batch of four costs about 0.5 full runs, against about 2
+  for a PR opened ready.
+
+The cost is the one this phase accepted when it gave each PR one run: the author of a draft
+gets no hosted verdict until the landing. With `LAND_BATCH=0` a landing forms no batch.
+Its draft still stands in the line, so another landing can stack it; `LAND_QUEUE=0` keeps a
+landing out of the turn and the line both.
+
 The slices:
 
 1. **B1, ended.** A shadow sweep of master, and replays of pull-request runs that hosted CI
    read red. *What the shadow sweep found* below has the result, which changed this plan.
 1. **R1, landed.** The shadow sweep's timer, its tool and its probe are deleted.
-1. **B2, in progress.** A queue of one. Every landing that merges its PR takes the landing
+1. **B2, landed.** A queue of one. Every landing that merges its PR takes the landing
    turn, marks a draft PR ready, updates its branch and merges after that one run
    ([Landing a merged PR](landing.md)). The turn spans both hosts, and `LAND_QUEUE=0` turns
-   it off for one landing. Two steps remain, and both wait for B3, because a queue of one
-   merges at most one untested head per CI run: sessions open their PRs as drafts, and the
-   fan-out stops marking a batch's PR ready before its landing.
-1. **B3, planned.** Batches of up to four. The queue opens one pull request that holds the
-   batch's heads stacked on master, and that PR's run is the batch's one full run. Its gate
-   rebuilds each stacked tree from master and the heads and records it on each head. Each
-   member then merges in turn, and its own run and master's prove the recorded tree and skip.
-   A red batch splits in half.
+   it off for one landing. Two steps remain, which D9 ruled on: sessions open their PRs as
+   drafts, and the fan-out stops marking a batch's PR ready before its landing.
+1. **B3, landed.** Batches of up to four. The landing that holds the turn opens one pull
+   request that holds the batch's heads stacked on master, and that PR's run is the batch's
+   one full run. Its gate rebuilds each stacked tree from master and the heads and records
+   it on each head. Each member then merges in turn, and its own run and master's prove the
+   recorded tree and skip. Every member of a red batch lands alone.
 1. **B4, planned.** The merge pacing is deleted, and so is the branch update that follows a
    green run on a stale base. A landing then takes its slot under the limit on live landings
    when it gets the turn, and the limit counts the landings of both hosts. That limit exists
@@ -218,7 +237,8 @@ B3 lands in four steps, each one exercised before the next:
       were stacked: it labels the member, marks it ready, waits for the member's two short
       jobs and squash-merges it. It writes `merged` into each member's place, and that
       member's own landing then follows the deploy as it does for a merge made elsewhere.
-      `LAND_BATCH=1` turns the batch on for one landing, for the pilot.
+      Every landing forms a batch this way since D9, and `LAND_BATCH=0` turns it off for
+      one landing.
 
       A landing stacks only the heads it would have been allowed to land. It runs its own
       checks on each member, the landing policy included, and the member's own landing ran
@@ -254,10 +274,10 @@ B3 lands in four steps, each one exercised before the next:
 
       A batch never fails a landing. A batch that cannot be formed leaves the holder to
       land its own PR as before, and a failure while the members merge ends the batch and
-      leaves the holder's deploy to go on. One limit stands until the batch is on by
-      default: the members' merges come after the holder's own merge wait, up to ten
-      minutes each, and `LAND_DEADLINE` does not count them. A lander unit needs its
-      deadline sized before it sets `LAND_BATCH`.
+      leaves the holder's deploy to go on. The members' merges come out of the two merge
+      budgets `LAND_DEADLINE` already counts for the holder's own wait, up to ten minutes
+      each. A member that no longer fits in what that wait left lands alone, so a batch
+      asks no lander unit for a longer deadline.
 
    Only a draft whose head has had no CI run that ran jobs stands in the line. A ready flip
    is the one event that starts a member's short labelled run, and a PR that is already

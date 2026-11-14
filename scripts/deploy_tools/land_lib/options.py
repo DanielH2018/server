@@ -67,7 +67,7 @@ PACE_MASTER_RUNS = 2
 # A landing takes the landing turn before it merges (`turn.py`); `0` turns the turn off.
 QUEUE_ENV = "LAND_QUEUE"
 # A landing that takes the turn with a draft tests the drafts in the line with its own
-# (`batch.py`); `1` turns that on, for the pilot.
+# (`batch.py`); `0` turns that off.
 BATCH_ENV = "LAND_BATCH"
 # Named as a set so the deploy-tools tests can clear all of them: the renovate agent's unit
 # exports LAND_REQUIRE_AUTHOR, and a test that inherited it exercised a refusal rather than the
@@ -152,7 +152,7 @@ class Options:
     # `LAND_QUEUE`: take the landing turn for the merge wait.
     queue: bool = True
     # `LAND_BATCH`: form a landing batch from the drafts in the line for the turn.
-    batch: bool = False
+    batch: bool = True
     primary: Path = PRIMARY_CHECKOUT
     # `--detach` forks the landing into a logfile this script names and returns; `cc-wait land
     # <pr>` is the wait. It defaults off, so an invocation that omits it reaches the same code
@@ -278,7 +278,7 @@ def parse_args(argv: list[str] | None, description: str) -> Options:
         merge_poll=_merge_poll_from_env(),
         pace_master_runs=int(os.environ.get(PACE_ENV) or PACE_MASTER_RUNS),
         queue=os.environ.get(QUEUE_ENV) != "0",
-        batch=os.environ.get(BATCH_ENV) == "1",
+        batch=os.environ.get(BATCH_ENV) != "0",
         primary=_primary_from_env(),
         detach=ns.detach,
         log_dir=ns.log_dir,
