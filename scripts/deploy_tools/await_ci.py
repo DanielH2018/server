@@ -56,10 +56,11 @@ CI_REPO = "DanielH2018/server"
 # inventory/group_vars/all.yml (the deployer renders it to CI_CONTEXTS in its settings
 # file, root-owned on daniel-box, which a worktree session cannot read). Equal in BOTH
 # directions: a name here the deployer does not require blocks a landing the deployer would
-# have deployed. `renovate config validator` is the live instance -- it runs on master and
-# can go red, and the deployer deliberately excludes it because a red renovate.json changes
-# nothing a deploy renders. Requiring it here would have parked every landing behind a
-# dependency-management fault.
+# have deployed. `renovate config validator` is the live instance. It is a PR check: the
+# ci.yml job skips push, so a master commit carries no check-run of that name, and the daily
+# renovate-config-canary.yml schedule validates master instead. The deployer deliberately
+# excludes it because a red renovate.json changes nothing a deploy renders. Requiring it here
+# would park every landing waiting on a check-run that master never gets.
 # tests/repo/test_ci_contexts_match_workflows.py pins both directions.
 REQUIRED_CONTEXTS = frozenset({"prek (lint + validate + tests + secrets)"})
 
