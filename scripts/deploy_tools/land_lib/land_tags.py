@@ -225,7 +225,9 @@ def quiet_paths(paths: list[str], range_: str) -> set[str]:
         return docs
     try:
         covered = set(
-            git_stdout("diff", "--name-only", f"{old}..{new}", cwd=REPO).splitlines()
+            git_stdout(
+                "diff", "--no-renames", "--name-only", f"{old}..{new}", cwd=REPO
+            ).splitlines()
         )
         if not set(paths) <= covered:
             return docs
