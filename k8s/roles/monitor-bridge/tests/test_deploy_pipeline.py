@@ -111,6 +111,7 @@ def test_a_missing_variable_exports_no_series_rather_than_a_zero(piped):
 
 
 def test_a_failed_read_drops_only_the_gauges_it_feeds(piped):
+    # fact: k8s/roles/monitor-bridge/CLAUDE.md#The two exporters
     found, problems = deploy_pipeline.collect(piped, github(fail="/runs?"), NOW)
     assert set(found) == {
         "homelab_deploy_hold_active",
@@ -176,6 +177,7 @@ def test_a_cycle_sends_three_gets_to_github_and_nothing_else(piped):
 
 
 def test_the_endpoint_serves_the_five_gauges_and_nothing_else(piped):
+    # fact: k8s/roles/monitor-bridge/CLAUDE.md#The two exporters
     exposition = deploy_pipeline.Exposition()
     found, _ = deploy_pipeline.collect(piped, github(), NOW)
     exposition.publish(found)

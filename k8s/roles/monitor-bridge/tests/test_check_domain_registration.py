@@ -96,6 +96,7 @@ def test_a_failed_read_is_down_retried_and_keeps_the_last_expiry(cfg):
 
 
 def test_an_empty_url_disables_the_check_without_a_read(cfg):
+    # fact: k8s/roles/monitor-bridge/CLAUDE.md#Checks
     ok, msg = dr.domain_registration(
         replace(cfg, DOMAIN_RDAP_URL=""), FakeSources(), now=1000.0, probe=_fresh()
     )
