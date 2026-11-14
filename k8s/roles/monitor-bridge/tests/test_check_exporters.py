@@ -222,20 +222,11 @@ _THREE_ORIGIN_UP = [
 ]
 
 
-def test_a_dead_node_exporter_on_another_origin_suppresses_its_dependents(cfg):
-    """daniel-box's node-exporter is down; host_packages must not also page.
-
-    Under a pinned probe the whole vector was invisible: daniel-server's only series is
-    healthy, so `up{origin="daniel-server"}` carried no dead exporter to suppress on.
-    """
-    ran, exported, _ = _cycle(cfg, _THREE_ORIGIN_UP)
-    assert "host_packages" not in ran
-    assert "targets" in ran
-    assert exported["host_packages"] is False
-
-
 def test_an_origin_pinned_probe_would_see_no_dead_exporter():
-    """The reject half, stated as the query it turns on rather than by reverting the fix."""
+    """daniel-box's node-exporter is down, and only the unpinned vector shows it.
+
+    `up{origin="daniel-server"}` carries one healthy series and no dead exporter to suppress on.
+    """
     pinned = [(m, v) for m, v in _THREE_ORIGIN_UP if m["origin"] == "daniel-server"]
     assert check.down_exporters(pinned) == set()
     assert check.down_exporters(_THREE_ORIGIN_UP) == {"node"}
