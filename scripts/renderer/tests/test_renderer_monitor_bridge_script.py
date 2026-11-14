@@ -149,7 +149,8 @@ def test_one_config_map_for_every_module_is_flagged(rendered):
     """The red case for the budget: the pre-conversion shape, every module in one object.
 
     Its client-side apply would store more than the annotation cap itself, which is why the
-    render ships one ConfigMap per module.
+    render ships one ConfigMap per module. The modules shrink as the role is trimmed, so the
+    test pads the merged object past the cap rather than relying on the live module total.
     """
     files, _ = rendered
     merged = {
@@ -158,6 +159,7 @@ def test_one_config_map_for_every_module_is_flagged(rendered):
         "metadata": {"name": "monitor-bridge-script", "namespace": "homelab"},
         "data": {k: v for cm in _config_maps(files) for k, v in cm["data"].items()},
     }
+    merged["data"]["padding.py"] = "#" * ANNOTATION_CAP
     flagged = _over_budget([merged])
     assert list(flagged) == ["monitor-bridge-script"]
     assert flagged["monitor-bridge-script"] > ANNOTATION_CAP

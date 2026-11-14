@@ -108,8 +108,8 @@ def test_both_arms_are_named_when_both_fire(cfg):
 
 
 def test_it_reads_the_builder_series_with_no_daniel_server_pin(cfg):
-    # origin_sel() would pin origin="daniel-server" (PROM_ORIGIN), and only daniel-box runs the
-    # builder: the pinned query matches nothing, and the tile reads red for ever.
+    # Only daniel-box runs the builder: a query pinned to origin="daniel-server" matches
+    # nothing, and the tile reads red for ever.
     src = FakeSources(
         prom_scalar=lambda q: NOW - 60, prom_vector=lambda q: [_unbuilt(0)]
     )

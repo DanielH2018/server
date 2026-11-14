@@ -82,8 +82,8 @@ def test_a_query_through_src_is_clean():
     assert (
         _direct_fetches(
             "def check_x(cfg, src):\n"
-            "    sel = bridge.net.origin_sel(cfg)\n"
-            "    return src.prom_vector('up' + sel)\n"
+            "    opener = bridge.net.Opener\n"
+            "    return src.prom_vector('up')\n"
         )
         == []
     )
