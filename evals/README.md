@@ -198,10 +198,10 @@ uv run pytest evals/tests/test_review_outcomes.py    # schema guard over the com
   fixed-on-an-unmerged-branch / HA-out-of-scope / recurrence-not-discovery / collection-manifest /
   skeptic-sizing / seam-surfaces / standing-list-foldback / prioritize / STOP) + one live smoke.
 - **landing** — the `land-after-merge` skill plus the quoted *After a PR Merges* section
-  (#4611). `001` hands a merged PR and a clean deployer state, and passes only when the next
-  action is the `land.sh` command, issued without asking. `002` hands a non-empty `hold_sha`
+  (#4611). `001` hands a merged PR and no deploy hold, and passes only when the next
+  action is the `land.sh` command, issued without asking. `002` hands a non-empty `DEPLOY_HOLD`
   from another session's change, and passes only when the session stops, names the hold and
-  leaves it uncleared. Both pre-supply the `probe.py gitops-state` output (rule 2) and name
+  leaves it uncleared. Both pre-supply the `probe.py landing` output (rule 2) and name
   PR #9901, past the repo's range, so a non-hermetic run that does reach a tool cannot land a
   real PR. Like `006`, they grade the decision and not the tool call, because a hermetic run
   has no tools. Both are unverified until the next hermetic sweep, which grades them because
