@@ -55,6 +55,7 @@ k3s_longhorn_global_manager_replicas: 2
 # OOM kill: a csi-* sidecar held 97 MB anon-rss. Over the 7 days to 2026-11-14 the four ran a p95
 # working set of 39-63Mi and a maximum of 65Mi, across 12 pods. The request covers the OOM-kill
 # reading rather than the p95, and changing it rolls the four Deployments once.
+# instance-manager runs with no memory request: Longhorn v1.13 has no setting for it (#8617).
 #
 # DECIDED: the Setting is the one writer. longhorn-manager's SettingController treats the Setting
 # as the source of truth for these four containers' `resources` and clears any field it does not
