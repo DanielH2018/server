@@ -40,8 +40,8 @@ Every figure is a measurement from 2026-11-14 on daniel-box, with 39 live sessio
   two `gh pr list`.
 
 Three figures are not measured: what one session spends in a normal hour, how many GraphQL
-points each `gh` subcommand costs, and how much of a session's spend is a bare `gh` typed into
-its shell. Slice 1 exists to measure all three, and slice 2 takes its numbers from them.
+points each `gh` subcommand costs, and how much quota is spent outside the wrappers that
+already exist. Slice 1 exists to measure all three, and slice 2 takes its numbers from them.
 
 ## GitHub's rules the design rests on
 
@@ -101,6 +101,27 @@ Three paths reach GitHub from a host, and each already has one owner.
 **The design adds no shim.** The operator ruled on 2026-11-14 that GitHub gets one shim, and
 `ghread` is it. The budget is a library that those three owners call.
 
+**claude-guard already sends a session's bare read to `ghread`.** A replay through
+`claude-guard replay --deny` on 2026-11-14 gave these verdicts:
+
+| A session types | Verdict | Where it goes |
+|---|---|---|
+| `gh pr list`, `view`, `checks`, `diff`; `gh issue list`, `view`; `gh run list`, `view`; `gh search` | Denied by the `ghread-route` rule | `ghread`, named in the denial |
+| `gh run watch` | Blocked by a hook | `cc-wait gh-ci`, named in the denial |
+| `gh api <path>`, a GET | Not denied; prompts | Stays bare |
+| `gh pr create`, `edit`, `comment`, `ready` | Allowed | Stays bare, because `ghread` never writes |
+
+Two bare paths remain that read, and slice 1 closes both in the dotfiles repo:
+
+- **A bare `gh api` GET.** The `ghread-route` rule extends to it, because `ghread api` sends
+  the same request.
+- **`cc-wait`'s `gh-pr` and `gh-ci` sources.** `cc_wait/github.py` runs a bare `gh` every 30
+  seconds for each distinct wait. It reads through `ghread` instead.
+
+A write stays bare on purpose. `ghread` refuses every write by construction, which is what
+makes its blanket allow rule safe. A session writes a few times per pull request, and
+GitHub's own limit of 80 content-creating requests per minute bounds a loop of them.
+
 ### A ledger the three owners call
 
 ```text
@@ -108,6 +129,8 @@ session shell read ── ghread ──────────────┐
 repo Python tool ──── lib/gh.py ───────────┼── gh_quota: admit, record, sample
 host REST reader ──── host_lib.github_get ─┘       │
                                                    └── ledger under /run/gh-quota/
+cc-wait gh-pr, gh-ci ─ ghread, from slice 1 on
+
 bare gh (a session's write, the operator's terminal)
         └── not recorded; GitHub still counts it, and it prints as `unattributed`
 ```
@@ -145,11 +168,11 @@ weight is an estimate, because the module does not see the HTTP requests `gh` ma
 ground-truth sample corrects for that: `gh-quota status` scales each session's recorded
 weight so that the sessions sum to what GitHub counted.
 
-**`unattributed` is the cost of having no shim on `PATH`.** What GitHub counted beyond the
-recorded rows is the spend that reached GitHub around the three owners: a bare `gh` in a
-session's shell, the operator's terminal, the operator's PC. `gh-quota status` prints it on
-its first line. A bare `gh` is never refused, which is the right answer for the operator's
-terminal and a gap for a session that loops on one.
+**`unattributed` is what reached GitHub around the three owners.** It is what GitHub counted
+beyond the recorded rows: a session's writes, the operator's terminal and the operator's PC.
+`gh-quota status` prints it on its first line. A bare `gh` is never refused by the ledger.
+That is the right answer for the operator's terminal. For a session it covers writes only,
+once claude-guard routes every read.
 
 **The mode** is one of `off`, `record` and `enforce`, read from `/etc/gh-quota.conf`, which
 the host package renders from a host variable. In `off`, each function returns at once.
@@ -245,9 +268,8 @@ graphql 3120/5000 used, resets 15:21 UTC; 37 sessions passing, 2 refused; 4% una
 - **No `gh` shim on `PATH`.** A program installed as `/usr/local/bin/gh` reaches every caller,
   a bare `gh` included, with no change to any of them. It is also a second GitHub shim beside
   `ghread`, and it shadows a binary by its position on `PATH`. The operator ruled it out on
-  2026-11-14. If `unattributed` stays above 20% of a bucket for a week, the first answer is to
-  move that spend onto `ghread`: a claude-guard rule in the dotfiles repo that sends a
-  session's bare `gh` read there.
+  2026-11-14. claude-guard's `ghread-route` rule does the same job for a session's reads by
+  denying the bare form and naming `ghread`.
 - **No intercepting proxy.** A proxy counts every request exactly and keeps the token out of
   a session. It needs TLS interception: a local CA that `gh`, Python and Node each trust
   through a different setting. Its outage is the outage it exists to prevent.
@@ -312,10 +334,15 @@ The module runs in `record` mode on both hosts. It refuses nothing.
 
  dotfiles repo, its own PR:
    home/dot_local/bin/executable_ghread   record each call when the module is installed
+   cc-wait: cc_wait/github.py             read through ghread, not a bare gh
+   claude-guard: ghread-route             + a bare `gh api` GET, with its case table
 ```
 
 - **To exercise it,** run `ghread pr list` and `findings.py claims` in a session, then
-  `gh-quota status --all`. The session appears with both calls.
+  `gh-quota status --all`. The session appears with both calls. Type `gh api
+  repos/<owner>/<repo>/pulls` and read the denial that names `ghread api`.
+- **The claude-guard change ships as a case table,** not as prose: each bare read it must
+  refuse, and each write and each `gh api` call with a method or a field that it must pass.
 - **The tests** cover the session key order, the classification of each subcommand in the
   table, the scaling against a ground-truth sample, and the fail-open path with an unreadable
   ledger. A census test names the subcommands the repo's tools run, so a subcommand the table
@@ -374,8 +401,9 @@ The module runs in `record` mode on both hosts. It refuses nothing.
 
 ## Open questions
 
-1. **How much of a session's spend is a bare `gh`?** The design rests on the answer being
-   small. Slice 1 measures it as `unattributed`.
+1. **How much quota do a session's bare writes spend?** claude-guard routes the reads, so the
+   writes are what stays outside the ledger. The design rests on that being small, and slice
+   1 measures it as `unattributed`.
 2. **Does `CLAUDE_CODE_SESSION_ID` reach a fan-out batch's calls with a value of its own?** A
    batch is its own `claude` process, so it should. Slice 1's first day of rows confirms it
    or shows every batch under one key.
