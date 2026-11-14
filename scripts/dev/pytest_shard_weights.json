@@ -1227,6 +1227,7 @@
  "tests/repo/test_leakguard.py": 1.88,
  "tests/repo/test_leakguard_child_env.py": 0.65,
  "tests/repo/test_module_length_ratchet.py": 5.35,
+ "tests/repo/test_named_files.py": 0.58,
  "tests/repo/test_phase_timing.py": 8.91,
  "tests/repo/test_prek_hooks_run_only_at_commit.py": 0.0,
  "tests/repo/test_prek_uv_entries_are_frozen.py": 0.0,
