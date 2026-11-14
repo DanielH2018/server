@@ -2,7 +2,8 @@
 
 One coverage run of the whole pytest suite, with per-test contexts, measured on 2026-11-14 at
 commit `ec7b15021` (#8516). It ran outside CI and gates nothing. Coverage is not part of CI and
-has no threshold.
+has no threshold. The counts and lists leave out `test_terraria_stats_follows_the_server.py`, which
+master deleted after that commit (f5c1c8636b).
 
 This page lists deletion candidates for later issues. An entry is not a verdict: a later issue
 reads each test file before it deletes anything.
@@ -11,9 +12,9 @@ reads each test file before it deletes anything.
 
 | Measure | Count |
 |---|---:|
-| Test files run | 1,424 |
-| Test files that cover at least one measured line inside a test | 1,306 |
-| Test files with no covered line that another test file does not also cover (list 1) | 704 |
+| Test files run | 1,423 |
+| Test files that cover at least one measured line inside a test | 1,305 |
+| Test files with no covered line that another test file does not also cover (list 1) | 703 |
 | Test files that cover no measured line inside a test | 118 |
 | Modules in scope for list 2 | 562 |
 | Modules with no covered line (list 2) | 1 |
@@ -226,7 +227,6 @@ the other test files that cover at least one of those lines.
 | `hosts/lib/tests/test_checkout_sync_component.py` | 467 | 682 |
 | `hosts/lib/tests/test_updater_package.py` | 452 | 685 |
 | `scripts/dev/tests/test_findings_reap_peer_host.py` | 443 | 616 |
-| `tests/services/test_terraria_stats_follows_the_server.py` | 437 | 699 |
 | `scripts/dev/tests/test_findings_open_project_warning.py` | 429 | 617 |
 | `tests/k8s/test_root_needs_dac_capability.py` | 417 | 690 |
 | `hosts/lib/tests/test_reconcile_component.py` | 415 | 685 |
