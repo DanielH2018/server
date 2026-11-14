@@ -86,8 +86,10 @@ crashlooping pod — "the site is not built" is an operator problem, not a rollo
 
 ## Verifying a change actually landed
 
-Under Flux, `promote`'s `verify` gates the rollout, and `land.sh` runs the health gate on every
-tag a promotion applied (`scripts/deploy_tools/land_lib/promotion.py:gated_tags`).
+Under Flux, `promote`'s `verify` gates the rollout. A merge a session lands with `land.sh` also
+gets the health gate on every tag the promotion applied
+(`scripts/deploy_tools/land_lib/promotion.py:gated_tags`). A Renovate automerge runs no
+`land.sh`, so `verify` is its only gate.
 `uv run python scripts/diagnostics/probe.py health docs` reads the pod and the route by hand too. It
 cannot see whether the site rendered: the Authelia middleware answers with a 302 before Traefik
 reaches nginx, so a green probe plus a working redirect proves nothing about content.
