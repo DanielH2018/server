@@ -28,9 +28,11 @@
  */
 /* THE PERSONAL LINKS RENDER AS ICON ONLY.
  *
- * `#my-calendar ~ li.service` is every tile AFTER the calendar in its own group — the five
- * personal links, and nothing else on the page. A general-sibling selector is what scopes this,
- * so a tile added to any other group is unaffected.
+ * `#my-calendar ~ li.service` is every tile AFTER the calendar in its own group. A
+ * general-sibling selector is what scopes this, so a tile added to any other group is
+ * unaffected. `:not([id^="calendar-tool-"])` then leaves out the Deploy, Artifacts and Docs
+ * tiles, which share the group but keep their name and description, so the rules below reach
+ * the personal links and nothing else on the page.
  *
  * `a:has(> .service-name)` rather than `a:last-child`: `.service-title` holds THREE children —
  * the icon anchor, the name anchor, and a status-dot div that is last. Targeting `:last-child`
@@ -51,17 +53,17 @@
  * again after this change, with `document.elementFromPoint` at each tile's centre and its four
  * edges returning the right href at every point on all ten tiles.
  */
-#my-calendar ~ li.service .service-title > a:has(> .service-name) {
+#my-calendar ~ li.service:not([id^="calendar-tool-"]) .service-title > a:has(> .service-name) {
   display: flex;
   position: absolute;
   inset: 0;
 }
 
-#my-calendar ~ li.service .service-name {
+#my-calendar ~ li.service:not([id^="calendar-tool-"]) .service-name {
   display: none;
 }
 
-#my-calendar ~ li.service .service-title {
+#my-calendar ~ li.service:not([id^="calendar-tool-"]) .service-title {
   justify-content: center;
 }
 
@@ -123,8 +125,8 @@ li.service:not(#my-calendar) .service-container > div {
 /* A THREE-STAT WIDGET SPANS ITS THREE BOXES ACROSS THE FULL WIDTH.
  *
  * At two per row an odd count leaves the last box alone on a half-empty row. Two and four
- * divide evenly; three does not. The Alertmanager tile is the one three-stat widget: Critical,
- * Warning and Watchdog on one row.
+ * divide evenly; three does not. The Navidrome tile is the one three-stat widget: Artists,
+ * Albums and Songs on one row.
  *
  * `:has(> :nth-child(3):last-child)` is "exactly three children": a third child that is also
  * the last. It matches nothing on a two- or four-stat widget, so those keep the 50% basis
@@ -188,7 +190,7 @@ li.service:not(#my-calendar) .service-container > div > div {
  * upstream file and re-reconciling it on every image bump, for a handful of words. Rewriting
  * these tiles as `customapi` widgets, which do take a `label:`, means re-deriving each service's
  * numbers from its raw API. A tile whose widget takes a `label:` per block, such as the
- * Alertmanager tile's `prometheusmetric`, needs no rename here.
+ * Karma tile's `prometheusmetric`, needs no rename here.
  *
  * `font-size: 0` rather than `display: none` or `visibility: hidden`: the box must keep its
  * place in the flex column, and it must be sized by the REPLACEMENT text. "Battery Charge" wraps
@@ -302,12 +304,13 @@ li.service > div.service-card {
  * block of definite height once the group is a flex column. The `- 0.75rem` is the list's own
  * `mt-3`.
  *
- * HOW THE HEIGHT IS SPLIT: the calendar spans FOUR Services rows and the two link rows together
- * span the FIFTH. The Services column is five rows of height r with four gaps of g, so the
- * list is 5r + 4g tall. Cut that into ten equal tracks with the same gap g: 10t + 9g = 5r + 4g
- * gives t = (r - g) / 2. Eight tracks plus their seven gaps are then 8t + 7g = 4r + 3g — exactly
- * four Services rows — and one track is a link row, so the two link rows plus their gap make
- * 2t + g = r, one Services row. Every size is derived from the list height, so it holds at any
+ * HOW THE HEIGHT IS SPLIT: the calendar spans THREE Services rows, the Deploy/Artifacts/Docs row
+ * spans the FOURTH, and the two link rows together span the FIFTH. The Services column is five
+ * rows of height r with four gaps of g, so the list is 5r + 4g tall. Cut that into ten equal
+ * tracks with the same gap g: 10t + 9g = 5r + 4g gives t = (r - g) / 2. Six tracks plus their
+ * five gaps are then 6t + 5g = 3r + 2g — exactly three Services rows. Two tracks plus their gap
+ * make 2t + g = r, one Services row, which the tool row takes whole and the two link rows split
+ * one track each. Every size is derived from the list height, so it holds at any
  * width and for any tile height; nothing here is a pixel constant. The previous version pinned
  * the calendar at a 22.5rem cap and the link cards at 50px, which matched the Services rows
  * only at 1920px with unwrapped titles.
@@ -324,7 +327,8 @@ li.service > div.service-card {
  * `:has(> div > ul > #my-calendar)` and `:has(> #my-calendar)` forms match one element each.
  *
  * The five-row count of the Services group is what the 10 encodes. A Services group that renders
- * four or six rows needs 8 or 12 tracks here and a matching `span` on the calendar.
+ * four or six rows needs 8 or 12 tracks here and a matching `span` on the calendar. The calendar
+ * spans four tracks fewer than the total, because the tool row and the link rows take four.
  *
  * Verified on the deployed page 2026-09-10 at 900, 1024, 1280, 1920 and 2560px — both columns end
  * on the same y at every one, including 900px where the grid collapses to two columns and six
@@ -346,9 +350,11 @@ ul.services-list:has(> #my-calendar) {
   grid-template-rows: repeat(10, minmax(0, 1fr));
 }
 
-/* Eight of the ten tracks: four Services rows and the three gaps between them. */
+/* Six of the ten tracks: three Services rows and the two gaps between them. Eight tracks, four
+ * rows, from 2026-11-13 when the music tiles made Services five rows deep, until the same day:
+ * the operator wanted the calendar back at three rows and the tool tiles in the row it freed. */
 #my-calendar {
-  grid-row: 1 / span 8;
+  grid-row: 1 / span 6;
   min-height: 0;
   /* Zero intrinsic height, so the calendar's natural 412px cannot set the row height. Without
    * this the calendar column's intrinsic size (412px of calendar plus two 40px link rows) beat
@@ -368,6 +374,33 @@ ul.services-list:has(> #my-calendar) {
    * Tried the other one first on the deployed page: the icon stayed 4px from the top with 14px
    * below it. Centred, the icon sits 9px from each edge. */
   justify-content: center;
+}
+
+/* THE TOOL ROW: DEPLOY, ARTIFACTS AND DOCS, ONE SERVICES ROW TALL AND A THIRD OF THE WIDTH EACH.
+ *
+ * `columns` is uniform across a group, and the Calendar group's five columns fit the links, not
+ * three tiles: at a span of one each the tool row would leave two empty cells. Fifteen columns
+ * hold both shapes, so a link spans three (five to a row, as before) and a tool tile spans five
+ * (three to a row). `grid-row: span 2` gives the tool row two tracks and the gap between them,
+ * which is one Services row (`2t + g = r` above), so the tiles fit a name and a description.
+ *
+ * Only from Tailwind's `lg` breakpoint, 1024px, where homepage's `lg:grid-cols-5` applies.
+ * Below it the group is two columns or one, and the links and tool tiles flow at one cell each,
+ * as the links did before.
+ */
+@media (min-width: 1024px) {
+  ul.services-list:has(> #my-calendar) {
+    grid-template-columns: repeat(15, minmax(0, 1fr));
+  }
+
+  #my-calendar ~ li.service {
+    grid-column: span 3;
+  }
+
+  #my-calendar ~ li.service[id^="calendar-tool-"] {
+    grid-column: span 5;
+    grid-row: span 2;
+  }
 }
 
 /* THE CARD FILLS ITS `<li>`, AND THE `<li>` IS SIZED BY ITS TRACKS. A grid item stretched to its

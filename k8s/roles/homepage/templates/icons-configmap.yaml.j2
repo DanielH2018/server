@@ -14,11 +14,11 @@ binaryData:
    in files/ unreferenced; reviving one is adding its name back to this list. A name listed
    here and missing from files/ fails the RENDER, not the deploy.
 
-   These three are here because dashboard-icons has no icon for them: anilist, monarch and
+   These four are here because dashboard-icons has no icon for them: anilist, karma, monarch and
    tacticstools answer 404 at the CDN under every name tried. metatft's logo in files/ came
    from a 256x256 PNG embedded in its /myicon3.ico, since that site serves its SPA shell at
    every ordinary icon path. Anything the CDN does serve (github, google-maps, gmail, …) is
    referenced by bare name in services.yaml.j2 and must NOT be added here. #}
-{% for icon in ['anilist.png', 'monarch.png', 'tacticstools.png'] %}
+{% for icon in ['anilist.png', 'karma.png', 'monarch.png', 'tacticstools.png'] %}
   {{ icon }}: {{ lookup('b64file', role_file('files/' ~ icon)) }}
 {% endfor %}

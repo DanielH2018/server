@@ -2,7 +2,7 @@
 
 The two Top Row columns are separate grids, and `custom.css` squares their bottom edges by
 cutting the calendar column into two tracks per Services row: the calendar spans all but the
-last two, and the two link rows take those. A Services tile added without re-deriving the CSS
+last four, the Deploy/Artifacts/Docs row takes two of those and the two link rows one each. A Services tile added without re-deriving the CSS
 leaves an orphan on the last row and the calendar column a row short. Nothing logs it, and the
 pod stays 1/1, so only this check or a look at the page catches it.
 
@@ -38,9 +38,9 @@ def layout_problems(tiles: int, columns: int, css: str) -> list[str]:
         out.append(
             f"calendar has {tracks.group(1)} tracks; {rows} Services rows need {2 * rows}"
         )
-    if int(span.group(1)) != 2 * rows - 2:
+    if int(span.group(1)) != 2 * rows - 4:
         out.append(
-            f"calendar spans {span.group(1)} tracks; {rows} rows need {2 * rows - 2}"
+            f"calendar spans {span.group(1)} tracks; {rows} rows need {2 * rows - 4}"
         )
     return out
 
@@ -54,6 +54,24 @@ def _services_tiles() -> int:
 def test_the_deployed_layout_squares_the_two_columns():
     columns = settings_yaml()["layout"]["Top Row"]["Services"]["columns"]
     assert layout_problems(_services_tiles(), columns, custom_css()) == []
+
+
+def test_the_tool_tiles_sit_between_the_calendar_and_the_links():
+    """The CSS spans the tool tiles over the row the calendar gives up, matched by id prefix.
+
+    A tool tile without the prefix renders icon-only in a link cell, and one placed after a link
+    leaves the tool row short.
+    """
+    [top_row] = [entry["Top Row"] for entry in services_yaml() if "Top Row" in entry]
+    [calendar] = [group["Calendar"] for group in top_row if "Calendar" in group]
+    ids = [next(iter(tile.values())).get("id", "") for tile in calendar]
+    assert ids[:4] == [
+        "my-calendar",
+        "calendar-tool-deploy",
+        "calendar-tool-artifacts",
+        "calendar-tool-docs",
+    ]
+    assert not [i for i in ids[4:] if i.startswith("calendar-tool-")]
 
 
 def test_a_tile_added_without_rederiving_the_css_is_flagged():
