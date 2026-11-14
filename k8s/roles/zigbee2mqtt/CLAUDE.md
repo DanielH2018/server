@@ -96,8 +96,13 @@ See repo-root `CLAUDE.md` for shared conventions.
     the device lost power or rebooted. Most of the restart count is these loops, and the fix is
     on the device side: its power and switch port. `ExtraProbeFailed` pages for them.
   - *Broker not ready at first start.* `MQTT failed to connect` (`ECONNREFUSED` or `connack
-    timeout`) right after a node event, one restart each. The watchdog arms only after a
-    successful first start, so it does not cover these.
+    timeout`) right after a node event, one restart each, 6 events. The watchdog arms only
+    after a successful first start, so it does not cover these. The `mqtt-broker-wait` init
+    container does (#8586). It sends mosquitto an anonymous MQTT CONNECT and starts z2m only
+    once a CONNACK comes back. A TCP wait would pass the `connack timeout` cases, where the
+    port accepts before the broker answers. mosquitto refuses the anonymous login, and that
+    refusal is the CONNACK, so the pod spec carries no credential. After 180 s the init
+    container fails, and the pod shows `Init:CrashLoopBackOff`.
 - **Pairing is closed by default** (no `permit_join` in 2.x). Enable join from the Z2M UI
   (`zigbee2mqtt.<domain>`) when adding devices, then disable.
 
