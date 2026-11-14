@@ -83,8 +83,10 @@ Land spawns `land.sh` detached and logs to `~/.local/state/deploy-ui/`
 (`hosts/components/deploy-ui/tests/test_deploy_ui_app.py::test_land_spawns_land_sh_is_clean`).
 Land and cancel each emit one logfmt line via `logger -t deploy-ui`
 (`hosts/components/deploy-ui/files/deploy_ui_lib/deploy_ui_writes.py:audit`). The page reads
-no hold itself: `land.sh` meets `DEPLOY_HOLD` on its own, and a landing under the hold merges
-and ends `deploy-failed` with cause `promote-held`
+no hold itself: `land.sh` meets `DEPLOY_HOLD` on its own. A PR that bumps a forward-only pin
+is refused before it merges
+(`scripts/deploy_tools/tests/test_land_pin_gate.py::test_a_bump_is_refused_unless_deploy_hold_reads_none`).
+Any other landing under the hold merges and ends `deploy-failed` with cause `promote-held`
 (`scripts/deploy_tools/tests/test_promote_land_wait.py::test_a_hold_set_before_the_merge_ends_the_wait_at_the_first_poll`).
 The hold is cleared with `gh variable set DEPLOY_HOLD --body none`, never from this page.
 

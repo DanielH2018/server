@@ -113,6 +113,7 @@ def test_a_metallb_bump_runs_the_metallb_gate_set(landing):
     ids=["missing", "empty", "blank", "a-sha"],
 )
 def test_a_bump_is_refused_unless_deploy_hold_reads_none(landing, hold, why):
+    # fact: hosts/components/deploy-ui/CLAUDE.md#Writes
     outcome, calls = _refused(landing, deploy_hold=hold)
     assert why in outcome.error
     assert "run_gates" not in _names(calls)
