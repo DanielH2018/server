@@ -55,6 +55,10 @@ files:
   - {src: templates/91homelab-rkhunter-propupd, dst: /etc/apt/apt.conf.d/91homelab-rkhunter-propupd}
   - {src: files/rkhunter-propupd, dst: /usr/lib/homelab/rkhunter-propupd, mode: "0755"}
   - {src: units/homelab-rkhunter-propupd.service, dst: /usr/lib/systemd/system/homelab-rkhunter-propupd.service}
+  # needrestart, run by apt's hook after a library upgrade, restarts the active refresh unit and
+  # waits for it, while the unit waits for the dpkg lock that apt holds. The override stops that
+  # restart (2026-11-14, daniel-box: the lock stayed held for 3+ hours).
+  - {src: files/needrestart-rkhunter-propupd.conf, dst: /etc/needrestart/conf.d/homelab-rkhunter-propupd.conf}
 enable:
   homelab-rkhunter-check.timer: timers.target
 lines:
