@@ -55,7 +55,21 @@ k3s_longhorn_global_manager_replicas: 2
 # OOM kill: a csi-* sidecar held 97 MB anon-rss. Over the 7 days to 2026-11-14 the four ran a p95
 # working set of 39-63Mi and a maximum of 65Mi, across 12 pods. The request covers the OOM-kill
 # reading rather than the p95, and changing it rolls the four Deployments once.
-# instance-manager runs with no memory request: Longhorn v1.13 has no setting for it (#8617).
+#
+# DECIDED: the v1 instance-manager keeps no memory request, because Longhorn offers no way to set
+# one (#8617). Its 7-day p95 working set to 2026-11-14 was 1565Mi on daniel-box and 1272Mi on
+# daniel-server, and the scheduler counts that memory as free. longhorn-manager builds the pod
+# from its InstanceManager CR, and the builder sets `resources` only from
+# GetInstanceManagerCPURequirement (longhorn-manager v1.13.0,
+# controller/instance_manager_controller.go). No Setting, annotation or CR field carries a memory
+# value. `data-engine-memory-size` sizes v2 hugepages only. The Setting above covers the CSI
+# components, not the instance-manager. A patch on the pod does not persist, because the manager
+# owns the pod and recreates it. An admission mutation would persist, since the manager's drift
+# check compares only CPU (controller/controller_manager.go:IsSameGuaranteedCPURequirement).
+# It is rejected all the same. The pod is bound by `nodeName`, so the kubelet's admission is its
+# only fit check, and a memory request adds a second dimension that check can refuse at boot.
+# A fault in the mutator would also block the pod that serves every v1 engine on its node.
+# Revisit when Longhorn adds an instance-manager memory setting.
 #
 # DECIDED: the Setting is the one writer. longhorn-manager's SettingController treats the Setting
 # as the source of truth for these four containers' `resources` and clears any field it does not
