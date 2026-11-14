@@ -9,5 +9,7 @@ d {{ pins.state_dir }} {{ '0710' if claude_code_agent_operator_read else '0750' 
 d {{ pins.state_dir }}/inbox 0750 {{ pins.agent_user }} {{ pins.agent_user }} -
 d {{ pins.state_dir }}/runs 0750 {{ pins.agent_user }} {{ pins.agent_user }} -
 d {{ pins.state_dir }}/done 0750 {{ pins.agent_user }} {{ pins.agent_user }} -
+# The exchange with the session unit: the runner recreates its in/ and out/ on each run.
+d {{ pins.state_dir }}/session 0750 {{ pins.agent_user }} {{ pins.agent_user }} -
 # The poller appends to this log, so the units' umask never reaches one created before it.
 f {{ pins.state_dir }}/shadow.jsonl 0640 {{ pins.agent_user }} {{ pins.agent_user }} -
