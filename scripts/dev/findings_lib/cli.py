@@ -363,6 +363,20 @@ def _parser(description: str) -> argparse.ArgumentParser:
     _add_dry_run(sl, suppress=True)
     _add_repo(sl)
 
+    sb = sub.add_parser(
+        "sync-board",
+        help="make each open issue's Project board item match its state and labels",
+        example=_example("sync-board [688 701] [--dry-run]"),
+    )
+    _add_dry_run(sb, suppress=True)
+    _add_repo(sb)
+    sb.add_argument(
+        "numbers",
+        nargs="*",
+        type=int,
+        help="issues to sync; every open one when omitted",
+    )
+
     v = sub.add_parser(
         "verify",
         help="print each finding's stored instructions for how to verify it; runs nothing",

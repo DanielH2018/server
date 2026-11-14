@@ -22,6 +22,8 @@ and it is a field so no test reads a real unit.
 field whose default is NOT the real implementation: the shared test fake leaves it unset, and
 a default that opened ssh would make every test with a "no worktree" claim depend on reaching
 the peer. `findings.py`'s entry point passes `read_peer_worktrees` instead.
+`sync_board` writes the Project board through `gh api graphql`. It is a field of its own so
+the tests that pin the exact `gh` calls a command makes do not also pin the board's queries.
 """
 
 import dataclasses
@@ -38,6 +40,7 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from dev.fanout_lib.batch_holds import BatchHold, running_batch_holds
+from dev.findings_lib.board import sync_board
 from dev.fanout_lib.manifest import branches_launched_by
 from dev.findings_lib.peer_trees import peer_worktree_list
 from lib.repo_paths import REPO
@@ -102,6 +105,9 @@ class FindingsTools:
     # `(repo) -> worktrees` the other host's checkout registers, or None when it cannot be
     # read. Asked only when a claim names no local worktree. None is this repo, as above.
     peer_worktrees: Callable[[str | None], list[Worktree] | None] = _no_peer_worktrees
+    # `(issue numbers, repo, dry_run=) -> {issue: (outcome, detail)}`, `board.sync_board`'s
+    # contract. None is this repo, as above.
+    sync_board: Callable[..., dict[int, tuple[str, str]]] = sync_board
 
     def batch_holds(self, issues: Collection[int]) -> Mapping[int, BatchHold]:
         """`running_batch_holds` aimed at this register, as `claim_states` takes it."""
