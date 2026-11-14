@@ -1,6 +1,6 @@
 """The WAN family's rules in bridge-exporter.yaml follow from the check table's `gate` column.
 
-M6's batch A6-3 ports the four rows (#8519 added a fifth) that sit behind `wan_reachable`, and the gate row itself,
+M6's batch A6-3 ported the rows that sit behind `wan_reachable`, and the gate row itself,
 to rules. Four things must hold, and the table is the only source for each:
 
 - a rule selects each row by its `check` label, and a dependent's rule carries the `requires`
