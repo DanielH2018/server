@@ -202,3 +202,15 @@ def test_rules_skills_agents_and_hooks_are_counted_with_their_history(
     for kind in KINDS:
         numbers = _measure_numbers(page, kind)
         assert {_kind_count(s, kind) for s in (NEW, MID, OLD)} <= numbers, kind
+
+
+def test_a_history_shorter_than_90_days_reads_as_no_commit(tmp_path, monkeypatch):
+    size = importlib.import_module(MODULE)
+    scrub_process_git_env(monkeypatch)
+    repo = init_repo(tmp_path / "repo")
+    _commit_state(repo, MID, 60)
+    out = tmp_path / "size.md"
+    assert size.main(["--out", str(out)], repo=repo, now=_NOW) == 0
+    page = out.read_text()
+    assert "*90 days earlier* has no commit" in page
+    assert _tree_lines(MID, "k8s") in _tree_numbers(page, "k8s")
