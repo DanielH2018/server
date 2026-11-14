@@ -1,4 +1,4 @@
-"""host_lib's shared log helpers: `logfmt`, `log`, the crash hook, `deploy_event`, `write_textfile`.
+"""host_lib's shared log helpers: `logfmt`, `log`, the crash hook, `deploy_event`, the textfile writes.
 
 #6161 moved the deployer's journald-aware `log` here so every host-shipped script prints one
 way, and gave the hand-written logfmt emitters one quoting rule. #6164 put the deploy
@@ -7,11 +7,18 @@ annotation's line here, so a failure and a success are written by the same funct
 
 import os
 import stat
+import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 
 import host_lib
+
+CHECK_LIB = (
+    Path(__file__).resolve().parents[2]
+    / "components/check-lib/files/homelab-check-lib.sh"
+)
 
 
 def _journal(monkeypatch, path):
@@ -105,6 +112,28 @@ def test_write_textfile_writes_0644_and_leaves_only_the_target(tmp_path):
     assert path.read_text() == "a 2\n"
     assert stat.S_IMODE(path.stat().st_mode) == 0o644
     assert os.listdir(tmp_path) == ["check.prom"]
+
+
+def test_the_check_textfile_declares_what_homelab_check_lib_declares(tmp_path):
+    # node-exporter drops every series whose file disagrees with another on HELP or TYPE.
+    (tmp_path / "py").mkdir()
+    (tmp_path / "sh").mkdir()
+    host_lib.write_check_textfile(
+        tmp_path / "py" / "c.prom", "c", success=True, deadline_s=60, started=0, now=5
+    )
+    subprocess.run(
+        ["bash", "-c", f'source "{CHECK_LIB}" && write_check_textfile c 1 5 60'],
+        env={
+            **os.environ,
+            "TEXTFILE_DIR": str(tmp_path / "sh"),
+            "CHECK_DURATION_S": "5",
+        },
+        check=True,
+        timeout=30,
+    )
+    assert (tmp_path / "py" / "c.prom").read_text() == (
+        tmp_path / "sh" / "c.prom"
+    ).read_text()
 
 
 def test_a_failed_textfile_write_removes_its_temp_file(tmp_path):
