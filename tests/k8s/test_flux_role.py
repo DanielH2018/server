@@ -176,6 +176,7 @@ spec:
 
 
 def test_all_namespace_peers_is_clean_on_the_rendered_fence():
+    # fact: k8s/roles/flux/CLAUDE.md#The `flux-system` fence
     docs = _flux_docs()
     policies = {d["metadata"]["name"] for d in docs if d["kind"] == "NetworkPolicy"}
     assert {"allow-egress", "flux-allow-prometheus"} <= policies, policies

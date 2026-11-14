@@ -40,6 +40,7 @@ def _cluster_base_classes() -> set[str]:
 
 def test_every_flux_priority_class_is_built_in_or_rendered_here():
     # fact: k8s/roles/cluster-base/CLAUDE.md#At a glance
+    # fact: k8s/roles/cluster-base/CLAUDE.md#cluster-base — the PriorityClasses and the read-only cluster identity
     named = _flux_classes()
     assert "homelab-critical" in named, "the flux render no longer names its own class"
     assert "homelab-critical" in _cluster_base_classes()

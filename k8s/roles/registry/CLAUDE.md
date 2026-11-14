@@ -1,8 +1,10 @@
 # registry — in-cluster Docker image cache
 
 A local `registry` (`registry_k8s_image`), the push store, that holds images
-`k8s/image-builder` builds in-cluster. Every consumer pulls from GHCR, so the store serves only
-the verify Job's seed, and break-glass pushes its artifact there. It also holds the old images
+`k8s/roles/image-builder/` builds in-cluster. Every consumer pulls from GHCR
+(`scripts/renderer/renderer_lib/images.py:ghcr_text`), so the store serves only
+the verify Job's seed (`k8s/roles/registry/files/registry_verify.py:seed`), and break-glass
+pushes its artifact there (`docs/break-glass.md`). It also holds the old images
 of n8n, homelab-mcp, ical-proxy, nut, pi-peer-backup, code-server, terraria, valheim and
 karakeep, which no consumer pulls. See repo-root `CLAUDE.md` for shared conventions.
 

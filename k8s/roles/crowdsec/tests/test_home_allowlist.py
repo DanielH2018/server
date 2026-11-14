@@ -62,6 +62,7 @@ def test_an_unchanged_allowlist_writes_nothing_and_is_up(capsys):
 
 
 def test_a_new_prefix_replaces_the_stored_one(capsys):
+    # fact: k8s/roles/crowdsec/CLAUDE.md#The home allowlist is a host-network lookup and a sidecar sync
     code, writes, line = _run(capsys, _data(ipv6_prefix=NEW_V6), ["98.42.7.9", OLD_V6])
     assert code == 0
     # The new entry goes in before the old one comes out.
@@ -74,6 +75,7 @@ def test_a_new_prefix_replaces_the_stored_one(capsys):
 
 def test_a_failed_ipv6_lookup_keeps_the_stored_prefix_and_is_down(capsys):
     """The red half of the pair above: the discovery wrote an error and no prefix value."""
+    # fact: k8s/roles/crowdsec/CLAUDE.md#The home allowlist is a host-network lookup and a sidecar sync
     data = _data(ipv4="98.42.7.10", ipv6_error="2 distinct global /64s")
     del data["ipv6_prefix"]
     code, writes, line = _run(capsys, data, ["98.42.7.9", OLD_V6])
@@ -92,6 +94,7 @@ def test_an_empty_prefix_value_removes_nothing(capsys):
 
 
 def test_an_unreachable_wan_is_a_skip_not_a_fault(capsys):
+    # fact: k8s/roles/crowdsec/CLAUDE.md#The home allowlist is a host-network lookup and a sidecar sync
     error = f"{home_ips_discover.WAN_UNREACHABLE} — failed to resolve public IPv4"
     code, writes, line = _run(capsys, _data(ipv4_error=error), ["98.42.7.9", OLD_V6])
     assert (code, writes) == (0, [])
@@ -107,6 +110,7 @@ def test_a_plain_ipv4_lookup_failure_is_down(capsys):
 
 
 def test_a_lookup_older_than_three_periods_is_down_and_writes_nothing(capsys):
+    # fact: k8s/roles/crowdsec/CLAUDE.md#The home allowlist is a host-network lookup and a sidecar sync
     stamp = (NOW - timedelta(seconds=901)).strftime("%Y-%m-%dT%H:%M:%SZ")
     code, writes, line = _run(capsys, _data(looked_up_at=stamp), [])
     assert (code, writes) == (1, [])

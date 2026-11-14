@@ -419,6 +419,7 @@ def unselected(workloads: list[tuple[str, dict]], policies: list[dict]) -> set[s
 
 def test_every_exempt_workload_is_selected_by_its_own_policy() -> None:
     """An exempt workload no policy selects is open to every pod in the namespace."""
+    # fact: k8s/roles/netpol-baseline/CLAUDE.md#netpol-baseline — default-deny NetworkPolicies for the cluster
     workloads = [
         (doc["metadata"]["name"], doc)
         for _role, _tpl, doc in rendered_docs()

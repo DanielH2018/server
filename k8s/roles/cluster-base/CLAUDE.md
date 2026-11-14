@@ -1,8 +1,14 @@
 # cluster-base — the PriorityClasses and the read-only cluster identity
 
-The four workload-tier PriorityClasses, and the `homelab-readonly` ServiceAccount with its
-ClusterRole, bindings and token Secret. Two objects here are needed before Flux can run. Flux's
-own controllers name `homelab-critical`, and the read-only kubeconfig carries the token this
+The four workload-tier PriorityClasses (`k8s/roles/cluster-base/templates/priorityclass.yaml.j2`),
+and the `homelab-readonly` ServiceAccount
+(`k8s/roles/cluster-base/defaults/main.yml:cluster_base_readonly_sa_name`) with its
+ClusterRole, bindings and token Secret (`k8s/roles/cluster-base/templates/readonly-rbac.yaml.j2`).
+Two objects here are needed before Flux can run. Flux's
+own controllers name `homelab-critical`
+(`tests/k8s/test_flux_priority_classes_come_from_cluster_base.py::test_every_flux_priority_class_is_built_in_or_rendered_here`),
+and the read-only kubeconfig
+(`hosts/components/k3s-server/templates/k3s-readonly-kubeconfig.j2`) carries the token this
 Secret holds.
 
 ## At a glance

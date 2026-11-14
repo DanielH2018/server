@@ -1,7 +1,9 @@
 # traefik — the cluster ingress edge
 
-Traefik terminates TLS. Every routed k8s role depends on it, and through it on the
-`traefik-crds` tag that holds the IngressRoute/Middleware CRDs those roles' manifests use.
+Traefik terminates TLS. Every routed k8s role depends on it
+(`tests/deploy/test_k8s_toposort.py::test_the_derived_traefik_edge_agrees_with_the_render`),
+and through it on the `traefik-crds` tag (`k8s/roles/traefik-crds/`) that holds the
+IngressRoute/Middleware CRDs those roles' manifests use.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in k8s/roles/longhorn-reconcile/defaults/main.yml. -->

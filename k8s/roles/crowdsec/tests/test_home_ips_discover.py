@@ -57,6 +57,7 @@ def test_ula_link_local_and_unusable_addresses_are_skipped():
 
 
 def test_two_distinct_prefixes_fail_the_lookup_rather_than_pick_one():
+    # fact: k8s/roles/crowdsec/CLAUDE.md#The home allowlist is a host-network lookup and a sidecar sync
     table = TABLE + "\n" + _row("2a02:1:2:3::1")
     assert hid.lookup_ipv6(lambda: table) == (
         "",
@@ -147,6 +148,7 @@ def _main(kube, ipify, table=TABLE):
 
 
 def test_a_good_run_writes_both_values_and_clears_both_errors(capsys):
+    # fact: k8s/roles/crowdsec/CLAUDE.md#The home allowlist is a host-network lookup and a sidecar sync
     kube = _Recorder()
     assert _main(kube, b"98.42.7.9") == 0
     assert kube.calls == [
@@ -183,6 +185,7 @@ def test_a_second_run_patches_the_same_values():
 
 def test_a_failed_ipv6_lookup_writes_its_error_and_leaves_the_stored_prefix():
     """A merge patch that omits `ipv6_prefix` leaves the stored /64 as it is (#1248)."""
+    # fact: k8s/roles/crowdsec/CLAUDE.md#The home allowlist is a host-network lookup and a sidecar sync
     kube = _Recorder()
     table = TABLE + "\n" + _row("2a02:1:2:3::1")
     assert _main(kube, b"98.42.7.9", table) == 0
