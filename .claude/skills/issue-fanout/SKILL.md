@@ -298,6 +298,20 @@ does, so `room` is not a promise the issue-body gates pass. Launch within a minu
 `room`: the probe's ssh connection to daniel-server persists for `MUX_PERSIST_S` (60s), and
 `launch` reuses it rather than spending another against `ufw limit ssh`.
 
+**Waiting for more work once the queue is empty.** When `next --json` lists nothing free,
+run `cc-wait findings [--repo OWNER/NAME] --after N --budget 1740` in the background, and
+re-run it on exit 75. N is the highest issue number the orchestrator has seen. The wait ends
+`new` (exit 0) once `next` would list a free issue numbered above N. Its detail is JSON
+naming each one's number, title, severity, cited paths, `no_vetted_remediation` and
+`solo_only`, so the orchestrator can group and claim without another read. A new issue that
+is claimed, deferred, blocked, `manual` or named by an open PR keeps the wait open, because
+the source shares `scripts/dev/findings_lib/claim.py:free_issues` with `next`. Pass
+`--after` every time. Without it the baseline is the highest open number when the wait
+starts, so each resume re-baselines and misses an issue filed between the two runs. Each
+read is one REST call every 300s, which leaves the GraphQL quota alone. The source is
+`scripts/dev/findings_lib/new_issue_probe.py`, run as `findings.py new-issues`. It only
+reports; nothing is claimed until the orchestrator runs `claim`.
+
 A batch that stops on any state but `done` also pages Discord once, as
 `fanout-alert@<unit>:<state>`, whether or not an orchestrator is watching (#4602). The page
 comes from the unit's own `ExecStopPost=`, `scripts/dev/fanout_lib/notify.py`, which logs
