@@ -608,21 +608,32 @@ switches it on, and it installs only while `claude_code_agent_user_enabled` is a
   `renovate-agent` unit carries. It reads `<state_dir>/inbox/<episode>.json` and runs
   `files/claude_triage_run.py` under `flock -n`, so one run goes at a time. A busy lock exits
   75. That exit is not a failure, and the episode waits in the inbox.
+- **The session runs in its own unit**, `homelab-claude-triage-session.service`
+  (guardrails plan B2). The runner writes the framed prompt to `<state_dir>/session/in/`,
+  starts the unit through `host_lib.start_unit` and waits for it. The unit runs
+  `files/claude_triage_session.py`, which feeds the prompt to `claude -p` on stdin, so the
+  episode text is on no command line. The script writes the session's JSON result to
+  `<state_dir>/session/out/` and prints nothing the session said, because a journal line the
+  session shaped could raise the next episode. The runner reads the result without following a
+  link, up to 1 MiB, and its journal lines carry the episode id and the state only. The record
+  and the report keep the session's stop reason.
 - **The session** is `claude -p`. Edit, Write, a landing and a push are denied, and
   `--permission-prompts none` denies anything that would wait on an answer. The session has a
-  $10 budget, 60 turns and a 30-minute wall clock, and it returns a diagnosis in a fixed JSON
-  schema.
+  $10 budget, 60 turns and a 30-minute wall clock, the session unit's `TimeoutStartSec`, and it
+  returns a diagnosis in a fixed JSON schema. The runner reads `Result=timeout` as a timed-out
+  run.
 - **The credential** is the run's own `claude setup-token` token. It is the SOPS key
-  `claude_code_triage_claude_oauth_token`, in a root 0600 `EnvironmentFile`, and the role
-  refuses to install without it. The interactive login `claude-rc.service` uses can lapse while
-  idle (#4618).
+  `claude_code_triage_claude_oauth_token`, which the session unit loads as a `LoadCredential=`
+  file, and the role refuses to install without it. The runner never holds it. The
+  interactive login `claude-rc.service` uses can lapse while idle (#4618).
 - **The episode text can be hostile.** A monitor message can carry log text anyone wrote. The prompt
   frames it as data. The runner HTML-escapes every field the session returns, because the
   report shares an origin with the operator's own artifacts.
 - **Every run leaves a record, a report and a page.** An inconclusive or timed-out run does too.
   The page is `claude-triage-report-alert@<episode>:<state>.service`, which holds the webhook. A
   polkit rule lets `claude` start the page and the run, in fixed shapes only. A run that crashes
-  pages through `OnFailure=homelab-alert@%n.service`.
+  pages through `OnFailure=homelab-alert@%n.service`. The same rule lets `claude` start the
+  session unit, until B2's user split moves every start right to a controller user.
 - **The caps are pinned** as literals in the role's `templates/claude-triage-pins.j2`, which
   every triage template imports, the same way `claude-land-pins.j2` pins the landing settings.
   No inventory value reaches them.

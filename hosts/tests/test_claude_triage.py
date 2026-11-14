@@ -23,6 +23,7 @@ from lib import yaml_fast
 
 ROLE = CLAUDE_CODE
 UNIT = "claude-triage@.service.j2"
+SESSION_UNIT = "claude-triage-session.service.j2"
 RULE = "50-claude-triage.rules.j2"
 RUNNER = ROLE / "files" / "claude_triage_run.py"
 CONFIG = "claude-triage-config.env.j2"
@@ -132,10 +133,23 @@ def test_the_unit_runs_as_the_agent_with_its_own_credential_and_a_clean_stop() -
     text = unit()
     agent = defaults()["claude_code_agent_user"]
     assert directive(text, "User") == [agent]
-    assert directive(text, "LoadCredential") == [
+    # The session unit holds the credential; the runner never needs it.
+    assert directive(text, "LoadCredential") == []
+    session = re.sub(
+        r"\\\n\s*", " ", render_component_text("claude-code", SESSION_UNIT)
+    )
+    assert directive(session, "User") == [agent]
+    assert directive(session, "LoadCredential") == [
         "claude_oauth_token:/etc/claude-triage/oauth-token"
     ]
-    assert directive(text, "KillSignal") == ["SIGINT"]
+    assert directive(session, "KillSignal") == ["SIGINT"]
+    # The session's own wall clock trips before the runner's, so the runner still records it.
+    assert int(directive(session, "TimeoutStartSec")[0]) < int(
+        directive(text, "TimeoutStartSec")[0]
+    )
+    assert directive(session, "ExecStart")[0].endswith(
+        "/opt/claude-triage/claude_triage_session.py"
+    )
     assert directive(text, "OnFailure") == ["homelab-alert@%n.service"]
     # A busy lock is a wait, not a failure.
     assert directive(text, "SuccessExitStatus") == ["75"]
@@ -151,10 +165,9 @@ def rule_patterns(rendered: str) -> list[re.Pattern]:
 
 
 def admitted(name: str) -> bool:
-    return any(
-        p.search(name)
-        for p in rule_patterns(render_component_text("claude-code", RULE))
-    )
+    rendered = render_component_text("claude-code", RULE)
+    exact = re.findall(r'unit !== "([^"]+)"', rendered)
+    return name in exact or any(p.search(name) for p in rule_patterns(rendered))
 
 
 @pytest.mark.parametrize(
@@ -165,6 +178,8 @@ def admitted(name: str) -> bool:
         ("claude-triage-report-alert@drill:diagnosed.service", True),
         ("claude-triage-report-alert@drill:failed.service", True),
         ("claude-triage-report-alert@drill:capped.service", True),
+        ("homelab-claude-triage-session.service", True),
+        ("homelab-claude-triage-session@drill.service", False),
         ("claude-triage@Drill.service", False),
         ("claude-triage@-drill.service", False),
         ("claude-triage@drill.service.d", False),

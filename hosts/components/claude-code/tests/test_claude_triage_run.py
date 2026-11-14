@@ -1,7 +1,8 @@
 """Behaviour of the triage runner that claude-triage@<episode>.service starts.
 
 The runner is stdlib-only and runs under the host's pinned Python, so these tests drive it
-with a fake `claude` binary instead of a real session.
+with a fake `claude` binary instead of a real session. A fake `start` stands in for systemd: it
+runs the session script in-process against the same config, as the session unit would.
 """
 
 import json
@@ -10,43 +11,13 @@ import stat
 import time
 
 import claude_triage_run as run
+import claude_triage_session as session
 import pytest
+from host_lib import UnitEnd
 
 # 2026-10-15 18:30 UTC: the cap tests date their records against this, never the live clock.
 T0 = 1792089000.0
 HOSTILE = '<script>alert(1)</script>"><img src=x onerror=alert(2)>'
-
-
-def test_a_token_pasted_across_a_wrapped_line_reaches_the_session_whole(
-    tmp_path,
-) -> None:
-    # The credential file as homelab-secrets writes a wrapped paste: a newline and an indent.
-    (tmp_path / run.TOKEN_CREDENTIAL).write_text("sk-ant-oat01-abc\n  def\n")
-    env = run.session_env({"CREDENTIALS_DIRECTORY": str(tmp_path), "HOME": "/h"})
-    assert env[run.TOKEN_ENV] == "sk-ant-oat01-abcdef"
-    env = run.session_env({run.TOKEN_ENV: "sk-ant-oat01-abc  def\n", "HOME": "/h"})
-    assert env == {run.TOKEN_ENV: "sk-ant-oat01-abcdef", "HOME": "/h"}
-    assert run.session_env({"HOME": "/h"}) == {"HOME": "/h"}
-
-
-def test_the_session_is_diagnose_only_capped_and_kept_for_resume() -> None:
-    argv = run.build_argv(
-        {"CLAUDE_BIN": "claude", "BUDGET_USD": "10", "MAX_TURNS": "60"}, "prompt"
-    )
-    after = argv[argv.index("--disallowedTools") + 1 :]
-    for tool in (
-        "Edit",
-        "Write",
-        "NotebookEdit",
-        "Bash(systemctl start homelab-claude-land@*)",
-    ):
-        assert tool in after
-    assert argv[argv.index("--max-budget-usd") + 1] == "10"
-    assert argv[argv.index("--max-turns") + 1] == "60"
-    assert argv[argv.index("--permission-prompts") + 1] == "none"
-    assert json.loads(argv[argv.index("--json-schema") + 1]) == run.SCHEMA
-    # The report's resume command needs the transcript on disk.
-    assert "--no-session-persistence" not in argv
 
 
 def test_the_episode_reaches_the_prompt_as_framed_data() -> None:
@@ -141,6 +112,7 @@ def _setup(tmp_path, claude_body: str) -> tuple[str, str, str]:
         "\n".join(
             [
                 f"STATE_DIR={state}",
+                f"EXCHANGE_DIR={state}/session",
                 f"REPORT_DIR={reports}",
                 "REPORT_BASE_URL=https://artifacts.example.test/a/daniel-box-claude/",
                 f"PROMPT_FILE={prompt}",
@@ -153,6 +125,17 @@ def _setup(tmp_path, claude_body: str) -> tuple[str, str, str]:
     return str(config), str(state), str(reports)
 
 
+def _start(config: str):
+    """systemd's part: run the session unit's script, then report how the unit ended."""
+
+    def start(unit: str, timeout: int) -> UnitEnd:
+        assert unit == run.SESSION_UNIT
+        session.main(["claude_triage_session.py"], config)
+        return UnitEnd("success", 0)
+
+    return start
+
+
 def test_a_run_with_no_diagnosis_still_leaves_a_record_a_report_and_a_page(
     tmp_path,
 ) -> None:
@@ -162,7 +145,10 @@ def test_a_run_with_no_diagnosis_still_leaves_a_record_a_report_and_a_page(
 
     assert (
         run.main(
-            ["claude_triage_run.py", "drill"], config, lambda e, s: pages.append((e, s))
+            ["claude_triage_run.py", "drill"],
+            config,
+            lambda e, s: pages.append((e, s)),
+            start=_start(config),
         )
         == 0
     )
@@ -192,7 +178,15 @@ def test_a_failed_session_says_why_in_the_record_and_the_report(tmp_path) -> Non
     )
     config, _, reports = _setup(tmp_path, body)
 
-    assert run.main(["claude_triage_run.py", "drill"], config, lambda e, s: None) == 0
+    assert (
+        run.main(
+            ["claude_triage_run.py", "drill"],
+            config,
+            lambda e, s: None,
+            start=_start(config),
+        )
+        == 0
+    )
 
     record = json.loads((tmp_path / "state" / "runs" / "drill.json").read_text())
     assert record["state"] == "failed"
@@ -268,3 +262,38 @@ def test_a_capped_record_and_yesterdays_runs_do_not_count_toward_the_cap(
         )
     (tmp_path / "torn.json").write_text("{")
     assert run.runs_today(str(tmp_path), now) == 1
+
+
+def test_a_session_the_unit_stopped_at_its_wall_clock_is_recorded_as_timed_out(
+    tmp_path,
+) -> None:
+    config, _, _ = _setup(tmp_path, "{}")
+    pages = []
+
+    run.main(
+        ["claude_triage_run.py", "drill"],
+        config,
+        lambda e, s: pages.append(s),
+        start=lambda unit, timeout: UnitEnd("timeout", -1),
+    )
+
+    record = json.loads((tmp_path / "state" / "runs" / "drill.json").read_text())
+    assert record["state"] == "timeout"
+    assert pages == ["timeout"]
+
+
+def test_a_result_the_session_planted_as_a_symlink_is_not_followed(tmp_path) -> None:
+    """The session could point its result at a file it cannot read; the runner reads nothing."""
+    config, state, _ = _setup(tmp_path, "{}")
+    secret = tmp_path / "secret.json"
+    secret.write_text(json.dumps({"structured_output": {"summary": "write-sentinel"}}))
+
+    def start(unit: str, timeout: int) -> UnitEnd:
+        os.symlink(secret, os.path.join(state, "session", "out", session.RESULT_NAME))
+        return UnitEnd("success", 0)
+
+    run.main(["claude_triage_run.py", "drill"], config, lambda e, s: None, start=start)
+
+    record = json.loads((tmp_path / "state" / "runs" / "drill.json").read_text())
+    assert record["state"] == "failed"
+    assert "write-sentinel" not in json.dumps(record)

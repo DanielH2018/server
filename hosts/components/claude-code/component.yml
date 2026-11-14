@@ -213,12 +213,14 @@ files:
   # The code and its config are root-owned, so a session cannot change what the next run executes.
   - {src: files/claude_triage_run.py, dst: /opt/claude-triage/claude_triage_run.py, when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}
   - {src: files/claude_triage_poll.py, dst: /opt/claude-triage/claude_triage_poll.py, when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}
+  - {src: files/claude_triage_session.py, dst: /opt/claude-triage/claude_triage_session.py, when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}
   - {lib: host_lib.py, dst: /opt/claude-triage/host_lib.py, when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}
   - {src: templates/claude-triage-prompt.txt.j2, dst: /opt/claude-triage/prompt.txt, when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}
   - {src: templates/claude-triage-config.env.j2, dst: /etc/claude-triage/config.env, when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}
   - {src: templates/claude-triage-tmpfiles.conf.j2, dst: /usr/lib/tmpfiles.d/homelab-claude-triage.conf, when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}
   - {src: templates/claude-triage@.service.j2, dst: /usr/lib/systemd/system/claude-triage@.service, when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}
   - {src: templates/claude-triage-report-alert@.service.j2, dst: /usr/lib/systemd/system/claude-triage-report-alert@.service, when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}
+  - {src: templates/claude-triage-session.service.j2, dst: /usr/lib/systemd/system/homelab-claude-triage-session.service, when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}
   - {src: templates/claude-triage-poll.service.j2, dst: /usr/lib/systemd/system/homelab-claude-triage-poll.service, when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}
   - {src: templates/claude-triage-poll.timer.j2, dst: /usr/lib/systemd/system/homelab-claude-triage-poll.timer, when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}
   - {src: units/homelab-claude-triage-poll-alert.service, dst: /usr/lib/systemd/system/homelab-claude-triage-poll-alert.service, when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}
@@ -228,6 +230,10 @@ units:
   homelab-claude-rc.service: {policy: manual}
   # Its job is the next boot; a restart would respawn sessions the operator stopped.
   homelab-claude-bg-resume.service: {policy: manual, when: claude_code_bg_resume_enabled}
+  # Started by claude-triage@ for one episode's session; a package install never starts it.
+  homelab-claude-triage-session.service:
+    policy: manual
+    when: claude_code_agent_user_enabled and claude_code_triage_enabled
 enable:
   homelab-claude-agent.service: {target: multi-user.target, when: claude_code_agent_user_enabled}
   homelab-claude-agent-browser.timer: {target: timers.target, when: claude_code_agent_user_enabled}

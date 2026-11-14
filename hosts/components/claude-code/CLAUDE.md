@@ -86,9 +86,9 @@ The operator's own Claude Code install is the dotfiles repo's (H7.38).
   timer ships wherever the agent exists, so the way out runs, and a pin bump or a failed run
   converges on the next run. The Node and `@playwright/mcp` pins are in the component's
   `defaults:`, where Renovate and `asset_pins.py --refresh node` read them.
-- **Triage's token is a `LoadCredential=` file, `/etc/claude-triage/oauth-token`.** The runner
-  joins the whole file without whitespace, so a token pasted across `setup-token`'s line wrap
-  still reaches the session whole.
+- **Triage's token is a `LoadCredential=` file, `/etc/claude-triage/oauth-token`,** which only
+  the session unit loads. The session script joins the whole file without whitespace, so a token
+  pasted across `setup-token`'s line wrap still reaches the session whole.
 - **Not packaged:** the operator's own Claude Code install, which the dotfiles repo owns since
   H7.38.
   ENFORCED: `hosts/lib/tests/test_claude_code_component.py`,
@@ -230,6 +230,7 @@ What it does not restore:
 
 `claude-triage@<episode>.service` runs one unattended, diagnose-only session as `claude` and
 leaves a report (shipped off behind `claude_code_triage_enabled`, and in daniel-box's package).
+It starts the session in `homelab-claude-triage-session.service` and waits for it.
 `homelab-claude-triage-poll.timer` starts one when an alert starts firing, and ships in `shadow`
 mode, which only logs. The templates, runner and poller are on the lander's approval list, and the caps and the poll mode are pinned in `templates/claude-triage-pins.j2`. `docs/claude-agent-user.md`,
 *Alert-triggered triage*, has the design.

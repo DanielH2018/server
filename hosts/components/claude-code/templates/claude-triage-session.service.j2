@@ -1,0 +1,43 @@
+{% import 'templates/claude-triage-pins.j2' as pins with context -%}
+# Shipped by the claude-code host component. claude-triage@<episode>.service starts it and waits
+# for it; nothing enables it, and reconcile never restarts it (`policy: manual`).
+[Unit]
+Description=Unattended triage session for the episode claude-triage@ prepared, as the agent user
+
+[Service]
+Type=oneshot
+# The agent user, never {{ sys_user }}: the episode text is untrusted, and this user has no
+# sudo, no age key, read-only kubectl and no read on /home. docs/claude-agent-user.md,
+# "Alert-triggered triage", has the design.
+User={{ pins.agent_user }}
+WorkingDirectory={{ pins.agent_home }}/server
+Environment=HOME={{ pins.agent_home }}
+# systemd's PATH is as minimal as cron's: without /usr/local/bin the session loses kubectl and
+# reports an empty cluster rather than failing.
+Environment=PATH={{ pins.agent_home }}/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=KUBECONFIG={{ pins.agent_home }}/.kube/config
+# The repo's hook shim resolves the clone and uv from these. A guard that cannot start turns
+# every Bash call into an ask, and nobody answers one here.
+Environment=RUN_HOOK_PROJECT_DIR={{ pins.agent_home }}/server
+Environment=RUN_HOOK_UV={{ pins.agent_home }}/.local/bin/uv
+Environment=PYTHONDONTWRITEBYTECODE=1
+# The Claude credential from `claude setup-token`, read by systemd as root (0600) into
+# $CREDENTIALS_DIRECTORY, so it is in no unit line `systemctl show` publishes. A credential rather
+# than an EnvironmentFile=, because a token pasted across a line wrap would end at the newline
+# there; the session script joins the whole file. It is this unit's own token: the interactive
+# login claude-rc.service uses can lapse while idle (#4618).
+LoadCredential=claude_oauth_token:/etc/claude-triage/oauth-token
+SyslogLevel=notice
+# The session's wall clock. SIGINT ends its turn cleanly; SIGTERM exits 143 with the turn
+# unrecorded. The runner reads Result=timeout as a timed-out session.
+KillSignal=SIGINT
+TimeoutStartSec={{ pins.run_timeout_s }}
+NoNewPrivileges=yes
+# DECIDED: UMask=0027, as claude-rc.service.j2 sets it. The result lands in the triage state
+# directory, which gives the operator's group traverse.
+UMask=0027
+ProtectHome=yes
+ProtectProc=invisible
+PrivateTmp=yes
+ExecStart={{ pins.agent_home }}/.local/bin/uv run --no-project --no-python-downloads \
+  --python {{ host_python_version }} /opt/claude-triage/claude_triage_session.py
