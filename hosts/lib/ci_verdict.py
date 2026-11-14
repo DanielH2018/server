@@ -130,7 +130,7 @@ def jobs_verdict(check_runs: list[dict]) -> str:
     skipped job passes only when `prove` succeeded and every dependent skipped: each dependent
     skips only on `needs.prove.outputs.proven == 'true'` or a cancelled run, so a skip means
     `proven` was true, and a check-run cannot show that output itself. `prove` is skipped on a
-    run that is not a push. A cancelled or failed `prove` (a runner fault) runs every dependent
+    run that is neither a push nor a labelled pull request. A cancelled or failed `prove` (a runner fault) runs every dependent
     whatever `proven` says, so they must all pass.
     A `CI_BUILD_READER_JOBS` job that skipped beside a build that succeeded also passes: the
     build had no work for it. A skipped matrix job arrives as one check-run under its

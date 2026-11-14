@@ -1,4 +1,5 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8"><title>Deploy queue</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23fb923c' d='M13.13 22.19L11.5 18.36C13.07 17.78 14.54 17 15.9 16.09L13.13 22.19M5.64 12.5L1.81 10.87L7.91 8.1C7 9.46 6.22 10.93 5.64 12.5M21.61 2.39C21.61 2.39 16.66 .269 11 5.93C8.81 8.12 7.5 10.53 6.65 12.64C6.37 13.39 6.56 14.21 7.11 14.77L9.24 16.89C9.79 17.45 10.61 17.63 11.36 17.35C13.5 16.53 15.88 15.19 18.07 13C23.73 7.34 21.61 2.39 21.61 2.39M14.54 9.46C13.76 8.68 13.76 7.41 14.54 6.63S16.59 5.85 17.37 6.63C18.14 7.41 18.15 8.68 17.37 9.46C16.59 10.24 15.32 10.24 14.54 9.46M8.88 16.53L7.47 15.12L8.88 16.53M6.24 22L9.88 18.36C9.54 18.27 9.21 18.12 8.91 17.91L4.83 22H6.24M2 22H3.41L8.18 17.24L6.76 15.83L2 20.59V22M2 19.17L6.09 15.09C5.88 14.79 5.73 14.47 5.64 14.12L2 17.76V19.17Z'/%3E%3C/svg%3E">
 <style>
 :root{--base:#1e1e2e;--mantle:#181825;--surface0:#313244;--surface1:#45475a;--text:#cdd6f4;--sub:#a6adc8;--mute:#6c7086;--blue:#89b4fa;--green:#a6e3a1;--yellow:#f9e2af;--red:#f38ba8;--crust:#11111b}
 body{margin:0;background:var(--base);color:var(--text);font:15px/1.5 system-ui,sans-serif}
@@ -9,7 +10,7 @@ th{color:var(--sub);font-size:12px;text-transform:uppercase}
 code{font-family:ui-monospace,monospace;background:var(--surface0);padding:1px 4px;border-radius:3px}
 button{background:var(--blue);color:var(--crust);border:0;padding:4px 10px;border-radius:3px;font-weight:600;cursor:pointer}
 button.danger{background:var(--red)}button.warn{background:var(--yellow)}button.plain{background:var(--surface0);color:var(--text)}
-.unavail{color:var(--red)}.clear{color:var(--green)}.mute{color:var(--mute)}
+.unavail{color:var(--red)}.warn-text{color:var(--yellow)}.clear{color:var(--green)}.mute{color:var(--mute)}
 pre{background:var(--mantle);border:1px solid var(--surface1);padding:10px;overflow:auto;white-space:pre-wrap;margin:0}
 #msg{min-height:1.4em;color:var(--yellow)}
 a{color:var(--blue)}
@@ -41,6 +42,8 @@ button.link{background:none;color:var(--blue);font-size:12px;font-weight:500;pad
 <div id="logbody"></div><div id="vverdict"></div><div id="vbar" class="bar"></div></section>
 <h2>Recently finished landings <button id="finToggle" class="link" onclick="setFin({hidden:!fin.hidden})"></button></h2><div id="landings"></div>
 <h2>Open pull requests</h2><div id="prs"></div>
+<h2>Game servers</h2><div id="games"></div>
+<section id="console" hidden><h2>Console <button class="link" onclick="closeConsole()">close</button></h2><div id="conbody"></div></section>
 <script>
 const H={'X-Deploy-UI':'1','Content-Type':'application/json'};
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -136,7 +139,23 @@ function renderLog(){const d=view.data,body=document.getElementById('logbody');
     live?(view.follow?'<button class="plain" onclick="view.follow=false;renderLog()">following</button>':'<button onclick="view.follow=true;const b=document.getElementById(\'logbody\');b.scrollTop=b.scrollHeight;renderLog()">jump to live</button>'):''].filter(Boolean).join(' ');}
 document.getElementById('logbody').addEventListener('scroll',e=>{const b=e.target;const bottom=b.scrollTop+b.clientHeight>=b.scrollHeight-24;
   if(view.follow!==bottom&&view.data){view.follow=bottom;}});
-function refresh(){panel('inflight','/api/inflight',inflight).then(()=>{if(!fin.hidden)panel('landings','/api/landings',landings);});panel('prs','/api/prs',prs);}
+// A game's state word, coloured: settled states plain, transitions yellow, a missing Deployment red.
+const GAME_TONE={running:'clear',starting:'warn-text',stopping:'warn-text',partial:'warn-text',stopped:'mute',missing:'unavail'};
+const up=t=>ago(t).replace(' ago','');
+function podNote(p){return `<span class="mute">${esc(p.phase)}${p.started?', up '+up(p.started):''}${p.restarts?`, ${p.restarts} restarts`:''}</span>`;}
+function gameServers(b){if(!b.games.length)return '<p class="mute">no game servers registered</p>';
+  return '<table><tr><th>game</th><th>state</th><th>deployments (ready/desired)</th><th></th></tr>'+b.games.map(g=>`<tr><td>${esc(g.name)}</td><td class="${GAME_TONE[g.state]||''}">${esc(g.state)}</td><td>${g.deployments.map(d=>`<code>${esc(d.name)}</code> ${d.missing?'<span class="unavail">missing</span>':`${d.ready}/${d.desired} `+d.pods.map(podNote).join(' ')}`).join('<br>')}</td><td><button class="plain" onclick="openConsole('${esc(g.name)}')">console</button></td></tr>`).join('')+'</table>';}
+let consoleGame=null;
+function openConsole(name){consoleGame=name;document.getElementById('console').hidden=false;pollConsole();document.getElementById('console').scrollIntoView({behavior:'smooth'});}
+function closeConsole(){consoleGame=null;document.getElementById('console').hidden=true;}
+const clock=t=>new Date(t*1000).toLocaleString([], {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit'});
+function consoleView(b){if(!b.lines.length)return `<p class="mute">${esc(b.game)}: no console lines in the last 7 days</p>`;
+  return `<p class="mute">${esc(b.game)} · newest ${b.lines.length} lines, from Loki</p><pre id="conlines" style="max-height:420px">${b.lines.map(l=>`<span class="mute">${clock(l.ts)}</span> ${esc(l.line)}`).join('\n')}</pre>`;}
+async function pollConsole(){if(!consoleGame)return;const old=document.getElementById('conlines');
+  const atBottom=!old||old.scrollTop+old.clientHeight>=old.scrollHeight-24;
+  await panel('conbody',`/api/game-console?game=${encodeURIComponent(consoleGame)}`,consoleView);
+  const el=document.getElementById('conlines');if(el&&atBottom)el.scrollTop=el.scrollHeight;}
+function refresh(){panel('games','/api/games',gameServers);pollConsole();panel('inflight','/api/inflight',inflight).then(()=>{if(!fin.hidden)panel('landings','/api/landings',landings);});panel('prs','/api/prs',prs);}
 document.getElementById('finToggle').textContent=fin.hidden?'show':'hide';document.getElementById('landings').hidden=fin.hidden;
 function fromHash(){const m=location.hash.match(/^#log\/(.+)$/);if(m&&decodeURIComponent(m[1])!==view.name)openLog(decodeURIComponent(m[1]));}
 window.addEventListener('hashchange',fromHash);fromHash();

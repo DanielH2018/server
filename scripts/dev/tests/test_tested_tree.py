@@ -1,7 +1,11 @@
-"""tested_tree answers `proven` only for a green status that carries the pushed tree.
+"""tested_tree answers `proven` only for a green status this repository's CI recorded.
+
+A push must carry the recorded tree. A pull-request head needs a record for any tree.
 
 Run: uv run pytest scripts/dev/tests/test_tested_tree.py
 """
+
+import pytest
 
 import tested_tree
 
@@ -105,6 +109,42 @@ def test_an_unreadable_tree_is_not_proven():
     assert _prove(_pr(), _status(tree=""), tree="") is False
     assert _prove(_pr(), _status(tree="nope"), tree="nope") is False
     assert _prove(_pr(), _status(), sha="") is False
+
+
+def _prove_head(statuses, head=HEAD):
+    return tested_tree.head_is_proven(_api([], statuses), REPO_NAME, head)[0]
+
+
+def test_a_head_with_a_green_record_for_any_tree_is_proven():
+    # A head carries one status per context and run, newest first.
+    newer = _status(context="ci/other") + _status(state="failure")
+    assert _prove_head(newer + _status(tree=OTHER_TREE)) is True
+
+
+@pytest.mark.parametrize(
+    "statuses",
+    [
+        [],
+        _status(login="fake-operator"),
+        _status(target_url="https://github.com/fake-owner/r/actions/runs/1"),
+        _status(tree="a batch"),
+        OSError("down"),
+    ],
+    ids=["none", "creator", "run-url", "no-tree", "unreadable"],
+)
+def test_a_head_without_a_green_record_from_this_repositorys_ci_is_not_proven(statuses):
+    assert _prove_head(statuses) is False
+
+
+def test_main_answers_the_pull_request_question_from_the_head_alone(
+    tmp_path, monkeypatch
+):
+    output = tmp_path / "out"
+    monkeypatch.setenv("GITHUB_OUTPUT", str(output))
+    argv = ["prove-head", "--repo", REPO_NAME, "--head", HEAD]
+
+    assert tested_tree.main(argv, _api(OSError("no pulls read"), _status())) == 0
+    assert output.read_text() == "proven=true\n"
 
 
 def test_main_writes_the_answer_and_exits_zero_when_the_lookup_fails(
