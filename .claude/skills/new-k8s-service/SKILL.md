@@ -8,10 +8,9 @@ allowed-tools: Read, Write, Edit, Grep, Glob, Bash
 
 A new service belongs in `k8s/roles/<name>/` unless it must run on `daniel-pi`
 (LAN-only utilities, WireGuard; `inventory/host_vars/daniel-pi.yml:compose_services`).
-`daniel-server` and `daniel-box` have no Docker at all, so a Compose role there deploys
-nothing: only the Pi's package lists the `pi-compose` component
-(`hosts/daniel-pi/package.yml:components`) — for the Pi, use the
-`new-container` skill instead.
+`daniel-server` and `daniel-box` have no Docker at all (`hosts/daniel-server/package.yml:components`,
+`hosts/daniel-box/package.yml:components`), so a Compose role there deploys nothing — for
+the Pi, use the `new-container` skill instead.
 
 ## 1. The role — scaffold it, do not copy a sibling
 

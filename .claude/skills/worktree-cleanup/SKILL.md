@@ -70,7 +70,8 @@ a worktree the current session still holds stays `keep` until that session exits
 can do from inside a worktree makes the pruner collect it.
 
 `git worktree remove` refuses outright while a worktree is locked, and unlocking is a separate
-step — without it the command reports success having removed nothing.
+step — a caller that skips the unlock and ignores the refusal reports success having removed
+nothing, so the pruner unlocks first (`scripts/lib/worktrees.py:remove`).
 
 **Live processes.** A lock is not the only sign of use: a session can run from a tree whose
 lock names a dead pid, and deleting its `$CLAUDE_PROJECT_DIR` breaks every repo hook it runs
