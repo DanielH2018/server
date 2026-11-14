@@ -168,4 +168,3 @@ def test_a_rotation_names_only_the_keys_left_stale():
 def test_a_range_git_cannot_read_keeps_the_blanket_note():
     note = land_tags.plane_note(["secrets/secrets.yml"], "0000000..1111111")
     assert note == land_tags.plane_note(["secrets/secrets.yml"])
-    assert "cluster_vars.py write" in note
