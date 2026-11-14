@@ -110,6 +110,35 @@ def test_an_unquoted_two_part_pin_is_read_as_one():
     assert workflow_pins("ci.yml", text) == [("ci.yml", "3.14")]
 
 
+def dockerfile_python_minors(text: str) -> list[str]:
+    """The Python minor each `FROM` names, as `python:3.15-slim` or uv's `uv:python3.15-trixie-slim`."""
+    return re.findall(r"^FROM\s+(?:\S*/)?(?:python:|uv:python)(\d+\.\d+)", text, re.M)
+
+
+def test_role_dockerfiles_build_on_the_canonical_python():
+    """A built image runs role code on its base's interpreter, so the base must be the minor CI tests."""
+    canonical = _canonical()
+    found = {
+        path.relative_to(REPO).as_posix(): dockerfile_python_minors(path.read_text())
+        for path in sorted(REPO.glob("k8s/roles/*/templates/Dockerfile*.j2"))
+    }
+    found = {path: minors for path, minors in found.items() if minors}
+    assert {
+        "k8s/roles/karakeep/templates/Dockerfile.j2",
+        "k8s/roles/ical-proxy/templates/Dockerfile.j2",
+        "k8s/roles/homelab-mcp/templates/Dockerfile.j2",
+    } <= found.keys(), f"census lost a known Python base image: {sorted(found)}"
+    mismatched = {p: m for p, m in found.items() if set(m) != {canonical}}
+    assert not mismatched, (
+        f"Dockerfile Python base images disagree with .python-version ({canonical}): {mismatched}"
+    )
+
+
+def test_a_uv_base_image_names_its_python_minor():
+    text = "FROM ghcr.io/astral-sh/uv:python3.14-bookworm-slim@sha256:ab\nFROM python:3.15-slim\n"
+    assert dockerfile_python_minors(text) == ["3.14", "3.15"]
+
+
 def test_a_composite_actions_pin_is_read():
     """The CI pin's home since #3733; a workflow-only reader would find nothing there."""
     text = 'runs:\n  using: composite\n  steps:\n    - uses: actions/setup-python@v6\n      with:\n        python-version: "3.14.7"\n'
