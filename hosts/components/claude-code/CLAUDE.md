@@ -309,10 +309,15 @@ server#8250 slice 2. `homelab-claude-guardrail-ack.timer` runs `files/claude_gua
 as root on both hosts, two minutes after each audit run.
 
 - **Scope:** every file under `claude_code_guardrail_audit_paths`, never the memory stores.
-  A change is explained, and stays quiet, when the file matches its package's md5, when it
+  A change is explained, and stays quiet, when the file matches its package's md5 and the
+  installed version is one an apt source publishes, when it
   matches what chezmoi renders for its owner from the dotfiles repo's `main`, or when a
   settings.json change touches only `claude_code_guardrail_ack_quiet_settings_keys`. The
-  operator ruled on 2026-11-13 to post only the rest. A posted diff masks any line naming a
+  operator ruled on 2026-11-13 to post only the rest. A package built from a branch and
+  installed with `dpkg -i` matches its own md5 but no published version, so its change posts
+  with the installed version and the newest published one (#8415). Reconcile's `applied.json`
+  cannot make that split: the postinst starts reconcile, which records the hand-installed
+  version as well. A posted diff masks any line naming a
   token, key, secret, password or webhook, and any long credential-shaped value.
 - **Mode:** `claude_code_guardrail_ack_enabled`. False drops the timer, its units and the
   config from the next package version, and keeps the state under

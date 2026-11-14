@@ -5,7 +5,11 @@ server#8250 slice 2. homelab-claude-guardrail-ack.timer runs this as root on bot
 reads every file under the guardrail paths in the config, compares it with the copy the last run
 kept, and classifies each change:
 
-- explained by a package: dpkg owns the path, and the file matches the installed package's md5;
+- explained by a package: dpkg owns the path, the file matches the installed package's md5, and
+  the installed version is one the apt sources publish. A package built elsewhere and installed
+  with `dpkg -i` matches its own md5 but no published version, so its change is posted with the
+  installed version and the newest published one. Reconcile's record cannot make this split,
+  because the postinst starts reconcile, which records the hand-installed version too;
 - explained by the dotfiles: the path is under a user's home, and the file matches what chezmoi
   renders for that user from the dotfiles repo's `main`;
 - Claude Code's own write: a settings.json whose changed top-level keys are all in
@@ -55,6 +59,7 @@ class Change:
     old: bytes | None
     new: bytes | None
     reason: str = ""
+    note: str = ""
 
     @property
     def explained(self) -> bool:
@@ -82,8 +87,17 @@ def files_under(paths: list[str]) -> dict[str, bytes]:
     return found
 
 
-def dpkg_md5(path: str) -> str | None:
-    """The md5 the owning package records for `path`, or None when no package owns it."""
+@dataclass(frozen=True)
+class Owner:
+    """The installed package that owns a path, and what it records for that path."""
+
+    package: str
+    version: str
+    md5: str
+
+
+def dpkg_owner(path: str) -> Owner | None:
+    """The package that owns `path` with its version and recorded md5, or None if none owns it."""
     owner = subprocess.run(["dpkg-query", "-S", path], capture_output=True, text=True)
     if owner.returncode != 0:
         return None
@@ -91,11 +105,41 @@ def dpkg_md5(path: str) -> str | None:
     sums = Path(f"/var/lib/dpkg/info/{package}.md5sums")
     if not sums.is_file():
         return None
+    version = subprocess.run(
+        ["dpkg-query", "-W", "-f", "${Version}", package],
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
     for line in sums.read_text().splitlines():
         digest, _, name = line.partition("  ")
         if "/" + name == path:
-            return digest
+            return Owner(package, version, digest)
     return None
+
+
+_POLICY_VERSION = re.compile(r"^ (?:\*\*\*| {3}) (\S+) -?\d+$")
+_POLICY_SOURCE = re.compile(r"^ {8}-?\d+ (.+)$")
+
+
+def published_versions(policy: str) -> list[str]:
+    """The versions an `apt-cache policy` table lists from a source other than dpkg's status file, newest first."""
+    found: list[str] = []
+    version = None
+    for line in policy.splitlines():
+        if m := _POLICY_VERSION.match(line):
+            version = m.group(1)
+        elif (m := _POLICY_SOURCE.match(line)) and version is not None:
+            if m.group(1) != "/var/lib/dpkg/status" and version not in found:
+                found.append(version)
+    return found
+
+
+def apt_published(package: str) -> list[str]:
+    """The versions of `package` the apt sources publish, newest first."""
+    proc = subprocess.run(
+        ["apt-cache", "policy", package], capture_output=True, text=True, timeout=60
+    )
+    return published_versions(proc.stdout) if proc.returncode == 0 else []
 
 
 def chezmoi_render(user: str, chezmoi: str, source: str, target: str) -> bytes | None:
@@ -191,12 +235,14 @@ class Boundaries:
     """The calls a run makes outside this process, so a test can replace them.
 
     Attributes:
-        md5: The installed package's md5 for a path, or None when no package owns it.
+        owner: The installed package that owns a path, or None when no package owns it.
+        published: The versions of a package the apt sources publish, newest first.
         render: What chezmoi renders for (user, chezmoi binary, source, target), or None.
         sync: Bring the dotfiles clone to `main` from (repo, clone); returns its commit.
     """
 
-    md5: Callable[[str], str | None] = dpkg_md5
+    owner: Callable[[str], Owner | None] = dpkg_owner
+    published: Callable[[str], list[str]] = apt_published
     render: Callable[[str, str, str, str], bytes | None] = chezmoi_render
     sync: Callable[[str, str], str] = sync_dotfiles
 
@@ -208,10 +254,19 @@ def classify(
     change: Change, config: dict, tools: Boundaries, dotfiles: Callable[[], str]
 ) -> Change:
     """The change with its reason filled in when something explains it."""
-    if change.new is not None:
-        digest = tools.md5(change.path)
-        if digest is not None and digest == hashlib.md5(change.new).hexdigest():
+    owner = tools.owner(change.path) if change.new is not None else None
+    if owner is not None and owner.md5 == hashlib.md5(change.new or b"").hexdigest():
+        published = tools.published(owner.package)
+        if owner.version in published:
             return Change(change.path, change.old, change.new, "package")
+        newest = published[0] if published else "none"
+        change = Change(
+            change.path,
+            change.old,
+            change.new,
+            note=f"{owner.package} {owner.version} is installed, and no apt source "
+            f"publishes it; the newest published version is {newest}",
+        )
     if change.path.endswith("/settings.json") and quiet_settings_change(
         change.old, change.new, set(config["quiet_settings_keys"])
     ):
@@ -259,7 +314,10 @@ def message(host: str, unexplained: list[Change]) -> str:
             if change.new is None
             else "changed"
         )
-        parts.append(f"`{change.path}` {state}\n```diff\n{masked_diff(change)}\n```")
+        note = f" ({change.note})" if change.note else ""
+        parts.append(
+            f"`{change.path}` {state}{note}\n```diff\n{masked_diff(change)}\n```"
+        )
     parts.append(
         'Read the audit record: `{job="audit"} |= "claude-guardrail"` in loki-homelab.'
     )
