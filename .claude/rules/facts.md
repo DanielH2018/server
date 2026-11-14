@@ -33,7 +33,7 @@ k8s/roles/traefik/defaults/main.yml:traefik_k8s_https_port
 # a test node
 scripts/lib/tests/test_kubectl.py::test_asking_for_staging_against_a_prod_kubectl_is_flagged
 # a DECIDED: marker, cited by text prefix
-scripts/deploy_tools/land_lib/land_tags.py:DECIDED: fire on ANY change
+scripts/deploy_tools/land_lib/land_tags.py:DECIDED: name the changed keys
 ```
 
 A test node must carry `# fact: <doc>#<heading>` in its body, or the lint warns that the

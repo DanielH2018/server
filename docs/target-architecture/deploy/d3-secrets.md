@@ -278,8 +278,8 @@ delivery path, which D5 uses when their roles move.
 - **A rotation maps to no deploy tag.** `scripts/deploy_tools/land_lib/land_tags.py:_ROTATION_NOTE`
   says so, and sends the operator to `scripts/secrets_mgmt/consumers.py:consumer_commands`.
   That function prints one `./scripts/deploy.sh --tags "<tags>"` line over every k8s
-  consumer. `land_tags.py` carries the marker `DECIDED fire on ANY change to secrets.yml,
-  and never try to name which keys moved`. In
+  consumer. `land_tags.py` carries the marker `DECIDED name the changed keys by comparing
+  ciphertext`, which since #8369 names only the keys a landing leaves stale. In
   `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_changes.py:services_from_changed_paths`,
   `secrets.yml` sets only `cs.secrets`, and another path under `secrets/` matches no
   plane and adds nothing.
@@ -747,8 +747,8 @@ procedure, and `docs/break-glass.md` lists the key in its recovery kit.
 - **`land-wait` waits on the Flux half of a cluster-secret PR.** A PR that changes
   `cluster-vars.sops.env` or `cluster-vars.source` touches no role. D3.4 makes `land-wait`
   treat it as touching `cluster-vars` and every flux-owned tag whose Kustomization depends
-  on `cluster-vars`. It names no changed key, so it keeps to the `DECIDED fire on ANY change
-  to secrets.yml` marker in `land_tags.py`. This rule is interim. C6 has `land.sh` read its
+  on `cluster-vars`. It names no changed key: it decrypts nothing, as the `DECIDED name the
+  changed keys by comparing ciphertext` marker in `land_tags.py` requires. This rule is interim. C6 has `land.sh` read its
   changed set from `digests.json` and derive no tags itself (D6), and C1 counts the
   `cluster-vars` files in every substituting tag's `footprint`. The rule retires in the PR
   that makes that switch.
@@ -1551,8 +1551,7 @@ and D3.10. This round replaces both under C3's default.
   *Risks* names the window as failure class 5.
 - **D3-R10-07 (medium). No tool waited on the Flux half of a cluster-secret PR.** Fixed.
   D3.4 makes `land-wait` wait on `cluster-vars` and its dependents for such a PR, with a
-  pair, and names no key, in keeping with `land_tags.py`'s `DECIDED fire on ANY change`
-  marker. *Verification* gives the statuses read for D3.3a, D3.3b, D3.4 step 3 and D3.9.
+  pair, and names no key, in keeping with the marker `land_tags.py` carried at the time. *Verification* gives the statuses read for D3.3a, D3.3b, D3.4 step 3 and D3.9.
 - **D3-R10-08 (medium). Decrypted SOPS manifests went through substitution.** Fixed. `write`
   adds `kustomize.toolkit.fluxcd.io/substitute: disabled` before encrypting, because the SOPS
   MAC covers the plaintext fields. The renderer copies the file byte for byte and refuses one
