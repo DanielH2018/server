@@ -47,16 +47,30 @@ def _tools(issues, *, worktrees=None, **api):
     return build_tools(Fakes(api=answers, worktree_facts=worktrees or facts()))
 
 
-def test_describe_declares_new_the_only_terminal_and_forgets_the_last_baseline(
-    tmp_path,
-):
+def test_describe_forgets_the_last_baseline(tmp_path):
     baseline = tmp_path / "b.json"
     baseline.write_text('{"after": 9}')
-    assert new_issue_probe.describe(baseline) == {
-        "terminal": {"new": 0},
-        "interval_s": 300,
-    }
+    assert new_issue_probe.describe(baseline)["interval_s"] == 300
     assert not baseline.exists()
+
+
+def test_the_declared_states_keep_cc_wait_s_contract():
+    """cc-wait refuses a source whose every terminal state exits 0, or that claims 2 or 75."""
+    codes = set(new_issue_probe.describe(None)["terminal"].values())
+    assert 0 in codes
+    assert any(code != 0 for code in codes)
+    assert not {2, 75} & codes
+
+
+def test_gh_with_no_login_ends_the_wait_gh_unauthenticated(capsys):
+    error = subprocess.CalledProcessError(4, ["gh"], stderr="gh auth login required")
+    tools, _ = build_tools(Fakes(json_errors={f"api {REG}/issues": error}))
+    assert main(["new-issues", "--after", "5"], tools) == 0
+    reading = json.loads(capsys.readouterr().out)
+    assert reading == {
+        "state": "gh-unauthenticated",
+        "detail": "gh auth login required",
+    }
 
 
 def test_a_wait_with_no_after_ends_only_on_an_issue_filed_after_it_began(tmp_path):

@@ -301,7 +301,8 @@ does, so `room` is not a promise the issue-body gates pass. Launch within a minu
 **Waiting for more work once the queue is empty.** When `next --json` lists nothing free,
 run `cc-wait findings [--repo OWNER/NAME] --after N --budget 1740` in the background, and
 re-run it on exit 75. N is the highest issue number the orchestrator has seen. The wait ends
-`new` (exit 0) once `next` would list a free issue numbered above N. Its detail is JSON
+`new` (exit 0) once `next` would list a free issue numbered above N, or `gh-unauthenticated`
+(4) when gh has no login, which no wait fixes. The `new` detail is JSON
 naming each one's number, title, severity, cited paths, `no_vetted_remediation` and
 `solo_only`, so the orchestrator can group and claim without another read. A new issue that
 is claimed, deferred, blocked, `manual` or named by an open PR keeps the wait open, because

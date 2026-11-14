@@ -10,8 +10,12 @@ asks, "has anything new been filed that I could pick up?", without re-running
 
 THE STATE.
 
-    none  (open)  no free issue numbered above the baseline
-    new   0       one or more; the detail is JSON naming each one
+    none                (open)  no free issue numbered above the baseline
+    new                 0       one or more; the detail is JSON naming each one
+    gh-unauthenticated  4       gh exited 4: no login is configured, which no wait fixes
+
+cc-wait refuses a source whose terminal states all exit 0, since it could never report a
+failure, so `gh-unauthenticated` is the one failure that ends the wait.
 
 "Free" is `claim.free_issues`, the definition `next` prints, so the wait ends exactly when
 `next` would list an issue above the baseline. A new issue that is claimed, deferred,
@@ -25,8 +29,8 @@ wait, deletes it, and the first read that reaches GitHub records it. A resumed w
 `--after` therefore re-baselines, and an issue filed between the two runs is missed. Every
 `none` detail names the baseline so a resume can pass it as `--after`.
 
-A FAILED READ EXITS 1, through `findings.main`'s gh-failure handler, and prints nothing on
-stdout, so cc-wait retries it. It is never read as "nothing new".
+ANY OTHER FAILED READ EXITS 1, through `findings.main`'s gh-failure handler, and prints
+nothing on stdout, so cc-wait retries it. It is never read as "nothing new".
 
 ONE REST REQUEST A QUIET READ. The newest open issues come from one `gh api` call. A new
 issue costs one more call for open PR bodies, plus one per thread it carries (comments,
@@ -37,6 +41,7 @@ import argparse
 import hashlib
 import json
 import os
+import subprocess
 from datetime import date
 from pathlib import Path
 
@@ -56,7 +61,10 @@ from dev.findings_lib.gh_calls import (
 )
 from dev.findings_lib.issue_model import PR_REPO, today_utc
 
-TERMINAL = {"new": 0}
+TERMINAL = {"new": 0, "gh-unauthenticated": 4}
+
+# gh's documented exit code for "authentication required".
+GH_AUTH_REQUIRED = 4
 
 # The fields an orchestrator groups and launches on without another read.
 REPORTED = (
@@ -131,5 +139,12 @@ def cmd_new_issues(args: argparse.Namespace, tools: FindingsTools) -> int:
     if args.describe:
         print(json.dumps(describe(None if args.after is not None else baseline)))
         return 0
-    print(json.dumps(read(tools, args.after, baseline, today_utc())))
+    try:
+        reading = read(tools, args.after, baseline, today_utc())
+    except subprocess.CalledProcessError as exc:
+        if exc.returncode != GH_AUTH_REQUIRED:
+            raise
+        detail = (exc.stderr or "").strip().splitlines()[-1:] or ["gh is not logged in"]
+        reading = {"state": "gh-unauthenticated", "detail": detail[0]}
+    print(json.dumps(reading))
     return 0
