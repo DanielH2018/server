@@ -86,7 +86,9 @@ peanut, and a host package can read it too. Every step that handles the value is
 3. Run `uv run python scripts/secrets_mgmt/secret_rotation.py consumers <key>`. It prints the
    Flux path for each k8s consumer, and a command for each host package.
 4. Land the PR with `land.sh`. A PR that changes either cluster file waits on the
-   `cluster-vars` Kustomization and on every Kustomization that depends on it.
+   `cluster-vars` Kustomization and on every Kustomization that depends on it. The landing
+   ends `settled` when the PR refreshed every copy of each rotated key, and
+   `needs-manual-apply` naming each key it left stale.
 5. Run any host-package command from step 3.
 
 ### Changing secrets.yml's recipients
@@ -204,8 +206,9 @@ redeploy the app **and** every consumer (for example, Homepage, monitor-bridge, 
 date left behind is not fatal: `audit` advances it to the commit that changed the ciphertext
 before deciding what is due. Examples:
 - `*_api_key` (sonarr/radarr/jellyfin/prowlarr): Settings → General → regenerate API key.
-  **Bazarr is a consumer of `sonarr_api_key` and `radarr_api_key` that no deploy reaches.** It
-  stores both in its own config on the `bazarr-config` PVC, entered through its UI, so there is
+  **Bazarr is a consumer of `sonarr_api_key` and `radarr_api_key` that no deploy reaches**, so
+  `stale_copies.OUTSIDE_THE_TREE` lists both, and a landing that rotates either ends
+  `needs-manual-apply`. It stores both in its own config on the `bazarr-config` PVC, entered through its UI, so there is
   no Ansible template holding them and no redeploy that updates them. After rotating either key,
   set it in Bazarr → Settings → Sonarr → API Key and Settings → Radarr → API Key, then restart
   Bazarr from System → Restart. The restart is required, not cosmetic: Bazarr's SignalR client

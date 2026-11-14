@@ -144,3 +144,28 @@ def test_a_secrets_rotation_sends_every_k8s_reader_through_cluster_vars(files):
     assert "cluster_vars.py write" in note
     assert "secret-readers:" not in note
     assert "this landing waits on that apply" not in note
+
+
+# ── plane_note with the PR's range: only the keys the landing leaves stale (#8369) ──
+
+
+def test_a_rotation_that_refreshed_every_copy_owes_no_hand():
+    note = land_tags.plane_note(
+        ["secrets/secrets.yml"], "a1..b2", read_stale=lambda old, new: {}
+    )
+    assert note == ""
+
+
+def test_a_rotation_names_only_the_keys_left_stale():
+    stale = {"sonarr_api_key": "Bazarr's config holds a copy no deploy reaches"}
+    note = land_tags.plane_note(
+        ["secrets/secrets.yml"], "a1..b2", read_stale=lambda old, new: stale
+    )
+    assert "`sonarr_api_key`: Bazarr's config holds a copy" in note
+    assert "regenerate it with `cluster_vars.py write`" not in note
+
+
+def test_a_range_git_cannot_read_keeps_the_blanket_note():
+    note = land_tags.plane_note(["secrets/secrets.yml"], "0000000..1111111")
+    assert note == land_tags.plane_note(["secrets/secrets.yml"])
+    assert "cluster_vars.py write" in note
