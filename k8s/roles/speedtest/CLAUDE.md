@@ -1,6 +1,7 @@
 # speedtest — speedtest-tracker
 
-`linuxserver/speedtest-tracker`, a periodic self-hosted speed test with history. See
+`linuxserver/speedtest-tracker` (`speedtest_k8s_image` in
+`k8s/roles/speedtest/defaults/main.yml`), a periodic self-hosted speed test with history. See
 repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
@@ -45,20 +46,22 @@ repo-root `CLAUDE.md` for shared conventions.
   below for why this cannot be set any other way.
 
 ## Notable
-- Was the original slice-1 auto-deploy pilot, paused for the same `Recreate` + RWO PVC
+- **HISTORY —** Was the original slice-1 auto-deploy pilot, paused for the same `Recreate` + RWO PVC
   shape every other \*arr-adjacent role was held back for; the snapshot/revert machinery
   added in slice 7b is what let it re-enable.
-- The image is pinned `tag@sha256` rather than a bare digest, deliberately: Renovate's
+- The image is pinned `tag@sha256` rather than a bare digest, deliberately
+  (`speedtest_k8s_image` in `k8s/roles/speedtest/defaults/main.yml`): Renovate's
   k8s-defaults manager tracks the tag to raise digest-bump PRs, and a bare `@sha256`
   pin would freeze with no update signal.
 - **Prometheus scrape (#996) needs the manual UI toggle above — there is no declarative
   alternative, checked at the exact pinned build.** monitor-bridge's `speedtest` check
-  reads the app's REST API and exports an up/down verdict, not the speed — a
+  (`k8s/roles/monitor-bridge/files/checks/host_edge.py:check_speedtest`) reads the app's REST API and exports an up/down verdict, not the speed — a
   degradation (the 2026-09-03 78.8 Mbps DOWN, itself below the worst-ever
   119 Mbps this pinned server had returned) had no history. The image natively exposes
   `/prometheus` (`speedtest_tracker_download_bits`, `_upload_bits`, `_ping_ms`, etc.,
-  labeled by server/ISP), scraped by observability's `prometheus.yaml.j2`
-  (`job_name: speedtest`).
+  labeled by server/ISP), scraped by the `speedtest` job that observability's
+  `prometheus.yaml.j2` derives from the `metrics` item on this role's `containers_list` entry
+  (`scripts/renderer/template_filters/scrape_jobs.py:scrape_jobs`).
 
   The pin (`defaults/main.yml`) resolves to upstream `alexjustesen/speedtest-tracker`
   tag `v1.14.7`, LSIO build `ls166` (confirmed via the image's
@@ -75,7 +78,7 @@ repo-root `CLAUDE.md` for shared conventions.
   Prometheus-related. This role has no precedent for seeding an app's DB-backed setting
   either, unlike
   `SPEEDTEST_SCHEDULE` and the other `SPEEDTEST_*` env vars in
-  `templates/deployment.yaml.j2`, which the app *does* read directly.
+  `k8s/roles/speedtest/templates/deployment.yaml.j2`, which the app *does* read directly.
 
   Until the toggle is flipped, the scrape target 404s and reads `up == 0` — loud, not a
   silently-missing series. `prometheus_allowed_ips` can stay empty: blank means "allow

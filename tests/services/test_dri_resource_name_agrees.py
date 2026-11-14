@@ -95,6 +95,7 @@ def _consumer_name() -> str:
 
 
 def test_every_consumer_requests_the_same_resource_name():
+    # fact: k8s/roles/gpu-exporter/CLAUDE.md#The two nodes have different GPUs, and #1446 named the wrong one
     names = _consumer_names()
     assert len(set().union(*names.values())) == 1, (
         f"the GPU consumers disagree on the extended-resource name: {names}. A consumer "
@@ -158,6 +159,7 @@ def test_a_rule_watching_the_unsanitised_name_is_flagged():
 
 
 def test_the_plugin_advertises_the_name_the_consumers_request():
+    # fact: k8s/roles/dri-device-plugin/CLAUDE.md#dri-device-plugin — advertises the AMD render node as a schedulable resource
     advertised: set[str] = set()
     for role, _tpl, doc in rendered_docs():
         if role == _PLUGIN_ROLE and doc.get("kind") == "DaemonSet":
