@@ -1,7 +1,7 @@
 # G11 — The binding sweep
 
-Status: IN PROGRESS. The measure is corrected: `report` leaves out a section with no
-prose. The pilot batch, step 1, is next.
+Status: IN PROGRESS. The measure is corrected, and the pilot batch, step 1, is done. Its
+30-day comparison is due on 2026-12-14.
 
 Depends on: [G7](g7-removed-names.md) and [G10](g10-value-rows.md). The sweep reads the
 doc set the first defines and binds sentences to the rows the second builds.
@@ -66,6 +66,39 @@ hold no prose: 10 preambles and 4 headings whose text all sits under subheadings
 `scripts/lib/facts/citations.py:has_prose` leaves them out, and the backlog fell from 262
 rows to 248. The exit criterion reads this ranking, so the correction comes before the
 first batch.
+
+## Step 1 result
+
+The pilot bound the four root `CLAUDE.md` sections that cited nothing. The plan counted
+five: the fifth was the file's title, which holds no prose.
+
+| Section | Sentence | Bound to |
+|---|---|---|
+| After a PR Merges | only `land.sh` reports how a landing ended | the `Verdict` symbol |
+| When to wait | `probe.py landing` reads the hold and master CI | the `run_landing` symbol |
+| When to wait | a docs-only change ends `nothing-to-deploy` | a test node |
+| Parallel Claude Sessions | the `worktree-` branch prefix | the `branch_prefix` symbol |
+| Parallel Claude Sessions | the `--sessions` listing | the `print_all_sessions` symbol |
+| Pre-commit Hooks | the files the commit-time hooks run | the `hook_files` symbol |
+| Pre-commit Hooks | the advice `repo_guards.py` prints | the `ADVICE` symbol |
+| Pre-commit Hooks | one untracked file parks the checkout sync | a test node |
+
+- **The one value already had a detector, and keeps it.** The section says the hooks run
+  "twenty-five" test files, and
+  `tests/repo/test_static_ratchet_hook.py::test_claude_md_states_how_many_files_the_hook_runs`
+  holds that count against the hooks. The test fails and rewrites nothing. Moving it to a
+  `VALUES` row would add the fixer, and is not part of this batch.
+- **Three sentences stay unbound.** "CI's `pytest` job runs the whole suite on every PR"
+  has no citable owner: the job's YAML holds action pins Renovate bumps, which the
+  `renovate-pin` rule refuses. The Claude Code binary's refusal of a command it cannot
+  verify, and the `ExitWorktree` warning, describe the harness, which this tree does not
+  hold.
+- **Four rule sections are left.** Two are directives and cite nothing by design: "A check
+  that reaches over a network measures its transport first" in `python-layout.md`, and
+  "Never print a secret value" in `k8s-templates.md`. The two in `docker.md` wait for a
+  fan-out batch that was editing that file on 2026-11-14.
+- The root file grew by eight citations. The 30-day comparison counts the notice rows they
+  draw against the 0.29 unedited rows per content citation that G9 measured.
 
 ## Verification
 
