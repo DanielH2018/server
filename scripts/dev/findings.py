@@ -558,8 +558,8 @@ def _recording_writes(tools: FindingsTools) -> tuple[FindingsTools, set[int]]:
     def gh(*argv, **kwargs):
         result = inner(*argv, **kwargs)
         if len(argv) > 2 and argv[0] == "issue" and argv[1] in _ISSUE_WRITES:
-            number = (
-                created_number(result.stdout) if argv[1] == "create" else int(argv[2])
+            number = created_number(
+                result.stdout if argv[1] == "create" else str(argv[2])
             )
             if number is not None:
                 written.add(number)
