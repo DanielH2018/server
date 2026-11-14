@@ -15,10 +15,14 @@ directory above it is created 0700 with that owner. Rewriting an existing file k
 mode. Both rules exist because sshd's `StrictModes` rejects an authorized_keys file or a `~/.ssh`
 the arm left with the wrong ones.
 
-Before it writes, the arm runs `dpkg -S` on the path, once per path per run. It accepts an unowned file, and an owned file
-only when every owner lists the path among its conffiles. It refuses any other owned file, so it
-can never fight dpkg, and a refusal is a fault: the package shipped something wrong. The arm never
-removes a line, so it keeps no record and reports no drift.
+Before it writes, the arm asks dpkg who owns every path the edits name, in one `dpkg -S` call per
+run. Each call reads every installed package's file list, which took up to 12s per call on the Pi
+during an update, so one call per path cost the Pi about 50s of disk reads on every package
+install (#8610). The arm accepts an unowned file, and an owned file only when every owner lists
+the path among its conffiles. It refuses any other owned file, so it can never fight dpkg, and a
+refusal is a fault: the package shipped something wrong. A path that dpkg neither gives an owner
+nor reports as unmatched is refused as well, so an answer the arm cannot read never counts as
+unowned. The arm never removes a line, so it keeps no record and reports no drift.
 
 `activate:` on an edit is not read here. The renderer writes it into the manifest's `activations`
 map, and step 3b runs the action when the file's hash changes.
@@ -71,18 +75,31 @@ def valid(section: object) -> bool:
     )
 
 
-def refusal(path: str) -> str | None:
-    """Why the arm must not edit `path`, or None when no package owns it or only a conffile."""
-    found = run("dpkg", "-S", path)
-    if found.returncode == 1:
-        return None
-    owners = set()
+def refusals(paths: list[str]) -> dict[str, str | None]:
+    """Why the arm must not edit each path: None when no package owns it, or owns it as a conffile."""
+    if not paths:
+        return {}
+    found = run("dpkg", "-S", *paths)
+    if found.returncode not in (0, 1):
+        return {path: f"dpkg -S failed: {found.stderr.strip()}" for path in paths}
+    owners: dict[str, set[str]] = {path: set() for path in paths}
     for line in found.stdout.splitlines():
         head, _, tail = line.rpartition(": ")
-        if tail == path and not head.startswith("diversion"):
-            owners.update(owner.strip() for owner in head.split(","))
-    if found.returncode != 0 or not owners:
-        return f"dpkg -S {path} failed: {found.stderr.strip()}"
+        if tail in owners and not head.startswith("diversion"):
+            owners[tail].update(owner.strip() for owner in head.split(","))
+    unmatched = set(found.stderr.splitlines())
+    result = {}
+    for path in paths:
+        if owners[path]:
+            result[path] = conffile_refusal(path, owners[path])
+        elif f"dpkg-query: no path found matching pattern {path}" in unmatched:
+            result[path] = None
+        else:
+            result[path] = f"dpkg -S {path} failed: {found.stderr.strip()}"
+    return result
+
+
+def conffile_refusal(path: str, owners: set[str]) -> str | None:
     for owner in sorted(owners):
         listed = run("dpkg-query", "-W", "-f", "${Conffiles}\\n", owner).stdout
         if path not in (row.split()[0] for row in listed.splitlines() if row.strip()):
@@ -153,11 +170,8 @@ def write(target: Path, text: str, mode: str) -> None:
     os.replace(tmp, target)
 
 
-def apply(edit: dict, refusals: dict[str, str | None]) -> bool:
-    """Apply one edit; `refusals` caches `refusal()` by path for the rest of the run."""
-    if edit["path"] not in refusals:
-        refusals[edit["path"]] = refusal(edit["path"])
-    problem = refusals[edit["path"]]
+def apply(edit: dict, problem: str | None) -> bool:
+    """Apply one edit, unless `problem` says why the arm must not edit its path."""
     if problem:
         log(f"lines: {problem}; refusing the edit", ERR)
         return False
@@ -177,5 +191,5 @@ def apply(edit: dict, refusals: dict[str, str | None]) -> bool:
 def reconcile(section: dict | None, prev: dict | None) -> tuple[bool, None, int]:
     """Run the arm. Return whether every edit applied; it keeps no record and counts no drift."""
     edits = section["edits"] if section else []
-    refusals: dict[str, str | None] = {}
-    return all([apply(edit, refusals) for edit in edits]), None, 0
+    problems = refusals(list(dict.fromkeys(edit["path"] for edit in edits)))
+    return all([apply(edit, problems[edit["path"]]) for edit in edits]), None, 0

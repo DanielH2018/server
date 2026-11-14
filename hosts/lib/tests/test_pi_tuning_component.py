@@ -170,6 +170,17 @@ def test_no_apt_hook_runs_apt_check_and_a_second_run_changes_nothing(package):
     assert twice == once
 
 
+def test_needrestart_skips_its_kernel_check_and_keeps_its_service_restarts(package):
+    settings = dict(
+        re.findall(
+            r"^\$nrconf\{(\w+)\}\s*=\s*(.+?);",
+            _text(package, "/etc/needrestart/conf.d/50-homelab.conf"),
+            re.M,
+        )
+    )
+    assert settings == {"kernelhints": "0"}
+
+
 def test_the_size_anchor_leaves_log_disk_size_alone(package):
     edits = _edits(package, LOG2RAM_CONF)
     size = edits["SIZE=128M"]["regexp"]
