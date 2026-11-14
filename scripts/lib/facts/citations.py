@@ -1,8 +1,8 @@
 """The closed citation grammar for the two fact stores.
 
 A backticked span in a memory entry or a ``CLAUDE.md`` section is one of three things:
-support (one of ``FORMS``), rejected (a form the spec excludes because it drifts on its own,
-``REJECT_REASONS``), or not a citation at all (a command, a flag, a bare word, a host:port).
+support (one of ``FORMS``), rejected (a ``file:line`` form, which drifts under every edit
+above the line), or not a citation at all (a command, a flag, a bare word, a host:port).
 The third case is ignored, never rejected: prose quotes commands constantly, and a lint
 that flagged every backtick would be switched off within a day.
 
@@ -21,7 +21,6 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from lib.git import git
 
 FORMS = frozenset({"path", "symbol", "yaml", "test", "marker"})
-REJECT_REASONS = frozenset({"file:line"})
 
 
 @dataclass(frozen=True)
@@ -295,6 +294,22 @@ def sections(doc_path: str, text: str) -> list[Section]:
     return out
 
 
+_FRONTMATTER = re.compile(r"\A---\n.*?\n---\n", re.DOTALL)
+
+
+def has_prose(section: Section) -> bool:
+    """Whether ``section`` holds any text a citation could support.
+
+    A heading with nothing under it holds none: a title, or a parent whose text all sits
+    under its subheadings. Neither does a preamble that is only the file's YAML
+    frontmatter, which every rule under ``.claude/rules/`` opens with.
+    """
+    body = section.body
+    if not section.heading:
+        body = _FRONTMATTER.sub("", body, count=1)
+    return bool(body.strip())
+
+
 def is_fact_doc(path: str) -> bool:
     """Whether the repo-relative ``path`` is an instruction file that fact support reads.
 
@@ -384,13 +399,17 @@ def repo_citations(repo: Path) -> Citations:
 
     The tracked set is read once per call: an out-of-tree span (``origin/master``, an
     untracked or gitignored file) parses as a path citation but is not support, so it is
-    dropped. A section that cites nothing maps to an empty list.
+    dropped. A section that cites nothing maps to an empty list. A section with no prose
+    (``has_prose``) is left out: it has nothing to bind, so counting it as uncited would
+    rank a title above the sections a reader can act on.
     """
     tracked = tracked_files(repo)
     out: dict[str, list[Citation]] = {}
     for doc in repo_docs(repo):
         rel = doc.relative_to(repo).as_posix()
         for sec in sections(rel, doc.read_text(encoding="utf-8")):
+            if not has_prose(sec):
+                continue
             cites, _ = parse_citations(sec.body)
             out[sec.key] = [c for c in cites if in_tree(c, tracked)]
     return out

@@ -24,11 +24,13 @@ n8n_k8s_runners_image: "{{ k8s_registry_pull_host }}/n8n-runners:{{ k8s_built_im
 k8s_autodeploy: false
 k8s_autodeploy_reason: "two reasons: (1) probe-less n8n-runners sub-deployment; (2) migrating state — Recreate + RWO PVC (n8n-data) holding the encryption key + credentials DB. COUPLING NOTE for a future promotion: n8n declares TWO claims, n8n-data and n8n-files — a revert of one without the other desyncs which workflow-referenced /files paths actually exist against the credentials/workflow state in n8n-data"
 
-# One set of blast-radius caps for both workloads.
+# One set of blast-radius caps for both workloads. Memory requests are per workload: the
+# 7-day p95 working set on 2026-11-14 was 439Mi for n8n and 97Mi for the runners.
 n8n_k8s_cpu_limit: "2"
 n8n_k8s_mem_limit: 2048Mi
 n8n_k8s_cpu_request: "100m"
-n8n_k8s_mem_request: 128Mi
+n8n_k8s_mem_request: 448Mi
+n8n_k8s_runners_mem_request: 128Mi
 
 # Holds workflows, execution history, the encrypted credentials in
 # database.sqlite AND the key that decrypts them in `config`. On `longhorn` (backed up to B2),

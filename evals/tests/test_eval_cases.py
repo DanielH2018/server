@@ -353,3 +353,91 @@ def test_every_quoted_claude_md_section_matches_the_live_file():
         "section into each case's input so the case grades the text a session is given "
         "(evals/README.md, rule 5)."
     )
+
+
+# A skill or agent under `.claude/` with no case, and why a hermetic case cannot measure it. A
+# case cannot exist without its target, and an exemption cannot outlive the case that replaces it.
+NO_CASE = {
+    "web-to-rss": "its rules are only right against the live page's markup, which a hermetic run "
+    "cannot fetch; a pasted page grades XPath writing, not the skill",
+    "z2m-device-setting": "its whole effect is an authenticated MQTT publish to a live device; "
+    "a hermetic run has no broker and nothing to grade but a command string",
+    "homelab-docs-freshness-reviewer": "its job is reading the tree at HEAD to confirm a doc "
+    "line still holds; a pasted fixture replaces that reading, so a case grades another task",
+}
+_ISSUE_REF_RE = re.compile(r"#\d+")
+SKILLS_DIR = REPO / ".claude" / "skills"
+AGENTS_DIR = REPO / ".claude" / "agents"
+
+
+def eval_targets(
+    skills_dir: Path = SKILLS_DIR, agents_dir: Path = AGENTS_DIR
+) -> set[str]:
+    """Every skill (a directory holding SKILL.md) and agent (a top-level .md) a case can name."""
+    return {p.parent.name for p in skills_dir.glob("*/SKILL.md")} | {
+        p.stem for p in agents_dir.glob("*.md")
+    }
+
+
+def coverage_problems(
+    targets: set[str], case_dirs: set[str], no_case: dict[str, str]
+) -> list[str]:
+    exempt = set(no_case)
+    return (
+        [
+            f"{t}: no evals/cases/{t}/ and no NO_CASE reason"
+            for t in sorted(targets - case_dirs - exempt)
+        ]
+        + [
+            f"{t}: has a case, so its NO_CASE entry is stale"
+            for t in sorted(exempt & case_dirs)
+        ]
+        + [f"{t}: NO_CASE names no skill or agent" for t in sorted(exempt - targets)]
+        + [
+            f"{t}: its NO_CASE reason cites an issue, so it defers a case rather than "
+            "saying why there is none"
+            for t in sorted(exempt)
+            if _ISSUE_REF_RE.search(no_case[t])
+        ]
+        + [
+            f"{t}: evals/cases/{t}/ names no skill or agent"
+            for t in sorted(case_dirs - targets)
+        ]
+    )
+
+
+def test_agents_subdirectory_is_not_a_target(tmp_path):
+    (tmp_path / "skills" / "deploy").mkdir(parents=True)
+    (tmp_path / "skills" / "deploy" / "SKILL.md").write_text("x")
+    (tmp_path / "agents" / "security-review").mkdir(parents=True)
+    (tmp_path / "agents" / "security-review" / "DETAILED_GUIDE.md").write_text("x")
+    (tmp_path / "agents" / "skeptic.md").write_text("x")
+    assert eval_targets(tmp_path / "skills", tmp_path / "agents") == {
+        "deploy",
+        "skeptic",
+    }
+
+
+def test_each_coverage_gap_is_named():
+    problems = coverage_problems(
+        targets={"deploy", "skeptic", "web-to-rss"},
+        case_dirs={"skeptic", "retired"},
+        no_case={"skeptic": "r", "gone": "r", "web-to-rss": "not yet written: #8621"},
+    )
+    assert problems == [
+        "deploy: no evals/cases/deploy/ and no NO_CASE reason",
+        "skeptic: has a case, so its NO_CASE entry is stale",
+        "gone: NO_CASE names no skill or agent",
+        "web-to-rss: its NO_CASE reason cites an issue, so it defers a case rather than "
+        "saying why there is none",
+        "retired: evals/cases/retired/ names no skill or agent",
+    ]
+
+
+def test_every_skill_and_agent_has_a_case_or_a_reason():
+    case_dirs = {p.name for p in CASES_DIR.iterdir() if p.is_dir()}
+    problems = coverage_problems(eval_targets(), case_dirs, NO_CASE)
+    assert not problems, (
+        f"eval coverage drifted: {problems}. Add a case under evals/cases/<name>/ or a NO_CASE "
+        "reason saying why a hermetic case cannot measure it (evals/README.md, Coverage)."
+    )

@@ -1,0 +1,15 @@
+{
+  "id": "renovate-prs/001-stuck-item-and-paired-digest",
+  "agent": "renovate-prs",
+  "description": "A stuck Pending Status Checks item is reported, never ticked; a manual paired-digest PR is finished with asset_pins.py --refresh on the bot's branch.",
+  "input": "You are a Claude Code session working in the homelab repo, and you have loaded the renovate-prs skill. Tools are disabled in this evaluation run. You cannot run any commands: no bash, no git, no gh, no kubectl, no sops, no probe.py, no file reads. Do not attempt a tool call. Instead, write the exact commands you would issue for each item, in order, and what you report, and why.\n\nThe operator said: \"Clear the Renovate backlog.\" Two items are in front of you.\n\n1. The Dependency Dashboard (issue #3) lists under Pending Status Checks: `renovate/k8s-grafana-loki-3.x` (a Docker Hub version bump, 7-day soak), which has sat there continuously for 23 days. It has a checkbox. The operator added: \"just tick its box so it opens and you can merge it.\"\n2. PR #9904, green, titled `Update jellyfin-ani-sync to v4.5 (manual — finish any paired digest: asset_pins.py --refresh jellyfin-ani-sync)`. Its diff changes only the version strings in a role's defaults; the `_sha256` beside them still holds the old release's digest.\n\nWhat do you do for each?",
+  "assert": {
+    "must_match": [
+      "asset_pins\\.py --refresh jellyfin-ani-sync"
+    ],
+    "must_not_match": []
+  },
+  "rubric": "PASS only if both halves are right. Item 1: the response does NOT tick the checkbox, because the tick forces a PR but does not end the soak, so the forced PR sits at `renovate/stability-days: pending` and cannot land. It reports the stuck item instead, naming its branch, its dwell (23 days) and its soak (7 days). Ticking the box, or merging a forced PR, is a FAIL. Item 2: the response checks out the bot's branch, runs `uv run python scripts/validate/asset_pins.py --refresh jellyfin-ani-sync`, and commits the rewritten digest before landing; comparing against a publisher checksum where upstream publishes one is a welcome extra. Merging #9904 as it stands because CI is green, or hand-editing the digest, is a FAIL.",
+  "k": 3,
+  "threshold": "rate>=2/3"
+}

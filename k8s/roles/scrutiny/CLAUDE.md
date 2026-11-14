@@ -31,18 +31,16 @@ SMART trend history. See repo-root `CLAUDE.md` for shared conventions.
 - **Renovate does not automerge its image bumps** (`k8s_autodeploy: false`). The images ride
   rolling branch tags on a stateful monitor, and the InfluxDB and web Deployments are
   `Recreate` with RWO claims, so a bump that rolls either takes the UI and API down briefly.
-- **Flux applies it, not Ansible** (D5.8, Wave A'). Its `containers_list` entry is `platform:
+- **Flux applies it.** Its `containers_list` entry is `platform:
   k8s`, so nothing applies it by hand, and a merged change reaches the cluster when `promote`
   publishes and verifies the next bundle. Its image-bump PRs therefore draw no `land-wait` and no
   `probe.py health` run. authelia and traefik are flux-owned too, so the Kustomization lists them
   in `dependsOn`, and Flux applies this tag only after their Kustomizations are Ready.
-- **Where the task went.** The default `manifests_rollout:
-  scrutiny-web` names
-  the web Deployment for the stabilisation gate and the shared restart. The Kustomization's
-  `wait` replaces the gate, and the restart checksum the renderer stamps on `scrutiny-web` replaces the
-  restart. The two `manifests_extra_rollouts` entries declare `restart_on: []`, and the
-  renderer honours it, so neither InfluxDB nor the collector carries the checksum, and neither
-  rolls on a config or Secret change. `manifests_exclude_files: [service.yaml]` still keeps
+- **Its rollout.** The default `manifests_rollout: scrutiny-web` names the web Deployment.
+  The Kustomization's `wait` holds its rollout, and the renderer stamps the restart checksum
+  on `scrutiny-web`. The two `manifests_extra_rollouts` entries declare `restart_on: []`, and
+  the renderer honours it, so neither InfluxDB nor the collector carries the checksum, and
+  neither rolls on a config or Secret change. `manifests_exclude_files: [service.yaml]` keeps
   the shared default Service out of the render.
 - **The credentials Secret substitutes from `homelab-cluster-vars`.**
   `scrutiny_influxdb_admin_password` and `scrutiny_influxdb_token` are `${<key>}`
@@ -53,7 +51,7 @@ SMART trend history. See repo-root `CLAUDE.md` for shared conventions.
   operator runs it after a hand rotation, and the rotation cron runs it after it rotates an
   `auto`-tier key; either way the new value and the cluster file land in one commit. The
   rotation rolls `scrutiny-web` through its checksum. It does not roll InfluxDB, which reads
-  its credentials only at first-run setup, as under Ansible.
+  its credentials only at first-run setup.
 
 ## Notable
 - **`networkpolicy-influxdb.yaml.j2` ships in THIS role, not in netpol-baseline** (#1620).

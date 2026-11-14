@@ -97,8 +97,8 @@ collide at collection.
 beats a namespace portion whatever the `sys.path` order, so a `deploy_tools.py` on the path
 shadows `scripts/deploy_tools/` and every
 `from deploy_tools.deploy_lib.detach_notify import ...` raises `ModuleNotFoundError: 'deploy_tools' is not a package` — for the whole suite, not just for the
-role that added the file. That is why the deployer's boundaries object lives in
-`deploy_toolbox.py` while the class it holds is `DeployTools`.
+role that added the file. **HISTORY —** that is why the retired deployer kept its boundaries object in
+`deploy_toolbox.py` while the class it held was `DeployTools`.
 
 The names at risk are the subdirectories of **every** `pythonpath` root in `pyproject.toml`,
 not `scripts/` alone. `tests` is a root too, so `deploy`, `k8s`, `longhorn`, `repo`,
@@ -194,9 +194,9 @@ or an older checkout may still run such a path, so a consolidation can leave a s
 until the last caller moves. The
 `module-families-live-in-a-package` row of `tests/repo/test_census_rows_layout.py`
 enforces the rule for a `scripts/` subdirectory and a role's `files/`. Its `allow` names each
-family that stays flat, with the reason. Two stay flat by design: the
-`scripts/validate/*_templates.py` checks, each its own prek hook, and the deployer's
-`gitops_*` modules, which other roles copy by path.
+family that stays flat, with the reason. One stays flat by design: the
+`scripts/validate/*_templates.py` checks, each its own prek hook. The retired deployer's
+`gitops_*` modules were the second until #7962 deleted them.
 
 **I/O behind one injectable object.** Every subprocess, HTTP, git and filesystem boundary a
 program crosses lives in one frozen dataclass whose fields default to the real implementation.

@@ -1,5 +1,4 @@
-{#- Triage's caps and identity: claude-triage@.service.j2, claude-triage-poll.service.j2,
-claude-triage-config.env.j2 and 50-claude-triage.rules.j2 import these as `pins`. A template's own
+{#- Triage's caps, users and paths: every triage template imports these as `pins`. A template's own
 assignment outranks every inventory value, so an agent PR that edits only host_vars cannot raise a
 run's budget, turns or wall clock, run the unit as another user, or arm the poller. The host
 package renderer puts the inventory above a component's defaults, so a component default would pin
@@ -7,9 +6,23 @@ nothing. The `claude-triage` template prefix is on the lander's approval list (o
 2026-10-15). Each value is a literal. hosts/tests/test_claude_triage.py holds them equal to
 the component's defaults/main.yml.
 -#}
-{%- set agent_user = "claude" -%}
-{%- set agent_home = "/var/lib/claude" -%}
-{%- set state_dir = "/var/lib/claude/triage" -%}
+{#- Who runs what (dotfiles#967's I1, guardrails plan B2). The controller runs the poller and
+the runner, owns the records, the reports, the clone and the session's toolchain, and alone may
+start the units. The session user runs claude and holds no GitHub token and no start right.
+Neither is `claude`, so no interactive session can start a run, plant an episode or change what a
+run reads. Every path sits outside both homes the session could write. report_dir equals
+artifacts_triage_dir in k8s/roles/artifacts/defaults/main.yml, which mounts it. -#}
+{%- set ctl_user = "claude-triage-ctl" -%}
+{%- set ctl_home = "/var/lib/claude-triage-ctl" -%}
+{%- set report_dir = "/var/lib/claude-triage-ctl/reports" -%}
+{%- set state_dir = "/var/lib/claude-triage-ctl/state" -%}
+{%- set session_user = "claude-triage" -%}
+{%- set session_home = "/var/lib/claude-triage" -%}
+{#- What the controller shares with the session through the session user's group. -#}
+{%- set exchange_dir = "/var/lib/claude-triage-exchange" -%}
+{%- set tools_dir = "/var/lib/claude-triage-tools" -%}
+{%- set clone_dir = "/var/lib/claude-triage-clone" -%}
+{%- set kubeconfig = "/etc/claude-triage/kubeconfig" -%}
 {%- set model = "opus" -%}
 {%- set budget_usd = 10 -%}
 {%- set max_turns = 60 -%}

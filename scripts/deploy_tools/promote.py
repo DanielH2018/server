@@ -155,8 +155,8 @@ from deploy_tools.promote_lib.reads import (
     prod_commit,
 )
 
-# The CI reduction every deploy path shares, so a promotion and a tick agree on what green
-# means. It moved to `hosts/lib/` in H7.2e so the deployer can retire without it.
+# The CI reduction every deploy path shares, so a promotion and checkout-sync agree on what
+# green means. It moved to `hosts/lib/` in H7.2e so the deployer could retire without it.
 sys.path.insert(0, str(HOST_LIB_FILES))
 from ci_verdict import ci_verdict
 

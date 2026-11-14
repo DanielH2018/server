@@ -111,6 +111,10 @@ GENERATORS: list[tuple[list[str], str]] = [
         ["scripts/docs/reference/scripts.py", "--out", "docs/reference/scripts.md"],
         "docs/reference/scripts.md",
     ),
+    (
+        ["scripts/docs/reference/size.py", "--out", "docs/reference/size.md"],
+        "docs/reference/size.md",
+    ),
     # A directory, not a page: the fact tables the hand-written pages transclude. Listed
     # after the pages because nothing reads it back, and before the map only so that the
     # markdown outputs sit together in the cron log.
@@ -148,6 +152,18 @@ GENERATORS: list[tuple[list[str], str]] = [
 
 
 GENERATOR_TIMEOUT = 300
+MKDOCS_TIMEOUT = 600
+RSYNC_TIMEOUT = 300
+
+
+def time_budget(generators: bool = True) -> int:
+    """The longest one run can take, in seconds, when every timed step runs to its timeout.
+
+    Args:
+        generators: False for a `--skip-generators` run, which builds and syncs the site only.
+    """
+    generator_s = len(GENERATORS) * GENERATOR_TIMEOUT if generators else 0
+    return generator_s + MKDOCS_TIMEOUT + RSYNC_TIMEOUT
 
 
 def _absolute_out(argv: list[str], out: str) -> list[str]:
@@ -366,7 +382,7 @@ def build_site(site_dir: str, generators: str = "ok") -> bool:
         cwd=REPO,
         capture_output=True,
         text=True,
-        timeout=600,
+        timeout=MKDOCS_TIMEOUT,
         check=False,
     )
     if result.returncode != 0:
@@ -390,7 +406,7 @@ def build_site(site_dir: str, generators: str = "ok") -> bool:
         ],
         capture_output=True,
         text=True,
-        timeout=300,
+        timeout=RSYNC_TIMEOUT,
         check=False,
     )
     shutil.rmtree(staging, ignore_errors=True)

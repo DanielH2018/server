@@ -39,8 +39,9 @@ three kinds of reach:
   readable by the session, and a session can send what it reads off the host.
 - **The privilege the operator's session holds.** That includes sudo, so a session can reach
   root without a commit.
-- **Code execution in the deployer.** The deployer runs from a git directory that `ubuntu`
-  owns, and a session as `ubuntu` can change its `.git/config`. See the rules below.
+- **Code execution in the primary checkout's jobs.** `homelab-checkout-sync` and the crons
+  that commit from the primary checkout run in a git directory that `ubuntu` owns, and a
+  session as `ubuntu` can change its `.git/config`. See the rules below.
 
 Each of these lets an injected session take data or reach root and leave no commit behind.
 [What the `claude` user cannot do](#what-the-claude-user-cannot-do) lists what replaces each
@@ -48,9 +49,10 @@ right the agent gives up.
 
 ### What the split cannot close
 
-**A merged deployable change reaches root, whatever the agent's uid.** The GitOps deployer
-applies the setup plane with `become`. Ansible applies k8s manifests with cluster-admin rights,
-and a manifest can schedule a privileged pod that mounts the host's filesystem. An agent whose
+**A merged deployable change reaches root, whatever the agent's uid.** Each host's
+`homelab-updater` installs its host package as root. Flux applies k8s manifests with
+cluster-admin rights, and a manifest can schedule a privileged pod that mounts the host's
+filesystem. An agent whose
 change merges and deploys therefore runs code as root on the nodes.
 
 Only a human approval on every merge closes that path. The operator rejected that gate, for the
@@ -202,7 +204,7 @@ Rejected alternatives:
 
 - A fork-based agent. The repo's interaction limit is `collaborators_only`, and the Actions
   policy holds every external contributor's CI run for approval.
-- A deployer gate that refuses agent-merged ranges. A refused merge still sits on `master`,
+- A deploy gate that refuses agent-merged ranges. A refused merge still sits on `master`,
   where the operator's sessions pull and run it.
 - The `renovate-approve` app. It would give a third party approval rights on the repo.
 
@@ -219,7 +221,7 @@ lander. The checks and the merge live in `land.sh`, and the lander does not re-i
 - **The landing policy lives in `land.sh`.** The settings change nothing when unset. With
   `LAND_REQUIRE_AUTHOR` set, every merge path is pinned to the head SHA `land.sh` checked, the
   head branch must carry `LAND_REQUIRE_BRANCH_PREFIX` and target `master`, a PR touching a path
-  in `LAND_APPROVAL_PATHS` refuses, and a deployer hold refuses before the merge. A PR that
+  in `LAND_APPROVAL_PATHS` refuses, and a `DEPLOY_HOLD` refuses before the merge. A PR that
   changes a module the lander imports refuses too, and so does one that can run code on import
   with no import line, such as a non-empty `__init__.py` or a symlink.
   `--verdict-file` writes `PENDING`, then the final `VERDICT:` or `REFUSED:` line.
@@ -257,7 +259,7 @@ lander. The checks and the merge live in `land.sh`, and the lander does not re-i
 ### The approval floor
 
 The approval list is a floor. It keeps the explicit grant points and the gate itself. The agent's
-own components (`claude-code`, `renovate-agent`), the deployer (`gitops_deploy`),
+own components (`claude-code`, `renovate-agent`),
 `host_lib.py` and `inventory/` are not on it, so a PR changing them lands without the
 operator.
 
@@ -287,7 +289,9 @@ truth, with a reason beside each entry. It holds:
   read-only token, the token and config templates, `templates/renovate-agent-pins.j2`, which
   sets the caps and the permission mode as literals, the prompt, the unit and timer, and
   `component.yml`. The operator added them on 2026-11-13 with the guardrails plan's B1. The
-  component's defaults, tests and `CLAUDE.md` stay off.
+  session's Claude Code settings `files/claude-settings.json`, the setup script that installs
+  them and its boot unit joined on 2026-11-14 (#8392), so no unapproved PR weakens the
+  session's deny floor. The component's defaults, tests and `CLAUDE.md` stay off.
 - `k8s/roles/cluster-base/` and its path after the rename, `k8s/roles/cluster-base/`,
   the agent's read-only cluster RBAC. The operator added it
   on 2026-10-16 (H1 Open question 7). Before H1, that RBAC applies only through
@@ -311,8 +315,8 @@ Two choices keep the floor from being bypassed through the inventory:
 unlisted `hosts/` path reaches root without approval. A true root barrier would put `hosts/`
 itself on the list.
 
-The list does not name the modules the landing process imports, such as `scripts/lib/` and the
-deployer's helpers. The policy derives that set when it runs, from the modules it has loaded,
+The list does not name the modules the landing process imports, such as `scripts/lib/` and
+`scripts/deploy_tools/`. The policy derives that set when it runs, from the modules it has loaded,
 and refuses a PR that changes one or adds a file that would shadow one. It also refuses any
 compiled module file: a `__pycache__/` path, a `.pyc` or an extension module. Python loads a
 `.pyc` file in place of unchanged source and an extension module before the `.py` beside it, and
@@ -575,14 +579,14 @@ restarting, and leaves a report to read later. The four rulings:
   image.
 - **Landing** follows the approval floor of `homelab-claude-land@` unchanged. Every file that sets a run's caps
   or identity is on that floor, so the agent cannot raise its own budget unattended.
-- **The report** is an HTML page in the agent's artifacts tree, served under
-  `/a/daniel-box-claude/`. A JSON record in `/var/lib/claude/triage/runs/` sits beside it, and a
-  Discord page links the report. It is not a GitHub issue, because the repo is public. The page
+- **The report** is an HTML page in the triage controller's report tree, served under
+  `/a/daniel-box-claude-triage/`. A JSON record in `/var/lib/claude-triage-ctl/state/runs/` sits
+  beside it, and a Discord page links the report. It is not a GitHub issue, because the repo is public. The page
   prunes after 30 days, and the record stays.
 - **The budget** is 6 runs a day, $10 to diagnose and $25 to fix. One run goes at a time, and a
   storm of monitors going down together gets one run.
 
-A timer running as `claude` is the trigger. It polls Prometheus for alerts that started firing. A webhook into the host was rejected. Host services bind to loopback, so a webhook
+A timer running as the triage controller is the trigger. It polls Prometheus for alerts that started firing. A webhook into the host was rejected. Host services bind to loopback, so a webhook
 would need a non-loopback port, a firewall rule, and a network input that starts Claude.
 
 The build runs in slices, and each slice is exercised before the next starts:
@@ -600,25 +604,47 @@ The build runs in slices, and each slice is exercised before the next starts:
 The `claude-code` host component installs the run. `claude_code_triage_enabled`
 switches it on, and it installs only while `claude_code_agent_user_enabled` is also true.
 
-- **The unit** `claude-triage@<episode>.service` runs as `claude`, with the hardening the
-  `renovate-agent` unit carries. It reads `<state_dir>/inbox/<episode>.json` and runs
+- **Two users, neither of them `claude`** (dotfiles#967's I1, guardrails plan B2).
+  `claude-triage-ctl` (uid 906) runs the poller and the runner. It owns the records, the
+  reports, the clone the session reads and the session's toolchain, and polkit lets it alone
+  start the run, the session and the page. `claude-triage` (uid 907) runs the session. It holds
+  no GitHub token and no start right, and it reads the clone, the toolchain and the prompt
+  through its group. So no interactive session as `claude` can start a run, plant an episode,
+  or change what a run reads. `templates/claude-triage-pins.j2` pins both users and every path.
+  `claude-triage-setup`, which the runner runs as root before each run, keeps the controller's
+  toolchain, the clone and its venv current while no run holds the lock, and copies the operator's read-only kubeconfig to
+  `/etc/claude-triage/kubeconfig` for the session.
+- **The unit** `claude-triage@<episode>.service` runs as `claude-triage-ctl`, with the hardening
+  the `renovate-agent` unit carries. It reads `<state_dir>/inbox/<episode>.json` and runs
   `files/claude_triage_run.py` under `flock -n`, so one run goes at a time. A busy lock exits
   75. That exit is not a failure, and the episode waits in the inbox.
+- **The session runs in its own unit**, `homelab-claude-triage-session.service`
+  (guardrails plan B2). The runner writes the framed prompt to the exchange's `in/`,
+  starts the unit through `host_lib.start_unit` and waits for it. The unit runs
+  `files/claude_triage_session.py`, which feeds the prompt to `claude -p` on stdin, so the
+  episode text is on no command line. The script writes the session's JSON result to
+  the exchange's `out/` and prints nothing the session said, because a journal line the
+  session shaped could raise the next episode. The runner reads the result without following a
+  link, up to 1 MiB, and its journal lines carry the episode id and the state only. The record
+  and the report keep the session's stop reason.
 - **The session** is `claude -p`. Edit, Write, a landing and a push are denied, and
   `--permission-prompts none` denies anything that would wait on an answer. The session has a
-  $10 budget, 60 turns and a 30-minute wall clock, and it returns a diagnosis in a fixed JSON
-  schema.
+  $10 budget, 60 turns and a 30-minute wall clock, the session unit's `TimeoutStartSec`, and it
+  returns a diagnosis in a fixed JSON schema. The runner reads `Result=timeout` as a timed-out
+  run. `--settings` loads `/opt/claude-triage/claude-settings.json`, root-owned: the shared guard
+  hooks and the deny floor the Renovate session carries, with the hooks run from the
+  controller's toolchain.
 - **The credential** is the run's own `claude setup-token` token. It is the SOPS key
-  `claude_code_triage_claude_oauth_token`, in a root 0600 `EnvironmentFile`, and the role
-  refuses to install without it. The interactive login `claude-rc.service` uses can lapse while
-  idle (#4618).
+  `claude_code_triage_claude_oauth_token`, which the session unit loads as a `LoadCredential=`
+  file, and the role refuses to install without it. The runner never holds it. The
+  interactive login `claude-rc.service` uses can lapse while idle (#4618).
 - **The episode text can be hostile.** A monitor message can carry log text anyone wrote. The prompt
   frames it as data. The runner HTML-escapes every field the session returns, because the
   report shares an origin with the operator's own artifacts.
 - **Every run leaves a record, a report and a page.** An inconclusive or timed-out run does too.
   The page is `claude-triage-report-alert@<episode>:<state>.service`, which holds the webhook. A
-  polkit rule lets `claude` start the page and the run, in fixed shapes only. A run that crashes
-  pages through `OnFailure=homelab-alert@%n.service`.
+  polkit rule lets the controller start the page, the run and the session unit, in fixed shapes
+  only. A run that crashes pages through `OnFailure=homelab-alert@%n.service`.
 - **The caps are pinned** as literals in the role's `templates/claude-triage-pins.j2`, which
   every triage template imports, the same way `claude-land-pins.j2` pins the landing settings.
   No inventory value reaches them.
@@ -631,22 +657,24 @@ To switch it on, the operator:
 1. Sets `claude_code_triage_enabled: true` in daniel-box's `host_vars`, runs `host_secrets.py
    sync daniel-box`, and lets the next daniel-box package version install it.
 
-To run a drill, as `claude`:
+To run a drill (**operator-only**, because only root and the controller may write the inbox or
+start a run):
 
 ```bash
 printf '%s\n' '{"monitor": "Drill", "message": "drill: no real fault"}' \
-  > /var/lib/claude/triage/inbox/drill-1.json
-systemctl start claude-triage@drill-1
+  | sudo install -o claude-triage-ctl -g claude-triage-ctl -m 0640 /dev/stdin \
+    /var/lib/claude-triage-ctl/state/inbox/drill-1.json
+sudo systemctl start claude-triage@drill-1
 ```
 
-The drill writes `/var/lib/claude/triage/runs/drill-1.json` and `triage-drill-1.html` under
-`/a/daniel-box-claude/`, and Discord gets the page. To switch triage off, set
+The drill writes `/var/lib/claude-triage-ctl/state/runs/drill-1.json` and `triage-drill-1.html`
+under `/a/daniel-box-claude-triage/`, and Discord gets the page. To switch triage off, set
 `claude_code_triage_enabled: false` and apply. The records stay.
 
 ### Slice 2: the poller
 
-`homelab-claude-triage-poll.timer` runs `files/claude_triage_poll.py` as `claude` every two
-minutes.
+`homelab-claude-triage-poll.timer` runs `files/claude_triage_poll.py` as `claude-triage-ctl`
+every two minutes.
 The code is root-owned under `/opt/claude-triage`, like the runner's.
 
 - **It reads the firing `ALERTS` vector**, without `Watchdog`, shadow and drill alerts, and
@@ -682,7 +710,7 @@ The code is root-owned under `/opt/claude-triage`, like the runner's.
   | `K8sDeploymentZeroAvailable` | `triage` | A Deployment with no available replica |
   | `K8sContainerCrashLooping` | `triage` | A crash-looping container |
   | `ScrapeTargetDown` | `triage` | A scrape target |
-  | `ExtraProbeFailed:wg-easy` | `none` | wg-easy's probe, held out until its flap is fixed (#8252) |
+  | `ExtraProbeFailed:wg-easy` | `none` | wg-easy's probe, held out until its 30s probe timeout (#8252) runs a week with no fall (#8582) |
 
   The table replaced a `critical` severity floor (#8242). Every down-class alert is a
   `warning`, so from 2026-10-31 to 2026-11-12 the floor logged 168 skipped falls and opened
@@ -707,14 +735,14 @@ The code is root-owned under `/opt/claude-triage`, like the runner's.
   around the weekly reboot, read from the same `weekly_reboot_*` group vars as the Alertmanager
   mute. A deferred key opens its episode once the gate lifts, if it is still down.
 - **The runner holds the daily cap.** A run past six in a UTC day writes a `capped` record and
-  page, and starts no session. The cap sits in the runner, because polkit lets `claude` start a
-  run directly.
+  page, and starts no session. The cap sits in the runner, because polkit lets the controller
+  start a run directly, without the poller.
 
 `claude_code_triage_poll_mode` picks what an episode does:
 
 - `off` reads nothing.
 - `shadow` logs `would queue <episode>` to the journal and appends the episode to
-  `/var/lib/claude/triage/shadow.jsonl`, with each unrouted fall beside them. It ships in
+  `/var/lib/claude-triage-ctl/state/shadow.jsonl`, with each unrouted fall beside them. It ships in
   this mode.
 - `armed` queues the episode in the inbox. Each poll starts the oldest queued episode when no
   run holds the runner's lock, so episodes run one after another. A queued episode whose run
@@ -777,16 +805,11 @@ the operator's.
 1. Run `files/claude-dotfiles-sync.sh` every 15 minutes from the timer, since a dotfiles merge
    ships no host package version here.
 
-The script has three guards:
+The script has two guards:
 
 - It refuses a source that does not render `is-agent` as true. Applied anyway, such a source
   would write the operator's `.gitconfig` over the agent's identity. The refusal is not fatal
   to the apply, so a host can switch the flag on before the dotfiles change lands.
-- After that check, and only then, it renames each root-owned subset tree to
-  `~/.claude/.subset-copy-<name>`. chezmoi, running as the agent, cannot write into a root-owned
-  directory, and the agent cannot delete one. It owns `~/.claude`, though, so it can rename one
-  in place. The component ships no subset and deletes no renamed tree. A refused source therefore
-  leaves the subset where it was, and the agent always has one of the two.
 - It applies in two passes, every directory but `~/.claude` and `~/.config/gh` and then
   everything but directories. The first pass is non-recursive. chezmoi applies a directory
   target's whole tree below it, so applying `~/.config` reopened `~/.config/gh` to `0755`.
@@ -864,8 +887,8 @@ operator can log in as `claude`, so only the operator can run the checks that st
 | Capability | Why | Where it goes instead |
 |---|---|---|
 | A dry run against the cluster before a merge | It needs decrypted SOPS values, and the agent has no age key | Merged work deploys through the lander (slice 3). A pre-merge dry run returns with slice 7. |
-| The `probe.py` subcommands that read a credential from SOPS: `arr`, `ha`, `ha-state`, `b2-longhorn` and `b2-budget`, plus `postflight.py` and `ui_login.py` | `core.sops_extract` decrypts the credential, and the agent has no age key. The failure says so and exits 75. | The operator. `probe.py health` reads no SOPS value and works for the agent, and the domain comes from inventory. |
-| `sudo` | No sudo rights and no `SUDO_ASKPASS` helper | The operator, or the deployer after a merge |
+| The `probe.py` subcommands that read a credential from SOPS: `arr`, `ha`, `ha-state`, `b2-longhorn` and `b2-budget`, plus `postflight.py` and `ui_login.py` | `core.sops_extract` decrypts the credential, and the agent has no age key. The failure says so and exits 75. | The operator. `probe.py health` reads no SOPS value and works for the agent. The domain and the B2 bucket come from inventory, so `b2-longhorn --dry-run` and `b2-budget --dry-run` work for the agent too. |
+| `sudo` | No sudo rights and no `SUDO_ASKPASS` helper | The operator, or a host package after a merge |
 | Adding or rotating a secret | `sops` needs the data key to write a value | The operator. Key names stay readable, because SOPS encrypts values only. |
 | ssh as `ubuntu` to the peers | That shell has sudo | The operator. The agent reaches daniel-server as its own `claude` agent user, for fan-out only (slice 5). The Pi has no agent login, because the one `probe.py` ssh path needs its `docker` group. |
 | The `adm` group's logs | The agent belongs to `systemd-journal` only, not `adm` | The journal through `systemd-journal`, and the verdict files from the lander for landing |

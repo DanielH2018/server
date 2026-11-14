@@ -13,7 +13,7 @@ k8s_autodeploy_reason: "CronJob gated on every revision by a gate Job in longhor
 # The python image the CronJob runs, the same digest as the other stdlib-only k8s jobs
 # (crowdsec_k8s_jobs_image, configarr_k8s_health_image). It needs no kubectl: the script calls the
 # API server directly with the pod's ServiceAccount token.
-longhorn_reconcile_k8s_image: python:3.14-alpine@sha256:f6a589d43c42b9e7f7dc67a12d37132491f362859a5d750607710cc56da3bc72
+longhorn_reconcile_k8s_image: python:3.15-alpine@sha256:0f9552bb28711333da16915ec146f5e6bb44a7fdac9ced15dc17c2e0206346dd
 
 # DECIDED: hourly, at minute 17. The Ansible tasks this job replaces ran once per `k3s-bringup.yml`
 # apply, with no clock, so there was no host cron to copy; the H1 plan fixes "hourly"

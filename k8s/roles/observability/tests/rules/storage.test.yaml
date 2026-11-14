@@ -237,6 +237,23 @@ tests:
                 finds no series, so its free-space floor is UNMONITORED. The claim was renamed or
                 excluded, or the kubelet stopped reporting it.
 
+  # A valheim Deployment parked at zero replicas mounts no volume, so the kubelet reports no free
+  # bytes for it: PVCFreeFloorUnmonitored stays quiet. The case above, with no replicas series,
+  # shows the rule still fires when kube-state-metrics is missing.
+  - interval: 1m
+    input_series:
+      - series: 'kubelet_volume_stats_available_bytes{job="kubernetes-kubelet", namespace="homelab", persistentvolumeclaim="roomy"}'
+        values: '500x30'
+      - series: 'kube_deployment_spec_replicas{namespace="homelab", deployment="valheim"}'
+        values: '0x30'
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: PVCFreeFloorUnmonitored
+        exp_alerts: []
+      - eval_time: 16m
+        alertname: PVCFreeFloorUnmonitored
+        exp_alerts: []
+
   # The claim census with one claim reporting: PVCCoverageShortfall fires and names the count.
   - interval: 1m
     input_series:

@@ -36,10 +36,10 @@ _CI_NO_VERDICT_CONCLUSIONS = frozenset(
 # that no job had failed on. `ci_verdict` leaves that gate out once its `read_suites` reader shows
 # the gate's check suite concluded `cancelled`. A cancelled need alone does not prove it: GitHub
 # reports a job past its `timeout-minutes` as `cancelled` too, on a run nobody cancelled. Both
-# readers pass `read_suites`: `await_ci.verdict_for` and the deployer's `fetch_ci_verdict` (#6007).
-# The rule lives in THIS module because it is the one module both runtimes import: the deployer
-# ships only its role's `files/`, so a rule under `scripts/` would not exist on the host, while
-# `scripts/deploy_tools/await_ci.py` already imports this file.
+# readers pass `read_suites`: `await_ci.verdict_for` and `CheckoutSync.verdict` (#6007).
+# The rule lives in THIS module because it is the one module both runtimes import: the
+# checkout-sync component ships `hosts/lib/` modules only, so a rule under `scripts/` would not
+# exist on the host, while `scripts/deploy_tools/await_ci.py` already imports this file.
 # ENFORCED: `tests/repo/test_ci_jobs_verdict_matches_gate.py` holds the names below equal
 # to the gate's `needs` in .github/workflows/ci.yml and runs the gate's own script against
 # `jobs_verdict`.
@@ -130,7 +130,7 @@ def jobs_verdict(check_runs: list[dict]) -> str:
     skipped job passes only when `prove` succeeded and every dependent skipped: each dependent
     skips only on `needs.prove.outputs.proven == 'true'` or a cancelled run, so a skip means
     `proven` was true, and a check-run cannot show that output itself. `prove` is skipped on a
-    run that is not a push. A cancelled or failed `prove` (a runner fault) runs every dependent
+    run that is neither a push nor a labelled pull request. A cancelled or failed `prove` (a runner fault) runs every dependent
     whatever `proven` says, so they must all pass.
     A `CI_BUILD_READER_JOBS` job that skipped beside a build that succeeded also passes: the
     build had no work for it. A skipped matrix job arrives as one check-run under its
@@ -289,7 +289,7 @@ def ci_walk_candidates(
 
     DECIDED: the gate chooses the NEWEST GREEN ANCESTOR, the walk is bounded, and a red
     ancestor is never chosen. `rev_list` is `git rev-list --first-parent <local>..<origin>`,
-    newest first, so every SHA in it is `--ff-only` reachable from `local` and the deployer
+    newest first, so every SHA in it is `--ff-only` reachable from `local` and checkout-sync
     can still only fast-forward. The tip is `rev_list[0]` and is NOT offered: its verdict is
     already in hand, and re-querying it would spend a second request on an answer the caller
     has. `max_walk` bounds GitHub requests per tick INCLUDING that one, so a walk of 10 is

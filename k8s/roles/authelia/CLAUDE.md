@@ -135,7 +135,7 @@ the container in `templates/deployment.yaml.j2`. ENFORCED:
   ENFORCED: `scripts/secrets_mgmt/tests/test_cluster_vars_write_refusals.py`, and `scripts/secrets_mgmt/tests/test_cluster_vars_write.py` for the `{{` refusal. A digest checks
   only when the placeholder render places it, which
   `tests/services/test_authelia_claude_ui_user.py` holds to the manage flags.
-- **Flux applies authelia, not Ansible** (D5, authelia's own window). Its `containers_list`
+- **Flux applies authelia.** Its `containers_list`
   entry is in `cluster/services.yml`, so nothing applies it by hand, and
   a merged change reaches the cluster when `promote` publishes and verifies the next bundle.
   A rotation

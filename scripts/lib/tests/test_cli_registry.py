@@ -79,6 +79,7 @@ def test_package_entry_points_finds_run_and_main_modules():
         "shed_set",
         "takeover",
         "uptime_robot",
+        "usage",
         "vip_placement",
     ]
     assert "core" not in names  # core.py defines helpers, not a run/main entry point

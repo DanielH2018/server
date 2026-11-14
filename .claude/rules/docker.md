@@ -19,8 +19,7 @@ The package installs the rendered project at `/usr/lib/homelab/compose/` on the 
 read-only: the next package version overwrites an edit, so always modify
 `hosts/components/pi-compose/services/<svc>/` instead. The directories under
 `/home/<user>/server/containers/<svc>/` that some services bind-mount are created by the
-component's `tmpfiles.d/homelab-compose.conf`. H5.12 deleted the Ansible Compose path that
-used to render them (`ansible/roles/containers/`).
+component's `tmpfiles.d/homelab-compose.conf`.
 
 ## Conventions
 

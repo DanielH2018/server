@@ -22,7 +22,6 @@ from _reap_entrypoint_harness import BACKUP_DIR, _run
 
 REPO = BACKUP_DIR.parents[1]
 REAP_ENTRY = BACKUP_DIR / "longhorn_reap.py"
-LIB_DIR = BACKUP_DIR / "longhorn_reap_lib"
 
 OLD_ENTRYPOINTS = (
     "longhorn_reap_orphan_backups.py",

@@ -63,7 +63,8 @@ APPROVER = "DanielH2018"
 BASE = "master"
 BRANCH_PREFIX = "renovate/"
 DENIED_SLUG = "k8s_autodeploy-false"
-# `--frozen`: a rewritten uv.lock would dirty the primary checkout, which parks the deployer.
+# `--frozen`: a rewritten uv.lock would dirty the primary checkout, which parks
+# `homelab-checkout-sync`.
 DENYLIST_ARGV = (
     "uv",
     "run",

@@ -1,10 +1,10 @@
 """Guard: every prek hook that runs through `uv run` carries `--frozen`.
 
-The unattended production paths (`gitops_deploy`, `secret-rotation-audit`)
-run `uv run --frozen`, which installs the committed `uv.lock` as-is. A bare `uv run` in a
-hook re-resolves instead, so the gate could pass against an environment the deployer never
-builds. `uv lock --check` catches the lock drifting; this keeps the hooks resolving from the
-same lock the deployer does, so the two cannot disagree on which environment a gate ran in.
+The unattended production paths (`homelab-checkout-sync`'s venv sync, `secret-rotation-audit`) run
+uv with `--frozen`, which installs the committed `uv.lock` as-is. A bare `uv run` in a hook
+re-resolves instead, so the gate could pass against an environment the primary checkout never
+builds. `uv lock --check` catches the lock drifting; this keeps the hooks resolving from the same
+lock checkout-sync does, so the two cannot disagree on which environment a gate ran in.
 
 Run: uv run pytest tests/repo/test_prek_uv_entries_are_frozen.py
 """

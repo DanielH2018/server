@@ -91,7 +91,8 @@ def no_socket(monkeypatch):
     monkeypatch.setattr(socket, "create_connection", refuse)
 
 
-def test_a_closed_loopback_port_is_refused_before_any_socket_opens(app, no_socket):
+@pytest.mark.usefixtures("no_socket")
+def test_a_closed_loopback_port_is_refused_before_any_socket_opens(app):
     with pytest.raises(ValueError, match="not a TLS endpoint this homelab routes"):
         app.cert_expiry("127.0.0.1", 1)
 
@@ -105,9 +106,8 @@ def test_a_closed_loopback_port_is_refused_before_any_socket_opens(app, no_socke
         ("n8n.example.com", 80),
     ],
 )
-def test_off_zone_targets_are_refused_before_any_socket_opens(
-    app, no_socket, host, port
-):
+@pytest.mark.usefixtures("no_socket")
+def test_off_zone_targets_are_refused_before_any_socket_opens(app, host, port):
     with pytest.raises(ValueError, match="not a TLS endpoint this homelab routes"):
         app.cert_expiry(host, port)
 

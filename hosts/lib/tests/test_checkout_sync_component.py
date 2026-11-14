@@ -1,7 +1,7 @@
 """The rendered `checkout-sync` component in daniel-box's package (H7.51).
 
 These tests hold what the plan fixes about the unit: the 10-minute monotonic timer, the run inside
-the git-tree lock, the builder's token as a credential, the deployer's CI contexts and walk bound,
+the git-tree lock, the builder's token as a credential, the shared CI contexts and walk bound,
 and the modules the script imports. The census row `component-timers-carry-a-contract` holds the
 contract, and test_checkout_sync.py covers the script's behaviour.
 
@@ -43,7 +43,7 @@ def test_the_timer_fires_every_10_minutes(package):
     assert "homelab-checkout-sync.timer" in package.enable_links()
 
 
-def test_the_service_runs_in_the_tree_lock_with_the_deployers_gate(package):
+def test_the_service_runs_in_the_tree_lock_with_the_shared_ci_gate(package):
     box = _box()
     service = _text(package, f"{UNITS}/homelab-checkout-sync.service")
     assert f"User={box['sys_user']}\n" in service
