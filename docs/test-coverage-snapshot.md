@@ -69,7 +69,7 @@ All six runs passed: 21,518 tests passed and 80 skipped, with 35,240 contexts re
 A test file is listed when it covers at least one measured line inside a test, and every one of
 those lines is also covered by at least one other test file.
 
-- **No entry can be deleted on its own say-so.** Two test files that cover the same lines
+- **No entry is safe to delete alone.** Two test files that cover the same lines
   each appear here, and deleting both loses the lines. The groups below have identical covered
   sets.
 - **Line coverage ignores assertions.** Two test files can run the same lines and check
