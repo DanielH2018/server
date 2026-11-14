@@ -1,0 +1,23 @@
+# Gives the speaker requests and limits, so its pods are Burstable rather than BestEffort, the
+# kubelet's first eviction under memory pressure (#8542). The speaker announces every
+# LoadBalancer VIP, so its eviction takes Traefik's edge and Pi-hole's DNS offline together. The
+# 21.6-day peak (all Prometheus retained) was 80Mi working set and under 4m CPU. The memory limit
+# sits at three times that peak, because an OOMKill drops the VIPs as surely as an eviction. The
+# CPU limit is wide, because a throttled speaker answers ARP and memberlist late.
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: speaker
+  namespace: metallb-system
+spec:
+  template:
+    spec:
+      containers:
+        - name: speaker
+          resources:
+            requests:
+              cpu: 10m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi

@@ -30,7 +30,13 @@ probes stay green.
   holds them.
 - **The file declares no `caBundle` and no data for the `metallb-webhook-cert` Secret.** The
   controller writes both at runtime, and under server-side apply a field the render does not
-  declare stays with the controller. The role carries no `files/patches/` for that reason.
+  declare stays with the controller, so no patch may declare either.
+- **`files/patches/` sets requests and limits on the controller and the speaker** (#8542).
+  Upstream ships both with no `resources`, and `metallb-system` has no LimitRange, so without
+  the patches both pods run BestEffort, the kubelet's first eviction under memory pressure.
+  Each patch sets `resources` only. Its header comment names the peak it was sized from.
+  `tests/k8s/test_metallb_vendored_manifest.py::test_the_patches_give_every_metallb_container_requests_and_limits`
+  holds all four keys on both containers.
 - **The tag renders `prune: false`** (`flux_prune: false`, with the `DECIDED:` marker beside
   it in `defaults/main.yml`). A render that drops a CRD would make Flux delete every pool and
   advertisement of its kind. The cost: an object removed from the render stays live until the

@@ -46,3 +46,53 @@ def test_a_template_without_the_annotations_is_flagged():
     del stripped["spec"]["template"]["metadata"]["annotations"]["prometheus.io/scrape"]
     assert _missing(controller) == []
     assert _missing(stripped) == ["prometheus.io/scrape"]
+
+
+PATCHES = K8S_ROLES / "metallb" / "files" / "patches"
+RESOURCE_KEYS = (
+    ("requests", "cpu"),
+    ("requests", "memory"),
+    ("limits", "cpu"),
+    ("limits", "memory"),
+)
+
+
+def _patched_containers() -> dict[tuple[str, str], dict]:
+    """Each upstream workload's containers by (workload, container), patch `resources` merged."""
+    workloads = _workloads(UPSTREAM.read_text())
+    for path in sorted(PATCHES.glob("*.yaml")) if PATCHES.is_dir() else ():
+        patch = yaml_fast.safe_load(path.read_text())
+        target = workloads[(patch["kind"], patch["metadata"]["name"])]
+        assert patch["metadata"]["namespace"] == target["metadata"]["namespace"], path
+        upstream = {
+            c["name"]: c for c in target["spec"]["template"]["spec"]["containers"]
+        }
+        for change in patch["spec"]["template"]["spec"]["containers"]:
+            resources = upstream[change["name"]].setdefault("resources", {})
+            for section, values in change["resources"].items():
+                resources[section] = {**(resources.get(section) or {}), **values}
+    return {
+        (name, c["name"]): c
+        for (kind, name) in WORKLOADS
+        for c in workloads[(kind, name)]["spec"]["template"]["spec"]["containers"]
+    }
+
+
+def test_the_patches_give_every_metallb_container_requests_and_limits():
+    # fact: k8s/roles/metallb/CLAUDE.md#At a glance
+    # Without all four keys the pod is BestEffort or inherits no default: metallb-system has no
+    # LimitRange, and the kubelet evicts a BestEffort speaker first, dropping every VIP.
+    containers = _patched_containers()
+    assert set(containers) == {("controller", "controller"), ("speaker", "speaker")}
+    missing = {
+        member: [
+            f"{s}.{k}"
+            for s, k in RESOURCE_KEYS
+            if not (c.get("resources") or {}).get(s, {}).get(k)
+        ]
+        for member, c in containers.items()
+    }
+    assert missing == {member: [] for member in containers}, (
+        f"these MetalLB containers lack resource keys: {missing}. Set them in "
+        "k8s/roles/metallb/files/patches/."
+    )
