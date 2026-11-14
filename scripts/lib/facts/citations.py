@@ -313,6 +313,31 @@ def is_fact_doc(path: str) -> bool:
     return len(parts) > 3 and parts[1] == "skills" and name == "SKILL.md"
 
 
+# Trees that describe the repo as it was (archives, ADR bodies, slice plans), or that a
+# generator writes.
+_NOT_LIVE = (
+    "docs/archive/",
+    "docs/adr/",
+    "docs/target-architecture/",
+    "docs/reference/",
+    "docs/assets/",
+)
+
+
+def is_live_doc(path: str) -> bool:
+    """Whether the repo-relative ``path`` is hand-written prose about the tree as it is.
+
+    True for a Markdown file that is no instruction file and sits outside the trees that
+    describe the repo as it was or that a generator writes. A README, a runbook under
+    ``docs/`` and a role's own ``docs/`` page all count.
+    """
+    return (
+        path.endswith(".md")
+        and not is_fact_doc(path)
+        and not path.startswith(_NOT_LIVE)
+    )
+
+
 def repo_docs(repo: Path) -> list[Path]:
     """Every TRACKED instruction file under ``repo``, as ``is_fact_doc`` defines one.
 

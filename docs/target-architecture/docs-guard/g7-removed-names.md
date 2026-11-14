@@ -1,7 +1,7 @@
 # G7 — A PR that removes a name fails while a doc or comment still uses it
 
-Status: IN PROGRESS. Steps 1 and 2, the shared predicate and the heading pointer guard,
-are done.
+Status: IN PROGRESS. Steps 1 to 3 are done: the shared predicate, the heading pointer
+guard, and the two new target classes as advice.
 
 Depends on: the tree rename of
 [#8186](https://github.com/DanielH2018/server/issues/8186), which landed on 2026-11-13.
@@ -39,20 +39,26 @@ hook, and the hook names both lines.
   read the same files. G5 declined this widening because it changed an interface G1 and
   G2 were building on, and both are done. The `facts-lint-changed` hook's file pattern
   follows the predicate.
-- **More targets for `vanished-identifier`.** Beside instruction-file sections it reads
-  hand-written `docs/**` and code comments. It skips `docs/archive/**`, ADR bodies, files
-  with a `generated_from:` banner, text under `**HISTORY —`, and `DECIDED:` comment
-  blocks. The rule stays driven by the PR's own diff, so it needs no state.
-- **Comment text does not hold a name.** Only a full-line `#` or `//` comment counts as a
-  comment, and a docstring counts as code. A name removed only from a comment line seeds
-  no finding. The rule classifies only the lines `git grep -n` returns for a removed name,
-  so it reads no whole file. Generated non-Markdown files leave the holder search through
-  prek's exclude list. A code-comment finding reports `file:line`.
-- **A ramp.** Each widened target class, and the comment-holder change, starts as a
-  warning. A replay over the last 30 days of merged PRs counts the rows each PR would have
-  received, and a sample is graded. A class becomes an error once fewer than one graded
-  row in five is a false alarm. The existing `CLAUDE.md` error class changes only when the
-  holder change passes the same test.
+- **Two more target classes.** Beside instruction-file sections the rule reads live docs
+  and code comments. A live doc is any Markdown file that is no instruction file and sits
+  outside `docs/archive/`, the ADRs, the slice plans and the generated pages. The rule
+  skips text under `**HISTORY —` and `generated_from` blocks. It stays driven by the PR's
+  own diff, so it needs no state.
+- **A comment names a token, and holds none for its own class.** Only a full-line `#` or
+  `//` comment counts as a comment, and a docstring counts as code. A name removed only
+  from a comment line seeds no finding. A comment finding reports `file:line`. A comment
+  has no backticks, so its token needs an underscore, a dot or two hyphens.
+- **A doc's name is held by any non-Markdown content, comments included.** The plan first
+  let a comment hold nothing for docs too. Step 3 measured that change and dropped it.
+- **A ramp.** Each new class is advice: `scripts/dev/repo_guards.py` prints it after its
+  guards and changes no exit code. A warning in a hook that passes reaches nobody, which
+  is what G9 found for the notice. A class becomes an error once fewer than one graded row
+  in five is a false alarm.
+- **One read of the tree.** The rule holds every tracked non-Markdown file in memory and
+  answers from there. One `git grep` per token scans the tree each time: the first build
+  took 5 minutes over a 150-commit range that removed 3,600 tokens, and the in-memory read
+  takes 7 seconds. The commit hook reads the tree only when an instruction file names a
+  removed token.
 - **A heading pointer.** A doc that sends its reader to one part of another doc writes the
   doc's path in backticks and the part's name in italics. A docs guard fails when the doc
   is not tracked, or when no heading or bold lead-in in it holds that text
@@ -78,11 +84,11 @@ hook, and the hook names both lines.
 -    Tree.docs: its own CLAUDE.md basename filter
 +    Tree.docs: calls is_fact_doc
    lint.py, removed.py
--    vanished-identifier: a name held only by a comment counts as present
 -    vanished-identifier: reads CLAUDE.md sections
-+    a full-line # or // comment does not hold a name; a removed comment line seeds none
-+    targets: instruction files, hand-written docs/**, code comments
-+    a class is a warning until its replay sample grades under 20% false alarms
+-    still_present(): one git grep per token
++    Code: the tracked non-Markdown tree, read once; holds(), comment_uses()
++    vanished_advice(): live docs and code comments, printed by repo_guards.py
++    a class is advice until its replay sample grades under 20% false alarms
 +  renames.py     rewrite citations and absolute links for one old-to-new mapping
  scripts/dev/fact_status.py
 +  mv <old> <new> [--root <dir>]
@@ -102,24 +108,63 @@ hook, and the hook names both lines.
    held 85 pointers. 2 were stale and both were real: a skill named a heading that
    `docs/landing.md` had renamed, and a runbook named a doc by its path from before the
    tree rename. The PR fixes both.
-3. The widened `vanished-identifier` targets and the comment-holder change, as warnings,
-   with the replay that counts their rows.
+3. The two new target classes, as advice. Done: *Step 3 result* below has the replay and
+   the graded samples.
 4. `fact_status.py mv`.
 5. One PR per target class that the graded replay clears, turning its warnings into
    errors.
 
+## Step 3 result
+
+A replay ran the widened rule over the 1,896 first-parent commits of the 30 days to
+2026-11-14, with each commit's parent as the base. A spread sample of each class was
+graded: a row is a false alarm when the sentence or comment it names was not stale.
+
+| Class | Rows | Commits | Graded | False alarms |
+|---|---|---|---|---|
+| Live docs, name held by nothing | 184 | 53 | 19 | 6, or 32% |
+| Live docs, name held only by a comment | 61 | 25 | 6 | 5, or 83% |
+| Comments, any identifier shape | 847 | 141 | 25 | 12, or 48% |
+| Comments, the narrowed shape | 444 | 94 | 31 | 5 to 8, or 16% to 26% |
+
+- **Neither class is under the bar, so both ship as advice.** The comment class is close:
+  five of its rows are false alarms, and three more could be graded either way.
+- **The comment-holder change is dropped for docs.** A name that survives only in comments
+  was an external one in five of six rows, such as `SUDO_ASKPASS` and `kern.log`.
+- **The narrowed shape removes 403 comment rows.** Eleven of the twelve false alarms in
+  the first comment sample were hyphenated English compounds, such as `pre-migration`.
+- **The doc false alarms are sentences about the past.** Four of the six say the thing is
+  gone, without the `**HISTORY —` marker. The other two name an upstream file and a host
+  path.
+- **The plans, the archive and the ADRs stay out.** The plans alone gave 3,437 rows, and
+  they describe the tree as it stood when each was written.
+- The window held the host migration and the tree rename, so a quiet month gives fewer
+  rows. One session graded every row.
+
+On master at `8140e8cf9` the advice over the last 150 commits lists 53 removed names in 74
+places. 43 of the names are paths under `ansible/` in comments that the tree rename left
+behind.
+
+The replay is a scratch program: it holds each commit's tree in memory and updates it per
+commit, in 98 seconds. It joins `fact_status.py report` in step 5, which is the first step
+that needs a second measurement.
+
 ## Verification
 
 Each step ships a pair of tests: an input the rule accepts and one it rejects. Step 3's
-replay prints rows per merged PR over 30 days, by target class.
+replay counted rows per commit over 30 days, by target class.
 
 ## Risks and what is not verified
 
-- The false-alarm share of the widened rule is unmeasured. Step 3 measures it before any
-  class blocks.
-- A removed name that survives as a substring of a longer name stays silent.
+- One session graded the step 3 samples, and the largest sample held 31 rows. Step 5
+  grades again before a class blocks.
+- Advice changes no exit code, so a session can ignore it. Step 5 is the remedy for a
+  class that grades under the bar, and no remedy exists for one that does not.
+- A removed name that survives as a substring of a longer name stays silent. So does a
+  doc's name that a comment still holds.
 
 ## Complexity delta
 
-Adds one docs guard, one subcommand and one module. Replaces two doc-set definitions
-with one. Widens one rule.
+Adds one docs guard, one subcommand, one module and one advice source in
+`scripts/dev/repo_guards.py`. Replaces two doc-set definitions with one, and one
+`git grep` per removed token with one read of the tree. Widens one rule.

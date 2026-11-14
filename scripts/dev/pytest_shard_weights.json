@@ -766,6 +766,7 @@
  "scripts/lib/tests/test_facts_lint_vanished.py": 0.21,
  "scripts/lib/tests/test_facts_notice.py": 0.96,
  "scripts/lib/tests/test_facts_pins.py": 0.0,
+ "scripts/lib/tests/test_facts_removed_advice.py": 0.21,
  "scripts/lib/tests/test_facts_report.py": 0.24,
  "scripts/lib/tests/test_function_imports.py": 4.44,
  "scripts/lib/tests/test_function_imports_exemptions.py": 0.13,
