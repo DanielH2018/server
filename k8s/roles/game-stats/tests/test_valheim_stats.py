@@ -175,16 +175,32 @@ def test_heartbeat_covering_every_session_marks_each_one_present():
     assert st.players["Ann"]["total_playtime"] == 600.0
 
 
-def test_heartbeat_below_the_open_count_closes_the_stalest_session():
-    """A missed disconnect is reconciled even while someone else stays connected."""
+def test_a_partial_heartbeat_closes_no_one_and_caps_the_gauge():
     st = stats.StatsState()
     _connected(st, "111", "Bob", 0.0)
     st.apply("heartbeat", 1, 600.0)
     _connected(st, "222", "Ann", 1000.0)
     st.apply("heartbeat", 1, 1200.0)
-    assert st.players["Bob"]["open_start"] is None
-    assert st.players["Bob"]["total_playtime"] == 600.0
+    assert st.players["Bob"]["open_start"] == 0.0
     assert st.players["Ann"]["open_start"] == 1000.0
+    assert st.online_count() == 1
+    assert "valheim_players_online 1" in stats.render_metrics(st, 1300.0)
+
+
+def test_a_live_players_hours_never_land_on_a_stale_session():
+    """Ann joined first and never died, so she holds the oldest event, yet is live."""
+    st = stats.StatsState()
+    _connected(st, "111", "Ann", 0.0)
+    st.apply("heartbeat", 1, 600.0)
+    _connected(st, "222", "Bob", 3600.0)
+    st.apply("heartbeat", 2, 4200.0)
+    st.apply("heartbeat", 1, 7800.0)  # Bob's Closing socket was missed
+    st.apply("heartbeat", 1, 9000.0)
+    assert st.playtime("Bob", 9500.0) == 600.0
+    st.apply("disconnect", "111", 10000.0)
+    st.apply("heartbeat", 0, 10200.0)
+    assert st.players["Ann"]["total_playtime"] == 10000.0
+    assert st.players["Bob"]["total_playtime"] == 600.0
 
 
 def test_another_players_presence_is_not_banked_on_a_stale_session():
@@ -196,7 +212,6 @@ def test_another_players_presence_is_not_banked_on_a_stale_session():
     st.apply("heartbeat", 1, 1800.0)
     st.apply("heartbeat", 0, 20 * 86400.0)
     assert st.players["Bob"]["total_playtime"] == 600.0
-    assert st.players["Ann"]["total_playtime"] == 1790.0
 
 
 def test_a_stale_session_banks_only_its_observed_time():

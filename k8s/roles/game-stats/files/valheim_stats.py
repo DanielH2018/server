@@ -156,6 +156,9 @@ class StatsState:
         self.pending_steam_id = None
         # name -> last heartbeat whose count covered every open session, theirs included.
         self.last_present = {}
+        # The last heartbeat counted more than 0 but fewer than the open sessions, so
+        # which session is stale is unknown.
+        self.ambiguous = False
 
     def _player(self, name):
         return self.players.setdefault(
@@ -187,30 +190,37 @@ class StatsState:
         their session. Another player's presence never extends it.
         """
         p = self.players[name]
-        end = max(p["last_seen"] or p["open_start"], self.last_present.pop(name, 0.0))
-        end = min(ts, end)
+        end = min(ts, self._last_evidence(name))
+        self.last_present.pop(name, None)
         p["total_playtime"] += max(0.0, end - p["open_start"])
         p["sessions"] += 1
         p["open_start"] = None
         p["last_seen"] = end
 
+    def _last_evidence(self, name):
+        p = self.players[name]
+        return max(p["last_seen"] or p["open_start"], self.last_present.get(name, 0.0))
+
     def _open_sessions(self):
         return [n for n, p in self.players.items() if p["open_start"] is not None]
 
     def _reconcile(self, connections, ts):
-        """Closes the open sessions the server's own connection count cannot cover.
+        """Folds the server's own connection count into the open sessions.
 
-        The count does not say which session is stale, so the excess closes oldest
-        last_seen first: a player still in the game keeps spawning and dying.
+        A count covering every open session marks each one present. A count of 0
+        closes them all. A count in between does not say which session is stale, and
+        a wrong guess would bank the live player's hours on the stale one, so it
+        closes nothing: the live player's own disconnect, or the next count of 0,
+        settles it.
         """
         open_names = self._open_sessions()
-        if len(open_names) <= connections:
+        self.ambiguous = 0 < connections < len(open_names)
+        if connections == 0:
+            for n in open_names:
+                self._close_stale(n, ts)
+        elif not self.ambiguous:
             for n in open_names:
                 self.last_present[n] = ts
-            return
-        open_names.sort(key=lambda n: self.players[n]["last_seen"] or 0.0)
-        for n in open_names[: len(open_names) - connections]:
-            self._close_stale(n, ts)
 
     def apply(self, kind, value, ts):
         """Applies one console event (connect/spawn/death/disconnect/restart/heartbeat).
@@ -220,10 +230,10 @@ class StatsState:
         open (a respawn after death, not a second session). disconnect closes the
         session bound to the SteamID's last-known name. restart (a shutdown or a world
         load) closes every open session and clears the SteamID<->name mapping.
-        heartbeat records the server's own connection count, and a count below the
-        number of open sessions closes the excess, oldest last_seen first, which is
-        what recovers from a missed disconnect. Both closes end a session at the last
-        time that player was seen, not at `ts`.
+        heartbeat records the server's own connection count; a count of 0 closes every
+        open session, which is what recovers from a missed disconnect (see _reconcile
+        for a count in between). Both closes end a session at the last time that
+        player was seen, not at `ts`.
 
         Args:
             kind: One of "connect", "spawn", "death", "disconnect", "restart",
@@ -269,22 +279,30 @@ class StatsState:
                 self._close_stale(n, ts)
             self.steam_to_name.clear()
             self.pending_steam_id = None
+            self.ambiguous = False
         elif kind == "heartbeat":
             self.connections = value
             self._reconcile(value, ts)
 
     def online_count(self):
-        return sum(1 for p in self.players.values() if p["open_start"] is not None)
+        """Open sessions, capped at the server's own count while that count is partial."""
+        n = len(self._open_sessions())
+        return min(n, self.connections) if self.ambiguous else n
 
     def total_deaths(self):
         return sum(p["deaths"] for p in self.players.values())
 
     def playtime(self, name, now):
-        """Total playtime incl. the in-progress session so the counter ticks live."""
+        """Total playtime incl. the in-progress session so the counter ticks live.
+
+        While the server's count is partial, an open session stops ticking at the
+        player's last evidence, so a stale session cannot run ahead and then fall back.
+        """
         p = self.players[name]
         base = p["total_playtime"]
         if p["open_start"] is not None:
-            base += max(0.0, now - p["open_start"])
+            end = min(now, self._last_evidence(name)) if self.ambiguous else now
+            base += max(0.0, end - p["open_start"])
         return base
 
 
@@ -333,8 +351,8 @@ def render_metrics(state, now):
     )
     # Cross-check gauge, not a duplicate. valheim_players_online is DERIVED from the
     # session state machine; valheim_connections is the number the server itself reports
-    # in its ~10 min heartbeat. Each heartbeat caps the derived count at the server's,
-    # so the derived count reading higher for longer than one heartbeat is a bug.
+    # in its ~10 min heartbeat. online_count() caps the derived count at the server's,
+    # so a derived count below the server's is the drift signal (a missed spawn).
     stats_lib.render_family(
         out,
         "valheim_players_online",
