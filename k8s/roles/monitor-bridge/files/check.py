@@ -38,10 +38,11 @@ from bridge.sources import Sources
 from bridge.types import Check, CheckFn, CheckResult, VerdictRecorder
 
 # Checks whose `up` line is logged every cycle, because something reads it as data. The
-# Longhorn Storage dashboard's four B2 panels regex the used/cap/pct/versions figures out of
-# b2_storage's "B2 storage ..." message in this container's log; quiet that line and they go
-# blank. ENFORCED: tests/test_check.py::test_every_dashboard_parsed_check_is_logged_when_up.
-LOGGED_WHEN_UP = frozenset({"b2_storage"})
+# Longhorn Storage dashboard's B2 and R2 panels regex their figures out of b2_storage's
+# "B2 storage ..." and r2_usage's "R2 month-to-date: ..." messages in this container's log;
+# quiet either line and its panels go blank.
+# ENFORCED: tests/test_check.py::test_every_dashboard_parsed_check_is_logged_when_up.
+LOGGED_WHEN_UP = frozenset({"b2_storage", "r2_usage"})
 
 # What a dependent row logs while its gate row reads down, keyed by the gate's name. A key is
 # also how `run_once` tells a gate row from any other. The dependent's body is not called and
