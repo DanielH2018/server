@@ -68,13 +68,14 @@ def unapplied_keys(
     `old..new` is the PR's own range, so it names the keys this PR rotated and no other PR's.
     `deployed` is the commit the landing applies, the merge commit, and defaults to `new`.
     Every copy and every reader is read there, because a PR that merged in between can add
-    or remove a reader, or refresh a copy, that the PR's head does not hold.
+    or remove a reader, or overwrite a copy, that the PR's head does not hold.
 
     A changed key is applied when every copy the tree holds is fresh at `deployed`. A k8s
     reader's copy is fresh when `cluster-vars.source` records the digest of the key's
     ciphertext, because `promote` then applies the cluster file. A host's copy is fresh when
-    its `secrets/hosts/<host>.sops.yaml` ciphertext for the key differs from `old`'s, because
-    the landing waits on that host's package. A key in `OUTSIDE_THE_TREE`, or one no file in
+    the PR's range changed the key's ciphertext in `secrets/hosts/<host>.sops.yaml` and
+    `deployed` still holds the PR's ciphertext, because the landing waits on that host's
+    package. Another PR's sync changes the ciphertext too, but it can carry the old value. A key in `OUTSIDE_THE_TREE`, or one no file in
     the tree reads, is never applied: whatever holds it is out of every deploy's reach.
 
     The readers are counted from `deployed`'s `k8s/` and `hosts/`, unpacked into a scratch
@@ -116,8 +117,12 @@ def unapplied_keys(
             why.append("the cluster file's copy is stale (`cluster_vars.py write`)")
         for host in sorted(hosts):
             path = f"secrets/hosts/{host}.sops.yaml"
-            copy = _ciphertexts_at(repo, deployed, path).get(name)
-            if copy is None or copy == _ciphertexts_at(repo, old, path).get(name):
+            ours = _ciphertexts_at(repo, new, path).get(name)
+            if (
+                ours is None
+                or ours == _ciphertexts_at(repo, old, path).get(name)
+                or ours != _ciphertexts_at(repo, deployed, path).get(name)
+            ):
                 why.append(
                     f"{host}'s host file is not synced (`host_secrets.py sync {host}`)"
                 )

@@ -718,7 +718,9 @@ One thing sits in the position of needing a hand:
   key it leaves stale (`stale_copies.unapplied_keys`). It reads every copy and every reader
   at the merge commit, so a reader that another PR merged first counts. A k8s reader's copy
   is fresh when `cluster-vars.source` records the key's new ciphertext. A host's copy is
-  fresh when that key in `secrets/hosts/<host>.sops.yaml` changed too. A key with a copy in
+  fresh when the PR changed that key in `secrets/hosts/<host>.sops.yaml` and the merge
+  commit still holds the PR's copy. Another PR's sync changes the ciphertext too, but it can
+  carry the old value. A key with a copy in
   `stale_copies.OUTSIDE_THE_TREE`, such as Bazarr's API keys, is always named, and so is a
   key no file reads. A rotation that refreshed every copy ends `settled`. Without a readable range the
   landing names no key and ends `needs-manual-apply`. Run

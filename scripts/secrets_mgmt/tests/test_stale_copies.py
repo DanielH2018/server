@@ -140,3 +140,20 @@ def test_a_reader_only_the_merge_commit_holds_counts(tmp_path):
     assert unapplied_keys(old, head, repo, deployed=merged) == {
         "late_token": "the cluster file's copy is stale (`cluster_vars.py write`)"
     }
+
+
+def test_another_prs_resync_of_the_host_file_does_not_count_as_this_prs(tmp_path):
+    keys = {"pod_token": _OLD, "sonarr_api_key": _OLD}
+    before = _keys(**keys, box_token=_OLD)
+    after = before | {"secrets/secrets.yml": _store(**keys, box_token=_NEW)}
+    repo, old, head = _rotation(tmp_path, before, after)
+    resync = "ENC[AES256_GCM,data:old-resealed,type:str]"
+    merged = commit(
+        Path(repo),
+        "merge with a PR that re-synced daniel-box from the old value",
+        **{"secrets/hosts/daniel-box.sops.yaml": _store(box_token=resync)},
+    )
+    assert unapplied_keys(old, head, repo, deployed=merged) == {
+        "box_token": "daniel-box's host file is not synced "
+        "(`host_secrets.py sync daniel-box`)"
+    }
