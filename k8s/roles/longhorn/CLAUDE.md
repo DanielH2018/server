@@ -103,6 +103,10 @@ host probes stay green.
   longhorn-manager builds the engine-image DaemonSet with no `resources` and no setting that
   sets them (#8500). The backup and trim Job pods are short-lived, and the RecurringJob
   controller builds their CronJobs with no `resources` either.
+- **The v1 instance-manager has a CPU request and no memory request** (#8617). longhorn-manager
+  builds its pod with only the CPU requirement, and no Setting, annotation or CR field carries
+  memory. An admission mutation could add one but is rejected. The `DECIDED:` marker beside
+  `k3s_longhorn_csi_sidecar_memory_request` in `defaults/main.yml` has the reasons.
 - **The engine-upgrade limit stays above 0.** Upstream ships `0`, which leaves engines on the old
   image after an upgrade, and this repo sets `3`.
   `tests/longhorn/test_engine_upgrade_limit_is_positive.py::test_a_zero_limit_is_flagged`
