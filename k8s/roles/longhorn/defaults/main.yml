@@ -63,6 +63,31 @@ k3s_longhorn_global_manager_replicas: 2
 # the request.
 k3s_longhorn_csi_sidecar_memory_request: 192Mi
 
+# Memory REQUESTS only (no limit) for the longhorn-csi-plugin DaemonSet's three containers,
+# through the same Setting (#8326). The driver deployer creates the DaemonSet with no
+# `resources`, so its pods ran BestEffort. The first key is for the `longhorn-csi-plugin`
+# container, the second for `node-driver-registrar` and `longhorn-liveness-probe`. Each container
+# gets a request, because a container without one in a Burstable pod keeps an oom_score_adj near
+# 1000. Measured 2026-11-14, 30-day peak working set: 47Mi for the plugin, 24Mi for the
+# registrar and 28Mi for the liveness probe; each request is the peak rounded up to a power of
+# two.
+#
+# Changing either value rolls the plugin DaemonSet once. The roll is safe for RWX mounts: the
+# driver deployer gives the DaemonSet maxUnavailable 1, and with
+# `endpoint-network-for-rwx-volume` unset the plugin mounts each NFS share in the host's mount
+# namespace, so the share outlives the plugin pod (longhorn-manager v1.13.0,
+# csi/node_server.go:getMounter).
+k3s_longhorn_csi_plugin_memory_request: 64Mi
+k3s_longhorn_csi_node_sidecar_memory_request: 32Mi
+
+# Memory REQUESTS only (no limit) for longhorn-ui and longhorn-driver-deployer, applied by
+# files/patches/longhorn-ui.yaml and files/patches/longhorn-driver-deployer.yaml (#8326).
+# Upstream ships both with no `resources` (BestEffort). Measured 2026-11-14, 30-day peak working
+# set: 6.6Mi for the UI and 12.9Mi for the driver deployer; each request is the peak rounded up
+# to a power of two. A test holds each patch equal to its key.
+k3s_longhorn_ui_memory_request: 16Mi
+k3s_longhorn_driver_deployer_memory_request: 32Mi
+
 # The Longhorn Settings this role renders (templates/settings.yaml.j2), each under the name
 # it had in setup/k3s's defaults. Flux applies them, so a change here is a change to the live
 # Setting once the tag promotes. Longhorn-manager creates each with its upstream default and

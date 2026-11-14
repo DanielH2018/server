@@ -23,7 +23,7 @@ host probes stay green.
 - **Merging a bump of `k3s_longhorn_version` is the upgrade** (H1 Open question 6). `land.sh`
   runs the `longhorn-upgrade` gates before it merges, Longhorn supports no downgrade and one
   minor per hop, so read `docs/longhorn-upgrade.md` before you bump the pin.
-- **Six patches change upstream objects**, all under `files/patches/`. The renderer lists them
+- **Eight patches change upstream objects**, all under `files/patches/`. The renderer lists them
   as the Kustomization's `patches:`, and each names its target by kind, name and namespace.
     - `longhorn-manager.yaml` adds a memory request and no limit to the manager container.
       A kustomize patch is copied verbatim and cannot read a variable, so
@@ -36,6 +36,14 @@ host probes stay green.
       and `::test_global_manager_patch_holds_the_replicas_of_the_defaults_key` hold the
       literals equal to `k3s_longhorn_global_manager_memory_request` and
       `k3s_longhorn_global_manager_replicas`.
+    - `longhorn-ui.yaml` and `longhorn-driver-deployer.yaml` give those two Deployments a
+      memory request and no limit (#8326). Upstream ships both with no `resources`, so their
+      pods ran BestEffort.
+      `tests/longhorn/test_longhorn_control_plane_resources.py::test_ui_and_driver_deployer_patches_request_the_defaults_value_and_no_limit`
+      holds the literals equal to `k3s_longhorn_ui_memory_request` and
+      `k3s_longhorn_driver_deployer_memory_request`, and
+      `tests/longhorn/test_longhorn_control_plane_resources.py::test_no_vendored_longhorn_workload_runs_besteffort`
+      fails a render that leaves any upstream Deployment or DaemonSet without a request.
     - `longhorn-manager-update-strategy.yaml` rolls the manager DaemonSet one pod at a time
       instead of upstream's `maxUnavailable: 100%` (#6009). The manager pods serve the
       admission webhook every claim's dry run calls, so one pod keeps serving it through a
@@ -76,15 +84,25 @@ host probes stay green.
   holds the shape of all three Settings, and
   `tests/longhorn/test_snapshot_data_integrity_patch_is_a_json_map.py::test_a_bare_string_value_is_flagged`
   is its red half.
-- **The CSI sidecars' memory request is a Setting, not a patch** (#5958).
+- **The CSI components' memory requests are a Setting, not a patch** (#5958, #8326).
   `system-managed-csi-components-resource-limits` carries
   `k8s/roles/longhorn/defaults/main.yml:k3s_longhorn_csi_sidecar_memory_request` for
-  `csi-attacher`, `csi-provisioner`, `csi-resizer` and `csi-snapshotter`. longhorn-manager
-  treats the Setting as the only source of those four containers' `resources` and clears
-  anything else hourly, so a second writer makes each Deployment roll on every tick. The value
-  names those four components with a `requests` block alone.
-  `tests/longhorn/test_longhorn_control_plane_resources.py::test_the_csi_setting_requests_the_defaults_value_for_the_four_sidecars_only`
+  `csi-attacher`, `csi-provisioner`, `csi-resizer` and `csi-snapshotter`,
+  `k8s/roles/longhorn/defaults/main.yml:k3s_longhorn_csi_plugin_memory_request` for the
+  `longhorn-csi-plugin` container, and
+  `k8s/roles/longhorn/defaults/main.yml:k3s_longhorn_csi_node_sidecar_memory_request` for
+  `node-driver-registrar` and `longhorn-liveness-probe`. The driver deployer creates those
+  objects at runtime, so no patch can reach them. longhorn-manager treats the Setting as the
+  only source of those containers' `resources` and clears anything else hourly, so a second
+  writer makes each object roll on every tick. Each entry is a `requests` block alone.
+  Changing a plugin value rolls the plugin DaemonSet one pod at a time, and RWX shares stay
+  mounted through it; the comment above the plugin key has the evidence.
+  `tests/longhorn/test_longhorn_control_plane_resources.py::test_the_csi_setting_requests_the_defaults_values_for_every_csi_component`
   holds the shape.
+- **Two kinds of Longhorn pod stay BestEffort, because Longhorn offers no knob for them.**
+  longhorn-manager builds the engine-image DaemonSet with no `resources` and no setting that
+  sets them (#8500). The backup and trim Job pods are short-lived, and the RecurringJob
+  controller builds their CronJobs with no `resources` either.
 - **The engine-upgrade limit stays above 0.** Upstream ships `0`, which leaves engines on the old
   image after an upgrade, and this repo sets `3`.
   `tests/longhorn/test_engine_upgrade_limit_is_positive.py::test_a_zero_limit_is_flagged`
