@@ -16,9 +16,10 @@ from collections.abc import Callable
 # per-PR step condition, so it legitimately reports a non-`success` completion.
 _CI_PASS_CONCLUSIONS = frozenset({"success", "skipped", "neutral"})
 # Deliberately NOT failures — these mean "no verdict for this SHA", not "this SHA is bad".
-# ci.yml sets `concurrency: cancel-in-progress` keyed on github.ref, so two pushes to master in
-# quick succession CANCEL the first run. Mapping `cancelled` to a failure would page on an
-# ordinary back-to-back push; the tip's own run is the one that supplies the verdict.
+# ci.yml groups master pushes by SHA and cancels in progress only on a pull_request, so a later
+# master push never cancels an earlier run. A commit still reads `cancelled` when a person cancels
+# its run, when a job passes its `timeout-minutes`, or on a PR head a force-push superseded, and a
+# push GitHub never ran CI for has no conclusion at all (`None`). None of these says the SHA is bad.
 _CI_NO_VERDICT_CONCLUSIONS = frozenset(
     {"cancelled", "stale", "skipped_by_concurrency", None}
 )

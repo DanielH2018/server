@@ -11,7 +11,7 @@ import subprocess
 
 import pytest
 
-from deploy_tools.land_lib import gh_read, merge, policy
+from deploy_tools.land_lib import gh_read, merge, policy, stale_base
 from deploy_tools.land_lib.outcome import Outcome
 from deploy_tools.land_lib.pr_json import parse_file
 from lib import gh_rate_limit
@@ -130,7 +130,7 @@ _OTHER_READS = {
         [[{"status": "modified", "filename": "docs/a.md"}]],
         lambda ln: policy._list(ln, "files", parse_file),
     ),
-    "compare": (["docs/a.md"], lambda ln: merge._master_paths_since(ln, "a" * 40)),
+    "compare": (["docs/a.md"], lambda ln: stale_base.master_paths_since(ln, "a" * 40)),
     "repo-visibility": (
         {"visibility": "public"},
         lambda ln: merge._refuse_private_repo(ln),

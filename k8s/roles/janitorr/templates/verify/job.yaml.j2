@@ -62,7 +62,7 @@
   secrets=lookup('file', role_file('templates/config-secret.yaml.j2'))
     + lookup('file', role_file('templates/config/application.yml.j2')),
 ) %}
-{% for line in lookup('file', repo_file('secrets/cluster-vars.source')).splitlines() if line and not line.startswith('#') and ('{{ ' + line.split()[0] + ' ') in roll.secrets %}
+{% for line in lookup('file', cluster_vars_source()).splitlines() if line and not line.startswith('#') and ('{{ ' + line.split()[0] + ' ') in roll.secrets %}
 {% set roll.text = roll.text + line %}
 {% endfor %}
 {% set roll_digest8 = ((roll.text + roll.secrets) | hash('sha256'))[:8] %}

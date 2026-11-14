@@ -9,8 +9,8 @@
 # lost join, leaves the workload to a later step that ends in service="unmapped", never drops it.
 #
 # The steps for a Deployment or a DaemonSet:
-#   1. label_homelab_role, which ansible/filter_plugins/role_label.py stamps on every object an
-#      armed role renders.
+#   1. label_homelab_role, which scripts/renderer/template_filters/role_label.py stamps on
+#      every object an armed role renders.
 #   2. label_kustomize_toolkit_fluxcd_io_name, with a trailing `-deferred` removed: a deferred
 #      apply's Kustomization is named `<tag>-deferred`.
 #   3. The override table, one label_replace per rendered workload that carries no label.
