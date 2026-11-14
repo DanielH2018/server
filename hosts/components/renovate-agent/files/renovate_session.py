@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """The Renovate agent's session, run in its own unit that the runner starts.
 
-`homelab-renovate-agent-session.service` runs this as `renovate_agent_user` (guardrails plan B2r). It
-checks the run worktree can be recreated, recreates it, runs the headless Claude session in it,
-and writes what the session printed to `OUTPUT_FILE` under the state directory. A worktree that
-still holds work is left alone: the reason goes to `BLOCKED_FILE` and no session starts. The
-runner reads both files after the unit ends.
+`homelab-renovate-agent-session.service` runs this as the session user (guardrails plan B2r).
+It checks the run worktree can be recreated, recreates it, runs the headless Claude session in
+it, and writes what the session printed to `OUTPUT_FILE` in the exchange's `out/` directory. A
+worktree that still holds work is left alone: the reason goes to `BLOCKED_FILE` and no session
+starts. The runner, which runs as the controller, reads both files after the unit ends, as
+untrusted data.
 
 The session's output never reaches the journal: it is captured here and written to a file, so
 text a session controls cannot become a syslog line that loki-homelab's rules read
@@ -20,7 +21,6 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
-from collections.abc import Mapping
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from agent_toolbox import TOOLS, AgentTools, log, read_file
@@ -28,25 +28,13 @@ from host_lib import atomic_write, install_excepthook, parse_env_file
 from run_requests import REQUESTS_DIR
 from run_worktree import prepare_worktree, worktree_is_reusable
 
-CONFIG = os.environ.get("RENOVATE_AGENT_CONFIG", "/etc/renovate-agent/config.env")
+# Holds no secret; the runner's config.env, with the webhook, is the controller's alone.
+CONFIG = "/usr/lib/homelab/renovate-agent/session.conf"
+OUT_DIR = "out"
 OUTPUT_FILE = "session.out"
 BLOCKED_FILE = "session.blocked"
-# The unit's EnvironmentFile: the session's GitHub token and Claude credential, root 0600.
+# The unit's EnvironmentFile: the session's read-only GitHub token and Claude credential, root 0600.
 SESSION_ENV_FILE = "/etc/renovate-agent/session.env"
-# The read-only token in SESSION_ENV_FILE that `session_env` hands the session as GH_TOKEN.
-SESSION_TOKEN_KEY = "RENOVATE_SESSION_GH_TOKEN"
-
-
-def session_env(env: Mapping[str, str]) -> dict[str, str]:
-    """The unit's environment with `GH_TOKEN` swapped for the session's read-only token.
-
-    A missing read token raises, so a session never starts holding the runner's token.
-    """
-    if not env.get(SESSION_TOKEN_KEY):
-        raise RuntimeError(f"{SESSION_TOKEN_KEY} is unset; {SESSION_ENV_FILE} lacks it")
-    out = {k: v for k, v in env.items() if k != SESSION_TOKEN_KEY}
-    out["GH_TOKEN"] = env[SESSION_TOKEN_KEY]
-    return out
 
 
 def session_argv(cfg: dict[str, str], requests_dir: str) -> list[str]:
@@ -82,7 +70,8 @@ def main(tools: AgentTools = TOOLS, config_path: str = CONFIG) -> int:
     under systemd there is no stdin to wait for.
     """
     cfg = parse_env_file(config_path)
-    state_dir = cfg.get("STATE_DIR", "/var/lib/renovate-agent")
+    exchange = cfg["EXCHANGE_DIR"]
+    out = os.path.join(exchange, OUT_DIR)
     repo_dir = cfg["REPO_DIR"]
     branch = cfg.get("BRANCH", "worktree-renovate-auto")
     path = os.path.join(
@@ -90,10 +79,10 @@ def main(tools: AgentTools = TOOLS, config_path: str = CONFIG) -> int:
     )
     reusable, why = worktree_is_reusable(repo_dir, path, branch, tools, cfg["REPO"])
     if not reusable:
-        atomic_write(os.path.join(state_dir, BLOCKED_FILE), why)
+        atomic_write(os.path.join(out, BLOCKED_FILE), why)
         return 0
     prepare_worktree(repo_dir, path, branch, tools)
-    argv = session_argv(cfg, os.path.join(state_dir, REQUESTS_DIR))
+    argv = session_argv(cfg, os.path.join(exchange, REQUESTS_DIR))
     log("starting session")
     p = subprocess.run(
         argv,
@@ -101,9 +90,8 @@ def main(tools: AgentTools = TOOLS, config_path: str = CONFIG) -> int:
         capture_output=True,
         text=True,
         stdin=subprocess.DEVNULL,
-        env=session_env(os.environ),
     )
-    atomic_write(os.path.join(state_dir, OUTPUT_FILE), p.stdout or "")
+    atomic_write(os.path.join(out, OUTPUT_FILE), p.stdout or "")
     return p.returncode
 
 

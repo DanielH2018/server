@@ -2,10 +2,11 @@
 """The unattended session runs as its own user and holds nothing that can reach master.
 
 The session reads third-party text: release notes, changelogs and PR bodies. So the unit runs
-it as `renovate_agent_user` with a GitHub token that can neither push nor merge, and the one
-privileged thing it may do is start `renovate-agent-land@<n>.service`, which re-checks the PR
-and lands it as the operator. Each test pins one leg of that. A leg that slips fails no
-deploy: the unit still starts, only with more reach than the design gives it.
+it as `renovate-agent` with a GitHub token that can neither push nor merge, and the one
+privileged thing it can do is write a request that the controller, `renovate-agent-ctl`, may
+act on. The lander re-checks the PR and lands it as the operator. Each test pins one leg of
+that. A leg that slips fails no deploy: the unit still starts, only with more reach than the
+design gives it.
 
 Run: uv run pytest hosts/tests/test_renovate_agent_identity.py
 """
@@ -30,6 +31,11 @@ UNIT = "homelab-renovate-agent.service.j2"
 LANDER = "renovate-agent-land@.service.j2"
 PROMPT = "prompt.txt.j2"
 CONFIG_ENV = "config.env.j2"
+SESSION_UNIT = "homelab-renovate-agent-session.service.j2"
+SESSION_CONF = "session.conf.j2"
+# The pinned users (templates/renovate-agent-pins.j2), which no inventory value moves.
+SESSION_USER = "renovate-agent"
+CTL_USER = "renovate-agent-ctl"
 HOOKS = REPO / ".claude" / "hooks"
 
 GH = "renovate_agent_gh_token"
@@ -41,6 +47,8 @@ CLONE = "/srv/identity-sentinel-clone"
 USER = "identity-sentinel-user"
 OPERATOR = "identity-sentinel-operator"
 GH_SENTINEL = "identity-sentinel-gh-token"
+GH_READ_SENTINEL = "identity-sentinel-gh-read-token"
+WEBHOOK_SENTINEL = "identity-sentinel-webhook"
 CLAUDE_SENTINEL = "identity-sentinel-claude-token"
 MOVED = {
     "renovate_agent_home": HOME,
@@ -48,7 +56,9 @@ MOVED = {
     "renovate_agent_user": USER,
     "sys_user": OPERATOR,
     GH: GH_SENTINEL,
+    GH_READ: GH_READ_SENTINEL,
     CLAUDE: CLAUDE_SENTINEL,
+    "discord_alert_webhook": WEBHOOK_SENTINEL,
 }
 # Any PR number the lander accepts, standing in for the prompt's `<n>`.
 PR = "3337"
@@ -86,21 +96,34 @@ def output(path: str) -> dict:
 
 
 def test_the_session_runs_as_its_own_user_in_its_own_clone() -> None:
-    unit = render(UNIT, MOVED)
-    assert directive(unit, "User") == [USER]
+    """The user is pinned, so the inventory's renovate_agent_user does not move it."""
+    unit = render(SESSION_UNIT, MOVED)
+    assert directive(unit, "User") == [SESSION_USER]
     assert directive(unit, "WorkingDirectory") == [f"-{CLONE}"]
     envs = directive(unit, "Environment")
     assert f"HOME={HOME}" in envs
     assert any(e.startswith(f"PATH={HOME}/.local/bin:") for e in envs)
-    assert directive(unit, "ExecStart")[0].startswith(f"/usr/bin/flock -n {HOME}/"), (
-        "the run lock must sit in the agent's home: fs.protected_regular=2 refuses an O_CREAT "
-        "open of the operator's old lock in sticky /run/lock"
-    )
-    config = render(CONFIG_ENV, MOVED)
+    config = render(SESSION_CONF, MOVED)
     assert f"\nREPO_DIR={CLONE}\n" in config, (
-        "the wrapper must cut its worktree in the agent's clone, never the primary checkout"
+        "the session must cut its worktree in the agent's clone, never the primary checkout"
     )
     assert f"\nCLAUDE_BIN={HOME}/.local/bin/claude\n" in config
+
+
+def test_the_runner_runs_as_the_controller_with_its_own_lock() -> None:
+    """dotfiles#967's I1: the controller runs the runner; the session's group lets it read
+    what the session writes into the exchange."""
+    unit = render(UNIT, MOVED)
+    assert directive(unit, "User") == [CTL_USER]
+    assert directive(unit, "SupplementaryGroups") == [SESSION_USER]
+    assert directive(unit, "ExecStart")[0].startswith(
+        "/usr/bin/flock -n /var/lib/renovate-agent-ctl/run.lock"
+    ), (
+        "fs.protected_regular=2 refuses an O_CREAT open of another user's lock in /run/lock"
+    )
+    assert not any(
+        HOME in v for v in directive(unit, "ExecStart") + directive(unit, "Environment")
+    ), "the controller must run nothing from the session user's home"
 
 
 # The directives that decide what the session's processes run and read.
@@ -121,8 +144,9 @@ def operator_reach(unit_text: str, operator: str) -> list[str]:
     ]
 
 
-def test_the_session_unit_reaches_nothing_of_the_operators() -> None:
-    assert operator_reach(render(UNIT, {"sys_user": OPERATOR}), OPERATOR) == []
+@pytest.mark.parametrize("template", [UNIT, SESSION_UNIT])
+def test_the_session_unit_reaches_nothing_of_the_operators(template) -> None:
+    assert operator_reach(render(template, {"sys_user": OPERATOR}), OPERATOR) == []
 
 
 def test_a_unit_running_from_the_operators_home_is_flagged() -> None:
@@ -143,31 +167,44 @@ def test_a_unit_running_from_the_operators_home_is_flagged() -> None:
         ("PrivateTmp", "yes"),
     ],
 )
+@pytest.mark.parametrize("template", [UNIT, SESSION_UNIT])
 def test_the_unit_hides_what_another_local_user_could_still_read(
-    key: str, value: str
+    key: str, value: str, template: str
 ) -> None:
-    assert directive(render(UNIT), key) == [value]
+    assert directive(render(template), key) == [value]
 
 
-def test_the_tokens_reach_the_session_only_through_session_env() -> None:
+def test_the_session_holds_only_the_read_token_and_the_controller_the_write_one() -> (
+    None
+):
+    """dotfiles#967's I1: the write token never reaches the session's environment."""
     session = render("session.env.j2", MOVED)
-    assert f"\nGH_TOKEN={GH_SENTINEL}\n" in session
+    assert f"\nGH_TOKEN={GH_READ_SENTINEL}\n" in session
     assert f"\nCLAUDE_CODE_OAUTH_TOKEN={CLAUDE_SENTINEL}\n" in session
-    for template in (UNIT, LANDER, CONFIG_ENV, PROMPT):
+    assert GH_SENTINEL + "\n" not in session
+    ctl = render("ctl.env.j2", MOVED)
+    assert f"\nGH_TOKEN={GH_SENTINEL}\n" in ctl
+    assert GH_READ_SENTINEL not in ctl and CLAUDE_SENTINEL not in ctl
+    for template in (UNIT, SESSION_UNIT, LANDER, CONFIG_ENV, SESSION_CONF, PROMPT):
         text = render(template, MOVED)
-        assert GH_SENTINEL not in text and CLAUDE_SENTINEL not in text, (
-            f"{template} carries a session token"
-        )
-    assert directive(render(UNIT), "EnvironmentFile") == [
+        assert not any(
+            s in text for s in (GH_SENTINEL, GH_READ_SENTINEL, CLAUDE_SENTINEL)
+        ), f"{template} carries a token"
+    assert directive(render(SESSION_UNIT), "EnvironmentFile") == [
         "/etc/renovate-agent/session.env"
     ]
-    written = output("/etc/renovate-agent/session.env")
-    assert (written["owner"], written["group"], written["mode"]) == (
-        "root",
-        "root",
-        "0600",
-    )
-    assert sorted(written["keys"]) == sorted([GH, GH_READ, CLAUDE])
+    assert directive(render(UNIT), "EnvironmentFile") == ["/etc/renovate-agent/ctl.env"]
+    for path, keys in (
+        ("/etc/renovate-agent/session.env", [GH_READ, CLAUDE]),
+        ("/etc/renovate-agent/ctl.env", [GH]),
+    ):
+        written = output(path)
+        assert (written["owner"], written["group"], written["mode"]) == (
+            "root",
+            "root",
+            "0600",
+        )
+        assert sorted(written["keys"]) == sorted(keys)
 
 
 def test_the_session_cannot_rewrite_its_own_config() -> None:
@@ -175,9 +212,12 @@ def test_the_session_cannot_rewrite_its_own_config() -> None:
     config = output("/etc/renovate-agent/config.env")
     assert (config["owner"], config["group"], config["mode"]) == (
         "root",
-        "renovate-agent",
+        CTL_USER,
         "0640",
     )
+    # The session reads only its own config, which carries no webhook.
+    assert WEBHOOK_SENTINEL not in render(SESSION_CONF, MOVED)
+    assert WEBHOOK_SENTINEL in render(CONFIG_ENV, MOVED)
 
 
 def _seconds(span: str) -> int:

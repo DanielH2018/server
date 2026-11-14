@@ -27,7 +27,6 @@ from __future__ import annotations
 
 import json
 import os
-import pwd
 import sys
 import time
 
@@ -44,8 +43,8 @@ from agent_logic import (
 )
 from agent_toolbox import TOOLS, AgentTools, log, start_unit
 from host_lib import atomic_write, install_excepthook, parse_env_file
-from renovate_session import BLOCKED_FILE, OUTPUT_FILE, SESSION_ENV_FILE
-from run_requests import Outcome, carry_out, fresh_dir
+from renovate_session import BLOCKED_FILE, OUT_DIR, OUTPUT_FILE, SESSION_ENV_FILE
+from run_requests import Outcome, carry_out, fresh_dir, read_untrusted
 
 # The env override exists so the I/O shell can be exercised end-to-end against a throwaway
 # config before the timer is ever armed. Without it the only way to run this code is to deploy
@@ -63,8 +62,8 @@ OPEN_PR_LIMIT = 200
 RUNS_FILE = "runs.jsonl"
 # The unit the session runs in; polkit lets this process's user start it.
 SESSION_UNIT = "homelab-renovate-agent-session.service"
-# Every other variable the session unit sets. A resume has to set each again, because sudo
-# resets the environment (#4603). test_session_resume.py holds this to both unit templates.
+# Every variable the session unit sets. A resume has to set each again, because sudo resets the
+# environment (#4603). test_session_resume.py holds this to the session unit's template.
 SESSION_ENV_KEYS = (
     "PATH",
     "HOME",
@@ -158,6 +157,34 @@ def pr_states(
     return states
 
 
+def session_files(out: str) -> tuple[str, str]:
+    """(blocked reason, session output) from the session's `out/` directory, read as untrusted.
+
+    The session wrote both, so a symlink there (to this controller's token file, say) is refused
+    rather than followed into the digest. A refused file reads as "".
+    """
+    found = []
+    for name in (BLOCKED_FILE, OUTPUT_FILE):
+        try:
+            found.append(read_untrusted(out, name))
+        except (OSError, ValueError) as exc:
+            log(f"refused the session's {name}: {type(exc).__name__}")
+            found.append("")
+    return found[0].strip(), found[1]
+
+
+def session_unit_env(tools: AgentTools) -> dict[str, str]:
+    """The session unit's own Environment= values, for the resume command to set again.
+
+    The runner runs as the controller, so its own environment is not the session's.
+    """
+    _, out = tools.run(
+        ["systemctl", "show", "-p", "Environment", "--value", SESSION_UNIT]
+    )
+    pairs = dict(item.split("=", 1) for item in out.split() if "=" in item)
+    return {k: pairs[k] for k in SESSION_ENV_KEYS if k in pairs}
+
+
 def request_line(request: Outcome) -> str:
     """The journal line for one request, in fixed words only.
 
@@ -189,12 +216,17 @@ def main(tools: AgentTools = TOOLS, config_path: str = CONFIG) -> int:
     cfg = parse_env_file(config_path)
     # One deadline for the whole run: the session, then the landings it nominated.
     deadline = time.time() + int(cfg.get("RUN_TIMEOUT_S", "14400"))
-    missing = [k for k in ("REPO", "REPO_DIR", "PROMPT_FILE") if not cfg.get(k)]
+    missing = [
+        k
+        for k in ("REPO", "REPO_DIR", "EXCHANGE_DIR", "SESSION_USER")
+        if not cfg.get(k)
+    ]
     if missing:
         raise RuntimeError(f"{config_path} is missing {', '.join(missing)}")
     host = os.uname().nodename
     webhook = cfg.get("DISCORD_WEBHOOK", "")
-    state_dir = cfg.get("STATE_DIR", "/var/lib/renovate-agent")
+    state_dir = cfg.get("STATE_DIR", "/var/lib/renovate-agent-ctl")
+    exchange = cfg["EXCHANGE_DIR"]
     path = os.path.join(
         cfg["REPO_DIR"], ".claude", "worktrees", cfg.get("WORKTREE", "renovate-auto")
     )
@@ -216,15 +248,13 @@ def main(tools: AgentTools = TOOLS, config_path: str = CONFIG) -> int:
         return 0
 
     log(f"{gate.reason}; starting {SESSION_UNIT}")
-    requests_dir = fresh_dir(state_dir)
-    for name in (OUTPUT_FILE, BLOCKED_FILE):
-        if os.path.lexists(os.path.join(state_dir, name)):
-            os.unlink(os.path.join(state_dir, name))
+    requests_dir = fresh_dir(exchange)
+    out = fresh_dir(exchange, OUT_DIR)
     wait = min(
         int(cfg.get("SESSION_TIMEOUT_S", "2700")) + 300, int(deadline - time.time())
     )
     end = start_unit(SESSION_UNIT, tools, max(wait, 1))
-    why = tools.read_file(os.path.join(state_dir, BLOCKED_FILE)).strip()
+    why, stdout = session_files(out)
     if why:
         # The previous tick left work in flight, so the session left the tree alone — removing
         # it is how unlanded work is lost. But it IS a unit failure: the tree stays blocked until
@@ -236,7 +266,6 @@ def main(tools: AgentTools = TOOLS, config_path: str = CONFIG) -> int:
         tools.discord_post(webhook, msg, USER_AGENT, log=log, spool_dir=spool)
         record_run(state_dir, run_record(int(time.time()), "blocked", why))
         return EXIT_WORKTREE_BLOCKED
-    stdout = tools.read_file(os.path.join(state_dir, OUTPUT_FILE))
     atomic_write(log_path, stdout)
     timed_out = end.result in ("timeout", "deadline")
     rc = 0 if end.result == "success" else max(end.status, 1)
@@ -264,16 +293,13 @@ def main(tools: AgentTools = TOOLS, config_path: str = CONFIG) -> int:
     )
     resume = ""
     if outcome.session_id:
-        # The unit runs this process as renovate_agent_user, so the effective user is the
-        # session's owner.
-        owner = pwd.getpwuid(os.geteuid()).pw_name
         resume = resume_command(
             outcome.session_id,
             path,
-            owner,
+            cfg["SESSION_USER"],
             cfg.get("CLAUDE_BIN", "claude"),
             SESSION_ENV_FILE,
-            {k: os.environ[k] for k in SESSION_ENV_KEYS if k in os.environ},
+            session_unit_env(tools),
         )
     tools.discord_post(
         webhook,

@@ -263,9 +263,14 @@ FLOOR = [
     "hosts/components/renovate-agent/files/run_requests.py",
     "hosts/components/renovate-agent/files/renovate_agent.py",
     "hosts/components/renovate-agent/files/renovate_session.py",
+    "hosts/components/renovate-agent/files/agent_toolbox.py",
+    "hosts/components/renovate-agent/files/agent_logic.py",
+    "hosts/components/renovate-agent/files/run_worktree.py",
     "hosts/components/renovate-agent/templates/homelab-renovate-agent-session.service.j2",
     "hosts/components/renovate-agent/templates/50-renovate-agent-session.rules.j2",
     "hosts/components/renovate-agent/templates/session.env.j2",
+    "hosts/components/renovate-agent/templates/ctl.env.j2",
+    "hosts/components/renovate-agent/templates/session.conf.j2",
     "hosts/components/renovate-agent/templates/config.env.j2",
     "hosts/components/renovate-agent/templates/renovate-agent-pins.j2",
     "hosts/components/renovate-agent/templates/prompt.txt.j2",
@@ -373,6 +378,30 @@ OFF_THE_FLOOR = [
 def test_a_pr_off_the_floor_lands_without_the_operator(path, tmp_path) -> None:
     assert (REPO / path).is_file(), f"{path} moved; update this list"
     assert policy.approval_hits([{"filename": path}], floor_prefixes(tmp_path)) == []
+
+
+# What the Renovate agent's package ships that may change without the operator, and why.
+RENOVATE_AGENT_SHIPPED_OFF_THE_FLOOR = {
+    # The disarmed marker only quiets two alerts; arming is the inventory flag's decision.
+    "templates/renovate-agent-disarmed.prom": "a metrics marker that grants nothing",
+}
+
+
+def test_every_file_the_renovate_agent_ships_is_on_the_floor(tmp_path) -> None:
+    """A file added to the package lands off the floor unless someone remembers the list."""
+    component = REPO / "hosts/components/renovate-agent"
+    spec = yaml_fast.safe_load((component / "component.yml").read_text())
+    shipped = {e["src"] for e in spec["files"] + spec["outputs"] if "src" in e}
+    assert "files/renovate_agent.py" in shipped and "templates/ctl.env.j2" in shipped
+    floor = floor_prefixes(tmp_path)
+    off = sorted(
+        src
+        for src in shipped
+        if not policy.approval_hits(
+            [{"filename": f"hosts/components/renovate-agent/{src}"}], floor
+        )
+    )
+    assert off == sorted(RENOVATE_AGENT_SHIPPED_OFF_THE_FLOOR)
 
 
 def profile_exports(lander_enabled: bool) -> dict[str, str]:

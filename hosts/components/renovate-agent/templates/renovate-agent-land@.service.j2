@@ -1,3 +1,4 @@
+{% import 'templates/renovate-agent-pins.j2' as pins with context -%}
 # Shipped by the renovate-agent component.
 [Unit]
 Description=Land Renovate PR #%i for the unattended Renovate agent
@@ -7,7 +8,7 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 # The operator's user, because land.sh deploys: it decrypts secrets and runs Ansible with
-# become. The agent's session runs as {{ renovate_agent_user }} and can only START this unit,
+# become. The agent's session runs as {{ pins.user }} and can only START this unit,
 # through the polkit rule 50-renovate-agent-land.rules. land_renovate_pr.py re-reads the PR
 # from GitHub before landing anything, so the instance name is the only input the session gives.
 User={{ sys_user }}

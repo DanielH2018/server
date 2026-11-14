@@ -6,6 +6,14 @@ defaults, so a component default would pin nothing. This file is on the lander's
 Each value is a literal. hosts/tests/test_renovate_agent_unit.py holds them equal to the
 component's defaults/main.yml, which the docs fragments read.
 -#}
+{#- Who runs what (dotfiles#967's I1): the controller runs the runner, holds the write token
+and the state, and alone may start the session and lander units; the session user runs claude.
+Both polkit rules key on these, so a host_vars edit cannot hand the session a start right. -#}
+{%- set user = "renovate-agent" -%}
+{%- set ctl_user = "renovate-agent-ctl" -%}
+{#- Where the session's requests and output pass to the controller. The controller owns it and
+the session may write only its requests/ and out/ children. -#}
+{%- set exchange_dir = "/var/lib/renovate-agent-exchange" -%}
 {%- set max_prs = 3 -%}
 {%- set model = "opus" -%}
 {%- set permission_mode = "auto" -%}
