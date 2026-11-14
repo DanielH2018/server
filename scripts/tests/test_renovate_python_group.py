@@ -59,8 +59,8 @@ def test_a_python_site_outside_the_rule_is_flagged() -> None:
     assert _group(rules, PYTHON_PIN_SITES[1], "minor") is None
 
 
-def test_python_patch_and_digest_bumps_stay_out_of_the_manual_group() -> None:
-    """A patch bump edits the CI pin alone, and a digest bump moves no interpreter."""
+def test_the_manual_group_admits_no_patch_or_digest_bump() -> None:
+    """Boundary guard: `matchUpdateTypes` keeps the k8s pins' digest automerge outside the group."""
     image = PYTHON_PIN_SITES[-1]
     assert _group(_PACKAGE_RULES, PYTHON_PIN_SITES[0], "patch") == "{{depName}}"
     assert not (_group(_PACKAGE_RULES, image, "digest") or "").startswith(GROUP_PREFIX)

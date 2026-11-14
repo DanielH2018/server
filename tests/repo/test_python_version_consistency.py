@@ -122,36 +122,52 @@ _PYTHON_IMAGE_PIN = re.compile(r"^(\w+_image):\s*['\"]?python:(\d+\.\d+)", re.MU
 KNOWN_PYTHON_IMAGE_PINS = frozenset({"monitor_bridge_k8s_image", "flux_job_image"})
 
 
-def python_image_pins(text: str) -> list[tuple[str, str]]:
-    """(variable, minor) for every `*_image: python:X.Y-…` pin in one role's defaults."""
-    return _PYTHON_IMAGE_PIN.findall(text)
+def off_version_pins(text: str, canonical: str) -> list[tuple[str, str]]:
+    """(variable, minor) for each `*_image: python:X.Y-…` pin whose minor differs from `canonical`.
 
-
-def _k8s_python_image_pins() -> list[tuple[str, str, str]]:
+    `canonical` is `.python-version` as written; the comparison is on major.minor.
+    """
     return [
-        (path.relative_to(REPO).as_posix(), var, minor)
-        for path in sorted(K8S_ROLES.glob("*/defaults/main.yml"))
-        for var, minor in python_image_pins(path.read_text())
+        (var, minor)
+        for var, minor in _PYTHON_IMAGE_PIN.findall(text)
+        if minor != _minor(canonical)
     ]
+
+
+def _k8s_defaults() -> dict[str, str]:
+    return {
+        path.relative_to(REPO).as_posix(): path.read_text()
+        for path in sorted(K8S_ROLES.glob("*/defaults/main.yml"))
+    }
 
 
 def test_k8s_python_image_pins_match_the_python_version_file():
     """Role `files/` code runs in these images and CI tests it on `.python-version` (#8532)."""
-    canonical = _minor(_canonical())
-    pins = _k8s_python_image_pins()
-    missing = KNOWN_PYTHON_IMAGE_PINS - {var for _, var, _ in pins}
+    canonical = _canonical()
+    defaults = _k8s_defaults()
+    found = {
+        var for text in defaults.values() for var, _ in _PYTHON_IMAGE_PIN.findall(text)
+    }
+    missing = KNOWN_PYTHON_IMAGE_PINS - found
     assert not missing, f"census found no python image pin named {sorted(missing)}"
-    mismatched = [(path, var, minor) for path, var, minor in pins if minor != canonical]
+    mismatched = [
+        (path, pin)
+        for path, text in defaults.items()
+        for pin in off_version_pins(text, canonical)
+    ]
     assert not mismatched, (
         f"k8s python image pins disagree with .python-version ({canonical}): {mismatched}. "
         f"The pods would run a different interpreter than CI tests their code on."
     )
 
 
+_PIN_314 = "monitor_bridge_k8s_image: python:3.14-alpine@sha256:" + "0" * 64 + "\n"
+
+
 def test_an_off_version_python_image_pin_is_flagged():
-    text = "monitor_bridge_k8s_image: python:3.14-alpine@sha256:" + "0" * 64 + "\n"
-    assert python_image_pins(text) == [("monitor_bridge_k8s_image", "3.14")]
+    assert off_version_pins(_PIN_314, "3.15") == [("monitor_bridge_k8s_image", "3.14")]
 
 
-def test_a_non_python_image_pin_is_clean():
-    assert python_image_pins("seed_volume_image: alpine:3.24\n") == []
+def test_a_matching_python_image_pin_is_clean():
+    assert off_version_pins(_PIN_314, "3.14.6") == []
+    assert off_version_pins("seed_volume_image: alpine:3.24\n", "3.15") == []
