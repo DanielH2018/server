@@ -184,6 +184,7 @@ nav:
       - "ADR-0030 The ansible/ tree is renamed for what it holds": adr/0030-the-ansible-tree-is-renamed-for-what-it-holds.md
       - "ADR-0031 One home and one stateless detector per kind of fact": adr/0031-each-kind-of-fact-has-one-stateless-detector.md
       - "ADR-0032 CI's heavy jobs may run on runner pods": adr/0032-cis-heavy-jobs-may-run-on-runner-pods.md
+      - "ADR-0033 The skeptic and implementer agents carry no turn cap": adr/0033-skeptic-and-implementer-carry-no-maxturns.md
       # The long-form documents three of the records above compress. They sit under Decisions
       # rather than in a section of their own: each one is the working-out behind a single
       # ADR, and a reader who wants that depth arrives from the record, not from a

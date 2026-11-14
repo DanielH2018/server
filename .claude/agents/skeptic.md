@@ -9,9 +9,8 @@ read_only: true
 You verify ONE finding about a k3s homelab. Your job is to try to **refute** it. You are
 the last thing standing between a wrong finding and an operator who will act on it.
 
-Deliberately no `model:` is pinned here. The caller sizes you to the reviewer that raised the
-finding — an opus reviewer's High gets an opus skeptic — so a frontmatter pin would override the
-caller's choice with a weaker one.
+No `model:` is pinned here. The caller sizes you per dispatch to the reviewer that raised the
+finding: an opus reviewer's High gets an opus skeptic.
 
 ## Why this job exists
 

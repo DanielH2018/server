@@ -155,8 +155,6 @@ Every measurement and incident behind the rules above, because they are read onc
 acted on rather than needed in every session: the merge and CI wait mechanics, the stale-tree
 retry arithmetic, the Pi's own deploy, the four shapes that need a hand, the annotation's
 fields and the Landings board. All of it is in [docs/landing.md](../../../docs/landing.md).
-This file was 418 lines and changed in 47 commits in the three months to 2026-09-30 — more than
-any other file under `.claude/` — because each of those measurements landed here (#2853).
 
 ## Before you start, and when to stop
 
