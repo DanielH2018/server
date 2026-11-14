@@ -1,8 +1,10 @@
 # artifacts — the Claude Code artifact browser, and the cross-host sync behind it
 
-Serves the HTML/Markdown artifacts Claude Code sessions write to `~/.claude/artifacts/`, so a
-report generated in a terminal session is readable in a browser behind Authelia. The
-cross-host sync that feeds it is a timer in daniel-box's host package, and this file documents
+Serves the HTML/Markdown artifacts Claude Code sessions write to `~/.claude/artifacts/`
+(`k8s/roles/artifacts/defaults/main.yml:artifacts_host_dir`), so a report generated in a
+terminal session is readable in a browser behind Authelia. The cross-host sync that feeds it is
+a timer in daniel-box's host package
+(`hosts/components/claude-code/units/homelab-sync-artifacts.timer.j2`), and this file documents
 how that sync behaves.
 
 ## At a glance
@@ -111,20 +113,27 @@ both directions.
 The template's own header records both cases, and is the thing to read before editing it.
 
 ## Retiring a service does not remove it from the index
-`artifacts_retired_services` exists so an artifact *about* a retired service stays findable by
-name — a document reviewing the kopia retirement is only searchable if `kopia` is still a
-recognised term. **Retiring a service should ADD its name there**, not drop it from
+`k8s/roles/artifacts/defaults/main.yml:artifacts_retired_services` exists so an artifact
+*about* a retired service stays findable by name — a document reviewing the kopia retirement is
+only searchable if `kopia` is still a recognised term
+(`tests/services/test_artifacts_configmap.py::test_the_service_list_is_json_and_holds_the_platform_names`).
+**Retiring a service should ADD its name there**, not drop it from
 `artifacts_platform_services`. That is the opposite of the usual cleanup instinct, which is why
 it is called out here.
 
 ## A scheduled generator declares `artifact:origin`
 Every index entry carries an `origin`: `scheduled` for an artifact a headless run wrote with no
-operator in the session, `session` for everything else. The GUI's origin filter reads it, and
-a `scheduled` card shows a chip. A generator declares it with
-`<meta name="artifact:origin" content="scheduled">`, or `origin: scheduled` in Markdown
-frontmatter. An artifact that declares nothing is `session`, unless its filename starts with an
-entry in `SCHEDULED_NAME_PREFIXES` (`files/artifact_meta.py`). That list covers the
-changelog-watch artifacts written before the field existed. **A new scheduled generator
+operator in the session, `session` for everything else
+(`k8s/roles/artifacts/tests/test_artifact_server.py::TestBuildIndex::test_a_file_with_no_parsed_metadata_still_has_an_origin`).
+The GUI's origin filter reads it, and a `scheduled` card shows a chip. A generator declares it
+with `<meta name="artifact:origin" content="scheduled">`, or `origin: scheduled` in Markdown
+frontmatter (`k8s/roles/artifacts/files/artifact_meta.py:declared_metadata`,
+`k8s/roles/artifacts/tests/test_artifact_server.py::TestDeclaredMetadata::test_origin`). An
+artifact that declares nothing is `session`, unless its filename starts with an entry in
+`k8s/roles/artifacts/files/artifact_meta.py:SCHEDULED_NAME_PREFIXES`; a declared origin wins
+over the filename
+(`k8s/roles/artifacts/tests/test_artifact_server.py::TestApplyMetadata::test_declared_origin_beats_the_filename`).
+That list covers the changelog-watch artifacts written before the field existed. **A new scheduled generator
 declares its origin rather than adding a prefix there.**
 
 ## Pruning

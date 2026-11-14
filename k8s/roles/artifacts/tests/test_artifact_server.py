@@ -105,6 +105,7 @@ class TestBuildIndex:
         assert index["origins"] == ["session"]
 
     def test_a_file_with_no_parsed_metadata_still_has_an_origin(self, root):
+        # fact: k8s/roles/artifacts/CLAUDE.md#A scheduled generator declares `artifact:origin`
         write(root, "daniel-box", "changelog-watch_2026-09-24.png", "")
         entry = srv.build_index(root, known_services=KNOWN)["artifacts"][0]
         assert entry["origin"] == "scheduled"
@@ -308,6 +309,7 @@ class TestDeclaredMetadata:
         assert meta["services"] == ["longhorn", "b2"]
 
     def test_origin(self):
+        # fact: k8s/roles/artifacts/CLAUDE.md#A scheduled generator declares `artifact:origin`
         body = '<meta name="artifact:origin" content="Scheduled">'
         assert tax.declared_metadata(body)["origin"] == "scheduled"
 
@@ -354,6 +356,7 @@ class TestApplyMetadata:
         assert "tags" not in entry
 
     def test_declared_origin_beats_the_filename(self):
+        # fact: k8s/roles/artifacts/CLAUDE.md#A scheduled generator declares `artifact:origin`
         entry: dict[str, Any] = {"name": "changelog-watch_2026-09-24.html"}
         tax.apply_metadata(
             entry, '<meta name="artifact:origin" content="session">', False, KNOWN
