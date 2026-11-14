@@ -8,10 +8,12 @@ collects them. There is no error to read, because the suite reports the count it
 reported.
 
 The second guard keeps tests out of the directory holding the code they cover. A role's
-`files/` is what the role ships, and the deployer's test-only path rule
-(`deploy_changes._is_test_only_path`) is a directory check, so tests sit in a sibling `tests/`
-directory. `tests/` satisfies the rule by name. `scripts/conftest.py` is the
-one deliberate exception, the shared conftest for the whole `scripts` testpath.
+`files/` is what `role_file(...)` ships into a ConfigMap. The landing's test-only predicates,
+`role_paths.is_test_path` and `path_kinds.is_test_only_path`, recognise a `test_*.py` or
+`conftest.py` by name anywhere, but a suite's helper module such as `_fake_sources.py` matches
+no name pattern: only a `tests` directory on its path keeps `land.sh` from reading a change to
+it as one that deploys. `scripts/conftest.py` is the one deliberate exception, the shared
+conftest for the whole `scripts` testpath.
 
 CI's `pytest` job runs the whole suite on every PR with no file scope, so what `testpaths`
 reaches is the gap this module covers.
