@@ -39,8 +39,9 @@ three kinds of reach:
   readable by the session, and a session can send what it reads off the host.
 - **The privilege the operator's session holds.** That includes sudo, so a session can reach
   root without a commit.
-- **Code execution in the deployer.** The deployer runs from a git directory that `ubuntu`
-  owns, and a session as `ubuntu` can change its `.git/config`. See the rules below.
+- **Code execution in the primary checkout's jobs.** `homelab-checkout-sync` and the crons
+  that commit from the primary checkout run in a git directory that `ubuntu` owns, and a
+  session as `ubuntu` can change its `.git/config`. See the rules below.
 
 Each of these lets an injected session take data or reach root and leave no commit behind.
 [What the `claude` user cannot do](#what-the-claude-user-cannot-do) lists what replaces each
@@ -48,9 +49,10 @@ right the agent gives up.
 
 ### What the split cannot close
 
-**A merged deployable change reaches root, whatever the agent's uid.** The GitOps deployer
-applies the setup plane with `become`. Ansible applies k8s manifests with cluster-admin rights,
-and a manifest can schedule a privileged pod that mounts the host's filesystem. An agent whose
+**A merged deployable change reaches root, whatever the agent's uid.** Each host's
+`homelab-updater` installs its host package as root. Flux applies k8s manifests with
+cluster-admin rights, and a manifest can schedule a privileged pod that mounts the host's
+filesystem. An agent whose
 change merges and deploys therefore runs code as root on the nodes.
 
 Only a human approval on every merge closes that path. The operator rejected that gate, for the
@@ -202,7 +204,7 @@ Rejected alternatives:
 
 - A fork-based agent. The repo's interaction limit is `collaborators_only`, and the Actions
   policy holds every external contributor's CI run for approval.
-- A deployer gate that refuses agent-merged ranges. A refused merge still sits on `master`,
+- A deploy gate that refuses agent-merged ranges. A refused merge still sits on `master`,
   where the operator's sessions pull and run it.
 - The `renovate-approve` app. It would give a third party approval rights on the repo.
 
@@ -219,7 +221,7 @@ lander. The checks and the merge live in `land.sh`, and the lander does not re-i
 - **The landing policy lives in `land.sh`.** The settings change nothing when unset. With
   `LAND_REQUIRE_AUTHOR` set, every merge path is pinned to the head SHA `land.sh` checked, the
   head branch must carry `LAND_REQUIRE_BRANCH_PREFIX` and target `master`, a PR touching a path
-  in `LAND_APPROVAL_PATHS` refuses, and a deployer hold refuses before the merge. A PR that
+  in `LAND_APPROVAL_PATHS` refuses, and a `DEPLOY_HOLD` refuses before the merge. A PR that
   changes a module the lander imports refuses too, and so does one that can run code on import
   with no import line, such as a non-empty `__init__.py` or a symlink.
   `--verdict-file` writes `PENDING`, then the final `VERDICT:` or `REFUSED:` line.
@@ -257,7 +259,7 @@ lander. The checks and the merge live in `land.sh`, and the lander does not re-i
 ### The approval floor
 
 The approval list is a floor. It keeps the explicit grant points and the gate itself. The agent's
-own components (`claude-code`, `renovate-agent`), the deployer (`gitops_deploy`),
+own components (`claude-code`, `renovate-agent`),
 `host_lib.py` and `inventory/` are not on it, so a PR changing them lands without the
 operator.
 
@@ -287,7 +289,9 @@ truth, with a reason beside each entry. It holds:
   read-only token, the token and config templates, `templates/renovate-agent-pins.j2`, which
   sets the caps and the permission mode as literals, the prompt, the unit and timer, and
   `component.yml`. The operator added them on 2026-11-13 with the guardrails plan's B1. The
-  component's defaults, tests and `CLAUDE.md` stay off.
+  session's Claude Code settings `files/claude-settings.json`, the setup script that installs
+  them and its boot unit joined on 2026-11-14 (#8392), so no unapproved PR weakens the
+  session's deny floor. The component's defaults, tests and `CLAUDE.md` stay off.
 - `k8s/roles/cluster-base/` and its path after the rename, `k8s/roles/cluster-base/`,
   the agent's read-only cluster RBAC. The operator added it
   on 2026-10-16 (H1 Open question 7). Before H1, that RBAC applies only through
@@ -311,8 +315,8 @@ Two choices keep the floor from being bypassed through the inventory:
 unlisted `hosts/` path reaches root without approval. A true root barrier would put `hosts/`
 itself on the list.
 
-The list does not name the modules the landing process imports, such as `scripts/lib/` and the
-deployer's helpers. The policy derives that set when it runs, from the modules it has loaded,
+The list does not name the modules the landing process imports, such as `scripts/lib/` and
+`scripts/deploy_tools/`. The policy derives that set when it runs, from the modules it has loaded,
 and refuses a PR that changes one or adds a file that would shadow one. It also refuses any
 compiled module file: a `__pycache__/` path, a `.pyc` or an extension module. Python loads a
 `.pyc` file in place of unchanged source and an extension module before the `.py` beside it, and
@@ -777,16 +781,11 @@ the operator's.
 1. Run `files/claude-dotfiles-sync.sh` every 15 minutes from the timer, since a dotfiles merge
    ships no host package version here.
 
-The script has three guards:
+The script has two guards:
 
 - It refuses a source that does not render `is-agent` as true. Applied anyway, such a source
   would write the operator's `.gitconfig` over the agent's identity. The refusal is not fatal
   to the apply, so a host can switch the flag on before the dotfiles change lands.
-- After that check, and only then, it renames each root-owned subset tree to
-  `~/.claude/.subset-copy-<name>`. chezmoi, running as the agent, cannot write into a root-owned
-  directory, and the agent cannot delete one. It owns `~/.claude`, though, so it can rename one
-  in place. The component ships no subset and deletes no renamed tree. A refused source therefore
-  leaves the subset where it was, and the agent always has one of the two.
 - It applies in two passes, every directory but `~/.claude` and `~/.config/gh` and then
   everything but directories. The first pass is non-recursive. chezmoi applies a directory
   target's whole tree below it, so applying `~/.config` reopened `~/.config/gh` to `0755`.
@@ -865,7 +864,7 @@ operator can log in as `claude`, so only the operator can run the checks that st
 |---|---|---|
 | A dry run against the cluster before a merge | It needs decrypted SOPS values, and the agent has no age key | Merged work deploys through the lander (slice 3). A pre-merge dry run returns with slice 7. |
 | The `probe.py` subcommands that read a credential from SOPS: `arr`, `ha`, `ha-state`, `b2-longhorn` and `b2-budget`, plus `postflight.py` and `ui_login.py` | `core.sops_extract` decrypts the credential, and the agent has no age key. The failure says so and exits 75. | The operator. `probe.py health` reads no SOPS value and works for the agent. The domain and the B2 bucket come from inventory, so `b2-longhorn --dry-run` and `b2-budget --dry-run` work for the agent too. |
-| `sudo` | No sudo rights and no `SUDO_ASKPASS` helper | The operator, or the deployer after a merge |
+| `sudo` | No sudo rights and no `SUDO_ASKPASS` helper | The operator, or a host package after a merge |
 | Adding or rotating a secret | `sops` needs the data key to write a value | The operator. Key names stay readable, because SOPS encrypts values only. |
 | ssh as `ubuntu` to the peers | That shell has sudo | The operator. The agent reaches daniel-server as its own `claude` agent user, for fan-out only (slice 5). The Pi has no agent login, because the one `probe.py` ssh path needs its `docker` group. |
 | The `adm` group's logs | The agent belongs to `systemd-journal` only, not `adm` | The journal through `systemd-journal`, and the verdict files from the lander for landing |

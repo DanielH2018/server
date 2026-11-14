@@ -82,9 +82,11 @@ def test_test_node_is_clean():
 
 
 def test_marker_is_clean():
-    c = _one("`scripts/deploy_tools/land_lib/land_tags.py:DECIDED: fire on ANY change`")
+    c = _one(
+        "`scripts/deploy_tools/land_lib/land_tags.py:DECIDED: name the changed keys`"
+    )
     assert c.form == "marker"
-    assert c.selector == "fire on ANY change"
+    assert c.selector == "name the changed keys"
 
 
 def test_a_probe_subcommand_is_no_citation():

@@ -29,15 +29,6 @@ from renderer.renderer_lib import host as host_mode
 
 FILTER = "/etc/rsyslog.d/49-homelab-info-filter.conf"
 I915 = "/etc/modprobe.d/i915.conf"
-BASELINE_PATHS = {
-    *WRITTEN,
-    SUDOERS,
-    BLACKLIST,
-    FILTER,
-    I915,
-    "/etc/issue",
-    "/etc/issue.net",
-}
 
 
 @pytest.fixture(scope="module")

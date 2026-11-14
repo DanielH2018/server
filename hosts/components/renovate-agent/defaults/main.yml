@@ -52,10 +52,10 @@ renovate_agent_budget_usd: 25
 renovate_agent_run_timeout_s: 67260
 renovate_agent_unit_timeout: 1131min
 
-# The longest Bash call the session may make, in ms. A landing blocks in `systemctl start` for up
-# to the lander's 1071-minute TimeoutStartSec, and Claude Code's own cap is 10 minutes. The unit
-# sets it as BASH_MAX_TIMEOUT_MS and the prompt quotes it.
-renovate_agent_bash_timeout_ms: 64560000
+# The session alone. It only triages and writes requests; the runner lands what it nominated
+# after it ends, inside renovate_agent_run_timeout_s. templates/renovate-agent-pins.j2 says why
+# this figure.
+renovate_agent_session_timeout_s: 2700
 
 # 06:00 America/Chicago — after Renovate's own "before 6am" cycle (UTC, so it closes at
 # midnight/1am CT depending on DST) has opened the day's PRs. This runs BEFORE the 13:00

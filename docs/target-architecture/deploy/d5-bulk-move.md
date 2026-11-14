@@ -1251,7 +1251,7 @@ conversion Jobs. Two Kubernetes behaviours make a careless Job re-run or wedge:
 **What every Job carries.** The scripts use only the Python standard library. They reach the
 API server with the pod's ServiceAccount token, and Prometheus or an app over HTTP.
 
-- **Image.** One pin, `flux_job_image`, set to the `python:3.14-alpine` digest that
+- **Image.** One pin, `flux_job_image`, set to the `python:3.15-alpine` digest that
   `monitor_bridge_k8s_image` already pins. Renovate's existing digest rule tracks it.
 - **Script delivery.** A ConfigMap in the same Kustomization, whose name ends in the digest of
   the script. The Job's spec names the ConfigMap, so the Job's spec digest covers the script,
@@ -4588,7 +4588,7 @@ Fixed:
   fixture is added.
 - D5-R2-17: *What every Job carries* states image, script delivery, namespace, pod spec and
   `backoffLimit`, and the soak Job is `soak-<spec digest8>`. No kubectl image is pinned in the
-  tree, so the Jobs use the Python standard library on the `python:3.14-alpine` digest that
+  tree, so the Jobs use the Python standard library on the `python:3.15-alpine` digest that
   monitor-bridge already pins. `tests/k8s/test_pod_template_hygiene.py` leaves Jobs
   out of scope, so no priority class is required.
 - D5-R2-18: authelia's seed becomes an initContainer, with a check of whether the CLI needs a

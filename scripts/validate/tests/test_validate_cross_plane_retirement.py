@@ -11,6 +11,8 @@ from pathlib import Path
 
 import pytest
 
+from lib.git import extract
+from lib.repo_paths import REPO
 from validate import render_diff_gates as gate
 
 ROLES = ("headlamp",)
@@ -22,12 +24,12 @@ TEMPLATE = "rbac-observability.yaml.j2"
 @pytest.fixture(scope="module")
 def head_snapshot(tmp_path_factory) -> gate.Snapshot:
     tree = tmp_path_factory.mktemp("head")
-    gate.extract("HEAD", tree, gate.RENDER_TREES)
+    extract("HEAD", tree, gate.RENDER_TREES, repo=REPO)
     return gate.snapshot(tree, ROLES)
 
 
 def test_an_emptied_deferred_template_keeps_the_kustomization(tmp_path, head_snapshot):
-    gate.extract("HEAD", tmp_path, gate.RENDER_TREES)
+    extract("HEAD", tmp_path, gate.RENDER_TREES, repo=REPO)
     (tmp_path / ROLE / "templates" / TEMPLATE).write_text("")
     head = gate.snapshot(tmp_path, ROLES)
     assert DEFERRED in head.deferred
@@ -43,7 +45,7 @@ def test_an_emptied_deferred_template_keeps_the_kustomization(tmp_path, head_sna
 def test_a_dropped_deferred_template_removes_the_kustomization(
     tmp_path: Path, head_snapshot
 ):
-    gate.extract("HEAD", tmp_path, gate.RENDER_TREES)
+    extract("HEAD", tmp_path, gate.RENDER_TREES, repo=REPO)
     (tmp_path / ROLE / "templates" / TEMPLATE).unlink()
     defaults = tmp_path / ROLE / "defaults/main.yml"
     defaults.write_text(defaults.read_text() + "manifests_deferred_files: []\n")

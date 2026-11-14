@@ -46,7 +46,7 @@ from agent_logic import (
 )
 from agent_toolbox import TOOLS, AgentTools, log, read_file
 from host_lib import atomic_write, install_excepthook, parse_env_file
-from run_requests import carry_out, fresh_dir
+from run_requests import Outcome, carry_out, fresh_dir
 from run_worktree import prepare_worktree, worktree_is_reusable
 
 # The env override exists so the I/O shell can be exercised end-to-end against a throwaway
@@ -75,7 +75,6 @@ SESSION_ENV_KEYS = (
     "PYTHONDONTWRITEBYTECODE",
     "RUN_HOOK_PROJECT_DIR",
     "RUN_HOOK_UV",
-    "BASH_MAX_TIMEOUT_MS",
 )
 
 
@@ -205,7 +204,7 @@ def run_session(
         "--add-dir",
         requests_dir,
     ]
-    timeout = int(cfg.get("RUN_TIMEOUT_S", "14400"))
+    timeout = int(cfg.get("SESSION_TIMEOUT_S", "3600"))
     log(f"starting session (timeout {timeout}s, budget ${cfg.get('BUDGET_USD', '25')})")
     try:
         p = subprocess.run(
@@ -224,6 +223,13 @@ def run_session(
     return p.stdout or "", p.returncode, False
 
 
+def landings(requests: list[Outcome]) -> list[str]:
+    """One digest line for each nomination the runner did not land, with why."""
+    return [
+        f"#{r.pr} {r.detail}" for r in requests if r.action == "land" and not r.done
+    ]
+
+
 def record_run(state_dir: str, line: str) -> None:
     """Append one tick's record to `runs.jsonl`; a failed write must not cost the digest."""
     try:
@@ -236,6 +242,8 @@ def record_run(state_dir: str, line: str) -> None:
 
 def main(tools: AgentTools = TOOLS, config_path: str = CONFIG) -> int:
     cfg = parse_env_file(config_path)
+    # One deadline for the whole run: the session, then the landings it nominated.
+    deadline = time.time() + int(cfg.get("RUN_TIMEOUT_S", "14400"))
     missing = [k for k in ("REPO", "REPO_DIR", "PROMPT_FILE") if not cfg.get(k)]
     if missing:
         raise RuntimeError(f"{config_path} is missing {', '.join(missing)}")
@@ -283,7 +291,16 @@ def main(tools: AgentTools = TOOLS, config_path: str = CONFIG) -> int:
     stdout, rc, timed_out = run_session(cfg, path, log_path, requests_dir)
     outcome = parse_run(stdout, rc, timed_out)
     census = {p.number for p in before}
-    for request in carry_out(requests_dir, census, cfg["REPO"], tools, state_dir):
+    requests = carry_out(
+        requests_dir,
+        census,
+        cfg["REPO"],
+        tools,
+        state_dir,
+        max_lands=int(cfg.get("MAX_PRS", "3")),
+        deadline=deadline,
+    )
+    for request in requests:
         log(
             f"request {request.name or '-'}: {request.action or '?'} "
             f"#{request.pr or '?'} {'done' if request.done else 'not done'}: {request.detail}"
@@ -312,7 +329,7 @@ def main(tools: AgentTools = TOOLS, config_path: str = CONFIG) -> int:
         )
     tools.discord_post(
         webhook,
-        render_digest(outcome, moved, host, log_path, resume),
+        render_digest(outcome, moved, host, log_path, resume, landings(requests)),
         USER_AGENT,
         log=log,
         spool_dir=spool,

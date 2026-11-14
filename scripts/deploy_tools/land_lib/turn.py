@@ -2,22 +2,29 @@
 
 A PR's CI run tests the tree of master with the PR merged in. Master's own run after the merge
 skips its jobs only when the merge made that same tree (`scripts/dev/tested_tree.py`), so
-master must stay where the PR's run found it. A landing that holds the turn marks its draft PR
-ready, waits for that one run and merges, and no other landing that takes turns merges in
-between. `docs/ci-throughput.md` has the measurements: a merge cost 1.4 pull-request runs and
-0.7 full master runs before the turn, against one run with it.
+master must stay where the PR's run found it. A landing that holds the turn starts its PR's
+one run on the master of that moment (`merge._start_run`), waits for it and merges, and no
+other landing that takes turns merges in between. `docs/ci-throughput.md` has the
+measurements: a merge cost 1.4 pull-request runs and 0.7 full master runs before the turn,
+against one run with it.
 
-The turn is an advisory lock on one file, held by the landing's own process, so a landing that
-dies gives it up. It is not a safety gate. A landing that cannot take it within `merge_timeout`
-goes on without it and merges as a landing without the turn does. A landing on another host,
-and a landing without `LAND_QUEUE`, take no turn and can still move master.
+The turn is an advisory lock on one file on `TURN_HOST`. A landing there locks the file itself.
+A landing on another host holds the same lock through an ssh session that lasts as long as
+the landing, so both hosts take turns with each other. Either way the lock ends with the
+landing's process, so a landing that dies gives the turn up.
+
+The turn is not a safety gate. A landing that cannot take it within `merge_timeout`, or
+cannot reach `TURN_HOST`, goes on without it and merges as a landing without the turn does.
+A landing without `LAND_QUEUE` takes no turn and can still move master.
 
 `LAND_QUEUE` turns it on, for a landing that merges its PR directly.
 """
 
 import contextlib
 import fcntl
+import inspect
 import os
+import shlex
 import subprocess
 from collections.abc import Callable, Generator
 
@@ -32,23 +39,26 @@ from lib.progress import OnChange
 # /run/lock is a tmpfs every user can create a file in, and one file there serves every
 # landing on the host, whichever user runs it.
 LOCK = _Path("/run/lock/homelab-land-turn.lock")
-# How often, and how far apart in seconds, `_mark_ready` reads `mergeable` while GitHub still
-# answers UNKNOWN.
-MERGEABLE_READS = 6
-MERGEABLE_POLL_S = 5
 
 
-def try_take(path: _Path = LOCK) -> Callable[[], None] | None:
-    """Take the turn without waiting.
+# The host whose file is the turn. The lander units run there.
+TURN_HOST = "daniel-box"
+# How long a landing on another host waits for `TURN_HOST` to give up the lock it released.
+_SSH_EXIT_S = 10
+
+
+def _lock(path: str) -> int | None:
+    """Open the turn's file and lock it without waiting.
 
     The lock needs only a read-only descriptor, so a landing run by one user can lock a file
-    that another user's landing created.
+    that another user's landing created. It names nothing but `os` and `fcntl`, because
+    `_HOLD` runs this source on `TURN_HOST`.
 
     Returns:
-        The call that gives the turn up, or None while another landing holds it.
+        The locked descriptor, or None while another landing holds the lock.
 
     Raises:
-        OSError: The lock file can be neither opened nor created.
+        OSError: The file can be neither opened nor created.
     """
     try:
         fd = os.open(path, os.O_RDONLY)
@@ -65,13 +75,97 @@ def try_take(path: _Path = LOCK) -> Callable[[], None] | None:
         if isinstance(exc, BlockingIOError):
             return None
         raise
-    return lambda: os.close(fd)
+    return fd
+
+
+# What a landing on another host runs on `TURN_HOST`: take the lock, say which way it went,
+# and hold it until stdin closes, which is when the landing's ssh session ends.
+_HOLD = f"""import fcntl, os, sys
+{inspect.getsource(_lock)}
+fd = _lock(sys.argv[1])
+print("busy" if fd is None else "held", flush=True)
+if fd is not None:
+    sys.stdin.read()
+"""
+
+
+def try_take(path: _Path = LOCK) -> Callable[[], None] | None:
+    """Take the turn on this host without waiting.
+
+    Returns:
+        The call that gives the turn up, or None while another landing holds it.
+
+    Raises:
+        OSError: The lock file can be neither opened nor created.
+    """
+    fd = _lock(str(path))
+    return None if fd is None else lambda: os.close(fd)
+
+
+def try_take_over_ssh(
+    path: _Path = LOCK, host: str = TURN_HOST
+) -> Callable[[], None] | None:
+    """Take the turn on `host` without waiting, through an ssh session that holds it.
+
+    Returns:
+        The call that gives the turn up, or None while another landing holds it.
+
+    Raises:
+        OSError: `host` did not answer, or could not open the lock file.
+    """
+    remote = f"python3 -c {shlex.quote(_HOLD)} {shlex.quote(str(path))}"
+    session = subprocess.Popen(
+        [
+            "ssh",
+            "-o",
+            "BatchMode=yes",
+            "-o",
+            "ConnectTimeout=10",
+            "-o",
+            "ServerAliveInterval=5",
+            "-o",
+            "ServerAliveCountMax=3",
+            host,
+            remote,
+        ],  # fmt: skip
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    stdin, stdout, stderr = session.stdin, session.stdout, session.stderr
+    assert stdin and stdout and stderr
+
+    def release() -> None:
+        stdin.close()
+        try:
+            session.wait(_SSH_EXIT_S)
+        except subprocess.TimeoutExpired:
+            session.kill()
+            session.wait()
+        stdout.close()
+        stderr.close()
+
+    answer = stdout.readline().strip()
+    if answer == "held":
+        return release
+    why = stderr.read().strip().splitlines()
+    release()
+    if answer == "busy":
+        return None
+    raise OSError(f"ssh {host}: {why[-1] if why else 'no answer'}")
+
+
+def _taker(hostname: str) -> Callable[[], Callable[[], None] | None]:
+    """The call that takes the turn from the host named `hostname`, qualified or not."""
+    here = hostname.split(".")[0] == TURN_HOST
+    return try_take if here else try_take_over_ssh
 
 
 def _wait(ln: Landing) -> Callable[[], None] | None:
     """Poll for the turn for up to `merge_timeout`; None when the landing goes on without it."""
     o = ln.opts
-    try_turn = ln.tools.try_turn or try_take
+    try_turn = ln.tools.try_turn or _taker(ln.tools.hostname())
     waiting = OnChange(say)
     waited = 0
     while True:
@@ -99,45 +193,9 @@ def _wait(ln: Landing) -> Callable[[], None] | None:
         waited += o.merge_poll
 
 
-def _mark_ready(ln: Landing) -> None:
-    """Mark a draft PR ready, which starts the CI run the merge waits for.
-
-    That run tests the merge of the PR into master as GitHub last built it, and GitHub builds
-    it again only when something asks whether the PR merges. The read of `mergeable` asks, so
-    it comes first, and the run tests the PR on the master this landing merges into.
-    """
-    if ln.view("isDraft").get("isDraft") is not True:
-        return
-    pr = str(ln.opts.pr)
-    for _ in range(MERGEABLE_READS):
-        if ln.view("mergeable").get("mergeable") != "UNKNOWN":
-            break
-        ln.tools.sleep(MERGEABLE_POLL_S)
-    try:
-        ln.tools.gh("pr", "ready", pr)
-    except subprocess.CalledProcessError as exc:
-        why = (exc.stderr or "").strip() or f"gh exited {exc.returncode}"
-        ln.die(
-            f"PR #{pr} is a draft and could not be marked ready ({why}); run "
-            f"`gh pr ready {pr}`, then re-run this",
-            1,
-        )
-    except subprocess.TimeoutExpired:
-        ln.die(
-            f"PR #{pr} is a draft and marking it ready timed out; run `gh pr ready {pr}`, "
-            "then re-run this",
-            1,
-        )
-    say(f"PR #{pr} was a draft; marked it ready, which starts its CI run")
-
-
 @contextlib.contextmanager
 def held(ln: Landing) -> Generator[bool]:
     """Hold the landing turn for the merge wait, and give it up however that wait ends.
-
-    Inside the turn it marks a draft PR ready, so the PR's one CI run starts after every
-    earlier landing's merge. The draft is marked ready even when the turn never came, because
-    a draft cannot merge.
 
     Yields:
         Whether this landing holds the turn. False for a landing without `LAND_QUEUE`, for one
@@ -148,7 +206,6 @@ def held(ln: Landing) -> Generator[bool]:
         return
     release = _wait(ln)
     try:
-        _mark_ready(ln)
         yield release is not None
     finally:
         if release:

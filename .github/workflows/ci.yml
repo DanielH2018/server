@@ -122,8 +122,8 @@ jobs:
   # `prove` was cancelled or failed, whatever `proven` says, and the gate reads such a `prove` as
   # unproven, so every dependent must succeed. `tested_tree.py` exits 0 on every answer, so
   # either conclusion comes from the runner (a timeout, a failed checkout, a lost runner) and
-  # says nothing about the tree. Before that, master run 39279035375 (2026-10-19) went red and
-  # parked the deployer for 21h. `prove` had set `proven=true` 6s in, the runner then hung in
+  # says nothing about the tree. HISTORY -- before that, master run 39279035375 (2026-10-19) went
+  # red and parked the since-retired GitOps deployer for 21h. `prove` had set `proven=true` 6s in, the runner then hung in
   # teardown after "Cleaning up orphan processes", and the job timeout cancelled it at 5m23s.
   # Every dependent skipped on `proven=true`, and the gate failed on `prove=cancelled`.
   #

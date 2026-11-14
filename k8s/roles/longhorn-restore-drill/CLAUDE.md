@@ -53,7 +53,7 @@ real, and tears everything down.
   is copied with its sidecars into the pod's emptyDir and checked there. The run writes
   `sqlite.<pvc>` as `<epoch> checked=<n> bad=<n>` on a pass and on a failure. A probe log with no
   summary line fails the run. The probe image (`k3s_longhorn_restore_drill_image`) is
-  `python:3.14-alpine`, for Python's `sqlite3` module. ENFORCED:
+  `python:3.15-alpine`, for Python's `sqlite3` module. ENFORCED:
   `tests/longhorn/test_longhorn_restore_drill_sqlite.py::test_a_corrupt_database_fails_the_drill_and_stamps_no_success`,
   `tests/longhorn/test_longhorn_restore_drill_sqlite.py::test_the_probe_reports_a_corrupt_database_as_bad`.
 

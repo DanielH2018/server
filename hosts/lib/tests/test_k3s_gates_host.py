@@ -38,26 +38,6 @@ def _round(mode, routes, root, version=VERSION, guard=False, notes=None):
     return k3s_gates.run_round(checks)
 
 
-# ── resolving a path under the host root ────────────────────────────────────────────────────
-
-
-def test_var_lock_resolves_under_the_fixture_root_not_the_tests_run_lock(root):
-    resolved = k3s_gates.resolve_under(str(root), "/var/lock/a.lock")
-    assert resolved == str(root / "run/lock/a.lock")
-
-
-def test_a_relative_link_and_dotdot_stay_inside_the_root(root):
-    (root / "var/rel").symlink_to("../run/lock")
-    assert k3s_gates.resolve_under(str(root), "/var/rel/../../etc") == str(root / "etc")
-
-
-def test_a_symlink_loop_is_an_error(root):
-    (root / "a").symlink_to("/b")
-    (root / "b").symlink_to("/a")
-    with pytest.raises(OSError, match="too many symlinks"):
-        k3s_gates.resolve_under(str(root), "/a")
-
-
 def test_the_script_parses_with_the_python_312_grammar():
     """The hosts run it under Ubuntu 24.04's python3; ruff's default target would write 3.14."""
     ast.parse(SCRIPT.read_text(), feature_version=(3, 12))

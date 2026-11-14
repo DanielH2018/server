@@ -18,7 +18,9 @@ commits and needs ``GIT_AUTHOR_*`` passes its own ``env`` to ``subprocess`` dire
 
 import os
 import subprocess
+import tarfile
 import tempfile
+from collections.abc import Iterable
 from pathlib import Path
 
 
@@ -79,6 +81,26 @@ def git_process(*args: str, cwd: str | Path) -> subprocess.Popen[bytes]:
 def git_stdout(*args: str, cwd: str | Path | None = None, **kwargs) -> str:
     """``git(...).stdout`` with surrounding whitespace removed."""
     return git(*args, cwd=cwd, **kwargs).stdout.strip()
+
+
+def extract(
+    sha: str, dest: Path, paths: Iterable[str] = (), *, repo: str | Path
+) -> None:
+    """Unpack `git archive` of `sha` in `repo`, narrowed to `paths` when given, under `dest`.
+
+    A path `sha` does not hold is skipped, so a caller can name `hosts` for a commit before it.
+    The archive reads the object store, so `repo`'s working tree may sit at any commit.
+    """
+    dest.mkdir(parents=True, exist_ok=True)
+    if paths := list(paths):
+        held = git_stdout("ls-tree", "--name-only", sha, "--", *paths, cwd=repo).split()
+        if not (paths := [p for p in paths if p in held]):
+            return
+    with tempfile.TemporaryDirectory(prefix="git-extract-tar-") as tmp:
+        tar_path = Path(tmp) / "tree.tar"
+        git("archive", "--format=tar", "-o", str(tar_path), sha, "--", *paths, cwd=repo)
+        with tarfile.open(tar_path) as tar:
+            tar.extractall(dest, filter="data")
 
 
 def git_dirty(
