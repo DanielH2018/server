@@ -53,9 +53,8 @@ the 12 items the digest listed were ticked. Renovate opened #3330 through #3340 
 #2335, every one of them still pending, and all 11 new PRs were closed unmerged the same day
 (#3365).
 
-**Report a stuck item instead.** Name its branch, its dwell and its soak in your summary. The
-cause is tracked by #3368. Cite the cause that issue identifies once it is determined, and cite
-the issue until then. What is known: tdarr is re-pushed faster than its 3-day soak, but four
+**Report a stuck item instead.** Name its branch, its dwell and its soak in your summary, and
+check it against the no-release-timestamp cause above. What is known: tdarr is re-pushed faster than its 3-day soak, but four
 other images target digests 4 to 13 days old that Renovate still reads as pending, so re-push
 churn is not the general cause. Renovate runs here as the Mend hosted app, whose run log lives
 on developer.mend.io and is not readable from a session.

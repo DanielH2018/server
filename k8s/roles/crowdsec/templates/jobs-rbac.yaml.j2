@@ -17,7 +17,7 @@
   `pods/log` cannot name the Traefik pod, whose name changes on every rollout, so the grant
   reads every homelab pod's log. That is why the token reaches the sidecar alone, through a
   projected volume, and never the engine container (deployment.yaml.j2).
-  ansible/tests/k8s/test_rbac_against_script.py runs each module's main with a recording runner
+  tests/k8s/test_rbac_against_script.py runs each module's main with a recording runner
   and holds these rules to the calls it records.
 #}
 ---

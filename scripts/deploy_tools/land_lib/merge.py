@@ -470,7 +470,9 @@ def _start_run(ln: Landing, take_turn: TakeTurn) -> tuple[str, bool, int]:
     the turn once that head is green, so no landing holds the turn while a run that started
     before it finishes. The branch is also left as it is for a head that moved after the
     landing policy pinned it, a head admitted on an approval, a PR GitHub reads as
-    conflicting, and an update that fails.
+    conflicting, and an update that fails. A head a landing batch tested is left too
+    (`batch.py`): the batch stacked it on the master of the turn, and an update would make a
+    head no run tested.
 
     Returns:
         The head the branch was updated from, or "" when it was not updated; whether the
@@ -494,6 +496,7 @@ def _start_run(ln: Landing, take_turn: TakeTurn) -> tuple[str, bool, int]:
         _mark_ready(ln)
     if (
         not (in_turn and untested)
+        or stale_base.batch_tested(ln, head)
         or view.get("mergeable") == "CONFLICTING"
         or head == ln.approved_head
         or (ln.pinned_head and head != ln.pinned_head)
@@ -539,6 +542,11 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
     together stay inside the two merge budgets LAND_DEADLINE counts.
     Without --arm-merge this only polls, for a PR merged some other way.
 
+    A head a landing batch tested (`batch.py`) merges with no stale-base check while it is
+    the head the batch stacked and master is still the commit the batch stacked it on
+    (`stale_base.batch_tested`). The seconds of the batch's run reach this wait with the
+    seconds in line for the turn, and the wait then ends inside the two merge budgets.
+
     A head whose every CI run skipped as a draft is named on the poll that first reads it. Once
     it has stayed so for `DRAFT_SKIPPED_GRACE_S`, a PR that is no longer a draft is converted
     to draft and back once for that head (`_retrigger_ready_run`) and the grace starts again.
@@ -577,6 +585,8 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
         waited = queued
     # The `waited + held` at which the wait ends; the update after a green head moves it, once.
     wait_ends_at = waited + o.merge_timeout
+    if ln.batched_s:
+        wait_ends_at = min(wait_ends_at, wait_cap)
     # The head the pin gate last passed, so a merge GitHub refuses and the wait retries runs
     # the gate and posts the status again only for a new head.
     gated_head = ""
@@ -690,7 +700,7 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
                 conflicts = view.get("mergeable") == "CONFLICTING"
                 moved = (
                     []
-                    if updated_from
+                    if updated_from or stale_base.batch_tested(ln, head)
                     else stale_base.stale_paths(ln, head, conflicts, no_overlap)
                 )
                 if moved:
@@ -747,8 +757,10 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
             held += step
         else:
             waited += step
+    in_line = queued - ln.batched_s
     notes = [
-        f"{queued}s of it waiting for the landing turn" if queued else "",
+        f"{in_line}s of it waiting for the landing turn" if in_line else "",
+        f"{ln.batched_s}s of it on its batch's run" if ln.batched_s else "",
         f"{held}s of it held by pacing" if held else "",
     ]
     say(", ".join([f"merged after {waited + held}s", *filter(None, notes)]))

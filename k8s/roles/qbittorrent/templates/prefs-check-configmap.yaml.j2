@@ -4,7 +4,7 @@
 
   No secret goes in here. The WebUI login reaches the pod from the qbittorrent-prefs-check
   Secret through `secretKeyRef` (the H2 plan's *No secret in a ConfigMap*), and
-  ansible/tests/k8s/test_no_secret_in_a_moved_jobs_configmap.py renders this file with every
+  tests/k8s/test_no_secret_in_a_moved_jobs_configmap.py renders this file with every
   secrets.yml key bound to a sentinel and fails on any sentinel it finds.
 #}
 ---

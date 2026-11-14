@@ -8,8 +8,8 @@
   mutation Jobs share `<tag>-verify`*).
 
   DECIDED: the script and the declared values come from arr-notification by `lookup()`, not
-  from the renderer. A cross-role lookup makes the deployer's scan redeploy sonarr, radarr
-  and lidarr when arr-notification changes, the coupling the Ansible `include_role` of arr-notification
+  from the renderer. A cross-role lookup puts arr-notification's files in the sonarr, radarr
+  and lidarr renders, so a change there redeploys all three, the coupling the Ansible `include_role` of arr-notification
   had before the flip, so the lookup changed no routing. A renderer argument for one role's script
   would be a special case for three readers.
 

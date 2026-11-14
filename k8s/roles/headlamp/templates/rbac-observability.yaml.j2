@@ -8,7 +8,7 @@
 # itself: it asks the API server to proxy each query —
 #   /api/v1/namespaces/observability/services/prometheus:9090/proxy/api/v1/query_range
 # — so the grant is `services/proxy` on THAT one Service, namespaced, and the TCP hop to the
-# pod is the API server's, admitted by netpol_baseline_obs_node_cidrs (roles/k8s/netpol-baseline)
+# pod is the API server's, admitted by netpol_baseline_obs_node_cidrs (k8s/roles/netpol-baseline)
 # rather than by anything selecting the headlamp pod.
 #
 # The authoriser checks the resource name WITH the port: measured 2026-09-06, an unpinned call
