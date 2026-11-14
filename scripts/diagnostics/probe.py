@@ -56,6 +56,8 @@ Subcommands:
                               kubectl serves the other one]
     arr <app> <api-path>     Read-only *arr API GET [--json] (sonarr/radarr/prowlarr/lidarr)
                              [--show-secrets prints the credential values it redacts]
+    uptime-robot             every Uptime Robot monitor the docs name exists and is not
+                             paused (key from SOPS uptimerobot_api_key, via stdin)
     ha state <entity_id>     Live HA entity state + attrs    (home-assistant :8123)
     ha automation <id|alias> One automation's on/off + last_triggered (resolves alias!=id)
     ha get <api-path>        Raw GET /api/<path>, e.g. `ha get error_log`
