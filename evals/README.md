@@ -1,9 +1,10 @@
 # Homelab eval cases
 
-Regression cases for the homelab-local reviewer **agents** (`.claude/agents/`), the
-`/homelab-review` orchestration **skill** (`.claude/skills/homelab-review/`), and the
-`land-after-merge` skill, the one case target that decides whether production changes. They are run by the
-**chezmoi** eval engine — this repo only hosts the cases; the engine stays a single source of truth.
+Regression cases for the homelab-local **agents** (`.claude/agents/`) and **skills**
+(`.claude/skills/`). Each `cases/<name>/` directory holds the cases for the skill or agent of
+that name. Every other skill and agent carries a recorded reason for having none (see
+*Coverage*). The cases are run by the **chezmoi** eval engine — this repo only hosts the cases;
+the engine stays a single source of truth.
 
 The eval scaffold shipped in commit `469bcf533`.
 
@@ -15,10 +16,8 @@ The eval scaffold shipped in commit `469bcf533`.
 # builtin suite (and needs its work-overlay agents present).
 export EVAL_CASE_DIRS=$HOME/server/evals/cases
 export EVAL_AGENT_DIRS=$HOME/server/.claude/agents:$HOME/server/.claude/skills
-for a in security-review homelab-network-diagnostician homelab-backup-observability-reviewer \
-         homelab-cicd-reviewer homelab-container-reviewer skeptic homelab-review ha-review \
-         land-after-merge; do
-  node $HOME/.local/share/chezmoi/evals/run-evals.mjs --agent "$a"
+for d in $HOME/server/evals/cases/*/; do
+  node $HOME/.local/share/chezmoi/evals/run-evals.mjs --agent "$(basename "$d")"
 done
 
 # filters + cheap iteration
@@ -202,6 +201,28 @@ uv run pytest evals/tests/test_review_outcomes.py    # schema guard over the com
   real PR. Like `006`, they grade the decision and not the tool call, because a hermetic run
   has no tools. Both are unverified until the next hermetic sweep, which grades them because
   `eval-run.sh.j2` iterates `evals/cases/*/`.
+- **procedure** — the skills that steer a multi-step procedure (#8534). Each case grades a fact
+  only the skill body states, so a run without the skill has no way to pass it.
+  `deploy/001` passes only when the session commits before it runs the render-diff gates,
+  and checks a Pi service with `probe.py health <svc> --docker` from daniel-box.
+  `new-k8s-service/001` passes only when the session scaffolds the role with
+  `new_k8s_service.py` instead of copying a sibling, writes no Service or IngressRoute, and
+  orders the entry with `depends_on`. `issue-fanout/001` hands a `findings.py next --json`
+  listing. It passes only when the session merges two issues that share a file into one batch,
+  keeps a fan-out-tooling issue out of every batch, keeps the two secret rotations out of the
+  same wave as separate batches, and stops for approval. All three are unverified until the
+  next hermetic sweep.
+
+## Coverage
+
+`test_every_skill_and_agent_has_a_case_or_a_reason` holds every skill (a `SKILL.md` under
+`.claude/skills/`) and every agent (a top-level `.md` under `.claude/agents/`) to one of two
+states. It has a `cases/<name>/` directory, or an entry in that module's `NO_CASE` dict that
+says why it has none. The test also fails on a `NO_CASE` entry for a target that has a case,
+and on a name that matches no skill or agent. A reason says why a hermetic case cannot measure
+the target, such as a live page or a live MQTT publish. "Not written yet" is a filed issue
+cited in the reason, never a reason by itself. A target whose case shows no difference with
+the skill removed is a candidate for the `scaffolding-delete-pass` skill.
 
 Each `/homelab-review` case pins one contract paragraph the skill grew after a real misfire, so a
 paragraph and its case move together: `001` dedup vs `004` anti-merge are deliberately a matched
