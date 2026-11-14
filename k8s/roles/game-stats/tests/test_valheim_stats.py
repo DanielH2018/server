@@ -36,10 +36,16 @@ def test_parse_disconnect():
 
 
 def test_parse_restart_on_world_load():
-    assert stats.parse_line(prefixed("Load world: Dedicated (Dedicated)")) == (
-        "restart",
-        None,
+    # Verbatim from this server's log.
+    line = prefixed(
+        "10/17/2026 05:10:18: ZNet.LoadWorld: Midgard (Midgard), save number 1750"
     )
+    assert stats.parse_line(line) == ("restart", None)
+
+
+def test_parse_restart_on_shutdown():
+    line = prefixed("10/17/2026 05:10:00: Game - OnApplicationQuit")
+    assert stats.parse_line(line) == ("restart", None)
 
 
 def test_parse_heartbeat():
@@ -141,10 +147,39 @@ def test_restart_closes_every_open_session():
     st = stats.StatsState()
     _connected(st, "111", "Bob", 0.0)
     _connected(st, "222", "Ann", 0.0)
-    st.apply("restart", None, 50.0)
+    st.apply("heartbeat", 2, 50.0)
+    st.apply("restart", None, 55.0)
     assert st.online_count() == 0
     assert st.players["Bob"]["total_playtime"] == 50.0
     assert st.players["Ann"]["total_playtime"] == 50.0
+
+
+def test_heartbeat_of_zero_closes_a_session_whose_disconnect_was_missed():
+    st = stats.StatsState()
+    _connected(st, "111", "Bob", 0.0)
+    st.apply("heartbeat", 1, 600.0)
+    st.apply("heartbeat", 0, 1200.0)
+    assert st.online_count() == 0
+    assert st.players["Bob"]["sessions"] == 1
+    assert st.players["Bob"]["total_playtime"] == 600.0
+
+
+def test_heartbeat_above_zero_leaves_open_sessions_open():
+    st = stats.StatsState()
+    _connected(st, "111", "Bob", 0.0)
+    _connected(st, "222", "Ann", 0.0)
+    st.apply("heartbeat", 1, 600.0)
+    assert st.online_count() == 2
+
+
+def test_a_stale_session_banks_only_its_observed_time():
+    """A session stuck open for weeks must not turn the weeks into playtime."""
+    st = stats.StatsState()
+    _connected(st, "111", "Bob", 0.0)
+    st.apply("death", "Bob", 300.0)
+    st.apply("heartbeat", 0, 21 * 86400.0)
+    assert st.players["Bob"]["total_playtime"] == 300.0
+    assert st.playtime("Bob", 22 * 86400.0) == 300.0
 
 
 def test_two_players_bind_to_their_own_steamids():
@@ -251,3 +286,11 @@ def test_main_requires_the_metrics_port_from_the_deployment():
     )
     assert result.returncode != 0
     assert "KeyError: 'METRICS_PORT'" in result.stderr
+
+
+def test_a_handshake_dropped_before_spawning_binds_no_one():
+    st = stats.StatsState()
+    st.apply("connect", "111", 0.0)
+    st.apply("disconnect", "111", 12.0)
+    st.apply("spawn", "Bob", 100.0)
+    assert "111" not in st.steam_to_name
