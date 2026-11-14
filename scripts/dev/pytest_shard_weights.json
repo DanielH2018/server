@@ -661,6 +661,7 @@
  "scripts/diagnostics/tests/test_probe.py": 0.0,
  "scripts/diagnostics/tests/test_probe_alertmanager_api.py": 0.0,
  "scripts/diagnostics/tests/test_probe_alerts.py": 0.01,
+ "scripts/diagnostics/tests/test_probe_arr_lidarr.py": 0.68,
  "scripts/diagnostics/tests/test_probe_arr_redaction.py": 0.0,
  "scripts/diagnostics/tests/test_probe_b2_ledger.py": 0.0,
  "scripts/diagnostics/tests/test_probe_bad_since_census.py": 0.0,

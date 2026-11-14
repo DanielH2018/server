@@ -54,7 +54,7 @@ Subcommands:
                              [--docker inspects the Pi's container instead]
                              [--cluster prod|stage — refuses when the local
                               kubectl serves the other one]
-    arr <app> <api-path>     Read-only *arr API GET [--json] (sonarr/radarr/prowlarr)
+    arr <app> <api-path>     Read-only *arr API GET [--json] (sonarr/radarr/prowlarr/lidarr)
                              [--show-secrets prints the credential values it redacts]
     ha state <entity_id>     Live HA entity state + attrs    (home-assistant :8123)
     ha automation <id|alias> One automation's on/off + last_triggered (resolves alias!=id)
