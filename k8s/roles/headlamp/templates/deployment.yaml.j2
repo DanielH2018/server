@@ -25,7 +25,7 @@ spec:
       # The credential the -unsafe-use-service-account-token flag below reads. Nothing may
       # mount under /run/secrets or /var/run/secrets here — that shadows the projected token
       # and the container never starts (the no-mount-shadows-the-serviceaccount-token row of
-      # ansible/tests/k8s/_workload_property_rows.py).
+      # tests/k8s/_workload_property_rows.py).
       #
       # STAYS TRUE under OIDC, where the token no longer authenticates anyone. `-in-cluster`
       # calls rest.InClusterConfig(), which reads the API server address and the cluster CA

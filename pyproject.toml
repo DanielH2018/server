@@ -112,6 +112,10 @@ testpaths = [                        # single source of truth for WHAT runs
 # -p phase_timing prints, on a run given `--durations`, what `--durations` cannot see: each
 # worker's collection, prebuild and finish times, and the slowest module collections (#7710).
 #
+# -p named_files keeps a run that names files, as every CI leg does, from building a node for
+# each of their siblings: pytest re-collects a named file's directory once per named file in it,
+# 20,542 module builds to keep 237 on one leg (#8681).
+#
 # No `-q` here, deliberately. `-q` is what a reader adds on the command line to shorten a scoped
 # run, and pytest COUNTS the flag: with `-q` already in addopts, a hand-typed `-q` becomes `-qq`,
 # which suppresses the summary line entirely. Measured on `scripts/lib/tests`: with
@@ -120,7 +124,7 @@ testpaths = [                        # single source of truth for WHAT runs
 # run that collected nothing read exactly like one that passed. Reviewers had to override
 # addopts to get a count back. The default verbosity
 # costs ~2 header lines per xdist worker and prints the count every time.
-addopts = "-n auto --dist loadscope -m 'not ui and not image' --strict-markers --strict-config -p leakguard -p xdist_width -p render_share -p phase_timing"
+addopts = "-n auto --dist loadscope -m 'not ui and not image' --strict-markers --strict-config -p leakguard -p xdist_width -p render_share -p phase_timing -p named_files"
 # Every warning is a failure. Measured before enabling: the only classes that
 # fired were ResourceWarnings, each a real leak — HTTPError test doubles built on a tempfile
 # nothing closed, an sqlite connection the Valheim store never closed, and the deployer's

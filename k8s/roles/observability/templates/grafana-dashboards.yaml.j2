@@ -14,7 +14,7 @@
   The Infrastructure folder is about 600 KB as JSON, so `tasks/dashboards.yml` renders it to
   its own directory and applies it server-side, which writes no such annotation. The flip PR
   drops the exclusion: Flux applies server-side too, and the file then renders into the
-  `observability` bundle. ansible/tests/services/test_dashboard_configmaps.py holds every
+  `observability` bundle. tests/services/test_dashboard_configmaps.py holds every
   ConfigMap under the 1 MiB object cap.
 
   `lookup('file')` strips trailing whitespace, which the JSON parse ignores. The `|` block keeps

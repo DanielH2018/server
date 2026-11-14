@@ -176,8 +176,15 @@ directory is on disk because the record is read days later: a spike is investiga
 the hour it happened in, and the ledger keeps each window for 8 days. Both hosts reboot
 every Sunday, and a ledger on a tmpfs loses those days at each reboot. A write to the disk
 costs a `gh` call about 4 ms, measured on daniel-box, against 0.3 ms on a tmpfs. The
-identity is the calling uid when the token comes from that user's `gh` login. It is a
-fingerprint of the token when the caller sets `GH_TOKEN`.
+identity is a fingerprint of the token `gh` uses for the call: `GH_TOKEN` or `GITHUB_TOKEN`
+when the caller sets one, and otherwise what `gh auth token` prints in the caller's
+environment. `gh` owns that choice, which also depends on its config directory and on the
+login it has stored, so the module asks `gh` and does not repeat the rule. The question
+costs about 30 ms per counted call and no GitHub call. The uid alone is not an identity:
+on 2026-11-14 one uid's ledger held two live windows per bucket, which one token cannot have
+([#8738](https://github.com/DanielH2018/server/issues/8738)), and a call was
+counted in whichever window ended later. A caller whose `gh` has no token gets the uid as
+its identity. Two tokens of one GitHub user spend one quota and get two ledger files.
 
 **The session key** is the first of these that exists:
 
@@ -286,7 +293,7 @@ run `findings.py claims` in the same quarter minute cost one call, not 39.
 
 ```text
 $ gh-quota status
-uid-1000 graphql: 3120/5000 used, resets 15:20 UTC; 2 sessions made 1012 calls; 2108 beyond the ledger (68%); 1 at or over 20%; --all lists 1 more
+tok-2edb9dd14a9a graphql: 3120/5000 used, resets 15:20 UTC; 2 sessions made 1012 calls; 2108 beyond the ledger (68%); 1 at or over 20%; --all lists 1 more
   7c1e90aa-0000-4000-8000-000000000001  1000 calls  issue list x960, pr view x40
 ```
 
@@ -397,7 +404,7 @@ every session at once.
 - **The claude-guard change ships as a case table,** not as prose: each bare read it must
   refuse, and each write and each `gh api` call with a method or a field that it must pass.
 - **The tests** cover the classification, the session key order, the count per session in
-  both buckets, the sample interval, the token fingerprint, the status lines and the two
+  both buckets, the sample interval, the identity of each token, the status lines and the two
   fail-open paths. One more drives `lib.gh.gh` and reads the count back from the ledger.
 - **It is done when** a week of ledger rows gives the three missing figures: the spend of a
   normal session-hour, the points per call class, and the share of spend beyond the ledger.

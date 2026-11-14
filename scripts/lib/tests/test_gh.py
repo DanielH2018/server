@@ -82,6 +82,7 @@ def test_gh_nonzero_raises_by_default(monkeypatch):
 def test_gh_counts_the_call_against_the_session_before_it_runs(monkeypatch, tmp_path):
     monkeypatch.setenv("GH_QUOTA_MODE", "record")
     monkeypatch.setenv("GH_QUOTA_DIR", str(tmp_path))
+    monkeypatch.setenv("GH_TOKEN", "not-a-real-token")
     monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "session-under-test")
     resources = {
         "graphql": {"used": 40, "limit": 5000, "reset": WINDOW_END},
