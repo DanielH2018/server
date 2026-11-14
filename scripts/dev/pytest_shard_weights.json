@@ -1343,6 +1343,7 @@
  "tests/services/test_n8n_deprecated_defaults_are_pinned.py": 0.02,
  "tests/services/test_n8n_web_port_is_fenced.py": 0.0,
  "tests/services/test_navidrome_parked_route.py": 0.02,
+ "tests/services/test_netns_reset_restores_resolv_conf.py": 0.09,
  "tests/services/test_not_reporting_rule_deadlines.py": 0.11,
  "tests/services/test_nut_fsd_login_confined.py": 3.74,
  "tests/services/test_observability_cluster_ips_pinned.py": 0.0,
