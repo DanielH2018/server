@@ -19,16 +19,15 @@ claims are unchanged.
   (weekly -> B2 (default target))
 <!-- /generated_from -->
 
-- **Flux applies it, not Ansible** (D5.19, the first Wave D PR). Its `containers_list` entry
+- **Flux applies it.** Its `containers_list` entry
   is in `cluster/services.yml`, so nothing applies it by hand, and a
   merged change reaches the cluster when `promote` publishes and verifies the next bundle. Both
   Deployments are `Recreate` over
   an RWO claim, so a roll stops the old pod before the new one starts and the exporter's
-  metrics gap for that interval, as they did under Ansible. `k8s_autodeploy: false` gates no
+  metrics gap for that interval. `k8s_autodeploy: false` gates no
   apply. It stops Renovate automerging the image bump.
-- **Where the task went.** The Kustomization's `wait` replaces the
-  rollout wait, and the
-  restart checksum the renderer stamps on each Deployment replaces the shared restart.
+- **Its rollout.** The Kustomization's `wait` holds the rollout. The restart checksum the
+  renderer stamps on each Deployment rolls the pods.
 
 - **Must sort AFTER `loki-homelab`**: `depends_on: [loki-homelab]` on the `containers_list`
   entry, pinned by

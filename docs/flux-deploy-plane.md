@@ -2,7 +2,7 @@
 
 Flux's source controller, Kustomize controller and notification controller run in the
 `flux-system` namespace. They follow the promoted artifact, and Flux applies every k8s service
-from it, Flux itself included (D5 step 29). The GitOps deployer and Ansible deploy no workload
+from it, Flux itself included (D5 step 29). No other path deploys a workload
 on the cluster. The plans are [slice D1](target-architecture/deploy/d1-flux-installed.md) and
 the slices after it, and the decision is
 [ADR-0020](adr/0020-flux-applies-the-cluster-from-a-promoted-artifact.md). A rebuilt cluster
@@ -110,6 +110,51 @@ sample at 02:50:43Z and the next at 02:51:01Z. kube-state-metrics' `up` has a sa
 ([#4786](https://github.com/DanielH2018/server/issues/4786)) therefore has no alert
 evaluations from 02:49:45Z to 02:53:45Z.
 
+### The reconcile rate
+
+**Every Kustomization reconciles once per promotion, not once per 10-minute interval.** All
+125 Kustomizations follow the one `OCIRepository` `homelab`. Each `promote` run pushes
+`sha-<commit>` with the revision `master@sha1:<commit>`, so the digest changes even when the
+bundle does not. When `prod` moves, the Kustomize controller reconciles every Kustomization, and
+the reconcile restarts its 10-minute interval. The interval fires only when no promotion
+lands within 10 minutes of the last one. This is accepted as a cost of the one-artifact
+design. Flux reconciles every Kustomization whose source revision changes, and it has no
+setting that skips a Kustomization whose path is unchanged. Scoping the reconciles would need
+one source per tag. `verify` does not need the extra reconciles, because it expects statuses
+only from T's changed set (*Verification*). For a Kustomization outside that set, the
+reconcile is an apply that changes nothing.
+
+**Dependency requeues add more reconcile attempts than the applies do.** When `prod` moves,
+a Kustomization whose dependency has not yet applied the new revision reads
+`DependencyNotReady`. It requeues every 30 seconds, the `--requeue-dependency` default, until
+the dependency is Ready (*The timeout follows the chain*). Each attempt patches the
+Kustomization's status, but it builds nothing and applies nothing. The deepest chain ends
+requeue most, and a Kustomization with no `dependsOn` never requeues. The requeues are
+accepted too. A longer `--requeue-dependency` would cut them, but each `dependsOn` hop of
+every rollout could then wait up to that longer interval. `chained_timeout.py` also sizes `verify`'s wait from
+the default, and `scripts/deploy_tools/tests/test_chained_timeout.py` fails a vendored install
+or role default that sets the flag.
+
+The rate follows the merge rate on master, so it has no fixed value. One hour of
+the Kustomize controller's log on 2026-11-14, from 07:51Z to 08:51Z, held 8 `prod` revisions:
+
+- 1062 `Reconciliation finished` lines, about 8.5 per Kustomization: one per revision, plus
+  one interval pass after a 10-minute gap.
+- 1873 `Dependencies do not meet ready condition` lines, about 15 per Kustomization.
+  `netpol-baseline-verify` logged 43 of them and each `<tag>-verify` about 28.
+  `cluster-vars`, `cluster-base` and `homelab-namespace` logged none.
+
+Over whole days the rate is lower. The `history` of the Kustomization `nut` counted 1137
+reconciliations from 2026-11-02 to 2026-11-09, about 6.9 an hour, and 371 from 2026-11-12 to
+2026-11-14, about 8.4 an hour.
+
+To read the rate, use `gotk_reconcile_duration_seconds_count` from the `flux` scrape job. The
+audit log does not carry it, because the audit policy drops the Kustomize controller's status
+patches ([#8512](https://github.com/DanielH2018/server/issues/8512)). A full reconcile and a
+requeue each count once. Over the same hour,
+`sum(increase(gotk_reconcile_duration_seconds_count{kind="Kustomization"}[1h]))` read 2952,
+against 2935 for the two log lines together.
+
 ## Alerts
 
 The `flux` rule group, `k8s/roles/observability/files/rules/flux.yaml`, pages through
@@ -215,10 +260,11 @@ keeps each one silent in the case D2's plan names.
 ## A `containers_list` change reaches Flux
 
 The flux role reads `containers_list`, because each controller's priority class derives from
-the `flux` entry's tier. So an added, removed or reordered entry reaches the `flux` tag
-through the deployer's broad plane, beside every other role that reads the list, and
-`k8s_autodeploy: false` does not stop that plane. The apply is forward-only: a failure in any
-of those roles writes `hold_sha` for the whole list.
+the `flux` entry's tier. So an added, removed or reordered entry changes the `flux` tag's
+render, beside every other role that reads the list, and Flux applies all of them from the
+promoted artifact. **HISTORY —** the GitOps deployer applied that list through its broad plane,
+which `k8s_autodeploy: false` did not stop, and a failure in any of those roles wrote
+`hold_sha` for the whole list.
 
 A PR that adds or removes a k8s entry therefore names the tags the landing applies. For an
 added or removed entry, `flux` is among them.
@@ -400,7 +446,7 @@ The Kustomization `flux-deferred` applies these objects in `flux-system` from th
   context `flux/<kustomization>` on the commit the artifact carries. A Ready reconcile posts
   `success`, and an error event posts `failure`.
 - **The Provider `discord` and the Alert `deploy-errors`** post error events from every
-  Kustomization and from the `OCIRepository` `homelab` to the channel the deployer posts to.
+  Kustomization and from the `OCIRepository` `homelab` to the `discord_alert_webhook` channel.
 
 A renderer test pins the two `OCIRepository` objects' URL, `ref` and `verify` block to these values
 (`scripts/renderer/tests/test_renderer_bootstrap_documents.py`), so a change to them fails CI
@@ -793,7 +839,7 @@ three checks hold it there (D5.1d):
   `<R> suspended-changed=<tag>`. The revert rule never passes that form. The way out is a
   commit that reverts the change or resumes the tag, then the operator's clear. A clear
   without one holds again at the next `decide`. `probe.py landing` prints the cause beside
-  `DEPLOY_HOLD`. The `promote` job posts the hold to the deployer's Discord channel from a
+  `DEPLOY_HOLD`. The `promote` job posts the hold to the `discord_alert_webhook` channel from a
   step after Decide, which holds the webhook and no token.
 - **`land-wait`.** `promote.py land-wait` leaves a tag suspended at the merge commit out of
   the wait, and `land.sh` leaves it out of the health gate. When every tag it waits on is
@@ -1105,10 +1151,9 @@ that failed for an environmental reason*, has the steps.
 for every failed name equals `last-good`'s, and `settle` would set `DEPLOY_HOLD` to `none` once
 it verifies. A hold in any other form, and a `failed=` hold that names `soak`, never qualify.
 
-**`probe.py landing` shows both holds:**
+**`probe.py landing` shows the hold:**
 
 ```text
-hold_sha (GitOps deployer, setup plane): none
 DEPLOY_HOLD (promote workflow, Flux-owned tags): none
 prod: 3cf44936 sha256:4e55da43005e   last-good: the same digest as prod
 ```
@@ -1171,7 +1216,7 @@ input*.
   `settle` tags `sha-<T>` as `held` and leaves `prod` on T. When T also changes a
   forward-only tag, the stateful form wins; neither resets.
 - **The post.** Once the hold is written, the `post` job runs `promote.py hold`, which posts
-  to the deployer's Discord channel through the `DEPLOY_DISCORD_WEBHOOK` repository secret,
+  to the `discord_alert_webhook` channel through the `DEPLOY_DISCORD_WEBHOOK` repository secret,
   a copy of `discord_alert_webhook`. It names the held SHA, every changed tag and
   every failed name, each marked as a snapshot role or not, and, when `soak` failed, the soak
   Job and the command that reads the services it named. Then, for each changed snapshot
@@ -2109,7 +2154,7 @@ run with. The flux role's `CLAUDE.md` has its rotation steps, and the
 rotation registry's `external-90d` tier is the one its SOPS copy belongs on.
 
 The repository secret `DEPLOY_DISCORD_WEBHOOK` holds the value of the SOPS key
-`discord_alert_webhook`, the deployer's Discord channel. Only the `post` job reads it,
+`discord_alert_webhook`, the homelab's Discord alert channel. Only the `post` job reads it,
 for the stateful hold's post, and that job holds `contents: read` alone. `promote.py` never
 prints the URL, and a failed post names only the HTTP status. `docs/secret-rotation.md` has
 the rotation step for the copy.

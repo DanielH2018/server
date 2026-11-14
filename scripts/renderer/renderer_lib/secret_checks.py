@@ -87,12 +87,6 @@ NO_BARE_DOLLAR_BRACE = "no-bare-dollar-brace"
 CONFINED_TO_SECRET = "confined-to-secret"
 NO_SOPS_MANIFEST_KEY = "no-sops-manifest-key"
 NO_SECRET_EXPRESSION = "no-secret-expression"
-OUTPUT_RULES = (
-    KNOWN_KEY,
-    NO_BARE_DOLLAR_BRACE,
-    CONFINED_TO_SECRET,
-    NO_SOPS_MANIFEST_KEY,
-)
 
 # The repo filters that place an argument into their output unchanged. Rule 5 accepts a secret
 # key as an argument to a member, and refuses it as an argument to any other filter, so the set

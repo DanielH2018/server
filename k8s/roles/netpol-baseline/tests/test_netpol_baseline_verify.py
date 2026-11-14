@@ -447,7 +447,8 @@ def test_no_rendered_policy_admits_the_verify_pod():
 
 
 def test_the_verify_job_reads_no_other_roles_file():
-    """The deployer redeploys a role when a file it `lookup()`s in another role changes."""
+    """A role's bundle re-renders, and Flux redeploys it, when a file it `lookup()`s in another
+    role changes."""
     staged = sorted(VERIFY_DIR.glob("*.j2"))
     assert [p.name for p in staged] == ["job.yaml.j2", "rbac.yaml.j2"]
     assert [

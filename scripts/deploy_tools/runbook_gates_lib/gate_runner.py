@@ -12,8 +12,8 @@ module is that shape written once:
     returned nothing parseable. That is not a graded verdict, so it is not a gate number.
   * Every cluster read goes through `lib.kubectl` naming the cluster, so the identity check
     that guards `probe.py health` refuses a staging kubectl here too.
-  * A state directory that does not exist means "wrong host", never "clean": the deployer's
-    hold marker and the drills' stamps live on the host that runs them, and reading an absent
+  * A state directory that does not exist means "wrong host", never "clean": the drills'
+    stamps live on the host that runs them, and reading an absent
     directory as a pass is the vacuous pass the gate exists to refuse (`stamp_dir_missing`).
 
 The Longhorn volume verdict lives here because two runbooks share it — a degraded volume stops
@@ -125,8 +125,8 @@ class Unreadable(RuntimeError):
     """A gate's source returned nothing parseable — the gate could not look, so it is not graded.
 
     `cluster` says whether that source was a kubectl read. The runner prefixes a cluster read's
-    message with "cannot ask the cluster"; a local read, such as a deployer marker under
-    `/var/lib/gitops-deploy`, prints its own message, which names the file (#4485).
+    message with "cannot ask the cluster"; a local read, such as a drill's stamp, prints its
+    own message, which names the file (#4485).
     """
 
     def __init__(self, message: str, *, cluster: bool = True):

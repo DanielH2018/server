@@ -430,7 +430,8 @@ def await_merge(ln: Landing, in_turn: bool = False) -> None:
     Only CONFLICTING may bail, and only on two consecutive polls: GitHub computes
     mergeability asynchronously and serves UNKNOWN until it settles, and master moving under
     the PR flips the field for one poll. A red PR CI is the other dead end; GitHub says only
-    `BLOCKED`, the same word it uses while checks run, so await_ci owns that verdict,
+    `BLOCKED`, which it also says while checks run and for every green PR into master under
+    the update restriction, so await_ci owns that verdict,
     one-shot. Only its exit 1 bails: `pending` IS the grace period, derived rather than
     guessed.
 

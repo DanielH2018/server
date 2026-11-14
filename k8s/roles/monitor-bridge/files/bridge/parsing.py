@@ -44,15 +44,6 @@ from datetime import datetime
 FETCH_BODY_MAX = 180
 
 
-def duration_seconds(spec: str) -> int:
-    """Seconds in a Prometheus duration like `15m` / `2h` / `90s` / `1d`. Unit-tested."""
-    units = {"s": 1, "m": 60, "h": 3600, "d": 86400, "w": 604800}
-    spec = spec.strip()
-    if not spec or spec[-1] not in units or not spec[:-1].isdigit():
-        raise ValueError("not a Prometheus duration: %r" % spec)
-    return int(spec[:-1]) * units[spec[-1]]
-
-
 def parse_duration(s: str) -> float:
     """Parse a Prometheus-style duration ('900s', '15m', '1h', '2d') to seconds (float).
 

@@ -2,9 +2,11 @@
 
 import hashlib
 import json
+import subprocess
 
 import claude_guardrail_ack as ack
 import pytest
+from lib.proc_testing import fake_bin
 
 TOKEN = "ghp_" + "A" * 36
 
@@ -28,7 +30,26 @@ def tree(tmp_path):
     return home, package_file, config
 
 
-def _run(tmp_path, config, *, rendered=None, md5=None, deliver=True):
+PUBLISHED = {"homelab-daniel-box": ["0.7465+g203fe8f7bc22", "0.7460+g840813a2285a"]}
+
+
+def _download(debs, package, version):
+    """The fake `apt-get download`: a .deb from `debs`, or the error an unreachable source gives."""
+    if (package, version) not in (debs or {}):
+        raise subprocess.CalledProcessError(100, ["apt-get", "download"])
+    return debs[(package, version)]
+
+
+def _run(
+    tmp_path,
+    config,
+    *,
+    rendered=None,
+    owners=None,
+    debs=None,
+    download=None,
+    deliver=True,
+):
     """One pass; returns (ok, verdict, the posts made)."""
     posts = []
 
@@ -37,7 +58,10 @@ def _run(tmp_path, config, *, rendered=None, md5=None, deliver=True):
         return deliver
 
     tools = ack.Boundaries(
-        md5=lambda path: (md5 or {}).get(path),
+        owner=lambda path: (owners or {}).get(path),
+        published=lambda package: PUBLISHED.get(package, []),
+        published_md5s=download
+        or (lambda package, version: _download(debs, package, version)),
         render=lambda user, chezmoi, source, target: (rendered or {}).get(target),
         sync=lambda repo, clone: "b0b8bf3f",
     )
@@ -79,17 +103,78 @@ def test_a_change_that_matches_the_dotfiles_main_render_is_not_posted(tmp_path, 
     assert "1 explained, 0 posted" in line
 
 
+def _owned(path, version):
+    """The installed package's record for `path` as it reads now."""
+    digest = hashlib.md5(path.read_bytes()).hexdigest()
+    return {str(path): ack.Owner("homelab-daniel-box", version, digest)}
+
+
+def _deb(path, version, content):
+    """A published .deb of `version` whose md5sums record `content` for `path`."""
+    digest = hashlib.md5(content).hexdigest()
+    return {("homelab-daniel-box", version): {str(path): digest}}
+
+
 def test_a_package_file_matching_its_md5_is_not_posted_and_a_drifted_one_is(
     tmp_path, tree
 ):
     _, package_file, config = tree
     _run(tmp_path, config)
     package_file.write_text("scripts/lib/\nscripts/deploy_tools/\n")
-    installed = {str(package_file): hashlib.md5(package_file.read_bytes()).hexdigest()}
-    assert _run(tmp_path, config, md5=installed)[2] == []
+    installed = _owned(package_file, "0.7465+g203fe8f7bc22")
+    deb = _deb(package_file, "0.7465+g203fe8f7bc22", package_file.read_bytes())
+    assert _run(tmp_path, config, owners=installed, debs=deb)[2] == []
     package_file.write_text("scripts/lib/\n")
-    [post] = _run(tmp_path, config, md5=installed)[2]
-    assert f"`{package_file}` changed" in post
+    [post] = _run(tmp_path, config, owners=installed, debs=deb)[2]
+    assert f"`{package_file}` changed\n" in post
+
+
+def test_a_hand_installed_package_change_is_posted_with_both_versions(tmp_path, tree):
+    _, package_file, config = tree
+    _run(tmp_path, config)
+    package_file.write_text("scripts/lib/\nscripts/deploy_tools/\n")
+    hand = _owned(package_file, "0.7466+g0123456789ab")
+    ok, line, [post] = _run(tmp_path, config, owners=hand)
+    assert ok and "0 explained, 1 posted" in line
+    assert (
+        f"`{package_file}` changed (homelab-daniel-box 0.7466+g0123456789ab is installed, "
+        "and no apt source serves it; the newest published version is "
+        "0.7465+g203fe8f7bc22)"
+    ) in post
+    assert "+scripts/deploy_tools/" in post
+
+
+def test_a_hand_build_reusing_a_published_version_is_posted(tmp_path, tree):
+    _, package_file, config = tree
+    _run(tmp_path, config)
+    package_file.write_text("scripts/lib/\nscripts/deploy_tools/\n")
+    reused = _owned(package_file, "0.7465+g203fe8f7bc22")
+    deb = _deb(package_file, "0.7465+g203fe8f7bc22", b"scripts/lib/\n")
+    ok, line, [post] = _run(tmp_path, config, owners=reused, debs=deb)
+    assert ok and "0 explained, 1 posted" in line
+    assert (
+        f"`{package_file}` changed (homelab-daniel-box 0.7465+g203fe8f7bc22 is installed, "
+        "and the file differs from the one in the published package of that version)"
+    ) in post
+
+
+def test_published_versions_skips_one_only_dpkg_status_lists():
+    policy = (
+        "homelab-daniel-box:\n"
+        "  Installed: 0.7466+g0123456789ab\n"
+        "  Candidate: 0.7466+g0123456789ab\n"
+        "  Version table:\n"
+        " *** 0.7466+g0123456789ab 100\n"
+        "        100 /var/lib/dpkg/status\n"
+        "     0.7465+g203fe8f7bc22 500\n"
+        "        500 http://10.0.0.215:8791 homelab/main amd64 Packages\n"
+        "     0.7460+g840813a2285a 500\n"
+        "        500 http://10.0.0.215:8791 homelab/main amd64 Packages\n"
+    )
+    assert ack.published_versions(policy) == [
+        "0.7465+g203fe8f7bc22",
+        "0.7460+g840813a2285a",
+    ]
 
 
 def test_claude_codes_own_model_write_is_quiet_and_a_permissions_change_is_posted(
@@ -123,3 +208,22 @@ def test_bytecode_under_a_hooks_directory_is_ignored(tmp_path, tree):
     _run(tmp_path, config)
     (home / "hooks" / "__pycache__" / "guard.cpython-312.pyc").write_bytes(b"\x00\x01")
     assert _run(tmp_path, config)[2] == []
+
+
+def test_a_failed_download_fails_the_run_and_the_next_run_classifies_the_change(
+    tmp_path, tree, monkeypatch
+):
+    _, package_file, config = tree
+    _run(tmp_path, config)
+    package_file.write_text("scripts/lib/\nscripts/deploy_tools/\n")
+    installed = _owned(package_file, "0.7465+g203fe8f7bc22")
+    monkeypatch.setenv(
+        "PATH", str(fake_bin(tmp_path / "bin", **{"apt-get": "exit 100\n"}))
+    )
+    with pytest.raises(subprocess.CalledProcessError):
+        _run(tmp_path, config, owners=installed, download=ack.apt_published_md5s)
+    monkeypatch.undo()
+    deb = _deb(package_file, "0.7465+g203fe8f7bc22", package_file.read_bytes())
+    ok, line, posts = _run(tmp_path, config, owners=installed, debs=deb)
+    assert (ok, posts) == (True, [])
+    assert "1 explained, 0 posted" in line

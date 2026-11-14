@@ -147,6 +147,16 @@ continuation lines and nested bullets with it; a history paragraph ends at the n
   `scripts/dev/repo_guards.py` ends by printing the `reread` format, which lists only the
   sections whose prose the branch left unchanged. That is how the notice reaches the
   session that made the change, and it changes no exit code.
+- `fact_status.py mv <old> <new> [--root <dir>] [--dry-run]` rewrites the references a
+  rename left behind. To fix the `removed names:` list after a move, run it once per moved
+  file or directory. It rewrites the places that list reads: instruction files and live
+  docs outside history and generated blocks, and full-line comments in other tracked
+  files. Code and docstrings stay as they are. It refuses when `<old>` is still tracked
+  or `<new>` is not. Under a moved directory it rewrites a reference only when the path
+  that results is tracked, and it lists the rest as left. `--root` rewrites the Markdown
+  under a directory outside the repo, such as a memory store, in place of the repo: such
+  a store has no `git diff`, so run it with `--dry-run` first.
+  `scripts/lib/facts/renames.py:move` has the rules.
 
 `docs/adr/0023-fact-support-is-a-diff-notice.md` records why the notice replaced the stored
 hashes and their blocking test. A moved atom gets a notice and never blocks a merge. `lint`
