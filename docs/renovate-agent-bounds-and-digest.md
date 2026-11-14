@@ -64,6 +64,14 @@ head that moved and, when asked, a head the operator has not approved. The test
 `hosts/components/renovate-agent/tests/test_renovate_floor.py` fails when a new top-level entry
 is neither on the floor nor listed with a reason.
 
+A refusal before any merge exits 3, `REFUSED_EXIT` in `files/land_renovate_pr.py`, and the unit
+lists 3 in `SuccessExitStatus=`. A pre-merge refusal is an expected end, so it leaves the unit
+inactive and `SystemdUnitsFailed` quiet (#8729). Two kinds count: the `REFUSED:` lines the lander
+writes itself, and a land.sh `VERDICT: refused` on a PR that GitHub's REST API reports unmerged. land.sh
+merges the PR itself, so nothing merges it after land.sh exits. A failed REST read keeps land.sh's
+exit 1, because a refusal can also come after the merge. Any other land.sh failure keeps its own
+nonzero exit and fails the unit.
+
 **The session nominates and the runner lands** (#967's I9, guardrails plan B2r). The session
 writes a `land` request for each PR it would land, and lands nothing itself. After the session
 ends and the other requests are carried out, `files/run_requests.py` starts the lander for each

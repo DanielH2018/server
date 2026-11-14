@@ -106,6 +106,15 @@ def test_the_lander_pins_land_sh_to_renovates_prs() -> None:
     )
 
 
+def test_a_pre_merge_refusal_leaves_the_lander_unit_inactive() -> None:
+    """The lander's refusal code is a success to systemd, so SystemdUnitsFailed stays quiet."""
+    lander = (COMPONENT / "files" / "land_renovate_pr.py").read_text()
+    code = re.search(r"^REFUSED_EXIT = (\d+)$", lander, re.MULTILINE)
+    assert code, "the lander names no REFUSED_EXIT"
+    success = directive(render("renovate-agent-land@.service.j2"), "SuccessExitStatus")
+    assert success == [code.group(1)]
+
+
 def test_onfailure_pages(unit: str) -> None:
     assert "homelab-alert@%n.service" in directive(unit, "OnFailure")
 
