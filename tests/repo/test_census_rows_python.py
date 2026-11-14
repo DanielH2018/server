@@ -383,7 +383,7 @@ ROWS = (
         ),
         green=(Subject("scripts/lib/no_other_root_holds_this_name.py", ""),),
         min_matches=100,
-        # One per root shape: a cross-role host module, a deployer module,
+        # One per root shape: a cross-role host module, a retired deployer module,
         # a monitor-bridge module reached bare inside its image, a k8s role's `files/`
         # reached only through a role test's insert, two `scripts/` modules, and one from each
         # `scripts/<dir>` a test inserts itself.

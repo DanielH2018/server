@@ -13,16 +13,15 @@ secret, no volume. See repo-root `CLAUDE.md` for shared conventions.
 - **Claims:** none (no PVC)
 <!-- /generated_from -->
 
-- **Flux applies it, not Ansible** (D5.5, the first Wave A PR). Its `containers_list` entry
+- **Flux applies it.** Its `containers_list` entry
   is in `cluster/services.yml`, so nothing applies it by hand, and a
   merged change reaches the cluster when `promote` publishes and verifies the next bundle. Its
   image-bump PRs therefore draw no `land-wait` and no `probe.py health` run.
-- **Where the task went.** Flux applies the same render, and the
-  Kustomization's `wait` replaces the rollout wait.
-  `k8s_autodeploy` no longer gates an apply, because the deployer skips the tag. It still
+- **Its rollout.** The Kustomization's `wait` holds the rollout.
+  `k8s_autodeploy` gates no apply: Flux applies every merged change. It still
   decides whether Renovate automerges the image bump.
 - **The render honours the role's `manifests_exclude_files`,** so the bundle holds no
-  Service, as the Ansible apply did.
+  Service.
 
 ## The two nodes have different GPUs, and #1446 named the wrong one
 

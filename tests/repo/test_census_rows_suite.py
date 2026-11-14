@@ -65,7 +65,7 @@ def _glob_using_test_files() -> list[str]:
 # production, and such a walk escaped every other branch (#3769). It needs the `roles` plural,
 # so a single role's `(role / "templates").iterdir()` stays clean.
 BARE_ROLE_WALK = re.compile(
-    r"(?:K8S_ROLES|SETUP_ROLES|CONTAINER_ROLES|CONTAINERS_ROLES|DOCKER_ROLES"
+    r"(?:K8S_ROLES|SETUP_ROLES|CONTAINERS_ROLES|DOCKER_ROLES"
     r'|k8s/roles"'
     r'|ROLES\s*/\s*"(?:k8s|setup|containers)"'
     r'|"k8s"\s*/\s*"roles")[^\n]*\.iterdir\(\)'
@@ -123,8 +123,8 @@ ROWS = (
         name="role-tree-walks-use-role-dirs",
         reason=(
             "A retired role's gitignored `__pycache__/` keeps `roles/<plane>/<role>/` on disk "
-            "after the deployer removes its tracked files, so a bare `iterdir()` reads the shell "
-            "as a role. That fails or miscensuses only in the long-lived primary checkout where "
+            "after checkout-sync's fast-forward removes its tracked files, so a bare `iterdir()` "
+            "reads the shell as a role. That fails or miscensuses only in the long-lived primary checkout where "
             "the crons run the suite, never in CI (#2952, #2964). Use `_role_census.role_dirs`."
         ),
         files=lambda: tracked("tests/*.py", "hosts/tests/*.py"),

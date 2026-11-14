@@ -10,7 +10,7 @@ not how it runs.
 
 CI renders every k8s manifest with `homelab-render` and publishes the result as an OCI
 artifact. A `promote` workflow moves the tag that Flux follows. Flux applies the artifact
-server-side, with prune and wait. Neither Ansible nor a deployer script applies a k8s workload,
+server-side, with prune and wait. No other path applies a k8s workload,
 and a bad change reverts through `promote` or holds through the `DEPLOY_HOLD` repository
 variable.
 

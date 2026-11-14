@@ -202,3 +202,17 @@ def test_notice_format_reaches_the_renderer(tmp_path, capsys, fmt, expected):
     assert expected in out
     if fmt == "json":
         assert json.loads(out)[0]["atom"] == "t/m.py:LIMIT"
+
+
+def test_mv_says_what_it_rewrote_and_refuses_a_move_the_tree_does_not_show(
+    tmp_path, capsys
+):
+    repo = _repo(tmp_path)
+    (repo / "CLAUDE.md").write_text("## Gate\n`s/m.py:LIMIT` bounds it.\n")
+    assert main(["mv", "--repo", str(repo), "s/m.py", "t/m.py"]) == 0
+    assert capsys.readouterr().out.startswith(
+        "mv: rewrote 1 reference to s/m.py in 1 file"
+    )
+    assert "`t/m.py:LIMIT`" in (repo / "CLAUDE.md").read_text()
+    assert main(["mv", "--repo", str(repo), "t/m.py", "s/m.py"]) == _USAGE
+    assert "t/m.py is still tracked" in capsys.readouterr().err

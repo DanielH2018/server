@@ -2,12 +2,12 @@
 """Dependency direction across ``scripts/``: a leaf never imports the facade it was split out of.
 
 Several modules under ``scripts/`` were split out of a larger one, and each records the same
-invariant in its own docstring — ``rotation_tools.py`` says it "names ``secret_rotation``
-nowhere, at import time or later", ``lib/script_classify.py`` says "a leaf never imports the
-facade it was split out of", and ``docs/catalog_lib/catalog_model.py`` says it again in its own words. A docstring is not a check. The deployer's own split is guarded by
-``tests/deploy/test_gitops_deploy_imports.py`` and monitor-bridge's by
-``tests/services/test_bridge_patch_boundary.py``, but nothing walked ``scripts/``, so a
-late ``import secret_rotation`` inside a leaf function would have landed green.
+invariant in its own docstring — ``rotation_tools.py`` says it "names ``secret_rotation`` nowhere,
+at import time or later", ``lib/script_classify.py`` says "a leaf never imports the facade it was
+split out of", and ``docs/catalog_lib/catalog_model.py`` says it again in its own words. A docstring
+is not a check. Monitor-bridge's split is guarded by
+``tests/services/test_bridge_patch_boundary.py``, but nothing walked ``scripts/``, so a late
+``import secret_rotation`` inside a leaf function would have landed green.
 
 WHY THE DIRECTION MATTERS, not just tidiness. Every facade here is also an entry point run as
 ``__main__``. A leaf that imports it back gets a SECOND copy of that module under a second name,

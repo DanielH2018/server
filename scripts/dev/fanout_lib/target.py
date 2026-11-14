@@ -58,7 +58,7 @@ class Target:
 
     @property
     def is_server(self) -> bool:
-        """Whether this is the homelab repo, the only one `land.sh` and the deployer serve."""
+        """Whether this is the homelab repo, the only one `land.sh` and `promote` serve."""
         return self.repo == SERVER
 
     @property

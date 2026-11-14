@@ -7,6 +7,8 @@ Every probe is a fake passed through main()'s keyword seams, for the reason
 import importlib.util
 import json
 import os
+import subprocess
+import sys
 import threading
 import types
 from pathlib import Path
@@ -126,4 +128,27 @@ def test_the_total_deadline_fits_inside_the_hook_budget():
     # The rest of the budget pays for `uv run` starting the interpreter and for printing.
     assert _mod.TOTAL_DEADLINE_S <= min(budgets) - 4
     # The session scan names a slow tree before the outer deadline drops the whole list.
-    assert _mod.SESSION_SCAN_DEADLINE_S < _mod.TOTAL_DEADLINE_S
+    assert (
+        _mod.LOCK_CHECK_DEADLINE_S + _mod.SESSION_SCAN_DEADLINE_S
+        < _mod.TOTAL_DEADLINE_S
+    )
+
+
+_HUNG_LOCK_CHECK = """
+import sys, time
+sys.path.insert(0, sys.argv[1])
+from hooklib.sections import keep_where
+print(keep_where(["hung", "dead"], lambda t: time.sleep(60) if t == "hung" else False, 0.2))
+"""
+
+
+def test_a_hung_lock_check_keeps_its_tree_and_never_holds_the_exit():
+    # A worker the interpreter joins at exit would hold this process for the full 60s.
+    proc = subprocess.run(
+        [sys.executable, "-c", _HUNG_LOCK_CHECK, str(Path(_HOOK).parent)],
+        capture_output=True,
+        text=True,
+        timeout=20,
+        check=True,
+    )
+    assert proc.stdout.strip() == "['hung']"

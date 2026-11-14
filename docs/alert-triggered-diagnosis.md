@@ -147,7 +147,7 @@ each. The gates that make the spend small are also code a reviewer has to keep c
 **Source: a pull timer, not a webhook.** A second Alertmanager webhook receiver could post
 to a host listener. That adds an inbound port on daniel-box, triggered by text that includes alert
 messages. A host timer that runs `probe.py monitors` and `probe.py alerts` every few minutes
-needs no listener. It also matches the pull model of the GitOps deployer
+needs no listener. It also matches the pull model that Flux and the host-package updater follow
 (`docs/adr/0010-pull-based-gitops-over-argo-and-flux.md`). A hook inside monitor-bridge is
 the worst choice: monitor-bridge runs in the cluster, and the session runs on the host.
 

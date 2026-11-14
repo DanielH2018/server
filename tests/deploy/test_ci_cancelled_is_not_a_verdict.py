@@ -49,7 +49,7 @@ def test_cancelled_is_declared_no_verdict():
 def test_the_operator_docs_name_the_constant():
     """`docs/landing.md` owns the rule; the root doc keeps a pointer; both name the constant.
 
-    Textual on purpose. The behavioural tests above cover the deployer, and this covers the
+    Textual on purpose. The behavioural tests above cover `ci_verdict`, and this covers the
     half a reader acts on — the rule that a cancelled run is no verdict. A rename of the
     constant must break both docs rather than hide; a reword of either leaves this green.
     """

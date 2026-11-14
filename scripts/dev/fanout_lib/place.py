@@ -427,10 +427,9 @@ def cmd_clean_one(
 
     from fanout_lib.clean import clean_one as default_clean
     from fanout_lib.clean import delete_branch as default_brancher
-    from fanout_lib.clean import landed
     from fanout_lib.clean import lock as default_locker
     from fanout_lib.clean import unlock as default_unlocker
-    from lib.worktrees import is_dirty, parse_worktree_list, remove
+    from lib.worktrees import is_dirty, is_merged, parse_worktree_list, remove
 
     target = resolve(args.repo)
     checkout = target.checkout
@@ -457,7 +456,7 @@ def cmd_clean_one(
     state, why = (clean if clean is not None else default_clean)(
         checkout,
         tree,
-        ask=ask if ask is not None else functools.partial(landed, base=target.base),
+        ask=ask if ask is not None else functools.partial(is_merged, base=target.base),
         dirty=dirty if dirty is not None else is_dirty,
         remover=remover if remover is not None else remove,
         unlocker=unlocker if unlocker is not None else default_unlocker,

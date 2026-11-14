@@ -1,9 +1,8 @@
 # system-upgrade — system-upgrade-controller and the two k3s Plans
 
 The controller (SUC), its Plan CRD and two Plans, `k3s-server` and `k3s-agent`, in the
-`system-upgrade` namespace. SUC replaces the k3s binary on the nodes the Plans select. Nothing
-else upgrades k3s since H6.3c and H6.3d landed. The slice plan is
-`docs/target-architecture/host/h6-k3s-suc.md`, and the decision is
+`system-upgrade` namespace. SUC replaces the k3s binary on the nodes the Plans select, and
+nothing else upgrades k3s. The decision is
 `docs/adr/0025-suc-upgrades-k3s-and-homelab-k3s-restart-restarts-it.md`.
 
 ## At a glance
@@ -15,10 +14,10 @@ else upgrades k3s since H6.3c and H6.3d landed. The slice plan is
 - **Claims:** none (no PVC)
 <!-- /generated_from -->
 
-- **Flux applies it, not Ansible** (H6.1b). Its `containers_list` entry is in `cluster/services.yml`
-  from its first commit, so nothing applies it by hand.
+- **Flux applies it.** Its `containers_list` entry is in `cluster/services.yml`, so
+  nothing applies it by hand.
 - **The Plans select the nodes in `system_upgrade_nodes`.** The list in `defaults/main.yml` holds
-  `daniel-box` since H6.3c and `daniel-server` since H6.3d. A node joins the list only after its
+  `daniel-box` and `daniel-server`. A node joins the list only after its
   host package installs the `k3s-gates` component, because each Plan's `prepare` runs
   `/host/usr/lib/homelab/k3s_gates.py` (#6413). Both Plans render an empty list as
   `no-node-selected`, a hostname no node carries, and setting the list back to empty is the
@@ -26,13 +25,13 @@ else upgrades k3s since H6.3c and H6.3d landed. The slice plan is
   `k8s/roles/system-upgrade/tests/test_system_upgrade_role.py` holds that an empty
   list matches no node.
 - **The k3s pin lives in `defaults/main.yml`.** `k3s_version`, `k3s_install_script_url` and
-  `k3s_install_script_sha256` live here, so a pin change routes to this Flux-owned tag. `hosts/bootstrap-host.sh`
-  installs that version on a fresh host. `SYSTEM_UPGRADE_DEFAULTS` in
+  `k3s_install_script_sha256` live here, so a pin change routes to this Flux-owned tag.
+  `hosts/bootstrap-host.sh` installs that version on a fresh host. `SYSTEM_UPGRADE_DEFAULTS` in
   `scripts/lib/repo_paths.py` names it for the Python readers.
 - **The controller and the CRD are vendored** under `files/upstream/`, byte for byte, pinned by
   `system_upgrade_controller_version` and the `system_upgrade_vendored_manifests` items in
   `defaults/main.yml`. `scripts/dev/vendor_manifest.py` checks the pin and refreshes the copies.
-  No render may fetch a URL (D5, C1).
+  No render may fetch a URL.
 - **Two patches change upstream objects**, both under `files/patches/`. A kustomize patch is
   copied verbatim and cannot read a variable, so
   `k8s/roles/system-upgrade/tests/test_system_upgrade_role.py` holds the image and env
@@ -58,11 +57,11 @@ else upgrades k3s since H6.3c and H6.3d landed. The slice plan is
   without a reset, so `promote` never lowers the Plans below a version a node already runs.
 - **The Kustomization judges the Plans.** `flux_health_check_exprs` and `flux_timeout` in
   `defaults/main.yml` render as `spec.healthCheckExprs` and `spec.timeout`
-  (`scripts/lib/k8s_roles.py:role_fields`). The expressions compare `status.latestVersion` with
-  the pin after SUC's `+` to `-` mapping, because a Plan has no `observedGeneration`.
-  A selector-only change keeps the version and the hash, so for H6.3c, H6.3d and exit 1 the
-  evidence is each node's `plan.upgrade.cattle.io/<plan>` label against the Plan's
-  `status.latestHash`, never the Kustomization.
+  (`scripts/lib/k8s_roles.py:role_fields`). The expressions compare `status.latestVersion` with the
+  pin after SUC's `+` to `-` mapping, because a Plan has no `observedGeneration`. A selector-only
+  change keeps the version and the hash, so its evidence is each node's
+  `plan.upgrade.cattle.io/<plan>` label against the Plan's `status.latestHash`, never the
+  Kustomization.
 - **The gates' identity is `k3s-plan`** (`templates/rbac.yaml.j2`): a ClusterRole that reads
   nodes, Longhorn volumes and backups and Plans, and a Role in `kube-system` that reads the
   `coredns` Deployment and the `kube-controller-manager` Lease by `resourceNames`. SUC hashes
@@ -70,12 +69,11 @@ else upgrades k3s since H6.3c and H6.3d landed. The slice plan is
   selected.
 - **The namespace denies all ingress** (`templates/networkpolicy.yaml.j2`). The controller
   declares no container port, so no netpol-baseline probe row can prove the policy live, and
-  the render test is the whole proof (H6 *Open questions* 13).
+  the render test is the whole proof.
 - **`prepare` runs a script the host package ships.** `/host/usr/lib/homelab/k3s_gates.py`
   comes from the `k3s-gates` component (`hosts/components/k3s-gates/component.yml`). A Plan
-  that selects a node without it fails `prepare`, the closed direction, as H6.3d's first merge
-  did on daniel-server (#6403).
-- **`system-upgrade-verify` compares each node's binary with the pin** (H6.3e). The renderer
+  that selects a node without it fails `prepare`, the closed direction (#6403).
+- **`system-upgrade-verify` compares each node's binary with the pin.** The renderer
   emits one Job per node in `system_upgrade_nodes` from `templates/verify/job.yaml.j2`, and
   Flux runs them once `flux/system-upgrade` reads Ready. Each Job reads its Node as `k3s-plan`
   and hashes `/usr/local/bin/k3s`, mounted read-only by hostPath, against
@@ -89,7 +87,7 @@ else upgrades k3s since H6.3c and H6.3d landed. The slice plan is
 ## Autonomous-role contract
 
 SUC and `homelab-k3s-restart` change state with no human in the loop. This section is their
-contract (H6 *Autonomous-role contract*); `homelab-k3s-restart` arrives with H6.3b.
+contract.
 
 - **Scope.** SUC replaces the k3s binary with the pinned version on a selected node, and never
   drains, cordons or downgrades. The restart unit restarts one k3s unit once per changed config

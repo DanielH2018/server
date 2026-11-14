@@ -125,9 +125,9 @@ k3s_longhorn_restore_drill_empty_ok_pvcs:
 # `files=0` restore would still be waived for, which is the whole thing this bounds.
 k3s_longhorn_restore_drill_empty_ok_max_actual_bytes: 62914560
 # The probe pod's image. It needs BusyBox's `find`, `wc` and `cat` for the content counts and
-# Python's `sqlite3` module for the integrity check, and `python:3.14-alpine` carries both. The
+# Python's `sqlite3` module for the integrity check, and `python:3.15-alpine` carries both. The
 # same digest as monitor-bridge's and longhorn-reconcile's.
-k3s_longhorn_restore_drill_image: python:3.14-alpine@sha256:f6a589d43c42b9e7f7dc67a12d37132491f362859a5d750607710cc56da3bc72
+k3s_longhorn_restore_drill_image: python:3.15-alpine@sha256:0f9552bb28711333da16915ec146f5e6bb44a7fdac9ced15dc17c2e0206346dd
 # A drill restores 51 MB in ~21s and the rotation admits volumes 25x that size: a slow restore
 # is not itself a failure, but a hung one must not leave a
 # Volume CR attached forever, and a timeout fires as a restore failure that nothing distinguishes

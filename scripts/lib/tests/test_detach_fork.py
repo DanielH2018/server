@@ -49,7 +49,7 @@ def test_a_fan_out_units_cgroup_is_flagged():
 @pytest.mark.parametrize(
     "cgroup",
     [
-        # A system unit: leaving it needs root, and the deployer waits for its own deploys.
+        # A system unit: leaving it needs root.
         "0::/system.slice/gitops-deploy.service\n",
         # A login session's scope, and a scope this module already moved the run into.
         "0::/user.slice/user-1000.slice/session-4.scope\n",

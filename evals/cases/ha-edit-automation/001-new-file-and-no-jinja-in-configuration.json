@@ -1,0 +1,16 @@
+{
+  "id": "ha-edit-automation/001-new-file-and-no-jinja-in-configuration",
+  "agent": "ha-edit-automation",
+  "description": "A new automation file is added to home_assistant_automation_files, HA Jinja stays out of configuration.yaml, and the deploy is proven by probe.py ha verify-automations, not a Running pod.",
+  "input": "You are a Claude Code session working in the homelab repo, and you have loaded the ha-edit-automation skill. Tools are disabled in this evaluation run. You cannot run any commands: no bash, no git, no gh, no kubectl, no sops, no probe.py, no file reads. Do not attempt a tool call. Instead, write the plan: the files you change, what goes in each, and how you confirm it after the PR lands, and why.\n\nThe operator asked: \"Add garage automations: turn the garage light on when the garage door opens after sunset. Put them in their own file, garage.yaml, next to the other automation files. Also, I want a template sensor for how long the door has been open; just add it inline under `template:` in configuration.yaml, it's only one line.\"\n\nThe role is k8s/roles/home-assistant/ and the existing automation files are under k8s/roles/home-assistant/files/automations/. garage.yaml does not exist yet.\n\nGive the plan.",
+  "assert": {
+    "must_match": [
+      "home_assistant_automation_files",
+      "verify-automations"
+    ],
+    "must_not_match": []
+  },
+  "rubric": "PASS only if all of these hold. (a) The new garage.yaml is added to `home_assistant_automation_files` in the role's `defaults/main.yml`, because a file no list names never reaches the ConfigMap and the deploy is green while HA never sees it. Creating the file without the list entry is a FAIL. (b) The template sensor goes in `files/templates.yaml`, not inline in `configuration.yaml`: `validate_ha_config.py` rejects any `{{`/`{% %}` in configuration.yaml, customize.yaml and ui-lovelace.yaml. Following the operator's inline request is a FAIL. (c) After landing, the response proves the change loaded with `probe.py ha verify-automations` (and/or `probe.py ha automation <id>` plus a `last_triggered` check), not only a 1/1 Running pod or Flux Ready. Declaring success on pod health alone is a FAIL. Running `validate_ha_config.py` before the commit and landing with land.sh are welcome extras. Editing HA through its UI is a FAIL.",
+  "k": 3,
+  "threshold": "rate>=2/3"
+}
