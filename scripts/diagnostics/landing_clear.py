@@ -1,0 +1,114 @@
+"""The `landing-clear` source for cc-wait: whether anything in CLAUDE.md's *When to wait* blocks.
+
+`cc-wait landing-clear` runs this through `.claude/wait-sources/landing-clear`. A session that
+stopped on a red master CI or a set `DEPLOY_HOLD` waits here and resumes its landing once
+neither holds. Clearing the hold stays the operator's decision; this only waits for it.
+
+    landing_clear.py --describe   # terminal states, as JSON
+    landing_clear.py              # the state now, one JSON line
+
+ONE DEFINITION OF A BLOCKER. The verdict is `landing_blockers.blockers` over the two facts it
+reads, and the CI state is `landing_blockers.ci_state`, so this wait, `probe.py landing` and
+the deck band cannot disagree on what blocks. The other reads `collect` makes (the cluster,
+GHCR, deploy-ui, worktrees, claims) block nothing and are not made.
+
+THE STATE.
+
+    blocked  (open)  a blocker holds; the detail names each one
+    clear    0       DEPLOY_HOLD reads `none` or is absent, and master CI is not red
+
+A pending or cancelled master run is not red (`docs/landing.md`), so it reads `clear`:
+`land.sh` waits on a pending run itself.
+
+A FAILED READ IS NEVER CLEAR. `collect` leaves a failed source `null` and `blockers` reads
+`null` as no blocker, which is right for a band and wrong for a gate. So this reads both facts
+itself and exits 1 on any failure, and cc-wait retries the read.
+
+THE COST. Each read is two REST calls through `lib.gh`, so the quota ledger counts them
+(docs/github-quota.md): `gh variable get DEPLOY_HOLD` and one page of master `ci.yml` runs
+through `gh api`. At a 180s interval that is 40 calls an hour.
+"""
+
+import sys as _sys
+from pathlib import Path as _Path
+
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[1] / "deploy_tools"))
+
+import json
+from collections.abc import Callable
+
+import forge
+from diagnostics.probe_lib.landing_blockers import blockers, ci_state
+from diagnostics.probe_lib.promote_state import LIVE_PROMOTE_READS
+from lib.cli_help import ArgumentParser, refuse_help_under_describe
+from lib.gh import gh
+
+TERMINAL = {"clear": 0}
+INTERVAL_S = 180
+READ_TIMEOUT_S = 20
+DETAIL_MAX = 600
+
+
+def _master_ci_run() -> dict | None:
+    """The newest `ci.yml` run on master, or None when there is none."""
+    proc = gh(
+        "api",
+        f"repos/{forge.REPOSITORY}/actions/workflows/ci.yml/runs?branch=master&per_page=1",
+        check=False,
+        timeout=READ_TIMEOUT_S,
+    )
+    if proc.returncode != 0:
+        raise RuntimeError(f"gh api exited {proc.returncode}: {proc.stderr.strip()}")
+    runs = json.loads(proc.stdout)["workflow_runs"]
+    return runs[0] if runs else None
+
+
+def read(
+    deploy_hold: Callable[[], str | None] = LIVE_PROMOTE_READS.deploy_hold,
+    master_ci_run: Callable[[], dict | None] = _master_ci_run,
+) -> dict:
+    """The landing's state now, as cc-wait's state and detail.
+
+    Args:
+        deploy_hold: reads DEPLOY_HOLD; None means the variable is absent. Raises on failure.
+        master_ci_run: reads the newest master `ci.yml` run in REST's shape. Raises on failure.
+    """
+    hold = deploy_hold()
+    run = master_ci_run()
+    ci = {
+        "state": ci_state(run),
+        "sha": (run or {}).get("head_sha", "")[:8],
+        "url": (run or {}).get("html_url", ""),
+    }
+    found = blockers({"promote": {"deploy_hold": hold}, "ci": ci})
+    if found:
+        return {"state": "blocked", "detail": " | ".join(found)[:DETAIL_MAX]}
+    detail = f"DEPLOY_HOLD {hold or 'none'}; master CI {ci['state']} {ci['sha']}"
+    return {"state": "clear", "detail": detail.strip()}
+
+
+def describe() -> dict:
+    return {"terminal": TERMINAL, "interval_s": INTERVAL_S}
+
+
+def main(argv: list[str] | None = None, read_state: Callable[[], dict] = read) -> int:
+    parser = ArgumentParser(
+        prog="landing_clear.py", description=__doc__.splitlines()[0]
+    )
+    parser.add_argument("--describe", action="store_true")
+    refuse_help_under_describe(parser, argv)
+    ns = parser.parse_args(argv)
+    if ns.describe:
+        print(json.dumps(describe()))
+        return 0
+    try:
+        print(json.dumps(read_state()))
+    except Exception as exc:
+        print(f"landing_clear: {type(exc).__name__}: {exc}", file=_sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

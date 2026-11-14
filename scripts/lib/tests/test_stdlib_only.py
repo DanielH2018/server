@@ -44,6 +44,7 @@ MUST_INCLUDE = frozenset(
         "scripts/dev/fanout.py",
         "scripts/dev/fanout_lib/review_unit.py",
         "scripts/deploy_tools/land_lib/land_probe.py",
+        "scripts/diagnostics/landing_clear.py",
         "hosts/components/deploy-ui/files/deploy_ui.py",
         "hosts/components/fake-remux/files/fake_remux.py",
         "hosts/components/fake-remux/files/mkv_attachment_repair.py",
