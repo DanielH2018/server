@@ -180,7 +180,7 @@ groups:
             daniel-server's textfile collector, so nothing confirms the Loki read route is being
             witnessed. Read `systemctl status homelab-loki-route-witness` on daniel-server, then
             /var/lib/node-exporter-textfile/loki-read-route-health.prom on the host.
-      # H7.51's checkout-sync, which takes over the deployer's dirty-tree page.
+      # H7.51's checkout-sync, which took over the retired deployer's dirty-tree page.
       - alert: CheckoutSyncFailed
         expr: homelab_check_success{check="checkout-sync",origin="daniel-box"} == 0
         labels:

@@ -420,7 +420,7 @@ files = "^(hosts/lib/host_lib\\.py|scripts/lib/longhorn_lib/longhorn_backups\\.p
 #
 # `files` is every input the generator reads: role defaults and templates (the auto-deploy
 # coverage walks every k8s role's defaults, which no fragment header lists), the inventory,
-# the template filter, `secrets/secret_rotation.yml`, the deployer's deploy_changes.py, and the
+# the template filter, `secrets/secret_rotation.yml`, and the
 # Python under scripts/ that reads or renders a fragment. The fragments themselves match too,
 # so a hand edit is reverted in the same commit. That makes the hook fire on the docs-refresh
 # cron's commit, which stages docs/assets/generated/; build_docs.py regenerates the fragments
@@ -678,7 +678,7 @@ pass_filenames = false
 files = "^(hosts/lib/host_lib\\.py|scripts/lib/longhorn_lib/longhorn_backups\\.py|cluster/services\\.yml|renovate\\.json|inventory/.*|k8s/roles/[^/]+/(defaults/.*|templates/Dockerfile[^/]*)|scripts/renderer/template_filters/[^/]+\\.py|tests/(_[^/]+|render_share|deploy/_autodeploy|deploy/test_renovate_[^/]+)\\.py|scripts/(deploy_tools|lib|renderer|validate)/.*\\.py|scripts/secrets_mgmt/cluster_vars_check\\.py|scripts/dev/k8s_autodeploy_counts\\.py|pyproject\\.toml|uv\\.lock)$"
 
 # Six more rules that failed PR CI between 2026-10-18 and 2026-10-25: the eval cases'
-# CLAUDE.md quotes, the k8s_host_files pairs (deleted with the role's rows in H7.48), the Landings board, the deployer's import
+# CLAUDE.md quotes, the k8s_host_files pairs (deleted with the role's rows in H7.48), the Landings board, the retired deployer's import
 # boundary, the alert conventions and the unit-template census. Each failed 2 to 4 branches
 # that changed an input the hook below names, and none ran before CI. Two of them run one node
 # rather than the module: the alert module's promtool cases took 4.8-5.2s and the unit module's
@@ -687,7 +687,7 @@ files = "^(hosts/lib/host_lib\\.py|scripts/lib/longhorn_lib/longhorn_backups\\.p
 #
 # Cost, one at a time with `-n0` on daniel-box on 2026-10-25 at load average 4.1-4.7, each
 # including its interpreter start: eval cases 0.3-0.8s, host-files pairs 0.4-0.5s, Landings
-# board 0.4s, deployer imports 0.7-0.8s, alert conventions 1.0s, unit census 0.6s.
+# board 0.4s, retired deployer imports 0.7-0.8s, alert conventions 1.0s, unit census 0.6s.
 #
 # `test_cluster_vars_tree.py` failed four branches in the same week and stays out. It takes
 # 11-12s because it renders every flux-owned role, so its gate would be every k8s template,

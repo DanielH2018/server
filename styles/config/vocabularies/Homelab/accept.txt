@@ -415,7 +415,7 @@ ORed
 # Narrowing a deploy-plane change (docs/gitops-pipeline.md)
 [Uu]nscoped
 
-# monitor-bridge check record and the deployer's record (docs/monitor-bridge-checks.md,
+# monitor-bridge check record and the retired deployer's record (docs/monitor-bridge-checks.md,
 # docs/gitops-pipeline.md). Hardware, exporter and shipper vocabulary the incident record uses
 # in prose, plus the possessive forms that record needs.
 [Aa]utomations

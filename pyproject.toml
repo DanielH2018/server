@@ -123,8 +123,8 @@ testpaths = [                        # single source of truth for WHAT runs
 addopts = "-n auto --dist loadscope -m 'not ui and not image' --strict-markers --strict-config -p leakguard -p xdist_width -p render_share -p phase_timing"
 # Every warning is a failure. Measured before enabling: the only classes that
 # fired were ResourceWarnings, each a real leak — HTTPError test doubles built on a tempfile
-# nothing closed, an sqlite connection the Valheim store never closed, and the deployer's
-# subprocess pipes left open on the timeout path. A DeprecationWarning from a dependency
+# nothing closed, an sqlite connection the Valheim store never closed, and the since-retired
+# GitOps deployer's subprocess pipes left open on the timeout path. A DeprecationWarning from a dependency
 # bump surfaces here too, on the PR that bumps it rather than on the day the API goes away.
 filterwarnings = [
   "error",

@@ -280,7 +280,7 @@ claude_code_memory_sync_interval: 15min
 # to the users arm, as renovate-agent's component.yml declares that agent's user, and
 # claude-agent-setup builds its home. A session running as
 # {{ sys_user }} reads everything that user can: the age key, which decrypts the become
-# password, the operator's gh token, ssh keys, and the deployer's primary checkout. This user
+# password, the operator's gh token, ssh keys, and the primary checkout. This user
 # reaches none of them. claude-rc.service runs as {{ sys_user }} unless a host's host_vars set
 # claude_code_user to this user (slice 4d).
 #

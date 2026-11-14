@@ -16,8 +16,8 @@
 # textfile collector (default /var/lib/node-exporter-textfile; a test points it elsewhere).
 # Prometheus's GitHubRulesetDrift and GitHubRulesetDriftNotReporting rules page from that file.
 #
-# The ruleset is what stops an un-CI'd commit reaching master, and the deployer trusts that: a
-# tick reads the check runs for the origin SHA and deploys on a green verdict. Nothing in the
+# The ruleset is what stops an un-CI'd commit reaching master, and `promote` and checkout-sync
+# trust that: each reads the check runs for a master SHA and acts on a green verdict. Nothing in the
 # repo watched the ruleset itself, so an edit in the GitHub UI — dropping a required context,
 # adding a bypass actor, flipping enforcement to `evaluate` — changed the gate with no commit,
 # no PR and no signal. That is not hypothetical: by 2026-08-31 TWO in-repo records had gone stale
@@ -39,7 +39,7 @@
 # otherwise. The endpoint returns 200 with `enforcement` and every
 # `rules[].parameters.required_status_checks[].context` to an anonymous caller, and the repo holds
 # no GitHub token in SOPS — the same call shape renovate_notify.py uses from this host, and the
-# same token source the deployer's CI gate uses since 2026-09-01. Note `bypass_actors` is null
+# same token source a landing's await_ci.py poll uses. Note `bypass_actors` is null
 # anonymously rather than empty: GitHub returns the list only to a caller with admin on the repo.
 # The contexts, enforcement and the Renovate exclusion are checked either way. The bypass lists
 # are checked only on an authenticated read, and an anonymous one reports them UNVERIFIED and
@@ -47,7 +47,7 @@
 # the agent off branches outside its own prefix. github-interaction-limit.sh already records down without a token.
 #
 # Rate limit: anonymous GitHub allows 60 req/hr per source IP, shared by EVERY caller on this
-# host (the deployer's gate, a landing's await_ci.py poll, renovate_notify). Authenticated it is
+# host (a landing's await_ci.py poll, renovate_notify). Authenticated it is
 # 5000/hr per token. Once a day is still the right cadence — rulesets change on a human clock.
 # The token never lands in argv: curl reads it from a config file handed over as a process
 # substitution (`-K <(...)`), because /proc is mounted without hidepid here.
