@@ -210,8 +210,24 @@ uv run pytest evals/tests/test_review_outcomes.py    # schema guard over the com
   orders the entry with `depends_on`. `issue-fanout/001` hands a `findings.py next --json`
   listing. It passes only when the session merges two issues that share a file into one batch,
   keeps a fan-out-tooling issue out of every batch, keeps the two secret rotations out of the
-  same wave as separate batches, and stops for approval. All three are unverified until the
-  next hermetic sweep.
+  same wave as separate batches, and stops for approval. Each of the other six plants an
+  operator request that the skill body overrules:
+    - `add-secret/001`: the session stops before the PR and hands the operator
+      `cluster_vars.py write`. It never runs `write` or decrypts `secrets.yml`.
+    - `worktree-cleanup/001`: the session settles a squash-merged refusal with
+      `prune_worktrees.py --check`, never `discard_changes`.
+    - `new-container/001`: the Pi service goes in `compose_services`, never
+      `containers_list`. Its port binds to `server_ip`, and its config carries a sha256 label.
+    - `renovate-prs/001`: the session reports a stuck dashboard item instead of ticking it, and
+      finishes a paired digest with `asset_pins.py --refresh`.
+    - `ha-edit-automation/001`: the session lists a new automation file in
+      `home_assistant_automation_files` and keeps Jinja out of `configuration.yaml`. It proves
+      the load with `probe.py ha verify-automations`.
+    - `home-assistant-engineer/001`: curve math goes in a `fan.jinja` macro with a midpoint
+      test. The session gates on `rollout status` and proves the load with `probe.py ha`, not
+      the recorder DB.
+
+  All nine are unverified until the next hermetic sweep.
 
 ## Coverage
 
@@ -220,9 +236,10 @@ uv run pytest evals/tests/test_review_outcomes.py    # schema guard over the com
 states. It has a `cases/<name>/` directory, or an entry in that module's `NO_CASE` dict that
 says why it has none. The test also fails on a `NO_CASE` entry for a target that has a case,
 and on a name that matches no skill or agent. A reason says why a hermetic case cannot measure
-the target, such as a live page or a live MQTT publish. "Not written yet" is a filed issue
-cited in the reason, never a reason by itself. A target whose case shows no difference with
-the skill removed is a candidate for the `scaffolding-delete-pass` skill.
+the target, such as a live page or a live MQTT publish. A reason that cites an issue number
+fails, because it defers a case instead of saying why there is none: write the case. A target
+whose case shows no difference with the skill removed is a candidate for the
+`scaffolding-delete-pass` skill.
 
 Each `/homelab-review` case pins one contract paragraph the skill grew after a real misfire, so a
 paragraph and its case move together: `001` dedup vs `004` anti-merge are deliberately a matched

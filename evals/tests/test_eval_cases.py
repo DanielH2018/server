@@ -355,16 +355,9 @@ def test_every_quoted_claude_md_section_matches_the_live_file():
     )
 
 
-# A skill or agent under `.claude/` with no case, and why. A case cannot exist without its
-# target, and an exemption cannot outlive the case that replaces it.
-_FILED_8621 = "a hermetic case is feasible and not yet written: #8621"
+# A skill or agent under `.claude/` with no case, and why a hermetic case cannot measure it. A
+# case cannot exist without its target, and an exemption cannot outlive the case that replaces it.
 NO_CASE = {
-    "add-secret": _FILED_8621,
-    "worktree-cleanup": _FILED_8621,
-    "new-container": _FILED_8621,
-    "renovate-prs": _FILED_8621,
-    "ha-edit-automation": _FILED_8621,
-    "home-assistant-engineer": _FILED_8621,
     "web-to-rss": "its rules are only right against the live page's markup, which a hermetic run "
     "cannot fetch; a pasted page grades XPath writing, not the skill",
     "z2m-device-setting": "its whole effect is an authenticated MQTT publish to a live device; "
@@ -372,6 +365,7 @@ NO_CASE = {
     "homelab-docs-freshness-reviewer": "its job is reading the tree at HEAD to confirm a doc "
     "line still holds; a pasted fixture replaces that reading, so a case grades another task",
 }
+_ISSUE_REF_RE = re.compile(r"#\d+")
 SKILLS_DIR = REPO / ".claude" / "skills"
 AGENTS_DIR = REPO / ".claude" / "agents"
 
@@ -400,6 +394,12 @@ def coverage_problems(
         ]
         + [f"{t}: NO_CASE names no skill or agent" for t in sorted(exempt - targets)]
         + [
+            f"{t}: its NO_CASE reason cites an issue, so it defers a case rather than "
+            "saying why there is none"
+            for t in sorted(exempt)
+            if _ISSUE_REF_RE.search(no_case[t])
+        ]
+        + [
             f"{t}: evals/cases/{t}/ names no skill or agent"
             for t in sorted(case_dirs - targets)
         ]
@@ -422,13 +422,14 @@ def test_each_coverage_gap_is_named():
     problems = coverage_problems(
         targets={"deploy", "skeptic", "web-to-rss"},
         case_dirs={"skeptic", "retired"},
-        no_case={"skeptic": "r", "gone": "r"},
+        no_case={"skeptic": "r", "gone": "r", "web-to-rss": "not yet written: #8621"},
     )
     assert problems == [
         "deploy: no evals/cases/deploy/ and no NO_CASE reason",
-        "web-to-rss: no evals/cases/web-to-rss/ and no NO_CASE reason",
         "skeptic: has a case, so its NO_CASE entry is stale",
         "gone: NO_CASE names no skill or agent",
+        "web-to-rss: its NO_CASE reason cites an issue, so it defers a case rather than "
+        "saying why there is none",
         "retired: evals/cases/retired/ names no skill or agent",
     ]
 
