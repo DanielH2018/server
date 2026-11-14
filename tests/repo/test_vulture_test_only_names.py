@@ -11,6 +11,7 @@ Run: uv run pytest tests/repo/test_vulture_test_only_names.py
 
 import ast
 import fnmatch
+import re
 import tomllib
 
 import pytest
@@ -134,3 +135,60 @@ def test_a_test_only_name_is_deleted_or_ignored_with_a_reason(path, name):
     assert _test_tree_mentions(name), (
         f"ignore_names keeps {name!r} for a guard, but no file under a tests/ directory names it"
     )
+
+
+def test_defines_finds_a_bound_name_is_clean():
+    assert _defines("scripts/lib/kubectl.py", "CLUSTER_NODES")
+    assert _defines("scripts/lib/kubectl.py", "WrongCluster")
+
+
+def test_defines_misses_an_unbound_name_is_flagged():
+    assert not _defines("scripts/lib/kubectl.py", "no_such_name_8632")
+    assert not _defines("scripts/lib/no_such_module_8632.py", "CLUSTER_NODES")
+
+
+def test_ignore_entry_matches_by_glob_is_clean():
+    assert _ignore_entry("server_hostname") == "server_hostname"
+    assert _ignore_entry("do_GET") == "do_*"
+    assert _reason("server_hostname")
+
+
+def test_ignore_entry_misses_an_unlisted_name_is_flagged():
+    assert _ignore_entry("no_such_name_8632") is None
+
+
+@pytest.mark.parametrize("path", sorted({p for p, _ in TEST_ONLY_NAMES}))
+def test_every_row_names_a_tracked_module(path):
+    """A moved module would make its rows pass as deleted; the row must follow the move."""
+    assert path in _tracked(path), (
+        f"{path} is not tracked: repoint its TEST_ONLY_NAMES rows"
+    )
+
+
+def _test_tree_names(name: str) -> bool:
+    word = re.compile(rf"(?<![\w]){re.escape(name)}(?![\w])")
+    return any(
+        word.search((REPO / path).read_text())
+        for path in _tracked("*.py")
+        if "/tests/" in f"/{path}"
+        and path != "tests/repo/test_vulture_test_only_names.py"
+    )
+
+
+@pytest.mark.parametrize(
+    ("path", "name"),
+    TEST_ONLY_NAMES,
+    ids=[f"{p.rsplit('/', 1)[-1]}::{n}" for p, n in TEST_ONLY_NAMES],
+)
+def test_a_kept_name_is_named_whole_by_a_test_outside_this_census(path, name):
+    if not _defines(path, name):
+        return
+    assert _test_tree_names(name), (
+        f"{name!r} is kept for a guard, but no test under a tests/ directory other than this "
+        "census names it as a whole word"
+    )
+
+
+def test_a_name_only_inside_a_longer_word_is_flagged():
+    assert not _test_tree_names("no_such_name_8632")
+    assert not _test_tree_names("ORMS_8632")
