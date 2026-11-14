@@ -202,8 +202,15 @@ then tests the master the merge lands on, so master's own run proves the tree an
 jobs. [CI throughput](ci-throughput.md) has the measurements and the plan this is slice B2 of.
 
 - The landing waits for the turn first, and prints `waiting for the landing turn` once.
-- With the turn, it marks a draft PR ready, which starts the PR's one CI run. A PR that is
-  ready already keeps the run it has.
+- It marks a draft PR ready. With the turn, it then updates the PR's branch from master when
+  the head has had no CI run that ran jobs and master is ahead of it. GitHub builds the tree
+  a pull-request run tests when the PR's branch is pushed, and a ready flip does not build it
+  again, so a run that a ready flip starts tests the master of the last push. The update is
+  a push, and the run it starts tests the master of the turn.
+- A head with a run that ran jobs keeps it, finished or not, and the stale-base rules above
+  judge it once it is green. A head the landing policy admitted on an approval is never
+  updated, because the update voids the approval. An update that GitHub refuses does not
+  stop the landing: the PR keeps the run the ready flip started.
 - A landing that holds the turn is not paced. No other landing with a turn merges ahead of
   it, and a paced holder would stop every landing behind it.
 - The turn ends when the merge wait does, whether the PR merged or the wait gave up. It is a

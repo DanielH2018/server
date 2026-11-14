@@ -365,9 +365,9 @@ def _source_read_calls(
     """Every read of a bound template name under `node`, descending scope by scope.
 
     A function PARAMETER of the same name is a different object, so it drops the binding for
-    that function's body. `_shell_render.rendered_or_source_text(path)` is why: the module
-    binds `path` in two `for path in discover_templates()` loops, and that function's own
-    `path.read_text()` is the fallback for an extension this module does not render.
+    that function's body. A module can bind `path` in a `for path in discover_templates()`
+    loop and also define a helper whose own `path` parameter it reads with `path.read_text()`:
+    that read is of the helper's argument, not of a bound template.
 
     `helpers` maps a locally defined reading helper to the parameters it reads as a file, and a
     call that hands one of those a bound template name is a read at the call site. A parameter

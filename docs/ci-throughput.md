@@ -93,8 +93,9 @@ merge. 6 of 164 finished pull-request runs were red. The pull-request runs are t
 share, and most of them test a master that has moved on by the time the PR merges.
 
 The queue therefore gives each PR one run, at the moment it lands. A PR stays a draft, and a
-draft runs no job. At its turn the landing marks the PR ready, and the run that starts tests
-the PR on the master it merges into. Master's own run then proves that tree and skips. Every
+draft runs no job. At its turn the landing marks the PR ready and updates its branch from
+master, and the run that starts tests the PR on the master it merges into. Master's own run
+then proves that tree and skips. Every
 rule in `scripts/deploy_tools/land_lib/` stays where it is, and so does every check a
 pull-request run makes, because the one run is still a pull-request run.
 
@@ -107,7 +108,7 @@ The slices:
    read red. *What the shadow sweep found* below has the result, which changed this plan.
 1. **R1, landed.** The shadow sweep's timer, its tool and its probe are deleted.
 1. **B2, in progress.** A queue of one. With `LAND_QUEUE` set, a landing takes the landing
-   turn, marks its draft PR ready and merges after that one run
+   turn, marks its draft PR ready, updates its branch and merges after that one run
    ([Landing a merged PR](landing.md)). The fan-out's server lander follows: it stops
    marking a batch's PR ready before the landing, and lands the draft.
 1. **B3, planned.** Batches of up to four. The queue opens one pull request that holds the
@@ -115,8 +116,12 @@ The slices:
    rebuilds each stacked tree from master and the heads and records it on each head. Each
    member then merges in turn, and its own run and master's prove the recorded tree and skip.
    A red batch splits in half.
-1. **B4, planned.** Every landing goes through the queue, on both hosts, and the merge pacing
-   and the branch-update re-test are deleted.
+1. **B4, planned.** Every landing goes through the queue, on both hosts. The merge pacing is
+   deleted, and so is the branch update that follows a green run on a stale base. A landing
+   then takes its slot under the limit on live landings when it gets the turn. That limit
+   exists because every live landing polls GitHub on one token. A landing that waits for the
+   turn polls only a lock file, so any number can wait, and the limit bounds the landings
+   that spend quota.
 
 Three things were settled before B2. The tree of a squash merge equals what `git merge-tree`
 builds for the same base and head: for #8474 both read `dfa8d4331c36`, with master 11 paths
@@ -124,6 +129,14 @@ past the PR's base. The token the lander uses can create and delete a `queue/` b
 the rulesets. A workflow dispatch was the first design for the queue's run, and it was
 dropped: a dispatched run skips every step that reads a pull request, so the render-diff
 gates and the cluster-pin gate would run nowhere.
+
+The first pilot of the turn was #8551 on 2026-11-14. The landing took the turn and marked the
+draft ready, and the PR got one run that ran jobs. Master's run still swept in full, for two
+reasons. The run tested the PR on the master of the PR's creation, 16 minutes old: GitHub
+builds the tree a pull-request run tests when the PR's branch is pushed, and neither a ready
+flip nor a read of the PR builds it again. The landing therefore updates the branch at its
+turn, which is a push, for a head that has had no run. The other reason is that two landings
+without the turn merged during the run, and that lasts until every landing takes turns.
 
 B3's gate rebuilds the trees because the batch's pull request names its members. Anyone who
 can open a pull request could name a head and a tree of their choosing, so the gate takes
