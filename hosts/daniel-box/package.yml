@@ -64,6 +64,10 @@ component: claude-code
 users:
   # The homelab band 900-949 sits below the uids Ubuntu hands out from 999 down (#8100).
   - {name: claude, uid: 900, home: /var/lib/claude, shell: /bin/bash, comment: Claude agent}
+  # Triage's controller (guardrails plan B2): owns triage's records and reports, and alone will
+  # start its units. Declared here, not in the claude-code component, because triage ships only
+  # on daniel-box. Its name and home are pinned in claude-triage-pins.j2.
+  - {name: claude-triage-ctl, uid: 906, home: /var/lib/claude-triage-ctl, shell: /usr/sbin/nologin, comment: Triage controller}
 components:
   - reconcile
   - secrets-unit
