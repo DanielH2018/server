@@ -83,7 +83,7 @@ groups:
             NetworkPolicy and the node's registries.yaml.
       # A sidecar that stopped writing, per node, because the absent arm cannot name a node it
       # never saw. The 3000s literals equal DEADLINE_S in node-exporter's
-      # files/ghcr-mirror-pull.sh, and ansible/roles/k8s/node-exporter/tests/test_ghcr_mirror_pull.py
+      # files/ghcr-mirror-pull.sh, and k8s/roles/node-exporter/tests/test_ghcr_mirror_pull.py
       # pins them to it. `unless` leaves a dead exporter to ScrapeTargetDown.
       - alert: GhcrMirrorPullNotReporting
         expr: |
@@ -142,7 +142,7 @@ groups:
             of the node-exporter pod on {{ $labels.origin }}, then the dockerhub-mirror pod, its
             NetworkPolicy and the node's registries.yaml.
       # The 3000s literals equal DEADLINE_S in node-exporter's files/ghcr-mirror-pull.sh, which
-      # this sidecar also runs, and ansible/roles/k8s/node-exporter/tests/test_dockerhub_mirror_pull.py
+      # this sidecar also runs, and k8s/roles/node-exporter/tests/test_dockerhub_mirror_pull.py
       # pins them to it.
       - alert: DockerhubMirrorPullNotReporting
         expr: |
@@ -183,7 +183,7 @@ groups:
       # M6 BATCH B6c (#6926). registry-gc.sh writes the registry-gc textfile, and these two rules
       # replaced the "Registry GC" tile that Cutover-1a deleted. The NotReporting literals
       # equal the DEADLINE_S the script renders, which equals the deleted tile's interval:
-      # ansible/tests/services/test_registry_gc_watchers_cover_the_worst_run.py pins both. The
+      # tests/services/test_registry_gc_watchers_cover_the_worst_run.py pins both. The
       # tile notified Discord only, so both rules are `warning`.
       - alert: RegistryGcFailed
         expr: homelab_check_success{check="registry-gc",origin="daniel-box"} == 0

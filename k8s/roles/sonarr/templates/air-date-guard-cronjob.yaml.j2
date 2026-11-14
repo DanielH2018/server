@@ -8,7 +8,7 @@
 
   DECIDED: the pod carries `app: sonarr-verify`, the label of the Jobs in templates/verify/,
   which sonarr's `netpol_from` already admits. Its own label would need a `netpol_from` entry in
-  ansible/inventory/, a broad change for one caller of one port; the qbittorrent Jobs reuse
+  inventory/, a broad change for one caller of one port; the qbittorrent Jobs reuse
   labels the same way.
 #}
 ---

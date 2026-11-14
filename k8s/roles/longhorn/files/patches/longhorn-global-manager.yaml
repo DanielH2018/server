@@ -6,7 +6,7 @@
 # replicas elect one leader and stand the rest by, so on two nodes the third replica adds no
 # failover. Both values are keys in defaults/main.yml (k3s_longhorn_global_manager_memory_request,
 # k3s_longhorn_global_manager_replicas); a kustomize patch is copied verbatim and cannot read a
-# variable, so ansible/tests/longhorn/test_longhorn_control_plane_resources.py holds them equal.
+# variable, so tests/longhorn/test_longhorn_control_plane_resources.py holds them equal.
 apiVersion: apps/v1
 kind: Deployment
 metadata:

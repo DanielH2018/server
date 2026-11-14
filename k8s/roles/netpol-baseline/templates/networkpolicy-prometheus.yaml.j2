@@ -1,7 +1,7 @@
 {# DECIDED: prometheus-callers sits in the observability namespace and admits callers from
    the homelab namespace and from flux-system, so it stays bespoke.
    The callers model (`netpol_from` / `netpol_fences`, macro in
-   ansible/templates/networkpolicy.yml.j2) renders one TCP port admitting same-namespace `app:`
+   k8s/templates/networkpolicy.yml.j2) renders one TCP port admitting same-namespace `app:`
    peers, and its header rules out growing it to absorb another shape. Census: #3701.
 #}
 ---
@@ -9,18 +9,18 @@
 # per-workload grant for an in-cluster, cross-namespace caller: monitor-bridge, homelab-mcp and homepage all run in
 # {{ k8s_namespace }} and reach it over the network (PROMETHEUS_URL on monitor-bridge and on
 # homelab-mcp, and the Headlamp tile's customapi widget URL on
-# homepage — roles/k8s/homepage/templates/config/services.yaml.j2). A fourth cross-namespace caller
+# homepage — k8s/roles/homepage/templates/config/services.yaml.j2). A fourth cross-namespace caller
 # runs in flux-system: the soak Job (D5.3, docs/target-architecture/deploy/d5-bulk-move.md,
 # *Reaching Prometheus*). It reads M2's `homelab:pod_service:info` and the critical alerts to
 # decide whether a promotion is healthy. Its name moves with each revision's SHA, so the peer
 # selects the stable pod label `app: soak` instead of `job-name`. A fifth runs in
 # {{ k8s_namespace }}: crowdsec's verify Job, `app: crowdsec-verify`
-# (roles/k8s/crowdsec/templates/verify/job.yaml.j2), which reads the edge's answers to
+# (k8s/roles/crowdsec/templates/verify/job.yaml.j2), which reads the edge's answers to
 # daniel-pi's probe from here. prometheus itself is ALSO read on host loopback
 # by `otelq` (a workstation host process — see observability/CLAUDE.md), covered the same way as
 # tempo/otel-collector below, not by this file. Headlamp's Prometheus plugin is a sixth
 # in-cluster reader that this file also does NOT admit, on purpose: it queries through the API
-# server's service proxy (roles/k8s/headlamp/templates/rbac.yaml.j2), so the hop that reaches
+# server's service proxy (k8s/roles/headlamp/templates/rbac.yaml.j2), so the hop that reaches
 # the pod is the API server's, from the node's cni0/flannel.1 address — the same node-CIDR peer
 # that carries otelq. The other four need no per-workload policy, each
 # for a different reason — don't collapse them into one mechanism:

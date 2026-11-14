@@ -13,7 +13,7 @@
    A role whose route needs anything else — extra middlewares, a second hostname, the
    public-route opt-out, a bypass prefix, a Jinja condition — keeps its own
    `templates/ingressroute.yaml.j2`, which wins over this file. The macro header in
-   `ansible/templates/ingressroute.yml.j2` lists every parameter such a role would reach for. #}
+   `k8s/templates/ingressroute.yml.j2` lists every parameter such a role would reach for. #}
 {% from 'ingressroute.yml.j2' import ingressroute with context %}
 ---
 {{ ingressroute(

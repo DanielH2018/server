@@ -32,7 +32,7 @@ Environment:
 Exit 0 when every check passes, 1 when one fails, naming it.
 
 Run: python3 verify_janitorr.py (in the Job; it takes no arguments)
-     uv run pytest ansible/roles/k8s/janitorr/tests/test_verify_janitorr.py
+     uv run pytest k8s/roles/janitorr/tests/test_verify_janitorr.py
 """
 
 import argparse

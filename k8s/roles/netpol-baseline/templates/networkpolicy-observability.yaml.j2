@@ -1,7 +1,7 @@
 {# DECIDED: the observability baseline selects a whole other namespace and admits traefik
    across namespaces plus node ipBlocks, so it stays bespoke.
    The callers model (`netpol_from` / `netpol_fences`, macro in
-   ansible/templates/networkpolicy.yml.j2) renders one TCP port admitting same-namespace `app:`
+   k8s/templates/networkpolicy.yml.j2) renders one TCP port admitting same-namespace `app:`
    peers, and its header rules out growing it to absorb another shape. Census: #3701.
 #}
 ---
@@ -61,7 +61,7 @@ spec:
         # invariant this bare selector leans on, and it is exactly what a second role landing in
         # the namespace later would silently invalidate — it would get free ingress to every
         # already-fenced pod here with no policy change of its own (guarded by
-        # ansible/tests/k8s/test_rendered_properties.py). Enumerating each workload's pairwise
+        # tests/k8s/test_rendered_properties.py). Enumerating each workload's pairwise
         # edges would add review surface without adding a boundary; the boundary that matters is
         # the namespace edge. A bare podSelector is correct here and means observability only.
         - podSelector: {}

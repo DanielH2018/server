@@ -1,7 +1,7 @@
 {# DECIDED: traefik's fence is an ipBlock origin lock on :8443, a from-less :8000 and a
    cross-namespace prometheus grant on :8080, so it stays bespoke.
    The callers model (`netpol_from` / `netpol_fences`, macro in
-   ansible/templates/networkpolicy.yml.j2) renders one TCP port admitting same-namespace `app:`
+   k8s/templates/networkpolicy.yml.j2) renders one TCP port admitting same-namespace `app:`
    peers, and its header rules out growing it to absorb another shape. Census: #3701.
 #}
 ---
@@ -65,7 +65,7 @@ spec:
     # origin lock the Docker-era DOCKER-USER chain used to be. Cloudflare Tunnel and a
     # ClientIP() clause on the public Rule were considered and rejected in #1974. Authenticated
     # Origin Pulls (#1990) sits on top of this: the `cloudflare-origin-pull` TLSOption
-    # (ansible/templates/origin-pull.yml.j2) requires Cloudflare's client certificate on every
+    # (k8s/templates/origin-pull.yml.j2) requires Cloudflare's client certificate on every
     # public Host router, so a source this list admits still fails the handshake unless the
     # connection is Cloudflare's.
     #

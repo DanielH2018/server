@@ -11,7 +11,7 @@
   The grant cannot name pods: the tombstones' names are not known in advance, and RBAC has no
   field selector, so `delete` reaches every pod in the namespace. The script narrows it, and
   each delete carries a `uid` precondition. No `get`: the list returns every field it reads.
-  ansible/tests/k8s/test_rbac_against_rest_script.py runs the module's main with a recording
+  tests/k8s/test_rbac_against_rest_script.py runs the module's main with a recording
   client and holds this Role to the calls it records.
 #}
 ---

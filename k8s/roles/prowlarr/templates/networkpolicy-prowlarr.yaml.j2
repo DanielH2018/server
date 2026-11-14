@@ -27,7 +27,7 @@
 # flaresolverr is unreachable from outside prowlarr, it first proves its own pod networking works
 # at all by dialling prowlarr on this port. Fence that leg out and the control can never pass,
 # so the Job fails on every revision — a negative test with no working control proves nothing.
-# Same shape as roles/k8s/registry/templates/networkpolicy.yaml.j2 admitting its own
+# Same shape as k8s/roles/registry/templates/networkpolicy.yaml.j2 admitting its own
 # registry-selftest-push/registry-selftest-pull Jobs: a test pod that must reach the workload it
 # is fencing. Do not "clean this up" as an unused caller. It replaced the Ansible-applied
 # flaresolverr-netpol-probe in prowlarr's flip (#5594). It must never join flaresolverr's fence,

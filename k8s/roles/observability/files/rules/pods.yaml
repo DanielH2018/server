@@ -21,7 +21,7 @@
 #   kube-state-metrics argument.
 #
 # THE LITERALS. The pi-peer-backup age limit is three periods of the CronJob's daily schedule.
-# ansible/tests/services/test_pod_producer_rule_literals.py pins it and the ConfigMap name to the
+# tests/services/test_pod_producer_rule_literals.py pins it and the ConfigMap name to the
 # role's defaults (M1 convention 1), and the autofix-bridge `check` literal to autofix.py.
 #
 # `service` NAMES THE THING CHECKED (operator, 2026-10-23; the DECIDED block in

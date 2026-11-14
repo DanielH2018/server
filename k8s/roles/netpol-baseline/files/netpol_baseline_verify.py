@@ -32,7 +32,7 @@ fails every leg it reaches.
 Exit 0 when every check passes, 1 when one fails, naming it.
 
 Run: python3 netpol_baseline_verify.py (in the Job; it takes no arguments)
-     uv run pytest ansible/roles/k8s/netpol-baseline/tests/test_netpol_baseline_verify.py
+     uv run pytest k8s/roles/netpol-baseline/tests/test_netpol_baseline_verify.py
 """
 
 import argparse

@@ -38,7 +38,7 @@ with slack. Inputs come from the Job's environment: `LAPI_URL`, `LAPI_MACHINE`,
 `OUTAGE_GRACE_SECONDS`. Exit 0 when the edge enforced the ban, 1 otherwise, naming the hop.
 
 Run: python3 crowdsec_verify.py (in the Job; it takes no arguments)
-     uv run pytest ansible/roles/k8s/crowdsec/tests/test_crowdsec_verify.py
+     uv run pytest k8s/roles/crowdsec/tests/test_crowdsec_verify.py
 """
 
 import argparse

@@ -15,7 +15,7 @@
   copies in observability's and longhorn-ui's middlewares.yaml.j2 document. Every namespace with a
   public route renders both: traefik for k8s_namespace, observability for the observability
   namespace (grafana's public name). ENFORCED by
-  ansible/tests/k8s/test_public_routes_require_cloudflare_origin_pull.py.
+  tests/k8s/test_public_routes_require_cloudflare_origin_pull.py.
 
   Two properties of Traefik make the per-host split sound rather than a bypass waiting to be
   found, both from v3's pkg/server/router/tcp and pkg/middlewares/snicheck:
@@ -27,7 +27,7 @@
       `.local.` SNI carrying a public Host header) is answered 421 Misdirected Request before
       any router sees it. So the certificate cannot be dodged by handshaking as a LAN name.
 
-  The CA is `roles/k8s/traefik/files/cloudflare-origin-pull-ca.crt` (public, provenance in the
+  The CA is `k8s/roles/traefik/files/cloudflare-origin-pull-ca.crt` (public, provenance in the
   file's header). The Secret carries it under `tls.ca`, the key Traefik's CRD provider reads
   first, with `ca.crt` as its fallback (`getCABlocks`, pkg/provider/kubernetes/crd/kubernetes.go
   at v3.7.12). The bytes reach `x509.CertPool.AppendCertsFromPEM` unparsed
@@ -55,7 +55,7 @@ apiVersion: traefik.io/v1alpha1
 kind: TLSOption
 metadata:
   # Referenced by name from every public-Host router. Not `default` — that name is reserved
-  # (see the `modern` TLSOption in roles/k8s/traefik/templates/dynamic.yaml.j2).
+  # (see the `modern` TLSOption in k8s/roles/traefik/templates/dynamic.yaml.j2).
   name: cloudflare-origin-pull
   namespace: {{ namespace }}
 spec:
