@@ -562,12 +562,14 @@ jobs:
       # slot-seconds (a full sweep about 3,800), pytest about 1,020 of them, and the pooled
       # queue wait was 10s at p50 and 161s at p90. The p90 comes from the
       # `host_packages_bootstrap` legs, which wait a median 56s for a runner; the pytest legs
-      # wait 12s. A leg's fixed cost is about 66 slot-seconds: 29.5s outside `Run the test
-      # suite`, plus about 37s of collection and render prebuild before its first test (the
-      # `phase timing` section of run 43594559130). Five shards would save about 66 of the
-      # 1,414 and one of the 25 queued jobs, and add about 20s to the wall of every run that
-      # skips the host package legs, where pytest is the last job to finish. Four would save
-      # about 130 and add about 50s. Neither moves the p90.
+      # wait 12s. Dropping a leg removes about 40 slot-seconds: the 29.5s it spends outside
+      # `Run the test suite`, plus the k8s render prebuild and the import cost every leg repeats.
+      # Its 17-22s of collection and up to 15s of fleet prebuild before the first test (the
+      # `phase timing` sections of run 43594559130) mostly move with its files to another leg.
+      # Five shards would save about 40 of the 1,414 and one of the 25 queued jobs, and add
+      # about 20s to the wall of every run that skips the host package legs, where pytest is
+      # the last job to finish. Four would save about 80 and add about 50s. Neither moves the
+      # p90.
       #
       # A shard can never finish faster than its largest `--dist loadscope` group, a module or
       # a class within one, so the floor rises as the matrix grows. On master runs 42541064791
@@ -577,6 +579,7 @@ jobs:
       # fixture. Each leg's `phase timing` section prints every worker's finish time, which
       # shows when one group sets the leg's wall.
       matrix:
+        # DECIDED: six shards, on slot-seconds per landing and p90 queue wait (#8456, 2026-11-14)
         shard: [1, 2, 3, 4, 5, 6]
     # The dotfiles commit the suite imports claude_guard and claude_worktree from. A pin,
     # not `main`: tracking the branch would turn this job red on an unrelated dotfiles commit.
@@ -598,8 +601,8 @@ jobs:
       # the version and the digest together there. age comes from apt, as the hosts install it.
       # apt-utils is for the repository signer's tests, which drive apt-ftparchive as the
       # signer does on daniel-box (hosts/lib/tests/test_repo_signer.py). Both share one
-      # apt-get, and NEEDRESTART_SUSPEND skips needrestart's post-install scan, which no
-      # runner needs; each apt-get it ran cost a leg about 1.5s.
+      # apt-get, and NEEDRESTART_SUSPEND skips needrestart's post-install scan, which adds
+      # about 1.5s per apt-get and which no runner needs.
       - name: Read the sops pin
         id: sops
         run: |
