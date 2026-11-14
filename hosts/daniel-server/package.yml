@@ -27,7 +27,7 @@
 # Since H7.31 it ships the rest of initial_setup's subjects, the same components as daniel-pi: the
 # fail2ban group (fail2ban, integrity-scans for rkhunter and aide-scan for AIDE, postfix and accounting), the
 # maintenance timers (host-maintenance: the weekly reboot, apt autoremove and dpkg purge; this
-# host has neither Docker nor fwupd) and ufw (ssh-firewall). check-lib ships the textfile library
+# host has no Docker, and no fwupd per the DECIDED marker at its has_fwupd) and ufw (ssh-firewall). check-lib ships the textfile library
 # the scans and the maintenance wrapper source. initial_setup keeps no task for them. The scans and the reboot read one more credential,
 # `healthchecks_ping_key` (`host_secrets.py sync daniel-server`, operator-only).
 #
