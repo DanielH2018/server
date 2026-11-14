@@ -181,6 +181,7 @@
  "hosts/lib/tests/test_reconcile_lines_arm.py": 3.34,
  "hosts/lib/tests/test_reconcile_shadow_handoff.py": 3.73,
  "hosts/lib/tests/test_reconcile_size_census.py": 0.06,
+ "hosts/lib/tests/test_reconcile_stub_imports.py": 0.01,
  "hosts/lib/tests/test_reconcile_ufw_arm.py": 9.34,
  "hosts/lib/tests/test_reconcile_users_arm.py": 3.11,
  "hosts/lib/tests/test_repo_signer.py": 0.52,
