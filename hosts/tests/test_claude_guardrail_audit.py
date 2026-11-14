@@ -136,6 +136,7 @@ def test_a_second_run_loads_nothing_twice(tmp_path):
 
 
 def test_a_stopped_auditd_is_flagged(tmp_path):
+    # fact: hosts/components/claude-code/CLAUDE.md#Autonomous-role contract (`claude-guardrail-audit`, the audit watches on the guardrail paths)
     rc, status, msg, _ = run(tmp_path, AUDIT_PID="0")
     assert (rc, status) == (1, "down")
     assert "auditd is not running (pid 0)" in msg
@@ -146,12 +147,14 @@ def test_a_stopped_auditd_is_flagged(tmp_path):
 
 
 def test_kernel_auditing_off_is_flagged(tmp_path):
+    # fact: hosts/components/claude-code/CLAUDE.md#Autonomous-role contract (`claude-guardrail-audit`, the audit watches on the guardrail paths)
     rc, status, msg, _ = run(tmp_path, AUDIT_ENABLED="0")
     assert (rc, status) == (1, "down")
     assert "kernel auditing is off (enabled=0)" in msg
 
 
 def test_a_watch_that_will_not_load_is_flagged_by_path(tmp_path):
+    # fact: hosts/components/claude-code/CLAUDE.md#Autonomous-role contract (`claude-guardrail-audit`, the audit watches on the guardrail paths)
     settings = str(tmp_path / "home" / "settings.json")
     rc, status, msg, _ = run(tmp_path, AUDIT_REFUSE=settings)
     assert (rc, status) == (1, "down")
@@ -159,6 +162,7 @@ def test_a_watch_that_will_not_load_is_flagged_by_path(tmp_path):
 
 
 def test_a_watch_the_list_dropped_is_removed_and_other_keys_are_kept(tmp_path):
+    # fact: hosts/components/claude-code/CLAUDE.md#Autonomous-role contract (`claude-guardrail-audit`, the audit watches on the guardrail paths)
     stale = "-w /etc/claude-old -p wa -k claude-guardrail"
     rc, status, msg, rules = run(tmp_path, rules=[HARDENING_WATCH, stale])
     assert (rc, status) == (0, "up")
@@ -167,6 +171,7 @@ def test_a_watch_the_list_dropped_is_removed_and_other_keys_are_kept(tmp_path):
 
 
 def test_disarming_removes_every_watch_under_both_keys(tmp_path):
+    # fact: hosts/components/claude-code/CLAUDE.md#Autonomous-role contract (`claude-guardrail-audit`, the audit watches on the guardrail paths)
     _, _, _, armed = run(tmp_path, rules=[HARDENING_WATCH])
     rc, status, msg, rules = run(
         tmp_path, {"claude_code_guardrail_audit_enabled": False}, rules=armed

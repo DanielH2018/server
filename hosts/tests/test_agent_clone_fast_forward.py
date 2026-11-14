@@ -65,6 +65,7 @@ def repos(tmp_path: Path) -> Repos:
 
 
 def test_a_clean_master_advances_to_origin(repos: Repos) -> None:
+    # fact: hosts/components/claude-code/CLAUDE.md#Autonomous-role contract (`claude-clone-sync`, `claude-dotfiles-sync`)
     before = repos.head()
     target = repos.push(**{"scripts/diagnostics/ui_mcp.sh": "new\n"})
     result = repos.sync()
@@ -109,6 +110,7 @@ def _named_after_master(repos: Repos) -> None:
     ids=["modified file", "detached HEAD", "another branch", "master-old"],
 )
 def test_the_agents_work_in_progress_is_left_alone(repos: Repos, state) -> None:
+    # fact: hosts/components/claude-code/CLAUDE.md#Autonomous-role contract (`claude-clone-sync`, `claude-dotfiles-sync`)
     state(repos)
     before = repos.head()
     repos.push(README="2\n")
@@ -140,6 +142,7 @@ def test_a_diverged_master_fails(repos: Repos) -> None:
 def test_a_moved_lock_resyncs_the_venv_and_installs_no_collections(
     repos: Repos,
 ) -> None:
+    # fact: hosts/components/claude-code/CLAUDE.md#Autonomous-role contract (`claude-clone-sync`, `claude-dotfiles-sync`)
     repos.push(**{"uv.lock": "b\n", "ansible/requirements.yml": "collections: []\n"})
     assert repos.sync().returncode == 0
     assert repos.tool_calls() == ["uv sync --frozen --compile-bytecode"]

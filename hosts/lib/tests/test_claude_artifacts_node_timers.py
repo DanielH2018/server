@@ -159,6 +159,7 @@ def test_the_package_creates_every_directory_the_artifacts_pod_mounts(box):
 
 
 def test_only_the_artifacts_node_ships_them():
+    # fact: hosts/components/claude-code/CLAUDE.md#Autonomous-role contract (`sync-artifacts`, a mirror of another host's tree)
     server = host_mode.render_host("daniel-server").files
     shipped = [
         path for path in server if "sync-artifacts" in path or "otel-health" in path

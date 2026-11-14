@@ -140,6 +140,7 @@ def _start(config: str):
 def test_a_run_with_no_diagnosis_still_leaves_a_record_a_report_and_a_page(
     tmp_path,
 ) -> None:
+    # fact: hosts/components/claude-code/CLAUDE.md#Autonomous-role contract (`claude-triage@`, a session started by a monitor episode)
     pages = []
     denied = [{"tool_name": "Bash", "tool_input": {"command": "secret-sentinel"}}] * 2
     body = json.dumps(
@@ -226,6 +227,7 @@ def test_a_malformed_episode_id_runs_nothing(tmp_path) -> None:
 
 def test_the_daily_cap_stops_a_run_before_any_session_starts(tmp_path) -> None:
     # The fake would leave a diagnosed record if a session ran.
+    # fact: hosts/components/claude-code/CLAUDE.md#Autonomous-role contract (`claude-triage@`, a session started by a monitor episode)
     body = json.dumps(
         {"subtype": "success", "structured_output": {"confidence": "high"}}
     )
