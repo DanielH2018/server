@@ -11,6 +11,7 @@ Run: uv run pytest scripts/tests/test_census_rows_test_renders.py
 """
 
 import pytest
+from _collection_render_rules import render_imports, renders_at_collection
 from _inventory_path_rules import inline_inventory_paths
 from _render_helper_rules import (
     bare_jinja_envs,
@@ -354,6 +355,68 @@ ROWS = (
             ),
         ),
         min_matches=MODULE_FLOOR,
+    ),
+    Census(
+        name="tests-render-after-collection",
+        reason=(
+            "A module-level assignment or a `parametrize` argument that reads the k8s render "
+            "or a host package renders while pytest collects the module. Under xdist every "
+            "other worker then waits on that render inside its own collection, where it "
+            "cannot overlap the fleet render `render_share.build_each` starts once collection "
+            "ends; one such module cost each CI leg 4-7.7s (#8692). Read the render inside a "
+            "test, or in a function the test calls, and report every offender from one test "
+            "rather than parametrizing over the render. The scan follows calls through the "
+            "module's own functions only, so a reader imported from another test module "
+            "passes it."
+        ),
+        files=pytest_only_modules,
+        offence=lambda s: renders_at_collection(s.text),
+        count=lambda s: bool(render_imports(s.text)),
+        red=(
+            Subject(
+                "a.py",
+                "from _k8s_render import rendered_docs\nDOCS = list(rendered_docs())\n",
+            ),
+            Subject(
+                "b.py",
+                "from _k8s_render import rendered_texts as texts\n"
+                "def keys():\n    return [k for k, _, _ in texts()]\n"
+                "@pytest.mark.parametrize('key', keys())\ndef test_x(key):\n    pass\n",
+            ),
+            Subject(
+                "c.py",
+                "from _host_packages import HOSTS, package\n"
+                "def _ships(host):\n    return package(host).files\n"
+                "def hosts():\n    return [h for h in HOSTS if _ships(h)]\n"
+                "AIDE = hosts()\n",
+            ),
+            Subject(
+                "d.py", "import _k8s_render as k\nDOCS = list(k.rendered_docs())\n"
+            ),
+        ),
+        green=(
+            Subject(
+                "a.py",
+                "import functools\nfrom _k8s_render import rendered_docs\n"
+                "@functools.cache\ndef docs():\n    return list(rendered_docs())\n"
+                "def test_x():\n    assert docs()\n",
+            ),
+            Subject("b.py", "from _k8s_render import pod_spec\nSPEC = pod_spec({})\n"),
+            Subject("d.py", "import _k8s_render\nSPEC = _k8s_render.pod_spec({})\n"),
+            Subject(
+                "c.py", "def rendered_docs():\n    return []\nDOCS = rendered_docs()\n"
+            ),
+        ),
+        must_find=frozenset(
+            {
+                "hosts/tests/test_aide_check.py",
+                "tests/deploy/test_k8s_toposort.py",
+                "tests/k8s/test_configmap_keys_not_absorbed.py",
+                "tests/k8s/test_vip_pins.py",
+                "tests/k8s/test_volume_names_descriptive.py",
+                "tests/longhorn/test_pvc_sizes_match_block_size.py",
+            }
+        ),
     ),
 )
 
