@@ -1,6 +1,7 @@
 # janitorr — Automated media library cleanup
 
-Deletes watched/old media and cleans up Sonarr/Radarr based on disk-usage rules.
+Deletes watched/old media and cleans up Sonarr/Radarr based on disk-usage rules
+(`k8s/roles/janitorr/defaults/main.yml:janitorr_k8s_dry_run`).
 See repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
@@ -94,29 +95,39 @@ See repo-root `CLAUDE.md` for shared conventions.
 ## The Flux verify Job
 
 `templates/verify/` holds `janitorr-verify`, which runs the role's checks with no `pods/exec`
-grant. `files/verify_janitorr.py` reads the mounted `application.yml`,
+grant
+(`k8s/roles/janitorr/tests/test_verify_janitorr.py::test_the_flipped_job_passes_every_job_census_row`).
+`k8s/roles/janitorr/files/verify_janitorr.py` reads the mounted `application.yml`,
 dials sonarr, radarr and jellyfin over HTTP, and writes, reads and removes the leaving-soon
 probe link through jellyfin's mount layout; its docstring maps each proof. Its pod is
 `app: janitorr-verify`, which sonarr's and radarr's `netpol_from` list (#5709).
 `tests/test_verify_janitorr.py` renders the Job through the Job census, checks that both
-fences admit the Job's pod, and holds the Job's mounts to janitorr's and jellyfin's.
+fences admit the Job's pod
+(`k8s/roles/janitorr/tests/test_verify_janitorr.py::test_the_arr_fences_admit_janitorr`), and
+holds the Job's mounts to janitorr's and jellyfin's
+(`k8s/roles/janitorr/tests/test_verify_janitorr.py::test_the_job_sees_the_library_where_janitorr_writes_and_jellyfin_reads`).
 
 Flux applies the role's manifests.
 `templates/config/application.yml.j2` and `templates/verify/job.yaml.j2` both read
-`janitorr_k8s_dry_run` from `defaults/main.yml`.
+`k8s/roles/janitorr/defaults/main.yml:janitorr_k8s_dry_run`
+(`k8s/roles/janitorr/tests/test_verify_janitorr.py::test_the_job_expects_the_dry_run_mode_the_role_default_sets`).
 
 ## Retention rungs
 
 `media-deletion` keys each expiration on free disk: a rung applies while free space is below
-its key. The rungs are 5, 10, 15, 20 and 25, and the 25 rung (movies 180d, seasons 240d) is the
-loosest.
+its key (`k8s/roles/janitorr/templates/config/application.yml.j2`). The rungs are 5, 10, 15, 20
+and 25, and the 25 rung (movies 180d, seasons 240d) is the loosest
+(`k8s/roles/janitorr/tests/test_verify_janitorr.py::test_the_rendered_config_trims_media_at_longhorns_25_percent_floor`).
 
 DECIDED: the loosest rung is 25 because `/srv/media` shares daniel-box's root LV with
 `/var/lib/longhorn`, and Longhorn stops scheduling on a disk below 25% available
 (`storage-minimal-available-percentage: 25`). A 20 rung would not act until the LV is 80% used,
 past that line. The LV cannot grow, because the VG has no free extents. Operator ruling
-2026-10-22, #5806. The `DiskHealthFailed` threshold of 75% used is Longhorn's floor too and
-stays. Media tagged `janitorr-keep` is exempt from every rung.
+2026-10-22, #5806
+(`k8s/roles/janitorr/templates/config/application.yml.j2:DECIDED: the loosest rung is 25`). The
+`DiskHealthFailed` threshold of 75% used
+(`hosts/components/k3s-host-checks/defaults/main.yml:k3s_disk_max_pct`) is Longhorn's floor too
+and stays. Media tagged `janitorr-keep` is exempt from every rung.
 
 ## Editing
 - Rules: `templates/config/application.yml.j2` (rendered into the k8s Secret by `k8s/roles/janitorr/`)
