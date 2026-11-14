@@ -223,7 +223,7 @@ OCIRepository `homelab`. `FluxNotReady` stayed quiet for the same reason, and
   replacement, set it with `gh secret set PROMOTE_TOKEN -R DanielH2018/server`, store the copy
   with `sops set` as `promote_token`, run `uv run python
   scripts/secrets_mgmt/secret_rotation.py sync`, and commit `secrets/secret_rotation.yml`.
-  The copy's registry row (`secrets/secret_rotation.yml:entries.promote_token`) is on the
+  The copy's registry row (`secrets/secret_rotation.yml:entries.promote_token.tier`) is on the
   `external-90d` tier with `source: record`, so the audit flags it before the token expires
   (`scripts/secrets_mgmt/tests/test_secret_registry.py::test_the_live_registry_marks_exactly_the_three_record_keys`).
 - **GitHub App credentials rotation (operator-only).** notification-controller posts commit

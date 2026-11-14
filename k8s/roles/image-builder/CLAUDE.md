@@ -20,8 +20,9 @@ every caller, where it would drift. See repo-root `CLAUDE.md` for shared convent
   `image_builder_*` vars in its own `image_builder_builds` default.
 - **Renovate does not automerge its bumps**
   (`k8s/roles/image-builder/defaults/main.yml:k8s_autodeploy`). It renders a Job and a
-  ConfigMap, no Deployment, and it builds the images every other role above consumes, so a bad
-  build here is upstream of all of them.
+  ConfigMap, no Deployment, and its context template defines the images every other role above
+  consumes (`scripts/renderer/renderer_lib/images.py:render_images`), so a bad edit here is
+  upstream of all of them.
 
 ## Notable
 - **Every build has TWO names for one manifest:** the mutable `image_builder_tag` (`latest`) and
