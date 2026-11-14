@@ -26,8 +26,7 @@ The exposure is the same one the `tests-read-shell-templates-rendered` row of
 `scripts/tests/test_census_rows_test_renders.py` covers for `*.sh.j2` repo-wide: a value that
 moves into a role default leaves the assertion matching `{{ ... }}`, and a pattern that
 matches nothing passes (#3178). The sanctioned readers are `_k8s_render` (k8s manifests and
-`Dockerfile*.j2`), `_setup_render` (setup-plane templates), `_compose_render` (the Pi's Compose
-and config templates) and `_shell_render` (`*.sh.j2`).
+`Dockerfile*.j2`), `_setup_render` (setup-plane templates) and `_shell_render` (`*.sh.j2`).
 
 Two things the rule deliberately does not reach:
 
@@ -316,7 +315,7 @@ def test_no_services_test_reads_a_templates_source():
     assert found == {}, (
         "these tests assert on a template's SOURCE, so a value moved into a role default "
         "leaves the assertion matching `{{ ... }}`. Render it instead — `_k8s_render` for a "
-        "manifest or a `Dockerfile*.j2`, `_compose_render` for the Pi's templates, "
+        "manifest or a `Dockerfile*.j2`, "
         "`_shell_render` for a `*.sh.j2` — or add an entry to TEMPLATE_SOURCE_READERS saying "
         f"why the source text is the subject: {found}"
     )
