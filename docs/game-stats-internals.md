@@ -29,12 +29,14 @@ ZNet.LoadWorld: Midgard (Midgard), save number 1750 <- start
 ```
 
 The last three lines are observed on this server. A shutdown or a start closes every open
-session, and so does a heartbeat that reports 0 connections. That heartbeat is what recovers
-a session whose `Closing socket` line was missed. Until #8528 the restart pattern searched
+session. A heartbeat that reports fewer connections than there are open sessions closes the
+excess, oldest last event first, because the count cannot say which one is stale. That
+heartbeat is what recovers a session whose `Closing socket` line was missed, even while
+another player stays connected. Until #8528 the restart pattern searched
 for `Load world: `, a line this server never logs, so a missed disconnect left two players
-online for three weeks. A reconciling close ends each session at the last heartbeat that
-reported a connection, or at the player's last event, so the time the session sat stale is
-not counted as playtime.
+online for three weeks. A reconciling close ends each session at the later of the player's
+last event and the last heartbeat whose count covered every open session. Another player's
+presence never extends a stale session, so the time it sat stale is not counted as playtime.
 
 Three consequences, each of which is a trap:
 
@@ -66,9 +68,9 @@ Two things exist to make a mismatch visible rather than silent:
 - `valheim_stats_unmatched_player_lines_total` — player-shaped lines that did not parse.
   Expect a flat zero; a step up with frozen player metrics means upstream reworded.
 - `valheim_connections` vs `valheim_players_online` — the server's own ~10 min heartbeat
-  against the session-derived count. A heartbeat of 0 forces the derived count to 0, so the
-  two can disagree only while the server reports at least one connection. A gap that
-  persists there means the session state machine has drifted. Both are on the dashboard
+  against the session-derived count. Each heartbeat caps the derived count at the server's, so
+  the derived count can read higher for at most one heartbeat interval. A gap that persists
+  longer means the session state machine has drifted. Both are on the dashboard
   side by side.
 
 ## Notable

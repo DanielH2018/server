@@ -154,7 +154,8 @@ class StatsState:
         # SteamID <-> name, needed because a disconnect names only the SteamID.
         self.steam_to_name = {}
         self.pending_steam_id = None
-        self.last_occupied_ts = 0.0  # last heartbeat reporting a connection
+        # name -> last heartbeat whose count covered every open session, theirs included.
+        self.last_present = {}
 
     def _player(self, name):
         return self.players.setdefault(
@@ -176,21 +177,40 @@ class StatsState:
             p["sessions"] += 1
             p["open_start"] = None
             p["last_seen"] = ts
+            self.last_present.pop(name, None)
 
-    def _close_all(self, ts):
-        """Closes every open session at the last time anyone was seen connected.
+    def _close_stale(self, name, ts):
+        """Closes a session whose disconnect was missed, at the last time it was seen.
 
-        A missed disconnect left the session open with no end time. Ending it at `ts`
-        would bank every hour since as playtime, so it ends at the later of the player's
-        own last event and the last heartbeat that reported a connection.
+        Ending it at `ts` would bank every hour since as playtime, so it ends at the
+        later of the player's own last event and the last heartbeat that accounted for
+        their session. Another player's presence never extends it.
         """
-        for p in self.players.values():
-            if p["open_start"] is not None:
-                end = max(p["last_seen"] or p["open_start"], self.last_occupied_ts)
-                p["total_playtime"] += max(0.0, min(ts, end) - p["open_start"])
-                p["sessions"] += 1
-                p["open_start"] = None
-                p["last_seen"] = min(ts, end)
+        p = self.players[name]
+        end = max(p["last_seen"] or p["open_start"], self.last_present.pop(name, 0.0))
+        end = min(ts, end)
+        p["total_playtime"] += max(0.0, end - p["open_start"])
+        p["sessions"] += 1
+        p["open_start"] = None
+        p["last_seen"] = end
+
+    def _open_sessions(self):
+        return [n for n, p in self.players.items() if p["open_start"] is not None]
+
+    def _reconcile(self, connections, ts):
+        """Closes the open sessions the server's own connection count cannot cover.
+
+        The count does not say which session is stale, so the excess closes oldest
+        last_seen first: a player still in the game keeps spawning and dying.
+        """
+        open_names = self._open_sessions()
+        if len(open_names) <= connections:
+            for n in open_names:
+                self.last_present[n] = ts
+            return
+        open_names.sort(key=lambda n: self.players[n]["last_seen"] or 0.0)
+        for n in open_names[: len(open_names) - connections]:
+            self._close_stale(n, ts)
 
     def apply(self, kind, value, ts):
         """Applies one console event (connect/spawn/death/disconnect/restart/heartbeat).
@@ -200,9 +220,10 @@ class StatsState:
         open (a respawn after death, not a second session). disconnect closes the
         session bound to the SteamID's last-known name. restart (a shutdown or a world
         load) closes every open session and clears the SteamID<->name mapping.
-        heartbeat records the server's own connection count, and a count of 0 closes
-        every open session, which is what recovers from a missed disconnect. Both
-        closes end a session at the last moment anyone was seen connected, not at `ts`.
+        heartbeat records the server's own connection count, and a count below the
+        number of open sessions closes the excess, oldest last_seen first, which is
+        what recovers from a missed disconnect. Both closes end a session at the last
+        time that player was seen, not at `ts`.
 
         Args:
             kind: One of "connect", "spawn", "death", "disconnect", "restart",
@@ -244,16 +265,13 @@ class StatsState:
             if name is not None:
                 self._close(name, ts)
         elif kind == "restart":
-            self._close_all(ts)
+            for n in self._open_sessions():
+                self._close_stale(n, ts)
             self.steam_to_name.clear()
             self.pending_steam_id = None
         elif kind == "heartbeat":
             self.connections = value
-            if value > 0:
-                self.last_occupied_ts = ts
-            else:
-                # With N > 0 the count cannot say which open session is the stale one.
-                self._close_all(ts)
+            self._reconcile(value, ts)
 
     def online_count(self):
         return sum(1 for p in self.players.values() if p["open_start"] is not None)
@@ -315,8 +333,8 @@ def render_metrics(state, now):
     )
     # Cross-check gauge, not a duplicate. valheim_players_online is DERIVED from the
     # session state machine; valheim_connections is the number the server itself reports
-    # in its ~10 min heartbeat. A heartbeat of 0 forces the derived count to 0, so a gap
-    # that persists while connections read above 0 is the drift signal.
+    # in its ~10 min heartbeat. Each heartbeat caps the derived count at the server's,
+    # so the derived count reading higher for longer than one heartbeat is a bug.
     stats_lib.render_family(
         out,
         "valheim_players_online",

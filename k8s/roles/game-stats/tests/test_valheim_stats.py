@@ -164,12 +164,39 @@ def test_heartbeat_of_zero_closes_a_session_whose_disconnect_was_missed():
     assert st.players["Bob"]["total_playtime"] == 600.0
 
 
-def test_heartbeat_above_zero_leaves_open_sessions_open():
+def test_heartbeat_covering_every_session_marks_each_one_present():
     st = stats.StatsState()
     _connected(st, "111", "Bob", 0.0)
     _connected(st, "222", "Ann", 0.0)
-    st.apply("heartbeat", 1, 600.0)
+    st.apply("heartbeat", 2, 600.0)
     assert st.online_count() == 2
+    st.apply("heartbeat", 0, 1200.0)
+    assert st.players["Bob"]["total_playtime"] == 600.0
+    assert st.players["Ann"]["total_playtime"] == 600.0
+
+
+def test_heartbeat_below_the_open_count_closes_the_stalest_session():
+    """A missed disconnect is reconciled even while someone else stays connected."""
+    st = stats.StatsState()
+    _connected(st, "111", "Bob", 0.0)
+    st.apply("heartbeat", 1, 600.0)
+    _connected(st, "222", "Ann", 1000.0)
+    st.apply("heartbeat", 1, 1200.0)
+    assert st.players["Bob"]["open_start"] is None
+    assert st.players["Bob"]["total_playtime"] == 600.0
+    assert st.players["Ann"]["open_start"] == 1000.0
+
+
+def test_another_players_presence_is_not_banked_on_a_stale_session():
+    st = stats.StatsState()
+    _connected(st, "111", "Bob", 0.0)
+    _connected(st, "222", "Ann", 10.0)
+    st.apply("heartbeat", 2, 600.0)
+    st.apply("heartbeat", 1, 1200.0)
+    st.apply("heartbeat", 1, 1800.0)
+    st.apply("heartbeat", 0, 20 * 86400.0)
+    assert st.players["Bob"]["total_playtime"] == 600.0
+    assert st.players["Ann"]["total_playtime"] == 1790.0
 
 
 def test_a_stale_session_banks_only_its_observed_time():
