@@ -22,6 +22,7 @@ import subprocess
 import pytest
 from _helpers import REPO
 from lib import yaml_fast
+from lib.proc_testing import fake_bin, path_with
 
 CI_WORKFLOW = REPO / ".github" / "workflows" / "ci.yml"
 GATE_NAME = "prek (lint + validate + tests + secrets)"
@@ -98,11 +99,82 @@ def test_pr_runs_do_not_scope_the_hooks():
     assert sweeps and all("--all-files" in run for run in sweeps), sweeps
 
 
-def test_the_prove_job_runs_on_a_push_only_and_reads_the_tested_tree_script():
+LABELLED = "contains(github.event.pull_request.labels.*.name, 'landing-batch')"
+SAME_REPO = "github.event.pull_request.head.repo.full_name == github.repository"
+
+
+def _evaluate(condition: str, event: str, **facts: object) -> bool:
+    """Evaluate one of ci.yml's conditions as GitHub would, for one event and its facts."""
+    python = (
+        " ".join(condition.split())
+        .replace(LABELLED, str(facts.get("labelled", False)))
+        .replace(DRAFT_ARM, str(not facts.get("draft", False)))
+        .replace(SAME_REPO, str(facts.get("same_repo", True)))
+        .replace("needs.prove.result", repr(facts.get("prove", "skipped")))
+        .replace("needs.prove.outputs.proven", repr(facts.get("proven", "")))
+        .replace("github.event_name", repr(event))
+        .replace("!(", "not (")
+        .replace("&&", " and ")
+        .replace("||", " or ")
+    )
+    # The input is ci.yml's own condition, with every name substituted by a literal.
+    return eval(python)
+
+
+@pytest.mark.parametrize(
+    ("event", "facts", "runs"),
+    [
+        ("push", {}, True),
+        ("pull_request", {"labelled": True}, True),
+        # The label keeps an ordinary PR run from waiting on one more runner.
+        ("pull_request", {}, False),
+        ("pull_request", {"labelled": True, "draft": True}, False),
+        # A fork's token cannot have written the record.
+        ("pull_request", {"labelled": True, "same_repo": False}, False),
+        ("workflow_dispatch", {"labelled": True}, False),
+    ],
+    ids=["push", "labelled", "unlabelled", "draft", "fork", "dispatch"],
+)
+def test_the_prove_job_runs_on_a_push_and_on_a_labelled_pr_of_this_repository(
+    event, facts, runs
+):
+    assert _evaluate(_jobs()["prove"]["if"], event, **facts) is runs
+
+
+def _prove_argv(tmp_path, event: str) -> list[str]:
+    """What the `prove` step hands `python3` on `event`, with git and python3 stubbed."""
+    step = next(s for s in _jobs()["prove"]["steps"] if s.get("id") == "prove")
+    assert step["env"]["PR_HEAD"] == "${{ github.event.pull_request.head.sha }}"
+    seen = tmp_path / "argv"
+    stubs = fake_bin(
+        tmp_path / "bin",
+        git="#!/usr/bin/env bash\necho the-tree\n",
+        python3=f"#!/usr/bin/env bash\nprintf '%s\\n' \"$@\" > {seen}\n",
+    )
+    env = {
+        "PATH": path_with(stubs),
+        "GITHUB_EVENT_NAME": event,
+        "GITHUB_REPOSITORY": "o/r",
+        "GITHUB_SHA": "the-merge",
+        "PR_HEAD": "the-head",
+    }
+    subprocess.run(["bash", "-c", step["run"]], env=env, timeout=30, check=True)
+    return seen.read_text().split()
+
+
+def test_a_push_asks_about_its_tree_and_a_pull_request_about_its_head(tmp_path):
+    script = "scripts/dev/tested_tree.py"
+    assert _prove_argv(tmp_path, "push") == [
+        *[script, "prove", "--repo", "o/r"],
+        *["--sha", "the-merge", "--tree", "the-tree"],
+    ]
+    assert _prove_argv(tmp_path, "pull_request") == [
+        *[script, "prove-head", "--repo", "o/r", "--head", "the-head"],
+    ]
+
+
+def test_the_prove_job_reads_statuses_and_publishes_its_answer():
     prove = _jobs()["prove"]
-    assert _normal(prove["if"]) == "github.event_name == 'push'"
-    script = "\n".join(str(s.get("run", "")) for s in prove["steps"])
-    assert "scripts/dev/tested_tree.py prove" in script
     assert prove["outputs"]["proven"] == "${{ steps.prove.outputs.proven }}"
     assert set(prove["permissions"]) == {"contents", "pull-requests", "statuses"}
     assert prove["permissions"]["statuses"] == "read"
@@ -210,11 +282,8 @@ def test_ci_skips_draft_prs_and_runs_when_one_is_marked_ready():
     ]
     jobs = _jobs()
     assert {"prek", "renovate-config", *DEPENDENTS} <= set(jobs)
-    # `prove` runs on a push only, which never carries a pull request.
     unguarded = [
-        name
-        for name, job in jobs.items()
-        if name != "prove" and DRAFT_ARM not in _normal(job.get("if"))
+        name for name, job in jobs.items() if DRAFT_ARM not in _normal(job.get("if"))
     ]
     assert unguarded == []
 
@@ -234,11 +303,29 @@ def test_the_statuses_write_permission_is_on_the_gate_alone():
 def test_only_a_same_repo_pr_run_records_the_tested_tree():
     steps = {s["name"]: s for s in _jobs()["prek"]["steps"] if "name" in s}
     record = steps["Record the tested tree on the PR head"]
-    assert "github.event_name == 'pull_request'" in record["if"]
-    assert "head.repo.full_name == github.repository" in record["if"]
     assert record["continue-on-error"] is True
     assert "ci/tested-tree" in record["run"]
     assert "ci/tested-tree" in (REPO / "scripts/dev/tested_tree.py").read_text()
+
+
+@pytest.mark.parametrize(
+    ("event", "facts", "records"),
+    [
+        ("pull_request", {}, True),
+        ("pull_request", {"prove": "success", "proven": "false"}, True),
+        # A proven run ran no job on the tree it would record.
+        ("pull_request", {"prove": "success", "proven": "true"}, False),
+        # A `prove` that said `true` and was then cancelled ran the sweep (#5783).
+        ("pull_request", {"prove": "cancelled", "proven": "true"}, True),
+        ("pull_request", {"same_repo": False}, False),
+        ("push", {"prove": "success", "proven": "false"}, False),
+    ],
+    ids=["unlabelled", "unproven", "proven", "cancelled", "fork", "push"],
+)
+def test_a_run_records_the_tree_it_tested_unless_it_was_proven(event, facts, records):
+    steps = {s["name"]: s for s in _jobs()["prek"]["steps"] if "name" in s}
+    condition = steps["Record the tested tree on the PR head"]["if"]
+    assert _evaluate(condition, event, **facts) is records
 
 
 def _gate_exit(prove: str, proven: str, results: dict[str, str]) -> int:

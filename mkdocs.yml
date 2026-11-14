@@ -215,6 +215,8 @@ nav:
           - Landing a merged PR: landing.md
           # What the 20-job runner cap costs a landing, and the phased plan to get under it.
           - CI throughput: ci-throughput.md
+          # What exhausts the shared GitHub API quota, and the proposed per-session budget.
+          - GitHub API quota: github-quota.md
           - Host packages: host-packages.md
           - The Flux deploy plane: flux-deploy-plane.md
           - The homelab-render renderer: homelab-render.md
