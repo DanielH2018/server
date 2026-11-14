@@ -80,6 +80,8 @@ class FakeRunner:
         # What `gh issue view --json labels` answers for every issue of the batch.
         self.labels = {"labels": []}
         self.verdict = "VERDICT: settled (deployed)"
+        # The VERDICT lines of the first landings, in order; `verdict` answers the rest.
+        self.verdicts = []
         self.land_rc = 0
         self.waits = [0]
         # The CI wait a batch that does not land runs: each `cc-wait gh-ci` command, the
@@ -187,7 +189,8 @@ class FakeRunner:
         if command[0].endswith("land.sh"):
             if self.land_rc == 0:
                 log = self.worktree / ".fanout" / "land4000-20261010T000000Z.log"
-                log.write_text(f"  waiting for CI\n{self.verdict}\n")
+                verdict = self.verdicts.pop(0) if self.verdicts else self.verdict
+                log.write_text(f"  waiting for CI\n{verdict}\n")
             return subprocess.CompletedProcess(
                 argv, self.land_rc, "", "refused: bad body"
             )

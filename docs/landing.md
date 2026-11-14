@@ -365,8 +365,13 @@ cannot parse — and a title here routinely names one, since it becomes the squa
 and has to name the outcome. Rewording the title does not reliably help.
 
 ```
-gh pr create --fill --body-file <path>   # title from the commit, body from the file
+gh pr create --draft --fill --body-file <path>   # title from the commit, body from the file
 ```
+
+`--draft` is the step D9 asks of a session: a draft's pushes start no job, and the landing
+marks it ready or tests it in a batch, as the bullets on a draft say earlier in this
+section. A PR that has to show a CI
+result before anyone lands it is marked ready with `gh pr ready <n>`, which starts its run.
 
 `--fill` takes the title from the commit subject, so the command line carries no title text to
 judge, and `--body-file` carries no body text either. gh lets `--body-file` override the body

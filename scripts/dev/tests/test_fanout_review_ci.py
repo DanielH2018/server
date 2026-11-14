@@ -1,4 +1,4 @@
-"""The review pipeline's CI wait, on both hosts (#4737, #5498).
+"""The review pipeline's CI wait on daniel-server, and its one resume on both hosts (#4737, #5498).
 
 The fake runner answers `cc-wait gh-ci` with the scripted `run.ci` exits and output, the PR's
 `statusCheckRollup` with `run.rollup`, and a failed job's log with `run.job_logs`.
@@ -20,8 +20,7 @@ from fanout_lib.review.review_ci import (
     READY_POLL_S,
     READY_WAIT_S,
 )
-from fanout_lib.review.review import LAND_MARGIN_S
-from fanout_lib.review.review_land import WAIT_MARGIN_S
+from fanout_lib.review.review_land import LAND_MARGIN_S, WAIT_MARGIN_S
 from fanout_lib.status import BLOCKER, PR_URL
 from fanout_lib.target import Target
 
@@ -29,6 +28,7 @@ PASSED = (0, "WAIT: passed abcd1234: 20 check runs passed\n")
 FAILED = (1, "WAIT: failed abcd1234: 1 failed: pytest\n")
 CANCELLED = (1, "WAIT: cancelled abcd1234: 1 cancelled: pytest\n")
 JOB_URL = "https://github.com/DanielH2018/server/actions/runs/9/job/777"
+PR_CI_RED = "VERDICT: pr-ci-red (PR #4000 cannot merge: its own CI is red)"
 
 
 class Clock:
@@ -260,45 +260,44 @@ def test_a_re_run_that_never_registers_waits_on_the_old_failure(tmp_path):
     assert final["result"].startswith("needs input: CI is red after one resume,")
 
 
-def test_a_daniel_box_batch_with_red_ci_is_resumed_once_then_lands(tmp_path):
+def _red_landing(tmp_path, verdicts):
+    """A daniel-box batch whose landings end on `verdicts`, the first on a red `pytest` job."""
     reports = [*_clean_review(), _report(f"Fixed the weight record. {PR}")]
     pipeline, run, _ = _server_batch(tmp_path, reports, host="daniel-box")
-    run.ci = [FAILED, PASSED]
+    run.verdicts = verdicts
     run.rollup = [{"name": "pytest", "conclusion": "FAILURE", "detailsUrl": JOB_URL}]
     run.job_logs = {"777": "FAILED test_x - no weight recorded\n"}
-    final = pipeline.run_all()
-    assert final["result"] == f"VERDICT: settled (deployed)\n{PR}"
-    assert [p for _, _, p in run.claude].count("ci-fix") == 1
-    assert len(run.ci_calls) == 2 and len(run.lands) == 2
-    assert "CI gate: passed after one resume." in run.comments[0]
-    record = _record(tmp_path)
-    assert record["ci_resumed"] is True and record["outcome"] == "pr"
+    run.fix_pushes = True
+    return pipeline, run
 
 
-def test_a_daniel_box_batch_with_green_ci_lands_without_a_resume(tmp_path):
-    pipeline, run, _ = _server_batch(tmp_path, _clean_review(), host="daniel-box")
-    final = pipeline.run_all()
-    assert final["result"] == f"VERDICT: settled (deployed)\n{PR}"
-    assert [phase for _, _, phase in run.claude] == ["implement", "review"]
-    assert len(run.ci_calls) == 1 and len(run.lands) == 2
-    assert "CI gate: passed." in run.comments[0]
-    assert _record(tmp_path)["ci_gate"] == "passed"
-
-
-def test_a_daniel_box_batch_still_red_after_its_resume_ends_needs_input_unlanded(
+def test_a_daniel_box_landing_that_ends_pr_ci_red_resumes_the_agent_once_then_lands(
     tmp_path,
 ):
-    reports = [*_clean_review(), _report(f"Tried a fix. {PR}")]
-    pipeline, run, _ = _server_batch(tmp_path, reports, host="daniel-box")
-    run.ci = [FAILED]
-    run.rollup = [{"name": "pytest", "conclusion": "FAILURE", "detailsUrl": JOB_URL}]
+    pipeline, run = _red_landing(tmp_path, [PR_CI_RED])
+    final = pipeline.run_all()
+    assert final["result"] == f"VERDICT: settled (deployed)\n{PR}"
+    argv, prompt, phase = run.claude[-1]
+    assert phase == "ci-fix" and argv[-2:] == ["--resume", "sid-1"]
+    assert PR_CI_RED in prompt and "no weight recorded" in prompt
+    assert [c[0].endswith("land.sh") for c in run.lands] == [True, False, True, False]
+    record = _record(tmp_path)
+    assert record["ci_gate"] == "passed after one resume"
+    assert record["outcome"] == "pr" and record["verdict"] == run.verdict
+
+
+def test_a_daniel_box_landing_still_pr_ci_red_after_its_resume_ends_needs_input(
+    tmp_path,
+):
+    pipeline, run = _red_landing(tmp_path, [PR_CI_RED, PR_CI_RED])
     final = pipeline.run_all()
     assert final["result"].startswith(
         "needs input: CI is red after one resume, so the PR needs a hand: pytest."
     )
     assert [p for _, _, p in run.claude].count("ci-fix") == 1
-    assert run.lands == []
-    assert _record(tmp_path)["outcome"] == "needs-input"
+    assert len(run.lands) == 4
+    record = _record(tmp_path)
+    assert record["outcome"] == "needs-input" and record["verdict"] == PR_CI_RED
 
 
 def test_another_repos_batch_on_daniel_server_waits_for_no_ci(tmp_path):
@@ -335,7 +334,7 @@ def test_a_draft_pr_is_marked_ready_and_the_ci_wait_starts_after_the_ready_run(
 def test_a_ready_pr_whose_ci_run_never_starts_ends_needs_input_without_a_wait(
     tmp_path,
 ):
-    pipeline, run, clock = _server_batch(tmp_path, _clean_review(), host="daniel-box")
+    pipeline, run, clock = _server_batch(tmp_path, _clean_review())
     run.draft = True
     final = pipeline.run_all()
     assert final["result"].startswith(

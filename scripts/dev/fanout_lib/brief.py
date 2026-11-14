@@ -231,12 +231,13 @@ of your final message. A {LANDS} session lands it and closes the issue.
 
 
 def drafts_pr(target: Target) -> bool:
-    """Whether a review batch opens its PR as a draft, which the pipeline marks ready (#5563).
+    """Whether a review batch opens its PR as a draft, which stays one through the review (#5563).
 
     This repo's `ci.yml` skips every job on a draft PR. A fan-out batch pushes again while its
     review runs, so CI on the first push was wasted: from 2026-10-16 to 2026-10-18, 27 PR runs
     were cancelled by such a push, and 50 more finished on a head such a push replaced.
-    `review_ci.ready_gate` marks the PR ready after the review. Another repo's CI does not
+    After the review, `review_ci.ready_gate` marks the PR ready on a host that does not land,
+    and `review_ci.land_draft` lands the draft on the deploy host. Another repo's CI does not
     skip drafts, so a draft there would only stop `autoland` from landing it.
     """
     return target.is_server
@@ -245,8 +246,9 @@ def drafts_pr(target: Target) -> bool:
 def _review_landing(target: Target) -> str:
     create = "`gh pr create --draft`" if drafts_pr(target) else "`gh pr create`"
     draft = (
-        "\nThe PR stays a draft, with no CI, until the review and its fix round are done; the "
-        "pipeline then marks it ready, and CI runs once on the head that lands.\n"
+        "\nThe PR stays a draft, with no CI, until the review and its fix round are done. Do "
+        "not mark it ready: the pipeline does, or lands the draft, and CI runs once on the "
+        "head that lands.\n"
         if drafts_pr(target)
         else ""
     )

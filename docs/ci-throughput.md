@@ -122,6 +122,25 @@ gets no hosted verdict until the landing. With `LAND_BATCH=0` a landing forms no
 Its draft still stands in the line, so another landing can stack it; `LAND_QUEUE=0` keeps a
 landing out of the turn and the line both.
 
+Who opens a draft, and what lands it:
+
+- **A session** opens its PR with `gh pr create --draft` and lands it with `land.sh`
+  ([Landing a merged PR](landing.md)).
+- **A fan-out batch on daniel-box** leaves its PR a draft through the review, and its
+  pipeline lands the draft (`scripts/dev/fanout_lib/review/review_ci.py:land_draft`), so
+  no run is spent before the landing. A landing that ends `pr-ci-red` resumes the batch's
+  agent once, and the pipeline lands the PR again.
+- **A fan-out batch on daniel-server** is unchanged: its pipeline marks the PR ready, waits
+  for that run, and the lander unit on daniel-box lands it. The operator chose this on
+  2026-11-14. The lander unit refuses a draft and a PR whose CI gate did not pass, and it
+  has no agent to resume when a run is red. From 2026-11-08 to 2026-11-14 the review
+  pipeline wrote 245 batch records on daniel-server and 187 on daniel-box, so 57% of
+  batches keep a run of their own.
+
+A later step, not planned: a daniel-server pipeline lands its own draft from daniel-server.
+That reverses the rule that only daniel-box lands, and a landing from daniel-server ends
+`deferred` when its health gate grades a container on daniel-pi (#8773).
+
 The slices:
 
 1. **B1, ended.** A shadow sweep of master, and replays of pull-request runs that hosted CI
@@ -130,8 +149,8 @@ The slices:
 1. **B2, landed.** A queue of one. Every landing that merges its PR takes the landing
    turn, marks a draft PR ready, updates its branch and merges after that one run
    ([Landing a merged PR](landing.md)). The turn spans both hosts, and `LAND_QUEUE=0` turns
-   it off for one landing. Two steps remain, which D9 ruled on: sessions open their PRs as
-   drafts, and the fan-out stops marking a batch's PR ready before its landing.
+   it off for one landing. D9 ruled on the two steps that followed: sessions open their PRs
+   as drafts, and a daniel-box fan-out batch lands its PR as a draft.
 1. **B3, landed.** Batches of up to four. The landing that holds the turn opens one pull
    request that holds the batch's heads stacked on master, and that PR's run is the batch's
    one full run. Its gate rebuilds each stacked tree from master and the heads and records

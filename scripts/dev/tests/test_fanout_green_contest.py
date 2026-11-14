@@ -8,6 +8,8 @@ verdicts, as `test_fanout_review_red_green.py` does.
 Run: uv run pytest scripts/dev/tests/test_fanout_green_contest.py
 """
 
+import pytest
+
 from _review_fakes import PR, _finding, _pipeline, _report
 from fanout_lib.review.red_gate import Gate, Gates, green_finding
 from fanout_lib.review.green_contest import contested, judgment
@@ -148,7 +150,13 @@ def test_a_fix_reply_that_names_its_test_and_cites_its_change_is_no_contest():
     assert contested(UNMET, by_name, RED_GATE) == [RED_NODE]
 
 
-def test_ci_red_after_an_upheld_contest_holds_for_a_hand_without_a_resume(tmp_path):
+# A daniel-box batch reads its red run from its one landing: `land.sh`, then the wait on it.
+@pytest.mark.parametrize(
+    ("host", "landings"), [("daniel-server", 0), ("daniel-box", 2)]
+)
+def test_ci_red_after_an_upheld_contest_holds_for_a_hand_without_a_resume(
+    tmp_path, host, landings
+):
     """A resume that rewrote the contested red test would face no gate and no reviewer."""
     reports = [
         _report(structured={"behaviours": [{"behaviour": "b", "tests": [RED_NODE]}]}),
@@ -160,14 +168,15 @@ def test_ci_red_after_an_upheld_contest_holds_for_a_hand_without_a_resume(tmp_pa
     ]
     gates = Gates(red=lambda *_: RED_GATE, green=lambda *_: UNMET)
     pipeline, run = _pipeline(
-        tmp_path, reports, heads=("base", "red1", "aaa", "bbb"), gates=gates
+        tmp_path, reports, heads=("base", "red1", "aaa", "bbb"), gates=gates, host=host
     )
     run.ci = [(1, "WAIT: failed abcd1234: pytest failed\n")]
+    run.verdict = "VERDICT: pr-ci-red (PR #4000 cannot merge: its own CI is red)"
     result = pipeline.run_all()["result"]
     assert result.startswith("needs input: CI is not green on a PR whose contest of")
     assert RED_NODE in result
     assert "ci-fix" not in [phase for _, _, phase in run.claude]
-    assert run.lands == []
+    assert len(run.lands) == landings
 
 
 def test_a_hold_with_no_fix_round_counts_the_first_reviews_findings(tmp_path):

@@ -102,7 +102,7 @@ not end your turn** on the landing.
 
 Both are about the command's TEXT, not what it does. Keep prose out of the command string.
 
-**Open the PR with `--fill` and a body file.** `gh pr create --title "…"` is refused
+**Open the PR as a draft, with `--fill` and a body file.** `gh pr create --title "…"` is refused
 whenever the title carries `git`, `cd`, `worktree`, `write` or a construct the containment check
 cannot parse, and a title here routinely names one. `--fill` takes the title from the commit, and
 gh lets `--body-file` override the body it would fill. Write the file to
@@ -110,8 +110,14 @@ gh lets `--body-file` override the body it would fill. Write the file to
 whose body skips one of its `## ` headings, and a bare `--fill` with it.
 
 ```bash
-gh pr create --fill --body-file <path>   # title from the commit, body from the file
+gh pr create --draft --fill --body-file <path>   # title from the commit, body from the file
 ```
+
+`--draft` is what lets the landing share a CI run. `ci.yml` runs no job on a draft, and
+`land.sh` marks the draft ready or tests it with the other drafts in line. A PR opened ready
+spends a full run at every push and never joins a batch. Do not mark the draft ready
+yourself. When a PR has to show a CI result before anyone lands it, such as one waiting on
+the operator's review, `gh pr ready <n>` starts its run.
 
 **A body's only closing keyword must be its own `Closes #N` line.** `--arm-merge` refuses
 otherwise and prints the offending line, because GitHub closes an issue named after

@@ -25,10 +25,15 @@ THE PHASES, each one `claude -p` in the batch's worktree:
    it reports is left only if it quotes a line the fix head's file has (`delta_confirm`,
    #6547); the rest are carried unverified and hold nothing. A finding of medium severity or
    worse left by it earns one more fix and delta review, and no more (#7687).
-4b. ready — `review_ci.ready_gate` marks a draft PR ready and waits for its CI run (#5563).
-5. land — on the deploy host, the pipeline runs `land.sh` itself (`review_land`) and resumes
-   the implementer only for a verdict that needs a decision, as the `apply` phase. Before the
-   landing, and on every other host instead of it, a session resumes to file what is left.
+4b. ready — on a host that does not land, `review_ci.ready_gate` marks a draft PR ready and
+   waits for its CI run (#5563).
+5. land — on the deploy host, the pipeline lands the PR as the draft it is
+   (`review_ci.land_draft`, which runs `land.sh` through `review_land`). The landing marks it
+   ready or tests it in a landing batch, so its first CI run is the one it merges on. A landing
+   that ends `pr-ci-red` resumes the implementer once, as the `ci-fix` phase, and the PR is
+   landed again. The implementer is resumed as the `apply` phase only for a verdict that
+   needs a decision. Before the landing, and on every other host instead of it, a session
+   resumes to file what is left.
 5b. CI wait — on a host that does not land, for this repo's batch only (#4737), `review_ci`
    waits for the PR's CI with `cc-wait gh-ci --pr` before the comment and before the filing
    session. A red verdict resumes the implementer once, as the `ci-fix` phase, with each failed
@@ -125,8 +130,13 @@ from fanout_lib.review.base_check import BaseCheck, unproven_tests
 from fanout_lib.review.git_state import GitState, changed, snapshot
 from fanout_lib.review.hunk_check import HunkCheck, red_detection
 from fanout_lib.review.processes import otel_attributes, reaping, run_process
-from fanout_lib.review.review_ci import awaits_ci, ci_gate, ready_gate
-from fanout_lib.review.review_land import RESUME_VERDICTS, land, out_of_time, release
+from fanout_lib.review.review_ci import awaits_ci, ci_gate, land_draft, ready_gate
+from fanout_lib.review.review_land import (
+    LAND_MARGIN_S,
+    RESUME_VERDICTS,
+    out_of_time,
+    release,
+)
 from fanout_lib.review.review_land import report as landing_report
 from fanout_lib.review.review_record import (
     Phase,
@@ -158,9 +168,6 @@ HEADLESS_PROMPT_FILE = SOURCE_ROOT / SYSTEM_PROMPT_FILE
 OWN_COPY = Path(".fanout") / "stop-hook"
 # A finding the fix round acts on. The reviewer reports everything, as the user-level
 # `## Code review` rule asks; this is the separate filtering pass.
-# `land.sh` waits up to about an hour for CI and the promotion. A landing started with less than
-# this left on the unit's `RuntimeMaxSec` would outlive the wait on it, so it is skipped.
-LAND_MARGIN_S = 90 * 60
 GATES = Gates()
 STATE_DIR = Path.home() / ".local" / "state" / "fanout-review"
 
@@ -592,14 +599,14 @@ class Pipeline:
         # Reverting hunks under red tests that fail anyway, after a contest, measures nothing.
         if red is not None and not green and not self.record.green_contest:
             self._detection(red)
-        # Whatever the review found, since a PR left a draft gets no CI.
+        # Whatever the review found, since a PR nothing lands gets no CI while it is a draft.
         ready = ready_gate(self)
         final = (
             held_for_green(self.record, green)
             if green
             else held_for_findings(self.record, self.state_dir)
         ) or ready
-        if final is None and awaits_ci(self.target):
+        if final is None and awaits_ci(self.host, self.target):
             # Before the comment, so the comment carries the CI gate beside the others.
             last, final = ci_gate(self, last)
         comment = ["gh", "pr", "comment", self.record.pr, "--body-file", "-"]
@@ -625,15 +632,11 @@ class Pipeline:
                 return out_of_time(self.record.pr)
             # Filed before the merge, so the PR body names each leftover's issue.
             self._file_leftovers()
-            landing = land(
-                self.run,
-                self.worktree,
-                self.record.pr,
-                self.time_left,
-                self.target.base,
-            )
+            landing, still_red = land_draft(self)
             self.record.verdict = landing.line or f"none (exit {landing.rc})"
             try:
+                if still_red:
+                    return still_red
                 if landing.verdict in RESUME_VERDICTS and self.session:
                     log_dir = str(self.worktree / ".fanout")
                     prompt = apply_prompt(self.record.pr, landing, log_dir)

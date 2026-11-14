@@ -33,8 +33,14 @@ RESUME_VERDICTS = frozenset({"unhealthy", "deploy-failed", "needs-manual-apply"}
 # The verdicts after which the PR is merged and nothing more is owed. `deferred` is one: a host's
 # updater applies its package, and cc-wait ends it with exit 4, not 0.
 FINISHED_VERDICTS = frozenset({"settled", "nothing-to-deploy", "deferred"})
+# The verdict of a landing whose PR failed its own CI run. `review_ci.land_draft` resumes the
+# implementer for it.
+PR_CI_RED = "pr-ci-red"
 # cc-wait's "still running, re-run this wait". land.sh's own give-up reaches it as 3.
 STILL_WAITING = 75
+# `land.sh` waits up to about an hour for CI and the promotion. A landing started with less than
+# this left on the unit's `RuntimeMaxSec` would outlive the wait on it, so it is skipped.
+LAND_MARGIN_S = 90 * 60
 # A wait started with less than this left on the unit's run time could be cut off mid-wait.
 WAIT_MARGIN_S = 600
 VERDICT_LINE = re.compile(r"(?m)^VERDICT: (\S+).*$")
