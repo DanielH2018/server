@@ -264,6 +264,7 @@
  "hosts/tests/test_k3s_server_flags_migration.py": 0.84,
  "hosts/tests/test_k3s_unit_logging.py": 0.0,
  "hosts/tests/test_lander_deadlines_cover_the_soak.py": 11.5,
+ "hosts/tests/test_legacy_cache_directories.py": 1.09,
  "hosts/tests/test_loki_route_witness.py": 0.02,
  "hosts/tests/test_netplan_dns_overrides.py": 0.0,
  "hosts/tests/test_netplan_static_address.py": 0.74,
