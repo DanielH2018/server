@@ -111,37 +111,37 @@ claude_code_fleet_caps_enabled: true
 # role's CLAUDE.md carries the full answer to "can user-<uid>.slice be reparented".
 claude_code_fleet_slice: user.slice
 
-# DECIDED: 14G on the shared parent, with the per-plane caps below at 10G as sub-bounds.
-# Lowering both planes to 7G would also make the sum 14G, and is the worse shape: a plane
+# DECIDED: 20G on the shared parent, with the per-plane caps below at 14G as sub-bounds.
+# Lowering both planes to 10G would also make the sum 20G, and is the worse shape: a plane
 # would throttle at half the box's fleet budget while the other plane sat idle. A parent
-# ceiling shares elastically — either plane may take up to its own 10G, and the two together
-# are held to 14G by the parent.
+# ceiling shares elastically — either plane may take up to its own 14G, and the two together
+# are held to 20G by the parent.
 #
-# Derivation, measured on daniel-box 2026-09-06. Re-derive all of it if you change this:
-#   RAM: MemTotal 29,576,480 kB = 28.2 GiB.
-#   The homelab plane's unreclaimable footprint, read as cgroup anon rather than
-#     memory.current (which counts page cache and so overstates what must stay resident):
-#     kubepods.slice 5.7 GiB + system.slice minus claude-rc.service 1.4 GiB = 7.1 GiB.
-#     Budgeted at 10 GiB so k3s and Longhorn can grow ~40% without racing the fleet.
-#   Kernel: SUnreclaim 0.55 GiB. Page cache left free for Longhorn and etcd I/O: ~3 GiB.
-#   28.2 - 10 - 0.55 - 3 = 14.6 GiB available to the fleet. The cap was 12G until
-#     2026-09-26, leaving ~2.6 GiB of that unspent. It was raised to 14G at user request to
-#     fit one more fan-out batch, which leaves ~0.6 GiB unspent. Do not raise it past the
-#     14.6 GiB: the excess comes out of the page cache Longhorn and etcd need, and the
-#     throttle stalls whichever cgroup loses the race for reclaim, which must not be the
-#     homelab plane.
-# Re-measured 2026-09-26 before the raise: the homelab plane's anon was kubepods.slice
-# 6.61 GiB + system.slice 1.70 GiB = 8.3 GiB, inside its 10 GiB budget. That budget is the
-# number to re-check first if k3s grows, because the fleet now spends nearly all that is
-# left after it.
-# Fleet peak at the old 12G cap, measured 2026-09-06: 4.0 GiB for claude-rc.service and
-# 7.2 GiB for user-1000.slice, 11.2 GiB together.
+# The operator set the target on 2026-11-13: leave about 8 GiB of host RAM available on every
+# node, so the fan-out can run more batches at once. The cap is that floor, worked backward.
+# MemAvailable already nets out the homelab plane's anon and the kernel, so neither is a term
+# below. Re-derive all of it if you change this:
+#   Measured on daniel-box 2026-11-13 23:25 UTC: MemTotal 28.2 GiB, MemAvailable 14.95 GiB
+#     with the fleet slice at 10.9 GiB of its old 14G cap.
+#   Valheim (2.5 GiB) is parked by a separate change, so 14.95 + 2.5 = 17.4 GiB is available
+#     without it.
+#   Spendable above the floor: 17.4 - 8 = 9.4 GiB.
+#   Cap: the fleet's current 10.9 GiB + 9.4 GiB spendable = 20.3 GiB, rounded down to 20G.
+#   Worst case: if every byte the fleet adds up to the cap stays unreclaimable, available
+#     falls to 17.4 - (20 - 10.9) = 8.3 GiB. Page cache the fleet adds is reclaimable, so
+#     8.3 GiB is a lower bound.
+# Until 2026-11-13 the cap was derived the other way round: 28.2 GiB - a 10 GiB budget for the
+# homelab plane's anon - 0.55 GiB SUnreclaim - 3 GiB page cache = 14.6 GiB, so 14G. That left
+# 14.95 GiB available, nearly twice the floor.
+# The floor moves one for one with the homelab plane. If k3s grows, re-check kubepods.slice
+# and system.slice anon first: growth of 0.3 GiB takes the worst case under 8 GiB. The
+# throttle stalls whichever cgroup loses the race for reclaim, which must not be the homelab
+# plane.
 #
 # memory.high counts PAGE CACHE as well as anon, so an ordinary multi-agent pytest fan-out
 # will touch this bound and reclaim cache. That is the cheap half of reclaim and it is
-# intended; the anon budget above is what the number is derived from, not what it throttles
-# on.
-claude_code_fleet_memory_high: 14G
+# intended; the floor above is what the number is derived from, not what it throttles on.
+claude_code_fleet_memory_high: 20G
 
 # The fleet's swap ceiling. 2G is a quarter of this host's 8 GiB /swap.img, so the homelab
 # plane keeps three quarters. Same not-zero reasoning as the per-plane cap below.
@@ -155,11 +155,11 @@ claude_code_fleet_swap_max: 2G
 #
 # Every fan-out agent on this host
 # runs in the login plane, so this is the cap the fan-out dispatcher runs out of first, and
-# raising the fleet cap alone adds no fan-out width. Deliberately more than half of 14G: a
+# raising the fleet cap alone adds no fan-out width. Deliberately more than half of 20G: a
 # plane doing real work while the other is idle should be able to use most of the fleet's
 # budget, and the parent is what stops the two of them together. See the unit template on
 # why this is MemoryHigh and not MemoryMax.
-claude_code_rc_memory_high: 10G
+claude_code_rc_memory_high: 14G
 
 # One plane's swap ceiling, written to memory.swap.max. Without it a plane swaps without
 # limit: one cgroup can hold all 8 GiB of this box's swap, stall in reclaim, and starve every
@@ -683,3 +683,15 @@ claude_code_guardrail_ack_quiet_settings_keys:
   - outputStyle
   - theme
 claude_code_guardrail_ack_dotfiles_repo: https://github.com/DanielH2018/dotfiles.git
+
+# ── The dotfiles root mirror (dotfiles#967 D13) ──────────────────────────────────────────
+# homelab-claude-dotfiles-mirror.timer runs files/claude_dotfiles_mirror.py as root. Each run
+# fetches the dotfiles repo into a root-owned bare mirror and records the newest tag whose
+# signature verifies against templates/claude-dotfiles-allowed-signers.j2 and whose commit
+# descends from the last one recorded. A T2 session's config is rendered only from that record
+# (B2). False drops the timer, its units, the config and the signers file from the next package
+# version, and keeps the mirror and the record.
+claude_code_dotfiles_mirror_enabled: true
+# A `*/N` minute, read as the timer's period.
+claude_code_dotfiles_mirror_minute: "*/15"
+claude_code_dotfiles_mirror_repo: https://github.com/DanielH2018/dotfiles.git

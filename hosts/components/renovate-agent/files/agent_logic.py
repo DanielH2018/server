@@ -271,8 +271,11 @@ def resume_command(
         env: The unit's other environment variables.
     """
     pairs = " ".join(shlex.quote(f"{k}={v}") for k, v in env.items())
+    # The env file carries the runner's write token as GH_TOKEN and the session's read-only
+    # one beside it; a resumed session gets the read-only one, as the session did.
     script = (
         f"cd {shlex.quote(cwd)} && set -a && . {shlex.quote(env_file)} && "
+        'GH_TOKEN="$RENOVATE_SESSION_GH_TOKEN" && unset RENOVATE_SESSION_GH_TOKEN && '
         f"exec runuser -u {shlex.quote(user)} -- env {pairs} "
         f"{shlex.quote(claude_bin)} --resume {shlex.quote(session_id)}"
     )

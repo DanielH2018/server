@@ -89,6 +89,17 @@ row to show it. Some lint rules therefore read the prose itself.
   `monitor-bridge-script-` prefix a template joins to each module's name, never appears
   literally, so a doc naming one rendered ConfigMap reads as vanished. Name it as the tree
   spells it.
+- Two more classes of removed name are advice, not lint rules. `scripts/dev/repo_guards.py`
+  prints them after its guards as a `removed names:` list, and they change no exit code.
+  The first is a section of a live doc that names the identifier in backticks: any Markdown
+  file that is no instruction file and is outside the archive, the ADRs, the slice plans
+  and the generated pages (`scripts/lib/facts/citations.py:is_live_doc`). The second is a
+  full-line `#` or `//` comment that names an identifier the branch took out of code, when
+  only comments still hold it. A comment has no backticks, so its identifier needs an
+  underscore, a dot or two hyphens (`scripts/lib/facts/removed.py:comment_name`).
+  `scripts/lib/facts/lint.py:vanished_advice` builds the list. A class becomes an error
+  when fewer than one graded row in five is a false alarm;
+  `docs/target-architecture/docs-guard/g7-removed-names.md` holds the measured shares.
 
 A paragraph or bullet that opens with `**HISTORY —` is history, and every prose rule skips it.
 A sentence such as "it lived on the staging guest until 2026-09-28" is correct exactly because
@@ -120,18 +131,22 @@ continuation lines and nested bullets with it; a history paragraph ends at the n
   `scripts/lib/facts/replay.py:notice_replay` has the counts.
   `--json` prints the same as one object. Under `notice_replay`, `moved` counts the replay's
   `moved` rows, and `moved_prose_edited` counts the ones whose commit also edited the
-  section's prose. `content_notices` names the commit and section of each row whose atom is
-  not a path atom.
+  section's prose. `content_notices` holds each row whose atom is not a path atom: its
+  commit, section, atom and kind, and whether the commit edited the section's prose. That
+  list is what a grading of the notice's yield reads.
 - `fact_status.py notice --since <ref> [--head <rev>]` lists every section that cites an
   atom the diff moved. The diff runs from the merge base of `<ref>` and the head to the head,
   and the head is the working tree unless `--head` names a revision. It compares the atom
   at the two ends of the diff, never against a recorded hash, so a row means the diff itself
   moved the atom. A row's kind is `moved`, `gone`, `ambiguous` or `unparsable`, and each row
   says whether the diff also edited the section's prose. `--format` takes `text`,
-  `markdown`, `github` or `json`. The rules for each row and each format are on
+  `markdown`, `github`, `json` or `reread`. The rules for each row and each format are on
   `scripts/lib/facts/notice.py:moved_sections` and `scripts/lib/facts/notice.py:render`. The
   command exits 0 with rows or without, and exits 2 only when git cannot resolve the merge
   base. `docs/target-architecture/docs-guard/g1-diff-notice.md` is the plan that built it.
+  `scripts/dev/repo_guards.py` ends by printing the `reread` format, which lists only the
+  sections whose prose the branch left unchanged. That is how the notice reaches the
+  session that made the change, and it changes no exit code.
 
 `docs/adr/0023-fact-support-is-a-diff-notice.md` records why the notice replaced the stored
 hashes and their blocking test. A moved atom gets a notice and never blocks a merge. `lint`

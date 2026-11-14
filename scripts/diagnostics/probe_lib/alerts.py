@@ -2,8 +2,10 @@
 
 One `query_range` over `--days` returns a sample for every step an alert was firing. Each
 series' consecutive samples are one episode; a gap longer than the splitting gap starts the
-next. Prometheus keeps 30 days (`observability_prometheus_retention`), so a wider window
-returns nothing older.
+next. Prometheus is configured for 30 days, but its size cap
+(`observability_prometheus_retention_size`) deletes blocks first, so it holds less: 22.6 days on
+2026-11-12. A window longer than what it holds prints a stderr warning naming the age of the
+oldest sample.
 
 Shadow alerts are listed and marked: Alertmanager pages nobody for them, and this is where
 their history is read. Watchdog fires always and is left out.
@@ -30,7 +32,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 # `core.<name>` for anything the tests monkeypatch -- binding those into this module's
 # globals with a `from core import ...` would take a snapshot the patch never reaches.
-from diagnostics.probe_lib import core, pi_plane
+from diagnostics.probe_lib import core, metrics, pi_plane
 from diagnostics.probe_lib.core import PI_HOST, prom_endpoint
 from lib.exit_codes import PROBE_UNREADABLE
 
@@ -136,6 +138,22 @@ def alert_episodes(result, step_s, gap_s=None):
     return episodes
 
 
+def history_shortfall_warning(days, held_s):
+    """The stderr line for a `days` window longer than the `held_s` seconds Prometheus holds.
+
+    None when the history covers the window, or when `held_s` is None because the span could
+    not be read. Pure.
+    """
+    requested = days * 86400
+    if held_s is None or held_s >= requested * metrics._SHORTFALL_SLACK:
+        return None
+    return (
+        f"warning: the oldest sample Prometheus holds is {metrics.format_span(held_s)} old, "
+        f"short of the {days:g}d requested; its size cap deleted anything older, so no "
+        "episode before then is listed"
+    )
+
+
 # UTC, and said to be UTC in the header: daniel-box runs UTC, so every incident timestamp an
 # operator compares against is UTC.
 def _fmt_utc(s):
@@ -209,6 +227,11 @@ def run_alerts(ns, now=None):
     step_s = step_seconds(ns.days)
     gap_s = None if ns.gap_min is None else ns.gap_min * 60
     episodes = alert_episodes(result, step_s, gap_s)
+    warning = history_shortfall_warning(
+        ns.days, metrics.covered_span_seconds(base, pin)
+    )
+    if warning:
+        print(warning, file=_sys.stderr)
     if ns.json:
         print(json.dumps(episodes))
     else:

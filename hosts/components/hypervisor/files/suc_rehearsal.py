@@ -9,8 +9,7 @@ Usage:
 `pins` prints the five pins the guest installs from, as `key=value` lines. REPO is a checkout:
 each key is found by globbing every k8s role's `defaults/main.yml`, so a pin that moves between
 roles (H6.1b moves the k3s pins) needs no edit here, and a key held by none or by two files is an
-error. The roles are read at `k8s/roles/` and at `ansible/roles/k8s/`, the paths after and before
-ADR 0030's rename, because this copy is installed and outlives the tree it shipped in.
+error.
 The registry image is read from the `registry` role alone, because a second role copies it.
 The flux CLI's tarball digest is homelab-tools' amd64 pin. `overlay` copies the system-upgrade bundle rendered at RENDERED into OUT and rewrites it
 for a one-node guest (*Rehearsal in a drill guest*, docs/target-architecture/host/h6-k3s-suc.md),
@@ -46,17 +45,13 @@ def _read(path):
         return handle.read()
 
 
-ROLE_DIRS = ("k8s/roles", "ansible/roles/k8s")
+ROLES = "k8s/roles"
 
 
 def _defaults(repo, key, role="*"):
     """The one k8s role `defaults/main.yml` value for `key`; none or two is a refusal."""
     found = {}
-    for path in sorted(
-        path
-        for roles in ROLE_DIRS
-        for path in glob.glob(os.path.join(repo, roles, role, "defaults/main.yml"))
-    ):
+    for path in sorted(glob.glob(os.path.join(repo, ROLES, role, "defaults/main.yml"))):
         with open(path) as handle:
             data = yaml.safe_load(handle) or {}
         if key in data:

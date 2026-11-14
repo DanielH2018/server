@@ -61,8 +61,7 @@ pin. The unit's second
 
 **The render runs on the built tree's interpreter, not the unit's.** `HOMELAB_PYTHON` runs the
 builder script only. `hosts/lib/builder_python.py:tree_python` reads `host_python_version`
-from the chosen commit's `inventory/group_vars/all.yml`, or from `inventory/group_vars/all.yml`
-in a commit from before ADR-0030's rename, and `render_python` installs it
+from the chosen commit's `inventory/group_vars/all.yml`, and `render_python` installs it
 with downloads allowed for that one call. `render()` passes it to `uv run --python`. A tree with no pin
 renders on `HOMELAB_PYTHON`, and a pin that is not a dotted version, or an install that fails,
 reads `reason="build"`. The unit that pins a new interpreter ships in `homelab-daniel-box`, which
@@ -123,7 +122,7 @@ that fails after a refusal is logged, and the run keeps the refusal's reason. A 
 then 0 on a repeat, so `OnFailure=` pages once for each condition. A refusal that came from an
 exception writes one stderr line, which systemd puts in the journal: the reason, the exception's type
 and message, its cause and the call chain that raised it (#6074). The journal keeps that line
-only because both units set `SyslogLevel=notice`: initial_setup's journald drop-in stores notice
+only because both units set `SyslogLevel=notice`: host-tuning's journald drop-in stores notice
 and above, and a unit's output defaults to info (#6127). ENFORCED:
 `hosts/lib/tests/test_builder_component.py::test_both_units_keep_a_state_directory_at_0711_and_log_at_notice`.
 A failed fetch exits 0 and writes nothing: the fetch timestamp then ages, which H3.5c's fetch-age arm pages on.

@@ -24,8 +24,7 @@ from lib.exit_codes import FACT_STATUS_BAD_ARGS, FACT_STATUS_BAD_REF
 
 from lib.facts.citations import repo_citations
 from lib.facts.lint import changed_units, lint_sections
-from lib.facts.notice import FORMATS, resolve_base, scan
-from lib.facts.notice import render as render_notice
+from lib.facts.notice import FORMATS, branch_notice
 from lib.facts.report import build, default_log, render
 from lib.repo_paths import REPO
 
@@ -63,16 +62,16 @@ def cmd_report(args: argparse.Namespace) -> int:
 
 def cmd_notice(args: argparse.Namespace) -> int:
     repo = Path(args.repo)
-    base = resolve_base(repo, args.since, args.head or "HEAD")
-    if base is None:
+    text = branch_notice(repo, args.since, args.head, args.format)
+    if text is None:
         print(
             f"no merge base of {args.since!r} and {args.head or 'HEAD'!r}; "
             "is the ref fetched?",
             file=_sys.stderr,
         )
         return FACT_STATUS_BAD_REF
-    rows, summary = scan(repo, base, args.head)
-    print(render_notice(rows, summary, args.format))
+    if text:
+        print(text)
     return 0
 
 

@@ -1,8 +1,8 @@
 # longhorn-reconcile — the hourly job that holds each volume in its backup tier
 
 A CronJob in `longhorn-system` that labels Longhorn Volume CRs with the recurring-job group
-their tier names and sets each Volume's backup target. It replaced the label, weekly-shard and
-legacy-label tasks that `setup/k3s` ran (H1.6, H1.7a).
+their tier names and sets each Volume's backup target (H1.6, H1.7a). It is the only writer of
+those labels.
 
 It does not touch the CSI sidecar Deployments. From H1.6 until #5958 it patched their memory
 request, and longhorn-manager cleared it on its own hourly tick, so each of the four
@@ -32,8 +32,7 @@ add a Deployment write back here.
 - **`tiers.json` is the role's three tier lists.** `k8s/roles/longhorn-reconcile/defaults/main.yml`
   derives `k3s_longhorn_r2_volumes`, `k3s_longhorn_weekly_volumes` and
   `k3s_longhorn_nobackup_volumes` from `containers_list` with `tier_backup_claims`,
-  `longhorn_weekly_claims` and `longhorn_nobackup_claims` (H1.7a moved them here from
-  `setup/k3s`, under the same names). The ConfigMap renders the three keys, and the docs
+  `longhorn_weekly_claims` and `longhorn_nobackup_claims` (H1.7a). The ConfigMap renders the three keys, and the docs
   generators, the catalogue and the tier tests resolve the same expressions through
   `scripts/lib/service_tiers.py:resolved_tier_lists`.
   `tests/test_longhorn_reconcile_render.py::test_the_configmap_tiers_are_the_three_lists_of_the_role_defaults`
@@ -114,8 +113,8 @@ authority is written here to keep a later edit from widening it.
   rest. `tests/test_longhorn_reconcile.py::test_a_run_reads_and_writes_no_deployment` and
   `tests/test_longhorn_reconcile_render.py::test_the_role_grants_nothing_on_deployments` keep
   this job off them.
-- **A reverted H1.6 deletes the CronJob.** The tag takes the default deletion policy, so the
-  CronJob goes with the Kustomization, and the restored `setup/k3s` tasks write the same labels.
+- **Deleting the role deletes the CronJob.** The tag takes the default deletion policy, so the
+  CronJob goes with the Kustomization, and nothing else writes the labels.
 - **The group names are a contract with the RecurringJobs.** A one-byte change in a label drops
   a volume out of its job with nothing failing. `tests/test_longhorn_reconcile.py` types the
   labels out and holds them equal to `scripts/renderer/template_filters/longhorn_groups.py`.

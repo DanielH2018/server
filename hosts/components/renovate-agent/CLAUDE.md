@@ -31,8 +31,10 @@ lander deploys what the session picks — not a sign the component is unfinished
 own GitHub token and Claude credential are declared outputs, so `host_secrets.py check` fails a
 host file that lacks them; `docs/renovate-agent-bounds-and-digest.md` has the checklist.
 
-**The session can neither push nor merge.** It runs as `renovate_agent_user`, with a token that
-has no contents write, in its own clone. It lands a PR only by starting
+**The session can neither push nor merge.** It runs as `renovate_agent_user`, with a read-only
+token, in its own clone. It closes, comments on or re-runs a PR only by writing a request file,
+which the runner carries out with its own token after the session ends (`files/run_requests.py`).
+It lands a PR only by starting
 `renovate-agent-land@<n>.service`, which polkit lets it start and which runs `land.sh` as
 `sys_user` on a PR the lander re-checks itself.
 
@@ -92,6 +94,10 @@ the caps or the schedule cannot quietly widen it.
   Never the session's closing paragraph — it reads confident whatever happened.
 - **Abort valves:** `renovate_agent_max_prs`, `renovate_agent_run_timeout_s`, the systemd
   `renovate_agent_unit_timeout` backstop, and `renovate_agent_budget_usd` as a runaway catch.
+  The templates read each cap, and the permission mode, from the literals in
+  `templates/renovate-agent-pins.j2`, which is on the lander's approval list, so a host_vars
+  edit moves none of them. The defaults hold the same values for the docs fragments
+  (`hosts/tests/test_renovate_agent_unit.py::test_an_inventory_value_moves_no_cap`).
   `docs/renovate-agent-bounds-and-digest.md` has why each is the var it is and why the budget
   must never be the one that binds.
 - **Required evidence:** a Discord digest whose headline is the before/after PR delta, plus the

@@ -23,6 +23,7 @@ from _ruleset_drift import (
     FENCE_BYPASS,
     FENCE_EXCLUDE,
     FENCE_RULESET_ID,
+    FORK_APPROVAL,
     RENOVATE_EXCLUDE,
     REPO,
     RESTRICTIONS,
@@ -451,6 +452,38 @@ def test_a_private_dotfiles_repo_is_flagged(tmp_path):
     )
     assert (rc, status) == (1, "down")
     assert f"repo {DOTFILES} reads 'private', not public" in msg
+
+
+def test_a_weaker_fork_approval_policy_is_flagged(tmp_path):
+    """Under any other policy a returning outside author's fork runs workflows unapproved."""
+    rc, status, msg = run(
+        tmp_path,
+        curl_body=ruleset_body(DECLARED),
+        fork_approval_body=json.dumps({"approval_policy": "first_time_contributors"}),
+    )
+    assert (rc, status) == (1, "down")
+    assert f"under 'first_time_contributors', declared {FORK_APPROVAL}" in msg
+
+
+def test_an_unreachable_fork_approval_read_is_unverified_not_clean(tmp_path):
+    """Every ruleset read succeeded, so only this arm stands between the failed read and an up."""
+    rc, status, msg = run(
+        tmp_path, curl_body=ruleset_body(DECLARED), fork_approval_rc=7
+    )
+    assert (rc, status) == (1, "down")
+    assert "failed to fetch the fork approval policy" in msg
+
+
+def test_a_fork_approval_read_without_admin_is_unverified(tmp_path):
+    """GitHub shows the policy only to an admin token, so an error body is not a clean read."""
+    rc, status, msg = run(
+        tmp_path,
+        curl_body=ruleset_body(DECLARED),
+        fork_approval_body='{"message":"Must have admin rights to Repository."}',
+    )
+    assert (rc, status) == (1, "down")
+    assert "Must have admin rights" in msg
+    assert "UNVERIFIED" in msg
 
 
 def test_the_update_restriction_fixtures_match_the_role_defaults(tmp_path):

@@ -460,6 +460,18 @@ def test_json_carries_the_five_keys_and_no_summary():
     }
 
 
+def test_reread_lists_only_the_sections_whose_prose_is_unchanged():
+    lines = render(_MIXED, _SUMMARY, "reread").splitlines()
+    assert lines[0].startswith("facts notice: 4 to re-read.")
+    assert lines[1] == "  A.md#a: moved m/first.py:X, gone p/gone.py"
+    assert not any("Z.md#z" in line for line in lines)
+
+
+def test_reread_is_empty_when_every_row_was_edited():
+    edited = [Notice("Z.md#z", "m/second.py:X", "symbol", "moved", True)]
+    assert render(edited, _SUMMARY, "reread") == ""
+
+
 def _many(content: int, paths: int) -> list[Notice]:
     """``paths`` path rows first, so only the ordering can keep them below the content rows."""
     return [

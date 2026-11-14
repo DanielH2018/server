@@ -16,6 +16,7 @@ MODULES = frozenset(
         "landing",
         "merge",
         "pace",
+        "turn",
         "stuck_checks",
         "policy",
         "classify",
@@ -90,6 +91,8 @@ ALLOWED = {
         "gh_read",
         "stuck_checks",
     },
+    # The one-landing-at-a-time lock the pipeline holds from the PR's CI run to its merge.
+    "turn": {"landing", "outcome"},
     # The master CI backlog read that holds --await-merge's direct merge (#5526).
     "pace": {"landing", "outcome"},
     # The read that ends --await-merge on a check GitHub never finishes (#7996).
@@ -157,6 +160,7 @@ ALLOWED = {
         "landing",
         "outcome",
         "merge",
+        "turn",
         "classify",
         "closing_refs",
         "ci",

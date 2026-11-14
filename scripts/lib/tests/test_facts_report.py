@@ -173,7 +173,9 @@ def test_a_section_deleted_after_its_move_is_still_listed_at_the_move(tmp_path):
 
     replay = _replay(repo)
 
-    assert {"commit": move, "unit": "CLAUDE.md#Gate"} in replay["content_notices"]
+    assert [(r["commit"], r["unit"]) for r in replay["content_notices"]] == [
+        (move, "CLAUDE.md#Gate")
+    ]
 
 
 def test_a_notice_that_raises_on_one_commit_is_recorded_and_the_replay_goes_on(
@@ -192,7 +194,15 @@ def test_a_notice_that_raises_on_one_commit_is_recorded_and_the_replay_goes_on(
 
     [crash] = replay["crashed"]
     assert crash["error"] == "KeyError"
-    assert replay["content_notices"] == [{"commit": move, "unit": "CLAUDE.md#Gate"}]
+    assert replay["content_notices"] == [
+        {
+            "commit": move,
+            "unit": "CLAUDE.md#Gate",
+            "atom": "t/m.py:LIMIT",
+            "kind": "moved",
+            "prose_edited": False,
+        }
+    ]
     assert replay["commits"] == 3
 
 

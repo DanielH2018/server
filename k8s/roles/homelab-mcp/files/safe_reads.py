@@ -147,10 +147,10 @@ def entity_id_valid(entity_id: str) -> bool:
 
 
 # File-read jail
-# The container bind-mounts ansible/ read-only; these guards keep a read_file
-# tool inside it. The age private key lives outside the mount (~/.config/sops),
-# so the worst a jail bug could leak is ansible/ content — and secrets.yml is
-# SOPS ciphertext, additionally denied by name below.
+# The container bind-mounts the checkout's k8s/, inventory/ and tests/ read-only;
+# these guards keep a read_file tool inside them. secrets/ and the age private key
+# (~/.config/sops) live outside the mounts, so the worst a jail bug could leak is
+# repo content, and secret file names are additionally denied below.
 _DENIED_BASENAMES = {"secrets.yml", "secrets.yaml", "keys.txt"}
 _DENIED_PARTS = {"secrets"}
 _DENIED_SUFFIXES = (".age", ".agekey", ".key", ".pem", ".p12", ".pfx")

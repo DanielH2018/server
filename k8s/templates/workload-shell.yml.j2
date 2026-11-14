@@ -38,7 +38,8 @@
   with different values), so it does not call this.
 
   ── pod_shell(priority_class, service_account=none, automount=none, run_as_user=none,
-               run_as_group=none, fs_group=none, non_root=false) ──
+               run_as_group=none, fs_group=none, non_root=false,
+               fs_group_change_policy='OnRootMismatch') ──
 
     enableServiceLinks: false invariant, every caller. Kubernetes otherwise injects legacy
                               Docker-link env vars for every Service in the namespace —
@@ -77,6 +78,14 @@
                               these four — two `securityContext:` keys under one pod spec is a
                               silent last-wins in YAML, and the rendered census would read the
                               survivor as the intent.
+    fs_group_change_policy    emitted beside `fs_group`. `OnRootMismatch` skips the kubelet's
+                              recursive chown when the volume root already carries the group;
+                              `Always` walks the whole volume on every mount, which on the
+                              shared media library grows with the library. Pass `Always` only
+                              where a file can reappear with the wrong group under a correct
+                              root (terraria's .wld.bak). The row
+                              `pods-with-fsgroup-skip-the-ownership-walk` in
+                              _volume_property_rows.py holds the default.
 
   What stays at the call site, beside the call: `nodeSelector` (a pin with a per-site reason
   and its own guard, test_vip_pins.py, which reads the literal), `affinity`
@@ -98,7 +107,7 @@
 {% endif %}
 {% endif %}
 {%- endmacro %}
-{% macro pod_shell(priority_class, service_account=none, automount=none, run_as_user=none, run_as_group=none, fs_group=none, non_root=false) %}
+{% macro pod_shell(priority_class, service_account=none, automount=none, run_as_user=none, run_as_group=none, fs_group=none, non_root=false, fs_group_change_policy='OnRootMismatch') %}
       enableServiceLinks: false
       priorityClassName: {{ priority_class }}
 {% if service_account is not none %}
@@ -122,6 +131,7 @@
 {% endif %}
 {% if fs_group is not none %}
         fsGroup: {{ fs_group }}
+        fsGroupChangePolicy: {{ fs_group_change_policy }}
 {% endif %}
 {% endif %}
 {%- endmacro %}

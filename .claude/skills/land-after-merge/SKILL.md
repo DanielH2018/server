@@ -140,7 +140,7 @@ on to the host wait.
 
 A PR that changes `cluster-vars.sops.env` or `cluster-vars.source` waits on promotion too,
 for the `cluster-vars` Kustomization and every Kustomization that depends on it
-(`docs/landing.md`, *A tag Flux applies waits on promotion*).
+(`docs/landing.md`, *Every landing waits on promotion*).
 
 Every `deploy-failed`, and every give-up
 (`merge-timeout`, `ci-red`, `ci-timeout`, `merge-conflict`, `pr-ci-red`), deployed

@@ -99,11 +99,11 @@ that bite from a config edit alone.
   block index within a tile is positional and must agree with that widget's `fields:` order,
   ENFORCED by `tests/services/test_homepage_block_label_overrides.py`. A widget that
   takes a `label:` per block, `customapi` or `prometheusmetric`, names its blocks in config and
-  needs no rename; the Alertmanager tile is one.
-- **The Alertmanager tile links to Karma's LAN name.** Karma is the alert UI, and its route
-  matches no public name, so the tile passes `lan=True` to `homepage_href`. Its three blocks
+  needs no rename; the Karma tile is one.
+- **The Karma tile links to Karma's LAN name.** Karma is the alert UI, and its route
+  matches no public name, so the tile passes `lan=True` to `homepage_href`. Its two blocks
   read Prometheus, not Karma. They count firing critical and warning alerts without `shadow="true"`
-  or `drill="true"`, the two the routing tree blackholes, and the Watchdog.
+  or `drill="true"`, the two the routing tree blackholes.
 - **The Longhorn widget is configured across TWO files, and the wrong half is silent.**
   `providers.longhorn.url` in `templates/config/settings.yaml.j2` holds the connection;
   `templates/config/widgets.yaml.j2` holds only the display options. A `url:` written beside

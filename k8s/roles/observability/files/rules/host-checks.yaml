@@ -253,6 +253,70 @@ groups:
             `systemctl status homelab-claude-guardrail-ack.timer` and `journalctl -t
             claude-guardrail-ack`, then
             /var/lib/node-exporter-textfile/claude-guardrail-ack.prom on the host.
+      - alert: ClaudeDotfilesMirrorFailed
+        expr: homelab_check_success{check="claude-dotfiles-mirror",origin="daniel-box"} == 0
+        labels:
+          severity: warning
+          service: daniel-box
+        annotations:
+          summary: The dotfiles root mirror on daniel-box refused a tag or could not fetch.
+          description: >-
+            claude-dotfiles-mirror on daniel-box ended with status=down: it could not fetch the
+            dotfiles repo, or the newest tag is unsigned, signed by a key other than the
+            operator's, or does not descend from the last verified tag. T2's config stays at
+            the last verified tag until it clears. Run `journalctl -t claude-dotfiles-mirror`
+            on daniel-box.
+      - alert: ClaudeDotfilesMirrorNotReporting
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="claude-dotfiles-mirror",origin="daniel-box"} > 2100
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="claude-dotfiles-mirror",origin="daniel-box"}[2100s])
+          )
+          unless on (origin) (up{job="node"} == 0)
+        labels:
+          severity: warning
+          service: daniel-box
+        annotations:
+          summary: The dotfiles root mirror on daniel-box has stopped reporting.
+          description: >-
+            No claude-dotfiles-mirror verdict newer than 35 minutes reached Prometheus from
+            daniel-box's textfile collector, so no new dotfiles tag is being verified. Read
+            `systemctl status homelab-claude-dotfiles-mirror.timer` and `journalctl -t
+            claude-dotfiles-mirror`, then
+            /var/lib/node-exporter-textfile/claude-dotfiles-mirror.prom on the host.
+      - alert: ClaudeDotfilesMirrorFailed
+        expr: homelab_check_success{check="claude-dotfiles-mirror",origin="daniel-server"} == 0
+        labels:
+          severity: warning
+          service: daniel-server
+        annotations:
+          summary: The dotfiles root mirror on daniel-server refused a tag or could not fetch.
+          description: >-
+            claude-dotfiles-mirror on daniel-server ended with status=down: it could not fetch the
+            dotfiles repo, or the newest tag is unsigned, signed by a key other than the
+            operator's, or does not descend from the last verified tag. T2's config stays at
+            the last verified tag until it clears. Run `journalctl -t claude-dotfiles-mirror`
+            on daniel-server.
+      - alert: ClaudeDotfilesMirrorNotReporting
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="claude-dotfiles-mirror",origin="daniel-server"} > 2100
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="claude-dotfiles-mirror",origin="daniel-server"}[2100s])
+          )
+          unless on (origin) (up{job="node"} == 0)
+        labels:
+          severity: warning
+          service: daniel-server
+        annotations:
+          summary: The dotfiles root mirror on daniel-server has stopped reporting.
+          description: >-
+            No claude-dotfiles-mirror verdict newer than 35 minutes reached Prometheus from
+            daniel-server's textfile collector, so no new dotfiles tag is being verified. Read
+            `systemctl status homelab-claude-dotfiles-mirror.timer` and `journalctl -t
+            claude-dotfiles-mirror`, then
+            /var/lib/node-exporter-textfile/claude-dotfiles-mirror.prom on the host.
       # M6 BATCH B1, LIVE SINCE ITS CUTOVER-1B. The two k3s crons write the textfile beside
       # their Kuma push, and Cutover-1a deleted Kuma's tiles for the same verdicts, so these
       # rules are their pager. Each check has the DiskHealth pair: `Failed` reads the verdict, and

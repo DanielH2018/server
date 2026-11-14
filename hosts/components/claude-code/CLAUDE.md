@@ -164,6 +164,12 @@ directory.
 - **The background-shell pressure reaper is off** (`claude_code_rc_disable_bg_shell_pressure_reap`):
   Node reads the **cgroup**, so `free -m` reads clean while it kills backgrounded Bash tasks.
 - **The weekly restart uses `try-restart`**, which never starts a host kept stopped on purpose.
+- **A Python timer writes its verdict through
+  `hosts/lib/host_lib.py:write_check_textfile`.** node-exporter
+  drops every `homelab_check_*` series whose file omits the HELP and TYPE lines the other
+  check files declare. The file's mtime still reaches Prometheus, so the only symptom is the
+  check's `NotReporting` alert. The `host-check-textfiles-go-through-host-lib` row of
+  `tests/repo/test_census_rows_python.py` refuses a hand-written series.
 
 ## The fleet bound, and why it lives on `user.slice`
 
@@ -321,6 +327,29 @@ as root on both hosts, two minutes after each audit run.
 - **Next-run review:** after a week, read the posts. A post with an obvious source, such as a
   tool that rewrites settings.json, is a candidate for a new explanation rather than a mute.
 
+## Autonomous-role contract (`claude-dotfiles-mirror`, the verified dotfiles tag for T2)
+
+dotfiles#967 D13, the root half of the T2 config source. `homelab-claude-dotfiles-mirror.timer`
+runs `files/claude_dotfiles_mirror.py` as root on both hosts.
+
+- **Scope:** a bare mirror of the dotfiles repo under `/var/lib/homelab-claude-dotfiles-mirror`,
+  which only root writes. Each run fetches, takes the newest tag, and records its name and
+  commit in `verified.json` only when its signature verifies against
+  `/etc/claude-dotfiles/allowed_signers` and its commit descends from the last recorded one.
+  git runs with no system or global config, so nothing in the mirror changes how it checks.
+- **The signer:** `templates/claude-dotfiles-allowed-signers.j2` holds one key, the operator's
+  "Daniel Box Key", as a literal the inventory cannot override. The operator chose that key on
+  2026-11-13. The template and the script are on the lander's approval list.
+- **Mode:** `claude_code_dotfiles_mirror_enabled`. False drops the timer, its units, the config
+  and the signers file from the next package version, and keeps the mirror and the record.
+- **Abort valves:** a refused tag leaves the last record in place, so a bad or rolled-back tag
+  never replaces a good one. A run that finds no tag records nothing and reports up.
+- **Evidence:** a `status=` line under `journalctl -t claude-dotfiles-mirror`, and
+  `claude-dotfiles-mirror.prom`, which `ClaudeDotfilesMirrorFailed` and
+  `ClaudeDotfilesMirrorNotReporting` read.
+- **Next-run review:** before B2 renders T2's config from the record, read a week of `status=`
+  lines and check that each tag the operator pushed was verified.
+
 ## Autonomous-role contract (`sync-artifacts`, a mirror of another host's tree)
 
 - **Scope:** `rsync --delete` of each `claude_code_artifacts_peer_sources` entry's `path` into
@@ -402,12 +431,10 @@ server batch runs as `ubuntu` on `worktree-fanout-<batch>`.
   the head the review read, with no unchecked box under an operator or before-merge heading and
   no `needs input` or `Do not merge` text. A `--no-review` batch writes no record, so it never
   lands. Neither does a PR touching the landing path's code (`scripts/deploy_tools/`, `scripts/lib/`), the
-  fan-out tooling, the deployer, `secrets/`, `.github/`, `.claude/` or this component. Two
-  narrowings apply (#5659). A PR passes when its only `pyproject.toml` change is to
+  fan-out tooling, `secrets/`, `.github/`, `.claude/` or this component. One narrowing
+  applies (#5659). A PR passes when its only `pyproject.toml` change is to
   `[tool.pytest.ini_options].testpaths`, judged by parsing the file at the merge base and at the
-  head, and a read or parse failure holds it. A PR also passes when its only change under the
-  deployer's role is a `CLAUDE.md` it adds or edits, read from the REST pulls-files statuses:
-  a rename, a removal or an unreadable status holds it. Each landing runs from its own `origin/master` worktree under
+  head, and a read or parse failure holds it. Each landing runs from its own `origin/master` worktree under
   `~/.local/state/fanout-server-lander/checkouts/`, never from the primary checkout.
 - **Primary:** the unit's working directory and `--primary` are `claude_code_operator_checkout`,
   which `ubuntu` owns. They are never `claude_code_rc_workdir`, the agent's clone on daniel-box:

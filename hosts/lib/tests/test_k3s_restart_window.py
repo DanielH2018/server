@@ -48,6 +48,7 @@ _KEYS = (
     "wifi_ssid: x\n"
     "wifi_password: x\n"
     "renovate_agent_gh_token: x\n"
+    "renovate_agent_gh_read_token: x\n"
     "renovate_agent_claude_oauth_token: x\n"
     "sonarr_api_key: x\n"
     "arr_discord_webhook_url: x\n"
@@ -74,6 +75,7 @@ EXEMPT = {
     "homelab-sync-artifacts.timer": "an ssh pull from daniel-server; reads no cluster state",
     "homelab-claude-guardrail-audit.timer": "loads auditd watches; never touches k3s",
     "homelab-claude-guardrail-ack.timer": "diffs guardrail files and posts to Discord; no k3s",
+    "homelab-claude-dotfiles-mirror.timer": "fetches and verifies the dotfiles repo; no k3s",
     "homelab-systemd-units.timer": "counts failed units through systemctl; never touches k3s",
     # A */5 schedule fires inside any window longer than 5 minutes, so the span cannot avoid it.
     "CronJob crowdsec */5 * * * *": "home-IP lookup; a missed run is not made up (backoffLimit 0)",

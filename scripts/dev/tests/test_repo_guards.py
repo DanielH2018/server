@@ -48,11 +48,34 @@ def test_a_run_names_every_guard_and_returns_pytests_exit_code(code):
         calls.append((argv, kwargs))
         return subprocess.CompletedProcess(argv, code)
 
-    assert repo_guards.run_guards(run) == code
+    assert repo_guards.run_guards(run, lambda: "") == code
     argv, kwargs = calls[0]
     assert argv[1:3] == ["-m", "pytest"]
     assert set(repo_guards.GUARDS) <= set(argv)
     assert kwargs["cwd"] == REPO
+
+
+def test_the_advice_follows_the_guards_and_changes_no_exit_code(capsys):
+    def run(argv, **kwargs):
+        return subprocess.CompletedProcess(argv, 0)
+
+    assert repo_guards.run_guards(run, lambda: "facts notice: 1 to re-read.") == 0
+    assert capsys.readouterr().out == "facts notice: 1 to re-read.\n"
+
+
+def test_advice_that_cannot_run_says_why_in_one_line_per_source(tmp_path):
+    assert repo_guards.advice(tmp_path).splitlines() == [
+        "facts notice skipped: no merge base with origin/master; is it fetched?",
+        "removed names skipped: no merge base with origin/master; is it fetched?",
+    ]
+
+    def crash(repo):
+        raise KeyError("boom")
+
+    sources = (("facts notice", crash), ("removed names", lambda repo: ""))
+    assert repo_guards.advice(tmp_path, sources) == (
+        "facts notice skipped: KeyError: 'boom'"
+    )
 
 
 def test_a_drop_candidate_holds_no_failing_module_and_no_hook_file():

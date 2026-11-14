@@ -49,6 +49,7 @@ from deploy_tools.land_lib import (
     health_verdict,
     host_wait,
     merge,
+    turn,
 )
 from deploy_tools.land_lib.landing import Landing
 from deploy_tools.land_lib.outcome import Outcome, Verdict, say
@@ -148,7 +149,8 @@ def _phases(ln: Landing) -> None:
         print(f"== 0/{STEP_COUNT}  waiting for PR #{ln.opts.pr} to merge ({how})")
         if ln.direct_merge_subject:
             classify.refuse_stale_code_before_merge(ln)
-        merge.await_merge(ln)
+        with turn.held(ln) as in_turn:
+            merge.await_merge(ln, in_turn)
     for number, (label, phase) in enumerate(_STEPS, 1):
         print(f"== {number}/{STEP_COUNT}  {label.format(pr=ln.opts.pr)}")
         phase(ln)

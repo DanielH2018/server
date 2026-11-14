@@ -144,6 +144,8 @@ def fence_ruleset(**overrides):
 
 DOTFILES = "DanielH2018/dotfiles"
 PUBLIC_DOTFILES = json.dumps({"full_name": DOTFILES, "visibility": "public"})
+FORK_APPROVAL = "all_external_contributors"
+FORK_APPROVAL_BODY = json.dumps({"approval_policy": FORK_APPROVAL})
 
 
 # The update restrictions as the live endpoint returned them on 2026-11-13, by id. A bypass
@@ -202,6 +204,8 @@ def run(
     repo_body=PUBLIC_REPO,
     restriction_bodies=None,
     dotfiles_body=PUBLIC_DOTFILES,
+    fork_approval_body=FORK_APPROVAL_BODY,
+    fork_approval_rc=0,
 ):
     """Render the script, stub curl + the check lib, run it. Returns (exit_code, status, message).
 
@@ -210,9 +214,11 @@ def run(
 
     `curl_body` answers the merge-gate ruleset fetch, and `branch_body` and `fence_body` the other
     two. `repo_body` answers the repo read that precedes them all, and `dotfiles_body` the
-    dotfiles repo's. `restriction_bodies` maps an update restriction's id to the body that
-    replaces its clean one. Each defaults to a clean body, so a case reads the verdict of the
-    arm it is about. Every value the template reads comes from the inventory and
+    dotfiles repo's. `fork_approval_body` answers the read of the fork approval policy, and
+    `fork_approval_rc` is that one read's exit code.
+    `restriction_bodies` maps an update restriction's id to the body that replaces its clean
+    one. Each defaults to a clean body, so a case reads the verdict of the arm it is about.
+    Every value the template reads comes from the inventory and
     the role's own defaults, which the shared accessor resolves. The `..._matches_the_role_defaults`
     tests in test_github_ruleset_drift.py keep this module's constants honest against them
     (#3178).
@@ -266,6 +272,7 @@ def run(
             )
             + f"  */repos/{REPO}) printf '%s' {json.dumps(repo_body)} ;;\n"
             f"  */repos/{DOTFILES}) printf '%s' {json.dumps(dotfiles_body)} ;;\n"
+            f"  */fork-pr-contributor-approval) printf '%s' {json.dumps(fork_approval_body)}; exit {fork_approval_rc} ;;\n"
             f"  *) printf '%s' {json.dumps(curl_body or '')} ;;\n"
             "esac\n"
             f"exit {curl_rc}\n"

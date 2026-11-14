@@ -94,6 +94,12 @@ github_update_restriction_rulesets:
 github_ruleset_drift_cron_hour: "6"
 github_ruleset_drift_cron_minute: "40"
 
+# Whose fork pull requests wait for a collaborator's approval before any workflow runs. A runner
+# pod takes a job from any workflow run in this repo, so the policy that makes every author
+# outside the repo wait is a condition of ADR-0032. The drift check alerts when the live policy
+# differs; it never writes the setting. It is under Settings, Actions, General.
+github_fork_approval_policy: all_external_contributors
+
 # The repo's GitHub interaction limit: who may comment, react, open issues and open PRs on a
 # repo that stays public. `collaborators_only` closes every one of those to anyone not listed
 # as a collaborator; `none` clears the limit. GitHub caps the setting at six months and lets it

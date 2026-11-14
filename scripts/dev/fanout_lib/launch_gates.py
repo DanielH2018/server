@@ -38,36 +38,18 @@ LOCAL_HOST = LANDING_HOST
 # headroom and health reads, leaving room for at most this many batch launches — each its
 # own ssh connection — before the run risks the 6th.
 MAX_BATCHES_PER_REMOTE_HOST = 3
-# The memory cap, which is a DIFFERENT constraint that happens to share the number. An agent
-# reserves RESERVATION_BYTES (2 GiB) against a login plane capped at 10 to 17 GiB
+# The memory cap, which is a DIFFERENT constraint from the ssh budget. An agent
+# reserves RESERVATION_BYTES (2 GiB) against a login plane capped at 14 to 23 GiB
 # (`claude_code_rc_memory_high`), which also holds the operator's own sessions. Unlike the ssh
 # budget above, this one stacks ACROSS runs: a second launch minutes after the first measures
 # a memory.current the first run's agents have not yet grown into, so headroom alone underprices
 # them. Counted from the run manifests, which cost no ssh to read, less the batches whose
 # unit has stopped (`still_running`).
-MAX_LIVE_BATCHES_PER_HOST = 3
-# DECIDED: daniel-server holds a 4th live batch (#5667, 2026-10-18), and the 2026-10-29
-# re-read of a week of data keeps it there. With 4 batches live, which was 26% of the time
-# any batch ran, its fleet slice peaked at 15.5 GiB of 18G, memory PSI stalled 0.6 us/s
-# (1 us/s before the 4th), and the node ran above 90% CPU 0.05% of the week (1-2% before).
-# The batches summed to at most 3.35 GiB of anon, so memory does not bind; CPU does: the
-# fleet's p95 draw with 4 live was 6.0 of 8 cores and its peak 7.05, so a 5th batch is not
-# supported. k8s workloads hold 3.1x the fleet slice's CPU weight (313 against 100), so a
-# 4th batch yields to them under contention. daniel-box stays at 3: its fleet slice sat at
-# its 14G cap again, with 96,855 MemoryHigh events in the week (436 before) and PSI of
-# 116-140 us/s (20 before), though the CPU (2.6 of 16 cores at p95) and anon (2.2 GiB at 3
-# batches) would fit a 4th. The 2026-11-08 re-read (#6763), the first week under the per-batch
-# MemoryHigh, keeps daniel-box at 3. Its fleet PSI fell to 55-67 us/s with 116 batches (63
-# before), and the fleet peaked at 13.3 GiB of 14G, so a 4th 2 GiB reservation still does not
-# fit. The cap rarely binds: daniel-box sat at 3 live for 10% of the week, and both hosts were
-# full together for 5% of the minutes both ran batches, the only time a launch finds no host.
-# daniel-server sat at 4 live for 9.6% of the week. The fleet `high` count (236,328) is no
-# longer comparable with 96,855: memory.events is hierarchical, so it now counts each batch's
-# own MemoryHigh, and daniel-server's went from 0 to 125,773 with its fleet under its cap.
-# Read the fleet's own hits from `claude_cgroup_memory_events_local_total` instead.
-# Raise daniel-box only if a week shows both hosts full for long stretches while its fleet PSI
-# stays low and its fleet peak leaves room for a 4th reservation.
-LIVE_BATCH_CAP_BY_HOST = {"daniel-server": 4}
+MAX_LIVE_BATCHES_PER_HOST = 6
+# DECIDED: the operator set both caps at 6 on 2026-11-13 to leave about 8 GiB of RAM free per
+# node (`claude_code_fleet_memory_high` derives the floor). CPU on daniel-server (8 cores) is
+# the known risk at 6: the earlier week measured a p95 of 6.0 of 8 cores at 4 batches.
+LIVE_BATCH_CAP_BY_HOST = {"daniel-server": 6}
 
 
 def live_batch_cap(host: str) -> int:
@@ -193,7 +175,7 @@ def over_live_batch_cap(
     # DECIDED: no LOCAL_HOST exemption, unlike `over_ssh_budget` above. daniel-box is exempt
     # there because its launches go over `bash -c` and spend no ssh connection at all; that
     # reason does not transfer to memory, which a local agent consumes exactly as a remote one
-    # does. The two caps share the number 3 on daniel-box, and nothing else.
+    # does.
     for host, n in sorted(new.items()):
         standing = still_running(live.get(host, []), states.get(host, ""))
         if len(standing) + n <= live_batch_cap(host):

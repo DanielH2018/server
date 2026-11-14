@@ -15,7 +15,7 @@ A PR is landed only when all of these hold:
 - It is open.
 - Its branch carries no `k8s_autodeploy-false` slug, and no changed path sits under a k8s role
   the denylist names. The title is never read, because the session can edit it.
-- It changes nothing under `inventory/` (`ansible/inventory/` before ADR 0030's rename). A pin there, such as `crowdsec_k8s_image` in
+- It changes nothing under `inventory/`. A pin there, such as `crowdsec_k8s_image` in
   `group_vars/all.yml`, reaches every role that reads it, denylisted ones included, and no path
   check can see which those are. An interactive session lands that class.
 - Its `renovate/stability-days` status, when it carries one, reads success and was posted by
@@ -81,13 +81,12 @@ FILE_CAP = 100
 # LAND_DEADLINE's 41460 plus the 22200 LAND_WINDOW_GRACE the reboot window may add (#5457).
 LAND_TIMEOUT_S = 63660
 PR_FIELDS = "author,isCrossRepository,baseRefName,state,headRefName,headRefOid,files"
-# Both sides of ADR 0030's rename: this script is installed, so it outlives the tree it shipped in.
-INVENTORY = ("inventory/", "ansible/inventory/")
+INVENTORY = "inventory/"
 # `lib/exit_codes.py:USAGE_ERROR`, which this host-shipped script cannot import (#4487).
 USAGE_ERROR = 64
 _PR_NUMBER = re.compile(r"[1-9][0-9]{0,6}")
 _SHA = re.compile(r"[0-9a-f]{40}")
-_K8S_ROLE = re.compile(r"^(?:k8s/roles|ansible/roles/k8s)/([^/]+)/")
+_K8S_ROLE = re.compile(r"^k8s/roles/([^/]+)/")
 _VERDICT = re.compile(r"^VERDICT: .*$", re.MULTILINE)
 _ROLE_LIST = re.compile(r"[a-z0-9_-]+(?:,[a-z0-9_-]+)*")
 

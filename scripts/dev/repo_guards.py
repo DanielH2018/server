@@ -7,6 +7,10 @@ A fan-out brief and a hand-run session both call this script, so the list has on
     uv run python scripts/dev/repo_guards.py                    # takes one to two minutes
     uv run python scripts/dev/repo_guards.py --drop-candidates  # what the list could lose
 
+After the guards, the run prints advice for the branch: each instruction-file section that
+cites code the branch changed and whose prose it left unchanged, and each name the branch
+removed that a doc or a comment still uses. Advice changes no exit code.
+
 The whole suite is out of scope. It costs about five times this set, and the operator ruled it
 out for fan-out batches (`.claude/hooks/block-batch-full-suite.py`).
 
@@ -32,6 +36,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from lib.cli_help import ArgumentParser
 from lib.exit_codes import FAILED, OK
+from lib.facts.lint import vanished_advice
+from lib.facts.notice import branch_notice
 from lib.repo_paths import REPO
 
 DEFAULT_WEEKS = 8
@@ -99,11 +105,57 @@ def drop_candidates(
 
 Run = Callable[..., subprocess.CompletedProcess]
 
+NOTICE_REF = "origin/master"
 
-def run_guards(run: Run = subprocess.run) -> int:
-    """Run every guard under pytest from the repo root and return pytest's exit code."""
+Source = Callable[[Path], str | None]
+
+
+def _reread(repo: Path) -> str | None:
+    return branch_notice(repo, NOTICE_REF, fmt="reread")
+
+
+def _removed_names(repo: Path) -> str | None:
+    return vanished_advice(repo, NOTICE_REF)
+
+
+# What a branch gets told before its PR opens: the sections that cite code it changed, and
+# the names it removed that a doc or a comment still uses.
+ADVICE: tuple[tuple[str, Source], ...] = (
+    ("facts notice", _reread),
+    ("removed names", _removed_names),
+)
+
+
+def advice(repo: Path = REPO, sources: tuple[tuple[str, Source], ...] = ADVICE) -> str:
+    """The lines of every source of ``sources``, or one line saying why a source gave none.
+
+    A source returns its lines, an empty string when it has nothing to say, or None when the
+    branch has no merge base with ``NOTICE_REF``.
+    """
+    blocks = []
+    for name, source in sources:
+        try:
+            text = source(repo)
+        except Exception as exc:  # advice never fails the run, so its crash is one line
+            text = f"{name} skipped: {type(exc).__name__}: {exc}"
+        if text is None:
+            text = f"{name} skipped: no merge base with {NOTICE_REF}; is it fetched?"
+        if text:
+            blocks.append(text)
+    return "\n".join(blocks)
+
+
+def run_guards(run: Run = subprocess.run, advice: Callable[[], str] = advice) -> int:
+    """Run every guard under pytest from the repo root and return pytest's exit code.
+
+    The lines of ``advice`` follow pytest's output and never change the exit code.
+    """
     argv = [sys.executable, "-m", "pytest", "-q", "-n", "auto", *GUARDS]
-    return run(argv, cwd=REPO, check=False).returncode
+    code = run(argv, cwd=REPO, check=False).returncode
+    text = advice()
+    if text:
+        print(text)
+    return code
 
 
 Survey = Callable[[date, date], tuple[set[str], int]]

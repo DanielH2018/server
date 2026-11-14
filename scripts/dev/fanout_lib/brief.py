@@ -294,7 +294,9 @@ after your last commit and before `gh pr create`. It takes one to two minutes:
 ```bash
 uv run python scripts/dev/repo_guards.py
 ```
-Fix a red guard. Never skip or deselect it. Do not run the whole suite: a hook refuses a
+Fix a red guard. Never skip or deselect it. When the run ends with a `facts notice:` list,
+re-read each section it names and edit any sentence your change made false. When it ends with
+a `removed names:` list, edit each doc and comment that still uses a name you removed. Do not run the whole suite: a hook refuses a
 pytest run that names no path or more than 300 test modules in a batch, because CI runs the
 whole suite on the PR and the pipeline resumes you with each failing check. CI's weight step also fails a heavy test module
 that `scripts/dev/pytest_shard_weights.json` does not list, and no test runs that step. For each
