@@ -523,8 +523,8 @@ def github_token(source: Mapping[str, str], run: Callable) -> str | None:
     gate reads ``HTTP Error 403: rate limit exceeded`` and defers as ``CI not finished``. That
     is correct fail-closed behaviour, and also a deploy outage nobody asked for. Measured
     2026-09-01: two landings and a manual tick, three 403 deferrals. Authenticated, the limit
-    is 5000/hour per token. This was two copies, in deploy_git and renovate_notify, that
-    disagreed on which variables they read (#3362).
+    is 5000/hour per token. **HISTORY —** This was two copies, in deploy_git and
+    renovate_notify, that disagreed on which variables they read (#3362).
     """
     for name in ("GH_TOKEN", "GITHUB_TOKEN"):
         value = (source.get(name) or "").strip()

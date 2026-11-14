@@ -24,7 +24,6 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 from fanout_lib.manifest import Batch
 from fanout_lib.target import SERVER_TARGET, Target
 from fanout_lib.transport import REPO
-from lib.gh import gh
 from lib.git import git
 from lib.worktrees import (
     REMOVABLE,
@@ -36,10 +35,6 @@ from lib.worktrees import (
     is_merged,
     remove,
 )
-
-
-# What GitHub's compare calls a base that is an ancestor of its head, or the same commit.
-CONTAINED = frozenset({"ahead", "identical"})
 
 
 def _first_line(proc, what: str) -> str:
@@ -92,63 +87,10 @@ def _drop_merged_branch(repo: str, tree: Worktree, merged: bool, brancher) -> st
     return "" if ok else f"— branch {tree.branch} not deleted: {err}"
 
 
-def contained_in_merged_pr(repo: str, head: str, branch: str, run_gh=gh) -> bool:
-    """True when a merged PR for `branch` has a head containing `head`: no local commit is unlanded.
-
-    `lib.worktrees.is_merged` matches the forge's merged head to the local tip exactly
-    (Ruling 38). That misses the batch `land.sh` landed after merging master into it on the
-    remote: the merged head is the local tip plus that merge commit, so the SHAs differ and
-    `clean` kept the batch for good (#6365). GitHub's compare answers `ahead` (or `identical`)
-    when `head` is an ancestor of the merged head, which proves every local commit was in the
-    merged PR. A tip that was never pushed, or has commits the merged head lacks, compares
-    `diverged`, `behind` or 404, and a `gh` that fails reads as not contained.
-
-    Still keyed on the SHA relation and never on "a merged PR exists under this name", so a
-    reused branch name cannot delete work that never landed.
-    """
-    if not head or not branch:
-        return False
-    try:
-        heads = run_gh(
-            "pr", "list", "--state", "merged", "--head", branch,
-            "--json", "headRefOid", "--jq", ".[].headRefOid",
-            check=False, cwd=repo,
-        )  # fmt: skip
-        if heads.returncode != 0:
-            return False
-        for merged_head in heads.stdout.split():
-            compared = run_gh(
-                "api", f"repos/{{owner}}/{{repo}}/compare/{head}...{merged_head}",
-                "--jq", ".status", check=False, cwd=repo,
-            )  # fmt: skip
-            if compared.returncode == 0 and compared.stdout.strip() in CONTAINED:
-                return True
-    except OSError, subprocess.TimeoutExpired:
-        return False
-    return False
-
-
-def landed(
-    repo: str,
-    head: str,
-    branch: str = "",
-    base: str = "origin/master",
-    merged=is_merged,
-    run_gh=gh,
-) -> bool:
-    """`is_merged`, or `head` sits inside the head of a merged PR for `branch`.
-
-    `merged` and `run_gh` are seams: the ladder's verdict and the forge reads behind it.
-    """
-    return merged(repo, head, branch, base=base) or contained_in_merged_pr(
-        repo, head, branch, run_gh
-    )
-
-
 def clean_one(
     repo: str,
     tree: Worktree,
-    ask=landed,
+    ask=is_merged,
     dirty=is_dirty,
     remover=remove,
     unlocker=unlock,
@@ -157,10 +99,10 @@ def clean_one(
 ) -> tuple[str, str]:
     """Remove `tree` when its branch landed and it is clean; otherwise keep it and say why.
 
-    `classify` reads a locked tree carrying an unrecognized lock reason (a `fanout-<batch>`
-    launch lock, not a Claude session lock) as a live session and keeps it forever — Ruling
-    13. This judges an in-memory unlocked copy so classify decides on merged/dirty state
-    instead, but only touches the REAL lock when a tree is actually about to be removed: the
+    `classify` reads a `fanout-<batch>` launch lock as live for a day after launch, and while
+    the batch's unit is active (`lib.fanout_lock`). The caller has already checked the unit,
+    so this judges an in-memory unlocked copy and classify decides on merged/dirty state
+    instead — Ruling 13. It only touches the REAL lock when a tree is actually about to be removed: the
     lock is released right before `remover` runs, and put back with its original reason if
     `remover` then fails. Every KEEP verdict leaves the lock exactly as it found it — a batch
     that is still running or still unmerged is never unlocked at all.

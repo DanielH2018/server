@@ -1,4 +1,4 @@
-"""Landing's shared helpers: how it ends, how it reads the PR, git and the deployer's state.
+"""Landing's shared helpers: how it ends, how it reads the PR, and git.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_land_landing.py
 """

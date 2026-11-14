@@ -254,7 +254,7 @@ def _build_parser():
         ),
     )
     b2l.add_argument(
-        "--bucket", help="override the bucket read from the longhorn_b2_bucket secret"
+        "--bucket", help="override the bucket inventory's longhorn_b2_bucket names"
     )
     b2l.add_argument(
         "--prefix", default=LONGHORN_PREFIX, help="B2 prefix Longhorn writes under"
@@ -268,7 +268,7 @@ def _build_parser():
         ),
     )
     b2b.add_argument(
-        "--bucket", help="override the bucket read from the longhorn_b2_bucket secret"
+        "--bucket", help="override the bucket inventory's longhorn_b2_bucket names"
     )
     b2b.add_argument(
         "--prefix", default=LONGHORN_PREFIX, help="B2 prefix Longhorn writes under"
@@ -485,4 +485,10 @@ def _build_parser():
     )
     for module in (lander, builder):
         module.add_parser(sub, _verdict_help)
+    usage = sub.add_parser(
+        "usage",
+        help="requests per service over the retention window, memory request and limit "
+        "against the 7d p95, and PVC fill with days to full",
+    )
+    _flag(usage, "--all", "list every container and PVC, not only the flagged ones")
     return p

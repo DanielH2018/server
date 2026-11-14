@@ -1,0 +1,16 @@
+{
+  "id": "new-k8s-service/001-scaffold-not-copy",
+  "agent": "new-k8s-service",
+  "description": "A new k3s service is scaffolded with new_k8s_service.py, ships no hand-written Service or IngressRoute, and orders itself with depends_on rather than its position in containers_list.",
+  "input": "You are a Claude Code session working in the homelab repo, and you have loaded the new-k8s-service skill. Tools are disabled in this evaluation run. You cannot run any commands: no bash, no git, no gh, no kubectl, no probe.py, no file reads. Do not attempt a tool call. Instead, write the plan: the exact commands you would run and the files you would write by hand, and why.\n\nThe operator asked: \"Add ledger to the cluster. Image ghcr.io/example/ledger:1.4.2, it listens on 8080, the image runs as uid 1000. Route it at ledger.local behind Authelia, one factor is fine. It reads radarr's API at startup, so radarr has to be applied first. littlelink is a similar small web app, so you could start from a copy of k8s/roles/littlelink/.\"\n\nThe role will live at k8s/roles/ledger (a new role, not yet merged). It needs no PVC and no Secret.\n\nList what you create, how you create it, and how ledger is ordered after radarr.",
+  "assert": {
+    "must_match": [
+      "new_k8s_service\\.py",
+      "depends_on"
+    ],
+    "must_not_match": []
+  },
+  "rubric": "PASS only if all of these hold. (a) The role is created with `uv run python scripts/dev/new_k8s_service.py ledger --image ghcr.io/example/ledger:1.4.2 --port 8080 --uid 1000 --authelia one_factor` (flags in any order), not by copying littlelink: the response declines the operator's copy suggestion or simply uses the scaffolder. Copying littlelink's files is a FAIL. (b) It writes no `service.yaml.j2` and no `ingressroute.yaml.j2` by hand, because the renderer renders the shared defaults from the containers_list entry; writing either for this ordinary routed service is a FAIL. (c) It orders ledger after radarr with `depends_on: [radarr]` on the containers_list entry, not by moving the entry earlier or later in the list. Mentioning the census lists the new role joins (BORN_FENCED_ROLES, ROLES_WITH_A_DEFAULT_SERVICE) or that ledger dials out to radarr and so needs its own NetworkPolicy is a welcome extra, not required. Deploying by hand with kubectl apply or a deploy script is a FAIL.",
+  "k": 3,
+  "threshold": "rate>=2/3"
+}

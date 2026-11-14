@@ -120,7 +120,7 @@ The session reads third-party text: release notes, changelogs and PR bodies. It 
 - **The run lock moved into the agent's home.** `fs.protected_regular=2` refuses an `O_CREAT`
   open of another user's file in sticky `/run/lock`, and the old lock there belongs to the
   operator.
-- **Deployer holds.** The wrapper reads no hold. `land.sh`, run by the lander as the operator,
+- **Deploy holds.** The wrapper reads no hold. `land.sh`, run by the lander as the operator,
   refuses a landing under `DEPLOY_HOLD`.
 
 ENFORCED: `hosts/tests/test_renovate_agent_identity.py`, which also runs the prompt's
@@ -181,7 +181,7 @@ budget only catches a loop. A landing in flight runs in the lander unit, so a se
 killed at either limit leaves that landing to finish, but the digest then cannot report it.
 
 **The session never runs in the primary checkout.** One untracked file in `/home/<user>/server`
-parks the GitOps deployer silently, and a session that edits, renders and tests is guaranteed to
+parks `homelab-checkout-sync` silently, and a session that edits, renders and tests is guaranteed to
 leave some. Each tick recreates `.claude/worktrees/renovate-auto` at `origin/master` inside the
 agent's own clone and runs there. The lander runs `land.sh` in the primary checkout as the
 operator.

@@ -12,15 +12,15 @@ host probes stay green.
 - **Claims:** none (no PVC)
 <!-- /generated_from -->
 
-- **Flux applies it, not Ansible** (H1.5a). Its `containers_list` entry is in `cluster/services.yml`
-  from its first commit. A rebuilt cluster gets it from the `longhorn` Kustomization at step 6 of
-  `docs/flux-deploy-plane.md`'s *Bootstrapping Flux on a rebuilt cluster*. The `longhorn-backup` Kustomization
-  depends on it and creates the backup targets once it reads `Ready`.
+- **Flux applies it.** Its `containers_list` entry is in `cluster/services.yml`. A rebuilt cluster
+  gets it from the `longhorn` Kustomization at step 6 of `docs/flux-deploy-plane.md`'s
+  *Bootstrapping Flux on a rebuilt cluster*. The `longhorn-backup` Kustomization depends on it and
+  creates the backup targets once it reads `Ready`.
 - **The workloads are `files/upstream/longhorn.yaml`**, upstream's file byte for byte, pinned by
   `k3s_longhorn_version` and the `longhorn_vendored_manifests` item in `defaults/main.yml`.
   `scripts/dev/vendor_manifest.py` checks the pin and refreshes the copy. The refresh command
-  sits above the pin. No render may fetch a URL (D5, C1).
-- **Merging a bump of `k3s_longhorn_version` is the upgrade** (H1 Open question 6). `land.sh`
+  sits above the pin. No render may fetch a URL.
+- **Merging a bump of `k3s_longhorn_version` is the upgrade.** `land.sh`
   runs the `longhorn-upgrade` gates before it merges, Longhorn supports no downgrade and one
   minor per hop, so read `docs/longhorn-upgrade.md` before you bump the pin.
 - **Nine patches change upstream objects**, all under `files/patches/`. The renderer lists them
@@ -68,7 +68,7 @@ host probes stay green.
       `tests/longhorn/test_longhorn_csi_secret_grant.py::test_the_patched_render_is_clean`
       fails a render in which the account still reads Secrets cluster-wide. Under
       `prune: false` the live objects stay until the operator deletes them (**operator-only**).
-- **Three templates hold the Settings, the no-backup class and the metrics policy** (H1.5b).
+- **Three templates hold the Settings, the no-backup class and the metrics policy.**
     - `templates/settings.yaml.j2` renders the eight `Setting` objects, each from one
       `k3s_longhorn_*` key in `defaults/main.yml`. Flux owns each Setting's `value`. longhorn-manager keeps its own
       annotation and status on the object, and the render declares neither, so Flux never takes
@@ -120,10 +120,10 @@ host probes stay green.
   in `defaults/main.yml`). A render that dropped a CRD would make Flux delete every Volume of
   its kind. The cost: an object removed from the render, or retired by a later release, stays
   live until the operator deletes it (**operator-only**).
-- **A StorageClass whose parameters change needs an operator delete.** StorageClass parameters
-  are immutable, and the Ansible task that deleted the class when its parameters differed is
-  gone. If the manager does not replace a class whose ConfigMap changed, the fix is an
-  **operator-only** delete of the class, which the manager recreates from the ConfigMap.
+- **A StorageClass whose parameters change needs an operator delete.** StorageClass parameters are
+  immutable, and no automation deletes the class when its parameters differ. If the manager does not
+  replace a class whose ConfigMap changed, the fix is an **operator-only** delete of the class,
+  which the manager recreates from the ConfigMap.
 - **`manifests_rollout_timeout` is `10m`** (`defaults/main.yml`). The DaemonSet rolls one
   pod at a time, so a roll is two pod starts in sequence. Both pods restarting at once with the
   image cached measured 36s on 2026-10-22 (#5922), which is one pod's start. A version bump also cold-pulls the image on each node in turn,

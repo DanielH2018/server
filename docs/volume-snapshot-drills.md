@@ -22,7 +22,7 @@ design and the reasoning behind each step are in
 
 The runbook starts from a stateful hold. When a failed revision R changed a snapshot role,
 `promote` writes `DEPLOY_HOLD` as `<R> stateful=<names>`, does **not** reset `prod`, and
-posts to the deployer's Discord channel. The post lists every changed tag and every
+posts to the `discord_alert_webhook` channel. The post lists every changed tag and every
 Kustomization that failed or timed out, each marked as a snapshot role or not. For each
 changed snapshot role it prints that role's `digest8`, the snapshot prefix of each claim,
 and a command block in Branch 1's order: the classify command, two suspends, one revert run,

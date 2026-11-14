@@ -389,7 +389,9 @@ the list itself could not be read. The second case is a `gh` failure rather than
 problem, and it is what `read` shows as `signing=unknown`, so run `read` first — its
 `signing=` field gives the gate's verdict per host before a launch spends an agent on it.
 
-When every PR has merged: `uv run python scripts/dev/fanout.py place clean <run-id>`. It
+When every PR has merged: `uv run python scripts/dev/fanout.py place clean <run-id>`. A batch
+`clean` never reaches falls to the weekly worktree sweep, which reads its `fanout-<batch>` lock
+as dead once the unit is inactive and the lock is a day old (`scripts/lib/fanout_lock.py`). It
 removes each worktree once its branch is merged into `origin/master` (or its tip is an ancestor of
 the head GitHub merged, as after `land.sh` merged master into the branch, #6365) and the tree is clean,
 then deletes that `worktree-fanout-<batch>` branch, and reports a kept tree with its reason. A

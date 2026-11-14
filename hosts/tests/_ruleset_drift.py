@@ -287,7 +287,7 @@ def run(
 
     # logger stub: the script's journal line. Recorded rather than sent, so a case can assert the
     # verdict reached the journal without reading the host's own. The real logger is what a
-    # `journalctl -t github-ruleset-drift` on the deployer reads, which is how a verify-by
+    # `journalctl -t github-ruleset-drift` on daniel-box reads, which is how a verify-by
     # confirms this producer ran.
     fake_bin(
         binstub,
