@@ -1,13 +1,17 @@
 """The bedroom dashboard, the display re-cast trigger and the wake tickers' trace depth.
 
 The dashboard reads the T1's illuminance, because the lights dominate the FP300's (#8388). The
-display's idle trigger holds for a minute, so a Cast socket reconnect does not re-cast (#8204).
+display's idle trigger holds for a minute, so a Cast socket reconnect does not re-cast (#8204),
+and show holds off after a dismiss, so lux noise around both thresholds cannot flap it (#8411).
 The per-minute wake tickers keep enough traces to cover a wake window (#8388).
 """
 
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+import pytest
 import yaml
+from jinja_harness import render_template
 
 ROLE = Path(__file__).resolve().parent.parent
 FILES = ROLE / "files"
@@ -64,6 +68,42 @@ def test_display_show_idle_trigger_holds_for_a_minute():
     ]
     assert len(display) == 1
     assert display[0].get("for") == "00:01:00"
+
+
+NOW = datetime(2026, 11, 12, 19, 25, tzinfo=timezone.utc)
+
+
+def _show_allowed_after_dismiss(dismissed: datetime | None, lux: str = "70") -> bool:
+    conditions = _automation("display.yaml", "bedroom_display_show")["condition"]
+    templates = [
+        c["value_template"]
+        for c in conditions
+        if c.get("condition") == "template"
+        and "automation.bedroom_display_dismiss" in c["value_template"]
+    ]
+    assert len(templates) == 1, templates
+    attributes = {("automation.bedroom_display_dismiss", "last_triggered"): dismissed}
+    rendered = render_template(
+        templates[0],
+        state_attr=lambda entity_id, name: attributes[(entity_id, name)],
+        states=lambda entity_id: {"sensor.aqara_fp300_illuminance": lux}[entity_id],
+        now=lambda: NOW,
+        timedelta=timedelta,
+    )
+    return rendered == "True"
+
+
+@pytest.mark.parametrize(("minutes_ago", "allowed"), [(14, False), (16, True)])
+def test_display_show_holds_off_after_a_dismiss(minutes_ago, allowed):
+    assert _show_allowed_after_dismiss(NOW - timedelta(minutes=minutes_ago)) is allowed
+
+
+def test_display_show_casts_when_dismiss_never_ran():
+    assert _show_allowed_after_dismiss(None)
+
+
+def test_display_show_casts_inside_the_hold_once_the_lights_come_on():
+    assert _show_allowed_after_dismiss(NOW - timedelta(minutes=1), lux="628")
 
 
 def test_per_minute_wake_tickers_keep_90_traces():
