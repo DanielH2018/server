@@ -7,8 +7,8 @@ out of the role doc so the inject hook stops truncating it (#2989).
 
 ## What is unit-tested, and the convention that keeps it that way
 
-**Bedroom Jinja math is unit-tested** (`tests/`, run via `uv run pytest`, the prek `pytest`
-hook and CI — wired in `pyproject.toml` `testpaths`). The bug-prone computed logic lives in
+**Bedroom Jinja math is unit-tested** (`tests/`, run via `uv run pytest` and CI's `pytest`
+job — wired in `pyproject.toml` `testpaths`). The bug-prone computed logic lives in
 pure `custom_templates/{fan,lighting}.jinja` macros; entity and time reads (`states()`,
 `now()`) stay in the YAML callers, and macros take plain numbers. The tested set:
 `fan_target_level` (curve, ±0.7-level hysteresis, night/sleep caps — used by
