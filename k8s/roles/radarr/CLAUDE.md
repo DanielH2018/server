@@ -22,7 +22,7 @@ when both paths share one mount.
 - **Persists:** `radarr-config` PVC (`longhorn`, ~30Mi) — `radarr.db` holds the library and
   absolute root-folder paths. Also mounts `media-data` (`radarr_k8s_media_claim`), shared RWX.
 - **`radarr-striptracks`** Docker mod strips unwanted audio/subtitle tracks on import.
-- **Flux applies it, not Ansible** (D5.20, a Wave D PR with sonarr and mosquitto). Its
+- **Flux applies it.** Its
   `containers_list` entry is in `cluster/services.yml`, so nothing applies it by hand, and a merged change
   reaches the cluster when `promote` publishes and verifies the next bundle. Its image-bump PRs
   therefore draw no `land-wait` and no `probe.py health` run. authelia, media-volume and traefik
@@ -36,16 +36,15 @@ when both paths share one mount.
   because the failed image may already have migrated the database. Nothing reverts the claim
   on its own: the operator follows the revert runbook in `docs/volume-snapshot-drills.md`.
   `k8s_autodeploy: true` still lets Renovate automerge the image bump, which is safe for the
-  same reason it was under Ansible: a bad swap can be reverted to the snapshot.
+  same reason: a bad swap can be reverted to the snapshot.
 - **`media-data` is neither snapshotted nor reverted** (`k8s_autodeploy_unreverted_claims`). A
   revert can desync import/rename history from files left in place, recoverable by a library
   rescan.
-- **Where the tasks went.** The pre-apply snapshot through `k8s/volume-snapshot`
-  became the `radarr-snapshot` Job, and the Kustomization's `wait` replaces the rollout wait.
-  arr-notification's seed Job in `radarr-verify` declares the Discord notification
-  (*Notable*). Its `k8s/arr-notification` include went in #5561. The seed Job's `lookup()`s are what
-  make radarr a caller of
-  arr-notification in `scripts/lib/k8s_role_callers.py:role_callers`.
+- **Its snapshot and rollout.** The `radarr-snapshot` Job takes the pre-apply snapshot, and
+  the Kustomization's `wait` holds the rollout. arr-notification's seed Job in
+  `radarr-verify` declares the Discord notification (*Notable*). The seed Job's `lookup()`s
+  are what make radarr a caller of arr-notification in
+  `scripts/lib/k8s_role_callers.py:role_callers` (#5561).
 
 ## Notable
 - **The rollout waits 660s, above the shared default.** A first boot installing DOCKER_MODS takes up to 10
@@ -55,9 +54,9 @@ when both paths share one mount.
   `progressDeadlineSeconds` reads it through `radarr_k8s_rollout_timeout` — see
   `k8s/roles/sonarr/CLAUDE.md` for why the deadline has to move with the budget (#2370).
 - **`templates/verify/` holds arr-notification's seed Job.** The renderer emits it into
-  `radarr-verify`, which holds only that Job and its `radarr-verify` ServiceAccount: radarr had
-  no Ansible verify tasks to convert. The Job's pod carries `app: radarr-verify`, which
-  radarr's `netpol_from` lists (#5535). `k8s/roles/arr-notification/CLAUDE.md` has the Job's design.
+  `radarr-verify`, which holds only that Job and its `radarr-verify` ServiceAccount. The Job's
+  pod carries `app: radarr-verify`, which radarr's `netpol_from` lists (#5535).
+  `k8s/roles/arr-notification/CLAUDE.md` has the Job's design.
 - **Log churn, not log size, drives PVC growth** — `radarr_k8s_log_level`/`_log_rotate` cap
   upstream's noisier defaults; see `k8s/roles/sonarr/defaults/main.yml` for the shared
   rationale across all three *arr roles.

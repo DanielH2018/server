@@ -37,8 +37,7 @@ shared conventions.
 - `tdarr_k8s_server_port` (8266, the internal-node control channel) is deliberately
   **not** in the Service — exposing it would publish an unauthenticated channel for a
   process that rewrites media.
-- **Flux owns tdarr (D5, Wave D).** `promote` applies it, and no Ansible run reaches
-  it. Its checks run in three places, each on every roll:
+- **Flux applies it.** `promote` publishes it. Its checks run in three places, each on every roll:
     - `tdarr-prepull` pulls the image onto the node before `tdarr` applies;
     - the Deployment's `vaapi-encode` initContainer runs the encode;
     - the `tdarr-verify` Job proves the render node opens and the library is writable.

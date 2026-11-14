@@ -1,10 +1,8 @@
 # longhorn-restore-drill — the restore drill's own Flux tag and its stamp ConfigMap
 
 The tag that holds the nightly restore drill's cluster objects: the empty ConfigMap
-`longhorn-restore-drill-stamps` (H2.3b), and since H2.3d the script ConfigMap, the CronJob, the
-ServiceAccount and the RBAC. The CronJob shipped `suspend: true` at H2.3d, and H2.3e set
-`suspend: false` after the operator confirmed the host cron file
-`/etc/cron.d/longhorn-restore-drill` was gone.
+`longhorn-restore-drill-stamps`, the script ConfigMap, the CronJob, the ServiceAccount and the
+RBAC. The CronJob's `suspend` is `false`, and the *Mode* bullet below says why.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in k8s/roles/longhorn-reconcile/defaults/main.yml. -->
@@ -16,25 +14,25 @@ ServiceAccount and the RBAC. The CronJob shipped `suspend: true` at H2.3d, and H
 - **Claim:** `${DRILL}` (no declared tier (runtime claim named by a shell variable))
 <!-- /generated_from -->
 
-- **Flux applies it, not Ansible.** Its `containers_list` entry is in `cluster/services.yml` and
-  `depends_on: [longhorn]` from its first commit.
+- **Flux applies it.** Its `containers_list` entry is in `cluster/services.yml` and
+  `depends_on: [longhorn]`.
 - **It is a tag of its own, not part of `longhorn`.** The drill's objects live in `homelab`.
-  H1's DR order waits on `longhorn` at step 6, and nothing creates `homelab` until step 8, so a
-  `homelab` object in `longhorn` would stall step 6.
+  The disaster-recovery order waits on `longhorn` at step 6, and nothing creates `homelab`
+  until step 8, so a `homelab` object in `longhorn` would stall step 6.
   `tests/k8s/test_step6_tags_render_into_created_namespaces.py` holds that. The
   generated `homelab-namespace` kind gives this tag its `dependsOn`, so it waits for `homelab`.
 - **The tag renders no Namespace.** A Namespace object here would be a second writer of
-  `homelab` beside the generated `homelab-namespace` kind, which C4 forbids.
+  `homelab` beside the generated `homelab-namespace` kind.
 - **The stamp ConfigMap carries two annotations.** `kustomize.toolkit.fluxcd.io/ssa: IfNotPresent`
   makes Flux create it once and never revert the drill's writes to its data.
   `kustomize.toolkit.fluxcd.io/prune: disabled` keeps it when a render drops it, because the
   tag prunes like any per-tag Kustomization and no render restores its state.
   `tests/k8s/test_restore_drill_stamps.py::test_the_stamp_configmap_renders_empty_with_both_annotations`
   holds both.
-- **A revert of the tag leaves the ConfigMap live.** C3's `deletionPolicy: Orphan` does that
-  until D6.20, and `prune: disabled` does it after. Deleting it is **operator-only**.
-- **`longhorn_drill_namespace` mirrors `k3s_longhorn_restore_drill_namespace`.** The host drill
-  reads the second until H2.3f.
+- **A revert of the tag leaves the ConfigMap live**, because `prune: disabled` keeps it.
+  Deleting it is **operator-only**.
+- **`longhorn_drill_namespace` mirrors `k3s_longhorn_restore_drill_namespace`.** Backup health's
+  readers read the second.
   `tests/k8s/test_restore_drill_stamps.py::test_the_stamp_namespace_equals_the_host_drills`
   holds the pair equal.
 - **The census names the ConfigMap and the CronJob.**
@@ -46,7 +44,7 @@ ServiceAccount and the RBAC. The CronJob shipped `suspend: true` at H2.3d, and H
 The CronJob `longhorn-restore-drill` (`templates/cronjob.yaml.j2`) runs
 `templates/longhorn-restore-drill.sh.j2` from the script ConfigMap at 04:10 UTC. It restores the
 newest backup of ONE volume into a NEW volume, mounts it in a throwaway pod, checks the data is
-real, and tears everything down (H2.3d).
+real, and tears everything down.
 
 - **SQLite databases must pass `PRAGMA integrity_check`.** A block snapshot taken mid-write can
   restore cleanly and still hold a corrupt database. The probe pod checks every file with a
@@ -123,10 +121,10 @@ real, and tears everything down (H2.3d).
 - **Hand runs are operator-only.** The agent's kubeconfig cannot create a Job. The plain and the
   pinned form are in `docs/k3s-node-plane-crons-and-incidents.md`, and both run outside the
   04:10 UTC slot. A pinned run stamps `success.<pvc>` and not `last-success`.
-- **The drill's keys live here.** The eight
-  `k3s_longhorn_restore_drill_*` keys are in `defaults/main.yml`. A host package renders without a k8s role's defaults,
-  so no host file can read one.
-- **The `DECIDED:` markers moved with the keys** into `defaults/main.yml`: the 4 GiB size cap,
+- **The drill's keys live here.** The eight `k3s_longhorn_restore_drill_*` keys are in
+  `defaults/main.yml`. A host package renders without a k8s role's defaults, so no host file can
+  read one.
+- **The `DECIDED:` markers sit beside the keys** in `defaults/main.yml`: the 4 GiB size cap,
   the 2700-second timeout and the 04:10 UTC slot. The script keeps its own, including the
   candidate list published from the full eligible set and the pinned run that leaves the global
   stamp alone.
