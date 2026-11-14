@@ -24,7 +24,7 @@ longhorn_drill_namespace: homelab
 # The image the CronJob runs. The drill is a shell job that needs bash, jq, curl and kubectl, and
 # `alpine/k8s` carries all four. It is BusyBox over musl for `mktemp`, `date`, `sort` and `stat`,
 # so tests/longhorn/_restore_drill.py runs the script inside this digest as well. The same
-# digest as janitorr's and crowdsec's kubectl images. The probe pod keeps
+# digest as janitorr's and crowdsec's kubectl images. The probe pod runs
 # `k3s_longhorn_restore_drill_image` below.
 longhorn_restore_drill_runner_image: alpine/k8s:1.37.2@sha256:dcb7185e112a453aa72f426754849a97357727ef8f40168fb208c8cf59952042
 
@@ -124,7 +124,10 @@ k3s_longhorn_restore_drill_empty_ok_pvcs:
 # from anything that could plausibly be real data. Raising it widens the band of real content a
 # `files=0` restore would still be waived for, which is the whole thing this bounds.
 k3s_longhorn_restore_drill_empty_ok_max_actual_bytes: 62914560
-k3s_longhorn_restore_drill_image: busybox:stable@sha256:73aaf090f3d85aa34ee199857f03fa3a95c8ede2ffd4cc2cdb5b94e566b11662
+# The probe pod's image. It needs BusyBox's `find`, `wc` and `cat` for the content counts and
+# Python's `sqlite3` module for the integrity check, and `python:3.14-alpine` carries both. The
+# same digest as monitor-bridge's and longhorn-reconcile's.
+k3s_longhorn_restore_drill_image: python:3.14-alpine@sha256:f6a589d43c42b9e7f7dc67a12d37132491f362859a5d750607710cc56da3bc72
 # A drill restores 51 MB in ~21s and the rotation admits volumes 25x that size: a slow restore
 # is not itself a failure, but a hung one must not leave a
 # Volume CR attached forever, and a timeout fires as a restore failure that nothing distinguishes

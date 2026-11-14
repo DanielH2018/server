@@ -65,7 +65,7 @@ def _glob_using_test_files() -> list[str]:
 # production, and such a walk escaped every other branch (#3769). It needs the `roles` plural,
 # so a single role's `(role / "templates").iterdir()` stays clean.
 BARE_ROLE_WALK = re.compile(
-    r"(?:K8S_ROLES|SETUP_ROLES|CONTAINER_ROLES|CONTAINERS_ROLES|DOCKER_ROLES"
+    r"(?:K8S_ROLES|SETUP_ROLES|CONTAINERS_ROLES|DOCKER_ROLES"
     r'|k8s/roles"'
     r'|ROLES\s*/\s*"(?:k8s|setup|containers)"'
     r'|"k8s"\s*/\s*"roles")[^\n]*\.iterdir\(\)'

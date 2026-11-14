@@ -84,8 +84,8 @@ tests:
             exp_annotations:
               summary: "daniel-box memory is 95% used."
               description: "daniel-box has less than 10% of its memory available. Per-container OOM kills are ContainerOOMKilled's. Read `free -h` and the top memory cgroups on the host."
-  # HostMetricsMissing. box is scraped and publishes / and memory but not /boot, /boot/efi or
-  # the Processor cooling devices, so those three arms fire after 15m. server's exporter is
+  # HostMetricsMissing. box is scraped and publishes / and memory but not /boot, /boot/efi, the
+  # Processor cooling devices or the timex series, so those four arms fire after 15m. server's exporter is
   # dead (up 0) and publishes nothing: that is ScrapeTargetDown's, so no arm fires for it.
   - interval: 1m
     input_series:
@@ -134,6 +134,16 @@ tests:
             exp_annotations:
               summary: "daniel-box publishes no thermal-throttle series."
               description: "daniel-box is scraped but its node-exporter publishes no series for the thermal-throttle check, so that check is not looking at the host. Read the matching collector on the host."
+          - exp_labels:
+              arm: clock
+              instance: daniel-box
+              job: node
+              origin: daniel-box
+              service: daniel-box
+              severity: warning
+            exp_annotations:
+              summary: "daniel-box publishes no clock series."
+              description: "daniel-box is scraped but its node-exporter publishes no series for the clock check, so that check is not looking at the host. Read the matching collector on the host."
   # ClaudeCgroupMemoryEvent. One oom_kill on box's fleet cgroup at minute 5 fires after 5m and
   # clears when it leaves the 10m window. A `high` event is not watched, and server logs none.
   - interval: 1m
@@ -567,8 +577,8 @@ tests:
             exp_annotations:
               summary: "daniel-pi's / is mounted read-only."
               description: "/ on daniel-pi is read-only, which is an SD card remounting itself after an I/O error. Every other arm stays green through it. A reboot does not come back from it."
-  # PiMetricsMissing. The Pi is scraped and publishes load only, so the memory, filesystem and
-  # read-only arms fire after 10m. The undervoltage arm is PiUndervoltageMissing's, below.
+  # PiMetricsMissing. The Pi is scraped and publishes load only, so the memory, filesystem,
+  # read-only and clock arms fire after 10m. The undervoltage arm is PiUndervoltageMissing's, below.
   - interval: 1m
     input_series:
       - series: 'up{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
@@ -612,6 +622,16 @@ tests:
             exp_annotations:
               summary: "daniel-pi publishes no read-only series."
               description: "daniel-pi is scraped but its node-exporter publishes no series for the read-only arm of the Pi checks, so nothing is watching it. Read the exporter on the host."
+          - exp_labels:
+              arm: clock
+              instance: daniel-pi
+              job: node-pi
+              origin: daniel-pi
+              service: daniel-pi
+              severity: warning
+            exp_annotations:
+              summary: "daniel-pi publishes no clock series."
+              description: "daniel-pi is scraped but its node-exporter publishes no series for the clock arm of the Pi checks, so nothing is watching it. Read the exporter on the host."
   # PiUndervoltageMissing. The Pi is scraped and publishes load only, so the undervoltage arm
   # fires once, unshadowed, after 10m. A second Pi whose scrape is dead (up 0) stays quiet:
   # ScrapeTargetDown owns that outage.
@@ -699,6 +719,83 @@ tests:
             exp_annotations:
               summary: "Only 0 hosts report temperature sensors, under the floor of 3."
               description: "The host temperature check needs a non-NVMe hwmon sensor from each of the three hosts, and 0 answer. The rest are unmonitored, not cool. Read the node scrape targets on Prometheus."
+  # HostClockUnsynchronised. box's kernel reports sync_status 0 with no offset, so the
+  # unsynchronised arm fires. server is synchronised but 0.6s slow, so the offset arm fires, which
+  # proves the absolute value. The Pi sits exactly at 0.5s, which is not over the limit. Both
+  # fire after the 15m hold.
+  - interval: 1m
+    input_series:
+      - series: 'node_timex_sync_status{instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0x30'
+      - series: 'node_timex_offset_seconds{instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0x30'
+      - series: 'node_timex_sync_status{instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '1x30'
+      - series: 'node_timex_offset_seconds{instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '-0.6x30'
+      - series: 'node_timex_sync_status{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '1x30'
+      - series: 'node_timex_offset_seconds{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '0.5x30'
+    alert_rule_test:
+      - alertname: HostClockUnsynchronised
+        eval_time: 14m
+        exp_alerts: []
+      - alertname: HostClockUnsynchronised
+        eval_time: 16m
+        exp_alerts:
+          - exp_labels:
+              arm: unsynchronised
+              instance: daniel-box
+              job: node
+              origin: daniel-box
+              service: daniel-box
+              severity: warning
+            exp_annotations:
+              summary: "daniel-box's clock is not in sync (unsynchronised)."
+              description: "The kernel on daniel-box reports its clock unsynchronised or more than 0.5s off, which breaks TOTP logins, ACME renewals, etcd and Loki ingestion. Read `timedatectl timesync-status` on the host."
+          - exp_labels:
+              arm: offset
+              instance: daniel-server
+              job: node
+              origin: daniel-server
+              service: daniel-server
+              severity: warning
+            exp_annotations:
+              summary: "daniel-server's clock is not in sync (offset)."
+              description: "The kernel on daniel-server reports its clock unsynchronised or more than 0.5s off, which breaks TOTP logins, ACME renewals, etcd and Loki ingestion. Read `timedatectl timesync-status` on the host."
+  # HostClockUnsynchronised on the Pi. It booted without network on a stale time, so it is
+  # unsynchronised and 0.7s fast, and both arms fire.
+  - interval: 1m
+    input_series:
+      - series: 'node_timex_sync_status{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '0x30'
+      - series: 'node_timex_offset_seconds{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '0.7x30'
+    alert_rule_test:
+      - alertname: HostClockUnsynchronised
+        eval_time: 16m
+        exp_alerts:
+          - exp_labels:
+              arm: unsynchronised
+              instance: daniel-pi
+              job: node-pi
+              origin: daniel-pi
+              service: daniel-pi
+              severity: warning
+            exp_annotations:
+              summary: "daniel-pi's clock is not in sync (unsynchronised)."
+              description: "The kernel on daniel-pi reports its clock unsynchronised or more than 0.5s off, which breaks TOTP logins, ACME renewals, etcd and Loki ingestion. The Pi has no RTC, so a boot without network starts it at a stale time. Read `timedatectl timesync-status` on the host."
+          - exp_labels:
+              arm: offset
+              instance: daniel-pi
+              job: node-pi
+              origin: daniel-pi
+              service: daniel-pi
+              severity: warning
+            exp_annotations:
+              summary: "daniel-pi's clock is not in sync (offset)."
+              description: "The kernel on daniel-pi reports its clock unsynchronised or more than 0.5s off, which breaks TOTP logins, ACME renewals, etcd and Loki ingestion. The Pi has no RTC, so a boot without network starts it at a stale time. Read `timedatectl timesync-status` on the host."
   # A dead exporter. Both node scrapes read up 0 and every other series is absent, so the
   # exporter is ScrapeTargetDown's: no per-host rule fires beside it, which is why A1 has no
   # inhibit. The two coverage floors carry no job or instance and fire as well, the safe
@@ -738,6 +835,9 @@ tests:
         eval_time: 30m
         exp_alerts: []
       - alertname: HostMetricsMissing
+        eval_time: 30m
+        exp_alerts: []
+      - alertname: HostClockUnsynchronised
         eval_time: 30m
         exp_alerts: []
       - alertname: PiUndervoltage

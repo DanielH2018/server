@@ -1,0 +1,20 @@
+---
+# Gives the MetalLB speaker a memory REQUEST (no limit) so its pods leave BestEffort, the
+# kubelet's first eviction under node memory pressure (#8326). The speaker announces every
+# LoadBalancer VIP, so an evicted speaker takes the node's announcements with it. Upstream ships
+# the container with no `resources`. The value is k3s_metallb_speaker_memory_request in
+# defaults/main.yml; a kustomize patch is copied verbatim and cannot read a variable, so
+# tests/k8s/test_metallb_vendored_manifest.py holds the two equal.
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: speaker
+  namespace: metallb-system
+spec:
+  template:
+    spec:
+      containers:
+        - name: speaker
+          resources:
+            requests:
+              memory: 128Mi

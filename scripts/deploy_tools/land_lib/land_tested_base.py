@@ -1,6 +1,6 @@
 """The master commit a head's green `ci.yml` PR run tested it against (issue #5487).
 
-`merge._master_paths_since` judges a green head stale by what master changed since this
+`stale_base.master_paths_since` judges a green head stale by what master changed since this
 commit. A pull_request run checks out `refs/pull/N/merge`, built when the run was triggered, so
 a PR pushed after master moved was tested against the newer master and the merge base alone
 would send it through a second CI run it did not need.

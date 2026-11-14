@@ -26,9 +26,9 @@ nothing the updater does not. That ends the wait as `deferred`, exit 4, so a cal
 from a resume point without reading the verdict text. A `deferred` whose log carries
 cause `promote-timeout` on its `LAND-RESULT:` line stays `gave-up`: no promotion covered a tag
 Flux applies, and a publish refusal does not clear on its own. So does one with cause
-`gate-unreadable`: the health gate could not read its store, and nothing gates health again
-(#5543). So does one with cause `gate-stale`: the gate's tree was older than `origin/master`
-(#7816). The cause decides, never the note beside it (#7911, #7969); a log from before
+`gate-unreadable`: the health gate could not read its store, or the promotion wait found no
+kubectl or kubeconfig, and nothing gates health again (#5543). So does one with cause
+`gate-stale`: the gate's tree was older than `origin/master` (#7816). The cause decides, never the note beside it (#7911, #7969); a log from before
 `LAND-RESULT:` existed falls back to the notes.
 """
 
