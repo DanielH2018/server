@@ -1,6 +1,6 @@
 # jellyfin — the media server, and the fleet's only GPU workload
 
-Jellyfin, transcoding on the Intel GPU the `dri-device-plugin` role advertises. It reads the
+Jellyfin, transcoding on the AMD GPU the `dri-device-plugin` role advertises. It reads the
 shared `media-data` library and owns its own config volume.
 
 This file holds the rules. `docs/jellyfin-plugins.md` holds the per-plugin record — what each of the
