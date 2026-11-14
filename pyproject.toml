@@ -174,6 +174,9 @@ pythonpath = [
   "hosts/components/fake-remux/files",
   "hosts/components/hypervisor/files",
   "hosts/components/worktree-holders/files",
+  # gh_quota.py is the ledger scripts/lib/gh.py records each call into, so every test that
+  # imports lib.gh needs it, as does the component's own test.
+  "hosts/components/gh-quota/files",
   # `scripts` resolves the cross-directory `from lib.docs_provenance import ...` form (a PEP 420
   # namespace package — the subdirectories deliberately have no __init__.py, which would change
   # how pytest names the test modules under them). Each remaining subdirectory is listed as well
@@ -227,7 +230,7 @@ extend-exclude = [
 # rootq's root script runs under /usr/bin/python3 too, because uv's interpreter sits under a
 # user's home, which root must not execute from; hosts/components/claude-code/tests/test_rootq.py
 # parses it with the 3.12 grammar.
-per-file-target-version = { "hosts/components/claude-code/files/homelab_rootq.py" = "py312", "hosts/components/claude-code/files/homelab_rootq_socket.py" = "py312", "hosts/components/claude-code/files/rootq_socket.py" = "py312", "hosts/lib/homelab-reconcile" = "py312", "hosts/lib/reconcile_lib/*.py" = "py312", "hosts/lib/ci_verdict.py" = "py312", "hosts/lib/k3s_gates.py" = "py312", "hosts/lib/homelab-k3s-restart" = "py312", "hosts/lib/homelab_repo_sign.py" = "py312", "hosts/lib/host_lib.py" = "py312" }
+per-file-target-version = { "hosts/components/gh-quota/files/gh_quota.py" = "py312", "hosts/components/claude-code/files/homelab_rootq.py" = "py312", "hosts/components/claude-code/files/homelab_rootq_socket.py" = "py312", "hosts/components/claude-code/files/rootq_socket.py" = "py312", "hosts/lib/homelab-reconcile" = "py312", "hosts/lib/reconcile_lib/*.py" = "py312", "hosts/lib/ci_verdict.py" = "py312", "hosts/lib/k3s_gates.py" = "py312", "hosts/lib/homelab-k3s-restart" = "py312", "hosts/lib/homelab_repo_sign.py" = "py312", "hosts/lib/host_lib.py" = "py312" }
 
 [tool.ruff.lint]
 # Bug-catching rules only — pyflakes F (unused imports, undefined names, f-string bugs),
@@ -402,6 +405,7 @@ python-version = "3.15"
 extra-paths = [
   "tests",
   "hosts/components/worktree-holders/files",
+  "hosts/components/gh-quota/files",
   "hosts/lib",
   "hosts/components/deploy-ui/files",
   "k8s/roles/monitor-bridge/files",

@@ -107,6 +107,8 @@ components:
   - uv
   - vale
   - worktree-holders
+  # The GitHub spend ledger that scripts/lib/gh.py and ghread record into (docs/github-quota.md).
+  - gh-quota
   - host-hardening
   - rsyslog-filter
 units:

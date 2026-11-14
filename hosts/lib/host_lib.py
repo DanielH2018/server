@@ -10,7 +10,8 @@ script (a ``lib:`` entry in its ``component.yml``), and the script does a
 scripts: the Cloudflare-1010 User-Agent on the Discord POST and its length cap, the
 torn-write-safe atomic state write, the config.env parser, the kubectl runner, the RFC3339
 parser, the GitHub token lookup and REST read, the journal-aware ``log``
-with its ``logfmt`` fields and crash hook, and the node-exporter textfile write. Stdlib only.
+with its ``logfmt`` fields and crash hook, the node-exporter textfile write, and the start of a
+session's oneshot unit with the guarded read of what it left. Stdlib only.
 
 The repository signer (homelab_repo_sign.py) imports it under the host's /usr/bin/python3,
 Ubuntu 24.04's 3.12, so this file keeps to the 3.12 grammar (#6202): pyproject.toml formats
@@ -20,9 +21,12 @@ it for py312, and tests/test_host_lib.py parses it with that grammar.
 from __future__ import annotations
 
 import datetime as _dt
+import errno
 import json
 import os
 import re
+import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -32,6 +36,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from collections.abc import Callable, Collection, Mapping
+from dataclasses import dataclass
 
 # Cron inherits neither a useful PATH nor KUBECONFIG. `k3s` and `kubectl` both live in
 # /usr/local/bin, which the cron default omits, so a caller that does not fix this gets an
@@ -690,3 +695,98 @@ def journal_reader(binary, window_hours, timeout):
         return [line for line in proc.stdout.splitlines() if line.strip()]
 
     return journal
+
+
+# A unit an agent's controller starts, and the files its session leaves for it (dotfiles#967's
+# I1 and I3). The renovate agent and triage both cross this boundary.
+
+
+@dataclass(frozen=True)
+class UnitEnd:
+    """How a oneshot unit started with `start_unit` ended.
+
+    Attributes:
+        result: systemd's `Result` (`success`, `exit-code`, `timeout`, …), or `deadline` when the
+            caller's wait ran out first; the unit then keeps running on its own.
+        status: the main process's exit status, or -1 when it is unknown.
+    """
+
+    result: str
+    status: int
+
+
+def start_unit(unit: str, run: Callable[..., tuple[int, str]], timeout: int) -> UnitEnd:
+    """Start the oneshot `unit`, wait up to `timeout` seconds for it to end, and say how it ended.
+
+    `run(argv, timeout=...)` returns (returncode, output), and 124 when it timed out. Polkit
+    decides whether this process's user may start `unit`. `systemctl start` blocks until a
+    oneshot unit finishes, so `Result` is read after it returns, never while it runs.
+    """
+    rc, _ = run(["systemctl", "start", unit], timeout=timeout)
+    if rc == 124:
+        return UnitEnd("deadline", -1)
+    _, out = run(["systemctl", "show", "-p", "Result", "-p", "ExecMainStatus", unit])
+    props = dict(line.split("=", 1) for line in out.splitlines() if "=" in line)
+    status = props.get("ExecMainStatus", "").strip()
+    return UnitEnd(
+        props.get("Result", "").strip(), int(status) if status.isdigit() else -1
+    )
+
+
+def fresh_dir(parent: str, name: str) -> str:
+    """An empty `name` directory in `parent` for the next session; a leftover one is set aside.
+
+    The controller owns `parent` and the new directory, which is setgid and group-writable so
+    the session's group writes into it and the controller reads what it wrote. The session cannot
+    replace the directory, because only the controller may write `parent` itself.
+    """
+    path = os.path.join(parent, name)
+    os.makedirs(parent, exist_ok=True)
+    if os.path.lexists(path):
+        stale = f"{path}.stale-{int(time.time())}"
+        os.rename(path, stale)
+        shutil.rmtree(stale, ignore_errors=True)
+    os.mkdir(path)
+    os.chmod(path, 0o2770)
+    return path
+
+
+def read_regular(dir_fd: int, name: str, limit: int) -> bytes:
+    """The bytes of regular file `name` in `dir_fd`, or raise ValueError naming why not.
+
+    The file is opened without following a link and without blocking, so a symlink, a FIFO or a
+    device node is refused rather than followed or waited on, and one over `limit` bytes is
+    refused rather than read whole.
+    """
+    try:
+        fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=dir_fd)
+    except OSError as exc:
+        if exc.errno == errno.ELOOP:
+            raise ValueError("a symlink") from exc
+        raise ValueError(f"cannot open it: {exc.strerror}") from exc
+    try:
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            raise ValueError("not a regular file")
+        data = os.read(fd, limit + 1)
+    finally:
+        os.close(fd)
+    if len(data) > limit:
+        raise ValueError(f"over {limit} bytes")
+    return data
+
+
+def read_untrusted(directory: str, name: str, limit: int) -> str:
+    """The text of regular file `name` in `directory`, read as `read_regular` reads; "" when absent.
+
+    `directory` itself is opened without following a link, so a session that replaced it with a
+    link to another tree gets an OSError, not a read of that tree.
+    """
+    dir_fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        try:
+            os.stat(name, dir_fd=dir_fd, follow_symlinks=False)
+        except FileNotFoundError:
+            return ""
+        return read_regular(dir_fd, name, limit).decode("utf-8", errors="replace")
+    finally:
+        os.close(dir_fd)

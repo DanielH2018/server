@@ -1,7 +1,7 @@
 """The host-write census row of target slice D5.1c: no host script writes a cluster object.
 
-It reads the `templates/` and `files/` of `roles/setup/k8s_host_files/`. A `kubectl` write there
-is a second writer beside Flux (contract C4).
+It reads the `templates/` and `files/` of every `hosts/components/<component>/`. A `kubectl`
+write there is a second writer beside Flux (contract C4).
 """
 
 import ast
@@ -9,8 +9,12 @@ import re
 
 from _row_table import Census, Subject, tracked
 
-_HOST_FILES_ROLE = "ansible/roles/setup/k8s_host_files/"
 _REGISTRY_GC_SCRIPT = "hosts/components/registry-gc/templates/registry-gc.sh.j2"
+_LONGHORN_BACKUP_HEALTH = (
+    "hosts/components/k3s-host-checks/files/longhorn_backup_health.py"
+)
+_TAKEOVER_CHECK = "hosts/components/claude-code/files/homelab-takeover-check.sh"
+_SUC_REHEARSAL = "hosts/components/hypervisor/files/suc-rehearsal-guest-run.sh"
 
 # ── No host script writes a cluster object ────────────────────────────────────────────
 
@@ -27,10 +31,10 @@ _WRITE_VERBS = frozenset(
         "set",
     }
 )
-# `kubectl`, or a shell variable holding it (`$KUBECTL`, `${KUBECTL}`), then any flags with
-# their values, then the subcommand. A `kubectl exec … -- cscli delete` names `exec`.
+# `kubectl`, or a shell variable or array holding it (`$KUBECTL`, `"${KUBECTL[@]}"`), then any
+# flags with their values, then the subcommand. A `kubectl exec … -- cscli delete` names `exec`.
 _SHELL_KUBECTL = re.compile(
-    r"(?:\bkubectl\b|\$\{?\w*KUBECTL\w*\}?)"
+    r"(?:\bkubectl\b|\$\{?\w*KUBECTL\w*(?:\[@\])?\}?\"?)"
     r"(?:\s+-{1,2}[\w-]+(?:=\S+|\s+(?!-|(?:"
     + "|".join(_WRITE_VERBS)
     + r")\b)[^\s;|&]+)?)*"
@@ -151,9 +155,11 @@ def kubectl_writes(subject: Subject) -> list[str]:
 
 
 def _host_scripts() -> list[str]:
-    return sorted(
-        set(tracked(_HOST_FILES_ROLE + "templates/*", _HOST_FILES_ROLE + "files/*"))
-        | {_REGISTRY_GC_SCRIPT}
+    # A `.json` file there is settings data, and claude-settings.json names `kubectl delete`.
+    return tracked(
+        "hosts/components/*/templates/*",
+        "hosts/components/*/files/*",
+        ":(exclude)hosts/components/*/files/*.json",
     )
 
 
@@ -177,6 +183,7 @@ HOST_SCRIPT_WRITES = Census(
         Subject("registry-gc.sh.j2", "#!/bin/bash\n" + REGISTRY_GC_SCALE),
         Subject("x.sh.j2", "k3s kubectl -n homelab rollout restart deploy/x\n"),
         Subject("x.sh", "${KUBECTL} --namespace=homelab annotate pod x a=b\n"),
+        Subject("x.sh", 'retry "${KUBECTL[@]}" -n "$NS" delete pod x\n'),
         # A boolean flag must not swallow the verb as its value.
         Subject("x.sh", "kubectl --insecure-skip-tls-verify delete pod x\n"),
         Subject(
@@ -203,11 +210,9 @@ HOST_SCRIPT_WRITES = Census(
             'run([K3S, "kubectl", "-n", NS, "exec", "deploy/x", "--", "cscli", "delete"])\n',
         ),
     ),
-    # 24 installed scripts, modules and files when the row landed (2026-10-16). H2's family PRs
-    # move most of them to setup roles, so the floor and the member are the one only D5 moves.
-    # pi-peer-backup's forced-command wrapper, the other, moved to `k8s_host_files` at its flip.
-    min_matches=1,
-    must_find=frozenset({_REGISTRY_GC_SCRIPT}),
+    # 219 component templates and files on 2026-11-14.
+    min_matches=150,
+    must_find=frozenset({_REGISTRY_GC_SCRIPT, _LONGHORN_BACKUP_HEALTH}),
     allow={
         _REGISTRY_GC_SCRIPT: (
             "The script scales only deploy/ghcr-mirror and deploy/dockerhub-mirror, since D5 "
@@ -217,6 +222,14 @@ HOST_SCRIPT_WRITES = Census(
             "exception to C4 on that field ownership for the ghcr-mirror (#5732), #6536 "
             "extends it to the dockerhub-mirror, and the mirrors' GC stays a host script "
             "after the flip"
+        ),
+        _TAKEOVER_CHECK: (
+            "Its one apply is `--dry-run=server`, which writes no object, and the other "
+            "match is an `echo` reporting that apply's exit code"
+        ),
+        _SUC_REHEARSAL: (
+            "It runs inside the throwaway drill guest that etcd-restore-drill-vm creates, and "
+            "its applies go to that guest's own k3s, which Flux does not manage"
         ),
     },
 )

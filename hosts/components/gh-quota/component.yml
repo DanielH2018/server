@@ -1,0 +1,24 @@
+# The GitHub spend ledger (docs/github-quota.md). `scripts/lib/gh.py` and `ghread` call
+# `gh_quota.record` for each `gh` call they make, and `gh-quota status` reports the spend per
+# session beside GitHub's own count.
+#
+# One source ships to two paths. /usr/lib/homelab/gh_quota.py is the module the wrappers import,
+# and /usr/bin/gh-quota is the same file as a command.
+#
+# /etc/gh-quota.conf carries the mode. To stop recording on one host, set `gh_quota_mode: "off"`
+# in its host_vars: the module returns at once from that host's next package version on, and
+# `gh-quota mode` prints which it is.
+#
+# /run/gh-quota is world-writable with the sticky bit, because each user that calls GitHub
+# writes its own ledger file there. The files hold call counts and a token's fingerprint, never
+# a token.
+#
+# Each file carries `has_claude_code`, so a host that stops running Claude sessions loses the
+# ledger with its next package version.
+defaults:
+  gh_quota_mode: record
+files:
+  - {src: files/gh_quota.py, dst: /usr/lib/homelab/gh_quota.py, when: has_claude_code}
+  - {src: files/gh_quota.py, dst: /usr/bin/gh-quota, mode: "0755", when: has_claude_code}
+  - {src: templates/gh-quota.conf.j2, dst: /etc/gh-quota.conf, when: has_claude_code}
+  - {src: tmpfiles.d/homelab-gh-quota.conf, dst: /usr/lib/tmpfiles.d/homelab-gh-quota.conf, when: has_claude_code}

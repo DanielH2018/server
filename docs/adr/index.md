@@ -78,6 +78,7 @@ wrong is worth more than the record of one that did not.
 | [0031](0031-each-kind-of-fact-has-one-stateless-detector.md) | Each kind of documented fact has one home and one stateless detector | Accepted | 2026-11-13 |
 | [0032](0032-cis-heavy-jobs-may-run-on-runner-pods.md) | CI's two heavy jobs may run on runner pods, and the repository stays public | Accepted | 2026-11-13 |
 | [0033](0033-game-server-replicas-are-runtime-state.md) | A game server's replica count is runtime state, set from deploy.local | Accepted | 2026-11-14 |
+| [0034](0034-github-quota-is-budgeted-per-session-in-the-wrappers.md) | GitHub quota is budgeted per session, inside the wrappers that already run gh | Accepted | 2026-11-14 |
 
 ## The long-form behind a record
 
