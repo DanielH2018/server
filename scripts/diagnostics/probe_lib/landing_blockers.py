@@ -66,7 +66,6 @@ from collections.abc import Callable
 from pathlib import Path
 
 from land_lib.detach import _VERDICT_LINE, default_log_dir, error_in, verdict_in
-from lib import yaml_fast
 from lib.inventory_lists import LANDING_HOST, host_vars_file
 from lib.repo_paths import HOST_LIB_FILES, REPO
 
@@ -192,6 +191,9 @@ def deploy_ui_url(host_vars: Path | None = None) -> str:
     Args:
         host_vars: the host_vars file to read; the GitOps host's when omitted.
     """
+    # Call-time: the `landing-clear` cc-wait source imports this module outside the venv.
+    from lib import yaml_fast
+
     data = yaml_fast.safe_load((host_vars or host_vars_file(LANDING_HOST)).read_text())
     return f"http://{data['server_ip']}:{DEPLOY_UI_PORT}"
 
