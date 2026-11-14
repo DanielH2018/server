@@ -15,6 +15,8 @@ from lib import gh_rate_limit
 
 PRIMARY = "gh: API rate limit exceeded for user ID 41801780. (HTTP 403)"
 SECONDARY = "gh: You have exceeded a secondary rate limit. (HTTP 403)"
+# The GraphQL quota's spelling carries "already" inside the phrase (#8708).
+GRAPHQL = "GraphQL: API rate limit already exceeded for user ID 41801780."
 NOW = 1_000_000.0
 
 
@@ -26,7 +28,7 @@ def _run_answering(stdout: str):
     return run
 
 
-@pytest.mark.parametrize("why", [PRIMARY, SECONDARY])
+@pytest.mark.parametrize("why", [PRIMARY, SECONDARY, GRAPHQL])
 def test_a_rate_limit_refusal_is_recognised(why):
     assert gh_rate_limit.is_rate_limited(why)
 
