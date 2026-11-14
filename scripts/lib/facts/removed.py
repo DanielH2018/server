@@ -89,7 +89,7 @@ def removed_lines(repo: Path, base: str) -> list[str]:
 
 
 # A full-line comment, as ``is_comment_line`` reads one line.
-_COMMENT_LINES = re.compile(r"(?m)^[ \t]*(?:#(?!!)|//).*$")
+COMMENT_LINES = re.compile(r"(?m)^[ \t]*(?:#(?!!)|//).*$")
 
 
 class Code:
@@ -137,7 +137,7 @@ class Code:
     def holds_outside_comments(self, tok: str) -> bool:
         """``holds``, with every full-line comment left out of the content."""
         if self._no_comments is None:
-            self._no_comments = _COMMENT_LINES.sub("", self._all)
+            self._no_comments = COMMENT_LINES.sub("", self._all)
         return self._on_a_path(tok) or tok in self._no_comments
 
     def comment_uses(self, tokens: set[str]) -> dict[str, list[str]]:
@@ -149,14 +149,14 @@ class Code:
         if not tokens:
             return {}
         # One pass over every comment finds the few tokens worth locating line by line.
-        every_comment = "\n".join(_COMMENT_LINES.findall(self._all))
+        every_comment = "\n".join(COMMENT_LINES.findall(self._all))
         named = identifiers(every_comment) & tokens
         uses: dict[str, list[str]] = {}
         for rel, text in self._texts.items():
             if not any(tok in text for tok in named):
                 continue
             line, at = 1, 0
-            for found in _COMMENT_LINES.finditer(text):
+            for found in COMMENT_LINES.finditer(text):
                 here = identifiers(found.group()) & named
                 if here:
                     line += text.count("\n", at, found.start())

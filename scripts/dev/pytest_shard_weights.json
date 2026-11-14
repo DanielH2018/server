@@ -773,6 +773,7 @@
  "scripts/lib/tests/test_facts_notice.py": 0.96,
  "scripts/lib/tests/test_facts_pins.py": 0.0,
  "scripts/lib/tests/test_facts_removed_advice.py": 0.21,
+ "scripts/lib/tests/test_facts_renames.py": 0.08,
  "scripts/lib/tests/test_facts_report.py": 0.24,
  "scripts/lib/tests/test_fanout_lock.py": 0.0,
  "scripts/lib/tests/test_function_imports.py": 4.44,
