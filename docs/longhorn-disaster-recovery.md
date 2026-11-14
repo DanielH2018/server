@@ -74,8 +74,11 @@ uv run python scripts/secrets_mgmt/recovery_kit.py record   # then commit secret
 `recovery_kit.py record` writes the refresh date to `secrets/recovery_kit.yml`, the only
 record of the kit's age. The daily secret-rotation audit on daniel-box runs
 `recovery_kit.py check`, which reads down when the stamp is missing or older than
-`MAX_AGE_DAYS` in `scripts/secrets_mgmt/recovery_kit.py`. `SecretRotationAuditFailed` then
-names the stale kit. No CI check reads the stamp's age, so an old kit never turns a PR red.
+`MAX_AGE_DAYS` in `scripts/secrets_mgmt/recovery_kit.py`. The audit writes that verdict to
+its own `recovery-kit` check, and `RecoveryKitStale` fires on it. The kit's verdict stays out
+of `SecretRotationAuditFailed`, so a stale kit cannot hide an overdue secret. A fresh `record`
+clears the alert at the next daily audit run. No CI check reads the stamp's age, so an old
+kit never turns a PR red.
 
 `secrets.yml` inside the bundle stays SOPS-encrypted — useless without the age key — so the
 bundle is no more sensitive than the GitHub repo; the age key is the part to protect.

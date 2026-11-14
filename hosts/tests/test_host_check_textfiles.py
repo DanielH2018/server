@@ -231,22 +231,36 @@ def test_a_clean_audit_writes_success_one_and_exits_zero(tmp_path):
 
 
 def test_a_fresh_recovery_kit_is_clean(tmp_path):
-    _run_audit(tmp_path, kit_rc=0)
+    textfile_dir, _ = _run_audit(tmp_path, kit_rc=0)
 
-    argv = (tmp_path / "uv-argv").read_text()
-    assert "secrets_mgmt/recovery_kit.py check" in argv
-    assert "--extra-down" not in argv
+    assert "secrets_mgmt/recovery_kit.py check" in (tmp_path / "uv-argv").read_text()
+    assert (
+        _series(textfile_dir, "recovery-kit")[
+            'homelab_check_success{check="recovery-kit"}'
+        ]
+        == "1"
+    )
 
 
 def test_a_stale_recovery_kit_is_flagged(tmp_path):
-    """The kit's reason reaches the audit as an extra down reason, so the verdict names it."""
-    _run_audit(tmp_path, kit_rc=1)
+    """The kit writes its own down verdict and leaves the audit's verdict and exit code alone."""
+    textfile_dir, code = _run_audit(tmp_path, audit_rc=0, kit_rc=1)
 
     assert (
-        "audit --verdict --extra-down the kit is stale"
-        in (tmp_path / "uv-argv").read_text()
+        _series(textfile_dir, "recovery-kit")[
+            'homelab_check_success{check="recovery-kit"}'
+        ]
+        == "0"
     )
-    assert "status=down the kit is stale" in _logged(tmp_path)
+    assert "-t recovery-kit status=down the kit is stale" in _logged(tmp_path)
+    assert "--extra-down" not in (tmp_path / "uv-argv").read_text()
+    assert (
+        _series(textfile_dir, "secret-rotation-audit")[
+            'homelab_check_success{check="secret-rotation-audit"}'
+        ]
+        == "1"
+    )
+    assert code == 0
 
 
 def test_a_failed_audit_writes_success_zero_and_keeps_its_exit_code_for_the_timer(

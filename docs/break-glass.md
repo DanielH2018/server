@@ -95,8 +95,9 @@ otherwise; none of the values below are secrets themselves, only names and locat
    so beside it keep the `claude` issue register exported by `findings.py export`: every
    refuted and accepted ruling lives only on GitHub, and without it the next review re-files
    them.
-   Each refresh ends with `scripts/secrets_mgmt/recovery_kit.py record`, whose stamp the daily secret-rotation
-   audit reads; the audit reads down once the kit is older than its limit.
+   Each refresh ends with `scripts/secrets_mgmt/recovery_kit.py record`. The daily
+   secret-rotation audit reads that stamp, and `RecoveryKitStale` fires once the kit is older
+   than its limit.
    The bundle is also the render source for break-glass promotion (*Scenario: GitHub, GHCR or
    Sigstore is unreachable*), so a refresh covers that use too. Beside it the kit holds the
    **break-glass private key**, a password-protected cosign key whose public half the flux role

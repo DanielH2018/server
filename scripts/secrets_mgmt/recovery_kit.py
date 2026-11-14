@@ -9,8 +9,8 @@ refresh, so the operator records each one in `secrets/recovery_kit.yml`:
            PR like any other change.
   check  — print the kit's age and exit 0, or print one reason and exit 1 when the stamp is
            missing, unreadable, dated in the future, or older than MAX_AGE_DAYS. The daily
-           secret-rotation audit on daniel-box runs it and adds the reason to its down
-           verdict, which SecretRotationAuditFailed reads.
+           secret-rotation audit on daniel-box runs it and writes the verdict to its own
+           `recovery-kit` check, which RecoveryKitStale reads.
 
 No test or prek hook runs `check`: the stamp ages with the calendar, so a CI check would turn
 every unrelated PR red on the day the kit crossed the limit.
