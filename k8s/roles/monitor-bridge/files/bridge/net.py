@@ -10,14 +10,10 @@ from-import, because a from-import would copy the function into the caller's glo
 time and the stub would change nothing that runs. That rule is enforced by
 ansible/tests/services/test_bridge_patch_boundary.py.
 
-CONFIGURATION IS A PARAMETER, NOT A GLOBAL. Every helper that reads a URL or the origin pin
-takes the frozen `Config` as its FIRST argument, so this module holds no env-derived state and
-a test states the configuration it wants by handing one in. `_get_json`, `_post_json` and
-`_instant_query` read no configuration and take none.
-
-The selector builder `origin_sel` lives here rather than beside the checks because it is the
-query-building half of fetching, it reads `cfg.PROM_ORIGIN`, and the gates test renders it to
-prove where the origin pin lands.
+CONFIGURATION IS A PARAMETER, NOT A GLOBAL. Every helper that reads a URL takes the frozen
+`Config` as its FIRST argument, so this module holds no env-derived state and a test states
+the configuration it wants by handing one in. `_get_json`, `_post_json` and `_instant_query`
+read no configuration and take none.
 """
 
 from collections.abc import Callable
@@ -37,19 +33,6 @@ from bridge.types import JsonObject, JsonValue, as_list, as_object, as_object_li
 Opener = Callable[..., Any]
 # What `_get`'s `read` makes of the response: parsed JSON, or the raw bytes.
 _Body = TypeVar("_Body")
-
-
-def origin_sel(cfg: Config, *matchers: str) -> str:
-    """A `{...}` label-matcher block: the given matchers plus the origin pin, when one applies.
-
-    Returns "" when there is nothing to select on, so `"up%s" % origin_sel(cfg)` is a bare `up`
-    against a Prometheus whose series carry no `origin` label, and `up{origin="daniel-server"}`
-    against the cluster instance every deployed check reads.
-    """
-    parts = [m for m in matchers if m]
-    if cfg.PROM_ORIGIN:
-        parts.append(cfg.PROM_ORIGIN)
-    return "{%s}" % ", ".join(parts) if parts else ""
 
 
 # HTTP / parsing helpers (pure-ish, unit-tested)

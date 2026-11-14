@@ -212,11 +212,9 @@ def test_an_up_probe_that_fails_does_not_suppress(cfg):
     assert ran == ["host_packages"]
 
 
-# The probe is a bare `up`, not pinned to PROM_ORIGIN. The `cfg` fixture leaves PROM_ORIGIN
-# empty, so a pinned probe would render as a bare `up` there too and the pin the pod actually
-# runs with would never appear in a test. One target per node-exporter, labelled the way
-# Prometheus labels them: the `node` job relabels each target with its own node name, `node-pi`
-# is statically labelled daniel-pi.
+# The probe is a bare `up`, not pinned to one `origin`. One target per node-exporter, labelled
+# the way Prometheus labels them: the `node` job relabels each target with its own node name,
+# `node-pi` is statically labelled daniel-pi.
 _THREE_ORIGIN_UP = [
     ({"job": "node", "origin": "daniel-box"}, 0.0),
     ({"job": "node", "origin": "daniel-server"}, 1.0),
@@ -224,15 +222,13 @@ _THREE_ORIGIN_UP = [
 ]
 
 
-def test_a_dead_node_exporter_is_seen_under_the_deployed_origin_pin(cfg):
+def test_a_dead_node_exporter_on_another_origin_suppresses_its_dependents(cfg):
     """daniel-box's node-exporter is down; host_packages must not also page.
 
     Under a pinned probe the whole vector was invisible: daniel-server's only series is
     healthy, so `up{origin="daniel-server"}` carried no dead exporter to suppress on.
     """
-    ran, exported, _ = _cycle(
-        replace(cfg, PROM_ORIGIN='origin="daniel-server"'), _THREE_ORIGIN_UP
-    )
+    ran, exported, _ = _cycle(cfg, _THREE_ORIGIN_UP)
     assert "host_packages" not in ran
     assert "targets" in ran
     assert exported["host_packages"] is False
