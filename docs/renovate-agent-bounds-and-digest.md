@@ -78,7 +78,7 @@ digest names each nomination the runner did not land, with why.
 **The session runs in its own unit** (guardrails plan B2r-2a). The runner starts
 `homelab-renovate-agent-session.service`, which polkit lets only the controller start
 (`templates/50-renovate-agent-session.rules.j2`), and waits for it through
-`agent_toolbox.py:start_unit`, the helper the landings use too. The unit runs
+`hosts/lib/host_lib.py:start_unit`, the helper the landings use too. The unit runs
 `files/renovate_session.py`: the worktree gate and its recreation, then the headless session.
 Its `TimeoutStartSec` is `renovate_agent_session_timeout_s`, so systemd stops a session at its
 wall clock and the runner reads `Result=timeout`. The script captures the session's output and
@@ -106,8 +106,10 @@ group so it can read what the session wrote.
 
 This runner and triage's `claude_triage_run.py` stay separate modules (decided 2026-11-14).
 They share only the call that starts a session, and even that differs: the flags, how each
-hands the session its token, and how each reads the output. `start_unit` is the part a shared
-session start needs, and triage can adopt it when B2 moves its session into a unit.
+hands the session its token, and how each reads the output. What they do share lives in
+`hosts/lib/host_lib.py`: `start_unit`, `fresh_dir` and `read_untrusted`. The runner reads the
+session's result with a 1 MiB cap, `SESSION_OUTPUT_MAX` in `files/renovate_agent.py`, because a
+long closing summary can pass the 16 KiB a request file gets.
 
 The lander unit's `ExecStartPre` replaces the last run's line with a `VERDICT: none` line before
 the lock wait, and the script writes `PENDING` once it holds the lock. A unit that systemd stops
