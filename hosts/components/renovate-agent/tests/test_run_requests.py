@@ -11,6 +11,7 @@ import json
 import os
 
 import agent_toolbox
+import host_lib
 import pytest
 import renovate_agent
 import renovate_session
@@ -58,7 +59,7 @@ class _Gh:
 
 def _run(tmp_path, gh=None):
     gh = gh or _Gh()
-    requests = run_requests.fresh_dir(str(tmp_path))
+    requests = host_lib.fresh_dir(str(tmp_path), run_requests.REQUESTS_DIR)
     return requests, gh
 
 
@@ -173,7 +174,7 @@ def test_a_request_the_runner_must_not_trust_is_refused_without_a_gh_call(
 def test_a_leftover_requests_directory_is_set_aside_unread(tmp_path):
     requests, _ = _run(tmp_path)
     _write(requests, "71-close.json", {"action": "close", "pr": 71})
-    again = run_requests.fresh_dir(str(tmp_path))
+    again = host_lib.fresh_dir(str(tmp_path), run_requests.REQUESTS_DIR)
     assert again == requests and os.listdir(again) == []
 
 
@@ -344,7 +345,7 @@ def test_a_session_file_planted_as_a_symlink_is_refused_not_followed(tmp_path, p
     exchange = tmp_path / "exchange"
     exchange.mkdir()
     if planted == "file":
-        out = run_requests.fresh_dir(str(exchange), "out")
+        out = host_lib.fresh_dir(str(exchange), "out")
         os.symlink(
             secret / renovate_session.OUTPUT_FILE,
             os.path.join(out, renovate_session.OUTPUT_FILE),
@@ -353,3 +354,11 @@ def test_a_session_file_planted_as_a_symlink_is_refused_not_followed(tmp_path, p
         os.symlink(secret, exchange / "out")
         out = str(exchange / "out")
     assert renovate_agent.session_files(out) == ("", "")
+
+
+def test_a_session_result_larger_than_a_request_is_read_whole(tmp_path):
+    """A long closing summary is not a hostile file; refusing it reads as a failed session."""
+    out = host_lib.fresh_dir(str(tmp_path), "out")
+    result = json.dumps({"type": "result", "result": "x" * (64 * 1024)})
+    (tmp_path / "out" / renovate_session.OUTPUT_FILE).write_text(result)
+    assert renovate_agent.session_files(out) == ("", result)

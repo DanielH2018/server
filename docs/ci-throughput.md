@@ -173,18 +173,27 @@ pull-request numbers only and records what it built.
 
 B3 lands in four steps, each one exercised before the next:
 
-1. **A labelled PR run asks the proof.** `prove` runs on a pull request that carries the
-   `landing-batch` label, and `tested_tree.py prove-head` answers whether the head carries a
-   tested-tree record. A member's own run then takes two short jobs. The label only decides
-   whether `prove` takes a runner, so an unlabelled PR run pays nothing. The question does
-   not compare trees: the tree a pull-request run checks out is the merge GitHub built at
-   the PR's last push, and the batch tested a different one. The landing compares the
-   recorded tree with `git merge-tree` of master and the head before it merges, and
-   master's run compares it again after.
+1. **A labelled PR run asks the proof (#8703).** `prove` runs on a pull request that
+   carries the `landing-batch` label, and `tested_tree.py prove-head` answers whether the
+   head carries a tested-tree record. A member's own run then takes two short jobs. The
+   label only decides whether `prove` takes a runner, so an unlabelled PR run pays nothing.
+   The question does not compare trees: the tree a pull-request run checks out is the
+   merge GitHub built at the PR's last push, and the batch tested a different one. The
+   landing compares the recorded tree with `git merge-tree` of master and the head before
+   it merges, and master's run compares it again after.
 1. **The batch's gate records each member's tree.** On a PR from a `queue/` branch of this
    repository, the gate reads the member numbers from the PR's body, rebuilds each stacked
    tree from the run's base and the members' heads, and records a tree on a head only when
-   the last rebuilt tree is the tree the run tested.
+   the last rebuilt tree is the tree the run tested (`tested_tree.py record-batch`). The
+   run tested only that last tree, and the record on an earlier member names a tree the
+   run never checked out: the decision under *What a batch proves* accepts that. A batch
+   the gate cannot rebuild is not red: its members land one at a time. A batch's run
+   executes its members' code with a token that can write statuses, so a fork's head must
+   never be stacked. The gate refuses a batch that names one, and that refusal is not the
+   boundary: a pull-request run takes its workflow and its scripts from the merge it tests,
+   so a stacked fork head would supply the gate's own code. The boundaries are who can push
+   a `queue/` branch, which is a collaborator, and the landing in the next step, which
+   stacks no fork's head.
 1. **The landing that holds the turn forms the batch.** A landing with an untested head that
    takes the turn stacks up to three more untested heads that stand in line behind it,
    pushes the stack to `queue/<its PR>`, opens the batch's pull request and waits for its

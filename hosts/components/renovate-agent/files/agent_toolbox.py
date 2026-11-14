@@ -87,36 +87,3 @@ class AgentTools:
 
 
 TOOLS = AgentTools()
-
-
-@dataclass(frozen=True)
-class UnitEnd:
-    """How a oneshot unit started with `start_unit` ended.
-
-    Attributes:
-        result: systemd's `Result` (`success`, `exit-code`, `timeout`, …), or `deadline` when the
-            caller's wait ran out first; the unit then keeps running on its own.
-        status: the main process's exit status, or -1 when it is unknown.
-    """
-
-    result: str
-    status: int
-
-
-def start_unit(unit: str, tools: AgentTools, timeout: int) -> UnitEnd:
-    """Start the oneshot `unit`, wait up to `timeout` seconds for it to end, and say how it ended.
-
-    Polkit decides whether this process's user may start `unit`. `systemctl start` blocks until a
-    oneshot unit finishes, so `Result` is read after it returns, never while it runs.
-    """
-    rc, _ = tools.run(["systemctl", "start", unit], timeout=timeout)
-    if rc == 124:
-        return UnitEnd("deadline", -1)
-    _, out = tools.run(
-        ["systemctl", "show", "-p", "Result", "-p", "ExecMainStatus", unit]
-    )
-    props = dict(line.split("=", 1) for line in out.splitlines() if "=" in line)
-    status = props.get("ExecMainStatus", "").strip()
-    return UnitEnd(
-        props.get("Result", "").strip(), int(status) if status.isdigit() else -1
-    )
