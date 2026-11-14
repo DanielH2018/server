@@ -16,9 +16,8 @@ from typing import Any
 
 from homelab_tool_fetch import Failure
 
-# Where a tree pins its interpreter, relative to the tree's root, first match wins. The builder
-# is installed from a package, so it reads trees from both sides of the ansible/ rename (ADR 0030).
-PYTHON_PINS = ("inventory/group_vars/all.yml", "ansible/inventory/group_vars/all.yml")
+# Where a tree pins its interpreter, relative to the tree's root.
+PYTHON_PIN = "inventory/group_vars/all.yml"
 _PIN_LINE = re.compile(r"""^host_python_version:\s*["']?([^"'\s#]*)["']?\s*(?:#.*)?$""")
 _PIN_VALUE = re.compile(r"\d+\.\d+(?:\.\d+)?")
 
@@ -32,13 +31,11 @@ def tree_python(tree: Path) -> str | None:
         Failure: reason `build`, for a pin that is not a dotted version, before it reaches an
           argv.
     """
-    for name in PYTHON_PINS:
-        try:
-            text = (tree / name).read_text()
-        except OSError:
-            continue
-        return _pin(text, name)
-    return None
+    try:
+        text = (tree / PYTHON_PIN).read_text()
+    except OSError:
+        return None
+    return _pin(text, PYTHON_PIN)
 
 
 def _pin(text: str, name: str) -> str | None:

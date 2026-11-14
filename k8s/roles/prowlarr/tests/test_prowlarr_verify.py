@@ -316,8 +316,9 @@ def test_a_flaresolverr_policy_only_change_renames_the_job(stubs, tmp_path):
 def test_the_verify_job_reads_no_other_roles_file():
     """The helper and the image come from `render_tag`, never a lookup into another role.
 
-    The deployer redeploys a role when a file it `lookup()`s in another role changes, and its
-    scan reads `verify/` too. tdarr's test has the red case for this scan.
+    A role's bundle re-renders, and Flux redeploys it, when a file it `lookup()`s in another role
+    changes, and `land.sh`'s cross-role scan reads `verify/` too. tdarr's test has the red case for
+    this scan.
     """
     staged = sorted((K8S_ROLES / TAG / "templates" / "verify").glob("*.j2"))
     assert [p.name for p in staged] == ["job.yaml.j2", "rbac.yaml.j2"]

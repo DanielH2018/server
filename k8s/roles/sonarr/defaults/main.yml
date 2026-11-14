@@ -97,7 +97,7 @@ k8s_claims:
 # Sonarr v5's Release Profile rule applied after the grab on v4. files/sonarr_air_date_guard.py
 # holds the rule and what it leaves alone. Retire this CronJob once Sonarr v5 stable ships and
 # a Release Profile's "do not download before air date" replaces it.
-sonarr_k8s_air_date_guard_image: python:3.14-alpine@sha256:f6a589d43c42b9e7f7dc67a12d37132491f362859a5d750607710cc56da3bc72
+sonarr_k8s_air_date_guard_image: python:3.15-alpine@sha256:0f9552bb28711333da16915ec146f5e6bb44a7fdac9ced15dc17c2e0206346dd
 # Every 5 minutes, matching monitor-bridge's Arr Queue Warnings cycle, so a fake is usually
 # removed before the warning it causes pages.
 sonarr_k8s_air_date_guard_schedule: "*/5 * * * *"

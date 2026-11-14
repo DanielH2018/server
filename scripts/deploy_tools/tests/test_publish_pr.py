@@ -139,6 +139,20 @@ def test_a_landing_that_fails_to_start_is_reported_distinctly():
     assert "bad flag" in out.message
 
 
+def test_busy_landing_slots_still_report_the_pr_as_published():
+    """The next run's `unlanded` merges the green PR, so a full slot set is not a failure."""
+    rec = Recorder(
+        {
+            "land --pr": cp(
+                publish_pr.LAND_GAVE_UP, err="land: 3 landings are already live"
+            )
+        }
+    )
+    out = _publish(rec)
+    assert out.rc == publish_pr.PUBLISH_PUBLISHED
+    assert out.message.startswith(f"PR #42 opened for {BRANCH}; no landing started")
+
+
 def test_a_create_that_prints_no_pr_url_starts_no_landing():
     """A landing needs the number; one started on a guess could merge someone else's PR."""
     rec = Recorder({"gh pr create": cp(0, out="Warning: 1 uncommitted change\n")})

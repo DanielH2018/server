@@ -102,6 +102,11 @@ fails the census. Raising the constant is an operator ruling. In the crossing PR
 operator rules whether to cut reconcile, to raise the ceiling here with a reason, or to
 switch the host plan to ansible-pull.
 
+On 2026-11-14 the operator raised the ceiling from 1,400 to 1,450 source lines. The reason
+is #8651: batching the `dpkg -S` and `systemctl show` reads in reconcile removes about 800
+commands from every reconcile run, and costs 26 source lines. The census holds the raise as
+`RULED_RAISE`, added to the formula above.
+
 ### `homelab-checkout-sync` keeps the CI gate and does not read `DEPLOY_HOLD`
 
 The deployer's timer fast-forwarded the primary checkout on daniel-box. After it retired,

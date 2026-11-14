@@ -10,8 +10,9 @@ the template as applied either way:
    without it `claude` is not found — the same trap already recorded for the host crons.
 3. The arming switch must be wired in BOTH directions. An `enabled: true` with no `false` arm
    is a one-way door: the operator can start the timer and not stop it.
-4. The prompt's caps must be the unit's caps. A prompt naming a different PR cap or timeout
-   from `defaults/main.yml` is how a session starts a landing it has no budget to finish.
+4. The caps come from `templates/renovate-agent-pins.j2`, never from the inventory, and the
+   prompt quotes the same pins the unit and config carry. A prompt naming a different PR cap or
+   timeout is how a session starts a landing it has no budget to finish.
 
 Every template here is asserted on its RENDER: a substring match on the Jinja holds only while the
 expression is spelled that way (#3202).
@@ -24,7 +25,8 @@ import re
 import pytest
 from lib import yaml_fast
 from _helpers import REPO, K8S_ROLES
-from _setup_render import COMPONENTS, render_component_text
+from _setup_render import COMPONENTS, render_component_text, role_context
+from lib.guard_jinja_env import template_env
 
 NAME = "renovate-agent"
 COMPONENT = COMPONENTS / NAME
@@ -76,9 +78,9 @@ def test_execstart_runs_the_wrapper_not_claude_directly(unit: str) -> None:
     assert "/usr/lib/homelab/renovate-agent/renovate_agent.py" in joined
 
 
-def test_path_carries_the_user_local_bin(unit: str) -> None:
-    """`claude` and `uv` live under ~/.local/bin; systemd's default PATH omits it."""
-    envs = directive(unit, "Environment")
+def test_path_carries_the_user_local_bin() -> None:
+    """`claude` and `uv` live under the session's ~/.local/bin; systemd's default PATH omits it."""
+    envs = directive(render(SESSION_UNIT), "Environment")
     paths = [e for e in envs if e.startswith("PATH=")]
     assert paths, "the unit sets no PATH"
     # systemd's last assignment of a variable wins, so the effective PATH is paths[-1].
@@ -160,27 +162,131 @@ def test_reconcile_never_restarts_a_session() -> None:
     """A package install must not kill a landing or spend a session as a side effect."""
     assert SPEC["units"]["homelab-renovate-agent.service"] == {"policy": "manual"}
     activates = [
-        f for f in SPEC["files"] if "homelab-renovate-agent" in f.get("activate", "")
+        f
+        for f in SPEC["files"]
+        if f.get("activate", "").partition(":")[2]
+        in ("homelab-renovate-agent.service", "homelab-renovate-agent.timer")
     ]
     assert activates == []
 
 
-def test_the_prompt_quotes_the_caps_it_is_given(defaults: dict) -> None:
-    """The prompt's numbers must FOLLOW the defaults, not merely mention their names.
+SETUP_UNIT = "homelab-renovate-agent-setup.service"
 
-    Each cap is rendered twice — at its default and at a value no default holds — so a number
-    typed into the prompt fails here, where a name matched in the source does not.
-    """
-    at_defaults = render(PROMPT)
-    caps = (("max_prs", 97), ("run_timeout_s", 9731), ("budget_usd", 97.31))
-    for suffix, moved_to in caps:
-        var = f"renovate_agent_{suffix}"
-        assert var in defaults, f"{var} is referenced by the prompt but has no default"
-        assert str(defaults[var]) in at_defaults, f"the prompt omits {var}'s default"
-        assert str(moved_to) in render(PROMPT, {var: moved_to}), (
-            f"the prompt hardcodes what should come from {var}: moving it to {moved_to} "
-            "changes nothing in the rendered prompt"
-        )
+
+def test_a_disarmed_agent_still_gets_its_claude_settings() -> None:
+    """The guardrail audit watches the settings file whether or not the timer is armed."""
+    assert SPEC["enable"][SETUP_UNIT] == "multi-user.target"
+    activated = {
+        f["src"]
+        for f in SPEC["files"]
+        if f.get("activate") == f"try-restart:{SETUP_UNIT}"
+    }
+    assert activated == {
+        "files/claude-settings.json",
+        "templates/renovate-agent-setup.sh.j2",
+    }
+    unit = render(f"{SETUP_UNIT}.j2")
+    assert directive(unit, "RemainAfterExit") == ["yes"], (
+        "try-restart reruns only an active unit"
+    )
+    assert directive(unit, "ExecStart")[0].endswith(
+        " /usr/lib/homelab/renovate-agent-setup"
+    )
+
+
+CONFIG = "config.env.j2"
+SESSION_CONF = "session.conf.j2"
+SESSION_UNIT = "homelab-renovate-agent-session.service.j2"
+PINNED = (
+    "max_prs",
+    "model",
+    "permission_mode",
+    "budget_usd",
+    "run_timeout_s",
+    "unit_timeout",
+    "session_timeout_s",
+)
+
+
+def pins() -> dict:
+    """What renovate-agent-pins.j2 exports to the templates that import it, by name."""
+    env = template_env(COMPONENT / "templates")
+    module = env.get_template("renovate-agent-pins.j2").make_module(
+        role_context(COMPONENT)
+    )
+    return {name: getattr(module, name) for name in PINNED}
+
+
+def test_the_pins_equal_the_defaults(defaults: dict) -> None:
+    """The docs fragments read the defaults, so a changed pin has to change its default too."""
+    for name, value in pins().items():
+        assert defaults[f"renovate_agent_{name}"] == value, name
+
+
+def test_the_config_unit_and_prompt_quote_the_pins(unit: str) -> None:
+    pinned = pins()
+    for template, keys in (
+        (CONFIG, ("run_timeout_s", "session_timeout_s", "max_prs")),
+        (SESSION_CONF, ("model", "permission_mode", "budget_usd")),
+    ):
+        config = render(template)
+        for name in keys:
+            assert f"{name.upper()}={pinned[name]}\n" in config, (template, name)
+    assert directive(unit, "TimeoutStartSec") == [pinned["unit_timeout"]]
+    prompt = render(PROMPT)
+    for name in ("max_prs", "session_timeout_s", "budget_usd"):
+        assert str(pinned[name]) in prompt, name
+
+
+SESSION_RULE = "50-renovate-agent-session.rules.j2"
+LAND_RULE = "50-renovate-agent-land.rules.j2"
+
+
+def test_the_session_unit_runs_the_session_script_under_its_wall_clock() -> None:
+    """systemd stops the session at session_timeout_s; the runner reads Result=timeout."""
+    session = render(SESSION_UNIT, {"renovate_agent_user": "session-sentinel"})
+    assert directive(session, "User") == ["renovate-agent"]
+    assert directive(session, "TimeoutStartSec") == [str(pins()["session_timeout_s"])]
+    assert directive(session, "ExecStart")[0].endswith("/renovate_session.py")
+    assert SPEC["units"]["homelab-renovate-agent-session.service"] == {
+        "policy": "manual"
+    }
+
+
+@pytest.mark.parametrize("template", [SESSION_RULE, LAND_RULE])
+def test_only_the_controller_may_start_the_units(template: str) -> None:
+    """dotfiles#967's I1: the session user starts nothing, whatever the inventory says."""
+    rule = render(template, {"renovate_agent_user": "session-sentinel"})
+    assert 'subject.user !== "renovate-agent-ctl"' in rule
+    assert '"renovate-agent"' not in rule
+
+
+def test_the_session_rule_admits_only_starting_the_session_unit() -> None:
+    rule = render(SESSION_RULE)
+    assert 'action.lookup("unit") !== "homelab-renovate-agent-session.service"' in rule
+    assert 'action.lookup("verb") !== "start"' in rule
+    assert rule.count("polkit.Result.YES") == 1
+
+
+@pytest.mark.parametrize(
+    "template",
+    [CONFIG, UNIT, PROMPT, SESSION_UNIT, SESSION_CONF, "renovate-agent-setup.sh.j2"],
+)
+def test_an_inventory_value_moves_no_cap(template: str) -> None:
+    """A PR that edits only host_vars must not raise a cap or widen the permission mode."""
+    # fact: hosts/components/renovate-agent/CLAUDE.md#Autonomous-role contract (it merges and deploys with no human in the loop)
+    moved = {
+        "renovate_agent_max_prs": 97,
+        "renovate_agent_model": "moved-model",
+        "renovate_agent_permission_mode": "bypassPermissions",
+        "renovate_agent_budget_usd": 9731,
+        "renovate_agent_run_timeout_s": 973100,
+        "renovate_agent_unit_timeout": "9731min",
+        "renovate_agent_session_timeout_s": 97310,
+        "renovate_agent_user": "moved-user",
+        "renovate_agent_ctl_home": "/srv/moved-ctl",
+    }
+    assert render(template, moved) == render(template)
 
 
 def test_the_prompt_invokes_the_skill() -> None:
@@ -216,13 +322,13 @@ def test_the_unit_and_its_config_make_no_kuma_push(unit: str) -> None:
 
 
 def test_config_env_stays_root_owned_and_group_read_only() -> None:
-    """It holds the Discord webhook, and the session must not be able to rewrite it."""
+    """It holds the Discord webhook, which only the controller reads."""
     [output] = [
         o for o in SPEC["outputs"] if o["path"] == "/etc/renovate-agent/config.env"
     ]
     assert (output["owner"], output["group"], output["mode"]) == (
         "root",
-        "renovate-agent",
+        "renovate-agent-ctl",
         "0640",
     )
 
@@ -387,3 +493,18 @@ def test_the_tell_is_read_from_the_end_of_a_per_package_parenthetical() -> None:
         )
         == "k8s_autodeploy: false"
     )
+
+
+def test_the_session_and_the_controller_meet_in_one_exchange_directory() -> None:
+    """The session writes where the prompt says, and the runner reads where its config says."""
+    [(prompt_dir,)] = [
+        m.groups() for m in [re.search(r"`(/\S+)/requests/`", render(PROMPT))] if m
+    ]
+    setup = render("renovate-agent-setup.sh.j2")
+    for template in (CONFIG, SESSION_CONF):
+        assert f"\nEXCHANGE_DIR={prompt_dir}\n" in render(template), template
+    assert re.search(
+        rf'^install -d -o "\$ctl" -g "\$agent" -m 2750 {re.escape(prompt_dir)}$',
+        setup,
+        re.MULTILINE,
+    ), "the setup must create the exchange the runner and the session use"

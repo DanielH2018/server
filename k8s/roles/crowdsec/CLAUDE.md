@@ -16,7 +16,7 @@ dashboard and the dashboard findings.
 - **Claim:** `crowdsec-db` (no backup (listed in k3s_longhorn_nobackup_volumes))
 <!-- /generated_from -->
 
-- **Flux applies it, not Ansible** (D5, crowdsec's own window). Its `containers_list` entry
+- **Flux applies it.** Its `containers_list` entry
   is in `cluster/services.yml`, so nothing applies it by hand. A merged
   change reaches the cluster when `promote` publishes and verifies the next bundle.
 - **Traefik's entry declares `depends_on: [crowdsec]`**, so the LAPI is up before the bouncer
@@ -39,9 +39,9 @@ a 2xx on an `authelia`-gated router, kept 7 days, capped at
 exit or a phone (#2123). Its module docstring is the design.
 
 **`remote-ips` never holds an address `home-ips` covers.** The job reads `home-ips` on every
-run, skips a sighting inside it, and prunes a live entry inside it. Before #6709, rotating home
-IPv6 privacy addresses filled the cap, and the job refused the operator's VPN exit, which
-CrowdSec then banned.
+run, skips a sighting inside it, and prunes a live entry inside it. Without that skip, rotating
+home IPv6 privacy addresses fill the cap, the job refuses the operator's VPN exit, and CrowdSec
+bans it (#6709).
 
 To see what is exempt: `… exec deploy/crowdsec -c crowdsec -- cscli allowlists inspect
 remote-ips` (or `home-ips`); to withdraw one, `… cscli allowlists remove remote-ips <ip>`. A
@@ -79,13 +79,11 @@ renamed route fails there rather than exempting nothing.
 ## The `crowdsec-jobs` sidecar runs four jobs beside the LAPI
 
 `files/crowdsec_jobs.py` runs in the `crowdsec-jobs` container of the engine pod
-(`k8s/roles/crowdsec/templates/deployment.yaml.j2`) and starts each job on its old host
-cron's UTC schedule: the remote allowlist every 5 minutes, the AppSec verify every 15, the
-bouncer prune at minute 17, and the home allowlist every 5 minutes from minute 1. All four were
-daniel-box root crons that ran `cscli` through `kubectl exec`, until H2.4b for the first three
-and H2.4c for the home allowlist. Their crons and scripts are
-`legacy:` entries in `hosts/daniel-box/package.yml` since H7.48. The operator chose
-the sidecar over a `pods/exec` grant on 2026-10-18 (#5655).
+(`k8s/roles/crowdsec/templates/deployment.yaml.j2`) and starts each job on a UTC schedule: the
+remote allowlist every 5 minutes, the AppSec verify every 15, the bouncer prune at minute 17,
+and the home allowlist every 5 minutes from minute 1. No daniel-box cron runs them, and their
+old crons and scripts are `legacy:` entries in `hosts/daniel-box/package.yml`. The operator
+chose the sidecar over a `pods/exec` grant on 2026-10-18 (#5655).
 
 - **cscli in the sidecar is a copy of the engine's own**, made by the `jobs-cscli` initContainer
   from `crowdsec_k8s_image`. It reads the shared `/etc/crowdsec` (read-only) and `crowdsec-db`, so
@@ -101,8 +99,7 @@ the sidecar over a `pods/exec` grant on 2026-10-18 (#5655).
   <tag>: status=<up|down> <summary>` to the container log, flushed per line. It exports the
   remote allowlist, AppSec verify and home allowlist verdicts as gauges on `/metrics` for the
   `pod-producers` rules.
-  Read the jobs with `probe.py loki-query '{container="crowdsec-jobs"}'`. The prefix is
-  the host crons' syslog shape.
+  Read the jobs with `probe.py loki-query '{container="crowdsec-jobs"}'`.
 - **Only the sidecar holds a Kubernetes token.** The pod does not automount one; a projected
   volume at `/var/run/crowdsec-jobs` reaches the sidecar alone, and `kubectl` finds it through
   the kubeconfig in the `crowdsec-jobs` ConfigMap. Its Role reads every homelab pod's log,
@@ -113,12 +110,12 @@ the sidecar over a `pods/exec` grant on 2026-10-18 (#5655).
 - **A sidecar crash takes the LAPI out of its Service** until the container restarts, because
   pod Ready needs every container. The scheduler never exits on a job's failure, and its memory
   limit is twice the measured peak (`k8s/roles/crowdsec/defaults/main.yml:crowdsec_k8s_jobs_mem_limit`).
-- **The sidecar exports three verdicts on `/metrics`** (M6 B6b, ruled on
+- **The sidecar exports three verdicts on `/metrics`** (ruled on
   2026-10-23). `jobs_metrics.py` serves `homelab_check_success`,
   `homelab_check_last_run_timestamp_seconds` and `homelab_check_deadline_seconds` per job tag,
   on the port of the `crowdsec-jobs` item in this role's `metrics` list. observability's `crowdsec-jobs` scrape job and
   the `pod-producers` rules read it, and netpol-baseline's Prometheus grant admits the
-  port. autofix-bridge ships the same file in its own ConfigMap (M6 B7), so an edit to
+  port. autofix-bridge ships the same file in its own ConfigMap, so an edit to
   `jobs_metrics.py` changes two pods.
 - **Run a job by hand** (operator-only, the read-only ServiceAccount is refused `pods/exec`):
   `sudo k3s kubectl -n homelab exec deploy/crowdsec -c crowdsec-jobs -- python3
@@ -166,7 +163,7 @@ pass against the old Traefik pod, which still held a key the LAPI accepted. The 
 run only when the Job is renamed, which is on every revision that rolls the crowdsec pod, a
 bouncer-key rotation included. A revision that rolls Traefik alone keeps the completed Job, so
 nothing re-proves the ban against that roll. The
-operator confirmed its evidence channel on 2026-10-18 (D5 *Open questions* 9).
+operator confirmed its evidence channel on 2026-10-18.
 
 - **`files/crowdsec_verify.py` bans daniel-pi through LAPI's machine API**, with no
   `pods/exec`. It sends the same `POST /v1/alerts` that `cscli decisions add` sends, reads it
@@ -177,12 +174,12 @@ operator confirmed its evidence channel on 2026-10-18 (D5 *Open questions* 9).
   `status`, and Prometheus scrapes it as `alloy-pi`, a path that never crosses Traefik.
 - **The gate's hop 2, the bouncer's pull, has no Job form.** LAPI v1.8.1 serves no bouncer
   route to a machine, so a missing 403 names both causes, a pull that never came and an edge
-  that does not consult the bouncer. The Ansible gate named the hop. To tell the two apart,
+  that does not consult the bouncer. To tell the two apart,
   read the LAPI log's `GET /v1/decisions/stream` lines from the traefik pod. They are absent
   when the plugin's metrics ticker stalled or the traefik pod cannot reach LAPI.
 - **A 403 in the probe file at a roll is a ban on the Pi, not a restart window** (#5761).
   Every probe 403 from 2026-10-19 to 2026-10-28 follows a ban on `10.0.0.139` in the LAPI log,
-  issued by the Ansible gate or by this Job. The edge refused only the Pi while it was banned,
+  issued by a verify run. The edge refused only the Pi while it was banned,
   and a LAPI restart with no ban produced no 403 for any client. `crowdsecAppsecFailureBlock`
   therefore keeps its default of `true`. `docs/crowdsec-waf-record.md` has the measurements.
 - **The fence peers are in place.** netpol-baseline's LAPI fence admits `crowdsec-verify` on
@@ -193,19 +190,17 @@ operator confirmed its evidence channel on 2026-10-18 (D5 *Open questions* 9).
 - **The `lapi-register` initContainer registers the `crowdsec-verify` machine**, so the Job
   can log in. `tests/test_crowdsec_verify.py` holds the red fixtures and runs the Job census
   over the render.
-- **The `crowdsec-home-ips` CronJob's one-off run is a second gate Job** in `crowdsec-verify`,
-  from `flux_cronjob_gates` in `defaults/main.yml`. It replaced the `k8s/cronjob-gate`
-  include. The Job keeps no ownerReference to the CronJob, so a scheduled firing can overlap
-  it, and both patch the same ConfigMap with one lookup's values.
+- **The `crowdsec-home-ips` CronJob's one-off run is a second gate Job** in `crowdsec-verify`, from
+  `flux_cronjob_gates` in `defaults/main.yml`. The Job keeps no ownerReference to the CronJob, so a
+  scheduled firing can overlap it, and both patch the same ConfigMap with one lookup's values.
 - **A Pi that Prometheus cannot scrape pauses the verdict, for a while.** While
   `up{job="alloy-pi"}` is not 1, the script waits rather than bans, and a poll in the window
   that finds the scrape down does not count against it. `OUTAGE_GRACE_SECONDS` in
   `templates/verify/job.yaml.j2` bounds the waits. Past it the Job fails naming the channel
   (#8060), and the way out is `docs/volume-snapshot-drills.md`, *A verify Job that failed for
   an environmental reason*: delete the Job, then clear the hold.
-- **A failed Job holds the revision.** The old gate reported a non-zero exit from the home-ips
-  run and continued. Under Flux any non-zero exit fails `crowdsec-verify`, and the soak does
-  not pass.
+- **A failed Job holds the revision.** Any non-zero exit, a home-ips run's included, fails
+  `crowdsec-verify`, and the soak does not pass.
 
 ## Traps
 

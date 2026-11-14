@@ -78,11 +78,11 @@ def test_a_failed_status_read_degrades_to_silence_rather_than_raising():
 def test_the_real_status_read_takes_no_optional_locks_on_the_shared_checkout():
     """The default `status` seam must pass `--no-optional-locks`, before the subcommand.
 
-    A plain `git status` refreshes and WRITES `.git/index` in the tree it reads. This hook reads
-    the SHARED primary checkout from inside a worktree session, so without the flag it would
-    write the one tree the isolation guard exists to keep a worktree session out of, and could
-    collide on `index.lock` with the deployer's own `merge --ff-only`. This asserts the real
-    default rather than an injected fake, because the flag is exactly what a fake would hide.
+    A plain `git status` refreshes and WRITES `.git/index` in the tree it reads. This hook reads the
+    SHARED primary checkout from inside a worktree session, so without the flag it would write the
+    one tree the isolation guard exists to keep a worktree session out of, and could collide on
+    `index.lock` with `homelab-checkout-sync`'s own `merge --ff-only`. This asserts the real default
+    rather than an injected fake, because the flag is exactly what a fake would hide.
     """
     argv = _mod.PRIMARY_STATUS_ARGV
     assert argv[0] == "--no-optional-locks", f"a lock-taking status read: {argv}"

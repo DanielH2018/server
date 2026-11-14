@@ -11,6 +11,7 @@ import importlib
 
 from lib import yaml_fast
 from lib.exit_codes import RENDER_OK
+from lib.repo_paths import CLUSTER_VARS_SOURCE
 from renderer import homelab_render
 from renderer.renderer_lib.restart import (
     RESTART_ANNOTATION,
@@ -19,7 +20,7 @@ from renderer.renderer_lib.restart import (
 )
 
 TAG = "pihole-exporter"
-KEYS = tuple(source_digests(homelab_render.SOURCE_FILE))
+KEYS = tuple(source_digests(CLUSTER_VARS_SOURCE))
 
 
 def _exporter_checksum(tmp_path, name: str, password_digest: str) -> str | None:

@@ -23,7 +23,9 @@ def derive_from_diff(ln: Landing) -> None:
     where verification matters most.
     """
     say(f"deriving tags from the diff since {ln.opts.since}")
-    r = ln.git("diff", "--name-only", f"{ln.opts.since}..{ln.merge_sha}")
+    r = ln.git(
+        "diff", "--no-renames", "--name-only", f"{ln.opts.since}..{ln.merge_sha}"
+    )
     if r.returncode != 0:
         ln.die(f"git diff {ln.opts.since}..{ln.merge_sha[:12]} failed", 1)
     paths = [p for p in r.stdout.splitlines() if p]

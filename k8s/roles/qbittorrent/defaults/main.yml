@@ -109,7 +109,7 @@ qbittorrent_k8s_prefs_check_schedule: "37 6 * * *"
 # The repo's pinned python image, the same digest as configarr's and janitorr's health
 # readers (configarr_k8s_health_image), whose defaults record the evidence. The check calls
 # no kubectl, so it needs no alpine/k8s init container.
-qbittorrent_k8s_prefs_check_image: python:3.14-alpine@sha256:f6a589d43c42b9e7f7dc67a12d37132491f362859a5d750607710cc56da3bc72
+qbittorrent_k8s_prefs_check_image: python:3.15-alpine@sha256:0f9552bb28711333da16915ec146f5e6bb44a7fdac9ced15dc17c2e0206346dd
 
 # Above the check's worst case: the 60 s connect wait (files/prefs_check.py:CONNECT_WAIT_S),
 # then a login and a preferences read at 15 s each, plus a cold image pull. The gate Job copies

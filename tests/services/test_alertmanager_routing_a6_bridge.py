@@ -2,7 +2,7 @@
 
 `test_alertmanager_routing.py` builds `PAGING` and `SHADOW` from the rule files. This module
 holds the non-vacuity tests for the `bridge-exporter.yaml` share of them: all 21 rules page, the
-eight `critical` ones mail as well as post, and a rule that regains `shadow` walks to the
+nine `critical` ones mail as well as post, and a rule that regains `shadow` walks to the
 blackhole instead.
 
 Run: uv run pytest tests/services/test_alertmanager_routing_a6_bridge.py
@@ -28,15 +28,16 @@ CRITICAL = {
     "B2Unreachable",
     "B2FreeTierHeadroomLow",
     "SmartHealthFailing",
+    "DomainRegistrationExpiring",
 }
 
 
 def test_every_a6_bridge_rule_pages():
-    """Non-vacuity for the A6 sets: 18 rules, none in `SHADOW`, the critical ones on both
+    """Non-vacuity for the A6 sets: 21 rules, none in `SHADOW`, the critical ones on both
     channels and the rest on Discord alone."""
     assert literal_sets(BRIDGE_RULES, shadow=True) == {}
     sets = literal_sets(BRIDGE_RULES, shadow=False)
-    assert len(sets) == 18
+    assert len(sets) == 21
     assert {labels["alertname"] for labels in sets.values()} >= CRITICAL
     for key, labels in sets.items():
         assert key in PAGING and key not in SHADOW, key

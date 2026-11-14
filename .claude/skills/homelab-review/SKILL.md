@@ -256,14 +256,14 @@ the appendix, and the appendix is never re-read.
 
 - **DECIDED: no skeptic cap and no `maxTurns` on `skeptic`** (#4615). Revisit if one review
   dispatches more than 20 skeptics or skeptic p90 passes 50 tool uses.
-  [ADR-0033](../../../docs/adr/0033-skeptic-and-implementer-carry-no-maxturns.md) holds the
+  [ADR-0035](../../../docs/adr/0035-skeptic-and-implementer-carry-no-maxturns.md) holds the
   measurement.
 - **DECIDED: no `maxTurns` on `implementer`** (#4652, #4663). Revisit if the top quartile's red
   rate reaches twice the other three's.
-  [ADR-0033](../../../docs/adr/0033-skeptic-and-implementer-carry-no-maxturns.md) holds the
+  [ADR-0035](../../../docs/adr/0035-skeptic-and-implementer-carry-no-maxturns.md) holds the
   join, the method and the measurement.
 - **Workflow subagents and every other agent type are undecided, not uncapped by decision.**
-  No outcome was measured for them. ADR-0033 holds their tool-use distributions.
+  No outcome was measured for them. ADR-0035 holds their tool-use distributions.
 
 **Merged history is not the whole history.** Several sessions work this repo at once, one branch
 each, so a fix can be real and not yet on master. The skeptic checks `gh pr list` itself; what it

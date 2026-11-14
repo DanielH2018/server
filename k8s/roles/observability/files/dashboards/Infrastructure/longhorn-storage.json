@@ -517,12 +517,254 @@
       "type": "stat"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "EGdsQqhVk"
+      },
+      "description": "Hours since each daily-tier volume's newest Longhorn backup, from longhorn_volume_last_backup_at. The tier is read from the recurring job that made the volume's backups. The daily job runs once a day, so anything past 26 h missed a run. longhorn-backup-health pages on a stale backup; this table names the volume.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "color-background"
+            }
+          },
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 26
+              },
+              {
+                "color": "red",
+                "value": 48
+              }
+            ]
+          },
+          "unit": "h"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "PVC"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "auto"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Namespace"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "auto"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 0,
+        "y": 40
+      },
+      "id": 18,
+      "options": {
+        "cellHeight": "sm",
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "Hours since last backup"
+          }
+        ]
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "EGdsQqhVk"
+          },
+          "editorMode": "code",
+          "expr": "sort_desc((time() - max by (pvc_namespace, pvc, volume) (longhorn_volume_last_backup_at > 0)) / 3600 and on (volume) longhorn_backup_state{recurring_job=\"daily-backup\"})",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "R2 daily tier — hours since last backup",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "volume": true
+            },
+            "indexByName": {
+              "Value": 2,
+              "pvc": 0,
+              "pvc_namespace": 1
+            },
+            "renameByName": {
+              "Value": "Hours since last backup",
+              "pvc": "PVC",
+              "pvc_namespace": "Namespace"
+            }
+          }
+        }
+      ],
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "EGdsQqhVk"
+      },
+      "description": "Hours since each weekly-tier volume's newest Longhorn backup, from longhorn_volume_last_backup_at. The weekly tier is sharded across seven daily jobs (weekly-backup-d0..d6), each volume backing up once a week, so anything past 170 h missed its shard's run.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "color-background"
+            }
+          },
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 170
+              },
+              {
+                "color": "red",
+                "value": 192
+              }
+            ]
+          },
+          "unit": "h"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "PVC"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "auto"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Namespace"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "auto"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 12,
+        "y": 40
+      },
+      "id": 19,
+      "options": {
+        "cellHeight": "sm",
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "Hours since last backup"
+          }
+        ]
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "EGdsQqhVk"
+          },
+          "editorMode": "code",
+          "expr": "sort_desc((time() - max by (pvc_namespace, pvc, volume) (longhorn_volume_last_backup_at > 0)) / 3600 and on (volume) longhorn_backup_state{recurring_job=~\"weekly-backup-.+\"})",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "B2 weekly tier — hours since last backup",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "volume": true
+            },
+            "indexByName": {
+              "Value": 2,
+              "pvc": 0,
+              "pvc_namespace": 1
+            },
+            "renameByName": {
+              "Value": "Hours since last backup",
+              "pvc": "PVC",
+              "pvc_namespace": "Namespace"
+            }
+          }
+        }
+      ],
+      "type": "table"
+    },
+    {
       "collapsed": false,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 40
+        "y": 50
       },
       "id": 14,
       "panels": [],
@@ -568,7 +810,7 @@
         "h": 8,
         "w": 16,
         "x": 0,
-        "y": 41
+        "y": 51
       },
       "id": 15,
       "targets": [
@@ -631,7 +873,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 41
+        "y": 51
       },
       "id": 16,
       "targets": [
@@ -669,7 +911,7 @@
         "h": 7,
         "w": 24,
         "x": 0,
-        "y": 49
+        "y": 59
       },
       "id": 17,
       "targets": [
@@ -685,6 +927,207 @@
         }
       ],
       "title": "B2 object versions",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 66
+      },
+      "id": 20,
+      "panels": [],
+      "title": "R2 (daily tier) — free-tier usage",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "bf4q19tuivta8e"
+      },
+      "description": "Month-to-date R2 storage against the free-tier allowance, parsed from monitor-bridge's r2_usage line. Cloudflare puts no cap on R2, so R2FreeTierHeadroomLow at 80% is the only boundary; this panel is the runway ahead of it. The figure is month-to-date peak storage, so it resets on the 1st.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10
+          },
+          "unit": "decgbytes"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/allowance/"
+            },
+            "properties": [
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "dash": [
+                    10,
+                    10
+                  ],
+                  "fill": "dash"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 16,
+        "x": 0,
+        "y": 67
+      },
+      "id": 21,
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "bf4q19tuivta8e"
+          },
+          "expr": "avg(avg_over_time({container=\"monitor-bridge\"} |= \"R2 month-to-date\" | regexp `R2 month-to-date: storage (?P<stored_gb>[0-9.]+)/(?P<cap_gb>[0-9.]+) GB \\((?P<storage_pct>[0-9]+)%\\), Class A (?P<class_a>[0-9]+)/(?P<class_a_cap>[0-9]+) \\((?P<class_a_pct>[0-9]+)%\\), Class B (?P<class_b>[0-9]+)/(?P<class_b_cap>[0-9]+) \\((?P<class_b_pct>[0-9]+)%\\)` | unwrap stored_gb [$__auto]))",
+          "legendFormat": "stored",
+          "queryType": "range",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "bf4q19tuivta8e"
+          },
+          "expr": "avg(avg_over_time({container=\"monitor-bridge\"} |= \"R2 month-to-date\" | regexp `R2 month-to-date: storage (?P<stored_gb>[0-9.]+)/(?P<cap_gb>[0-9.]+) GB \\((?P<storage_pct>[0-9]+)%\\), Class A (?P<class_a>[0-9]+)/(?P<class_a_cap>[0-9]+) \\((?P<class_a_pct>[0-9]+)%\\), Class B (?P<class_b>[0-9]+)/(?P<class_b_cap>[0-9]+) \\((?P<class_b_pct>[0-9]+)%\\)` | unwrap cap_gb [$__auto]))",
+          "legendFormat": "free-tier allowance",
+          "queryType": "range",
+          "refId": "B"
+        }
+      ],
+      "title": "R2 stored vs free-tier allowance",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "bf4q19tuivta8e"
+      },
+      "description": "Each R2 arm as a percent of its month-to-date free-tier allowance. R2FreeTierHeadroomLow pages when any arm reaches 80%.",
+      "fieldConfig": {
+        "defaults": {
+          "max": 100,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 60
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 67
+      },
+      "id": 22,
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "bf4q19tuivta8e"
+          },
+          "expr": "avg(avg_over_time({container=\"monitor-bridge\"} |= \"R2 month-to-date\" | regexp `R2 month-to-date: storage (?P<stored_gb>[0-9.]+)/(?P<cap_gb>[0-9.]+) GB \\((?P<storage_pct>[0-9]+)%\\), Class A (?P<class_a>[0-9]+)/(?P<class_a_cap>[0-9]+) \\((?P<class_a_pct>[0-9]+)%\\), Class B (?P<class_b>[0-9]+)/(?P<class_b_cap>[0-9]+) \\((?P<class_b_pct>[0-9]+)%\\)` | unwrap storage_pct [$__auto]))",
+          "legendFormat": "storage",
+          "queryType": "range",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "bf4q19tuivta8e"
+          },
+          "expr": "avg(avg_over_time({container=\"monitor-bridge\"} |= \"R2 month-to-date\" | regexp `R2 month-to-date: storage (?P<stored_gb>[0-9.]+)/(?P<cap_gb>[0-9.]+) GB \\((?P<storage_pct>[0-9]+)%\\), Class A (?P<class_a>[0-9]+)/(?P<class_a_cap>[0-9]+) \\((?P<class_a_pct>[0-9]+)%\\), Class B (?P<class_b>[0-9]+)/(?P<class_b_cap>[0-9]+) \\((?P<class_b_pct>[0-9]+)%\\)` | unwrap class_a_pct [$__auto]))",
+          "legendFormat": "Class A",
+          "queryType": "range",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "bf4q19tuivta8e"
+          },
+          "expr": "avg(avg_over_time({container=\"monitor-bridge\"} |= \"R2 month-to-date\" | regexp `R2 month-to-date: storage (?P<stored_gb>[0-9.]+)/(?P<cap_gb>[0-9.]+) GB \\((?P<storage_pct>[0-9]+)%\\), Class A (?P<class_a>[0-9]+)/(?P<class_a_cap>[0-9]+) \\((?P<class_a_pct>[0-9]+)%\\), Class B (?P<class_b>[0-9]+)/(?P<class_b_cap>[0-9]+) \\((?P<class_b_pct>[0-9]+)%\\)` | unwrap class_b_pct [$__auto]))",
+          "legendFormat": "Class B",
+          "queryType": "range",
+          "refId": "C"
+        }
+      ],
+      "title": "R2 free-tier used %, per arm",
+      "type": "gauge"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "bf4q19tuivta8e"
+      },
+      "description": "Month-to-date R2 Class A (writes, lists) and Class B (reads) operation counts. A runaway client shows here as a steepening line long before it reaches the allowance.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 24,
+        "x": 0,
+        "y": 75
+      },
+      "id": 23,
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "bf4q19tuivta8e"
+          },
+          "expr": "avg(avg_over_time({container=\"monitor-bridge\"} |= \"R2 month-to-date\" | regexp `R2 month-to-date: storage (?P<stored_gb>[0-9.]+)/(?P<cap_gb>[0-9.]+) GB \\((?P<storage_pct>[0-9]+)%\\), Class A (?P<class_a>[0-9]+)/(?P<class_a_cap>[0-9]+) \\((?P<class_a_pct>[0-9]+)%\\), Class B (?P<class_b>[0-9]+)/(?P<class_b_cap>[0-9]+) \\((?P<class_b_pct>[0-9]+)%\\)` | unwrap class_a [$__auto]))",
+          "legendFormat": "Class A",
+          "queryType": "range",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "bf4q19tuivta8e"
+          },
+          "expr": "avg(avg_over_time({container=\"monitor-bridge\"} |= \"R2 month-to-date\" | regexp `R2 month-to-date: storage (?P<stored_gb>[0-9.]+)/(?P<cap_gb>[0-9.]+) GB \\((?P<storage_pct>[0-9]+)%\\), Class A (?P<class_a>[0-9]+)/(?P<class_a_cap>[0-9]+) \\((?P<class_a_pct>[0-9]+)%\\), Class B (?P<class_b>[0-9]+)/(?P<class_b_cap>[0-9]+) \\((?P<class_b_pct>[0-9]+)%\\)` | unwrap class_b [$__auto]))",
+          "legendFormat": "Class B",
+          "queryType": "range",
+          "refId": "B"
+        }
+      ],
+      "title": "R2 operations, month to date",
       "type": "timeseries"
     }
   ],

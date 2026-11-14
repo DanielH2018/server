@@ -11,6 +11,7 @@ from math import prod
 
 from _land_fakes import Fakes
 from deploy_tools.land_lib import merge, pace
+from deploy_tools.land_lib.options import PACE_MASTER_RUNS
 from lib import yaml_fast
 from lib.exit_codes import CI_GREEN, CI_PENDING
 from lib.repo_paths import REPO
@@ -246,3 +247,98 @@ def test_every_cited_sweep_size_is_the_workflows_job_count():
             r"full[\s#]+sweep[\s#]+runs[\s#]+(\d+)[\s#]+jobs", (REPO / path).read_text()
         )
         assert [int(n) for n in found] == [sweep] * sites, path
+
+
+def _pace_decided_block() -> str:
+    """The `# DECIDED:` comment above PACE_MASTER_RUNS in options.py, `#` prefixes stripped."""
+    lines = (REPO / "scripts/deploy_tools/land_lib/options.py").read_text().splitlines()
+    end = next(
+        i for i, line in enumerate(lines) if line.startswith("PACE_MASTER_RUNS =")
+    )
+    start = max(i for i in range(end) if lines[i].startswith("# DECIDED:"))
+    return " ".join(line.lstrip("# ") for line in lines[start:end])
+
+
+def test_the_pacing_rationale_quotes_a_measured_uncontended_sweep_width():
+    """The cap of 2 assumes one sweep fits the 20-job pool, measured only on a busy pool (#8257)."""
+    sentences = re.split(r"(?<=\.)\s+", _pace_decided_block())
+    uncontended = [
+        s
+        for s in sentences
+        if re.search(r"uncontended|idle (runner )?pool|no other run", s, re.IGNORECASE)
+    ]
+    assert any(re.search(r"\b\d+\b", s) for s in uncontended), (
+        "the DECIDED block above PACE_MASTER_RUNS quotes no peak width measured with no "
+        f"other run on the pool: {uncontended}"
+    )
+
+
+def test_the_pacing_rationale_says_whether_the_arm_runner_shares_the_pool():
+    """`host_tools_arm64` runs on an arm label nobody measured against the 20 slots (#8257)."""
+    jobs = yaml_fast.safe_load((REPO / ".github" / "workflows" / "ci.yml").read_text())[
+        "jobs"
+    ]
+    arm = {
+        name: str(job["runs-on"])
+        for name, job in jobs.items()
+        if "arm" in str(job.get("runs-on", ""))
+    }
+    assert "host_tools_arm64" in arm, sorted(arm)
+    block = _pace_decided_block()
+    named = {n for pair in arm.items() for n in pair if n in block}
+    assert named, (
+        "the DECIDED block above PACE_MASTER_RUNS names no arm job or runner label "
+        f"from ci.yml ({arm}), so it does not say whether arm jobs share the 20-job pool"
+    )
+
+
+# GitHub's concurrent-job limit for hosted runners on this account's plan.
+RUNNER_POOL = 20
+
+
+def _pace_sentences() -> list[str]:
+    return re.split(r"(?<=\.)\s+", _pace_decided_block())
+
+
+def test_the_uncontended_width_is_a_job_count_the_cap_follows_from():
+    """The quoted width must be a peak job count, not a date or an issue number (#8257)."""
+    widths = [
+        int(n)
+        for s in _pace_sentences()
+        if re.search(r"uncontended|idle (runner )?pool|no other run", s, re.IGNORECASE)
+        for n in re.findall(r"peaked at (\d+) jobs", s)
+    ]
+    assert widths, "no uncontended sentence says `peaked at <n> jobs`"
+    sweep = _full_sweep_jobs("push")
+    for width in widths:
+        assert 1 < width <= sweep, (width, sweep)
+        fits_one_not_two = width <= RUNNER_POOL < 2 * width
+        assert fits_one_not_two == (PACE_MASTER_RUNS == 2), (width, PACE_MASTER_RUNS)
+
+
+def test_the_arm_sentence_says_whether_the_runners_share_the_pool():
+    """Naming the arm job is not an answer; the sentence must state the pooling (#8257)."""
+    jobs = yaml_fast.safe_load((REPO / ".github" / "workflows" / "ci.yml").read_text())[
+        "jobs"
+    ]
+    arm_names = {
+        n
+        for name, job in jobs.items()
+        if "arm" in str(job.get("runs-on", ""))
+        for n in (name, str(job["runs-on"]))
+    }
+    arm_sentences = [s for s in _pace_sentences() if any(n in s for n in arm_names)]
+    verdicts = [
+        s
+        for s in arm_sentences
+        if re.search(r"\bshares?\b.{0,40}pool|\bown (pool|slots)\b|separate pool", s)
+    ]
+    assert verdicts, (
+        f"no arm sentence states whether arm jobs share the pool: {arm_sentences}"
+    )
+    hedged = [
+        s
+        for s in verdicts
+        if re.search(r"unmeasured|not measured|unknown|nobody", s, re.I)
+    ]
+    assert not hedged, hedged

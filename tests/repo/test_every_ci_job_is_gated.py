@@ -137,7 +137,7 @@ def exemption_problems(workflow_text: str, exempt: frozenset[str]) -> list[str]:
 
 def _ruleset_contexts() -> set[str]:
     """The merge gate, read from the YAML defaults as a literal list -- the same regex shape the
-    sibling guard uses for the deployer's role defaults."""
+    sibling guard uses for `ci_required_contexts`."""
     text = (
         REPO / "hosts" / "components" / "github-checks" / "defaults" / "main.yml"
     ).read_text()

@@ -163,7 +163,7 @@ spec:
           # account-specific, is written to /config/plugins/configurations/, and nothing below
           # touches that directory.
           #
-          # python:3.14-alpine rather than the alpine:3.24 the container above uses, and not
+          # python:3.15-alpine rather than the alpine:3.24 the container above uses, and not
           # because Python reads better. The release is a .zip and /config is owned by uid
           # {{ puid }} — a plain alpine container would have to `apk add unzip` as root, and root
           # here holds no DAC_OVERRIDE (see the comment above), so it could not then write the

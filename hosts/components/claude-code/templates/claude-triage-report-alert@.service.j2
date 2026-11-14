@@ -21,7 +21,7 @@ ExecStart=/usr/bin/curl -fsS -m 10 --retry 5 --retry-delay 10 --retry-all-errors
   --variable 'failed_at@%t/claude-triage-report-alert/%i/failed-at' \
   --variable 'instance=%i' \
   --variable 'webhook@%d/discord_webhook' \
-  --expand-data '{"content":"{% raw %}{{instance:json}}{% endraw %}: an unattended triage run on {{ inventory_hostname }} finished; the page opens with the episode and its state. The report is triage-<episode>.html at https://artifacts.{{ domain }}/a/{{ inventory_hostname }}-{{ pins.agent_user }}/ and the record is {{ pins.state_dir }}/runs/<episode>.json. Finished at {% raw %}{{failed_at:trim:json}}{% endraw %}."}' \
+  --expand-data '{"content":"{% raw %}{{instance:json}}{% endraw %}: an unattended triage run on {{ inventory_hostname }} finished; the page opens with the episode and its state. The report is triage-<episode>.html at https://artifacts.{{ domain }}/a/{{ inventory_hostname }}-claude-triage/ and the record is {{ pins.state_dir }}/runs/<episode>.json. Finished at {% raw %}{{failed_at:trim:json}}{% endraw %}."}' \
   --expand-url '{% raw %}{{webhook:trim}}{% endraw %}'
 SyslogLevel=notice
 ExecStartPost=/bin/echo claude-triage-report page delivered for %i

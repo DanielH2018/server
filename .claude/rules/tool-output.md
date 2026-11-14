@@ -25,9 +25,7 @@ came from (#7892 to #7899). A tool you add or change follows the five rules belo
    are the narrower cases (`findings.py next`, `findings.py show`). Name the flag in the count
    line when it hides something: `10 waiting (8 deferred, 2 blocked); --waiting to list`.
 4. **A polling loop prints only when its line changes.** Route the line through
-   `scripts/lib/progress.py:OnChange`. Don't hand-roll a `last` check: three loops did, and
-   `land_lib/host_wait.py` printed one line 42 times in one landing before it moved to
-   `OnChange`.
+   `scripts/lib/progress.py:OnChange`. Don't hand-roll a `last` check.
 5. **A result another program reads is machine-readable.** Make it one terminal line in the
    established shape: probe's `PROBE-VERDICT: <state> (…)`, land's
    `LAND-RESULT: verdict=… cause=…`, or one compact JSON object (`flux_wait.py`). Grade on an

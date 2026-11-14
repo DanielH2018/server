@@ -85,4 +85,4 @@ spec:
                 - task-runner-launcher
             initialDelaySeconds: 30
             periodSeconds: 30
-{{ container_resources(cpu_limit=n8n_k8s_cpu_limit, mem_limit=n8n_k8s_mem_limit, cpu_request=n8n_k8s_cpu_request, mem_request=n8n_k8s_mem_request) }}
+{{ container_resources(cpu_limit=n8n_k8s_cpu_limit, mem_limit=n8n_k8s_mem_limit, cpu_request=n8n_k8s_cpu_request, mem_request=n8n_k8s_runners_mem_request) }}
