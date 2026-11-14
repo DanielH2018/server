@@ -228,13 +228,14 @@ def test_the_session_is_told_to_nominate_and_never_to_land() -> None:
 def test_the_hooks_run_in_the_worktree_the_wrapper_builds() -> None:
     """The shim's defaults are the operator's checkout and uv, which this user cannot read, and
     a guard that cannot start asks — an unattended denial on every Bash call."""
-    envs = dict(e.split("=", 1) for e in directive(render(UNIT, MOVED), "Environment"))
+    session = render("homelab-renovate-agent-session.service.j2", MOVED)
+    envs = dict(e.split("=", 1) for e in directive(session, "Environment"))
     config = dict(
         line.split("=", 1)
         for line in render(CONFIG_ENV, MOVED).splitlines()
         if "=" in line and not line.startswith("#")
     )
-    # renovate_agent.main builds the run worktree's path the same way.
+    # renovate_session.main builds the run worktree's path the same way.
     built = f"{config['REPO_DIR']}/.claude/worktrees/{config['WORKTREE']}"
     assert envs.get("RUN_HOOK_PROJECT_DIR") == built
     assert envs.get("RUN_HOOK_UV") == f"{HOME}/.local/bin/uv"

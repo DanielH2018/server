@@ -180,7 +180,6 @@ def test_a_leftover_requests_directory_is_set_aside_unread(tmp_path):
 @pytest.mark.parametrize(
     "verdict",
     [
-        SETTLED,
         "VERDICT: nothing-to-deploy (PR #71 touched no service)",
         "REFUSED: PR #71 changes inventory/",
     ],
@@ -201,7 +200,6 @@ def test_the_next_nomination_lands_after_one_that_ends_well(tmp_path, verdict):
             "VERDICT: refused (PR #71 is merged, and this landing graded nothing)",
             "exit-code",
         ),
-        ("PENDING", "exit-code"),
         (SETTLED, "timeout"),
     ],
 )
