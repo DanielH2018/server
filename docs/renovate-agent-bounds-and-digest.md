@@ -27,10 +27,10 @@ ENFORCED:
 ## The lander
 
 `renovate-agent-land@<n>.service` lands one Renovate PR for the agent. It runs
-`files/land_renovate_pr.py` as the operator's user, because `land.sh` deploys. The agent's own
-user, `renovate_agent_user`, may start it through `templates/50-renovate-agent-land.rules.j2`
-and do nothing else with privilege. The session then reads
-`/var/lib/renovate-agent-land/<n>.verdict`.
+`files/land_renovate_pr.py` as the operator's user, because `land.sh` deploys. The
+controller user, `renovate-agent-ctl`, may start it through
+`templates/50-renovate-agent-land.rules.j2`, and the session's user may not. The runner starts
+it and then reads `/var/lib/renovate-agent-land/<n>.verdict`.
 
 The lander re-reads the PR from GitHub with the operator's token and lands it only when every
 check in its module docstring passes. The denied roles come from
@@ -64,24 +64,68 @@ head that moved and, when asked, a head the operator has not approved. The test
 `hosts/components/renovate-agent/tests/test_renovate_floor.py` fails when a new top-level entry
 is neither on the floor nor listed with a reason.
 
-The session starts the lander with a plain `systemctl start`, which blocks until the landing
-ends. The unit raises Claude Code's 10-minute Bash cap to `renovate_agent_bash_timeout_ms`
-through `BASH_MAX_TIMEOUT_MS`, so the call outlasts the 1071-minute `TimeoutStartSec` of the lander unit. A
-call cut short leaves the landing running, so the prompt waits on the unit's `ActiveState`
-before it reads the file. The unit's `ExecStartPre` replaces the last run's line with a `VERDICT:
-none` line before the lock wait, and the script writes `PENDING` once it holds the lock. A unit
-that systemd stops mid-landing, by `TimeoutStartSec` or a kill, leaves `PENDING` behind. The
-prompt therefore also reads the unit's `Result`: only `success` and `exit-code` mean the script
-wrote its outcome, and anything else is no verdict (#5205).
+**The session nominates and the runner lands** (#967's I9, guardrails plan B2r). The session
+writes a `land` request for each PR it would land, and lands nothing itself. After the session
+ends and the other requests are carried out, `files/run_requests.py` starts the lander for each
+nomination in file order, one at a time, with a plain `systemctl start` that blocks until the
+landing ends. It goes on after `VERDICT: settled`, `VERDICT: nothing-to-deploy` or a pre-merge
+`REFUSED:` from the lander, and starts no further landing after anything else. It lands at most
+`renovate_agent_max_prs`, skips a PR the run closed, and starts nothing once
+`renovate_agent_run_timeout_s`, the deadline for the session and the landings together, has
+passed. A wait cut short by that deadline leaves the landing running in its own unit. The
+digest names each nomination the runner did not land, with why.
+
+**The session runs in its own unit** (guardrails plan B2r-2a). The runner starts
+`homelab-renovate-agent-session.service`, which polkit lets only the controller start
+(`templates/50-renovate-agent-session.rules.j2`), and waits for it through
+`hosts/lib/host_lib.py:start_unit`, the helper the landings use too. The unit runs
+`files/renovate_session.py`: the worktree gate and its recreation, then the headless session.
+Its `TimeoutStartSec` is `renovate_agent_session_timeout_s`, so systemd stops a session at its
+wall clock and the runner reads `Result=timeout`. The script captures the session's output and
+writes it to `session.out` under the exchange directory's `out/`, and a blocked worktree's
+reason to `session.blocked`, so session text never reaches the journal. The runner's journal
+line for each request carries fixed words only, for the same reason (#8676).
+
+**Two users** (dotfiles#967's I1, guardrails plan B2r-2b). `templates/renovate-agent-pins.j2`
+pins both, so no inventory value moves either:
+
+- `renovate-agent` (uid 901) runs the session. It holds the read-only GitHub token and the
+  Claude credential, from `/etc/renovate-agent/session.env`, and reads its settings from
+  `/usr/lib/homelab/renovate-agent/session.conf`, which carries no secret.
+- `renovate-agent-ctl` (uid 905) runs the runner. It holds the write token, from
+  `/etc/renovate-agent/ctl.env`, reads `config.env` with the Discord webhook, and keeps the run
+  record in its home, `/var/lib/renovate-agent-ctl`. Only it may start the session and lander
+  units.
+
+The two meet in `/var/lib/renovate-agent-exchange`, which the controller owns with the session
+user's group, mode 2750. The runner recreates `requests/` and `out/` inside it on each run,
+group-writable and set-group-ID, so the session can write there but cannot replace either
+directory. The runner reads each file there without following a link, and treats a link or a
+non-regular file as no output. The controller runs with the session user as a supplementary
+group so it can read what the session wrote.
+
+This runner and triage's `claude_triage_run.py` stay separate modules (decided 2026-11-14).
+They share only the call that starts a session, and even that differs: the flags, how each
+hands the session its token, and how each reads the output. What they do share lives in
+`hosts/lib/host_lib.py`: `start_unit`, `fresh_dir` and `read_untrusted`. The runner reads the
+session's result with a 1 MiB cap, `SESSION_OUTPUT_MAX` in `files/renovate_agent.py`, because a
+long closing summary can pass the 16 KiB a request file gets.
+
+The lander unit's `ExecStartPre` replaces the last run's line with a `VERDICT: none` line before
+the lock wait, and the script writes `PENDING` once it holds the lock. A unit that systemd stops
+mid-landing, by `TimeoutStartSec` or a kill, leaves `PENDING` behind. The runner therefore reads
+the unit's `Result` first: only `success` and `exit-code` mean the script wrote its outcome, and
+anything else is no verdict (#5205).
 
 ## The session's own identity
 
 The session reads third-party text: release notes, changelogs and PR bodies. It runs as
-`renovate_agent_user` so that text steering it reaches nothing able to change `master`.
+`renovate-agent` so that text steering it reaches nothing able to change `master`.
 
-- **Home, state and clone.** `renovate_agent_home` (`/var/lib/renovate-agent`) holds the run
-  record, the session's `~/.claude` and its own clone at `renovate_agent_clone_dir`. The
-  directory carries the set-group-ID bit and group `sys_user`, so the docs cron still reads the run record.
+- **Home and clone.** `renovate_agent_home` (`/var/lib/renovate-agent`) holds the session's
+  `~/.claude` and its own clone at `renovate_agent_clone_dir`. The run record is in the
+  controller's home, which carries the set-group-ID bit and group `sys_user`, so the docs cron
+  reads it.
 - **Toolchain.** The agent runs its own uv rather than `/usr/bin/uv`, the host's
   package wrapper. `renovate-agent-setup` copies the operator's uv into the agent's `~/.local/bin` and runs
   `uv python install` as the agent. Every project hook runs through `uv run`, and in an
@@ -96,31 +140,29 @@ The session reads third-party text: release notes, changelogs and PR bodies. It 
   apply.
 - **GitHub tokens.** Two fine-grained tokens for this repo alone (guardrails plan B1).
   `renovate_agent_gh_token` is the runner's: pull requests and actions read-write, contents,
-  checks and metadata read. `renovate_agent_gh_read_token` is the session's, with no write
-  permission at all. The runner swaps it in as the session's `GH_TOKEN`
-  (`renovate_agent.py:session_env`), and a session whose read token is unset never starts.
-  The session asks for a close, a comment or a re-run by writing a JSON request into
-  `/var/lib/renovate-agent/requests/`, which `run_session` passes to Claude Code with
-  `--add-dir` so a headless Write there needs no approval. The runner carries each request out with its own token
+  checks and metadata read, in `ctl.env`. `renovate_agent_gh_read_token` is the session's,
+  with no write permission at all, in `session.env`. The session asks for a close, a comment
+  or a re-run by writing a JSON request into `/var/lib/renovate-agent-exchange/requests/`,
+  which `renovate_session.py` passes to Claude Code with `--add-dir` so a headless Write there
+  needs no approval. The runner carries each request out with its own token
   after the session ends, through `files/run_requests.py`, and logs each outcome to
   `requests.jsonl` in the state directory. A request must be a regular file under 16 KiB,
   opened without following a link and without blocking, and must name an open Renovate PR the
-  run counted. Anything else is refused and logged. The session and the runner still share a
-  uid until B2r splits them, so the read token bounds what the session's own `gh` calls can
-  do, not what a steered session could reach. The lander merges with the operator's token.
-- **Claude credential.** `renovate_agent_claude_oauth_token`, from `claude setup-token`. Both
-  reach the session as environment variables through `/etc/renovate-agent/session.env` (root
-  0600), which systemd reads as root.
+  run counted. Anything else is refused and logged. The lander merges with the operator's
+  token.
+- **Claude credential.** `renovate_agent_claude_oauth_token`, from `claude setup-token`. It
+  and the read token reach the session as environment variables through
+  `/etc/renovate-agent/session.env` (root 0600), which systemd reads as root.
 - **Confinement.** `ProtectHome=yes`, `ProtectProc=invisible`, `NoNewPrivileges=yes` and
   `PrivateTmp=yes`. A same-uid sandbox was ruled out first: systemd 255 has no `PrivatePIDs=`,
   so a session running as the operator could read the operator's other processes and user bus.
-- **Its own config is read-only to it.** `/etc/renovate-agent/config.env` is root-owned and
-  group-readable by the agent. A steered session could otherwise raise its budget or point
-  `PROMPT_FILE` at a prompt of its own for the next run.
-- **The run lock moved into the agent's home.** `fs.protected_regular=2` refuses an `O_CREAT`
+- **Its config is read-only to it.** `session.conf` is a root-owned packaged file, and
+  `config.env` is readable only by root and the controller. A steered session could otherwise
+  raise its budget or point `PROMPT_FILE` at a prompt of its own for the next run.
+- **The run lock is in the controller's home.** `fs.protected_regular=2` refuses an `O_CREAT`
   open of another user's file in sticky `/run/lock`, and the old lock there belongs to the
   operator.
-- **Deployer holds.** The wrapper reads no hold. `land.sh`, run by the lander as the operator,
+- **Deploy holds.** The wrapper reads no hold. `land.sh`, run by the lander as the operator,
   refuses a landing under `DEPLOY_HOLD`.
 
 ENFORCED: `hosts/tests/test_renovate_agent_identity.py`, which also runs the prompt's
@@ -137,7 +179,7 @@ ENFORCED: `hosts/tests/test_renovate_agent_identity.py`, which also runs the pro
 4. Set `renovate_agent_enabled: true` in `inventory/host_vars/daniel-box.yml`, and let the next
    package version arm the timer.
 5. Start one run by hand and watch it. Auto mode's classifier decides whether the session may
-   run `systemctl start` on a system unit, and nothing short of a real run tests that.
+   write its request files, and nothing short of a real run tests that.
 
 ## Exercising the wrapper without arming anything
 
@@ -181,7 +223,7 @@ budget only catches a loop. A landing in flight runs in the lander unit, so a se
 killed at either limit leaves that landing to finish, but the digest then cannot report it.
 
 **The session never runs in the primary checkout.** One untracked file in `/home/<user>/server`
-parks the GitOps deployer silently, and a session that edits, renders and tests is guaranteed to
+parks `homelab-checkout-sync` silently, and a session that edits, renders and tests is guaranteed to
 leave some. Each tick recreates `.claude/worktrees/renovate-auto` at `origin/master` inside the
 agent's own clone and runs there. The lander runs `land.sh` in the primary checkout as the
 operator.
@@ -228,12 +270,13 @@ another path does not find it. The line sits outside the 900-character summary c
 summary cannot truncate it.
 
 The command is `sudo sh -c 'cd <run worktree> && set -a && . <EnvironmentFile> && exec runuser
--u <renovate_agent_user> -- env <unit variables> claude --resume <id>'`. The session's GitHub
+-u renovate-agent -- env <unit variables> claude --resume <id>'`. The session's GitHub
 token and Claude credential exist only in the unit's root-only `EnvironmentFile`, so the
 command reads that file as root before it switches user. `sudo` resets the environment, so the
-command also sets again each variable the unit sets: `PATH`, `HOME` and the hook shim's
-`RUN_HOOK_*` paths among them. `SESSION_ENV_KEYS` in `files/renovate_agent.py` lists them, and
-`test_session_resume.py` fails when the unit sets a variable that list lacks.
+command also sets again each variable the session unit sets: `PATH`, `HOME` and the hook
+shim's `RUN_HOOK_*` paths among them. The runner reads their values with `systemctl show -p
+Environment` on the session unit. `SESSION_ENV_KEYS` in `files/renovate_agent.py` lists them,
+and `test_session_resume.py` fails when the unit sets a variable that list lacks.
 
 The transcript lives under the owner's home rather than in the worktree, so it survives the
 next tick's `prepare_worktree`. A resumed session works in the tree a tick reuses, though. Any
@@ -264,7 +307,7 @@ session that reads green and does nothing.
 
 ## The run record
 
-Every tick appends one JSON line to `runs.jsonl` in `STATE_DIR` (`/var/lib/renovate-agent`), so
+Every tick appends one JSON line to `runs.jsonl` in `STATE_DIR` (`/var/lib/renovate-agent-ctl`), so
 whether the agent is worth its cost is a count over one file rather than a read of 30 digests
 (#2864). `run_record` in `files/agent_logic.py` builds the line, and each exit path writes one:
 
@@ -296,7 +339,7 @@ jq -s --argjson since "$(date -d '-30 days' +%s)" '[.[] | select(.ts >= $since)]
   | {ticks: length, sessions: map(select(.result == "ran" or .result == "failed")) | length,
      merged: map(.merged // [] | length) | add, closed: map(.closed // [] | length) | add,
      touched: map(.touched // [] | length) | add, cost_usd: map(.cost_usd // 0) | add}' \
-  /var/lib/renovate-agent/runs.jsonl
+  /var/lib/renovate-agent-ctl/runs.jsonl
 ```
 
 The file gains one line a day and is never rotated.

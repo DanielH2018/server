@@ -227,3 +227,54 @@ def test_a_failed_download_fails_the_run_and_the_next_run_classifies_the_change(
     ok, line, posts = _run(tmp_path, config, owners=installed, debs=deb)
     assert (ok, posts) == (True, [])
     assert "1 explained, 0 posted" in line
+
+
+@pytest.fixture
+def copied(tmp_path, tree):
+    """A second home holding copies of a package file and of the first home's hooks."""
+    home, package_file, config = tree
+    agent = tmp_path / "agent"
+    (agent / "hooks").mkdir(parents=True)
+    (agent / "settings.json").write_bytes(package_file.read_bytes())
+    (agent / "hooks" / "guard.sh").write_bytes(
+        (home / "hooks" / "guard.sh").read_bytes()
+    )
+    config["paths"] += [str(agent / "settings.json"), str(agent / "hooks")]
+    config["copies"] = [
+        {"dst": str(agent / "settings.json"), "src": str(package_file)},
+        {"dst": str(agent / "hooks"), "src": str(home / "hooks")},
+    ]
+    return agent, package_file, home, config
+
+
+def test_a_copy_of_a_published_package_file_is_not_posted_and_a_hand_edit_is(
+    tmp_path, copied
+):
+    agent, package_file, _, config = copied
+    _run(tmp_path, config)
+    package_file.write_text("scripts/lib/\nscripts/deploy_tools/\n")
+    (agent / "settings.json").write_bytes(package_file.read_bytes())
+    installed = _owned(package_file, "0.7465+g203fe8f7bc22")
+    deb = _deb(package_file, "0.7465+g203fe8f7bc22", package_file.read_bytes())
+    ok, line, posts = _run(tmp_path, config, owners=installed, debs=deb)
+    assert (ok, posts) == (True, [])
+    assert "2 explained, 0 posted" in line
+    (agent / "settings.json").write_text("{}\n")
+    [post] = _run(tmp_path, config, owners=installed, debs=deb)[2]
+    assert f"`{agent}/settings.json` changed" in post
+
+
+def test_a_copy_of_a_hook_matching_the_render_at_its_source_is_not_posted(
+    tmp_path, copied
+):
+    agent, _, home, config = copied
+    _run(tmp_path, config)
+    new = b"#!/bin/sh\nexit 1\n"
+    (agent / "hooks" / "guard.sh").write_bytes(new)
+    rendered = {str(home / "hooks" / "guard.sh"): new}
+    ok, line, posts = _run(tmp_path, config, rendered=rendered)
+    assert (ok, posts) == (True, [])
+    assert "1 explained, 0 posted" in line
+    (agent / "hooks" / "guard.sh").write_bytes(b"#!/bin/sh\ntrue\n")
+    [post] = _run(tmp_path, config, rendered=rendered)[2]
+    assert f"`{agent}/hooks/guard.sh` changed" in post

@@ -4,7 +4,7 @@
 | 0 | `LAND_SETTLED` | deployed and settled, or there was nothing to deploy. |
 | 1 | `LAND_FAILED` | CI red or unproven, a change needing a hand, a tag no k8s entry declares, a held or failed promotion, a failed health gate, or a PR closed, conflicting or with red CI. |
 | 64 | `LAND_BAD_ARGS` | the command line is wrong. |
-| 75 | `LAND_GAVE_UP` | gave up waiting — a budget elapsed, no promotion covered the merge in time, the health gate could not read its store, or no host package containing the merge is published. |
+| 75 | `LAND_GAVE_UP` | gave up waiting — a budget elapsed, no promotion covered the merge in time, the health gate could not read its store, or no host package containing the merge is published. From a `--detach` parent: the live-landing limit was full, so no landing started. |
 
 The `VERDICT:` line ends with one of 15 words: `settled`, `unhealthy`, `deploy-failed`, `nothing-to-deploy`, `needs-manual-apply`, `deferred`, `merge-conflict`, `pr-ci-red`, `merge-timeout`, `ci-red`, `ci-timeout`, `ci-unproven`, `refused`, `handoff-timeout`, `unbuilt`.
 

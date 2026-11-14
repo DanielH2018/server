@@ -48,12 +48,11 @@ from typing import Any
 
 SCRIPTS_PAGE = "reference/scripts.md"
 
-# Directories the basename scan prunes: build output, virtualenvs, other sessions' checkouts,
-# and the vendored collections, whose third-party filenames are not ours to disambiguate
-# against. Pruning rather than filtering is the difference between 813 ms and 16 ms on a 2.3 s
+# Directories the basename scan prunes: build output, virtualenvs and other sessions'
+# checkouts. Pruning rather than filtering is the difference between 813 ms and 16 ms on a 2.3 s
 # build -- `.venv` alone is thousands of files this would otherwise walk and discard.
 _SKIP_NAMES = {".git", ".venv", "site", "node_modules", "__pycache__"}
-_SKIP_PATHS = {".claude/worktrees", "ansible/collections"}
+_SKIP_PATHS = {".claude/worktrees"}
 
 # The first cell of a generated table row, when that cell is a code span. Every table on the
 # Scripts page puts the script's repo-relative path there.

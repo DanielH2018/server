@@ -5,7 +5,8 @@ it, with its in-flight panel. It serves the page
 and API `k8s/roles/deploy-ui/` routes to, and runs `land.sh` and
 `gh` exactly as the operator would from a terminal. It starts no deploy, because Flux applies
 every service. The page stays as the one browser view of landings in progress (operator
-ruling, 2026-11-06).
+ruling, 2026-11-06). It also starts and stops the game servers, through the scale-only
+`homelab-games` identity (ADR-0033).
 
 ## Trust
 
@@ -24,6 +25,10 @@ a hostile pod already has kubectl-adjacent reach. Nothing stops it at the networ
 netpol-baseline is INGRESS ONLY (`k8s/roles/netpol-baseline/templates/networkpolicy.yaml.j2`),
 so pod egress is unfenced on this cluster.
 Every POST also needs `X-Deploy-UI: 1` so a cross-site form cannot ride the Authelia cookie.
+
+DECIDED: such a pod can also start and stop the game servers. Accepted 2026-11-14 with ADR-0033,
+because the daemon's `homelab-games` token can change the replica count of the Deployments
+`game_servers` lists and nothing else.
 
 ## Turning it off
 
@@ -68,7 +73,7 @@ The daemon runs outside the venv. The unit renders `DEPLOY_UI_TREE_LOCK` from
 ## Writes
 
 Land spawns `land.sh` detached and logs to `~/.local/state/deploy-ui/`. Land and cancel each
-emit one logfmt line via `logger -t deploy-ui`. The page reads no deployer state: `land.sh`
+emit one logfmt line via `logger -t deploy-ui`. The page reads no hold itself: `land.sh`
 refuses a landing under `DEPLOY_HOLD` itself, and the hold is cleared with `gh variable set
 DEPLOY_HOLD --body none`, never from this page.
 
@@ -108,6 +113,47 @@ and a test pins its keys to `scripts/deploy_tools/land_lib/outcome.py:VERDICTS`,
 daemon cannot import land_lib
 (`hosts/components/deploy-ui/tests/test_deploy_ui_landings.py::test_every_land_verdict_has_a_hint_is_clean`).
 
+## Game servers
+
+The *Game servers* panel shows each game in `game_servers` (`inventory/group_vars/all.yml`), which
+the component renders into `games.json` beside the daemon (`templates/games.json.j2`) and the unit
+names in `DEPLOY_UI_GAMES_FILE`. A game is its server's Deployment plus every Deployment
+that runs only while it does, such as its game-stats exporter. `files/deploy_ui_lib/deploy_ui_games.py`
+folds them into one state: `running`, `starting`, `stopping`, `stopped`, `partial` (some scaled up,
+some down) or `missing`.
+
+- **The state comes from the read-only kubeconfig.** The unit sets `KUBECONFIG` to the operator's
+  `~/.kube/config`, the `homelab-readonly` identity, and the panel runs two `kubectl get` calls
+  per poll: the Deployments by name, and their pods by `app in (...)`.
+- **The console comes from Loki, not from `pods/log`.** `curl` reads the newest 200 lines of
+  `{namespace=<ns>,container=<server>}` from the last 7 days through the LAN route in
+  `DEPLOY_UI_LOKI`, so a parked server still shows its last run. Loki splits one container
+  into a stream per level, and `parse_console` merges them by timestamp.
+
+### Starting and stopping a game
+
+`POST /api/game {game, action}` with `action` one of `start`, `stop` or `restart` scales every
+Deployment the game lists, together. `GameControl` in `files/deploy_ui_lib/deploy_ui_game_control.py`
+owns the games' reads and writes, and `App` routes to it as `App.games`. No template renders those counts (ADR-0033), so Flux leaves
+them where the panel sets them.
+
+- **Each write is a PATCH to the `scale` subresource, through `curl`.** The token is the
+  `games_panel_token` credential, which the unit imports with `ImportCredential=` and
+  `/run/credstore` supplies; it travels on curl's stdin as a header file, never in argv, which
+  `ps` shows to every user. The API server's URL and CA come from the read-only kubeconfig. Each
+  write carries `fieldManager=deploy-ui-games`, which Flux's takeover leaves alone.
+- **A missing credential refuses writes, not the page.** `ImportCredential=` starts the unit
+  without it, and each write answers 503 naming the operator's `host_secrets.py sync daniel-box`.
+- **A restart is a stop, then a start.** The Deployments are `Recreate` over RWO claims, so
+  `finish_restart` waits on its own thread for the game's pods to go, up to `restart_wait_s`,
+  then scales back to 1. A wait that runs out leaves the game stopped and says so in an audit
+  line.
+- **`start_refused` on a game's entry refuses start and restart**, with its text as the 409
+  reason; stop stays allowed. terraria carries one until issue #822's restore checklist is done.
+- Every action writes one audit line through `logger -t deploy-ui`:
+  `action=game-<action> game=<name>`, and the restart's outcome as
+  `action=game-restart game=<name> result=started|left-stopped`.
+
 ## Usage count
 
 The daemon writes one logfmt line per request to its unit journal (#2864):
@@ -120,8 +166,9 @@ A client that closes the connection mid-response adds a second line,
 `BrokenPipeError` traceback that HostLogErrors would count (#7921). It opens with a word
 other than `request`, so the count below does not see the request twice.
 
-The page polls four panels every 10 seconds, so an open tab writes about 24 lines a minute,
-and 18 while the finished list is hidden, because the page skips its fetch.
+The page polls five panels every 10 seconds, so an open tab writes about 30 lines a minute,
+and 24 while the finished list is hidden, because the page skips its fetch. An open game
+console adds 6 more.
 An open landing viewer polls `/api/log` every 2 seconds and adds 30 more. Those polls show a tab was open, not that anyone used it. Count page
 loads and writes instead:
 

@@ -30,12 +30,11 @@ irreplaceable data kopia still uniquely protected; the Docker role is in git his
   false` still stops Renovate's
   automerge of the digest bump. The Deployment is `Recreate`, so a change that rolls it takes
   the server down until the new pod passes its startup probe.
-- **Parked at `replicas: 0`.** `inventory/group_vars/all.yml:terraria_k8s_replicas` is
-  0 (#822), so the render holds `replicas: 0` and a roll starts no pod. Flux's drift
-  correction now resets a hand scale as well. The value has three readers: this role's
-  Deployment, game-stats' `terraria-stats` Deployment and observability's `terraria-stats`
-  scrape job. All three roles are Flux-owned, so unparking is one merge that `promote`
-  applies. The restore checklist on #822 has the rest.
+- **Parked, and the Games panel refuses to start it.** The Deployment renders no `replicas:`;
+  deploy.local's Games panel owns the count of it and of game-stats' `terraria-stats`
+  (ADR-0033). Its `game_servers` entry in `inventory/group_vars/all.yml` carries
+  `start_refused`, so the panel will not start it until #822's restore checklist is done.
+  Lifting the refusal is a merge that removes that key.
 - **Its image build and rollout.** The `images` job pushes
   `ghcr.io/danielh2018/terraria:<content tag>`. The defaults name
   `<k8s_registry_pull_host>/terraria`; the renderer rewrites that ref to the GHCR one with
