@@ -216,6 +216,22 @@ before deciding what is due. Examples:
   Missing this on 2026-08-29 left Bazarr reconnecting in a loop that leaked 173 MiB → its 1Gi cap
   in 90 minutes and OOM-killed it; the only visible signal was the "k3s Container OOM" monitor,
   which self-clears one hour after the kill while subtitle fetching stays silently broken.
+- **Other apps store copies in their own settings, and no deploy reaches those copies either.**
+  `stale_copies.OUTSIDE_THE_TREE` lists each one below, so a landing that rotates the key ends
+  `needs-manual-apply`. The hand step follows each copy.
+  - Prowlarr holds `sonarr_api_key`, `radarr_api_key` and `lidarr_api_key` in its application
+    entries. After rotating one, set it in Prowlarr → Settings → Apps → that app → API Key.
+  - Sonarr, Radarr and Lidarr hold `prowlarr_api_key` in every indexer Prowlarr synced to
+    them. After rotating it, run Prowlarr → Settings → Apps → Sync App Indexers. Then check
+    that `probe.py arr <app> indexerstatus` reports no failing indexer in each app.
+  - Sonarr, Radarr and Lidarr hold `qbittorrent_password` in their download client entry. After
+    rotating it, set it in each app under `Settings → Download Clients → qBittorrent →
+    Password`.
+  - Home Assistant's MQTT integration holds `mqtt_password`, and its NUT integration holds
+    `nut_ha_password`. Both are config entries created through its UI. After rotating either,
+    set it under Settings → Devices & services → that integration → Reconfigure.
+  - Each Obsidian LiveSync client holds `livesync_db_password` and `livesync_sync_token` in the
+    plugin's settings on its own device. After rotating either, enter it on every device.
 - `k3s_readonly_token` (H6.3b): the token of the cluster's read-only ServiceAccount
   (`homelab-readonly` in `kube-system`), which `homelab-k3s-restart` loads to read the API and
   `homelab-k3s-kubeconfig` writes into the read-only `~/.kube/config` on daniel-box and
