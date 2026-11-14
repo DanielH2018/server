@@ -1,9 +1,8 @@
-"""The three render accessors reach every artifact a guard asserts on, and fail loudly otherwise.
+"""The two render accessors reach every artifact a guard asserts on, and fail loudly otherwise.
 
-`_compose_render.rendered_texts`, `_k8s_render.rendered_build_texts` and
-`_shell_render.rendered_shell_texts` are the accessors for the three template classes the
-manifest harness skips: the Pi's Docker roles, every k8s role's `Dockerfile*.j2`, and every
-role's `*.sh.j2`. A guard built on any of them reads a set it does not enumerate itself, so an
+`_k8s_render.rendered_build_texts` and `_shell_render.rendered_shell_texts` are the accessors
+for the two template classes the manifest harness skips: every k8s role's `Dockerfile*.j2`,
+and every role's `*.sh.j2`. A guard built on any of them reads a set it does not enumerate itself, so an
 accessor that quietly came back short would turn each of those guards into a pass over nothing
 (#3175, #3178).
 
@@ -16,20 +15,12 @@ Run: uv run pytest tests/repo/test_shared_render_accessors.py
 
 import pytest
 
-from _compose_render import (
-    host_vars,
-    rendered_text,
-    rendered_texts,
-    render_role_template,
-    render_texts,
-)
 from _helpers import load_defaults, K8S_ROLES
 from _k8s_render import (
     BUILD_ROLES,
     IMAGE_BUILDER_CALLER_VARS,
     rendered_build_text,
     rendered_build_texts,
-    # Aliased: `_compose_render` exports a `render_role_template` of its own, for the Pi.
     render_role_template as render_k8s_template,
 )
 from _shell_render import (
@@ -39,99 +30,8 @@ from _shell_render import (
     rendered_shell_texts,
 )
 from lib import yaml_fast
-from lib.render_guard import containers_entries_in
 from validate.shell_templates import discover_templates
 from _setup_render import CLAUDE_CODE
-
-# The Pi's Docker roles are gone: H5.9 moved wg-easy, the last one, into the host package, which
-# tests read through `render_host`, and H5.12 deleted `roles/containers`. The accessor outlives
-# the tree because other guards still import it, so these tests run it over a tmp-tree role
-# (`_pi_role_rendering` below) and over the real census, which must stay empty.
-
-
-def _pi_docker_roles() -> set[str]:
-    return {entry["name"] for entry in containers_entries_in(host_vars())}
-
-
-def test_every_pi_docker_role_is_rendered() -> None:
-    rendered = {role for role, _, _ in rendered_texts()}
-    assert rendered == _pi_docker_roles() == set()
-
-
-def test_every_pi_template_is_rendered(tmp_path) -> None:
-    """The accessor renders each `templates/*.j2` of a Pi role, compose and config alike (#3175).
-
-    alloy's River config was the artifact #3175 was filed for, so the tmp-tree role carries a
-    compose file and a config.
-    """
-    role = tmp_path / "probe_role"
-    (role / "templates").mkdir(parents=True)
-    (role / "templates" / "docker-compose.yml.j2").write_text("a=1\n")
-    (role / "templates" / "config.river.j2").write_text("b=2\n")
-    found = render_texts({"containers_list": [{"name": "probe_role"}]}, roles=tmp_path)
-    assert [(r, t) for r, t, _ in found] == [
-        ("probe_role", "config.river.j2"),
-        ("probe_role", "docker-compose.yml.j2"),
-    ]
-
-
-def test_an_unrendered_pi_template_is_named_rather_than_missed() -> None:
-    with pytest.raises(AssertionError, match=r"config\.river\.j2"):
-        rendered_text("wg-easy", "config.river.j2")
-
-
-def test_a_pi_template_that_will_not_render_fails_the_caller(tmp_path) -> None:
-    (tmp_path / "probe_role" / "templates").mkdir(parents=True)
-    with pytest.raises(AssertionError, match="render error"):
-        render_role_template(
-            "probe_role",
-            "no-such-template.j2",
-            {"containers_list": [{"name": "probe_role"}]},
-            roles=tmp_path,
-        )
-
-
-def _pi_role_rendering(tmp_path, default: str, host: dict | None = None) -> str:
-    """A tmp-tree Pi role whose template prints `value`, which its defaults set to `default`.
-
-    `host` goes into the host's vars, which outrank the default.
-    """
-    role = tmp_path / "probe_role"
-    (role / "templates").mkdir(parents=True)
-    (role / "defaults").mkdir()
-    (role / "templates" / "out.j2").write_text("value={{ value }}\n")
-    (role / "defaults" / "main.yml").write_text(f'value: "{default}"\n')
-    vars_ = {
-        "containers_list": [{"name": "probe_role"}],
-        "sys_user": "pi-user",
-        **(host or {}),
-    }
-    ((_, _, text),) = render_texts(vars_, roles=tmp_path)
-    return text
-
-
-def test_a_pi_default_aliasing_the_inventory_renders_expanded(tmp_path) -> None:
-    assert _pi_role_rendering(tmp_path, "{{ sys_user }}/x") == "value=pi-user/x\n"
-
-
-def test_a_pi_host_var_aliasing_another_renders_expanded(tmp_path) -> None:
-    """Host vars a caller hands in resolve as the host_vars file would, as the validator's do.
-
-    Laid on as `render_context` overrides, they came back raw after resolution, so the render
-    carried the alias's literal braces.
-    """
-    text = _pi_role_rendering(tmp_path, "default", {"value": "{{ sys_user }}/a"})
-    assert text == "value=pi-user/a\n"
-
-
-def test_a_pi_default_that_will_not_expand_renders_stub_not_braces(tmp_path) -> None:
-    """The context comes from `render_context`, which drops such a key, as the validator does.
-
-    The harness used to keep the raw value, so the render carried the literal braces the
-    validator's context never holds (#3792).
-    """
-    text = _pi_role_rendering(tmp_path, "{{ sys_user | no_such_filter }}")
-    assert text == "value=STUB\n"
 
 
 def test_an_included_role_with_no_census_entry_renders() -> None:
