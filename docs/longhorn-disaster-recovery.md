@@ -136,8 +136,16 @@ the per-volume map and each exclusion's rationale:
    section's step 1 checks them.
 3. **Wait for the backupstore sync** — `uv run python scripts/diagnostics/probe.py health longhorn-backup`
    reports both targets available (it skips a target disarmed on purpose and fails when no
-   target is named `default`), or `kubectl -n longhorn-system get backuptarget` shows
-   `AVAILABLE true`, then Backup CRs appear. **The poll interval is `0`** — polling is
+   target is named `default`), then Backup CRs appear. To wait for one target to read
+   available, run this once per target (`default`, then `r2`). It exits 0 on `true`, and
+   75 with a re-run command when its budget runs out:
+
+    ```bash
+    cc-wait k8s-field -n longhorn-system backuptargets.longhorn.io/default \
+      '{.status.available}' --equals true
+    ```
+
+   **The poll interval is `0`** — polling is
    OFF (`k3s_longhorn_backupstore_poll_interval` is 0, because even a 1h interval exhausted
    B2's Class-B cap), so the sync does not happen on its
    own: force it in the Longhorn UI with Backup → Sync.
@@ -310,8 +318,13 @@ a live stale session when this section was written. `<sid>` is the number in the
       -o jsonpath='{.status.state} {.status.currentNodeID}{"\n"}'
     ```
 
-    If the volume is attached on this node, scale its workload to 0 and wait for `detached`
-    first.
+    If the volume is attached on this node, scale its workload to 0 first. To wait for the
+    volume to detach, run:
+
+    ```bash
+    cc-wait k8s-field -n longhorn-system volumes.longhorn.io/<pvc-…> \
+      '{.status.state}' --equals detached
+    ```
 
 2. List the SCSI disks behind the session, then delete each one so that no block device
    still points at the dead session:

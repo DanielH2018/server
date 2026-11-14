@@ -249,9 +249,15 @@ the same 3.5 GB of blocks and the bucket never got them back. What released them
 a trim — in that order, because ext4 skips block groups it already trimmed since mount and the
 nightly trim had trimmed them all while the snapshots still pinned them. A `rollout restart` is
 not a remount (kubelet keeps the volume staged on the same node); scaling the workload to 0
-until the Volume CR reads `detached` is. `actualSize` went 3.61 GB → 215 MB, the next backup
-was 63 MB, and the bucket went from 7.64 GB billed to 2.68 GB once the hidden versions were
-expired.
+until the Volume CR reads `detached` is. To wait for that state before scaling back, run:
+
+```bash
+cc-wait k8s-field -n longhorn-system volumes.longhorn.io/<pvc-name> \
+  '{.status.state}' --equals detached
+```
+
+`actualSize` went 3.61 GB → 215 MB, the next backup was 63 MB, and the bucket went from
+7.64 GB billed to 2.68 GB once the hidden versions were expired.
 
 **A deletion's saving lands seven days later.** The bucket carries one lifecycle rule,
 `daysFromHidingToDeleting: 7`. A delete writes a hide marker over the current version, and B2
