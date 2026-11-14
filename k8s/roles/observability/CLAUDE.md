@@ -332,5 +332,6 @@ pages when Tempo's blocklist poll fails: stored traces go unsearchable behind a 
 
 `OTEL_LOG_USER_PROMPTS`, `OTEL_LOG_ASSISTANT_RESPONSES`, `OTEL_LOG_TOOL_DETAILS` and
 `OTEL_LOG_TOOL_CONTENT` are all `1`, so prompts, responses and tool output land in Loki
-**verbatim**. That is why the OTLP port is bound to loopback. Treat Loki's retention window as
+**verbatim**. That is why the OTLP port is bound to loopback
+(`k8s/roles/observability/defaults/main.yml:observability_otlp_host_ip`). Treat Loki's retention window as
 sensitive as the transcripts themselves.
