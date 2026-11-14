@@ -83,9 +83,11 @@ five: the fifth was the file's title, which holds no prose.
 | Pre-commit Hooks | the advice `repo_guards.py` prints | the `ADVICE` symbol |
 | Pre-commit Hooks | one untracked file parks the checkout sync | a test node |
 
-- **The one value was deleted, not given a row.** The section said the hooks run
-  "twenty-five" test files. No reader acts on the count, so the sentence names
-  `hook_files`, which lists them, and nothing is left to go stale.
+- **The one value already had a detector, and keeps it.** The section says the hooks run
+  "twenty-five" test files, and
+  `tests/repo/test_static_ratchet_hook.py::test_claude_md_states_how_many_files_the_hook_runs`
+  holds that count against the hooks. The test fails and rewrites nothing. Moving it to a
+  `VALUES` row would add the fixer, and is not part of this batch.
 - **Three sentences stay unbound.** "CI's `pytest` job runs the whole suite on every PR"
   has no citable owner: the job's YAML holds action pins Renovate bumps, which the
   `renovate-pin` rule refuses. The Claude Code binary's refusal of a command it cannot
