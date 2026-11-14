@@ -1,0 +1,15 @@
+{#- The Renovate agent's caps and permission mode: config.env.j2, homelab-renovate-agent.service.j2
+and prompt.txt.j2 import these as `pins`. A template's own assignment outranks every inventory
+value, so a PR that edits only host_vars cannot raise a run's PR count, spend or wall clock, or
+widen its permission mode. The host package renderer puts the inventory above a component's
+defaults, so a component default would pin nothing. This file is on the lander's approval list.
+Each value is a literal. hosts/tests/test_renovate_agent_unit.py holds them equal to the
+component's defaults/main.yml, which the docs fragments read.
+-#}
+{%- set max_prs = 3 -%}
+{%- set model = "opus" -%}
+{%- set permission_mode = "auto" -%}
+{%- set budget_usd = 25 -%}
+{%- set run_timeout_s = 67260 -%}
+{%- set unit_timeout = "1131min" -%}
+{%- set bash_timeout_ms = 64560000 -%}

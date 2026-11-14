@@ -106,6 +106,17 @@ def test_marking_ready_waits_for_github_to_settle_whether_the_pr_merges(landing)
     ] * 2
 
 
+def test_marking_ready_stops_asking_when_github_never_settles(landing):
+    ln, calls = _landing(landing, mergeable={"mergeable": "UNKNOWN"})
+    _land(ln)
+    names = [c[0] if c[0] != "gh" else " ".join(c[1][:2]) for c in calls]
+    # The run that follows may test an older master, which costs a proof and not the merge.
+    assert (
+        names[: names.index("pr ready")].count("gh:mergeable") == turn.MERGEABLE_READS
+    )
+    assert _order(calls)[-2:] == ["merge", "release_turn"]
+
+
 def test_a_draft_that_cannot_be_marked_ready_ends_the_landing_with_the_remedy(
     landing,
 ):

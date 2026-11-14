@@ -264,6 +264,10 @@ FLOOR = [
     "hosts/components/renovate-agent/files/renovate_agent.py",
     "hosts/components/renovate-agent/templates/session.env.j2",
     "hosts/components/renovate-agent/templates/config.env.j2",
+    "hosts/components/renovate-agent/templates/renovate-agent-pins.j2",
+    "hosts/components/renovate-agent/templates/prompt.txt.j2",
+    "hosts/components/renovate-agent/templates/homelab-renovate-agent.service.j2",
+    "hosts/components/renovate-agent/templates/homelab-renovate-agent.timer.j2",
     "hosts/components/renovate-agent/component.yml",
     "scripts/deploy_tools/land",
     "pyproject.toml",
@@ -273,13 +277,9 @@ FLOOR = [
     ".github/",
     "hosts/components/host-hardening/",
     "hosts/components/sshd/",
-    "ansible/.sops.yaml",
-    "ansible/vars/secrets.yml",
-    # Each ansible/ entry also at its path after ADR 0030's rename, ahead of the rename.
     "secrets/.sops.yaml",
     "secrets/secrets.yml",
     # The agent's cluster RBAC joined the floor on 2026-10-16 (H1 Open question 7).
-    "ansible/roles/k8s/cluster-base/",
     "k8s/roles/cluster-base/",
 ]
 
@@ -331,9 +331,9 @@ def test_a_pr_changing_the_lander_needs_the_operator(path, tmp_path) -> None:
     ]
 
 
-# H1 creates cluster-base, so these paths do not exist yet and LANDER_FILES cannot hold them.
-CLUSTER_BASE_FILE = "ansible/roles/k8s/cluster-base/templates/readonly-rbac.yaml.j2"
-CLUSTER_BASE_SIBLING = "ansible/roles/k8s/cluster-baseline/templates/deployment.yaml.j2"
+# The RBAC template, and a role the tree does not hold whose name shares cluster-base's prefix.
+CLUSTER_BASE_FILE = "k8s/roles/cluster-base/templates/readonly-rbac.yaml.j2"
+CLUSTER_BASE_SIBLING = "k8s/roles/cluster-baseline/templates/deployment.yaml.j2"
 
 
 def test_a_pr_changing_cluster_base_needs_the_operator(tmp_path) -> None:
@@ -357,7 +357,7 @@ def test_a_pr_changing_a_role_named_like_cluster_base_lands_without_the_operator
 OFF_THE_FLOOR = [
     "docs/landing.md",
     "hosts/components/claude-code/defaults/main.yml",
-    "hosts/components/renovate-agent/templates/prompt.txt.j2",
+    "hosts/components/renovate-agent/defaults/main.yml",
     "inventory/host_vars/daniel-box.yml",
 ]
 

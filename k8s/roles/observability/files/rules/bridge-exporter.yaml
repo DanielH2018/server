@@ -10,18 +10,18 @@ groups:
   - name: bridge-exporter
     rules:
       # DECIDED: `service` names the thing checked, not the bridge that evaluates it (operator,
-      # 2026-10-23). The seven row rules carry wan, discord, r2, cloudflare, healthchecks and b2
-      # (twice). Only MonitorBridgeDown and BridgeCheckStale keep `service: monitor-bridge`, since
+      # 2026-10-23). The eight row rules carry wan, discord, r2, cloudflare, healthchecks, domain
+      # and b2 (twice). Only MonitorBridgeDown and BridgeCheckStale keep `service: monitor-bridge`, since
       # the bridge itself is what they report on. A page reading "B2Unreachable, service
       # monitor-bridge" points the operator at the wrong component. No route or inhibit matches
       # `service`; Alertmanager groups by [alertname, service], and alertname already separates
       # these rules.
-      # THE WAN FAMILY (A6-3): the gate row and the four rows behind it. Each rule reads one
+      # THE WAN FAMILY (A6-3): the gate row and the five rows behind it. Each rule reads one
       # row's `homelab_check_success` gauge, which the exporter sets to 0 when the row's verdict
       # is down. A dependent whose gate reads down is skipped and exports 0 in the same cycle as
       # the gate, so source and targets reach Alertmanager in one batch. None of these rules has
       # a `for:`: monitor-bridge's WAN body already needs both providers to fail, and none of
-      # the four dependents is a `startup_grace` row. The gate shares this group with its
+      # the five dependents is a `startup_grace` row. The gate shares this group with its
       # dependents, so Prometheus evaluates them together. `requires: wan` marks a dependent
       # for the inhibit rule in alertmanager-secret.yaml.j2, whose source is WANUnreachable.
       # A row with no series stays quiet here: BridgeCheckStale owns a missing row.
@@ -36,8 +36,9 @@ groups:
           description: >-
             Both WAN probe providers failed from monitor-bridge, so this house has no working link
             or no DNS. The rows behind this gate (Discord delivery, R2 headroom, Cloudflare IP
-            drift and Healthchecks.io console drift) are held by the inhibit rule. Read the
-            probe's failure messages in the monitor-bridge log in the homelab namespace.
+            drift, Healthchecks.io console drift and the domain registration read) are held by
+            the inhibit rule. Read the probe's failure messages in the monitor-bridge log in the
+            homelab namespace.
       - alert: DiscordDeliveryFailing
         expr: homelab_check_success{job="monitor-bridge", check="discord"} == 0
         labels:
@@ -88,6 +89,44 @@ groups:
             the console. Fix the console, or change docs/healthchecks-io-deadman.md and
             monitor_bridge_healthchecks_expected together and redeploy monitor-bridge.
           runbook_url: https://docs.local.daniel-hunter.com/healthchecks-io-deadman/
+      - alert: DomainRegistrationUnreadable
+        expr: homelab_check_success{job="monitor-bridge", check="domain_registration"} == 0
+        labels:
+          severity: warning
+          service: domain
+          requires: wan
+        annotations:
+          summary: monitor-bridge cannot read the domain's registration expiry over RDAP.
+          description: >-
+            The registry's RDAP record did not answer or carries no expiration event, so the
+            days-left gauge holds its last read, or is absent after a restart. The
+            monitor-bridge log names the error. A failed read is retried every cycle.
+      # The registration's days left, which the domain_registration row exports as a gauge
+      # (#8519). A lapsed domain stops ACME renewal, every public route and the WireGuard
+      # endpoint name at once. The gauge keeps its last value through an RDAP failure, so no
+      # `requires` label: a WAN outage does not move it. The page fires beside the warning,
+      # since Alertmanager routes each on its own severity.
+      - alert: DomainRegistrationExpiringSoon
+        expr: homelab_domain_registration_expiry_days{job="monitor-bridge"} <= 45
+        labels:
+          severity: warning
+          service: domain
+        annotations:
+          summary: The domain registration expires in 45 days or fewer.
+          description: >-
+            The registry's RDAP record dates the domain's expiry {{ $value | printf "%.0f" }}
+            days out. Renew it at the registrar, and turn on auto-renew if it is off.
+      - alert: DomainRegistrationExpiring
+        expr: homelab_domain_registration_expiry_days{job="monitor-bridge"} <= 14
+        labels:
+          severity: critical
+          service: domain
+        annotations:
+          summary: The domain registration expires in 14 days or fewer.
+          description: >-
+            The registry's RDAP record dates the domain's expiry {{ $value | printf "%.0f" }}
+            days out. A lapse takes down ACME renewal, every public route, the WireGuard
+            endpoint name and the alert plane's own notifications. Renew it at the registrar.
       # `ScrapeTargetDown` (service monitor-bridge, files/rules/
       # scrape-targets.yaml) pages a failed scrape of this job, and M1 convention 5 allows one
       # pager. The absent() arm is what that rule cannot see: a scrape job removed from

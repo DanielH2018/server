@@ -81,6 +81,10 @@ SCANNED = {
 # Modules that read a template's SOURCE, each with why a render cannot answer the question.
 # Every entry is permanent: a render erases the thing it reads.
 TEMPLATE_SOURCE_READERS = {
+    "hosts/tests/test_host_python_invocations.py": (
+        "whether a manifest embeds a `.sh.j2` through `lookup('template', ...)` is the "
+        "subject, and the render replaces that call with the script's text"
+    ),
     "hosts/tests/test_docs_refresh_failure_path.py": (
         "the tmpfiles `d` line's owner and mode are the subject, and the file is a one-line "
         "package path, not a shell script with a render to run"

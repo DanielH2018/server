@@ -1,3 +1,4 @@
+{% import 'templates/renovate-agent-pins.j2' as pins with context -%}
 /renovate-prs
 
 You are running unattended, from a daily systemd timer on {{ inventory_hostname }}. Nobody
@@ -6,11 +7,11 @@ asking. Follow the renovate-prs skill; the notes below govern where it and this 
 
 Scope for this run:
 
-- Handle at most {{ renovate_agent_max_prs }} PRs. The timer runs daily, so the rest wait for
+- Handle at most {{ pins.max_prs }} PRs. The timer runs daily, so the rest wait for
   tomorrow. Take them in the order the skill's triage puts them: the mechanical classes first
   (uv.lock, prek/CI tooling, plain k8s image pins), the `manual — ` work orders last.
-- The session has a wall-clock ceiling of {{ renovate_agent_run_timeout_s }}s and a spend
-  ceiling of ${{ renovate_agent_budget_usd }}. Hitting either kills the run mid-step, so stop
+- The session has a wall-clock ceiling of {{ pins.run_timeout_s }}s and a spend
+  ceiling of ${{ pins.budget_usd }}. Hitting either kills the run mid-step, so stop
   and report while a landing is settled rather than starting another one near the limit.
 - You are already inside a git worktree at .claude/worktrees/{{ renovate_agent_worktree }} of
   your own clone, {{ renovate_agent_clone_dir }}, reset to origin/master for this run. You run
@@ -33,7 +34,7 @@ and `gh run rerun` step in the skill:
 How you land a PR, which replaces every `land.sh` step in the skill:
 
 - Run `systemctl start renovate-agent-land@<n>.service` for PR <n>, with a Bash timeout of
-  {{ renovate_agent_bash_timeout_ms }} ms. It returns when the landing has finished, which can
+  {{ pins.bash_timeout_ms }} ms. It returns when the landing has finished, which can
   take up to 190 minutes. Then read `/var/lib/renovate-agent-land/<n>.verdict`.
 - If that call timed out first, the landing is still running and the file may still hold an
   earlier verdict. Run this until it no longer reads `activating`, then read the verdict:

@@ -14,15 +14,19 @@ import urllib.parse
 
 from bridge.config import Config
 from bridge.sources import Sources
-from bridge.types import JsonObject, JsonValue, as_object
+from bridge.types import JsonObject, JsonValue, as_object, optional_object
 from verdicts.storage import b2_storage_verdict, b2_sum_versions
+
+# ASSUMPTION, untestable without a live breach: B2 checks the Class B cap before it looks the
+# name up, so a capped account answers 403 rather than this 404.
+B2_CLASS_B_PROBE_FILE = "monitor-bridge-class-b-probe-absent"
 
 
 def b2_authorize_data(cfg: Config, src: Sources) -> JsonObject:
     """The parsed b2_authorize_account response. Raises on any transport/HTTP failure.
 
-    The bridge's only authorize call: `b2_authorize` (the gate) and `b2_storage_usage` both
-    reach B2 through it.
+    The bridge's only authorize call, a Class C transaction: `b2_authorize` (the gate) and
+    `b2_storage_usage` both reach B2 through it.
 
     DECIDED: the bridge keeps this client rather than using scripts/lib/b2.py's `B2Session`
     (#3766). `b2_reachable` picks its cache TTL from the exception type: `Sources.get_json`
@@ -144,12 +148,20 @@ def check_b2_storage(cfg: Config, src: Sources) -> tuple[bool, str]:
 
 
 def b2_authorize(cfg: Config, src: Sources) -> tuple[bool, str]:
-    """Authenticate against B2. (ok, msg) — the msg carries B2's own error text on failure.
+    """Authenticate against B2, then spend one Class B call. (ok, msg).
 
-    Basic auth with the key id + application key is the whole protocol for b2_authorize_account,
-    sent by b2_authorize_data. _get_json re-raises HTTPError with the response body appended, so a cap breach arrives here as
-    "HTTP Error 403: ... transaction_cap_exceeded ..." and that string is what the check's log
-    line carries — the named cause G3 asked for.
+    B2 caps Class B and Class C transactions separately, and `b2_authorize_account` is Class C,
+    so authorizing alone reads up while a spent Class B cap fails Longhorn's backup reads. The
+    second call is `b2_download_file_by_name` for a name that does not exist
+    (`B2_CLASS_B_PROBE_FILE`): B2's 404 `not_found` proves it accepted a Class B call, and a
+    cap breach answers 403 `transaction_cap_exceeded` instead.
+
+    Raises:
+      urllib.error.HTTPError: B2 answered either call with an error other than that 404, so the
+        call was billed. _get_json and _get_bytes append the response body, so a cap breach
+        arrives as "HTTP Error 403: ... transaction_cap_exceeded ..." and the check's log line
+        carries B2's own cause.
+      RuntimeError: Either call never reached B2.
     """
     data = b2_authorize_data(cfg, src)
     # A 200 from something that isn't B2 must not read as healthy. Accept EITHER field rather than
@@ -159,7 +171,34 @@ def b2_authorize(cfg: Config, src: Sources) -> tuple[bool, str]:
     # guess here would page every cycle rather than fail safe.
     if not (data.get("accountId") or data.get("authorizationToken")):
         return False, "B2 auth returned neither accountId nor authorizationToken"
-    return True, "B2 reachable"
+    api_info = optional_object(data.get("apiInfo"), "apiInfo") or {}
+    storage = optional_object(api_info.get("storageApi"), "storageApi") or {}
+    allowed = optional_object(data.get("allowed"), "allowed") or {}
+    download_url = storage.get("downloadUrl") or data.get("downloadUrl")
+    bucket_name = storage.get("bucketName") or allowed.get("bucketName")
+    if not download_url or not bucket_name:
+        return False, (
+            "B2 auth carried no downloadUrl/bucketName, so the Class B probe cannot run"
+        )
+    try:
+        src.get_bytes(
+            "%s/file/%s/%s"
+            % (
+                str(download_url).rstrip("/"),
+                urllib.parse.quote(str(bucket_name)),
+                B2_CLASS_B_PROBE_FILE,
+            ),
+            headers={"Authorization": str(data.get("authorizationToken") or "")},
+        )
+    except urllib.error.HTTPError as e:
+        if e.code == 404 and "not_found" in str(e.msg):
+            return True, "B2 reachable"
+        e.msg = "Class B probe: %s" % e.msg
+        raise
+    return (
+        False,
+        "B2 Class B probe found %s, which must not exist" % B2_CLASS_B_PROBE_FILE,
+    )
 
 
 def b2_reachable(
