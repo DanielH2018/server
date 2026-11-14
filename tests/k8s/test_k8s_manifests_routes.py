@@ -11,6 +11,11 @@ and rendering without them raises `UndefinedError` rather than reproducing what 
 """
 
 import re
+import sys
+from pathlib import Path
+
+import pytest
+import yaml
 
 from lib import yaml_fast
 from lib.render_guard import k8s_services
@@ -466,3 +471,53 @@ def test_scrutiny_bypass_guard_rejects_the_old_wildcard():
     assert SCRUTINY_MUTATING_PATHS
     for path in sorted(SCRUTINY_MUTATING_PATHS):
         assert _bypass_permits_mutation(old, path), path
+
+
+def _authelia_check_against(monkeypatch, name: str, match: str) -> None:
+    """Run the forward-auth test over one authed fixture route that carries no `authelia`."""
+    module = sys.modules[__name__]
+    entry = {"name": "fixture", "use_authelia": True}
+    doc = {
+        "apiVersion": "traefik.io/v1alpha1",
+        "kind": "IngressRoute",
+        "metadata": {"name": name},
+        "spec": {
+            "entryPoints": ["https"],
+            "routes": [
+                {
+                    "kind": "Rule",
+                    "match": match,
+                    "middlewares": [{"name": "rate-limit"}],
+                    "services": [{"name": "fixture", "port": 80}],
+                }
+            ],
+            "tls": {"options": {"name": "modern"}},
+        },
+    }
+    rendered = yaml.safe_dump(doc)
+    monkeypatch.setattr(module, "_k8s_entries", lambda: [entry])
+    monkeypatch.setattr(module, "_route_template", lambda role: Path("fixture.j2"))
+    monkeypatch.setattr(module, "_route_templates", lambda role: [Path("fixture.j2")])
+    monkeypatch.setattr(module, "_role_context", lambda role, **overrides: overrides)
+    monkeypatch.setattr(module, "_render", lambda path, **ctx: rendered)
+    test_every_authed_service_carries_forward_auth_and_rate_limit()
+
+
+def test_a_clientip_clause_joined_by_or_to_a_public_host_needs_authelia(monkeypatch):
+    """`||` makes the ClientIP clause optional, so the public Host alone reaches the backend."""
+    with pytest.raises(AssertionError, match="fixture-public"):
+        _authelia_check_against(
+            monkeypatch,
+            "fixture-public",
+            "Host(`fixture.example.com`) || ClientIP(`10.0.0.0/8`)",
+        )
+
+
+def test_a_wide_clientip_cidr_outside_a_monitoring_route_needs_authelia(monkeypatch):
+    """A ClientIP clause admitting every address guards nothing, so it exempts nothing."""
+    with pytest.raises(AssertionError, match="fixture-wide"):
+        _authelia_check_against(
+            monkeypatch,
+            "fixture-wide",
+            "Host(`fixture.example.com`) && ClientIP(`0.0.0.0/0`)",
+        )
