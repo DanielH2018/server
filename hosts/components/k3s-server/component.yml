@@ -105,6 +105,11 @@ defaults:
   #   kubelet-arg        the two unsafe sysctls wg-easy needs; setup/k3s's defaults say why.
   #                      image-gc-high-threshold=85 is the kubelet's default value, so it
   #                      changes no behaviour: H6.7 added it to prove the windowed restart.
+  #                      system-reserved lowers node allocatable by memory pods use without
+  #                      requesting it (#8644). It accounts only: enforce-node-allocatable stays
+  #                      `pods`, so no cgroup caps k3s or the host's processes. Sum at 2026-11-14:
+  #                      Longhorn instance-manager's 7-day p95 working set 1565 MiB, system.slice
+  #                      anon 1.9 GiB (k3s-server, containerd), user.slice anon 3.7 GiB.
   #   secrets-encryption the apiserver encrypts Secrets on write, so k3s's snapshots carry no
   #                      plaintext Secret to R2. Secrets written before the flag stay plaintext
   #                      until `k3s secrets-encrypt rotate-keys` rewrites them: docs/host-packages.md,
@@ -144,6 +149,8 @@ defaults:
     kubelet-arg:
       - allowed-unsafe-sysctls=net.ipv4.conf.all.src_valid_mark,net.ipv4.ip_forward
       - image-gc-high-threshold=85
+      # DECIDED: user.slice counts. The Claude sessions there compete with pods for memory.
+      - system-reserved=memory=7Gi
     secrets-encryption: true
     etcd-expose-metrics: "{{ k3s_etcd_expose_metrics }}"
     kube-apiserver-arg: "{{ (k3s_server_audit_args if k3s_audit_log_enabled else []) + ['authentication-config=' ~ k3s_authentication_config_path] }}"
