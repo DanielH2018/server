@@ -142,6 +142,9 @@ class Fakes:
     master_runs: list[list[dict[str, str]] | Exception] = field(
         default_factory=lambda: [[]]
     )
+    # What each `tools.try_turn` call answers: True takes the landing turn, False finds another
+    # landing holding it, and an exception is raised in place of an answer.
+    turn: list[bool | Exception] = field(default_factory=lambda: [True])
     # What the PR head's `ci.yml` runs listing answers on every call, as `merge._ready_run_on`
     # reads it: `{id, status, conclusion}` per run. The default is one draft run that skipped,
     # and an exception is raised in place of an answer.
@@ -370,7 +373,16 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
         t[0] += 1.0
         return t[0]
 
+    turn_seq = _seq(f.turn, calls, "try_turn")
+
+    def try_turn():
+        answer = turn_seq()
+        if isinstance(answer, Exception):
+            raise answer
+        return (lambda: calls.append(("release_turn", (), {}))) if answer else None
+
     tools = Tools(
+        try_turn=try_turn,
         gh_json=gh_json,
         gh=gh_run,
         git=git_run,

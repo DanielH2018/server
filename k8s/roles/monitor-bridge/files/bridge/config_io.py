@@ -47,6 +47,8 @@ class IoConfig:
     R2_PROBE_INTERVAL_S: float
     CLOUDFLARE_IPS_EXPECTED: frozenset[str]
     CLOUDFLARE_IPS_PROBE_INTERVAL_S: float
+    DOMAIN_RDAP_URL: str
+    DOMAIN_REGISTRATION_PROBE_INTERVAL_S: float
     WAN_PROBE_URLS: tuple[str, ...]
     HEALTHCHECKS_API_URL: str
     HEALTHCHECKS_API_KEY: str = field(repr=False)
@@ -215,6 +217,13 @@ def io_config(
             c.strip() for c in _env("CLOUDFLARE_IPS_EXPECTED").split(",") if c.strip()
         ),
         CLOUDFLARE_IPS_PROBE_INTERVAL_S=_num("CLOUDFLARE_IPS_PROBE_INTERVAL_S"),
+        # The domain's RDAP record, whose `expiration` event dates the registration (#8519).
+        # Empty disables the check. Successes cached a day, failures re-probed every cycle
+        # (checks/domain_registration.py).
+        DOMAIN_RDAP_URL=_env("DOMAIN_RDAP_URL"),
+        DOMAIN_REGISTRATION_PROBE_INTERVAL_S=_num(
+            "DOMAIN_REGISTRATION_PROBE_INTERVAL_S"
+        ),
         # The WAN gate's endpoints, comma-separated and tried in order; empty disables the
         # gate. They are URLs rather than hosts so resolution, connect and TLS are all probed
         # by one request — checks/wan.py's header has why an anycast IP would not do.

@@ -43,6 +43,19 @@ fails, and even a successful call ends in wg-quick's PostUp hitting the LAN rout
 PostUp already added (`RTNETLINK answers: File exists`, the fatal case documented on
 `qbittorrent_k8s_lan_networks`), so the tunnel is torn back down.
 
+## The 2026-11-13 loop: a failed tunnel deletes the default route
+
+Mullvad refused a key with `KEY_LIMIT_REACHED`, first for qbittorrent and then for slskd's first
+deploy (#8402). Each start after the first failed with `Could not resolve host: api.mullvad.net
+(Could not contact DNS servers)`, and only a pod delete recovered it. kube-router's chains for the
+pod counted no packets, so the queries never left the netns.
+
+LSIO's `svc-wireguard/run` runs `ip route del default` when `wg-quick up` fails. The default route
+belongs to the pod netns, so it stays deleted across container restarts. With no default route,
+neither CoreDNS's service address nor anything off-link is reachable. The netns reset stashes the
+route in routing table 51819 and restores it. Nobody has read `ip route` inside a stuck sidecar, so
+the cause rests on LSIO's source and the symptoms, not on a live observation.
+
 ## How the netns reset was measured, and the leak the first deploy found
 
 Measured in the real image on daniel-pi (2026-09-17, `linuxserver/wireguard` under Docker with

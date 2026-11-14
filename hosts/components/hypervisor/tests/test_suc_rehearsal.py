@@ -61,21 +61,10 @@ def test_the_flux_tarball_digest_is_homelab_tools_amd64_pin():
 @pytest.mark.parametrize("holders", [0, 2], ids=["none", "two"])
 def test_a_pin_held_by_none_or_two_defaults_files_is_refused(tmp_path, holders):
     for name in ("a", "b")[:holders]:
-        defaults = tmp_path / "ansible/roles/k8s" / name / "defaults"
+        defaults = tmp_path / "k8s/roles" / name / "defaults"
         defaults.mkdir(parents=True)
         (defaults / "main.yml").write_text("k3s_version: v1.0.0+k3s1\n")
     with pytest.raises(suc_rehearsal.Refusal, match="k3s_version is held by"):
-        suc_rehearsal.pins(str(tmp_path))
-
-
-def test_a_pin_is_read_from_the_renamed_roles(tmp_path):
-    """The installed copy also reads checkouts from after ADR 0030's rename."""
-    defaults = tmp_path / "k8s/roles/k3s/defaults"
-    defaults.mkdir(parents=True)
-    (defaults / "main.yml").write_text("k3s_version: v1.0.0+k3s1\n")
-    with pytest.raises(
-        suc_rehearsal.Refusal, match="k3s_install_script_url is held by 0"
-    ):
         suc_rehearsal.pins(str(tmp_path))
 
 

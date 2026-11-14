@@ -26,6 +26,7 @@ from .citations import (
     GENERATED_BLOCK,
     HISTORY_MARKER,
     in_tree,
+    is_live_doc,
     mask_history,
     parse_citations,
     repo_docs,
@@ -34,7 +35,13 @@ from .citations import (
     tracked_files,
 )
 from .pins import image_pins, pinned_keys, split_image_ref
-from .removed import identifiers, removed_tokens, still_present
+from .removed import (
+    Code,
+    comment_name,
+    identifiers,
+    is_comment_line,
+    removed_lines,
+)
 
 RULES = frozenset(
     {
@@ -299,40 +306,107 @@ def _version_facts(
 def vanished_identifiers(
     repo: Path, since: str, tracked: frozenset[str]
 ) -> list[LintFinding]:
-    """A finding per section that names, in backticks, an identifier this branch removed.
+    """A finding per instruction-file section that names an identifier this branch removed.
 
     The branch is ``merge-base(since, HEAD)`` to the working tree, so a ``since`` that moved on
     after the branch was cut does not read master's own additions as this branch's removals.
-    A token is reported only if it occurs nowhere at HEAD (``still_present``), and only in a
-    section that still names it, so a commit that fixes its own sentence stays silent. A
+    A token is reported only if it occurs nowhere at HEAD (``removed.Code.holds``), and only
+    in a section that still names it, so a commit that fixes its own sentence stays silent. A
     history paragraph or bullet is skipped, and so is a ``generated_from`` block: its
     generator rewrites it, and the hook that checks those blocks fails until it has.
     """
-    base = (
-        git("merge-base", since, "HEAD", cwd=repo, check=False).stdout.strip() or since
-    )
-    removed = removed_tokens(repo, base)
-    if not removed:
-        return []
-    named: dict[str, set[str]] = {}
-    for doc in repo_docs(repo):
-        rel = doc.relative_to(repo).as_posix()
-        for sec in sections(rel, doc.read_text(encoding="utf-8")):
-            for span in spans(GENERATED_BLOCK.sub("", mask_history(sec.body))):
-                for tok in identifiers(span) & removed:
-                    named.setdefault(tok, set()).add(sec.key)
-    held = still_present(repo, sorted(named), tracked)
+    base, uses = _vanished_uses(repo, since, tracked, advised=False)
     return [
         _f(
-            key,
+            place,
             "vanished-identifier",
             f"`{tok}` was removed in {base[:9]}..HEAD or the uncommitted changes and occurs "
             f"nowhere else in the tree; edit the sentence, or open its paragraph or bullet "
             f"with `{HISTORY_MARKER}`",
         )
-        for tok in sorted(set(named) - held)
-        for key in sorted(named[tok])
+        for tok, place in uses
     ]
+
+
+def _named(docs: list[Path], repo: Path, removed: set[str]) -> dict[str, set[str]]:
+    """Each of ``removed`` that a section of ``docs`` names in backticks, with those sections."""
+    named: dict[str, set[str]] = {}
+    for doc in docs:
+        rel = doc.relative_to(repo).as_posix()
+        for sec in sections(rel, doc.read_text(encoding="utf-8")):
+            for span in spans(GENERATED_BLOCK.sub("", mask_history(sec.body))):
+                for tok in identifiers(span) & removed:
+                    named.setdefault(tok, set()).add(sec.key)
+    return named
+
+
+def _vanished_uses(
+    repo: Path, since: str, tracked: frozenset[str], advised: bool
+) -> tuple[str, list[tuple[str, str]]]:
+    """The diff's base, and a ``(token, place)`` for each use of a name the branch removed.
+
+    A place is a section key, or ``path:line`` for a comment. Uses come sorted. Without
+    ``advised`` the uses are those that block a commit: sections of instruction files. With
+    it they also hold the two classes that are advice until their false alarms are graded
+    under one in five (``docs/target-architecture/docs-guard/g7-removed-names.md``):
+
+    - a section of a live doc (``citations.is_live_doc``) that names the token in backticks;
+    - a full-line comment that names a token the branch took out of code, when only
+      comments still hold it. The token must be ``removed.comment_name``-shaped.
+    """
+    base = (
+        git("merge-base", since, "HEAD", cwd=repo, check=False).stdout.strip() or since
+    )
+    lines = removed_lines(repo, base)
+    removed = {tok for line in lines for tok in identifiers(line)}
+    if not removed:
+        return base, []
+    docs = repo_docs(repo)
+    code_names: set[str] = set()
+    if advised:
+        docs += [repo / rel for rel in sorted(tracked) if is_live_doc(rel)]
+        # A name the branch took out of a comment alone was stale before the branch.
+        code_names = {
+            tok
+            for line in lines
+            if not is_comment_line(line)
+            for tok in identifiers(line)
+            if comment_name(tok)
+        }
+    named = _named(docs, repo, removed)
+    if not named and not code_names:
+        return base, []
+    code = Code(repo, tracked)
+    uses = [
+        (tok, key) for tok, keys in named.items() if not code.holds(tok) for key in keys
+    ]
+    for tok, places in code.comment_uses(code_names).items():
+        if not code.holds_outside_comments(tok):
+            uses += [(tok, place) for place in places]
+    return base, sorted(uses)
+
+
+def vanished_advice(repo: Path, since: str) -> str | None:
+    """The names the branch removed that a doc or a comment still uses, for its session.
+
+    One count line, then one line per name with every place that still uses it. Empty when
+    there is none, and None when ``since`` and HEAD share no merge base.
+    """
+    if git("merge-base", since, "HEAD", cwd=repo, check=False).returncode != 0:
+        return None
+    by_name: dict[str, list[str]] = {}
+    _, uses = _vanished_uses(repo, since, tracked_files(repo), advised=True)
+    for tok, place in uses:
+        by_name.setdefault(tok, []).append(place)
+    if not by_name:
+        return ""
+    lines = [
+        f"removed names: {len(by_name)} still used. This branch removed each name below, "
+        "and no code holds it. Edit each place that uses it, or open a sentence about the "
+        f"past with `{HISTORY_MARKER}`."
+    ]
+    lines += [f"  {tok}: {', '.join(places)}" for tok, places in by_name.items()]
+    return "\n".join(lines)
 
 
 def changed_units(repo: Path, since: str) -> set[str]:

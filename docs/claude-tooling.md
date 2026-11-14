@@ -100,7 +100,8 @@ Reads firing-alert history from Prometheus' `ALERTS` over `--days`, one row per 
 episode. One `query_range` returns a sample for every step an alert fired. A series' samples
 within two steps of each other are one episode, and `--gap-min` pins that gap by hand. The step
 is 60 seconds and widens past about a week to stay under Prometheus' per-series point cap.
-Prometheus keeps 30 days, so a wider window returns nothing older.
+Prometheus' size cap holds less than its configured 30 days, so a window past what it holds
+returns nothing older, and the command warns on stderr with the oldest sample's age.
 
 **Every episode row carries both ends, in UTC**, so a row compares directly against
 `journalctl --utc` output. Shadow alerts are listed and marked `shadow`, because Alertmanager

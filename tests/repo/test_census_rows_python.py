@@ -448,6 +448,39 @@ ROWS = (
             )
         ),
     ),
+    Census(
+        name="host-check-textfiles-go-through-host-lib",
+        reason=(
+            "node-exporter merges a `homelab_check_*` family across every textfile and drops "
+            "each series whose file disagrees on HELP or TYPE, while the file's mtime still "
+            "reaches Prometheus. A host script that writes the four series itself loses all "
+            "four, and its NotReporting rule pages from the first run. Call "
+            "`host_lib.write_check_textfile`, which carries homelab-check-lib.sh's HELP and "
+            "TYPE lines."
+        ),
+        files=lambda: [
+            rel
+            for rel in tracked("hosts/*.py")
+            if "/tests/" not in rel and rel != "hosts/lib/host_lib.py"
+        ],
+        offence=lines_matching(re.compile(r"""["']homelab_check_\w+""")),
+        red=(
+            Subject("a.py", '("homelab_check_success", int(ok)),\n'),
+            Subject("b.py", "f'homelab_check_success{{check=\"{CHECK}\"}} 1'\n"),
+        ),
+        green=(
+            Subject("a.py", "write_check_textfile(path, CHECK, success=ok, **kw)\n"),
+            Subject("b.py", '"""Exits 0 with `homelab_check_success` 0."""\n'),
+        ),
+        min_matches=40,
+        must_find=frozenset(
+            {
+                "hosts/lib/checkout_sync.py",
+                "hosts/components/claude-code/files/claude_guardrail_ack.py",
+                "hosts/components/claude-code/files/claude_dotfiles_mirror.py",
+            }
+        ),
+    ),
 )
 _IDS = [row.name for row in ROWS]
 

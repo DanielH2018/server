@@ -280,6 +280,10 @@ ROWS = (
                 "its `CITED_PAGE` pattern excludes a design-doc citation from the runbook "
                 "rule, and its fixture is an alert description; it reads no plan"
             ),
+            "tests/repo/test_documented_paths_exist.py": (
+                "its `_PLANS` prefix leaves the plans out of the heading-pointer corpus; "
+                "it reads no plan"
+            ),
         },
     ),
 )

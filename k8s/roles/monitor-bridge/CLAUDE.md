@@ -57,7 +57,7 @@ observability's `bridge-exporter.yaml`** for it to page.
 
 ## The two exporters
 
-`files/verdict_export.py` serves the check verdicts and `files/deploy_pipeline.py` serves five
+`files/verdict_export.py` serves the check verdicts and the domain registration's days left, and `files/deploy_pipeline.py` serves five
 `homelab_deploy_*` gauges from the `promote` workflow's state. Each has its own port and scrape
 job. The internals page has their series and wiring.
 

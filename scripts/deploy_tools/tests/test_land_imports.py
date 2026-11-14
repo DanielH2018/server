@@ -16,6 +16,8 @@ MODULES = frozenset(
         "landing",
         "merge",
         "pace",
+        "turn",
+        "stale_base",
         "stuck_checks",
         "policy",
         "classify",
@@ -88,8 +90,13 @@ ALLOWED = {
         "policy",
         "pr_json",
         "gh_read",
+        "stale_base",
         "stuck_checks",
     },
+    # What makes a green head stale against master, and the one branch update (#4013).
+    "stale_base": {"landing", "outcome", "gh_read", "policy", "pr_json"},
+    # The one-landing-at-a-time lock the pipeline holds from the PR's CI run to its merge.
+    "turn": {"landing", "outcome"},
     # The master CI backlog read that holds --await-merge's direct merge (#5526).
     "pace": {"landing", "outcome"},
     # The read that ends --await-merge on a check GitHub never finishes (#7996).
@@ -157,6 +164,7 @@ ALLOWED = {
         "landing",
         "outcome",
         "merge",
+        "turn",
         "classify",
         "closing_refs",
         "ci",

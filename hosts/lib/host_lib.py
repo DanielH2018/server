@@ -203,6 +203,54 @@ def write_textfile(
         raise
 
 
+_CHECK_FAMILIES = (
+    ("homelab_check_success", "1 when the check's last verdict was up, 0 when down."),
+    (
+        "homelab_check_last_run_timestamp_seconds",
+        "Unix time the check's last verdict was taken.",
+    ),
+    (
+        "homelab_check_deadline_seconds",
+        "Longest legitimate gap between two of the check's writes.",
+    ),
+    (
+        "homelab_check_duration_seconds",
+        "Seconds the check's run took to reach its verdict.",
+    ),
+)
+
+
+def write_check_textfile(
+    path: str | os.PathLike[str],
+    check: str,
+    *,
+    success: bool,
+    deadline_s: int,
+    started: float,
+    now: float | None = None,
+    detail: tuple[str, ...] | list[str] = (),
+) -> None:
+    """Write the four `homelab_check_*` series for `check` to `path`, then each `detail` line.
+
+    The Python twin of `write_check_textfile` in homelab-check-lib.sh, with the same HELP and
+    TYPE lines. node-exporter merges a family across every textfile and drops each series whose
+    file disagrees on HELP or TYPE, so a file that omits them loses all four series while its
+    mtime still reaches Prometheus. Raises what `write_textfile` raises.
+    """
+    now = time.time() if now is None else now
+    values = (int(success), int(now), deadline_s, int(now - started))
+    lines = [
+        line
+        for (name, help_text), value in zip(_CHECK_FAMILIES, values, strict=True)
+        for line in (
+            f"# HELP {name} {help_text}",
+            f"# TYPE {name} gauge",
+            f'{name}{{check="{check}"}} {value}',
+        )
+    ]
+    write_textfile(path, "\n".join([*lines, *detail]) + "\n")
+
+
 _RFC3339_FMT = "%Y-%m-%dT%H:%M:%SZ"
 _FRACTIONAL_SECONDS_RE = re.compile(r"\.\d+")
 
