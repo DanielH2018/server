@@ -88,5 +88,95 @@ See repo-root `CLAUDE.md` for shared conventions.
 - **Pairing is closed by default** (no `permit_join` in 2.x). Enable join from the Z2M UI
   (`zigbee2mqtt.<domain>`) when adding devices, then disable.
 
+## Replacing the coordinator
+
+A dead coordinator does not have to mean re-pairing every device. Zigbee2MQTT can form the
+same network on a replacement radio from `coordinator_backup.json`. Nobody has run this
+procedure yet, so treat the restore behaviour below as read from the source, not observed.
+
+### The coordinator's recorded firmware
+
+The SLZB's own API reported this on 2026-11-14, from `http://<slzb_ip>/ha_info`:
+
+| Field | Value |
+|---|---|
+| `model` | `SLZB-06MU` |
+| `sw_version` (SMLIGHT core firmware) | `v3.3.1`, `fw_channel` release |
+| `zb_hw` (radio chip) | EFR32MG21 |
+| `zb_version` (Zigbee firmware build) | `20250220` |
+| `zb_type` | `0`, coordinator |
+
+The device reports itself as an SLZB-06MU, although this doc calls it the SLZB-06M. The
+`zb_version` field is a build date, not an EmberZNet version. The EmberZNet/EZSP version was
+not read. Zigbee2MQTT logs it at startup, and the frontend's About page shows it. Re-read
+the API after any firmware update and change this table in the same edit.
+
+### What the restore carries, and what it does not
+
+The zigbee-herdsman ember adapter writes the backup (`EmberAdapter.backup`). It holds the PAN
+ID, extended PAN ID, channel, network key, the network key's frame counter, the hashed trust
+centre link key and the old coordinator's IEEE address. It does not carry these:
+
+- **The coordinator's IEEE address on the new radio.** The restore stores the old address but
+  never writes it. The new radio keeps its own address, and Zigbee2MQTT logs
+  `Coordinator address changed`. Zigbee2MQTT's FAQ says to copy the old adapter's IEEE address
+  into the new one when moving to another adapter. Whether the paired devices keep working
+  without that copy has not been tested here.
+- **A frame counter increment.** The restore sets the network key's outgoing frame counter to
+  the backup's value unchanged. Devices drop frames whose counter is lower than the last one
+  they saw. Zigbee2MQTT writes the backup at startup only when the file is missing, daily,
+  and on a clean stop. A dead coordinator gets no clean stop, so the backup can be up to a day
+  behind. The coordinator's transmissions from that day then sit above the restored counter,
+  and devices can ignore the new coordinator until it catches up. The newer the backup, the
+  smaller that gap.
+- **Device tables.** The backup holds no child or routing table, and its per-device link keys
+  are empty with Zigbee2MQTT's defaults. Devices re-announce and routes rebuild on their own.
+  A battery device that stays silent may need a button press or a power cycle.
+- **The SLZB's own settings.** Its IP address, coordinator mode and port 6638 live on the
+  device, not in the backup.
+
+The adapter restores only when every one of these holds; otherwise it forms a new network
+from config and logs `Config does not match backup`:
+
+- The new radio is on no network, or on one whose PAN ID, extended PAN ID or key differs from
+  config, which the adapter then leaves.
+- The backup's PAN ID, extended PAN ID and network key match config. They do here because
+  config pins all three (`network_key`, `pan_id` and `ext_pan_id` in
+  `templates/config/configuration.yaml.j2`).
+- The backup's channel is in config's channel list. Config sets none, so Zigbee2MQTT's default
+  list applies.
+- The backup was written by EZSP version 12 or later. The adapter renames an older one to
+  `.old` and forms fresh.
+
+A fresh network means every device has to rejoin, and the new radio is then on that network.
+If that happens, stop and read the log before trying again.
+
+### Procedure (operator-only)
+
+1. **Keep the backup.** Copy `coordinator_backup.json` and `database.db` off the
+   `zigbee2mqtt-data` volume before anything starts the pod against the new radio. If the
+   volume is also gone, restore it from its R2 backup first (`docs/longhorn-disaster-recovery.md`).
+2. **Power off the old coordinator** if it still runs. The radio accepts one client, and two
+   radios on the same PAN conflict.
+3. **Flash the replacement** to the firmware in the table above: the same SMLIGHT core
+   firmware and the same Zigbee build, in coordinator mode. Zigbee2MQTT's ember adapter needs
+   EmberZNet 7.4.x to 9.1.x (EZSP v13).
+4. **Copy the old IEEE address onto the new radio**, following Zigbee2MQTT's
+   "copy the IEEE address" guide. The address is `coordinatorIeeeAddress` in the backup.
+5. **Give the replacement the old address and port.** Either reserve `10.0.0.127` for it on
+   the LAN and set its Zigbee TCP port to 6638, or change `slzb_ip` in
+   `inventory/group_vars/all.yml`. That variable feeds both the Zigbee2MQTT config and the
+   blackbox probe in `k8s/roles/observability/templates/prometheus.yaml.j2`, so changing it
+   is a merged change.
+6. **Let the pod reconnect.** Zigbee2MQTT exits when it cannot reach the coordinator, and the
+   kubelet restarts it. Once the new radio answers on port 6638, the next start connects with
+   no manual restart. The log should read `Forming from backup` and then `restored`.
+7. **Check the devices.** Each one should report within its availability timeout. Toggle a
+   bulb and press the Tap Dial. A device that stays offline may need a power cycle, and
+   re-pairing it is the last resort.
+
+Nobody has run this procedure onto a spare adapter. The first run should record its date
+here, together with how many devices needed attention.
+
 ## Editing
 - Z2M cfg: `templates/config/configuration.yaml.j2` (rendered into the k8s Secret by `k8s/roles/zigbee2mqtt/`)
