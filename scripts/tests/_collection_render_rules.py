@@ -18,25 +18,42 @@ RENDER_MODULES = frozenset({"_k8s_render", "_host_packages"})
 _PURE = frozenset({"pod_spec", "pod_template"})
 
 
+def _renders(name: str) -> bool:
+    return name not in _PURE and not name.isupper()
+
+
 def render_imports(source: str) -> list[str]:
-    """The rendering functions `source` imports from the render modules, by local name."""
+    """The rendering functions `source` imports from the render modules, by local name.
+
+    A module imported whole is listed as its local name and a dot, `_k8s_render.`, so that any
+    rendering function called through it matches.
+    """
     if not any(module in source for module in RENDER_MODULES):
         return []
-    return [
-        alias.asname or alias.name
-        for node in ast.walk(parse(source))
-        if isinstance(node, ast.ImportFrom) and node.module in RENDER_MODULES
-        for alias in node.names
-        if alias.name not in _PURE and not alias.name.isupper()
-    ]
+    found = []
+    for node in ast.walk(parse(source)):
+        if isinstance(node, ast.ImportFrom) and node.module in RENDER_MODULES:
+            found += [a.asname or a.name for a in node.names if _renders(a.name)]
+        elif isinstance(node, ast.Import):
+            found += [
+                f"{a.asname or a.name}." for a in node.names if a.name in RENDER_MODULES
+            ]
+    return found
 
 
 def _called_names(node: ast.AST) -> set[str]:
-    return {
-        call.func.id
-        for call in ast.walk(node)
-        if isinstance(call, ast.Call) and isinstance(call.func, ast.Name)
-    }
+    """Each called name in `node`: `f` for `f()`, and `m.f` for `m.f()`."""
+    names = set()
+    for call in ast.walk(node):
+        if not isinstance(call, ast.Call):
+            continue
+        if isinstance(call.func, ast.Name):
+            names.add(call.func.id)
+        elif isinstance(call.func, ast.Attribute) and isinstance(
+            call.func.value, ast.Name
+        ):
+            names.add(f"{call.func.value.id}.{call.func.attr}")
+    return names
 
 
 def _import_time_code(tree: ast.Module) -> list[ast.stmt | ast.expr]:
@@ -60,9 +77,11 @@ def renders_at_collection(source: str) -> list[str]:
     call one, however deep. A function that is only defined, cached or not, renders nothing
     until a test calls it.
     """
-    readers = set(render_imports(source))
-    if not readers:
+    imported = render_imports(source)
+    if not imported:
         return []
+    modules = tuple(name for name in imported if name.endswith("."))
+    readers = set(imported) - set(modules)
     tree = parse(source)
     defs = {
         stmt.name: _called_names(stmt)
@@ -72,6 +91,11 @@ def renders_at_collection(source: str) -> list[str]:
 
     def reached(names: set[str], seen: frozenset[str] = frozenset()) -> set[str]:
         found = names & readers
+        found |= {
+            name
+            for name in names
+            if name.startswith(modules) and _renders(name.split(".", 1)[1])
+        }
         for name in (names & defs.keys()) - seen:
             found |= reached(defs[name], seen | {name})
         return found

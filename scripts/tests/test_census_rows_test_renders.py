@@ -365,7 +365,9 @@ ROWS = (
             "cannot overlap the fleet render `render_share.build_each` starts once collection "
             "ends; one such module cost each CI leg 4-7.7s (#8692). Read the render inside a "
             "test, or in a function the test calls, and report every offender from one test "
-            "rather than parametrizing over the render."
+            "rather than parametrizing over the render. The scan follows calls through the "
+            "module's own functions only, so a reader imported from another test module "
+            "passes it."
         ),
         files=pytest_only_modules,
         offence=lambda s: renders_at_collection(s.text),
@@ -388,6 +390,9 @@ ROWS = (
                 "def hosts():\n    return [h for h in HOSTS if _ships(h)]\n"
                 "AIDE = hosts()\n",
             ),
+            Subject(
+                "d.py", "import _k8s_render as k\nDOCS = list(k.rendered_docs())\n"
+            ),
         ),
         green=(
             Subject(
@@ -397,6 +402,7 @@ ROWS = (
                 "def test_x():\n    assert docs()\n",
             ),
             Subject("b.py", "from _k8s_render import pod_spec\nSPEC = pod_spec({})\n"),
+            Subject("d.py", "import _k8s_render\nSPEC = _k8s_render.pod_spec({})\n"),
             Subject(
                 "c.py", "def rendered_docs():\n    return []\nDOCS = rendered_docs()\n"
             ),

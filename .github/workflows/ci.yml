@@ -690,6 +690,19 @@ jobs:
           uv run python scripts/dev/pytest_shard.py --of "$SHARDS" --shard "$SHARD" --out "$RUNNER_TEMP/shard.txt"
           echo "$(wc -l < "$RUNNER_TEMP/shard.txt") test file(s) in this shard"
 
+      # Every xdist worker collects the whole shard, and on a cold checkout each one rewrites
+      # every module's assertions itself: 2.3-2.5s of a 6.7s collection on daniel-server (#8693).
+      # pytest names a rewritten module `<name>.<cache tag>-pytest-<version>.pyc` and validates it
+      # by the source's hash, not its mtime, so an entry from an earlier commit stays valid for
+      # every module the commit left unchanged, and a changed module is rewritten again.
+      # About 7 MB per shard. A new key every run, so each run saves what it rewrote.
+      - name: Cache pytest's rewritten test modules
+        uses: actions/cache@v6.1.0
+        with:
+          path: "**/__pycache__/*-pytest-*.pyc"
+          key: pytest-rewrite-${{ runner.os }}-${{ hashFiles('uv.lock') }}-shard${{ matrix.shard }}-${{ github.sha }}
+          restore-keys: pytest-rewrite-${{ runner.os }}-${{ hashFiles('uv.lock') }}-shard${{ matrix.shard }}-
+
       # --durations because this job is the pole of the whole landing: unsharded, its test step
       # measured 267s against the `hooks` job beside it at 29-46s, and a landing waits on CI twice.
       # The runner is slower per test than the workstation, so a local `--durations` run does

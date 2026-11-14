@@ -1131,7 +1131,7 @@
  "tests/k8s/test_traefik_netpol_https_origin_lock.py": 0.0,
  "tests/k8s/test_uncovered_roles_justifications_resolve.py": 0.01,
  "tests/k8s/test_vendored_manifests_match_their_pins.py": 0.01,
- "tests/k8s/test_vip_pins.py": 11.38,
+ "tests/k8s/test_vip_pins.py": 11.75,
  "tests/k8s/test_volume_names_descriptive.py": 0.13,
  "tests/k8s/test_workload_service_overrides.py": 0.02,
  "tests/k8s/test_workload_shell_uses_the_macros.py": 0.03,
