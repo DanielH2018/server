@@ -51,6 +51,14 @@ def test_a_paused_monitor_is_flagged():
     assert "paused   803868101  Auth Health" in text
 
 
+def test_a_partial_page_is_unreadable_not_a_deletion():
+    payload = _payload((803868101, _UP)) | {
+        "pagination": {"offset": 0, "limit": 1, "total": 2}
+    }
+    with pytest.raises(core.Unreadable):
+        ur.format_uptime_robot(_DOCUMENTED, payload)
+
+
 def test_a_refused_api_call_is_unreadable_not_a_verdict():
     with pytest.raises(core.Unreadable):
         ur.format_uptime_robot(
@@ -64,9 +72,10 @@ def test_the_doc_table_yields_the_known_monitors_with_ids():
     assert all(r["id"].isdigit() for r in rows)
 
 
-def test_a_reworded_doc_table_is_unreadable():
-    with pytest.raises(core.Unreadable):
+def test_a_reworded_doc_table_fails_without_reading_as_unreadable():
+    with pytest.raises(SystemExit) as exc:
         ur.documented_monitors("| Auth Health | 803868101 | no backticks |\n")
+    assert not isinstance(exc.value, core.Unreadable)
 
 
 def test_the_key_reaches_curl_on_stdin_not_argv():
@@ -81,5 +90,4 @@ def test_the_key_reaches_curl_on_stdin_not_argv():
     )
     assert code == 1
     assert "<uptimerobot_api_key>" in seen["config"]
-    assert "monitors=803868101-803868270" in seen["config"]
     assert "<uptimerobot_api_key>" not in seen["url"]

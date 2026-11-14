@@ -56,22 +56,25 @@ def documented_monitors(text: str | None = None) -> list[dict[str, str]]:
     """The rows of the doc's monitor table, each a dict of name, id, url, keyword and rule.
 
     Raises:
-        Unreadable: a monitor in `KNOWN_MONITORS` is not in the table.
+        SystemExit: a monitor in `KNOWN_MONITORS` is not in the table. No retry can fix
+          that, so `probe.py` reports it as the fail verdict rather than as unreadable.
     """
     rows = [
         m.groupdict() for m in _ROW.finditer(DOC.read_text() if text is None else text)
     ]
     missing = KNOWN_MONITORS - {row["name"] for row in rows}
     if missing:
-        raise core.Unreadable(
-            f"{DOC.name}: monitor table no longer lists {sorted(missing)}"
-        )
+        raise SystemExit(f"{DOC.name}: monitor table no longer lists {sorted(missing)}")
     return rows
 
 
-def api_config(api_key: str, ids: list[str]) -> str:
-    """The `curl --config -` body that POSTs the key and the ids, so neither reaches argv."""
-    return f'data = "api_key={api_key}&format=json&monitors={"-".join(ids)}"\n'
+def api_config(api_key: str) -> str:
+    """The `curl --config -` body that POSTs the key, so it never reaches argv.
+
+    It asks for every monitor rather than filtering by id: how the API answers a filter
+    naming a deleted id is undocumented, and a deletion must read as a verdict.
+    """
+    return f'data = "api_key={api_key}&format=json"\n'
 
 
 def format_uptime_robot(
@@ -80,13 +83,21 @@ def format_uptime_robot(
     """Render the verdict as `(text, exit_code)`: 1 when a documented monitor is missing or paused.
 
     Raises:
-        Unreadable: the API refused the request, so the monitor list proves nothing.
+        Unreadable: the API refused the request or returned a partial page, so the monitor
+          list proves nothing.
     """
     if payload.get("stat") != "ok":
         raise core.Unreadable(
             f"Uptime Robot refused the monitor list: {payload.get('error')}"
         )
-    live = {str(m.get("id")): m for m in payload.get("monitors") or []}
+    monitors = payload.get("monitors") or []
+    total = (payload.get("pagination") or {}).get("total", len(monitors))
+    if total > len(monitors):
+        raise core.Unreadable(
+            f"Uptime Robot returned {len(monitors)} of {total} monitors; a partial page "
+            "cannot show that a monitor is missing"
+        )
+    live = {str(m.get("id")): m for m in monitors}
     problems = []
     for row in documented:
         monitor = live.get(row["id"])
@@ -116,15 +127,14 @@ def run_uptime_robot(ns, *, read_key=None, post=None) -> int:
           `core.config_get`.
     """
     documented = documented_monitors()
-    ids = [row["id"] for row in documented]
     if getattr(ns, "dry_run", False):
         print(
             " ".join(core.ha_curl_argv(API_URL))
-            + f"   # + api_key=<{API_KEY_NAME}>&monitors={'-'.join(ids)} (via --config stdin)"
+            + f"   # + api_key=<{API_KEY_NAME}> (via --config stdin)"
         )
         return 0
     api_key = (read_key or core.sops_extract)(API_KEY_NAME)
-    body = (post or core.config_get)(API_URL, api_config(api_key, ids))
+    body = (post or core.config_get)(API_URL, api_config(api_key))
     text, code = format_uptime_robot(documented, core.parse_json(API_URL, body))
     print(text)
     return code

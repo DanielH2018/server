@@ -63,8 +63,8 @@ has its own test under `scripts/diagnostics/tests/`.
   `get`/`list` on Secrets and `create`/`delete` on pods, and exits 1 naming any verb it gained
   (`probe_lib/readonly_rbac.py`). A refused control verb exits 75, because then the denials
   prove nothing.
-- **`uptime-robot`** lists the Uptime Robot monitors `docs/uptime-robot-monitors.md` names
-  through the API, and exits 1 naming any documented id that no longer exists or is paused
+- **`uptime-robot`** lists the account's Uptime Robot monitors through the API, and exits 1
+  naming any id `docs/uptime-robot-monitors.md` documents that no longer exists or is paused
   (`probe_lib/uptime_robot.py`). Its key is the SOPS key `uptimerobot_api_key`, which the
   operator holds, so an agent session gets exit 75.
 - **`shed-set`** prints the Deployments and StatefulSets to scale to zero when one node is

@@ -138,9 +138,9 @@ host returns the same `"status":"OK"` beside the session fields.
 
 ## Checking the console against this file
 
-`uv run python scripts/diagnostics/probe.py uptime-robot` lists the documented ids through
+`uv run python scripts/diagnostics/probe.py uptime-robot` lists the account's monitors through
 Uptime Robot's v2 `getMonitors` API. It exits 1 when a documented id no longer exists or is
-paused, and 75 when it could not read the API. A monitor that is down is not a failure here,
+paused, and 75 when it could not read the API or got a partial page. A monitor that is down is not a failure here,
 because Uptime Robot pages on that itself. The table above is the oracle:
 `scripts/diagnostics/probe_lib/uptime_robot.py` parses it, and the keyword test reads the same
 rows.
