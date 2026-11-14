@@ -4,7 +4,11 @@ import json
 import subprocess
 
 import gh as ghmod
+import gh_quota
 import pytest
+
+# 2100-01-01, so the quota window in the ledger test stays open under the real clock.
+WINDOW_END = 4_102_444_800
 
 
 def test_gh_disables_prompts_and_the_notifier(monkeypatch):
@@ -51,3 +55,30 @@ def test_gh_nonzero_raises_by_default(monkeypatch):
         ghmod.gh("auth", "status")
     assert "not logged in" in excinfo.value.stderr
     assert ghmod.gh("auth", "status", check=False).returncode == 1
+
+
+def test_gh_counts_the_call_against_the_session_before_it_runs(monkeypatch, tmp_path):
+    monkeypatch.setenv("GH_QUOTA_MODE", "record")
+    monkeypatch.setenv("GH_QUOTA_DIR", str(tmp_path))
+    monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "session-under-test")
+    resources = {
+        "graphql": {"used": 40, "limit": 5000, "reset": WINDOW_END},
+        "core": {"used": 0, "limit": 5000, "reset": WINDOW_END},
+    }
+
+    def sample(argv, **_kwargs):
+        return subprocess.CompletedProcess(
+            argv, 0, json.dumps({"resources": resources}), ""
+        )
+
+    # Reading the ledger first takes the sample here, so `gh()` below does not run one.
+    ledger = gh_quota.Ledger(root=tmp_path, run=sample)
+    (window,) = ledger.windows()
+    assert window.sessions == {}
+
+    # A missing cwd stops subprocess before `gh` starts, so nothing reaches GitHub.
+    with pytest.raises(FileNotFoundError):
+        ghmod.gh("pr", "list", "--state", "open", cwd=tmp_path / "missing")
+
+    (window,) = ledger.windows()
+    assert window.sessions == {"session-under-test": {"pr list": 1}}
