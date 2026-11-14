@@ -130,10 +130,10 @@ flux_sync_suspend: false
 flux_verify_drill: false
 
 # The one image every Job Flux applies runs, such as `<tag>-snapshot`'s (target slice D5,
-# *Rules for every Job Flux applies*). The same python:3.14-alpine digest monitor_bridge_k8s_image
+# *Rules for every Job Flux applies*). The same python:3.15-alpine digest monitor_bridge_k8s_image
 # pins, and Renovate's k8s-images manager moves both in one PR, as one dependency. The renderer
 # reads it here (scripts/renderer/renderer_lib/snapshot.py); no task of this role does.
-flux_job_image: python:3.14-alpine@sha256:f6a589d43c42b9e7f7dc67a12d37132491f362859a5d750607710cc56da3bc72
+flux_job_image: python:3.15-alpine@sha256:0f9552bb28711333da16915ec146f5e6bb44a7fdac9ced15dc17c2e0206346dd
 
 # The OCIRepository, the root Kustomization, the Providers and the Alerts are kinds whose
 # CRDs components.yaml installs, so one directory apply would refuse them on a cluster

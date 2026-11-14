@@ -1,7 +1,8 @@
 # coredns — cluster DNS, derived from k3s's bundled addon
 
 CoreDNS's Deployment, the `kube-dns` Service, its RBAC and the `Corefile` key of the `coredns`
-ConfigMap. Every pod resolves names through it, and so do Flux's own controllers, which fetch
+ConfigMap
+(`k8s/roles/coredns/tests/test_coredns_render.py::test_the_configmap_carries_only_the_corefile_key`). Every pod resolves names through it, and so do Flux's own controllers, which fetch
 the bundle from GHCR. A bad apply here stops name resolution, and host probes stay green.
 
 ## At a glance
@@ -12,7 +13,7 @@ the bundle from GHCR. A bad apply here stops name resolution, and host probes st
 - **Claims:** none (no PVC)
 <!-- /generated_from -->
 
-- **Flux applies it, not Ansible** (H1.4). Its `containers_list` entry is in `cluster/services.yml`
+- **Flux applies it.** Its `containers_list` entry is in `cluster/services.yml`
   from its first commit. The `.skip` marker that stops k3s reconciling its addon is the
   `homelab-daniel-box` package's since H6.4a (`hosts/components/k3s-server/`). On a new
   cluster the marker goes back only once Deployment `coredns` exists: `docs/host-packages.md`,

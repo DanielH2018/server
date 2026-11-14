@@ -66,9 +66,19 @@ bundle refreshed whenever the key backup is (or after a `secrets.yml` change), w
 ```bash
 git bundle create "homelab-$(date +%F).bundle" --all
 uv run python scripts/dev/findings.py export --out "homelab-register-$(date +%F).json"
+uv run python scripts/secrets_mgmt/recovery_kit.py record   # then commit secrets/recovery_kit.yml
 # recover: git clone homelab-YYYY-MM-DD.bundle server
 #   then, operator-only: sops -d needs the age key beside it, and prints every secret
 ```
+
+`recovery_kit.py record` writes the refresh date to `secrets/recovery_kit.yml`, the only
+record of the kit's age. The daily secret-rotation audit on daniel-box runs
+`recovery_kit.py check`, which reads down when the stamp is missing or older than
+`MAX_AGE_DAYS` in `scripts/secrets_mgmt/recovery_kit.py`. The audit writes that verdict to
+its own `recovery-kit` check, and `RecoveryKitStale` fires on it. The kit's verdict stays out
+of `SecretRotationAuditFailed`, so a stale kit cannot hide an overdue secret. A fresh `record`
+clears the alert at the next daily audit run. No CI check reads the stamp's age, so an old
+kit never turns a PR red.
 
 `secrets.yml` inside the bundle stays SOPS-encrypted — useless without the age key — so the
 bundle is no more sensitive than the GitHub repo; the age key is the part to protect.
@@ -104,7 +114,8 @@ the per-volume map and each exclusion's rationale:
   absorb a batch). Acceptable by design — configs, largely regenerable.
   A volume added to the tier recently holds fewer recovery points than the retain until it
   has run that many weeks.
-- **No-backup** (16 volumes): rebuilt, not restored. The notable rebuild paths:
+- **No-backup** (the listed volumes plus every `longhorn-nobackup` PV): rebuilt, not
+  restored. The notable rebuild paths:
   `scrutiny` (TSDB refills from collector runs),
   Pi-hole (`pihole -g` rebuilds gravity; config is Ansible-rendered), `livesync` (a client
   runs "Rebuild everything" — the vault's source of truth is the markdown on each

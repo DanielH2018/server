@@ -1,5 +1,8 @@
 """The project and bind-source censuses over the rendered Compose project (H5.2a1).
 
+The last two cases cover the rows the project gives the nut login census
+(`tests/services/test_nut_fsd_login_confined.py`).
+
 Each census has a `_is_clean` case and a `_is_flagged` case, so a rule that stopped matching fails
 its own test. The live component holds no service until H5.6, so the named members below are
 fixture services. The move PRs point the censuses at the live project and name their services.
@@ -8,11 +11,13 @@ Run: uv run pytest hosts/lib/tests/test_pi_compose_census.py
 """
 
 import pytest
+import yaml
 from _compose_tree import (
     ALLOY,
     AUTOHEAL,
     COMPOSE,
     DIGEST,
+    NAMES,
     PROXY,
     REAL,
     TMPFILES_LINES,
@@ -23,6 +28,7 @@ from _compose_tree import (
     project_problems,
     tmpfiles_dirs,
 )
+from _setup_render import pi_compose_texts
 
 FIXTURE_MEMBERS = {"docker-proxy-lifecycle", "alloy", "autoheal"}
 TMPFILES = (REAL / "tmpfiles.d" / "homelab-compose.conf").read_text() + TMPFILES_LINES
@@ -158,3 +164,48 @@ def test_a_short_syntax_volume_is_flagged(tree):
     )
     _, binds, _ = problems(tree)
     assert binds == ["alloy: volume './data:/data' is not long-syntax bind"]
+
+
+LOGIN_SENTINEL = "nut-monitor-password-sentinel-8541"
+UPS_READER = f"""services:
+  ups-reader:
+    container_name: ups-reader
+    image: ghcr.io/example/ups-reader:1{DIGEST}
+    environment:
+      - UPS_PASSWORD={{{{ VAR }}}}
+"""
+
+
+def login_census_rows(tmp_path, var, key):
+    """The nut login census's rows for a one-service tree whose compose file reads `var`."""
+    tree = ComposeTree(
+        tmp_path,
+        services={"ups-reader": {"compose.yaml.j2": UPS_READER.replace("VAR", var)}},
+        keys=(key,),
+        names=(*NAMES, "nut_monitor_password", "nut_ha_password"),
+    )
+    spec_defaults = yaml.safe_load((REAL / "component.yml").read_text())["defaults"]
+    tree.write(
+        defaults={**spec_defaults, "upsmon_secret": "{{ nut_monitor_password }}"}
+    )
+    return pi_compose_texts(tree.render(), {"nut_monitor_password": LOGIN_SENTINEL})
+
+
+def test_an_alias_of_the_login_reaches_a_pi_compose_census_row(tmp_path):
+    rows = {
+        (component, name): text
+        for component, name, text in login_census_rows(
+            tmp_path, "upsmon_secret", "nut_monitor_password"
+        )
+    }
+    assert (
+        f"UPS_PASSWORD={LOGIN_SENTINEL}"
+        in rows["pi-compose/ups-reader", "compose.yaml"]
+    )
+    assert LOGIN_SENTINEL in rows["pi-compose", "compose.env"]
+
+
+def test_a_pi_compose_service_reading_the_ha_login_carries_no_sentinel(tmp_path):
+    rows = login_census_rows(tmp_path, "nut_ha_password", "nut_ha_password")
+    assert ("pi-compose/ups-reader", "compose.yaml") in {(c, n) for c, n, _ in rows}
+    assert not [component for component, _, text in rows if LOGIN_SENTINEL in text]

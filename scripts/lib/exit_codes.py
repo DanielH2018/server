@@ -145,6 +145,11 @@ SECRET_ROTATION_OK = OK
 SECRET_ROTATION_FAILED = FAILED
 SECRET_ROTATION_BAD_ARGS = USAGE_ERROR
 
+# -- scripts/secrets_mgmt/recovery_kit.py -----------------------------------------------
+RECOVERY_KIT_OK = OK
+RECOVERY_KIT_STALE = FAILED
+RECOVERY_KIT_BAD_ARGS = USAGE_ERROR
+
 # -- scripts/backup/b2_drain.py ---------------------------------------------------------
 # `prune_backups.py` syncs the target only on 0 and 1, so a refused volume reports while a
 # usage error or a mid-run B2 failure stops the run.
@@ -233,7 +238,8 @@ CONTRACTS: dict[str, tuple[Code, ...]] = {
             "LAND_GAVE_UP",
             "gave up waiting — a budget elapsed, no promotion covered the merge in time, "
             "the health gate could not read its store, "
-            "or no host package containing the merge is published.",
+            "or no host package containing the merge is published. "
+            "From a `--detach` parent: the live-landing limit was full, so no landing started.",
         ),
     ),
     "scripts/deploy_tools/await_ci.py": (
@@ -435,6 +441,23 @@ CONTRACTS: dict[str, tuple[Code, ...]] = {
             SECRET_ROTATION_BAD_ARGS,
             "SECRET_ROTATION_BAD_ARGS",
             "the command line is wrong: a name or date the subcommand refuses.",
+        ),
+    ),
+    "scripts/secrets_mgmt/recovery_kit.py": (
+        _c(
+            RECOVERY_KIT_OK,
+            "RECOVERY_KIT_OK",
+            "the kit is within its age limit, or `record` wrote the stamp.",
+        ),
+        _c(
+            RECOVERY_KIT_STALE,
+            "RECOVERY_KIT_STALE",
+            "`check` found the stamp missing, unreadable, in the future or past the age limit.",
+        ),
+        _c(
+            RECOVERY_KIT_BAD_ARGS,
+            "RECOVERY_KIT_BAD_ARGS",
+            "the command line is wrong, including a `record --date` after today.",
         ),
     ),
     "scripts/backup/b2_drain.py": (

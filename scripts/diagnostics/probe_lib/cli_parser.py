@@ -254,7 +254,7 @@ def _build_parser():
         ),
     )
     b2l.add_argument(
-        "--bucket", help="override the bucket read from the longhorn_b2_bucket secret"
+        "--bucket", help="override the bucket inventory's longhorn_b2_bucket names"
     )
     b2l.add_argument(
         "--prefix", default=LONGHORN_PREFIX, help="B2 prefix Longhorn writes under"
@@ -268,7 +268,7 @@ def _build_parser():
         ),
     )
     b2b.add_argument(
-        "--bucket", help="override the bucket read from the longhorn_b2_bucket secret"
+        "--bucket", help="override the bucket inventory's longhorn_b2_bucket names"
     )
     b2b.add_argument(
         "--prefix", default=LONGHORN_PREFIX, help="B2 prefix Longhorn writes under"
@@ -337,6 +337,17 @@ def _build_parser():
         ),
     )
     _dry_run(vp, "print the kubectl calls without making them")
+    ur = sub.add_parser(
+        "uptime-robot",
+        **_verdict_help(
+            "assert every Uptime Robot monitor docs/uptime-robot-monitors.md names exists and "
+            "is not paused. Lists monitors through the API with the SOPS key "
+            "uptimerobot_api_key, fed via stdin; changes nothing.",
+            "every documented monitor runs",
+            "a documented monitor is missing or paused",
+        ),
+    )
+    _dry_run(ur, "print the curl call without making it")
     fx = sub.add_parser("flux", **_verdict_help(*FLUX_HELP))
     fx.add_argument("tags", nargs="*", help=FLUX_TAGS_HELP)
     _flag(fx, "--all", "list every Kustomization, not only the unsettled ones")
@@ -485,4 +496,10 @@ def _build_parser():
     )
     for module in (lander, builder):
         module.add_parser(sub, _verdict_help)
+    usage = sub.add_parser(
+        "usage",
+        help="requests per service over the retention window, memory request and limit "
+        "against the 7d p95, and PVC fill with days to full",
+    )
+    _flag(usage, "--all", "list every container and PVC, not only the flagged ones")
     return p

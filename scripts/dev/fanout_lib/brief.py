@@ -25,7 +25,7 @@ from fanout_lib.target import (
 from findings_lib.issue_model import cited_paths
 from lib.inventory_lists import LANDING_HOST
 
-# `land.sh` and the deployer run on the GitOps host, so only batches placed there land.
+# `land.sh` runs on the landing host, so only batches placed there land.
 LANDS = LANDING_HOST
 # The label `findings.py` puts on every issue it files. The launch gate refuses anything
 # else: this repo is public, so an unlabelled issue is text an arbitrary GitHub account

@@ -39,7 +39,7 @@ KNOWN_DOWNLOADS = {
     ("ci.yml", "hooks", "Install Vale"),
     ("ci.yml", "hooks", "Provision promtool, amtool, pint and lokitool"),
     ("ci.yml", "hooks", "Prove each alert tool rejects its bad fixture"),
-    ("ci.yml", "pytest", "Install sops and age for the cluster_vars tests"),
+    ("ci.yml", "pytest", "Install sops, age and apt-utils for the tests"),
     ("ci.yml", "sops_manifest_type_proof", "Install sops, age and kind"),
     ("ci.yml", "host_packages_build", "Fetch the pinned nfpm and check its sha256"),
     ("ci.yml", "host_packages_build", "Scan the named package roots for secrets"),
@@ -176,7 +176,7 @@ def test_a_constant_cache_key_is_flagged(workflow):
 
 def test_a_curl_that_ignores_the_cache_is_flagged(workflow):
     broken = copy.deepcopy(workflow)
-    step = _step(broken, "pytest", "Install sops and age for the cluster_vars tests")
+    step = _step(broken, "pytest", "Install sops, age and apt-utils for the tests")
     step["run"] = step["run"].replace('if [[ -f "$sops" ]]; then', "if true; then")
     assert any("curls without checking the cache first" in p for p in problems(broken))
 

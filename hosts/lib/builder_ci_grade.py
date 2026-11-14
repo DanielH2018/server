@@ -1,8 +1,8 @@
-"""Grade a commit's CI check runs the way the deployer's gate does, for the builder.
+"""Grade a commit's CI check runs the way `ci_verdict.py` does, for the builder.
 
 Split from host_package_builder.py (H3.12), which imports it. The
-builder cannot import `deploy_git`, so this module carries its own copy of `ci_verdict`, the two
-conclusion sets and `read_check_pages`, and a test holds the copy equal to the deployer's.
+builder ships stdlib-only modules, so this module carries its own copy of `ci_verdict` and the
+two conclusion sets, and a test holds the copy equal to `hosts/lib/ci_verdict.py`.
 Stdlib only, because the builder ships beside it with nothing else. checkout_sync.py imports
 its `read_check_pages` and `token_refused`, and the `checkout-sync` component ships it too.
 """
@@ -12,24 +12,24 @@ from __future__ import annotations
 import urllib.error
 from collections.abc import Callable
 
-# deploy_git.py's two conclusion sets, which `ci_verdict` below grades by. A test holds the
-# two copies equal, because this script cannot import the deployer's module.
+# ci_verdict.py's two conclusion sets, which `ci_verdict` below grades by.
+# test_builder_ci_grading.py holds the two copies equal.
 _CI_PASS_CONCLUSIONS = frozenset({"success", "skipped", "neutral"})
 _CI_NO_VERDICT_CONCLUSIONS = frozenset(
     {"cancelled", "stale", "skipped_by_concurrency", None}
 )
 
 
-# deploy_git.py's page size and page cap for a check-runs listing, which `read_check_pages`
-# below walks by. The same test holds these equal to the deployer's.
+# The page size and page cap for a check-runs listing, which `read_check_pages` below walks
+# by. renovate-notify's `notify_logic` holds a copy, and its test holds the two equal.
 _CHECK_PAGE_SIZE, _CHECK_PAGES_MAX = 100, 20
 
 
 def ci_verdict(check_runs: list[dict], required: frozenset[str]) -> str:
-    """`pass`, `pending` or `fail` for one commit, graded as `deploy_git.ci_verdict` grades.
+    """`pass`, `pending` or `fail` for one commit, graded as `ci_verdict.ci_verdict` grades.
 
     One difference: the caller refuses an empty `required` before it asks (builder step 4),
-    so this never meets the empty set that disarms the deployer's gate.
+    so this never meets the empty set that disarms `ci_verdict.ci_verdict`.
     """
     states: dict[str, set[str]] = {}
     for run in check_runs:
@@ -53,7 +53,7 @@ def ci_verdict(check_runs: list[dict], required: frozenset[str]) -> str:
 
 
 def read_check_pages(fetch_page: Callable[[str], object], key: str) -> list[dict]:
-    """Every entry of `key` across a check-runs listing, walked as `deploy_git.read_check_pages`.
+    """Every entry of `key` across a paged check-runs listing, up to `_CHECK_PAGES_MAX` pages.
 
     GitHub pages the listing at 100 runs, so a failing re-run of a required check can sit on
     page 2 only (#5991). `fetch_page(query)` returns the parsed body for the `?per_page=&page=`

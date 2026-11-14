@@ -26,7 +26,7 @@ Inputs come from the Job's environment: `CONTROL_URL`, `N8N_WEB_URL` and `N8N_BR
 when every leg passes, 1 when one fails, naming it.
 
 Run: python3 n8n_verify.py (in the Job; it takes no arguments)
-     uv run pytest ansible/roles/k8s/n8n/tests/test_n8n_verify.py
+     uv run pytest k8s/roles/n8n/tests/test_n8n_verify.py
 """
 
 import argparse

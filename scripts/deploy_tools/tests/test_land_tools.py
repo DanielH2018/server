@@ -126,8 +126,8 @@ def test_a_held_tree_lock_does_not_cost_the_gate_its_snapshot(tmp_path):
     """No lock is taken at all, because a detached add of a pinned SHA touches no working tree.
 
     The first cut took it non-blocking and degraded to the primary on a refusal, which handed
-    the gap back on the likeliest path: `gitops-deploy.service` holds this lock for its whole
-    unit run, so the tick a landing races is exactly when the gate would have read `skipped`.
+    the gap back on the likeliest path: the retired `gitops-deploy.service` held this lock for
+    its whole unit run, so the tick a landing raced was exactly when the gate read `skipped`.
     """
     repo, first, _second, lock = _snapshot_repo(tmp_path)
     held = os.open(lock, os.O_WRONLY | os.O_CREAT, 0o666)
@@ -205,7 +205,7 @@ def _wait_args(timeout_s, token):
 
 
 def test_an_anonymous_ci_wait_backs_off_and_walks_no_descendants(capsys):
-    """#6148: anonymous reads get 60/hour per IP, shared with the deployer's gate."""
+    """#6148: anonymous reads get 60/hour per IP, shared by every anonymous reader there."""
     (interval, walk) = _wait_args(1200, None)[0]
     assert interval >= 60
     assert walk is False

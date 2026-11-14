@@ -1,7 +1,8 @@
 # pihole-exporter — Pi-hole's DNS statistics as Prometheus series
 
 `ekofr/pihole-exporter` polling Pi-hole's v6 admin API and serving `pihole_*` on `:9617`. One
-Deployment, one Service, no volume, no route, no secret of its own.
+Deployment, one Service (`k8s/roles/pihole-exporter/templates/`), no volume, no route, no
+secret of its own (`k8s/roles/pihole-exporter/defaults/main.yml:manifests_outside_secrets`).
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in k8s/roles/longhorn-reconcile/defaults/main.yml. -->
@@ -11,13 +12,12 @@ Deployment, one Service, no volume, no route, no secret of its own.
 - **Claims:** none (no PVC)
 <!-- /generated_from -->
 
-- **Flux applies it, not Ansible** (D5.5, the first Wave A PR). Its `containers_list` entry
+- **Flux applies it.** Its `containers_list` entry
   is in `cluster/services.yml`, so nothing applies it by hand, and a
   merged change reaches the cluster when `promote` publishes and verifies the next bundle. Its
   image-bump PRs therefore draw no `land-wait` and no `probe.py health` run.
-- **Where the task went.** Flux applies the same render, and the
-  Kustomization's `wait` replaces the rollout wait.
-  `k8s_autodeploy` no longer gates an apply, because the deployer skips the tag. It still
+- **Its rollout.** The Kustomization's `wait` holds the rollout.
+  `k8s_autodeploy` gates no apply: Flux applies every merged change. It still
   decides whether Renovate automerges the image bump.
 - **Its Kustomization carries `dependsOn: pihole`.** pihole is flux-owned too, so the renderer
   turns the entry's `depends_on: [pihole]` into a real `dependsOn` rather than dropping it into
@@ -44,17 +44,21 @@ redundant, and a scrape job pointed straight at the Pi-holes would be simpler an
 ## Both instances, and why that is the whole point
 
 DNS is load-balanced across two independent FTLs (`pihole` and `pihole-2`), each keeping its
-own `pihole-FTL.db`. A scrape that reached one of them would report roughly **half** the
+own `pihole-FTL.db`
+(`tests/services/test_pihole_redundancy.py::test_both_instances_are_selected_by_the_dns_service`). A scrape that reached one of them would report roughly **half** the
 house's query volume — silently, with a graph that looks entirely plausible.
 
-So `PIHOLE_HOSTNAME` carries both Services, and the exporter labels every series with
+So `PIHOLE_HOSTNAME` carries both Services
+(`k8s/roles/pihole-exporter/defaults/main.yml:pihole_exporter_k8s_targets`), and the exporter labels every series with
 `hostname`. **A panel must sum across that label**; one that filters to a single hostname is
 back to reporting half.
 
 Instance 2's Service, `pihole-2-web`, was added to the pihole role for this. It has no
 IngressRoute and must not get one: the admin UI is deliberately pinned to instance 1, because a
 session round-robined across two FTLs 401s at random (the comment on the `pihole` Service says
-so at the line).
+so at the line, and
+`tests/services/test_pihole_redundancy.py::test_only_the_web_service_is_pinned_to_one_instance`
+holds the pin).
 
 ## It holds no credential of its own
 
@@ -92,7 +96,8 @@ bump; `promote`'s verification gates the apply.
 
 ## NetworkPolicy
 
-The pod carries `netpol-baseline: enforced`, which is what admits Prometheus to it. Its
-outbound polls are admitted by the `app: pihole-exporter` podSelector added to
-`netpol-baseline/templates/networkpolicy-pihole.yaml.j2`, on port 80 — a podSelector and not an
+The pod carries `netpol-baseline: enforced`, which is what admits Prometheus to it
+(`tests/k8s/test_netpol_baseline_labels.py::test_exactly_the_fenced_roles_carry_the_baseline_label`).
+Its outbound polls are admitted by the `app: pihole-exporter` podSelector added to
+`k8s/roles/netpol-baseline/templates/networkpolicy-pihole.yaml.j2`, on port 80 — a podSelector and not an
 ipBlock, because pod → ClusterIP → pod traffic keeps the caller's pod IP.

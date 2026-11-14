@@ -22,7 +22,7 @@
   The call site keeps the two macro calls this body makes on its behalf —
   `workload-shell.yml.j2`'s `spec_shell`/`pod_shell` and `security-context.yml.j2`'s
   `hardened_security_context` — inside THIS file rather than at the caller, so
-  `ansible/tests/k8s/test_workload_shell_uses_the_macros.py` scans this file for them the way
+  `tests/k8s/test_workload_shell_uses_the_macros.py` scans this file for them the way
   it scans pihole's shared Deployment macro instead of pihole's two callers.
 
   Arguments. Everything textual derives from `app`: `metadata.name`, both `app:` labels, the
@@ -101,7 +101,7 @@ spec:
           env:
 {{ lsio_env() }}
             # {{ app | capitalize }}:Log, reached through the unprefixed environment-variable provider.
-            # Upstream defaults are debug / 50 files; see roles/k8s/sonarr/defaults/main.yml.
+            # Upstream defaults are debug / 50 files; see k8s/roles/sonarr/defaults/main.yml.
             - name: {{ app | upper }}__LOG__LEVEL
               value: "{{ log_level }}"
             - name: {{ app | upper }}__LOG__ROTATE

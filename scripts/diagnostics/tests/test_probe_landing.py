@@ -67,7 +67,7 @@ def test_ci_state_reads_only_a_failing_conclusion_as_red():
     assert landing.ci_state(None) == "pending"
 
 
-def test_a_clear_deployer_and_green_ci_is_not_blocked():
+def test_nothing_in_flight_and_green_ci_is_not_blocked():
     snap = landing.collect(fake_deploy_ui, fake_run(GREEN))
     assert snap["blockers"] == []
     assert snap["errors"] == []
@@ -238,7 +238,7 @@ def test_a_claim_no_worktree_works_is_listed_with_its_reason():
 
 def test_deploy_ui_url_is_the_host_vars_server_ip_not_the_hostname(tmp_path):
     # deploy-ui binds `server_ip` only, so a hostname that resolves to loopback on the
-    # deployer's own host (Debian's 127.0.1.1 line) is refused there.
+    # daniel-box itself (Debian's 127.0.1.1 line) is refused there.
     host_vars = tmp_path / "box.yml"
     host_vars.write_text("server_ip: 192.0.2.7\nhas_gitops: true\n")
     assert landing.deploy_ui_url(host_vars) == "http://192.0.2.7:8790"

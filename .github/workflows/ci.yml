@@ -23,10 +23,10 @@ on:
   # gitleaks built with its Go (#2366). Without this trigger the first full sweep on a new image
   # is the merge commit's push run, and a red one there parks every landing behind it.
   #
-  # Dispatch the BRANCH, never master. `ci_verdict` in the deployer's `deploy_git.py` reduces
+  # Dispatch the BRANCH, never master. `ci_verdict` in `hosts/lib/ci_verdict.py` reduces
   # every check-run sharing a required name for one commit, worst outcome wins. A red dispatch
-  # run therefore pins "prek (lint + validate + tests + secrets)" red on a master SHA that the
-  # deployer's gate and `await_ci.py` both read, and that SHA's own green push run does not
+  # run therefore pins "prek (lint + validate + tests + secrets)" red on a master SHA that
+  # checkout-sync's gate and `await_ci.py` both read, and that SHA's own green push run does not
   # outvote it. The concurrency arm below keeps a dispatch out of a push's group; it does nothing
   # about this. Since #2402 the rule is enforced rather than asked for:
   # `.claude/hooks/block-footguns.py:ci_dispatch_on_master_problem` denies a `gh workflow run`
@@ -58,7 +58,7 @@ concurrency:
   # A PR branch groups by ref, so a force-push supersedes its own earlier run. A push to
   # master groups by SHA, which puts every master commit in a group of its own.
   #
-  # Master needs that because every SHA needs its own verdict: the deployer's CI gate and
+  # Master needs that because every SHA needs its own verdict: checkout-sync's CI gate and
   # `await_ci.py` read check-runs per commit, and a commit with no verdict reads `cancelled`
   # forever — every landing behind it then waits on a later SHA's full sweep instead.
   #
@@ -110,20 +110,29 @@ jobs:
   # status, a token without access and a failed lookup, is `proven=false`, and the run proceeds
   # in full as it did before. The script exits 0 either way.
   #
-  # The job runs on a push only. On every other event it is skipped, its output is empty, and
-  # every dependent runs: a dispatch, a merge_group run and a PR run are never proven. Nothing
-  # here is push-only except this job, so there is no push-only job to keep running.
+  # The job runs on a push, and on a pull request that carries the `landing-batch` label. On
+  # every other event it is skipped, its output is empty, and every dependent runs: a
+  # dispatch, a merge_group run and an unlabelled PR run are never proven. Nothing here is
+  # push-only except this job, so there is no push-only job to keep running.
+  #
+  # A landing batch tests up to four PRs stacked on master in one run, and that run records a
+  # tested tree on each PR's head (`docs/ci-throughput.md`, slice B3). The landing then labels
+  # each PR and marks it ready. The run that starts asks `tested_tree.py prove-head` whether
+  # the head carries a record, and skips as a proven push does. The label only decides
+  # whether this job takes a runner: an unlabelled PR run pays nothing for the proof, and a
+  # labelled head with no record runs in full. A fork's PR is never proven, because its
+  # token cannot have written the record.
   #
   # The `prek` gate stays green on the proven path because a `skipped` dependency counts as a
-  # pass only when this job succeeded and said `proven=true`. The deployer's CI gate and
+  # pass only when this job succeeded and said `proven=true`. checkout-sync's CI gate and
   # `await_ci.py` read the gate's check-run, and read `skipped` as a pass.
   #
   # A timed-out or failed `prove` falls back to the full sweep (#5783). Each dependent runs when
   # `prove` was cancelled or failed, whatever `proven` says, and the gate reads such a `prove` as
   # unproven, so every dependent must succeed. `tested_tree.py` exits 0 on every answer, so
   # either conclusion comes from the runner (a timeout, a failed checkout, a lost runner) and
-  # says nothing about the tree. Before that, master run 39279035375 (2026-10-19) went red and
-  # parked the deployer for 21h. `prove` had set `proven=true` 6s in, the runner then hung in
+  # says nothing about the tree. HISTORY -- before that, master run 39279035375 (2026-10-19) went
+  # red and parked the since-retired GitOps deployer for 21h. `prove` had set `proven=true` 6s in, the runner then hung in
   # teardown after "Cleaning up orphan processes", and the job timeout cancelled it at 5m23s.
   # Every dependent skipped on `proven=true`, and the gate failed on `prove=cancelled`.
   #
@@ -139,7 +148,12 @@ jobs:
   # and the 41st is the hang above. A hang delays the sweep by the whole timeout, so it is short.
   prove:
     name: prove the pushed tree was tested
-    if: github.event_name == 'push'
+    if: >-
+      github.event_name == 'push'
+      || (github.event_name == 'pull_request'
+      && contains(github.event.pull_request.labels.*.name, 'landing-batch')
+      && github.event.pull_request.draft != true
+      && github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-26.04
     timeout-minutes: 2
     permissions:
@@ -156,10 +170,15 @@ jobs:
         id: prove
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
-          python3 scripts/dev/tested_tree.py prove \
-            --repo "$GITHUB_REPOSITORY" --sha "$GITHUB_SHA" --tree "$(git rev-parse "$GITHUB_SHA^{tree}")"
+          if [ "$GITHUB_EVENT_NAME" = push ]; then
+            python3 scripts/dev/tested_tree.py prove \
+              --repo "$GITHUB_REPOSITORY" --sha "$GITHUB_SHA" --tree "$(git rev-parse "$GITHUB_SHA^{tree}")"
+          else
+            python3 scripts/dev/tested_tree.py prove-head --repo "$GITHUB_REPOSITORY" --head "$PR_HEAD"
+          fi
 
   # The hook sweep is split two ways — `pytest`, and this job for everything else. Neither
   # carries the branch-protection required context; the `prek` gate job at the bottom does,
@@ -511,8 +530,8 @@ jobs:
   # a local `prek run --all-files` and this job cannot disagree about what a test run is.
   #
   # Sharded across a matrix, because this job is the pole of every run and a landing
-  # waits on it twice — once on the PR, once on the master merge commit that `land.sh` and the
-  # deployer's CI gate both read. Unsharded, the test step took 124s and the job 138s of which
+  # waits on it twice — once on the PR, once on the master merge commit that `land.sh` and
+  # checkout-sync's CI gate both read. Unsharded, the test step took 124s and the job 138s of which
   # 11s is setup, against 98s for the `hooks` job beside it.
   #
   # THE MATRIX KEEPS THE JOB ID `pytest`, which is what makes this a one-file change.
@@ -552,16 +571,24 @@ jobs:
       # select step below reads `strategy.job-total` for `--of`, and the required context is
       # the `prek` gate, not any individual leg — nothing outside this file counts the legs.
       #
-      # The trade is close to even and rests on a projection, so it is reversible on
-      # evidence. `pytest_shard.py --of N --summary` projected 59.5s per shard at four and
-      # 39.7s at six (local serial seconds, which are NOT the runner's
-      # step time — the runner runs each shard under xdist). The split packs on the runner's
-      # own seconds since #6149, and `--summary` prints those: about 467 per shard at six,
-      # which the test step runs in about 1.5 x 467 / 4, near 180s, on its four xdist workers
-      # (the factor is fitted to run 40125170130). Against that, two more legs pay
-      # ~20s of setup each in runner minutes. Keep six only if a master run's per-shard step
-      # times say the run wall dropped by more than the extra setup costs; the `--durations`
-      # report on every leg is what to read that off.
+      # The count is chosen on two numbers, not on one run's unloaded wall: the slot-seconds a
+      # landing's CI uses, and the p90 queue wait under normal load. The account runs at most 20
+      # hosted jobs at once and a full sweep asks for 25, so every leg's fixed cost also
+      # lengthens the queue every other run waits in. `scripts/dev/ci_slot_cost.py --recent 20`
+      # prints both, per job family. Re-decide the count from its output, never from a projection.
+      #
+      # Its reading over 20 green master runs on 2026-11-14 kept six. A run used a median 1,414
+      # slot-seconds (a full sweep about 3,800), pytest about 1,020 of them, and the pooled
+      # queue wait was 10s at p50 and 161s at p90. The p90 comes from the
+      # `host_packages_bootstrap` legs, which wait a median 56s for a runner; the pytest legs
+      # wait 12s. Dropping a leg removes about 40 slot-seconds: the 29.5s it spends outside
+      # `Run the test suite`, plus the k8s render prebuild and the import cost every leg repeats.
+      # Its 17-22s of collection and up to 15s of fleet prebuild before the first test (the
+      # `phase timing` sections of run 43594559130) mostly move with its files to another leg.
+      # Five shards would save about 40 of the 1,414 and one of the 25 queued jobs, and add
+      # about 20s to the wall of every run that skips the host package legs, where pytest is
+      # the last job to finish. Four would save about 80 and add about 50s. Neither moves the
+      # p90.
       #
       # A shard can never finish faster than its largest `--dist loadscope` group, a module or
       # a class within one, so the floor rises as the matrix grows. On master runs 42541064791
@@ -571,12 +598,13 @@ jobs:
       # fixture. Each leg's `phase timing` section prints every worker's finish time, which
       # shows when one group sets the leg's wall.
       matrix:
+        # DECIDED: six shards, on slot-seconds per landing and p90 queue wait (#8456, 2026-11-14)
         shard: [1, 2, 3, 4, 5, 6]
     # The dotfiles commit the suite imports claude_guard and claude_worktree from. A pin,
     # not `main`: tracking the branch would turn this job red on an unrelated dotfiles commit.
     # The `git-refs` custom manager in renovate.json proposes each bump as its own PR.
     env:
-      DOTFILES_SHA: b0b8bf3f77f910693d6e85c28d5838af03454ec2
+      DOTFILES_SHA: ab0bcaa2077ab9b40607c240c6c1485fa29baf64
       # Skips pyproject.toml's `lint` group, which no step here runs (test_ci_lint_group.py).
       UV_NO_GROUP: lint
     steps:
@@ -590,6 +618,10 @@ jobs:
       # amd64 `version` and `sha256` of `sops` in homelab-tools' package.yml, as the
       # sops_manifest_type_proof job does, so a sops bump has no CI copy to move. Renovate moves
       # the version and the digest together there. age comes from apt, as the hosts install it.
+      # apt-utils is for the repository signer's tests, which drive apt-ftparchive as the
+      # signer does on daniel-box (hosts/lib/tests/test_repo_signer.py). Both share one
+      # apt-get, and NEEDRESTART_SUSPEND skips needrestart's post-install scan, which adds
+      # about 1.5s per apt-get and which no runner needs.
       - name: Read the sops pin
         id: sops
         run: |
@@ -605,7 +637,7 @@ jobs:
         with:
           path: ${{ runner.temp }}/pinned/sops
           key: sops-${{ runner.os }}-${{ steps.sops.outputs.version }}-${{ steps.sops.outputs.sha256 }}
-      - name: Install sops and age for the cluster_vars tests
+      - name: Install sops, age and apt-utils for the tests
         env:
           SOPS_VERSION: ${{ steps.sops.outputs.version }}
           SOPS_SHA256: ${{ steps.sops.outputs.sha256 }}
@@ -626,17 +658,10 @@ jobs:
           mkdir -p "$RUNNER_TEMP/bin"
           install -m 0755 "$sops" "$RUNNER_TEMP/bin/sops"
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
-          sudo apt-get install -y --no-install-recommends age \
-            || { sudo apt-get update -q && sudo apt-get install -y --no-install-recommends age; }
+          apt_install=(sudo env NEEDRESTART_SUSPEND=1 apt-get install -y --no-install-recommends age apt-utils)
+          "${apt_install[@]}" || { sudo apt-get update -q && "${apt_install[@]}"; }
           "$RUNNER_TEMP/bin/sops" --version --disable-version-check
           age-keygen --version
-      # The repository signer's tests drive apt-ftparchive, as the signer does on daniel-box
-      # (hosts/lib/tests/test_repo_signer.py).
-      - name: Install apt-utils for the repository signer tests
-        run: |
-          set -euo pipefail
-          sudo apt-get install -y --no-install-recommends apt-utils \
-            || { sudo apt-get update -q && sudo apt-get install -y --no-install-recommends apt-utils; }
           command -v apt-ftparchive
       # The Bash hooks split commands with the dotfiles repo's `claude_guard` package, and the
       # worktree pruner reads `claude_worktree` from it. A host gets both from `chezmoi apply`;
@@ -671,6 +696,26 @@ jobs:
           uv run python scripts/dev/pytest_shard.py --of "$SHARDS" --shard "$SHARD" --out "$RUNNER_TEMP/shard.txt"
           echo "$(wc -l < "$RUNNER_TEMP/shard.txt") test file(s) in this shard"
 
+      # Every xdist worker collects the whole shard, and on a cold checkout each one rewrites
+      # every module's assertions itself: 2.3-2.5s of a 6.7s collection on daniel-server (#8693).
+      # pytest names a rewritten module `<name>.<cache tag>-pytest-<version>.pyc` and validates it
+      # by the source's hash, not its mtime, so an entry from an earlier commit stays valid for
+      # every module the commit left unchanged, and a changed module is rewritten again.
+      # DECIDED: only master saves, once per shard per UTC day: about 7 MB per shard, so six
+      # entries a day. A per-run key would write about 42 MB per run against a cache budget
+      # already over 10 GB, and evict the pinned-tool caches first. A PR branch's entry is
+      # visible to that branch alone, so a PR save would help no other run.
+      - name: Name today's rewrite cache key
+        id: rewrite-day
+        run: echo "day=$(date -u +%F)" >> "$GITHUB_OUTPUT"
+      - name: Restore pytest's rewritten test modules
+        uses: actions/cache/restore@v6.1.0
+        id: rewrite-cache
+        with:
+          path: "**/__pycache__/*-pytest-*.pyc"
+          key: pytest-rewrite-${{ runner.os }}-${{ hashFiles('uv.lock') }}-shard${{ matrix.shard }}-${{ steps.rewrite-day.outputs.day }}
+          restore-keys: pytest-rewrite-${{ runner.os }}-${{ hashFiles('uv.lock') }}-shard${{ matrix.shard }}-
+
       # --durations because this job is the pole of the whole landing: unsharded, its test step
       # measured 267s against the `hooks` job beside it at 29-46s, and a landing waits on CI twice.
       # The runner is slower per test than the workstation, so a local `--durations` run does
@@ -694,6 +739,13 @@ jobs:
           mapfile -t files < "$RUNNER_TEMP/shard.txt"
           uv run python -m pytest --color yes --durations=0 "${files[@]}" \
             | tee "$RUNNER_TEMP/durations.log"
+
+      - name: Save pytest's rewritten test modules
+        if: github.ref == 'refs/heads/master' && steps.rewrite-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6.1.0
+        with:
+          path: "**/__pycache__/*-pytest-*.pyc"
+          key: ${{ steps.rewrite-cache.outputs.cache-primary-key }}
 
       # The measured half of the shard-weight check. Nothing static separates a heavy module from
       # a light one, so this step reads the durations report the shard just wrote. It has three
@@ -1709,6 +1761,16 @@ jobs:
   # the script's local build under its `[DONE]` line to find the rest (#7982). Keep the shard
   # count equal to the number of offline builds `bootstrap_plan.plan` lists;
   # `test_bootstrap_case.py` holds it.
+  #
+  # The count meets the criterion the pytest matrix is chosen on: slot-seconds per landing and
+  # the p90 queue wait, as `scripts/dev/ci_slot_cost.py --recent 20` prints them. Over 20 green
+  # master runs on 2026-11-14 these six legs used about 1,740 slot-seconds of a full sweep's
+  # 3,800, and they set the p90 wait. They wait for runners because they become ready while the
+  # six pytest legs still hold slots. Only about 30s of a leg's 294s median is fixed setup
+  # (checkout, the setup action, the hand-off, the image build), so two shards per release
+  # would save about 60 slot-seconds and two queued jobs. They would also put two offline builds
+  # on one leg, each 224-244s with a runner to itself, which lengthens the sweep's last leg by
+  # more than the queue it saves.
   # The `name:` leaves the shard out, so a release's three shards share the check-run name
   # `hosts/lib/ci_verdict.py` lists. An installed host package holds that list, and a renamed
   # leg would read as pending to every copy installed before the rename.
@@ -1960,7 +2022,7 @@ jobs:
             test -z "$(dpkg --verify homelab-tools)"
           '
 
-  # The required status context. Branch protection, the deployer's CI_CONTEXTS, await_ci.py
+  # The required status context. Branch protection, checkout-sync's CI_CONTEXTS, await_ci.py
   # and the ruleset-drift cron all name "prek (lint + validate + tests + secrets)", so that name
   # lives on this gate rather than on either half above. `if: always()` because a job with
   # `needs` is otherwise SKIPPED when a dependency fails, and GitHub counts a skipped required
@@ -1971,17 +2033,20 @@ jobs:
     runs-on: ubuntu-26.04
     needs: [prove, hooks, pr_gates, pytest, deck_mod, lockfile, flux_roundtrip, sops_manifest_type_proof, host_packages_build, host_packages, host_packages_bootstrap, host_tools_arm64]
     # On a draft the gate skips with its dependents. A red gate there would pin the head red
-    # for every reader that takes the worst check run per name (`deploy_git.ci_verdict`), even
+    # for every reader that takes the worst check run per name (`ci_verdict.ci_verdict`), even
     # after the ready run passes. The skipped gate is not a pass: GitHub refuses to merge a
-    # draft, `deploy_git.ci_verdict` (which `land.sh` reads) leaves a skipped gate out, and
+    # draft, `ci_verdict.ci_verdict` (which `land.sh` reads) leaves a skipped gate out, and
     # `review_ci.ready_for_ci` waits for the ready run and turns the PR back into a draft if
     # none starts.
     if: ${{ always() && github.event.pull_request.draft != true }}
     # land.sh's CI budget sums this chain's timeouts (test_land_ci_budget.py), so the gate
     # names its own rather than inheriting GitHub's 360 minutes.
     timeout-minutes: 5
-    # `statuses: write` is for the record step below, on a pull request only. The job runs no
-    # checkout and no repository code.
+    # `statuses: write` is for the record steps below, on a pull request only. The job runs
+    # no checkout and no repository code, except on a landing batch, whose last two steps
+    # check the batch out and run `tested_tree.py` from it. A batch is a `queue/` branch of
+    # this repository, which only a collaborator can push, and the landing that pushes one
+    # stacks no fork's head.
     permissions:
       contents: read
       statuses: write
@@ -2021,7 +2086,7 @@ jobs:
             "host-packages-build=$HOST_PACKAGES_BUILD host-packages=$HOST_PACKAGES" \
             "host-packages-bootstrap=$HOST_PACKAGES_BOOTSTRAP" \
             "host-tools-arm64=$HOST_TOOLS_ARM64 run-cases=${RUN_CASES:-} arm64-tools=${ARM64_TOOLS:-}"
-          # `prove` runs on a push only, so it is `skipped` on every other event. A `cancelled`
+          # `prove` runs on a push and on a labelled PR, so it is `skipped` on every other run. A `cancelled`
           # or `failure` `prove` broke on the runner, so whatever it said is unproven and every
           # dependent ran (#5783).
           case "$PROVE" in success | skipped | cancelled | failure) ;; *) exit 1 ;; esac
@@ -2046,8 +2111,13 @@ jobs:
       # squash commit of a fork PR then finds no status, `prove` answers false, and the push run
       # sweeps in full. `continue-on-error` keeps a failed write from turning the gate red: the
       # cost of a missing status is one full master run, never a wrong skip.
+      #
+      # A proven run records nothing. It ran no job on GITHUB_SHA's tree, and that tree is the
+      # merge GitHub built at the PR's last push, which no run tested. Proven is the gate's
+      # own reading: `prove` succeeded and said `true`. A `prove` that set `true` and was then
+      # cancelled ran the sweep, and that run records.
       - name: Record the tested tree on the PR head
-        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && !(needs.prove.result == 'success' && needs.prove.outputs.proven == 'true')
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
@@ -2059,6 +2129,42 @@ jobs:
           gh api "repos/$GITHUB_REPOSITORY/statuses/$HEAD_SHA" \
             -f state=success -f context=ci/tested-tree -f description="$tree" -f target_url="$RUN_URL"
           echo "Recorded tree $tree on $HEAD_SHA."
+
+      # A landing batch is a pull request from a `queue/` branch of this repository that holds
+      # up to four PRs stacked on master, and this run is the one full run they share
+      # (`docs/ci-throughput.md`, slice B3). `tested_tree.py record-batch` reads the members'
+      # numbers from the PR's body, stacks their heads on this run's base itself, and records a
+      # tree on each head only when the last stacked tree is the tree this run tested. The
+      # body travels in the environment, because it is free text.
+      #
+      # The checkout is this job's only one, and only a batch pays for it. It takes the whole
+      # history without blobs: a merge needs each head's merge base, and git fetches the few
+      # blobs a merge reads. Both steps carry `continue-on-error`, as the record above does:
+      # a batch whose trees are not recorded lands its members one at a time, and a red gate
+      # here would fail a batch that passed. Each has its own timeout for the same reason: a
+      # fetch that hangs would otherwise run into the job's timeout and cancel the gate.
+      - name: Check out the batch's history
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.head_ref, 'queue/') && !(needs.prove.result == 'success' && needs.prove.outputs.proven == 'true')
+        continue-on-error: true
+        timeout-minutes: 2
+        uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+          filter: blob:none
+          persist-credentials: false
+      - name: Record the tested tree on each batch member's head
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.head_ref, 'queue/') && !(needs.prove.result == 'success' && needs.prove.outputs.proven == 'true')
+        continue-on-error: true
+        timeout-minutes: 2
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          BATCH_BODY: ${{ github.event.pull_request.body }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          python3 scripts/dev/tested_tree.py record-batch --repo "$GITHUB_REPOSITORY" \
+            --base "$(git rev-parse "$GITHUB_SHA^1")" \
+            --tested-tree "$(git rev-parse "$GITHUB_SHA^{tree}")" --run-url "$RUN_URL"
 
   renovate-config:
     name: renovate config validator

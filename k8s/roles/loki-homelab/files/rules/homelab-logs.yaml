@@ -6,7 +6,7 @@
 # lokitool parses every expression in the validate-alert-rules hook. LogQL has no counterpart
 # to `promtool test rules`, so nothing here is unit-tested into firing; M5's slice plan
 # (docs/target-architecture/monitoring/m5-loki-ruler.md, *The rules*) states what checks each
-# rule instead. ansible/tests/services/test_loki_stream_labels.py holds every selector to the
+# rule instead. tests/services/test_loki_stream_labels.py holds every selector to the
 # labels and values Alloy emits, and holds each silence rule to its side of the Pi boundary.
 #
 # Every selector is a literal copied from `loki_streams` in group_vars/all.yml, because this
@@ -179,7 +179,7 @@ groups:
           description: >-
             home-assistant logged {{ $value }} pychromecast "Heartbeat timeout" lines in the last
             hour, so the Cast connect-back loop is running and dashboard casts to the Nest Hub
-            fail. ansible/roles/k8s/home-assistant/docs/platform.md describes the loop and the
+            fail. k8s/roles/home-assistant/docs/platform.md describes the loop and the
             quit-app fallback.
       # The update line of each cloudflare-ddns Deployment, ported by M6's batch B7. favonia's
       # image serves no metrics, so the log is the only evidence an update cycle succeeded. Every
@@ -198,7 +198,7 @@ groups:
       # Their alerts never reach Prometheus `ALERTS`, so `probe.py health cloudflare-ddns` cannot
       # see them; CloudflareDdnsUnavailable in observability's `pods` group covers a dead pod
       # instead. LogQL has no promtool test, so the red proof is a lokitool parse, the census
-      # entries in ansible/tests/services/test_loki_stream_labels.py and a live evaluation. Every
+      # entries in tests/services/test_loki_stream_labels.py and a live evaluation. Every
       # edit of this file restarts Loki.
       #
       # These two page since B7's Cutover-1b dropped the `shadow` label, after Cutover-1a

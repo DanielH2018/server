@@ -8,7 +8,9 @@ This module carries the import path only. `_hook_common.py` reads `claude_guard.
 that also read `claude_guard.tables` moved into the package itself (dotfiles #628).
 
 `claude_guard` is not on the repo's `uv` environment — it lives outside this repo, deployed by
-chezmoi to `~/.local/share/claude-guard`. Import this module before anything from
+chezmoi to `~/.local/share/claude-guard`, or wherever `CLAUDE_GUARD_HOME` names: an unattended
+session whose home holds no deploy reads a copy its controller owns. That is the same variable
+the dotfiles hooks' `claude-guard-call.sh` reads. Import this module before anything from
 `claude_guard`; it inserts that path at `sys.path[0]` only when the directory exists and the
 package is not already importable, then imports `claude_guard` itself so a caller can rely on
 `sys.modules["claude_guard"]` being populated.
@@ -23,10 +25,13 @@ package is not already importable, then imports `claude_guard` itself so a calle
 # command.
 """
 
+import os
 import sys
 from pathlib import Path
 
-_CLAUDE_GUARD_DIR = Path("~/.local/share/claude-guard").expanduser()
+_CLAUDE_GUARD_DIR = Path(
+    os.environ.get("CLAUDE_GUARD_HOME", "~/.local/share/claude-guard")
+).expanduser()
 
 if "claude_guard" not in sys.modules and _CLAUDE_GUARD_DIR.is_dir():
     sys.path.insert(0, str(_CLAUDE_GUARD_DIR))
@@ -37,7 +42,7 @@ except ImportError as exc:
     raise ImportError(
         f"claude_guard package not found at {_CLAUDE_GUARD_DIR} or on sys.path. "
         "It is deployed by the dotfiles repo (chezmoi apply) — run that on this host, "
-        "or check that ~/.local/share/claude-guard exists."
+        "or check that ~/.local/share/claude-guard or CLAUDE_GUARD_HOME exists."
     ) from exc
 
 del claude_guard

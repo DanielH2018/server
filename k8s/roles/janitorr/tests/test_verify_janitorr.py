@@ -246,6 +246,7 @@ def test_the_tree_renders_janitorr_verify(stubs, flipped_tag):
 
 
 def test_the_flipped_job_passes_every_job_census_row(flipped):
+    # fact: k8s/roles/janitorr/CLAUDE.md#The Flux verify Job
     assert sorted(doc["kind"] for doc in flipped) == [
         "ConfigMap",
         "Job",
@@ -270,6 +271,7 @@ def test_the_arr_fences_admit_janitorr(fence, port, flipped, stubs):
     The `janitorr-verify` peers landed in a PR of their own (#5709), because the cross-plane
     gate refuses them beside a janitorr change.
     """
+    # fact: k8s/roles/janitorr/CLAUDE.md#The Flux verify Job
     (policy,) = [
         doc
         for doc in _docs(cluster.render_tag(fence, stubs).files)
@@ -291,6 +293,7 @@ def test_the_job_sees_the_library_where_janitorr_writes_and_jellyfin_reads(
     flipped, stubs
 ):
     """The probe is janitorr's link at janitorr's place, read through jellyfin's mounts."""
+    # fact: k8s/roles/janitorr/CLAUDE.md#The Flux verify Job
     job_pod = _job(flipped)["spec"]["template"]["spec"]
     janitorr = _deployment(TAG, stubs)["spec"]["template"]["spec"]
     jellyfin = _deployment("jellyfin", stubs)["spec"]["template"]["spec"]
@@ -338,6 +341,7 @@ def test_the_job_expects_the_dry_run_mode_the_role_default_sets(
     flipped, stubs, tmp_path
 ):
     """The Job expects what the Secret it mounts renders, from the one default."""
+    # fact: k8s/roles/janitorr/CLAUDE.md#The Flux verify Job
     assert _env_of(_job(flipped))["JANITORR_EXPECT_DRY_RUN"] == "false"
     dry_tag = _render_tree_copy(tmp_path, stubs, _make_dry)
     assert _env_of(_job(_docs(dry_tag.verify)))["JANITORR_EXPECT_DRY_RUN"] == "true"
@@ -405,6 +409,7 @@ def test_the_job_reads_no_other_roles_file():
 
 def test_the_rendered_config_trims_media_at_longhorns_25_percent_floor(flipped_tag):
     """#5806: the loosest rung is 25% free, so janitorr acts before Longhorn stops scheduling."""
+    # fact: k8s/roles/janitorr/CLAUDE.md#Retention rungs
     (secret,) = [
         doc
         for doc in _docs(flipped_tag.files)

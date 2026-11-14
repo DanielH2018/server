@@ -256,6 +256,11 @@ RESET_PATHS = Census(
             "commands it carries (`mkdir`, `cp`, `git`, the agent's `uv` and installer) are "
             "none of `SHIMMED_BINARIES`"
         ),
+        "hosts/components/claude-code/templates/claude-triage-setup.sh.j2": (
+            "the reset applies only under root's `runuser`, as in renovate-agent-setup, and the "
+            "commands it carries (`mkdir`, `cp`, `git`, the controller's `uv`, `claude` and "
+            "installer) are none of `SHIMMED_BINARIES`"
+        ),
         "scripts/dev/run_as_cron.sh": (
             "reproducing cron's bare PATH is its purpose; `test_run_as_cron.py` runs only "
             "shell builtins and `echo` through it"

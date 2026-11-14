@@ -3,7 +3,8 @@
 WHY. `gh_json` returns a `JsonValue`, and the lander read it as a dict of `Any`, so ty checked
 nothing about a `.get` chain on it (#3704). Each reader here narrows one shape at the boundary:
 
-- `parse_view`: `gh pr view --json <fields>`, which `Landing.view` returns.
+- `parse_view`: `gh pr view --json <fields>`, which `Landing.view` returns. `rest_filter`
+  gives the same shape from the REST pull object for the fields REST carries.
 - `parse_file` / `parse_review`: an entry of the REST `pulls/<n>/files` and `pulls/<n>/reviews`
   listings, which the landing policy reads.
 
@@ -83,6 +84,37 @@ class PrReview(TypedDict, total=False):
     state: str
     submitted_at: str
     commit_id: str
+
+
+# A `PrView` field as a jq expression over the REST pull object, giving the value `gh pr view`
+# gives. REST's `mergeable` is null until GitHub has computed it, which `gh pr view` calls
+# UNKNOWN.
+_REST = {
+    "headRefOid": ".head.sha",
+    "isDraft": ".draft",
+    "mergeable": (
+        'if .mergeable == null then "UNKNOWN" elif .mergeable then "MERGEABLE" '
+        'else "CONFLICTING" end'
+    ),
+    "state": (
+        'if .merged then "MERGED" elif .state == "closed" then "CLOSED" else "OPEN" end'
+    ),
+}
+
+
+def rest_filter(fields: str) -> str | None:
+    """The jq filter that turns a REST pull object into a `gh pr view --json <fields>` answer.
+
+    `gh pr view` is a GraphQL query, and GraphQL has its own hourly quota. A read the landing
+    repeats, such as the merge wait's poll, asks REST instead.
+
+    Returns:
+        The filter, or None when REST's pull object lacks one of `fields`.
+    """
+    names = fields.split(",")
+    if not all(name in _REST for name in names):
+        return None
+    return "{" + ", ".join(f"{name}: ({_REST[name]})" for name in names) + "}"
 
 
 def _str(value: JsonValue, what: str) -> str:

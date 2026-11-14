@@ -1,6 +1,6 @@
 #!/bin/bash
 # Daily drift check: does the LIVE GitHub ruleset still require the contexts this repo declares,
-# does the branch-protection ruleset still exclude Renovate's branches, and does the fence still
+# each pinned to the GitHub Actions app, does the branch-protection ruleset still exclude Renovate's branches, and does the fence still
 # keep the agent's account to its own branches? Three arms, one verdict. Ahead of all three, the repo
 # must be public: on the free plan GitHub enforces no ruleset on a private repo (#3610).
 # After them it reads the fork approval policy, which the runner pods depend on (ADR-0032).
@@ -16,8 +16,8 @@
 # textfile collector (default /var/lib/node-exporter-textfile; a test points it elsewhere).
 # Prometheus's GitHubRulesetDrift and GitHubRulesetDriftNotReporting rules page from that file.
 #
-# The ruleset is what stops an un-CI'd commit reaching master, and the deployer trusts that: a
-# tick reads the check runs for the origin SHA and deploys on a green verdict. Nothing in the
+# The ruleset is what stops an un-CI'd commit reaching master, and `promote` and checkout-sync
+# trust that: each reads the check runs for a master SHA and acts on a green verdict. Nothing in the
 # repo watched the ruleset itself, so an edit in the GitHub UI — dropping a required context,
 # adding a bypass actor, flipping enforcement to `evaluate` — changed the gate with no commit,
 # no PR and no signal. That is not hypothetical: by 2026-08-31 TWO in-repo records had gone stale
@@ -39,7 +39,7 @@
 # otherwise. The endpoint returns 200 with `enforcement` and every
 # `rules[].parameters.required_status_checks[].context` to an anonymous caller, and the repo holds
 # no GitHub token in SOPS — the same call shape renovate_notify.py uses from this host, and the
-# same token source the deployer's CI gate uses since 2026-09-01. Note `bypass_actors` is null
+# same token source a landing's await_ci.py poll uses. Note `bypass_actors` is null
 # anonymously rather than empty: GitHub returns the list only to a caller with admin on the repo.
 # The contexts, enforcement and the Renovate exclusion are checked either way. The bypass lists
 # are checked only on an authenticated read, and an anonymous one reports them UNVERIFIED and
@@ -47,7 +47,7 @@
 # the agent off branches outside its own prefix. github-interaction-limit.sh already records down without a token.
 #
 # Rate limit: anonymous GitHub allows 60 req/hr per source IP, shared by EVERY caller on this
-# host (the deployer's gate, a landing's await_ci.py poll, renovate_notify). Authenticated it is
+# host (a landing's await_ci.py poll, renovate_notify). Authenticated it is
 # 5000/hr per token. Once a day is still the right cadence — rulesets change on a human clock.
 # The token never lands in argv: curl reads it from a config file handed over as a process
 # substitution (`-K <(...)`), because /proc is mounted without hidepid here.
@@ -255,6 +255,19 @@ if [ "$LIVE" != "$EXPECTED" ]; then
   exit 1
 fi
 
+# Each required context must be pinned to the GitHub Actions app. GitHub matches an unpinned
+# context by name alone, so any token with write access satisfies it with a commit status of that
+# name (#8398). GitHub omits `integration_id` for an unpinned context, and `// "none"` names that.
+# An anonymous read returns the pins, so this arm runs ahead of the admin-only bypass checks.
+UNPINNED=$(printf '%s' "$BODY" \
+  | jq -r --argjson app {{ github_actions_app_id }} \
+    '.rules[]?.parameters?.required_status_checks[]? | select(.integration_id != $app) | "\(.context)=\(.integration_id // "none")"' \
+  | sort | tr '\n' ' ')
+if [ -n "$UNPINNED" ]; then
+  push down "ruleset {{ github_ruleset_id }} has required contexts not pinned to GitHub Actions (app {{ github_actions_app_id }}): [${UNPINNED}] — a commit status of that name from any token with write access satisfies it; pin each to GitHub Actions in the ruleset"
+  exit 1
+fi
+
 # The same ruleset requires every change to master to arrive as a PR, with no approving review.
 # The PR requirement is what stops a token pushing to master directly, since the fence does
 # not cover master. A required review would also hold every land.sh merge, which no session
@@ -442,5 +455,5 @@ if [ "$FORK_APPROVAL" != "{{ github_fork_approval_policy }}" ]; then
   exit 1
 fi
 
-push up "repo public; ruleset {{ github_ruleset_id }} active, ${LIVE_COUNT} required contexts, matches the declared set; ruleset {{ github_branch_ruleset_id }} excludes {{ github_branch_ruleset_renovate_exclude }}; ruleset {{ github_ruleset_id }} requires a PR with {{ github_ruleset_required_approvals }} approving reviews; ruleset {{ github_fence_ruleset_id }} restricts every branch except {{ github_fence_ruleset_exclude | join(', ') }}; {% for rs in github_update_restriction_rulesets %}ruleset {{ rs.id }} restricts {{ rs.include | join(', ') }} on {{ rs.repo }}; {% endfor %}all bypass lists as declared; fork pull requests wait for approval ({{ github_fork_approval_policy }})"
+push up "repo public; ruleset {{ github_ruleset_id }} active, ${LIVE_COUNT} required contexts, matches the declared set, each pinned to app {{ github_actions_app_id }};ruleset {{ github_branch_ruleset_id }} excludes {{ github_branch_ruleset_renovate_exclude }}; ruleset {{ github_ruleset_id }} requires a PR with {{ github_ruleset_required_approvals }} approving reviews; ruleset {{ github_fence_ruleset_id }} restricts every branch except {{ github_fence_ruleset_exclude | join(', ') }}; {% for rs in github_update_restriction_rulesets %}ruleset {{ rs.id }} restricts {{ rs.include | join(', ') }} on {{ rs.repo }}; {% endfor %}all bypass lists as declared; fork pull requests wait for approval ({{ github_fork_approval_policy }})"
 exit 0

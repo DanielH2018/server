@@ -28,7 +28,7 @@ autofix.py carried a byte-identical copy — bridge/common.py is the module both
 autofix.py import it from now. Its header states the same rule this one does, checked against
 both files' test suites rather than just this one's.
 
-ENFORCED by ansible/tests/services/test_monitor_bridge_modules.py, which re-derives the patched
+ENFORCED by tests/services/test_monitor_bridge_modules.py, which re-derives the patched
 set from the test sources on every run. Deriving it is the point: the first census here
 was a grep for one spelling of `setattr`, and it silently missed both the line-wrapped
 form and every `check.X = ...` assignment.
@@ -42,15 +42,6 @@ import urllib.parse
 from datetime import datetime
 
 FETCH_BODY_MAX = 180
-
-
-def duration_seconds(spec: str) -> int:
-    """Seconds in a Prometheus duration like `15m` / `2h` / `90s` / `1d`. Unit-tested."""
-    units = {"s": 1, "m": 60, "h": 3600, "d": 86400, "w": 604800}
-    spec = spec.strip()
-    if not spec or spec[-1] not in units or not spec[:-1].isdigit():
-        raise ValueError("not a Prometheus duration: %r" % spec)
-    return int(spec[:-1]) * units[spec[-1]]
 
 
 def parse_duration(s: str) -> float:

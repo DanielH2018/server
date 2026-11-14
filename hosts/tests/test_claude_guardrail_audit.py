@@ -186,6 +186,5 @@ def test_the_defaults_watch_both_memory_stores_and_the_renovate_agent_home():
         for p in DEFAULTS["claude_code_guardrail_audit_paths"]
         if "renovate-agent" in p
     ]
-    assert renovate == [
-        f"{RENOVATE_DEFAULTS['renovate_agent_home']}/.claude/settings.json"
-    ]
+    home = RENOVATE_DEFAULTS["renovate_agent_home"]
+    assert renovate == [f"{home}/.claude/settings.json", f"{home}/.claude/hooks"]

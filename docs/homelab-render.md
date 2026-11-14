@@ -107,7 +107,10 @@ under the same subdirectory names, after every pass that edits rendered text. Th
 placeholder, because Flux would then substitute into the upstream bytes. No `$` in those bytes
 is escaped. `tests/_k8s_render.py:rendered_docs` reads `render_tag`'s output, which
 holds no vendored file, so the fleet guards never read them. H1's *Vendored upstream manifests*
-(`docs/target-architecture/host/h1-cluster-config-to-flux.md`) says why that is accepted.
+(`docs/target-architecture/host/h1-cluster-config-to-flux.md`) says why that is accepted. The
+one exception is the per-container resources guard in
+`tests/k8s/test_namespace_resource_defaults.py`, which reads each vendored workload with its
+patches applied.
 
 A placeholder render with `--role` also writes the publish bundle, `DIR/flux/` and
 `DIR/digests.json`, for the k8s tags it names, plus each shared kind's
@@ -397,9 +400,9 @@ or dict. It refuses every other filter, every attribute, subscript or method cal
 comparison and every truthiness test, `{% if K | default('') %}` included. It reads a key
 reached through `lookup('vars', 'K')` as `K`. A non-literal `lookup('vars', X)` counts as a
 possible secret reference, held to bare, `default` and `to_json`, unless
-`NON_SECRET_VARS_LOOKUPS` names its site. That set holds one site, Prometheus's
-`lookup('vars', job.replicas_var) | int`, and the entry fails when any `containers_list`
-`replicas_var` names a secret key, or when the site has gone.
+`NON_SECRET_VARS_LOOKUPS` names its site. That set is empty: the tree holds no non-literal
+`vars` lookup. An entry fails when a name its argument can take is a secret key, or when its
+site has gone.
 
 An output inside a `{% filter %}` block, or a `{% set %}` block with a filter, passes through
 that block's filters too, and rule 5 holds it to the same list. An `{% include %}` or a

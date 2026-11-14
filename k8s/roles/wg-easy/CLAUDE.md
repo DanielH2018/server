@@ -26,7 +26,7 @@ LAN-only **Docker** wg-easy, on an older version with a different auth model.
 - **Pinned `:15@sha256:…`** — `:15` keeps Renovate tracking the major so a v16 arrives as a
   deliberate PR; the digest keeps it immutable within v15.x.
 - **`udp_port: 51820`** on the `containers_list` entry.
-- **Flux applies it, not Ansible** (D5.12, an own-window flip with the operator on the LAN). Its
+- **Flux applies it.** Its
   `containers_list` entry is in `cluster/services.yml`, so nothing applies it by hand, and a merged change reaches the cluster when `promote` publishes and
   verifies the next bundle. The Deployment is `Recreate` and the role declares no snapshot claim, so
   the tag renders no
@@ -34,9 +34,9 @@ LAN-only **Docker** wg-easy, on an older version with a different auth model.
   up, and this is the sole remote-access path, so a roll that fails starts the recovery from the
   LAN: read the takeover census in the flip PR, then revert the flip. The operator must not be
   connected through wg-easy when it rolls.
-- **Where the task went.** The
-  Kustomization's `wait` replaces the rollout wait. The orphaned wg-easy-env Secret that the
-  task's comment names is still deleted by hand, because no prune reaches a Secret.
+- **Its rollout.** The Kustomization's `wait` holds the `wg-easy` rollout.
+- **HISTORY —** An orphaned `wg-easy-env` Secret from the earlier deploy is deleted by hand,
+  because no prune reaches a Secret.
 
 ## The traps, all of which are written out at their own lines in the role
 

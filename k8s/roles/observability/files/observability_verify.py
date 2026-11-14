@@ -21,7 +21,7 @@ Inputs come from the Job's environment: `OTLP_NAMESPACE`, `OTLP_DAEMONSET` and
 script prints it. Exit 0 when every hostPort is pinned, 1 otherwise, naming the port.
 
 Run: python3 observability_verify.py (in the Job; it takes no arguments)
-     uv run pytest ansible/roles/k8s/observability/tests/test_observability_verify.py
+     uv run pytest k8s/roles/observability/tests/test_observability_verify.py
 """
 
 import argparse

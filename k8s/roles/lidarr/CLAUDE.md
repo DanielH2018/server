@@ -2,7 +2,7 @@
 
 Lidarr, the music member of the *arr stack. It finds albums through Prowlarr, downloads them
 through qBittorrent, and imports them by hardlink into `/data/media/music`, which navidrome
-serves read-only.
+serves read-only (`k8s/roles/navidrome/defaults/main.yml:navidrome_k8s_media_subpath`).
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in k8s/roles/longhorn-reconcile/defaults/main.yml. -->
@@ -14,18 +14,23 @@ serves read-only.
   (media-local))
 <!-- /generated_from -->
 
-- **Stable branch only.** `lidarr_k8s_image` tracks LSIO's stable stream. Lidarr cannot move
+- **Stable branch only.** `lidarr_k8s_image` in `k8s/roles/lidarr/defaults/main.yml` tracks
+  LSIO's stable stream. Lidarr cannot move
   from nightly or the plugins branch back to stable without restoring its database, so a
   Soulseek plugin that needs another branch is a decision for #8192, not an image bump.
 - **The API key comes from SOPS.** `lidarr_api_key` reaches the pod through the
-  `lidarr-exportarr` Secret, and the shared macro's `api_key_secret` argument sets
+  `lidarr-exportarr` Secret (`k8s/roles/lidarr/templates/secret-exportarr.yaml.j2`), and the
+  shared macro's `api_key_secret` argument (`k8s/templates/arr-deployment.yml.j2`) sets
   `LIDARR__AUTH__APIKEY` from it. Lidarr reads `Lidarr:Auth:ApiKey` before its own
   `config.xml`, so the key in SOPS is the key Lidarr uses, and exportarr and Prowlarr can hold
   it before Lidarr first starts.
-- **The `lidarr-snapshot` Job snapshots `lidarr-config` before each revision applies**, as
-  radarr's does, and `media-data` is mounted but never reverted
-  (`k8s_autodeploy_unreverted_claims`).
-- **Mounts all of `media-data` at `/data`.** The root folder is `/data/media/music`, and
+- **The `lidarr-snapshot` Job snapshots `lidarr-config` before each revision applies**
+  (`k8s/roles/lidarr/defaults/main.yml:k8s_autodeploy_snapshot_pvcs`), as radarr's does, and
+  `media-data` is mounted but never reverted
+  (`k8s/roles/lidarr/defaults/main.yml:k8s_autodeploy_unreverted_claims`).
+- **Mounts all of `media-data` at `/data`**
+  (`k8s/roles/lidarr/defaults/main.yml:lidarr_k8s_media_claim`). The root folder is
+  `/data/media/music`, and
   downloads land under `/data/torrents/lidarr`, so an import is a hardlink.
 
 ## Notable
@@ -38,7 +43,8 @@ serves read-only.
   `files/seed_lidarr_quality_profiles.py` at `/api/v1/qualityprofile`. It adopts Lidarr's shipped
   `Standard` (the lossy profile) and `Lossless` by name, creates one that is missing, and never
   deletes: `Any` stays. The script splits Lidarr's quality groups into single qualities, because
-  `allowed` belongs to a group and `MP3-320` shares one with `AAC-320`.
+  `allowed` belongs to a group and `MP3-320` shares one with `AAC-320`. To read what the
+  profiles hold, run `probe.py arr lidarr qualityprofile --json`.
 - **Lidarr has no Opus quality, and the lossy profile allows no Vorbis tier in its place.** The
   operator ruled on 2026-11-13 to drop the "Opus 192 and above" tier, and `AAC-VBR` stands for
   the AAC tier above `AAC-256`. A Lidarr that adds Opus is an edit to `lidarr_quality_profiles`.

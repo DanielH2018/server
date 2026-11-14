@@ -3,12 +3,15 @@
 The homelab's only quality-profile/custom-format syncer, using
 [Configarr](https://configarr.de) — a recyclarr-compatible syncer that ALSO supports local
 custom-format definitions, where recyclarr is TRaSH-guide-only. It holds the two guide-backed
-profiles the retired `recyclarr` role synced, plus Sonarr's "Anime" profile.
+profiles the retired `recyclarr` role synced, plus Sonarr's "Anime" profile
+(`k8s/roles/configarr/templates/config/config.yml.j2`).
 
 ## Why the Anime local CFs exist
 Sonarr parses quality and codec from the release **title** at grab time, so no codec custom
 format can catch a title that lies, and the only pre-grab lever is **release-group
-reputation**. A `[NTRX] … (BD Remux 1080p AVC …)` grab in 2026-07 shipped a long-GOP HEVC
+reputation**.
+
+**HISTORY —** A `[NTRX] … (BD Remux 1080p AVC …)` grab in 2026-07 shipped a long-GOP HEVC
 x265 re-encode instead, which made Jellyfin buffer and seek slowly.
 
 ## At a glance
@@ -20,7 +23,7 @@ x265 re-encode instead, which made Jellyfin buffer and seek slowly.
 - **Claims:** none (no PVC)
 <!-- /generated_from -->
 
-- **Flux applies it, not Ansible** (D5, Wave D). Its `containers_list` entry is
+- **Flux applies it.** Its `containers_list` entry is
   in `cluster/services.yml`, so nothing applies it by hand. A merged change
   reaches the cluster when `promote` publishes and verifies the next bundle.
 - **Host: daniel-box (k8s CronJob).** This role renders `templates/config/config.yml.j2` and
@@ -37,7 +40,7 @@ x265 re-encode instead, which made Jellyfin buffer and seek slowly.
   run does not count toward its dead-man monitor, and that role's CLAUDE.md has the other side
   of the choice.
 - **The health reader was a daniel-box host cron until H2.5b.** The cron,
-  `/usr/local/bin/configarr-health.sh` and the `configarr` drift fragment are `legacy:` entries in `hosts/daniel-box/package.yml` since H7.48, and
+  `/usr/local/bin/configarr-health.sh` and the `configarr` drift fragment are `legacy:` entries in `hosts/daniel-box/package.yml`, and
   `homelab-reconcile` removes each from a host that still holds it.
 - **`flux_cronjob_gates` in `defaults/main.yml` names the two gate Jobs.** The renderer copies
   each CronJob's `jobTemplate` into `configarr-verify` as `<cronjob>-deploy-gate-<spec
@@ -50,9 +53,8 @@ x265 re-encode instead, which made Jellyfin buffer and seek slowly.
   reader selects by that label and by finish time, never by name, so it still counts a gate
   run. `k8s/roles/configarr/tests/test_configarr_gate.py::test_the_reconcile_gate_is_a_rerun_safe_mutation_the_health_reader_counts`
   runs the reader's own predicate over the rendered Job.
-- **The Flux gate is stricter than the Ansible one was.** A sync that exits non-zero fails
-  `configarr-verify` and holds the revision, where `k8s/cronjob-gate` reported it and let the
-  deploy continue. The copy carries no ownerReference to the CronJob, so `concurrencyPolicy:
+- **A failed sync holds the revision.** A sync that exits non-zero fails `configarr-verify`,
+  and the revision does not pass its soak. The copy carries no ownerReference to the CronJob, so `concurrencyPolicy:
   Forbid` no longer keeps a scheduled 04:30 firing off a gate run; the sync converges, so an
   overlap writes nothing twice.
 - **Both gates start together, and that is accepted, not ordered.** Flux applies the two gate
@@ -77,7 +79,8 @@ x265 re-encode instead, which made Jellyfin buffer and seek slowly.
   the Jobs labelled `app=configarr`, so that label would make it judge its own runs.
 
 ## Scope — what configarr manages
-`delete_unmanaged_custom_formats` is **OFF** everywhere: Configarr never deletes a CF it did
+`delete_unmanaged_custom_formats` is **OFF** everywhere
+(`k8s/roles/configarr/templates/config/config.yml.j2`): Configarr never deletes a CF it did
 not create.
 
 - **Sonarr `WEB-1080p` profile** — guide-backed, via recyclarr `include:` templates
@@ -108,9 +111,10 @@ not create.
   upgrade-eligible. That is intended: the cutoff stays 400 so such an episode keeps searching.
   The accepted cost (2026-07-18 review) is ongoing RSS/search churn for it plus a hard delete
   on each upgrade — Sonarr's recycle bin is off, so an upgrade has no undo. The live CF
-  definitions stay in Sonarr's DB (on its Longhorn PVC, backed up to B2), and
-  `files/baseline/anime-profile.json` is a read-only snapshot of the Anime profile and its CF
-  scores — this repo's only git record of them, documentation rather than something applied.
+  definitions stay in Sonarr's DB (on its Longhorn PVC, backed up to B2).
+  `k8s/roles/configarr/files/baseline/anime-profile.json` is a read-only snapshot of the Anime
+  profile and its CF scores, and `anime-cf-scores.json` beside it lists the 52 non-zero scores
+  — this repo's only git record of them, documentation rather than something applied.
 
 **Accepted trade-off from the recyclarr port:** `include:`'s `reset_unmatched_scores` makes
 Configarr authoritative for scores *inside the guide profiles it syncs*, which is why the
@@ -130,12 +134,15 @@ the bespoke scheme first.
   uv run python scripts/diagnostics/probe.py arr sonarr "/api/v3/qualityprofile" --json \
     | jq '.[]|select(.name=="Anime")' > k8s/roles/configarr/files/baseline/anime-profile.json
   ```
-- Health evaluator: `files/configarr_lib/configarr_status.py` (exit-code/output verdict logic, tested in
-  `tests/test_configarr_status.py`) — staged into the `configarr-health` ConfigMap and mounted
-  at `configarr_lib/`, beside `configarr_lib/configarr_health_logic.py`, under the
-  `configarr_health.py` reader.
+- Health evaluator: `k8s/roles/configarr/files/configarr_lib/configarr_status.py:evaluate`
+  (exit-code/output verdict logic, tested in `k8s/roles/configarr/tests/test_configarr_status.py`)
+  — staged into the `configarr-health` ConfigMap and mounted at `configarr_lib/`, beside
+  `configarr_lib/configarr_health_logic.py`, under the `configarr_health.py` reader
+  (`k8s/roles/configarr/tests/test_configarr_health.py::test_the_reader_imports_from_the_pods_mounted_layout`).
 - Verify the health reader: `kubectl -n homelab logs -l app=configarr-health --tail=5` — its
-  `configarr-health: status=up` line is the verdict. No `pushed` line follows it since Cutover-2.
+  `configarr-health: status=up` line is the verdict
+  (`k8s/roles/configarr/tests/test_configarr_health.py::test_a_clean_run_logs_status_up_in_the_syslog_shape`).
+  No `pushed` line follows it since Cutover-2.
 - Deploy: merge the change. `promote` publishes the revision, and Flux runs the gate Job
   `configarr-deploy-gate-<spec digest8>` in `configarr-verify`, so the edit syncs immediately.
 - Verify a sync: `kubectl -n homelab get jobs -l app=configarr`, then `kubectl -n homelab logs

@@ -1,7 +1,8 @@
 # prowlarr — indexer manager for the *arr stack
 
-Prowlarr, with a `flaresolverr` sidecar that solves Cloudflare challenges for the indexers by
-rendering attacker-supplied pages in a headless browser.
+Prowlarr, with a `flaresolverr` Deployment beside it
+(`k8s/roles/prowlarr/templates/deployment-flaresolverr.yaml.j2`) that solves Cloudflare
+challenges for the indexers by rendering attacker-supplied pages in a headless browser.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in k8s/roles/longhorn-reconcile/defaults/main.yml. -->
@@ -20,7 +21,7 @@ rendering attacker-supplied pages in a headless browser.
   keys. flaresolverr's browser profile is disposable and sits on an emptyDir.
 - **Secrets:** `prowlarr_api_key` (also reused as the exportarr sidecar's credential —
   Prowlarr has no scoped read-only key to mint instead).
-- **Flux applies it, not Ansible** (#5594, a Wave D PR with monitor-bridge). Its `containers_list`
+- **Flux applies it.** Its `containers_list`
   entry is in `cluster/services.yml`, so nothing applies it by hand, and a merged change reaches the cluster
   when `promote` publishes and verifies the next bundle. authelia and traefik are flux-owned too,
   so the Kustomization lists them in `dependsOn`, and Flux applies this tag only after their
@@ -31,9 +32,8 @@ rendering attacker-supplied pages in a headless browser.
   failed revision writes the stateful hold, and nothing reverts the claim on its own: the
   operator follows the revert runbook in `docs/volume-snapshot-drills.md`.
   `k8s_autodeploy: true` still lets Renovate automerge the image bump.
-- **Where the tasks went.** The Kustomization's `wait` replaces the rollout wait
-  for both Deployments. The flaresolverr isolation probe became the `prowlarr-verify` Job,
-  and its five tasks and `netpol-probe-job.yaml.j2` were deleted.
+- **Its checks.** The Kustomization's `wait` holds both Deployments' rollout. The
+  `prowlarr-verify` Job runs the flaresolverr isolation probe.
 
 ## Notable
 - **A revert desyncs indexer IDs.** Unlike sonarr/radarr/bazarr/jellyfin, which self-heal a
@@ -80,4 +80,5 @@ rendering attacker-supplied pages in a headless browser.
   rationale, shared across the *arr roles.
 
 ## Editing
-- Manifest: `templates/deployment.yaml.j2`, `templates/deployment-flaresolverr.yaml.j2`
+- Manifest: `k8s/roles/prowlarr/templates/deployment.yaml.j2`,
+  `k8s/roles/prowlarr/templates/deployment-flaresolverr.yaml.j2`

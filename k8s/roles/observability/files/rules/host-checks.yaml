@@ -32,7 +32,7 @@ groups:
       # exporter to the bridge's `targets` check, so one dead exporter pages once.
       #
       # Both 1500s literals equal the DEADLINE_S that disk-health.sh.j2 renders from
-      # k3s_disk_health_cron_minute. ansible/tests/services/test_disk_health_rule_literals.py
+      # k3s_disk_health_cron_minute. tests/services/test_disk_health_rule_literals.py
       # pins them to it.
       - alert: DiskHealthNotReporting
         expr: |
@@ -58,7 +58,7 @@ groups:
       # Both producers are daniel-box crons that write a check file through
       # homelab-check-lib.sh. Each NotReporting pair mirrors DiskHealthNotReporting, and its two
       # literals equal the deadline the producer renders from its own cron minute:
-      # ansible/tests/services/test_b6a_rule_literals.py pins them. Both tiles notified Discord
+      # tests/services/test_b6a_rule_literals.py pins them. Both tiles notified Discord
       # only, so the rules are `warning`. No inhibit: each NotReporting rule carries its own
       # `unless on (origin) (up{job="node"} == 0)`, and a dead exporter leaves each Failed rule
       # no series, so `ScrapeTargetDown` is the one page.
@@ -124,7 +124,7 @@ groups:
       # Claude Code's guardrail paths every 5 minutes, and its textfile says whether auditd runs
       # with every watch in place. One pair per host that runs Claude Code. The NotReporting
       # literals equal the DEADLINE_S the script renders, which
-      # ansible/tests/services/test_b6a_rule_literals.py pins.
+      # tests/services/test_b6a_rule_literals.py pins.
       - alert: ClaudeGuardrailAuditFailed
         expr: homelab_check_success{check="claude-guardrail-audit",origin="daniel-box"} == 0
         labels:
@@ -322,7 +322,7 @@ groups:
       # rules are their pager. Each check has the DiskHealth pair: `Failed` reads the verdict, and
       # `NotReporting` reads the file's age. The deadline literal in a NotReporting rule
       # equals the DEADLINE_S its producer renders, and
-      # ansible/tests/services/test_b1_rule_literals.py pins the two together. A daily check
+      # tests/services/test_b1_rule_literals.py pins the two together. A daily check
       # gets a day plus an hour (k3s_daily_check_deadline_s), the interval of its Kuma tile.
       # The `unless` clause leaves a dead exporter to the bridge's `targets` check.
       - alert: LonghornBackupHealthFailed
@@ -1038,7 +1038,7 @@ groups:
       # rule per k3s node, so `service` stays a literal. Both NotReporting rules mirror
       # DiskHealthNotReporting's two arms. Their 300s literals equal DEADLINE_S in
       # node-exporter's files/iscsi-sessions.sh, and
-      # ansible/roles/k8s/node-exporter/tests/test_iscsi_sessions.py pins them to it.
+      # k8s/roles/node-exporter/tests/test_iscsi_sessions.py pins them to it.
       - alert: IscsiSessionStale
         expr: homelab_iscsi_session_info{state!="LOGGED_IN",origin="daniel-box"} == 1
         for: 15m
@@ -1270,7 +1270,7 @@ groups:
       # so it stays Ready on a slower link and nothing else reports it. The carrier arm catches
       # a pulled cable or a dead switch port. The `up` arm catches a link that is
       # administratively down, where node_exporter serves no carrier series at all. A warning,
-      # not a page: the node still serves. ansible/tests/services/test_host_plane_rule_literals.py
+      # not a page: the node still serves. tests/services/test_host_plane_rule_literals.py
       # holds the set to host_vars and prints the rule a new node needs.
       - alert: WiredLinkDown
         expr: |
@@ -1307,7 +1307,7 @@ groups:
       # One rule per inventory host, so `service` stays a literal. The updater writes
       # homelab_host_reconcile_ok 0 on every run while the host holds, so the rule pages a hold
       # that stands for 15 minutes, not one failed run.
-      # ansible/tests/services/test_host_plane_rule_literals.py holds the set to host_vars.
+      # tests/services/test_host_plane_rule_literals.py holds the set to host_vars.
       #
       # Convention 5 (m1-alertmanager.md) does not bind the host-plane rules, because the `node`
       # and `node-pi` jobs both carry `origin`. They meet it anyway: neither pages on `up`, and
@@ -1574,8 +1574,8 @@ groups:
             free and `uv run python scripts/dev/fanout.py place read` for the hosts' headroom,
             then launch, or record why the queue waits (`findings.py defer`).
       # HostUpdateStale: one rule per entry of observability_expected_hosts. Each entry's rule is
-      # the shape of tests/rules/fixtures/host-update-stale.yaml, and
-      # ansible/tests/services/test_host_plane_rule_literals.py prints the rule a new entry
+      # the shape of k8s/roles/observability/tests/rules/fixtures/host-update-stale.yaml, and
+      # tests/services/test_host_plane_rule_literals.py prints the rule a new entry
       # needs.
       - alert: HostUpdateStale
         expr: |

@@ -183,7 +183,7 @@ tests:
                 homelab-k3s-restart has refused to restart k3s.service on daniel-box at every
                 window for 72 hours. Read `journalctl -u homelab-k3s-restart -p notice` for the
                 refusing gate, which is a Longhorn volume, a node, CoreDNS, a SUC run, a Flux
-                promotion, the deployer's lock or hold, or an unreadable API.
+                promotion, or an unreadable API.
   - interval: 1m
     input_series:
       - series: 'homelab_k3s_restart_pending{host="daniel-box"}'

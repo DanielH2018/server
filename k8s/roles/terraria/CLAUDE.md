@@ -12,37 +12,34 @@ irreplaceable data kopia still uniquely protected; the Docker role is in git his
 - **Claim:** `terraria-config` (weekly -> B2 (default target))
 <!-- /generated_from -->
 
-- **Built by CI** from `templates/Dockerfile.j2`: in-cluster from 2026-08-31, and by the
-  promote workflow's `images` job since D5.15. It is a single `chown` layer whose only purpose
-  is to let the server run as a non-root uid. The **digest pin did not go away**: it is the
-  `FROM` line of that Dockerfile, `beardedio/terraria:vanilla-latest` pinned by a digest that
-  Renovate bumps. Upstream publishes no pinned vanilla versions, so `vanilla-latest` is the
-  only tag available and the digest is what stops it floating.
-  What changed is how an update lands. Renovate's built-in dockerfile manager still raises a
+- **Built by CI** from `templates/Dockerfile.j2`, by the promote workflow's `images` job. It
+  is a single `chown` layer whose only purpose is to let the server run as a non-root uid.
+  The **digest pin** is the `FROM` line of that Dockerfile, `beardedio/terraria:vanilla-latest`
+  pinned by a digest that Renovate bumps. Upstream publishes no pinned vanilla versions, so
+  `vanilla-latest` is the only tag available and the digest is what stops it floating.
+  An update lands as follows. Renovate's built-in dockerfile manager raises a
   digest-bump PR, and built images carry `automerge: false`, so a person merges it. The merge
   changes the context, so the content tag moves, the `images` job pushes the new tag, and
   `promote` rolls the pod. A package refresh that no pin moves is a hand PR that bumps a
   `rebuild_stamp` data key in the context
   (`k8s/roles/image-builder/CLAUDE.md`). All of this matters because the volume holds
   irreplaceable world data.
-- **Flux applies it, not Ansible** (D5.15, Wave C). Its `containers_list` entry is
+- **Flux applies it.** Its `containers_list` entry is
   in `cluster/services.yml`, so nothing applies it by hand, and a merged
   change reaches the cluster when `promote` publishes and verifies the next bundle. `k8s_autodeploy:
   false` still stops Renovate's
   automerge of the digest bump. The Deployment is `Recreate`, so a change that rolls it takes
   the server down until the new pod passes its startup probe.
-- **Parked at `replicas: 0`.** `inventory/group_vars/all.yml:terraria_k8s_replicas` is
-  0 (#822), so the render holds `replicas: 0` and a roll starts no pod. Flux's drift
-  correction now resets a hand scale as well. The value has three readers: this role's
-  Deployment, game-stats' `terraria-stats` Deployment and observability's `terraria-stats`
-  scrape job. All three roles are Flux-owned, so unparking is one merge that `promote`
-  applies. The restore checklist on #822 has the rest.
-- **Where the tasks went.** The build became
-  the `images` job (D5.4), which pushes `ghcr.io/danielh2018/terraria:<content tag>`. The
-  defaults name `<k8s_registry_pull_host>/terraria`; the renderer rewrites that ref to the GHCR
-  one with `imagePullPolicy: IfNotPresent`
-  (`scripts/renderer/renderer_lib/images.py:ghcr_refs`). The Kustomization's `wait` replaces
-  the rollout wait.
+- **Parked, and the Games panel refuses to start it.** The Deployment renders no `replicas:`;
+  deploy.local's Games panel owns the count of it and of game-stats' `terraria-stats`
+  (ADR-0033). Its `game_servers` entry in `inventory/group_vars/all.yml` carries
+  `start_refused`, so the panel will not start it until #822's restore checklist is done.
+  Lifting the refusal is a merge that removes that key.
+- **Its image build and rollout.** The `images` job pushes
+  `ghcr.io/danielh2018/terraria:<content tag>`. The defaults name
+  `<k8s_registry_pull_host>/terraria`; the renderer rewrites that ref to the GHCR one with
+  `imagePullPolicy: IfNotPresent` (`scripts/renderer/renderer_lib/images.py:ghcr_refs`). The
+  Kustomization's `wait` holds the rollout.
 - **Host:** daniel-box · **Port:** public 7777 via `Service type: LoadBalancer`,
   `externalTrafficPolicy: Local`, pinned to the host IP — the router's forward points here
 - **Storage:** worlds + config on a BACKED-UP Longhorn PVC (the point of the move),

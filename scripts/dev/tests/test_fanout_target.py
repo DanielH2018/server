@@ -200,6 +200,8 @@ def test_the_snapshot_holds_origin_master_while_the_primary_checkout_lags(
     script = "scripts/dev/fanout.py"
     files = {script: "old\n", ".claude/hooks/fanout-stop.py": "hook\n", "README": "x"}
     files |= {"pyproject.toml": "p\n", "uv.lock": "l\n", ".python-version": "3.14\n"}
+    ledger = "hosts/components/gh-quota/files/gh_quota.py"
+    files |= {ledger: "ledger\n"}
     commit(server, "old", **files)
     git(server, "push", "-q", "origin", "master")
     upstream = tmp_path / "upstream"
@@ -219,6 +221,8 @@ def test_the_snapshot_holds_origin_master_while_the_primary_checkout_lags(
     # #3783: the brief's `uv run --project` names the snapshot, so uv needs its project files.
     assert (snap / "uv.lock").read_text() == "l\n"
     assert (snap / ".python-version").read_text() == "3.14\n"
+    # scripts/lib/gh.py counts each gh call into the ledger module, so the snapshot carries it.
+    assert (snap / ledger).read_text() == "ledger\n"
     assert not (snap / "README").exists()
     assert sorted(p.name for p in (wt / ".fanout").iterdir()) == ["server"]
 

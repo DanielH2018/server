@@ -6,11 +6,17 @@ does not declare, which rolls the controller and every speaker pod at the promot
 refresh to a release that drops them would do the same on the next bump, so the check runs on the
 file, not only on the census before the flip.
 
+The role's two patches give the controller and the speaker requests and a CPU limit, so neither
+pod runs BestEffort (#8326, #8542); the tests at the bottom hold each patch's memory request
+equal to its defaults key. tests/k8s/test_namespace_resource_defaults.py holds every key but
+the memory limit, which the operator ruled out on 2026-11-14.
+
 Run: uv run pytest tests/k8s/test_metallb_vendored_manifest.py
 """
 
 import copy
 
+from _helpers import besteffort_workloads, load_defaults
 from lib import yaml_fast
 from lib.repo_paths import K8S_ROLES
 
@@ -46,3 +52,47 @@ def test_a_template_without_the_annotations_is_flagged():
     del stripped["spec"]["template"]["metadata"]["annotations"]["prometheus.io/scrape"]
     assert _missing(controller) == []
     assert _missing(stripped) == ["prometheus.io/scrape"]
+
+
+ROLE = K8S_ROLES / "metallb"
+DEFAULTS = load_defaults(ROLE)
+PATCH_KEYS = {
+    ("Deployment", "controller"): "k3s_metallb_controller_memory_request",
+    ("DaemonSet", "speaker"): "k3s_metallb_speaker_memory_request",
+}
+
+
+def _patches() -> dict[tuple[str, str], dict]:
+    return _workloads(
+        "\n---\n".join(
+            p.read_text() for p in sorted((ROLE / "files" / "patches").glob("*.yaml"))
+        )
+    )
+
+
+def test_no_metallb_workload_runs_besteffort():
+    # fact: k8s/roles/metallb/CLAUDE.md#At a glance
+    # An evicted speaker drops every VIP its node announces (#8326).
+    assert besteffort_workloads(ROLE) == []
+
+
+def test_each_patch_requests_its_defaults_value():
+    # fact: k8s/roles/metallb/CLAUDE.md#At a glance
+    # A kustomize patch is copied verbatim and cannot read a variable.
+    patches = _patches()
+    assert set(patches) == set(PATCH_KEYS)
+    upstream = _workloads(UPSTREAM.read_text())
+    for member, key in PATCH_KEYS.items():
+        (container,) = patches[member]["spec"]["template"]["spec"]["containers"]
+        assert container["name"] == member[1]
+        assert container["name"] in {
+            c["name"]
+            for c in upstream[member]["spec"]["template"]["spec"]["containers"]
+        }
+        assert container["resources"]["requests"]["memory"] == str(DEFAULTS[key])
+
+
+def test_the_unpatched_upstream_file_is_flagged(tmp_path):
+    (tmp_path / "files" / "upstream").mkdir(parents=True)
+    (tmp_path / "files" / "upstream" / UPSTREAM.name).write_text(UPSTREAM.read_text())
+    assert besteffort_workloads(tmp_path) == sorted(PATCH_KEYS)

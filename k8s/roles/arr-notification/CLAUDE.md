@@ -1,11 +1,12 @@
 # k8s/arr-notification — the shared *arr Discord Connect declaration
 
 This role renders no manifest and starts no workload. It declares one *arr app's Discord
-"Connect" notification over the app's own API, so the notification is repo state rather than
-UI state. Under Flux the declaration runs as a seed Job in sonarr's, radarr's and lidarr's
+"Connect" notification over the app's own API
+(`k8s/roles/arr-notification/files/seed_arr_notification.py:main`), so the notification is repo
+state rather than UI state. The declaration runs as a seed Job in sonarr's, radarr's and lidarr's
 `templates/verify/` (*The Job form*, below), which reads this role's script and defaults by
-`lookup()`. Those lookups are the role's only callers: sonarr and radarr included it until #5561, which dropped the includes because
-no Ansible path ran them after the Flux flip (D5.20).
+`lookup()`. Those lookups are the role's only callers, and no app includes the role
+(`k8s/roles/arr-notification/tests/test_seed_job.py::test_the_seed_job_reads_no_role_but_its_app_and_arr_notification`).
 
 **Why it exists.** A Connect notification is a row in `sonarr.db` / `radarr.db` on the app's
 config PVC. No manifest reproduces it, so a Longhorn revert past its creation, or anyone
@@ -14,29 +15,36 @@ that would have reported the problem.
 
 **No standalone deploy tag.** Its callers reach it through a `lookup()`, never through
 `--tags arr-notification`. It is not a `containers_list` entry, so a promoted image bump
-here would match no play and deploy nothing while reporting success. `k8s_autodeploy: false`
-for the same reason; the reason string is in `defaults/main.yml`.
+here would match no play and deploy nothing while reporting success.
+`k8s/roles/arr-notification/defaults/main.yml:k8s_autodeploy` is false for the same reason; the
+reason string is `k8s/roles/arr-notification/defaults/main.yml:k8s_autodeploy_reason`.
 
 ## The before-state it adopts (measured 2026-09-06)
 
-Both apps already carried a Discord notification named `Discord (health)`, created by hand:
+**HISTORY —** Both apps already carried a Discord notification named `Discord (health)`, created by hand:
 
 | app | id | name | implementation | triggers true |
 |---|---|---|---|---|
 | sonarr | 3 | `Discord (health)` | Discord | `onHealthIssue`, `onHealthRestored` |
 | radarr | 1 | `Discord (health)` | Discord | `onHealthIssue`, `onHealthRestored` |
 
-Both point at the same webhook, and that webhook is byte-for-byte the SOPS
+**HISTORY —** Both point at the same webhook, and that webhook is byte-for-byte the SOPS
 `arr_discord_webhook_url` that `autofix-bridge` and the `fake-remux` component already read. So this role
-adopts two rows and mints nothing: the first deploy reports **no change**.
+adopted two rows and minted nothing: the first deploy reported **no change**.
 
-lidarr (added in #8365) had no such row. Its first deploy **creates** `Discord (health)` from
-`GET /api/v1/notification/schema`, with the same health-only triggers; a row someone adds by
-hand under that name first is adopted instead.
+**HISTORY —** lidarr (added in #8365) had no such row. Its first deploy was to **create**
+`Discord (health)` from `GET /api/v1/notification/schema`, with the same health-only triggers.
+On 2026-11-14 lidarr's seed Job reported **no change**, so the row exists.
+
+A missing row is created from the app's schema
+(`k8s/roles/arr-notification/files/seed_arr_notification.py:schema_for`), and a row someone adds
+by hand under the declared name first is adopted instead.
 
 sonarr also carries an `Episode Trimmer` CustomScript notification (id 2, `onDownload` +
 `onUpgrade`). This role never touches it — `find_notification` matches on implementation AND
-name, so a CustomScript that happened to share the name is left alone.
+name, so a CustomScript that happened to share the name is left alone
+(`k8s/roles/arr-notification/files/seed_arr_notification.py:find_notification`,
+`k8s/roles/arr-notification/tests/test_seed_arr_notification.py::test_a_same_named_notification_of_another_kind_is_not_adopted`).
 
 ## Decisions worth not re-opening
 
@@ -96,42 +104,61 @@ uv run python k8s/roles/arr-notification/files/seed_arr_notification.py --test
 
 ## The Job form
 
-Under Flux the seed runs as a post-apply mutation Job in `sonarr-verify`, `radarr-verify` and
+The seed runs as a post-apply mutation Job in `sonarr-verify`, `radarr-verify` and
 `lidarr-verify`. `templates/verify/notification.yaml.j2` in each app's role holds it,
-byte-identical in all three.
-It landed inert in `templates/verify-inert/`, and the apps' flip (D5.20) moved it.
+byte-identical in all three
+(`k8s/roles/arr-notification/tests/test_seed_job.py::test_the_apps_carry_the_same_template`).
 
 - **The script is the one this role ships**, read by a cross-role `lookup()`, so a change here
-  changes both apps' renders. The template also reads
-  `arr_notification_name`, `arr_notification_triggers` and
-  `arr_notification_include_health_warnings` from `defaults/main.yml` as literals, and spells
-  `arr_notification_username` as the app's name capitalised.
+  changes all three apps' renders. The template also reads
+  `k8s/roles/arr-notification/defaults/main.yml:arr_notification_name`,
+  `k8s/roles/arr-notification/defaults/main.yml:arr_notification_triggers` and
+  `k8s/roles/arr-notification/defaults/main.yml:arr_notification_include_health_warnings` from
+  `defaults/main.yml` as literals, and spells
+  `k8s/roles/arr-notification/defaults/main.yml:arr_notification_username` as the app's name
+  capitalised
+  (`k8s/roles/arr-notification/tests/test_seed_job.py::test_the_job_declares_what_the_ansible_seed_declares`).
 - **One transport.** The script imports only modules the Job census admits, so a hand run
-  reaches the app through `flux_job_connect.open_url` as the Job does. A refused connect
-  therefore retries for 60 seconds in a hand run too.
+  reaches the app through `scripts/renderer/job_files/flux_job_connect.py:open_url` as the Job
+  does. A refused connect therefore retries for 60 seconds in a hand run too
+  (`scripts/renderer/job_files/flux_job_connect.py:RETRY_SECONDS`).
 - **The API key comes from `<app>-exportarr`**, which the app's own render applies. The webhook
   comes from `<app>-notification`, a Secret in `<app>-verify` filled by substitution, so that
-  Kustomization substitutes.
+  Kustomization substitutes
+  (`k8s/roles/arr-notification/tests/test_seed_job.py::test_every_secret_the_job_reads_is_rendered_before_it_runs`).
 - **The Job reruns once per revision that rolls the app**, because its spec embeds a digest of
-  the rendered Deployment. A webhook rotation alone renames nothing, so the rotated URL reaches
-  the app on the next revision that rolls it.
-- **The fence peers landed ahead of the flip.** The Job's pod carries `app: <app>-verify`, and
+  the rendered Deployment (`ARR_DEPLOYMENT_DIGEST8` in
+  `k8s/roles/sonarr/templates/verify/notification.yaml.j2`).
+- **The Job also reruns when `arr_discord_webhook_url` rotates.** Its spec embeds the
+  `cluster-vars.source` digest of that key (`ARR_WEBHOOK_DIGEST8`), so a rotation alone renames
+  the Job and the seed writes the new URL into each app's database (#8602). The rendered
+  `<app>-notification` Secret cannot carry the rotation, because its placeholder text does not
+  move when the key does. `tests/test_seed_job.py` rotates the key in a tree copy and checks
+  that each app's Job is renamed
+  (`k8s/roles/arr-notification/tests/test_seed_job.py::test_a_webhook_rotation_alone_renames_the_seed_job`).
+- **The fence peers are in place.** The Job's pod carries `app: <app>-verify`, and
   each app's `netpol_from` lists that label (#5535). `tests/test_seed_job.py` checks that the
-  Job's pod is one its app's fence admits.
+  Job's pod is one its app's fence admits
+  (`k8s/roles/arr-notification/tests/test_seed_job.py::test_the_apps_fence_admits_every_flipped_job`).
 
 ## Tests
 
-`tests/test_seed_arr_notification.py`, registered in `pyproject.toml`'s `testpaths`. Every
-rule is an accept/reject pair over `find_notification` / `declared_body` / `needs_update` —
+`k8s/roles/arr-notification/tests/test_seed_arr_notification.py`, registered in
+`pyproject.toml`'s `testpaths`. Every rule is an accept/reject pair over
+`k8s/roles/arr-notification/files/seed_arr_notification.py:find_notification` /
+`k8s/roles/arr-notification/files/seed_arr_notification.py:declared_body` /
+`k8s/roles/arr-notification/files/seed_arr_notification.py:needs_update` —
 the three functions that decide create, rewrite or no-op.
 
-`tests/test_seed_job.py` renders the three apps' flipped Jobs, runs the Job census over them, and
+`tests/test_seed_job.py` renders the three apps' Jobs, runs the Job census over them, and
 runs the rendered script twice against a fixture API from no row and from a drifted row. The
-second run must write nothing; the Job's `homelab/rerun-safe` annotation names that test. A
+second run must write nothing; the Job's `homelab/rerun-safe` annotation names that test
+(`k8s/roles/arr-notification/tests/test_seed_job.py::test_a_second_run_changes_nothing`). A
 red-proof pair seeds lidarr against a fixture that serves only `/api/v1` (accepted) and only
-`/api/v3` (refused).
+`/api/v3` (refused)
+(`k8s/roles/arr-notification/tests/test_seed_job.py::test_lidarr_seeds_over_api_v1_and_only_v1`).
 
-**The create path is unexercised live until lidarr's first deploy.** The sonarr and radarr
+**HISTORY — The create path is unexercised live until lidarr's first deploy.** The sonarr and radarr
 notifications already existed when this role was written, so only the update-and-no-op branch
 has run against those apps. Lidarr's first deploy is the first live create; before it, the
 create branch is covered by the schema test and the fixture run alone.

@@ -78,9 +78,9 @@ def test_execstart_runs_the_wrapper_not_claude_directly(unit: str) -> None:
     assert "/usr/lib/homelab/renovate-agent/renovate_agent.py" in joined
 
 
-def test_path_carries_the_user_local_bin(unit: str) -> None:
-    """`claude` and `uv` live under ~/.local/bin; systemd's default PATH omits it."""
-    envs = directive(unit, "Environment")
+def test_path_carries_the_user_local_bin() -> None:
+    """`claude` and `uv` live under the session's ~/.local/bin; systemd's default PATH omits it."""
+    envs = directive(render(SESSION_UNIT), "Environment")
     paths = [e for e in envs if e.startswith("PATH=")]
     assert paths, "the unit sets no PATH"
     # systemd's last assignment of a variable wins, so the effective PATH is paths[-1].
@@ -104,6 +104,15 @@ def test_the_lander_pins_land_sh_to_renovates_prs() -> None:
     assert f'\nAUTHOR = "{census.group(1)}"\n' in lander, (
         "the lander's own author check must name the login the census keys on"
     )
+
+
+def test_a_pre_merge_refusal_leaves_the_lander_unit_inactive() -> None:
+    """The lander's refusal code is a success to systemd, so SystemdUnitsFailed stays quiet."""
+    lander = (COMPONENT / "files" / "land_renovate_pr.py").read_text()
+    code = re.search(r"^REFUSED_EXIT = (\d+)$", lander, re.MULTILINE)
+    assert code, "the lander names no REFUSED_EXIT"
+    success = directive(render("renovate-agent-land@.service.j2"), "SuccessExitStatus")
+    assert success == [code.group(1)]
 
 
 def test_onfailure_pages(unit: str) -> None:
@@ -162,12 +171,41 @@ def test_reconcile_never_restarts_a_session() -> None:
     """A package install must not kill a landing or spend a session as a side effect."""
     assert SPEC["units"]["homelab-renovate-agent.service"] == {"policy": "manual"}
     activates = [
-        f for f in SPEC["files"] if "homelab-renovate-agent" in f.get("activate", "")
+        f
+        for f in SPEC["files"]
+        if f.get("activate", "").partition(":")[2]
+        in ("homelab-renovate-agent.service", "homelab-renovate-agent.timer")
     ]
     assert activates == []
 
 
+SETUP_UNIT = "homelab-renovate-agent-setup.service"
+
+
+def test_a_disarmed_agent_still_gets_its_claude_settings() -> None:
+    """The guardrail audit watches the settings file whether or not the timer is armed."""
+    assert SPEC["enable"][SETUP_UNIT] == "multi-user.target"
+    activated = {
+        f["src"]
+        for f in SPEC["files"]
+        if f.get("activate") == f"try-restart:{SETUP_UNIT}"
+    }
+    assert activated == {
+        "files/claude-settings.json",
+        "templates/renovate-agent-setup.sh.j2",
+    }
+    unit = render(f"{SETUP_UNIT}.j2")
+    assert directive(unit, "RemainAfterExit") == ["yes"], (
+        "try-restart reruns only an active unit"
+    )
+    assert directive(unit, "ExecStart")[0].endswith(
+        " /usr/lib/homelab/renovate-agent-setup"
+    )
+
+
 CONFIG = "config.env.j2"
+SESSION_CONF = "session.conf.j2"
+SESSION_UNIT = "homelab-renovate-agent-session.service.j2"
 PINNED = (
     "max_prs",
     "model",
@@ -175,7 +213,7 @@ PINNED = (
     "budget_usd",
     "run_timeout_s",
     "unit_timeout",
-    "bash_timeout_ms",
+    "session_timeout_s",
 )
 
 
@@ -196,24 +234,53 @@ def test_the_pins_equal_the_defaults(defaults: dict) -> None:
 
 def test_the_config_unit_and_prompt_quote_the_pins(unit: str) -> None:
     pinned = pins()
-    config = render(CONFIG)
-    for key, name in (
-        ("MODEL", "model"),
-        ("PERMISSION_MODE", "permission_mode"),
-        ("BUDGET_USD", "budget_usd"),
-        ("RUN_TIMEOUT_S", "run_timeout_s"),
+    for template, keys in (
+        (CONFIG, ("run_timeout_s", "session_timeout_s", "max_prs")),
+        (SESSION_CONF, ("model", "permission_mode", "budget_usd")),
     ):
-        assert f"{key}={pinned[name]}\n" in config, key
+        config = render(template)
+        for name in keys:
+            assert f"{name.upper()}={pinned[name]}\n" in config, (template, name)
     assert directive(unit, "TimeoutStartSec") == [pinned["unit_timeout"]]
-    assert f"BASH_MAX_TIMEOUT_MS={pinned['bash_timeout_ms']}" in directive(
-        unit, "Environment"
-    )
     prompt = render(PROMPT)
-    for name in ("max_prs", "run_timeout_s", "budget_usd", "bash_timeout_ms"):
+    for name in ("max_prs", "session_timeout_s", "budget_usd"):
         assert str(pinned[name]) in prompt, name
 
 
-@pytest.mark.parametrize("template", [CONFIG, UNIT, PROMPT])
+SESSION_RULE = "50-renovate-agent-session.rules.j2"
+LAND_RULE = "50-renovate-agent-land.rules.j2"
+
+
+def test_the_session_unit_runs_the_session_script_under_its_wall_clock() -> None:
+    """systemd stops the session at session_timeout_s; the runner reads Result=timeout."""
+    session = render(SESSION_UNIT, {"renovate_agent_user": "session-sentinel"})
+    assert directive(session, "User") == ["renovate-agent"]
+    assert directive(session, "TimeoutStartSec") == [str(pins()["session_timeout_s"])]
+    assert directive(session, "ExecStart")[0].endswith("/renovate_session.py")
+    assert SPEC["units"]["homelab-renovate-agent-session.service"] == {
+        "policy": "manual"
+    }
+
+
+@pytest.mark.parametrize("template", [SESSION_RULE, LAND_RULE])
+def test_only_the_controller_may_start_the_units(template: str) -> None:
+    """dotfiles#967's I1: the session user starts nothing, whatever the inventory says."""
+    rule = render(template, {"renovate_agent_user": "session-sentinel"})
+    assert 'subject.user !== "renovate-agent-ctl"' in rule
+    assert '"renovate-agent"' not in rule
+
+
+def test_the_session_rule_admits_only_starting_the_session_unit() -> None:
+    rule = render(SESSION_RULE)
+    assert 'action.lookup("unit") !== "homelab-renovate-agent-session.service"' in rule
+    assert 'action.lookup("verb") !== "start"' in rule
+    assert rule.count("polkit.Result.YES") == 1
+
+
+@pytest.mark.parametrize(
+    "template",
+    [CONFIG, UNIT, PROMPT, SESSION_UNIT, SESSION_CONF, "renovate-agent-setup.sh.j2"],
+)
 def test_an_inventory_value_moves_no_cap(template: str) -> None:
     """A PR that edits only host_vars must not raise a cap or widen the permission mode."""
     # fact: hosts/components/renovate-agent/CLAUDE.md#Autonomous-role contract (it merges and deploys with no human in the loop)
@@ -224,7 +291,9 @@ def test_an_inventory_value_moves_no_cap(template: str) -> None:
         "renovate_agent_budget_usd": 9731,
         "renovate_agent_run_timeout_s": 973100,
         "renovate_agent_unit_timeout": "9731min",
-        "renovate_agent_bash_timeout_ms": 97310000,
+        "renovate_agent_session_timeout_s": 97310,
+        "renovate_agent_user": "moved-user",
+        "renovate_agent_ctl_home": "/srv/moved-ctl",
     }
     assert render(template, moved) == render(template)
 
@@ -262,13 +331,13 @@ def test_the_unit_and_its_config_make_no_kuma_push(unit: str) -> None:
 
 
 def test_config_env_stays_root_owned_and_group_read_only() -> None:
-    """It holds the Discord webhook, and the session must not be able to rewrite it."""
+    """It holds the Discord webhook, which only the controller reads."""
     [output] = [
         o for o in SPEC["outputs"] if o["path"] == "/etc/renovate-agent/config.env"
     ]
     assert (output["owner"], output["group"], output["mode"]) == (
         "root",
-        "renovate-agent",
+        "renovate-agent-ctl",
         "0640",
     )
 
@@ -433,3 +502,18 @@ def test_the_tell_is_read_from_the_end_of_a_per_package_parenthetical() -> None:
         )
         == "k8s_autodeploy: false"
     )
+
+
+def test_the_session_and_the_controller_meet_in_one_exchange_directory() -> None:
+    """The session writes where the prompt says, and the runner reads where its config says."""
+    [(prompt_dir,)] = [
+        m.groups() for m in [re.search(r"`(/\S+)/requests/`", render(PROMPT))] if m
+    ]
+    setup = render("renovate-agent-setup.sh.j2")
+    for template in (CONFIG, SESSION_CONF):
+        assert f"\nEXCHANGE_DIR={prompt_dir}\n" in render(template), template
+    assert re.search(
+        rf'^install -d -o "\$ctl" -g "\$agent" -m 2750 {re.escape(prompt_dir)}$',
+        setup,
+        re.MULTILINE,
+    ), "the setup must create the exchange the runner and the session use"

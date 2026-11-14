@@ -1,6 +1,6 @@
 """monitor-bridge's run loop — one full check cycle, gates first.
 
-Stdlib only (runs on python:3.14-alpine with no extra deps). Each check returns
+Stdlib only (runs on python:3.15-alpine with no extra deps). Each check returns
 (ok: bool, msg: str), and the exporter records the verdict as the row's
 `homelab_check_success` gauge, which the rules in observability's `bridge-exporter.yaml` page
 on.
@@ -15,8 +15,8 @@ A name the suite patches is read QUALIFIED from the module that binds it — `br
 — never from-imported, because a from-import copies the value in at import time and never sees
 the patch. Nothing here is a module table any more: the checks arrive as the `checks` argument
 and the queries through `src`, so a test states them instead of patching them. Enforced by
-ansible/tests/services/test_bridge_patch_boundary.py; the census of what is patched where is
-ansible/tests/services/test_monitor_bridge_modules.py.
+tests/services/test_bridge_patch_boundary.py; the census of what is patched where is
+tests/services/test_monitor_bridge_modules.py.
 
 Design: docs/monitor-bridge-internals.md.
 
@@ -38,10 +38,11 @@ from bridge.sources import Sources
 from bridge.types import Check, CheckFn, CheckResult, VerdictRecorder
 
 # Checks whose `up` line is logged every cycle, because something reads it as data. The
-# Longhorn Storage dashboard's four B2 panels regex the used/cap/pct/versions figures out of
-# b2_storage's "B2 storage ..." message in this container's log; quiet that line and they go
-# blank. ENFORCED: tests/test_check.py::test_every_dashboard_parsed_check_is_logged_when_up.
-LOGGED_WHEN_UP = frozenset({"b2_storage"})
+# Longhorn Storage dashboard's B2 and R2 panels regex their figures out of b2_storage's
+# "B2 storage ..." and r2_usage's "R2 month-to-date: ..." messages in this container's log;
+# quiet either line and its panels go blank.
+# ENFORCED: tests/test_check.py::test_every_dashboard_parsed_check_is_logged_when_up.
+LOGGED_WHEN_UP = frozenset({"b2_storage", "r2_usage"})
 
 # What a dependent row logs while its gate row reads down, keyed by the gate's name. A key is
 # also how `run_once` tells a gate row from any other. The dependent's body is not called and
@@ -111,10 +112,9 @@ def down_exporters(
 def _exporter_suppressed(src: Sources) -> set[str]:
     """The checks a dead exporter skips this cycle, or an empty set when the probe fails.
 
-    A BARE `up`, deliberately — no origin_sel(). PROM_ORIGIN resolves to origin="daniel-server",
-    while the `node` job labels each target with its own node name (daniel-box, daniel-server).
-    A pinned probe therefore saw one node exporter of three and missed a dead daniel-box one
-    (#2779). A failure to DETERMINE exporter health leaves the set empty: fail toward alerting,
+    A BARE `up`, deliberately, with no `origin` matcher. The `node` job labels each target with
+    its own node name (daniel-box, daniel-server), so a probe pinned to origin="daniel-server"
+    saw one node exporter of three and missed a dead daniel-box one (#2779). A failure to DETERMINE exporter health leaves the set empty: fail toward alerting,
     never masking.
     """
     # DECIDED: suppression stays keyed on the Prometheus `job`, so a dead exporter on ONE host

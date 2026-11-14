@@ -1,7 +1,9 @@
 # pihole — LAN DNS resolver, running two instances
 
 Pi-hole plus an unbound sidecar, deployed as two independent pods for deploy-time DNS
-continuity. Coexisted with a Docker-era copy through the DNS cutover; that copy is retired.
+continuity (`tests/services/test_pihole_redundancy.py::test_two_instances_are_rendered`).
+
+**HISTORY —** Coexisted with a Docker-era copy through the DNS cutover; that copy is retired.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in k8s/roles/longhorn-reconcile/defaults/main.yml. -->
@@ -14,14 +16,16 @@ continuity. Coexisted with a Docker-era copy through the DNS cutover; that copy 
   }}`)
 <!-- /generated_from -->
 
-- **The unbound sidecar** listens on `pihole_k8s_unbound_port` inside the pod; FTL owns `:53`
+- **The unbound sidecar** listens on
+  `k8s/roles/pihole/defaults/main.yml:pihole_k8s_unbound_port` inside the pod; FTL owns `:53`
   in the shared network namespace.
 - **The route is the web UI only** (port 80). LAN DNS itself is served on
-  `pihole_k8s_lan_ip` (`dns_k8s_vip`), not through Traefik.
+  `k8s/roles/pihole/defaults/main.yml:pihole_k8s_lan_ip` (`dns_k8s_vip`), not through Traefik.
 - **Persists:** two independent PVCs, `pihole_k8s_claim` / `pihole_k8s_claim_2`, one per pod
-  — `/etc/pihole` is RWO/single-writer, so each instance gets its own rather than sharing.
-  `longhorn-nobackup`: every byte is derivable — `gravity.db` from `pihole_k8s_adlists`,
-  `pihole.toml` from the `FTLCONF` env, `pihole-FTL.db` is query history, not state.
+  — `/etc/pihole` is RWO/single-writer, so each instance gets its own rather than sharing
+  (`tests/services/test_pihole_redundancy.py::test_instances_do_not_share_a_volume`).
+  `k8s/roles/pihole/defaults/main.yml:pihole_k8s_storage_class`: every byte is derivable —
+  `gravity.db` from `pihole_k8s_adlists`, `pihole.toml` from the `FTLCONF` env, `pihole-FTL.db` is query history, not state.
 
 ## Notable
 - **Blocklist state is declared, not volume-seeded.** `pihole_k8s_adlists` and
@@ -35,8 +39,8 @@ continuity. Coexisted with a Docker-era copy through the DNS cutover; that copy 
   controller Recreate-cycled both instances (2026-09-28, #2884: 52s of LAN DNS downtime, and both
   new pods failed their image pull against the resolver they had just replaced).
   `manifests_deferred_files: [deployment-2.yaml]` with `manifests_deferred_dir_name:
-  pihole-instance-2` is the contract (#2899). Why the Ansible-era roll was sequenced by hand is
-  in `docs/pihole-dns-continuity-record.md`.
+  pihole-instance-2` is the contract (#2899). `docs/pihole-dns-continuity-record.md` records
+  why the two instances must roll in sequence.
 - **LAN reverse-DNS is forwarded to the router, with `server=` rather than `rev-server=`.**
   `templates/config/pihole-dnsmasq.conf.j2` forwards the zone `lan_subnet` implies to
   `lan_router_ip`, so PTR lookups for DHCP clients return the names the router leased them.
@@ -57,11 +61,11 @@ continuity. Coexisted with a Docker-era copy through the DNS cutover; that copy 
 
 ## Flux applies it
 
-- **Flux applies pihole, not Ansible** (D5, pihole's own window). Its `containers_list` entry
+- **Flux applies pihole.** Its `containers_list` entry
   is in `cluster/services.yml`, so nothing applies it by hand, and a
   merged change reaches the cluster when `promote` publishes and verifies the next bundle.
-- **Where the tasks went.** `defaults/main.yml` keeps `manifests_self_rollouts` because the renderer reads it to
-  stamp the restart annotation on both instances.
+- **Its restart.** `defaults/main.yml` sets `manifests_self_rollouts` because the renderer
+  reads it to stamp the restart annotation on both instances.
 - **The gravity reconcile is `templates/verify/gravity.yaml.j2`, a mutation Job.** It runs
   `files/pihole_gravity.py` against each FTL's v6 REST API, through the `pihole` and
   `pihole-2-web` Services, with the password from `pihole-env`. So it needs no `pods/exec` and
@@ -76,10 +80,10 @@ continuity. Coexisted with a Docker-era copy through the DNS cutover; that copy 
   both instances, and instance 2 rolls only after instance 1 is Ready. `pihole-verify` depends
   on `pihole-deferred`, so the reconcile meets two Ready instances.
   `tests/test_pihole_gravity.py` pins that order.
-- **The ready-endpoint check has no successor.** `wait: true` on `pihole` holds instance 1
+- **Its ready-endpoint check.** `wait: true` on `pihole` holds instance 1
   Ready and `wait: true` on `pihole-deferred` holds instance 2 Ready. `pihole-dns` selects both
   by `app: pihole`, so two Ready Deployments are two ready endpoints.
-- **The pinned-VIP assert is observability's `PiholeLanAddressNotPinned` rule.** The rule
+- **Observability's `PiholeLanAddressNotPinned` rule checks the pinned VIP.** The rule
   reads `pihole-dns`'s LoadBalancer ingress from kube-state-metrics, at `warning` with
   `verify="true"`, so the soak checks it on every revision. Its address is a literal, so moving
   `dns_k8s_vip` is an edit to that rule too.
@@ -88,19 +92,30 @@ continuity. Coexisted with a Docker-era copy through the DNS cutover; that copy 
 
 ## The sibling guard and its break-glass
 
-- **The sibling check is `templates/precheck/guard.yaml.j2`.** Under Flux,
+- **The sibling check is `k8s/roles/pihole/templates/precheck/guard.yaml.j2`.** Under Flux,
   `pihole` rolls instance 1 whatever state instance 2 is in, and `pihole` cannot depend on
   `pihole-deferred` without a cycle (#5695). The renderer writes `templates/precheck/` to
-  `pihole-precheck`, which `pihole` depends on (#5719). `files/pihole_sibling_guard.py` reads the
-  EndpointSlices of `pihole` and `pihole-2-web`, which each select one instance. It fails while
+  `pihole-precheck`, which `pihole` depends on (#5719,
+  `k8s/roles/pihole/tests/test_pihole_precheck.py::test_pihole_waits_on_the_guard_for_longer_than_its_deadline`).
+  `k8s/roles/pihole/files/pihole_sibling_guard.py:run` reads the
+  EndpointSlices of `pihole` and `pihole-2-web`, which each select one instance
+  (`k8s/roles/pihole/tests/test_pihole_sibling_guard.py::test_the_guard_reads_the_two_single_instance_services`).
+  It fails while
   pihole-2 has no ready, non-terminating endpoint for 300s, so Flux holds `pihole` and instance 1
-  keeps serving. It passes at once when `pihole` has no EndpointSlice at all, so a first apply
-  cannot deadlock on an instance 2 that only `pihole-deferred` creates. An API read that gets no
-  answer, a 429 or a 5xx is retried inside the 300s wait. Its Role grants `get` and `list` on
-  EndpointSlices in pihole's namespace.
+  keeps serving
+  (`k8s/roles/pihole/tests/test_pihole_sibling_guard.py::test_a_sibling_with_no_ready_endpoint_holds_instance_1`).
+  It passes at once when `pihole` has no EndpointSlice at all, so a first apply
+  cannot deadlock on an instance 2 that only `pihole-deferred` creates
+  (`k8s/roles/pihole/tests/test_pihole_sibling_guard.py::test_a_first_apply_passes_without_reading_the_sibling`).
+  An API read that gets no
+  answer, a 429 or a 5xx is retried inside the 300s wait
+  (`k8s/roles/pihole/tests/test_pihole_sibling_guard.py::test_a_transient_read_is_retried_inside_the_wait`).
+  Its Role grants `get` and `list` on
+  EndpointSlices in pihole's namespace (`k8s/roles/pihole/templates/precheck/rbac.yaml.j2`).
 - **The guard re-runs only on a revision that rolls instance 1.** Its name embeds a digest of
   instance 1's parsed Deployment, the shared ConfigMap and the Secret template, so a change to
-  `deployment-2.yaml.j2` alone keeps the name and reaches pihole-2 past a passed guard.
+  `deployment-2.yaml.j2` alone keeps the name and reaches pihole-2 past a passed guard
+  (`k8s/roles/pihole/tests/test_pihole_sibling_guard.py::test_the_guard_renames_exactly_when_instance_1_rolls`).
 - **A failed guard also holds `pihole-deferred`**, which depends on `pihole`. A revision that
   rolls instance 1 and would also fix a down pihole-2 cannot reach it while the guard fails.
   Deleting the failed Job does not help, because Flux recreates it under the same name.
@@ -110,7 +125,10 @@ continuity. Coexisted with a Docker-era copy through the DNS cutover; that copy 
   pihole-2 and for pihole-2 to be Ready, then restore `true` in a second PR. The restore renders
   the same Job name as before the bypass, and the pruned Job is gone, so the guard runs fresh and
   passes against a serving pihole-2. Flux takes no `-e`, so the switch is a git revision, and the
-  two PRs record when the guard was off. `tests/test_pihole_precheck.py` pins both renders.
+  two PRs record when the guard was off.
+  `k8s/roles/pihole/tests/test_pihole_precheck.py::test_the_default_renders_the_guard_job` and
+  `k8s/roles/pihole/tests/test_pihole_precheck.py::test_the_break_glass_renders_no_guard_and_leaves_pihole_unheld`
+  pin both renders.
 
 ## Editing
-Adlists/regex: `defaults/main.yml`.
+Adlists/regex: `k8s/roles/pihole/defaults/main.yml`.

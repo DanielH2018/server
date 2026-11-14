@@ -19,8 +19,9 @@ command plans a list of argv first, then runs it, so `--dry-run` writes nothing.
 `scripts/lib/worktrees.py` decides whether a session worktree is done with: `is_merged`,
 `classify` and `worktree_facts`. `scripts/dev/prune_worktrees.py` is only the CLI over it, and
 nothing else imports the CLI. `.claude/hooks/session-health.py` imports `parse_worktree_list`
-and `session_is_alive` from `lib.worktrees` to print the other-live-sessions banner. Since
-#2133 those two, `Worktree` and the cherry and merge-tree readers come from the
+and `lock_is_live` from `lib.worktrees` to print the other-live-sessions banner, so a
+`fanout-<batch>` lock counts only while its batch unit is active (#8576). Since #2133
+`parse_worktree_list`, `session_is_alive`, `Worktree` and the cherry and merge-tree readers come from the
 `claude_worktree` module the dotfiles repo deploys to `~/.local/share/claude-worktree`, and
 `lib.worktrees` re-exports them. `scripts/lib/_claude_worktree.py` is the bootstrap, and it
 raises rather than falls back, so a host without the deploy prunes and reaps nothing.
@@ -111,6 +112,32 @@ orchestrator claims every issue of a batch *before* that batch's agent starts, s
 no internal race. `fanout.py place launch` takes those claims itself. The only residual race is between independent ad-hoc sessions, where the
 cost of losing is a duplicated triage rather than corruption. The read-back handles it —
 the session whose claim comment sorts first holds the issue, and the loser releases.
+
+## The Project board follows the issue
+
+The "Server Issue Tracking" Project shows every open finding. `findings_lib/board.py` derives
+three of its fields from the issue alone:
+
+- **Status** is `Done` once the issue is closed. It is `In Progress` while the issue carries
+  `claimed` or while an open pull request names it as closing. Otherwise it is `Todo`.
+- **Severity** is the `severity/<level>` label's level.
+- **Not before** is the `not-before:<date>` label's date.
+
+`findings.main` records every issue a subcommand writes to through `gh issue
+edit|close|reopen|create`. When the subcommand returns, `main` syncs those issues' board items
+and adds an issue the board lacks. So `claim` moves an issue to `In Progress`, and `release`,
+`reap`, `manual` and a stale-claim takeover move it back, with no per-command board code. A
+dry run writes nothing, so it syncs nothing. Another repo's register (`--repo`) has no board,
+so it is skipped.
+
+The issue stays the record: `next`, `claim` and the fan-out never read the board. A board
+write that fails therefore prints one warning naming the issues and leaves the exit code
+alone. `findings.py sync-board [<n> ...]` repairs the board, and with no numbers it checks
+every open issue. Two paths change an issue without findings.py: a label someone changed in
+the GitHub UI, and a session whose gh token cannot reach the board, such as one run as the
+`claude` user. To catch both, `homelab-board-sync.timer` on daniel-box runs `sync-board` over
+every open issue hourly, as `ubuntu` (`hosts/components/board-sync/`). Writing the board needs
+the `project` scope on the gh token, which the `ubuntu` user's token carries.
 
 ## Staleness: a claim expires with its worktree, not with a pid
 
@@ -248,7 +275,7 @@ exists to name it from. No `worktree.*` setting changes either name.
 A session in such a tree runs `scripts/dev/label_worktree.py`, which writes a one-line `.claim`
 at the worktree root. The root deny in `.gitignore` keeps the file out of every commit, and it
 is removed with the tree. The script refuses a checkout outside `.claude/worktrees/`, because
-one untracked file in the primary checkout parks the deployer. Three places print the label
+one untracked file in the primary checkout parks `homelab-checkout-sync`. Three places print the label
 beside the name, with no network call:
 
 - `session-health.py`'s other-live-sessions list.

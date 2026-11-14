@@ -102,6 +102,7 @@ def test_the_guard_moved_into_the_precheck_kind_passes_every_job_census_row(
 
 def test_pihole_waits_on_the_guard_for_longer_than_its_deadline(precheck_tag):
     """A failing guard holds instance 1: `pihole` depends on `pihole-precheck`."""
+    # fact: k8s/roles/pihole/CLAUDE.md#The sibling guard and its break-glass
     directories = precheck_tag.directories()
     assert PRECHECK in directories, f"the role copy renders no {PRECHECK}"
     files = bundle_files(directories, {}, [TAG], "300s", DOTENV)
@@ -119,12 +120,14 @@ def test_pihole_waits_on_the_guard_for_longer_than_its_deadline(precheck_tag):
 
 def test_the_default_renders_the_guard_job(precheck_tag):
     """The red half of the break-glass pair: without the switch the Job renders."""
+    # fact: k8s/roles/pihole/CLAUDE.md#The sibling guard and its break-glass
     (job,) = _jobs(precheck_tag.directories()[PRECHECK])
     assert job["metadata"]["name"].startswith("pihole-sibling-guard-")
 
 
 def test_the_break_glass_renders_no_guard_and_leaves_pihole_unheld(stubs, tmp_path):
     """With the switch false the Job and its script are gone, and `pihole` still waits on the tag."""
+    # fact: k8s/roles/pihole/CLAUDE.md#The sibling guard and its break-glass
     directories = _render_copy(tmp_path, stubs, "false").directories()
     docs = _guard_docs(directories[PRECHECK])
     assert _jobs(directories[PRECHECK]) == []

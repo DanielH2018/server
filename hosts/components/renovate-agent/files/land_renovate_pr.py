@@ -36,7 +36,9 @@ the environment RENOVATE_AGENT_REPO (default DanielH2018/server) and RENOVATE_AG
 (default /home/ubuntu/server). Writes the outcome to
 /var/lib/renovate-agent-land/<pr-number>.verdict.
 Exit codes: land.sh's own on a landing, 64 for an argument that is not a PR number, 3 for a
-refusal.
+refusal before any merge: the lander's own, or a land.sh `refused` on a PR GitHub reports
+unmerged. A land.sh crash also prints `refused`, but its traceback keeps land.sh's exit 1. The unit lists 3 in `SuccessExitStatus=`, so a refusal leaves it inactive rather than
+failed and `SystemdUnitsFailed` pages only for a landing that went wrong.
 """
 
 from __future__ import annotations
@@ -63,7 +65,8 @@ APPROVER = "DanielH2018"
 BASE = "master"
 BRANCH_PREFIX = "renovate/"
 DENIED_SLUG = "k8s_autodeploy-false"
-# `--frozen`: a rewritten uv.lock would dirty the primary checkout, which parks the deployer.
+# `--frozen`: a rewritten uv.lock would dirty the primary checkout, which parks
+# `homelab-checkout-sync`.
 DENYLIST_ARGV = (
     "uv",
     "run",
@@ -84,11 +87,14 @@ PR_FIELDS = "author,isCrossRepository,baseRefName,state,headRefName,headRefOid,f
 INVENTORY = "inventory/"
 # `lib/exit_codes.py:USAGE_ERROR`, which this host-shipped script cannot import (#4487).
 USAGE_ERROR = 64
+REFUSED_EXIT = 3
 _PR_NUMBER = re.compile(r"[1-9][0-9]{0,6}")
 _SHA = re.compile(r"[0-9a-f]{40}")
 _K8S_ROLE = re.compile(r"^k8s/roles/([^/]+)/")
 _VERDICT = re.compile(r"^VERDICT: .*$", re.MULTILINE)
 _ROLE_LIST = re.compile(r"[a-z0-9_-]+(?:,[a-z0-9_-]+)*")
+# land.py prints `VERDICT: refused` for a crash too, then re-raises, so a traceback follows it.
+TRACEBACK = "Traceback (most recent call last):"
 
 
 def pr_number(arg: str) -> int | None:
@@ -181,6 +187,20 @@ def verdict_line(output: str) -> str:
     return found[-1] if found else "VERDICT: none (land.sh printed no verdict line)"
 
 
+def unmerged(tools: AgentTools, repo: str, number: int) -> bool:
+    """Whether GitHub's REST API reports PR `number` not merged; False when the read fails.
+
+    REST, because the refusal this tells apart is often GraphQL's quota running out, and the
+    two quotas are separate. land.sh merges the PR itself, so once it exits nothing merges it.
+    """
+    rc, out = tools.run(["gh", "api", f"repos/{repo}/pulls/{number}"])
+    try:
+        pr = json.loads(out) if rc == 0 else None
+    except json.JSONDecodeError:
+        return False
+    return isinstance(pr, dict) and pr.get("merged") is False
+
+
 def main(
     argv: list[str],
     tools: AgentTools = TOOLS,
@@ -189,9 +209,10 @@ def main(
 ) -> int:
     """Check PR `argv[1]`, land it if every check passes, and record the outcome.
 
-    Returns land.sh's exit code, 64 for a malformed argument and 3 for a refusal. The result
-    file is overwritten before anything else runs, so the session never reads an earlier
-    landing's verdict as this one's.
+    Returns land.sh's exit code, 64 for a malformed argument and `REFUSED_EXIT` for a refusal
+    before any merge, land.sh's `refused` on a PR still unmerged included. The result file is
+    overwritten before anything else runs, so the session never reads an earlier landing's
+    verdict as this one's.
     """
     number = pr_number(argv[1]) if len(argv) == 2 else None
     if number is None:
@@ -210,7 +231,7 @@ def main(
     def refuse(reason: str) -> int:
         log(f"PR #{number} refused: {reason}")
         atomic_write(result, f"REFUSED: {reason}\n")
-        return 3
+        return REFUSED_EXIT
 
     rc, out = tools.run(list(DENYLIST_ARGV), cwd=repo_dir)
     if rc != 0:
@@ -260,7 +281,16 @@ def main(
         timeout=LAND_TIMEOUT_S,
     )
     print(out, flush=True)
-    atomic_write(result, verdict_line(out) + "\n")
+    verdict = verdict_line(out)
+    atomic_write(result, verdict + "\n")
+    if (
+        rc != 0
+        and verdict.startswith("VERDICT: refused ")
+        and TRACEBACK not in out
+        and unmerged(tools, repo, number)
+    ):
+        log(f"PR #{number} refused by land.sh before any merge")
+        return REFUSED_EXIT
     return rc
 
 

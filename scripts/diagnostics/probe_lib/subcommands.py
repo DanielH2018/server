@@ -50,6 +50,8 @@ from diagnostics.probe_lib.push_rules import run_push_rules
 from diagnostics.probe_lib.readonly_rbac import run_readonly_rbac
 from diagnostics.probe_lib.shed_set import run_shed_set
 from diagnostics.probe_lib.takeover import run_takeover
+from diagnostics.probe_lib.uptime_robot import run_uptime_robot
+from diagnostics.probe_lib.usage import run_usage
 from diagnostics.probe_lib.vip_placement import run_vip_placement
 from lib.cli_registry import Registry
 
@@ -156,6 +158,13 @@ SUBCOMMANDS = [
         run_health,
     ),
     ("arr", "read-only *arr API GET (key from SOPS, fed via stdin)", "arr", run_arr),
+    (
+        "uptime-robot",
+        "assert every Uptime Robot monitor docs/uptime-robot-monitors.md names exists and is "
+        "not paused (exit 1 when one is missing or paused)",
+        "uptime_robot",
+        run_uptime_robot,
+    ),
     ("ha", "Home Assistant live state (read-only, GET)", "ha", run_ha),
     ("ha-state", "live view of the derived HA state model", "ha", run_ha_state),
     (
@@ -193,6 +202,13 @@ SUBCOMMANDS = [
         "builder",
         run_builder,
     ),
+    (
+        "usage",
+        "requests per service over the retention window, memory request and limit against "
+        "the 7d p95, and PVC fill with days to full",
+        "usage",
+        run_usage,
+    ),
 ]
 
 # The subcommands with a callable that `main()` routes by hand instead of through `handlers`,
@@ -223,6 +239,7 @@ VERDICT_SUBCOMMANDS = frozenset(
         "push-rules",
         "lander",
         "builder",
+        "uptime-robot",
     }
 )
 VERDICT_HA_SUBCOMMANDS = frozenset({"verify-automations", "verify-entities"})

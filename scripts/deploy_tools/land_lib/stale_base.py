@@ -12,6 +12,9 @@ and the merge waits for CI on the updated head instead. A PR whose files master 
 merges as it stands (#6565). A landing updates the branch at most once. It never updates the branch of a head the landing policy admitted on
 an approval, which the update would void: a stale approved head is refused with a rebase
 remedy instead.
+
+A landing that holds the landing turn makes the same update earlier, for a head that has had
+no CI run, so that its one run tests the master of the turn (`merge._start_run`).
 """
 
 import subprocess
@@ -21,7 +24,7 @@ import sys as _sys
 from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
-from lib.json_types import as_list, as_object_list
+from lib.json_types import as_list, as_object, as_object_list
 from deploy_tools.land_lib import gh_read, policy
 from deploy_tools.land_lib.landing import BRANCH, Landing
 from deploy_tools.land_lib.outcome import say
@@ -31,6 +34,45 @@ from deploy_tools.land_lib.pr_json import parse_file
 COMPARE_CAP = 300
 # Each path the compare lists, and a renamed path's old name as well.
 _COMPARE_PATHS = "[.files[]? | .filename, (.previous_filename // empty)]"
+
+
+def batch_tested(ln: Landing, head: str) -> bool:
+    """Whether a landing batch tested the merge of `head` onto the master of this moment.
+
+    `batch.py` records the head it stacked in `ln.tested_head` and the master commit it
+    stacked that head on in `ln.tested_on`. While `head` is that head and master is that
+    commit, the squash merge makes the tree the batch's run tested, so no rule here has
+    anything to judge. Once either has moved, or master cannot be read, the batch's run
+    stands for nothing: `ln.tested_on` is cleared, and the rules below judge the head as
+    they judge any other.
+    """
+    if not ln.tested_on:
+        return False
+    url = f"repos/{{owner}}/{{repo}}/git/ref/heads/{BRANCH}"
+
+    def call() -> str:
+        got = ln.tools.gh_json("api", url, "--jq", "{sha: .object.sha}")
+        return str(as_object(got or {}, "gh api git/ref").get("sha") or "")
+
+    if head != ln.tested_head:
+        why = f"its head is {head[:8]}, not the {ln.tested_head[:8]} the batch stacked"
+    else:
+        try:
+            tip = gh_read.read(call, ln.tools.sleep, "gh api git/ref")
+        except (gh_read.GhReadFailed, ValueError) as exc:
+            tip = f"unreadable ({exc})"
+        if tip == ln.tested_on:
+            return True
+        why = (
+            f"{BRANCH} is {tip[:8] if len(tip) == 40 else tip}, not the "
+            f"{ln.tested_on[:8]} the batch stacked it on"
+        )
+    say(
+        f"the batch's run no longer stands for PR #{ln.opts.pr}: {why}; the stale-base "
+        "rules judge it"
+    )
+    ln.tested_on = ""
+    return False
 
 
 def master_paths_since(ln: Landing, head: str) -> list[str]:
@@ -147,7 +189,7 @@ def update_branch(ln: Landing, head: str, moved: list[str]) -> None:
     )
     say(
         f"{BRANCH} changed {len(moved)} path(s) since PR #{ln.opts.pr}'s base ({shown}); "
-        f"updating its branch so CI re-tests it against {BRANCH} before the merge"
+        f"updating its branch so CI tests it against {BRANCH} before the merge"
     )
     try:
         ln.tools.gh(

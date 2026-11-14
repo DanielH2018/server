@@ -14,8 +14,10 @@ from pathlib import Path
 import pytest
 
 from _helpers import stub_logger_on_path
+from _land_batch_fakes import GREEN, OWN, GitHub, head_of
 from _land_fakes import PRIMARY, Fakes, build_classifier, build_tools, make_landing
-from deploy_tools.land_lib import detach, live_limit, options, tools
+from deploy_tools.land_lib import detach, line, live_limit, options, tools
+from lib.proc_testing import fake_bin, path_with
 
 # Read off the modules that consume them rather than retyped, so a knob added there is cleared
 # here without anyone remembering to.
@@ -171,3 +173,44 @@ def _no_syspath_leak():
         "by bare name would resolve against it. Remove the entry in a finally, or use "
         "monkeypatch.syspath_prepend."
     )
+
+
+@pytest.fixture
+def ssh_here(tmp_path, monkeypatch):
+    """An `ssh` that runs the command it is given on this host, in place of the turn host."""
+    stubs = fake_bin(
+        tmp_path / "bin", ssh='#!/usr/bin/env bash\nexec sh -c "${@: -1}"\n'
+    )
+    monkeypatch.setenv("PATH", path_with(stubs))
+
+
+@pytest.fixture
+def batch_of(landing, tmp_path):
+    """A draft's landing that holds the turn, with `drafts` standing in the line behind it.
+
+    Returns the landing, the repository model and the line. `over` changes a PR as the
+    repository shows it, by number.
+    """
+
+    def build(drafts=(), over=None, run=(GREEN,), opts=None, fakes=None, **github):
+        flags = {"queue": True, "arm_merge": True, "await_merge": True}
+        ln, calls = landing(fakes or Fakes(), **{**flags, **(opts or {})})
+        the_line = line.here(tmp_path / "line")
+        prs = {pr: {} for pr in (OWN, *drafts)}
+        for pr, changes in (over or {}).items():
+            prs[pr] = changes
+        hub = GitHub(ln.tools, prs, run, **github)
+        hub.calls = calls
+        ln.tools = replace(
+            ln.tools,
+            gh_json=hub.gh_json,
+            gh=hub.gh,
+            await_ci=hub.await_ci,
+            line=the_line,
+        )
+        ln.direct_merge_subject = "Own"
+        for pr in drafts:
+            the_line("join", pr, head_of(pr))
+        return ln, hub, the_line
+
+    return build
