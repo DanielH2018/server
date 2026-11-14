@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Say whether a master push carries a tree that a green PR run already tested.
+"""Say whether a CI run would test a tree that a green PR run already tested.
 
 A squash merge usually lands the tree that the PR's own run checked: the PR run checks out
 `refs/pull/N/merge`, and the squash commit has the same tree whenever master did not move under
@@ -9,14 +9,22 @@ only when the Actions token created it and its `target_url` is one of this repos
 runs. This script is the reader. The push run of ci.yml calls it first, and every other job
 skips when it answers `proven=true`.
 
+A pull-request run asks a second question, `prove-head`: whether the PR's head carries such a
+record at all, for any tree. The run of a landing batch records one on the head of each PR it
+tested stacked on master, and that PR's own run then skips as master's does. It does not
+compare trees, because the tree a pull-request run would check out is the one GitHub built at
+the PR's last push, not the one the batch tested. The landing compares them before it merges,
+and master's run compares them again after (`docs/ci-throughput.md`).
+
 It fails safe in every direction: any error, any missing status and any mismatch answers
-`proven=false`, and the push run then sweeps in full. It exits 0 in all of those cases, so a
-broken lookup never turns master red by itself.
+`proven=false`, and the run then sweeps in full. It exits 0 in all of those cases, so a
+broken lookup never turns a run red by itself.
 
 Writes `proven=true|false` to the file named by $GITHUB_OUTPUT when that variable is set, and
 prints the answer with its reason.
 
 Run: python3 scripts/dev/tested_tree.py prove --repo OWNER/NAME --sha SHA --tree TREE
+     python3 scripts/dev/tested_tree.py prove-head --repo OWNER/NAME --head SHA
 """
 
 import json
@@ -44,15 +52,21 @@ Rows = list[dict[str, Any]]
 Get = Callable[[str], Rows]
 
 
-def _is_recorded_run(status: dict[str, Any], repo: str, tree: str) -> bool:
-    """Whether `status` is the green record that this repository's CI wrote for `tree`."""
+def _is_recorded_run(status: dict[str, Any], repo: str, tree: str | None) -> bool:
+    """Whether `status` is the green record this repository's CI wrote for `tree`.
+
+    With `tree` None, a record for any tree counts.
+    """
     creator = status.get("creator")
     login = creator.get("login") if isinstance(creator, dict) else None
     url = status.get("target_url")
+    recorded = status.get("description")
     return (
         status.get("context") == CONTEXT
         and status.get("state") == "success"
-        and status.get("description") == tree
+        and isinstance(recorded, str)
+        and _OBJECT_ID.fullmatch(recorded) is not None
+        and tree in (None, recorded)
         and login == CREATOR
         and isinstance(url, str)
         and re.fullmatch(
@@ -93,6 +107,31 @@ def tree_is_proven(get: Get, repo: str, sha: str, tree: str) -> tuple[bool, str]
         return False, f"the lookup failed: {type(exc).__name__}: {exc}"
 
 
+def head_is_proven(get: Get, repo: str, head: str) -> tuple[bool, str]:
+    """Whether a green run of this repository's CI recorded a tested tree on `head`.
+
+    `get` maps an API path to its decoded JSON and raises on any failure. Returns the answer
+    and the reason, which the pull-request run prints.
+    """
+    if not _OBJECT_ID.fullmatch(head):
+        return False, "the PR head is unreadable"
+    try:
+        statuses = get(f"repos/{repo}/commits/{head}/statuses?per_page=100")
+        for status in statuses:
+            if _is_recorded_run(status, repo, None):
+                tree = status["description"]
+                return (
+                    True,
+                    f"PR head {head[:8]} carries a green run on tree {tree[:8]}",
+                )
+        return (
+            False,
+            f"no green {CONTEXT} status from this repository's CI on {head[:8]}",
+        )
+    except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
+        return False, f"the lookup failed: {type(exc).__name__}: {exc}"
+
+
 def _api_get(token: str) -> Get:
     def get(path: str) -> Rows:
         request = urllib.request.Request(
@@ -117,11 +156,19 @@ def main(argv: list[str] | None = None, get: Get | None = None) -> int:
     prove.add_argument("--repo", required=True, help="OWNER/NAME")
     prove.add_argument("--sha", required=True, help="the pushed commit")
     prove.add_argument("--tree", required=True, help="the pushed commit's tree id")
+    prove_head = sub.add_parser(
+        "prove-head", help="answer proven=true|false for one pull-request run"
+    )
+    prove_head.add_argument("--repo", required=True, help="OWNER/NAME")
+    prove_head.add_argument("--head", required=True, help="the PR's head commit")
     args = parser.parse_args(argv)
 
     if get is None:
         get = _api_get(os.environ.get("GITHUB_TOKEN", ""))
-    proven, reason = tree_is_proven(get, args.repo, args.sha, args.tree)
+    if args.command == "prove":
+        proven, reason = tree_is_proven(get, args.repo, args.sha, args.tree)
+    else:
+        proven, reason = head_is_proven(get, args.repo, args.head)
     answer = f"proven={'true' if proven else 'false'}"
     print(f"{answer}: {reason}")
     output = os.environ.get("GITHUB_OUTPUT")
