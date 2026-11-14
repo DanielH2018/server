@@ -441,3 +441,30 @@ def test_the_pis_real_manifest_runs_the_secrets_step_once_for_its_credentials(
 
     assert result.returncode == 0, result.stderr
     assert node.writes().count(["restart", SECRETS_UNIT]) == 1
+
+
+def test_a_new_user_exists_before_the_secrets_step_writes_an_output_it_owns(node):
+    """An output's owner or group can be a user the same package version declares (#8690)."""
+    node.manifest["reconcilers"] = ["users"]
+    node.manifest["users"] = {
+        "users": [
+            {
+                "name": "ctl",
+                "uid": 905,
+                "home": "/var/lib/ctl",
+                "shell": "/usr/sbin/nologin",
+                "comment": "controller",
+            }
+        ]
+    }
+    node.state["sysusers"] = {"creates": {"ctl": 905}}
+
+    settled(node)
+
+    order = [
+        call["argv"][0]
+        for call in node.calls()
+        if call["argv"][0] == "systemd-sysusers"
+        or call["argv"][:3] == ["systemctl", "restart", SECRETS_UNIT]
+    ]
+    assert order == ["systemd-sysusers", "systemctl"], order

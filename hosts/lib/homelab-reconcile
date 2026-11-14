@@ -136,8 +136,9 @@ UNIT_NAME = re.compile(r"[A-Za-z0-9@_.:-]+\.(service|timer|socket|path)")
 PLAIN_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*")
 POLICIES = frozenset({"manual", "windowed"})
 # Each arm module has valid(section) and reconcile(section, prev) -> (ok, record | None, drift).
-# Users and lines run before the units start, lines before the activations read the files it
-# edits, and libvirt then ufw last, so that ufw's enable applies the sysctl edit already made.
+# Users and lines run before the units start: users before the secrets step, whose outputs a new
+# user or group can own, and lines before the activations read the files it edits. Libvirt then
+# ufw run last, so that ufw's enable applies the sysctl edit already made.
 ARMS = {"users": users, "lines": lines, "libvirt": libvirt, "ufw": ufw}
 EARLY = ("users", "lines")
 SHA256 = re.compile(r"[0-9a-f]{64}")
@@ -320,8 +321,29 @@ def unit_hash(unit: str) -> dict:
     }
 
 
-def load_state(unit: str) -> str:
-    return systemctl("show", "-p", "LoadState", "--value", unit).stdout.strip()
+def show(names: list[str]) -> list[dict]:
+    """The Id, LoadState and ActiveState of each name or glob, one dict per unit, in order.
+
+    An empty list when systemctl refuses the call.
+    """
+    result = systemctl("show", "-p", "Id,LoadState,ActiveState", *names)
+    blocks = result.stdout.split("\n\n") if result.returncode == 0 else []
+    return [dict(row.partition("=")[::2] for row in b.split()) for b in blocks]
+
+
+def unit_states(units: set[str]) -> dict[str, dict]:
+    """Each unit's `show` dict, from one call when systemctl answers for every unit.
+
+    The dicts pair with the names by position, because `show` reports an alias by its target's
+    Id. One name systemctl refuses fails the whole call, so a refused or short answer is read
+    again one unit at a time, and a unit systemctl still refuses gets an empty dict.
+    """
+    names = sorted(u for u in units if UNIT_NAME.fullmatch(u) and not template_unit(u))
+    states = show(names) if names else []
+    if len(states) != len(names):
+        log("systemctl show did not answer for every unit; asking about each alone")
+        states = [next(iter(show([name])), {}) for name in names]
+    return dict(zip(names, states, strict=True))
 
 
 def is_active(unit: str) -> bool:
@@ -330,15 +352,11 @@ def is_active(unit: str) -> bool:
 
 def not_found_homelab_units() -> set[str]:
     """Every loaded `homelab-*` unit whose LoadState is not-found: its file has gone."""
-    out = systemctl("show", "-p", "Id", "-p", "LoadState", "homelab-*").stdout
-    found = set()
-    for block in out.split("\n\n"):
-        props = dict(
-            line.partition("=")[::2] for line in block.splitlines() if "=" in line
-        )
-        if props.get("LoadState") == "not-found" and is_homelab(props.get("Id", "")):
-            found.add(props["Id"])
-    return found
+    return {
+        props["Id"]
+        for props in show(["homelab-*"])
+        if props.get("LoadState") == "not-found" and is_homelab(props.get("Id", ""))
+    }
 
 
 def stop(unit: str) -> bool:
@@ -356,10 +374,15 @@ def stop(unit: str) -> bool:
 # Legacy entries (H3, *The host handoff rule*).
 
 
+# Each legacy path's owners: step 4 reads them all with one `dpkg -S` before it retires any entry.
+OWNERS: dict[str, set[str] | None] = {}
+
+
 def owned(path: Path) -> bool | None:
     """True when a package owns `path`, False when none does, None when dpkg cannot say."""
-    code = run("dpkg", "-S", str(path)).returncode
-    return {0: True, 1: False}.get(code)
+    key = str(path)
+    owners = OWNERS[key] if key in OWNERS else lines.owners([key])[key]
+    return None if owners is None else bool(owners)
 
 
 def retire_path(path: Path) -> bool:
@@ -538,14 +561,21 @@ def retire_unit(unit: str) -> bool:
     return template or stop(unit)
 
 
-def retire(entry: dict) -> bool:
+def legacy_path(entry: dict) -> Path:
+    """The file a legacy entry other than a cron retires."""
     if "path" in entry:
-        return retire_path(Path(entry["path"]))
+        return Path(entry["path"])
+    if "cron_file" in entry:
+        return CRON_D / entry["cron_file"]
+    return ETC_UNIT_DIR / entry["unit"]
+
+
+def retire(entry: dict) -> bool:
     if "cron" in entry:
         return retire_cron(entry["cron"], entry["user"])
-    if "cron_file" in entry:
-        return retire_path(CRON_D / entry["cron_file"])
-    return retire_unit(entry["unit"])
+    if "unit" in entry:
+        return retire_unit(entry["unit"])
+    return retire_path(legacy_path(entry))
 
 
 def legacy_key(entry: dict) -> str:
@@ -736,6 +766,10 @@ def act(manifest: dict, prev: dict) -> tuple[bool, dict]:
         if unit in unlinked:
             links_state.add(unit)
 
+    # Step 1a: the users arm, so an output step 1b writes can name a user this version adds.
+    drift, arms = {"legacy": 0}, {}
+    ok = run_arms(["users"], manifest, prev, arms, drift) and ok
+
     # Step 1b: in a package that ships `secrets-unit`, run homelab-secrets when its inputs, its
     # unit file or its activity says the outputs may be stale. A failed run does not stop the rest.
     secrets_state, secrets_ran = None, True
@@ -758,38 +792,41 @@ def act(manifest: dict, prev: dict) -> tuple[bool, dict]:
             log(f"restart {SECRETS_UNIT}")
         secrets_state = digest if secrets_ran else prev.get("secrets_inputs_sha256")
 
-    # Step 1c: the users and lines arms, so a unit that runs as a new user starts, and step 3b
-    # activates the files the lines arm edited.
-    drift, arms = {"legacy": 0}, {}
-    ok = run_arms(EARLY, manifest, prev, arms, drift) and ok
+    # Step 1c: the lines arm, so step 3b activates the files it edited.
+    ok = run_arms(["lines"], manifest, prev, arms, drift) and ok
 
     # The restart set, built before step 2: the units whose file or drop-in changed, and the
     # units in pending.json, each only when it is enabled or active. A foreign unit the manifest
     # dropped is walked once more, because its drop-in has gone.
     foreign_dropped = {u for u in prev_units if u not in units and not is_homelab(u)}
+    queued = read_pending()
+    states = unit_states(set(units) | foreign_dropped | queued | links)
     hashes = {}
     changed = set()
     for unit in sorted((set(units) | foreign_dropped) - dropped):
         hashes[unit] = unit_hash(unit), prev_units.get(unit)
         if hashes[unit][0] != hashes[unit][1] and not left_alone(
-            unit, units, links, manual
+            unit, units, links, manual, states
         ):
             changed.add(unit)
-    queued = read_pending()
-    idle = {unit for unit in queued - changed if left_alone(unit, units, links, manual)}
+    idle = {u for u in queued - changed if left_alone(u, units, links, manual, states)}
     if idle:
         log(f"dropping {', '.join(sorted(idle))} from the queue: nothing to restart")
         ok = update_pending(set(), idle) and ok
     restart_set = sorted(changed | (queued - idle))
 
     # Step 2: start every enabled unit outside the set that is not active, never a masked or a
-    # windowed one.
-    start_failed = set()
+    # windowed one. After the first start, a unit is asked again: that start may have pulled it in.
+    start_failed, starting = set(), False
     for unit in sorted(links - set(restart_set)):
         if units.get(unit, {}).get("policy") == "windowed":
             continue
-        if is_active(unit) or load_state(unit) == "masked":
+        state = states.get(unit, {})
+        if state.get("LoadState") == "masked" or state.get("ActiveState") == "active":
             continue
+        if starting and is_active(unit):
+            continue
+        starting = True
         if not bring_up(unit, "start", outputs, queued, started):
             start_failed.add(unit)
             ok = False
@@ -828,6 +865,9 @@ def act(manifest: dict, prev: dict) -> tuple[bool, dict]:
     # Step 4: retire the legacy entries not yet retired. A package that ships `secrets-unit`
     # retires none until every credential and output exists and homelab-secrets is active.
     prev_retired = set(prev.get("retired") or [])
+    files = [e for e in manifest["legacy"] if "cron" not in e]
+    paths = {str(legacy_path(e)) for e in files if legacy_key(e) not in prev_retired}
+    OWNERS.update(lines.owners(sorted(paths)))
     retired = []
     waiting = None
     removed, handed, plain = False, set(), []
@@ -861,7 +901,8 @@ def act(manifest: dict, prev: dict) -> tuple[bool, dict]:
         log("daemon-reload failed after removing a file under /etc/systemd/system", ERR)
         ok = False
     for unit in sorted(handed):
-        if not left_alone(unit, units, links, manual) and not bring_up(
+        fresh = unit_states({unit})
+        if not left_alone(unit, units, links, manual, fresh) and not bring_up(
             unit, "restart", outputs, queued, started
         ):
             start_failed.add(unit)
@@ -964,19 +1005,20 @@ def running_service(entry: dict) -> bool:
     return systemctl("is-active", unit).stdout.strip() in activate.RUNNING
 
 
-def left_alone(unit: str, units: dict, links: set[str], manual: set[str]) -> bool:
+def left_alone(unit: str, units: dict, links: set, manual: set, states: dict) -> bool:
     """True when reconcile takes the unit's new file, or its queue entry, without acting."""
     policy = units.get(unit, {}).get("policy")
+    state = states.get(unit, {})
     if unit in manual or policy in POLICIES:
         return True
     # A masked unit may still have an enable link, so this comes before the next test.
-    if load_state(unit) == "masked":
+    if state.get("LoadState") == "masked":
         return True
     if is_homelab(unit):
         enabled = unit in links
     else:
         enabled = systemctl("is-enabled", unit).stdout.strip() == "enabled"
-    return not (enabled or is_active(unit))
+    return not (enabled or state.get("ActiveState") == "active")
 
 
 def write_applied(state: dict) -> None:

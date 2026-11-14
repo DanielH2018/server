@@ -14,10 +14,6 @@
 !/hosts
 # The k3s service list the renderer reads (docs/target-architecture/host/h1-cluster-config-to-flux.md, H1.9).
 !/cluster
-# Email-to-RSS Cloudflare Worker — tracked as a git submodule (see .gitmodules);
-# its own .gitignore keeps wrangler.toml (KV ids) and node_modules local-only.
-!/Email-to-RSS
-!/.gitmodules
 !prek.toml
 !/.shellcheckrc
 !/.gitleaks.toml

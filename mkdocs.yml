@@ -14,6 +14,10 @@ use_directory_urls: true
 
 theme:
   name: material
+  # The Docs tile's mdi icon and colour in homepage's services.yaml.j2.
+  favicon: assets/favicon.svg
+  icon:
+    logo: material/book-open-variant
   features:
     - navigation.top
     - navigation.indexes
@@ -185,6 +189,7 @@ nav:
       - "ADR-0030 The ansible/ tree is renamed for what it holds": adr/0030-the-ansible-tree-is-renamed-for-what-it-holds.md
       - "ADR-0031 One home and one stateless detector per kind of fact": adr/0031-each-kind-of-fact-has-one-stateless-detector.md
       - "ADR-0032 CI's heavy jobs may run on runner pods": adr/0032-cis-heavy-jobs-may-run-on-runner-pods.md
+      - "ADR-0033 A game server's replica count is runtime state": adr/0033-game-server-replicas-are-runtime-state.md
       # The long-form documents three of the records above compress. They sit under Decisions
       # rather than in a section of their own: each one is the working-out behind a single
       # ADR, and a reader who wants that depth arrives from the record, not from a
@@ -210,6 +215,8 @@ nav:
           - Landing a merged PR: landing.md
           # What the 20-job runner cap costs a landing, and the phased plan to get under it.
           - CI throughput: ci-throughput.md
+          # What exhausts the shared GitHub API quota, and the proposed per-session budget.
+          - GitHub API quota: github-quota.md
           - Host packages: host-packages.md
           - The Flux deploy plane: flux-deploy-plane.md
           - The homelab-render renderer: homelab-render.md

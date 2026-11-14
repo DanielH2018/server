@@ -20,6 +20,10 @@ Configuration comes from the environment, which deploy-ui.service sets:
   DEPLOY_UI_CLI_LOGS   where `land.sh --detach` logs (default /tmp/homelab-landings-<user>)
   DEPLOY_UI_BIND       listen address (default 127.0.0.1)
   DEPLOY_UI_PORT       listen port (default 8790)
+  DEPLOY_UI_GAMES      game registry, `name=server,dep;...` (default: none)
+  DEPLOY_UI_NAMESPACE  namespace of the game Deployments (default homelab)
+  DEPLOY_UI_LOKI       Loki base URL for the game consoles (default: none)
+  KUBECONFIG           the read-only kubeconfig `kubectl` reads the games with
 """
 
 import functools
@@ -38,6 +42,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import ClassVar
 
+from deploy_ui_lib import deploy_ui_games as game_reads
 from deploy_ui_lib import deploy_ui_reads as reads
 from deploy_ui_lib import deploy_ui_writes as writes
 from host_lib import logfmt
@@ -59,6 +64,12 @@ class Config:
     # Where `land.sh --detach` writes when no session dir is set (`land_lib/detach.py`).
     cli_log_dir: Path = Path(f"/tmp/homelab-landings-{getpass.getuser()}")
     landing_window_s: int = 24 * 3600
+    games: tuple[game_reads.Game, ...] = ()
+    namespace: str = "homelab"
+    loki_url: str = ""
+    console_lines: int = 200
+    # A parked server's last run stays readable for a week; Loki refuses a range past ~30d.
+    console_window_s: int = 7 * 24 * 3600
 
     @classmethod
     def from_env(cls) -> "Config":
@@ -78,6 +89,9 @@ class Config:
             cli_log_dir=Path(
                 e("DEPLOY_UI_CLI_LOGS", f"/tmp/homelab-landings-{getpass.getuser()}")
             ),
+            games=game_reads.parse_games(e("DEPLOY_UI_GAMES", "")),
+            namespace=e("DEPLOY_UI_NAMESPACE", "homelab"),
+            loki_url=e("DEPLOY_UI_LOKI", "").rstrip("/"),
         )
 
 
@@ -282,6 +296,65 @@ class App:
             "raw": text,
         }
 
+    def game_servers(self) -> dict:
+        """Each registered game's state, from its Deployments and their pods."""
+        if not self.cfg.games:
+            return {"games": []}
+        kubectl = ["kubectl", "-n", self.cfg.namespace, "get"]
+        names = [d for g in self.cfg.games for d in g.deployments]
+        deployments = self._out(
+            [*kubectl, "deployments", *names, "--ignore-not-found", "-o", "json"], 15
+        )
+        pods = self._out(
+            [
+                *kubectl,
+                "pods",
+                "-l",
+                game_reads.pod_selector(self.cfg.games),
+                "-o",
+                "json",
+            ],
+            15,
+        )
+        return {"games": game_reads.game_rows(self.cfg.games, deployments, pods)}
+
+    def game_console(self, name: str) -> dict:
+        """The newest console lines of one game's server container, read from Loki.
+
+        Raises:
+            Unavailable: `name` is not a registered game, no Loki URL is set, or the
+                query failed.
+        """
+        game = next((g for g in self.cfg.games if g.name == name), None)
+        if game is None:
+            raise Unavailable(f"no game named {name!r}")
+        if not self.cfg.loki_url:
+            raise Unavailable("DEPLOY_UI_LOKI is not set")
+        start_ns = int(time.time() - self.cfg.console_window_s) * 10**9
+        raw = self._out(
+            [
+                "curl",
+                "-fsS",
+                "--max-time",
+                "10",
+                "-G",
+                f"{self.cfg.loki_url}/loki/api/v1/query_range",
+                "--data-urlencode",
+                f"query={game_reads.console_query(self.cfg.namespace, game)}",
+                "--data-urlencode",
+                f"limit={self.cfg.console_lines}",
+                "--data-urlencode",
+                "direction=backward",
+                "--data-urlencode",
+                f"start={start_ns}",
+            ],
+            15,
+        )
+        return {
+            "game": name,
+            "lines": game_reads.parse_console(raw, self.cfg.console_lines),
+        }
+
     # ---- writes ----
     def land(self, body: dict) -> tuple[int, str]:
         pr, since = str(body.get("pr", "")), str(body.get("since", ""))
@@ -331,6 +404,7 @@ class App:
         "/api/inflight": "inflight",
         "/api/prs": "prs",
         "/api/landings": "landings",
+        "/api/games": "game_servers",
     }
     WRITES: ClassVar[dict[str, str]] = {
         "/api/land": "land",
@@ -344,6 +418,9 @@ class App:
         if url.path == "/api/log":
             q = {k: v[0] for k, v in urllib.parse.parse_qs(url.query).items()}
             read = functools.partial(self.log, q.get("name", ""), q.get("size", ""))
+        elif url.path == "/api/game-console":
+            q = {k: v[0] for k, v in urllib.parse.parse_qs(url.query).items()}
+            read = functools.partial(self.game_console, q.get("game", ""))
         elif url.path in self.READS:
             read = getattr(self, self.READS[url.path])
         else:

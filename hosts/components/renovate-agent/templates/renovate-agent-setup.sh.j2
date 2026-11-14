@@ -1,4 +1,5 @@
 #!/bin/bash
+{% import 'templates/renovate-agent-pins.j2' as pins with context -%}
 # Shipped by the renovate-agent component. homelab-renovate-agent.service runs it as root through
 # `ExecStartPre=+` before each session, so a pin bump or a rebuilt host converges on the next tick.
 # homelab-renovate-agent-setup.service runs it at boot and when it or the packaged Claude Code
@@ -7,7 +8,7 @@
 # Usage: renovate-agent-setup [-h|--help]
 # Takes no arguments. Running it by hand as root applies every step below.
 #
-# Gives {{ renovate_agent_user }} its home, the operator's pinned uv, uvx and prek, the operator's
+# Gives {{ pins.user }} its home, the operator's pinned uv, uvx and prek, the operator's
 # claude_guard package, claude_worktree module and Claude Code hook scripts, the packaged Claude
 # Code settings, the pinned Python, Claude Code and its own clone. Each run copies the settings
 # over the agent's, so an edit a session makes to them lasts until the next run.
@@ -20,7 +21,7 @@ case "${1-}" in
   -h | --help) awk 'NR > 1 && /^#/ { print; next } NR > 1 { exit }' "$0"; exit 0 ;;
 esac
 
-agent={{ renovate_agent_user }}
+agent={{ pins.user }}
 home={{ renovate_agent_home }}
 clone={{ renovate_agent_clone_dir }}
 operator=/home/{{ sys_user }}
@@ -33,6 +34,22 @@ as_agent() {
 # Group sys_user and setgid, so the operator reads what the agent writes. /var/lib is root's, so the
 # agent cannot have replaced the home itself.
 install -d -o "$agent" -g {{ sys_user }} -m 2750 "$home"
+
+# The controller's home holds the run's state. Group sys_user and setgid, so the docs-refresh
+# reader, which runs as sys_user, reads runs.jsonl as it read it in the agent's home.
+ctl={{ pins.ctl_user }}
+ctl_home={{ pins.ctl_home }}
+install -d -o "$ctl" -g {{ sys_user }} -m 2750 "$ctl_home"
+# The exchange: the controller owns it, and the session's group may only traverse it. The runner
+# recreates its requests/ and out/ children each run, setgid and group-writable, so the session
+# writes there and the controller reads what it wrote; the session cannot replace either child.
+install -d -o "$ctl" -g "$agent" -m 2750 {{ pins.exchange_dir }}
+# The records a run wrote in the agent's home before the controller owned them, copied once.
+for name in runs.jsonl requests.jsonl last_run; do
+  if [ -f "$home/$name" ] && [ ! -L "$home/$name" ] && [ ! -e "$ctl_home/$name" ]; then
+    install -o "$ctl" -g {{ sys_user }} -m 0640 "$home/$name" "$ctl_home/$name"
+  fi
+done
 as_agent mkdir -p "$home/.local/bin" "$home/.local/share/claude-guard" "$home/.local/share/claude-worktree" "$home/.claude"
 
 stage=$(mktemp -d)

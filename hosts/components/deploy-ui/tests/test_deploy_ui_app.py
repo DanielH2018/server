@@ -400,3 +400,67 @@ def test_client_closing_mid_response_logs_one_line_no_traceback_is_flagged(
         "request method=GET path=/ status=200 user=daniel",
         "client-disconnected method=GET path=/ status=200 user=daniel",
     ]
+
+
+def _games_app(tmp_path, table, loki_url="https://loki.example"):
+    cfg = dataclasses.replace(
+        _bare_config(tmp_path),
+        games=deploy_ui.game_reads.parse_games("valheim=valheim,valheim-stats"),
+        loki_url=loki_url,
+    )
+    return deploy_ui.App(cfg, run=FakeRun(table))
+
+
+def test_games_reads_the_deployments_and_their_pods_is_clean(tmp_path):
+    deployments = {
+        "items": [
+            {"metadata": {"name": n}, "spec": {"replicas": 0}, "status": {}}
+            for n in ("valheim", "valheim-stats")
+        ]
+    }
+    app = _games_app(
+        tmp_path,
+        {
+            ("kubectl", "-n", "homelab", "get", "deployments"): (
+                json.dumps(deployments),
+                0,
+            ),
+            ("kubectl", "-n", "homelab", "get", "pods"): ('{"items": []}', 0),
+        },
+    )
+    [game] = body(app.get("/api/games"))["games"]
+    assert (game["name"], game["state"]) == ("valheim", "stopped")
+    pods_call = next(c for c in app.run.calls if "pods" in c)
+    assert pods_call[pods_call.index("-l") + 1] == "app in (valheim,valheim-stats)"
+
+
+def test_games_when_kubectl_fails_is_unavailable_is_flagged(tmp_path):
+    app = _games_app(tmp_path, {("kubectl",): ("", 1)})
+    assert "kubectl exited 1" in body(app.get("/api/games"))["unavailable"]
+
+
+def test_game_console_queries_loki_for_the_server_container_is_clean(tmp_path):
+    loki = {"data": {"result": [{"values": [["2000000000", "Game server connected"]]}]}}
+    app = _games_app(tmp_path, {("curl",): (json.dumps(loki), 0)})
+    got = body(app.get("/api/game-console?game=valheim"))
+    assert got == {
+        "game": "valheim",
+        "lines": [{"ts": 2, "line": "Game server connected"}],
+    }
+    [call] = app.run.calls
+    assert "https://loki.example/loki/api/v1/query_range" in call
+    assert 'query={namespace="homelab",container="valheim"}' in call
+
+
+@pytest.mark.parametrize(
+    ("path", "loki_url", "reason"),
+    [
+        ("/api/game-console?game=minecraft", "https://loki.example", "no game named"),
+        ("/api/game-console?game=valheim", "", "DEPLOY_UI_LOKI is not set"),
+    ],
+)
+def test_game_console_refusals_are_unavailable_is_flagged(
+    tmp_path, path, loki_url, reason
+):
+    app = _games_app(tmp_path, {}, loki_url=loki_url)
+    assert reason in body(app.get(path))["unavailable"]

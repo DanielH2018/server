@@ -213,6 +213,12 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
         k: (list(v) if isinstance(v, list) else [v]) for k, v in f.gh_views.items()
     }
     views.setdefault("mergeCommit", [{"mergeCommit": {"oid": MERGE_SHA}}])
+    # What `merge._start_run` reads before the first poll: the PR as that poll finds it, ready.
+    polls = views.get("state,mergeable,headRefOid")
+    if polls:
+        views.setdefault(
+            "isDraft,state,mergeable,headRefOid", [{"isDraft": False, **polls[0]}]
+        )
     views.setdefault("commits", [{"commits": []}])
     views.setdefault(
         "files,changedFiles",

@@ -402,6 +402,25 @@ def test_repo_citations_keeps_a_tracked_path_citation(tmp_path):
     assert by_unit["CLAUDE.md#Style"] == []
 
 
+def test_repo_citations_leaves_out_a_section_with_no_prose(tmp_path):
+    """A title, a parent of subheadings and a frontmatter-only preamble bind nothing."""
+    from lib.facts.citations import repo_citations
+
+    _init(tmp_path)
+    (tmp_path / ".claude" / "rules").mkdir(parents=True)
+    (tmp_path / ".claude" / "rules" / "r.md").write_text(
+        '---\npaths:\n  - "scripts/**"\n---\n\n# Title\n\n## Parent\n\n### Child\nwhy.\n'
+    )
+    (tmp_path / "CLAUDE.md").write_text("Opening prose.\n\n## Style\nwhy.\n")
+    git(tmp_path, "add", "-A")
+
+    assert sorted(repo_citations(tmp_path)) == [
+        ".claude/rules/r.md#Child",
+        "CLAUDE.md#",
+        "CLAUDE.md#Style",
+    ]
+
+
 def test_repo_citations_drops_an_untracked_path_citation(tmp_path):
     from lib.facts.citations import repo_citations
 

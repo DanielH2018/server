@@ -1,0 +1,53 @@
+---
+# The identity deploy.local's Games panel starts and stops the game servers with (ADR-0033).
+# The operator copies the token into daniel-box's host secrets; deploy-ui loads it with
+# LoadCredential=, never through ~/.kube/config.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ deploy_ui_games_sa_name }}
+  namespace: {{ k8s_namespace }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ deploy_ui_games_sa_name }}-token
+  namespace: {{ k8s_namespace }}
+  annotations:
+    kubernetes.io/service-account.name: {{ deploy_ui_games_sa_name }}
+# Non-expiring, like the read-only token: the daemon has no way to mint a replacement. Revoke
+# by deleting this Secret and the ServiceAccount.
+type: kubernetes.io/service-account-token
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ deploy_ui_games_sa_name }}
+  namespace: {{ k8s_namespace }}
+rules:
+  # DECIDED: deployments/scale only, on the game Deployments by name. Patch on `deployments`
+  # could rewrite the pod spec, and PSA only warns here, so a leaked token would be root on a
+  # node. (ADR-0033)
+  - apiGroups: ["apps"]
+    resources: ["deployments/scale"]
+    resourceNames:
+{% for game in game_servers %}
+{% for deployment in game.deployments %}
+      - {{ deployment }}
+{% endfor %}
+{% endfor %}
+    verbs: ["get", "patch", "update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ deploy_ui_games_sa_name }}
+  namespace: {{ k8s_namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ deploy_ui_games_sa_name }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ deploy_ui_games_sa_name }}
+    namespace: {{ k8s_namespace }}

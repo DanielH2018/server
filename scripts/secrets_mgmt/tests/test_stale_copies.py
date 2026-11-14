@@ -88,9 +88,44 @@ def test_a_key_with_a_copy_outside_the_tree_is_stale_however_fresh_the_rest(tmp_
         _keys(pod_token=_OLD, box_token=_OLD, sonarr_api_key=_NEW),
     )
     assert unapplied_keys(old, new, repo) == {
-        "sonarr_api_key": "Bazarr's config on the bazarr-config PVC holds a copy no "
-        "deploy reaches"
+        "sonarr_api_key": "no deploy reaches its copy in Bazarr's config on the "
+        "bazarr-config PVC and Prowlarr's Sonarr application"
     }
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "crowdsec_k8s_agent_password",
+        "crowdsec_k8s_bouncer_api_key",
+        "lidarr_api_key",
+        "livesync_db_password",
+        "livesync_sync_token",
+        "mqtt_password",
+        "nut_ha_password",
+        "prowlarr_api_key",
+        "qbittorrent_password",
+        "scrutiny_influxdb_admin_password",
+        "scrutiny_influxdb_token",
+    ],
+)
+def test_a_key_an_app_stores_itself_is_stale_with_its_cluster_file_fresh(
+    tmp_path, name
+):
+    repo = init_repo(tmp_path / "repo")
+    reader = {"k8s/roles/app/templates/secret.yaml.j2": "a: {{ " + name + " }}\n"}
+
+    def at(value: str) -> dict:
+        return {
+            "secrets/secrets.yml": _store(**{name: value}),
+            "secrets/cluster-vars.source": _source(**{name: value}),
+        }
+
+    old = commit(repo, "before", **reader, **at(_OLD))
+    new = commit(repo, "after", **at(_NEW))
+    assert unapplied_keys(old, new, str(repo))[name].startswith(
+        "no deploy reaches its copy in "
+    )
 
 
 def test_a_key_no_file_reads_is_stale(tmp_path):

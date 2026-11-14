@@ -108,7 +108,9 @@ def _epoch_marker(state_dir: Path, filename: str, outcome_ok: str) -> LoopRun:
     return LoopRun(dt.datetime.fromtimestamp(epoch, dt.timezone.utc), outcome_ok)
 
 
-def renovate_agent_run(state_dir: Path = Path("/var/lib/renovate-agent")) -> LoopRun:
+def renovate_agent_run(
+    state_dir: Path = Path("/var/lib/renovate-agent-ctl"),
+) -> LoopRun:
     """The daily Renovate PR triage session.
 
     Cadence: homelab-renovate-agent.timer's OnCalendar, from renovate_agent_oncalendar

@@ -40,16 +40,13 @@ OS/hardware steps around the script that those don't.
 git config --global user.name  "your_username"
 git config --global user.email "your_email@example.com"
 git config --global credential.helper store
-git clone --recurse-submodules https://github.com/DanielH2018/server.git   # use a GitHub PAT as the password
+git clone https://github.com/DanielH2018/server.git   # use a GitHub PAT as the password
 ```
 
 Clone it to **`/home/<user>/server`, as the user named by `sys_user`** (`ubuntu`, in
 `inventory/group_vars/all.yml`). Both the path and the username are baked into role templates and
 systemd units, such as the secret-rotation crons and AIDE's local config. A repo cloned elsewhere, or owned by a
 differently named user, breaks those with no clear error.
-
-`--recurse-submodules` picks up `Email-to-RSS` (a pinned submodule — see
-[`docs/email-to-rss.md`](email-to-rss.md)); a plain clone leaves the directory empty.
 
 Secrets are committed **encrypted** (SOPS/age), so the clone already contains
 `secrets/secrets.yml` — there is no separate secrets-copy step. Letting this host
@@ -220,5 +217,5 @@ history — do not follow it.
   `/etc/systemd/journald.conf.d/50-homelab.conf`) — nothing to do by hand.
 - **LaTeX editing in code-server:**
   `k8s/roles/code-server/CLAUDE.md`.
-- **Email-to-RSS** (the Cloudflare Worker submodule):
+- **Email-to-RSS** (the Cloudflare Worker, deployed from its own repository's CI):
   [`docs/email-to-rss.md`](email-to-rss.md).

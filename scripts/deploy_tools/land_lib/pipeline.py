@@ -149,8 +149,8 @@ def _phases(ln: Landing) -> None:
         print(f"== 0/{STEP_COUNT}  waiting for PR #{ln.opts.pr} to merge ({how})")
         if ln.direct_merge_subject:
             classify.refuse_stale_code_before_merge(ln)
-        with turn.held(ln) as in_turn:
-            merge.await_merge(ln, in_turn)
+        with turn.held(ln) as take_turn:
+            merge.await_merge(ln, take_turn)
     for number, (label, phase) in enumerate(_STEPS, 1):
         print(f"== {number}/{STEP_COUNT}  {label.format(pr=ln.opts.pr)}")
         phase(ln)

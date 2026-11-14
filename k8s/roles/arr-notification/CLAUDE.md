@@ -111,8 +111,13 @@ byte-identical in all three.
   comes from `<app>-notification`, a Secret in `<app>-verify` filled by substitution, so that
   Kustomization substitutes.
 - **The Job reruns once per revision that rolls the app**, because its spec embeds a digest of
-  the rendered Deployment. A webhook rotation alone renames nothing, so the rotated URL reaches
-  the app on the next revision that rolls it.
+  the rendered Deployment.
+- **The Job also reruns when `arr_discord_webhook_url` rotates.** Its spec embeds the
+  `cluster-vars.source` digest of that key (`ARR_WEBHOOK_DIGEST8`), so a rotation alone renames
+  the Job and the seed writes the new URL into each app's database (#8602). The rendered
+  `<app>-notification` Secret cannot carry the rotation, because its placeholder text does not
+  move when the key does. `tests/test_seed_job.py` rotates the key in a tree copy and checks
+  that each app's Job is renamed.
 - **The fence peers are in place.** The Job's pod carries `app: <app>-verify`, and
   each app's `netpol_from` lists that label (#5535). `tests/test_seed_job.py` checks that the
   Job's pod is one its app's fence admits.
