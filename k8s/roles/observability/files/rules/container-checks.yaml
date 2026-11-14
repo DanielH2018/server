@@ -155,7 +155,7 @@ groups:
       # The deleted bridge CADVISOR_PODS_MIN census (_cadvisor_blind), one arm per check because the
       # three vectors differ in size: the cpu arm sees only pods that carry a cpu limit. The
       # literal 20 was CADVISOR_PODS_MIN in monitor-bridge's env.yaml.j2, and
-      # ansible/tests/services/test_container_checks_rule_literals.py pins it now, with the
+      # tests/services/test_container_checks_rule_literals.py pins it now, with the
       # DECIDED marker for the measurement behind it. `or vector(0)` is
       # the zero-series case: a vanished kubernetes-cadvisor job leaves every count() empty, and
       # without it the arm would be silent exactly when blind. `for: 10m` is

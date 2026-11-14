@@ -201,8 +201,11 @@ and the bedtime/wake routines that drive them.
   getting gradually brighter. `sensor.bedroom_wake_start` = alarm−15 min (the window open edge;
   dynamic — see the dynamic-wake bullet below). Delegated entirely to `script.bedroom_apply_wake`
   (fixed warm 2200K, no `adaptive_lighting.apply` turn-on flash), driven per-minute by
-  `automation.bedroom_wake_ramp`. Pressing button 4 mid-window resumes the ramp from the current
-  point (`bedroom_apply_wake` recomputes the right frame for now()). When no morning alarm is set the sensor is `unavailable` →
+  `automation.bedroom_wake_ramp`. Pressing button 1 mid-window with the lights off resumes the
+  ramp from the current point: its press runs `bedroom_apply_natural`, which hands the morning
+  exception to `bedroom_apply_wake`, and that script recomputes the right frame for now(). Holding
+  button 1 does the same through `bedroom_apply_natural_gated` unless the lux gate blocks it.
+  When no morning alarm is set the sensor is `unavailable` →
   this exception is false and the default applies. `wake_transition` macro is gone — transition is
   now always 60 s (one ramp step). **`bedroom_morning_reset` also calls this dispatcher** (single
   source of truth — no duplicated ramp math). Color temp ALWAYS comes from AL; exceptions override

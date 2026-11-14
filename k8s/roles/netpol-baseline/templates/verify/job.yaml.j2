@@ -19,7 +19,7 @@
   fence another role renders, such as flux's `allow-egress` or a `netpol_role_owned` fence,
   does not rename the Job: reading it would be a cross-role lookup, which the deployer's scan
   reads as a dependency. Such a fence is re-verified at this role's next change.
-  ansible/roles/k8s/netpol-baseline/tests/test_netpol_baseline_verify.py fails if a policy
+  k8s/roles/netpol-baseline/tests/test_netpol_baseline_verify.py fails if a policy
   template is missing there. Each lookup names its file literally, because the secret checks
   trace a template lookup only through a literal path.
 

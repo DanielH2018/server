@@ -3,6 +3,7 @@
 Run: uv run pytest hosts/components/gh-quota/tests/test_gh_quota.py
 """
 
+import dataclasses
 import hashlib
 import json
 import os
@@ -19,17 +20,30 @@ SESSION = "7c1e90aa-0000-4000-8000-000000000001"
 
 
 class FakeGh:
-    """Stands in for `gh api rate_limit`: answers that one call, or fails the way `gh` can."""
+    """Stands in for `gh`: names its stored token and answers `gh api rate_limit`.
+
+    `logins` maps a `GH_CONFIG_DIR`, None when the caller sets none, to the token
+    `gh auth token` prints there. A directory it does not name is not logged in.
+    `fail` makes the rate-limit call fail the way `gh` can.
+    """
 
     def __init__(self):
+        self.logins: dict[str | None, str] = {None: "gho_operator"}
         self.graphql_used = 100
         self.core_used = 0
         self.fail: Exception | None = None
         self.env: dict[str, str] = {}
 
-    def __call__(self, argv, *, env, **_kwargs):
-        assert argv == ["gh", "api", "rate_limit"]
+    def __call__(self, argv, *, env, check=False, **_kwargs):
         self.env = env
+        if argv == ["gh", "auth", "token"]:
+            token = self.logins.get(env.get("GH_CONFIG_DIR"))
+            if token is not None:
+                return subprocess.CompletedProcess(argv, 0, f"{token}\n", "")
+            if check:
+                raise subprocess.CalledProcessError(1, argv)
+            return subprocess.CompletedProcess(argv, 1, "", "no oauth token found\n")
+        assert argv == ["gh", "api", "rate_limit"]
         if self.fail is not None:
             raise self.fail
         resources = {
@@ -58,6 +72,10 @@ def _ledger(
     root.mkdir()
     clock, gh = Clock(), FakeGh()
     return Ledger(root=root, conf=conf, env=env, now=clock, run=gh), clock, gh
+
+
+def _identity_of(token: str) -> str:
+    return "tok-" + hashlib.sha256(token.encode()).hexdigest()[:12]
 
 
 @pytest.fixture
@@ -159,10 +177,42 @@ def test_a_token_caller_gets_a_ledger_named_by_fingerprint(tmp_path: Path):
 
     ledger.record(["pr", "list"])
 
-    fingerprint = hashlib.sha256(token.encode()).hexdigest()[:12]
     (path,) = ledger.root.glob("*.sqlite")
-    assert path.name.startswith(f"tok-{fingerprint}@")
+    assert path.name.startswith(f"{_identity_of(token)}@")
     assert gh.env["GH_TOKEN"] == token
+
+
+def test_two_logins_of_one_uid_are_counted_in_separate_ledgers(recording):
+    operator, _clock, gh = recording
+    gh.logins["/home/agent/gh"] = "gho_agent"
+    agent = dataclasses.replace(
+        operator,
+        env={"CLAUDE_CODE_SESSION_ID": "agent", "GH_CONFIG_DIR": "/home/agent/gh"},
+    )
+
+    operator.record(["pr", "list"])
+    agent.record(["pr", "list"])
+    agent.record(["issue", "list"])
+
+    calls = {
+        w.identity: {session: sum(n.values()) for session, n in w.sessions.items()}
+        for w in operator.windows()
+        if w.bucket == "graphql"
+    }
+    assert calls == {
+        _identity_of("gho_operator"): {SESSION: 1},
+        _identity_of("gho_agent"): {"agent": 2},
+    }
+
+
+def test_a_caller_whose_gh_has_no_token_gets_a_ledger_named_by_uid(tmp_path: Path):
+    ledger, _clock, gh = _ledger(tmp_path, "record", {})
+    gh.logins.clear()
+
+    ledger.record(["pr", "list"])
+
+    (path,) = ledger.root.glob("*.sqlite")
+    assert path.name.startswith(f"uid-{os.getuid()}@")
 
 
 def test_status_lists_only_the_sessions_over_the_share_until_asked_for_all():

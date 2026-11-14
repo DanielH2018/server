@@ -25,7 +25,7 @@
 # Runs as the longhorn-restore-drill ServiceAccount, and has to: it creates and deletes
 # Volume/PV/PVC objects and runs a pod. The read-only ServiceAccount the heartbeat uses cannot do
 # any of that, so do not try to convert this to that credential. The ServiceAccount's Roles are
-# derived from the calls below, and ansible/tests/k8s/test_rbac_against_script.py holds them to
+# derived from the calls below, and tests/k8s/test_rbac_against_script.py holds them to
 # this script, so a new kubectl line needs its grant in the same change.
 #
 # State lives in the ConfigMap longhorn-restore-drill-stamps (H2.3c of
