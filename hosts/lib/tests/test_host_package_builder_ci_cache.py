@@ -1,8 +1,8 @@
 """The builder's CI cache never outlives a re-run that turns a red commit green (#5786).
 
 GitHub's check-runs API returns the latest run per name, so `gh run rerun --failed` replaces a
-failure with a success for the same SHA. The deployer's gate asks afresh every tick and sees
-it; the builder must too, or it reads `no-green` on a commit the deployer has deployed. The
+failure with a success for the same SHA. checkout-sync's gate asks afresh every run and sees
+it; the builder must too, or it reads `no-green` on a commit checkout-sync has taken. The
 fixture history, the stub GitHub and the stub render are test_host_package_builder.py's.
 
 Run: uv run pytest hosts/lib/tests/test_host_package_builder_ci_cache.py

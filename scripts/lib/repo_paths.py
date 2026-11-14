@@ -59,11 +59,9 @@ JOB_FILES = SCRIPTS / "renderer" / "job_files"
 # `longhorn_robustness.py`'s one copy lives in monitor-bridge's `files/` without shipping in its
 # pod; the runbook gates import it from here (#3668).
 MONITOR_BRIDGE_FILES = K8S_ROLES / "monitor-bridge" / "files"
-# `host_lib.py` and `ci_verdict.py`, the modules the host packages ship beside a host script (H7.2e moved them out of `setup/common/files/`). A tool that
-# imports one of the deployer's IMPURE modules (`deploy_state`, `deploy_config`) puts this on
-# `sys.path` for `host_lib`. A tool that imports `deploy_logic` puts it there for `ci_verdict`,
-# which `deploy_git` imports. `deploy_logic` itself must not load `host_lib`, which
-# `test_deploy_logic_imports_without_host_lib` enforces by `sys.modules`.
+# `host_lib.py` and `ci_verdict.py`, the modules the host packages ship beside a host script (H7.2e
+# moved them out of `setup/common/files/`). A tool under `scripts/` that imports `host_lib` or
+# `ci_verdict` puts this on `sys.path` first.
 HOST_LIB_FILES = REPO / "hosts" / "lib"
 SHARED_TPL = K8S / "templates"  # shared macros
 

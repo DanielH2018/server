@@ -429,12 +429,12 @@ PROBE = "uv run python scripts/diagnostics/probe.py"
 def format_banner(targets=(), parked=(), master_moved=()):
     """Render the problem sections as the banner's lines ([] => print nothing).
 
-    The deployer's lines come before the branch line, because "this branch is behind
-    origin/master" is the SYMPTOM of a parked deployer, so the cause reads first.
+    The parked-checkout lines come before the branch line, because "this branch is behind
+    origin/master" is the SYMPTOM of a parked `homelab-checkout-sync`, so the cause reads first.
 
     The triage line names whole commands joined by `or`, so a line copied into a shell is
     one runnable command rather than a pipe. It names only the commands that can see a
-    problem the banner printed: `landing` for a deployer line, `targets` and `health` for a
+    problem the banner printed: `landing` for a parked-checkout line, `targets` and `health` for a
     down scrape target. A banner holding only the branch line gets no triage line, because
     neither command says anything about it.
     """
@@ -487,7 +487,7 @@ def main(
 ):
     """Print the SessionStart health banner for a genuine session open, then exit 0.
 
-    Prints nothing for a mid-session compaction. Combines Prometheus-target, deployer and
+    Prints nothing for a mid-session compaction. Combines Prometheus-target, parked-checkout and
     stale-branch problems into one banner, then adds the unlabelled-worktree prompt and the
     other live sessions in this repo to the agent's context, cut to `BANNER_BUDGET_BYTES` so
     what asks for an action comes before what only informs. Worktrees ready to remove and

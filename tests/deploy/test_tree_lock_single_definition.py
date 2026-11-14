@@ -50,7 +50,7 @@ def test_the_lock_macro_is_the_only_template_opening_the_tree_lock():
 
 def test_every_lock_caller_imports_the_macro_with_context():
     # `with context` is load-bearing: without it server_git_tree_lock renders empty inside the
-    # macro and the caller locks a different file from the deployer.
+    # macro and the caller locks a different file from `homelab-checkout-sync`.
     for caller in _LOCK_CALLERS:
         name = caller.name
         source = caller.read_text()

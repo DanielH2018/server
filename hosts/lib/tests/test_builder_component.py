@@ -214,7 +214,7 @@ def test_both_units_publish_their_own_series_as_root(package):
         assert post.startswith(f"-+/bin/sh /usr/lib/homelab/publish-textfile {prefix} ")
 
 
-def test_the_settings_carry_the_deployers_ci_contexts_and_the_prometheus_cluster_ip(
+def test_the_settings_carry_the_shared_ci_contexts_and_the_prometheus_cluster_ip(
     package,
 ):
     # fact: hosts/components/builder/CLAUDE.md#The rollout gate (H3.12)
