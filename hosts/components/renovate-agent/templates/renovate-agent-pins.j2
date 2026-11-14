@@ -10,6 +10,10 @@ component's defaults/main.yml, which the docs fragments read.
 {%- set model = "opus" -%}
 {%- set permission_mode = "auto" -%}
 {%- set budget_usd = 25 -%}
+{#- The whole run: the session, then the landings it nominated, one after another. -#}
 {%- set run_timeout_s = 67260 -%}
+{#- The session alone, which only triages and writes requests. An assumption, not a measurement
+of a session that does no landing: the 15 runs to 2026-11-12, landings included, each ended
+within 16 minutes of the timer. It and one whole landing fit inside run_timeout_s. -#}
+{%- set session_timeout_s = 2700 -%}
 {%- set unit_timeout = "1131min" -%}
-{%- set bash_timeout_ms = 64560000 -%}
