@@ -16,6 +16,7 @@ landing's words:
 | settled | the landing goes on to the health gate | -- | -- |
 | deploy-failed | `deploy-failed` | `promote-held`, or `soak-failed` for R's `flux/soak` | 1 |
 | gave-up | `deferred` | `promote-timeout` | 75 |
+| gave-up, no kubectl or kubeconfig | `deferred` | `gate-unreadable` | 75 |
 | suspended | `nothing-to-deploy`, or the next steps when a host package changed | -- | 0 |
 | suspended, with a plane or other hosts owed | `needs-manual-apply` | -- | 1 |
 
@@ -237,6 +238,14 @@ def wait_on_promotion(ln: Landing) -> None:
             Verdict.DEPLOY_FAILED,
             1,
             f"PR #{pr}, {sha} — DEPLOY_HOLD holds promotion, so {tags} is not applied",
+        )
+    if result.cause == Cause.GATE_UNREADABLE:
+        ln.ledger.cause = Cause.GATE_UNREADABLE
+        ln.finish(
+            Verdict.DEFERRED,
+            75,
+            f"PR #{pr}, {sha} — this host could not read the cluster, so the promotion "
+            f"wait ended at once; {tags} not verified",
         )
     print(PROMOTE_TIMEOUT_NOTE)
     ln.ledger.cause = Cause.PROMOTE_TIMEOUT

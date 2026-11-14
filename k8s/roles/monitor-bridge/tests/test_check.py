@@ -134,26 +134,27 @@ def test_a_narrowed_run_still_logs_each_up_verdict(cfg, capsys):
     assert f"OK   {entry.name} - {entry.name} ok" in out
 
 
-def test_every_dashboard_parsed_check_is_logged_when_up(cfg, capsys):
-    """The Longhorn Storage B2 panels regex b2_storage's up line out of this pod's log."""
+@pytest.mark.parametrize(
+    "name, needle, msg",
+    [
+        ("b2_storage", "B2 storage", "B2 storage 1.0 GB of 10.0 GB"),
+        ("r2_usage", "R2 month-to-date", "R2 month-to-date: storage 1.00/10 GB (10%)"),
+    ],
+)
+def test_every_dashboard_parsed_check_is_logged_when_up(cfg, capsys, name, needle, msg):
+    """The Longhorn Storage B2 and R2 panels regex each check's up line out of this pod's log."""
     board = (
         Path(__file__).resolve().parents[2]
         / "observability/files/dashboards/Infrastructure/longhorn-storage.json"
     ).read_text()
-    assert '{container=\\"monitor-bridge\\"} |= \\"B2 storage\\"' in board
-    entry = next(e for e in registry.build_checks() if e.name == "b2_storage")
+    assert f'{{container=\\"monitor-bridge\\"}} |= \\"{needle}\\"' in board
+    entry = next(e for e in registry.build_checks() if e.name == name)
     out = _quiet_cycle(
         cfg,
-        [
-            replace(
-                entry,
-                fn=lambda _cfg, _src: (True, "B2 storage 1.0 GB of 10.0 GB"),
-                gate=None,
-            )
-        ],
+        [replace(entry, fn=lambda _cfg, _src: (True, msg), gate=None)],
         capsys,
     )
-    assert "OK   b2_storage - B2 storage 1.0 GB of 10.0 GB" in out
+    assert f"OK   {name} - {msg}" in out
 
 
 # ── the registry: gate rows first, each row carrying its gate ───────────────────────────────

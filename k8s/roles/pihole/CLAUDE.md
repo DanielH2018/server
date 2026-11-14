@@ -35,8 +35,8 @@ continuity. Coexisted with a Docker-era copy through the DNS cutover; that copy 
   controller Recreate-cycled both instances (2026-09-28, #2884: 52s of LAN DNS downtime, and both
   new pods failed their image pull against the resolver they had just replaced).
   `manifests_deferred_files: [deployment-2.yaml]` with `manifests_deferred_dir_name:
-  pihole-instance-2` is the contract (#2899). Why the Ansible-era roll was sequenced by hand is
-  in `docs/pihole-dns-continuity-record.md`.
+  pihole-instance-2` is the contract (#2899). `docs/pihole-dns-continuity-record.md` records
+  why the two instances must roll in sequence.
 - **LAN reverse-DNS is forwarded to the router, with `server=` rather than `rev-server=`.**
   `templates/config/pihole-dnsmasq.conf.j2` forwards the zone `lan_subnet` implies to
   `lan_router_ip`, so PTR lookups for DHCP clients return the names the router leased them.
@@ -57,11 +57,11 @@ continuity. Coexisted with a Docker-era copy through the DNS cutover; that copy 
 
 ## Flux applies it
 
-- **Flux applies pihole, not Ansible** (D5, pihole's own window). Its `containers_list` entry
+- **Flux applies pihole.** Its `containers_list` entry
   is in `cluster/services.yml`, so nothing applies it by hand, and a
   merged change reaches the cluster when `promote` publishes and verifies the next bundle.
-- **Where the tasks went.** `defaults/main.yml` keeps `manifests_self_rollouts` because the renderer reads it to
-  stamp the restart annotation on both instances.
+- **Its restart.** `defaults/main.yml` sets `manifests_self_rollouts` because the renderer
+  reads it to stamp the restart annotation on both instances.
 - **The gravity reconcile is `templates/verify/gravity.yaml.j2`, a mutation Job.** It runs
   `files/pihole_gravity.py` against each FTL's v6 REST API, through the `pihole` and
   `pihole-2-web` Services, with the password from `pihole-env`. So it needs no `pods/exec` and
@@ -76,10 +76,10 @@ continuity. Coexisted with a Docker-era copy through the DNS cutover; that copy 
   both instances, and instance 2 rolls only after instance 1 is Ready. `pihole-verify` depends
   on `pihole-deferred`, so the reconcile meets two Ready instances.
   `tests/test_pihole_gravity.py` pins that order.
-- **The ready-endpoint check has no successor.** `wait: true` on `pihole` holds instance 1
+- **Its ready-endpoint check.** `wait: true` on `pihole` holds instance 1
   Ready and `wait: true` on `pihole-deferred` holds instance 2 Ready. `pihole-dns` selects both
   by `app: pihole`, so two Ready Deployments are two ready endpoints.
-- **The pinned-VIP assert is observability's `PiholeLanAddressNotPinned` rule.** The rule
+- **Observability's `PiholeLanAddressNotPinned` rule checks the pinned VIP.** The rule
   reads `pihole-dns`'s LoadBalancer ingress from kube-state-metrics, at `warning` with
   `verify="true"`, so the soak checks it on every revision. Its address is a literal, so moving
   `dns_k8s_vip` is an edit to that rule too.

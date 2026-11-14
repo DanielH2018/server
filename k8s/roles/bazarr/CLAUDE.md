@@ -16,27 +16,26 @@ shared conventions.
 - **Storage:** `bazarr-config` PVC (`longhorn`, 1Gi) holds the database and subtitle paths.
   Also mounts the shared `media-data` claim (read/write, via subPath) for the files
   themselves.
-- **Flux applies it, not Ansible** (D5.9, the first Wave B PR). Its `containers_list` entry is
+- **Flux applies it.** Its `containers_list` entry is
   in `cluster/services.yml`, so nothing applies it by hand, and a merged change reaches the cluster when
   `promote` publishes and verifies the next bundle. Its image-bump PRs therefore draw no
   `land-wait` and no `probe.py health` run. authelia, media-volume and traefik are flux-owned too,
   so the Kustomization lists them in `dependsOn`, and Flux applies this tag only after their
   Kustomizations are Ready. The Deployment is `Recreate`, so a change that rolls it takes the
   service down briefly.
-- **The `bazarr-snapshot` Job snapshots `bazarr-config` before each revision applies**
-  (D5.2a). The bazarr Kustomization depends on `bazarr-snapshot`, so a revision applies only
+- **The `bazarr-snapshot` Job snapshots `bazarr-config` before each revision applies**.
+  The bazarr Kustomization depends on `bazarr-snapshot`, so a revision applies only
   after the snapshot is ready; `docs/flux-deploy-plane.md` lists the Job's checks. A failed
   revision that changes bazarr writes the stateful hold, and `promote` does not reset `prod`,
   because the failed image may already have migrated the database. Nothing reverts the claim
   on its own: the operator follows the revert runbook in `docs/volume-snapshot-drills.md`.
-  `k8s_autodeploy: true` still lets Renovate automerge the image bump, which is safe for the
-  same reason it was under Ansible: a bad swap can be reverted to the snapshot.
+  `k8s_autodeploy: true` still lets Renovate automerge the image bump, which is safe because a
+  bad swap can be reverted to the snapshot.
 - **`media-data` is neither snapshotted nor reverted** (`k8s_autodeploy_unreverted_claims`). It
   is a shared claim other roles also write; a revert can forget a subtitle file bazarr already
   wrote there, which is self-healing because bazarr checks existence before re-downloading.
-- **Where the task went.** Its pre-apply snapshot through
-  `k8s/volume-snapshot` became the `bazarr-snapshot` Job, and the Kustomization's `wait`
-  replaces the rollout wait.
+- **Its snapshot and rollout.** The `bazarr-snapshot` Job takes the pre-apply snapshot. The
+  Kustomization's `wait` holds the rollout.
 
 ## Notable
 - `-lsNN` linuxserver tagging hides a breaking bump as a routine patch bump — the reason the

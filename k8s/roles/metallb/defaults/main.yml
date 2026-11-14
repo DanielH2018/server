@@ -33,6 +33,18 @@ metallb_vendored_manifests:
 # runs this role. This key is the pool's definition site (H1.3).
 k3s_metallb_pool: 10.0.0.241-10.0.0.250
 
+# Memory REQUESTS only (no limit) for the controller and the speaker, applied by
+# files/patches/controller.yaml and files/patches/speaker.yaml (#8326). Upstream ships both
+# containers with no `resources`, which makes their pods BestEffort: the kubelet evicts those
+# first under node memory pressure, and an evicted speaker drops every VIP the node announces.
+# A request alone moves the pod to Burstable without adding an OOM-by-limit kill path. Measured
+# 2026-11-14: the 30-day peak working set was 77Mi for the controller and 80Mi for a speaker
+# (32Mi and 34-43Mi at rest); each request is the peak rounded up to a power of two. A kustomize
+# patch cannot read a variable, so tests/k8s/test_metallb_vendored_manifest.py holds each patch
+# equal to its key.
+k3s_metallb_controller_memory_request: 128Mi
+k3s_metallb_speaker_memory_request: 128Mi
+
 # DECIDED: never pruned. Under prune: true, a render that dropped the speaker, the controller or
 # a CRD would make Flux delete it, and deleting a CRD deletes every IPAddressPool and
 # L2Advertisement of its kind: every VIP, the edge and DNS, goes down at once. With prune: false

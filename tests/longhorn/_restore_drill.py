@@ -19,7 +19,7 @@ the way the cluster's does. A harness built with `cm=False` has no such file, wh
 reports as NotFound (`--ignore-not-found`: rc 0, empty output). `K3S_STUB_GET_CM=fail` fails
 the read, and `K3S_STUB_PATCH_FAILS=<text>` fails any patch whose call contains the text.
 `K3S_STUB_DELETE_FAILS=<text>` fails any delete whose call contains the text. `K3S_STUB_PHASE` sets
-the probe pod's phase (default `Succeeded`).
+the probe pod's phase (default `Succeeded`), and `K3S_STUB_PROBE` its log (default `PASSING_PROBE`).
 """
 
 import json
@@ -38,6 +38,9 @@ from _shell_render import render_shell_script
 
 DRILL_TEMPLATE = ("k8s", "longhorn-restore-drill", "longhorn-restore-drill.sh.j2")
 DRILL_DEFAULTS = K8S_ROLES / "longhorn-restore-drill" / "defaults" / "main.yml"
+
+# What the probe pod logs for a volume holding real data and no SQLite database.
+PASSING_PROBE = "files=3 bytes=4096\nsqlite_checked=0 sqlite_bad=0"
 
 STUB = r"""
 fixtures="$K3S_STUB_FIXTURES"
@@ -66,7 +69,7 @@ case "$*" in
     [[ -z "${K3S_STUB_DELETE_FAILS:-}" || "$*" != *"$K3S_STUB_DELETE_FAILS"* ]] || return 1 ;;
   *"get volume restore-drill-"*) printf '%s' "${K3S_STUB_VOLSTATE:-detached false}" ;;
   *"get pod "*) printf '%s' "${K3S_STUB_PHASE:-Succeeded}" ;;
-  *"logs "*) printf '%s\n' "${K3S_STUB_PROBE:-files=3 bytes=4096}" ;;
+  *"logs "*) printf '%s\n' "${K3S_STUB_PROBE}" ;;
   *) : ;;
 esac
 """
@@ -154,6 +157,7 @@ class Harness:
             "PATH": os.environ["PATH"],
             "K3S_STUB_FIXTURES": str(self.fixtures),
             "K3S_STUB_RESTORE": restore,
+            "K3S_STUB_PROBE": PASSING_PROBE,
             "BASH_FUNC_kubectl%%": f"() {{ {STUB} }}",
             **(env or {}),
         }

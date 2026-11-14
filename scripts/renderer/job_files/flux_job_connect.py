@@ -9,7 +9,7 @@ a flaky check pass on its second try.
 
 The Job census in `scripts/renderer/tests/test_renderer_job_census.py` fails a Job script that
 opens a connection any other way, and it admits this file only as a byte-identical copy beside
-the script in the Job's ConfigMap. Standard library only: the Job image is `python:3.14-alpine`.
+the script in the Job's ConfigMap. Standard library only: the Job image is `python:3.15-alpine`.
 
 Typical usage example:
 

@@ -1,4 +1,4 @@
-"""The GUI artifact_server.py serves at `/` and the star button it serves at `/api/star.js`.
+"""The GUI artifact_server.py serves at `/`, the star button at `/api/star.js`, and the favicon.
 
 Raw strings, no Python logic. It is a module rather than a `.html` file so that the pod
 needs only the ConfigMap keys it already mounts — a separate asset would need its own key,
@@ -13,6 +13,7 @@ GUI_HTML = r"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Homelab Artifacts</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.ico">
 <style>
 :root{--base:#1e1e2e;--mantle:#181825;--crust:#11111b;--surface0:#313244;--surface1:#45475a;
 --text:#cdd6f4;--subtext0:#a6adc8;--overlay0:#6c7086;--blue:#89b4fa;--green:#a6e3a1;
@@ -267,4 +268,9 @@ button:focus-visible{outline:2px solid #f9e2af;outline-offset:2px}
     document.body.append(box);
   }).catch(() => {});
 })();
+"""
+
+# The Artifacts tile's mdi icon and colour in homepage's services.yaml.j2. Served at
+# /favicon.ico, the path a browser requests for an artifact page that declares no icon.
+FAVICON_SVG = r"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="#38bdf8" d="M4 4V22H20V24H4C2.9 24 2 23.1 2 22V4H4M15 7H20.5L15 1.5V7M8 0H16L22 6V18C22 19.11 21.11 20 20 20H8C6.89 20 6 19.1 6 18V2C6 .89 6.89 0 8 0M17 16V14H8V16H17M20 12V10H8V12H20Z"/></svg>
 """

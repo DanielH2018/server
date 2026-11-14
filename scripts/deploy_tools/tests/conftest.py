@@ -16,6 +16,7 @@ import pytest
 from _helpers import stub_logger_on_path
 from _land_fakes import PRIMARY, Fakes, build_classifier, build_tools, make_landing
 from deploy_tools.land_lib import detach, live_limit, options, tools
+from lib.proc_testing import fake_bin, path_with
 
 # Read off the modules that consume them rather than retyped, so a knob added there is cleared
 # here without anyone remembering to.
@@ -171,3 +172,12 @@ def _no_syspath_leak():
         "by bare name would resolve against it. Remove the entry in a finally, or use "
         "monkeypatch.syspath_prepend."
     )
+
+
+@pytest.fixture
+def ssh_here(tmp_path, monkeypatch):
+    """An `ssh` that runs the command it is given on this host, in place of the turn host."""
+    stubs = fake_bin(
+        tmp_path / "bin", ssh='#!/usr/bin/env bash\nexec sh -c "${@: -1}"\n'
+    )
+    monkeypatch.setenv("PATH", path_with(stubs))

@@ -12,9 +12,12 @@ import time
 import urllib.error
 from collections.abc import Callable
 
-# gh prints the API's message: "API rate limit exceeded for user ID N" for the hourly quota,
-# and "You have exceeded a secondary rate limit" for a burst.
-_RATE_LIMITED = re.compile(r"rate limit exceeded|secondary rate limit", re.IGNORECASE)
+# gh prints the API's message: "API rate limit exceeded for user ID N" for the hourly core
+# quota, "API rate limit already exceeded for user ID N" for the GraphQL quota, and "You have
+# exceeded a secondary rate limit" for a burst.
+_RATE_LIMITED = re.compile(
+    r"rate limit (?:already )?exceeded|secondary rate limit", re.IGNORECASE
+)
 _SECONDARY = re.compile(r"secondary rate limit", re.IGNORECASE)
 # gh prefixes a GraphQL error with "GraphQL:"; that quota resets apart from core's.
 _GRAPHQL = re.compile(r"\bGraphQL\b", re.IGNORECASE)

@@ -95,7 +95,7 @@ def _help_failure(path: Path) -> str | None:
     text = path.read_text(encoding="utf-8")
     if "--help" not in text and "argparse" not in text:
         # A script with no help path would do its real work under this run: the host crons
-        # here call cscli, read their config and tick the deployer. argparse answers --help
+        # here call cscli, read their config and write their state. argparse answers --help
         # without the file spelling the flag out.
         return "has no --help path; not run, because it would do its real work"
     pythonpath = os.pathsep.join(str(p) for p in (path.parent, *SHIPPED_BESIDE))

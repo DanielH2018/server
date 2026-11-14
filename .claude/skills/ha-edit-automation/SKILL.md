@@ -7,7 +7,7 @@ allowed-tools: Read, Edit, Write, Bash, Glob
 Make a correct, idempotent HA change under `k8s/roles/home-assistant/`. The repo
 is the source of truth — **HA UI edits are overwritten on deploy.** Read the role `CLAUDE.md`
 (editing gotchas) and `SETUP.md` (how the bedroom suite fits together) before changing
-interdependent logic. Run everything from `/home/ubuntu/server`.
+interdependent logic. Run everything from the repo root (your worktree).
 
 HA itself moved to the k3s cluster at slice-5 B3, but **the edit path did not change**: the
 `k8s/roles/home-assistant/` role copies these same files verbatim into ConfigMaps, so

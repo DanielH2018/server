@@ -29,6 +29,9 @@ not release it when the session ends. Treating any lock as "in use" would theref
 every abandoned worktree forever. The `start` field is the process start time from
 /proc/<pid>/stat, so it distinguishes a live owner from a dead one whose pid has since been
 reused, and a lock whose owner is gone is ignored rather than obeyed.
+A fan-out batch's lock names its systemd user unit (`fanout-<batch>`) instead,
+and reads as dead once that unit is inactive and the lock is a day old. See
+lib.fanout_lock.
 
 Usage:
     uv run python scripts/dev/prune_worktrees.py            # report only (default)

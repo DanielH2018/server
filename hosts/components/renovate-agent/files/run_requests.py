@@ -8,6 +8,14 @@ with its own token once the session has ended:
     {"action": "close", "pr": 71, "body": "Superseded by #80."}
     {"action": "comment", "pr": 71, "body": "..."}
     {"action": "rerun", "pr": 71}
+    {"action": "land", "pr": 71}
+
+A `land` request nominates a PR; the session never lands one (#967's I9). After the other
+requests, the runner starts `renovate-agent-land@<n>` for each nomination in file order, one at
+a time, and grades how each ended. It goes on after `settled`, `nothing-to-deploy` or the
+lander's own pre-merge `REFUSED:`, and starts no further landing after anything else. It drops a
+nomination past the run's landing cap, one for a PR the run closed, and any once the run's
+deadline has passed.
 
 A request is read only when it is a regular file under `MAX_BYTES`, opened without following
 a link and without blocking, so a symlink, a FIFO or a device node is refused rather than
@@ -18,22 +26,24 @@ agent.
 
 from __future__ import annotations
 
-import errno
 import json
 import os
-import shutil
-import stat
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from agent_toolbox import AgentTools
+from host_lib import read_regular, start_unit
 
 REQUESTS_DIR = "requests"
 REQUEST_LOG = "requests.jsonl"
 MAX_BYTES = 16 * 1024
 MAX_REQUESTS = 50
 MAX_BODY = 4000
-ACTIONS = ("close", "comment", "rerun")
+ACTIONS = ("close", "comment", "rerun", "land")
+VERDICT_DIR = "/var/lib/renovate-agent-land"
+# land.sh's VERDICT: states after which the next nomination may land.
+GOES_ON = ("settled", "nothing-to-deploy")
 
 
 @dataclass(frozen=True)
@@ -45,38 +55,6 @@ class Outcome:
     detail: str
     action: str = ""
     pr: int = 0
-
-
-def fresh_dir(state_dir: str) -> str:
-    """An empty requests directory for the next session; a leftover one is set aside, not read."""
-    path = os.path.join(state_dir, REQUESTS_DIR)
-    os.makedirs(state_dir, exist_ok=True)
-    if os.path.lexists(path):
-        stale = f"{path}.stale-{int(time.time())}"
-        os.rename(path, stale)
-        shutil.rmtree(stale, ignore_errors=True)
-    os.mkdir(path, 0o700)
-    return path
-
-
-def _read(dir_fd: int, name: str) -> bytes:
-    """The bytes of regular file `name` in `dir_fd`, or raise ValueError naming why not."""
-    try:
-        fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=dir_fd)
-    except OSError as exc:
-        if exc.errno == errno.ELOOP:
-            raise ValueError("a symlink") from exc
-        raise ValueError(f"cannot open it: {exc.strerror}") from exc
-    try:
-        mode = os.fstat(fd).st_mode
-        if not stat.S_ISREG(mode):
-            raise ValueError("not a regular file")
-        data = os.read(fd, MAX_BYTES + 1)
-    finally:
-        os.close(fd)
-    if len(data) > MAX_BYTES:
-        raise ValueError(f"over {MAX_BYTES} bytes")
-    return data
 
 
 def parse(data: bytes, census: set[int]) -> dict:
@@ -147,11 +125,95 @@ def _rerun(pr: str, repo: str, tools: AgentTools) -> tuple[bool, str]:
     return True, f"re-ran {len(runs)} failed run(s)"
 
 
-def carry_out(
-    requests_dir: str, census: set[int], repo: str, tools: AgentTools, state_dir: str
+def grade(result: str, verdict: str) -> tuple[bool, bool, str]:
+    """(landed, go_on, detail) for a lander unit that ended with `result` and wrote `verdict`.
+
+    `success` and `exit-code` mean the lander finished and wrote its file; any other systemd
+    `Result`, or a file still reading `PENDING`, means it was stopped before it wrote an outcome.
+    """
+    line = verdict.strip().splitlines()[-1] if verdict.strip() else ""
+    if result not in ("success", "exit-code"):
+        return (
+            False,
+            False,
+            f"systemd stopped the lander (Result={result or 'unknown'})",
+        )
+    if line.startswith("REFUSED:"):
+        return False, True, line
+    state = (
+        line.removeprefix("VERDICT: ").split(" ", 1)[0]
+        if line.startswith("VERDICT: ")
+        else ""
+    )
+    if state in GOES_ON:
+        return True, True, line
+    return False, False, line or "the lander left no verdict"
+
+
+def _land(
+    pr: int,
+    tools: AgentTools,
+    timeout: int,
+) -> tuple[bool, bool, str]:
+    """Start the lander for `pr`, wait for it, and grade how it ended."""
+    end = start_unit(f"renovate-agent-land@{pr}.service", tools.run, timeout)
+    if end.result == "deadline":
+        # The lander keeps running in its own unit; only this wait ended.
+        return False, False, "still running at the run's deadline"
+    verdict = tools.read_file(os.path.join(VERDICT_DIR, f"{pr}.verdict"))
+    if not verdict:
+        return False, False, "the lander's verdict file is missing, empty or unreadable"
+    return grade(end.result, verdict[:4096])
+
+
+def _land_all(
+    nominated: list[tuple[str, int]],
+    closed: set[int],
+    tools: AgentTools,
+    max_lands: int,
+    deadline: float,
+    clock: Callable[[], float],
 ) -> list[Outcome]:
-    """Read every request in `requests_dir`, carry out the valid ones and log each outcome."""
     outcomes: list[Outcome] = []
+    started, stopped = 0, ""
+    for name, pr in nominated:
+        left = int(deadline - clock())
+        if pr in closed:
+            detail = "not landed: the run closed it"
+        elif stopped:
+            detail = f"not landed: {stopped}"
+        elif started >= max_lands:
+            detail = f"not landed: over the run's {max_lands} landings"
+        elif left <= 0:
+            stopped = "the run's deadline passed"
+            detail = f"not landed: {stopped}"
+        else:
+            started += 1
+            landed, go_on, detail = _land(pr, tools, left)
+            if not go_on:
+                stopped = f"#{pr} stopped the run: {detail}"
+            outcomes.append(Outcome(name, landed, detail, "land", pr))
+            continue
+        outcomes.append(Outcome(name, False, detail, "land", pr))
+    return outcomes
+
+
+def carry_out(
+    requests_dir: str,
+    census: set[int],
+    repo: str,
+    tools: AgentTools,
+    state_dir: str,
+    max_lands: int,
+    deadline: float,
+    clock: Callable[[], float] = time.time,
+) -> list[Outcome]:
+    """Read every request in `requests_dir`, carry out the valid ones and log each outcome.
+
+    Lands go last, after every close, comment and rerun, under `max_lands` and `deadline`.
+    """
+    outcomes: list[Outcome] = []
+    nominated: list[tuple[str, int]] = []
     try:
         dir_fd = os.open(requests_dir, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
     except OSError as exc:
@@ -168,9 +230,13 @@ def carry_out(
                     )
                     continue
                 try:
-                    request = parse(_read(dir_fd, name), census)
+                    request = parse(read_regular(dir_fd, name, MAX_BYTES), census)
                 except ValueError as exc:
                     outcomes.append(Outcome(name, False, f"refused: {exc}"))
+                    continue
+                if request["action"] == "land":
+                    if request["pr"] not in [pr for _, pr in nominated]:
+                        nominated.append((name, request["pr"]))
                     continue
                 done, detail = _carry_out(request, repo, tools)
                 outcomes.append(
@@ -178,6 +244,8 @@ def carry_out(
                 )
         finally:
             os.close(dir_fd)
+    closed = {o.pr for o in outcomes if o.action == "close" and o.done}
+    outcomes += _land_all(nominated, closed, tools, max_lands, deadline, clock)
     stamp = int(time.time())
     with open(os.path.join(state_dir, REQUEST_LOG), "a", encoding="utf-8") as log_file:
         for o in outcomes:

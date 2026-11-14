@@ -98,7 +98,8 @@ Exit codes:
       verify: failed, or no verdict. ci-verdict: anything but pass. hold: the record is
       unreadable, or a message was not posted. reset-check: a refusal.
   64  usage error
-  75  land-wait: gave-up, the wait reached its timeout.
+  75  land-wait: gave-up, the wait reached its timeout, or this host has no kubectl or
+      readable kubeconfig.
 
 Every GitHub and GHCR call goes through `forge.py`, and this module starts no subprocess
 (scripts/deploy_tools/tests/test_promote_forge_boundary.py).
@@ -154,8 +155,8 @@ from deploy_tools.promote_lib.reads import (
     prod_commit,
 )
 
-# The CI reduction every deploy path shares, so a promotion and a tick agree on what green
-# means. It moved to `hosts/lib/` in H7.2e so the deployer can retire without it.
+# The CI reduction every deploy path shares, so a promotion and checkout-sync agree on what
+# green means. It moved to `hosts/lib/` in H7.2e so the deployer could retire without it.
 sys.path.insert(0, str(HOST_LIB_FILES))
 from ci_verdict import ci_verdict
 
