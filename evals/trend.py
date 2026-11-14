@@ -22,6 +22,8 @@ HISTORY = Path(__file__).parent / "history.json"
 # Run-level records live beside the per-case lists under this key. A case id is always
 # `<agent>/<case>`, so a key without a slash never collides with one.
 RUNS_KEY = "_runs"
+# main's exit code for a report with no healthy trial in any case; eval-run.sh.j2 branches on it.
+NO_SIGNAL_RC = 2
 
 
 def load_history(path: Path) -> dict:
@@ -88,6 +90,23 @@ def sweep_cost(report: list[dict]) -> float | None:
             return None
         costs.append(float(cost))
     return round(sum(costs), 4) if costs else None
+
+
+def no_signal_reasons(report: list[dict]) -> list[str] | None:
+    """The distinct infra reasons of a report in which no case has a healthy trial, else None.
+
+    Such a run measured nothing: every trial failed before grading, such as on a rejected API
+    key. Recording it would append a row per case that reads like any other run, so `main`
+    refuses it instead. An empty report also counts as no signal.
+    """
+    if any(case.get("healthy") for case in report):
+        return None
+    reasons = {
+        run.get("reason") or run.get("status") or "unknown"
+        for case in report
+        for run in case.get("_runs", [])
+    }
+    return sorted(reasons)
 
 
 def _signal(entries: list[dict], mode: str) -> list[bool]:
@@ -199,7 +218,8 @@ def main(argv=None) -> int:
     In `--mode subscription`, reports current FAILs without recording or comparing. In
     `--mode hermetic` (default), records the run, classifies each case as REGRESSION /
     FLAKY / STABLE, prints the summary, and writes history back unless `--no-write` is
-    passed. Returns 1 if any case regressed, else 0.
+    passed. Returns 1 if any case regressed, else 0. A report with no healthy trial in any
+    case is not recorded: it prints the infra reasons and returns NO_SIGNAL_RC.
     """
     p = argparse.ArgumentParser(
         description="Roll eval report.json into cross-run trends."
@@ -228,6 +248,14 @@ def main(argv=None) -> int:
         )
         print(f"  current FAILs: {', '.join(failing) if failing else 'none'}")
         return 0
+
+    reasons = no_signal_reasons(report)
+    if reasons is not None:
+        print(
+            "no healthy trial in any case: the run measured nothing; history NOT written."
+        )
+        print(f"  infra reasons: {'; '.join(reasons) or 'none reported'}")
+        return NO_SIGNAL_RC
 
     history = record_run(
         load_history(args.history), report, int(time.time()), args.mode, args.epoch

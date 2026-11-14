@@ -4,8 +4,9 @@
 is newer than the 3.12 the hosts run; `test_reconcile_component.py` holds its syntax to 3.12.
 """
 
+import io
 import json
-import shlex
+import marshal
 import subprocess
 import sys
 from pathlib import Path
@@ -43,6 +44,24 @@ SECRETS_UNIT = "homelab-secrets.service"
 
 V1 = "0.100+gaaaaaaaaaaaa"
 UNIT_DIR = "usr/lib/systemd/system"
+# A real host manifest makes ~800 stub calls of ~10 ms each; a loaded host stretches that past 60 s.
+RECONCILE_TIMEOUT = 300
+
+
+def _wrapper(command: str) -> str:
+    """The `PATH` entry for `command`: a Python script that hands its argv to the stub.
+
+    The kernel runs it directly, with no shell between. `-S` skips `site`, which the stub's
+    standard-library imports do not need. Importing the stub, rather than running it as a
+    script, lets Python cache its bytecode instead of compiling it on every call.
+    """
+    return (
+        f"#!{sys.executable} -S\n"
+        "import sys\n"
+        f"sys.path.insert(0, {str(STUB.parent)!r})\n"
+        f"import {STUB.stem}\n"
+        f"sys.exit({STUB.stem}.main({command!r}, sys.argv[1:]))\n"
+    )
 
 
 class Node:
@@ -59,11 +78,7 @@ class Node:
         for directory in (self.root, self.stub, self.bin):
             directory.mkdir()
         for command in COMMANDS:
-            write_exec(
-                self.bin / command,
-                f"exec {shlex.quote(sys.executable)} {shlex.quote(str(STUB))} "
-                f'{command} "$@"\n',
-            )
+            write_exec(self.bin / command, _wrapper(command))
         self.lock = self.root / "var/lib/dpkg/lock-frontend"
         self.lock.parent.mkdir(parents=True)
         self.lock.touch()
@@ -128,8 +143,10 @@ class Node:
         self.manifest["enable_links"].remove(name)
 
     def _prepare(self) -> dict[str, str]:
-        (self.stub / "state.json").write_text(json.dumps(self.state))
-        (self.stub / "calls.jsonl").write_text("")
+        # The JSON round trip gives the stub the same lists and string keys json.loads would.
+        shaped = json.loads(json.dumps(self.state))
+        (self.stub / "state.marshal").write_bytes(marshal.dumps(shaped))
+        (self.stub / "calls.marshal").write_bytes(b"")
         self.write_manifest()
         return {
             "PATH": self.path,
@@ -142,9 +159,17 @@ class Node:
         self.manifest_path.write_text(json.dumps(self.manifest))
 
     def run(self, *args: str) -> subprocess.CompletedProcess:
-        result = run([sys.executable, str(self.script), *args], env=self._prepare())
-        self.state = json.loads((self.stub / "state.json").read_text())
+        result = run(
+            [sys.executable, str(self.script), *args],
+            env=self._prepare(),
+            timeout=RECONCILE_TIMEOUT,
+        )
+        self.load_state()
         return result
+
+    def load_state(self) -> None:
+        """Read back into `state` what the stub's calls left it."""
+        self.state = marshal.loads((self.stub / "state.marshal").read_bytes())
 
     def command(self) -> tuple[list[str], dict[str, str]]:
         """The argv and environment that run reconcile on the current state, for a caller that starts it."""
@@ -161,13 +186,20 @@ class Node:
         )
 
     def finish(self, process: subprocess.Popen) -> int:
-        process.communicate(timeout=60)
-        self.state = json.loads((self.stub / "state.json").read_text())
+        try:
+            process.communicate(timeout=RECONCILE_TIMEOUT)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.communicate()
+            raise
+        self.load_state()
         return process.returncode
 
     def calls(self, command: str | None = None) -> list[dict]:
-        lines = (self.stub / "calls.jsonl").read_text().splitlines()
-        calls = [json.loads(line) for line in lines]
+        records = io.BytesIO((self.stub / "calls.marshal").read_bytes())
+        calls = []
+        while records.tell() < len(records.getbuffer()):
+            calls.append(marshal.load(records))
         return [call for call in calls if command is None or call["argv"][0] == command]
 
     def actions(self) -> list[list[str]]:

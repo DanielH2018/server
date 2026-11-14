@@ -271,11 +271,8 @@ def resume_command(
         env: The unit's other environment variables.
     """
     pairs = " ".join(shlex.quote(f"{k}={v}") for k, v in env.items())
-    # The env file carries the runner's write token as GH_TOKEN and the session's read-only
-    # one beside it; a resumed session gets the read-only one, as the session did.
     script = (
         f"cd {shlex.quote(cwd)} && set -a && . {shlex.quote(env_file)} && "
-        'GH_TOKEN="$RENOVATE_SESSION_GH_TOKEN" && unset RENOVATE_SESSION_GH_TOKEN && '
         f"exec runuser -u {shlex.quote(user)} -- env {pairs} "
         f"{shlex.quote(claude_bin)} --resume {shlex.quote(session_id)}"
     )
@@ -283,7 +280,12 @@ def resume_command(
 
 
 def render_digest(
-    outcome: Outcome, moved: Delta, host: str, log_path: str, resume: str = ""
+    outcome: Outcome,
+    moved: Delta,
+    host: str,
+    log_path: str,
+    resume: str = "",
+    unlanded: list[str] | None = None,
 ) -> str:
     """The Discord digest, headlined by the measured delta.
 
@@ -320,6 +322,8 @@ def render_digest(
         )
     if moved.opened:
         lines.append("opened during the run: " + _nums(moved.opened))
+    if unlanded:
+        lines.append("nominated, not landed: " + "; ".join(unlanded))
     if outcome.denials:
         # A denial is the failure this whole design rests on not happening: auto mode refusing
         # the session's writes leaves it reading green while doing nothing.

@@ -38,5 +38,5 @@ reaches the CRDs through its edge to `traefik`.
   flux-owned.
 - **`tier: home-edge`**, traefik's tier, keeps the tag out of the lost-node shed set without
   a `NEVER_SHED` entry (`scripts/renderer/template_filters/service_tier.py`).
-- **Flux applies it, not Ansible** (D5, traefik's own window). Its `containers_list` entry
+- **Flux applies it.** Its `containers_list` entry
   is in `cluster/services.yml` from its first commit.

@@ -36,7 +36,7 @@ curl -fsSL "https://raw.githubusercontent.com/k3s-io/k3s/<new tag>/install.sh" |
 Merging the pin upgrades both nodes through SUC, so the merge comes before either verification.
 An agent newer than its server is unsupported. The `k3s-agent` Plan's `prepare` therefore runs in
 `agent` mode, which waits for the `k3s-server` Plan before it lets daniel-server upgrade.
-Merging does not park the deployer: see *After merging the pin* below.
+Merging parks nothing: see *After merging the pin* below.
 
 1. Pass the gates.
 2. Record pre-upgrade state.
@@ -58,7 +58,7 @@ uv run python scripts/deploy_tools/runbook_gates.py k3s-upgrade
 Exit 0 means all four passed. Exit 1–4 is the gate that failed, and the script prints what it
 found. Exit 69 means the cluster could not be asked: no readable kubeconfig, or a kubectl that
 serves the staging cluster (`scripts/lib/kubectl.py` refuses that rather than grading it). It
-also means a deployer marker exists and could not be read, which is not a hold.
+also means the `DEPLOY_HOLD` variable could not be read, which is not a hold.
 
 1. **No degraded Longhorn volume.** A degraded volume plus a node restart is how the last good
    replica goes. `detached`/`unknown` is normal for an idle volume; `degraded` (or `faulted`)
@@ -255,9 +255,9 @@ uv run python scripts/diagnostics/probe.py monitors
 
 ## After merging the pin
 
-A pin change no longer reaches the deployer's setup plane. The pin lives in the Flux-owned
+A pin change reaches no host's setup plane. The pin lives in the Flux-owned
 `system-upgrade` role (H6.1b), so a bump routes to the `system-upgrade` tag, which `land.sh`
-waits on through promotion, and the deployer writes no `manual_plane` line for `k3s`. The
+waits on through promotion. The
 `k3s-server` Plan selects daniel-box since H6.3c and the `k3s-agent` Plan selects daniel-server
 since H6.3d, so merging the pin upgrades both nodes through SUC and no hand apply is owed for
 either.

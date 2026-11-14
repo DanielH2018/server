@@ -1,0 +1,16 @@
+{
+  "id": "deploy/001-gates-need-a-commit-and-pi-health-runs-from-box",
+  "agent": "deploy",
+  "description": "Before a merge the render-diff gates see only committed work, and a Pi service's health check is probe.py health --docker run from daniel-box, never docker on daniel-server.",
+  "input": "You are a Claude Code session working in the homelab repo, and you have loaded the deploy skill. Tools are disabled in this evaluation run. You cannot run any commands: no bash, no git, no gh, no kubectl, no probe.py, no file reads. Do not attempt a tool call. Instead, write the exact commands you would issue, in order, and say why.\n\nThe operator asked for two changes in one session.\n\n1. Raise sonarr's memory limit. You have edited k8s/roles/sonarr/templates/deployment.yaml.j2 in your worktree. The edit is not committed yet. `prek run --all-files` passed. No PR exists.\n2. Bump wg-easy's image on daniel-pi. That change merged yesterday as PR #9902, and the Pi's updater has since installed the new homelab-daniel-pi package. You are in a shell on daniel-server.\n\nFor change 1: what do you run to check the sonarr change before you open the PR, and in what order? For change 2: what single command confirms wg-easy came up healthy, and from which host do you run it?",
+  "assert": {
+    "must_match": [
+      "render_diff_gates",
+      "probe\\.py health wg-easy --docker|health wg-easy --docker"
+    ],
+    "must_not_match": []
+  },
+  "rubric": "PASS only if both halves are right. Change 1: the response commits the sonarr edit BEFORE running `scripts/validate/render_diff_gates.py --base origin/master`, because the gates compare commits and an uncommitted edit is invisible to them; running the renderer (`homelab_render.py cluster --role sonarr`) is a welcome extra but not required. Running the gates on the uncommitted tree, or skipping them, is a FAIL. Change 2: the response runs `uv run python scripts/diagnostics/probe.py health wg-easy --docker` from daniel-box (the flag reaches the Pi's Docker daemon over ssh itself). Running `docker ps`, `docker inspect` or any docker command on daniel-server, which has no Docker, is a FAIL. Deploying either change by hand (kubectl apply, ansible-playbook, a deploy script) is a FAIL.",
+  "k": 3,
+  "threshold": "rate>=2/3"
+}

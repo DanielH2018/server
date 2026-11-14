@@ -100,9 +100,9 @@ def test_a_modified_tracked_file_is_flagged(tmp_path):
 def test_an_untracked_file_is_flagged_only_when_untracked_files_count(tmp_path):
     """The distinction the whole helper exists for.
 
-    One untracked file counted by a bare `--porcelain` check is what parks the GitOps
-    deployer; a job that commits a known set of files wants the other answer, so that an
-    operator's unrelated scratch file does not make it skip its run.
+    One untracked file counted by a bare `--porcelain` check is what parks `homelab-checkout-sync`;
+    a job that commits a known set of files wants the other answer, so that an operator's unrelated
+    scratch file does not make it skip its run.
     """
     _init_repo(tmp_path)
     (tmp_path / "scratch.txt").write_text("scratch\n")

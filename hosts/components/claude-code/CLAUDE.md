@@ -1,8 +1,7 @@
 # `hosts/components/claude-code` — Claude Code's host half (daniel-server and daniel-box)
 
-This component ships what the `claude_code` setup role installed. H7.55 deleted the emptied
-role. The role's `templates/`,
-`files/` and `defaults/main.yml` sit beside this file (#6773). The renderer loads
+This component ships Claude Code's host setup. Its `templates/`, `files/` and
+`defaults/main.yml` sit beside this file (#6773). The renderer loads
 `defaults/main.yml` beneath `component.yml`'s `defaults:`, and each host's `package.yml` reaches
 the component's templates and defaults with `component: claude-code`. This file holds the rules
 for what they render.
@@ -52,8 +51,9 @@ The operator's own Claude Code install is the dotfiles repo's (H7.38).
   lander. A block var would pin nothing here, because the host package renderer puts the
   inventory above a component's defaults. The pins file and `component.yml` are on the
   lander's approval list.
-- **Triage's caps and identity are pinned in `templates/claude-triage-pins.j2`**, for the
-  lander's reason. Every triage template imports it. The poller
+- **Triage's caps, users and paths are pinned in `templates/claude-triage-pins.j2`**, for the
+  lander's reason. Its controller, `claude-triage-ctl`, and its session user, `claude-triage`,
+  are declared in `hosts/daniel-box/package.yml`, because triage ships only there. Every triage template imports it. The poller
   is `homelab-claude-triage-poll`, and its page,
   `hosts/components/claude-code/units/homelab-claude-triage-poll-alert.service`, keeps the
   one-hour quiet window a poller failing every tick needs. `claude-triage@` and
@@ -87,9 +87,9 @@ The operator's own Claude Code install is the dotfiles repo's (H7.38).
   timer ships wherever the agent exists, so the way out runs, and a pin bump or a failed run
   converges on the next run. The Node and `@playwright/mcp` pins are in the component's
   `defaults:`, where Renovate and `asset_pins.py --refresh node` read them.
-- **Triage's token is a `LoadCredential=` file, `/etc/claude-triage/oauth-token`.** The runner
-  joins the whole file without whitespace, so a token pasted across `setup-token`'s line wrap
-  still reaches the session whole.
+- **Triage's token is a `LoadCredential=` file, `/etc/claude-triage/oauth-token`,** which only
+  the session unit loads. The session script joins the whole file without whitespace, so a token
+  pasted across `setup-token`'s line wrap still reaches the session whole.
 - **Not packaged:** the operator's own Claude Code install, which the dotfiles repo owns since
   H7.38.
   ENFORCED: `hosts/lib/tests/test_claude_code_component.py`,
@@ -229,8 +229,9 @@ What it does not restore:
 `docs/claude-agent-user.md` has the rest. `claude` lands a PR through
 `homelab-claude-land@<n>.service`.
 
-`claude-triage@<episode>.service` runs one unattended, diagnose-only session as `claude` and
-leaves a report (shipped off behind `claude_code_triage_enabled`, and in daniel-box's package).
+`claude-triage@<episode>.service` runs as `claude-triage-ctl` and leaves a report of one
+unattended, diagnose-only session that runs as `claude-triage` (shipped off behind `claude_code_triage_enabled`, and in daniel-box's package).
+It starts the session in `homelab-claude-triage-session.service` and waits for it.
 `homelab-claude-triage-poll.timer` starts one when an alert starts firing, and ships in `shadow`
 mode, which only logs. The templates, runner and poller are on the lander's approval list, and the caps and the poll mode are pinned in `templates/claude-triage-pins.j2`. `docs/claude-agent-user.md`,
 *Alert-triggered triage*, has the design.
@@ -309,10 +310,18 @@ server#8250 slice 2. `homelab-claude-guardrail-ack.timer` runs `files/claude_gua
 as root on both hosts, two minutes after each audit run.
 
 - **Scope:** every file under `claude_code_guardrail_audit_paths`, never the memory stores.
-  A change is explained, and stays quiet, when the file matches its package's md5, when it
+  A change is explained, and stays quiet, when the file matches the md5 recorded inside the
+  `.deb` an apt source serves for the installed version, when it
   matches what chezmoi renders for its owner from the dotfiles repo's `main`, or when a
-  settings.json change touches only `claude_code_guardrail_ack_quiet_settings_keys`. The
-  operator ruled on 2026-11-13 to post only the rest. A posted diff masks any line naming a
+  settings.json change touches only `claude_code_guardrail_ack_quiet_settings_keys`. A file
+  under a `copies` destination in `templates/claude-guardrail-ack.json.j2` is explained when
+  its content would be explained at its source: renovate-agent's settings copy against the
+  packaged file, and its hooks copy against the operator's hooks. The operator ruled on 2026-11-13 to post only the rest. The run fetches that `.deb` with
+  `apt-get download`, which checks it against the signed index. A package installed with
+  `dpkg -i` matches its own md5sums but not a published `.deb`, so its change posts with the
+  installed version (#8415). Reconcile's `applied.json`
+  cannot make that split: the postinst starts reconcile, which records the hand-installed
+  version as well. A posted diff masks any line naming a
   token, key, secret, password or webhook, and any long credential-shaped value.
 - **Mode:** `claude_code_guardrail_ack_enabled`. False drops the timer, its units and the
   config from the next package version, and keeps the state under
@@ -370,8 +379,9 @@ runs `files/claude_dotfiles_mirror.py` as root on both hosts.
 
 - **Scope:** `rsync --delete` of `claude_code_memory_sync_dir` (follows `claude_code_user`) to
   `claude_code_memory_sync_target_dir` (the operator's store)
-  on `claude_code_memory_sync_target`, one-way. A memory a daniel-server session writes is lost
-  at the next run, by the operator's decision (#3123); `docs/claude-memory-sync.md` has why.
+  on `claude_code_memory_sync_target`, one-way, by the operator's decision (#3123). The copy
+  strips every write bit from the target (`--chmod=a-w`), so a memory a daniel-server session
+  tries to write fails at once; `docs/claude-memory-sync.md` has why.
 - **Mode:** `claude_code_memory_sync_enabled`, true only in daniel-box's host_vars; false
   drops the timer and its units from the next package version.
 - **Abort valve:** the unit skips unless the source `MEMORY.md` is non-empty.
@@ -384,22 +394,25 @@ runs `files/claude_dotfiles_mirror.py` as root on both hosts.
 - **Scope:** one episode per run. Slice 1 diagnoses only: Edit, Write, a landing and a push
   are denied. The later slices widen this to a fix landed through `homelab-claude-land@` and a
   restart through an allowlisted broker, under the operator's 2026-10-15 rulings.
+- **Identity:** the controller, `claude-triage-ctl`, runs the poller and the runner and alone may
+  start the units. The session user, `claude-triage`, holds no GitHub token and no start right,
+  and reads the clone and its toolchain read-only. Neither is `claude` (dotfiles#967's I1).
 - **Mode:** `claude_code_triage_enabled`, false by default; false stops the poller, then removes
   the rule, the units, the code and the config, and keeps the records.
   `claude_code_triage_poll_mode` is `off`, `shadow` or `armed`, pinned at `shadow` in
   `templates/claude-triage-pins.j2`, so arming the trigger needs the operator's approval.
 - **Abort valves:** `$10`, 60 turns and a 30-minute wall clock per run, and six runs a UTC day,
   all pinned in `templates/claude-triage-pins.j2`, plus a lock that holds runs to one at a time. The runner
-  enforces the daily cap, because polkit lets `claude` start a run without the poller. The
+  enforces the daily cap, because polkit lets the controller start a run without the poller. The
   poller opens an episode only on a fall that holds for two polls and that the pinned route
   table (`poll_routes`) names. It logs an unrouted fall as skipped, makes one storm episode of
   more than three falls of one profile at once, and opens nothing while `DeployHoldActive` fires or the weekly
   reboot's mute is open. It queues episodes and starts the next only when the lock is free,
   and never restarts one whose run crashed.
-- **Evidence:** `/var/lib/claude/triage/runs/<episode>.json`, the report under
-  `/a/<host>-claude/`, and a Discord page for every run; a crash pages separately, and a
+- **Evidence:** `/var/lib/claude-triage-ctl/state/runs/<episode>.json`, the report under
+  `/a/<host>-claude-triage/`, and a Discord page for every run; a crash pages separately, and a
   poller failure pages at most once an hour. In shadow
-  mode, `/var/lib/claude/triage/shadow.jsonl` and `journalctl -u homelab-claude-triage-poll` list each
+  mode, `/var/lib/claude-triage-ctl/state/shadow.jsonl` and `journalctl -u homelab-claude-triage-poll` list each
   run the poller would have started. `claude-triage-poll.prom` pages a poller that stopped.
 - **Next-run review:** before widening the scope or a cap, read the last week's records for
   what the runs diagnosed and what they cost.
@@ -447,7 +460,7 @@ server batch runs as `ubuntu` on `worktree-fanout-<batch>`.
   runner cap). A PR is started once: a log in `~/.local/state/fanout-server-lander/logs/`, or
   a live `land.py --pr <n>` process anywhere, skips it. `land.sh` holds no per-PR lock, so
   this check is the only guard against a second landing. The unit sets
-  `LAND_REQUIRE_BRANCH_PREFIX`, which makes `land.sh` refuse while the deployer holds a SHA and
+  `LAND_REQUIRE_BRANCH_PREFIX`, which makes `land.sh`
   pin the merge to the head it checked, and `LAND_REQUIRE_AUTHOR`.
 - **Evidence:** `journalctl -u homelab-claude-fanout-server-lander` has one line per candidate PR,
   `eligible` or `ineligible` with the reason. Each landing's own `VERDICT:` is in its

@@ -8,7 +8,7 @@ from _role_census import role_dirs
 
 
 def test_a_retired_roles_debris_shell_is_not_a_role(tmp_path):
-    """The deployer's fast-forward removes a retired role's tracked files and the gitignored
+    """checkout-sync's fast-forward removes a retired role's tracked files and the gitignored
     `__pycache__/` keeps its directory, so a bare walk reads a role that no longer exists
     in git."""
     (tmp_path / "widget" / "templates").mkdir(parents=True)

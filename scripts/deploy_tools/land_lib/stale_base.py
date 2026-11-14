@@ -12,6 +12,9 @@ and the merge waits for CI on the updated head instead. A PR whose files master 
 merges as it stands (#6565). A landing updates the branch at most once. It never updates the branch of a head the landing policy admitted on
 an approval, which the update would void: a stale approved head is refused with a rebase
 remedy instead.
+
+A landing that holds the landing turn makes the same update earlier, for a head that has had
+no CI run, so that its one run tests the master of the turn (`merge._start_run`).
 """
 
 import subprocess
@@ -147,7 +150,7 @@ def update_branch(ln: Landing, head: str, moved: list[str]) -> None:
     )
     say(
         f"{BRANCH} changed {len(moved)} path(s) since PR #{ln.opts.pr}'s base ({shown}); "
-        f"updating its branch so CI re-tests it against {BRANCH} before the merge"
+        f"updating its branch so CI tests it against {BRANCH} before the merge"
     )
     try:
         ln.tools.gh(
