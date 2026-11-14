@@ -7,11 +7,9 @@ and `--prune` removes it. One holding content git never stored is kept and repor
 such file named. Each test runs the script's `main` against a scratch repo, so the
 object-store check runs against real git.
 
-The in-use check reads the real /proc, so a test's own `sleep` holder counts. The one input
-that depends on the rest of the host is switched off: an unreadable process of another uid in
-this uid's login slice, which `claude_worktree.holds_tree` matches against every tree. One
-`sudo -u claude` running anywhere in the slice would otherwise keep every orphan (#8730). The
-root helper never answers for a scratch repo, because it reports only under the holder root.
+The in-use check reads the real /proc, so a test's own `sleep` holder counts. The slice rule
+is switched off, because it reads the rest of the host; see `lib.worktree_testing`. The root
+helper never answers for a scratch repo, because it reports only under the holder root.
 
 Run: uv run pytest scripts/dev/tests/test_prune_worktrees_orphan_dirs.py
 """
@@ -20,9 +18,9 @@ import os
 import subprocess
 from pathlib import Path
 
-import claude_worktree
 import prune_worktrees
 from lib.git_testing import commit, git, init_repo, scrub_process_git_env
+from lib.worktree_testing import ignore_foreign_slice_holds
 
 # The scratch repo commits this content as `a.txt`, so a copy of it is already stored.
 TRACKED_CONTENT = "one\n"
@@ -32,9 +30,7 @@ def _repo(tmp_path: Path, monkeypatch) -> Path:
     scrub_process_git_env(monkeypatch)
     monkeypatch.setenv("GIT_CONFIG_GLOBAL", os.devnull)
     monkeypatch.setenv("GIT_CONFIG_SYSTEM", os.devnull)
-    monkeypatch.setattr(
-        claude_worktree, "_foreign_in_my_slice", lambda entry, uid: False
-    )
+    ignore_foreign_slice_holds(monkeypatch)
     repo = tmp_path / "repo"
     init_repo(repo)
     commit(repo, "init", **{"a.txt": TRACKED_CONTENT})
