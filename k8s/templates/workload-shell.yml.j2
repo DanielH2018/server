@@ -11,7 +11,7 @@
   `spec:`; `pod_shell` at 6 spaces, directly under `spec.template.spec:`. A Job or CronJob pod
   spec sits elsewhere and is NOT a caller.
 
-  ansible/tests/k8s/test_workload_shell_uses_the_macros.py is the call-site guard: every
+  tests/k8s/test_workload_shell_uses_the_macros.py is the call-site guard: every
   Deployment template calls both, every DaemonSet template calls `pod_shell`, and none writes
   an owned field out by hand. A macro cannot force its own call, so the rendered-fleet census
   in test_pod_template_hygiene.py, test_deploy_strategy.py and the
@@ -51,7 +51,7 @@
                               The collision needs only that a Service name match the app's
                               env-var prefix, which is the normal case here.
     priority_class            REQUIRED, one of the homelab tiers in
-                              roles/k8s/cluster-base/templates/priorityclass.yaml.j2 (or a k8s
+                              k8s/roles/cluster-base/templates/priorityclass.yaml.j2 (or a k8s
                               system class the hygiene test's `_SYSTEM_TIER` allowlists). No
                               default on purpose: five values are in use and none dominates,
                               and an omitted class is priority 0 — BELOW homelab-best-effort,

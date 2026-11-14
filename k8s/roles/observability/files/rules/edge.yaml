@@ -11,7 +11,7 @@
 # rule sets `service: traefik` as a literal. A rule that groups by Traefik's backend copies it to
 # `backend` first with label_replace, because the literal replaces the series label of the same
 # name. Each threshold carries the value of the monitor-bridge env key the deleted row read, and
-# ansible/tests/services/test_edge_rule_literals.py pins it (M1 convention 1).
+# tests/services/test_edge_rule_literals.py pins it (M1 convention 1).
 #
 # The volume floor (TRAEFIK_MIN_RPS, 0.05) is an `and` clause in each ratio rule: a single error
 # on a near-idle route is not a 100% error ratio.

@@ -14,7 +14,7 @@
   `{{ k8s_namespace }}-crowdsec@kubernetescrd`, so this router is rejected by exactly the
   failure the probe exists to catch, and the probe 404s instead of 200ing. Moving it to
   another entrypoint would leave the probe passing while detecting nothing — ENFORCED by
-  ansible/tests/services/test_traefik_edge_selfcheck.py against the RENDERED manifests.
+  tests/services/test_traefik_edge_selfcheck.py against the RENDERED manifests.
 
   `ping@internal` is Traefik's own ping handler, reached by name with `kind: TraefikService`
   and no port — the same shape (and the same trap) as the dashboard's `api@internal`; give it

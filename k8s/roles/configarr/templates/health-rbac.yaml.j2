@@ -5,7 +5,7 @@
     get jobs -l app=configarr -o json   list on jobs.batch
     logs job/<name>                     get on jobs.batch, list on pods, get on pods/log
 
-  ansible/tests/k8s/test_rbac_against_script.py runs the reader's main with a recording
+  tests/k8s/test_rbac_against_script.py runs the reader's main with a recording
   runner and holds this Role to the calls it records.
 #}
 ---

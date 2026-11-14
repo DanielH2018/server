@@ -19,7 +19,7 @@ the pod's `HOSTNAME`, so two runs never collide. Exit 0 when the link holds, 1 w
 naming why.
 
 Run: python3 media_volume_verify.py (in the Job; it takes no arguments)
-     uv run pytest ansible/roles/k8s/media-volume/tests/test_media_volume_verify.py
+     uv run pytest k8s/roles/media-volume/tests/test_media_volume_verify.py
 """
 
 import argparse

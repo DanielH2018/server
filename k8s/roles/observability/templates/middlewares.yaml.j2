@@ -6,7 +6,7 @@
 # authelia one, which is the control standing between the LAN and every protected service.
 #
 # Duplication has a cost: these can drift from the homelab originals
-# (roles/k8s/traefik/templates/dynamic.yaml.j2 and roles/k8s/authelia/templates/
+# (k8s/roles/traefik/templates/dynamic.yaml.j2 and k8s/roles/authelia/templates/
 # forwardauth-middleware.yaml.j2). Two copies is worth it; thirty would not be, and if the
 # telemetry stack ever grows more routed services this should become a shared template.
 apiVersion: traefik.io/v1alpha1
@@ -38,9 +38,9 @@ spec:
         depth: 1
 ---
 # The authelia unit: strip, forwardAuth, then the `authelia` chain the routes name. A copy of
-# roles/k8s/authelia/templates/forwardauth-middleware.yaml.j2, which carries the reasoning
+# k8s/roles/authelia/templates/forwardauth-middleware.yaml.j2, which carries the reasoning
 # (why these three headers and never X-Forwarded-For or -Proto). Keep it in lockstep;
-# ansible/tests/k8s/test_forwardauth_rebuilds_request_target.py checks every copy.
+# tests/k8s/test_forwardauth_rebuilds_request_target.py checks every copy.
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
@@ -106,5 +106,5 @@ spec:
 ---
 # Same per-namespace resolution for the public-Host option: grafana's public name renders in
 # this namespace, so the `cloudflare-origin-pull` its route names must exist here, with the CA
-# Secret it verifies against (origin-pull-secret.yaml.j2). See ansible/templates/origin-pull.yml.j2.
+# Secret it verifies against (origin-pull-secret.yaml.j2). See k8s/templates/origin-pull.yml.j2.
 {{ origin_pull_tlsoption(k8s_observability_namespace) }}

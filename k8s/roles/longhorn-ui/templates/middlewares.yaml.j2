@@ -4,9 +4,9 @@
 # beside the Service it targets, and Traefik's `allowCrossNamespace` stays off — so the
 # objects a route names have to exist here rather than in {{ k8s_namespace }}.
 #
-# Same trade-off the telemetry stack made (roles/k8s/observability/templates/middlewares.yaml.j2):
-# these can drift from the originals in roles/k8s/traefik/templates/dynamic.yaml.j2 and
-# roles/k8s/authelia/templates/forwardauth-middleware.yaml.j2. Three namespaces carrying a copy
+# Same trade-off the telemetry stack made (k8s/roles/observability/templates/middlewares.yaml.j2):
+# these can drift from the originals in k8s/roles/traefik/templates/dynamic.yaml.j2 and
+# k8s/roles/authelia/templates/forwardauth-middleware.yaml.j2. Three namespaces carrying a copy
 # is the point at which a shared template starts to earn itself; the next one should build it.
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
@@ -20,9 +20,9 @@ spec:
     period: 1m
 ---
 # The authelia unit: strip, forwardAuth, then the `authelia` chain the route names. A copy of
-# roles/k8s/authelia/templates/forwardauth-middleware.yaml.j2, which carries the reasoning
+# k8s/roles/authelia/templates/forwardauth-middleware.yaml.j2, which carries the reasoning
 # (why these three headers and never X-Forwarded-For or -Proto). Keep it in lockstep;
-# ansible/tests/k8s/test_forwardauth_rebuilds_request_target.py checks every copy.
+# tests/k8s/test_forwardauth_rebuilds_request_target.py checks every copy.
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:

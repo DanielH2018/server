@@ -4,7 +4,7 @@
 # its alerts", and docs/flux-deploy-plane.md says what each alert means for the operator.
 #
 # The five homelab_deploy_* gauges come from the deploy-pipeline scrape job, which monitor-bridge
-# serves from ansible/roles/k8s/monitor-bridge/files/deploy_pipeline.py and refreshes once per
+# serves from k8s/roles/monitor-bridge/files/deploy_pipeline.py and refreshes once per
 # 300s cycle. Every rule carries service="deploy-pipeline", the one literal C7 admits outside the
 # deploy-tag-or-host rule (D2 Open question 12): it names no deploy tag, so no `probe.py health`
 # gate reads these alerts and a standing hold cannot fail the flux role's own gate.

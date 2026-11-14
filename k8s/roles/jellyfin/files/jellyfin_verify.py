@@ -25,7 +25,7 @@ the Job's environment: `VERIFY_DEVICE`, the render node, and `VERIFY_DATA`, the 
 Exit 0 when both checks pass, 1 when either fails, naming it.
 
 Run: python3 jellyfin_verify.py (in the Job; it takes no arguments)
-     uv run pytest ansible/roles/k8s/jellyfin/tests/test_jellyfin_verify.py
+     uv run pytest k8s/roles/jellyfin/tests/test_jellyfin_verify.py
 """
 
 import argparse

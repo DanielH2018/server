@@ -90,7 +90,7 @@ data:
             # router and only then does the lookup fail, so an excluded router would log
             # nothing at all. Dropping crowdsec here would remove real enforcement to silence
             # a startup line or two. ENFORCED by
-            # ansible/tests/services/test_traefik_http_entrypoint_crowdsec.py.
+            # tests/services/test_traefik_http_entrypoint_crowdsec.py.
             - {{ k8s_namespace }}-crowdsec@kubernetescrd
 {% endif %}
       https:
@@ -117,7 +117,7 @@ data:
             # sees `client, edge`. It is the in-repo plugin under files/cloudflare-realip/,
             # loaded from a ConfigMap (experimental.localPlugins below), and gated with the
             # bouncer because the startupProbe that catches a failed plugin load is too.
-            # ENFORCED by ansible/tests/k8s/test_traefik_cloudflare_realip.py.
+            # ENFORCED by tests/k8s/test_traefik_cloudflare_realip.py.
             - {{ k8s_namespace }}-cloudflare-realip@kubernetescrd
             # crowdsec next: a banned IP is rejected before any headers work is done.
             - {{ k8s_namespace }}-crowdsec@kubernetescrd

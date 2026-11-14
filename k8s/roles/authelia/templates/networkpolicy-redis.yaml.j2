@@ -4,7 +4,7 @@
 # (config-secret.yaml.j2), and nothing else does.
 #
 # THIS POLICY SHIPS WITH THE ROLE THAT NEEDS IT, and that is the whole point of the file's
-# location. It lived in roles/k8s/netpol-baseline/ until 2026-09-10, one role away from the
+# location. It lived in k8s/roles/netpol-baseline/ until 2026-09-10, one role away from the
 # Deployment whose startup depends on it. `--tags authelia` therefore staged a portal that
 # could not reach its session store, and Authelia refuses to start without one: it exits on
 # `error initializing session backend: redis connection error: ... i/o timeout` and
@@ -14,7 +14,7 @@
 # edge and no ordering constraint to violate.
 #
 # 6379 is the containerPort AND the Service port — verified 2026-09-10, they match, and
-# ansible/tests/services/test_authelia_redis_sessions.py keeps them matching. That test also
+# tests/services/test_authelia_redis_sessions.py keeps them matching. That test also
 # pins this file's co-location, so moving it back fails the suite rather than the pod.
 #
 # The crowdsec agent sidecar shares the authelia pod, so it arrives here carrying `app:

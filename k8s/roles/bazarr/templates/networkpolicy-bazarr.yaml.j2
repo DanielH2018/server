@@ -10,7 +10,7 @@
 # pod answered fine on its own IP. A check that cannot reach its subject reports the fence, not
 # the subject.
 #
-# Same shape and same reasoning as roles/k8s/prowlarr/templates/networkpolicy-prowlarr.yaml.j2.
+# Same shape and same reasoning as k8s/roles/prowlarr/templates/networkpolicy-prowlarr.yaml.j2.
 # PORT-SCOPED: the grant is this one port, not the pod.
 #
 # traefik is listed deliberately and is NOT redundant to remove. While bazarr carries the

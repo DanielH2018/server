@@ -18,7 +18,7 @@ Inputs come from the Job's environment: `NODE_NAME`, `K3S_VERSION`, `K3S_SHA256`
 `K3S_BINARY`. Exit 0 when the binary matches or the node is pending, 1 otherwise.
 
 Run: python3 system_upgrade_verify.py (in the Job; it takes no arguments)
-     uv run pytest ansible/roles/k8s/system-upgrade/tests/test_system_upgrade_verify.py
+     uv run pytest k8s/roles/system-upgrade/tests/test_system_upgrade_verify.py
 """
 
 import argparse

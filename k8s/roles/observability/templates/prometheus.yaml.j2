@@ -230,7 +230,7 @@ data:
       # item on monitor-bridge's entry, because the deploy tags derive a change to that field
       # onto every role that reads it. The port is monitor-bridge's
       # monitor_bridge_deploy_pipeline_port, which this role cannot read, and
-      # ansible/tests/services/test_deploy_pipeline_scrape.py holds the two equal.
+      # tests/services/test_deploy_pipeline_scrape.py holds the two equal.
       # `ScrapeTargetDown` (service monitor-bridge, files/rules/scrape-targets.yaml) pages a
       # failed scrape.
       - job_name: deploy-pipeline
@@ -245,7 +245,7 @@ data:
       # config fixes, as scrape_jobs.py explains. The item's comment there says what the job
       # feeds. A job needing anything more stays hand-written below, and reads its target's
       # port from the entry with `entry_port` (#3816).
-      # ansible/filter_plugins/scrape_jobs.py documents the keys.
+      # scripts/renderer/template_filters/scrape_jobs.py documents the keys.
 {% for job in services | scrape_jobs(k8s_namespace) %}
 {% if job.replicas_var is not defined or lookup('vars', job.replicas_var) | int > 0 %}
       - job_name: {{ job.job }}
@@ -400,7 +400,7 @@ data:
             target_label: instance
           - target_label: __address__
             replacement: 'blackbox-exporter.{{ k8s_namespace }}.svc:{{ services | entry_port('blackbox-exporter') }}'
-      # GPU utilization on each node, through gpu-exporter (roles/k8s/gpu-exporter). The
+      # GPU utilization on each node, through gpu-exporter (k8s/roles/gpu-exporter). The
       # dri-device-plugin advertises the render node as `devic.es/dri` and jellyfin and tdarr
       # both request it, but nothing turned the resulting load into a series — a slow transcode
       # and a contended one were indistinguishable (#1446).
@@ -639,7 +639,7 @@ data:
             target_label: node
       # One job per CrowdSec agent SIDECAR, from crowdsec_k8s_sidecar_agents (group_vars) — the
       # same map the sidecars' AGENT_USERNAME and the LAPI machine registration read
-      # (ansible/templates/crowdsec-agent.yml.j2). traefik's agent parses the edge access log,
+      # (k8s/templates/crowdsec-agent.yml.j2). traefik's agent parses the edge access log,
       # the busiest log source in the fleet (#1694); authelia's parses the portal's auth log for
       # the failed-login scenarios (#1706). Before each had a job its acquisition and parsing
       # counters existed nowhere, so a sidecar that stops parsing (a bad parser, a log it lost)
@@ -688,7 +688,7 @@ data:
       # NetworkPolicies that admit only its own components, so this target read `up == 0` with a
       # connection refused and nothing noticed, because the disclosure above reads the same
       # whether the scrape is unwired or fenced off. Reopened by
-      # roles/k8s/longhorn/templates/networkpolicy-metrics.yaml.j2.
+      # k8s/roles/longhorn/templates/networkpolicy-metrics.yaml.j2.
       #
       # FIXED (2026-08-17): this used to be a static_configs target against the
       # longhorn-backend ClusterIP. Prometheus held one keep-alive connection to whichever of
@@ -1130,7 +1130,7 @@ metadata:
   labels:
     # Headlamp's Prometheus plugin finds its backend by this label (it checks
     # `headlamp-prometheus=true` on a Service before the generic app.kubernetes.io names) and
-    # queries it via the API server's service proxy — roles/k8s/headlamp/templates/rbac.yaml.j2
+    # queries it via the API server's service proxy — k8s/roles/headlamp/templates/rbac.yaml.j2
     # holds the matching grant. Dropping the label leaves the plugin loaded and every chart
     # empty, with no error.
     headlamp-prometheus: "true"
