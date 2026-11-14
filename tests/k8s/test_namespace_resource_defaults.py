@@ -47,8 +47,11 @@ def _all_vars() -> dict:
 
 _RESOURCE_KEYS = ("requests.cpu", "requests.memory", "limits.cpu", "limits.memory")
 _REQUEST_ONLY = frozenset({"requests.cpu", "limits.cpu", "limits.memory"})
-_LONGHORN_UNSIZED = (frozenset(_RESOURCE_KEYS), "upstream's default, unsized (#8543)")
-_METALLB_UNSIZED = (frozenset(_RESOURCE_KEYS), "upstream's default, unsized (#8542)")
+_METALLB_MEMORY_REQUEST_ONLY = (
+    _REQUEST_ONLY,
+    "a memory request and no limit, from the role's patch (#8326); "
+    "tests/k8s/test_metallb_vendored_manifest.py holds it",
+)
 # A vendored container that may go without some keys: its id -> (the keys it lacks, why).
 # The set is exact. A key that gets set, or a container that disappears, fails the guard as
 # a stale exemption, so an entry cannot outlive its fix.
@@ -63,12 +66,8 @@ _VENDORED_EXEMPT = {
         "a memory request and no limit, the manager's rule (#5968); "
         "tests/longhorn/test_longhorn_control_plane_resources.py holds it",
     ),
-    "longhorn DaemonSet/longhorn-manager containers/pre-pull-share-manager-image": _LONGHORN_UNSIZED,
-    "longhorn Deployment/longhorn-driver-deployer initContainers/wait-longhorn-manager": _LONGHORN_UNSIZED,
-    "longhorn Deployment/longhorn-driver-deployer containers/longhorn-driver-deployer": _LONGHORN_UNSIZED,
-    "longhorn Deployment/longhorn-ui containers/longhorn-ui": _LONGHORN_UNSIZED,
-    "metallb Deployment/controller containers/controller": _METALLB_UNSIZED,
-    "metallb DaemonSet/speaker containers/speaker": _METALLB_UNSIZED,
+    "metallb Deployment/controller containers/controller": _METALLB_MEMORY_REQUEST_ONLY,
+    "metallb DaemonSet/speaker containers/speaker": _METALLB_MEMORY_REQUEST_ONLY,
 }
 
 
