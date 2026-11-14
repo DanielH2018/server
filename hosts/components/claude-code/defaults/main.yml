@@ -667,8 +667,9 @@ claude_code_guardrail_audit_memory_dirs:
 # ── The guardrail acknowledgement (server#8250 slice 2) ──────────────────────────────────
 # homelab-claude-guardrail-ack.timer runs files/claude_guardrail_ack.py as root. Each run posts
 # to Discord every change to a file under claude_code_guardrail_audit_paths that nothing merged
-# explains: a package file that no longer matches its package's md5, or a file under a user's
-# home that does not match what chezmoi renders from the dotfiles repo's main. Memory stores are
+# explains: a package file that does not match the md5 inside the .deb an apt source serves
+# for its installed version (so a `dpkg -i` of a branch build posts), or a file under a
+# user's home that does not match what chezmoi renders from the dotfiles repo's main. Memory stores are
 # audited, never posted. The operator ruled on 2026-11-13 to post unexplained changes only.
 # False drops the timer and its units from the next package version, and keeps the state.
 claude_code_guardrail_ack_enabled: true
