@@ -43,9 +43,9 @@ landing's log carries `probe.py health` output and is grepped for `^VERDICT:`.
 accepts equal the registry's names, and that every `probe_lib` module with a `run_*`/`main` entry point is
 registered.
 
-### Measurements and invariant checks: `b2-spend`, `vip-placement`, `readonly-rbac`, `shed-set`, `takeover`
+### Measurements and invariant checks: `b2-spend`, `usage`, `vip-placement`, `readonly-rbac`, `shed-set`, `takeover`
 
-Five subcommands turn a fact an operator once had to remember into one they can re-derive. Each
+Six subcommands turn a fact an operator once had to remember into one they can re-derive. Each
 has its own test under `scripts/diagnostics/tests/`.
 
 - **`b2-spend [--since 24h]`** sums the Class B spend per volume out of Longhorn's own "changed
@@ -55,6 +55,18 @@ has its own test under `scripts/diagnostics/tests/`.
   B2-target volumes to the "Class B measured" figure; the R2-target ones print as their own
   excluded subtotal, because R2's caps are monthly and vast. A volume whose target does not
   resolve counts against B2 — a failed join must not read as a quiet day during a cap incident.
+- **`usage [--all]`** prints three tables from Prometheus and the live IngressRoutes
+  (`probe_lib/usage.py`). The first counts each service's requests over the whole retention
+  window, which it measures and prints, about 22 days. It sums the service's LAN, public and API IngressRoutes, and shows
+  the `-monitoring` routes in their own column, outside the total. A service whose total is
+  0 can still have a busy monitoring route, so read both columns before calling it unused.
+  Traefik creates a route's series only on its first request, so the verb lists the live
+  IngressRoutes through `kubectl` and prints a service no client has requested as a 0 row.
+  The second compares each Running container's memory request and limit with its 7-day p95
+  working set, and flags a p95 above 80% of the limit or more than 25% from the request.
+  The third lists each PVC's fill and its days to full at the 7-day growth rate. Without
+  `--all`, the last two list only the flagged rows. It is a report, not a verdict: exit 0,
+  or 75 when a query or the IngressRoute read fails.
 - **`vip-placement`** reads the Services, EndpointSlices, L2Advertisements and Nodes, and exits
   1 naming any `externalTrafficPolicy: Local` MetalLB VIP with no Ready endpoint on the node
   that announces it (`probe_lib/vip_placement.py`). Host probes stay green through that
