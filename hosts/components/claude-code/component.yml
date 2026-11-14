@@ -214,6 +214,11 @@ files:
   - {src: files/claude_triage_run.py, dst: /opt/claude-triage/claude_triage_run.py, when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}
   - {src: files/claude_triage_poll.py, dst: /opt/claude-triage/claude_triage_poll.py, when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}
   - {src: files/claude_triage_session.py, dst: /opt/claude-triage/claude_triage_session.py, when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}
+  - {src: files/claude-triage-settings.json, dst: /opt/claude-triage/claude-settings.json, when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}
+  # No unit of its own: reconcile starts an enabled unit and waits for it, and a cold first run
+  # (Claude Code, a full clone, a full uv sync) could outlast that wait and hold the host. The
+  # runner runs it before each episode instead.
+  - {src: templates/claude-triage-setup.sh.j2, dst: /usr/lib/homelab/claude-triage-setup, mode: "0755", when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}
   - {lib: host_lib.py, dst: /opt/claude-triage/host_lib.py, when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}
   - {src: templates/claude-triage-prompt.txt.j2, dst: /opt/claude-triage/prompt.txt, when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}
   - {src: templates/claude-triage-config.env.j2, dst: /etc/claude-triage/config.env, when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}

@@ -191,8 +191,6 @@ def render_report(record: dict, updated: str) -> str:
         for item in evidence
         if isinstance(item, dict)
     )
-    session = record.get("session_id") or ""
-    resume = f"cd ~/server && claude --resume {session}" if session else "no session id"
     monitor = episode.get("monitor", record["episode_id"])
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
@@ -225,8 +223,8 @@ table{{border-collapse:collapse;width:100%}} th,td{{border:1px solid var(--s1);p
 <h2>Proposed fix</h2><p>{_e(found.get("proposed_fix", ""))}</p>
 <h2>Follow-up</h2><p>{_e(found.get("follow_up", ""))}</p>
 <h2>The episode (untrusted input)</h2><pre>{_e(json.dumps(episode, indent=2, sort_keys=True))}</pre>
-<h2>Continue the session</h2><p>As <code>claude</code>: <code>{_e(resume)}</code></p>
-<p class="muted">Episode {_e(record["episode_id"])} · started {_e(record.get("started"))} ·
+<p class="muted">Episode {_e(record["episode_id"])} · session {_e(record.get("session_id") or "none")} ·
+ permission denials {_e(record.get("denials"))} · started {_e(record.get("started"))} ·
  finished {_e(record.get("finished"))} · stop: {_e(record.get("subtype"))}</p>
 </main></body></html>
 """
@@ -266,7 +264,7 @@ def main(
         )
         return 2
     cfg = parse_env_file(config_path)
-    state_dir = cfg.get("STATE_DIR", "/var/lib/claude/triage")
+    state_dir = cfg["STATE_DIR"]
     report_dir = cfg["REPORT_DIR"]
     inbox = os.path.join(state_dir, "inbox", f"{episode_id}.json")
     with open(inbox, encoding="utf-8") as f:
@@ -312,6 +310,9 @@ def main(
         "subtype": "timeout" if timed_out else result.get("subtype"),
         "cost_usd": result.get("total_cost_usd"),
         "num_turns": result.get("num_turns"),
+        # A count, never the tools: a guard that cannot start denies every Bash call, and the run
+        # then reads like an ordinary inconclusive one.
+        "denials": len(result.get("permission_denials") or []),
         "duration_s": round(time.monotonic() - t0),
         "started": started,
         "finished": finished,

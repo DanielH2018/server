@@ -68,6 +68,9 @@ users:
   # start its units. Declared here, not in the claude-code component, because triage ships only
   # on daniel-box. Its name and home are pinned in claude-triage-pins.j2.
   - {name: claude-triage-ctl, uid: 906, home: /var/lib/claude-triage-ctl, shell: /usr/sbin/nologin, comment: Triage controller}
+  # Triage's session user: runs the headless session the controller starts, with no GitHub token
+  # and no start right.
+  - {name: claude-triage, uid: 907, home: /var/lib/claude-triage, shell: /usr/sbin/nologin, comment: Triage session}
 components:
   - reconcile
   - secrets-unit
