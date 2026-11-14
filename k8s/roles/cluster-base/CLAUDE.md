@@ -1,7 +1,7 @@
 # cluster-base — the PriorityClasses and the read-only cluster identity
 
-The four workload-tier PriorityClasses, and the `homelab-readonly` ServiceAccount with its
-ClusterRole, bindings and token Secret. Two objects here are needed before Flux can run. Flux's
+The four workload-tier PriorityClasses, the `homelab-readonly` ServiceAccount with its
+ClusterRole, bindings and token Secret, and the scale-only `homelab-games` identity. Two objects here are needed before Flux can run. Flux's
 own controllers name `homelab-critical`, and the read-only kubeconfig carries the token this
 Secret holds.
 
@@ -30,6 +30,14 @@ Secret holds.
   `cluster_base_readonly_sa_namespace`.
   `tests/k8s/test_cluster_base_mirrors_the_k3s_identity.py::test_each_mirrored_pair_is_equal`
   holds each pair equal, so a rename changes both sides in one PR.
+- **`homelab-games` is the one identity here that writes.** `templates/games-panel-rbac.yaml.j2`
+  renders it in the workload namespace with a Role that grants `deployments/scale` on the
+  Deployments `game_servers` lists, and nothing else. deploy.local's Games panel uses it to start
+  and stop the game servers, under ADR-0033. The
+  `games-identity-only-scales-the-game-deployments` row in `tests/k8s/_rbac_property_rows.py`
+  holds the bound on every rendered Role and binding that names it. Because the tag never
+  prunes, revoking the identity means deleting the ServiceAccount and its token Secret by hand
+  (**operator-only**).
 - **`k3s_readonly_crd_api_groups` lives in this role's defaults.** It keeps its `k3s_` name
   because the key's readers are in this role alone. `headlamp_k8s_crd_api_groups` mirrors it.
 - **`templates/skip-probe-configmap.yaml.j2` is inert on purpose.** It proves that

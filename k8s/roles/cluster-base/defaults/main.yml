@@ -13,6 +13,11 @@
 cluster_base_readonly_sa_name: homelab-readonly
 cluster_base_readonly_sa_namespace: kube-system
 
+# The Games panel's scale-only identity (templates/games-panel-rbac.yaml.j2, ADR-0033). It lives in
+# the workload namespace, not kube-system, so no `system:serviceaccounts:kube-system` group
+# binding can widen it.
+cluster_base_games_sa_name: homelab-games
+
 # CRD API groups the read-only role can read. The built-in `view` ClusterRole covers no CRD
 # group except Flux's six: the vendored ClusterRole `flux-view-flux-system` aggregates read on
 # them into `view`, and tests/k8s/test_aggregated_clusterroles.py lists and pins that
@@ -58,4 +63,4 @@ manifests_rollout: ''
 # is filled in by the cluster and nothing in the file is confidential, but the apply's
 # verdict skips `secret/` lines and the `secret` trigger renders only this list
 # (tests/deploy/test_manifests_apply_verdict.py), so the Secret has to be listed.
-manifests_secret_files: ['readonly-rbac.yaml']
+manifests_secret_files: ['readonly-rbac.yaml', 'games-panel-rbac.yaml']

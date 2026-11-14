@@ -4,7 +4,7 @@
 file under the test-module length cap; the rules for what makes a row are in its docstring.
 """
 
-from lib.repo_paths import K8S_ROLES
+from lib.repo_paths import ALL_VARS, K8S_ROLES
 
 from _helpers import load_yaml
 from _property_table import Property
@@ -78,6 +78,75 @@ def binding_doc(
 
 def _identity_subject() -> dict:
     return {"kind": "ServiceAccount", "name": READONLY_SA, "namespace": READONLY_NS}
+
+
+_ALL_VARS = load_yaml(ALL_VARS)
+GAMES_SA = _DEFAULTS["cluster_base_games_sa_name"]
+GAMES_NS = _ALL_VARS["k8s_namespace"]
+GAME_DEPLOYMENTS = frozenset(
+    d for game in _ALL_VARS["game_servers"] for d in game["deployments"]
+)
+
+
+def _names_the_games_identity(binding: dict) -> bool:
+    namespace = binding["metadata"].get("namespace")
+    return any(
+        s.get("kind") == "ServiceAccount"
+        and s.get("name") == GAMES_SA
+        and (s.get("namespace") or namespace) == GAMES_NS
+        for s in binding.get("subjects") or []
+    )
+
+
+def _games_identity_grants(role: str, tpl: str, doc: dict):
+    kind, meta = doc.get("kind"), doc.get("metadata", {})
+    if kind in BINDING_KINDS and _names_the_games_identity(doc):
+        yield f"{role}:{kind}/{meta['name']}", doc
+    elif (
+        kind == "Role"
+        and meta.get("name") == GAMES_SA
+        and meta.get("namespace") == GAMES_NS
+    ):
+        yield f"{role}:Role/{meta['name']}", doc
+
+
+def _games_grant_offence(role: str, doc: dict) -> str | None:
+    if doc["kind"] in BINDING_KINDS:
+        ref = doc["roleRef"]
+        if ref["kind"] == "Role" and ref["name"] == GAMES_SA:
+            return None
+        return f"binds the games identity to {ref['kind']} {ref['name']!r}"
+    for rule in doc.get("rules") or []:
+        if rule.get("apiGroups") != ["apps"] or rule.get("resources") != [
+            "deployments/scale"
+        ]:
+            return f"grants {rule.get('resources')} in {rule.get('apiGroups')}, not apps deployments/scale"
+        names = set(rule.get("resourceNames") or [])
+        if not names or not names <= GAME_DEPLOYMENTS:
+            return f"names {sorted(names - GAME_DEPLOYMENTS) or 'no'} Deployments outside game_servers"
+    return None
+
+
+def _games_role(rules: list[dict]) -> dict:
+    return {
+        "kind": "Role",
+        "metadata": {"name": GAMES_SA, "namespace": GAMES_NS},
+        "rules": rules,
+    }
+
+
+def _scale_rule(**overrides) -> dict:
+    return {
+        "apiGroups": ["apps"],
+        "resources": ["deployments/scale"],
+        "resourceNames": ["valheim"],
+        "verbs": ["get", "patch", "update"],
+        **overrides,
+    }
+
+
+def _games_subject() -> dict:
+    return {"kind": "ServiceAccount", "name": GAMES_SA, "namespace": GAMES_NS}
 
 
 RBAC_PROPERTIES = (
@@ -186,6 +255,43 @@ RBAC_PROPERTIES = (
                 f"cluster-base:ClusterRoleBinding/{READONLY_SA}-view",
                 f"cluster-base:ClusterRoleBinding/{READONLY_SA}",
                 f"cluster-base:RoleBinding/{READONLY_SA}-kcm-lease",
+            }
+        ),
+    ),
+    Property(
+        name="games-identity-only-scales-the-game-deployments",
+        reason=(
+            "deploy.local's Games panel holds the homelab-games token, and any pod in the "
+            "cluster can reach that panel without Authelia. ADR-0033 accepts that only because "
+            "the identity can change the replica count of the game Deployments and nothing "
+            "else. Patch on `deployments` could rewrite a pod spec, and PSA only warns here, so "
+            "a wider grant would turn a leaked token into root on a node. This row reads every "
+            "rendered Role named for the identity and every binding that names it."
+        ),
+        select=_games_identity_grants,
+        offence=_games_grant_offence,
+        red=("cluster-base", _games_role([_scale_rule(resources=["deployments"])])),
+        more_red=(
+            ("cluster-base", _games_role([_scale_rule(resourceNames=["traefik"])])),
+            ("cluster-base", _games_role([_scale_rule(resourceNames=[])])),
+            (
+                "rogue-role",
+                binding_doc(
+                    "RoleBinding",
+                    "rogue-games",
+                    "ClusterRole",
+                    "edit",
+                    [_games_subject()],
+                    namespace=GAMES_NS,
+                ),
+            ),
+        ),
+        green=("cluster-base", _games_role([_scale_rule()])),
+        min_matches=2,
+        must_find=frozenset(
+            {
+                f"cluster-base:Role/{GAMES_SA}",
+                f"cluster-base:RoleBinding/{GAMES_SA}",
             }
         ),
     ),

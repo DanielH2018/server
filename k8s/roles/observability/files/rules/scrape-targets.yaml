@@ -237,8 +237,13 @@ groups:
             minutes, so its exporter is down or unreachable from Prometheus and its series have
             gone stale. Read the exporter pod's events and log, or the host's unit for a static
             target.
+      # A parked game's exporter is scaled to 0 from deploy.local (ADR-0033), so its Service has no
+      # endpoint. The `unless` mutes a job while kube-state-metrics reads 0 replicas for the
+      # Deployment of the same name.
       - alert: ScrapeTargetDown
-        expr: up{job=~"valheim-stats|terraria-stats"} == 0
+        expr: >-
+          up{job=~"valheim-stats|terraria-stats"} == 0
+          unless on(job) label_replace(kube_deployment_spec_replicas{namespace="homelab",deployment=~"valheim-stats|terraria-stats"} == 0, "job", "$1", "deployment", "(.+)")
         for: 10m
         labels:
           severity: warning
@@ -550,7 +555,9 @@ groups:
             rather than staying down.
             Read the host's load and memory, then the exporter pod's restarts and log.
       - alert: ScrapeTargetFlapping
-        expr: avg_over_time(up{job=~"valheim-stats|terraria-stats"}[30m]) < 0.7 and resets(up{job=~"valheim-stats|terraria-stats"}[30m]) >= 2 and min_over_time(max_over_time(up{job=~"valheim-stats|terraria-stats"}[11m])[30m:1m]) == 1
+        expr: >-
+          avg_over_time(up{job=~"valheim-stats|terraria-stats"}[30m]) < 0.7 and resets(up{job=~"valheim-stats|terraria-stats"}[30m]) >= 2 and min_over_time(max_over_time(up{job=~"valheim-stats|terraria-stats"}[11m])[30m:1m]) == 1
+          unless on(job) label_replace(kube_deployment_spec_replicas{namespace="homelab",deployment=~"valheim-stats|terraria-stats"} == 0, "job", "$1", "deployment", "(.+)")
         for: 10m
         labels:
           severity: warning
