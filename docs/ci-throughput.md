@@ -162,7 +162,10 @@ slots. Two facts about the limit came out of it:
 - A landing takes its slot before it waits for anything and holds it to its verdict. Read
   from the code, one landing spends about 6 GitHub calls a minute while its PR's CI runs, 6
   while master's CI runs, 2 to 4 during the promotion, and none while it waits for the turn
-  or for health.
+  or for health. Every one of those repeated calls is a REST call. Two of the six in the
+  merge wait were `gh pr view`, which spends the separate GraphQL quota, until
+  `Landing.view` took the PR's state from the REST pull object (`pr_json.rest_filter`).
+  `docs/github-quota.md` holds the account-wide design.
 - The count is a directory of pid files on the host that runs the landing. daniel-box and
   daniel-server therefore each admit three landings against the one token, and seven were
   live at once that afternoon.
