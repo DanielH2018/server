@@ -420,6 +420,7 @@
  "k8s/roles/system-upgrade/tests/test_system_upgrade_verify.py": 0.81,
  "k8s/roles/tdarr/tests/test_tdarr_verify.py": 0.3,
  "k8s/roles/traefik/tests/test_traefik_bouncer_key_precheck.py": 0.96,
+ "k8s/roles/zigbee2mqtt/tests/test_mqtt_broker_wait.py": 9.08,
  "scripts/backup/tests/test_b2_drain.py": 0.0,
  "scripts/backup/tests/test_longhorn_reap_backups_cli.py": 2.07,
  "scripts/backup/tests/test_longhorn_reap_backups_modes_cli.py": 1.35,
