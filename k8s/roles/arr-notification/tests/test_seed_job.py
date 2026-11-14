@@ -11,6 +11,7 @@ Run: uv run pytest k8s/roles/arr-notification/tests/test_seed_job.py
 
 import json
 import re
+import shutil
 import subprocess
 import sys
 import threading
@@ -21,6 +22,7 @@ import pytest
 
 from lib import yaml_fast
 from lib.k8s_roles import K8S_ROLES
+from lib.repo_paths import SECRETS
 from renderer import shadow_diff
 from renderer.renderer_lib import cluster
 from renderer.renderer_lib.context import load_stubs
@@ -65,17 +67,7 @@ def stubs(tmp_path_factory):
 @pytest.fixture(scope="module")
 def flipped(stubs) -> dict[str, list[dict]]:
     """Each app's `<app>-verify` documents, as the renderer emits them."""
-    docs = {}
-    for app in APPS:
-        rendered = cluster.render_tag(app, stubs)
-        docs[app] = [
-            doc
-            for name, text in sorted(rendered.verify.items())
-            if name != "kustomization.yaml"
-            for doc in yaml_fast.safe_load_all(text)
-            if doc
-        ]
-    return docs
+    return {app: _verify_docs(cluster.render_tag(app, stubs)) for app in APPS}
 
 
 def _seed(docs: list[dict]) -> dict:
@@ -119,6 +111,7 @@ def test_the_job_declares_what_the_ansible_seed_declares(flipped, app):
         "ARR_NOTIFICATION_TRIGGERS": json.dumps(DEFAULTS["arr_notification_triggers"]),
         "ARR_NOTIFICATION_INCLUDE_HEALTH_WARNINGS": "false",
         "ARR_DEPLOYMENT_DIGEST8": env["ARR_DEPLOYMENT_DIGEST8"],
+        "ARR_WEBHOOK_DIGEST8": env["ARR_WEBHOOK_DIGEST8"],
     }
 
 
@@ -152,6 +145,50 @@ def test_the_seed_job_reads_no_role_but_its_app_and_arr_notification(app):
     """`land.sh`'s cross-role scan routes an arr-notification change to both apps through it."""
     text = (K8S_ROLES / app / TEMPLATE).read_text()
     assert set(re.findall(r"\bk8s/roles/([^/'\"]+)/", text)) == {"arr-notification"}
+
+
+def _verify_docs(rendered) -> list[dict]:
+    return [
+        doc
+        for name, text in sorted(rendered.verify.items())
+        if name != "kustomization.yaml"
+        for doc in yaml_fast.safe_load_all(text)
+        if doc
+    ]
+
+
+def _render_tree_copy(tree, stubs, app: str, rotate: bool) -> list[dict]:
+    """`<app>-verify` rendered from a copy of the two roles and of `cluster-vars.source`.
+
+    `render_tag` sets `role_path` to the copy, so the Job's lookups read the copy. With
+    `rotate`, the copy's `arr_discord_webhook_url` digest is replaced first, as a rotation
+    replaces it, and nothing else in the tree changes.
+    """
+    for role in (app, "arr-notification"):
+        shutil.copytree(K8S_ROLES / role, tree / "k8s" / "roles" / role)
+    (tree / "secrets").mkdir()
+    source = tree / "secrets" / "cluster-vars.source"
+    shutil.copy(SECRETS / "cluster-vars.source", source)
+    if rotate:
+        lines = source.read_text().splitlines()
+        (row,) = [
+            n
+            for n, line in enumerate(lines)
+            if line.startswith("arr_discord_webhook_url ")
+        ]
+        key, _digest, *rest = lines[row].split()
+        lines[row] = " ".join([key, "0" * 64, *rest])
+        source.write_text("\n".join(lines) + "\n")
+    return _verify_docs(cluster.render_tag(app, stubs, roles=tree / "k8s" / "roles"))
+
+
+@pytest.mark.parametrize("app", APPS)
+def test_a_webhook_rotation_alone_renames_the_seed_job(stubs, tmp_path, app):
+    """The app stores the URL in its own database, so a rotation must re-run the seed (#8602)."""
+    before = _seed(_render_tree_copy(tmp_path / "a", stubs, app, rotate=False))
+    after = _seed(_render_tree_copy(tmp_path / "b", stubs, app, rotate=True))
+    assert before["spec"] != after["spec"]
+    assert before["metadata"]["name"] != after["metadata"]["name"]
 
 
 class _Arr:

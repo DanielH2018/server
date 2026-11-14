@@ -81,3 +81,41 @@ def test_an_unreadable_lock_file_keeps_the_tree(tmp_path):
     tree = _batch_tree(tmp_path)
     (tmp_path / "admin" / "locked").unlink()
     assert _is_live(tree, "inactive")
+
+
+def _proc_root(tmp_path, *units: str) -> str:
+    """A fake /proc holding one process per unit under ubuntu's manager, and one kernel thread."""
+    proc = tmp_path / "proc"
+    (proc / "2").mkdir(parents=True)
+    (proc / "2" / "cgroup").write_text("0::/\n")
+    for pid, unit in enumerate(units, start=100):
+        (proc / str(pid)).mkdir()
+        (proc / str(pid) / "cgroup").write_text(
+            f"0::/user.slice/user-1000.slice/user@1000.service/app.slice/{unit}.service\n"
+        )
+    return str(proc)
+
+
+def _foreign_is_live(tree: str, foreign) -> bool:
+    return fanout_lock.batch_is_live(
+        tree, "fanout-8529", lambda unit: "active", NOW, foreign, os.getuid() + 1
+    )
+
+
+def test_another_users_tree_reads_live_to_a_caller_that_removes_trees(tmp_path):
+    assert _foreign_is_live(_batch_tree(tmp_path), None)
+
+
+def test_another_users_tree_whose_unit_holds_a_process_is_live(tmp_path):
+    state = fanout_lock.process_unit_state(_proc_root(tmp_path, "fanout-8529"))
+    assert _foreign_is_live(_batch_tree(tmp_path), state)
+
+
+def test_another_users_tree_whose_unit_holds_no_process_is_released(tmp_path):
+    state = fanout_lock.process_unit_state(_proc_root(tmp_path, "fanout-8530"))
+    assert not _foreign_is_live(_batch_tree(tmp_path), state)
+
+
+def test_an_unreadable_proc_keeps_another_users_tree(tmp_path):
+    state = fanout_lock.process_unit_state(str(tmp_path / "no-proc"))
+    assert _foreign_is_live(_batch_tree(tmp_path), state)

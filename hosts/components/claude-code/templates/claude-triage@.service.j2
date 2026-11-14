@@ -1,6 +1,6 @@
 {% import 'templates/claude-triage-pins.j2' as pins with context -%}
 [Unit]
-Description=Unattended triage of monitor episode %i, as the agent user
+Description=Unattended triage of monitor episode %i, as the triage controller
 After=network-online.target
 Wants=network-online.target
 # A run that crashes, or that systemd kills, pages here. A run that finishes pages through
@@ -9,38 +9,27 @@ OnFailure=homelab-alert@%n.service
 
 [Service]
 Type=oneshot
-# The agent user, never {{ sys_user }}: the episode text is untrusted, and this user has no
-# sudo, no age key, read-only kubectl and no read on /home. docs/claude-agent-user.md,
-# "Alert-triggered triage", has the design.
-User={{ pins.agent_user }}
-WorkingDirectory={{ pins.agent_home }}/server
-Environment=HOME={{ pins.agent_home }}
-# systemd's PATH is as minimal as cron's: without /usr/local/bin the session loses kubectl and
-# reports an empty cluster rather than failing.
-Environment=PATH={{ pins.agent_home }}/.local/bin:/usr/local/bin:/usr/bin:/bin
-Environment=KUBECONFIG={{ pins.agent_home }}/.kube/config
-# The repo's hook shim resolves the clone and uv from these. A guard that cannot start turns
-# every Bash call into an ask, and nobody answers one here.
-Environment=RUN_HOOK_PROJECT_DIR={{ pins.agent_home }}/server
-Environment=RUN_HOOK_UV={{ pins.agent_home }}/.local/bin/uv
+# The controller (dotfiles#967's I1): it owns the records, the reports and the run lock, and alone
+# may start the session unit. It runs no session text. The session runs as {{ pins.session_user }},
+# whose group lets this unit read the result the session leaves in the exchange.
+User={{ pins.ctl_user }}
+SupplementaryGroups={{ pins.session_user }}
+Environment=HOME={{ pins.ctl_home }}
+Environment=PATH=/usr/bin:/bin
 Environment=PYTHONDONTWRITEBYTECODE=1
-# The Claude credential from `claude setup-token`, read by systemd as root (0600) into
-# $CREDENTIALS_DIRECTORY, so it is in no unit line `systemctl show` publishes. A credential rather
-# than an EnvironmentFile=, because a token pasted across a line wrap would end at the newline
-# there; the runner joins the whole file. It is this unit's own token: the interactive login
-# claude-rc.service uses can lapse while idle (#4618).
-LoadCredential=claude_oauth_token:/etc/claude-triage/oauth-token
+Environment=UV_CACHE_DIR={{ pins.ctl_home }}/uv-cache
+Environment=UV_PYTHON_INSTALL_DIR={{ pins.ctl_home }}/python
 SyslogLevel=notice
-# SIGINT ends the session's turn cleanly; SIGTERM exits 143 with the turn unrecorded.
-KillSignal=SIGINT
-# Above the script's own RUN_TIMEOUT_S ({{ pins.run_timeout_s }}s), which should
-# trip first: it still writes the record, the report and the page.
-TimeoutStartSec={{ pins.run_timeout_s + 600 }}
+# The session runs in homelab-claude-triage-session.service, which this runner starts and waits
+# for, and which holds the Claude credential. Its TimeoutStartSec, run_timeout_s
+# ({{ pins.run_timeout_s }}s), trips first, so this script still writes the record, the report
+# and the page.
+TimeoutStartSec={{ pins.run_timeout_s + 900 }}
 NoNewPrivileges=yes
 # DECIDED: UMask=0027, as claude-rc.service.j2 sets it. homelab-claude-triage.conf gives the
 # operator's group traverse on the state directory, so under systemd's default 0022 a record, a log or a
 # directory this unit creates there would be world-readable by its fixed name. A report lands
-# in the setgid artifacts directory, where 0640 keeps the operator's group read.
+# in the setgid report tree, where 0640 keeps the operator's group read.
 UMask=0027
 ProtectHome=yes
 ProtectProc=invisible
@@ -48,8 +37,9 @@ PrivateTmp=yes
 # One run at a time. A busy lock exits 75, which is not a failure: the episode stays in the
 # inbox for the next start, and nothing pages.
 SuccessExitStatus=75
-# The state directories and their modes, before the lock inside them is taken.
-ExecStartPre=+/usr/bin/systemd-tmpfiles --create /usr/lib/tmpfiles.d/homelab-claude-triage.conf
+# The directories, the session's toolchain and its clone, before the lock inside them is taken.
+ExecStartPre=+/usr/bin/env -i PATH=/usr/bin:/bin:/usr/sbin:/sbin /usr/lib/homelab/claude-triage-setup
+ExecStartPre=/usr/lib/homelab/bin/uv python install --no-bin {{ host_python_version }}
 ExecStart=/usr/bin/flock -n -E 75 {{ pins.state_dir }}/run.lock \
-  {{ pins.agent_home }}/.local/bin/uv run --no-project --no-python-downloads \
+  /usr/lib/homelab/bin/uv run --no-project --no-python-downloads \
   --python {{ host_python_version }} /opt/claude-triage/claude_triage_run.py %i

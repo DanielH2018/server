@@ -4,7 +4,7 @@
 Shipped as a sibling copy beside valheim_stats.py and stats.py (terraria-stats), the same
 mechanism `hosts/lib/host_lib.py` uses: a directly-invoked script gets only its own directory
 on `sys.path`, so a shared module has to be copied in rather than imported across the tree (see `.claude/rules/python-layout.md`). This one ships into a ConfigMap and
-runs inside a python:3.14-alpine pod rather than on a host, so each game's rendered ConfigMap
+runs inside a python:3.15-alpine pod rather than on a host, so each game's rendered ConfigMap
 (`roles/k8s/game-stats/templates/configmap-*.yaml.j2`) carries a copy beside the entry
 script, rather than a host package shipping one beside a host script.
 

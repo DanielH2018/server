@@ -12,7 +12,8 @@ LIVE_ARGS is daniel-server's `k3s.io/node-args` annotation, read on 2026-11-03 w
 writes it from the command line it started with, and it equals `k3s_agent_args` at the merge
 base, 425dcdfd98, rendered with daniel-server's inventory. K3S_URL and K3S_TOKEN come from the installer's
 env file, not the command line, so neither appears. A later deliberate flag change edits this
-fixture in the same PR: the image-gc pair is #8307's, live from the agent's next start.
+fixture in the same PR: the image-gc pair is #8307's and the memory reserve #8644's, each live from the agent's
+next start.
 """
 
 import functools
@@ -21,7 +22,11 @@ import re
 from lib import yaml_fast
 from lib.repo_paths import K3S_HOST_CHECKS_DEFAULTS
 from renderer.renderer_lib import host as host_mode
-from test_k3s_server_flags_migration import cli_flags, config_flags
+from test_k3s_server_flags_migration import (
+    cli_flags,
+    config_flags,
+    reserved_memory_problems,
+)
 
 CONFIG = "/etc/rancher/k3s/config.yaml.d/50-homelab.yaml"
 
@@ -37,6 +42,8 @@ LIVE_ARGS = [
     "image-gc-high-threshold=65",
     "--kubelet-arg",
     "image-gc-low-threshold=55",
+    "--kubelet-arg",
+    "system-reserved=memory=4Gi",
 ]
 
 
@@ -102,3 +109,7 @@ def test_a_low_threshold_not_below_the_high_one_is_flagged():
         for item in config["kubelet-arg"]
     ]
     assert image_gc_problems(config) == ["image-gc-low-threshold 65 is not below 65"]
+
+
+def test_the_agent_kubelet_reserves_memory():
+    assert reserved_memory_problems(rendered_config()) == []

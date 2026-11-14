@@ -12,6 +12,11 @@ import stat
 from dataclasses import dataclass
 from pathlib import Path
 
+
+class Unavailable(Exception):
+    """A read or write could not be answered; the page shows the reason in red."""
+
+
 _RUN_RE = re.compile(r"\bland\.py\b")
 _PR_RE = re.compile(r"--pr\s+(\d+)")
 _TAGS_RE = re.compile(r"--tags[= ]+(\S+)")

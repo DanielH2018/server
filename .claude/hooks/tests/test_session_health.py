@@ -324,6 +324,9 @@ def test_main_cuts_the_agent_context_to_its_budget_and_keeps_the_health_lines(
 def _fence_worktree_survey(fenced_calls, tmp_path, monkeypatch):
     """Put a `uv` first on PATH that records `prune_worktrees.py` and passes the rest through.
 
+    A `systemctl` stub answers the live-session scan's fan-out unit queries `inactive`, the
+    state of a collected batch unit, so the host's own fan-out units stay unasked.
+
     `prune_worktrees.py --brief` surveys every `.claude/worktrees/*` checkout on the host, and
     the hook kills it at `WORKTREE_TIMEOUT_S`. daniel-box carries over a hundred of them and
     CI's runner none, so letting it run made this file take 4-5s on daniel-box and 0.77s on CI.
@@ -341,6 +344,7 @@ def _fence_worktree_survey(fenced_calls, tmp_path, monkeypatch):
             "esac\n"
             f'exec "{real_uv}" "$@"\n'
         ),
+        systemctl="#!/bin/sh\necho inactive\n",
     )
     monkeypatch.setenv("PATH", path_with(stub_dir))
     return fenced_calls

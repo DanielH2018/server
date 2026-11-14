@@ -16,6 +16,7 @@ import json
 import pytest
 from _helpers import REPO as REPO_ROOT
 from _ruleset_drift import (
+    ACTIONS_APP_ID,
     ANONYMOUS_PRIVATE_REPO,
     BRANCH_RULESET_ID,
     DECLARED,
@@ -193,6 +194,20 @@ def test_a_repo_body_with_no_visibility_is_a_bad_fetch(tmp_path):
     assert "private" not in msg
 
 
+@pytest.mark.parametrize(("pin", "shown"), [(None, "none"), (12345, "12345")])
+def test_a_context_not_pinned_to_github_actions_is_flagged(tmp_path, pin, shown):
+    """An unpinned context, or one pinned to another app, accepts a status from any writer."""
+    context = DECLARED[1]
+    rc, status, msg = run(
+        tmp_path, curl_body=ruleset_body(DECLARED, pins={context: pin})
+    )
+    assert (rc, status) == (1, "down")
+    assert (
+        f"not pinned to GitHub Actions (app {ACTIONS_APP_ID}): [{context}={shown} ]"
+        in msg
+    )
+
+
 def test_zero_required_contexts_is_flagged(tmp_path):
     """A well-formed ruleset that requires nothing: every merge gate is open."""
     rc, status, msg = run(tmp_path, curl_body=ruleset_body([]))
@@ -363,6 +378,7 @@ def test_the_declared_set_matches_the_role_defaults(tmp_path):
     context added to defaults without a thought about the comparison shows up here.
     """
     defaults = _defaults()
+    assert defaults["github_actions_app_id"] == ACTIONS_APP_ID
     assert defaults["github_expected_ruleset_contexts"] == DECLARED, (
         "github_expected_ruleset_contexts drifted from this test's fixture — if the "
         "ruleset genuinely changed, update both; the monitor compares this list against GitHub"

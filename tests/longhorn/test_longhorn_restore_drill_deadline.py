@@ -15,7 +15,7 @@ import tempfile
 from pathlib import Path
 
 from _k8s_render import render_role_template
-from _restore_drill import DRILL_DEFAULTS, render
+from _restore_drill import DRILL_DEFAULTS, harness, render
 from _helpers import load_yaml
 from lib import yaml_fast
 from renderer import homelab_render
@@ -50,6 +50,16 @@ def test_the_deadline_clears_the_restore_timeout_plus_the_probe_bound() -> None:
     assert deadline < DAY_SECONDS // 4, (
         "the deadline must sit far below the daily period"
     )
+
+
+def test_the_pass_line_reports_the_probe_time_the_bound_limits(tmp_path: Path) -> None:
+    """The log is where an operator reads the probe's headroom under its bound."""
+    # fact: k8s/roles/longhorn-restore-drill/CLAUDE.md#What the drill is and what it writes (the autonomous-role contract)
+    run = harness(tmp_path, ["some-config"])
+    proc = run(restore="pass")
+    assert proc.returncode == 0, proc.stderr
+    (passed,) = [line for line in proc.stdout.splitlines() if ": PASS: " in line]
+    assert re.search(r", probe=\d+s\)", passed), passed
 
 
 def test_the_grace_period_covers_one_poll_and_the_four_cleanup_deletes() -> None:

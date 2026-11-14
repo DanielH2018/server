@@ -151,17 +151,6 @@ def rendered_shell_function(plane: str, role: str, template: str, name: str) -> 
     return match.group(0)
 
 
-def rendered_or_source_text(path: Path) -> str:
-    """A `*.sh.j2` role template's RENDERED text; any other extension's SOURCE text.
-
-    For a census that spans extensions this module does not render — a `.service.j2` unit, a
-    k8s manifest, a `config.env.j2` — alongside the `*.sh.j2` templates it does (#3178).
-    """
-    if not path.name.endswith(".sh.j2"):
-        return path.read_text()
-    return rendered_shell_text(path.parents[2].name, path.parents[1].name, path.name)
-
-
 def rendered_names_for(plane: str, role: str) -> set[str]:
     """Every `*.sh.j2` name rendered for one (plane, role).
 

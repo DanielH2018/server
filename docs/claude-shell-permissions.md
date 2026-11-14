@@ -102,7 +102,8 @@ neither the age key that decrypts the become password nor the repo owner's `gh` 
 secret in `secrets/secrets.yml`. With the token, it can merge its own PR through the
 REST endpoint, which is how `land.sh` merges every landing.
 The master CI gate's `pull_request` rule refuses a direct push to master from any token, so
-every change reaches master as a PR. The GitOps deployer then applies master with `become`. So
+every change reaches master as a PR. `promote` and Flux then apply master's k8s changes, and each host's `homelab-updater` installs
+its host package as root. So
 for a `sys_user` session the boundary is the permission layer this page describes, plus the PR
 every change leaves. The unattended
 Renovate session runs as its own user, on a token that can neither push nor merge
