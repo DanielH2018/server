@@ -13,7 +13,7 @@ routed tenant of the retired Docker edge. See repo-root `CLAUDE.md` for shared c
 <!-- /generated_from -->
 
 - **Flux's render pulls `ghcr.io/danielh2018/homelab-mcp:<content tag>`**, with
-  `imagePullPolicy: IfNotPresent` (D5.4b), and the *Image* line above names that repository.
+  `imagePullPolicy: IfNotPresent`, and the *Image* line above names that repository.
   The role's defaults still name the in-cluster registry. promote's `images`
   job builds the image from `templates/Dockerfile.j2` and the files below.
 - **No IngressRoute** — routed through the k8s edge's file-provider gate Secret (`k8s/roles/traefik/templates/livesync-gate-secret.yaml.j2`)

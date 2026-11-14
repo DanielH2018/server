@@ -25,8 +25,8 @@ CouchDB backend for the Obsidian Self-hosted LiveSync plugin. See repo-root `CLA
 - **`k8s_autodeploy: false` still stops Renovate automerging the image bump.** The flag
   gates no apply: Flux applies every merged change. The denial reason above is about the
   revert, not the snapshot.
-- **The `livesync-snapshot` Job snapshots `livesync-data` before each revision applies**
-  (D5.2a). The livesync Kustomization depends on `livesync-snapshot`, so a revision applies
+- **The `livesync-snapshot` Job snapshots `livesync-data` before each revision applies**.
+  The livesync Kustomization depends on `livesync-snapshot`, so a revision applies
   only after the snapshot is ready; `docs/flux-deploy-plane.md` lists the Job's checks. The
   claim is `longhorn-nobackup`, so the snapshot is Longhorn-local and no backup copies it. A
   failed revision that changes livesync writes the stateful hold, and `promote` does not reset

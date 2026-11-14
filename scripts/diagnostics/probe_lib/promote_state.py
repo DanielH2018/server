@@ -6,7 +6,7 @@ The `promote` workflow's repository variable `DEPLOY_HOLD` holds the Flux-owned 
 The first three reads are the ones docs/target-architecture/deploy/d2-first-leaf.md (*What
 `probe.py landing` reads, and what it costs*) prices: one `api.github.com` call, two `ghcr.io`
 requests and one cluster read. daniel-box has no flux CLI, and an anonymous `api.github.com`
-poll would spend the host's quota that the deployer's CI gate reads.
+poll would spend the host's shared anonymous quota.
 
 The fourth is a second cluster read, D5.1b's: every Kustomization and OCIRepository in
 `flux-system` whose `spec.suspend` is true, the root `homelab` included, with the field

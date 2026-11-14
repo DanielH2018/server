@@ -37,7 +37,9 @@ groups:
             pi-sd-health on daniel-pi ended with status=down: the root filesystem's ext4
             errors_count is nonzero or unreadable, the rotated-log integrity verdict is bad or
             stale, or /var/log is not log2ram's tmpfs. The `pi-sd-health` line in
-            /var/log/pi-health/health.log holds the message. Plan an fsck and a card replacement.
+            /var/log/pi-health/health.log names the failing leg. Only a nonzero errors_count
+            calls for an fsck and a card replacement; a /var/log that is not a tmpfs means
+            log2ram refused to start, and a reboot after its cause is fixed recovers it.
       - alert: PiSdHealthNotReporting
         expr: |
           (

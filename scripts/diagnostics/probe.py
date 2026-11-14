@@ -72,6 +72,9 @@ Subcommands:
                              started with their VERDICT, the PRs it named [--since 6h]
     builder [-n N]           daniel-box's host-package builder: reason, published versions,
                              newest builds, failures [--since 24h]
+    usage [--all]            requests per service over the retention window (all routes
+                             summed, monitoring apart), memory request/limit vs 7d p95,
+                             PVC fill and days to full (prometheus :9090)
 
 Exit codes: every verdict subcommand exits 0 or 1 for what it observed, and 75 when it could
 not read its source, with the failed read on stderr. `health` exits 3 when the tag names nothing

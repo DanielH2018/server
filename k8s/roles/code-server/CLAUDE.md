@@ -14,8 +14,7 @@ it is built from (`templates/Dockerfile.j2` + `files/extensions.sh`); the invent
 <!-- /generated_from -->
 
 - **Image:** built by the promote workflow's `images` job from `templates/Dockerfile.j2`,
-  pushed to `ghcr.io/danielh2018/code-server:<content tag>` (D5.4). In-cluster by
-  k8s/image-builder before D5.16.
+  pushed to `ghcr.io/danielh2018/code-server:<content tag>`.
 - **Host:** daniel-box (k3s), pinned by a required node affinity · **Port:** 8443
 - **Flux applies it.** Its `containers_list` entry is
   in `cluster/services.yml`, so nothing applies it by hand, and a merged
@@ -88,7 +87,7 @@ it is built from (`templates/Dockerfile.j2` + `files/extensions.sh`); the invent
 - **`extensions.sh` installs but does not prune**, so removing an extension from the image
   leaves it live on the config volume. Retiring one means adding its id to `RETIRED_EXTS` in
   that script, not just deleting it from the Dockerfile.
-- **Under Flux, the new image is pulled before the old pod stops** (#5525). The role sets
+- **The new image is pulled before the old pod stops** (#5525). The role sets
   `flux_prepull_timeout: 4500s`, so the render adds the `code-server-prepull` Kustomization,
   and `code-server` depends on it. Its Job runs the Deployment's GHCR ref under the
   Deployment's own node affinity. The affinity is required (operator ruling 2026-10-18,
@@ -96,8 +95,7 @@ it is built from (`templates/Dockerfile.j2` + `files/extensions.sh`); the invent
   once the kubelet holds the image. A cordoned daniel-box leaves the pod unschedulable
   instead of moving it to daniel-server. The
   `Recreate` rollout then pays only the container start, not the 20-50 minute GHCR pull.
-  `docs/flux-deploy-plane.md`, *The pre-pull Job*, has the mechanism. An Ansible deploy
-  ignores the key.
+  `docs/flux-deploy-plane.md`, *The pre-pull Job*, has the mechanism.
 - **Two claims, and only the small one is backed up** (2026-08-16). `code-server-config`
   (10 Gi) holds derived state and is in this role's `containers_list` entry's
   `no_backup_claims`, so in `k3s_longhorn_nobackup_volumes`;

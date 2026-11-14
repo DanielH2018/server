@@ -451,9 +451,7 @@ claude_code_lander_enabled: false
 claude_code_triage_enabled: false
 # Pinned again in templates/claude-triage-pins.j2, which wins over any inventory override; the
 # values here are what the validator renders with. Literals, for the reason the lander's are.
-claude_code_triage_agent_user: claude
-claude_code_triage_agent_home: /var/lib/claude
-claude_code_triage_state_dir: /var/lib/claude/triage
+claude_code_triage_state_dir: /var/lib/claude-triage-ctl/state
 claude_code_triage_model: opus
 # The operator's budget (2026-10-15): $10 to diagnose. The fix phase gets its own cap later.
 claude_code_triage_budget_usd: 10
@@ -658,6 +656,7 @@ claude_code_guardrail_audit_paths:
   - "{{ claude_code_agent_user_home }}/.claude/CLAUDE.md"
   - "{{ claude_code_agent_user_home }}/.claude/rules"
   - /var/lib/renovate-agent/.claude/settings.json
+  - /var/lib/renovate-agent/.claude/hooks
 # Watched under the key `claude-memory`: the memory stores a session reads at its next start. The
 # audit record names the writing process, so a Bash write shows apart from the Write tool's.
 claude_code_guardrail_audit_memory_dirs:
@@ -667,8 +666,9 @@ claude_code_guardrail_audit_memory_dirs:
 # ── The guardrail acknowledgement (server#8250 slice 2) ──────────────────────────────────
 # homelab-claude-guardrail-ack.timer runs files/claude_guardrail_ack.py as root. Each run posts
 # to Discord every change to a file under claude_code_guardrail_audit_paths that nothing merged
-# explains: a package file that no longer matches its package's md5, or a file under a user's
-# home that does not match what chezmoi renders from the dotfiles repo's main. Memory stores are
+# explains: a package file that does not match the md5 inside the .deb an apt source serves
+# for its installed version (so a `dpkg -i` of a branch build posts), or a file under a
+# user's home that does not match what chezmoi renders from the dotfiles repo's main. Memory stores are
 # audited, never posted. The operator ruled on 2026-11-13 to post unexplained changes only.
 # False drops the timer and its units from the next package version, and keeps the state.
 claude_code_guardrail_ack_enabled: true

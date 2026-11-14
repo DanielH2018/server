@@ -485,4 +485,10 @@ def _build_parser():
     )
     for module in (lander, builder):
         module.add_parser(sub, _verdict_help)
+    usage = sub.add_parser(
+        "usage",
+        help="requests per service over the retention window, memory request and limit "
+        "against the 7d p95, and PVC fill with days to full",
+    )
+    _flag(usage, "--all", "list every container and PVC, not only the flagged ones")
     return p

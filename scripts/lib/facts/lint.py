@@ -403,7 +403,8 @@ def vanished_advice(repo: Path, since: str) -> str | None:
     lines = [
         f"removed names: {len(by_name)} still used. This branch removed each name below, "
         "and no code holds it. Edit each place that uses it, or open a sentence about the "
-        f"past with `{HISTORY_MARKER}`."
+        f"past with `{HISTORY_MARKER}`. After a rename, `fact_status.py mv <old> <new>` "
+        "rewrites them."
     ]
     lines += [f"  {tok}: {', '.join(places)}" for tok, places in by_name.items()]
     return "\n".join(lines)

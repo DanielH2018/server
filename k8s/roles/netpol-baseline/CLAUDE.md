@@ -51,7 +51,7 @@ tighter or looser allow-list than the baseline. Deploys no workload of its own.
   nothing. The two disagreed for ~16 hours during slice 4.5. The `exempt` check of the verify
   Job's `gate` initContainer lists the `netpol-baseline-exempt` pods in each
   namespace-scoped baseline's namespace. It runs after the apply, so drift fails the Job and
-  the revision's soak acts on it, where the Ansible task refused the apply.
+  the revision's soak acts on it.
   `tests/k8s/test_netpol_baseline_labels.py` pins the set against templates.
 - **`netpol_baseline_node_cidrs` are `/32` host addresses on purpose** — a `/16` here would
   silently cancel the whole policy.
@@ -59,8 +59,8 @@ tighter or looser allow-list than the baseline. Deploys no workload of its own.
   gives the role an edge onto every other k8s entry. The renderer's ordering turns that into
   a dependency of `netpol-baseline` on every other flux-owned tag and on every other tag's
   `-deferred` Kustomization. `netpol-baseline-deferred` depends on `netpol-baseline`, and
-  `netpol-baseline-verify` on `netpol-baseline-deferred`. The Ansible tasks drained queued
-  rollouts first, and Flux's `wait` and that ordering replace the drain. Every k8s role is
+  `netpol-baseline-verify` on `netpol-baseline-deferred`. Flux's `wait` and that ordering
+  hold the role until every other rollout is Ready. Every k8s role is
   flux-owned, so the renderer drops none of these edges into the `homelab/ansible-owned-deps`
   annotation.
 - **A failed workload change leaves these policies unapplied.** The role depends on every

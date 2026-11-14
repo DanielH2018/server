@@ -48,6 +48,15 @@ Usage (every subcommand also takes `--repo OWNER/NAME`; see below)::
     uv run python scripts/dev/findings.py verify --all
     uv run python scripts/dev/findings.py verify 688 701
     uv run python scripts/dev/findings.py next [--limit N] [--waiting] [--json]
+    uv run python scripts/dev/findings.py sync-board [688 701] [--dry-run]
+
+THE PROJECT BOARD FOLLOWS THE ISSUE. After any subcommand that writes an issue, `main` makes
+that issue's item on the "Server Issue Tracking" Project agree with it: Status (Todo, In
+Progress while `claimed` or while an open PR will close it, Done once closed), Severity and
+Not before. `findings_lib/board.py` owns the mapping. A board write that fails prints one
+warning and leaves the exit code alone, because nothing reads the board back; `sync-board`
+repairs it, and with no numbers it checks every open issue. Another repo's register has no
+board, so `--repo` other than this one skips it.
 
 WORKING ANOTHER REPO'S REGISTER. Every subcommand takes `--repo OWNER/NAME` and then works
 that repo's own `claude` register, with the same labels, trailer, fingerprint dedup and claim
@@ -126,6 +135,7 @@ birth, or because `manual` found the label already in the state it was asked for
 """
 
 import argparse
+import dataclasses
 import json
 import subprocess
 import sys
@@ -142,6 +152,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 # `scripts/docs/reference/backlog.py` reaches this code as `dev.findings` with only
 # `scripts/` on sys.path, so a bare `from issue_model import ...` would raise
 # ModuleNotFoundError under the docs-refresh cron while pytest stayed green.
+from dev.findings_lib.board import FAILED, UNCHANGED, UPDATED, board_warning
 from dev.findings_lib.claim import claim_states
 from lib.exit_codes import FINDINGS_BAD_ARGS
 from lib.progress import count_line
@@ -153,6 +164,7 @@ from dev.findings_lib.gh_calls import (
     _create,
     _existing_labels,
     _load_issue,
+    created_number,
     fingerprint_match,
     load_issues,
     blocker_hints,
@@ -161,6 +173,7 @@ from dev.findings_lib.gh_calls import (
 )
 from dev.findings_lib.issue_model import (
     NO_REOPEN,
+    PR_REPO,
     cited_paths,
     current_claim,
     recorded_blockers,
@@ -508,6 +521,53 @@ def cmd_sync_labels(args: argparse.Namespace, tools: FindingsTools) -> int:
     return 0
 
 
+def cmd_sync_board(args: argparse.Namespace, tools: FindingsTools) -> int:
+    """Handles ``sync-board``: makes each named issue's board item, or every open one's, agree.
+
+    The backfill for issues filed while nothing wrote the board, and the repair for a field
+    someone changed on the board by hand or a write that failed.
+
+    Returns:
+        1 if any issue's board item could not be synced, 0 otherwise.
+    """
+    numbers = args.numbers or [i["number"] for i in load_issues("open", tools)]
+    outcomes = tools.sync_board(numbers, tools.repo, dry_run=args.dry_run)
+    counts = dict.fromkeys((UPDATED, UNCHANGED, FAILED), 0)
+    for outcome, _ in outcomes.values():
+        counts[outcome] += 1
+    verb = "would update" if args.dry_run else "updated"
+    print(
+        f"{len(outcomes)} issues: {counts[UPDATED]} {verb}, "
+        f"{counts[UNCHANGED]} unchanged, {counts[FAILED]} failed"
+    )
+    for n in sorted(outcomes):
+        outcome, detail = outcomes[n]
+        if outcome != UNCHANGED:
+            print(f"#{n} {'failed: ' if outcome == FAILED else ''}{detail}")
+    return 1 if counts[FAILED] else 0
+
+
+_ISSUE_WRITES = frozenset({"edit", "close", "reopen", "create"})
+
+
+def _recording_writes(tools: FindingsTools) -> tuple[FindingsTools, set[int]]:
+    """``tools`` whose `gh` notes each issue a successful write changed, and that set."""
+    written: set[int] = set()
+    inner = tools.gh
+
+    def gh(*argv, **kwargs):
+        result = inner(*argv, **kwargs)
+        if len(argv) > 2 and argv[0] == "issue" and argv[1] in _ISSUE_WRITES:
+            number = created_number(
+                result.stdout if argv[1] == "create" else str(argv[2])
+            )
+            if number is not None:
+                written.add(number)
+        return result
+
+    return dataclasses.replace(tools, gh=gh), written
+
+
 def cmd_list(args: argparse.Namespace, tools: FindingsTools) -> int:
     """Handles the ``list`` subcommand: prints open findings as a table or JSON.
 
@@ -683,6 +743,7 @@ def main(argv: list[str] | None, tools: FindingsTools) -> int:
     tools = aimed(tools, args.repo)
     handler = {
         "sync-labels": cmd_sync_labels,
+        "sync-board": cmd_sync_board,
         "list": cmd_list,
         "history": cmd_history,
         "show": cmd_show,
@@ -701,6 +762,10 @@ def main(argv: list[str] | None, tools: FindingsTools) -> int:
         "verify": cmd_verify,
         "next": cmd_next,
     }[args.cmd]
+    if args.cmd != "sync-board" and args.repo in (None, PR_REPO):
+        tools, written = _recording_writes(tools)
+    else:
+        written = set()
     try:
         return handler(args, tools)
     except (subprocess.SubprocessError, OSError) as exc:
@@ -713,6 +778,11 @@ def main(argv: list[str] | None, tools: FindingsTools) -> int:
         else:
             sys.stderr.write(f"gh failed: {exc}\n")
         return 1
+    finally:
+        if written:
+            warning = board_warning(tools.sync_board(sorted(written), tools.repo))
+            if warning:
+                sys.stderr.write(warning + "\n")
 
 
 if __name__ == "__main__":

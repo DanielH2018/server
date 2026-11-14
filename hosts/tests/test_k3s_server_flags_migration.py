@@ -49,6 +49,8 @@ MERGE_BASE_ARGS = [
     "--etcd-snapshot-retention=28",
     # H6.7: the kubelet's default value, added to prove the windowed restart.
     "--kubelet-arg=image-gc-high-threshold=85",
+    # #8644: memory pods use without requesting it.
+    "--kubelet-arg=system-reserved=memory=7Gi",
 ]
 
 
@@ -100,3 +102,28 @@ def test_a_flag_lost_in_the_move_is_detected():
     config = dict(rendered_config())
     config["disable"] = [item for item in config["disable"] if item != "servicelb"]
     assert config_flags(config) != cli_flags(MERGE_BASE_ARGS)
+
+
+def reserved_memory_problems(config: dict) -> list[str]:
+    """The kubelet must reserve memory, so allocatable excludes what unrequested pods use.
+
+    Longhorn's instance-manager has no memory request (#8617), so without a reserve the
+    scheduler counts its working set as free (#8644).
+    """
+    for item in config.get("kubelet-arg", []):
+        name, _, value = item.partition("=")
+        if name in ("system-reserved", "kube-reserved") and "memory=" in value:
+            return []
+    return ["kubelet-arg reserves no memory"]
+
+
+def test_the_server_kubelet_reserves_memory():
+    assert reserved_memory_problems(rendered_config()) == []
+
+
+def test_a_kubelet_without_reserved_memory_is_flagged():
+    config = dict(rendered_config())
+    config["kubelet-arg"] = [
+        item for item in config["kubelet-arg"] if not item.startswith("system-reserved")
+    ]
+    assert reserved_memory_problems(config) == ["kubelet-arg reserves no memory"]

@@ -136,7 +136,8 @@ def test_the_flipped_job_runs_as_tdarr_with_its_device_and_library(flipped):
 
 
 def test_the_staged_job_reads_no_other_roles_file():
-    """The deployer redeploys a role when a file it `lookup()`s in another role changes.
+    """A role's bundle re-renders, and Flux redeploys it, when a file it `lookup()`s in another
+    role changes.
 
     The Job takes `flux_job_image` from the renderer rather than from the flux defaults, so a
     Renovate bump of that pin does not redeploy tdarr. This reads every role path the staged

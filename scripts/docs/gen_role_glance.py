@@ -49,8 +49,8 @@ RUN AT COMMIT TIME, NOT BY THE DOCS-REFRESH CRON. The `regen-role-glance` prek h
 stale block and exits 1 like a formatter, so the author stages the rewritten doc and commits
 again. The block therefore lands in the same commit as the change that moved it, with no
 hand step. The cron stages `docs/reference` and `docs/assets/generated` only, and a write
-under `k8s/roles/` would leave the primary checkout dirty, which parks the GitOps
-deployer. `scripts/docs/tests/test_gen_role_glance.py` stays as the CI backstop for a
+under `k8s/roles/` would leave the primary checkout dirty, which parks
+`homelab-checkout-sync`. `scripts/docs/tests/test_gen_role_glance.py` stays as the CI backstop for a
 commit that skipped prek.
 
 DECIDED: the hook regenerates at commit time rather than `inject-nested-docs` generating
@@ -60,7 +60,7 @@ only at injection time is absent from most sessions. It would also be absent on 
 an editor, on the MkDocs site and in a PR diff, where a reviewer sees a route or claim move.
 
 STATIC PARSING ONLY, like every generator here: role defaults through `yaml.safe_load`,
-templates through regexes, nothing imported from the deployer. The one renderer module it
+templates through regexes, nothing imported to evaluate. The one renderer module it
 reads, `renderer_lib/task_inputs.py`, reads the image builds from a role's defaults and
 evaluates nothing.
 

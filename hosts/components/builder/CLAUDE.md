@@ -80,7 +80,7 @@ nothing new publishes either. The way out is `docs/break-glass.md` item 9's by-h
 The component reads two values other roles own. `ci_required_contexts` and `ci_ancestor_walk_max`
 come from `inventory/group_vars/all.yml`. The Prometheus ClusterIP in `builder_prom_urls`
 repeats `observability_prometheus_cluster_ip`, and
-`hosts/lib/tests/test_builder_component.py::test_the_settings_carry_the_deployers_ci_contexts_and_the_prometheus_cluster_ip`
+`hosts/lib/tests/test_builder_component.py::test_the_settings_carry_the_shared_ci_contexts_and_the_prometheus_cluster_ip`
 holds the two equal.
 
 ## The builder's run
@@ -182,7 +182,7 @@ built commit. A pending or red commit on master therefore does not hold them bac
 
 `PROMETHEUS_URLS` renders from `builder_prom_urls` in `component.yml`. The component cannot read
 the observability role's `observability_prometheus_cluster_ip`, so the default repeats the address,
-and `hosts/lib/tests/test_builder_component.py::test_the_settings_carry_the_deployers_ci_contexts_and_the_prometheus_cluster_ip`
+and `hosts/lib/tests/test_builder_component.py::test_the_settings_carry_the_shared_ci_contexts_and_the_prometheus_cluster_ip`
 holds the two equal.  The code is
 `hosts/lib/builder_rollout_gate.py`, and `docs/host-packages.md`
 has the override's runbook step.

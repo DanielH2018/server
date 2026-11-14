@@ -114,12 +114,12 @@ nothing goes the other way, so the pair cannot cycle. The fetch/persist/post she
 `files/renovate_notify.py`, which imports from both. `host_lib.py` is copied in from
 `hosts/lib/` — edit it there, not here.
 
-`notify_logic` also carries a copy of the deployer's check-runs page walk, because the notifier
-cannot import `deployer_lib`. GitHub serves a check-runs or combined-status read with no
+`notify_logic` also carries a copy of `builder_ci_grade`'s check-runs page walk, because the
+notifier cannot import the builder's module. GitHub serves a check-runs or combined-status read with no
 `per_page` as one page of 30 entries, so a failing entry past that page once read as green
 (#6002). The copy walks every page of both reads, and a read short of `total_count` fails the
 run instead of posting a digest that omits the PR.
-`tests/test_renovate_notify.py` holds the copy equal to the deployer's.
+`tests/test_renovate_notify.py` holds the copy equal to `builder_ci_grade`'s (#5991).
 
 ## What a dry run does not prove
 

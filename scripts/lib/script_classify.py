@@ -145,7 +145,7 @@ def _argv_references(nodes: list[ast.AST]) -> set[str]:
     string it prints, and reading that as an invocation would put a deploy gate behind a session hook.
 
     A dict key is skipped too. It names a file as data, never as an argv element: the
-    deployer's `SETUP_FILES_SHIPPED_BY_OTHER_ROLES` is keyed by module paths.
+    retired deployer's `SETUP_FILES_SHIPPED_BY_OTHER_ROLES` was keyed by module paths.
     """
     keys = {key for node in nodes if isinstance(node, ast.Dict) for key in node.keys}
     docstrings = {
@@ -294,8 +294,8 @@ def _invocation_sites(repo: Path) -> list[tuple[Path, str, str]]:
         sites.append((path, "gate", f"Claude hook: {path.name}"))
 
     roles = repo / "k8s" / "roles"
-    # `files/*/*` reaches a package a role ships from a subdirectory, such as gitops_deploy's
-    # `files/deployer_lib/` (#4355).
+    # `files/*/*` reaches a package a role ships from a subdirectory, such as the retired
+    # gitops_deploy role's `files/deployer_lib/` (#4355).
     patterns = (
         "**/templates/*",
         "**/files/*",

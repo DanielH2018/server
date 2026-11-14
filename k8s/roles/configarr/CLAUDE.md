@@ -37,7 +37,7 @@ x265 re-encode instead, which made Jellyfin buffer and seek slowly.
   run does not count toward its dead-man monitor, and that role's CLAUDE.md has the other side
   of the choice.
 - **The health reader was a daniel-box host cron until H2.5b.** The cron,
-  `/usr/local/bin/configarr-health.sh` and the `configarr` drift fragment are `legacy:` entries in `hosts/daniel-box/package.yml` since H7.48, and
+  `/usr/local/bin/configarr-health.sh` and the `configarr` drift fragment are `legacy:` entries in `hosts/daniel-box/package.yml`, and
   `homelab-reconcile` removes each from a host that still holds it.
 - **`flux_cronjob_gates` in `defaults/main.yml` names the two gate Jobs.** The renderer copies
   each CronJob's `jobTemplate` into `configarr-verify` as `<cronjob>-deploy-gate-<spec
@@ -50,9 +50,8 @@ x265 re-encode instead, which made Jellyfin buffer and seek slowly.
   reader selects by that label and by finish time, never by name, so it still counts a gate
   run. `k8s/roles/configarr/tests/test_configarr_gate.py::test_the_reconcile_gate_is_a_rerun_safe_mutation_the_health_reader_counts`
   runs the reader's own predicate over the rendered Job.
-- **The Flux gate is stricter than the Ansible one was.** A sync that exits non-zero fails
-  `configarr-verify` and holds the revision, where `k8s/cronjob-gate` reported it and let the
-  deploy continue. The copy carries no ownerReference to the CronJob, so `concurrencyPolicy:
+- **A failed sync holds the revision.** A sync that exits non-zero fails `configarr-verify`,
+  and the revision does not pass its soak. The copy carries no ownerReference to the CronJob, so `concurrencyPolicy:
   Forbid` no longer keeps a scheduled 04:30 firing off a gate run; the sync converges, so an
   overlap writes nothing twice.
 - **Both gates start together, and that is accepted, not ordered.** Flux applies the two gate

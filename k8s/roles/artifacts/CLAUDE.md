@@ -1,11 +1,9 @@
 # artifacts — the Claude Code artifact browser, and the cross-host sync behind it
 
 Serves the HTML/Markdown artifacts Claude Code sessions write to `~/.claude/artifacts/`, so a
-report generated in a terminal session is readable in a browser behind Authelia. Written
-2026-08-24: this role had no `CLAUDE.md` at all, and it was the only role under `k8s/roles/` in
-that state — which mattered because it installed a **cross-host cron** that nothing else in the
-tree documented. Since H7.40 daniel-box's host package ships that sync as a timer, and this
-file still documents how it behaves.
+report generated in a terminal session is readable in a browser behind Authelia. The
+cross-host sync that feeds it is a timer in daniel-box's host package, and this file documents
+how that sync behaves.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in k8s/roles/longhorn-reconcile/defaults/main.yml. -->
@@ -47,6 +45,14 @@ file still documents how it behaves.
   create it root-owned in the agent's home. `claude-agent-setup`, which the claude-code host
   component ships, creates the directory (`2750 claude:ubuntu`, default ACL `g:ubuntu:rX`). The pod runs as `puid:pgid`, not root, so
   it reads that tree through the `ubuntu` group grant.
+- **Triage's report tree is a fourth source.** `artifacts_triage_dir`
+  (`/var/lib/claude-triage-ctl/reports`, set only while `claude_code_triage_enabled` is true)
+  mounts read-only at `/srv/artifacts/daniel-box-claude-triage`. The triage controller,
+  `claude-triage-ctl`, owns it, so a session as `claude` can neither fake nor redirect a report.
+  The claude-code component's triage tmpfiles entry creates it (`2750 claude-triage-ctl:ubuntu`),
+  and the pod reads it through the same group. The path equals `report_dir` in
+  `hosts/components/claude-code/templates/claude-triage-pins.j2`
+  (`hosts/tests/test_claude_triage.py::test_the_artifacts_pod_mounts_the_report_tree_the_host_creates`).
 
 ## The peer sync runs from daniel-box, and the direction is not arbitrary
 daniel-box's host package ships `/usr/lib/homelab/sync-artifacts` and

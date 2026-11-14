@@ -29,7 +29,7 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   restart, so the old pod serves through the pull (`flux_prepull_timeout` in
   `defaults/main.yml`, #5855). `docs/platform.md` has the outages a cold pull caused (#4188).
 - **The `home-assistant-snapshot` Job snapshots `home-assistant-config` before each revision
-  applies** (D5.2a). The home-assistant Kustomization depends on `home-assistant-snapshot`, so
+  applies**. The home-assistant Kustomization depends on `home-assistant-snapshot`, so
   a revision applies only after the snapshot is ready; `docs/flux-deploy-plane.md` lists the
   Job's checks. A failed revision that changes home-assistant writes the stateful hold, and
   `promote` does not reset `prod`, because the failed image may already have migrated the
@@ -66,11 +66,11 @@ because a role doc is loaded on every task in this directory whether it is neede
 ## The one convention that breaks edits
 - **Automations, scenes, scripts, template sensors and shared Jinja macros are COPIED, not
   templated** (since 2026-06-18). `configmap.yaml.j2` carries each with `lookup('file')`,
-  because they hold HA `{{ }}` Jinja that Ansible's templater would try to render and fail on
+  because they hold HA `{{ }}` Jinja that the renderer's Jinja would try to render and fail on
   — so no `{% raw %}` is needed, and **HA Jinja lives in these files, never inline in
   `configuration.yaml`**. `templates/config/secrets.yaml.j2` is the only genuinely templated
   config file, and `validate_ha_config.py` rejects a `{{ }}` marker in the three verbatim root
-  files, where an Ansible var would reach HA unrendered and render to nothing.
+  files, where a role var would reach HA unrendered and render to nothing.
 - **A NEW file ships nothing until its list in `defaults/main.yml` names it.** Four lists,
   one per shape: `home_assistant_automation_files` (merged by `!include_dir_merge_list`),
   `home_assistant_script_files` (`!include_dir_merge_named`), `home_assistant_template_files`
