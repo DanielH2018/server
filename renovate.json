@@ -934,14 +934,14 @@
       "automerge": false
     },
     {
-      "description": "k3s control plane (`k3s_version` in k8s/roles/system-upgrade/defaults, moved there by H6.1b). NEVER automerged: a k3s bump reinstalls the control plane on a single-server cluster, and until H6.3c it stays a hand apply of `k3s-bringup.yml` by the operator, following docs/k3s-upgrade.md. The pin now routes to the Flux-owned `system-upgrade` tag, so the deployer no longer writes a `manual_plane` line for it and nothing reminds the operator that the bump is owed. After H6.3c SUC applies a bump to the nodes its Plans select. A k3s bump also finishes k3s_install_script_sha256 in the same file: the installer is fetched from the release tag (#2147), so the hash of its install.sh moves with the tag. Split from MetalLB and Longhorn by H1.1g, whose two rules below name the merge gate instead. Same manual-finish class as the SOPS and crowdsec-plugin rules above.",
+      "description": "k3s control plane (`k3s_version` in k8s/roles/system-upgrade/defaults, moved there by H6.1b). NEVER automerged, because merging this pin is the upgrade: the `system-upgrade` role's SUC Plans apply the merged pin to daniel-box (H6.3c) and daniel-server (H6.3d), and on this single-server cluster that restarts the only control-plane node. The operator therefore chooses when the upgrade happens by choosing when to merge, following docs/k3s-upgrade.md before and after. The groupName keeps `k8s_autodeploy: false` because the `system-upgrade` role is denylisted, and that phrase keeps the unattended renovate_agent off the PR. A k3s bump also finishes k3s_install_script_sha256 in the same file: the installer is fetched from the release tag (#2147), so the hash of its install.sh moves with the tag. Split from MetalLB and Longhorn by H1.1g, whose two rules below name the merge gate instead. Same manual-finish class as the SOPS and crowdsec-plugin rules above.",
       "matchDatasources": [
         "github-releases"
       ],
       "matchPackageNames": [
         "k3s-io/k3s"
       ],
-      "groupName": "k3s control plane (manual — hand-run upgrade: docs/k3s-upgrade.md; k8s_autodeploy: false)",
+      "groupName": "k3s control plane (manual — merging is the upgrade: docs/k3s-upgrade.md; k8s_autodeploy: false)",
       "rebaseWhen": "conflicted",
       "schedule": [
         "before 6am on monday"
