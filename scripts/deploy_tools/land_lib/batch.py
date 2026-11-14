@@ -168,7 +168,9 @@ def _members(ln: Landing) -> list[Member]:
     if not waiting:
         return []
     reads = live_limit.github_reads(ln.tools.gh_json)
-    why = _alone(ln, ln.opts.pr, reads)
+    # The landing's code is compared with master here, once. Until the last member merges,
+    # master then moves only by this batch's own merges, which its run tested.
+    why = _alone(ln, ln.opts.pr, reads) or classify.code_lags_master(ln)
     if why:
         say(f"no batch: PR #{ln.opts.pr} lands alone, because {why}")
         return []
@@ -393,7 +395,6 @@ def _merge_member(ln: Landing, member: Member, before: Landing) -> str:
         waiting = turn.line_of(ln)("waiting", str(line.FRESH_S)).splitlines()
         if f"{pr} {member.head}" not in waiting:
             return "its own landing left the line"
-        classify.refuse_stale_code_before_merge(member.ln)
         head = member.ln.view("headRefOid").get("headRefOid") or ""
         if not stale_base.batch_tested(member.ln, head):
             return "the batch's run no longer stands for it"
