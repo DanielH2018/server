@@ -47,6 +47,8 @@ class IoConfig:
     R2_PROBE_INTERVAL_S: float
     CLOUDFLARE_IPS_EXPECTED: frozenset[str]
     CLOUDFLARE_IPS_PROBE_INTERVAL_S: float
+    DOMAIN_RDAP_URL: str
+    DOMAIN_REGISTRATION_PROBE_INTERVAL_S: float
     WAN_PROBE_URLS: tuple[str, ...]
     HEALTHCHECKS_API_URL: str
     HEALTHCHECKS_API_KEY: str = field(repr=False)
@@ -108,17 +110,16 @@ def io_config(
         # docs/archive/k3s-migration/backup-consolidation-longhorn.md), but this probe stays:
         # Longhorn still needs B2 reachable.
         #
-        # The probe authenticates against B2's native API. A cap breach answers
-        # b2_authorize_account with HTTP 403 and error code `transaction_cap_exceeded`, which
-        # _get_json's HTTPError detail carries verbatim into the alert message, naming the cause
-        # directly.
+        # The probe authenticates against B2's native API (b2_authorize_account, Class C), then
+        # makes one Class B call (checks/b2.py:b2_authorize), because B2 caps the two classes
+        # separately and Longhorn's backup reads are Class B. A cap breach answers either call
+        # with HTTP 403 and error code `transaction_cap_exceeded`, which _get_json's HTTPError
+        # detail carries verbatim into the alert message, naming the cause directly.
         #
         # ASSUMPTION, stated because it is load-bearing and cannot be tested without a live
-        # breach: that b2_authorize_account is itself subject to the cap. Backblaze's endpoint
-        # documentation lists 403/transaction_cap_exceeded among its errors, which is the basis.
-        # If a future breach shows THIS monitor stayed green through it, the assumption was
-        # wrong — point B2_PROBE_URL at a Class C call (b2_list_buckets, which needs the account
-        # id from the auth response) instead. It is a URL swap, not a rewrite, deliberately.
+        # breach: that each call is subject to its class's cap. Backblaze's endpoint
+        # documentation lists 403/transaction_cap_exceeded among the errors of both. A Class A
+        # cap has no probe: Class A calls are free and B2 sets no cap on them.
         B2_PROBE_URL=_env(
             "B2_PROBE_URL", "https://api.backblazeb2.com/b2api/v3/b2_authorize_account"
         ),
@@ -216,6 +217,13 @@ def io_config(
             c.strip() for c in _env("CLOUDFLARE_IPS_EXPECTED").split(",") if c.strip()
         ),
         CLOUDFLARE_IPS_PROBE_INTERVAL_S=_num("CLOUDFLARE_IPS_PROBE_INTERVAL_S"),
+        # The domain's RDAP record, whose `expiration` event dates the registration (#8519).
+        # Empty disables the check. Successes cached a day, failures re-probed every cycle
+        # (checks/domain_registration.py).
+        DOMAIN_RDAP_URL=_env("DOMAIN_RDAP_URL"),
+        DOMAIN_REGISTRATION_PROBE_INTERVAL_S=_num(
+            "DOMAIN_REGISTRATION_PROBE_INTERVAL_S"
+        ),
         # The WAN gate's endpoints, comma-separated and tried in order; empty disables the
         # gate. They are URLs rather than hosts so resolution, connect and TLS are all probed
         # by one request — checks/wan.py's header has why an anycast IP would not do.

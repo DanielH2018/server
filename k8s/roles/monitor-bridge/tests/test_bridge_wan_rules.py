@@ -1,6 +1,6 @@
 """The WAN family's rules in bridge-exporter.yaml follow from the check table's `gate` column.
 
-M6's batch A6-3 ports the four rows that sit behind `wan_reachable`, and the gate row itself,
+M6's batch A6-3 ported the rows that sit behind `wan_reachable`, and the gate row itself,
 to rules. Four things must hold, and the table is the only source for each:
 
 - a rule selects each row by its `check` label, and a dependent's rule carries the `requires`
@@ -106,12 +106,13 @@ def rendered_config() -> dict:
     return yaml_fast.safe_load(secret["stringData"]["alertmanager.yml"])
 
 
-def test_the_wan_family_is_the_four_rows_behind_the_gate():
+def test_the_wan_family_is_the_five_rows_behind_the_gate():
     assert set(dependents()) == {
         "discord",
         "r2_usage",
         "cloudflare_ips_drift",
         "healthchecks_drift",
+        "domain_registration",
     }
 
 

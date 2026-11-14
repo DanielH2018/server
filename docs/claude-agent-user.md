@@ -274,9 +274,7 @@ truth, with a reason beside each entry. It holds:
 - `.github/`
 - `hosts/components/host-hardening/` and `hosts/components/sshd/`, which hold the sudo cache,
   ssh and the operator's login
-- `secrets/.sops.yaml` and `secrets/secrets.yml`, and their paths after
-  [ADR-0030](adr/0030-the-ansible-tree-is-renamed-for-what-it-holds.md)'s rename,
-  `secrets/.sops.yaml` and `secrets/secrets.yml`
+- `secrets/.sops.yaml` and `secrets/secrets.yml`
 - alert-triggered triage: every `templates/claude-triage*` template, which includes the pins
   template that sets the run's caps, the rule `templates/50-claude-triage.rules.j2`,
   `files/claude_triage_run.py` and `files/claude_triage_poll.py`, all under
@@ -866,7 +864,7 @@ operator can log in as `claude`, so only the operator can run the checks that st
 | Capability | Why | Where it goes instead |
 |---|---|---|
 | A dry run against the cluster before a merge | It needs decrypted SOPS values, and the agent has no age key | Merged work deploys through the lander (slice 3). A pre-merge dry run returns with slice 7. |
-| The `probe.py` subcommands that read a credential from SOPS: `arr`, `ha`, `ha-state`, `b2-longhorn` and `b2-budget`, plus `postflight.py` and `ui_login.py` | `core.sops_extract` decrypts the credential, and the agent has no age key. The failure says so and exits 75. | The operator. `probe.py health` reads no SOPS value and works for the agent, and the domain comes from inventory. |
+| The `probe.py` subcommands that read a credential from SOPS: `arr`, `ha`, `ha-state`, `b2-longhorn` and `b2-budget`, plus `postflight.py` and `ui_login.py` | `core.sops_extract` decrypts the credential, and the agent has no age key. The failure says so and exits 75. | The operator. `probe.py health` reads no SOPS value and works for the agent. The domain and the B2 bucket come from inventory, so `b2-longhorn --dry-run` and `b2-budget --dry-run` work for the agent too. |
 | `sudo` | No sudo rights and no `SUDO_ASKPASS` helper | The operator, or the deployer after a merge |
 | Adding or rotating a secret | `sops` needs the data key to write a value | The operator. Key names stay readable, because SOPS encrypts values only. |
 | ssh as `ubuntu` to the peers | That shell has sudo | The operator. The agent reaches daniel-server as its own `claude` agent user, for fan-out only (slice 5). The Pi has no agent login, because the one `probe.py` ssh path needs its `docker` group. |

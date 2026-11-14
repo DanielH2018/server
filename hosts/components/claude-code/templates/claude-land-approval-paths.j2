@@ -78,11 +78,7 @@ uv.toml
 # sudo, ssh and the operator's own login: the sudo cache, the SSH directory and sshd's AllowGroups.
 hosts/components/host-hardening/
 hosts/components/sshd/
-# The secrets and who can decrypt them. Each entry is listed at its path before and after the
-# rename of ansible/ (ADR 0030), so the installed list holds across the merge. The rename's
-# follow-up removes the ansible/ entries once this list is installed again.
-ansible/.sops.yaml
-ansible/vars/secrets.yml
+# The secrets and who can decrypt them.
 secrets/.sops.yaml
 secrets/secrets.yml
 # The agent's cluster grant (operator decision, 2026-10-16, H1 Open question 7): the read-only
@@ -90,5 +86,4 @@ secrets/secrets.yml
 # k3s-bringup.yml, by hand; once Flux applies cluster-base on merge, this entry is the human
 # gate. A plain prefix, so it holds before H1 creates the role. The trailing slash keeps a
 # sibling such as cluster-baseline off the floor.
-ansible/roles/k8s/cluster-base/
 k8s/roles/cluster-base/

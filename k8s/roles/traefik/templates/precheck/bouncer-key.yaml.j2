@@ -48,7 +48,7 @@
 {#- The key's ciphertext digest, read from the cluster file's source; no value enters the
     spec. -#}
 {% set key = namespace(digest='') %}
-{% for line in lookup('file', repo_file('secrets/cluster-vars.source')).splitlines() if line and not line.startswith('#') and line.split()[0] == 'crowdsec_k8s_bouncer_api_key' %}
+{% for line in lookup('file', cluster_vars_source()).splitlines() if line and not line.startswith('#') and line.split()[0] == 'crowdsec_k8s_bouncer_api_key' %}
 {% set key.digest = line.split()[1] %}
 {% endfor %}
 {% set spec_text %}

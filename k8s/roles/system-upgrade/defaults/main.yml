@@ -126,6 +126,6 @@ flux_health_check_exprs:
 # Auto-deploy stance. Flux applies the tag, so this gates no apply; the reason records why a bad
 # merge here is not a routine bump.
 k8s_autodeploy: false
-k8s_autodeploy_reason: "platform — a merged change to a Plan upgrades the k3s binary on every node it selects; the Plans select no node until H6.3c, and the gates, deadlines and forward-only hold are the protection"
+k8s_autodeploy_reason: "platform — a merged change to a Plan, or to the k3s pin, upgrades the k3s binary on every node in `system_upgrade_nodes`; the gates, deadlines and forward-only hold are the protection"
 
 manifests_rollout: ''

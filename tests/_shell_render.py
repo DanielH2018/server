@@ -1,8 +1,7 @@
 """Render every Jinja-templated shell script, for tests that need to assert on the OUTPUT.
 
-`*.sh.j2` is the third template class `_k8s_render._render_all` skips, after the Pi's Compose
-and config templates (`_compose_render.rendered_texts`) and every k8s role's `Dockerfile*.j2`
-(`_k8s_render.rendered_build_texts`). A guard that reads a shell template's SOURCE matches
+`*.sh.j2` is a template class `_k8s_render._render_all` skips, as it skips every k8s role's
+`Dockerfile*.j2` (`_k8s_render.rendered_build_texts`). A guard that reads a shell template's SOURCE matches
 `{{ ... }}` the moment a value it asserts on — a retry count, a URL, a threshold — moves into
 a role default, and a pattern that matches nothing passes (#3178).
 
@@ -12,7 +11,7 @@ lints. Secret values render as `STUB` (the `DECIDED:` rule in `lib/render_guard.
 guard built on this keys on field names, never on credential-shaped values.
 
 A template is addressed by its (plane, role, name) triple rather than a role name: shell
-templates live on all three planes and `k8s/crowdsec` ships four of them, so a bare role name
+templates live on both planes and `k8s/crowdsec` ships four of them, so a bare role name
 is ambiguous. A host component's template takes `components` as its plane and the component's
 name as its role, which is where its path puts them: `hosts/components/<name>/templates/`.
 """

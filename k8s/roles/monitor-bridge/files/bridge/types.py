@@ -74,8 +74,9 @@ class PushCheck:
     """One row of `check_table.CHECKS`: a check or gate.
 
     Every field but `fn` must be written as a LITERAL in the table. The deploy reads the table
-    with `ansible/filter_plugins/py_table.py`, which parses `check_table.py` rather than running
-    it, and keeps only the keyword arguments whose value is a literal. `fn` is the one it drops.
+    with `scripts/renderer/template_filters/py_table.py`, which parses `check_table.py` rather
+    than running it, and keeps only the keyword arguments whose value is a literal. `fn` is the
+    one it drops.
 
     Attributes:
       name: The check's own name — what CHECKS_ONLY/CHECKS_SKIP and the gate sets refer to.
