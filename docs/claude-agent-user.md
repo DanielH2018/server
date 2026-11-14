@@ -289,7 +289,9 @@ truth, with a reason beside each entry. It holds:
   read-only token, the token and config templates, `templates/renovate-agent-pins.j2`, which
   sets the caps and the permission mode as literals, the prompt, the unit and timer, and
   `component.yml`. The operator added them on 2026-11-13 with the guardrails plan's B1. The
-  component's defaults, tests and `CLAUDE.md` stay off.
+  session's Claude Code settings `files/claude-settings.json`, the setup script that installs
+  them and its boot unit joined on 2026-11-14 (#8392), so no unapproved PR weakens the
+  session's deny floor. The component's defaults, tests and `CLAUDE.md` stay off.
 - `k8s/roles/cluster-base/` and its path after the rename, `k8s/roles/cluster-base/`,
   the agent's read-only cluster RBAC. The operator added it
   on 2026-10-16 (H1 Open question 7). Before H1, that RBAC applies only through

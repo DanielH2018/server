@@ -9,6 +9,10 @@
 {{ {
   'paths': claude_code_guardrail_audit_paths,
   'homes': _homes,
+  'copies': [
+    {'dst': '/var/lib/renovate-agent/.claude/settings.json', 'src': '/usr/lib/homelab/renovate-agent/claude-settings.json'},
+    {'dst': '/var/lib/renovate-agent/.claude/hooks', 'src': '/home/' ~ sys_user ~ '/.claude/hooks'},
+  ],
   'quiet_settings_keys': claude_code_guardrail_ack_quiet_settings_keys,
   'dotfiles_repo': claude_code_guardrail_ack_dotfiles_repo,
   'dotfiles_clone': '/var/lib/homelab-claude-guardrail-ack-dotfiles',

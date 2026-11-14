@@ -11,6 +11,7 @@ Run: uv run pytest hosts/tests/test_renovate_agent_identity.py
 """
 
 import importlib.util
+import json
 import re
 import shlex
 import sys
@@ -258,6 +259,97 @@ def test_the_agent_gets_claude_guard_where_the_hook_looks_for_it() -> None:
         f'copy_from_operator "$operator{rel}/claude_guard" "$home{rel}/claude_guard"'
         in setup
     )
+
+
+SETTINGS_SRC = "files/claude-settings.json"
+
+
+def session_settings() -> dict:
+    return json.loads((COMPONENT / SETTINGS_SRC).read_text())
+
+
+def hook_commands(settings: dict, event: str, matcher: str) -> list[str]:
+    return [
+        hook["command"]
+        for entry in settings.get("hooks", {}).get(event, [])
+        if entry.get("matcher") == matcher
+        for hook in entry["hooks"]
+    ]
+
+
+def test_the_session_settings_run_the_shared_guard_hooks() -> None:
+    """claude-guard on every Bash call, and the secret-file deny on every file tool."""
+    settings = session_settings()
+    assert hook_commands(settings, "PreToolUse", "Bash") == [
+        "~/.claude/hooks/guard-pre-tool-use.sh"
+    ]
+    assert hook_commands(settings, "PermissionRequest", "Bash") == [
+        "~/.claude/hooks/guard-permission-request.sh"
+    ]
+    assert hook_commands(settings, "PreToolUse", "Read|Edit|Write|NotebookEdit") == [
+        "~/.claude/hooks/protect-secrets.sh"
+    ]
+
+
+@pytest.mark.parametrize(
+    "rule",
+    [
+        "Bash(sudo:*)",
+        "Bash(su:*)",
+        "Bash(kubectl delete:*)",
+        "Bash(git push --force)",
+        "Read(~/.config/gh/**)",
+        "Read(//run/homelab-secrets/**)",
+        "Edit(~/.claude/settings.json)",
+        "Edit(~/.claude/hooks/**)",
+        "Edit(~/.local/share/claude-guard/**)",
+    ],
+)
+def test_the_session_settings_deny_the_floor(rule: str) -> None:
+    assert rule in session_settings()["permissions"]["deny"]
+
+
+def test_the_session_settings_lock_out_bypass_mode() -> None:
+    permissions = session_settings()["permissions"]
+    assert permissions["disableBypassPermissionsMode"] == "disable"
+    assert "allow" not in permissions, (
+        "the floor ships denies only; the wrapper's permission mode decides the rest"
+    )
+
+
+def test_setup_installs_the_settings_at_the_path_the_guardrail_audit_watches() -> None:
+    shipped = [f for f in SPEC["files"] if f.get("src") == SETTINGS_SRC]
+    assert len(shipped) == 1
+    setup = render("renovate-agent-setup.sh.j2", MOVED)
+    assert f"\nsettings={shipped[0]['dst']}\n" in setup
+    assert (
+        'as_agent cp --remove-destination "$settings" "$home/.claude/settings.json"'
+        in setup
+    ), "the agent, not root, must write into its own home"
+    assert 'copy_from_operator "$operator/.claude/hooks" "$home/.claude/hooks"' in setup
+
+
+def test_the_session_settings_carry_the_auto_mode_deny_floor() -> None:
+    """The wrapper runs the session in auto mode, where the classifier reads these rules."""
+    auto = session_settings()["autoMode"]
+    assert auto["classifyAllShell"] is True
+    assert any("`master`" in rule for rule in auto["hard_deny"])
+    assert auto["soft_deny"] and auto["environment"]
+    assert "allow" not in auto
+
+
+def test_the_guardrail_ack_explains_the_copies_setup_makes() -> None:
+    """A rollout of the settings or the operator's hooks must not post as unexplained."""
+    ack = json.loads(
+        render_component_text("claude-code", "claude-guardrail-ack.json.j2")
+    )
+    [shipped] = [f["dst"] for f in SPEC["files"] if f.get("src") == SETTINGS_SRC]
+    home = "/var/lib/renovate-agent"
+    assert {c["dst"]: c["src"] for c in ack["copies"]} == {
+        f"{home}/.claude/settings.json": shipped,
+        f"{home}/.claude/hooks": "/home/ubuntu/.claude/hooks",
+    }
+    assert {c["dst"] for c in ack["copies"]} <= set(ack["paths"])
 
 
 def guard_decision(command: str) -> str | None:
