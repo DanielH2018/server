@@ -39,7 +39,7 @@ from lib.cli_help import answer_help
 OUTDIR = "k8s/roles/observability/files/dashboards"
 
 # Canonical datasource uids we provision (see provisioning/datasources.yml.j2).
-PROM_UID, LOKI_UID = "EGdsQqhVk", "bf4q19tuivta8e"
+PROM_UID = "EGdsQqhVk"
 
 # Dashboards managed by fetch_grafana_dashboards.py (upstream = grafana.com). Skip them
 # here so the two scripts own disjoint files and never clobber each other.

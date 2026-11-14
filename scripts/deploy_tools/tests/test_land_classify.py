@@ -166,16 +166,6 @@ def test_an_unreadable_merge_commit_says_so_and_falls_back_to_this_checkout(
     assert (ln.resolved_tags == ["pihole-exporter"]) is registered_here
 
 
-# ── a role directory the merge commit lacks is deleted, not shared (#7108) ──
-
-
-def _role_pr(role: str) -> dict:
-    return {
-        "files": [{"path": f"k8s/roles/{role}/tasks/main.yml"}],
-        "changedFiles": 1,
-    }
-
-
 def test_explicit_tags_skip_derivation(landing):
     """`--tags` overrides the derivation; the override's sonarr survives `derived`'s radarr."""
     ln, _ = landing(Fakes(derived=(["radarr"], "pr")), tags="sonarr")

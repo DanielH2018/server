@@ -98,5 +98,5 @@ id_ed25519
 # directory, extending the `.claude-plugin/types/` scaffold it also writes. That scaffold
 # ignores itself; the root file does not. Since dotfiles#797 sets CLAUDE_CODE_PLUGIN_DIRS
 # to `.claude/plugins/deck`, every session on the k3s nodes loads the deck mod from the
-# primary checkout and recreates the file, which would park the GitOps deployer as above.
+# primary checkout and recreates the file, which would park homelab-checkout-sync as above.
 .claude/plugins/*/tsconfig.json

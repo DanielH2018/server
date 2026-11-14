@@ -54,7 +54,7 @@ Subcommands:
                              [--docker inspects the Pi's container instead]
                              [--cluster prod|stage — refuses when the local
                               kubectl serves the other one]
-    arr <app> <api-path>     Read-only *arr API GET [--json] (sonarr/radarr/prowlarr)
+    arr <app> <api-path>     Read-only *arr API GET [--json] (sonarr/radarr/prowlarr/lidarr)
                              [--show-secrets prints the credential values it redacts]
     ha state <entity_id>     Live HA entity state + attrs    (home-assistant :8123)
     ha automation <id|alias> One automation's on/off + last_triggered (resolves alias!=id)
@@ -72,6 +72,9 @@ Subcommands:
                              started with their VERDICT, the PRs it named [--since 6h]
     builder [-n N]           daniel-box's host-package builder: reason, published versions,
                              newest builds, failures [--since 24h]
+    usage [--all]            requests per service over the retention window (all routes
+                             summed, monitoring apart), memory request/limit vs 7d p95,
+                             PVC fill and days to full (prometheus :9090)
 
 Exit codes: every verdict subcommand exits 0 or 1 for what it observed, and 75 when it could
 not read its source, with the failed read on stderr. `health` exits 3 when the tag names nothing

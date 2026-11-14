@@ -6,7 +6,7 @@ It is the acting half of the pair whose reporting half is
 `hosts/components/renovate-notify/`: that component says what is open and what needs manual
 work, this one does it.
 
-`homelab-daniel-box` ships it. H7.37 moved it from the `renovate_agent` role.
+`homelab-daniel-box` ships it.
 
 The four bounds on a run and the worktree rules, what the Discord digest measures, the alive
 tile's exit-code and token plumbing, how to exercise the wrapper without arming anything, the
@@ -44,7 +44,8 @@ home, the operator's uv, uvx, prek, claude_guard and claude_worktree, the pinned
 Code and the clone. The agent runs every command that writes into its home.
 
 There is deliberately **no restart on a package install**: the session's unit is `policy:
-manual`, because a run costs money and changes the fleet. Start one by hand:
+manual`, because a run costs money and changes the fleet. Start one by hand
+(**operator-only**):
 
 ```bash
 sudo systemctl start homelab-renovate-agent && journalctl -u homelab-renovate-agent -f

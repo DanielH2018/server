@@ -2,10 +2,9 @@
 
 This role renders no manifest and starts no workload. It declares one *arr app's Discord
 "Connect" notification over the app's own API, so the notification is repo state rather than
-UI state. Under Flux the declaration runs as a seed Job in sonarr's, radarr's and lidarr's
+UI state. The declaration runs as a seed Job in sonarr's, radarr's and lidarr's
 `templates/verify/` (*The Job form*, below), which reads this role's script and defaults by
-`lookup()`. Those lookups are the role's only callers: sonarr and radarr included it until #5561, which dropped the includes because
-no Ansible path ran them after the Flux flip (D5.20).
+`lookup()`. Those lookups are the role's only callers, and no app includes the role.
 
 **Why it exists.** A Connect notification is a row in `sonarr.db` / `radarr.db` on the app's
 config PVC. No manifest reproduces it, so a Longhorn revert past its creation, or anyone
@@ -96,10 +95,9 @@ uv run python k8s/roles/arr-notification/files/seed_arr_notification.py --test
 
 ## The Job form
 
-Under Flux the seed runs as a post-apply mutation Job in `sonarr-verify`, `radarr-verify` and
+The seed runs as a post-apply mutation Job in `sonarr-verify`, `radarr-verify` and
 `lidarr-verify`. `templates/verify/notification.yaml.j2` in each app's role holds it,
 byte-identical in all three.
-It landed inert in `templates/verify-inert/`, and the apps' flip (D5.20) moved it.
 
 - **The script is the one this role ships**, read by a cross-role `lookup()`, so a change here
   changes both apps' renders. The template also reads
@@ -115,7 +113,7 @@ It landed inert in `templates/verify-inert/`, and the apps' flip (D5.20) moved i
 - **The Job reruns once per revision that rolls the app**, because its spec embeds a digest of
   the rendered Deployment. A webhook rotation alone renames nothing, so the rotated URL reaches
   the app on the next revision that rolls it.
-- **The fence peers landed ahead of the flip.** The Job's pod carries `app: <app>-verify`, and
+- **The fence peers are in place.** The Job's pod carries `app: <app>-verify`, and
   each app's `netpol_from` lists that label (#5535). `tests/test_seed_job.py` checks that the
   Job's pod is one its app's fence admits.
 
@@ -125,7 +123,7 @@ It landed inert in `templates/verify-inert/`, and the apps' flip (D5.20) moved i
 rule is an accept/reject pair over `find_notification` / `declared_body` / `needs_update` —
 the three functions that decide create, rewrite or no-op.
 
-`tests/test_seed_job.py` renders the three apps' flipped Jobs, runs the Job census over them, and
+`tests/test_seed_job.py` renders the three apps' Jobs, runs the Job census over them, and
 runs the rendered script twice against a fixture API from no row and from a drifted row. The
 second run must write nothing; the Job's `homelab/rerun-safe` annotation names that test. A
 red-proof pair seeds lidarr against a fixture that serves only `/api/v1` (accepted) and only

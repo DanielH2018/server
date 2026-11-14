@@ -7,14 +7,20 @@ manager's fix is the `longhorn` role's kustomize patch (H1.5a), which Flux appli
 object it patches. The csi-* sidecars are not in the upstream file: longhorn-driver-deployer
 creates them at runtime, and longhorn-manager sets their `resources` from the
 `system-managed-csi-components-resource-limits` Setting the same role renders (#5958). The
-Setting tests below hold it to the same rule. longhorn-global-manager, the Deployment v1.13
+Setting tests below hold it to the same rule, and it carries the longhorn-csi-plugin
+DaemonSet's three containers too (#8326). longhorn-global-manager, the Deployment v1.13
 added, has its own patch and tests (#5968). The manager DaemonSet's update strategy has its
 own patch too, which rolls one pod at a time so the admission webhook stays served (#6009).
 
-Only a request, never a limit: a limit set too low turns "killed by OOM badness" into "killed
-by cgroup cap" — a different failure mode this design rejects. `test_a_patch_carrying_a_
+The manager, the global manager and the CSI components take only a request, never a limit: a
+limit set too low turns "killed by OOM badness" into "killed by cgroup cap" — a different
+failure mode this design rejects. `test_a_patch_carrying_a_
 limits_key_is_rejected` is the pair proving this guard can actually go red rather than
 passing on any resources block it is handed.
+
+The containers outside the storage data path take requests AND limits: longhorn-ui,
+longhorn-driver-deployer and its init container, and the manager DaemonSet's pre-pull sidecar
+(#8543). Restarting any of them touches no volume, so a generous limit costs nothing.
 
 Run: uv run pytest tests/longhorn/test_longhorn_control_plane_resources.py
 """
@@ -22,6 +28,7 @@ Run: uv run pytest tests/longhorn/test_longhorn_control_plane_resources.py
 import json
 
 import pytest
+from _helpers import besteffort_workloads
 from _k8s_render import rendered_docs
 from lib import yaml_fast
 
@@ -194,10 +201,6 @@ def test_upstream_alone_replaces_every_manager_pod_at_once():
     assert _manager_max_unavailable(_docs(UPSTREAM), []) == "100%"
 
 
-# The four Deployments longhorn-driver-deployer creates and the Setting names. Any other
-# component in the Setting would have the manager roll it, and the plugin DaemonSet's roll can
-# strand RWX mounts.
-CSI_SIDECARS = {"csi-attacher", "csi-provisioner", "csi-resizer", "csi-snapshotter"}
 CSI_SETTING = "system-managed-csi-components-resource-limits"
 
 
@@ -213,20 +216,103 @@ def _csi_setting_value() -> dict:
             return json.loads(doc["value"])
     raise AssertionError(
         "the longhorn render holds no system-managed-csi-components-resource-limits Setting; "
-        "without it the CSI sidecars run BestEffort"
+        "without it the CSI components run BestEffort"
     )
 
 
-def test_the_csi_setting_requests_the_defaults_value_for_the_four_sidecars_only():
+def _request(key: str) -> dict:
+    return {"requests": {"memory": str(LONGHORN_DEFAULT_VALUES[key])}}
+
+
+def test_the_csi_setting_requests_the_defaults_values_for_every_csi_component():
     # fact: k8s/roles/longhorn/CLAUDE.md#At a glance
     # Exact equality, not a subset: longhorn-manager compares each entry with the live
-    # container's `resources`, so an extra `limits: {}` never matches and rolls the Deployment
-    # on every tick.
-    request = {
-        "requests": {
-            "memory": str(
-                LONGHORN_DEFAULT_VALUES["k3s_longhorn_csi_sidecar_memory_request"]
-            )
-        }
+    # container's `resources`, so an extra `limits: {}` never matches and rolls the object on
+    # every tick. The keys are every component the v1.13.0 manager reads from the Setting; one
+    # it omits runs BestEffort (#8326).
+    sidecar = _request("k3s_longhorn_csi_sidecar_memory_request")
+    node_sidecar = _request("k3s_longhorn_csi_node_sidecar_memory_request")
+    assert _csi_setting_value() == {
+        "csi-attacher": sidecar,
+        "csi-provisioner": sidecar,
+        "csi-resizer": sidecar,
+        "csi-snapshotter": sidecar,
+        "longhorn-csi-plugin": _request("k3s_longhorn_csi_plugin_memory_request"),
+        "node-driver-registrar": node_sidecar,
+        "longhorn-liveness-probe": node_sidecar,
     }
-    assert _csi_setting_value() == {name: request for name in CSI_SIDECARS}
+
+
+def test_no_vendored_longhorn_workload_runs_besteffort():
+    # fact: k8s/roles/longhorn/CLAUDE.md#At a glance
+    assert besteffort_workloads(LONGHORN_ROLE) == []
+
+
+def _workload_container(
+    path, kind: str, name: str, section: str, container: str
+) -> dict:
+    (doc,) = [
+        d for d in _docs(path) if _target_of(d) == (kind, name, "longhorn-system")
+    ]
+    (found,) = [
+        c
+        for c in doc["spec"]["template"]["spec"].get(section) or []
+        if c["name"] == container
+    ]
+    return found
+
+
+@pytest.mark.parametrize(
+    ("patch", "kind", "name", "section", "container", "key"),
+    [
+        (
+            "longhorn-ui.yaml",
+            "Deployment",
+            "longhorn-ui",
+            "containers",
+            "longhorn-ui",
+            "k3s_longhorn_ui_resources",
+        ),
+        (
+            "longhorn-driver-deployer.yaml",
+            "Deployment",
+            "longhorn-driver-deployer",
+            "containers",
+            "longhorn-driver-deployer",
+            "k3s_longhorn_driver_deployer_resources",
+        ),
+        (
+            "longhorn-driver-deployer.yaml",
+            "Deployment",
+            "longhorn-driver-deployer",
+            "initContainers",
+            "wait-longhorn-manager",
+            "k3s_longhorn_driver_deployer_wait_resources",
+        ),
+        (
+            "longhorn-manager-pre-pull.yaml",
+            "DaemonSet",
+            "longhorn-manager",
+            "containers",
+            "pre-pull-share-manager-image",
+            "k3s_longhorn_share_manager_pre_pull_resources",
+        ),
+    ],
+)
+def test_unsized_upstream_containers_get_the_defaults_requests_and_limits(
+    patch, kind, name, section, container, key
+):
+    # fact: k8s/roles/longhorn/CLAUDE.md#At a glance
+    # Upstream ships each container with no `resources`, so the patch's block is what Flux
+    # applies. A refresh that adds upstream resources fails the first assertion, and the
+    # patch then needs re-reading against them.
+    assert "resources" not in _workload_container(
+        UPSTREAM, kind, name, section, container
+    )
+    resources = _workload_container(PATCHES / patch, kind, name, section, container)[
+        "resources"
+    ]
+    assert {
+        f"{part}.{unit}" for part, values in resources.items() for unit in values
+    } == {"requests.cpu", "requests.memory", "limits.cpu", "limits.memory"}
+    assert resources == LONGHORN_DEFAULT_VALUES[key]

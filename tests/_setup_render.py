@@ -15,9 +15,12 @@ Secret values a caller does not override render as `STUB` (the `DECIDED:` rule i
 """
 
 from functools import cache
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from lib.render_context import render_context
+from renderer.renderer_lib import host as host_mode
+from renderer.renderer_lib.host_outputs import COMPOSE_ROOT, TEMPLATE_ROOT
+from renderer.renderer_lib.host_package import Package
 from validate.setup_templates import (
     HOST_RENDER_CONTEXT,
     COMPONENTS,
@@ -77,6 +80,47 @@ def rendered_setup_texts() -> tuple[tuple[str, str, str], ...]:
     if _TEXTS is None:
         _TEXTS = render_setup_texts()
     return _TEXTS
+
+
+PI_COMPOSE = "pi-compose"
+
+
+def pi_compose_texts(
+    package: Package, overrides: dict | None = None
+) -> tuple[tuple[str, str, str], ...]:
+    """(component, file name, TEXT) for every Compose project file a host package ships.
+
+    pi-compose keeps its templates outside a `templates/` directory, so `render_setup_texts`
+    never reaches them; this reads them from the package the host renderer built instead. A
+    service's files are labelled `pi-compose/<service>`, and the project file and the
+    `compose.env` secret template `pi-compose`.
+
+    Host mode renders each secret a compose file reads, alias or not, as `${<key>}`. Each key of
+    `overrides` has that reference replaced by its value, so a census that sets a secret to a
+    sentinel finds the sentinel here as it does on the other planes.
+    """
+    env_root = TEMPLATE_ROOT / COMPOSE_ROOT.relative_to("/")
+    texts = []
+    for dst, (content, _) in sorted(package.files.items()):
+        path = PurePosixPath(dst)
+        root = next(
+            (r for r in (COMPOSE_ROOT, env_root) if path.is_relative_to(r)), None
+        )
+        if root is None:
+            continue
+        parts = path.relative_to(root).parts
+        component = "/".join((PI_COMPOSE, *parts[:-1]))
+        text = content.decode()
+        for key, value in (overrides or {}).items():
+            text = text.replace(f"${{{key}}}", str(value))
+        texts.append((component, parts[-1], text))
+    return tuple(texts)
+
+
+@cache
+def pi_package() -> Package:
+    """daniel-pi's host package at inventory values, rendered at most once per process."""
+    return host_mode.render_host("daniel-pi")
 
 
 # The component that took over the claude_code setup role's sources (#6773).

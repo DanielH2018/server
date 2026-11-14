@@ -244,7 +244,7 @@ keep_failure_log() {
 # record (2026-08-25 twice, 08-27, 09-04) and a human cleaned up each time before the next run.
 #
 # A newly generated page needs `rm`, not `git checkout HEAD --`: it has no HEAD version, the
-# checkout fails on it, and the file is left UNTRACKED -- which parks the deployer just as surely.
+# checkout fails on it, and the file is left UNTRACKED -- which parks `homelab-checkout-sync` just as surely.
 #
 # Scoped to the staged paths, never a blanket `git checkout -- docs/reference`: topology.md is
 # hand-written prose in that tree, and a blanket checkout would destroy an uncommitted human edit.
@@ -264,7 +264,7 @@ EOF
   #
   # A prek hook can modify a file AFTER `git add` ran -- gen-doc-fragments regenerates the whole
   # fragment set, so it rewrites fragments this run's generators never touched. Those files are
-  # dirty, they park the deployer, and they are absent from $1 by construction. A check scoped to
+  # dirty, they park checkout-sync, and they are absent from $1 by construction. A check scoped to
   # $1 would report "tree restored" over exactly the leftover that made 2026-09-04's alert wrong.
   #
   # The cost is a false TREE-STILL-DIRTY if a human edits topology.md (the one hand-written page
@@ -321,7 +321,7 @@ clear_commit_failed() { rm -f "$COMMIT_FAILED_STAMP"; }
 # The status to report for a dirty tree. Foreign dirt is `up`: somebody else is mid-edit and this
 # run legitimately did nothing. This script's OWN leftover dirt is `down` -- run N fails its commit
 # and pushes down, run N+1 meets that dirt, takes the dirty branch and used to push `up`, clearing
-# the alarm run N raised while nothing had been published and the deployer was still parked. The
+# the alarm run N raised while nothing had been published and the checkout was still parked. The
 # stamp tells the two apart; paths cannot, because a human running build_docs.py by hand in this
 # checkout dirties exactly the same files.
 dirty_tree_status() { if [ -e "$COMMIT_FAILED_STAMP" ]; then printf down; else printf up; fi; }
@@ -418,8 +418,8 @@ fi
 #
 # IT RUNS BEFORE THE `git diff --cached --quiet` GATE BELOW. That is what lets a weights-only
 # change reach a PR: most runs regenerate no page at all, and a table written after the gate
-# would be left unstaged in the primary checkout, which deploy_git.py reads as dirty and which
-# parks every deploy on the box.
+# would be left unstaged in the primary checkout, which homelab-checkout-sync reads as dirty, so
+# it stops fast-forwarding the checkout.
 #
 # A FAILING MEASUREMENT DEGRADES THE RUN, IT DOES NOT ABORT IT — build_docs.py's GENERATORS_OK
 # path rather than an early exit.
@@ -555,7 +555,7 @@ STAGED_STATUS="$(git diff --cached --name-status --no-renames)"
 # off the commit line, and it left prek entirely on 2026-10-02), and this cron must not publish
 # generated pages the suite rejects. Run here rather than left to the push because a
 # rejected commit is a state this script can undo -- restore_generated_tree -- where a rejected
-# push would leave a commit on the local master for the deployer to trip over.
+# push would leave a commit on the local master for homelab-checkout-sync to trip over.
 #
 # AFTER `git add`, because pytest_shard's census reads `git ls-files` and several guards read
 # the regenerated pages off disk. AFTER STAGED_STATUS for the same reason the commit is: the
