@@ -5,12 +5,13 @@ identity's quota, so one session's burst of calls refuses every other session, t
 the operator's own terminal. This page records what exhausts the quota, the design that
 contains a burst inside the session that caused it, and the slices that build it.
 
-**Status: proposed on 2026-11-14.** The operator has not accepted the design, and no slice is
-built. On acceptance, *The design* becomes an ADR in the PR that builds slice 1.
+**Status: accepted on 2026-11-14.**
+[ADR-0034](adr/0034-github-quota-is-budgeted-per-session-in-the-wrappers.md) records the
+decision. The ledger records and refuses nothing.
 
 | Slice | What it delivers | State |
 |---|---|---|
-| 1 | A ledger that `ghread` and `lib/gh.py` record each call in, and `gh-quota status` | Planned |
+| 1 | A ledger that `ghread` and `lib/gh.py` record each call in, and `gh-quota status` | Built for `lib/gh.py`. `ghread`, `cc-wait` and the claude-guard rule are open in the dotfiles repo. |
 | 2 | The session ceiling, the reserve and the write pace, enforced inside those two wrappers | Planned |
 | 3 | The REST readers that do not run `gh` record and obey the same ledger | Planned |
 | 4 | Identical reads from many sessions cost one GitHub call | Planned |
@@ -148,28 +149,27 @@ below applies.
 
 ```text
 session shell read ── ghread ──────────────┐
-repo Python tool ──── lib/gh.py ───────────┼── gh_quota: admit, record, sample
+repo Python tool ──── lib/gh.py ───────────┼── gh_quota: record, and admit from slice 2
 host REST reader ──── host_lib.github_get ─┘       │
                                                    └── ledger under /run/gh-quota/
 cc-wait gh-pr, gh-ci ─ ghread, from slice 1 on
 
 bare gh (a session's write, the operator's terminal)
-        └── not recorded; GitHub still counts it, and it prints as `unattributed`
+        └── not recorded; GitHub still counts it, and it prints as `beyond the ledger`
 ```
 
-`gh_quota` is one Python module with three functions.
+`gh_quota` is one Python module. A wrapper calls one function before it runs `gh`.
 
 | Function | What it does |
 |---|---|
-| `admit(bucket, weight)` | Reads the ledger and returns pass, a hold in seconds, or a refusal. |
-| `record(bucket, weight, argv_class)` | Writes one ledger row: session, bucket, weight, class, time. |
-| `sample()` | At most once every 30 seconds, stores `GET /rate_limit` beside the rows as ground truth. |
+| `record(args)` | Takes the arguments the wrapper is about to hand `gh`. It names the call's bucket and class itself, adds one to the session's count, and stores `GET /rate_limit` beside the counts when `SAMPLE_EVERY_S` has passed. |
+| `admit(args)`, from slice 2 | Reads the ledger and returns pass, a hold in seconds, or a refusal. |
 
 **One home, three importers.** The module ships in a host package as
 `/usr/lib/homelab/gh_quota.py`, because a host timer imports only root-owned code.
-`scripts/lib/gh.py` imports the repo's copy of the same file, as `scripts/lib/worktrees.py`
-imports `worktree_holders.py`. `ghread` imports the packaged path when it exists. On a host
-without the package, such as the operator's PC, `ghread` runs as it does without this design.
+`scripts/lib/gh.py` imports the repo's copy of the same file through a path insert. `ghread`
+imports the packaged path when it exists. On a host without the package, such as the
+operator's PC, `ghread` runs as it does without this design.
 
 **The ledger** is one SQLite file per quota identity under `/run/gh-quota/`. `/run` is a
 tmpfs, and a quota window lasts one hour, so a reboot loses nothing worth keeping. The
@@ -184,22 +184,30 @@ fingerprint of the token when the caller sets `GH_TOKEN`.
 2. The systemd unit name from `/proc/self/cgroup`, for a timer or the lander.
 3. `operator`, for a call with neither.
 
-**Classification** is a table in the module: `gh` subcommand to bucket and weight.
-`gh auth`, `gh config`, `gh version` and `gh api rate_limit` are free and write no row. A
-weight is an estimate, because the module does not see the HTTP requests `gh` makes. The
-ground-truth sample corrects for that: `gh-quota status` scales each session's recorded
-weight so that the sessions sum to what GitHub counted.
+**Classification** is `classify` in the module: a `gh` argv to a bucket and a call class,
+such as `graphql` and `pr list`. `gh auth`, `gh config`, `gh version` and
+`gh api rate_limit` are free and write no row. A `gh api` write records as `api mutation` or
+`api write`, apart from a read.
 
-**`unattributed` is what reached GitHub around the three owners.** It is what GitHub counted
-beyond the recorded rows: a session's writes, the operator's terminal and the operator's PC.
-`gh-quota status` prints it on its first line. A bare `gh` is never refused by the ledger.
+**The ledger counts calls, not points.** The module does not see the HTTP requests `gh`
+makes, and one GraphQL call can cost several points. `gh-quota status` therefore prints the
+recorded calls beside what GitHub counted, and does not scale one to fit the other. The cost
+of each call class is fitted later from the recorded windows.
+
+**Spend beyond the ledger is what GitHub counted above the recorded calls.** For `core` it is
+what reached GitHub around the three owners: a session's writes, the operator's terminal and
+the operator's PC. For `graphql` it also holds the points a recorded call cost above one.
+`gh-quota status` prints it on each count line. A bare `gh` is never refused by the ledger.
 That is the right answer for the operator's terminal. For a session it covers writes only,
 once claude-guard routes every read.
 
-**The mode** is one of `off`, `record` and `enforce`, read from `/etc/gh-quota.conf`, which
-the host package renders from a host variable. In `off`, each function returns at once.
+**The mode** is `off` or `record`, and slice 2 adds `enforce`. The component's
+`gh_quota_mode` default renders it into `/etc/gh-quota.conf`, and a host's host_vars can
+override it. In `off`, `record` returns at once. `GH_QUOTA_MODE=off` in one call's
+environment is `off` for that call: the test suite sets it, so a test's fake `gh` call never
+lands in the host's ledger.
 
-**The module fails open.** A ledger it cannot open, lock or parse makes `admit` pass and
+**The module fails open.** A ledger it cannot open, lock or parse lets the call through and
 counts the failure in a second file that `gh-quota status` reads. The ledger's own outage
 must not become a GitHub outage.
 
@@ -207,7 +215,7 @@ must not become a GitHub outage.
 
 | Rule | Condition | Who it stops |
 |---|---|---|
-| Session ceiling | The session's scaled spend in the window has reached its ceiling for that bucket. | That session only |
+| Session ceiling | The session's spend in the window has reached its ceiling for that bucket. | That session only |
 | Reserve | GitHub's `remaining` for the bucket is at or below the reserve. | Every caller except class `priority` and `operator` |
 | Write pace | The identity's last write through a wrapper was less than one second ago. | That write, until its turn |
 
@@ -271,18 +279,20 @@ run `findings.py claims` in the same quarter minute cost one call, not 39.
 
 ```text
 $ gh-quota status
-graphql 3120/5000 used, resets 15:21 UTC; 37 sessions passing, 2 refused; 4% unattributed
-  refused  7c1e90aa  ceiling  1004/1000  issue list x212, pr view x40
-  refused  a93b0d51  reserve
---all lists every session; --bucket core for REST
+uid-1000 graphql: 3120/5000 used, resets 15:20 UTC; 2 sessions made 1012 calls; 2108 beyond the ledger (68%); 1 at or over 20%; --all lists 1 more
+  7c1e90aa-0000-4000-8000-000000000001  1000 calls  issue list x960, pr view x40
 ```
+
+Each identity and bucket with an open quota window gets one count line. Under it come only
+the sessions at or above `ATTENTION_SHARE` of the bucket's limit.
 
 | Command | What it does |
 |---|---|
-| `gh-quota status` | The count line, then only the sessions that are refused or near their ceiling. |
-| `gh-quota status --all` | Every session, with its spend by argv class. |
-| `gh-quota release <session>` | Lifts that session's ceiling until the window resets. Operator only. |
-| `gh-quota mode` | Prints the mode. The mode changes through the host variable and the next package version. |
+| `gh-quota status` | A count line per identity and bucket, then only the sessions over the share. |
+| `gh-quota status --all` | Every session, with its calls by class. |
+| `gh-quota status --json` | The same windows as one line of compact JSON. |
+| `gh-quota mode` | Prints the mode. The mode changes through `gh_quota_mode` and the next package version. |
+| `gh-quota release <session>`, from slice 2 | Lifts that session's ceiling until the window resets. Operator only. |
 
 `release` is the way out of a refusal, and `status` is the way to see one. `release` writes
 `/run/gh-quota/override`, which the operator's user owns. While a session still runs as
@@ -343,21 +353,23 @@ same PR.
 
 ### Slice 1: record, and read the record
 
-The module runs in `record` mode on both hosts. It refuses nothing.
+The module runs in `record` mode on both hosts. It refuses nothing. The half in this repo is
+built. The dotfiles half is open, so a session's `ghread` reads are not in the ledger yet.
 
 ```diff
  hosts/components/
 +  gh-quota/
-+    component.yml          ships the files below where has_claude_code is true
-+    files/gh_quota.py      -> /usr/lib/homelab/gh_quota.py: ledger, classify, sample
-+    files/gh_quota_cli.py  -> /usr/local/bin/gh-quota
++    component.yml          ships the files below where has_claude_code is true;
++                           its default is gh_quota_mode: record
++    files/gh_quota.py      -> /usr/lib/homelab/gh_quota.py, the module, and
++                           -> /usr/bin/gh-quota, the same file as a command
 +    templates/gh-quota.conf.j2
++    tmpfiles.d/homelab-gh-quota.conf   creates /run/gh-quota
 +    tests/test_gh_quota.py
-+    CLAUDE.md
+ hosts/daniel-box/package.yml, hosts/daniel-server/package.yml   + gh-quota
  scripts/lib/gh.py          gh(): record each call
- inventory/group_vars/all.yml
-+  gh_quota_mode: record
- docs/github-quota.md
+ tests/leakguard.py         GH_QUOTA_MODE=off for the whole suite
+ docs/adr/0034-…            the decision
 
  dotfiles repo, its own PR:
    home/dot_local/bin/executable_ghread   record each call when the module is installed
@@ -370,12 +382,11 @@ The module runs in `record` mode on both hosts. It refuses nothing.
   repos/<owner>/<repo>/pulls` and read the denial that names `ghread api`.
 - **The claude-guard change ships as a case table,** not as prose: each bare read it must
   refuse, and each write and each `gh api` call with a method or a field that it must pass.
-- **The tests** cover the session key order, the classification of each subcommand in the
-  table, the scaling against a ground-truth sample, and the fail-open path with an unreadable
-  ledger. A census test names the subcommands the repo's tools run, so a subcommand the table
-  does not classify fails the suite.
+- **The tests** cover the classification, the session key order, the count per session in
+  both buckets, the sample interval, the token fingerprint, the status lines and the two
+  fail-open paths. One more drives `lib.gh.gh` and reads the count back from the ledger.
 - **It is done when** a week of ledger rows gives the three missing figures: the spend of a
-  normal session-hour, the points per subcommand, and the `unattributed` share.
+  normal session-hour, the points per call class, and the share of spend beyond the ledger.
 
 ### Slice 2: enforce the three rules
 
@@ -399,8 +410,8 @@ The module runs in `record` mode on both hosts. It refuses nothing.
   two sessions at once and read their start times: no two fall inside one second.
 - **The tests** pair each rule with one caller it must refuse and one it must pass, and hold
   `gh_rate_limit.wait_s` against the refusal line's `retry_s`.
-- **It waits on a decision** when slice 1 measured `unattributed` above 20%: enforcing a
-  ceiling that most of a session's spend goes around protects little.
+- **It waits on a decision** when slice 1 measured `core` spend beyond the ledger above 20%.
+  A ceiling that most of a session's spend goes around protects little.
 
 ### Slice 3: the REST readers
 
@@ -432,7 +443,7 @@ The module runs in `record` mode on both hosts. It refuses nothing.
 
 1. **How much quota do a session's bare writes spend?** claude-guard routes the reads, so the
    writes are what stays outside the ledger. The design rests on that being small, and slice
-   1 measures it as `unattributed`.
+   1 measures it as spend beyond the ledger.
 2. **Does `CLAUDE_CODE_SESSION_ID` reach a fan-out batch's calls with a value of its own?** A
    batch is its own `claude` process, so it should. Slice 1's first day of rows confirms it
    or shows every batch under one key.
@@ -444,7 +455,7 @@ The module runs in `record` mode on both hosts. It refuses nothing.
    reserve protects the lander either way. Slice 1's data says whether a fair share per live
    session is worth its extra rule.
 5. **Does anything outside the repo call GitHub with the session's token?** The desktop
-   app's pull-request pane is one candidate. `unattributed` measures it.
+   app's pull-request pane is one candidate. Spend beyond the ledger measures it.
 6. **Which path did the 2026-11-14 backfill's writes take?** The write pace covers a write
    through `lib/gh.py`. If the backfill ran a bare `gh` in a shell loop, the pace would not
    have held it, and a session's bare write needs an owner too.
