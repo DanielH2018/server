@@ -64,16 +64,6 @@ if [[ $("$chezmoi" execute-template '{{ includeTemplate "is-agent" . }}' 2>/dev/
   exit 1
 fi
 
-# The subset the deleted claude_code role copied in before the dotfiles is root-owned. chezmoi
-# cannot write into it, and the agent cannot delete it, but the agent owns ~/.claude and so can
-# rename it in place. The component ships no subset and deletes no renamed tree.
-# Only after the check above, so a refused source leaves the subset where it was.
-for tree in operator rules output-styles skills; do
-  if [[ -d "$HOME/.claude/$tree" && $(stat -c %U "$HOME/.claude/$tree") == root ]]; then
-    mv -T "$HOME/.claude/$tree" "$HOME/.claude/.subset-copy-$tree"
-  fi
-done
-
 mapfile -t dirs < <("$chezmoi" managed --include=dirs --path-style=absolute |
   grep -vxF -e "$HOME/.claude" -e "$HOME/.config/gh")
 if ((${#dirs[@]})); then

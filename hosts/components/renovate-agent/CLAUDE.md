@@ -34,8 +34,8 @@ host file that lacks them; `docs/renovate-agent-bounds-and-digest.md` has the ch
 **The session can neither push nor merge.** It runs as `renovate_agent_user`, with a read-only
 token, in its own clone. It closes, comments on or re-runs a PR only by writing a request file,
 which the runner carries out with its own token after the session ends (`files/run_requests.py`).
-It lands a PR only by starting
-`renovate-agent-land@<n>.service`, which polkit lets it start and which runs `land.sh` as
+It lands nothing: it nominates a PR with a `land` request, and after the session ends the
+runner starts `renovate-agent-land@<n>.service` for each nomination, which runs `land.sh` as
 `sys_user` on a PR the lander re-checks itself.
 
 **The session's tooling converges before each run.** `homelab-renovate-agent.service` runs
@@ -130,4 +130,7 @@ the caps or the schedule cannot quietly widen it.
   A digest the host could not deliver waits in `<STATE_DIR>/discord-spool/` and goes out,
   marked as delayed, at the start of the next daily tick, a quiet skip included (#3905).
 - **Next-run review:** before raising a cap or widening the prompt, read the last week's
-  digests for what the sessions actually resolved and what they timed out on.
+  digests for what the sessions actually resolved and what they timed out on. The session's
+  own 2700-second wall clock in `templates/renovate-agent-pins.j2` is an estimate from runs
+  that still landed in-session; after the first armed week, compare it with the sessions'
+  `duration_ms` in `last_session.json`.

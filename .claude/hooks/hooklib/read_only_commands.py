@@ -28,9 +28,6 @@ SAFE_ASSIGNMENTS = frozenset(
 )
 ASSIGNMENT = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)=")
 
-# The words that end or open a compound command and run nothing themselves.
-CONTROL_WORDS = frozenset({"for", "case", "done", "fi", "esac", "}", "{", "in", "else"})
-
 # Shells, and builtins that run text as a command. Re-segmenting their argument would judge it
 # once, but the shell then re-reads it with its own quoting, so they are denied outright.
 SHELLS = frozenset(

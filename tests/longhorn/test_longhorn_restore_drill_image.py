@@ -42,9 +42,8 @@ def docker_available() -> None:
     pytest.skip("no Docker daemon here; CI runs the image leg")
 
 
-def test_a_passing_drill_completes_under_the_pinned_image(
-    tmp_path: Path, docker_available: None
-) -> None:
+@pytest.mark.usefixtures("docker_available")
+def test_a_passing_drill_completes_under_the_pinned_image(tmp_path: Path) -> None:
     run = harness(tmp_path, [A])
     proc = launch_in_image(run, restore="pass")
     assert proc.returncode == 0, proc.stderr
@@ -52,8 +51,9 @@ def test_a_passing_drill_completes_under_the_pinned_image(
     assert run.epoch(f"success.{A}") > 0
 
 
+@pytest.mark.usefixtures("docker_available")
 def test_the_sweep_parses_a_creation_timestamp_under_the_pinned_image(
-    tmp_path: Path, docker_available: None
+    tmp_path: Path,
 ) -> None:
     run = harness(tmp_path, [A])
     add_drill_volume(run, "restore-drill-b-config", 1_700_000_000)
@@ -62,8 +62,9 @@ def test_the_sweep_parses_a_creation_timestamp_under_the_pinned_image(
     assert "SWEPT: restore-drill-b-config" in proc.stdout, proc.stdout
 
 
+@pytest.mark.usefixtures("docker_available")
 def test_a_suffixed_mktemp_template_passes_on_the_host_and_fails_under_the_image(
-    tmp_path: Path, docker_available: None
+    tmp_path: Path,
 ) -> None:
     """The red case: GNU `mktemp` accepts the suffix, BusyBox does not, and the apply then fails."""
     # fact: k8s/roles/longhorn-restore-drill/CLAUDE.md#What the drill is and what it writes (the autonomous-role contract)

@@ -781,16 +781,11 @@ the operator's.
 1. Run `files/claude-dotfiles-sync.sh` every 15 minutes from the timer, since a dotfiles merge
    ships no host package version here.
 
-The script has three guards:
+The script has two guards:
 
 - It refuses a source that does not render `is-agent` as true. Applied anyway, such a source
   would write the operator's `.gitconfig` over the agent's identity. The refusal is not fatal
   to the apply, so a host can switch the flag on before the dotfiles change lands.
-- After that check, and only then, it renames each root-owned subset tree to
-  `~/.claude/.subset-copy-<name>`. chezmoi, running as the agent, cannot write into a root-owned
-  directory, and the agent cannot delete one. It owns `~/.claude`, though, so it can rename one
-  in place. The component ships no subset and deletes no renamed tree. A refused source therefore
-  leaves the subset where it was, and the agent always has one of the two.
 - It applies in two passes, every directory but `~/.claude` and `~/.config/gh` and then
   everything but directories. The first pass is non-recursive. chezmoi applies a directory
   target's whole tree below it, so applying `~/.config` reopened `~/.config/gh` to `0755`.

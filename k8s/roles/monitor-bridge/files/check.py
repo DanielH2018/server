@@ -1,6 +1,6 @@
 """monitor-bridge's run loop — one full check cycle, gates first.
 
-Stdlib only (runs on python:3.14-alpine with no extra deps). Each check returns
+Stdlib only (runs on python:3.15-alpine with no extra deps). Each check returns
 (ok: bool, msg: str), and the exporter records the verdict as the row's
 `homelab_check_success` gauge, which the rules in observability's `bridge-exporter.yaml` page
 on.

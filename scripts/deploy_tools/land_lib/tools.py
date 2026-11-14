@@ -9,8 +9,8 @@ adding a flag to one and its call site must pass its own landing, though the pri
 holds the previous release.
 
 WHAT IS NOT HERE. Three path-list decisions -- `plane_note`, `derive`, `quiet_paths` -- are NOT on
-`Tools`. They are pure functions of a file list, so a fake of them would leave no pipeline
-test running the real derivation. They live on the frozen `Classifier` the Landing holds
+`Tools`. They are functions of a file list, and of the PR's range for the two that read git,
+so a fake of them would leave no pipeline test running the real derivation. They live on the frozen `Classifier` the Landing holds
 beside `Tools`, so a test takes the real ones and fake boundaries.
 """
 
@@ -252,7 +252,7 @@ def declared_tags_at(ref: str, primary: Path) -> set[str] | None:
 class PlaneNote(Protocol):
     """`land_tags.plane_note`: what a PR still needs a HUMAN to apply, or ""."""
 
-    def __call__(self, files: list[str], /) -> str: ...
+    def __call__(self, files: list[str], range_: str = "", /) -> str: ...
 
 
 class Derive(Protocol):
@@ -311,10 +311,10 @@ class Tools:
 
 @dataclass(frozen=True)
 class Classifier:
-    """The pure path-list decisions, held beside `Tools` rather than inside it.
+    """The path-list decisions, held beside `Tools` rather than inside it.
 
-    Every one is a function of a changed-file list and nothing else: no subprocess, no
-    network, no clock. Keeping them here is what lets a pipeline test drive the REAL
+    Every one is a function of a changed-file list and, for `plane_note` and `quiet_paths`,
+    the PR's range, which they read through git: no network, no clock. Keeping them here is what lets a pipeline test drive the REAL
     derivation over a fixed path list while every boundary in `Tools` stays fake.
     """
 

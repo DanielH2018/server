@@ -1,7 +1,7 @@
 """Pure decision core for the configarr-health CronJob's reader (configarr_health.py).
 
 Split from the I/O shell so it stays stdlib-only (the CronJob runs it in the bare
-python:3.14-alpine image, with no wheels installed) and unit-testable without a cluster. The shell runs the kubectl reads and the verdict export; everything that decides up-or-down
+python:3.15-alpine image, with no wheels installed) and unit-testable without a cluster. The shell runs the kubectl reads and the verdict export; everything that decides up-or-down
 lives here.
 
 Replaces the `ts`/`ok`/`msg` state file monitor-bridge used to read over a bind mount. That idiom
