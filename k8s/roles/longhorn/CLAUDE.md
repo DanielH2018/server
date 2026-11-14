@@ -83,14 +83,14 @@ host probes stay green.
   treats the Setting as the only source of those four containers' `resources` and clears
   anything else hourly, so a second writer makes each Deployment roll on every tick. The value
   names those four components with a `requests` block alone.
+  `tests/longhorn/test_longhorn_control_plane_resources.py::test_the_csi_setting_requests_the_defaults_value_for_the_four_sidecars_only`
+  holds the shape.
 - **The engine-image DaemonSet runs BestEffort by decision** (#8500). longhorn-manager creates
   `engine-image-ei-<hash>` at runtime with no `resources`, and no Setting sets them, so neither
   a patch nor a Setting can reach it.
   `k8s/roles/longhorn/defaults/main.yml:DECIDED: accept BestEffort for the engine-image pods`
   says why a second writer or a LimitRange is worse than an evicted pod its DaemonSet
   recreates.
-  `tests/longhorn/test_longhorn_control_plane_resources.py::test_the_csi_setting_requests_the_defaults_value_for_the_four_sidecars_only`
-  holds the shape.
 - **The engine-upgrade limit stays above 0.** Upstream ships `0`, which leaves engines on the old
   image after an upgrade, and this repo sets `3`.
   `tests/longhorn/test_engine_upgrade_limit_is_positive.py::test_a_zero_limit_is_flagged`
