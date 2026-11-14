@@ -140,6 +140,11 @@ the admin role and Renovate update master. Auto-merge applies no bypass (github/
 so a PR armed with `gh pr merge --auto` sits `BLOCKED` from any account. `land.sh` merges as
 the operator, whose admin role the bypass covers, and is the one merge path.
 
+Nothing on an armed PR names the hold. PR #8270 was armed at 00:42 UTC on 2026-11-13, 42
+minutes after the ruleset went live. At 01:22 it still read `mergeStateStatus: BLOCKED` with
+`autoMergeRequest: SQUASH` and every required check green (#8294). `land.sh --fresh` then
+merged it directly. The same `BLOCKED` shows on every open PR into master, armed or not.
+
 `--arm-merge` refuses a `CHANGES_REQUESTED` PR before any merge call, because someone asked for
 it to change. `--await-merge` merges the PR through the REST merge endpoint on the first poll
 where `await_ci` reads its head green, pinned to that head SHA. The master CI gate still refuses
@@ -336,8 +341,9 @@ base moving under a PR flips it for one poll.
 
 **A PR whose own CI is red ends the wait too**, exit `LAND_FAILED` with `VERDICT: pr-ci-red`, quoting what
 `await_ci.py` said. GitHub reports it only as `mergeStateStatus: BLOCKED`, the same word it
-uses while the checks are still running. No other rule blocks a PR into master, so the wait
-treats `BLOCKED` as a question about checks. The wait keeps going
+uses while the checks are still running. Ruleset 27167149's update restriction also holds
+every PR into master at `BLOCKED` with every check green, so the word says nothing about the
+checks. The wait never reads it: `await_ci.py` owns the verdict. The wait keeps going
 while `await_ci.py` answers `pending`, which is what it answers until a required check
 registers; that is the grace period, so no landing is cut short for polling before CI started.
 
