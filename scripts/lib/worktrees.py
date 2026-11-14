@@ -92,13 +92,17 @@ def lock_is_live(
     tree: Worktree,
     state: Callable[[str], str | None] = fanout_lock.unit_state,
     now: float | None = None,
+    foreign: Callable[[str], str | None] | None = None,
 ) -> bool:
     """Whether `tree`'s lock owner may still be using it: a Claude session or a fan-out unit.
 
-    `state` and `now` are `fanout_lock.batch_is_live`'s test seams.
+    `state` and `now` are `fanout_lock.batch_is_live`'s test seams. `foreign` judges a
+    fan-out tree another user owns, as `fanout_lock.batch_is_live` describes.
     """
     if fanout_lock.is_fanout_reason(tree.lock_reason):
-        return fanout_lock.batch_is_live(tree.path, tree.lock_reason, state, now)
+        return fanout_lock.batch_is_live(
+            tree.path, tree.lock_reason, state, now, foreign
+        )
     return session_is_alive(tree.lock_reason)
 
 
