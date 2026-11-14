@@ -91,6 +91,22 @@ log2ram mounts its tmpfs only at boot, and reconcile marks the host reboot-pendi
 `/etc/log2ram.conf` changes. Reboot the Pi by hand after the install. Then check that `systemctl is-active log2ram` prints `active` and that
 `findmnt /var/log` shows a tmpfs.
 
+**An unclean reset could trip the guard again until #8234.** On 2026-11-12 the watchdog reset
+the Pi at 12:43 UTC during an AIDE scan (#8084). log2ram exited with status 1 at the next boot,
+and `PiSdHealthFailed` paged for two hours. The card was healthy: every pi-sd-health line in
+that window reads `errors_count=0`. It failed on the other two legs, because `/var/log` was not a
+tmpfs and `/var/hdd.log` held no rotated `.gz`. The start path has two `exit 1` lines. One is
+`is_safe`, which cannot fire right after the script's own `mkdir`, so the size guard refused the
+start. The second AIDE reset, at 14:46, booted cleanly. While `/var/log` sat on the card,
+journald could see the real size of its archives and vacuumed them to `SystemMaxUse`.
+
+The journal cap had assumed the other half of `SIZE` held everything else. On 2026-11-14 the
+SD copy was 99 MB: 45 MB of journal and 37 MB of pacct, mostly the uncompressed 22 MB
+`pacct.0`. At 32 archives the worst case was about 151 MB. 16 archives bring it to about 119
+MB. `test_the_whole_sd_copy_fits_under_the_log2ram_boot_guard` in
+`hosts/lib/tests/test_pi_tuning_component.py` sums the journal, pacct, auditd and sysstat caps
+against `SIZE`.
+
 ## Watchdog and debloat
 
 The hardware watchdog is `dtparam=watchdog=on` plus the `watchdog` daemon, which reboots the
@@ -198,13 +214,15 @@ H7.25 a task also counted the DISTINCT `JOURNALD_AWARE=` values and failed on an
 The caps themselves, set when the tmpfs was 81% full on 2026-06-11:
 
 - A Pi journald drop-in, `60-homelab-pi.conf` with `SystemMaxUse=32M`, overrides
-  initial_setup's server-sized 1G cap. Its `SystemMaxFiles=32` and `SystemMaxFileSize=2M`
-  bound the journal's SD copy at 64 MiB, half the tmpfs, because `SystemMaxUse` cannot see the
-  zeros written to the card (#4583, above). The files are small rather than few: a day's system
-  journal held 786 entries, so 2 MiB holds a day, and 30 archives keep about 15 days of history.
-  That outlasts the weekly AIDE and rkhunter reports, which log to the journal.
+  initial_setup's server-sized 1G cap. Its `SystemMaxFiles=16` and `SystemMaxFileSize=2M`
+  bound the journal's SD copy at 32 MiB plus the two active files, because `SystemMaxUse`
+  cannot see the zeros written to the card (#4583, #8234, above). The files are small rather
+  than few: a day's system journal held 786 entries, so 2 MiB holds a day. log2ram's daily
+  rotate archives the system and user journals together, so 16 archives keep about 8 days of
+  history. That outlasts the weekly rkhunter report, which logs to the journal.
 - `ACCT_LOGGING="3"` cuts pacct retention from 30 daily generations (savelog via
-  `/etc/cron.daily/acct`, about 28 MB/day of healthcheck exec churn) to 3.
+  `/etc/cron.daily/acct`, about 28 MB/day of healthcheck exec churn) to 3. savelog leaves
+  `pacct.0` uncompressed, so pacct holds about 62 MB at its daily peak.
 - auditd is capped to a 12 MB ceiling. Its free-space thresholds have their own section below.
 - `HISTORY=2` cuts sysstat's shipped 7 days — 18 sa/sar files, 9.9 MB — to 2.
 
