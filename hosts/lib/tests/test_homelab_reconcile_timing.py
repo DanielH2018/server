@@ -20,6 +20,7 @@ from pathlib import Path
 import pytest
 from _reconcile_arms import base, ship
 from _reconcile_host import Node
+from lib.proc_testing import write_exec
 
 SLOW_SECONDS = 1.5
 # Below the injected delay, because a whole-second log format rounds 1.5 down to 1.
@@ -39,10 +40,12 @@ def node(tmp_path) -> Node:
 def slowed(node: Node, command: str, args: str, action: str = "") -> None:
     """Make `command` run `action` (by default a sleep) first when called with exactly `args`."""
     wrapper = node.bin / command
-    shebang, body = wrapper.read_text().split("\n", 1)
+    stub = wrapper.rename(node.bin / f".{command}.stub")
     action = action or f"sleep {SLOW_SECONDS}"
-    wrapper.write_text(
-        f'{shebang}\ncase "$*" in {shlex.quote(args)}) {action} ;; esac\n{body}'
+    write_exec(
+        wrapper,
+        f'case "$*" in {shlex.quote(args)}) {action} ;; esac\n'
+        f'exec {shlex.quote(str(stub))} "$@"\n',
     )
 
 

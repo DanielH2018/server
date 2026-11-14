@@ -29,7 +29,12 @@ from lib.repo_paths import REPO
 # 13562 once #8181 took the service list out of the host_vars layer.
 # 13567 once #8184 resolved a template lookup's `role_file()` path in rule 5.
 # 15030 once #8185 moved the template filters from ansible/filter_plugins/ into the renderer.
-LINE_CEILING = 15030
+# 15028 once #8345 moved the `cluster-vars.source` path into `lib.repo_paths`.
+# 15022 once #8517 deleted an unused tuple from secret_checks.py.
+# 15007 once #8632 moved the test-only `scan_template` wrapper into the tests.
+# 14997 once the games' replica counts left the render, and `replicas_var` with them (ADR-0033).
+# 14982 once #8632 landed on top of that.
+LINE_CEILING = 14982
 # Exit 6's command, `git ls-files 'scripts/renderer/*.py' | grep -v /tests/ | xargs cat | wc -l`.
 PATHSPEC = "scripts/renderer/*.py"
 

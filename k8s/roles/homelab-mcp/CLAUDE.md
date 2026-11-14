@@ -13,7 +13,7 @@ routed tenant of the retired Docker edge. See repo-root `CLAUDE.md` for shared c
 <!-- /generated_from -->
 
 - **Flux's render pulls `ghcr.io/danielh2018/homelab-mcp:<content tag>`**, with
-  `imagePullPolicy: IfNotPresent` (D5.4b), and the *Image* line above names that repository.
+  `imagePullPolicy: IfNotPresent`, and the *Image* line above names that repository.
   The role's defaults still name the in-cluster registry. promote's `images`
   job builds the image from `templates/Dockerfile.j2` and the files below.
 - **No IngressRoute** — routed through the k8s edge's file-provider gate Secret (`k8s/roles/traefik/templates/livesync-gate-secret.yaml.j2`)
@@ -39,7 +39,7 @@ routed tenant of the retired Docker edge. See repo-root `CLAUDE.md` for shared c
   `get`/`list` on pods, `pods/log`, nodes, deployments and daemonsets — no `watch`, no
   secrets, no exec. Deliberately narrower than the shell's own read-only ServiceAccount.
 - **Secrets** (SOPS keys, not values): `homelab_mcp_token`, `claude_ha_token`.
-- **Flux applies it, not Ansible** (D5.14, the first Wave C PR). Its `containers_list` entry is
+- **Flux applies it.** Its `containers_list` entry is
   in `cluster/services.yml`, so nothing applies it by hand, and a merged change reaches the cluster when
   `promote` publishes and verifies the next bundle. Its Kustomization's `dependsOn` names no other
   role, because the role renders no route.
@@ -60,14 +60,14 @@ routed tenant of the retired Docker edge. See repo-root `CLAUDE.md` for shared c
   ClusterRole and ClusterRoleBinding,
   so dropping one from `rbac.yaml.j2` deletes it live at the next promotion.
   Deleting the Kustomization deletes them too, because the tag takes the default deletion policy.
-- **Where the tasks went.** The `k8s/image-builder` include became promote's `images` job
-  (D5.4a2, `scripts/deploy_tools/ci_images.py`) and the GHCR ref (D5.4b): the renderer writes
-  the build context to `DIR/images/homelab-mcp/` and its content tag to `DIR/images/tags.json`,
-  and the Deployment's ref reads the same tag. The role's
-  `manifests_rollout: homelab-mcp` names the Deployment for the stabilisation gate and the
-  shared restart. The Kustomization's `wait` replaces the gate, and the restart checksum the
-  renderer stamps replaces the restart. `k8s_autodeploy: true` no longer gates an apply,
-  because the deployer skips the tag.
+- **Its image build and rollout.** Promote's `images` job
+  (`scripts/deploy_tools/ci_images.py`) builds the image and pushes it to GHCR. The renderer
+  writes the build context to `DIR/images/homelab-mcp/` and its content tag to
+  `DIR/images/tags.json`, and the Deployment's ref reads the same tag. The role's
+  `manifests_rollout: homelab-mcp` names the Deployment that the Kustomization's `wait`
+  holds and that the renderer stamps the restart checksum on.
+  `k8s_autodeploy: true` gates no apply: Flux applies
+  every merged change. It still decides whether Renovate automerges the image bump.
 
 ## Notable
 - `image_builder_context_files` (not `image_builder_context`) carries `app.py`,

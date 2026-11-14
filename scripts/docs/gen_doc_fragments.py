@@ -25,8 +25,8 @@ run a commit. When a fragment's content last changed is its git history.
 
 STATIC PARSING ONLY, like every generator here. Role defaults and the inventory are read
 through `lib.estate`, which parses the YAML and applies Ansible's precedence, and Python
-constants with `ast`, never by importing the deployer or the rotation tool --
-both bootstrap sys.path and read the environment on import. The k8s Renovate stance is
+constants with `ast`, never by importing the rotation tool --
+it bootstraps sys.path and read the environment on import. The k8s Renovate stance is
 the one exception: `scripts/dev/k8s_autodeploy_counts.py` and the `lib.k8s_roles` derivation
 it wraps do neither -- they only walk role directories and `yaml.safe_load` their
 defaults -- so this script imports them rather than re-deriving the same partition.

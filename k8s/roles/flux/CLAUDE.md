@@ -75,8 +75,8 @@ controllers apply every service, and an exemption would be a lasting hole for th
   refuses a volume the map does not name, so a regeneration that adds one fails the render;
 - sets each flag `flux_controller_args` names on its controller, replacing upstream's value
   for that flag. kustomize-controller's `--concurrent` is `k8s_rollout_batch_width` plus one,
-  so Flux reconciles as many tags at once as the deploy play rolls workloads (D5.1c), and the
-  soak holds the extra worker from the start of a rollout (D5.3b2).
+  so Flux reconciles as many tags at once as the deploy play rolls workloads, and the
+  soak holds the extra worker from the start of a rollout.
   `scripts/deploy_tools/chained_timeout.py:CONCURRENT` sizes `verify`'s queueing term from
   the width alone.
 
@@ -96,25 +96,25 @@ egress rule changes nothing. A change that adds a Receiver adds its fence with i
 
 ## Rollouts
 
-**Under Flux**, the `flux` Kustomization's `wait: true` health check on the three Deployments
-and the soak replace the waits below, which ran only while Ansible applied this role.
+**Its checks.** The `flux` Kustomization's `wait: true` health check on the three Deployments
+and the soak hold the rollout.
 
-`manifests_rollout: ''` skips the shared wait. The role waits on each controller itself and
-hands them to the end-of-play stabilisation gate, as observability does. Every
-`flux_controllers` entry carries `restart_on: []`, because no task here restarts a controller
-and no controller reads a Secret or ConfigMap through its pod spec; `defaults/main.yml` has the
-full reason. The release record would otherwise owe all three a restart after a
-NetworkPolicy edit, or after a rotation of either Secret that `templates/secret.yaml.j2`
-renders or of the SOPS manifest `templates/github-status-secret.yaml.j2`.
+`manifests_rollout: ''` skips the shared wait, which covers one Deployment, and
+`manifests_self_rollouts` names the three controllers for the release record. Every
+`flux_controllers` entry carries `restart_on: []`, because nothing in this role restarts a
+controller and no controller reads a Secret or ConfigMap through its pod spec; `defaults/main.yml`
+has the full reason. The release record would otherwise owe all three a restart after a
+NetworkPolicy edit, or after a rotation of either Secret that `templates/secret.yaml.j2` renders or
+of the SOPS manifest `templates/github-status-secret.yaml.j2`.
 
-**Memory, an idle floor.** On 2026-10-13, with no source configured, `kubectl top pod -n
-flux-system` read source-controller at 16Mi, kustomize-controller at 18Mi and
-notification-controller at 24Mi, beside a 64Mi request each. That is the floor for a root
-that applies nothing. D5 re-measures it once Flux applies services.
+**HISTORY — Memory, an idle floor.** On 2026-10-13, with no source configured, `kubectl top
+pod -n flux-system` read source-controller at 16Mi, kustomize-controller at 18Mi and
+notification-controller at 24Mi, beside a 64Mi request each. That was the floor for a root
+that applied nothing.
 
-**Memory, following `prod`.** Later on 2026-10-13, three hours after D1.5 pointed the root at
-`prod`, the working set is higher. The three controllers request 192Mi in all, 64Mi each, and
-each is limited to 1Gi. The peak is the largest
+**HISTORY — Memory, following `prod`.** Later on 2026-10-13, three hours after the root first
+followed `prod`, the working set was higher. The three controllers requested 192Mi in all,
+64Mi each, and each was limited to 1Gi. The peak is the largest
 `container_memory_working_set_bytes{namespace="flux-system",container="manager"}` over those
 three hours:
 
@@ -124,22 +124,22 @@ three hours:
 | source-controller | 24Mi | 29.8Mi |
 | notification-controller | 27Mi | 27.8Mi |
 
-kustomize-controller runs above its 64Mi request while it applies an empty root. The node
-has room, and the 1Gi limit is about fourteen times the peak, so D1 leaves the request alone. D5 sets
-the requests from its own measurement once Flux applies services.
+**HISTORY —** kustomize-controller ran above its 64Mi request while it applied an empty
+root. The node had room, and the 1Gi limit was about fourteen times the peak, so the request
+stayed at 64Mi until a measurement under load.
 
-**Memory, under full load (D5 exit 7, step 31).** On 2026-10-23 the operator deleted the
+**HISTORY — Memory, under full load.** On 2026-10-23 the operator deleted the
 kustomize-controller pod, and its replacement reconciled about 115 Kustomizations from cold. A
 promote in the same hour applied a new bundle revision to every Kustomization. Over that hour
 `probe.py metric` read a peak working set of 174002176 B, about 166 MiB. The steady working set
-is 145 to 155 MiB. The pod it replaced read a 24-hour peak of 176783360 B. D1's 63Mi to 70.1Mi
+is 145 to 155 MiB. The pod it replaced read a 24-hour peak of 176783360 B. The 63Mi to 70.1Mi
 figure above was an empty root, so it understates the load by more than half.
 
-Exit 7 requires the peak to stay at or under the request, and 64Mi fails that by 2.3 times.
-`flux_controller_resources` (`k8s/roles/flux/defaults/main.yml:flux_controller_resources`)
-therefore raises kustomize-controller's request to 192Mi, which covers the peak with about 15
+**kustomize-controller's request covers its full-load peak.** A request of 64Mi falls short
+of that peak by 2.3 times, so `flux_controller_resources` (`k8s/roles/flux/defaults/main.yml:flux_controller_resources`)
+raises kustomize-controller's request to 192Mi, which covers the peak with about 15
 percent headroom. The limit stays at 1Gi. source-controller and notification-controller keep
-64Mi, because this step measured only kustomize-controller.
+64Mi, because the full-load measurement covered only kustomize-controller.
 
 ## What Flux follows
 
@@ -158,7 +158,7 @@ statuses and Discord errors. `docs/flux-deploy-plane.md` describes each object.
   `scripts/renderer/tests/test_renderer_crd_census.py` names `flux` as a member. The lever
   reaches `flux` alone (`scripts/renderer/renderer_lib/bundle.py:flux_files`, its decision
   marker), so a sync object the render drops is pruned.
-- **The source is pinned to D1's values.**
+- **The source is pinned.**
   `scripts/renderer/tests/test_renderer_bootstrap_documents.py` fails a render whose
   OCIRepositories move off `oci://ghcr.io/danielh2018/homelab-manifests`, `prod` and
   `last-good`, or the `promote` signer, because a broken source cuts Flux off from the commit
@@ -186,16 +186,18 @@ Discord. The way out is the lever set back to `false`: the render drops the docu
 `flux-deferred`'s prune deletes `ocirepository/verify-drill` at its next reconcile after the
 promotion.
 
-**The drill ran on 2026-10-13.** The first dispatch was a false green: `verify-drill` read
-Ready=True with its signature verified (#4820). `publish` pushes with `--reproducible`, and
-the drill ran at the commit `prod` already carried, so its digest equalled `prod`'s signed
-digest. #4826 fixed that. The drill push carries the annotation
-`io.homelab.verify-drill=true`, so no signed push carries its digest, and the dispatch fails
-unless `cosign verify` refuses that digest. The refusal alone proves nothing, because cosign
-v3.1.3 reads a registry error on its bundle probe as "no bundle" (#4829). The dispatch
-therefore also reads the registry itself, and fails unless it answers that the digest has no
-referrer and no legacy `.sig` tag. GHCR serves no referrers API, so cosign keeps a digest's
-bundle in the referrers tag `sha256-<hex>`. The re-dispatch
+**What the dispatch checks.** `publish` pushes with `--reproducible`, so a drill at the commit
+`prod` already carries would reuse `prod`'s signed digest. The drill push therefore carries the
+annotation `io.homelab.verify-drill=true`, so no signed push carries its digest, and the
+dispatch fails unless `cosign verify` refuses that digest (#4826). The refusal alone proves
+nothing, because cosign v3.1.3 reads a registry error on its bundle probe as "no bundle"
+(#4829). The dispatch therefore also reads the registry itself, and fails unless it answers
+that the digest has no referrer and no legacy `.sig` tag. GHCR serves no referrers API, so
+cosign keeps a digest's bundle in the referrers tag `sha256-<hex>`.
+
+**HISTORY — The drill ran on 2026-10-13.** The first dispatch was a false green: `verify-drill`
+read Ready=True with its signature verified (#4820), because the drill ran at the commit
+`prod` already carried and its digest equalled `prod`'s signed digest. The re-dispatch
 pushed `sha256:5bac820c…bb97` unsigned. At 04:45:39Z `verify-drill` read Ready=False with
 "failed to verify the signature using provider 'cosign keyless': no signatures found", and
 `homelab` stayed Ready. `deploy-errors` posted nothing to Discord, because it names only the
@@ -226,7 +228,7 @@ OCIRepository `homelab`. `FluxNotReady` stayed quiet for the same reason, and
 - **The App credentials reach the cluster as a SOPS manifest.** Flux deletes the newlines of a
   substituted PEM and types an all-digit ID as a number, so all three keys are
   `SOPS_MANIFEST_KEYS` keys. `render_sops_manifests` ships
-  `templates/github-status-secret.yaml.j2` as D3's SOPS-encrypted copy, and the `flux`
+  `templates/github-status-secret.yaml.j2` as its SOPS-encrypted copy, and the `flux`
   Kustomization renders `decryption` with `sops-age`. The Secret `flux-github-status` holds the
   keys `githubAppID`, `githubAppInstallationID` and `githubAppPrivateKey`, and the
   `github-status` Provider sets `address` to the repository URL and reads that Secret. To

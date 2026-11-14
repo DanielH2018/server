@@ -12,7 +12,7 @@ fact it reads from outside the checkout comes through this module:
   through `gh variable set`, for `decide`'s forward-only gate hold. For `promote.py prune` it also lists the
   artifact's package versions and deletes one, through the Packages API.
 - `Cosign` runs `cosign verify` under the identity the cluster's OCIRepository checks.
-- `Discord` posts `promote.py hold`'s messages to the deployer's channel, through the webhook
+- `Discord` posts `promote.py hold`'s messages to the deploy Discord channel, through the webhook
   in the `DEPLOY_DISCORD_WEBHOOK` repository secret. It never prints the URL.
 
 Each read returns a value, returns None for "absent", or raises `ForgeError`. What absent and

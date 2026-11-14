@@ -6,10 +6,9 @@ changes**. It is the reporting half of the pair whose acting half is
 `hosts/components/renovate-agent/`: this component says what is open and what needs manual
 work, that one does it.
 
-`homelab-daniel-box` ships it, and only that package lists it: the query is fleet-wide, so a
-second host duplicates every notification. H7.37 moved it from the `renovate_notify` role. A
-merged change reaches the host when the builder publishes the next package version and the
-updater installs it.
+`homelab-daniel-box` ships it, and only that package lists it: the query is fleet-wide, so a second
+host duplicates every notification. A merged change reaches the host when the builder publishes the
+next package version and the updater installs it.
 
 `component.yml` holds the contract. The working-out behind the rules below is
 `docs/renovate-notify-internals.md`: the sandbox's two overrides, the dashboard parsers, the

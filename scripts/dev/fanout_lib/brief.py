@@ -25,7 +25,7 @@ from fanout_lib.target import (
 from findings_lib.issue_model import cited_paths
 from lib.inventory_lists import LANDING_HOST
 
-# `land.sh` and the deployer run on the GitOps host, so only batches placed there land.
+# `land.sh` runs on the landing host, so only batches placed there land.
 LANDS = LANDING_HOST
 # The label `findings.py` puts on every issue it files. The launch gate refuses anything
 # else: this repo is public, so an unlabelled issue is text an arbitrary GitHub account
@@ -295,7 +295,8 @@ after your last commit and before `gh pr create`. It takes one to two minutes:
 uv run python scripts/dev/repo_guards.py
 ```
 Fix a red guard. Never skip or deselect it. When the run ends with a `facts notice:` list,
-re-read each section it names and edit any sentence your change made false. Do not run the whole suite: a hook refuses a
+re-read each section it names and edit any sentence your change made false. When it ends with
+a `removed names:` list, edit each doc and comment that still uses a name you removed. Do not run the whole suite: a hook refuses a
 pytest run that names no path or more than 300 test modules in a batch, because CI runs the
 whole suite on the PR and the pipeline resumes you with each failing check. CI's weight step also fails a heavy test module
 that `scripts/dev/pytest_shard_weights.json` does not list, and no test runs that step. For each

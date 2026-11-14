@@ -8,6 +8,7 @@ where a fact came from. `live_wait_reads` builds the one the CLI runs. Each read
 
 import json
 import time
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -18,6 +19,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 # `forge`, `chained_timeout` and `flux_host` import bare, from scripts/deploy_tools.
 _sys.path.insert(1, str(_Path(__file__).resolve().parents[1]))
 from lib.git import git
+from lib.repo_paths import REPO
 
 import forge
 from artifact_retention import LAST_GOOD_TAG, PROD_TAG
@@ -105,9 +107,18 @@ def _published_ancestor(f: forge.Forge, repo: Path, sha: str) -> str | None:
 
 
 def live_wait_reads(
-    f: forge.Forge, repo: Path, host: FluxHost | None = None
+    f: forge.Forge,
+    repo: Path,
+    host: FluxHost | None = None,
+    now: Callable[[], datetime] = lambda: datetime.now(UTC),
 ) -> WaitReads:
-    """The reads `promote.py land-wait` makes, against the forge, the host and `repo`."""
+    """The reads `promote.py land-wait` makes, against the forge, the host and the checkouts.
+
+    `repo` answers the git reads. The reboot schedule comes from this module's own checkout,
+    which `classify.refuse_stale_code` holds level with master during a landing, because
+    `repo` may be a primary checkout that its host does not sync and that sits far behind
+    master. `now` is the wall clock the reboot window is read against.
+    """
     host = host or FluxHost()
     return WaitReads(
         hold=lambda: f.github.variable(HOLD_VARIABLE),
@@ -118,7 +129,7 @@ def live_wait_reads(
         in_flight=lambda: _in_flight(f),
         soak=lambda sha: _soak_status(f, sha),
         reboot_window=lambda: reboot_window.remaining(
-            reboot_window.read_schedule(repo), VERIFY_CAP_S, datetime.now(UTC)
+            reboot_window.read_schedule(REPO), VERIFY_CAP_S, now()
         ),
         annotate=lambda line: host.log(ANNOTATION_TAG, line),
         sleep=time.sleep,

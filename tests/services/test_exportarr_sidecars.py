@@ -208,11 +208,11 @@ def test_the_image_pins_stay_in_lockstep():
 def test_each_pin_is_a_variable_renovate_can_see():
     """Where the pin LIVES is the requirement here, so this half stays a source check.
 
-    A pin inlined into the macro invocation renders an identical manifest and is offered no
-    updates, because Renovate's k8s-images manager matches an `_image:` key and nothing else. A
-    pin hoisted into group_vars is still offered updates, but it loses automerge and the
-    deployer's rollback (`ansible/templates/exportarr.yml.j2` has the reason, #3277). No render
-    assertion can see either, because the manifest is the same every way.
+    A pin inlined into the macro invocation renders an identical manifest and is offered no updates,
+    because Renovate's k8s-images manager matches an `_image:` key and nothing else. A pin hoisted
+    into group_vars is still offered updates, but it loses automerge and the retired deployer's
+    rollback (`ansible/templates/exportarr.yml.j2` has the reason, #3277). No render assertion can
+    see either, because the manifest is the same every way.
     """
     for arr in ARRS:
         text = (REPO / f"k8s/roles/{arr}/defaults/main.yml").read_text()

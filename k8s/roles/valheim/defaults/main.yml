@@ -192,10 +192,11 @@ valheim_k8s_admin_ids: "76561198091839404"
 valheim_k8s_server_args: "-modifier portals casual"
 
 # The dedicated server simulates the whole world in RAM and wants headroom, not a tight cap.
+# The request is the 7-day p95 working set before the park (3675Mi, 2026-11-14) rounded up.
 valheim_k8s_cpu_limit: "6"
 valheim_k8s_mem_limit: 9216Mi
 valheim_k8s_cpu_request: "750m"
-valheim_k8s_mem_request: 3072Mi
+valheim_k8s_mem_request: 3712Mi
 
 # The claims the renderer emits for this role, which the valheim Kustomization applies: the
 # backed-up world claim and the nobackup SteamCMD install.

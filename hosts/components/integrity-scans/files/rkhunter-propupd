@@ -2,17 +2,38 @@
 # Refreshes rkhunter's file-properties baseline after a package change, outside apt's lock (#7680).
 # A start while the unit is active does nothing, so a dpkg run that lands during a refresh is
 # caught here: the loop runs again until dpkg's status file holds still across a whole refresh.
+#
+# A dpkg run that changed only homelab-* packages keeps the baseline (#8650): their files are
+# none of the ones rkhunter records, and the full refresh forked ~6,600 processes on the Pi.
+# The fingerprint is dpkg's status without the homelab-* stanzas, plus rkhunter's config.
 set -euo pipefail
 
 lib_dir=${HOMELAB_LIB_DIR:-/usr/lib/homelab}
 status=${DPKG_STATUS:-/var/lib/dpkg/status}
+conf_dir=${RKHUNTER_CONF_DIR:-/etc}
+database=${RKHUNTER_DATABASE:-/var/lib/rkhunter/db/rkhunter.dat}
+stamp=${STATE_DIRECTORY:-/var/lib/homelab-rkhunter-propupd}/fingerprint
+
+fingerprint() {
+  {
+    awk 'BEGIN { RS = ""; ORS = "\n\n" } !/^Package: homelab-/' "$status"
+    cat "$conf_dir/rkhunter.conf" "$conf_dir/rkhunter.conf.local" 2>/dev/null || true
+  } | sha256sum
+}
 
 while :; do
   "$lib_dir/homelab-reconcile" --wait-for-apt
   # dpkg replaces the status file by rename, so the inode changes on every write.
   before=$(stat -c '%i %Y' "$status")
-  rkhunter --propupd --nolog --nocolors
+  current=$(fingerprint)
+  if [[ -f $database && -f $stamp && $(<"$stamp") == "$current" ]]; then
+    result="only homelab-* packages changed; rkhunter baseline kept"
+  else
+    rkhunter --propupd --nolog --nocolors
+    result="rkhunter baseline refreshed"
+  fi
   [[ $(stat -c '%i %Y' "$status") == "$before" ]] && break
   echo "dpkg changed packages during the refresh; refreshing again"
 done
-echo "rkhunter baseline refreshed"
+printf '%s\n' "$current" >"$stamp"
+echo "$result"

@@ -3,7 +3,7 @@
 `hosts/daniel-box/package.yml` lists every component the host installs and a credential-bearing
 one needs the host's SOPS file, which is not part of what these tests hold. A test therefore
 renders a throwaway package that lists only the components under test, over symlinks to the real
-`hosts/components`, `hosts/lib` and `ansible/` trees, so it reads the same sources the real
+`hosts/components`, `hosts/lib`, `k8s`, `inventory` and `secrets` trees, so it reads the same sources the real
 package does.
 """
 

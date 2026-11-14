@@ -48,6 +48,25 @@ spec:
             - name: zigbee2mqtt-data
               mountPath: /data
 {{ container_resources(cpu_limit='250m', mem_limit='128Mi', cpu_request='10m', mem_request='16Mi') }}
+        # DECIDED: z2m starts only once mosquitto answers an MQTT CONNECT (#8586). A TCP wait
+        # passes a broker that accepts the port but sends no CONNACK yet, and z2m exits on
+        # that too. The CONNECT is anonymous: mosquitto refuses it with CONNACK code 5, and
+        # any CONNACK (first byte 0x20) proves the broker is serving, so no credential sits in
+        # the pod spec. After 180 s the init container fails into kubelet's backoff, where the
+        # pod shows Init:CrashLoopBackOff instead of hanging unseen.
+        - name: mqtt-broker-wait
+          image: {{ zigbee2mqtt_k8s_init_image }}
+          imagePullPolicy: IfNotPresent
+          command:
+            - sh
+            - -c
+            - >-
+              timeout 180 sh -c "until printf '\020\024\000\004MQTT\004\002\000\074\000\010z2m-wait'
+              | timeout 3 nc {{ zigbee2mqtt_k8s_mqtt_broker }} 1883 | head -c 1 | od -An -tx1
+              | grep -qx ' 20'; do echo 'waiting for a CONNACK from {{ zigbee2mqtt_k8s_mqtt_broker }}:1883';
+              sleep 2; done"
+{{ hardened_security_context(read_only=true, non_root=true) }}
+{{ container_resources(cpu_limit='100m', mem_limit='32Mi', cpu_request='10m', mem_request='8Mi') }}
       containers:
         - name: zigbee2mqtt
           image: {{ zigbee2mqtt_k8s_image }}
@@ -60,6 +79,18 @@ spec:
           env:
             - name: TZ
               value: "{{ tz }}"
+            # DECIDED: Z2M's in-process watchdog absorbs a coordinator socket reset (#8322).
+            # The SLZB drops the TCP link with `read ECONNRESET` and accepts a reconnect 2 s
+            # later, so a 3 s in-process restart replaces a container restart. The delays
+            # (minutes) sum to 48 s, inside the liveness window (3 x 30 s): the frontend is
+            # down while the watchdog waits, so a longer list would only end in a kubelet
+            # kill. A coordinator gone for minutes exhausts the list, and the container
+            # exits into kubelet's backoff and the crash-loop alert. Liveness stays because
+            # it is the only hang detection this pod has. The watchdog arms only after the
+            # first successful start; the mqtt-broker-wait init container covers a broker
+            # not ready at boot.
+            - name: Z2M_WATCHDOG
+              value: "0.05,0.25,0.5"
           volumeMounts:
             - name: zigbee2mqtt-data
               mountPath: /app/data

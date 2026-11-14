@@ -15,8 +15,13 @@
 # etcd snapshot and does nothing against an API-level read. That rule is the only record
 # that anyone read a credential, including a read RBAC refused. The control plane's own
 # machine identities are dropped just ahead of it, so kubelet and apiserver Secret reads
-# stay out of the file. How much volume that rule adds is unmeasured: this Prometheus does
-# not scrape apiserver_request_total, so nobody can report the event rate.
+# stay out of the file. That rule's volume is measured at its comment below.
+#
+# VOLUME. The file ships to loki-homelab as `{job="k8s-audit"}`, and on 2026-11-14 it was about
+# 60 percent of that Loki's ingest (53 MB an hour). To find the top producers, count by
+# `user.username`, `verb`, `objectRef.resource` and `objectRef.subresource` with a `| json`
+# stage over `bytes_over_time`. Each `level: None` rule under "controller status and churn"
+# names its share of that hour.
 #
 # No level here ever records a Secret body. Logging bodies would write every credential in
 # the cluster to a plaintext file on disk, which is the exact exposure --secrets-encryption
@@ -62,6 +67,12 @@ rules:
   # read drop below, which would otherwise swallow it, and it deliberately precedes the
   # readonly ServiceAccount's own drop, because that SA's refused Secret reads are exactly
   # the signal wanted. `Metadata` names the reader, the Secret and the time, never the value.
+  #
+  # Kept despite its volume, about 15 percent of the stream on 2026-11-14. kustomize-controller
+  # reads `homelab-cluster-vars` once per substituting Kustomization per reconcile (3,300 an
+  # hour), and notification-controller reads `flux-github-status` per commit-status post (930 an
+  # hour). Both are SOPS-delivered credentials, so a drop for them would hide a read of the
+  # cluster's substitution values by a compromised controller token.
   - level: Metadata
     verbs: ["get", "list", "watch"]
     resources:
@@ -122,6 +133,48 @@ rules:
       - /openapi/*
       - /api*
 
+  # ── dropped: controller status and churn (measured 2026-11-14) ───────────────────────
+  # Each rule names the controller's own identity, so the same write by a person or any other
+  # ServiceAccount still reaches the catch-all.
+
+  # kustomize-controller writing each Kustomization's status: about 100 patches per
+  # Kustomization per hour, 38 percent of the stream. A status write cannot change what Flux
+  # applies, and the Kustomization's own status already records every reconcile.
+  - level: None
+    users: ["system:serviceaccount:flux-system:kustomize-controller"]
+    verbs: ["patch", "update"]
+    resources:
+      - group: "kustomize.toolkit.fluxcd.io"
+        resources: ["kustomizations/status"]
+
+  # Longhorn's manager writing its own CRs' status as replicas and engines change state: about
+  # 9 percent of the stream. Spec writes and deletes by the same account stay logged.
+  - level: None
+    users: ["system:serviceaccount:longhorn-system:longhorn-service-account"]
+    verbs: ["patch", "update"]
+    resources:
+      - group: "longhorn.io"
+        resources: ["engines/status", "volumes/status", "instancemanagers/status", "replicas/status", "nodes/status"]
+
+  # metrics-server authorising each kubelet scrape: a SubjectAccessReview is never stored, so
+  # it changes no state. About 2 percent of the stream.
+  - level: None
+    users: ["system:serviceaccount:kube-system:metrics-server"]
+    verbs: ["create"]
+    resources:
+      - group: "authorization.k8s.io"
+        resources: ["subjectaccessreviews"]
+
+  # Event writes from any identity: an Event is itself a log record, and Flux alone wrote
+  # about 4 percent of the stream as Events. A delete is kept, since it removes evidence.
+  - level: None
+    verbs: ["create", "patch", "update"]
+    resources:
+      - group: ""
+        resources: ["events"]
+      - group: "events.k8s.io"
+        resources: ["events"]
+
   # ── kept: everything that changes state, plus pod access ──────────────────────────────
 
   # Pod subresources are the reason this log exists. `exec`, `attach` and `portforward` are
@@ -135,4 +188,10 @@ rules:
 
   # Catch-all: every remaining request, which after the drops above means the writes —
   # create, update, patch, delete, deletecollection — plus anything a future resource adds.
+  #
+  # kustomize-controller's server-side-apply patches are the largest producer left here, about
+  # 15 percent of the stream on 2026-11-14 (configmaps, deployments, Kustomizations, services,
+  # IngressRoutes). They are kept: Flux is the only write path to the workloads, so these
+  # entries are the record of what each promotion changed. The policy has no selector for
+  # dry-run requests, so the no-op dry-run patches cannot be dropped without the real ones.
   - level: Metadata

@@ -17,6 +17,13 @@ has_igpu: true
 has_code_server: false
 # No Docker engine: this host is a k3s agent node.
 has_docker: false
+# DECIDED: no fwupd here, because LVFS carries no firmware for this hardware. The host is an
+# Intel NUC11TNHi5 (BIOS TNTGL357) with an SK hynix Platinum P41 NVMe (SHPP41-500GM). On
+# 2026-11-14 fwupd.org's search returned "No results" for "NUC11" and for "P41", while a
+# "ThinkPad" control search returned listings. ASUS, which took over the NUC line, publishes
+# this board's BIOS as a manual download on its support page. CPU microcode arrives through the
+# `intel-microcode` apt package, not fwupd. Set this true once LVFS lists the board or the drive.
+has_fwupd: false
 
 # Claude Code session host for issue-fanout agents. The Remote Control unit
 # stays on daniel-box; agents here stop at `gh pr create` and a daniel-box session lands the

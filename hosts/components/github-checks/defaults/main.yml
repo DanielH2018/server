@@ -21,6 +21,12 @@ github_expected_ruleset_contexts:
   - pull + boot changed images
   - renovate config validator
   - flux-deletion-drill
+# The app every required context is pinned to: 15368 is GitHub Actions. GitHub matches an unpinned
+# required check by name alone, so a commit status of that name from any token with write access
+# satisfies it. Three of the four contexts were unpinned until the operator pinned them on
+# 2026-11-13 (#8398). tested_tree.py and slice B3 of docs/ci-throughput.md trust a check's creator,
+# which only the pin guarantees, so the drift check fails on a context with no pin or another app.
+github_actions_app_id: 15368
 # Nobody merges past the CI gate. A bypass actor added here could merge an un-CI'd PR, through
 # land.sh's REST merge or any other merge call it makes. Each entry is
 # `<actor_type>:<actor_id>:<bypass_mode>`, as the rulesets API names them.

@@ -36,10 +36,16 @@ def test_parse_disconnect():
 
 
 def test_parse_restart_on_world_load():
-    assert stats.parse_line(prefixed("Load world: Dedicated (Dedicated)")) == (
-        "restart",
-        None,
+    # Verbatim from this server's log.
+    line = prefixed(
+        "10/17/2026 05:10:18: ZNet.LoadWorld: Midgard (Midgard), save number 1750"
     )
+    assert stats.parse_line(line) == ("restart", None)
+
+
+def test_parse_restart_on_shutdown():
+    line = prefixed("10/17/2026 05:10:00: Game - OnApplicationQuit")
+    assert stats.parse_line(line) == ("restart", None)
 
 
 def test_parse_heartbeat():
@@ -141,10 +147,93 @@ def test_restart_closes_every_open_session():
     st = stats.StatsState()
     _connected(st, "111", "Bob", 0.0)
     _connected(st, "222", "Ann", 0.0)
-    st.apply("restart", None, 50.0)
+    st.apply("heartbeat", 2, 50.0)
+    st.apply("restart", None, 55.0)
     assert st.online_count() == 0
     assert st.players["Bob"]["total_playtime"] == 50.0
     assert st.players["Ann"]["total_playtime"] == 50.0
+
+
+def test_heartbeat_of_zero_closes_a_session_whose_disconnect_was_missed():
+    st = stats.StatsState()
+    _connected(st, "111", "Bob", 0.0)
+    st.apply("heartbeat", 1, 600.0)
+    st.apply("heartbeat", 0, 1200.0)
+    assert st.online_count() == 0
+    assert st.players["Bob"]["sessions"] == 1
+    assert st.players["Bob"]["total_playtime"] == 600.0
+
+
+def test_heartbeat_covering_every_session_marks_each_one_present():
+    st = stats.StatsState()
+    _connected(st, "111", "Bob", 0.0)
+    _connected(st, "222", "Ann", 0.0)
+    st.apply("heartbeat", 2, 600.0)
+    assert st.online_count() == 2
+    st.apply("heartbeat", 0, 1200.0)
+    assert st.players["Bob"]["total_playtime"] == 600.0
+    assert st.players["Ann"]["total_playtime"] == 600.0
+
+
+def test_a_partial_heartbeat_closes_no_one_and_caps_the_gauge():
+    st = stats.StatsState()
+    _connected(st, "111", "Bob", 0.0)
+    st.apply("heartbeat", 1, 600.0)
+    _connected(st, "222", "Ann", 1000.0)
+    st.apply("heartbeat", 1, 1200.0)
+    assert st.players["Bob"]["open_start"] == 0.0
+    assert st.players["Ann"]["open_start"] == 1000.0
+    assert st.online_count() == 1
+    assert "valheim_players_online 1" in stats.render_metrics(st, 1300.0)
+
+
+def test_a_live_players_hours_never_land_on_a_stale_session():
+    """Ann joined first and never died, so she holds the oldest event, yet is live."""
+    st = stats.StatsState()
+    _connected(st, "111", "Ann", 0.0)
+    st.apply("heartbeat", 1, 600.0)
+    _connected(st, "222", "Bob", 3600.0)
+    st.apply("heartbeat", 2, 4200.0)
+    st.apply("heartbeat", 1, 7800.0)  # Bob's Closing socket was missed
+    st.apply("heartbeat", 1, 9000.0)
+    assert st.playtime("Bob", 9500.0) == 600.0
+    st.apply("disconnect", "111", 10000.0)
+    st.apply("heartbeat", 0, 10200.0)
+    assert st.players["Ann"]["total_playtime"] == 10000.0
+    assert st.players["Bob"]["total_playtime"] == 600.0
+
+
+def test_a_partial_heartbeat_does_not_lower_the_live_players_counter():
+    st = stats.StatsState()
+    _connected(st, "111", "Ann", 0.0)
+    _connected(st, "222", "Bob", 3600.0)
+    st.apply("heartbeat", 2, 4200.0)
+    before = st.playtime("Ann", 7700.0)
+    st.apply("heartbeat", 1, 7800.0)
+    assert st.playtime("Ann", 7900.0) >= before
+    st.apply("disconnect", "111", 10000.0)
+    assert st.players["Ann"]["total_playtime"] == 10000.0
+
+
+def test_another_players_presence_is_not_banked_on_a_stale_session():
+    st = stats.StatsState()
+    _connected(st, "111", "Bob", 0.0)
+    _connected(st, "222", "Ann", 10.0)
+    st.apply("heartbeat", 2, 600.0)
+    st.apply("heartbeat", 1, 1200.0)
+    st.apply("heartbeat", 1, 1800.0)
+    st.apply("heartbeat", 0, 20 * 86400.0)
+    assert st.players["Bob"]["total_playtime"] == 600.0
+
+
+def test_a_stale_session_banks_only_its_observed_time():
+    """A session stuck open for weeks must not turn the weeks into playtime."""
+    st = stats.StatsState()
+    _connected(st, "111", "Bob", 0.0)
+    st.apply("death", "Bob", 300.0)
+    st.apply("heartbeat", 0, 21 * 86400.0)
+    assert st.players["Bob"]["total_playtime"] == 300.0
+    assert st.playtime("Bob", 22 * 86400.0) == 300.0
 
 
 def test_two_players_bind_to_their_own_steamids():
@@ -251,3 +340,11 @@ def test_main_requires_the_metrics_port_from_the_deployment():
     )
     assert result.returncode != 0
     assert "KeyError: 'METRICS_PORT'" in result.stderr
+
+
+def test_a_handshake_dropped_before_spawning_binds_no_one():
+    st = stats.StatsState()
+    st.apply("connect", "111", 0.0)
+    st.apply("disconnect", "111", 12.0)
+    st.apply("spawn", "Bob", 100.0)
+    assert "111" not in st.steam_to_name
