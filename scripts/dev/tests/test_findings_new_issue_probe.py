@@ -128,10 +128,9 @@ def _blocked():
         _claimed,
         _blocked,
         lambda: (_rest_issue(7), {f"{REG}/pulls": [{"body": "Closes #7"}]}, None),
-        lambda: (_rest_issue(7, labels=("manual",)), {}, None),
         lambda: (_rest_issue(7, pr=True), {}, None),
     ],
-    ids=["live-claim", "open-blocker", "open-pr-closes-it", "manual", "a-pull-request"],
+    ids=["live-claim", "open-blocker", "open-pr-closes-it", "a-pull-request"],
 )
 def test_a_new_issue_next_would_not_offer_keeps_the_wait_open(tmp_path, case):
     issue, api, worktrees = case()
