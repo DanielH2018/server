@@ -32,7 +32,13 @@
 # - Abort valves: the scan advances no baseline.
 # - Required evidence, every run: an `rkhunter-check` line in the journal and the textfile the
 #   `host-checks` rule group reads (#6168). Each refresh logs a `rkhunter baseline refreshed`
-#   line under the `rkhunter-propupd` tag.
+#   line under the `rkhunter-propupd` tag, and each skipped one a `rkhunter baseline kept` line.
+#
+# DECIDED: a dpkg run that changed only homelab-* packages keeps rkhunter's baseline (#8650).
+# rkhunter 1.4.6 records the properties of the commands its PROP_FILE_LIST names, found in its
+# default BINDIR, and of USER_FILEPROP_FILES_DIRS, which no config sets. No host package ships
+# such a file (hosts/tests/test_rkhunter_propupd.py holds the census). A change to any other
+# package's stanza in dpkg's status, or to rkhunter's config, still refreshes in full.
 defaults:
   integrity_scans_host_lib_dir: /usr/lib/homelab
   # rkhunter reads PermitRootLogin from the main sshd_config only and never follows its Include.

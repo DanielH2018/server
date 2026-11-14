@@ -109,14 +109,15 @@ The slices:
 1. **R1, landed.** The shadow sweep's timer, its tool and its probe are deleted.
 1. **B2, in progress.** A queue of one. With `LAND_QUEUE` set, a landing takes the landing
    turn, marks its draft PR ready, updates its branch and merges after that one run
-   ([Landing a merged PR](landing.md)). The fan-out's server lander follows: it stops
-   marking a batch's PR ready before the landing, and lands the draft.
+   ([Landing a merged PR](landing.md)). The turn spans both hosts. The fan-out's server
+   lander follows: it stops marking a batch's PR ready before the landing, and lands the
+   draft.
 1. **B3, planned.** Batches of up to four. The queue opens one pull request that holds the
    batch's heads stacked on master, and that PR's run is the batch's one full run. Its gate
    rebuilds each stacked tree from master and the heads and records it on each head. Each
    member then merges in turn, and its own run and master's prove the recorded tree and skip.
    A red batch splits in half.
-1. **B4, planned.** Every landing goes through the queue, on both hosts. The merge pacing is
+1. **B4, planned.** Every landing goes through the queue. The merge pacing is
    deleted, and so is the branch update that follows a green run on a stale base. A landing
    then takes its slot under the limit on live landings when it gets the turn. That limit
    exists because every live landing polls GitHub on one token. A landing that waits for the
@@ -137,6 +138,15 @@ builds the tree a pull-request run tests when the PR's branch is pushed, and nei
 flip nor a read of the PR builds it again. The landing therefore updates the branch at its
 turn, which is a push, for a head that has had no run. The other reason is that two landings
 without the turn merged during the run, and that lasts until every landing takes turns.
+
+The second pilot was #8668 on the same day, a draft pushed 20 minutes and three master commits
+before its landing. The landing took the turn, updated the branch across 29 changed paths and
+merged 240 s later on one run. That run recorded the tree `02974102da74`, which is what
+`git merge-tree` builds from the master of the turn and the PR's head, so the run tested the
+master of the turn. Master's run still swept in full, in 8 minutes 40 seconds: a landing
+without the turn merged 68 s before the pilot did. The pilot also waited 16 minutes for a
+slot under the limit on live landings before it could ask for the turn, which is the wait B4
+removes.
 
 B3's gate rebuilds the trees because the batch's pull request names its members. Anyone who
 can open a pull request could name a head and a tree of their choosing, so the gate takes

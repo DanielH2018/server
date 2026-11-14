@@ -183,6 +183,10 @@ def _setup_script(tmp_path, stubs):
         },
     )
     body = body.replace("operator=/home/ubuntu", f"operator={operator}")
+    body = body.replace(
+        "settings=/usr/lib/homelab/renovate-agent/claude-settings.json",
+        f"settings={tmp_path / 'claude-settings.json'}",
+    )
     body = body.replace("PATH=/usr/bin:/bin", f"PATH={stubs}:/usr/bin:/bin")
     home.mkdir()
     return write_exec(tmp_path / "setup.sh", body), home, operator
@@ -210,6 +214,8 @@ def setup(tmp_path):
     worktree = operator / ".local/share/claude-worktree"
     worktree.mkdir(parents=True)
     (worktree / "claude_worktree.py").write_text("y = 1\n")
+    write_exec(operator / ".claude/hooks/guard-pre-tool-use.sh", "true\n")
+    (tmp_path / "claude-settings.json").write_text('{"hooks": {}}\n')
     env = {"PATH": path_with(stubs)}
     return script, home, calls, env
 
@@ -224,8 +230,10 @@ def test_the_setup_gives_the_agent_its_tools_python_claude_and_clone(setup):
         ".local/bin/claude",
         ".local/share/claude-guard/claude_guard/rules.py",
         ".local/share/claude-worktree/claude_worktree.py",
+        ".claude/hooks/guard-pre-tool-use.sh",
     ):
         assert (home / rel).exists(), rel
+    assert (home / ".claude/settings.json").read_text() == '{"hooks": {}}\n'
     log = calls.read_text()
     assert re.search(r"^uv python install \d+\.\d+\.\d+$", log, re.M)
     assert "curl -fsSL --retry 3 -o" in log
@@ -249,8 +257,10 @@ def test_the_agent_runs_every_command_that_writes_into_its_home(setup):
                 ".local/bin/prek",
                 ".local/share/claude-guard/claude_guard",
                 ".local/share/claude-worktree/claude_worktree.py",
+                ".claude/hooks",
             )
         ),
+        rf"cp --remove-destination \S+ {home}/\.claude/settings\.json",
         rf"mkdir -p {home}/\.local/bin .*",
         rf"{home}/\.local/bin/uv python install \S+",
         r"env CLAUDE_INSTALL_ALLOW_SUDO=1 bash \S+",

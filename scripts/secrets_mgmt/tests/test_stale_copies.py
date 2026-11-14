@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from lib.git_testing import commit, init_repo
+from lib.git_testing import commit, git, init_repo
 from secrets_mgmt.cluster_vars_check import digest
 from secrets_mgmt.stale_copies import unapplied_keys
 
@@ -134,3 +134,61 @@ def test_a_key_no_file_reads_is_stale(tmp_path):
         tmp_path, _keys(**keys), _keys(**keys, ui_login_password=_NEW)
     )
     assert list(unapplied_keys(old, new, repo)) == ["ui_login_password"]
+
+
+@pytest.mark.parametrize(
+    "reader, why",
+    [
+        (
+            {"k8s/roles/late/templates/secret.yaml.j2": "t: {{ late_token }}\n"},
+            "the cluster file's copy is stale (`cluster_vars.py write`)",
+        ),
+        (
+            {"hosts/daniel-server/package.yml": "credentials:\n  - late_token\n"},
+            "daniel-server's host file is not synced "
+            "(`host_secrets.py sync daniel-server`)",
+        ),
+    ],
+    ids=["k8s", "host"],
+)
+def test_a_reader_the_rotation_added_counts_with_the_working_tree_at_old(
+    tmp_path, reader, why
+):
+    keys = {"pod_token": _OLD, "box_token": _OLD, "sonarr_api_key": _OLD}
+    before = _keys(**keys, late_token=_OLD)
+    after = before | {"secrets/secrets.yml": _store(**keys, late_token=_NEW), **reader}
+    repo, old, new = _rotation(tmp_path, before, after)
+    git(repo, "checkout", "-q", old)
+    assert unapplied_keys(old, new, repo) == {"late_token": why}
+
+
+def test_a_reader_only_the_merge_commit_holds_counts(tmp_path):
+    keys = {"pod_token": _OLD, "box_token": _OLD, "sonarr_api_key": _OLD}
+    before = _keys(**keys, late_token=_OLD)
+    after = before | {"secrets/secrets.yml": _store(**keys, late_token=_NEW)}
+    repo, old, head = _rotation(tmp_path, before, after)
+    merged = commit(
+        Path(repo),
+        "merge with a PR that added a reader",
+        **{"k8s/roles/late/templates/secret.yaml.j2": "t: {{ late_token }}\n"},
+    )
+    assert unapplied_keys(old, head, repo, deployed=merged) == {
+        "late_token": "the cluster file's copy is stale (`cluster_vars.py write`)"
+    }
+
+
+def test_another_prs_resync_of_the_host_file_does_not_count_as_this_prs(tmp_path):
+    keys = {"pod_token": _OLD, "sonarr_api_key": _OLD}
+    before = _keys(**keys, box_token=_OLD)
+    after = before | {"secrets/secrets.yml": _store(**keys, box_token=_NEW)}
+    repo, old, head = _rotation(tmp_path, before, after)
+    resync = "ENC[AES256_GCM,data:old-resealed,type:str]"
+    merged = commit(
+        Path(repo),
+        "merge with a PR that re-synced daniel-box from the old value",
+        **{"secrets/hosts/daniel-box.sops.yaml": _store(box_token=resync)},
+    )
+    assert unapplied_keys(old, head, repo, deployed=merged) == {
+        "box_token": "daniel-box's host file is not synced "
+        "(`host_secrets.py sync daniel-box`)"
+    }
