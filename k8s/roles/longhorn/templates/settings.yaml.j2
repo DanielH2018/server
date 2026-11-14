@@ -9,7 +9,7 @@
 # the first `to_json` renders the map in the compact form the manager stores, and the second
 # quotes it as a YAML string. A bare value would store the wrong thing, and Longhorn would
 # ignore it. ENFORCED by
-# ansible/tests/longhorn/test_snapshot_data_integrity_patch_is_a_json_map.py.
+# tests/longhorn/test_snapshot_data_integrity_patch_is_a_json_map.py.
 #
 # `system-managed-csi-components-resource-limits` is a JSON object serialised as a string too:
 # component name -> Kubernetes ResourceRequirements (longhorn-manager v1.12.1,
@@ -20,7 +20,7 @@
 # container's `resources` field by field, so an empty `limits: {}` here would never equal the
 # absent `limits` the API server returns, and the manager would rewrite the Deployments on every
 # tick. ENFORCED by
-# ansible/tests/longhorn/test_longhorn_control_plane_resources.py.
+# tests/longhorn/test_longhorn_control_plane_resources.py.
 #
 # Every other value is a quoted string, because the Setting schema types `value` as a string.
 #

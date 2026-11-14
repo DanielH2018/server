@@ -5,7 +5,7 @@
 # the request's Accept header admits it, and with 401 when there is none; blackbox sends no
 # Accept unless a module sets one, and Go's net/http adds none. http_sso_302 passes only on the
 # 302, so without this header it reads every SSO-gated name as down while the name serves.
-# ansible/tests/services/test_blackbox_exporter_modules.py pins it on every http module.
+# tests/services/test_blackbox_exporter_modules.py pins it on every http module.
 modules:
   # The ingress names without SSO. A 2xx passes, reached through redirects. TLS is verified
   # (no insecure_skip_verify).

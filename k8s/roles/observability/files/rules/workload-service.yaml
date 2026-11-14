@@ -14,7 +14,7 @@
 #   2. label_kustomize_toolkit_fluxcd_io_name, with a trailing `-deferred` removed: a deferred
 #      apply's Kustomization is named `<tag>-deferred`.
 #   3. The override table, one label_replace per rendered workload that carries no label.
-#      ansible/tests/k8s/test_workload_service_overrides.py derives that set from the rendered
+#      tests/k8s/test_workload_service_overrides.py derives that set from the rendered
 #      manifests and fails when the table and the render disagree.
 #   4. `k3s` for anything else in the add-on namespaces, which the setup/k3s role applies.
 #   5. `unmapped`.
@@ -62,7 +62,7 @@ groups:
       # ReplicaSet, a DaemonSet or a StatefulSet. A Job-owned or ownerless pod outside the
       # add-on namespaces has no series: every such Job runs under `restartPolicy: Never`, so
       # the kubelet never restarts its container in place. The `job-restart-policy-is-never`
-      # row of ansible/tests/k8s/test_rendered_properties.py holds that. A StatefulSet pod has
+      # row of tests/k8s/test_rendered_properties.py holds that. A StatefulSet pod has
       # no join step, so it lands in `unmapped` until the mapping gains one.
       - record: homelab:pod_service:info
         expr: |

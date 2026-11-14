@@ -1,8 +1,8 @@
 ---
 # The three documents below are one unit, and the same unit is copied into the other two
-# namespaces with protected routes (roles/k8s/longhorn-ui/templates/middlewares.yaml.j2,
-# roles/k8s/observability/templates/middlewares.yaml.j2). Keep the copies in lockstep;
-# ansible/tests/k8s/test_forwardauth_rebuilds_request_target.py checks every one.
+# namespaces with protected routes (k8s/roles/longhorn-ui/templates/middlewares.yaml.j2,
+# k8s/roles/observability/templates/middlewares.yaml.j2). Keep the copies in lockstep;
+# tests/k8s/test_forwardauth_rebuilds_request_target.py checks every one.
 #
 # Order matters for the apply: `kubectl apply` walks this file top to bottom, so both chain
 # members exist before the `authelia` chain at the bottom starts naming them.

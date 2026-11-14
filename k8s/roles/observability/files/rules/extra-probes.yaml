@@ -68,7 +68,7 @@ groups:
             http one, then the workload's own log.
       # The port arm of monitor-bridge's pi_pressure row, ported. The row held a down streak of
       # 2 cycles of 300s, so 10m is the same tolerance for a container that a deploy recreates.
-      # ansible/tests/services/test_extra_probe_targets.py pins the number.
+      # tests/services/test_extra_probe_targets.py pins the number.
       - alert: PiPortDead
         expr: probe_success{job="blackbox-pi-ports"} == 0
         for: 10m

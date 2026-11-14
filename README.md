@@ -5,7 +5,7 @@ A **k3s** homelab managed as infrastructure-as-code with **Ansible**, with a sma
 secrets encrypted with **SOPS/age**, storage on **Longhorn**, and reverse-proxied behind
 **Cloudflare**.
 
-<!-- The exact count is whatever `containers_list` says in inventory/host_vars/*.yml — don't
+<!-- The exact count is whatever `containers_list` says in cluster/services.yml — don't
      restate a precise number here or in CLAUDE.md; two hand-maintained copies drift apart
      (they read 44 and 49 while the real total was 52). -->
 
@@ -115,9 +115,8 @@ workload by hand.
   List order in `cluster/services.yml` is only the sort's tiebreak.
 
 - **The Pi's containers** are `compose_services` entries that its `homelab-daniel-pi` package
-  deploys. No host lists a Docker `containers_list` entry:
-  `scripts/validate/compose_templates.py:undeployed_docker_entries` refuses one. The Pi's
-  ordering, docker-proxy before autoheal and alloy, is each service file's `depends_on`, and
+  deploys. No host_vars file carries a `containers_list`. The Pi's ordering, docker-proxy
+  before autoheal and alloy, is each service file's `depends_on`, and
   `tests/deploy/test_platform_filter_real_inventory.py` pins it.
 
 No playbook brings a host up. `hosts/bootstrap-host.sh` does, and `docs/host-packages.md`

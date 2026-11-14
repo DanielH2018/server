@@ -3,7 +3,7 @@
 # SCRUTINY_WEB_INFLUXDB_HOST / _PORT=8086 (web.yaml.j2). The collector DaemonSet does NOT write
 # here — it posts to scrutiny-web's API, which does the InfluxDB writes.
 #
-# THIS POLICY SHIPS WITH THE ROLE THAT NEEDS IT. It lived in roles/k8s/netpol-baseline/ until
+# THIS POLICY SHIPS WITH THE ROLE THAT NEEDS IT. It lived in k8s/roles/netpol-baseline/ until
 # 2026-09-10, one role away from the Deployment whose startup depends on it (#1620, the same
 # split as authelia's session store in #1609). scrutiny-web EXITS rather than degrades when
 # InfluxDB is unreachable: it calls `/api/v2/setup` during AppEngine.Setup and `panic(err)`s on
@@ -14,7 +14,7 @@
 # see a split like it — it derives a role's edges from templates inside that role's own
 # directory (scripts/renderer/template_filters/toposort.py), so a dependency expressed in a sibling role
 # produces no edge and no ordering constraint to violate.
-# ansible/tests/services/test_scrutiny_influxdb_policy.py pins the co-location.
+# tests/services/test_scrutiny_influxdb_policy.py pins the co-location.
 #
 # 8086 is the containerPort AND the Service port — verified 2026-08-20, they match, and that
 # same test keeps them matching.
