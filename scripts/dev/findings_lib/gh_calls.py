@@ -380,3 +380,9 @@ def run(plans: list[list[str]], dry_run: bool, tools: FindingsTools) -> None:
 def _create(argv: list[str], tools: FindingsTools) -> str:
     """Runs an `issue create` argv and returns the created issue's URL."""
     return tools.gh(*_aimed_argv(argv, tools)).stdout.strip()
+
+
+def created_number(url: str) -> int | None:
+    """The issue number at the end of the URL `gh issue create` prints, or None."""
+    tail = url.strip().rsplit("/", 1)[-1]
+    return int(tail) if tail.isdigit() else None
