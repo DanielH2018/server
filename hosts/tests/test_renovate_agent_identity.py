@@ -59,6 +59,7 @@ MOVED = {
     GH_READ: GH_READ_SENTINEL,
     CLAUDE: CLAUDE_SENTINEL,
     "discord_alert_webhook": WEBHOOK_SENTINEL,
+    "renovate_agent_ctl_home": "/srv/identity-sentinel-ctl",
 }
 # Any PR number the lander accepts, standing in for the prompt's `<n>`.
 PR = "3337"

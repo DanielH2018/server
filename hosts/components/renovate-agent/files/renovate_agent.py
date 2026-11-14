@@ -8,9 +8,9 @@ The unit's ExecStartPost writes the textfile verdict that RenovateAgentNotReport
 The tick is gated before it costs anything: no open Renovate PRs means no session. The decision
 lives in agent_logic, which is pure.
 
-The session runs in a dedicated worktree, never in the primary checkout. `run_worktree`
-decides whether that tree can be recreated and recreates it; `agent_toolbox` holds the
-process boundaries both halves inject.
+The session runs in its own unit, as its own user, in a dedicated worktree that
+`renovate_session.py` prepares; this runner only starts it and reads what it left in the
+exchange directory. `agent_toolbox` holds the process boundaries both inject.
 
 Config from /etc/renovate-agent/config.env (KEY=VALUE) — see templates/config.env.j2.
 Stdlib only.
@@ -20,7 +20,7 @@ Usage: renovate_agent.py   (takes no arguments; -h/--help prints this text)
 Run by renovate-agent.service from renovate-agent.timer (daily), installed as
 /usr/lib/homelab/renovate-agent/renovate_agent.py. To start a tick by hand, run
 `sudo systemctl start renovate-agent`. RENOVATE_AGENT_CONFIG overrides the config path.
-REPO, REPO_DIR and PROMPT_FILE are required in the config file.
+REPO, REPO_DIR, EXCHANGE_DIR and SESSION_USER are required in the config file.
 """
 
 from __future__ import annotations

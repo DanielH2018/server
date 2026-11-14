@@ -268,7 +268,10 @@ def test_the_session_rule_admits_only_starting_the_session_unit() -> None:
     assert rule.count("polkit.Result.YES") == 1
 
 
-@pytest.mark.parametrize("template", [CONFIG, UNIT, PROMPT, SESSION_UNIT, SESSION_CONF])
+@pytest.mark.parametrize(
+    "template",
+    [CONFIG, UNIT, PROMPT, SESSION_UNIT, SESSION_CONF, "renovate-agent-setup.sh.j2"],
+)
 def test_an_inventory_value_moves_no_cap(template: str) -> None:
     """A PR that edits only host_vars must not raise a cap or widen the permission mode."""
     # fact: hosts/components/renovate-agent/CLAUDE.md#Autonomous-role contract (it merges and deploys with no human in the loop)
@@ -280,6 +283,8 @@ def test_an_inventory_value_moves_no_cap(template: str) -> None:
         "renovate_agent_run_timeout_s": 973100,
         "renovate_agent_unit_timeout": "9731min",
         "renovate_agent_session_timeout_s": 97310,
+        "renovate_agent_user": "moved-user",
+        "renovate_agent_ctl_home": "/srv/moved-ctl",
     }
     assert render(template, moved) == render(template)
 

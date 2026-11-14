@@ -10,9 +10,8 @@ renovate_agent_enabled: false
 # renovate_agent_host lives in inventory/group_vars/all.yml, not here: initial_setup.yml's
 # `when:` on the role entry is evaluated before this file is in scope.
 renovate_agent_repo: DanielH2018/server
-# The controller's home: the run's state. The session's and the controller's users, and the
-# exchange directory between them, are pinned in templates/renovate-agent-pins.j2.
-renovate_agent_ctl_home: /var/lib/renovate-agent-ctl
+# The session's and the controller's users, the controller's home and the exchange directory
+# between them are pinned in templates/renovate-agent-pins.j2.
 # Its home, its state and its own clone. The session never sees the primary checkout:
 # ProtectHome= hides /home from the unit, and /home/{{ sys_user }} is 0750 besides.
 renovate_agent_home: /var/lib/renovate-agent

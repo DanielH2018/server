@@ -23,11 +23,11 @@ SupplementaryGroups={{ pins.user }}
 TimeoutStartSec={{ pins.unit_timeout }}
 # `gh` and `git` are in /usr/bin; the controller has no ~/.local/bin.
 Environment=PATH=/usr/bin:/bin
-Environment=HOME={{ renovate_agent_ctl_home }}
+Environment=HOME={{ pins.ctl_home }}
 Environment=PYTHONDONTWRITEBYTECODE=1
 # The controller's own interpreter under its home, as the dotfiles mirror keeps one.
-Environment=UV_CACHE_DIR={{ renovate_agent_ctl_home }}/uv-cache
-Environment=UV_PYTHON_INSTALL_DIR={{ renovate_agent_ctl_home }}/python
+Environment=UV_CACHE_DIR={{ pins.ctl_home }}/uv-cache
+Environment=UV_PYTHON_INSTALL_DIR={{ pins.ctl_home }}/python
 # The controller's write token. Read by systemd as root, so the file is root 0600 and the value
 # appears in no unit line `systemctl show` publishes.
 EnvironmentFile=/etc/renovate-agent/ctl.env
@@ -51,7 +51,7 @@ ExecStartPre=/usr/lib/homelab/bin/uv python install --no-bin {{ host_python_vers
 # is daily, so a run still going when the next one fires means something is wrong and the second
 # should say so rather than wait. The lock sits in the controller's own home:
 # fs.protected_regular=2 refuses an O_CREAT open of another user's file in sticky /run/lock.
-ExecStart=/usr/bin/flock -n {{ renovate_agent_ctl_home }}/run.lock \
+ExecStart=/usr/bin/flock -n {{ pins.ctl_home }}/run.lock \
   /usr/lib/homelab/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }} \
   /usr/lib/homelab/renovate-agent/renovate_agent.py
 # The same run's verdict for node_exporter's textfile collector (M6 batch B4). It runs only when

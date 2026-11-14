@@ -31,8 +31,8 @@ Environment=LAND_DEADLINE=41460
 # bound a landing: this unit runs on after the session ends, so one started late on a Saturday
 # can still be waiting on Sunday's window (#5457).
 Environment=LAND_WINDOW_GRACE=22200
-# /var/lib/renovate-agent-land/<n>.verdict is the one thing the session reads back, so the
-# directory is world-readable and only this unit writes it.
+# /var/lib/renovate-agent-land/<n>.verdict is what the runner reads back as the controller,
+# so the directory is world-readable and only this unit writes it.
 StateDirectory=renovate-agent-land
 StateDirectoryMode=0755
 SyslogLevel=notice

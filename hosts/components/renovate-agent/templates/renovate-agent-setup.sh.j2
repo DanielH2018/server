@@ -38,7 +38,7 @@ install -d -o "$agent" -g {{ sys_user }} -m 2750 "$home"
 # The controller's home holds the run's state. Group sys_user and setgid, so the docs-refresh
 # reader, which runs as sys_user, reads runs.jsonl as it read it in the agent's home.
 ctl={{ pins.ctl_user }}
-ctl_home={{ renovate_agent_ctl_home }}
+ctl_home={{ pins.ctl_home }}
 install -d -o "$ctl" -g {{ sys_user }} -m 2750 "$ctl_home"
 # The exchange: the controller owns it, and the session's group may only traverse it. The runner
 # recreates its requests/ and out/ children each run, setgid and group-writable, so the session

@@ -119,7 +119,8 @@ the caps or the schedule cannot quietly widen it.
   `renovate_agent_unit_timeout` backstop, and `renovate_agent_budget_usd` as a runaway catch.
   The templates read each cap, and the permission mode, from the literals in
   `templates/renovate-agent-pins.j2`, which is on the lander's approval list, so a host_vars
-  edit moves none of them. The defaults hold the same values for the docs fragments
+  edit moves none of them. The same file pins both users, the controller's home and the
+  exchange directory. The defaults hold the same values for the docs fragments
   (`hosts/tests/test_renovate_agent_unit.py::test_an_inventory_value_moves_no_cap`).
   `docs/renovate-agent-bounds-and-digest.md` has why each is the var it is and why the budget
   must never be the one that binds.
