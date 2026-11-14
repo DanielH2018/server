@@ -51,7 +51,6 @@ to remove and fan-out batches running on another host.
 # pointing at a row-only script saves nothing: `run-hook.sh` starts the same `uv run`
 # interpreter for every registration, and that start is the whole cost of a compaction here.
 
-import concurrent.futures
 import functools
 import json
 import os
@@ -83,7 +82,7 @@ except ImportError, SyntaxError:
 
 try:
     from hooklib import service_lines
-    from hooklib.sections import run_sections
+    from hooklib.sections import keep_where, run_sections
     from hooklib.worktree_lines import _stale_worktree_lines, remote_fanout_lines
 
     HOOKLIB_IMPORT_ERROR = ""
@@ -107,6 +106,9 @@ except (ImportError, SyntaxError) as exc:
             except Exception:
                 out.append([])
         return out
+
+    def keep_where(items, check, deadline):
+        return [item for item in items if check(item)]
 
 
 # How many dirty paths the banner names before it summarises the rest. Enough to recognise whose
@@ -265,6 +267,9 @@ def master_moved_problems(git=None):
 # `git worktree list`. Under TOTAL_DEADLINE_S, so a slow tree is named on its own line before
 # the outer deadline gives up on the whole session list.
 SESSION_SCAN_DEADLINE_S = 6
+# How long judging every worktree lock may take, before those reads. With the scan's
+# deadline it stays under TOTAL_DEADLINE_S; a lock not judged in time counts as live.
+LOCK_CHECK_DEADLINE_S = 2
 
 
 SESSIONS_COMMAND = "uv run python .claude/hooks/session-health.py --sessions"
@@ -316,6 +321,7 @@ def other_live_sessions(
     sys.path.insert(0, os.path.join(REPO, "scripts"))
     try:
         from lib.worktree_label import with_label
+        from lib.fanout_lock import process_unit_state
         from lib.worktrees import lock_is_live, parse_worktree_list
 
         if git_dirty is None:
@@ -357,11 +363,14 @@ def other_live_sessions(
         )[1:]
         if os.path.realpath(tree.path) != os.path.realpath(cwd) and tree.locked
     ]
-    # A fan-out lock carries no pid, so `lock_is_live` asks systemd for its batch unit's
-    # state: one `systemctl --user show` per tree, 1.5s in turn over 177 trees on daniel-server.
-    with concurrent.futures.ThreadPoolExecutor(max_workers=16) as pool:
-        alive = pool.map(lock_is_live, locked)
-        live = [tree for tree, ok in zip(locked, alive, strict=True) if ok]
+    # One `systemctl --user show` per fan-out tree: 1.5s in turn over 177 trees on
+    # daniel-server. A tree another user owns, as `ubuntu` fan-out trees are to a `claude`
+    # session, is judged from /proc, because that user's manager answers only its owner.
+    live = keep_where(
+        locked,
+        functools.partial(lock_is_live, foreign=process_unit_state()),
+        LOCK_CHECK_DEADLINE_S,
+    )
     try:
         mine = set() if show_all else changed_paths(cwd, run)
     except Exception:
