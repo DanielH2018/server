@@ -1,6 +1,6 @@
 {#
   The drill's identity (H2.3d). Its rules are the calls longhorn-restore-drill.sh.j2 makes and
-  nothing else; ansible/tests/k8s/test_rbac_against_script.py derives that set from the script and
+  nothing else; tests/k8s/test_rbac_against_script.py derives that set from the script and
   holds these rules to it.
 
   `list` and `watch` sit beside `delete` on each kind `cleanup()` deletes, because kubectl waits

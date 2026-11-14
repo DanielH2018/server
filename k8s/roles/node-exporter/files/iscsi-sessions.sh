@@ -32,7 +32,7 @@ ONCE=${ONCE:-0}
 CHECK=iscsi-sessions
 # The longest legitimate gap between two writes: five intervals. The IscsiSessionsNotReporting
 # rules in observability's host-checks.yaml carry it as a literal, and
-# ansible/roles/k8s/node-exporter/tests/test_iscsi_sessions.py pins the two together.
+# k8s/roles/node-exporter/tests/test_iscsi_sessions.py pins the two together.
 DEADLINE_S=$((INTERVAL_S * 5))
 
 # One label value as read from sysfs: the file's first line, or `unknown` when it is missing.

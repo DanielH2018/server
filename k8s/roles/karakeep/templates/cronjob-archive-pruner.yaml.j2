@@ -48,7 +48,7 @@ spec:
               # so nothing installs at start and the root filesystem can stay read-only.
               image: {{ karakeep_k8s_tagger_image }}
               # Built in-cluster: see the `built-images-pull-always` row of
-              # ansible/tests/k8s/_workload_property_rows.py.
+              # tests/k8s/_workload_property_rows.py.
               imagePullPolicy: Always
               command:
                 - python3

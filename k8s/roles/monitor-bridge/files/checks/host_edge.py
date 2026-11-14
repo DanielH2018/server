@@ -48,7 +48,7 @@ def check_speedtest(cfg: Config, src: Sources) -> tuple[bool, str]:
     # SPEEDTEST_FLOOR_CONSECUTIVE counts RESULTS, which the REST history hands back in one fetch;
     # Prometheus samples a 6-hourly result every 5 min, so the same arm would mean grouping
     # samples by result id before it could count anything. (3) The scrape itself depends on a
-    # manual UI toggle that roles/k8s/speedtest/CLAUDE.md records as impossible to set from
+    # manual UI toggle that k8s/roles/speedtest/CLAUDE.md records as impossible to set from
     # config at the pinned build, on a longhorn-nobackup PVC — a human step this alert path should not
     # acquire. The scrape stays what it was added for in #996: history in Grafana.
     try:

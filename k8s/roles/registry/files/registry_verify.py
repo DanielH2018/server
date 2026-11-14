@@ -32,8 +32,8 @@ Inputs come from the Job's environment. `REGISTRY_RENDER_DIGEST8` is in the spec
 the Job, and the script prints it. Exit 0 when the check passes, 1 when it fails, naming why.
 
 Run: python3 registry_verify.py (in the Job; it takes no arguments)
-     uv run pytest ansible/roles/k8s/registry/tests/test_registry_verify.py
-     uv run pytest ansible/roles/k8s/registry/tests/test_registry_verify_seed.py
+     uv run pytest k8s/roles/registry/tests/test_registry_verify.py
+     uv run pytest k8s/roles/registry/tests/test_registry_verify_seed.py
 """
 
 import argparse

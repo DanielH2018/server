@@ -17,7 +17,7 @@
 #   which only moves when a run exits 0, and the reader exits 1 when its export fails.
 #
 # THE LITERALS. Each age limit is three periods of its producer's schedule (the sidecar exports
-# its own limit as `homelab_check_deadline_seconds`). ansible/tests/services/
+# its own limit as `homelab_check_deadline_seconds`). tests/services/
 # test_pod_producer_rule_literals.py pins the two CronJob limits and the ConfigMap names to the
 # roles' defaults (M1 convention 1).
 #

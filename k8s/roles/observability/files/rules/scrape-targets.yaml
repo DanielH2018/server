@@ -13,7 +13,7 @@
 # scripts/validate/alert_conventions.py takes `service` from a literal, a workload-service
 # join, or a job whose every target sets it, and a static scrape job has none of the last two.
 # The last rule is the catch-all: a job that no earlier rule names still pages, with
-# service="unmapped". ansible/tests/services/test_scrape_target_rule_jobs.py fails until every
+# service="unmapped". tests/services/test_scrape_target_rule_jobs.py fails until every
 # job in the rendered prometheus.yml is in exactly one earlier rule, so "unmapped" is a
 # fallback and never a destination.
 #
@@ -340,7 +340,7 @@ groups:
       # of 10 as an outage that never paged, and a target failing in runs of 10 would page
       # nothing at all.
       # Each rule's job matcher and `service` mirror one ScrapeTargetDown rule's, so
-      # ansible/tests/services/test_scrape_target_flap_rule.py holds the two sets equal.
+      # tests/services/test_scrape_target_flap_rule.py holds the two sets equal.
       - alert: ScrapeTargetFlapping
         expr: avg_over_time(up{job=~"prometheus|otel-collector|otel-collector-internal|kube-state-metrics|loki-internal|tempo-internal|alertmanager"}[30m]) < 0.7 and resets(up{job=~"prometheus|otel-collector|otel-collector-internal|kube-state-metrics|loki-internal|tempo-internal|alertmanager"}[30m]) >= 2 and min_over_time(max_over_time(up{job=~"prometheus|otel-collector|otel-collector-internal|kube-state-metrics|loki-internal|tempo-internal|alertmanager"}[11m])[30m:1m]) == 1
         for: 10m
@@ -645,7 +645,7 @@ groups:
       # emptied makes every rule above evaluate to nothing, which this rule reads as a fault.
       # `or vector(0)` turns an empty count into 0, so the empty-input case fires. The 10m hold
       # matches ScrapeTargetDown's, so a rolling pod's scrape gap pages neither.
-      # ansible/tests/services/test_scrape_target_rule_jobs.py pins both floors to the bridge.
+      # tests/services/test_scrape_target_rule_jobs.py pins both floors to the bridge.
       - alert: ScrapeTargetsMissing
         expr: >-
           (count(up{origin!="daniel-server"}) or vector(0)) < 3

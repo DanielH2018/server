@@ -86,7 +86,7 @@ rules:
   # every ConfigMap's data in memory. It exports only metadata: --metric-annotations-allowlist
   # below names the one annotation, no collector exports `data`, and the Prometheus job drops
   # every other kube_configmap_* family and every series without the annotation. No Secret
-  # grant is added, and ansible/tests/k8s/test_no_secret_in_a_moved_jobs_configmap.py keeps
+  # grant is added, and tests/k8s/test_no_secret_in_a_moved_jobs_configmap.py keeps
   # secret values out of ConfigMaps in any case.
   - apiGroups: [""]
     resources: [configmaps]

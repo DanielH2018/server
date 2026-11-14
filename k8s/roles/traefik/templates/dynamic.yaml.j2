@@ -56,12 +56,12 @@ spec:
                                   missing header rather than falling back to the remote
                                   address — so depth here would pool the whole LAN into one
                                   bucket. That is why the two hosts are separate Rules with
-                                  separate middlewares (ansible/templates/ingressroute.yml.j2)
+                                  separate middlewares (k8s/templates/ingressroute.yml.j2)
                                   rather than one Rule with one sourceCriterion.
 
   Not `excludedIPs: cloudflare_ips` (the PoolStrategy): it walks XFF right-to-left skipping
   the excluded ranges, which is depth 1 with a 22-entry dependency on the range list, and it
-  returns the same "" for a missing header. ENFORCED: ansible/tests/k8s/
+  returns the same "" for a missing header. ENFORCED: tests/k8s/
   test_rate_limit_keys_on_the_client.py fails a public Host rule attached to a plain limiter,
   a `.local.` rule attached to a `-proxied` one, and a Rule mixing the two.
 #}

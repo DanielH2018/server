@@ -32,7 +32,7 @@
 
    So the pod callers use ClusterIP, where the pod-level NetworkPolicy can actually distinguish
    them:
-     - homepage's widgets      -> roles/k8s/homepage/templates/config/services.yaml.j2
+     - homepage's widgets      -> k8s/roles/homepage/templates/config/services.yaml.j2
      - blackbox-exporter probe -> the `blackbox-extra` job in the observability role
    The cost is that the probe does not exercise the Traefik route, only the app. Accepted:
    nothing reaches this service through the edge any more, so an edge break for ical-proxy has no

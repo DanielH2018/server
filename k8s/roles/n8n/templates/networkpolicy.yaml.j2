@@ -30,7 +30,7 @@ spec:
   ingress:
     # 5678: traefik, where the Authelia two_factor middleware, the CrowdSec bouncer and the
     # rate-limit run, and monitor-bridge, the one in-cluster API caller (check_n8n dials
-    # `n8n:5678` with X-N8N-API-KEY — roles/k8s/monitor-bridge/templates/env-secret.yaml.j2).
+    # `n8n:5678` with X-N8N-API-KEY — k8s/roles/monitor-bridge/templates/env-secret.yaml.j2).
     # Until 2026-09-17 this rule carried no `from:` and admitted every pod (#1926); under the
     # namespace-scope baseline that made n8n the ONLY web workload whose port any pod could
     # reach, and n8n is the one that executes workflow code and holds encrypted credentials.

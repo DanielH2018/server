@@ -34,7 +34,7 @@ nothing here can print a secret:
 
     QBT_USERNAME=$(sops -d --extract '["qbittorrent_username"]' ansible/vars/secrets.yml) \
     QBT_PASSWORD=$(sops -d --extract '["qbittorrent_password"]' ansible/vars/secrets.yml) \
-    uv run python ansible/roles/k8s/qbittorrent/files/apply_prefs.py --dry-run
+    uv run python k8s/roles/qbittorrent/files/apply_prefs.py --dry-run
 """
 
 from __future__ import annotations

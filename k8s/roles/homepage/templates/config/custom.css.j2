@@ -202,7 +202,7 @@ li.service:not(#my-calendar) .service-container > div > div {
  * a tile the next reorder — and the links above were reordered the same day. The block index
  * within a tile is still positional, because homepage renders a widget's blocks in the order its
  * component declares them; that order is the `fields:` list in services.yaml.j2, and the two are
- * ENFORCED to agree by ansible/tests/services/test_homepage_block_label_overrides.py.
+ * ENFORCED to agree by tests/services/test_homepage_block_label_overrides.py.
  */
 li.service:has(a[href*="speedtest."]) .service-block:nth-child(1) > .font-bold,
 li.service:has(a[href*="karakeep."]) .service-block:nth-child(1) > .font-bold,

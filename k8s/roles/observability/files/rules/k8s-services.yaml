@@ -7,7 +7,7 @@
 # verify-on-a-metric conversion of D5 (docs/target-architecture/deploy/d5-bulk-move.md). Each
 # carries verify="true", so the soak Job fails a revision that changes its service while it
 # fires. The address is a literal because a rule file is never Jinja;
-# ansible/tests/services/test_lan_address_rules_agree.py holds it, the namespace and the
+# tests/services/test_lan_address_rules_agree.py holds it, the namespace and the
 # Service name to the rendered Service.
 # TraefikIngressAddressNotPinned is the same conversion of traefik's "Fail if Traefik did not
 # get the reserved ingress VIP". It lands ahead of traefik's flip, while observability is still

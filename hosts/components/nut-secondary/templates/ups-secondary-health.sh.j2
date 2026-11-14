@@ -106,7 +106,7 @@ fi
 # Unconditional: this line is the durable record of the verdict's message, and Loki keeps it.
 # NOTICE rather than INFO: journald here is capped at MaxLevelStore=notice, so an
 # info-level line is dropped from the journal AND from forwarding to rsyslog, never reaching
-# Loki (2026-08-29 review M-15, which was exactly that bug in live_drift_check.py).
+# Loki (2026-08-29 review M-15).
 logger -p daemon.notice -t ups-secondary-health "status=${STATUS} ${MSG}"
 
 # The textfile carries the verdict. A failed write logs.
