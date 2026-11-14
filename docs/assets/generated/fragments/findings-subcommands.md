@@ -17,5 +17,6 @@
 | `show` | one finding's body, outcome, closing PR and comment thread |
 | `export` | write every finding in every state to one JSON file, for the break-glass kit |
 | `sync-labels` | create any missing label |
+| `sync-board` | make each open issue's Project board item match its state and labels |
 | `verify` | print each finding's stored instructions for how to verify it; runs nothing |
 | `next` | issues a session may pick up, best first |

@@ -136,8 +136,9 @@ UNIT_NAME = re.compile(r"[A-Za-z0-9@_.:-]+\.(service|timer|socket|path)")
 PLAIN_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*")
 POLICIES = frozenset({"manual", "windowed"})
 # Each arm module has valid(section) and reconcile(section, prev) -> (ok, record | None, drift).
-# Users and lines run before the units start, lines before the activations read the files it
-# edits, and libvirt then ufw last, so that ufw's enable applies the sysctl edit already made.
+# Users and lines run before the units start: users before the secrets step, whose outputs a new
+# user or group can own, and lines before the activations read the files it edits. Libvirt then
+# ufw run last, so that ufw's enable applies the sysctl edit already made.
 ARMS = {"users": users, "lines": lines, "libvirt": libvirt, "ufw": ufw}
 EARLY = ("users", "lines")
 SHA256 = re.compile(r"[0-9a-f]{64}")
@@ -765,6 +766,10 @@ def act(manifest: dict, prev: dict) -> tuple[bool, dict]:
         if unit in unlinked:
             links_state.add(unit)
 
+    # Step 1a: the users arm, so an output step 1b writes can name a user this version adds.
+    drift, arms = {"legacy": 0}, {}
+    ok = run_arms(["users"], manifest, prev, arms, drift) and ok
+
     # Step 1b: in a package that ships `secrets-unit`, run homelab-secrets when its inputs, its
     # unit file or its activity says the outputs may be stale. A failed run does not stop the rest.
     secrets_state, secrets_ran = None, True
@@ -787,10 +792,8 @@ def act(manifest: dict, prev: dict) -> tuple[bool, dict]:
             log(f"restart {SECRETS_UNIT}")
         secrets_state = digest if secrets_ran else prev.get("secrets_inputs_sha256")
 
-    # Step 1c: the users and lines arms, so a unit that runs as a new user starts, and step 3b
-    # activates the files the lines arm edited.
-    drift, arms = {"legacy": 0}, {}
-    ok = run_arms(EARLY, manifest, prev, arms, drift) and ok
+    # Step 1c: the lines arm, so step 3b activates the files it edited.
+    ok = run_arms(["lines"], manifest, prev, arms, drift) and ok
 
     # The restart set, built before step 2: the units whose file or drop-in changed, and the
     # units in pending.json, each only when it is enabled or active. A foreign unit the manifest

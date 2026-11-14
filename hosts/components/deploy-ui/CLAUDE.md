@@ -108,6 +108,26 @@ and a test pins its keys to `scripts/deploy_tools/land_lib/outcome.py:VERDICTS`,
 daemon cannot import land_lib
 (`hosts/components/deploy-ui/tests/test_deploy_ui_landings.py::test_every_land_verdict_has_a_hint_is_clean`).
 
+## Game servers
+
+The *Game servers* panel shows each game in `game_servers` (`inventory/group_vars/all.yml`), which
+the unit passes in as `DEPLOY_UI_GAMES`. A game is its server's Deployment plus every Deployment
+that runs only while it does, such as its game-stats exporter. `files/deploy_ui_lib/deploy_ui_games.py`
+folds them into one state: `running`, `starting`, `stopping`, `stopped`, `partial` (some scaled up,
+some down) or `missing`.
+
+- **The state comes from the read-only kubeconfig.** The unit sets `KUBECONFIG` to the operator's
+  `~/.kube/config`, the `homelab-readonly` identity, and the panel runs two `kubectl get` calls
+  per poll: the Deployments by name, and their pods by `app in (...)`.
+- **The console comes from Loki, not from `pods/log`.** `curl` reads the newest 200 lines of
+  `{namespace=<ns>,container=<server>}` from the last 7 days through the LAN route in
+  `DEPLOY_UI_LOKI`, so a parked server still shows its last run. Loki splits one container
+  into a stream per level, and `parse_console` merges them by timestamp.
+
+The panel only reads. The page has no start or stop control: Flux renders each game's
+`spec.replicas` from `<game>_k8s_replicas`, and drift correction would revert a scale made
+anywhere else.
+
 ## Usage count
 
 The daemon writes one logfmt line per request to its unit journal (#2864):
@@ -120,8 +140,9 @@ A client that closes the connection mid-response adds a second line,
 `BrokenPipeError` traceback that HostLogErrors would count (#7921). It opens with a word
 other than `request`, so the count below does not see the request twice.
 
-The page polls four panels every 10 seconds, so an open tab writes about 24 lines a minute,
-and 18 while the finished list is hidden, because the page skips its fetch.
+The page polls five panels every 10 seconds, so an open tab writes about 30 lines a minute,
+and 24 while the finished list is hidden, because the page skips its fetch. An open game
+console adds 6 more.
 An open landing viewer polls `/api/log` every 2 seconds and adds 30 more. Those polls show a tab was open, not that anyone used it. Count page
 loads and writes instead:
 

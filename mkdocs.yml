@@ -14,6 +14,10 @@ use_directory_urls: true
 
 theme:
   name: material
+  # The Docs tile's mdi icon and colour in homepage's services.yaml.j2.
+  favicon: assets/favicon.svg
+  icon:
+    logo: material/book-open-variant
   features:
     - navigation.top
     - navigation.indexes
