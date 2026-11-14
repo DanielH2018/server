@@ -210,6 +210,8 @@ nav:
           - Landing a merged PR: landing.md
           # What the 20-job runner cap costs a landing, and the phased plan to get under it.
           - CI throughput: ci-throughput.md
+          # One coverage run with per-test contexts: deletion candidates, not a gate.
+          - Test coverage snapshot: test-coverage-snapshot.md
           - Host packages: host-packages.md
           - The Flux deploy plane: flux-deploy-plane.md
           - The homelab-render renderer: homelab-render.md
