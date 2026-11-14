@@ -1,9 +1,10 @@
+{% import 'templates/renovate-agent-pins.j2' as pins with context -%}
 # Shipped by the renovate-agent component. Enabled at boot, and restarted by reconcile when the setup
 # script or the Claude Code settings it installs change. homelab-renovate-agent.service also runs the
 # script before each session; this unit gives a disarmed agent its settings, which the guardrail
 # audit watches.
 [Unit]
-Description=Give the {{ renovate_agent_user }} agent its home, tooling and Claude Code settings
+Description=Give the {{ pins.user }} agent its home, tooling and Claude Code settings
 OnFailure=homelab-alert@%n.service
 # The first run installs Claude Code and clones the repo over HTTPS.
 Wants=network-online.target

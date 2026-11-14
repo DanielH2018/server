@@ -12,15 +12,12 @@ Run: uv run pytest hosts/components/renovate-agent/tests/test_session_resume.py
 """
 
 import json
-import os
 import pathlib
-import pwd
 import re
 import shlex
 import subprocess
 
 import agent_logic
-import pytest
 import renovate_agent
 import renovate_session
 from lib.proc_testing import write_exec
@@ -28,10 +25,11 @@ from lib.proc_testing import write_exec
 SESSION_ID = "6f1c2a9e-4b7d-4e2a-9c3f-0d8b5a7e1c42"
 
 
-@pytest.fixture(autouse=True)
-def _session_token(monkeypatch, tmp_path):
-    """The unit's EnvironmentFile sets the session's read-only token; main() needs it."""
-    monkeypatch.setenv("RENOVATE_SESSION_GH_TOKEN", "gh-read-sentinel")
+OWNER = "session-sentinel"
+# What `systemctl show -p Environment --value` prints for the session unit.
+SESSION_UNIT_ENV = (
+    "PATH=/srv/agent/.local/bin:/usr/bin:/bin HOME=/srv/agent RUN_HOOK_PROJECT_DIR=/wt"
+)
 
 
 HANDOFF = (
@@ -55,6 +53,8 @@ class _Host:
         if argv == ["systemctl", "start", renovate_agent.SESSION_UNIT]:
             (self.state / renovate_session.OUTPUT_FILE).write_text(self.output)
             return 0, ""
+        if argv[:4] == ["systemctl", "show", "-p", "Environment"]:
+            return 0, SESSION_UNIT_ENV + "\n"
         if argv[:2] == ["systemctl", "show"]:
             return 0, "Result=success\nExecMainStatus=0\n"
         if argv[0] == "gh":
@@ -113,10 +113,10 @@ def _tick(tmp_path: pathlib.Path, summary: str) -> tuple[_Host, pathlib.Path]:
     prompt.write_text("/renovate-prs\n")
     cfg = tmp_path / "config.env"
     cfg.write_text(
-        f"REPO=o/r\nREPO_DIR={tmp_path}\nPROMPT_FILE={prompt}\n"
-        f"STATE_DIR={tmp_path}/state\nCLAUDE_BIN={tmp_path}/claude\n"
+        f"REPO=o/r\nREPO_DIR={tmp_path}\nEXCHANGE_DIR={tmp_path}/exchange\n"
+        f"SESSION_USER={OWNER}\nSTATE_DIR={tmp_path}/state\nCLAUDE_BIN={tmp_path}/claude\n"
     )
-    host = _Host(tmp_path / "state", json.dumps(result))
+    host = _Host(tmp_path / "exchange" / "out", json.dumps(result))
     tools = renovate_agent.AgentTools(
         run=host.run,
         discord_post=host.discord_post,
@@ -162,10 +162,10 @@ def test_the_resume_command_runs_from_the_session_worktree(tmp_path) -> None:
 def test_the_resume_command_runs_as_the_user_that_owns_the_session(tmp_path) -> None:
     """The harness stores a session under its owner's home, so the operator must switch user.
 
-    The unit runs this process as `renovate_agent_user`, so the effective user here is the
-    session's owner.
+    The runner runs as the controller, so the owner comes from the config, never from the
+    runner's own uid.
     """
-    owner = pwd.getpwuid(os.geteuid()).pw_name
+    owner = OWNER
     host, _ = _tick(tmp_path, HANDOFF)
 
     (digest,) = host.posts
@@ -222,10 +222,7 @@ def test_the_resumed_claude_gets_the_units_credentials_and_hook_env(tmp_path) ->
         f'echo "args=$*" >> {seen}\necho "cwd=$PWD" >> {seen}\nenv >> {seen}\n',
     )
     creds = tmp_path / "creds"
-    creds.write_text(
-        "GH_TOKEN=gh-write-sentinel\nRENOVATE_SESSION_GH_TOKEN=gh-sentinel\n"
-        "CLAUDE_CODE_OAUTH_TOKEN=claude-sentinel\n"
-    )
+    creds.write_text("GH_TOKEN=gh-sentinel\nCLAUDE_CODE_OAUTH_TOKEN=claude-sentinel\n")
     cmd = agent_logic.resume_command(
         SESSION_ID,
         str(worktree),
@@ -245,19 +242,16 @@ def test_the_resumed_claude_gets_the_units_credentials_and_hook_env(tmp_path) ->
     assert f"args=--resume {SESSION_ID}" in lines
     assert f"cwd={worktree}" in lines
     assert "GH_TOKEN=gh-sentinel" in lines
-    assert not any("gh-write-sentinel" in line for line in lines)
     assert "CLAUDE_CODE_OAUTH_TOKEN=claude-sentinel" in lines
     assert f"RUN_HOOK_PROJECT_DIR={worktree}" in lines
 
 
-@pytest.mark.parametrize(
-    "template",
-    ["homelab-renovate-agent.service.j2", "homelab-renovate-agent-session.service.j2"],
-)
-def test_the_resume_carries_every_variable_the_unit_sets(template) -> None:
-    """A variable added to a unit but not to SESSION_ENV_KEYS would be lost on a resume."""
+def test_the_resume_carries_every_variable_the_unit_sets() -> None:
+    """A variable added to the session unit but not to SESSION_ENV_KEYS is lost on a resume."""
     unit = (
-        pathlib.Path(renovate_agent.__file__).parents[1] / "templates" / template
+        pathlib.Path(renovate_agent.__file__).parents[1]
+        / "templates"
+        / "homelab-renovate-agent-session.service.j2"
     ).read_text()
     keys = re.findall(r"^Environment=([A-Z_]+)=", unit, re.MULTILINE)
     assert "RUN_HOOK_PROJECT_DIR" in keys

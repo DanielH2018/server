@@ -274,7 +274,7 @@ class _Tick:
             (self.state / "requests" / "1-71-land.json").write_text(
                 json.dumps({"action": "land", "pr": 71})
             )
-            (self.state / renovate_session.OUTPUT_FILE).write_text(self.output)
+            (self.state / "out" / renovate_session.OUTPUT_FILE).write_text(self.output)
             return 0, ""
         if argv[:2] == ["systemctl", "start"]:
             self.merged = True
@@ -297,11 +297,10 @@ class _Tick:
         return True
 
 
-def test_a_pr_the_session_nominates_lands_and_reaches_the_digest(tmp_path, monkeypatch):
+def test_a_pr_the_session_nominates_lands_and_reaches_the_digest(tmp_path):
     """The after-census runs after the landings, so the headline counts what they merged."""
-    monkeypatch.setenv("RENOVATE_SESSION_GH_TOKEN", "gh-read-sentinel")
     (tmp_path / ".claude" / "worktrees" / "renovate-auto").mkdir(parents=True)
-    state = tmp_path / "state"
+    exchange = tmp_path / "exchange"
     result = json.dumps(
         {"type": "result", "subtype": "success", "result": "Nominated #71."}
     )
@@ -309,10 +308,10 @@ def test_a_pr_the_session_nominates_lands_and_reaches_the_digest(tmp_path, monke
     prompt.write_text("/renovate-prs\n")
     cfg = tmp_path / "config.env"
     cfg.write_text(
-        f"REPO=o/r\nREPO_DIR={tmp_path}\nPROMPT_FILE={prompt}\n"
-        f"STATE_DIR={state}\nCLAUDE_BIN={tmp_path}/claude\n"
+        f"REPO=o/r\nREPO_DIR={tmp_path}\nEXCHANGE_DIR={exchange}\nSESSION_USER=agent\n"
+        f"STATE_DIR={tmp_path}/state\nCLAUDE_BIN={tmp_path}/claude\n"
     )
-    tick = _Tick(state, result)
+    tick = _Tick(exchange, result)
     tools = renovate_agent.AgentTools(
         run=tick.run,
         read_file=tick.read,
@@ -334,3 +333,23 @@ def test_the_journal_line_for_a_request_carries_no_session_text(tmp_path):
         for o in _carry(tmp_path, requests, _lander(tmp_path))
     ]
     assert lines == ["request refused #0 not done", "request land #71 done"]
+
+
+@pytest.mark.parametrize("planted", ["file", "directory"])
+def test_a_session_file_planted_as_a_symlink_is_refused_not_followed(tmp_path, planted):
+    """The session could point its output at the controller's token file; nothing reads it."""
+    secret = tmp_path / "secret"
+    secret.mkdir()
+    (secret / renovate_session.OUTPUT_FILE).write_text("GH_TOKEN=write-sentinel\n")
+    exchange = tmp_path / "exchange"
+    exchange.mkdir()
+    if planted == "file":
+        out = run_requests.fresh_dir(str(exchange), "out")
+        os.symlink(
+            secret / renovate_session.OUTPUT_FILE,
+            os.path.join(out, renovate_session.OUTPUT_FILE),
+        )
+    else:
+        os.symlink(secret, exchange / "out")
+        out = str(exchange / "out")
+    assert renovate_agent.session_files(out) == ("", "")

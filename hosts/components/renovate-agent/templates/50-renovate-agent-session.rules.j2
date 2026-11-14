@@ -1,13 +1,13 @@
+{% import 'templates/renovate-agent-pins.j2' as pins with context -%}
 // Shipped by the renovate-agent component.
 //
-// Lets the runner's user START the session unit, and nothing else. The runner and the session
-// still share renovate_agent_user until guardrails plan B2r's second half moves this rule to the
-// controller user, which the session user will not be.
+// Lets the controller START the session unit, and nothing else. The session's own user holds no
+// start right (dotfiles#967's I1).
 polkit.addRule(function (action, subject) {
     if (action.id !== "org.freedesktop.systemd1.manage-units") {
         return undefined;
     }
-    if (subject.user !== "{{ renovate_agent_user }}") {
+    if (subject.user !== "{{ pins.ctl_user }}") {
         return undefined;
     }
     if (action.lookup("unit") !== "homelab-renovate-agent-session.service") {
