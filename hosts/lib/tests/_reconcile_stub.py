@@ -15,13 +15,16 @@ State keys:
     installed: package -> [three-letter dpkg status, version].
     units: unit -> {"load": loaded|masked|not-found, "active": active|inactive|failed,
         "enabled": enabled|disabled|static}. A unit missing here is not loaded.
-    fail: "<verb> <unit>" strings, each a systemctl call that exits 1, and "udevadm <subcommand>"
-        strings, each a udevadm call that exits 1.
+    fail: "<verb> <unit>" strings, each a systemctl call that exits 1, "udevadm <subcommand>"
+        strings, each a udevadm call that exits 1, and "dpkg -S", which makes every `dpkg -S`
+        exit 2. `systemctl show` refuses a whole call that names a template's own name, or a
+        unit with a "show <unit>" string here.
     owned: paths `dpkg -S` reports a package owns.
     crontabs: user -> crontab text. A user missing here has no crontab.
-    effects: "<verb> <unit>" -> {"write": {absolute path: text}, "queue": [unit, ...]}, what a
-        successful call of that verb leaves on disk under HOMELAB_ROOT: the files it writes and
-        the units it adds to /run/homelab-secrets/pending.json.
+    effects: "<verb> <unit>" -> {"write": {absolute path: text}, "queue": [unit, ...],
+        "pulls": [unit, ...]}, what a successful call of that verb leaves behind: the files it
+        writes under HOMELAB_ROOT, the units it adds to /run/homelab-secrets/pending.json, and
+        the units it starts as dependencies.
     A unit's "limit": true makes `start` and `restart` fail until `reset-failed` clears it. A
     unit's "invocation" is what `systemctl show -p InvocationID` prints, and a start, restart or
     try-restart changes it.
@@ -94,13 +97,20 @@ def dpkg_query(state: dict, args: list[str]) -> int:
 
 
 def dpkg(state: dict, args: list[str]) -> int:
-    if args[0] != "-S":
+    """`dpkg -S <path>...`: exit 1 when any path is unowned, as dpkg does."""
+    if args[0] != "-S" or len(args) < 2:
         raise SystemExit(f"stub dpkg: unexpected {args}")
-    if args[1] in state["owned"]:
-        print(f"some-package: {args[1]}")
-        return 0
-    print(f"dpkg-query: no path found matching pattern {args[1]}", file=sys.stderr)
-    return 1
+    if "dpkg -S" in state["fail"]:
+        print("dpkg-query: error: the database is locked", file=sys.stderr)
+        return 2
+    code = 0
+    for path in args[1:]:
+        if path in state["owned"]:
+            print(f"some-package: {path}")
+        else:
+            print(f"dpkg-query: no path found matching pattern {path}", file=sys.stderr)
+            code = 1
+    return code
 
 
 def crontab(state: dict, args: list[str]) -> int:
@@ -119,7 +129,7 @@ def systemctl(state: dict, args: list[str]) -> int:
     verb, rest = args[0], args[1:]
     units = state["units"]
     if verb == "show":
-        return _show(units, rest)
+        return _show(units, rest, state["fail"])
     if verb == "daemon-reload":
         return 0
     if verb == "list-units":
@@ -184,6 +194,8 @@ def _effects(state: dict, call: str) -> None:
 
     root = Path(os.environ["HOMELAB_ROOT"])
     effect = state.get("effects", {}).get(call, {})
+    for unit in effect.get("pulls", []):
+        state["units"][unit]["active"] = "active"
     for path, text in effect.get("write", {}).items():
         target = root / path.lstrip("/")
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -195,7 +207,7 @@ def _effects(state: dict, call: str) -> None:
         pending.write_text(json.dumps(sorted(set(queue) | set(effect["queue"]))))
 
 
-def _show(units: dict, args: list[str]) -> int:
+def _show(units: dict, args: list[str], fail: list[str]) -> int:
     names = [arg for i, arg in enumerate(args) if arg != "-p" and args[i - 1] != "-p"]
     if "--value" in names:
         (unit,) = [name for name in names if name != "--value"]
@@ -207,12 +219,23 @@ def _show(units: dict, args: list[str]) -> int:
         return 0
     import fnmatch
 
-    (pattern,) = names
-    blocks = [
-        f"Id={unit}\nLoadState={known['load']}\n"
-        for unit, known in sorted(units.items())
-        if fnmatch.fnmatch(unit, pattern)
-    ]
+    if any("@." in name or f"show {name}" in fail for name in names):
+        print(
+            "Failed to get properties: a template's name is not a unit", file=sys.stderr
+        )
+        return 1
+    matched = []
+    for name in names:
+        if "*" in name:
+            matched += [unit for unit in sorted(units) if fnmatch.fnmatch(unit, name)]
+        else:
+            matched.append(name)
+    blocks = []
+    for unit in matched:
+        known = units.get(unit, {"load": "not-found", "active": "inactive"})
+        blocks.append(
+            f"Id={unit}\nLoadState={known['load']}\nActiveState={known['active']}\n"
+        )
     print("\n".join(blocks), end="")
     return 0
 

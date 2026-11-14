@@ -122,6 +122,7 @@
  "hosts/lib/tests/test_eval_sweep_component.py": 0.11,
  "hosts/lib/tests/test_h737_box_components.py": 1.75,
  "hosts/lib/tests/test_homelab_reconcile.py": 5.07,
+ "hosts/lib/tests/test_homelab_reconcile_batched_reads.py": 1.2,
  "hosts/lib/tests/test_homelab_reconcile_restart.py": 12.29,
  "hosts/lib/tests/test_homelab_reconcile_timing.py": 20.63,
  "hosts/lib/tests/test_homelab_reconcile_udev.py": 1.58,
