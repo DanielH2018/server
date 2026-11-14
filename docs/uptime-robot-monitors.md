@@ -140,14 +140,16 @@ host returns the same `"status":"OK"` beside the session fields.
 
 `uv run python scripts/diagnostics/probe.py uptime-robot` lists the account's monitors through
 Uptime Robot's v2 `getMonitors` API. It exits 1 when a documented id no longer exists or is
-paused, and 75 when it could not read the API or got a partial page. A monitor that is down is not a failure here,
-because Uptime Robot pages on that itself. The table above is the oracle:
+paused, and 75 when it could not read the API or got a partial page. A monitor that is down is
+not a failure here, because Uptime Robot pages on that itself. The table above is the oracle:
 `scripts/diagnostics/probe_lib/uptime_robot.py` parses it, and the keyword test reads the same
 rows.
 
 The probe reads its key from the SOPS key `uptimerobot_api_key` and feeds it to curl on stdin.
-**That key is not in SOPS.** Until the operator adds it, the probe exits 75 with the decrypt
-error. Adding it is the operator's decision, filed with the daily schedule below as #8593.
+**That key is not in SOPS, and nothing runs the probe on a schedule.** Until both exist, a
+monitor deleted or paused in the console still goes unnoticed, as `803270234` did: the probe
+exits 75 with the decrypt error, and only when someone runs it. #8593 holds both operator steps,
+the key and the daily schedule.
 
 - **Use the read-only key.** Uptime Robot issues a read-only API key that serves every `get*`
   method and changes nothing. The account's main key can edit and delete monitors, which this
