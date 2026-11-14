@@ -179,11 +179,10 @@ def exclude_fanout_command(target: Target) -> str:
 
 
 def create_worktree_command(batch: str, target: Target = SERVER_TARGET) -> str:
-    # The lock keeps prune_worktrees.py off this tree: its `--reason` doesn't match the
-    # `claude session ... (pid ... start ...)` shape prune_worktrees.session_is_alive
-    # recognizes, so an unrecognized reason reads as alive and the tree survives every
-    # prune until Task 10's `clean` unlocks it. Without this a merged, clean, unlocked
-    # tree is removable the moment the PR lands — even while the unit is still running.
+    # The lock keeps prune_worktrees.py off this tree while the batch's unit runs: its
+    # `--reason` is the unit name, which lib.fanout_lock.REASON matches and batch_is_live
+    # judges by the unit's state. Without it a merged, clean, unlocked tree is removable the
+    # moment the PR lands — even while the unit is still running.
     wt = worktree_path(batch, target)
     steps = [
         exists_check_command(batch, target),

@@ -303,7 +303,7 @@ def test_arr_subcommand_parses_app_path_and_json_flag():
 def test_arr_subcommand_rejects_unknown_app():
 
     with pytest.raises(SystemExit):
-        cli_parser._build_parser().parse_args(["arr", "lidarr", "health"])
+        cli_parser._build_parser().parse_args(["arr", "readarr", "health"])
 
 
 # ── core.get_status: the (status, body) curl GET postflight judges its checks by ─────────

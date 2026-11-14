@@ -455,7 +455,7 @@ def test_a_real_history_bullet_is_masked_and_its_neighbours_are_not():
     assert "seeded once, at the 2026-08 migration" not in masked
     assert "tasks/sync.yml" not in masked
     assert "media-volume-probe" not in masked
-    assert "Flux applies it, not Ansible" in masked
+    assert "Flux applies it." in masked
     assert "Directory `mode:` is deliberately unset" in masked
     assert masked.count("\n") == text.count("\n")
 

@@ -43,6 +43,8 @@ SECRETS_UNIT = "homelab-secrets.service"
 
 V1 = "0.100+gaaaaaaaaaaaa"
 UNIT_DIR = "usr/lib/systemd/system"
+# A real host manifest makes ~800 stub calls, ~18 s idle, past 60 s on a loaded host.
+RECONCILE_TIMEOUT = 300
 
 
 class Node:
@@ -142,7 +144,11 @@ class Node:
         self.manifest_path.write_text(json.dumps(self.manifest))
 
     def run(self, *args: str) -> subprocess.CompletedProcess:
-        result = run([sys.executable, str(self.script), *args], env=self._prepare())
+        result = run(
+            [sys.executable, str(self.script), *args],
+            env=self._prepare(),
+            timeout=RECONCILE_TIMEOUT,
+        )
         self.state = json.loads((self.stub / "state.json").read_text())
         return result
 
@@ -161,7 +167,12 @@ class Node:
         )
 
     def finish(self, process: subprocess.Popen) -> int:
-        process.communicate(timeout=60)
+        try:
+            process.communicate(timeout=RECONCILE_TIMEOUT)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.communicate()
+            raise
         self.state = json.loads((self.stub / "state.json").read_text())
         return process.returncode
 

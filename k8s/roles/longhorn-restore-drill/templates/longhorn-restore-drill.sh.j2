@@ -10,8 +10,8 @@
 # Running it creates and deletes a real Volume, PV, PVC and pod.
 #
 # Restores the newest backup of one small volume from B2 into a NEW volume, mounts it in a
-# throwaway pod, checks the data is real, then tears everything down. The live volume is never
-# touched.
+# throwaway pod, checks the data is real and every SQLite database on it passes
+# `PRAGMA integrity_check`, then tears everything down. The live volume is never touched.
 #
 # This exists because "the backup completed" and "the backup restores" are different claims and
 # only the first was ever checked. The backup-plane heartbeat watches Longhorn's own objects;
@@ -33,7 +33,7 @@
 # once with `get` and writes each stamp with a merge `patch`. Keys: `last-success`, `candidates`,
 # `excluded_oversize` and `excluded_nopvc` hold the old files' content; `attempts.<pvc>`,
 # `retries.<pvc>` and `seen.<pvc>` hold an epoch; `success.<pvc>` holds the epoch the drill
-# passed at.
+# passed at; `sqlite.<pvc>` holds `<epoch> checked=<n> bad=<n>`, the last SQLite check's result.
 set -uo pipefail
 
 for arg in "$@"; do
@@ -442,15 +442,95 @@ done
 # with nothing after the colon. An empty capture is indistinguishable from an empty volume, which
 # is the one thing this check exists to tell apart. Creating the pod, waiting for it to reach a
 # terminal phase, and then reading its logs makes both the result and any failure legible.
+#
+# A block snapshot taken mid-write can restore cleanly and still hold a corrupt SQLite database,
+# so the probe also runs `PRAGMA integrity_check` on every file that starts with the SQLite
+# header, found by header rather than by a per-app path for the same reason the counts are
+# generic. It opens each database read-only first. A read-only open refuses a hot `-journal` and
+# a `-wal` with no `-shm`, both normal in a crash-consistent snapshot, and `immutable=1` would
+# skip the WAL and check stale pages. For those it copies the database and its sidecars into the
+# pod's emptyDir and opens the copy read-write, which replays them the way the app does at
+# start. The restored volume itself stays mounted read-only. Only paths and verdicts are printed.
+SQLITE_CHECK=$(cat <<'PY'
+import os, shutil, sqlite3, stat, sys
+from urllib.parse import quote
+
+MAGIC = b"SQLite format 3\x00"
+SIDECARS = ("-wal", "-shm", "-journal")
+root, scratch = sys.argv[1], sys.argv[2]
+
+
+def is_sqlite(path):
+    try:
+        with open(path, "rb") as f:
+            return f.read(16) == MAGIC
+    except OSError:
+        return False
+
+
+def integrity(uri):
+    conn = sqlite3.connect(uri, uri=True)
+    try:
+        rows = conn.execute("PRAGMA integrity_check").fetchall()
+    finally:
+        conn.close()
+    return "ok" if rows == [("ok",)] else " ".join(str(rows[0][0]).split())
+
+
+def check(path):
+    try:
+        return integrity("file:" + quote(path) + "?mode=ro")
+    except sqlite3.Error:
+        pass
+    copy_dir = os.path.join(scratch, "db")
+    shutil.rmtree(copy_dir, ignore_errors=True)
+    os.makedirs(copy_dir)
+    copy = os.path.join(copy_dir, "copy.db")
+    try:
+        shutil.copyfile(path, copy)
+        for suffix in SIDECARS:
+            if os.path.exists(path + suffix):
+                shutil.copyfile(path + suffix, copy + suffix)
+        return integrity("file:" + quote(copy))
+    except Exception as e:
+        return "cannot open: " + " ".join(str(e).split())
+    finally:
+        shutil.rmtree(copy_dir, ignore_errors=True)
+
+
+checked = bad = 0
+for dirpath, dirnames, filenames in os.walk(root):
+    dirnames.sort()
+    for name in sorted(filenames):
+        path = os.path.join(dirpath, name)
+        if not stat.S_ISREG(os.lstat(path).st_mode) or not is_sqlite(path):
+            continue
+        result = check(path)
+        checked += 1
+        rel = os.path.relpath(path, root).replace("\n", "\\n")
+        if result == "ok":
+            print("sqlite ok " + rel)
+        else:
+            bad += 1
+            print("sqlite bad " + rel + ": " + result)
+print("sqlite_checked=%d sqlite_bad=%d" % (checked, bad))
+PY
+)
+# shellcheck disable=SC2016 # the probe pod's sh expands these, not this script
+PROBE_SH='echo files=$(find /drill -type f | wc -l) bytes=$(find /drill -type f -exec cat {} + | wc -c); python3 -c "$SQLITE_CHECK" /drill /scratch'
+OVERRIDES=$(jq -nc --arg name "${DRILL}-probe" --arg image "{{ k3s_longhorn_restore_drill_image }}" \
+  --arg claim "$DRILL" --arg sh "$PROBE_SH" --arg py "$SQLITE_CHECK" \
+  '{spec: {restartPolicy: "Never",
+    containers: [{name: $name, image: $image, command: ["sh", "-c", $sh],
+      env: [{name: "SQLITE_CHECK", value: $py}],
+      volumeMounts: [{name: "d", mountPath: "/drill", readOnly: true},
+                     {name: "scratch", mountPath: "/scratch"}]}],
+    volumes: [{name: "d", persistentVolumeClaim: {"claimName": $claim}},
+              {name: "scratch", emptyDir: {}}]}}') \
+  || fail "could not build the probe pod spec"
 $KUBECTL -n "$PVC_NS" run "${DRILL}-probe" --restart=Never \
   --image={{ k3s_longhorn_restore_drill_image }} \
-  --overrides="$(cat <<JSON
-{"spec":{"containers":[{"name":"${DRILL}-probe","image":"{{ k3s_longhorn_restore_drill_image }}",
-"command":["sh","-c","echo files=\$(find /drill -type f | wc -l) bytes=\$(find /drill -type f -exec cat {} + | wc -c)"],
-"volumeMounts":[{"name":"d","mountPath":"/drill","readOnly":true}]}],
-"volumes":[{"name":"d","persistentVolumeClaim":{"claimName":"${DRILL}"}}],"restartPolicy":"Never"}}
-JSON
-)" >/dev/null 2>&1 || fail "could not create the probe pod"
+  --overrides="$OVERRIDES" >/dev/null 2>&1 || fail "could not create the probe pod"
 
 PROBE_DEADLINE=$(( $(date +%s) + 300 ))
 while :; do
@@ -510,6 +590,20 @@ MIN_BYTES="{{ k3s_longhorn_restore_drill_min_bytes }}"
 [[ -n "$BYTES" && ( "$BYTES" -ge "$MIN_BYTES" || -n "$DECLARED_EMPTY" ) ]] \
   || fail "restored volume for ${PVC} holds ${BYTES:-0} bytes, under the ${MIN_BYTES} floor: ${PROBE}${WAIVER_NOTE}"
 
+# A missing summary means the check did not finish, so the databases' state is unknown, not clean.
+SQLITE_CHECKED=$(sed -n 's/^sqlite_checked=\([0-9]\{1,\}\) sqlite_bad=[0-9]\{1,\}$/\1/p' <<<"$PROBE" | tail -1)
+SQLITE_BAD=$(sed -n 's/^sqlite_checked=[0-9]\{1,\} sqlite_bad=\([0-9]\{1,\}\)$/\1/p' <<<"$PROBE" | tail -1)
+[[ -n "$SQLITE_CHECKED" && -n "$SQLITE_BAD" ]] \
+  || fail "the SQLite integrity check on the restored ${PVC} reported no result: ${PROBE}"
+# `sqlite.<pvc>` records the check's outcome on a pass and on a failure alike; only the success
+# stamps below are proof.
+SQLITE_RESULT="$(date +%s) checked=${SQLITE_CHECKED} bad=${SQLITE_BAD}"
+if (( SQLITE_BAD > 0 )); then
+  stamp_set "sqlite.${PVC}" "$SQLITE_RESULT" \
+    || echo "longhorn-restore-drill: cannot record the SQLite result for ${PVC} in ${STATE_CM}" >&2
+  fail "restored volume for ${PVC} holds ${SQLITE_BAD} SQLite database(s) that fail PRAGMA integrity_check: $(grep '^sqlite bad ' <<<"$PROBE" | tr '\n' ';')"
+fi
+
 # The stamp is written ONLY here, after both assertions pass. Check 7 reads its contents, so
 # stamping earlier — or on any failure path — would report a broken drill as a healthy one.
 # DECIDED: an operator-pinned run leaves the global stamp alone. Check 7 reads it as "is the
@@ -519,14 +613,15 @@ MIN_BYTES="{{ k3s_longhorn_restore_drill_min_bytes }}"
 # a hand run proves just as well.
 PASSED_AT=$(date +%s)
 if [[ -z "$OPERATOR_PIN" ]]; then
-  stamp_set last-success "$PASSED_AT" "success.${PVC}" "$PASSED_AT" \
+  stamp_set last-success "$PASSED_AT" "success.${PVC}" "$PASSED_AT" "sqlite.${PVC}" "$SQLITE_RESULT" \
     || fail "cannot record the pass for ${PVC} in ${STATE_CM}"
 else
   # The per-volume record check 8 reads for coverage. The global stamp answers "is the drill
   # alive"; this one answers "has THIS volume been proven", which rotation makes a different
   # question — a green global stamp now means one of 25 volumes restored, not all of them.
-  stamp_set "success.${PVC}" "$PASSED_AT" || fail "cannot record the pass for ${PVC} in ${STATE_CM}"
+  stamp_set "success.${PVC}" "$PASSED_AT" "sqlite.${PVC}" "$SQLITE_RESULT" \
+    || fail "cannot record the pass for ${PVC} in ${STATE_CM}"
 fi
 NOTE=""
 [[ -n "$DECLARED_EMPTY" && "$FILES" == "0" ]] && NOTE=" — declared may-be-empty, content assertions waived"
-echo "longhorn-restore-drill: PASS: ${PVC} restored from ${BACKUP} (files=${FILES}, bytes=${BYTES})${NOTE}"
+echo "longhorn-restore-drill: PASS: ${PVC} restored from ${BACKUP} (files=${FILES}, bytes=${BYTES}, sqlite_ok=${SQLITE_CHECKED})${NOTE}"
