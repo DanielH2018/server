@@ -31,9 +31,9 @@ them and still read green (#3224).
 Run: uv run pytest tests/k8s/test_volume_names_descriptive.py
 """
 
+import functools
 import re
 
-import pytest
 from _helpers import K8S_ROLES
 from _k8s_render import rendered_texts
 
@@ -98,6 +98,7 @@ def source_fallback() -> dict[str, str]:
     }
 
 
+@functools.cache
 def manifest_texts() -> dict[str, str]:
     """The census: each template's render where `_k8s_render` reaches its role, else its source.
 
@@ -108,9 +109,6 @@ def manifest_texts() -> dict[str, str]:
     """
     texts = {f"{role}/{name}": text for role, name, text in rendered_texts()}
     return texts | source_fallback()
-
-
-MANIFESTS = manifest_texts()
 
 
 def volume_blocks(text: str) -> list[tuple[str, int, list[str]]]:
@@ -175,28 +173,40 @@ def volume_names(text: str) -> dict[str, set[str]]:
     return found
 
 
-@pytest.mark.parametrize("key", sorted(MANIFESTS))
-def test_every_mount_resolves_to_a_declared_volume(key: str) -> None:
-    found = volume_names(MANIFESTS[key])
-    orphans = sorted(found["volumeMounts"] - found["volumes"])
+def test_every_mount_resolves_to_a_declared_volume() -> None:
+    orphans = {
+        key: sorted(found["volumeMounts"] - found["volumes"])
+        for key, text in sorted(manifest_texts().items())
+        if (found := volume_names(text))["volumeMounts"] - found["volumes"]
+    }
     assert not orphans, (
-        f"{key} mounts volume(s) it never declares: {orphans}. "
+        f"These manifests mount volume(s) they never declare: {orphans}. "
         "The pod is rejected at admission; no schema check sees this."
     )
 
 
-@pytest.mark.parametrize("key", sorted(MANIFESTS))
-def test_no_declared_volume_is_unmounted(key: str) -> None:
-    found = volume_names(MANIFESTS[key])
-    unused = sorted(found["volumes"] - found["volumeMounts"])
+def test_no_declared_volume_is_unmounted() -> None:
+    unused = {
+        key: sorted(found["volumes"] - found["volumeMounts"])
+        for key, text in sorted(manifest_texts().items())
+        if (found := volume_names(text))["volumes"] - found["volumeMounts"]
+    }
     assert not unused, (
-        f"{key} declares volume(s) nothing mounts: {unused}. "
+        f"These manifests declare volume(s) nothing mounts: {unused}. "
         "Usually the leftover half of a rename."
     )
 
 
-@pytest.mark.parametrize("key", sorted(MANIFESTS))
-def test_no_volumes_block_repeats_a_name(key: str) -> None:
+def repeated_volume_names(text: str) -> list[str]:
+    """`<line>: <names>` for each `volumes:` block of `text` that declares a name twice."""
+    return [
+        f"{line}: {sorted({n for n in names if names.count(n) > 1})}"
+        for kind, line, names in volume_blocks(text)
+        if kind == "volumes" and len(set(names)) < len(names)
+    ]
+
+
+def test_no_volumes_block_repeats_a_name() -> None:
     """Two `volumes:` entries sharing a name — the way a rename collides two volumes into one.
 
     Nothing else catches it: comparing volumes against volumeMounts as sets passes, and
@@ -207,14 +217,15 @@ def test_no_volumes_block_repeats_a_name(key: str) -> None:
     jellyfin mounts `media` twice. The illegal duplicate on that side is a repeated
     `mountPath`, which is not a naming question.
     """
-    for kind, line, names in volume_blocks(MANIFESTS[key]):
-        if kind != "volumes":
-            continue
-        dupes = sorted({n for n in names if names.count(n) > 1})
-        assert not dupes, (
-            f"{key}:{line} declares volume(s) {dupes} more than once. "
-            "The pod is rejected at admission."
-        )
+    dupes = {
+        key: found
+        for key, text in sorted(manifest_texts().items())
+        if (found := repeated_volume_names(text))
+    }
+    assert not dupes, (
+        f"These manifests declare a volume more than once, by line: {dupes}. "
+        "The pod is rejected at admission."
+    )
 
 
 def generic_names(text: str) -> list[str]:
@@ -224,11 +235,14 @@ def generic_names(text: str) -> list[str]:
     return sorted(n for n in names - ALLOWED_UNPREFIXED if n in GENERIC)
 
 
-@pytest.mark.parametrize("key", sorted(MANIFESTS))
-def test_volume_names_name_their_workload(key: str) -> None:
-    generic = generic_names(MANIFESTS[key])
+def test_volume_names_name_their_workload() -> None:
+    generic = {
+        key: found
+        for key, text in sorted(manifest_texts().items())
+        if (found := generic_names(text))
+    }
     assert not generic, (
-        f"{key} uses generic volume name(s): {generic}. "
+        f"These manifests use generic volume name(s): {generic}. "
         "Name the volume for the workload or component that owns it — "
         "`sonarr-config`, not `config`."
     )
@@ -309,6 +323,7 @@ def test_the_scanner_reads_an_indentless_sequence() -> None:
         ["missing"],
         ["data", "data"],
     ]
+    assert repeated_volume_names(_INDENTLESS_VOLUMES) == ["10: ['data']"]
 
 
 def test_the_source_fallback_is_only_the_templates_the_render_skips() -> None:
@@ -330,6 +345,6 @@ def test_a_reached_role_is_checked_from_its_render() -> None:
     artifacts keys its volume on `artifacts_k8s_node` and on each peer's name, which a source
     scan reads as `artifacts-{{ ... }}`.
     """
-    names = volume_names(MANIFESTS["artifacts/deployment.yaml.j2"])["volumes"]
+    names = volume_names(manifest_texts()["artifacts/deployment.yaml.j2"])["volumes"]
     assert {"artifacts-daniel-box", "artifacts-daniel-server"} <= names
     assert not any("{{" in name for name in names)
