@@ -53,6 +53,3 @@ def test_the_install_reruns_while_any_listed_shim_is_missing(tmp_path) -> None:
         held = [t for t in HOOK_TYPES if t != missing]
         assert install_guard_fires(setup, tmp_path / missing, held), missing
     assert not install_guard_fires(setup, tmp_path / "all", HOOK_TYPES)
-
-
-JSONQ_COPY = "Give the agent user the operator's jsonq"

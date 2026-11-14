@@ -37,21 +37,6 @@ CASES = [
 ]
 
 
-def _arms(*names):
-    return [(n, {"x": AGENT}) for n in names]
-
-
-def _invoker(costs, passes=1):
-    """Returns an engine stand-in billing `costs` in order, and the list of calls made."""
-    calls = []
-
-    def invoke(case_id, env, arm_dir):
-        calls.append((arm_dir.name, case_id))
-        return {"passes": passes, "healthy": 1, "costUsd": costs[len(calls) - 1]}
-
-    return invoke, calls
-
-
 def test_sections_split_on_level_two_headings_outside_fences():
     preamble, sections = split_sections(DOC)
     assert preamble == "# Title\nIntro line.\n\n"
