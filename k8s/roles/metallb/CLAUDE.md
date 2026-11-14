@@ -30,18 +30,23 @@ probes stay green.
   holds them.
 - **The file declares no `caBundle` and no data for the `metallb-webhook-cert` Secret.** The
   controller writes both at runtime, and under server-side apply a field the render does not
-  declare stays with the controller, so no patch is needed for either.
-- **Two patches give the controller and the speaker a memory request and no limit** (#8326),
-  `files/patches/controller.yaml` and `files/patches/speaker.yaml`. Upstream ships both with no
-  `resources`, so their pods ran BestEffort, the kubelet's first eviction under memory
-  pressure, and an evicted speaker drops the node's announcements. A kustomize patch cannot
-  read a variable, so
-  `tests/k8s/test_metallb_vendored_manifest.py::test_each_patch_requests_its_defaults_value_and_no_limit`
-  holds each literal equal to `k3s_metallb_controller_memory_request` or
+  declare stays with the controller, so no patch may declare either.
+- **Two patches give the controller and the speaker requests and a CPU limit, and no memory
+  limit** (#8326, #8542), `files/patches/controller.yaml` and `files/patches/speaker.yaml`.
+  An OOM kill would drop the load balancer, so the operator ruled on 2026-11-14 that neither
+  container gets a memory limit. Each patch sets `resources` only.
+  Upstream ships both with no `resources`, so their pods ran BestEffort, the kubelet's first
+  eviction under memory pressure, and an evicted speaker drops the node's announcements.
+  Each patch's header comment names the peak its values were sized from.
+  `tests/k8s/test_namespace_resource_defaults.py` holds every key but `limits.memory` on both
+  containers, and exempts `limits.memory` under a `DECIDED:` marker.
+  A kustomize patch cannot read a variable, so
+  `tests/k8s/test_metallb_vendored_manifest.py::test_each_patch_requests_its_defaults_value`
+  holds each memory request equal to `k3s_metallb_controller_memory_request` or
   `k3s_metallb_speaker_memory_request`, and
   `tests/k8s/test_metallb_vendored_manifest.py::test_no_metallb_workload_runs_besteffort`
-  fails a render that leaves either workload without a request. Changing a request rolls the
-  speakers, which blips every VIP while the primary node's speaker restarts.
+  fails a render that leaves either workload without a request. Changing a request or a limit
+  rolls the speakers, which blips every VIP while the primary node's speaker restarts.
 - **The tag renders `prune: false`** (`flux_prune: false`, with the `DECIDED:` marker beside
   it in `defaults/main.yml`). A render that drops a CRD would make Flux delete every pool and
   advertisement of its kind. The cost: an object removed from the render stays live until the
