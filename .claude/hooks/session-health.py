@@ -51,6 +51,7 @@ to remove and fan-out batches running on another host.
 # pointing at a row-only script saves nothing: `run-hook.sh` starts the same `uv run`
 # interpreter for every registration, and that start is the whole cost of a compaction here.
 
+import concurrent.futures
 import functools
 import json
 import os
@@ -315,7 +316,7 @@ def other_live_sessions(
     sys.path.insert(0, os.path.join(REPO, "scripts"))
     try:
         from lib.worktree_label import with_label
-        from lib.worktrees import parse_worktree_list, session_is_alive
+        from lib.worktrees import lock_is_live, parse_worktree_list
 
         if git_dirty is None:
             from lib.git import git_dirty
@@ -349,15 +350,18 @@ def other_live_sessions(
     def name_of(tree):
         return with_label(tree.branch or os.path.basename(tree.path), tree.path)
 
-    live = [
+    locked = [
         tree
         for tree in parse_worktree_list(
             run(["git", "worktree", "list", "--porcelain"], 5).stdout
         )[1:]
-        if os.path.realpath(tree.path) != os.path.realpath(cwd)
-        and tree.locked
-        and session_is_alive(tree.lock_reason)
+        if os.path.realpath(tree.path) != os.path.realpath(cwd) and tree.locked
     ]
+    # A fan-out lock carries no pid, so `lock_is_live` asks systemd for its batch unit's
+    # state: one `systemctl --user show` per tree, 1.5s in turn over 177 trees on daniel-server.
+    with concurrent.futures.ThreadPoolExecutor(max_workers=16) as pool:
+        alive = pool.map(lock_is_live, locked)
+        live = [tree for tree, ok in zip(locked, alive, strict=True) if ok]
     try:
         mine = set() if show_all else changed_paths(cwd, run)
     except Exception:
