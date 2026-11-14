@@ -82,6 +82,7 @@ def test_resolution_ignores_unmanaged_domains_and_templated():
 
 
 def test_override_writer_errors_flags_undeclared_writer():
+    # fact: k8s/roles/home-assistant/CLAUDE.md#Claude tooling for this role
     writes = {
         "input_boolean.bedroom_sleep_mode": [
             "script.bedroom_bedtime",
@@ -321,6 +322,7 @@ def test_single_writer_still_flags_unsanctioned_writer():
 
 
 def test_freshness_errors_flag_stale_committed_file(tmp_path, monkeypatch):
+    # fact: k8s/roles/home-assistant/CLAUDE.md#Claude tooling for this role
     # point the artifact paths at a temp dir with deliberately-wrong content
     monkeypatch.setattr(hsm, "DERIVED_YAML", tmp_path / "derived_state.yml")
     monkeypatch.setattr(hsm, "STATE_MD", tmp_path / "STATE.md")

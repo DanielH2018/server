@@ -1,7 +1,7 @@
 # ical-proxy — iCal feed aggregation proxy
 
-Small Flask app that merges several ICS calendars into one feed for the Homepage
-calendar widget. See repo-root `CLAUDE.md` for shared conventions.
+Small Flask app (`k8s/roles/ical-proxy/files/ical_proxy.py`) that republishes several ICS
+calendars, one feed each, for the Homepage calendar widget. See repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in k8s/roles/longhorn-reconcile/defaults/main.yml. -->
@@ -46,10 +46,14 @@ calendar widget. See repo-root `CLAUDE.md` for shared conventions.
   change. It still decides whether Renovate automerges the image bump.
 
 ## Notable
-- Aggregates Google + Obsidian ICS URLs (`calendar_1/2/4` from secrets), refreshing every
-  15 min. Not exposed publicly — Homepage consumes it over the private network.
+- Aggregates Google + Obsidian ICS URLs (`calendar_1/2/4` from secrets, rendered by
+  `k8s/roles/ical-proxy/templates/secret.yaml.j2`), refreshing every 15 min
+  (`REFRESH_INTERVAL` in `k8s/roles/ical-proxy/templates/deployment.yaml.j2`, read by
+  `k8s/roles/ical-proxy/files/ical_proxy.py:refresh_loop`). Not exposed publicly — Homepage
+  consumes it over the private network (`k8s/roles/ical-proxy/templates/ingressroute.yaml.j2`).
 - To change the image, edit `templates/Dockerfile.j2` or the app and merge. The next
   promotion builds the new content tag and rolls the pod.
 
 ## Editing
-- App: `files/ical_proxy.py` (tests in `tests/test_app.py`) · Image: `templates/Dockerfile.j2`
+- App: `k8s/roles/ical-proxy/files/ical_proxy.py` (tests in `k8s/roles/ical-proxy/tests/test_app.py`)
+  · Image: `k8s/roles/ical-proxy/templates/Dockerfile.j2`

@@ -1,7 +1,8 @@
 # home-assistant — Home automation platform
 
-LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions, and
-[`SETUP.md`](SETUP.md) for a human-readable setup / operation / tuning guide to the bedroom suite
+LinuxServer.io Home Assistant (the image key in `k8s/roles/home-assistant/defaults/main.yml`).
+See repo-root `CLAUDE.md` for shared conventions, and
+[`k8s/roles/home-assistant/SETUP.md`](SETUP.md) for a human-readable setup / operation / tuning guide to the bedroom suite
 (this file is the editing-gotchas reference).
 
 ## At a glance
@@ -57,27 +58,34 @@ because a role doc is loaded on every task in this directory whether it is neede
 
 | Looking for | Read |
 |---|---|
-| Auth, Marketplace, `configuration.yaml` templating, entity naming, the PVC, pod networking | [`docs/platform.md`](docs/platform.md) |
-| Presence, adaptive lighting, the light/fan mediator, the Tap Dial, the lux gate, manual override, bedtime + wake | [`docs/lighting-and-presence.md`](docs/lighting-and-presence.md) |
-| Threshold alerts, `bedroom_notify` routing, away-hold, UPS/CO2/sensor-offline alerts | [`docs/alerts-and-notifications.md`](docs/alerts-and-notifications.md) |
-| Fan control, the YAML dashboard, outdoor AQI + window advisor | [`docs/climate-and-air.md`](docs/climate-and-air.md) |
-| The tested macros, the scenario harness, `probe.py ha`, the state model, the entity-snapshot trap | [`docs/testing-and-tooling.md`](docs/testing-and-tooling.md) |
+| Auth, Marketplace, `configuration.yaml` templating, entity naming, the PVC, pod networking | [`k8s/roles/home-assistant/docs/platform.md`](docs/platform.md) |
+| Presence, adaptive lighting, the light/fan mediator, the Tap Dial, the lux gate, manual override, bedtime + wake | [`k8s/roles/home-assistant/docs/lighting-and-presence.md`](docs/lighting-and-presence.md) |
+| Threshold alerts, `bedroom_notify` routing, away-hold, UPS/CO2/sensor-offline alerts | [`k8s/roles/home-assistant/docs/alerts-and-notifications.md`](docs/alerts-and-notifications.md) |
+| Fan control, the YAML dashboard, outdoor AQI + window advisor | [`k8s/roles/home-assistant/docs/climate-and-air.md`](docs/climate-and-air.md) |
+| The tested macros, the scenario harness, `probe.py ha`, the state model, the entity-snapshot trap | [`k8s/roles/home-assistant/docs/testing-and-tooling.md`](docs/testing-and-tooling.md) |
 
 ## The one convention that breaks edits
 - **Automations, scenes, scripts, template sensors and shared Jinja macros are COPIED, not
-  templated** (since 2026-06-18). `configmap.yaml.j2` carries each with `lookup('file')`,
+  templated** (since 2026-06-18).
+  `k8s/roles/home-assistant/templates/configmap.yaml.j2` carries each with `lookup('file')`,
   because they hold HA `{{ }}` Jinja that the renderer's Jinja would try to render and fail on
   — so no `{% raw %}` is needed, and **HA Jinja lives in these files, never inline in
-  `configuration.yaml`**. `templates/config/secrets.yaml.j2` is the only genuinely templated
-  config file, and `validate_ha_config.py` rejects a `{{ }}` marker in the three verbatim root
-  files, where a role var would reach HA unrendered and render to nothing.
+  `configuration.yaml`**. `k8s/roles/home-assistant/templates/config/secrets.yaml.j2` is the
+  only genuinely templated config file, and `validate_ha_config.py` rejects a `{{ }}` marker in
+  the three verbatim root files (`scripts/home_assistant/validate_ha_config.py:_NO_JINJA_FILES`,
+  `scripts/home_assistant/tests/test_validate_ha_config.py::test_assemble_rejects_ansible_markers`),
+  where a role var would reach HA unrendered and render to nothing.
 - **A NEW file ships nothing until its list in `defaults/main.yml` names it.** Four lists,
   one per shape: `home_assistant_automation_files` (merged by `!include_dir_merge_list`),
   `home_assistant_script_files` (`!include_dir_merge_named`), `home_assistant_template_files`
   and `home_assistant_root_files`, which also carries the `.py` scripts a `shell_command`
-  runs. The validator checks the directory and the list agree.
+  runs (`scripts/home_assistant/validate_ha_config.py:_SHIPPED_DIR_LISTS`). The validator
+  checks the directory and the list agree
+  (`scripts/home_assistant/tests/test_validate_ha_config.py::test_automation_file_list_flags_unlisted_file`).
 - **Git is the source of truth; HA UI edits are overwritten on deploy.** A config edit changes
-  the rendered ConfigMap, so the renderer's restart annotation rolls the Deployment (~120s).
+  the rendered ConfigMap, so the renderer's restart annotation
+  (`scripts/renderer/renderer_lib/restart.py:RESTART_ANNOTATION`) rolls the Deployment that
+  `k8s/roles/home-assistant/defaults/main.yml:manifests_rollout` names (~120s).
 
 
 ## Testing
@@ -96,15 +104,21 @@ because a role doc is loaded on every task in this directory whether it is neede
   waiting for night or for leaving home — the dashboard's "🧪 Test scenarios" card.
 
 ## Claude tooling for this role
-- **The `home-assistant-engineer` agent** and the `ha-edit-automation` and
-  `z2m-device-setting` skills carry the authoring workflow.
+- **The `home-assistant-engineer` agent** (`.claude/agents/home-assistant-engineer.md`) and the
+  `ha-edit-automation` and `z2m-device-setting` skills
+  (`.claude/skills/ha-edit-automation/SKILL.md`, `.claude/skills/z2m-device-setting/SKILL.md`)
+  carry the authoring workflow.
 - **`scripts/diagnostics/probe.py ha`** is read-only live HA state; `probe.py ha --help` lists
-  its subcommands. `ha verify-automations` is the post-deploy gate. Prefer it over recorder-DB
+  its subcommands. `ha verify-automations` is the post-deploy gate
+  (`scripts/diagnostics/probe_lib/ha.py:automation_load_errors`). Prefer it over recorder-DB
   reads.
 - **The derived state model** (`state/STATE.md`, `state/derived_state.yml`) is generated and
-  freshness-gated by the `validate-ha-config` hook — never hand-edit it. The one
-  hand-maintained file is `state/expected_override_writers.yml`, the write tripwire for
-  `bedroom_manual_off`, `bedroom_fan_manual` and `bedroom_sleep_mode`.
+  freshness-gated by the `validate-ha-config` hook
+  (`scripts/home_assistant/tests/test_ha_state_checks.py::test_freshness_errors_flag_stale_committed_file`)
+  — never hand-edit it. The one hand-maintained file is
+  `k8s/roles/home-assistant/state/expected_override_writers.yml`, the write tripwire for
+  `bedroom_manual_off`, `bedroom_fan_manual` and `bedroom_sleep_mode`
+  (`scripts/home_assistant/tests/test_ha_state_checks.py::test_override_writer_errors_flags_undeclared_writer`).
 
 ## Editing
 - HA cfg: `files/` (shipped into the cluster by `k8s/roles/home-assistant/`; only
