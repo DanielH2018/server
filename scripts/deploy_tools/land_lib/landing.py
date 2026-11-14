@@ -96,6 +96,17 @@ class Landing:
         # `merge.await_merge` never updates this head's branch: the update would make a head
         # the approval does not name.
         self.approved_head = ""
+        # The master commit a landing batch stacked this PR on, and the head it stacked
+        # (`batch.py`). While both still hold, the head needs no branch update and no
+        # stale-base check (`stale_base.batch_tested`). `tested_on` is empty when no batch
+        # tested the PR, and once the head or master has moved.
+        self.tested_on = ""
+        self.tested_head = ""
+        # The `batch.Member`s this landing's batch tested behind its own PR and has not
+        # merged yet, in the order they were stacked.
+        self.batch: list[Any] = []
+        # The seconds the run of this landing's batch took, which its merge wait counts.
+        self.batched_s = 0
 
     @property
     def plane(self) -> str:

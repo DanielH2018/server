@@ -42,6 +42,7 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from deploy_tools.land_lib import (
+    batch,
     ci,
     classify,
     closing_refs,
@@ -150,7 +151,7 @@ def _phases(ln: Landing) -> None:
         if ln.direct_merge_subject:
             classify.refuse_stale_code_before_merge(ln)
         with turn.held(ln) as take_turn:
-            merge.await_merge(ln, take_turn)
+            batch.land(ln, take_turn)
     for number, (label, phase) in enumerate(_STEPS, 1):
         print(f"== {number}/{STEP_COUNT}  {label.format(pr=ln.opts.pr)}")
         phase(ln)
