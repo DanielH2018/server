@@ -1,4 +1,4 @@
-"""await_ci's required CI contexts must match the deployer's gate, and both must name real jobs.
+"""await_ci's required CI contexts must match the shared gate, and both must name real jobs.
 
 Two drifts, each an outage of its own shape:
 
@@ -7,9 +7,9 @@ check. `ci_verdict` holds the verdict at `pending` for a required name with no r
 name does not fail open -- it hangs the wait forever.
 
 A set that differs from `ci_required_contexts` breaks the "agree by construction" claim
-await_ci rests on. A name await_ci requires and the deployer does not parks a landing the
-deployer would have deployed; the reverse lets a session deploy past a gate the tick would
-have held. So the two sets must be EQUAL, not merely overlapping.
+await_ci rests on. A name await_ci requires and the gate does not parks a landing that
+checkout-sync's gate would have passed; the reverse lets a session deploy past a gate
+checkout-sync would have held. So the two sets must be EQUAL, not merely overlapping.
 
 Run: uv run pytest tests/repo/test_ci_contexts_match_workflows.py
 """
@@ -45,21 +45,21 @@ def _contexts_in(path, key: str) -> set[str]:
     return {str(c) for c in contexts}
 
 
-def _deployer_contexts() -> set[str]:
+def _gate_contexts() -> set[str]:
     """The gate every deploy path grades by, read from the YAML rather than from the rendered
     settings file, which is root-owned and only exists on daniel-box. It is
     `ci_required_contexts` in group_vars/all.yml since H7.2e."""
     return _contexts_in(GROUP_VARS, "ci_required_contexts")
 
 
-def test_await_ci_requires_exactly_what_the_deployer_requires():
-    assert await_ci.required_contexts() == _deployer_contexts()
+def test_await_ci_requires_exactly_what_the_gate_requires():
+    assert await_ci.required_contexts() == _gate_contexts()
 
 
-def test_the_deployer_context_parse_actually_finds_names():
+def test_the_gate_context_parse_actually_finds_names():
     """A regex that matched nothing would make the equality test compare two empty sets --
     and an empty required set is the disarmed gate await_ci refuses to report against."""
-    assert _deployer_contexts()
+    assert _gate_contexts()
 
 
 def test_every_required_context_names_a_real_job():

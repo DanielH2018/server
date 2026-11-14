@@ -13,7 +13,7 @@ the pin is physical and never unwinds.
 <!-- /generated_from -->
 
 - **Flux's render pulls `ghcr.io/danielh2018/nut:<content tag>`**, with `imagePullPolicy:
-  IfNotPresent` (D5.4b), and the *Image* line above names that repository. The role's defaults
+  IfNotPresent`, and the *Image* line above names that repository. The role's defaults
   still name the in-cluster registry. The image is built from
   `templates/Dockerfile.j2` (debian:bookworm-slim + nut). Config is **not** baked in, because
   the image is public on GHCR and `upsd.users` carries passwords. It mounts from the
@@ -88,7 +88,7 @@ lowbatt` raises FSD as soon as the UPS asserts LB (`battery.charge.low` 10,
 roughly 11 minutes for the poweroffs. `hosts/tests/test_nut_host_secondary.py` asserts the
 delay stays inside that band while a host beyond `ups_host` is armed.
 
-**Pinned ClusterIP.** The Service pins `spec.clusterIP` (H7.33), because daniel-box's package
+**Pinned ClusterIP.** The Service pins `spec.clusterIP`, because daniel-box's package
 renders the address literally into `upsmon.conf`. A Service recreate keeps the address. The
 package's copy is `nut_host_upsd_clusterip` in `hosts/components/nut-secondary/component.yml`,
 and `hosts/tests/test_nut_host_secondary.py` pins the two together.

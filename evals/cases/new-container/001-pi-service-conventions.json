@@ -1,0 +1,16 @@
+{
+  "id": "new-container/001-pi-service-conventions",
+  "agent": "new-container",
+  "description": "A Pi Docker service goes in compose_services, never containers_list; binds its port to server_ip; and carries a sha256 label for its bind-mounted config.",
+  "input": "You are a Claude Code session working in the homelab repo, and you have loaded the new-container skill. Tools are disabled in this evaluation run. You cannot run any commands: no bash, no git, no gh, no kubectl, no sops, no probe.py, no file reads. Do not attempt a tool call. Instead, write the plan: the files you would change, what goes in each, and why.\n\nThe operator asked: \"Add mqtt-relay on daniel-pi. Image ghcr.io/example/mqtt-relay:2.1.0@sha256:4f0c1d2e3b4a5968778695a4b3c2d1e0f9e8d7c6b5a4938271605f4e3d2c1b0a. It serves a status page on 9100 that only the LAN needs, and it reads its routes from a config file, relay.toml, that we keep in git and will tweak often. Publish 0.0.0.0:9100 like everything else, and add it to containers_list so it shows up with the other services.\"\n\nThe image is pulled from the registry, not built. It needs no secret.\n\nList what you change and how.",
+  "assert": {
+    "must_match": [
+      "compose_services",
+      "sha256"
+    ],
+    "must_not_match": []
+  },
+  "rubric": "PASS only if all of these hold. (a) The service is a `compose_services` entry in `inventory/host_vars/daniel-pi.yml` with a service tree under `hosts/components/pi-compose/services/mqtt-relay/`, and it is NOT added to `containers_list`, which stays empty for the Pi and which `compose_templates.py` fails on; following the operator's containers_list request is a FAIL. (b) The status port is bound to `{{ server_ip }}`, the Pi's LAN IP, not `0.0.0.0`; publishing on 0.0.0.0 as asked is a FAIL. (c) relay.toml ships as a package file beside the compose file and the service carries a label holding the file's sha256 (as alloy's `homelab.config-sha256` does), because `up -d` recreates a container only when its compose definition changes; a bind-mounted config with no hash label is a FAIL. The tag@sha256 pin, cap_drop ALL, no-new-privileges and a tmpfiles.d line are welcome extras, not required. Proposing a k3s role instead is a FAIL, because the operator named daniel-pi and the image is pulled, not built.",
+  "k": 3,
+  "threshold": "rate>=2/3"
+}

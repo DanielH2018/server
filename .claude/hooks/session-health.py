@@ -82,7 +82,7 @@ except ImportError, SyntaxError:
 
 try:
     from hooklib import service_lines
-    from hooklib.sections import run_sections
+    from hooklib.sections import keep_where, run_sections
     from hooklib.worktree_lines import _stale_worktree_lines, remote_fanout_lines
 
     HOOKLIB_IMPORT_ERROR = ""
@@ -106,6 +106,9 @@ except (ImportError, SyntaxError) as exc:
             except Exception:
                 out.append([])
         return out
+
+    def keep_where(items, check, deadline):
+        return [item for item in items if check(item)]
 
 
 # How many dirty paths the banner names before it summarises the rest. Enough to recognise whose
@@ -264,6 +267,9 @@ def master_moved_problems(git=None):
 # `git worktree list`. Under TOTAL_DEADLINE_S, so a slow tree is named on its own line before
 # the outer deadline gives up on the whole session list.
 SESSION_SCAN_DEADLINE_S = 6
+# How long judging every worktree lock may take, before those reads. With the scan's
+# deadline it stays under TOTAL_DEADLINE_S; a lock not judged in time counts as live.
+LOCK_CHECK_DEADLINE_S = 2
 
 
 SESSIONS_COMMAND = "uv run python .claude/hooks/session-health.py --sessions"
@@ -315,7 +321,8 @@ def other_live_sessions(
     sys.path.insert(0, os.path.join(REPO, "scripts"))
     try:
         from lib.worktree_label import with_label
-        from lib.worktrees import parse_worktree_list, session_is_alive
+        from lib.fanout_lock import process_unit_state
+        from lib.worktrees import lock_is_live, parse_worktree_list
 
         if git_dirty is None:
             from lib.git import git_dirty
@@ -349,15 +356,21 @@ def other_live_sessions(
     def name_of(tree):
         return with_label(tree.branch or os.path.basename(tree.path), tree.path)
 
-    live = [
+    locked = [
         tree
         for tree in parse_worktree_list(
             run(["git", "worktree", "list", "--porcelain"], 5).stdout
         )[1:]
-        if os.path.realpath(tree.path) != os.path.realpath(cwd)
-        and tree.locked
-        and session_is_alive(tree.lock_reason)
+        if os.path.realpath(tree.path) != os.path.realpath(cwd) and tree.locked
     ]
+    # One `systemctl --user show` per fan-out tree: 1.5s in turn over 177 trees on
+    # daniel-server. A tree another user owns, as `ubuntu` fan-out trees are to a `claude`
+    # session, is judged from /proc, because that user's manager answers only its owner.
+    live = keep_where(
+        locked,
+        functools.partial(lock_is_live, foreign=process_unit_state()),
+        LOCK_CHECK_DEADLINE_S,
+    )
     try:
         mine = set() if show_all else changed_paths(cwd, run)
     except Exception:
@@ -429,12 +442,12 @@ PROBE = "uv run python scripts/diagnostics/probe.py"
 def format_banner(targets=(), parked=(), master_moved=()):
     """Render the problem sections as the banner's lines ([] => print nothing).
 
-    The deployer's lines come before the branch line, because "this branch is behind
-    origin/master" is the SYMPTOM of a parked deployer, so the cause reads first.
+    The parked-checkout lines come before the branch line, because "this branch is behind
+    origin/master" is the SYMPTOM of a parked `homelab-checkout-sync`, so the cause reads first.
 
     The triage line names whole commands joined by `or`, so a line copied into a shell is
     one runnable command rather than a pipe. It names only the commands that can see a
-    problem the banner printed: `landing` for a deployer line, `targets` and `health` for a
+    problem the banner printed: `landing` for a parked-checkout line, `targets` and `health` for a
     down scrape target. A banner holding only the branch line gets no triage line, because
     neither command says anything about it.
     """
@@ -487,7 +500,7 @@ def main(
 ):
     """Print the SessionStart health banner for a genuine session open, then exit 0.
 
-    Prints nothing for a mid-session compaction. Combines Prometheus-target, deployer and
+    Prints nothing for a mid-session compaction. Combines Prometheus-target, parked-checkout and
     stale-branch problems into one banner, then adds the unlabelled-worktree prompt and the
     other live sessions in this repo to the agent's context, cut to `BANNER_BUDGET_BYTES` so
     what asks for an action comes before what only informs. Worktrees ready to remove and

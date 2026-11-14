@@ -50,6 +50,7 @@ from diagnostics.probe_lib.push_rules import run_push_rules
 from diagnostics.probe_lib.readonly_rbac import run_readonly_rbac
 from diagnostics.probe_lib.shed_set import run_shed_set
 from diagnostics.probe_lib.takeover import run_takeover
+from diagnostics.probe_lib.usage import run_usage
 from diagnostics.probe_lib.vip_placement import run_vip_placement
 from lib.cli_registry import Registry
 
@@ -192,6 +193,13 @@ SUBCOMMANDS = [
         "(exit 1 when it is not publishing)",
         "builder",
         run_builder,
+    ),
+    (
+        "usage",
+        "requests per service over the retention window, memory request and limit against "
+        "the 7d p95, and PVC fill with days to full",
+        "usage",
+        run_usage,
     ),
 ]
 

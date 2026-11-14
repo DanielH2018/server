@@ -336,6 +336,51 @@ select = [
 "**/test_*.py" = ["D205", "D209"]
 "**/conftest.py" = ["D205", "D209"]
 
+# A one-off dead-code sweep reads this, not a hook or CI job (#8517): `uvx vulture` from the
+# repo root. It scans every tracked Python root, so a caller outside scripts/, hosts/lib and the
+# role files/ trees still counts; only those three trees were triaged (#8623 has the rest). The
+# extensionless hosts/lib/homelab-* scripts are not read, so `refresh_pending` reports as
+# unused. Every name below was triaged as live on 2026-11-14.
+# A test counts as a caller here, because many library functions exist for a guard under
+# tests/. To list production code that only tests call, run a second pass with
+# `--exclude '*/tests/*,*conftest.py,*/test_*.py,*/_*_harness.py'` (#8632 has its triage).
+[tool.vulture]
+paths = [".claude", "evals", "hosts", "k8s", "scripts", "tests"]
+ignore_decorators = [
+  "@pytest.fixture",  # autouse fixtures and fixtures named in usefixtures
+  "@mcp.tool",  # homelab-mcp tools, called by the MCP client
+  "@app.route",  # ical-proxy Flask routes
+]
+ignore_names = [
+  # Hooks and handlers a framework calls by name.
+  "do_*", "on_config", "on_files", "on_page_content", "pytest_*",
+  # Class attributes a stdlib base class or jinja2.Environment reads.
+  "server_version", "protocol_version", "daemon_threads", "keep_trailing_newline",
+  # Parameter of a yaml Dumper override, kept for the base signature.
+  "indentless",
+  # Module globals or attributes a test monkeypatches.
+  "_chown", "LOCK_TIMEOUT_SECONDS", "linkname",
+  # TypedDict keys: the gh JSON shapes in land_lib/pr_json.py, and a monitor-bridge cache.
+  "messageHeadline", "messageBody", "changeType", "baseRefName", "changedFiles",
+  "headRefName", "headRefOid", "isCrossRepository", "isDraft", "mergeCommit",
+  "mergeStateStatus", "reviewDecision", "previous_filename", "submitted_at", "commit_id",
+  "expiry",
+  # Dataclass fields serialised with asdict() into the fan-out review record.
+  "base_error", "ci_rerun_jobs",
+  # Read by test_host_census.py and named in docs/host-packages.md.
+  "NEVER_CANARY",
+  # Bound in scripts/conftest.py so a bare `import grafana_panel_report` resolves.
+  "grafana_panel_report",
+  # Validated with the other reboot keys; reboot_window.py says why the window ignores it.
+  "lead_min",
+  # Collected by pytest: the `test` prefix matches without an underscore.
+  "testworktree_*",
+  # Module-level `pytestmark`, which pytest reads.
+  "pytestmark",
+  # Keyword a fake's signature accepts because the real call passes it.
+  "server_hostname",
+]
+
 [tool.ty.environment]
 python-version = "3.15"
 # This repo has no `__init__.py` files and no installed package: a script reaches a sibling

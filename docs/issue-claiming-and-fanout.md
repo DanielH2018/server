@@ -19,8 +19,9 @@ command plans a list of argv first, then runs it, so `--dry-run` writes nothing.
 `scripts/lib/worktrees.py` decides whether a session worktree is done with: `is_merged`,
 `classify` and `worktree_facts`. `scripts/dev/prune_worktrees.py` is only the CLI over it, and
 nothing else imports the CLI. `.claude/hooks/session-health.py` imports `parse_worktree_list`
-and `session_is_alive` from `lib.worktrees` to print the other-live-sessions banner. Since
-#2133 those two, `Worktree` and the cherry and merge-tree readers come from the
+and `lock_is_live` from `lib.worktrees` to print the other-live-sessions banner, so a
+`fanout-<batch>` lock counts only while its batch unit is active (#8576). Since #2133
+`parse_worktree_list`, `session_is_alive`, `Worktree` and the cherry and merge-tree readers come from the
 `claude_worktree` module the dotfiles repo deploys to `~/.local/share/claude-worktree`, and
 `lib.worktrees` re-exports them. `scripts/lib/_claude_worktree.py` is the bootstrap, and it
 raises rather than falls back, so a host without the deploy prunes and reaps nothing.
