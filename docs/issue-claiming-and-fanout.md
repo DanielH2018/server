@@ -248,7 +248,7 @@ exists to name it from. No `worktree.*` setting changes either name.
 A session in such a tree runs `scripts/dev/label_worktree.py`, which writes a one-line `.claim`
 at the worktree root. The root deny in `.gitignore` keeps the file out of every commit, and it
 is removed with the tree. The script refuses a checkout outside `.claude/worktrees/`, because
-one untracked file in the primary checkout parks the deployer. Three places print the label
+one untracked file in the primary checkout parks `homelab-checkout-sync`. Three places print the label
 beside the name, with no network call:
 
 - `session-health.py`'s other-live-sessions list.

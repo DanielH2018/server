@@ -125,8 +125,8 @@ class Unreadable(RuntimeError):
     """A gate's source returned nothing parseable — the gate could not look, so it is not graded.
 
     `cluster` says whether that source was a kubectl read. The runner prefixes a cluster read's
-    message with "cannot ask the cluster"; a local read, such as a deployer marker under
-    `/var/lib/gitops-deploy`, prints its own message, which names the file (#4485).
+    message with "cannot ask the cluster"; a non-cluster read, such as the `DEPLOY_HOLD`
+    variable, prints its own message (#4485).
     """
 
     def __init__(self, message: str, *, cluster: bool = True):

@@ -26,7 +26,7 @@ name: promote
 #            `promote.py decide`, which walks master from its tip and picks the commit T `prod`
 #            moves to. It pulls `prod`'s bundle and T's before anything moves, and hands them
 #            on to `verify`. A step after Decide posts a suspended-changed hold to the
-#            deployer's Discord channel, with the webhook and no token.
+#            discord_alert_webhook channel, with the webhook and no token.
 #   tag      packages: write. Checks out nothing. Tags `prod`'s digest `last-good` when that
 #            tag is absent, moves `prod` to T, and records its digest in PROD_DIGEST.
 #   verify   contents: read, statuses: read, packages: read. Runs `promote.py verify T`,
@@ -46,7 +46,7 @@ name: promote
 #            commit when that commit is newer than T.
 #   post     contents: read. Runs only after `settle` wrote the stateful hold. Checks out this
 #            workflow's own commit and runs `promote.py hold`, which posts the hold, with a
-#            command block per changed snapshot role, to the deployer's Discord channel through
+#            command block per changed snapshot role, to the discord_alert_webhook channel through
 #            the DEPLOY_DISCORD_WEBHOOK secret. A failed post fails the run.
 #   reconcile  packages: write, statuses: read. Checks out nothing. Runs only when `decide`
 #            names a run that ended without its `settle` (`lost_settle`, #7863). While `prod`

@@ -735,7 +735,7 @@ user that cannot write the repo.
 A Bash write that leaves an isolated session's worktree is **denied** by the dotfiles
 `claude_guard` package, not by this hook (`checks/worktree_escape.py`, moved there by #2818).
 `isolation-guard.sh` covers `Edit|Write` only, so `cd /home/ubuntu/server && python3 - <<'EOF'`
-could write into the primary checkout and park the GitOps deployer (#1419). The
+could write into the primary checkout and park `homelab-checkout-sync` (#1419). The
 check reads nothing this repo owns, so it runs from `guard-pre-tool-use.sh` in every repo.
 
 `block-footguns` splits with the same segment parser through `_hook_common.split_stages` (#2134),
@@ -857,7 +857,7 @@ inspect either, because the isolation guard refuses a git command targeting the 
 checkout. The banner is the only place that cause reaches the session that pays for it.
 
 The banner ends with a triage line of whole `probe.py` commands joined by `or`. It names
-`landing` when a deployer line is present, and `targets` and `health <svc>` when a scrape
+`landing` when the dirty-primary-checkout line is present, and `targets` and `health <svc>` when a scrape
 target is down. A banner holding only the branch line gets no triage line.
 
 More sections print whether or not anything is unhealthy, in this order: the prompt to label a

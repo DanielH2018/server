@@ -23,10 +23,10 @@ on:
   # gitleaks built with its Go (#2366). Without this trigger the first full sweep on a new image
   # is the merge commit's push run, and a red one there parks every landing behind it.
   #
-  # Dispatch the BRANCH, never master. `ci_verdict` in the deployer's `deploy_git.py` reduces
+  # Dispatch the BRANCH, never master. `ci_verdict` in `hosts/lib/ci_verdict.py` reduces
   # every check-run sharing a required name for one commit, worst outcome wins. A red dispatch
-  # run therefore pins "prek (lint + validate + tests + secrets)" red on a master SHA that the
-  # deployer's gate and `await_ci.py` both read, and that SHA's own green push run does not
+  # run therefore pins "prek (lint + validate + tests + secrets)" red on a master SHA that
+  # checkout-sync's gate and `await_ci.py` both read, and that SHA's own green push run does not
   # outvote it. The concurrency arm below keeps a dispatch out of a push's group; it does nothing
   # about this. Since #2402 the rule is enforced rather than asked for:
   # `.claude/hooks/block-footguns.py:ci_dispatch_on_master_problem` denies a `gh workflow run`
@@ -58,7 +58,7 @@ concurrency:
   # A PR branch groups by ref, so a force-push supersedes its own earlier run. A push to
   # master groups by SHA, which puts every master commit in a group of its own.
   #
-  # Master needs that because every SHA needs its own verdict: the deployer's CI gate and
+  # Master needs that because every SHA needs its own verdict: checkout-sync's CI gate and
   # `await_ci.py` read check-runs per commit, and a commit with no verdict reads `cancelled`
   # forever — every landing behind it then waits on a later SHA's full sweep instead.
   #
@@ -115,15 +115,15 @@ jobs:
   # here is push-only except this job, so there is no push-only job to keep running.
   #
   # The `prek` gate stays green on the proven path because a `skipped` dependency counts as a
-  # pass only when this job succeeded and said `proven=true`. The deployer's CI gate and
+  # pass only when this job succeeded and said `proven=true`. Checkout-sync's CI gate and
   # `await_ci.py` read the gate's check-run, and read `skipped` as a pass.
   #
   # A timed-out or failed `prove` falls back to the full sweep (#5783). Each dependent runs when
   # `prove` was cancelled or failed, whatever `proven` says, and the gate reads such a `prove` as
   # unproven, so every dependent must succeed. `tested_tree.py` exits 0 on every answer, so
   # either conclusion comes from the runner (a timeout, a failed checkout, a lost runner) and
-  # says nothing about the tree. Before that, master run 39279035375 (2026-10-19) went red and
-  # parked the deployer for 21h. `prove` had set `proven=true` 6s in, the runner then hung in
+  # says nothing about the tree. HISTORY -- before that, master run 39279035375 (2026-10-19) went
+  # red and parked the since-retired GitOps deployer for 21h. `prove` had set `proven=true` 6s in, the runner then hung in
   # teardown after "Cleaning up orphan processes", and the job timeout cancelled it at 5m23s.
   # Every dependent skipped on `proven=true`, and the gate failed on `prove=cancelled`.
   #
@@ -511,8 +511,8 @@ jobs:
   # a local `prek run --all-files` and this job cannot disagree about what a test run is.
   #
   # Sharded across a matrix, because this job is the pole of every run and a landing
-  # waits on it twice — once on the PR, once on the master merge commit that `land.sh` and the
-  # deployer's CI gate both read. Unsharded, the test step took 124s and the job 138s of which
+  # waits on it twice — once on the PR, once on the master merge commit that `land.sh` and
+  # checkout-sync's CI gate both read. Unsharded, the test step took 124s and the job 138s of which
   # 11s is setup, against 98s for the `hooks` job beside it.
   #
   # THE MATRIX KEEPS THE JOB ID `pytest`, which is what makes this a one-file change.
@@ -1960,7 +1960,7 @@ jobs:
             test -z "$(dpkg --verify homelab-tools)"
           '
 
-  # The required status context. Branch protection, the deployer's CI_CONTEXTS, await_ci.py
+  # The required status context. Branch protection, checkout-sync's CI_CONTEXTS, await_ci.py
   # and the ruleset-drift cron all name "prek (lint + validate + tests + secrets)", so that name
   # lives on this gate rather than on either half above. `if: always()` because a job with
   # `needs` is otherwise SKIPPED when a dependency fails, and GitHub counts a skipped required

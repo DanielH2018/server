@@ -429,12 +429,12 @@ PROBE = "uv run python scripts/diagnostics/probe.py"
 def format_banner(targets=(), parked=(), master_moved=()):
     """Render the problem sections as the banner's lines ([] => print nothing).
 
-    The deployer's lines come before the branch line, because "this branch is behind
-    origin/master" is the SYMPTOM of a parked deployer, so the cause reads first.
+    The dirty-primary-checkout line comes before the branch line, because "this branch is
+    behind origin/master" is the SYMPTOM of a parked checkout-sync, so the cause reads first.
 
     The triage line names whole commands joined by `or`, so a line copied into a shell is
     one runnable command rather than a pipe. It names only the commands that can see a
-    problem the banner printed: `landing` for a deployer line, `targets` and `health` for a
+    problem the banner printed: `landing` for the dirty-checkout line, `targets` and `health` for a
     down scrape target. A banner holding only the branch line gets no triage line, because
     neither command says anything about it.
     """

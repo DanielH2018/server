@@ -206,9 +206,9 @@ keep_sweep_output() {
 # Puts the checkout back the way it was before `git add`, and keeps the sweep.
 #
 # `git reset` alone -- all this path used to do -- unstages and nothing else, leaving
-# evals/history.json MODIFIED in the primary checkout. deploy_git.py reads any porcelain output as
-# dirty and gitops_deploy.py takes its healthy-skip path, still writing `last_run`, so ONE failed
-# commit here parks every deploy on the box behind a green deployer. That is not hypothetical:
+# evals/history.json MODIFIED in the primary checkout. homelab-checkout-sync reads any porcelain
+# output as dirty and stops fast-forwarding the checkout, so ONE failed commit here parks it.
+# HISTORY -- the retired GitOps deployer skipped the same way while reading healthy, and
 # docs-refresh.sh carried the identical body and did exactly that on 2026-09-04 and 2026-09-05,
 # 25 consecutive skipped ticks the second time (#1155, fixed there by #1162). This cron commits
 # weekly rather than twice daily, which changes how often it can happen and nothing else.
@@ -216,7 +216,7 @@ keep_sweep_output() {
 # THE COPY IS NOT OPTIONAL, and it is where this differs from docs-refresh. There the staged file
 # is generator output the next run reproduces, so discarding it costs nothing. Here it is a week
 # of paid API calls that no rerun reproduces, so the sweep is copied outside the checkout BEFORE
-# the tree is put back. Trading a parked deployer for a lost eval sweep is not a fix.
+# the tree is put back. Trading a parked checkout for a lost eval sweep is not a fix.
 #
 # KEPT_NOTE says what actually happened, and is not decoration. A silenced `cp` that failed --
 # $STAMP_DIR absent because initial_setup has not run since this landed, a full disk, wrong
@@ -233,7 +233,7 @@ restore_history() {
   fi
   git reset >/dev/null 2>&1
   # A file with no HEAD version needs `rm`, not `git checkout HEAD --`: the checkout fails on it
-  # and leaves it UNTRACKED, which parks the deployer just as surely as a modified one.
+  # and leaves it UNTRACKED, which parks homelab-checkout-sync just as surely as a modified one.
   if git cat-file -e HEAD:evals/history.json 2>/dev/null; then
     git checkout HEAD -- evals/history.json >/dev/null 2>&1 || rc=1
   else
@@ -242,7 +242,7 @@ restore_history() {
   # THE ACTION IS PER-PATH; THE CHECK IS PER-TREE, and the asymmetry is deliberate. A prek hook
   # can modify a file AFTER `git add` ran, and such a file is absent from the staged path by
   # construction -- a check scoped to evals/history.json would report "tree restored" over
-  # exactly the leftover that parks the deployer. Everything dirty here arrived during this run:
+  # exactly the leftover that parks homelab-checkout-sync. Everything dirty here arrived during this run:
   # the pre-sweep gate and the post-lock gate both exit on a tree that was already dirty.
   # SCOPE (see lib.git.git_dirty, #1223): whole tree, untracked counted — the same
   # scope git_dirty(cwd) defaults to, expressed here in shell since these templates can't import it.
@@ -388,7 +388,7 @@ fi
 # off the commit line, and it left prek entirely on 2026-10-02), and this cron must not publish
 # a sweep the suite rejects. Run here rather than left to the push because a rejected
 # commit is a state this script can undo -- restore_history -- where a rejected push would
-# leave a commit on the local master for the deployer to trip over. `timeout` because this
+# leave a commit on the local master for homelab-checkout-sync to trip over. `timeout` because this
 # script holds {{ server_git_tree_lock }} for its whole life.
 timeout 900 "$UV" run --frozen python -m pytest >"$LOG" 2>&1
 SUITE_RC=$?

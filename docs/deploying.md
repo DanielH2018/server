@@ -2,7 +2,7 @@
 
 No script here deploys a workload by hand. `promote` and Flux apply every k8s change, and the
 host packages apply the host plane, the Pi's services included. This page says which path
-applies a change and what runs in place of the GitOps deployer.
+applies a change and what replaced the retired GitOps deployer.
 
 H7.52 retired `gitops-deploy.timer`, and H7.53
 ([#7962](https://github.com/DanielH2018/server/issues/7962)) deleted its code with

@@ -68,7 +68,7 @@ The daemon runs outside the venv. The unit renders `DEPLOY_UI_TREE_LOCK` from
 ## Writes
 
 Land spawns `land.sh` detached and logs to `~/.local/state/deploy-ui/`. Land and cancel each
-emit one logfmt line via `logger -t deploy-ui`. The page reads no deployer state: `land.sh`
+emit one logfmt line via `logger -t deploy-ui`. The page reads no hold itself: `land.sh`
 refuses a landing under `DEPLOY_HOLD` itself, and the hold is cleared with `gh variable set
 DEPLOY_HOLD --body none`, never from this page.
 
