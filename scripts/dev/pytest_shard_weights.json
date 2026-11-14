@@ -392,7 +392,6 @@
  "k8s/roles/monitor-bridge/tests/test_deploy_pipeline.py": 0.53,
  "k8s/roles/monitor-bridge/tests/test_deploy_pipeline_reboot_window.py": 0.17,
  "k8s/roles/monitor-bridge/tests/test_longhorn_robustness.py": 0.0,
- "k8s/roles/monitor-bridge/tests/test_msgfmt.py": 0.0,
  "k8s/roles/monitor-bridge/tests/test_sources_boundary.py": 0.07,
  "k8s/roles/monitor-bridge/tests/test_verdict_export.py": 0.04,
  "k8s/roles/n8n/tests/test_n8n_verify.py": 8.48,

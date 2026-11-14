@@ -341,6 +341,9 @@ select = [
 # role files/ trees still counts; only those three trees were triaged (#8623 has the rest). The
 # extensionless hosts/lib/homelab-* scripts are not read, so `refresh_pending` reports as
 # unused. Every name below was triaged as live on 2026-11-14.
+# A test counts as a caller here, because many library functions exist for a guard under
+# tests/. To list production code that only tests call, run a second pass with
+# `--exclude '*/tests/*,*conftest.py,*/test_*.py,*/_*_harness.py'` (#8632 has its triage).
 [tool.vulture]
 paths = [".claude", "evals", "hosts", "k8s", "scripts", "tests"]
 ignore_decorators = [
