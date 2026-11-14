@@ -1,7 +1,7 @@
 # `hosts/components/deploy-ui` — the host half of deploy.local (daniel-box)
 
 `deploy-ui.service`, `User={{ sys_user }}`, cwd the primary checkout. `homelab-daniel-box` ships
-it. H7.50 moved it from the `deploy_ui` setup role, with its in-flight panel. It serves the page
+it, with its in-flight panel. It serves the page
 and API `k8s/roles/deploy-ui/` routes to, and runs `land.sh` and
 `gh` exactly as the operator would from a terminal. It starts no deploy, because Flux applies
 every service. The page stays as the one browser view of landings in progress (operator
@@ -27,7 +27,8 @@ Every POST also needs `X-Deploy-UI: 1` so a cross-site form cannot ride the Auth
 
 ## Turning it off
 
-- To stop it on daniel-box for a while, run `sudo systemctl mask --now deploy-ui.service`.
+- To stop it on daniel-box for a while, run `sudo systemctl mask --now deploy-ui.service`
+  (**operator-only**).
   To remove it, drop `deploy-ui` from `components:` in `hosts/daniel-box/package.yml`; the next
   package version stops it, and reconcile deletes its three ufw rules over two runs, because
   the arm deletes at most two in one run.

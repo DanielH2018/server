@@ -12,20 +12,20 @@ probes stay green.
 - **Claims:** none (no PVC)
 <!-- /generated_from -->
 
-- **Flux applies it, not Ansible** (H1.3). Its `containers_list` entry is in `cluster/services.yml`
-  from its first commit. A rebuilt cluster gets it from the `metallb` Kustomization at step 6 of
+- **Flux applies it.** Its `containers_list` entry is in `cluster/services.yml`.
+  A rebuilt cluster gets it from the `metallb` Kustomization at step 6 of
   `docs/flux-deploy-plane.md`'s *Bootstrapping Flux on a rebuilt cluster*.
 - **The workloads are `files/upstream/metallb-native.yaml`**, upstream's file byte for byte,
   pinned by `k3s_metallb_version` and the `metallb_vendored_manifests` item in
   `defaults/main.yml`. `scripts/dev/vendor_manifest.py` checks the pin and refreshes the copy.
-  The refresh command sits above the pin. No render may fetch a URL (D5, C1).
-- **Merging a bump of `k3s_metallb_version` is the upgrade** (H1 Open question 6).
-  `land.sh` runs the `metallb-upgrade` gates before it merges, and MetalLB's CRDs carry a
-  conversion webhook, so the version never runs backwards.
+  The refresh command sits above the pin. No render may fetch a URL.
+- **Merging a bump of `k3s_metallb_version` is the upgrade.** `land.sh` runs the `metallb-upgrade`
+  gates before it merges, and MetalLB's CRDs carry a conversion webhook, so the version never runs
+  backwards.
 - **The file declares the `prometheus.io/port` and `prometheus.io/scrape` pod-template
   annotations** on the controller and the speaker. Only `kubectl-client-side-apply` owns them
-  live (the H1 plan's *Baseline*), so a vendored file without them would remove them at the
-  takeover and roll every MetalLB pod at the promote.
+  live, so a vendored file without them would remove them and roll every MetalLB pod at the
+  next promote.
   `tests/k8s/test_metallb_vendored_manifest.py::test_the_vendored_file_declares_the_prometheus_template_annotations`
   holds them.
 - **The file declares no `caBundle` and no data for the `metallb-webhook-cert` Secret.** The
@@ -38,8 +38,8 @@ probes stay green.
 - **The tag is forward-only** (`flux_forward_only: true` in `defaults/main.yml`). When a
   revision that changes it fails, `promote` writes `DEPLOY_HOLD` and leaves `prod` where it
   is, because a reset would re-apply an older vendored file over upgraded CRDs.
-  `tests/k8s/test_forward_only_tags.py` holds the flagged roles equal to the H1
-  plan's list.
+  `tests/k8s/test_forward_only_tags.py` holds the flagged roles equal to its
+  `PLAN_FORWARD_ONLY` set.
 - **`NEVER_SHED` names the tag** in `scripts/renderer/template_filters/service_tier.py`. The role is
   untiered, and the lost-node break-glass must not scale the announcer down.
   `tests/k8s/test_shed_set_is_derived_from_tier.py::test_never_shed_matches_the_untiered_roles_that_never_prune`
@@ -52,4 +52,4 @@ probes stay green.
   holds the two halves together.
 - **The pools apply through MetalLB's validating webhook** (`failurePolicy: Fail`). On a fresh
   cluster the first apply of the pools can fail until the controller serves the webhook, and
-  Flux retries. The Ansible path used to wait for the controller to become Available.
+  Flux retries until the controller is Available.

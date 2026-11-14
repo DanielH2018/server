@@ -2,10 +2,10 @@
 
 Three host timers and a heartbeat that find mislabeled re-encodes in the media library,
 replace them through Sonarr, and repair mkv font-attachment names that break burned-in
-subtitles. `homelab-daniel-box` ships it. H7.37 moved it from the `fake_remux` role.
+subtitles. `homelab-daniel-box` ships it.
 
-Detail that predates the move — the design, the ledger shape, the tunables, how to run either
-script by hand in report-only or shadow mode — is in `k8s/roles/autofix-bridge/CLAUDE.md`, whose
+The design, the ledger shape, the tunables, and how to run either script by hand in
+report-only or shadow mode are in `k8s/roles/autofix-bridge/CLAUDE.md`, whose
 contract section names fake-remux replacement as one of its actuator planes. This file carries
 what is specific to the host timers: the schedule, the lock, and the contract below.
 

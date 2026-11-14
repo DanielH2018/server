@@ -2,14 +2,14 @@
 
 The builder half of target-architecture slice H3, whose plan is
 `docs/target-architecture/host/h3-pi-pilot.md`. It builds the host packages from master, signs
-them, and serves the apt repository the hosts' updater reads. H7.41b moved it from the
-`homelab_builder` role into daniel-box's package. The `failure-alert` component ships the page that
+them, and serves the apt repository the hosts' updater reads. daniel-box's package ships it.
+The `failure-alert` component ships the page that
 a failed run opens. This file holds the rules for the component; the plan's *The builder and the
 repository (daniel-box)* holds the design.
 
 ## What the component installs
 
-`component.yml` and the files beside it declare everything the role used to write:
+`component.yml` and the files beside it declare everything the builder needs:
 
 - The system users `homelab-builder` (uid 902) and `homelab-signer` (uid 903), nologin, declared by
   uid alone. The uids sit in the homelab band 900-949, below the uids Ubuntu hands out from 999
@@ -22,11 +22,11 @@ repository (daniel-box)* holds the design.
   `StateDirectoryMode=0711`: the signer traverses the builder's directory to reach `staged/`, as
   `http.server` traverses the signer's to reach `repo/`.
 - `/usr/lib/homelab/builder/`, root-owned: `host_package_builder.py`, `homelab_tool_fetch.py` (the
-  `homelab-tools` step below), `builder_ci_grade.py`, `builder_rollout_gate.py`, `builder_python.py`,
-  `homelab_repo_sign.py`, `host_lib.py` and `builder.conf`. The sources are in
+  `homelab-tools` step below), `builder_ci_grade.py`, `builder_rollout_gate.py`,
+  `builder_python.py`, `homelab_repo_sign.py`, `host_lib.py` and `builder.conf`. The sources are in
   `hosts/lib/`. The directory sits outside the builder's `ReadWritePaths`, so a builder run cannot
-  rewrite the code the next run executes. `builder.conf` holds the deployer's CI contexts, its walk
-  bound, the repo and the Prometheus URLs, and no secret.
+  rewrite the code the next run executes. `builder.conf` holds the CI contexts the builder grades a
+  commit on, its walk bound, the repo and the Prometheus URLs, and no secret.
 - `/usr/lib/homelab/publish-textfile` and `/usr/lib/homelab/builder-fingerprint`, both root-owned.
 - `homelab-builder.service` and `homelab-builder.timer` (every 2 minutes),
   `homelab-repo-sign.service` and `homelab-apt-repo.service`. The units keep the names the Ansible
@@ -66,10 +66,10 @@ in a commit from before ADR-0030's rename, and `render_python` installs it
 with downloads allowed for that one call. `render()` passes it to `uv run --python`. A tree with no pin
 renders on `HOMELAB_PYTHON`, and a pin that is not a dotted version, or an install that fails,
 reads `reason="build"`. The unit that pins a new interpreter ships in `homelab-daniel-box`, which
-only this render builds, so a render on the unit's pin deadlocked the 3.15.2 cutover for six
-hours (#7023).
+only this render builds, so a render on the unit's pin would wait on the package that carries
+that pin (#7023).
 
-**The package does not generate the signing key.** The Ansible role generated it once.
+**The package does not generate the signing key.**
 `docs/break-glass.md` item 9 holds the restore, and the rebuild procedure that generates a fresh key.
 
 **A broken builder package.** The builder builds `homelab-daniel-box`, which carries the builder.
@@ -97,10 +97,9 @@ commits.
 `state.json`'s `staged` names the packages whose `.deb` may still be unsigned. `stage()` saves
 it before it empties `staged/` or copies a render into `published/`, so a run that fails or is
 killed in between leaves the next run a record that matches the disk. `published/` keeps each
-render as a copy that preserves symlinks, and the comparison reads a symlink's target text: a
+render as a copy that preserves symlinks, and the comparison reads a symlink's target text. A
 link that dangles inside its own render, such as the Pi package's
-`timers.target.wants/homelab-updater.timer`, once made `copytree` raise after the copy and made
-the comparison skip the link. The Pi package was recorded as published and never signed
+`timers.target.wants/homelab-updater.timer`, therefore copies and compares like any other file
 (2026-10-23). The signer's own refusals are a separate path: a refused set moves to
 `refused/`, and the signer's alert pages it.
 
@@ -257,7 +256,8 @@ and publish what was staged, so every host's updater installs it at its next fir
   `/var/lib/homelab-signer/` and empties `staged/`, with no network. It **never** publishes a
   package outside the refusal rule, and never runs code from the builder's clone.
 - **Mode (explicit + reversible):** the timer's enable link arms the builder. `sudo systemctl mask
-  --now homelab-builder.timer` pauses it, and `unmask` then `start` resumes it. Dropping the link
+  --now homelab-builder.timer` pauses it, and `unmask` then `start` resumes it
+  (**operator-only**). Dropping the link
   from a package version stops the timer on the install that drops it.
 - **Authoritative sources:** `origin/master` as fetched this run, GitHub's check-runs API
   graded over `CI_CONTEXTS`, and `archive-key.fpr`. The builder reads nothing from its clone

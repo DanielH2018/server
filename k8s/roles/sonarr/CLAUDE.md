@@ -16,7 +16,7 @@ conventions.
 
 - **`sonarr-config`** (2Gi, `longhorn`, backed up) holds the library DB and absolute
   root-folder paths; `media-data` is the shared claim (mounted, not owned).
-- **Flux applies it, not Ansible** (D5.20, a Wave D PR with radarr and mosquitto). Its
+- **Flux applies it.** Its
   `containers_list` entry is in `cluster/services.yml`, so nothing applies it by hand, and a merged change
   reaches the cluster when `promote` publishes and verifies the next bundle. Its image-bump PRs
   therefore draw no `land-wait` and no `probe.py health` run. authelia, media-volume and traefik
@@ -30,17 +30,15 @@ conventions.
   because the failed image may already have migrated the database. Nothing reverts the claim
   on its own: the operator follows the revert runbook in `docs/volume-snapshot-drills.md`.
   `k8s_autodeploy: true` still lets Renovate automerge the image bump, which is safe for the
-  same reason it was under Ansible: a bad swap can be reverted to the snapshot.
+  same reason: a bad swap can be reverted to the snapshot.
 - **`media-data` is neither snapshotted nor reverted** (`k8s_autodeploy_unreverted_claims`). A
   revert can desync import/rename history from files left in place, recoverable by a library
   rescan.
-- **Where the tasks went.** The pre-apply snapshot through `k8s/volume-snapshot`
-  became the `sonarr-snapshot` Job, and the Kustomization's `wait` replaces the rollout wait.
-  The library reads became the `sonarr-verify` Job.
-  arr-notification's seed Job beside it declares the Discord notification (*Notable*). Its
-  `k8s/arr-notification` include went in #5561. The seed Job's `lookup()`s are what make sonarr a
-  caller of arr-notification in
-  `scripts/lib/k8s_role_callers.py:role_callers`.
+- **Its snapshot and checks.** The `sonarr-snapshot` Job takes the pre-apply snapshot, and
+  the Kustomization's `wait` holds the rollout. The `sonarr-verify` Job runs the library
+  reads. arr-notification's seed Job beside it declares the Discord notification
+  (*Notable*). The seed Job's `lookup()`s are what make sonarr a caller of arr-notification
+  in `scripts/lib/k8s_role_callers.py:role_callers` (#5561).
 
 ## Notable
 - `sonarr_k8s_log_level: info` / `rotate: "10"` overrides upstream's debug-level default

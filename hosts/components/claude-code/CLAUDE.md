@@ -1,8 +1,7 @@
 # `hosts/components/claude-code` — Claude Code's host half (daniel-server and daniel-box)
 
-This component ships what the `claude_code` setup role installed. H7.55 deleted the emptied
-role. The role's `templates/`,
-`files/` and `defaults/main.yml` sit beside this file (#6773). The renderer loads
+This component ships Claude Code's host setup. Its `templates/`, `files/` and
+`defaults/main.yml` sit beside this file (#6773). The renderer loads
 `defaults/main.yml` beneath `component.yml`'s `defaults:`, and each host's `package.yml` reaches
 the component's templates and defaults with `component: claude-code`. This file holds the rules
 for what they render.
@@ -447,7 +446,7 @@ server batch runs as `ubuntu` on `worktree-fanout-<batch>`.
   runner cap). A PR is started once: a log in `~/.local/state/fanout-server-lander/logs/`, or
   a live `land.py --pr <n>` process anywhere, skips it. `land.sh` holds no per-PR lock, so
   this check is the only guard against a second landing. The unit sets
-  `LAND_REQUIRE_BRANCH_PREFIX`, which makes `land.sh` refuse while the deployer holds a SHA and
+  `LAND_REQUIRE_BRANCH_PREFIX`, which makes `land.sh`
   pin the merge to the head it checked, and `LAND_REQUIRE_AUTHOR`.
 - **Evidence:** `journalctl -u homelab-claude-fanout-server-lander` has one line per candidate PR,
   `eligible` or `ineligible` with the reason. Each landing's own `VERDICT:` is in its

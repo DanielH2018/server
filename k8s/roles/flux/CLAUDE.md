@@ -96,16 +96,16 @@ egress rule changes nothing. A change that adds a Receiver adds its fence with i
 
 ## Rollouts
 
-**Under Flux**, the `flux` Kustomization's `wait: true` health check on the three Deployments
-and the soak replace the waits below, which ran only while Ansible applied this role.
+**Its checks.** The `flux` Kustomization's `wait: true` health check on the three Deployments
+and the soak hold the rollout.
 
-`manifests_rollout: ''` skips the shared wait. The role waits on each controller itself and
-hands them to the end-of-play stabilisation gate, as observability does. Every
-`flux_controllers` entry carries `restart_on: []`, because no task here restarts a controller
-and no controller reads a Secret or ConfigMap through its pod spec; `defaults/main.yml` has the
-full reason. The release record would otherwise owe all three a restart after a
-NetworkPolicy edit, or after a rotation of either Secret that `templates/secret.yaml.j2`
-renders or of the SOPS manifest `templates/github-status-secret.yaml.j2`.
+`manifests_rollout: ''` skips the shared wait, which covers one Deployment, and
+`manifests_self_rollouts` names the three controllers for the release record. Every
+`flux_controllers` entry carries `restart_on: []`, because nothing in this role restarts a
+controller and no controller reads a Secret or ConfigMap through its pod spec; `defaults/main.yml`
+has the full reason. The release record would otherwise owe all three a restart after a
+NetworkPolicy edit, or after a rotation of either Secret that `templates/secret.yaml.j2` renders or
+of the SOPS manifest `templates/github-status-secret.yaml.j2`.
 
 **Memory, an idle floor.** On 2026-10-13, with no source configured, `kubectl top pod -n
 flux-system` read source-controller at 16Mi, kustomize-controller at 18Mi and
@@ -186,16 +186,18 @@ Discord. The way out is the lever set back to `false`: the render drops the docu
 `flux-deferred`'s prune deletes `ocirepository/verify-drill` at its next reconcile after the
 promotion.
 
-**The drill ran on 2026-10-13.** The first dispatch was a false green: `verify-drill` read
-Ready=True with its signature verified (#4820). `publish` pushes with `--reproducible`, and
-the drill ran at the commit `prod` already carried, so its digest equalled `prod`'s signed
-digest. #4826 fixed that. The drill push carries the annotation
-`io.homelab.verify-drill=true`, so no signed push carries its digest, and the dispatch fails
-unless `cosign verify` refuses that digest. The refusal alone proves nothing, because cosign
-v3.1.3 reads a registry error on its bundle probe as "no bundle" (#4829). The dispatch
-therefore also reads the registry itself, and fails unless it answers that the digest has no
-referrer and no legacy `.sig` tag. GHCR serves no referrers API, so cosign keeps a digest's
-bundle in the referrers tag `sha256-<hex>`. The re-dispatch
+**What the dispatch checks.** `publish` pushes with `--reproducible`, so a drill at the commit
+`prod` already carries would reuse `prod`'s signed digest. The drill push therefore carries the
+annotation `io.homelab.verify-drill=true`, so no signed push carries its digest, and the
+dispatch fails unless `cosign verify` refuses that digest (#4826). The refusal alone proves
+nothing, because cosign v3.1.3 reads a registry error on its bundle probe as "no bundle"
+(#4829). The dispatch therefore also reads the registry itself, and fails unless it answers
+that the digest has no referrer and no legacy `.sig` tag. GHCR serves no referrers API, so
+cosign keeps a digest's bundle in the referrers tag `sha256-<hex>`.
+
+**HISTORY — The drill ran on 2026-10-13.** The first dispatch was a false green: `verify-drill`
+read Ready=True with its signature verified (#4820), because the drill ran at the commit
+`prod` already carried and its digest equalled `prod`'s signed digest. The re-dispatch
 pushed `sha256:5bac820c…bb97` unsigned. At 04:45:39Z `verify-drill` read Ready=False with
 "failed to verify the signature using provider 'cosign keyless': no signatures found", and
 `homelab` stayed Ready. `deploy-errors` posted nothing to Discord, because it names only the
