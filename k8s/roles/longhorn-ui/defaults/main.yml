@@ -12,5 +12,6 @@ k8s_autodeploy_reason: "renders no Deployment — route-only (IngressRoute + mid
 
 manifests_rollout: ''
 
-# The entry's `port` is the upstream longhorn-frontend Service's, which setup/k3s installs.
+# The entry's `port` is the upstream longhorn-frontend Service's, which the `longhorn`
+# role's vendored `files/upstream/longhorn.yaml` installs.
 manifests_exclude_files: [service.yaml]

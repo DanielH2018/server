@@ -35,6 +35,7 @@ _KEYS = (
     "claude_code_triage_claude_oauth_token: x\n"
     "authelia_agent_password: x\n"
     "healthchecks_ping_key: x\n"
+    "games_panel_token: x\n"
     "r2_access_key_id: x\n"
     "r2_secret_access_key: x\n"
     "r2_bucket: x\n"

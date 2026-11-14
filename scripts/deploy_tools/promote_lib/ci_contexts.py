@@ -25,7 +25,7 @@ from lib.repo_paths import HOST_LIB_FILES
 import forge
 from deploy_tools.promote_lib.prune import READ_ERRORS, ReadError
 
-# ci_verdict imports nothing first-party, unlike deploy_logic, which re-exports the whole deployer.
+# ci_verdict imports nothing first-party, so this pulls in no other host module.
 sys.path.insert(0, str(HOST_LIB_FILES))
 from ci_verdict import ci_verdict
 
@@ -41,7 +41,7 @@ def read_ci_contexts(path: Path) -> list[str]:
     Raises:
         ReadError: the file is unreadable, or the key is missing or is anything but a
             non-empty list of non-empty strings. A Jinja reference such as
-            `"{{ ci_required_contexts }}"`, which the deployer's role default holds, is a
+            `"{{ ci_required_contexts }}"`, which the retired deployer's role default held, is a
             string, so it raises too.
     """
     try:

@@ -39,6 +39,7 @@ data:
             period: 24h
     limits_config:
       retention_period: {{ loki_homelab_retention }}
+{# TODO: https://github.com/DanielH2018/server/issues/8591 - {job="k8s-audit"} stays near 40 percent of ingest after #8512; a shorter retention_stream for it is the operator's call, because it shortens the audit window. #}
       # The Docker copy's guards, carried over verbatim: promtail re-reading from scratch
       # after a lost positions file once blew the default ingest limit.
       max_global_streams_per_user: 5000

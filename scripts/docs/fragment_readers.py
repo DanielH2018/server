@@ -6,7 +6,7 @@ renderer in `fragment_renderers.py` is a pure function of what one of these retu
 neither half has to know about the other.
 
 STATIC PARSING ONLY, for the reason the generator's own docstring gives: importing the
-deployer or the rotation tool would bootstrap `sys.path` and read the environment on import.
+rotation tool would bootstrap `sys.path` and read the environment on import.
 Python constants come from `ast`, role defaults and inventory from `lib.estate`, and the
 fail2ban jail template from `configparser`.
 """

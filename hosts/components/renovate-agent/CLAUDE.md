@@ -6,7 +6,7 @@ It is the acting half of the pair whose reporting half is
 `hosts/components/renovate-notify/`: that component says what is open and what needs manual
 work, this one does it.
 
-`homelab-daniel-box` ships it. H7.37 moved it from the `renovate_agent` role.
+`homelab-daniel-box` ships it.
 
 The four bounds on a run and the worktree rules, what the Discord digest measures, the alive
 tile's exit-code and token plumbing, how to exercise the wrapper without arming anything, the
@@ -31,11 +31,13 @@ lander deploys what the session picks — not a sign the component is unfinished
 own GitHub token and Claude credential are declared outputs, so `host_secrets.py check` fails a
 host file that lacks them; `docs/renovate-agent-bounds-and-digest.md` has the checklist.
 
-**The session can neither push nor merge.** It runs as `renovate_agent_user`, with a read-only
-token, in its own clone. It closes, comments on or re-runs a PR only by writing a request file,
+**The session can neither push nor merge.** It runs as `renovate-agent`, with a read-only
+token, in its own clone, inside `homelab-renovate-agent-session.service`. The runner runs as
+`renovate-agent-ctl`, which alone holds the write token and may start the session and lander
+units; it starts the session and waits for it (`files/renovate_session.py`). It closes, comments on or re-runs a PR only by writing a request file,
 which the runner carries out with its own token after the session ends (`files/run_requests.py`).
-It lands a PR only by starting
-`renovate-agent-land@<n>.service`, which polkit lets it start and which runs `land.sh` as
+It lands nothing: it nominates a PR with a `land` request, and after the session ends the
+runner starts `renovate-agent-land@<n>.service` for each nomination, which runs `land.sh` as
 `sys_user` on a PR the lander re-checks itself.
 
 **The session's tooling converges before each run.** `homelab-renovate-agent.service` runs
@@ -43,8 +45,29 @@ It lands a PR only by starting
 home, the operator's uv, uvx, prek, claude_guard and claude_worktree, the pinned Python, Claude
 Code and the clone. The agent runs every command that writes into its home.
 
+**The session carries the shared guard hooks and a deny floor.** The package ships
+`hosts/components/renovate-agent/files/claude-settings.json` to `/usr/lib/homelab/renovate-agent/`.
+The setup script copies it to the agent's `~/.claude/settings.json` on every run, and copies the
+operator's `~/.claude/hooks` beside it. The file registers three hooks: claude-guard on Bash,
+the permission-request guard, and `protect-secrets` on the file tools. It also carries the
+operator's deny list plus `sudo` and edits to the session's own settings, hooks and claude_guard,
+and it disables bypass mode. The wrapper runs the session in auto mode, so the file also carries
+the operator's `autoMode` deny rules, environment and `classifyAllShell`. It holds no allow rules
+and no `env`, because the operator's carry `/home` paths that `ProtectHome=` hides. Both lists are
+a snapshot of the operator's: a dotfiles change reaches the session only through a PR that edits
+this file. `homelab-renovate-agent-setup.service` runs the setup at
+boot and when the script or the settings change, so the file exists while the agent is disarmed and
+`claude-guardrail-audit` watches it and the hooks copy. The agent owns both copies, so a session can
+edit them until the next run replaces them; the auditd watch records that write, and
+`claude-guardrail-ack` posts any copy that matches neither the packaged file nor the operator's
+rendered hooks. The settings, the setup script and its
+unit are on both landers' approval lists
+(`hosts/components/claude-code/templates/claude-land-approval-paths.j2`, and `hosts/` in
+`hosts/components/renovate-agent/files/t2-approval-floor`).
+
 There is deliberately **no restart on a package install**: the session's unit is `policy:
-manual`, because a run costs money and changes the fleet. Start one by hand:
+manual`, because a run costs money and changes the fleet. Start one by hand
+(**operator-only**):
 
 ```bash
 sudo systemctl start homelab-renovate-agent && journalctl -u homelab-renovate-agent -f
@@ -94,6 +117,11 @@ the caps or the schedule cannot quietly widen it.
   Never the session's closing paragraph — it reads confident whatever happened.
 - **Abort valves:** `renovate_agent_max_prs`, `renovate_agent_run_timeout_s`, the systemd
   `renovate_agent_unit_timeout` backstop, and `renovate_agent_budget_usd` as a runaway catch.
+  The templates read each cap, and the permission mode, from the literals in
+  `templates/renovate-agent-pins.j2`, which is on the lander's approval list, so a host_vars
+  edit moves none of them. The same file pins both users, the controller's home and the
+  exchange directory. The defaults hold the same values for the docs fragments
+  (`hosts/tests/test_renovate_agent_unit.py::test_an_inventory_value_moves_no_cap`).
   `docs/renovate-agent-bounds-and-digest.md` has why each is the var it is and why the budget
   must never be the one that binds.
 - **Required evidence:** a Discord digest whose headline is the before/after PR delta, plus the
@@ -105,4 +133,7 @@ the caps or the schedule cannot quietly widen it.
   A digest the host could not deliver waits in `<STATE_DIR>/discord-spool/` and goes out,
   marked as delayed, at the start of the next daily tick, a quiet skip included (#3905).
 - **Next-run review:** before raising a cap or widening the prompt, read the last week's
-  digests for what the sessions actually resolved and what they timed out on.
+  digests for what the sessions actually resolved and what they timed out on. The session's
+  own 2700-second wall clock in `templates/renovate-agent-pins.j2` is an estimate from runs
+  that still landed in-session; after the first armed week, compare it with the sessions'
+  `duration_ms` in `last_session.json`.

@@ -11,7 +11,8 @@ spec:
   # RWO config PVC on single-replica Longhorn — a rolling update deadlocks on the volume,
   # and two servers writing one world would be worse than the deadlock.
 {{ spec_shell('Recreate') }}
-  replicas: {{ terraria_k8s_replicas }}
+  # No `replicas:`. deploy.local's Games panel owns the count (ADR-0033); a rendered value would
+  # make Flux reset every start or stop.
   selector:
     matchLabels:
       app: terraria

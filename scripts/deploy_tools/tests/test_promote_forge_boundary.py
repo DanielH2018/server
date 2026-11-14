@@ -78,9 +78,9 @@ ALLOWED_LIB = frozenset(
     }
 )
 
-# No `deployer_lib` module: `ci_verdict` moved to `hosts/lib/` in H7.2e, and the rest of the
-# deployer reads GitHub's check-runs API through `urlopen` (`deploy_toolbox.fetch_ci_verdict`)
-# or posts to webhooks (`deploy_alerts`).
+# No `deployer_lib` module: `ci_verdict` moved to `hosts/lib/` in H7.2e, and the rest of the retired
+# deployer read GitHub's check-runs API through `urlopen` (`deploy_toolbox.fetch_ci_verdict`) or
+# posted to webhooks (`deploy_alerts`).
 ALLOWED_DEPLOYER_LIB: frozenset[str] = frozenset()
 
 # Each package whose imports are held to an allowlist, by the package name.

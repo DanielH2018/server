@@ -15,7 +15,7 @@ UPS state of its own; the physical UPS is USB-attached to daniel-server via the 
   difference between the two is never the image.
 - **Port:** 8080
 - **No PVC** — `/config` and `/app/config` are `emptyDir`, seeded at boot.
-- **Flux applies it, not Ansible** (D3.6, the first Flux role with a Secret). Its
+- **Flux applies it.** Its
   `containers_list` entry is in `cluster/services.yml`, so nothing applies it by hand, and a merged change reaches the cluster when `promote` publishes and
   verifies the next bundle. Its digest-bump PRs therefore draw no `land-wait` and no
   `probe.py health` run.
@@ -30,7 +30,7 @@ UPS state of its own; the physical UPS is USB-attached to daniel-server via the 
   of the ciphertext, never of a value (`docs/flux-deploy-plane.md`).
 - **Rotating `peanut_password` or `peanut_username`** is operator-only at the source: `sops
   set`, then `cluster_vars.py write`, committed together. homepage's PeaNUT widget renders
-  the same login. homepage has been flux-owned since D5.7 and substitutes it from the same
+  the same login. homepage substitutes it from the same
   `homelab-cluster-vars` Secret, so the next promotion carries the rotation to both roles,
   and no hand deploy follows. `secret_rotation.py consumers peanut_password` prints both
   halves.

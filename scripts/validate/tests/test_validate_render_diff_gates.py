@@ -18,6 +18,8 @@ import pytest
 
 from deploy_tools.object_loss import PRUNE_KEY, prune_disabled
 from renderer.renderer_lib.targets import render_targets
+from lib.git import extract
+from lib.repo_paths import REPO
 from validate import render_diff_gates as gate
 from renderer.template_filters.toposort import build_k8s_dep_map
 
@@ -84,7 +86,7 @@ SHELL_EDIT = (
 @pytest.fixture(scope="module")
 def head_tree(tmp_path_factory) -> Path:
     tree = tmp_path_factory.mktemp("head")
-    gate.extract("HEAD", tree, gate.RENDER_TREES)
+    extract("HEAD", tree, gate.RENDER_TREES, repo=REPO)
     return tree
 
 

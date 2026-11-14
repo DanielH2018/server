@@ -51,7 +51,6 @@ from renderer.renderer_lib.environment import renderer_env
 from renderer.renderer_lib.jinja_aliases import scan_templates
 from renderer.renderer_lib.jinja_uses import (
     Policy,
-    TemplateScan,
     Use,
     embed_refusals,
     resolve_embed,
@@ -87,12 +86,6 @@ NO_BARE_DOLLAR_BRACE = "no-bare-dollar-brace"
 CONFINED_TO_SECRET = "confined-to-secret"
 NO_SOPS_MANIFEST_KEY = "no-sops-manifest-key"
 NO_SECRET_EXPRESSION = "no-secret-expression"
-OUTPUT_RULES = (
-    KNOWN_KEY,
-    NO_BARE_DOLLAR_BRACE,
-    CONFINED_TO_SECRET,
-    NO_SOPS_MANIFEST_KEY,
-)
 
 # The repo filters that place an argument into their output unchanged. Rule 5 accepts a secret
 # key as an argument to a member, and refuses it as an argument to any other filter, so the set
@@ -312,20 +305,6 @@ def output_members(render: PlaceholderRender, known_keys: Iterable[str]) -> list
 
 
 # -- rule 5: the template sources ----------------------------------------------------------
-
-
-def scan_template(
-    source: str,
-    keys: frozenset[str],
-    non_secret: frozenset[str] = frozenset(),
-    passthrough: frozenset[str] = PASSTHROUGH_FILTERS,
-    env=None,
-) -> TemplateScan:
-    """Rule 5's walk over one template, with `passthrough` and `SOPS_MANIFEST_KEYS`."""
-    env = env or renderer_env(SHARED_TPL)
-    policy = Policy(passthrough, SOPS_MANIFEST_KEYS)
-    path = Path("template.j2")
-    return scan_templates({path: source}, keys, policy, env, {path: non_secret})[path]
 
 
 @dataclass

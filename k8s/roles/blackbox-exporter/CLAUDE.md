@@ -33,7 +33,7 @@ conventions.
   behind this role's readiness. The plan's *No deploy-order edge* has the full reasoning. The
   entry sits above `netpol-baseline` in `containers_list` only because that role must stay
   last.
-- **Flux applies it, not Ansible** (D5, Wave A's last PR). Its `containers_list` entry
+- **Flux applies it.** Its `containers_list` entry
   is in `cluster/services.yml`, so nothing applies it by hand, and a
   merged change reaches the cluster when `promote` publishes and verifies the next bundle. The
   Kustomization's `wait` replaces

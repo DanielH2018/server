@@ -11,10 +11,11 @@ import subprocess
 
 import pytest
 
-from deploy_tools.land_lib import gh_read, merge, policy
+from deploy_tools.land_lib import gh_read, merge, policy, stale_base
 from deploy_tools.land_lib.outcome import Outcome
 from deploy_tools.land_lib.pr_json import parse_file
 from lib import gh_rate_limit
+from lib.proc_testing import fake_bin, path_with
 
 # What gh exits with when GitHub's GraphQL endpoint does not answer: the shape #5296 logged.
 IO_TIMEOUT = subprocess.CalledProcessError(
@@ -130,7 +131,7 @@ _OTHER_READS = {
         [[{"status": "modified", "filename": "docs/a.md"}]],
         lambda ln: policy._list(ln, "files", parse_file),
     ),
-    "compare": (["docs/a.md"], lambda ln: merge._master_paths_since(ln, "a" * 40)),
+    "compare": (["docs/a.md"], lambda ln: stale_base.master_paths_since(ln, "a" * 40)),
     "repo-visibility": (
         {"visibility": "public"},
         lambda ln: merge._refuse_private_repo(ln),
@@ -173,3 +174,22 @@ def test_a_read_still_rate_limited_after_its_waits_refuses(landing):
         ln.view("headRefOid")
     assert "rate limit" in exc.value.error
     assert _sleeps(calls) == [gh_rate_limit.SECONDARY_WAIT_S] * gh_read.RATE_LIMIT_WAITS
+
+
+GRAPHQL_RATE_LIMITED = subprocess.CalledProcessError(
+    1, "gh", stderr="GraphQL: API rate limit already exceeded for user ID 41801780."
+)
+
+
+def test_a_read_refused_by_the_spent_graphql_quota_waits_and_continues(
+    landing, monkeypatch, tmp_path, capsys
+):
+    """The 2026-11-14 refusals of PR 8699: GraphQL's message says "already exceeded" (#8708)."""
+    # A `gh` that reports no reset, so the wait is the fixed fallback rather than the clock's.
+    monkeypatch.setenv("PATH", path_with(fake_bin(tmp_path, gh="exit 0\n")))
+    ln, calls = landing()
+    _reads(ln, [GRAPHQL_RATE_LIMITED, ANSWER])
+    assert _view_or_fail(ln) == ANSWER
+    pause = gh_rate_limit.UNKNOWN_RESET_WAIT_S
+    assert _sleeps(calls) == [pause]
+    assert f"hit the GitHub rate limit; waiting {pause}s" in capsys.readouterr().out

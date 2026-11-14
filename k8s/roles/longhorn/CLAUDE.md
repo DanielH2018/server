@@ -12,18 +12,18 @@ host probes stay green.
 - **Claims:** none (no PVC)
 <!-- /generated_from -->
 
-- **Flux applies it, not Ansible** (H1.5a). Its `containers_list` entry is in `cluster/services.yml`
-  from its first commit. A rebuilt cluster gets it from the `longhorn` Kustomization at step 6 of
-  `docs/flux-deploy-plane.md`'s *Bootstrapping Flux on a rebuilt cluster*. The `longhorn-backup` Kustomization
-  depends on it and creates the backup targets once it reads `Ready`.
+- **Flux applies it.** Its `containers_list` entry is in `cluster/services.yml`. A rebuilt cluster
+  gets it from the `longhorn` Kustomization at step 6 of `docs/flux-deploy-plane.md`'s
+  *Bootstrapping Flux on a rebuilt cluster*. The `longhorn-backup` Kustomization depends on it and
+  creates the backup targets once it reads `Ready`.
 - **The workloads are `files/upstream/longhorn.yaml`**, upstream's file byte for byte, pinned by
   `k3s_longhorn_version` and the `longhorn_vendored_manifests` item in `defaults/main.yml`.
   `scripts/dev/vendor_manifest.py` checks the pin and refreshes the copy. The refresh command
-  sits above the pin. No render may fetch a URL (D5, C1).
-- **Merging a bump of `k3s_longhorn_version` is the upgrade** (H1 Open question 6). `land.sh`
+  sits above the pin. No render may fetch a URL.
+- **Merging a bump of `k3s_longhorn_version` is the upgrade.** `land.sh`
   runs the `longhorn-upgrade` gates before it merges, Longhorn supports no downgrade and one
   minor per hop, so read `docs/longhorn-upgrade.md` before you bump the pin.
-- **Six patches change upstream objects**, all under `files/patches/`. The renderer lists them
+- **Nine patches change upstream objects**, all under `files/patches/`. The renderer lists them
   as the Kustomization's `patches:`, and each names its target by kind, name and namespace.
     - `longhorn-manager.yaml` adds a memory request and no limit to the manager container.
       A kustomize patch is copied verbatim and cannot read a variable, so
@@ -36,6 +36,16 @@ host probes stay green.
       and `::test_global_manager_patch_holds_the_replicas_of_the_defaults_key` hold the
       literals equal to `k3s_longhorn_global_manager_memory_request` and
       `k3s_longhorn_global_manager_replicas`.
+    - `longhorn-ui.yaml`, `longhorn-driver-deployer.yaml` and `longhorn-manager-pre-pull.yaml`
+      give requests and limits to the four containers upstream ships with no `resources`:
+      longhorn-ui, longhorn-driver-deployer, its `wait-longhorn-manager` init container, and the
+      manager DaemonSet's `pre-pull-share-manager-image` sidecar (#8326, #8543). None of them
+      sits in the storage data path, so unlike the manager they take a limit. The sidecar has
+      its own file because `longhorn-manager.yaml` names only the manager container.
+      `tests/longhorn/test_longhorn_control_plane_resources.py::test_unsized_upstream_containers_get_the_defaults_requests_and_limits`
+      holds each block equal to its `k3s_longhorn_*_resources` key in `defaults/main.yml`, and
+      `tests/longhorn/test_longhorn_control_plane_resources.py::test_no_vendored_longhorn_workload_runs_besteffort`
+      fails a render that leaves any upstream Deployment or DaemonSet without a request.
     - `longhorn-manager-update-strategy.yaml` rolls the manager DaemonSet one pod at a time
       instead of upstream's `maxUnavailable: 100%` (#6009). The manager pods serve the
       admission webhook every claim's dry run calls, so one pod keeps serving it through a
@@ -58,7 +68,7 @@ host probes stay green.
       `tests/longhorn/test_longhorn_csi_secret_grant.py::test_the_patched_render_is_clean`
       fails a render in which the account still reads Secrets cluster-wide. Under
       `prune: false` the live objects stay until the operator deletes them (**operator-only**).
-- **Three templates hold the Settings, the no-backup class and the metrics policy** (H1.5b).
+- **Three templates hold the Settings, the no-backup class and the metrics policy.**
     - `templates/settings.yaml.j2` renders the eight `Setting` objects, each from one
       `k3s_longhorn_*` key in `defaults/main.yml`. Flux owns each Setting's `value`. longhorn-manager keeps its own
       annotation and status on the object, and the render declares neither, so Flux never takes
@@ -76,15 +86,25 @@ host probes stay green.
   holds the shape of all three Settings, and
   `tests/longhorn/test_snapshot_data_integrity_patch_is_a_json_map.py::test_a_bare_string_value_is_flagged`
   is its red half.
-- **The CSI sidecars' memory request is a Setting, not a patch** (#5958).
+- **The CSI components' memory requests are a Setting, not a patch** (#5958, #8326).
   `system-managed-csi-components-resource-limits` carries
   `k8s/roles/longhorn/defaults/main.yml:k3s_longhorn_csi_sidecar_memory_request` for
-  `csi-attacher`, `csi-provisioner`, `csi-resizer` and `csi-snapshotter`. longhorn-manager
-  treats the Setting as the only source of those four containers' `resources` and clears
-  anything else hourly, so a second writer makes each Deployment roll on every tick. The value
-  names those four components with a `requests` block alone.
-  `tests/longhorn/test_longhorn_control_plane_resources.py::test_the_csi_setting_requests_the_defaults_value_for_the_four_sidecars_only`
+  `csi-attacher`, `csi-provisioner`, `csi-resizer` and `csi-snapshotter`,
+  `k8s/roles/longhorn/defaults/main.yml:k3s_longhorn_csi_plugin_memory_request` for the
+  `longhorn-csi-plugin` container, and
+  `k8s/roles/longhorn/defaults/main.yml:k3s_longhorn_csi_node_sidecar_memory_request` for
+  `node-driver-registrar` and `longhorn-liveness-probe`. The driver deployer creates those
+  objects at runtime, so no patch can reach them. longhorn-manager treats the Setting as the
+  only source of those containers' `resources` and clears anything else hourly, so a second
+  writer makes each object roll on every tick. Each entry is a `requests` block alone.
+  Changing a plugin value rolls the plugin DaemonSet one pod at a time, and RWX shares stay
+  mounted through it; the comment above the plugin key has the evidence.
+  `tests/longhorn/test_longhorn_control_plane_resources.py::test_the_csi_setting_requests_the_defaults_values_for_every_csi_component`
   holds the shape.
+- **Two kinds of Longhorn pod stay BestEffort, because Longhorn offers no knob for them.**
+  longhorn-manager builds the engine-image DaemonSet with no `resources` and no setting that
+  sets them (#8500). The backup and trim Job pods are short-lived, and the RecurringJob
+  controller builds their CronJobs with no `resources` either.
 - **The engine-upgrade limit stays above 0.** Upstream ships `0`, which leaves engines on the old
   image after an upgrade, and this repo sets `3`.
   `tests/longhorn/test_engine_upgrade_limit_is_positive.py::test_a_zero_limit_is_flagged`
@@ -100,10 +120,10 @@ host probes stay green.
   in `defaults/main.yml`). A render that dropped a CRD would make Flux delete every Volume of
   its kind. The cost: an object removed from the render, or retired by a later release, stays
   live until the operator deletes it (**operator-only**).
-- **A StorageClass whose parameters change needs an operator delete.** StorageClass parameters
-  are immutable, and the Ansible task that deleted the class when its parameters differed is
-  gone. If the manager does not replace a class whose ConfigMap changed, the fix is an
-  **operator-only** delete of the class, which the manager recreates from the ConfigMap.
+- **A StorageClass whose parameters change needs an operator delete.** StorageClass parameters are
+  immutable, and no automation deletes the class when its parameters differ. If the manager does not
+  replace a class whose ConfigMap changed, the fix is an **operator-only** delete of the class,
+  which the manager recreates from the ConfigMap.
 - **`manifests_rollout_timeout` is `10m`** (`defaults/main.yml`). The DaemonSet rolls one
   pod at a time, so a roll is two pod starts in sequence. Both pods restarting at once with the
   image cached measured 36s on 2026-10-22 (#5922), which is one pod's start. A version bump also cold-pulls the image on each node in turn,
