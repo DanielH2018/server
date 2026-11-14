@@ -39,12 +39,14 @@ def test_the_service_runs_sync_board_as_sys_user_in_the_primary_checkout(package
     user = render_context(None, "daniel-box", inventory=REPO_INVENTORY)["sys_user"]
     unit = _text(package, "homelab-board-sync.service")
     assert f"User={user}\n" in unit
-    assert f"WorkingDirectory=/home/{user}/server\n" in unit
+    assert "StateDirectory=homelab-board-sync\n" in unit
+    assert "ExecStart=/usr/lib/homelab/board-sync\n" in unit
+    script = package.files["/usr/lib/homelab/board-sync"][0].decode()
+    assert f"cd /home/{user}/server ||" in script
     assert (
-        f"ExecStart=/home/{user}/.local/bin/uv run --quiet python "
+        f"/home/{user}/.local/bin/uv run --quiet python "
         "scripts/dev/findings.py sync-board\n"
-    ) in unit
-    assert "--dry-run" not in unit
+    ) in script
 
 
 def test_a_failed_run_pages_and_the_service_loads_no_credential(package):

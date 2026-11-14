@@ -23,15 +23,18 @@
 #   limit, and reconcile's `hold_sha` holds a package that would change the unit.
 # - Required evidence, every run: the count line `<n> issues: <x> updated, <y> unchanged, <z>
 #   failed` in the journal under `board-sync`, then one line per item it changed or could not
-#   change. A failed item exits 1, and OnFailure= pages Discord through homelab-alert.
+#   change. A failed run adds `status=degraded <n> consecutive failed runs`. The third failed run
+#   in a row exits 1, and OnFailure= pages Discord through homelab-alert, then every 24th after
+#   it: a failure that lasts pages once a day, and one the next run clears pages never.
 # - Next-run review: a page names homelab-board-sync.service. Read `journalctl -t board-sync`.
 #   A `board has no "<field>" field` or `has no option` line means the board's schema moved, and
-#   recurs every hour until the board or board.py changes. Any other reason is gh or GitHub, and
-#   the next run retries it.
+#   recurs every hour until the board or board.py changes. Any other reason is gh or GitHub.
 #
 # ENFORCED: hosts/lib/tests/test_board_sync_component.py, which renders the package and holds the
-# unit, the timer, its enable link and this contract.
+# unit, the timer, its enable link and this contract, and hosts/tests/test_board_sync_paging.py,
+# which runs the rendered script through a failure streak.
 files:
+  - {src: templates/board-sync.sh.j2, dst: /usr/lib/homelab/board-sync, mode: "0755"}
   - {src: units/homelab-board-sync.service.j2, dst: /usr/lib/systemd/system/homelab-board-sync.service}
   - {src: units/homelab-board-sync.timer, dst: /usr/lib/systemd/system/homelab-board-sync.timer}
 enable:
