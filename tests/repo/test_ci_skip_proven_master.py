@@ -21,6 +21,7 @@ import subprocess
 
 import pytest
 from _helpers import REPO
+import tested_tree
 from lib import yaml_fast
 from lib.proc_testing import fake_bin, path_with
 
@@ -101,6 +102,7 @@ def test_pr_runs_do_not_scope_the_hooks():
 
 LABELLED = "contains(github.event.pull_request.labels.*.name, 'landing-batch')"
 SAME_REPO = "github.event.pull_request.head.repo.full_name == github.repository"
+QUEUE_BRANCH = "startsWith(github.head_ref, 'queue/')"
 
 
 def _evaluate(condition: str, event: str, **facts: object) -> bool:
@@ -110,6 +112,7 @@ def _evaluate(condition: str, event: str, **facts: object) -> bool:
         .replace(LABELLED, str(facts.get("labelled", False)))
         .replace(DRAFT_ARM, str(not facts.get("draft", False)))
         .replace(SAME_REPO, str(facts.get("same_repo", True)))
+        .replace(QUEUE_BRANCH, str(facts.get("queue", False)))
         .replace("needs.prove.result", repr(facts.get("prove", "skipped")))
         .replace("needs.prove.outputs.proven", repr(facts.get("proven", "")))
         .replace("github.event_name", repr(event))
@@ -326,6 +329,69 @@ def test_a_run_records_the_tree_it_tested_unless_it_was_proven(event, facts, rec
     steps = {s["name"]: s for s in _jobs()["prek"]["steps"] if "name" in s}
     condition = steps["Record the tested tree on the PR head"]["if"]
     assert _evaluate(condition, event, **facts) is records
+
+
+BATCH_STEPS = (
+    "Check out the batch's history",
+    "Record the tested tree on each batch member's head",
+)
+
+
+@pytest.mark.parametrize(
+    ("event", "facts", "records"),
+    [
+        ("pull_request", {"queue": True}, True),
+        ("pull_request", {}, False),
+        # A fork's run has a read-only token, and its code must not hold a writing one.
+        ("pull_request", {"queue": True, "same_repo": False}, False),
+        ("pull_request", {"queue": True, "prove": "success", "proven": "true"}, False),
+        ("push", {"queue": True}, False),
+    ],
+    ids=["batch", "ordinary", "fork", "proven", "push"],
+)
+def test_only_a_batch_run_of_this_repository_records_its_members(event, facts, records):
+    steps = {s["name"]: s for s in _jobs()["prek"]["steps"] if "name" in s}
+    for name in BATCH_STEPS:
+        assert _evaluate(steps[name]["if"], event, **facts) is records, name
+        # A batch whose trees are not recorded lands one at a time; it must not go red, and
+        # a step that hangs must end before the gate's own timeout cancels the gate.
+        assert steps[name]["continue-on-error"] is True, name
+        assert steps[name]["timeout-minutes"] < _jobs()["prek"]["timeout-minutes"], name
+
+
+def test_a_batch_run_hands_the_gate_its_base_and_tree_and_the_body_as_data(tmp_path):
+    steps = {s["name"]: s for s in _jobs()["prek"]["steps"] if "name" in s}
+    checkout, record = (steps[name] for name in BATCH_STEPS)
+    # A merge needs each head's merge base, and no credential stays in the checkout.
+    assert checkout["with"]["fetch-depth"] == 0
+    assert checkout["with"]["persist-credentials"] is False
+    # The body is free text: it reaches the script in the environment, never in the script.
+    assert (
+        record["env"][tested_tree.BODY_ENV] == "${{ github.event.pull_request.body }}"
+    )
+    assert "github.event" not in record["run"]
+    assert record["env"]["GITHUB_TOKEN"] == "${{ github.token }}"
+    # The readers accept a record only when it points at this run, as the PR's own does.
+    own = steps["Record the tested tree on the PR head"]
+    assert record["env"]["RUN_URL"] == own["env"]["RUN_URL"]
+    seen = tmp_path / "argv"
+    stubs = fake_bin(
+        tmp_path / "bin",
+        git='#!/usr/bin/env bash\necho "git:$2"\n',
+        python3=f"#!/usr/bin/env bash\nprintf '%s\\n' \"$@\" > {seen}\n",
+    )
+    # The step's own variables and the two the runner sets: the script runs under `set -u`.
+    env = {name: f"${name}" for name in record["env"]} | {
+        "PATH": path_with(stubs),
+        "GITHUB_REPOSITORY": "o/r",
+        "GITHUB_SHA": "merge",
+    }
+    subprocess.run(["bash", "-c", record["run"]], env=env, timeout=30, check=True)
+    assert seen.read_text().split() == [
+        *["scripts/dev/tested_tree.py", "record-batch", "--repo", "o/r"],
+        *["--base", "git:merge^1", "--tested-tree", "git:merge^{tree}"],
+        *["--run-url", "$RUN_URL"],
+    ]
 
 
 def _gate_exit(prove: str, proven: str, results: dict[str, str]) -> int:

@@ -359,16 +359,24 @@ def not_found_homelab_units() -> set[str]:
     }
 
 
-def stop(unit: str) -> bool:
-    result = systemctl("stop", unit)
-    if result.returncode not in (0, NOT_LOADED):
-        log(f"stop {unit} failed: {result.stderr.strip()}", ERR)
-        return False
-    systemctl(
-        "reset-failed", unit
-    )  # a unit that is not failed makes this fail harmlessly
-    log(f"stopped {unit}")
-    return True
+def stop(units: list[str]) -> set[str]:
+    """Stop each unit, then clear the failed state of every stopped one in one `reset-failed`.
+
+    Return the units whose stop failed. `reset-failed` carries on past a name that is not loaded
+    or not failed and then exits 1, so its result is not read.
+    """
+    stopped, failed = [], set()
+    for unit in units:
+        result = systemctl("stop", unit)
+        if result.returncode in (0, NOT_LOADED):
+            log(f"stopped {unit}")
+            stopped.append(unit)
+        else:
+            log(f"stop {unit} failed: {result.stderr.strip()}", ERR)
+            failed.add(unit)
+    if stopped:  # with no name, reset-failed clears every failed unit on the host
+        systemctl("reset-failed", *stopped)
+    return failed
 
 
 # Legacy entries (H3, *The host handoff rule*).
@@ -555,10 +563,10 @@ def retire_unit(unit: str) -> bool:
         if systemctl("disable", unit).returncode != 0:
             log(f"disable {unit} failed", ERR)
             return False
-        if not (template or stop(unit)) or not retire_path(path):
+        if (not template and stop([unit])) or not retire_path(path):
             return False
         return systemctl("daemon-reload").returncode == 0
-    return template or stop(unit)
+    return template or not stop([unit])
 
 
 def legacy_path(entry: dict) -> Path:
@@ -707,9 +715,10 @@ def bring_up(
         log(f"{verb} {unit} skipped: {', '.join(missing)} does not exist yet")
         update_pending({unit}, set())
         return False
-    systemctl(
-        "reset-failed", unit
-    )  # clears the start limit; harmless on a unit that is not failed
+    # DECIDED: one reset-failed per unit, just before its own call, not one for the whole step
+    # (#8670). A unit crash-looping on its old config hits its start limit again within a
+    # second of a batched reset, and its own restart is then refused.
+    systemctl("reset-failed", unit)
     started[unit] = int(time.time())
     if systemctl(verb, unit).returncode != 0:
         log(f"{verb} {unit} failed", ERR)
@@ -757,9 +766,7 @@ def act(manifest: dict, prev: dict) -> tuple[bool, dict]:
     dropped = {u for u in set(prev_units) - set(units) if is_homelab(u)}
     unlinked = {u for u in prev_links - links if is_homelab(u) and u.endswith(".timer")}
     stopping = dropped | unlinked | not_found_homelab_units()
-    for unit in sorted(stopping):
-        if stop(unit):
-            continue
+    for unit in stop(sorted(stopping)):
         ok = False
         if unit in prev_units and unit not in units:
             units_state[unit] = prev_units[unit]
@@ -914,10 +921,12 @@ def act(manifest: dict, prev: dict) -> tuple[bool, dict]:
         manifest["handoffs"], start_failed | failed | activation_failed
     )
     removed = False
+    asked = {e.get("unit", "") for e in plain if legacy_key(e) not in prev_retired}
+    live = {} if waiting else unit_states(asked)
     for entry in plain:
         key = legacy_key(entry)
         # A running service is never stopped to retire it: the entry stays and counts as drift.
-        if key not in prev_retired and not waiting and running_service(entry):
+        if key not in prev_retired and not waiting and running_service(entry, live):
             drift["legacy"] += 1
             log(f"keeping {key}: the service is running, so it retires once it is not")
         elif key in prev_retired:
@@ -987,10 +996,12 @@ def run_arms(names: list, manifest: dict, prev: dict, arms: dict, drift: dict) -
     return ok
 
 
-def running_service(entry: dict) -> bool:
+def running_service(entry: dict, states: dict) -> bool:
     """True for a legacy entry that names a service systemd is running or starting.
 
-    For a template service, true while any of its instances is.
+    For a template service, true while any of its instances is. Any other service is looked up
+    in `states`, read after step 4b's restarts, and one systemctl would not answer for counts as
+    running, so it stays.
     """
     unit = entry.get("unit", "")
     if not unit.endswith(".service"):
@@ -1002,7 +1013,8 @@ def running_service(entry: dict) -> bool:
             f"--state={','.join(sorted(activate.RUNNING))}", instances,
         )  # fmt: skip
         return listed.returncode != 0 or bool(listed.stdout.strip())
-    return systemctl("is-active", unit).stdout.strip() in activate.RUNNING
+    active = states.get(unit, {}).get("ActiveState")
+    return active is None or active in activate.RUNNING
 
 
 def left_alone(unit: str, units: dict, links: set, manual: set, states: dict) -> bool:

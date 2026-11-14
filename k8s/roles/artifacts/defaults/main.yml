@@ -44,6 +44,12 @@ artifacts_host_dir: /home/ubuntu/.claude/artifacts
 # group grant on the directory (2750 claude:ubuntu, default ACL g:ubuntu:rX), not through
 # DAC_OVERRIDE. This role does not create the directory; hosts/components/claude-code/ does.
 artifacts_agent_dir: "{{ '/var/lib/claude/.claude/artifacts' if (claude_code_agent_user_enabled | default(false) | bool) else '' }}"
+# The triage controller's report tree (guardrails plan B2): claude-triage-ctl writes a report
+# per episode there, apart from the agent's own tree, so a session as `claude` can neither fake
+# nor redirect one. The index lists it as `<artifacts_k8s_node>-claude-triage`. Empty means no
+# mount. It equals report_dir in hosts/components/claude-code/templates/claude-triage-pins.j2,
+# whose tmpfiles entry creates it (2750 claude-triage-ctl:ubuntu); this role does not.
+artifacts_triage_dir: "{{ '/var/lib/claude-triage-ctl/reports' if (claude_code_triage_enabled | default(false) | bool) else '' }}"
 # Where daniel-box holds the other hosts' copies: one subdirectory per host, which becomes
 # the /a/<host>/ path segment the index and the GUI filter on. hosts/components/claude-code/'s
 # peer sync writes them, from its twin claude_code_artifacts_peer_dir.

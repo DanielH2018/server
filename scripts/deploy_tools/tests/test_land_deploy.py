@@ -9,6 +9,8 @@ from _land_fakes import MERGE_SHA, PRIMARY, Fakes
 from deploy_tools.land_lib import deploy
 from deploy_tools.land_lib.outcome import Outcome
 from deploy_tools.land_lib.landing import Classification
+from deploy_tools.land_lib.tools import Classifier
+from lib.git_testing import commit, git, init_repo
 
 
 def _ready(landing, fakes=None, **opts):
@@ -42,8 +44,32 @@ def test_the_diff_fallback_derives_from_since_to_the_merge_in_the_primary_checko
     ln.needs_diff = True
     deploy.derive_from_diff(ln)
     assert ln.resolved_tags == ["sonarr"]
-    diff = ("diff", "--name-only", f"abc..{MERGE_SHA}")
+    diff = ("diff", "--no-renames", "--name-only", f"abc..{MERGE_SHA}")
     assert ("git", diff, {"cwd": PRIMARY}) in calls
+
+
+def test_a_role_to_role_move_derives_the_tag_of_the_role_that_lost_the_file(
+    landing, tmp_path
+):
+    repo = init_repo(tmp_path / "repo")
+    body = "".join(f"line {i}\n" for i in range(30))
+    base = commit(repo, "base", **{"k8s/roles/sonarr/files/script.sh": body})
+    (repo / "k8s/roles/radarr/files").mkdir(parents=True)
+    git(
+        repo,
+        "mv",
+        "k8s/roles/sonarr/files/script.sh",
+        "k8s/roles/radarr/files/script.sh",
+    )
+    git(repo, "commit", "-q", "-m", "move", "--no-gpg-sign")
+    ln, _ = _ready(landing, Fakes(), since=base)
+    ln.merge_sha = "HEAD"
+    ln.classifier = Classifier()
+    ln.classification = Classification(declared=frozenset({"sonarr", "radarr"}))
+    ln.git = lambda *args: git(repo, *args, check=False)
+    ln.needs_diff = True
+    deploy.derive_from_diff(ln)
+    assert ln.resolved_tags == ["radarr", "sonarr"]
 
 
 def test_a_diff_that_fails_ends_the_landing_naming_the_range(landing):

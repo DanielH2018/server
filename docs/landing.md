@@ -214,6 +214,12 @@ jobs. `LAND_QUEUE=0` turns the turn off for one landing.
   a push, and the run it starts tests the master of the turn.
 - A landing that stood in line reads its PR again before it acts, because the PR may have
   moved or merged in the meantime.
+- A landing that waits with a draft that has had no CI run stands in the line for the turn:
+  a file named for its PR in `/run/lock/homelab-land-line` on daniel-box, holding the head
+  it would test (`land_lib/line.py`). The holder of the turn reads the line to test those
+  drafts with its own, which is slice B3 of [CI throughput](ci-throughput.md). A landing
+  whose place reads `merged` stops waiting, because the holder merged its PR. The line is
+  no gate: a landing that cannot reach it waits for the turn without it.
 - A head with a run that ran jobs keeps it, finished or not, and the stale-base rules above
   judge it once it is green. An update those rules make then runs inside the turn. A head the landing policy admitted on an approval is never
   updated, because the update voids the approval. An update that GitHub refuses does not

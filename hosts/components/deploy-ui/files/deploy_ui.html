@@ -143,8 +143,16 @@ document.getElementById('logbody').addEventListener('scroll',e=>{const b=e.targe
 const GAME_TONE={running:'clear',starting:'warn-text',stopping:'warn-text',partial:'warn-text',stopped:'mute',missing:'unavail'};
 const up=t=>ago(t).replace(' ago','');
 function podNote(p){return `<span class="mute">${esc(p.phase)}${p.started?', up '+up(p.started):''}${p.restarts?`, ${p.restarts} restarts`:''}</span>`;}
+// A game's controls: start while stopped, stop and restart otherwise. A refused start shows its
+// reason in place of the start and restart buttons; stop stays, so a refusal never strands a game.
+function gameAct(name,action){if(confirm(`${action} ${name}?`))post('/api/game',{game:name,action});}
+function gameControls(g){if(g.state==='missing')return '';
+  const btn=(action,cls)=>`<button class="${cls}" onclick="gameAct('${esc(g.name)}','${action}')">${action}</button>`;
+  const up=g.state!=='stopped';
+  const go=g.start_refused?`<span class="mute" title="${esc(g.start_refused)}">start refused: ${esc(g.start_refused)}</span>`:(up?btn('restart','warn'):btn('start',''));
+  return [go,up?btn('stop','danger'):''].filter(Boolean).join(' ');}
 function gameServers(b){if(!b.games.length)return '<p class="mute">no game servers registered</p>';
-  return '<table><tr><th>game</th><th>state</th><th>deployments (ready/desired)</th><th></th></tr>'+b.games.map(g=>`<tr><td>${esc(g.name)}</td><td class="${GAME_TONE[g.state]||''}">${esc(g.state)}</td><td>${g.deployments.map(d=>`<code>${esc(d.name)}</code> ${d.missing?'<span class="unavail">missing</span>':`${d.ready}/${d.desired} `+d.pods.map(podNote).join(' ')}`).join('<br>')}</td><td><button class="plain" onclick="openConsole('${esc(g.name)}')">console</button></td></tr>`).join('')+'</table>';}
+  return '<table><tr><th>game</th><th>state</th><th>deployments (ready/desired)</th><th></th></tr>'+b.games.map(g=>`<tr><td>${esc(g.name)}</td><td class="${GAME_TONE[g.state]||''}">${esc(g.state)}</td><td>${g.deployments.map(d=>`<code>${esc(d.name)}</code> ${d.missing?'<span class="unavail">missing</span>':`${d.ready}/${d.desired} `+d.pods.map(podNote).join(' ')}`).join('<br>')}</td><td>${gameControls(g)} <button class="plain" onclick="openConsole('${esc(g.name)}')">console</button></td></tr>`).join('')+'</table>';}
 let consoleGame=null;
 function openConsole(name){consoleGame=name;document.getElementById('console').hidden=false;pollConsole();document.getElementById('console').scrollIntoView({behavior:'smooth'});}
 function closeConsole(){consoleGame=null;document.getElementById('console').hidden=true;}

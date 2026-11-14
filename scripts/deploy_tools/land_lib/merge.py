@@ -103,9 +103,9 @@ DRAFT_SKIPPED_GRACE_S = await_ci.DROPPED_PUSH_GRACE_S
 # A poll that pacing holds sleeps this many merge polls. On 2026-11-11 thirteen landers polling
 # every 30s spent the hourly quota, and a held lander cannot merge sooner for polling sooner.
 HELD_POLL_FACTOR = 4
-# Takes the landing turn (`turn.held`): whether the landing holds it, and the seconds the call
-# waited in line.
-type TakeTurn = Callable[[], tuple[bool, int]]
+# Takes the landing turn (`turn.held`), given the head of a draft that has had no CI run or
+# "": whether the landing holds it, and the seconds the call waited in line.
+type TakeTurn = Callable[[str], tuple[bool, int]]
 
 
 def _reference_is_deliberate(prefix: str) -> bool:
@@ -449,7 +449,7 @@ def _mark_ready(ln: Landing) -> None:
     say(f"PR #{pr} was a draft; marked it ready")
 
 
-def _no_turn() -> tuple[bool, int]:
+def _no_turn(draft: str) -> tuple[bool, int]:
     """`await_merge`'s `take_turn` for a caller that has no landing turn to offer."""
     return False, 0
 
@@ -458,7 +458,8 @@ def _start_run(ln: Landing, take_turn: TakeTurn) -> tuple[str, bool, int]:
     """Give a PR that has had no CI run its one run, unless `LAND_QUEUE=0`.
 
     A head with no CI run that ran jobs takes the landing turn first (`turn.py`), so that the
-    run it is about to get tests the master its merge lands on. A draft is then marked ready,
+    run it is about to get tests the master its merge lands on. A draft stands in the line
+    for the turn while it waits (`line.py`). A draft is then marked ready,
     because a draft's run runs no job and a draft cannot merge. With the turn, the PR's branch
     is updated from master when master is ahead of it. GitHub builds the tree a pull-request
     run tests when the PR's branch is pushed. A ready flip does not build it again: PR #8551
@@ -486,7 +487,7 @@ def _start_run(ln: Landing, take_turn: TakeTurn) -> tuple[str, bool, int]:
         untested = not _ready_run_on(ln, head)
         if not untested or in_turn or queued:
             break
-        in_turn, queued = take_turn()
+        in_turn, queued = take_turn(head if view.get("isDraft") is True else "")
         if not queued:
             break
     if view.get("isDraft") is True:
@@ -670,7 +671,7 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
             if rc == CI_DISARMED and ln.direct_merge_subject:
                 ln.die(disarmed(f" at {head[:8]}", f"PR #{o.pr} not merged"), 1)
             if rc == CI_GREEN and ln.direct_merge_subject and not in_turn:
-                in_turn, in_line = take_turn()
+                in_turn, in_line = take_turn("")
                 if in_line:
                     # The PR may have moved while this landing stood in line, so read it again.
                     queued += in_line
