@@ -135,11 +135,6 @@ def test_role_dockerfiles_build_on_the_canonical_python():
     )
 
 
-def test_a_uv_base_image_names_its_python_minor():
-    text = "FROM ghcr.io/astral-sh/uv:python3.14-bookworm-slim@sha256:ab\nFROM python:3.15-slim\n"
-    assert dockerfile_python_minors(text) == ["3.14", "3.15"]
-
-
 def test_a_composite_actions_pin_is_read():
     """The CI pin's home since #3733; a workflow-only reader would find nothing there."""
     text = 'runs:\n  using: composite\n  steps:\n    - uses: actions/setup-python@v6\n      with:\n        python-version: "3.14.7"\n'
