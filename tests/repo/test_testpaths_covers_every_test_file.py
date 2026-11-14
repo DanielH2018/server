@@ -8,8 +8,8 @@ collects them. There is no error to read, because the suite reports the count it
 reported.
 
 The second guard keeps tests out of the directory holding the code they cover. A role's
-`files/` is what the role ships, and the deployer's test-only path rule
-(`deploy_changes._is_test_only_path`) is a directory check, so tests sit in a sibling `tests/`
+`files/` is what the role ships, and the retired deployer's test-only path
+rule (`deploy_changes._is_test_only_path`) was a directory check, so tests sit in a sibling `tests/`
 directory. `tests/` satisfies the rule by name. `scripts/conftest.py` is the
 one deliberate exception, the shared conftest for the whole `scripts` testpath.
 

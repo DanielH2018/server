@@ -222,7 +222,8 @@ def test_only_the_cap_account_holds_a_role(flipped):
 
 
 def test_the_jobs_read_no_other_roles_file():
-    """The deployer redeploys a role when a file it `lookup()`s in another role changes.
+    """A role's bundle re-renders, and Flux redeploys it, when a file it `lookup()`s in another
+    role changes.
 
     The Jobs take `flux_job_image` and `flux_job_connect` from the renderer, so neither a bump
     of that pin nor an edit to the helper redeploys jellyfin.

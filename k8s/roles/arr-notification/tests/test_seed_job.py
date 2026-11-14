@@ -149,7 +149,7 @@ def test_every_secret_the_job_reads_is_rendered_before_it_runs(flipped, stubs, a
 
 @pytest.mark.parametrize("app", APPS)
 def test_the_seed_job_reads_no_role_but_its_app_and_arr_notification(app):
-    """The deployer's scan routes an arr-notification change to both apps through this lookup."""
+    """`land.sh`'s cross-role scan routes an arr-notification change to both apps through it."""
     text = (K8S_ROLES / app / TEMPLATE).read_text()
     assert set(re.findall(r"\bk8s/roles/([^/'\"]+)/", text)) == {"arr-notification"}
 

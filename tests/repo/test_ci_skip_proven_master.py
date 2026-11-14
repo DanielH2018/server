@@ -7,7 +7,7 @@ WHY THIS IS A TEST. Three properties hold the design together, and each fails si
 - Every job that repeats on a push waits for `prove` and skips only on `proven == 'true'`. A job
   that dropped the condition would run on the proven path and cost what the change saves, and a
   job that dropped `needs: prove` would read an unset output.
-- The `prek` gate, the check-run that the deployer's `ci_verdict` and `await_ci.py` read, passes
+- The `prek` gate, the check-run that `ci_verdict` and `await_ci.py` read, passes
   on the proven path and fails on a skipped job anywhere else. GitHub counts a skipped required
   check as passing, so a gate that accepted `skipped` unconditionally would merge a red-by-skip.
 

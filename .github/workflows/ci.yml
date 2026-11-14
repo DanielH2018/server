@@ -115,7 +115,7 @@ jobs:
   # here is push-only except this job, so there is no push-only job to keep running.
   #
   # The `prek` gate stays green on the proven path because a `skipped` dependency counts as a
-  # pass only when this job succeeded and said `proven=true`. Checkout-sync's CI gate and
+  # pass only when this job succeeded and said `proven=true`. checkout-sync's CI gate and
   # `await_ci.py` read the gate's check-run, and read `skipped` as a pass.
   #
   # A timed-out or failed `prove` falls back to the full sweep (#5783). Each dependent runs when
@@ -1971,9 +1971,9 @@ jobs:
     runs-on: ubuntu-26.04
     needs: [prove, hooks, pr_gates, pytest, deck_mod, lockfile, flux_roundtrip, sops_manifest_type_proof, host_packages_build, host_packages, host_packages_bootstrap, host_tools_arm64]
     # On a draft the gate skips with its dependents. A red gate there would pin the head red
-    # for every reader that takes the worst check run per name (`hosts/lib/ci_verdict.py`), even
+    # for every reader that takes the worst check run per name (`ci_verdict.ci_verdict`), even
     # after the ready run passes. The skipped gate is not a pass: GitHub refuses to merge a
-    # draft, `ci_verdict` (which `land.sh` reads) leaves a skipped gate out, and
+    # draft, `ci_verdict.ci_verdict` (which `land.sh` reads) leaves a skipped gate out, and
     # `review_ci.ready_for_ci` waits for the ready run and turns the PR back into a draft if
     # none starts.
     if: ${{ always() && github.event.pull_request.draft != true }}

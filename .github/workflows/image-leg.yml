@@ -7,7 +7,7 @@ name: image-leg
 #
 # A separate workflow rather than a ci.yml job, on purpose. Every ci.yml job must be read by the
 # `prek` gate (tests/repo/test_every_ci_job_is_gated.py), which would make this one a
-# merge blocker through that required context and add it to checkout-sync's gate lists. The
+# merge blocker through that required context and add it to `ci_required_contexts`. The
 # operator decides later whether this check is required, as image-smoke.yml's is. Until then a
 # red run is visible on the PR and blocks nothing.
 #

@@ -423,8 +423,8 @@ def test_a_ci_dispatch_aimed_at_master_is_denied(command):
     ],
 )
 def test_a_branch_dispatch_and_the_near_misses_stay_clean(command):
-    """CLEAN half: dispatching a branch is the sanctioned form, a branch SHA is not one the
-    deployer walks, and nothing that merely NAMES the command may be denied."""
+    """CLEAN half: dispatching a branch is the sanctioned form, a branch SHA is not one
+    checkout-sync walks, and nothing that merely NAMES the command may be denied."""
     assert _mod.problem(command) is None
 
 

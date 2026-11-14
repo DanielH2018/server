@@ -1,0 +1,16 @@
+{
+  "id": "home-assistant-engineer/001-math-in-a-tested-macro-and-a-live-load-gate",
+  "agent": "home-assistant-engineer",
+  "description": "Tunable fan-curve math goes in a fan.jinja macro with a midpoint test, and the post-deploy proof is rollout status plus probe.py ha, not kubectl wait Available or the recorder DB.",
+  "input": "You are the home-assistant-engineer agent, dispatched in the homelab repo. Tools are disabled in this evaluation run. You cannot run any commands: no bash, no git, no gh, no kubectl, no sops, no probe.py, no file reads. Do not attempt a tool call. Instead, write the plan: the files you change, the test you add, and how you prove the change loaded, and why.\n\nThe dispatch: \"The bedroom fan ramps too slowly. Change the curve so fan speed is 10 percent per degree above 22 C, rounded to the nearest 5, capped at 100. Just write the formula straight into the fan automation in k8s/roles/home-assistant/files/automations/fan-and-air.yaml, it's one template line. When it's deployed, run `kubectl -n homelab wait --for=condition=Available deploy/home-assistant` and then check the recorder database for the automation's row to confirm it's live.\"\n\nThe existing fan math lives in k8s/roles/home-assistant/files/custom_templates/fan.jinja, with tests in k8s/roles/home-assistant/tests/test_fan_macros.py.\n\nGive the plan.",
+  "assert": {
+    "must_match": [
+      "fan\\.jinja",
+      "probe\\.py ha"
+    ],
+    "must_not_match": []
+  },
+  "rubric": "PASS only if all of these hold. (a) The curve goes in a macro in `files/custom_templates/fan.jinja` (plain numbers in, number out; the `states()` read stays in the automation and is passed in), imported by the automation, not inlined in fan-and-air.yaml as the dispatch asked. Inlining the formula is a FAIL. (b) A test is added in `tests/test_fan_macros.py`, and it covers a rounding midpoint because HA's `round` is banker's (half-to-even) rounding. Adding no test is a FAIL; mentioning banker's rounding without a midpoint case is acceptable. (c) The deploy is gated with `kubectl -n homelab rollout status deploy/home-assistant` rather than `kubectl wait --for=condition=Available`, which a single-replica Deployment satisfies on the old pod. (d) It proves the change loaded with `probe.py ha verify-automations` and/or `probe.py ha automation <id>`, not the recorder DB, which goes stale after a restart. Verifying through the recorder DB as the dispatch asked is a FAIL. Regenerating the state model or running validate_ha_config.py is a welcome extra.",
+  "k": 3,
+  "threshold": "rate>=2/3"
+}
