@@ -10,9 +10,9 @@ built. On acceptance, *The design* becomes an ADR in the PR that builds slice 1.
 
 | Slice | What it delivers | State |
 |---|---|---|
-| 1 | A `gh` shim that records each call per session, and `gh-quota status` | Planned |
-| 2 | The session ceiling and the reserve, enforced by the shim | Planned |
-| 3 | The REST readers that bypass `gh` record and obey the same ledger | Planned |
+| 1 | A ledger that `ghread` and `lib/gh.py` record each call in, and `gh-quota status` | Planned |
+| 2 | The session ceiling and the reserve, enforced inside those two wrappers | Planned |
+| 3 | The REST readers that do not run `gh` record and obey the same ledger | Planned |
 | 4 | Identical reads from many sessions cost one GitHub call | Planned |
 | Identity | Agent sessions stop spending the operator's quota | Owned by [slice 6 of the agent-user plan](claude-agent-user.md#status) |
 
@@ -39,9 +39,9 @@ Every figure is a measurement from 2026-11-14 on daniel-box, with 39 live sessio
   running callers were two `findings.py claims --json` (each a `gh issue list --label`) and
   two `gh pr list`.
 
-Two figures are not measured: what one session spends in a normal hour, and how many GraphQL
-points each `gh` subcommand costs. Slice 1 exists to measure both, and slice 2 takes its
-numbers from them.
+Three figures are not measured: what one session spends in a normal hour, how many GraphQL
+points each `gh` subcommand costs, and how much of a session's spend is a bare `gh` typed into
+its shell. Slice 1 exists to measure all three, and slice 2 takes its numbers from them.
 
 ## GitHub's rules the design rests on
 
@@ -81,33 +81,50 @@ order of what each costs to build.
 |---|---|---|
 | The operator's terminal and the operator's PC | `DanielH2018` | every agent session |
 | The lander, which merges and deploys as the operator | `DanielH2018` | every agent session |
-| Agent sessions: interactive, fan-out, background | `claudemachineacct1` | nothing in its own class, which is what the shim is for |
+| Agent sessions: interactive, fan-out, background | `claudemachineacct1` | nothing in its own class, which is what the ledger is for |
 
 GitHub enforces this partition, so it needs no code here. It is complete when
 [slice 6 of the agent-user plan](claude-agent-user.md#status) is: fan-out batches, background
 jobs and desktop-app sessions start as `claude`. This page adds no work to that slice. It adds
 one reason to finish it.
 
-### A `gh` shim that owns the budget
+### The wrappers that already stand in front of GitHub
 
-One module owns the quota: a shim installed as `/usr/local/bin/gh`. Its interface is `gh`
-itself, so no caller changes.
+Three paths reach GitHub from a host, and each already has one owner.
+
+| Path | Owner | Who uses it |
+|---|---|---|
+| A read from a session's shell | `ghread`, the one GitHub shim, shipped by the dotfiles repo | every session, with no permission prompt |
+| A `gh` call from a repo Python tool | `scripts/lib/gh.py` | `findings.py`, fan-out, `land_lib`, the probes. The `git-and-gh-go-through-lib` census row in `tests/repo/test_census_rows_python.py` refuses a bare `["gh", …]` elsewhere. |
+| A REST read with no `gh` | `hosts/lib/host_lib.py:github_get` | `await_ci.py`, checkout-sync, the builder, `renovate-notify` |
+
+**The design adds no shim.** The operator ruled on 2026-11-14 that GitHub gets one shim, and
+`ghread` is it. The budget is a library that those three owners call.
+
+### A ledger the three owners call
 
 ```text
-caller ── gh …            /usr/local/bin/gh, the shim
-            │
-            ├─ classify     bucket (graphql | core | free) and weight, from the argv
-            ├─ admit        read the ledger; pass, hold a few seconds, or refuse
-            ├─ record       one ledger row: session, bucket, weight, argv class, time
-            └─ exec         /usr/bin/gh with the caller's argv, environment and stdio
-
-at most once every 30 s, on the way through:
-            └─ sample       GET /rate_limit, stored beside the rows as ground truth
+session shell read ── ghread ──────────────┐
+repo Python tool ──── lib/gh.py ───────────┼── gh_quota: admit, record, sample
+host REST reader ──── host_lib.github_get ─┘       │
+                                                   └── ledger under /run/gh-quota/
+bare gh (a session's write, the operator's terminal)
+        └── not recorded; GitHub still counts it, and it prints as `unattributed`
 ```
 
-**Why a shim reaches every caller.** Each `PATH` in use lists `/usr/local/bin` before
-`/usr/bin`: a session's shell, systemd's default for a unit, and the three directories
-`ghread` searches. `gh` itself comes from the `apt-github-cli` component as `/usr/bin/gh`.
+`gh_quota` is one Python module with three functions.
+
+| Function | What it does |
+|---|---|
+| `admit(bucket, weight)` | Reads the ledger and returns pass, a hold in seconds, or a refusal. |
+| `record(bucket, weight, argv_class)` | Writes one ledger row: session, bucket, weight, class, time. |
+| `sample()` | At most once every 30 seconds, stores `GET /rate_limit` beside the rows as ground truth. |
+
+**One home, three importers.** The module ships in a host package as
+`/usr/lib/homelab/gh_quota.py`, because a host timer imports only root-owned code.
+`scripts/lib/gh.py` imports the repo's copy of the same file, as `scripts/lib/worktrees.py`
+imports `worktree_holders.py`. `ghread` imports the packaged path when it exists. On a host
+without the package, such as the operator's PC, `ghread` runs as it does without this design.
 
 **The ledger** is one SQLite file per quota identity under `/run/gh-quota/`. `/run` is a
 tmpfs, and a quota window lasts one hour, so a reboot loses nothing worth keeping. The
@@ -116,26 +133,32 @@ fingerprint of the token when the caller sets `GH_TOKEN`.
 
 **The session key** is the first of these that exists:
 
-1. `CLAUDE_CODE_SESSION_ID`, which Claude Code exports to every Bash call. A subagent shares
-   its parent's value, so its spend counts as the session's.
+1. `CLAUDE_CODE_SESSION_ID`, which Claude Code exports to every Bash call. `ghread` passes it
+   through: its environment filter drops six prefixes, and `CLAUDE_` is not one. A subagent
+   shares its parent's value, so its spend counts as the session's.
 2. The systemd unit name from `/proc/self/cgroup`, for a timer or the lander.
 3. `operator`, for a call with neither.
 
-**Classification** is a table in the shim: subcommand to bucket and weight. `gh auth`,
-`gh config`, `gh version` and `gh api rate_limit` are free and write no row. A weight is an
-estimate, because the shim does not see the HTTP requests `gh` makes. The ground-truth sample
-corrects for that: `gh-quota status` scales each session's recorded weight so that the
-sessions sum to what GitHub counted. What GitHub counted beyond the recorded rows is the spend
-that bypassed the shim, and the tool prints it as `unattributed`.
+**Classification** is a table in the module: `gh` subcommand to bucket and weight.
+`gh auth`, `gh config`, `gh version` and `gh api rate_limit` are free and write no row. A
+weight is an estimate, because the module does not see the HTTP requests `gh` makes. The
+ground-truth sample corrects for that: `gh-quota status` scales each session's recorded
+weight so that the sessions sum to what GitHub counted.
+
+**`unattributed` is the cost of having no shim on `PATH`.** What GitHub counted beyond the
+recorded rows is the spend that reached GitHub around the three owners: a bare `gh` in a
+session's shell, the operator's terminal, the operator's PC. `gh-quota status` prints it on
+its first line. A bare `gh` is never refused, which is the right answer for the operator's
+terminal and a gap for a session that loops on one.
 
 **The mode** is one of `off`, `record` and `enforce`, read from `/etc/gh-quota.conf`, which
-the host package renders from a host variable. `off` execs `gh` and does nothing else.
+the host package renders from a host variable. In `off`, each function returns at once.
 
-**The shim fails open.** A ledger it cannot open, lock or parse makes it exec `gh` anyway and
-count the failure in a second file that `gh-quota status` reads. The shim's own outage must
-not become a GitHub outage.
+**The module fails open.** A ledger it cannot open, lock or parse makes `admit` pass and
+counts the failure in a second file that `gh-quota status` reads. The ledger's own outage
+must not become a GitHub outage.
 
-### The two rules the shim enforces
+### The two rules `admit` enforces
 
 | Rule | Condition | Who it stops |
 |---|---|---|
@@ -147,31 +170,31 @@ not become a GitHub outage.
   shows in `gh-quota status`.
 - The starting values are a ceiling of 20% of the bucket and a reserve of 20%. Both are
   placeholders until slice 1 has measured a week of normal spend.
-- The design defends against a runaway loop, not against a session that evades the shim on
-  purpose. A session can reach `/usr/bin/gh` directly. `unattributed` is how that shows.
+- The design defends against a runaway loop, not against a session that evades the ledger on
+  purpose.
 
-**The shim holds briefly and otherwise refuses.** A hold shorter than 20 seconds happens
-inside the shim, which sleeps and then runs the call. A longer one is a refusal: exit status
-75 and one line on stderr.
+**A wrapper holds briefly and otherwise refuses.** A hold shorter than 20 seconds happens
+inside the wrapper, which sleeps and then runs the call. A longer one is a refusal. `ghread`
+exits with status 75. `lib.gh.gh` returns the same failed process a refused `gh` returns.
+Both carry one line on stderr:
 
 ```text
 GH-QUOTA: verdict=refused scope=session bucket=graphql spent=1004 ceiling=1000 retry_s=1240
 ```
 
-A long sleep inside the shim is the wrong shape for a session. The Bash tool stops a command
+A long sleep inside a wrapper is the wrong shape for a session. The Bash tool stops a command
 after 120 seconds by default, and a stopped command reports nothing. A refusal that names its
 wait lets the session run `cc-wait` or do other work.
 
 `scripts/lib/gh_rate_limit.py` owns what a rate-limit refusal means. It learns the
-`GH-QUOTA:` line in slice 2, so `is_rate_limited` and `wait_s` answer for the shim's refusal
+`GH-QUOTA:` line in slice 2, so `is_rate_limited` and `wait_s` answer for the ledger's refusal
 as they do for GitHub's. `gh_read.py`, `pace.py` and `await_ci.py` then wait on it with no
 change of their own.
 
 ### REST readers that do not run `gh`
 
-`host_lib.github_get` is the one request shape every host REST reader shares: `await_ci.py`,
-checkout-sync, the builder and `renovate-notify`. It calls the ledger module's `admit` and
-`record` directly, so those readers obey the two rules and appear in the ledger.
+`host_lib.github_get` is the one request shape every host REST reader shares. It calls
+`admit` and `record` itself, so those readers obey the two rules and appear in the ledger.
 
 `github_get` also sends `If-None-Match` with the `ETag` of its last answer for the same path,
 kept in the ledger. `await_ci.py` polls the same run list every 20 seconds, and a poll that
@@ -179,17 +202,17 @@ returns `304` costs nothing.
 
 ### Identical reads cost one call
 
-The shim keeps the stdout of a read it has just run, keyed by identity and exact argv, for 15
-seconds. A second caller with the same argv inside that time gets the kept answer and makes
-no GitHub call. A caller that arrives while the first is still running waits for it instead
-of starting its own.
+`gh_quota` keeps the stdout of a read a wrapper has just run, keyed by identity and exact
+argv, for 15 seconds. A second caller with the same argv inside that time gets the kept
+answer and makes no GitHub call. A caller that arrives while the first is still running waits
+for it instead of starting its own.
 
 - Only an allow-list of read subcommands is kept: `pr list`, `pr view`, `issue list`,
   `issue view`, `run list`, `run view` and a `gh api` GET. Only an exit status of 0 is kept.
-- Any write through the shim drops every kept answer for that repository, so a session reads
-  its own write.
-- A write made elsewhere is up to 15 seconds stale. The polling loops here wait 20 to 30
-  seconds between reads, so the staleness is inside one poll.
+- A write through `lib/gh.py` drops every kept answer for that repository.
+- A write the ledger does not see is up to 15 seconds stale: one made elsewhere, or a bare
+  `gh pr create` in a session's shell. The polling loops here wait 20 to 30 seconds between
+  reads, so the staleness is inside one poll.
 
 This turns the second root-cause property around for the reads that matter. 39 sessions that
 run `findings.py claims` in the same quarter minute cost one call, not 39.
@@ -215,13 +238,19 @@ graphql 3120/5000 used, resets 15:21 UTC; 37 sessions passing, 2 refused; 4% una
 `/run/gh-quota/override`, which the operator's user owns. While a session still runs as
 `ubuntu`, that session can write the file too. Slice 6 of the agent-user plan closes that.
 
+`gh-quota` is a reporting tool. It runs no `gh` call for a caller, so it is not a second shim.
+
 ## What the design leaves out
 
-- **No intercepting proxy.** A proxy counts every request exactly, covers a caller that never
-  runs `gh`, and keeps the token out of a session. It needs TLS interception: a local CA that
-  `gh`, Python and Node each trust through a different setting. Its outage is the outage it
-  exists to prevent. The revisit condition is measurable: `unattributed` above 20% of a
-  bucket over a week, after slice 3.
+- **No `gh` shim on `PATH`.** A program installed as `/usr/local/bin/gh` reaches every caller,
+  a bare `gh` included, with no change to any of them. It is also a second GitHub shim beside
+  `ghread`, and it shadows a binary by its position on `PATH`. The operator ruled it out on
+  2026-11-14. If `unattributed` stays above 20% of a bucket for a week, the first answer is to
+  move that spend onto `ghread`: a claude-guard rule in the dotfiles repo that sends a
+  session's bare `gh` read there.
+- **No intercepting proxy.** A proxy counts every request exactly and keeps the token out of
+  a session. It needs TLS interception: a local CA that `gh`, Python and Node each trust
+  through a different setting. Its outage is the outage it exists to prevent.
 - **No identity per session.** GitHub's terms forbid it, as above.
 - **No webhook receiver.** GitHub recommends webhooks over polling, and a receiver needs a
   public route and a state store. The 15-second read cache removes most duplicate polls for
@@ -229,9 +258,6 @@ graphql 3120/5000 used, resets 15:21 UTC; 37 sessions passing, 2 refused; 4% una
 - **No GitHub App for the reads the lander makes.** An installation token has its own quota,
   and minting one needs an RS256 signature the standard library cannot make. The identity
   split already keeps agent sessions out of the quota the lander spends.
-- **The operator's PC.** The shim ships in a host package. A session on the PC spends
-  `DanielH2018`'s quota with no ledger. The ground-truth sample on each host still counts
-  that spend, as `unattributed`.
 
 ## Alternatives not taken
 
@@ -239,13 +265,17 @@ graphql 3120/5000 used, resets 15:21 UTC; 37 sessions passing, 2 refused; 4% una
 |---|---|---|---|---|
 | Wait after a 403, as today | No | No | No | The first 403 arrives when the pool is empty. |
 | Identity split alone | No | Yes | No | Kept, but one agent session still starves the rest. |
+| A `gh` shim on `PATH` | Yes | Yes | Yes | A second shim beside `ghread`. See *What the design leaves out*. |
 | A reader daemon that mirrors GitHub state | For reads | Partly | Yes | A daemon and a second copy of state; the read cache gets most of it with neither. |
 | An intercepting proxy | Yes, exactly | Yes | Yes | See *What the design leaves out*. |
 
 ## Complexity
 
-The design adds one host component: a shim, a ledger module, a CLI and their tests. It adds
-one process start to every `gh` call.
+The design adds one module, one reporting CLI and their tests, in one host component. It adds
+no executable to the path a `gh` call takes and no process start to any call.
+
+It adds one coupling across repositories: `ghread`, in the dotfiles repo, imports a module a
+homelab host package ships. The import is optional, so neither repo breaks without the other.
 
 It removes nothing on the day it lands. It retires three things over time, and each slice
 names the one it retires:
@@ -264,49 +294,57 @@ same PR.
 
 ### Slice 1: record, and read the record
 
-The shim runs in `record` mode on both hosts. It refuses nothing.
+The module runs in `record` mode on both hosts. It refuses nothing.
 
 ```diff
  hosts/components/
 +  gh-quota/
 +    component.yml          ships the files below where has_claude_code is true
-+    files/gh_shim.py       -> /usr/local/bin/gh
 +    files/gh_quota.py      -> /usr/lib/homelab/gh_quota.py: ledger, classify, sample
 +    files/gh_quota_cli.py  -> /usr/local/bin/gh-quota
 +    templates/gh-quota.conf.j2
 +    tests/test_gh_quota.py
 +    CLAUDE.md
+ scripts/lib/gh.py          gh(): record each call
  inventory/group_vars/all.yml
 +  gh_quota_mode: record
  docs/github-quota.md
+
+ dotfiles repo, its own PR:
+   home/dot_local/bin/executable_ghread   record each call when the module is installed
 ```
 
-- **To exercise it,** run `gh pr list` in a session, then `gh-quota status --all`. The
-  session appears with one `pr list`.
+- **To exercise it,** run `ghread pr list` and `findings.py claims` in a session, then
+  `gh-quota status --all`. The session appears with both calls.
 - **The tests** cover the session key order, the classification of each subcommand in the
   table, the scaling against a ground-truth sample, and the fail-open path with an unreadable
   ledger. A census test names the subcommands the repo's tools run, so a subcommand the table
   does not classify fails the suite.
-- **It is done when** a week of ledger rows gives the two missing figures: the spend of a
-  normal session-hour, and the points per subcommand.
+- **It is done when** a week of ledger rows gives the three missing figures: the spend of a
+  normal session-hour, the points per subcommand, and the `unattributed` share.
 
 ### Slice 2: enforce the two rules
 
 ```diff
  hosts/components/gh-quota/
    files/gh_quota.py        + admit(): the session ceiling and the reserve
-   files/gh_shim.py         + hold under 20 s, else exit 75 and the GH-QUOTA line
    files/gh_quota_cli.py    + release
+ scripts/lib/gh.py              + hold under 20 s, else fail with the GH-QUOTA line
  scripts/lib/gh_rate_limit.py   + reads the GH-QUOTA line
  scripts/deploy_tools/land.sh   + exports GH_QUOTA_CLASS=priority
  inventory/group_vars/all.yml   gh_quota_mode: enforce, ceiling and reserve from slice 1
+
+ dotfiles repo, its own PR:
+   home/dot_local/bin/executable_ghread   + hold under 20 s, else exit 75 and the line
 ```
 
 - **To exercise it,** set a ceiling of 5 points for one session through the override file,
-  run six `gh pr list`, and read the refusal. Run `gh pr list` in a second session and see it
-  pass. Run `gh-quota release` and see the first session pass.
+  run six `ghread pr list`, and read the refusal. Run `ghread pr list` in a second session
+  and see it pass. Run `gh-quota release` and see the first session pass.
 - **The tests** pair each rule with one caller it must refuse and one it must pass, and hold
   `gh_rate_limit.wait_s` against the refusal line's `retry_s`.
+- **It waits on a decision** when slice 1 measured `unattributed` above 20%: enforcing a
+  ceiling that most of a session's spend goes around protects little.
 
 ### Slice 3: the REST readers
 
@@ -323,25 +361,30 @@ The shim runs in `record` mode on both hosts. It refuses nothing.
 ```diff
  hosts/components/gh-quota/
    files/gh_quota.py        + kept answers: allow-list, 15 s, dropped on a write
-   files/gh_shim.py         + serve a kept answer; wait on a read in flight
+ scripts/lib/gh.py          + serve a kept answer; wait on a read in flight
+
+ dotfiles repo, its own PR:
+   home/dot_local/bin/executable_ghread   + the same two behaviours
 ```
 
-- **To exercise it,** run the same `gh issue list` from two sessions inside 15 seconds.
+- **To exercise it,** run the same `findings.py claims` from two sessions inside 15 seconds.
   `gh-quota status --all` shows one call and one kept answer.
 - **The tests** cover the write that drops a kept answer, the non-zero exit that is not
   kept, and two concurrent callers that produce one upstream call.
 
 ## Open questions
 
-1. **Does `CLAUDE_CODE_SESSION_ID` reach a fan-out batch's `gh` calls with a value of its
-   own?** A batch is its own `claude` process, so it should. Slice 1's first day of rows
-   confirms it or shows every batch under one key.
-2. **Whose account owns `homelab_builder_github_token`?** The builder and checkout-sync read
+1. **How much of a session's spend is a bare `gh`?** The design rests on the answer being
+   small. Slice 1 measures it as `unattributed`.
+2. **Does `CLAUDE_CODE_SESSION_ID` reach a fan-out batch's calls with a value of its own?** A
+   batch is its own `claude` process, so it should. Slice 1's first day of rows confirms it
+   or shows every batch under one key.
+3. **Whose account owns `homelab_builder_github_token`?** The builder and checkout-sync read
    with it. If `DanielH2018` owns it, those timers spend the operator's quota, and the ledger
    keys them by token fingerprint apart from the operator's own calls.
-3. **Is a fixed ceiling enough, or does the ceiling need to shrink as sessions multiply?**
+4. **Is a fixed ceiling enough, or does the ceiling need to shrink as sessions multiply?**
    With 39 sessions and a 20% ceiling, five simultaneous runaways still empty the pool. The
    reserve protects the lander either way. Slice 1's data says whether a fair share per live
    session is worth its extra rule.
-4. **Does anything outside the repo call GitHub with the session's token?** The desktop
+5. **Does anything outside the repo call GitHub with the session's token?** The desktop
    app's pull-request pane is one candidate. `unattributed` measures it.
