@@ -401,6 +401,55 @@ ul.services-list:has(> #my-calendar) {
     grid-column: span 5;
     grid-row: span 2;
   }
+
+  /* A TOOL TILE IS DRAWN LIKE A ONE-STAT WIDGET: the header at the top, level with the
+   * Services tiles' names, and the description in a stat-block panel along the bottom. Centred
+   * in the card, the header sat 32px below Sonarr's and left the lower half empty.
+   *
+   * The header row is held at the height a name and description take (3.25rem), so the icon
+   * centres where a widget tile's does, and the name is pinned to its top. The description
+   * leaves that row and is positioned against the card, which is `position: relative`: inset
+   * 0.5rem is the card's `p-1` plus a block's `m-1`, and 2.75rem is a block's height, so the
+   * panel covers the same box as a one-stat widget's block. It stays inside the name anchor,
+   * so the panel is part of the link. The background is block.jsx's
+   * `bg-theme-200/50 dark:bg-theme-900/20`, and the text is a block label's
+   * `font-bold text-xs uppercase`.
+   *
+   * Only at `lg` and up: below it a tool tile is one track tall, and a 44px panel would cover
+   * its name. */
+  #my-calendar ~ li.service[id^="calendar-tool-"] > div.service-card {
+    justify-content: flex-start;
+  }
+
+  #my-calendar ~ li.service[id^="calendar-tool-"] .service-title {
+    min-height: 3.25rem;
+  }
+
+  #my-calendar ~ li.service[id^="calendar-tool-"] .service-title-text {
+    align-items: flex-start;
+  }
+
+  #my-calendar ~ li.service[id^="calendar-tool-"] .service-description {
+    position: absolute;
+    left: 0.5rem;
+    right: 0.5rem;
+    bottom: 0.5rem;
+    height: 2.75rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 0.125rem;
+    background: rgb(var(--color-200) / 0.5);
+    color: inherit;
+    font-weight: 700;
+    font-size: 0.75rem;
+    line-height: 1rem;
+    text-transform: uppercase;
+  }
+
+  .dark #my-calendar ~ li.service[id^="calendar-tool-"] .service-description {
+    background: rgb(var(--color-900) / 0.2);
+  }
 }
 
 /* THE CARD FILLS ITS `<li>`, AND THE `<li>` IS SIZED BY ITS TRACKS. A grid item stretched to its

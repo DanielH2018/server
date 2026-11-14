@@ -368,11 +368,12 @@
         # THE THREE TOOL TILES SIT DIRECTLY UNDER THE CALENDAR, in the Services row the calendar
         # gave up on 2026-11-13. They are link-only like the personal links, but keep their name
         # and description: custom.css.j2 excludes them from the icon-only rules by their `id:`
-        # prefix and spans each across a third of the row. Moved here from `Admin & Tools`,
-        # which leaves that group one row of four.
+        # prefix, spans each across a third of the row, and draws the description as a stat-block
+        # panel so the tile matches the widget tiles beside it. The `-#rrggbb` suffix colours an
+        # `mdi-` icon. Moved here from `Admin & Tools`, which leaves that group one row of four.
         - Deploy:
             id: calendar-tool-deploy
-            icon: mdi-rocket-launch
+            icon: mdi-rocket-launch-#fb923c
             # LAN-only, like longhorn and the traefik dashboard this tile replaced: the queue page
             # starts landings with land.sh, so it is behind Authelia on a name with no public route
             # (hosts/components/deploy-ui/).
@@ -380,12 +381,12 @@
             description: Deploy queue
         - Artifacts:
             id: calendar-tool-artifacts
-            icon: mdi-file-document-multiple
+            icon: mdi-file-document-multiple-#38bdf8
             href: {{ services | homepage_href('artifacts', domain) }}
             description: Generated reports
         - Docs:
             id: calendar-tool-docs
-            icon: mdi-book-open-variant
+            icon: mdi-book-open-variant-#34d399
             href: {{ services | homepage_href('docs', domain) }}
             description: Homelab reference
         # THE PERSONAL LINKS, as SERVICE tiles rather than bookmarks, and that is the only way
