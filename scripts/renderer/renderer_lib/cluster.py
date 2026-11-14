@@ -422,7 +422,7 @@ def render_tag(
     checking = set(precheck_files([tag], roles)[tag])
     # Every Job Flux applies runs `flux_job_image`, a flux role default no other role's
     # context holds. Passing it here keeps a verify template from `lookup()`ing the flux
-    # defaults, which the deployer's cross-role scan would read as the role depending on them.
+    # defaults, which `land.sh`'s cross-role scan would read as the role depending on them.
     # The helper's text comes the same way, so a helper fix does not redeploy every verifying role.
     image = _flux_job_image() if verifying or checking else None
     helper = FLUX_JOB_CONNECT.read_text() if verifying or checking else None

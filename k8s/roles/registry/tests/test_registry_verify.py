@@ -420,7 +420,8 @@ def test_a_policy_only_change_renames_both_jobs(stubs, tmp_path):
 
 
 def test_the_staged_jobs_read_no_other_roles_file():
-    """The deployer redeploys a role when a file it `lookup()`s in another role changes."""
+    """A role's bundle re-renders, and Flux redeploys it, when a file it `lookup()`s in another
+    role changes."""
     staged = sorted((K8S_ROLES / TAG / "templates" / "verify").glob("*.j2"))
     assert [p.name for p in staged] == ["job.yaml.j2", "rbac.yaml.j2"]
     assert [

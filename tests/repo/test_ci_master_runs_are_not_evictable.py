@@ -1,6 +1,6 @@
 """A push to master must land in a concurrency group of its own.
 
-WHY THIS IS A TEST. Every master SHA needs its own CI verdict: the deployer's CI gate and
+WHY THIS IS A TEST. Every master SHA needs its own CI verdict: checkout-sync's CI gate and
 `await_ci.py` read check-runs per commit, and a commit with no verdict reads `cancelled`
 forever, so every landing behind it waits on a later SHA's full sweep instead.
 

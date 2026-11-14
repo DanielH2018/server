@@ -24,8 +24,8 @@ See repo-root `CLAUDE.md` for shared conventions.
   Kustomization depends on it. The Deployment is `Recreate` and the SLZB-06M coordinator
   accepts one client, so a change that rolls the pod drops every Zigbee device from MQTT until
   the new pod connects.
-- **The `zigbee2mqtt-snapshot` Job snapshots `zigbee2mqtt-data` before each revision applies**
-  (D5.2a). The zigbee2mqtt Kustomization depends on `zigbee2mqtt-snapshot`, so a revision
+- **The `zigbee2mqtt-snapshot` Job snapshots `zigbee2mqtt-data` before each revision applies**.
+  The zigbee2mqtt Kustomization depends on `zigbee2mqtt-snapshot`, so a revision
   applies only after the snapshot is ready; `docs/flux-deploy-plane.md` lists the Job's checks.
   A failed revision that changes zigbee2mqtt writes the stateful hold, and `promote` does not
   reset `prod`. A volume revert is not the default answer to that hold here: the coordinator's

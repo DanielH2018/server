@@ -111,6 +111,10 @@ GENERATORS: list[tuple[list[str], str]] = [
         ["scripts/docs/reference/scripts.py", "--out", "docs/reference/scripts.md"],
         "docs/reference/scripts.md",
     ),
+    (
+        ["scripts/docs/reference/size.py", "--out", "docs/reference/size.md"],
+        "docs/reference/size.md",
+    ),
     # A directory, not a page: the fact tables the hand-written pages transclude. Listed
     # after the pages because nothing reads it back, and before the map only so that the
     # markdown outputs sit together in the cron log.

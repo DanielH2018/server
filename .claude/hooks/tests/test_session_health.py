@@ -133,14 +133,14 @@ def test_main_stays_silent_when_no_other_session_is_live(monkeypatch, capsys):
     assert capsys.readouterr().out == ""
 
 
-def test_main_is_clean_when_the_parked_deployer_probe_is_quiet(monkeypatch, capsys):
+def test_main_is_clean_when_the_parked_checkout_probe_is_quiet(monkeypatch, capsys):
     """main() prints nothing when dirty_primary_problems() finds no dirty checkout or park."""
     run_main = _run_main(monkeypatch, '{"source":"startup"}', parked=[])
     assert run_main() == 0
     assert capsys.readouterr().out == ""
 
 
-def test_main_is_flagged_when_the_parked_deployer_probe_reports(monkeypatch, capsys):
+def test_main_is_flagged_when_the_parked_checkout_probe_reports(monkeypatch, capsys):
     """main() prints the banner when dirty_primary_problems() finds a dirty primary checkout.
 
     Paired with the _is_clean case above: this is the RED proof that isolating this seam in
@@ -156,8 +156,8 @@ def test_main_is_flagged_when_the_parked_deployer_probe_reports(monkeypatch, cap
     assert "primary checkout" in capsys.readouterr().out
 
 
-def test_a_deployer_only_banner_names_probe_landing(monkeypatch, capsys):
-    """A banner whose only line is the deployer's prints `probe.py landing` in full (#3936)."""
+def test_a_parked_checkout_only_banner_names_probe_landing(monkeypatch, capsys):
+    """A banner holding only the parked-checkout line prints `probe.py landing` (#3936)."""
     run_main = _run_main(
         monkeypatch,
         '{"source":"startup"}',
@@ -258,7 +258,7 @@ def test_stale_worktree_lines_swallows_a_timeout():
 
 
 # settings.json kills the hook at its `timeout`, and a kill discards whatever Python still
-# buffers — the whole banner, parked-deployer warning included. The worktree read is
+# buffers — the whole banner, parked-checkout warning included. The worktree read is
 # the slow step (it reaches GitHub), so its own cap sits inside that budget. Since #6153 every
 # probe runs before anything prints, under `TOTAL_DEADLINE_S` (test_session_health_deadline.py
 # pins the deadline).
