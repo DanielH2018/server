@@ -62,8 +62,9 @@ KNOWN_JOBS = frozenset(
     }
 )
 
-# The one job that is meant to be skipped on a dispatch: it proves a PUSH's tree, and its
-# absence is what makes every other job run. test_ci_skip_proven_master.py pins its condition.
+# The one job that is meant to be skipped on a dispatch: it proves a push's tree or a labelled
+# PR's head, and its absence is what makes every other job run.
+# test_ci_skip_proven_master.py pins its condition.
 PUSH_ONLY_JOBS = frozenset({"prove"})
 
 # The proof arm of a dependent job's condition. `prove` is skipped on a dispatch, so its output
