@@ -88,6 +88,7 @@ def _container(docs: list[dict]) -> dict:
 
 def test_the_apps_carry_the_same_template():
     """One file, byte for byte, so a fix to one app's seed Job cannot miss another's."""
+    # fact: k8s/roles/arr-notification/CLAUDE.md#The Job form
     assert len({(K8S_ROLES / app / TEMPLATE).read_bytes() for app in APPS}) == 1
 
 
@@ -99,6 +100,7 @@ def test_the_flipped_seed_job_passes_every_job_census_row(flipped, app):
 @pytest.mark.parametrize("app", APPS)
 def test_the_job_declares_what_the_ansible_seed_declares(flipped, app):
     """The non-secret inputs match what the role's defaults declare for the same app."""
+    # fact: k8s/roles/arr-notification/CLAUDE.md#The Job form
     env = {e["name"]: e.get("value") for e in _container(flipped[app])["env"]}
     username = jinja2.Template(DEFAULTS["arr_notification_username"]).render(
         arr_notification_app=app
@@ -118,6 +120,7 @@ def test_the_job_declares_what_the_ansible_seed_declares(flipped, app):
 @pytest.mark.parametrize("app", APPS)
 def test_every_secret_the_job_reads_is_rendered_before_it_runs(flipped, stubs, app):
     """The key from `<app>`'s own render, the webhook from a Secret in `<app>-verify`."""
+    # fact: k8s/roles/arr-notification/CLAUDE.md#The Job form
     refs = {
         (e["name"], ref["name"], ref["key"])
         for e in _container(flipped[app])["env"]
@@ -143,6 +146,7 @@ def test_every_secret_the_job_reads_is_rendered_before_it_runs(flipped, stubs, a
 @pytest.mark.parametrize("app", APPS)
 def test_the_seed_job_reads_no_role_but_its_app_and_arr_notification(app):
     """`land.sh`'s cross-role scan routes an arr-notification change to both apps through it."""
+    # fact: k8s/roles/arr-notification/CLAUDE.md#k8s/arr-notification — the shared *arr Discord Connect declaration
     text = (K8S_ROLES / app / TEMPLATE).read_text()
     assert set(re.findall(r"\bk8s/roles/([^/'\"]+)/", text)) == {"arr-notification"}
 
@@ -185,6 +189,7 @@ def _render_tree_copy(tree, stubs, app: str, rotate: bool) -> list[dict]:
 @pytest.mark.parametrize("app", APPS)
 def test_a_webhook_rotation_alone_renames_the_seed_job(stubs, tmp_path, app):
     """The app stores the URL in its own database, so a rotation must re-run the seed (#8602)."""
+    # fact: k8s/roles/arr-notification/CLAUDE.md#The Job form
     before = _seed(_render_tree_copy(tmp_path / "a", stubs, app, rotate=False))
     after = _seed(_render_tree_copy(tmp_path / "b", stubs, app, rotate=True))
     assert before["spec"] != after["spec"]
@@ -284,6 +289,7 @@ def _unpack(docs: list[dict], directory) -> None:
 def test_lidarr_seeds_over_api_v1_and_only_v1(flipped, tmp_path, served, seeds):
     """Lidarr serves `/api/v1`: a server answering only that path is seeded, one answering only
     sonarr's `/api/v3` is refused, so the script cannot have kept its old hardcoded version."""
+    # fact: k8s/roles/arr-notification/CLAUDE.md#Tests
     _unpack(flipped["lidarr"], tmp_path)
     arr = _Arr([], served)
     try:
@@ -308,6 +314,7 @@ def _drifted(app: str) -> dict:
 @pytest.mark.parametrize("app", APPS)
 def test_a_second_run_changes_nothing(flipped, tmp_path, app, start):
     """`homelab/rerun-safe` names this test: the Job's second run writes nothing."""
+    # fact: k8s/roles/arr-notification/CLAUDE.md#Tests
     _unpack(flipped[app], tmp_path)
     arr = _Arr([] if start == "no-row" else [_drifted(app)], API_VERSIONS[app])
     try:
@@ -358,6 +365,7 @@ def test_the_apps_fence_admits_every_flipped_job(flipped, stubs, app):
     The fence is the NetworkPolicy the tree renders for the app, with the `<app>-verify` peer
     its `netpol_from` lists (#5535).
     """
+    # fact: k8s/roles/arr-notification/CLAUDE.md#The Job form
     (policy,) = [
         doc
         for text in cluster.render_tag(app, stubs).files.values()
