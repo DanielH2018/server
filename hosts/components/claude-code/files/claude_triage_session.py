@@ -99,7 +99,8 @@ def build_argv(cfg: dict[str, str]) -> list[str]:
         cfg.get("MAX_TURNS", "60"),
         "--disallowedTools",
         *DENIED_TOOLS,
-        # Session persistence stays on: the report's resume command needs the transcript.
+        # Session persistence stays on until the session's home is a tmpfs (guardrails plan B2-3),
+        # which exports the transcript instead; the operator ruled out resuming in place.
     ]
 
 

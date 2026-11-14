@@ -2,8 +2,7 @@
 {% import 'templates/claude-triage-pins.j2' as pins with context -%}
 # Shipped by the claude-code host component as /usr/lib/homelab/claude-triage-setup.
 # claude-triage@.service runs it as root through `ExecStartPre=+` before each run, so a pin bump or
-# a rebuilt host converges on the next episode. homelab-claude-triage-setup.service runs it at boot
-# and when it or the session's settings change.
+# a rebuilt host converges on the next episode.
 #
 # Usage: claude-triage-setup [-h|--help]
 # Takes no arguments. Running it by hand as root applies every step below.
@@ -54,6 +53,15 @@ fi
 # group, outside every home the session writes. Copied on every run so a re-issued token reaches it.
 if [[ -f "$operator/.kube/config" ]]; then
   install -o root -g "$session" -m 0640 "$operator/.kube/config" {{ pins.kubeconfig }}
+fi
+
+# The toolchain and the clone change only while no run holds the lock: a refresh under a live
+# session would reset the tree it reads. The runner starts this script before it takes the lock.
+exec 9>>"$state/run.lock"
+chown "$ctl:$ctl" "$state/run.lock"
+if ! flock -n 9; then
+  echo "claude-triage-setup: a run holds the lock; leaving the toolchain and the clone as they are"
+  exit 0
 fi
 
 stage=$(mktemp -d)

@@ -612,7 +612,7 @@ switches it on, and it installs only while `claude_code_agent_user_enabled` is a
   through its group. So no interactive session as `claude` can start a run, plant an episode,
   or change what a run reads. `templates/claude-triage-pins.j2` pins both users and every path.
   `claude-triage-setup`, which the runner runs as root before each run, keeps the controller's
-  toolchain, the clone and its venv current, and copies the operator's read-only kubeconfig to
+  toolchain, the clone and its venv current while no run holds the lock, and copies the operator's read-only kubeconfig to
   `/etc/claude-triage/kubeconfig` for the session.
 - **The unit** `claude-triage@<episode>.service` runs as `claude-triage-ctl`, with the hardening
   the `renovate-agent` unit carries. It reads `<state_dir>/inbox/<episode>.json` and runs

@@ -13,6 +13,9 @@ Type=oneshot
 User={{ pins.session_user }}
 WorkingDirectory={{ pins.clone_dir }}
 Environment=HOME={{ pins.session_home }}
+# systemd sets SHELL from the passwd entry, which is nologin for this user; the Bash tool needs a
+# real shell.
+Environment=SHELL=/bin/bash
 # systemd's PATH is as minimal as cron's: without /usr/local/bin the session loses kubectl and
 # reports an empty cluster rather than failing.
 Environment=PATH={{ pins.tools_dir }}/.local/bin:/usr/local/bin:/usr/bin:/bin
