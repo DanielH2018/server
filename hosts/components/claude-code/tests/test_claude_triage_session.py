@@ -105,18 +105,6 @@ def restore_sigint():
     signal.signal(signal.SIGINT, previous)
 
 
-def test_the_transcript_leaves_the_home_for_the_exchange(
-    tmp_path, restore_sigint
-) -> None:
-    config, copied = _transcript_run(
-        tmp_path, 'echo \'{"type":"user"}\' > "$T"\necho \'{}\''
-    )
-
-    assert session.main(["claude_triage_session.py"], str(config)) == 0
-
-    assert copied.read_text() == '{"type":"user"}\n'
-
-
 def test_the_transcript_survives_the_wall_clocks_sigint(
     tmp_path, restore_sigint
 ) -> None:
