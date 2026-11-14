@@ -8,7 +8,8 @@ The census renders every role and host component with the password set to a sent
 counts the renders that carry it, so a template aliasing the secret through a second variable
 is caught where a scan of template source would miss it (#3183). Beside each plane's manifest
 and config templates it renders every `*.sh.j2` and every k8s `Dockerfile*.j2`, the two
-classes `_k8s_render.render_texts` skips.
+classes `_k8s_render.render_texts` skips, and the Pi's Compose files from its host package, which
+keeps them outside any `templates/` directory.
 
 Run: uv run pytest tests/services/test_nut_fsd_login_confined.py
 """
@@ -18,7 +19,7 @@ from functools import cache
 
 from _k8s_render import render_build_texts
 from _k8s_render import render_texts as k8s_render_texts
-from _setup_render import render_setup_texts
+from _setup_render import PI_COMPOSE, pi_compose_texts, pi_package, render_setup_texts
 from lib.repo_paths import K8S_ROLES
 from validate.setup_templates import COMPONENTS
 from _shell_render import render_shell_texts
@@ -53,7 +54,17 @@ def _roles_naming_the_login() -> set[str]:
         for path in COMPONENTS.glob("*/templates/**/*.j2")
         if "nut_monitor_password" in path.read_text()
     }
-    return roles | components
+    services = COMPONENTS / PI_COMPOSE / "services"
+    compose = {
+        f"components/{PI_COMPOSE}/{path.relative_to(services).parts[0]}"
+        for path in services.glob("*/**/*.j2")
+        if "nut_monitor_password" in path.read_text()
+    } | {
+        f"components/{PI_COMPOSE}"
+        for path in (COMPONENTS / PI_COMPOSE).glob("*.j2")
+        if "nut_monitor_password" in path.read_text()
+    }
+    return roles | components | compose
 
 
 def _roles_rendering(overrides: dict, marker: str) -> set[str]:
@@ -62,6 +73,7 @@ def _roles_rendering(overrides: dict, marker: str) -> set[str]:
         ("k8s", k8s_render_texts(overrides)),
         ("k8s", render_build_texts(overrides)),
         ("components", render_setup_texts(overrides)),
+        ("components", pi_compose_texts(pi_package(), overrides)),
     )
     rendered = {
         f"{plane}/{role}"
@@ -136,6 +148,15 @@ def test_a_k8s_shell_script_naming_nothing_renders_no_sentinel(tmp_path):
     script = _shell_role(tmp_path, "#!/bin/bash\nupsc -p '{{ nut_ha_password }}'\n")
     texts = render_shell_texts({"nut_monitor_password": SENTINEL}, script)
     assert SENTINEL not in texts[0][3]
+
+
+PI_SERVICES = frozenset({"alloy", "autoheal", "docker-proxy", "wg-easy"})
+
+
+def test_the_census_renders_every_pi_compose_service():
+    rendered = {component for component, _, _ in pi_compose_texts(pi_package())}
+    missing = {f"{PI_COMPOSE}/{s}" for s in PI_SERVICES} - rendered
+    assert not missing, f"no census row for: {sorted(missing)}"
 
 
 def test_only_the_shutdown_chain_renders_the_primary_login():
