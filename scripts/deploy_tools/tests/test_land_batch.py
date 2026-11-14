@@ -15,6 +15,7 @@ from _land_batch_fakes import GREEN, OWN, GitHub, head_of
 from _land_fakes import Fakes
 from deploy_tools.land_lib import batch, line, turn
 from deploy_tools.land_lib.outcome import Outcome
+from deploy_tools.land_lib.tools import CiVerdict
 from lib.exit_codes import CI_PENDING, CI_RED
 
 
@@ -410,6 +411,48 @@ def test_a_member_that_was_marked_ready_and_did_not_merge_gets_a_full_run(
     assert "9" not in hub.ever_labelled
     assert _answers(the_line, "7", "9") == ["", ""]
     assert "PR #7 gets a full run" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    ("poll", "merged"),
+    [
+        # The run's three pending polls leave 1340 s of the two 700 s budgets: room for one
+        # member's 600 s, twice over.
+        pytest.param(20, [OWN, "7"], id="room-left"),
+        # They leave 1100 s, which is less than that.
+        pytest.param(100, [OWN], id="budgets-spent"),
+    ],
+)
+def test_the_members_merge_inside_the_landings_two_merge_budgets(
+    batch_of, poll, merged
+):
+    ln, hub, _ = batch_of(
+        drafts=("7",),
+        run=[(CI_PENDING, "pending")] * 3 + [GREEN],
+        opts={"merge_timeout": 700, "merge_poll": poll},
+    )
+    _land(ln)
+    assert hub.merged == merged
+    assert ("7" in hub.ever_labelled) == ("7" in merged)
+
+
+def test_a_slow_member_leaves_no_budget_for_the_one_behind_it(batch_of):
+    ln, hub, _ = batch_of(
+        drafts=("7", "9"), opts={"merge_timeout": 850, "merge_poll": 110}
+    )
+    # PR 7's short run takes five polls, 550 s of the 1700 s the two budgets hold.
+    pending = [CiVerdict(CI_PENDING, "pending")] * 5
+    its_ci = ln.tools.await_ci
+
+    def await_ci(sha, timeout):
+        if sha == head_of("7") and not hub.prs["7"]["isDraft"] and pending:
+            return pending.pop()
+        return its_ci(sha, timeout)
+
+    ln.tools = replace(ln.tools, await_ci=await_ci)
+    _land(ln)
+    assert hub.merged == [OWN, "7"]
+    assert "9" not in hub.ever_labelled
 
 
 def test_a_member_that_stayed_a_draft_only_loses_the_label(batch_of):
