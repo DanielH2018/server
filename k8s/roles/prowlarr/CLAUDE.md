@@ -1,7 +1,8 @@
 # prowlarr — indexer manager for the *arr stack
 
-Prowlarr, with a `flaresolverr` sidecar that solves Cloudflare challenges for the indexers by
-rendering attacker-supplied pages in a headless browser.
+Prowlarr, with a `flaresolverr` Deployment beside it
+(`k8s/roles/prowlarr/templates/deployment-flaresolverr.yaml.j2`) that solves Cloudflare
+challenges for the indexers by rendering attacker-supplied pages in a headless browser.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in k8s/roles/longhorn-reconcile/defaults/main.yml. -->
@@ -79,4 +80,5 @@ rendering attacker-supplied pages in a headless browser.
   rationale, shared across the *arr roles.
 
 ## Editing
-- Manifest: `templates/deployment.yaml.j2`, `templates/deployment-flaresolverr.yaml.j2`
+- Manifest: `k8s/roles/prowlarr/templates/deployment.yaml.j2`,
+  `k8s/roles/prowlarr/templates/deployment-flaresolverr.yaml.j2`
