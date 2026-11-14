@@ -168,8 +168,8 @@ def test_every_authed_service_carries_forward_auth_and_rate_limit():
                 # login portal (use_authelia: false) is the route that needs it most. It
                 # applies to bypass routes too: skipping auth never means skipping this.
                 assert any(m.startswith("rate-limit") for m in middlewares), name
-                # monitoring_route() names its document `<name>-monitoring` and confines it to
-                # the LAN host and a ClientIP set; test_no_monitoring_route_serves_a_bare_path_prefix
+                # A `-monitoring` document (monitoring_route(), prometheus) is a LAN-host,
+                # ClientIP-confined read door; test_no_monitoring_route_serves_a_bare_path_prefix
                 # bounds its path. A ClientIP clause anywhere else exempts nothing.
                 if name.endswith("-monitoring"):
                     continue
