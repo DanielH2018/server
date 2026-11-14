@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/secrets.py
-generated_at: 2026-11-14 06:17 UTC
-generated_sha: ddd758e77
+generated_at: 2026-11-14 23:41 UTC
+generated_sha: dcaefe2d5
 ---
 
 !!! warning "Generated file — do not edit"
@@ -67,6 +67,7 @@ needs a human to mint the new value in the app, then `sops set` it.
 | `flux_github_app_installation_id` | 2026-04-06 | 2027-03-08 | 114 |
 | `flux_github_app_private_key` | 2026-05-21 | 2027-05-18 | 185 |
 | `freshrss_password` | 2026-06-01 | 2027-05-03 | 170 |
+| `games_panel_token` | 2026-11-14 | 2027-11-01 | 352 |
 | `google_assistant_project_id` | 2026-06-25 | 2027-05-31 | 198 |
 | `google_assistant_service_account` | 2025-12-31 | 2026-12-08 | 24 |
 | `grafana_admin_password` | 2026-02-02 | 2027-01-31 | 78 |
@@ -139,7 +140,6 @@ lives in a third-party system; rotate there first.
 | `monitor_bridge_deploy_pipeline_github_token` | 2026-10-11 | 2027-09-22 | 312 |
 | `monitor_discord_webhook_url` | 2026-09-19 | 2027-08-27 | 286 |
 | `mullvad_account` | 2025-11-16 | 2026-10-18 | -27 |
-| `tested_tree_app_private_key` | 2026-11-13 | 2027-11-04 | 355 |
 | `weather_api_key` | 2026-08-30 | 2027-08-04 | 263 |
 | `wifi_password` | 2026-07-20 | 2027-06-24 | 222 |
 | `wireguard_interface_private_key` | 2026-02-09 | 2027-02-06 | 84 |
