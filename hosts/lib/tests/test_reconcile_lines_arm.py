@@ -203,7 +203,7 @@ def test_a_dpkg_error_refuses_every_edit_and_edits_nothing(node):
     result = node.run()
 
     assert result.returncode == 1
-    assert result.stderr.count("dpkg -S failed: dpkg-query: error") == 2
+    assert result.stderr.count("failed: dpkg-query: error") == 2
     assert read(node, SYSCTL) == "a=1\n"
     assert read(node, BLOCK["path"]) == "b=1\n"
 

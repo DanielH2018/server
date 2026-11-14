@@ -76,30 +76,24 @@ def valid(section: object) -> bool:
 
 
 def refusals(paths: list[str]) -> dict[str, str | None]:
-    """Why the arm must not edit each path: None when no package owns it, or owns it as a conffile."""
-    if not paths:
-        return {}
+    """Why the arm must not edit each of `paths`, which must not be empty: see `refusal`."""
     found = run("dpkg", "-S", *paths)
-    if found.returncode not in (0, 1):
-        return {path: f"dpkg -S failed: {found.stderr.strip()}" for path in paths}
     owners: dict[str, set[str]] = {path: set() for path in paths}
     for line in found.stdout.splitlines():
         head, _, tail = line.rpartition(": ")
         if tail in owners and not head.startswith("diversion"):
             owners[tail].update(owner.strip() for owner in head.split(","))
-    unmatched = set(found.stderr.splitlines())
-    result = {}
-    for path in paths:
-        if owners[path]:
-            result[path] = conffile_refusal(path, owners[path])
-        elif f"dpkg-query: no path found matching pattern {path}" in unmatched:
-            result[path] = None
-        else:
-            result[path] = f"dpkg -S {path} failed: {found.stderr.strip()}"
-    return result
+    return {p: refusal(p, owners[p], found.returncode, found.stderr) for p in paths}
 
 
-def conffile_refusal(path: str, owners: set[str]) -> str | None:
+def refusal(path: str, owners: set[str], code: int, stderr: str) -> str | None:
+    """Why the arm must not edit `path`, or None when no package owns it or only a conffile.
+
+    `code` and `stderr` are those of the run's one `dpkg -S`, and `owners` its owners of `path`.
+    """
+    unmatched = f"dpkg-query: no path found matching pattern {path}"
+    if code not in (0, 1) or not (owners or unmatched in stderr.splitlines()):
+        return f"dpkg -S {path} failed: {stderr.strip()}"
     for owner in sorted(owners):
         listed = run("dpkg-query", "-W", "-f", "${Conffiles}\\n", owner).stdout
         if path not in (row.split()[0] for row in listed.splitlines() if row.strip()):
@@ -191,5 +185,6 @@ def apply(edit: dict, problem: str | None) -> bool:
 def reconcile(section: dict | None, prev: dict | None) -> tuple[bool, None, int]:
     """Run the arm. Return whether every edit applied; it keeps no record and counts no drift."""
     edits = section["edits"] if section else []
-    problems = refusals(list(dict.fromkeys(edit["path"] for edit in edits)))
+    paths = list(dict.fromkeys(edit["path"] for edit in edits))
+    problems = refusals(paths) if paths else {}
     return all([apply(edit, problems[edit["path"]]) for edit in edits]), None, 0
