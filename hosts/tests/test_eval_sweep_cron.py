@@ -191,3 +191,26 @@ def test_the_unchanged_arm_scan_rejects_a_laundered_version():
         "fi\n"
     )
     assert not _unchanged_arm_is_safe(laundered)
+
+
+def _no_signal_arm_reports_down(script: str) -> bool:
+    """Whether trend.py's no-signal exit (2) fails closed before anything is staged."""
+    marker = 'if [ "$TREND_RC" -eq 2 ]; then'
+    if marker not in script or "git add evals/history.json" not in script:
+        return False
+    start = script.index(marker)
+    arm = script[start : script.index("\nfi\n", start)]
+    staged_after = script.index("git add evals/history.json") > start
+    return staged_after and "PUSH_STATUS=up" not in arm and "exit 1" in arm
+
+
+def test_a_sweep_with_no_healthy_trial_reports_down():
+    assert _no_signal_arm_reports_down(SCRIPT), (
+        "a sweep where every trial failed before grading measured nothing; it must report "
+        "down and publish no history row (#8535)"
+    )
+
+
+def test_the_no_signal_scan_rejects_a_script_that_publishes_it():
+    """The rejecting half: the 2026-11-10 script went straight from trend.py to `git add`."""
+    assert not _no_signal_arm_reports_down("TREND_RC=$?\ngit add evals/history.json\n")

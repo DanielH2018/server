@@ -84,6 +84,11 @@ uv run python evals/trend.py report.json --no-write                 # report onl
   run, where `costUsd` sums every case report's `costUsd`, so it equals the engine's
   `sweep cost:` line (or the sum of those lines over a multi-agent report). A report with any case
   missing `costUsd`, such as one from before the engine priced its calls, records `null`, not 0.
+- **Refuses a run with no healthy trial in any case**, such as one where the API rejected the
+  key for every trial. Such a run measured nothing, so `trend.py` writes no row, prints the
+  infra reasons and exits 2. The weekly sweep reports that exit as down and publishes nothing.
+  A run where only some cases are INCONCLUSIVE is still recorded, with `thresholdMet: null` on
+  those cases.
 - Exits non-zero if any case **regressed** — usable as a gate. A miss is a regression only when
   the trend can attribute it: the case was **STABLE** before this run, or it also missed the run
   before. At k=3 trials and a 2/3 threshold one unlucky trial is a miss, so a single miss after a
