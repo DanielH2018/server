@@ -1135,6 +1135,7 @@
  "tests/longhorn/test_longhorn_restore_drill_oversize.py": 0.19,
  "tests/longhorn/test_longhorn_restore_drill_retry.py": 0.24,
  "tests/longhorn/test_longhorn_restore_drill_signal_timeout.py": 4.48,
+ "tests/longhorn/test_longhorn_restore_drill_sqlite.py": 1.75,
  "tests/longhorn/test_longhorn_restore_drill_state.py": 0.68,
  "tests/longhorn/test_longhorn_storageclass.py": 0.04,
  "tests/longhorn/test_pvc_sizes_match_block_size.py": 0.05,
