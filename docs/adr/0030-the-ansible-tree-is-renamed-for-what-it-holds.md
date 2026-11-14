@@ -76,6 +76,12 @@ The rename lands in two steps:
    and the readers in step 1 drop their `ansible/` paths in a follow-up, once the moved
    tree's packages are installed.
 
+The follow-up ran in two parts. 83aed3de3 ([#8407](https://github.com/DanielH2018/server/issues/8407)) dropped the
+`ansible/` paths from the installed readers and their tests. The T2 approval floor kept
+`ansible/roles/k8s/homelab-mcp/` while the homelab-mcp pod still mounted the node's `ansible/`
+tree. [#8372](https://github.com/DanielH2018/server/issues/8372) dropped that last entry once [#8409](https://github.com/DanielH2018/server/issues/8409) moved the pod to
+`k8s/`.
+
 ## Consequences
 
 - Between the two steps, the approval list carries entries that match nothing. The list

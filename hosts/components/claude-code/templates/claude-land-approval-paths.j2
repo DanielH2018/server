@@ -48,8 +48,9 @@ hosts/components/claude-code/templates/claude-dotfiles-allowed-signers.j2
 hosts/components/claude-code/files/claude_dotfiles_mirror.py
 # The unattended Renovate agent's grant points (dotfiles#967 slice 1 and B1): the T2 floor, the
 # code that checks a PR against it and the lander unit and rule that land one; the runner that
-# carries out the session's requests and swaps in its read-only token; the token file, the caps,
-# and the component that ships them. The rest of the component stays off.
+# carries out the session's requests and swaps in its read-only token; the token file, the config,
+# the pins that set the caps and permission mode, the prompt, the unit and timer, and the component
+# that ships them. Its defaults, tests and CLAUDE.md stay off.
 hosts/components/renovate-agent/files/t2-approval-floor
 hosts/components/renovate-agent/files/renovate_floor.py
 hosts/components/renovate-agent/files/land_renovate_pr.py
@@ -59,6 +60,10 @@ hosts/components/renovate-agent/files/run_requests.py
 hosts/components/renovate-agent/files/renovate_agent.py
 hosts/components/renovate-agent/templates/session.env.j2
 hosts/components/renovate-agent/templates/config.env.j2
+hosts/components/renovate-agent/templates/renovate-agent-pins.j2
+hosts/components/renovate-agent/templates/prompt.txt.j2
+hosts/components/renovate-agent/templates/homelab-renovate-agent.service.j2
+hosts/components/renovate-agent/templates/homelab-renovate-agent.timer.j2
 hosts/components/renovate-agent/component.yml
 # The landing policy and the code that runs it.
 scripts/deploy_tools/land
@@ -73,11 +78,7 @@ uv.toml
 # sudo, ssh and the operator's own login: the sudo cache, the SSH directory and sshd's AllowGroups.
 hosts/components/host-hardening/
 hosts/components/sshd/
-# The secrets and who can decrypt them. Each entry is listed at its path before and after the
-# rename of ansible/ (ADR 0030), so the installed list holds across the merge. The rename's
-# follow-up removes the ansible/ entries once this list is installed again.
-ansible/.sops.yaml
-ansible/vars/secrets.yml
+# The secrets and who can decrypt them.
 secrets/.sops.yaml
 secrets/secrets.yml
 # The agent's cluster grant (operator decision, 2026-10-16, H1 Open question 7): the read-only
@@ -85,5 +86,4 @@ secrets/secrets.yml
 # k3s-bringup.yml, by hand; once Flux applies cluster-base on merge, this entry is the human
 # gate. A plain prefix, so it holds before H1 creates the role. The trailing slash keeps a
 # sibling such as cluster-baseline off the floor.
-ansible/roles/k8s/cluster-base/
 k8s/roles/cluster-base/

@@ -3,8 +3,9 @@ name: image-smoke
 # Runs on EVERY PR (no `paths:` filter) on purpose: this is a required status check,
 # and a path-filtered workflow that never triggers would leave the PR's required check
 # stuck at "Expected — waiting for status". The job self-scopes instead — the
-# "Collect changed image refs" step diffs only the compose templates, so a PR that
-# touches none yields an empty list and the boot step is skipped (a fast green).
+# "Collect changed image refs" step diffs only the k8s role defaults and group_vars/all.yml,
+# so a PR that changes no image ref there yields an empty list and the boot step is skipped
+# (a fast green).
 #
 # workflow_dispatch takes an explicit list instead of the diff, for two jobs the PR trigger
 # cannot do. It is the only way to exercise a change to the check itself — a PR that edits this
@@ -101,8 +102,10 @@ jobs:
           # already deployed, so this job is the last automated check before it does. Which is why it now covers every ref rather than
           # excluding the ones that cannot boot bare — all 9 roles the old exclusion list
           # touched were denylisted ones.
-          # The ansible/ paths exist only on a base from before the rename; naming them lets
-          # --find-renames pair a moved file, so a move with no pin change selects no image.
+          # smoke_extract.py selects a ref the diff adds only when no removed line carries it, so
+          # a moved or reformatted defaults file with unchanged pins selects no image, whether or
+          # not --find-renames pairs the move. The ansible/ paths exist only on a base from
+          # before the rename; naming them puts that side's removed refs in the diff.
           diff="$(git diff --find-renames "origin/$BASE_REF"...HEAD -- \
             'k8s/roles/*/defaults/main.yml' \
             'inventory/group_vars/all.yml' \

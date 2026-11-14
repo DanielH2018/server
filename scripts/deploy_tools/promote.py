@@ -98,7 +98,8 @@ Exit codes:
       verify: failed, or no verdict. ci-verdict: anything but pass. hold: the record is
       unreadable, or a message was not posted. reset-check: a refusal.
   64  usage error
-  75  land-wait: gave-up, the wait reached its timeout.
+  75  land-wait: gave-up, the wait reached its timeout, or this host has no kubectl or
+      readable kubeconfig.
 
 Every GitHub and GHCR call goes through `forge.py`, and this module starts no subprocess
 (scripts/deploy_tools/tests/test_promote_forge_boundary.py).

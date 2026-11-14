@@ -10,8 +10,9 @@ the template as applied either way:
    without it `claude` is not found — the same trap already recorded for the host crons.
 3. The arming switch must be wired in BOTH directions. An `enabled: true` with no `false` arm
    is a one-way door: the operator can start the timer and not stop it.
-4. The prompt's caps must be the unit's caps. A prompt naming a different PR cap or timeout
-   from `defaults/main.yml` is how a session starts a landing it has no budget to finish.
+4. The caps come from `templates/renovate-agent-pins.j2`, never from the inventory, and the
+   prompt quotes the same pins the unit and config carry. A prompt naming a different PR cap or
+   timeout is how a session starts a landing it has no budget to finish.
 
 Every template here is asserted on its RENDER: a substring match on the Jinja holds only while the
 expression is spelled that way (#3202).
@@ -24,7 +25,8 @@ import re
 import pytest
 from lib import yaml_fast
 from _helpers import REPO, K8S_ROLES
-from _setup_render import COMPONENTS, render_component_text
+from _setup_render import COMPONENTS, render_component_text, role_context
+from lib.guard_jinja_env import template_env
 
 NAME = "renovate-agent"
 COMPONENT = COMPONENTS / NAME
@@ -165,22 +167,66 @@ def test_reconcile_never_restarts_a_session() -> None:
     assert activates == []
 
 
-def test_the_prompt_quotes_the_caps_it_is_given(defaults: dict) -> None:
-    """The prompt's numbers must FOLLOW the defaults, not merely mention their names.
+CONFIG = "config.env.j2"
+PINNED = (
+    "max_prs",
+    "model",
+    "permission_mode",
+    "budget_usd",
+    "run_timeout_s",
+    "unit_timeout",
+    "bash_timeout_ms",
+)
 
-    Each cap is rendered twice — at its default and at a value no default holds — so a number
-    typed into the prompt fails here, where a name matched in the source does not.
-    """
-    at_defaults = render(PROMPT)
-    caps = (("max_prs", 97), ("run_timeout_s", 9731), ("budget_usd", 97.31))
-    for suffix, moved_to in caps:
-        var = f"renovate_agent_{suffix}"
-        assert var in defaults, f"{var} is referenced by the prompt but has no default"
-        assert str(defaults[var]) in at_defaults, f"the prompt omits {var}'s default"
-        assert str(moved_to) in render(PROMPT, {var: moved_to}), (
-            f"the prompt hardcodes what should come from {var}: moving it to {moved_to} "
-            "changes nothing in the rendered prompt"
-        )
+
+def pins() -> dict:
+    """What renovate-agent-pins.j2 exports to the templates that import it, by name."""
+    env = template_env(COMPONENT / "templates")
+    module = env.get_template("renovate-agent-pins.j2").make_module(
+        role_context(COMPONENT)
+    )
+    return {name: getattr(module, name) for name in PINNED}
+
+
+def test_the_pins_equal_the_defaults(defaults: dict) -> None:
+    """The docs fragments read the defaults, so a changed pin has to change its default too."""
+    for name, value in pins().items():
+        assert defaults[f"renovate_agent_{name}"] == value, name
+
+
+def test_the_config_unit_and_prompt_quote_the_pins(unit: str) -> None:
+    pinned = pins()
+    config = render(CONFIG)
+    for key, name in (
+        ("MODEL", "model"),
+        ("PERMISSION_MODE", "permission_mode"),
+        ("BUDGET_USD", "budget_usd"),
+        ("RUN_TIMEOUT_S", "run_timeout_s"),
+    ):
+        assert f"{key}={pinned[name]}\n" in config, key
+    assert directive(unit, "TimeoutStartSec") == [pinned["unit_timeout"]]
+    assert f"BASH_MAX_TIMEOUT_MS={pinned['bash_timeout_ms']}" in directive(
+        unit, "Environment"
+    )
+    prompt = render(PROMPT)
+    for name in ("max_prs", "run_timeout_s", "budget_usd", "bash_timeout_ms"):
+        assert str(pinned[name]) in prompt, name
+
+
+@pytest.mark.parametrize("template", [CONFIG, UNIT, PROMPT])
+def test_an_inventory_value_moves_no_cap(template: str) -> None:
+    """A PR that edits only host_vars must not raise a cap or widen the permission mode."""
+    # fact: hosts/components/renovate-agent/CLAUDE.md#Autonomous-role contract (it merges and deploys with no human in the loop)
+    moved = {
+        "renovate_agent_max_prs": 97,
+        "renovate_agent_model": "moved-model",
+        "renovate_agent_permission_mode": "bypassPermissions",
+        "renovate_agent_budget_usd": 9731,
+        "renovate_agent_run_timeout_s": 973100,
+        "renovate_agent_unit_timeout": "9731min",
+        "renovate_agent_bash_timeout_ms": 97310000,
+    }
+    assert render(template, moved) == render(template)
 
 
 def test_the_prompt_invokes_the_skill() -> None:
