@@ -608,7 +608,7 @@ weekly_reboot_mute_recovery_minutes: 40
 has_docker: false
 # Whether this host has fwupd, so the host-maintenance component ships the weekly firmware update
 # (homelab-firmware-update.timer). False by default; daniel-box overrides it true. The Pi's
-# pi-tuning component purges fwupd, and daniel-server has never had it.
+# pi-tuning component purges fwupd, and daniel-server's host_vars mark why it has none.
 has_fwupd: false
 # The Docker engine packages, listed once because two readers must agree on the set:
 # homelab-daniel-pi's engine pins (hosts/components/pi-docker) install and hold them. An upgrade of
