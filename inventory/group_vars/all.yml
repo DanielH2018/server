@@ -219,6 +219,13 @@ terraria_k8s_replicas: 0
 # to 1 restarts the server, the exporter and the scrape job in one merge. The exporter's
 # playtime totals miss the parked window.
 valheim_k8s_replicas: 0
+# The game servers deploy.local's Games panel shows (hosts/components/deploy-ui). Each lists
+# the server's Deployment first, then every Deployment that runs only while it does. The panel
+# finds a Deployment's pods by `app=<deployment name>` and the server's console by Loki's
+# `container=<server deployment name>`, so a game whose names differ needs the panel changed.
+game_servers:
+  - {name: terraria, deployments: [terraria, terraria-stats]}
+  - {name: valheim, deployments: [valheim, valheim-stats]}
 # Shared between k8s/roles/crowdsec (the engine that runs LAPI+AppSec) and k8s/roles/traefik
 # (the bouncer plugin middleware + the log-tailing agent sidecar). Cross-role, and role
 # defaults are invisible across roles.

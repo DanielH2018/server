@@ -1,8 +1,7 @@
 # G8 — Memory: one resolver, a checked index, a read-only replica
 
-Status: IN PROGRESS. Step 1, the shared resolver and the index check, is done. Step 2's
-code is done, and its edit to the store on daniel-box is open. Step 3's unit change is
-done, and the hook's one-line message for a replica is open.
+Status: IN PROGRESS. Steps 1 and 3 are done, and the exit criterion is met. Step 2's code
+is done, and its edit to the store on daniel-box is open.
 
 Depends on: [G6](g6-repair-audit-defects.md) for the tree rule and the `enforced_by:`
 keys.
@@ -84,7 +83,7 @@ the memory store on daniel-server fails at once, with the route in the session-s
    open: it writes 47 keys and rewrites `archive/README.md` on daniel-box.
 3. The read-only target, in this repo's `claude-memory-sync` unit, with its
    autonomous-role contract and `docs/claude-memory-sync.md` updated in the same PR.
-   Done. The hook's one-line message for a store it cannot write is open, in the dotfiles
+   Done, with the hook's one-line message for a store it cannot write, in the dotfiles
    repo.
 
 ## Step 1 result
@@ -145,6 +144,13 @@ of the file and locked by the next run.
 
 The way out is `chmod -R u+w` on the store, which `docs/claude-memory-sync.md` records.
 With the sync turned off the store stays read-only until someone runs it.
+
+[#8687](https://github.com/DanielH2018/server/pull/8687) landed the unit on 2026-11-14,
+and [dotfiles#1311](https://github.com/DanielH2018/dotfiles/pull/1311) landed the hook's
+line. The first run after daniel-box applied its package printed one permission line per
+file, 194 in all. On daniel-server the store then read `dr-xr-x---`, `touch` in it
+failed with `Permission denied`, and the hook printed one line: the store is read-only,
+where a lesson goes, and that 2 upkeep checks report findings on the owning host.
 
 ## Verification
 

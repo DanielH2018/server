@@ -67,7 +67,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 # Flat siblings in the same directory, mounted together at /app from one ConfigMap, so a
 # plain import resolves both under `python3 /app/artifact_server.py` and under the tests'
 # path insert. Neither module imports back.
-from _gui_html import GUI_HTML, STAR_JS
+from _gui_html import FAVICON_SVG, GUI_HTML, STAR_JS
 from artifact_meta import (
     apply_metadata,
     derive_origin,
@@ -394,6 +394,9 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == "/healthz":
             self._send(200, b"ok\n", "text/plain; charset=utf-8")
+            return
+        if path == "/favicon.ico":
+            self._send(200, FAVICON_SVG.encode("utf-8"), "image/svg+xml")
             return
         if path == "/api/star":
             self._get_star()
