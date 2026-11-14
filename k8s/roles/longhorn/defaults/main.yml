@@ -56,6 +56,7 @@ k3s_longhorn_global_manager_replicas: 2
 # working set of 39-63Mi and a maximum of 65Mi, across 12 pods. The request covers the OOM-kill
 # reading rather than the p95, and changing it rolls the four Deployments once.
 # instance-manager runs with no memory request: Longhorn v1.13 has no setting for it (#8617).
+# Each node's kubelet `system-reserved` memory covers its working set instead (#8644).
 #
 # DECIDED: the Setting is the one writer. longhorn-manager's SettingController treats the Setting
 # as the source of truth for these four containers' `resources` and clears any field it does not
