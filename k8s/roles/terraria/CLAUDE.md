@@ -1,6 +1,6 @@
 # terraria (k8s) — Vanilla Terraria server
 
-Moved from Docker 2026-08-10 (backup consolidation BL1 — its worlds were the only
+**HISTORY —** Moved from Docker 2026-08-10 (backup consolidation BL1 — its worlds were the only
 irreplaceable data kopia still uniquely protected; the Docker role is in git history at
 `git show 2460d0675fd748e70fcbcde87185371ffd62402b:ansible/roles/containers/archive/terraria/`). See repo-root `CLAUDE.md`.
 
@@ -69,4 +69,4 @@ irreplaceable data kopia still uniquely protected; the Docker role is in git his
   kept a `DAC_OVERRIDE` grant looking necessary for three weeks after it had stopped being so.
 
 ## Editing
-- Manifests: `templates/*.yaml.j2` · Defaults: `defaults/main.yml`
+- Manifests: `templates/*.yaml.j2` (`k8s/roles/terraria/templates/`) · Defaults: `k8s/roles/terraria/defaults/main.yml`

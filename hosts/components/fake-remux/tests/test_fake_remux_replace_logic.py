@@ -248,6 +248,7 @@ def test_advance_grabbed_gone_from_queue_but_imported_is_replaced():
 
 
 def test_advance_fake_replacement_blocklists_and_retries_original_untouched():
+    # fact: k8s/roles/autofix-bridge/CLAUDE.md#Autonomous-role contract (it changes state with no human in the loop)
     led = {
         "13": _rec(
             13,

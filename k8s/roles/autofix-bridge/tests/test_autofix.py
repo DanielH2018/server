@@ -62,6 +62,7 @@ def test_dangerous_matches_mixed_case_pattern():
 
 
 def test_candidate_hard_bad_status_error():
+    # fact: k8s/roles/autofix-bridge/CLAUDE.md#Autonomous-role contract (it changes state with no human in the loop)
     assert autofix.is_candidate(_item(status="error"), PATTERNS) is True
 
 
@@ -332,6 +333,7 @@ def test_run_once_live_deletes_then_searches_in_order(monkeypatch):
 
 
 def test_run_once_held_branch_makes_zero_mutating_calls(monkeypatch):
+    # fact: k8s/roles/autofix-bridge/CLAUDE.md#Autonomous-role contract (it changes state with no human in the loop)
     n = autofix.MAX_ACTIONS_PER_CYCLE + 1
     items = [
         _item(status="error", download_id="dl-%d" % i, qid=i, series_id=100 + i)

@@ -1,8 +1,11 @@
 # karakeep — bookmark archiving, with a search index and an AI tagger
 
-Karakeep (the app), a `karakeep-chrome` headless-shell sidecar for page snapshots, a
-Meilisearch Deployment for search, and a `time-tagger` sidecar that calls the app's API on a
-loop to auto-tag bookmarks.
+Karakeep (the app), a `karakeep-chrome` headless-shell Deployment for page snapshots
+(`k8s/roles/karakeep/templates/deployment-chrome.yaml.j2`), a
+Meilisearch Deployment for search (`k8s/roles/karakeep/templates/deployment-meilisearch.yaml.j2`),
+and a `time-tagger` Deployment that calls the app's API on a
+loop to auto-tag bookmarks
+(`k8s/roles/karakeep/templates/deployment-time-tagger.yaml.j2:DECIDED: a plain (non-subPath) ConfigMap mount under a re-exec loop`).
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in k8s/roles/longhorn-reconcile/defaults/main.yml. -->

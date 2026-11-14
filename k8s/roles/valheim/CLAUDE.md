@@ -1,8 +1,10 @@
 # valheim (k8s) — Valheim dedicated server
 
-Archived on Docker 2026-01-07, reactivated 2026-08-13 **straight onto k3s**. The archived
+**HISTORY —** Archived on Docker 2026-01-07, reactivated 2026-08-13 **straight onto k3s**. The archived
 compose role and its reactivation recipe (deleted in #2385) describe a topology that no
-longer exists. `k8s/terraria` is the sibling this role copies.
+longer exists.
+
+`k8s/roles/terraria/` is the sibling this role copies.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in k8s/roles/longhorn-reconcile/defaults/main.yml. -->
@@ -121,5 +123,5 @@ it; it is mutually exclusive with `VALHEIM_PLUS`, unused here.
 deployment sets no `PRE_BEPINEX_CONFIG_HOOK`, and the three log lines that look like success.
 
 ## Editing
-- Manifests: `templates/*.yaml.j2` · Defaults: `defaults/main.yml`
+- Manifests: `templates/*.yaml.j2` (`k8s/roles/valheim/templates/`) · Defaults: `k8s/roles/valheim/defaults/main.yml`
 - Deploy: merge, and `promote` applies it. Nothing applies it by hand.

@@ -172,6 +172,7 @@ def test_both_pods_carry_the_restart_checksum_the_renderer_derives(rendered):
 
 
 def test_a_stats_lib_edit_moves_both_pods_checksums(rendered):
+    # fact: k8s/roles/game-stats/CLAUDE.md#Editing
     before, after = _values(rendered), _values(_with_edit(rendered, LIB))
     assert all(after[pod] != before[pod] for pod in GAMES)
 
