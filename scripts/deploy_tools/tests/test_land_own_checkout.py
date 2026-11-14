@@ -11,8 +11,7 @@ from types import SimpleNamespace
 import pytest
 
 from _land_fakes import PRIMARY, Fakes, make_landing
-from deploy_tools.land_lib import classify, own_checkout
-from deploy_tools.land_lib.fresh import GradeFresh
+from deploy_tools.land_lib import classify, fresh, own_checkout
 from deploy_tools.land_lib.outcome import Outcome
 from lib import git_testing
 from lib.git_testing import commit, init_repo, scrubbed_env
@@ -126,7 +125,7 @@ def test_a_stale_checkout_after_the_merge_hands_the_grading_to_a_fresh_checkout(
         ci_timeout=60,
     )
     ln.merge_sha = "m" * 40
-    with pytest.raises(GradeFresh) as raised:
+    with pytest.raises(fresh.GradeFresh) as raised:
         classify.refuse_stale_code(ln)
     assert "scripts/lib/render_guard.py" in str(raised.value)
     assert raised.value.argv == ["--pr", "999", "--since", "pre", "--ci-timeout", "60"]
@@ -135,7 +134,7 @@ def test_a_stale_checkout_after_the_merge_hands_the_grading_to_a_fresh_checkout(
 def test_a_stale_checkout_without_since_grades_from_the_merges_parent():
     ln, _ = make_landing(Fakes(stale_code=["a.py"]), tags="glance", verdict_file="/v")
     ln.merge_sha = "m" * 40
-    with pytest.raises(GradeFresh) as raised:
+    with pytest.raises(fresh.GradeFresh) as raised:
         classify.refuse_stale_code(ln)
     argv = raised.value.argv
     assert argv[argv.index("--since") + 1] == f"{'m' * 40}^1"
