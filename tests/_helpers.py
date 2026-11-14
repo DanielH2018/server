@@ -67,6 +67,51 @@ def load_defaults(role: Path) -> dict:
     return load_yaml(role / "defaults" / "main.yml") or {}
 
 
+def besteffort_workloads(role: Path) -> list[tuple[str, str]]:
+    """The vendored Deployments and DaemonSets whose pods stay BestEffort after the patches.
+
+    Reads every file under the role's `files/upstream/` and `files/patches/`. A pod leaves
+    BestEffort once any container carries a memory request, so a workload is listed when no
+    container of its template has one, from upstream or from a patch naming that container.
+    Returns `(kind, name)` pairs, sorted.
+    """
+    files = role / "files"
+
+    def docs(directory: str) -> list[dict]:
+        return [
+            d
+            for path in sorted((files / directory).glob("*.y*ml"))
+            for d in yaml_fast.safe_load_all(path.read_text())
+            if isinstance(d, dict)
+        ]
+
+    def containers(doc: dict) -> list[dict]:
+        return doc["spec"]["template"]["spec"].get("containers") or []
+
+    def requested(doc: dict) -> set[str]:
+        return {
+            c["name"]
+            for c in containers(doc)
+            if "memory" in ((c.get("resources") or {}).get("requests") or {})
+        }
+
+    patched: dict[tuple[str, str], set[str]] = {}
+    for patch in docs("patches") if (files / "patches").is_dir() else []:
+        if "template" in (patch.get("spec") or {}):
+            key = (patch["kind"], patch["metadata"]["name"])
+            patched.setdefault(key, set()).update(requested(patch))
+    return sorted(
+        (d["kind"], d["metadata"]["name"])
+        for d in docs("upstream")
+        if d.get("kind") in {"Deployment", "DaemonSet"}
+        and not (
+            requested(d)
+            | patched.get((d["kind"], d["metadata"]["name"]), set())
+            & {c["name"] for c in containers(d)}
+        )
+    )
+
+
 def image_tag(ref: str) -> str:
     """The tag of an image ref, with any `@sha256:` digest Renovate pinned beside it dropped.
 

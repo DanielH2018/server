@@ -7,7 +7,9 @@ manager's fix is the `longhorn` role's kustomize patch (H1.5a), which Flux appli
 object it patches. The csi-* sidecars are not in the upstream file: longhorn-driver-deployer
 creates them at runtime, and longhorn-manager sets their `resources` from the
 `system-managed-csi-components-resource-limits` Setting the same role renders (#5958). The
-Setting tests below hold it to the same rule. longhorn-global-manager, the Deployment v1.13
+Setting tests below hold it to the same rule, and it carries the longhorn-csi-plugin
+DaemonSet's three containers too (#8326). longhorn-ui and longhorn-driver-deployer have their own
+patches. longhorn-global-manager, the Deployment v1.13
 added, has its own patch and tests (#5968). The manager DaemonSet's update strategy has its
 own patch too, which rolls one pod at a time so the admission webhook stays served (#6009).
 
@@ -22,6 +24,7 @@ Run: uv run pytest tests/longhorn/test_longhorn_control_plane_resources.py
 import json
 
 import pytest
+from _helpers import besteffort_workloads
 from _k8s_render import rendered_docs
 from lib import yaml_fast
 
@@ -194,10 +197,6 @@ def test_upstream_alone_replaces_every_manager_pod_at_once():
     assert _manager_max_unavailable(_docs(UPSTREAM), []) == "100%"
 
 
-# The four Deployments longhorn-driver-deployer creates and the Setting names. Any other
-# component in the Setting would have the manager roll it, and the plugin DaemonSet's roll can
-# strand RWX mounts.
-CSI_SIDECARS = {"csi-attacher", "csi-provisioner", "csi-resizer", "csi-snapshotter"}
 CSI_SETTING = "system-managed-csi-components-resource-limits"
 
 
@@ -213,20 +212,52 @@ def _csi_setting_value() -> dict:
             return json.loads(doc["value"])
     raise AssertionError(
         "the longhorn render holds no system-managed-csi-components-resource-limits Setting; "
-        "without it the CSI sidecars run BestEffort"
+        "without it the CSI components run BestEffort"
     )
 
 
-def test_the_csi_setting_requests_the_defaults_value_for_the_four_sidecars_only():
+def _request(key: str) -> dict:
+    return {"requests": {"memory": str(LONGHORN_DEFAULT_VALUES[key])}}
+
+
+def test_the_csi_setting_requests_the_defaults_values_for_every_csi_component():
     # fact: k8s/roles/longhorn/CLAUDE.md#At a glance
     # Exact equality, not a subset: longhorn-manager compares each entry with the live
-    # container's `resources`, so an extra `limits: {}` never matches and rolls the Deployment
-    # on every tick.
-    request = {
-        "requests": {
-            "memory": str(
-                LONGHORN_DEFAULT_VALUES["k3s_longhorn_csi_sidecar_memory_request"]
-            )
-        }
+    # container's `resources`, so an extra `limits: {}` never matches and rolls the object on
+    # every tick. The keys are every component the v1.13.0 manager reads from the Setting; one
+    # it omits runs BestEffort (#8326).
+    sidecar = _request("k3s_longhorn_csi_sidecar_memory_request")
+    node_sidecar = _request("k3s_longhorn_csi_node_sidecar_memory_request")
+    assert _csi_setting_value() == {
+        "csi-attacher": sidecar,
+        "csi-provisioner": sidecar,
+        "csi-resizer": sidecar,
+        "csi-snapshotter": sidecar,
+        "longhorn-csi-plugin": _request("k3s_longhorn_csi_plugin_memory_request"),
+        "node-driver-registrar": node_sidecar,
+        "longhorn-liveness-probe": node_sidecar,
     }
-    assert _csi_setting_value() == {name: request for name in CSI_SIDECARS}
+
+
+def test_no_vendored_longhorn_workload_runs_besteffort():
+    # fact: k8s/roles/longhorn/CLAUDE.md#At a glance
+    assert besteffort_workloads(LONGHORN_ROLE) == []
+
+
+@pytest.mark.parametrize(
+    ("name", "key"),
+    [
+        ("longhorn-ui", "k3s_longhorn_ui_memory_request"),
+        ("longhorn-driver-deployer", "k3s_longhorn_driver_deployer_memory_request"),
+    ],
+)
+def test_ui_and_driver_deployer_patches_request_the_defaults_value_and_no_limit(
+    name, key
+):
+    # fact: k8s/roles/longhorn/CLAUDE.md#At a glance
+    patch = yaml_fast.safe_load((PATCHES / f"{name}.yaml").read_text())
+    assert _target(patch) == ("Deployment", name, "longhorn-system")
+    assert _target(patch) in _upstream_targets()
+    containers = patch["spec"]["template"]["spec"]["containers"]
+    assert [c["name"] for c in containers] == [name]
+    assert containers[0]["resources"] == _request(key)
