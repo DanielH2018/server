@@ -10,3 +10,11 @@ k8s_autodeploy: false
 k8s_autodeploy_reason: "renders no Deployment — route-only (Service + EndpointSlice + IngressRoute) in front of deploy-ui.service on daniel-box; a bad route change exposes a page that starts landings and clears the deployer's hold"
 
 manifests_rollout: ''
+
+# The Games panel's scale-only identity (templates/games-rbac.yaml.j2, ADR-0033). It lives in the
+# workload namespace, not kube-system, so no `system:serviceaccounts:kube-system` group binding
+# can widen it, and outside cluster-base, which a rebuilt cluster applies before `homelab` exists.
+deploy_ui_games_sa_name: homelab-games
+
+# games-rbac.yaml declares the identity's token Secret, and its name does not say so.
+manifests_secret_files: ['games-rbac.yaml']
