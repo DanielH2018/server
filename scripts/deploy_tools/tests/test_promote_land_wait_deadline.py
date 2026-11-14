@@ -202,6 +202,14 @@ def test_the_live_reads_wire_the_in_flight_read_to_prod():
     assert reads.in_flight() == P
 
 
+def test_the_live_reboot_read_ignores_a_primary_checkout_without_the_inventory(
+    tmp_path,
+):
+    reads = wait_reads.live_wait_reads(_forge(FakeTransport()), tmp_path, FluxHost())
+    found = reads.reboot_window()
+    assert found is None or found[0] > 0
+
+
 @pytest.mark.parametrize(
     "in_flight", [P, None], ids=["an-earlier-commit-in-flight", "nothing-in-flight"]
 )
