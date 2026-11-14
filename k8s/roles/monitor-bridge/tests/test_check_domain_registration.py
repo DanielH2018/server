@@ -76,7 +76,9 @@ def test_a_success_is_not_read_again_within_the_interval(cfg):
     src = _answering(RECORD)
     dr.domain_registration(cfg, src, now=1000.0, probe=probe)
     later = 1000.0 + cfg.DOMAIN_REGISTRATION_PROBE_INTERVAL_S - 1
-    assert dr.domain_registration(cfg, src, now=later, probe=probe)[0]
+    ok, msg = dr.domain_registration(cfg, src, now=later, probe=probe)
+    assert ok
+    assert "read 24h ago" in msg
     assert len(src.calls) == 1
 
 
