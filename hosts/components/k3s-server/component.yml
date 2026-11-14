@@ -106,8 +106,12 @@ defaults:
   #                      image-gc-high-threshold=85 is the kubelet's default value, so it
   #                      changes no behaviour: H6.7 added it to prove the windowed restart.
   #                      system-reserved lowers node allocatable by memory pods use without
-  #                      requesting it (#8644). It accounts only: enforce-node-allocatable stays
-  #                      `pods`, so no cgroup caps k3s or the host's processes. Sum at 2026-11-14:
+  #                      requesting it (#8644). With enforce-node-allocatable at its default
+  #                      `pods`, the kubelet also lowers kubepods.slice memory.max to capacity
+  #                      minus the reserve, so every pod together, instance-manager included,
+  #                      shares that cap and an anon spike past it OOM-kills inside kubepods.
+  #                      Pod anon was 6.0 GB against the 22.8 GB cap. No cgroup caps k3s or the
+  #                      host's processes. Sum at 2026-11-14:
   #                      Longhorn instance-manager's 7-day p95 working set 1565 MiB, system.slice
   #                      anon 1.9 GiB (k3s-server, containerd), user.slice anon 3.7 GiB.
   #   secrets-encryption the apiserver encrypts Secrets on write, so k3s's snapshots carry no

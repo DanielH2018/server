@@ -74,9 +74,10 @@ defaults:
     # root filesystem shares: at the kubelet's 85 every superseded image stayed (#8307). The
     # kubelet refuses a low threshold not below the high one, so the pair moves together.
     # system-reserved lowers node allocatable by memory pods use without requesting it (#8644),
-    # and the k3s-server component's flag comment says how. Sum at 2026-11-14: Longhorn
-    # instance-manager's 7-day p95 working set 1272 MiB, system.slice anon 0.65 GiB, user.slice
-    # anon 1.8 GiB.
+    # and also caps kubepods.slice at capacity minus the reserve; the k3s-server component's
+    # flag comment says how. Pod anon was 3.7 GB against the 29.0 GB cap. Sum at 2026-11-14:
+    # Longhorn instance-manager's 7-day p95 working set 1272 MiB, system.slice anon 0.65 GiB,
+    # user.slice anon 1.8 GiB.
     kubelet-arg:
       - allowed-unsafe-sysctls=net.ipv4.conf.all.src_valid_mark,net.ipv4.ip_forward
       - image-gc-high-threshold=65
