@@ -55,7 +55,7 @@ data:
           nodeGraph:
             enabled: true
       # --- Aliases carrying daniel-server's Grafana uids (slice 3, B4) ------------------
-      # Every dashboard in roles/k8s/observability/files/dashboards references its datasource
+      # Every dashboard in k8s/roles/observability/files/dashboards references its datasource
       # by UID — `EGdsQqhVk` and `bf4q19tuivta8e`, baked into each panel; none references one by
       # NAME, so these aliases are free to be named whatever reads clearly. D6's lever is that a
       # matching uid makes all of them work here with no edit at all.
@@ -94,7 +94,7 @@ data:
   dashboards.yaml: |
     apiVersion: 1
     providers:
-      # Every board, from roles/k8s/observability/files/dashboards — one provider, because
+      # Every board, from k8s/roles/observability/files/dashboards — one provider, because
       # foldersFromFilesStructure derives the Grafana folder from the directory name and so
       # reproduces the AI/Apps/Infrastructure/Logs/Networking/Security layout without naming any
       # of them here. The Claude Code board had its own provider until the two copies were
@@ -299,8 +299,9 @@ spec:
           # earlier pod had already peaked at 485 MiB against the 512Mi limit unaided.
           # The working set peaked at 1084 MiB across three clean tier runs — past 1Gi,
           # which is why that limit was not enough either. daniel-box carries 28.2 GiB
-          # and sits at 44%, so the headroom is free.
-{{ container_resources(cpu_limit='1', mem_limit='2Gi', cpu_request='50m', mem_request='128Mi') }}
+          # and sits at 44%, so the headroom is free. The request is the 7-day p95 working
+          # set (563Mi on 2026-11-14) rounded up to 64Mi.
+{{ container_resources(cpu_limit='1', mem_limit='2Gi', cpu_request='50m', mem_request='576Mi') }}
       volumes:
         # The provisioning ConfigMap carries both files, but they mount at different paths,
         # so it is projected twice with a subPath-style item selector rather than mounted

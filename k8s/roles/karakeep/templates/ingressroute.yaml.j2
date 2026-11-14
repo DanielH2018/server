@@ -25,7 +25,7 @@
   next-auth's `/api/auth/*`, the password login that stays behind Authelia on the public name
   and would be open to every pod on the `.local` one. Widen it only with the
   widget source in hand, and never past `/api/v1/`:
-  ansible/tests/services/test_karakeep_public_bypass.py refuses a prefix that reaches next-auth.
+  tests/services/test_karakeep_public_bypass.py refuses a prefix that reaches next-auth.
 #}
 {{ monitoring_route(
     container_item.name,

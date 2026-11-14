@@ -12,7 +12,7 @@ role, no Deployment of its own.
 - **Claim:** `media-data` (not Longhorn (media-local))
 <!-- /generated_from -->
 
-- **Flux applies it, not Ansible** (#5652, Wave D). Its `containers_list` entry is
+- **Flux applies it.** Its `containers_list` entry is
   in `cluster/services.yml`, so nothing applies it by hand. A merged change
   reaches the cluster when `promote` publishes and verifies the next bundle. The claim carries
   `kustomize.toolkit.fluxcd.io/prune: disabled`, so neither a revert nor a removal from the
@@ -42,8 +42,7 @@ role, no Deployment of its own.
   `media/` with `os.link` and fails unless the link count reads 2. It also proves the claim
   binds: with `WaitForFirstConsumer`, a pod that stays `Pending` until its 300s deadline means
   the PV's node pin is wrong, not the hardlinks. Its name embeds a digest of the rendered PV
-  and StorageClass, so Flux re-runs it only when those change, where the Ansible probe it
-  replaced re-ran on every deploy; `job.yaml.j2`'s `DECIDED:` note has why.
+  and StorageClass, so Flux re-runs it only when those change; `job.yaml.j2`'s `DECIDED:` note has why.
   `tests/test_media_volume_verify.py` renders the role and runs the Job census over it.
 - **HISTORY —** until the flip, a hardlink probe Job rendered into
   `/etc/rancher/k3s/manifests/media-volume-probe` on daniel-box and ran on every deploy. The

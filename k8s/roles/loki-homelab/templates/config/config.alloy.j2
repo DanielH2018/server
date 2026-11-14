@@ -6,7 +6,7 @@
 // every Grafana dashboard were written against `job`, `container`, `pod`, `namespace`,
 // `machine` and `stream` — and against the ABSENCE of `app`, which is how the HA ban check
 // went blind on 2026-08-23. The `alloy-emits-the-loki-labels-consumers-select-on` row of
-// ansible/tests/k8s/_config_property_rows.py guards the set. The host streams also carry
+// tests/k8s/_config_property_rows.py guards the set. The host streams also carry
 // `program`, the rsyslog tag the `loki.process "host"` stage extracts.
 //
 // Replaced Promtail on 2026-09-02, six months after Promtail's 2026-03-02 end of life. Three
@@ -189,7 +189,7 @@ loki.process "pods" {
   // prefix is a non-capturing group because RE2 has no lookbehind and a second capture group
   // would be replaced too. Prospective only: probe.py redacts the records already in Loki
   // (probe_lib/core.py:redact_log_secrets), and
-  // ansible/tests/k8s/test_alloy_redacts_access_log_query_credentials.py holds the two lists
+  // tests/k8s/test_alloy_redacts_access_log_query_credentials.py holds the two lists
   // equal.
   //
   // The Subsonic credentials `u`, `t`, `s` and `p` are redacted under /rest/ only, because a

@@ -19,6 +19,7 @@ What's specific to this unit, and what this file guards:
 
 import re
 
+import pytest
 from _shell_render import render_shell_script, rendered_shell_text
 from lib import yaml_fast
 from lib.proc_testing import fake_bin, run
@@ -191,3 +192,46 @@ def test_the_unchanged_arm_scan_rejects_a_laundered_version():
         "fi\n"
     )
     assert not _unchanged_arm_is_safe(laundered)
+
+
+def _no_signal_arm_reports_down(script: str) -> bool:
+    """Whether trend.py's no-signal exit (2) fails closed before anything is staged."""
+    marker = 'if [ "$TREND_RC" -eq 2 ]; then'
+    if marker not in script or "git add evals/history.json" not in script:
+        return False
+    start = script.index(marker)
+    arm = script[start : script.index("\nfi\n", start)]
+    staged_after = script.index("git add evals/history.json") > start
+    return staged_after and "PUSH_STATUS=up" not in arm and "exit 1" in arm
+
+
+def test_a_sweep_with_no_healthy_trial_reports_down():
+    assert _no_signal_arm_reports_down(SCRIPT), (
+        "a sweep where every trial failed before grading measured nothing; it must report "
+        "down and publish no history row (#8535)"
+    )
+
+
+_ARM = 'if [ "$TREND_RC" -eq 2 ]; then\n  say_failure "no healthy trial" "$TREND_OUT"\n{body}\nfi\n'
+_STAGE = "git add evals/history.json\n"
+
+
+@pytest.mark.parametrize(
+    "script",
+    [
+        pytest.param("TREND_RC=$?\n" + _STAGE, id="no-arm"),
+        pytest.param(
+            _ARM.format(body="  PUSH_STATUS=up\n  exit 1") + _STAGE, id="reports-up"
+        ),
+        pytest.param(_ARM.format(body="  :") + _STAGE, id="falls-through"),
+        pytest.param(_STAGE + _ARM.format(body="  exit 1"), id="arm-after-git-add"),
+    ],
+)
+def test_the_no_signal_scan_rejects_a_script_that_publishes_it(script):
+    """The rejecting half: each script here can still publish a no-signal sweep."""
+    assert not _no_signal_arm_reports_down(script)
+
+
+def test_the_no_signal_scan_accepts_a_minimal_closed_arm():
+    """Non-vacuity for the rejects above: the same fixture shape with a correct arm passes."""
+    assert _no_signal_arm_reports_down(_ARM.format(body="  exit 1") + _STAGE)

@@ -20,6 +20,7 @@ User={{ sys_user }}
 WorkingDirectory={{ pins.checkout }}
 Environment=PATH=/home/{{ sys_user }}/.local/bin:/usr/local/bin:/usr/bin:/bin
 Environment=HOME=/home/{{ sys_user }}
+Environment=KUBECONFIG=/home/{{ sys_user }}/.kube/config
 # The checkout is the deployer's, and an untracked __pycache__ there would park it.
 Environment=PYTHONDONTWRITEBYTECODE=1
 # land.sh's landing policy: only the agent's account, only its fenced branches, and no path

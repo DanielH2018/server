@@ -93,8 +93,9 @@ merge. 6 of 164 finished pull-request runs were red. The pull-request runs are t
 share, and most of them test a master that has moved on by the time the PR merges.
 
 The queue therefore gives each PR one run, at the moment it lands. A PR stays a draft, and a
-draft runs no job. At its turn the landing marks the PR ready, and the run that starts tests
-the PR on the master it merges into. Master's own run then proves that tree and skips. Every
+draft runs no job. At its turn the landing marks the PR ready and updates its branch from
+master, and the run that starts tests the PR on the master it merges into. Master's own run
+then proves that tree and skips. Every
 rule in `scripts/deploy_tools/land_lib/` stays where it is, and so does every check a
 pull-request run makes, because the one run is still a pull-request run.
 
@@ -106,17 +107,23 @@ The slices:
 1. **B1, ended.** A shadow sweep of master, and replays of pull-request runs that hosted CI
    read red. *What the shadow sweep found* below has the result, which changed this plan.
 1. **R1, landed.** The shadow sweep's timer, its tool and its probe are deleted.
-1. **B2, in progress.** A queue of one. With `LAND_QUEUE` set, a landing takes the landing
-   turn, marks its draft PR ready and merges after that one run
-   ([Landing a merged PR](landing.md)). The fan-out's server lander follows: it stops
-   marking a batch's PR ready before the landing, and lands the draft.
+1. **B2, in progress.** A queue of one. Every landing that merges its PR takes the landing
+   turn, marks a draft PR ready, updates its branch and merges after that one run
+   ([Landing a merged PR](landing.md)). The turn spans both hosts, and `LAND_QUEUE=0` turns
+   it off for one landing. Two steps remain, and both wait for B3, because a queue of one
+   merges at most one untested head per CI run: sessions open their PRs as drafts, and the
+   fan-out stops marking a batch's PR ready before its landing.
 1. **B3, planned.** Batches of up to four. The queue opens one pull request that holds the
    batch's heads stacked on master, and that PR's run is the batch's one full run. Its gate
    rebuilds each stacked tree from master and the heads and records it on each head. Each
    member then merges in turn, and its own run and master's prove the recorded tree and skip.
    A red batch splits in half.
-1. **B4, planned.** Every landing goes through the queue, on both hosts, and the merge pacing
-   and the branch-update re-test are deleted.
+1. **B4, planned.** The merge pacing is deleted, and so is the branch update that follows a
+   green run on a stale base. A landing then takes its slot under the limit on live landings
+   when it gets the turn, and the limit counts the landings of both hosts. That limit exists
+   because every live landing polls GitHub on one token. A landing that waits for the turn
+   polls only a lock file, so any number can wait, and the limit bounds the landings that
+   spend quota.
 
 Three things were settled before B2. The tree of a squash merge equals what `git merge-tree`
 builds for the same base and head: for #8474 both read `dfa8d4331c36`, with master 11 paths
@@ -125,11 +132,151 @@ the rulesets. A workflow dispatch was the first design for the queue's run, and 
 dropped: a dispatched run skips every step that reads a pull request, so the render-diff
 gates and the cluster-pin gate would run nowhere.
 
+The first pilot of the turn was #8551 on 2026-11-14. The landing took the turn and marked the
+draft ready, and the PR got one run that ran jobs. Master's run still swept in full, for two
+reasons. The run tested the PR on the master of the PR's creation, 16 minutes old: GitHub
+builds the tree a pull-request run tests when the PR's branch is pushed, and neither a ready
+flip nor a read of the PR builds it again. The landing therefore updates the branch at its
+turn, which is a push, for a head that has had no run. The other reason is that two landings
+without the turn merged during the run, and that lasts until every landing takes turns.
+
+The second pilot was #8668 on the same day, a draft pushed 20 minutes and three master commits
+before its landing. The landing took the turn, updated the branch across 29 changed paths and
+merged 240 s later on one run. That run recorded the tree `02974102da74`, which is what
+`git merge-tree` builds from the master of the turn and the PR's head, so the run tested the
+master of the turn. Master's run still swept in full, in 8 minutes 40 seconds: a landing
+without the turn merged 68 s before the pilot did. The pilot also waited 16 minutes for a
+slot under the limit on live landings before it could ask for the turn, which is the wait B4
+removes.
+
+The first master run the turn proved was #8674's, the next landing. Its run recorded the tree
+`31fc245857a5`, the merge made the same tree, and master's run took 15 seconds. That is what
+shortens a landing: its slot is held mostly after the merge, while master's run waits for
+runners.
+
+The limit on live landings was what held the backlog of 2026-11-14, not CI. At 12:55 UTC, 25
+of 29 open PRs were green. The fan-out's lander on daniel-box had been refused a slot 70
+times in six hours and had started two landings, because sessions' landings held all three
+slots. Two facts about the limit came out of it:
+
+- A landing takes its slot before it waits for anything and holds it to its verdict. Read
+  from the code, one landing spends about 6 GitHub calls a minute while its PR's CI runs, 6
+  while master's CI runs, 2 to 4 during the promotion, and none while it waits for the turn
+  or for health. Every one of those repeated calls is a REST call. Two of the six in the
+  merge wait were `gh pr view`, which spends the separate GraphQL quota, until
+  `Landing.view` took the PR's state from the REST pull object (`pr_json.rest_filter`).
+  `docs/github-quota.md` holds the account-wide design.
+- The count is a directory of pid files on the host that runs the landing. daniel-box and
+  daniel-server therefore each admit three landings against the one token, and seven were
+  live at once that afternoon.
+
 B3's gate rebuilds the trees because the batch's pull request names its members. Anyone who
 can open a pull request could name a head and a tree of their choosing, so the gate takes
-pull-request numbers only and records what it built. B3 first checks what `promote` publishes
-when the commits of one batch reach master seconds apart, because only the last of them is a
-tree that a run tested.
+pull-request numbers only and records what it built.
+
+B3 lands in four steps, each one exercised before the next:
+
+1. **A labelled PR run asks the proof (#8703).** `prove` runs on a pull request that
+   carries the `landing-batch` label, and `tested_tree.py prove-head` answers whether the
+   head carries a tested-tree record. A member's own run then takes two short jobs. The
+   label only decides whether `prove` takes a runner, so an unlabelled PR run pays nothing.
+   The question does not compare trees: the tree a pull-request run checks out is the
+   merge GitHub built at the PR's last push, and the batch tested a different one. The
+   landing merges a head a batch tested only while master is still the commit the batch
+   stacked it on, and master's run compares the tree again after.
+1. **The batch's gate records each member's tree (#8721).** On a PR from a `queue/` branch
+   of this repository, the gate reads the member numbers from the PR's body, rebuilds each stacked
+   tree from the run's base and the members' heads, and records a tree on a head only when
+   the last rebuilt tree is the tree the run tested (`tested_tree.py record-batch`). The
+   run tested only that last tree, and the record on an earlier member names a tree the
+   run never checked out: the decision under *What a batch proves* accepts that. A batch
+   the gate cannot rebuild is not red: its members land one at a time. A batch's run
+   executes its members' code with a token that can write statuses, so a fork's head must
+   never be stacked. The gate refuses a batch that names one, and that refusal is not the
+   boundary: a pull-request run takes its workflow and its scripts from the merge it tests,
+   so a stacked fork head would supply the gate's own code. The boundaries are who can push
+   a `queue/` branch and the landing in the next step, which stacks no fork's head. The
+   `agent branch fence` ruleset lets only the admin role and Renovate create a branch
+   outside `worktree-claude+**`, so only a landing that can already merge to master can
+   push a `queue/` branch.
+1. **The landing that holds the turn forms the batch.** It lands in two parts.
+
+    - **The line (#8734).** A landing that waits for the turn with a draft that has had no CI run
+      stands in the line: one file per PR in `/run/lock/homelab-land-line` on daniel-box,
+      holding the head (`land_lib/line.py`). The landing refreshes its place on every poll
+      and gives it up when the wait ends. A place that has gone two minutes without a
+      refresh, which is four polls at the default interval, belongs to a landing that
+      died, and the next read of the line removes it. The holder of the turn writes what
+      became of a PR into that PR's place, and a landing whose place reads `merged` stops
+      waiting. A landing reads and answers only the places its own user wrote. For a
+      landing on daniel-server that user is the one its ssh logs in as on daniel-box.
+    - **The batch.** A landing with a draft that takes the turn stacks up to three more
+      drafts from the line behind its own (`land_lib/batch.py`). It builds the stack on
+      GitHub: a `queue/<its PR>` branch at master's tip, then one call to the `merges`
+      endpoint for each head. It opens the batch's pull request and waits for its run. On
+      green it labels and merges its own PR. It then takes each member in the order they
+      were stacked: it labels the member, marks it ready, waits for the member's two short
+      jobs and squash-merges it. It writes `merged` into each member's place, and that
+      member's own landing then follows the deploy as it does for a merge made elsewhere.
+      `LAND_BATCH=1` turns the batch on for one landing, for the pilot.
+
+      A landing stacks only the heads it would have been allowed to land. It runs its own
+      checks on each member, the landing policy included, and the member's own landing ran
+      its checks before it stood in the line. It stacks only landings of its own user. A
+      PR that changes a forward-only pin, the `flux` role or cluster-vars lands alone,
+      because the cluster-pin gate refuses a pin bump that shares its PR. A member merges
+      under its PR's title, whatever `--subject` its own landing was given.
+
+      The landing pushes nothing. A `merges` call makes a commit with two parents where
+      the squash merge makes one, and both make the same tree: for two open heads on
+      2026-11-14 the endpoint and the gate's own stack both gave `90a57d70` and
+      `fbc228e3`. A head that conflicts with the PRs before it answers HTTP 409 and is
+      left in the line.
+
+      A labelled run on a head that carries a record skips every job and compares no
+      tree, so the label is the dangerous part. Three rules hold it. A PR is labelled
+      only by the landing that is about to merge it. It is labelled only at the head the
+      batch stacked and only while master is the commit that head was stacked on, which
+      for a member is the commit the PR before it merged as
+      (`stale_base.batch_tested`). A PR that was labelled and marked ready and then did
+      not merge is converted to draft and back with no label, which starts a full run,
+      so no later landing merges it on the skipped one. A member whose head moved, whose
+      own landing left the line, or that master moved under is never labelled, and it
+      and the members after it land alone.
+
+      A batch never fails a landing. A batch that cannot be formed leaves the holder to
+      land its own PR as before, and a failure while the members merge ends the batch and
+      leaves the holder's deploy to go on. One limit stands until the batch is on by
+      default: the members' merges come after the holder's own merge wait, up to ten
+      minutes each, and `LAND_DEADLINE` does not count them. A lander unit needs its
+      deadline sized before it sets `LAND_BATCH`.
+
+   Only a draft stands in the line. A ready flip is the one event that starts a member's
+   short labelled run, and a PR that is already ready has no flip left to make.
+1. **A red batch.** Every member of a red batch lands alone. With a red rate of 3.7% a batch
+   of four is red about one time in seven, which is where the estimate of 0.3 to 0.4 runs a
+   merge comes from.
+
+Four facts about the workflows shaped those steps:
+
+- Only the `prek` gate reports on a push to master. The other three required contexts
+  report on a pull request alone, and two of them, `pull + boot changed images` and
+  `flux-deletion-drill`, run on a draft's pushes. A draft member therefore lacks only the
+  gate, and GitHub refuses to merge a draft, so the landing marks it ready and its run must
+  pass the gate. Without step 1 that run is a full sweep.
+- The render-diff and cluster-pin gates take the run's base as `HEAD^1`, so on a batch they
+  judge the members together. Two rules can refuse a batch whose members each pass alone:
+  the pin rule above, and the rule that refuses a new edge beside a change to its
+  dependent. Such a batch is a red batch.
+- A squash merge of each member keeps one commit a PR on master, with the PR marked merged.
+  Merging the batch's own pull request would be one run and no member runs at all, and it
+  was refused: a rebase merge leaves the members' PRs closed and unmerged, and a merge
+  commit puts every commit of every member's branch on master.
+- `promote` publishes a bundle for a commit only when its `images` job runs, and a newer
+  pending `images` job evicts an older one. When a batch's commits reach master within a
+  minute, the middle ones can get no bundle, and `decide` promotes the newest commit that
+  has one, which is usually the batch's last and so the tree the batch's run tested. A
+  landing of a middle commit already waits for a promotion of a later commit to cover it.
 
 What the queue is worth is an estimate. The measured row is one afternoon's counts on
 2026-11-12, and the batch row assumes the 3.7% red rate above, with a red batch run again in

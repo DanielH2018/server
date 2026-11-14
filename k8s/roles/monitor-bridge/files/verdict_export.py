@@ -10,6 +10,8 @@ job as three gauges per row, labelled `check="<row>"`, and one gauge for the who
   three cycles. `INTERVAL` is 300s, so 900s.
 - `homelab_check_rows` is the count of enabled rows in `CHECKS`, gate rows included. It is not
   `registry.build_checks`' length, because that drops every gate row.
+- `homelab_domain_registration_expiry_days` is the days left before the domain's registration
+  expires, from the `domain_registration` row's RDAP read. It is absent until a read succeeds.
 
 The value is the end state's verdict, taken before suppression and before `startup_grace`
 (docs/target-architecture/monitoring/m6-retire-kuma.md, *The bridge as an exporter*). A row whose
@@ -39,6 +41,10 @@ TIMESTAMP_GAUGE = (
     "homelab_check_last_run_timestamp_seconds",
     "Unix time the cycle last recorded the row.",
 )
+REGISTRATION_GAUGE = (
+    "homelab_domain_registration_expiry_days",
+    "Days until the domain's registration expires, from its RDAP record.",
+)
 DEADLINE_GAUGE = (
     "homelab_check_deadline_seconds",
     "Seconds the row's timestamp may age before it is stale.",
@@ -57,12 +63,18 @@ class CheckExposition(Exposition):
         self._rows = 0
         self._deadline = float(DEADLINE_CYCLES * interval_s)
         self._verdicts: dict[str, tuple[float, float]] = {}
+        self._registration_days: float | None = None
         self._verdict_lock = threading.Lock()
         self._render()
 
     def set_rows(self, rows: int) -> None:
         """Set the row count: the enabled rows of `check_table.CHECKS`, gate rows included."""
         self._rows = rows
+        self._render()
+
+    def set_registration_days(self, days: float | None) -> None:
+        """Set the days left on the domain's registration. None drops the gauge."""
+        self._registration_days = days
         self._render()
 
     def record(self, name: str, ok: bool, now: float) -> None:
@@ -79,6 +91,12 @@ class CheckExposition(Exposition):
             "# TYPE %s gauge" % ROWS_GAUGE[0],
             "%s %d" % (ROWS_GAUGE[0], self._rows),
         ]
+        if self._registration_days is not None:
+            lines += [
+                "# HELP %s %s" % REGISTRATION_GAUGE,
+                "# TYPE %s gauge" % REGISTRATION_GAUGE[0],
+                "%s %r" % (REGISTRATION_GAUGE[0], float(self._registration_days)),
+            ]
         if verdicts:
             for (metric, help_text), pick in (
                 (SUCCESS_GAUGE, lambda v: v[0]),

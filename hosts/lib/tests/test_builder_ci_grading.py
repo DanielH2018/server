@@ -44,7 +44,7 @@ def test_every_reason_is_a_plan_value_and_none_is_trust():
         [{"name": "other", "status": "completed", "conclusion": "failure"}],
     ],
 )
-def test_the_grading_matches_the_deployers(runs):
+def test_the_grading_matches_the_shared_gate(runs):
     assert cg.ci_verdict(runs, frozenset({"prek"})) == shared_gate.ci_verdict(
         runs, frozenset({"prek"})
     )

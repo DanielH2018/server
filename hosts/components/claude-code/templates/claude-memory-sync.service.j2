@@ -14,14 +14,17 @@ SyslogLevel=notice
 # files on the far side must stay owned by the same account.
 User={{ sys_user }}
 # DECIDED: one-way and overwriting (operator, issue #3123). This host is the only writer that
-# counts; a file a session on {{ claude_code_memory_sync_target }} wrote is replaced or deleted
-# on the next run. --delete is what makes the far store MATCH rather than keep entries this
-# host archived. An empty or missing source must never reach --delete, which would wipe the
-# far store, so the condition skips the run unless the index exists and is non-empty.
+# counts. --delete is what makes the far store MATCH rather than keep entries this host
+# archived. An empty or missing source must never reach --delete, which would wipe the far
+# store, so the condition skips the run unless the index exists and is non-empty.
 ExecCondition=/usr/bin/test -s {{ claude_code_memory_sync_dir }}/MEMORY.md
-# --itemize-changes puts every overwritten or deleted file in the journal, the only record of
-# what a far-side write lost. BatchMode makes a missing key fail instead of prompting.
-ExecStart=/usr/bin/rsync -a --delete --mkpath --itemize-changes \
+# DECIDED: the far store is read-only (operator, ADR-0031). --chmod=a-w strips every write
+# bit from what the copy leaves on {{ claude_code_memory_sync_target }}, directories included,
+# so a session's write there fails at once instead of vanishing on the next run. rsync adds
+# the owner's write bit back to a directory only while it changes that directory.
+# --itemize-changes puts every changed or deleted file in the journal. BatchMode makes a
+# missing key fail instead of prompting.
+ExecStart=/usr/bin/rsync -a --delete --mkpath --itemize-changes --chmod=a-w \
   -e "ssh -o BatchMode=yes -o ConnectTimeout=20" \
   {{ claude_code_memory_sync_dir }}/ \
   {{ claude_code_memory_sync_target }}:{{ claude_code_memory_sync_target_dir }}/

@@ -1,6 +1,6 @@
 {# DECIDED: wg-easy's 51820/UDP listener is open to the internet, so this fence stays bespoke.
    The callers model (`netpol_from` / `netpol_fences`, macro in
-   ansible/templates/networkpolicy.yml.j2) renders one TCP port admitting same-namespace `app:`
+   k8s/templates/networkpolicy.yml.j2) renders one TCP port admitting same-namespace `app:`
    peers, and its header rules out growing it to absorb another shape. Census: #3701.
    Do not reach for `from_apps: []`: it renders `from:` as null, which admits every source by
    accident rather than by statement.
@@ -20,7 +20,7 @@
 #
 # VPN clients cannot reach a cluster service by ClusterIP or pod IP at all: the wg-easy pod drops
 # peer traffic bound for k3s_pod_cidr and k3s_service_cidr in its own netns (the
-# `peer-cluster-drop` init container in roles/k8s/wg-easy). Peers reach services by hostname
+# `peer-cluster-drop` init container in k8s/roles/wg-easy). Peers reach services by hostname
 # through the Traefik VIP, a LAN address, so no policy should ever need `app: wg-easy` as a peer.
 #
 # Both ports come from this service's `containers_list` entry (udp_port / port) — verified live

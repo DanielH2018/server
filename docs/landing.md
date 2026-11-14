@@ -31,16 +31,24 @@ a reader runs that older reader against the merge commit. On 2026-11-09 such a r
 landing has loaded from its checkout, and every module those import, function bodies included.
 With `--arm-merge --await-merge`, the landing first compares them with `origin/master` before
 it merges anything (#7830), and ends `refused` with nothing merged. After resolving the merge
-commit, step 1 compares them with the merge commit's first parent. It ends `refused` when master
-changed one the checkout lacks.
-`land_lib/classify.py:refuse_stale_code` has the rule.
+commit, step 1 compares them with the merge commit's first parent.
 
-**Both refusals name `--fresh` as the re-run** (#7933). With `--fresh`, `land.sh` fetches
-`origin/master` in the primary and adds a detached worktree of it under `/tmp`. It runs that
-checkout's `land.sh` with the same arguments, then removes the worktree. A checkout made by
-hand went stale again within minutes when master moved, and the `git -C <primary> worktree
-add` that made it is a command a worktree-isolated session's guard refuses. The landing
-still refuses rather than re-running on its own, so `land.sh` keeps running the release it
+**After the merge, a stale checkout hands the grading to a fresh one without asking** (#8679).
+Step 1 then runs `land.sh --pr <n> --since <pre-merge>` from a fresh checkout of
+`origin/master`. That landing prints the `VERDICT:` line and records the verdict, and the
+stale landing records nothing. On 2026-11-14 three of one session's four landings ended
+`refused` here with the PR merged, and each `--fresh` re-run waited on master CI a second time.
+The caller's answer to that refusal was always the same command, so the landing runs it.
+`land_lib/classify.py:refuse_stale_code` has the rule. It still ends `refused` under a lander
+unit, and when git could not make the comparison.
+
+**The refusal before the merge names `--fresh` as the re-run** (#7933). With `--fresh`,
+`land.sh` fetches `origin/master` in the primary and adds a detached worktree of it under
+`/tmp`. It runs that checkout's `land.sh` with the same arguments, then removes the worktree.
+The post-merge hand-off uses the same mechanics. A checkout made by hand went stale again
+within minutes when master moved, and the `git -C <primary> worktree add` that made it is a
+command a worktree-isolated session's guard refuses. Before the merge the landing still
+refuses rather than re-running on its own, so a landing merges only from the release it
 ships with unless the caller asks. With `--detach`, the fork runs the fresh checkout, so the
 checkout lives until the landing ends. `land_lib/fresh.py` has the mechanics. A lander
 unit's caller cannot pass `--fresh`, because the unit runs a fixed command line. Under a unit,
@@ -140,6 +148,18 @@ the admin role and Renovate update master. Auto-merge applies no bypass (github/
 so a PR armed with `gh pr merge --auto` sits `BLOCKED` from any account. `land.sh` merges as
 the operator, whose admin role the bypass covers, and is the one merge path.
 
+Nothing on an armed PR names the hold. PR #8270 was armed at 00:42 UTC on 2026-11-13, 42
+minutes after the ruleset went live. At 01:22 it still read `mergeStateStatus: BLOCKED` with
+`autoMergeRequest: SQUASH` and every required check green. `land.sh --fresh` then
+merged it directly. The same `BLOCKED` shows on every open PR into master, armed or not.
+
+The ruleset's creation time is what separates a held arm from one that merges. The PR timelines
+show it (#8294). Before 00:00:45 UTC on 2026-11-13, an armed PR merged within minutes: #8078
+merged 4 minutes after its arm on 2026-11-12. After that time, #8271 waited 36 minutes and
+#8368 waited 6 hours, each until a session merged it. The master CI gate's `pull_request` rule carried
+`require_extra_approval_for_unattributed_changes: true` through both periods. Its history shows
+the flag set since at least 2026-10-11, so that flag is not the hold.
+
 `--arm-merge` refuses a `CHANGES_REQUESTED` PR before any merge call, because someone asked for
 it to change. `--await-merge` merges the PR through the REST merge endpoint on the first poll
 where `await_ci` reads its head green, pinned to that head SHA. The master CI gate still refuses
@@ -184,25 +204,58 @@ and closed as not planned on 2026-11-02 (#6521).
   sleeps past it (#8147).
 - `LAND_PACE_MASTER_RUNS` sets the cap, and `0` turns pacing off.
 
-**With `LAND_QUEUE` set, a landing takes the landing turn before it merges.** One landing at a
-time holds the turn on a host, from the start of its PR's CI run to its merge. The PR's run
-then tests the master the merge lands on, so master's own run proves the tree and skips its
-jobs. [CI throughput](ci-throughput.md) has the measurements and the plan this is slice B2 of.
+**A landing takes the landing turn before it merges.** One landing at a time holds the turn,
+across both hosts. A PR that has had no CI run gets its one run inside the turn, so the run
+tests the master the merge lands on, and master's own run proves the tree and skips its
+jobs. `LAND_QUEUE=0` turns the turn off for one landing.
+[CI throughput](ci-throughput.md) has the measurements and the plan this is slice B2 of.
 
-- The landing waits for the turn first, and prints `waiting for the landing turn` once.
-- With the turn, it marks a draft PR ready, which starts the PR's one CI run. A PR that is
-  ready already keeps the run it has.
+- A landing asks for the turn when it can use it, and prints `waiting for the landing turn`
+  once while it stands in line. A head that has had no CI run that ran jobs asks before
+  that run. Any other head asks on the first poll that reads it green. No landing holds the
+  turn while a run that started before it finishes, because every landing behind it would
+  wait for that run too.
+- It marks a draft PR ready. With the turn, it then updates the PR's branch from master when
+  the head has had no CI run that ran jobs and master is ahead of it. GitHub builds the tree
+  a pull-request run tests when the PR's branch is pushed, and a ready flip does not build it
+  again, so a run that a ready flip starts tests the master of the last push. The update is
+  a push, and the run it starts tests the master of the turn.
+- A landing that stood in line reads its PR again before it acts, because the PR may have
+  moved or merged in the meantime.
+- A landing that waits with a draft that has had no CI run stands in the line for the turn:
+  a file named for its PR in `/run/lock/homelab-land-line` on daniel-box, holding the head
+  it would test (`land_lib/line.py`). The holder of the turn reads the line to test those
+  drafts with its own, which is slice B3 of [CI throughput](ci-throughput.md). A landing
+  whose place reads `merged` stops waiting, because the holder merged its PR. The line is
+  no gate: a landing that cannot reach it waits for the turn without it.
+- With `LAND_BATCH=1`, a landing that takes the turn with a draft tests the drafts in the
+  line with its own in one CI run and merges them behind its own PR (`land_lib/batch.py`).
+  Its log names each PR it stacks, each one it leaves out with the reason, and each merge.
+  A landing whose PR another landing merged this way prints `the landing that holds the
+  turn merged PR #N with its own` and goes on to the deploy.
+- A head with a run that ran jobs keeps it, finished or not, and the stale-base rules above
+  judge it once it is green. An update those rules make then runs inside the turn. A head the landing policy admitted on an approval is never
+  updated, because the update voids the approval. An update that GitHub refuses does not
+  stop the landing: the PR keeps the run the ready flip started.
 - A landing that holds the turn is not paced. No other landing with a turn merges ahead of
   it, and a paced holder would stop every landing behind it.
-- The turn ends when the merge wait does, whether the PR merged or the wait gave up. It is a
-  lock held by the landing's process, so a landing that dies gives it up.
-- The turn is not a safety gate. A landing that waits `merge_timeout` for it goes on without
-  it, marks its draft ready and merges as a paced landing does. The pre-merge wait can
-  therefore reach three times `merge_timeout`, and no lander with a `LAND_DEADLINE` sets
-  `LAND_QUEUE` yet.
-- A landing on the other host, and a landing without `LAND_QUEUE`, take no turn and can move
-  master under the holder. The holder's merge then falls back to the stale-base rules above,
-  and master's run sweeps in full.
+- The turn is a lock on one file on daniel-box. A landing there locks the file itself, and a
+  landing on daniel-server holds the same lock through an ssh session that lasts as long as
+  the landing.
+- The turn ends when the merge wait does, whether the PR merged or the wait gave up. The lock
+  ends with the landing's process, so a landing that dies gives it up: a holder killed with
+  SIGKILL on daniel-server freed the lock on daniel-box within a second.
+- The turn is not a safety gate. A landing that waits `merge_timeout` for it, or that cannot
+  reach daniel-box, goes on without it, marks its draft ready and merges as a landing with
+  `LAND_QUEUE=0` does.
+- The wait for the turn counts as waited. The merge wait gets one `merge_timeout` after it,
+  and no branch update moves the end of the wait past twice `merge_timeout`. The pre-merge
+  wait therefore stays inside the two merge budgets the `LAND_DEADLINE` sizing below counts.
+  A landing that spent `merge_timeout` waiting for the turn merges a green head without
+  pacing, as a landing that pacing held that long does.
+- A landing with `LAND_QUEUE=0` takes no turn and can move master under the holder. The
+  holder's merge then falls back to the stale-base rules above, and master's run sweeps in
+  full. A merge made outside `land.sh` does the same.
 
 **A head whose only CI skipped as a draft is re-triggered once, then ends the wait if it skips again.** `ci.yml` runs
 no job on a draft, so the push's run skips every job, the `prek` gate included, and `await_ci`
@@ -336,8 +389,9 @@ base moving under a PR flips it for one poll.
 
 **A PR whose own CI is red ends the wait too**, exit `LAND_FAILED` with `VERDICT: pr-ci-red`, quoting what
 `await_ci.py` said. GitHub reports it only as `mergeStateStatus: BLOCKED`, the same word it
-uses while the checks are still running. No other rule blocks a PR into master, so the wait
-treats `BLOCKED` as a question about checks. The wait keeps going
+uses while the checks are still running. Ruleset 27167149's update restriction also holds
+every PR into master at `BLOCKED` with every check green, so the word says nothing about the
+checks. The wait never reads it: `await_ci.py` owns the verdict. The wait keeps going
 while `await_ci.py` answers `pending`, which is what it answers until a required check
 registers; that is the grace period, so no landing is cut short for polling before CI started.
 
@@ -713,7 +767,17 @@ own (*The promotion wait*).
 One thing sits in the position of needing a hand:
 
 - **A rotated secret** has no path to match: a secret's value lives in no role's template, so
-  `secrets/secrets.yml` derives zero tags however many roles consume it. Run
+  `secrets/secrets.yml` derives zero tags however many roles consume it. The landing compares
+  each key's ciphertext across the PR's own range, without decrypting, and names each changed
+  key it leaves stale (`stale_copies.unapplied_keys`). It reads every copy and every reader
+  at the merge commit, so a reader that another PR merged first counts. A k8s reader's copy
+  is fresh when `cluster-vars.source` records the key's new ciphertext. A host's copy is
+  fresh when the PR changed that key in `secrets/hosts/<host>.sops.yaml` and the merge
+  commit still holds the PR's copy. Another PR's sync changes the ciphertext too, but it can
+  carry the old value. A key with a copy in
+  `stale_copies.OUTSIDE_THE_TREE`, such as Bazarr's API keys, is always named, and so is a
+  key no file reads. A rotation that refreshed every copy ends `settled`. Without a readable range the
+  landing names no key and ends `needs-manual-apply`. Run
   `uv run python scripts/secrets_mgmt/secret_rotation.py consumers <secret>` for who holds a
   stale copy and the repair command per plane.
 
@@ -733,8 +797,8 @@ When no host differs, the candidate is cleared and the landing ends
 waits rather than skips.
 
 A PR with host targets and no service tag deploys nothing in step 4. A PR that also rotates a
-secret, which no deploy tag or host package applies, still ends `needs-manual-apply`, and the
-output names each host it did not wait on.
+secret and leaves a copy of it stale still ends `needs-manual-apply`, and the output names each
+host it did not wait on.
 
 Step 5, `host_wait.wait_for_hosts`, queries Prometheus on loopback and then on the ClusterIP.
 A host settles when `homelab_host_applied_info` equals or descends from the merge commit and

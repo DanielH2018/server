@@ -13,7 +13,7 @@
 #
 # This does not narrow the RBAC, which is the other half of the exposure and is deliberately
 # read-only: the SA holds no secrets, no pods/exec and no write verbs (rbac.yaml.j2, enforced by
-# ansible/tests/k8s/test_k8s_manifests.py).
+# tests/k8s/test_k8s_manifests.py).
 #
 # Traefik is the only legitimate caller: every human path to Headlamp arrives through the
 # IngressRoute, where the Authelia middleware runs. Kubelet's probe traffic needs no rule —

@@ -16,16 +16,15 @@ Prometheus `node_exporter` as a DaemonSet, added at the Phase F drain so daniel-
   (interfaces, `/proc`) rather than a pod netns; the standard node-exporter posture.
 - **Mounts:** `/proc`, `/sys`, `/` (as `/rootfs`), all **read-only** `hostPath` — no write
   access despite `hostNetwork`/`hostPID`.
-- **Flux applies it, not Ansible** (D5.7, the third Wave A PR). Its `containers_list` entry
+- **Flux applies it.** Its `containers_list` entry
   is in `cluster/services.yml`, so nothing applies it by hand, and a
   merged change reaches the cluster when `promote` publishes and verifies the next bundle. Its
   image-bump PRs therefore draw no `land-wait` and no `probe.py health` run.
-- **Where the task went.** Its `manifests_rollout:
-  node-exporter` default and its include's `manifests_rollout_kind: daemonset` name the DaemonSet for the
-  stabilisation gate. The Kustomization's `wait` replaces that gate: it reads the DaemonSet
-  ready only when every scheduled pod is ready, so a node that goes NotReady mid-apply still
-  fails the wait. `k8s_autodeploy` no longer gates an apply, because the deployer skips the
-  tag. It still decides whether Renovate automerges the image bump.
+- **Its rollout.** Its `manifests_rollout: node-exporter` default and its include's
+  `manifests_rollout_kind: daemonset` name the DaemonSet. The Kustomization's `wait` reads the
+  DaemonSet ready only when every scheduled pod is ready, so a node that goes NotReady
+  mid-apply fails the wait. `k8s_autodeploy` gates no apply: Flux applies every merged change.
+  It still decides whether Renovate automerges the image bump.
 - **Renovate may automerge its image bump because** it is stateless with no PVC, a
   readinessProbe gates the rollout, and the image is version-pinned.
 
