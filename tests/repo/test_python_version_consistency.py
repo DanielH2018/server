@@ -16,6 +16,7 @@ import tomllib
 
 from lib import yaml_fast
 from _helpers import REPO
+from _k8s_render import rendered_build_texts
 
 
 PYTHON_VERSION_FILE = REPO / ".python-version"
@@ -119,14 +120,14 @@ def test_role_dockerfiles_build_on_the_canonical_python():
     """A built image runs role code on its base's interpreter, so the base must be the minor CI tests."""
     canonical = _canonical()
     found = {
-        path.relative_to(REPO).as_posix(): dockerfile_python_minors(path.read_text())
-        for path in sorted(REPO.glob("k8s/roles/*/templates/Dockerfile*.j2"))
+        f"{role}/{template}": minors
+        for role, template, text in rendered_build_texts()
+        if (minors := dockerfile_python_minors(text))
     }
-    found = {path: minors for path, minors in found.items() if minors}
     assert {
-        "k8s/roles/karakeep/templates/Dockerfile.j2",
-        "k8s/roles/ical-proxy/templates/Dockerfile.j2",
-        "k8s/roles/homelab-mcp/templates/Dockerfile.j2",
+        "karakeep/Dockerfile.j2",
+        "ical-proxy/Dockerfile.j2",
+        "homelab-mcp/Dockerfile.j2",
     } <= found.keys(), f"census lost a known Python base image: {sorted(found)}"
     mismatched = {p: m for p, m in found.items() if set(m) != {canonical}}
     assert not mismatched, (
