@@ -79,6 +79,7 @@ components:
   - host-maintenance
   - ssh-firewall
   - docs-refresh
+  - board-sync
   - infra-map
   - eval-sweep
   - worktree-sweep

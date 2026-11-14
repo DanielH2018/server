@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# Resync the Project board with every open issue, and fail the unit only on a failure streak.
+#
+# Usage: board-sync [-h|--help]
+# Takes no arguments. homelab-board-sync.timer runs it hourly as the checkout owner on daniel-box.
+# Running it by hand writes the board for real.
+#
+# `findings.py sync-board` exits 1 when any one issue's board item fails. A schema problem
+# repeats every run, and a GitHub 5xx usually clears on the next, so exiting 1 on every failed
+# run would page hourly through OnFailure=. This script counts consecutive failed runs in
+# $STATE_DIRECTORY/failures and exits 1 on the PAGE_AT-th, then on every PAGE_EVERY-th after it:
+# one page after three hours, then one a day. A successful run resets the count.
+set -u
+
+for arg in "$@"; do
+  case "$arg" in
+    -h | --help) awk 'NR > 1 && /^#/ { print; next } NR > 1 { exit }' "$0"; exit 0 ;;
+  esac
+done
+
+PAGE_AT=3
+PAGE_EVERY=24
+count_file="${STATE_DIRECTORY:?the unit sets StateDirectory=}/failures"
+
+cd /home/{{ sys_user }}/server || exit 1
+/home/{{ sys_user }}/.local/bin/uv run --quiet python scripts/dev/findings.py sync-board
+rc=$?
+if [ "$rc" -eq 0 ]; then
+  rm -f "$count_file"
+  exit 0
+fi
+
+prev=$(cat "$count_file" 2>/dev/null)
+[[ "$prev" =~ ^[0-9]+$ ]] || prev=0
+failures=$((prev + 1))
+echo "$failures" > "$count_file"
+if [ "$failures" -ge "$PAGE_AT" ] && [ $(( (failures - PAGE_AT) % PAGE_EVERY )) -eq 0 ]; then
+  echo "status=down $failures consecutive failed runs; journalctl -t board-sync has each reason"
+  exit 1
+fi
+echo "status=degraded $failures consecutive failed runs; pages at $PAGE_AT, then every $PAGE_EVERY"
+exit 0

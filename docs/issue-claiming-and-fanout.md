@@ -133,9 +133,11 @@ so it is skipped.
 The issue stays the record: `next`, `claim` and the fan-out never read the board. A board
 write that fails therefore prints one warning naming the issues and leaves the exit code
 alone. `findings.py sync-board [<n> ...]` repairs the board, and with no numbers it checks
-every open issue. Use it after a label someone changed in the GitHub UI, or after a session
-whose gh token cannot reach the board. Writing the board needs the `project` scope on the gh
-token, which the `ubuntu` user's token carries.
+every open issue. Two paths change an issue without findings.py: a label someone changed in
+the GitHub UI, and a session whose gh token cannot reach the board, such as one run as the
+`claude` user. To catch both, `homelab-board-sync.timer` on daniel-box runs `sync-board` over
+every open issue hourly, as `ubuntu` (`hosts/components/board-sync/`). Writing the board needs
+the `project` scope on the gh token, which the `ubuntu` user's token carries.
 
 ## Staleness: a claim expires with its worktree, not with a pid
 
