@@ -9,6 +9,7 @@ Its own module rather than part of `consumers.py`, because it reads the host fil
 `host_secrets`, and the registry audit's prek hook lists `consumers.py`'s import closure.
 """
 
+import tempfile
 from collections.abc import Mapping
 from types import MappingProxyType
 
@@ -17,7 +18,7 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))  # scripts/
 
-from lib.git import git
+from lib.git import extract, git
 from secrets_mgmt.cluster_vars_check import ciphertexts, digest, parse_source
 from secrets_mgmt.consumers import HOST_PLANE, K8S_PLANE, tree_consumers
 from secrets_mgmt.host_secrets import tree_hosts, tree_keys
@@ -34,6 +35,7 @@ OUTSIDE_THE_TREE: Mapping[str, str] = MappingProxyType(
 
 _STORE = "secrets/secrets.yml"
 _CLUSTER_SOURCE = "secrets/cluster-vars.source"
+_READER_TREES = ("k8s", "hosts")  # what `tree_consumers` and `_host_readers` walk
 
 
 def _text_at(repo: str, ref: str, path: str) -> str | None:
@@ -68,7 +70,8 @@ def unapplied_keys(old: str, new: str, repo: str = REPO) -> dict[str, str]:
     the landing waits on that host's package. A key in `OUTSIDE_THE_TREE`, or one no file in
     the tree reads, is never applied: whatever holds it is out of every deploy's reach.
 
-    The readers are counted in `repo`'s working tree, which the landing has fast-forwarded.
+    The readers are counted at `new`, from its `k8s/` and `hosts/` unpacked into a scratch
+    directory, so `repo`'s working tree may sit at any commit.
 
     Raises:
         subprocess.CalledProcessError: `old` or `new` does not name a commit.
@@ -77,13 +80,22 @@ def unapplied_keys(old: str, new: str, repo: str = REPO) -> dict[str, str]:
         git("rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}", cwd=repo)
     before, after = (_ciphertexts_at(repo, ref, _STORE) for ref in (old, new))
     recorded = parse_source(_text_at(repo, new, _CLUSTER_SOURCE) or "")
+    changed = sorted(k for k, value in after.items() if before.get(k) != value)
+    with tempfile.TemporaryDirectory(prefix="stale-copies-") as tree:
+        extract(new, _Path(tree), _READER_TREES, repo=repo)
+        readers = {
+            name: (
+                K8S_PLANE in tree_consumers(name, tree).values(),
+                _host_readers(name, tree),
+            )
+            for name in changed
+        }
     out = {}
-    for name in sorted(k for k, value in after.items() if before.get(k) != value):
+    for name in changed:
         why = []
         if name in OUTSIDE_THE_TREE:
             why.append(f"{OUTSIDE_THE_TREE[name]} holds a copy no deploy reaches")
-        k8s = K8S_PLANE in tree_consumers(name, repo).values()
-        hosts = _host_readers(name, repo)
+        k8s, hosts = readers[name]
         if not (k8s or hosts or why):
             why.append(
                 "no file in the tree reads it, so whatever holds it is outside it"

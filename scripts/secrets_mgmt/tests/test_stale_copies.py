@@ -9,7 +9,9 @@ Run: uv run pytest scripts/secrets_mgmt/tests/test_stale_copies.py
 
 from pathlib import Path
 
-from lib.git_testing import commit, init_repo
+import pytest
+
+from lib.git_testing import commit, git, init_repo
 from secrets_mgmt.cluster_vars_check import digest
 from secrets_mgmt.stale_copies import unapplied_keys
 
@@ -97,3 +99,29 @@ def test_a_key_no_file_reads_is_stale(tmp_path):
         tmp_path, _keys(**keys), _keys(**keys, ui_login_password=_NEW)
     )
     assert list(unapplied_keys(old, new, repo)) == ["ui_login_password"]
+
+
+@pytest.mark.parametrize(
+    "reader, why",
+    [
+        (
+            {"k8s/roles/late/templates/secret.yaml.j2": "t: {{ late_token }}\n"},
+            "the cluster file's copy is stale (`cluster_vars.py write`)",
+        ),
+        (
+            {"hosts/daniel-server/package.yml": "credentials:\n  - late_token\n"},
+            "daniel-server's host file is not synced "
+            "(`host_secrets.py sync daniel-server`)",
+        ),
+    ],
+    ids=["k8s", "host"],
+)
+def test_a_reader_the_rotation_added_counts_with_the_working_tree_at_old(
+    tmp_path, reader, why
+):
+    keys = {"pod_token": _OLD, "box_token": _OLD, "sonarr_api_key": _OLD}
+    before = _keys(**keys, late_token=_OLD)
+    after = before | {"secrets/secrets.yml": _store(**keys, late_token=_NEW), **reader}
+    repo, old, new = _rotation(tmp_path, before, after)
+    git(repo, "checkout", "-q", old)
+    assert unapplied_keys(old, new, repo) == {"late_token": why}
