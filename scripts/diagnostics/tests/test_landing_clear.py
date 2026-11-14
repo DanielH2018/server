@@ -5,6 +5,7 @@ Run: uv run pytest scripts/diagnostics/tests/test_landing_clear.py
 
 import json
 import os
+import subprocess
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -79,9 +80,44 @@ def test_a_failed_read_exits_1_and_prints_no_state(hold_read, ci_read, capsys):
     assert "HTTP 502" in out.err
 
 
-def test_describe_names_clear_as_the_only_terminal_state(capsys):
+def test_describe_declares_a_failure_state_cc_wait_accepts(capsys):
+    # cc-wait refuses a source whose terminal states all exit 0, and owns codes 2 and 75.
     assert landing_clear.main(["--describe"]) == 0
-    assert json.loads(capsys.readouterr().out) == {
-        "terminal": {"clear": 0},
-        "interval_s": landing_clear.INTERVAL_S,
-    }
+    terminal = json.loads(capsys.readouterr().out)["terminal"]
+    assert terminal["clear"] == 0
+    assert any(code not in (0, 2, 75) for code in terminal.values()), terminal
+
+
+def _gh_exits(code, stdout="", stderr=""):
+    def fake_gh(*args, **kwargs):
+        return subprocess.CompletedProcess(["gh", *args], code, stdout, stderr)
+
+    return fake_gh
+
+
+def _ci_read(code, stdout="", stderr=""):
+    return lambda: landing_clear._master_ci_run(_gh_exits(code, stdout, stderr))
+
+
+def test_no_gh_login_ends_the_wait_as_gh_unauthenticated():
+    state = landing_clear.read(
+        deploy_hold=lambda: pytest.fail("hold read after a gh exit 4"),
+        master_ci_run=_ci_read(4, stderr="To get started with GitHub CLI"),
+    )
+    assert state["state"] == "gh-unauthenticated"
+    assert state["state"] in landing_clear.TERMINAL
+
+
+def test_any_other_gh_failure_is_a_failed_read(capsys):
+    ci_read = _ci_read(1, stderr="HTTP 401: Bad credentials")
+
+    def read_state():
+        return landing_clear.read(lambda: "none", ci_read)
+
+    assert landing_clear.main([], read_state=read_state) == 1
+    assert capsys.readouterr().out == ""
+
+
+def test_a_master_with_no_ci_run_reads_pending():
+    state = landing_clear.read(lambda: "none", _ci_read(0, '{"workflow_runs": []}'))
+    assert state == {"state": "clear", "detail": "DEPLOY_HOLD none; master CI pending"}
