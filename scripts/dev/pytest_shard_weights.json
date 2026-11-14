@@ -701,6 +701,7 @@
  "scripts/diagnostics/tests/test_probe_shed_set.py": 0.0,
  "scripts/diagnostics/tests/test_probe_takeover.py": 3.33,
  "scripts/diagnostics/tests/test_probe_unreadable_source.py": 0.19,
+ "scripts/diagnostics/tests/test_probe_uptime_robot.py": 0.02,
  "scripts/diagnostics/tests/test_probe_usage_and_config_errors.py": 0.0,
  "scripts/diagnostics/tests/test_probe_verdict_line.py": 0.05,
  "scripts/diagnostics/tests/test_probe_vip_placement.py": 0.0,
