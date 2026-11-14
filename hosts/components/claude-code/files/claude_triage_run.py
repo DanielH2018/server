@@ -10,7 +10,8 @@ carried. The script writes the framed prompt into the exchange directory and sta
 over it (`claude_triage_session.py`) and leaves the result there. The script reads that result
 as untrusted, and writes three things whatever the session achieved:
 
-- the record, `<STATE_DIR>/runs/<episode-id>.json`, which outlives the report;
+- the record, `<STATE_DIR>/runs/<episode-id>.json`, which outlives the report, and beside it
+  the session's transcript, `<episode-id>.transcript.jsonl`;
 - the report, `<REPORT_DIR>/triage-<episode-id>.html`, an artifact the operator opens later;
 - the page, by starting `claude-triage-report-alert@<episode-id>:<state>.service`, which holds the
   Discord webhook so this user never does.
@@ -30,6 +31,7 @@ import html
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -37,7 +39,14 @@ from collections.abc import Callable
 
 # The runner runs from /opt/claude-triage, where component.yml's `lib: host_lib.py` entry
 # ships host_lib.py beside it.
-from claude_triage_session import IN_DIR, OUT_DIR, PROMPT_NAME, RESULT_NAME
+from claude_triage_session import (
+    IN_DIR,
+    OUT_DIR,
+    PROMPT_NAME,
+    RESULT_NAME,
+    TRANSCRIPT_MAX,
+    TRANSCRIPT_NAME,
+)
 from host_lib import (
     ERR,
     WARNING,
@@ -122,6 +131,28 @@ def session_result(out: str, end: UnitEnd) -> tuple[dict, bool]:
     return (result if isinstance(result, dict) else {}), timed_out
 
 
+def keep_transcript(out: str, dest: str) -> int | None:
+    """Copy the session's transcript from the exchange's `out/` to `dest`; its size, or None.
+
+    Read as the result is read, so a link, a FIFO or an oversized file is refused and logged by
+    class. A run whose session wrote no transcript keeps nothing.
+    """
+    try:
+        text = read_untrusted(out, TRANSCRIPT_NAME, TRANSCRIPT_MAX)
+    except (OSError, ValueError) as exc:
+        log(
+            f"refused the session's {TRANSCRIPT_NAME}: {type(exc).__name__}",
+            WARNING,
+            tag=TAG,
+        )
+        return None
+    if not text:
+        return None
+    data = text.encode()
+    write_textfile(dest, data, 0o640)
+    return len(data)
+
+
 def classify(result: dict, timed_out: bool) -> str:
     """One of STATES, from what the session returned rather than what it claimed."""
     if timed_out:
@@ -164,6 +195,9 @@ def runs_today(runs_dir: str, now: float) -> int:
     except OSError:
         return 0
     for name in names:
+        # A run's transcript sits beside its record.
+        if not name.endswith(".json"):
+            continue
         try:
             with open(os.path.join(runs_dir, name), encoding="utf-8") as f:
                 record = json.load(f)
@@ -278,7 +312,10 @@ def main(
     started = time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime(t))
     t0 = time.monotonic()
     cap = int(cfg.get("DAILY_CAP", "0"))
-    if cap and runs_today(os.path.join(state_dir, "runs"), t) >= cap:
+    runs_dir = os.path.join(state_dir, "runs")
+    os.makedirs(runs_dir, exist_ok=True)
+    transcript_bytes = None
+    if cap and runs_today(runs_dir, t) >= cap:
         # Here, not only in the poller: polkit lets the agent start this unit directly.
         result, timed_out, state = {}, False, "capped"
         error = f"the daily cap of {cap} runs was reached, so no session ran"
@@ -296,6 +333,11 @@ def main(
         # The unit's own TimeoutStartSec stops the session; this wait only outlasts it.
         end = start(SESSION_UNIT, int(cfg.get("RUN_TIMEOUT_S", "1800")) + 300)
         result, timed_out = session_result(out, end)
+        transcript_bytes = keep_transcript(
+            out, os.path.join(runs_dir, f"{episode_id}.transcript.jsonl")
+        )
+        # Nothing the session wrote outlives the run (dotfiles#967's I2).
+        shutil.rmtree(out, ignore_errors=True)
         state = classify(result, timed_out)
         error = stop_reason(result, timed_out)
     finished = time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime())
@@ -313,16 +355,17 @@ def main(
         # A count, never the tools: a guard that cannot start denies every Bash call, and the run
         # then reads like an ordinary inconclusive one.
         "denials": len(result.get("permission_denials") or []),
+        "transcript_bytes": transcript_bytes,
+        "transcript_cut": transcript_bytes == TRANSCRIPT_MAX,
         "duration_s": round(time.monotonic() - t0),
         "started": started,
         "finished": finished,
         "report": f"{cfg.get('REPORT_BASE_URL', '')}triage-{episode_id}.html",
     }
-    os.makedirs(os.path.join(state_dir, "runs"), exist_ok=True)
     # The mode is explicit because the artifacts tree's default ACL cannot widen a file created
     # 0600: neither the operator nor the artifacts pod could then read the report.
     write_textfile(
-        os.path.join(state_dir, "runs", f"{episode_id}.json"),
+        os.path.join(runs_dir, f"{episode_id}.json"),
         json.dumps(record, indent=2, sort_keys=True) + "\n",
         0o640,
     )

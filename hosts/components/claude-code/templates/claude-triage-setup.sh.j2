@@ -31,6 +31,10 @@ as_ctl() {
 
 systemd-tmpfiles --create /usr/lib/tmpfiles.d/homelab-claude-triage.conf
 
+# What sessions wrote to the home before it became a per-run tmpfs. The mount would hide it, not
+# remove it. find -delete follows no link, and the session's tmpfs exists only in its own unit.
+find "{{ pins.session_home }}" -xdev -mindepth 1 -delete
+
 # The records a run wrote while triage ran as the agent, copied once. find does not follow links,
 # so a link the agent planted there is skipped rather than read as root.
 old={{ claude_code_agent_user_home }}/triage

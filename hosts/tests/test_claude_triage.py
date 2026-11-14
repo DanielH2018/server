@@ -508,7 +508,8 @@ def test_no_triage_path_sits_where_the_agent_or_the_session_could_rename_it() ->
 
 def test_the_session_shares_only_read_access_with_the_controller() -> None:
     """The session reads the clone, the toolchain and the exchange through its group; tmpfiles
-    gives it no write on any of them. The runner recreates the exchange's out/ for each run."""
+    gives it no write on any of them. The runner recreates the exchange's out/ for each run, and
+    the session's home is only the mountpoint of its per-run tmpfs."""
     # fact: hosts/components/claude-code/CLAUDE.md#Autonomous-role contract (`claude-triage@`, a session started by a monitor episode)
     declared = tmpfiles(True)
     module = (
@@ -520,7 +521,7 @@ def test_the_session_shares_only_read_access_with_the_controller() -> None:
         "exchange_dir": ("2750", CTL_USER, SESSION_USER),
         "tools_dir": ("2750", CTL_USER, SESSION_USER),
         "clone_dir": ("2750", CTL_USER, SESSION_USER),
-        "session_home": ("0700", SESSION_USER, SESSION_USER),
+        "session_home": ("0755", "root", "root"),
     }
     for name, entry in expected.items():
         assert declared[getattr(module, name)] == entry, name

@@ -18,6 +18,16 @@ artifacts_triage_dir in k8s/roles/artifacts/defaults/main.yml, which mounts it. 
 {%- set state_dir = "/var/lib/claude-triage-ctl/state" -%}
 {%- set session_user = "claude-triage" -%}
 {%- set session_home = "/var/lib/claude-triage" -%}
+{#- The session's bounds (dotfiles#967's I2 and I8). Its home, /tmp, /var/tmp and /dev/shm are
+tmpfs mounts that end with the unit. Their pages count against memory_max, so the sizes sum well
+below it and a full mount fails with ENOSPC rather than an OOM kill. The home's mount takes the
+session's numeric uid, which hosts/daniel-box/package.yml declares. -#}
+{%- set session_uid = 907 -%}
+{%- set home_size = "512M" -%}
+{%- set tmp_size = "512M" -%}
+{%- set scratch_size = "64M" -%}
+{%- set memory_max = "4G" -%}
+{%- set tasks_max = 512 -%}
 {#- What the controller shares with the session through the session user's group. -#}
 {%- set exchange_dir = "/var/lib/claude-triage-exchange" -%}
 {%- set tools_dir = "/var/lib/claude-triage-tools" -%}

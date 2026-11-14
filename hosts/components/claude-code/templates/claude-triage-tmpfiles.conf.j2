@@ -21,5 +21,6 @@ f {{ pins.state_dir }}/shadow.jsonl 0640 {{ pins.ctl_user }} {{ pins.ctl_user }}
 d {{ pins.exchange_dir }} 2750 {{ pins.ctl_user }} {{ pins.session_user }} -
 d {{ pins.tools_dir }} 2750 {{ pins.ctl_user }} {{ pins.session_user }} -
 d {{ pins.clone_dir }} 2750 {{ pins.ctl_user }} {{ pins.session_user }} -
-# The session's own home: its caches and its transcripts.
-d {{ pins.session_home }} 0700 {{ pins.session_user }} {{ pins.session_user }} -
+# The mountpoint of the session's home. The session unit mounts a tmpfs here for each run, so the
+# directory itself stays root's and empty.
+d {{ pins.session_home }} 0755 root root -

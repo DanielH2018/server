@@ -5,9 +5,11 @@ These tests drive it with a fake `claude` that records what it was given.
 """
 
 import json
+import signal
 import stat
 
 import claude_triage_session as session
+import pytest
 
 
 def test_a_token_pasted_across_a_wrapped_line_reaches_the_session_whole(
@@ -74,3 +76,65 @@ def test_the_prompt_reaches_claude_on_stdin_and_the_result_lands_in_the_exchange
     assert json.loads(result) == {"result": "session-text-sentinel"}
     printed = capsys.readouterr()
     assert "sentinel" not in printed.out + printed.err
+
+
+def _transcript_run(tmp_path, claude_body: str) -> tuple:
+    """The session script over a fake claude that writes a transcript into a fresh home."""
+    exchange = tmp_path / "exchange"
+    (exchange / session.IN_DIR).mkdir(parents=True)
+    (exchange / session.OUT_DIR).mkdir()
+    (exchange / session.IN_DIR / session.PROMPT_NAME).write_text("prompt")
+    home = tmp_path / "home"
+    transcript = home / ".claude" / "projects" / "-var-lib-clone" / "s1.jsonl"
+    transcript.parent.mkdir(parents=True)
+    fake = tmp_path / "claude"
+    fake.write_text(f"#!/bin/sh\ncat >/dev/null\nT={transcript}\n{claude_body}\n")
+    fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
+    config = tmp_path / "config.env"
+    config.write_text(
+        f"EXCHANGE_DIR={exchange}\nCLAUDE_BIN={fake}\nWORKDIR={tmp_path}\n"
+        f"SESSION_HOME={home}\n"
+    )
+    return config, exchange / session.OUT_DIR / session.TRANSCRIPT_NAME
+
+
+@pytest.fixture
+def restore_sigint():
+    previous = signal.getsignal(signal.SIGINT)
+    yield
+    signal.signal(signal.SIGINT, previous)
+
+
+def test_the_transcript_leaves_the_home_for_the_exchange(
+    tmp_path, restore_sigint
+) -> None:
+    config, copied = _transcript_run(
+        tmp_path, 'echo \'{"type":"user"}\' > "$T"\necho \'{}\''
+    )
+
+    assert session.main(["claude_triage_session.py"], str(config)) == 0
+
+    assert copied.read_text() == '{"type":"user"}\n'
+
+
+def test_the_transcript_survives_the_wall_clocks_sigint(
+    tmp_path, restore_sigint
+) -> None:
+    """systemd's stop signals the whole unit, the script included, and the copy still happens."""
+    config, copied = _transcript_run(
+        tmp_path, 'echo stopped > "$T"\nkill -INT "$PPID"\nsleep 0.2'
+    )
+
+    assert session.main(["claude_triage_session.py"], str(config)) == 0
+
+    assert copied.read_text() == "stopped\n"
+
+
+def test_an_oversized_transcript_is_cut_at_the_cap(tmp_path) -> None:
+    transcript = tmp_path / ".claude" / "projects" / "-clone" / "s1.jsonl"
+    transcript.parent.mkdir(parents=True)
+    transcript.write_text("0123456789abcdef")
+
+    session.export_transcript(str(tmp_path), str(tmp_path), limit=8)
+
+    assert (tmp_path / session.TRANSCRIPT_NAME).read_bytes() == b"01234567"

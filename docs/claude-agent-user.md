@@ -627,6 +627,15 @@ switches it on, and it installs only while `claude_code_agent_user_enabled` is a
   session shaped could raise the next episode. The runner reads the result without following a
   link, up to 1 MiB, and its journal lines carry the episode id and the state only. The record
   and the report keep the session's stop reason.
+- **Nothing the session writes reaches a later run** (dotfiles#967's I2, guardrails plan B2-3).
+  The session unit mounts a fresh tmpfs over the session's home and over `/tmp`, `/var/tmp`
+  and `/dev/shm`, each capped in size, and `ProtectSystem=strict` makes every other path
+  read-only. The one disk path the session writes is the exchange's `out/`. Once `claude` exits,
+  on its own or at the wall clock, the session script copies the transcript there, cut at
+  32 MiB. The runner keeps it as `runs/<episode>.transcript.jsonl` beside the record and then
+  deletes `out/`. Nothing resumes the session in place: the operator ruled on 2026-11-14 that
+  an unattended session keeps its transcript and loses resume. The unit also caps the
+  session's memory and tasks, and turns auto memory off.
 - **The session** is `claude -p`. Edit, Write, a landing and a push are denied, and
   `--permission-prompts none` denies anything that would wait on an answer. The session has a
   $10 budget, 60 turns and a 30-minute wall clock, the session unit's `TimeoutStartSec`, and it
@@ -667,8 +676,8 @@ printf '%s\n' '{"monitor": "Drill", "message": "drill: no real fault"}' \
 sudo systemctl start claude-triage@drill-1
 ```
 
-The drill writes `/var/lib/claude-triage-ctl/state/runs/drill-1.json` and `triage-drill-1.html`
-under `/a/daniel-box-claude-triage/`, and Discord gets the page. To switch triage off, set
+The drill writes `/var/lib/claude-triage-ctl/state/runs/drill-1.json`, the transcript beside it,
+and `triage-drill-1.html` under `/a/daniel-box-claude-triage/`, and Discord gets the page. To switch triage off, set
 `claude_code_triage_enabled: false` and apply. The records stay.
 
 ### Slice 2: the poller
