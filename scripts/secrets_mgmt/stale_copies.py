@@ -27,6 +27,8 @@ from secrets_mgmt.rotation_tools import REPO
 # keys always owes a hand step; `docs/secret-rotation.md` gives each one's.
 OUTSIDE_THE_TREE: Mapping[str, str] = MappingProxyType(
     {
+        "crowdsec_k8s_agent_password": "the CrowdSec LAPI's machine registrations",
+        "crowdsec_k8s_bouncer_api_key": "the CrowdSec LAPI's bouncer registration",
         "lidarr_api_key": "Prowlarr's Lidarr application",
         "livesync_db_password": "each Obsidian LiveSync client's plugin settings",
         "livesync_sync_token": "each Obsidian LiveSync client's plugin settings",
@@ -36,6 +38,8 @@ OUTSIDE_THE_TREE: Mapping[str, str] = MappingProxyType(
         "qbittorrent_password": "the qBittorrent download client in Sonarr, Radarr and Lidarr",
         "radarr_api_key": "Bazarr's config on the bazarr-config PVC and Prowlarr's Radarr "
         "application",
+        "scrutiny_influxdb_admin_password": "InfluxDB's database, set at its first-run setup",
+        "scrutiny_influxdb_token": "InfluxDB's database, set at its first-run setup",
         "sonarr_api_key": "Bazarr's config on the bazarr-config PVC and Prowlarr's Sonarr "
         "application",
     }

@@ -96,6 +96,8 @@ def test_a_key_with_a_copy_outside_the_tree_is_stale_however_fresh_the_rest(tmp_
 @pytest.mark.parametrize(
     "name",
     [
+        "crowdsec_k8s_agent_password",
+        "crowdsec_k8s_bouncer_api_key",
         "lidarr_api_key",
         "livesync_db_password",
         "livesync_sync_token",
@@ -103,9 +105,11 @@ def test_a_key_with_a_copy_outside_the_tree_is_stale_however_fresh_the_rest(tmp_
         "nut_ha_password",
         "prowlarr_api_key",
         "qbittorrent_password",
+        "scrutiny_influxdb_admin_password",
+        "scrutiny_influxdb_token",
     ],
 )
-def test_a_key_an_app_holds_in_its_own_settings_is_stale_with_its_cluster_file_fresh(
+def test_a_key_an_app_stores_itself_is_stale_with_its_cluster_file_fresh(
     tmp_path, name
 ):
     repo = init_repo(tmp_path / "repo")

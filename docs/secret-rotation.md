@@ -232,6 +232,14 @@ before deciding what is due. Examples:
     set it under Settings → Devices & services → that integration → Reconfigure.
   - Each Obsidian LiveSync client holds `livesync_db_password` and `livesync_sync_token` in the
     plugin's settings on its own device. After rotating either, enter it on every device.
+  - InfluxDB holds `scrutiny_influxdb_admin_password` and `scrutiny_influxdb_token` in its own
+    database. It reads both from its `INIT_*` env only at first-run setup, and the rotation does
+    not roll it. Change the password in InfluxDB with `influx user password`. InfluxDB issues
+    the token itself, so create the new one with `influx auth create` before `sops set` stores
+    it.
+  - The CrowdSec LAPI holds `crowdsec_k8s_bouncer_api_key` and `crowdsec_k8s_agent_password`
+    in its registrations. The CrowdSec bullet below gives the deletes that let them
+    re-register.
 - `k3s_readonly_token` (H6.3b): the token of the cluster's read-only ServiceAccount
   (`homelab-readonly` in `kube-system`), which `homelab-k3s-restart` loads to read the API and
   `homelab-k3s-kubeconfig` writes into the read-only `~/.kube/config` on daniel-box and
