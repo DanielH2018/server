@@ -7,6 +7,7 @@ ranked by reads, the instruction bytes each session loaded, and the notice repla
 window (``--json`` for a cron or an agent). ``notice`` lists every section citing an atom that the diff from the merge base of
 ``--since`` to ``--head``, or to the working tree, moved.
 It exits 0 with rows or without, and 2 only when git cannot resolve the merge base.
+``mv`` rewrites the references a rename left in docs and comments.
 """
 
 import sys as _sys
@@ -25,6 +26,7 @@ from lib.exit_codes import FACT_STATUS_BAD_ARGS, FACT_STATUS_BAD_REF
 from lib.facts.citations import repo_citations
 from lib.facts.lint import changed_units, lint_sections
 from lib.facts.notice import FORMATS, branch_notice
+from lib.facts.renames import move
 from lib.facts.report import build, default_log, render
 from lib.repo_paths import REPO
 
@@ -75,6 +77,35 @@ def cmd_notice(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_mv(args: argparse.Namespace) -> int:
+    root = Path(args.root) if args.root else None
+    try:
+        moved = move(Path(args.repo), args.old, args.new, root, not args.dry_run)
+    except ValueError as refused:
+        print(f"mv: {refused}", file=_sys.stderr)
+        return _USAGE
+    old = args.old.rstrip("/")
+    left = sum(len(paths) for paths in moved.left.values())
+    if not moved.rewritten and not left:
+        print(f"mv: no reference to {old}")
+        return 0
+    verb = "would rewrite" if args.dry_run else "rewrote"
+    count, files = sum(moved.rewritten.values()), len(moved.rewritten)
+    line = (
+        f"mv: {verb} {count} reference{'' if count == 1 else 's'} to {old} "
+        f"in {files} file{'' if files == 1 else 's'}"
+    )
+    if left:
+        line += f"; left {left} whose new path is not tracked"
+    print(line + ("" if args.dry_run else "; `git diff` shows them"))
+    if args.dry_run:
+        for path, count in moved.rewritten.items():
+            print(f"  {path}: {count}")
+    for path, paths in moved.left.items():
+        print(f"  left in {path}: {', '.join(paths)}")
+    return 0
+
+
 def _add_common(sp: argparse.ArgumentParser) -> None:
     """Add ``--repo``/``--store`` to a subparser.
 
@@ -121,6 +152,22 @@ def main(argv: list[str] | None = None) -> int:
     )
     nt.add_argument("--format", choices=FORMATS, default="text")
     nt.set_defaults(fn=cmd_notice)
+    mv = sub.add_parser(
+        "mv", help="rewrite the references to a moved path in docs and comments"
+    )
+    _add_common(mv)
+    mv.add_argument("old", help="the repo path that is gone, a file or a directory")
+    mv.add_argument("new", help="the repo path that replaced it")
+    mv.add_argument(
+        "--root",
+        default=None,
+        help="rewrite the Markdown under this directory, such as a memory store, "
+        "in place of the repo",
+    )
+    mv.add_argument(
+        "--dry-run", action="store_true", help="count the references, change nothing"
+    )
+    mv.set_defaults(fn=cmd_mv)
     args = p.parse_args(argv)
     return args.fn(args)
 
