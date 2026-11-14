@@ -735,9 +735,12 @@ One thing sits in the position of needing a hand:
 - **A rotated secret** has no path to match: a secret's value lives in no role's template, so
   `secrets/secrets.yml` derives zero tags however many roles consume it. The landing compares
   each key's ciphertext across the PR's own range, without decrypting, and names each changed
-  key it leaves stale (`stale_copies.unapplied_keys`). A k8s reader's copy is fresh when
-  `cluster-vars.source` records the key's new ciphertext. A host's copy is fresh when the PR
-  also changed that key in `secrets/hosts/<host>.sops.yaml`. A key with a copy in
+  key it leaves stale (`stale_copies.unapplied_keys`). It reads every copy and every reader
+  at the merge commit, so a reader that another PR merged first counts. A k8s reader's copy
+  is fresh when `cluster-vars.source` records the key's new ciphertext. A host's copy is
+  fresh when the PR changed that key in `secrets/hosts/<host>.sops.yaml` and the merge
+  commit still holds the PR's copy. Another PR's sync changes the ciphertext too, but it can
+  carry the old value. A key with a copy in
   `stale_copies.OUTSIDE_THE_TREE`, such as Bazarr's API keys, is always named, and so is a
   key no file reads. A rotation that refreshed every copy ends `settled`. Without a readable range the
   landing names no key and ends `needs-manual-apply`. Run
