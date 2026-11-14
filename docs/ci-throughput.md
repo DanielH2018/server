@@ -372,9 +372,9 @@ The decisions, all the operator's:
   commit of a batch can therefore be red by itself. `scripts/deploy_tools/await_ci.py`
   already lets a descendant's verdict stand for a commit that has none.
 - **Who records the tested tree. Withdrawn.** A GitHub App was to record the tree a local
-  sweep tested. A run of the real workflow records its own, so the App has no use. Its
-  private key is `tested_tree_app_private_key` in `secrets/secrets.yml`, and nothing
-  reads it. Removing the key and deleting the App, number 5745632, are the operator's steps.
+  sweep tested. A run of the real workflow records its own, so the App has no use. Nothing
+  read its private key. On 2026-11-14 the operator removed the key from
+  `secrets/secrets.yml` and deleted the App, number 5745632.
 - **Whose memory a sweep uses. Withdrawn with the sweep.** Phase C asks the question again
   for runner pods.
 
