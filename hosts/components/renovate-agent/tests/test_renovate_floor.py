@@ -51,6 +51,7 @@ def test_a_path_on_the_floor_is_flagged(path):
     [
         "k8s/roles/sonarr/defaults/main.yml",
         "k8s/roles/homelab-mcp-adjacent/defaults/main.yml",
+        "ansible/roles/k8s/homelab-mcp/defaults/main.yml",
     ],
 )
 def test_a_path_off_the_floor_is_clean(path):
