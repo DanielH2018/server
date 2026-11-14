@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/backlog.py
-generated_at: 2026-11-14 06:17 UTC
-generated_sha: ddd758e77
+generated_at: 2026-11-14 12:28 UTC
+generated_sha: 4fa943fb7
 ---
 
 !!! warning "Generated file — do not edit"
@@ -25,8 +25,8 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | [#8310](https://github.com/DanielH2018/server/issues/8310) | medium | gap | backup-observability | daniel-box's kubelet has no graceful node shutdown, so its reboots may drop Longhorn iSCSI sessions under mounted filesystems | 2026-11-13 | 0 | - | ✓ |
 | [#8328](https://github.com/DanielH2018/server/issues/8328) | medium | gap | cicd | 40 more issue numbers the hidden bot account authored return 404, and their state is unknown | 2026-11-13 | 0 | - | ✓ |
 | [#8359](https://github.com/DanielH2018/server/issues/8359) | medium | gap | container | daniel-box's kubelet still starts image GC at 85 percent, above Longhorn's 75 percent floor, pending daniel-server's canary restart | 2026-11-13 | 0 | - | ✓ |
-| [#8392](https://github.com/DanielH2018/server/issues/8392) | medium | gap | security | Give the renovate-agent user a managed Claude Code config before it is re-armed | 2026-11-13 | 0 | - | ✓ |
-| [#8398](https://github.com/DanielH2018/server/issues/8398) | medium | gap | security | No check holds master's required status checks pinned to GitHub Actions | 2026-11-13 | 0 | - | ✓ |
+| [#8392](https://github.com/DanielH2018/server/issues/8392) | medium | gap | security | Give the renovate-agent user a managed Claude Code config before it is re-armed | 2026-11-13 | 0 | worktree-orchestrator-wave20 | ✓ |
+| [#8398](https://github.com/DanielH2018/server/issues/8398) | medium | gap | security | No check holds master's required status checks pinned to GitHub Actions | 2026-11-13 | 0 | worktree-orchestrator-wave20 | ✓ |
 | [#8456](https://github.com/DanielH2018/server/issues/8456) | medium | improvement | cicd | Choose CI shard counts by runner-slot cost per landing, not unloaded wall time | 2026-11-13 | 0 | - | ✓ |
 | [#8457](https://github.com/DanielH2018/server/issues/8457) | medium | improvement | cicd | Cut the fixed setup cost every CI job pays before its own work | 2026-11-13 | 0 | - | ✓ |
 | [#8511](https://github.com/DanielH2018/server/issues/8511) | medium | gap | backup-observability | No backup or etcd snapshot has an immutability window, so one bucket credential can delete every copy — *no vetted remediation* | 2026-11-14 | 0 | - | ✓ |
@@ -35,6 +35,7 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | [#8575](https://github.com/DanielH2018/server/issues/8575) | medium | gap | cicd | Nothing runs fanout.py place clean after the pipeline lands a batch | 2026-11-14 | 0 | - | ✓ |
 | [#8593](https://github.com/DanielH2018/server/issues/8593) | medium | gap | backup-observability | probe.py uptime-robot needs its read-only API key in SOPS and a daily schedule | 2026-11-14 | 0 | - | ✓ |
 | [#8598](https://github.com/DanielH2018/server/issues/8598) | medium | gap | cicd | OUTSIDE_THE_TREE may miss secret copies an app stores through its own UI | 2026-11-14 | 0 | worktree-orchestrator-wave20 | ✓ |
+| [#8625](https://github.com/DanielH2018/server/issues/8625) | medium | gap | cicd | The weekly eval sweep's anthropic_api_key is rejected by the API since 2026-11-10 | 2026-11-14 | 0 | - | ✓ |
 | [#4435](https://github.com/DanielH2018/server/issues/4435) | low | improvement | cicd | Decide whether to move scripts/ into an installable homelab package | 2026-10-11 | 0 | - | ✓ |
 | [#6292](https://github.com/DanielH2018/server/issues/6292) | low | improvement | container | Retire sonarr-air-date-guard once Sonarr v5 stable ships its air-date Release Profile rule | 2026-10-25 | 0 | - | ✓ |
 | [#7194](https://github.com/DanielH2018/server/issues/7194) | low | improvement | docs | Reword the Kuma history that M6's census row holds on its allowlist | 2026-11-05 | 0 | worktree-orchestrator-wave20 | ✓ |
@@ -49,83 +50,62 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | [#7990](https://github.com/DanielH2018/server/issues/7990) | low | improvement | docs | Mark the attribution-emoji and agent tools-key memories as enforced | 2026-11-11 | 0 | worktree-orchestrator-wave20 | ✓ |
 | [#8018](https://github.com/DanielH2018/server/issues/8018) | low | gap | cicd | Cap live landers per orchestrator and measure the core call rate under load | 2026-11-12 | 0 | - | ✓ |
 | [#8080](https://github.com/DanielH2018/server/issues/8080) | low | gap | cicd | Confirm hosted Renovate regenerates actions.lock on its first Actions bump | 2026-11-12 | 0 | - | ✓ |
-| [#8145](https://github.com/DanielH2018/server/issues/8145) | low | gap | - | No shipped script deletes the .subset-copy trees claude-dotfiles-sync renames | 2026-11-12 | 0 | - | ✓ |
 | [#8193](https://github.com/DanielH2018/server/issues/8193) | low | addition | container | Turn on navidrome scrobbling and Lidarr import lists for music discovery | 2026-11-12 | 0 | - | - |
-| [#8208](https://github.com/DanielH2018/server/issues/8208) | low | gap | cicd | Record a D7 supersession whose T has its own change and settles good | 2026-11-12 | 0 | - | ✓ |
+| [#8208](https://github.com/DanielH2018/server/issues/8208) | low | gap | cicd | Record a D7 supersession whose T has its own change and settles good | 2026-11-12 | 0 | worktree-orchestrator-wave20 | ✓ |
 | [#8228](https://github.com/DanielH2018/server/issues/8228) | low | gap | docs | The Ubuntu 26.04 upgrade has no tracking issue, no etcd snapshot step for daniel-box and an unproven Pi rollback | 2026-11-12 | 0 | - | ✓ |
-| [#8231](https://github.com/DanielH2018/server/issues/8231) | low | improvement | security | The route test exempts any route whose match contains ClientIP( from its Authelia assertion | 2026-11-12 | 0 | - | ✓ |
 | [#8234](https://github.com/DanielH2018/server/issues/8234) | low | gap | backup-observability | daniel-pi runs saturated: load at 4.7 times its cores, memory down to 12 percent, and a critical SD-health page on 2026-11-12 — *no vetted remediation* | 2026-11-12 | 0 | worktree-orchestrator-wave20 | ✓ |
-| [#8252](https://github.com/DanielH2018/server/issues/8252) | low | gap | backup-observability | wg-easy's ExtraProbeFailed flaps with PiLoadHigh, so triage cannot route it | 2026-11-12 | 0 | worktree-orchestrator-wave20 | ✓ |
 | [#8257](https://github.com/DanielH2018/server/issues/8257) | low | gap | cicd | Merge pacing's cap of 2 assumes one ci.yml sweep fits the 20-job pool; uncontended width and arm-runner pooling are unmeasured | 2026-11-12 | 0 | - | ✓ |
 | [#8263](https://github.com/DanielH2018/server/issues/8263) | low | improvement | cicd | Delete the stale ansible/collections/ from both primary checkouts, then drop its last three excludes | 2026-11-12 | 0 | - | ✓ |
-| [#8294](https://github.com/DanielH2018/server/issues/8294) | low | gap | cicd | A PR armed for auto-merge sat BLOCKED for 40 minutes with every required check green — *no vetted remediation* | 2026-11-13 | 0 | - | ✓ |
 | [#8320](https://github.com/DanielH2018/server/issues/8320) | low | gap | cicd | The lander derives deploy tags from a rename-detecting diff, so a cross-role move skips the source role | 2026-11-13 | 0 | - | ✓ |
-| [#8322](https://github.com/DanielH2018/server/issues/8322) | low | gap | container | zigbee2mqtt exits when its TCP link to the SLZB-06M coordinator drops | 2026-11-13 | 0 | worktree-orchestrator-wave20 | ✓ |
 | [#8325](https://github.com/DanielH2018/server/issues/8325) | low | gap | backup-observability | The 2026-08-23 wg-easy-config seed backup is reapable by the next seeds sweep | 2026-11-13 | 0 | - | ✓ |
 | [#8349](https://github.com/DanielH2018/server/issues/8349) | low | improvement | security | rootq PATHS rows added for probe.py applied may have no caller left | 2026-11-13 | 0 | worktree-orchestrator-wave20 | ✓ |
-| [#8355](https://github.com/DanielH2018/server/issues/8355) | low | improvement | cicd | probe.py b2-longhorn and b2-budget decrypt the non-secret B2 bucket name from SOPS | 2026-11-13 | 0 | worktree-orchestrator-wave20 | ✓ |
 | [#8360](https://github.com/DanielH2018/server/issues/8360) | low | improvement | cicd | pythonpath-coverage rows in test_prek_files_cover_pythonpath_imports name members the base prek.toml regexes already matched | 2026-11-13 | 0 | - | ✓ |
-| [#8369](https://github.com/DanielH2018/server/issues/8369) | low | improvement | cicd | land.sh ends needs-manual-apply for a secret rotation it applied in full — *no vetted remediation* | 2026-11-13 | 0 | worktree-orchestrator-wave20 | ✓ |
-| [#8376](https://github.com/DanielH2018/server/issues/8376) | low | improvement | docs | 56 role CLAUDE.md files open with Flux applies it, not Ansible plus a migration wave tag | 2026-11-13 | 0 | worktree-orchestrator-wave20 | ✓ |
-| [#8377](https://github.com/DanielH2018/server/issues/8377) | low | improvement | docs | Role, host-component and rule docs state current rules as diffs against the retired Ansible layout | 2026-11-13 | 0 | worktree-orchestrator-wave20 | ✓ |
 | [#8378](https://github.com/DanielH2018/server/issues/8378) | low | improvement | docs | new-container, renovate-prs, skeptic, land-after-merge and homelab-review carry stale references or a false claim | 2026-11-13 | 0 | worktree-orchestrator-wave20 | ✓ |
-| [#8379](https://github.com/DanielH2018/server/issues/8379) | low | gap | docs | Role and host docs give sudo and kubectl-write commands with no operator-only mark | 2026-11-13 | 0 | worktree-orchestrator-wave20 | ✓ |
 | [#8391](https://github.com/DanielH2018/server/issues/8391) | low | gap | home-assistant | The lighting doc's sleep-quality-aware morning bullet describes a wake curve removed on 2026-08-16 | 2026-11-13 | 0 | worktree-orchestrator-wave20 | ✓ |
 | [#8401](https://github.com/DanielH2018/server/issues/8401) | low | improvement | home-assistant | Coin-cell low-battery thresholds for the T1 and window sensor are unmeasured | 2026-11-13 | 0 | - | ✓ |
 | [#8405](https://github.com/DanielH2018/server/issues/8405) | low | improvement | docs | Rewrite the ansible/ paths left in comments that reach a rendered manifest or image | 2026-11-13 | 0 | worktree-orchestrator-wave20 | ✓ |
 | [#8411](https://github.com/DanielH2018/server/issues/8411) | low | improvement | home-assistant | The bedroom display's dismiss and show automations flap against each other | 2026-11-13 | 0 | worktree-orchestrator-wave20 | ✓ |
 | [#8412](https://github.com/DanielH2018/server/issues/8412) | low | improvement | docs | lighting-and-presence.md says Tap Dial button 4 resumes the wake ramp | 2026-11-13 | 0 | worktree-orchestrator-wave20 | ✓ |
-| [#8415](https://github.com/DanielH2018/server/issues/8415) | low | gap | security | Post a guardrail change that a hand-installed host package makes, not only one no package explains | 2026-11-13 | 0 | - | ✓ |
 | [#8420](https://github.com/DanielH2018/server/issues/8420) | low | gap | docs | Three memory entries are out of date: G3 reads PLANNED, the kubectl entry is marked ENFORCED, and the agent-polling cost is wrong | 2026-11-13 | 0 | - | ✓ |
 | [#8447](https://github.com/DanielH2018/server/issues/8447) | low | gap | container | The per-container requests-and-limits guard does not reach vendored kustomize-patched Deployments | 2026-11-13 | 0 | worktree-orchestrator-wave20 | ✓ |
 | [#8458](https://github.com/DanielH2018/server/issues/8458) | low | improvement | cicd | Run only the pytest modules a PR's diff can affect, with the full sweep on master — *no vetted remediation* | 2026-11-13 | 0 | - | ✓ |
 | [#8463](https://github.com/DanielH2018/server/issues/8463) | low | improvement | cicd | A legacy directory entry holds the host when the unit reconcile stopped left files in it — *no vetted remediation* | 2026-11-13 | 0 | worktree-orchestrator-wave20 | ✓ |
-| [#8464](https://github.com/DanielH2018/server/issues/8464) | low | improvement | docs | Ten k8s role CLAUDE.md files still say the retired deployer skips k8s_autodeploy tags | 2026-11-13 | 0 | worktree-orchestrator-wave20 | ✓ |
 | [#8500](https://github.com/DanielH2018/server/issues/8500) | low | gap | container | Longhorn's engine-image DaemonSet runs BestEffort and Longhorn offers no knob for its resources — *no vetted remediation* | 2026-11-14 | 0 | worktree-orchestrator-wave20 | ✓ |
 | [#8507](https://github.com/DanielH2018/server/issues/8507) | low | improvement | backup-observability | longhorn_b2_bucket has two copies: inventory for the probe, SOPS for the BackupTarget | 2026-11-14 | 0 | - | ✓ |
-| [#8512](https://github.com/DanielH2018/server/issues/8512) | low | improvement | backup-observability | The Kubernetes audit stream is about 60 percent of loki-homelab's ingest, and no measurement says which audit rule emits it | 2026-11-14 | 0 | worktree-orchestrator-wave20 | ✓ |
-| [#8513](https://github.com/DanielH2018/server/issues/8513) | low | improvement | backup-observability | probe.py has no usage report: requests per service, and memory requests and limits against p95 use | 2026-11-14 | 0 | worktree-orchestrator-wave20 | ✓ |
 | [#8514](https://github.com/DanielH2018/server/issues/8514) | low | improvement | network | bazarr's and n8n's public UI routes carried no request in 21 days: decide which low-traffic routes stay public | 2026-11-14 | 0 | - | ✓ |
-| [#8515](https://github.com/DanielH2018/server/issues/8515) | low | improvement | docs | Nothing measures the repo's size, so a proposal cannot name what it removes | 2026-11-14 | 0 | - | ✓ |
 | [#8516](https://github.com/DanielH2018/server/issues/8516) | low | improvement | cicd | Test coverage has never been measured across 1,404 test files | 2026-11-14 | 0 | - | ✓ |
-| [#8517](https://github.com/DanielH2018/server/issues/8517) | low | improvement | cicd | No dead-code check has ever run over scripts/, hosts/lib or the role files/ trees | 2026-11-14 | 0 | - | ✓ |
 | [#8522](https://github.com/DanielH2018/server/issues/8522) | low | gap | backup-observability | The recovery age key has never been proven to decrypt the repo's SOPS file on its own | 2026-11-14 | 0 | - | ✓ |
 | [#8523](https://github.com/DanielH2018/server/issues/8523) | low | gap | network | The router, switch and access-point configuration is saved nowhere | 2026-11-14 | 0 | - | ✓ |
 | [#8525](https://github.com/DanielH2018/server/issues/8525) | low | gap | backup-observability | No check compares the live UptimeRobot monitors with the ids the runbooks name — *no vetted remediation* | 2026-11-14 | 0 | worktree-orchestrator-wave20 | ✓ |
 | [#8526](https://github.com/DanielH2018/server/issues/8526) | low | gap | network | No doc says which LAN functions survive a WAN outage, and no game day has tested it | 2026-11-14 | 0 | - | ✓ |
-| [#8528](https://github.com/DanielH2018/server/issues/8528) | low | gap | container | valheim-stats has reported 2 players online for 21 days without a change | 2026-11-14 | 0 | worktree-orchestrator-wave20 | ✓ |
-| [#8530](https://github.com/DanielH2018/server/issues/8530) | low | gap | container | alloy, homepage and prometheus run within 20 percent of their memory limits | 2026-11-14 | 0 | worktree-orchestrator-wave20 | ✓ |
-| [#8531](https://github.com/DanielH2018/server/issues/8531) | low | improvement | container | Memory requests understate use for home-assistant, karakeep, prometheus and meilisearch, and overstate it for Longhorn's CSI sidecars | 2026-11-14 | 0 | worktree-orchestrator-wave20 | ✓ |
-| [#8532](https://github.com/DanielH2018/server/issues/8532) | low | gap | cicd | CI tests role code on Python 3.15 while 19 role images run it on Python 3.14 | 2026-11-14 | 0 | worktree-orchestrator-wave20 | ✓ |
 | [#8533](https://github.com/DanielH2018/server/issues/8533) | low | improvement | cicd | The Email-to-RSS submodule has no CI and no Renovate, and no code in this repo reads it | 2026-11-14 | 0 | - | ✓ |
-| [#8534](https://github.com/DanielH2018/server/issues/8534) | low | improvement | cicd | Ten skills and two agents have no eval case | 2026-11-14 | 0 | - | ✓ |
-| [#8535](https://github.com/DanielH2018/server/issues/8535) | low | gap | cicd | The 2026-11-10 eval run ended INCONCLUSIVE with no healthy sample | 2026-11-14 | 0 | - | ✓ |
+| [#8535](https://github.com/DanielH2018/server/issues/8535) | low | gap | cicd | The 2026-11-10 eval run ended INCONCLUSIVE with no healthy sample | 2026-11-14 | 0 | worktree-orchestrator-wave20 | ✓ |
 | [#8539](https://github.com/DanielH2018/server/issues/8539) | low | addition | container | Add Explo: ListenBrainz discovery playlists in Navidrome | 2026-11-14 | 0 | - | ✓ |
-| [#8541](https://github.com/DanielH2018/server/issues/8541) | low | gap | cicd | No render census reaches the Pi's pi-compose templates, so the nut FSD login census cannot see a Pi service | 2026-11-14 | 0 | worktree-orchestrator-wave20 | ✓ |
-| [#8543](https://github.com/DanielH2018/server/issues/8543) | low | gap | container | Longhorn's UI, driver deployer and share-manager pre-pull containers set no requests or limits | 2026-11-14 | 0 | worktree-orchestrator-wave20 | ✓ |
-| [#8548](https://github.com/DanielH2018/server/issues/8548) | low | improvement | docs | Python docstrings and comments still name the retired GitOps deployer as a live actor | 2026-11-14 | 0 | worktree-orchestrator-wave20 | ✓ |
-| [#8556](https://github.com/DanielH2018/server/issues/8556) | low | improvement | docs | Uncited role docs still carry plan-slice tags and Ansible-era comparisons | 2026-11-14 | 0 | worktree-orchestrator-wave20 | ✓ |
-| [#8560](https://github.com/DanielH2018/server/issues/8560) | low | gap | docs | 74 places, nearly all comments, name paths the tree rename moved | 2026-11-14 | 0 | - | ✓ |
-| [#8561](https://github.com/DanielH2018/server/issues/8561) | low | gap | cicd | findings.py open hints a block command that fails when the body waits on a pull request | 2026-11-14 | 0 | - | - |
-| [#8567](https://github.com/DanielH2018/server/issues/8567) | low | gap | backup-observability | The restore drill's 300-second probe bound may not fit a large SQLite integrity check | 2026-11-14 | 0 | - | ✓ |
-| [#8576](https://github.com/DanielH2018/server/issues/8576) | low | improvement | cicd | The SessionStart banner counts every fan-out worktree lock as a live session | 2026-11-14 | 0 | - | ✓ |
+| [#8560](https://github.com/DanielH2018/server/issues/8560) | low | gap | docs | 74 places, nearly all comments, name paths the tree rename moved | 2026-11-14 | 0 | worktree-orchestrator-wave20 | ✓ |
+| [#8561](https://github.com/DanielH2018/server/issues/8561) | low | gap | cicd | findings.py open hints a block command that fails when the body waits on a pull request | 2026-11-14 | 0 | worktree-orchestrator-wave20 | - |
+| [#8567](https://github.com/DanielH2018/server/issues/8567) | low | gap | backup-observability | The restore drill's 300-second probe bound may not fit a large SQLite integrity check | 2026-11-14 | 0 | worktree-orchestrator-wave20 | ✓ |
 | [#8580](https://github.com/DanielH2018/server/issues/8580) | low | gap | home-assistant | No one has run the Zigbee coordinator-replacement procedure onto a spare adapter | 2026-11-14 | 0 | - | ✓ |
 | [#8582](https://github.com/DanielH2018/server/issues/8582) | low | gap | backup-observability | Drop the ExtraProbeFailed:wg-easy triage pin once its 30s probe timeout holds for a week | 2026-11-14 | 0 | - | ✓ |
-| [#8583](https://github.com/DanielH2018/server/issues/8583) | low | improvement | cicd | A reconcile run against a real host manifest spawns about 800 stub interpreters, about 18 s per test | 2026-11-14 | 0 | - | - |
 | [#8585](https://github.com/DanielH2018/server/issues/8585) | low | gap | container | The SLZB-06M coordinator loses power or reboots, crash-looping zigbee2mqtt for 11-42 minutes | 2026-11-14 | 0 | - | ✓ |
-| [#8586](https://github.com/DanielH2018/server/issues/8586) | low | improvement | container | zigbee2mqtt exits once when mosquitto is not ready at its first start | 2026-11-14 | 0 | - | ✓ |
 | [#8589](https://github.com/DanielH2018/server/issues/8589) | low | improvement | backup-observability | The off-site recovery kit's bundle and register export are still made by hand — *no vetted remediation* | 2026-11-14 | 0 | - | ✓ |
-| [#8590](https://github.com/DanielH2018/server/issues/8590) | low | improvement | cicd | Every Flux Kustomization reconciles about every 2 to 3 minutes against a 10m interval | 2026-11-14 | 0 | - | ✓ |
 | [#8591](https://github.com/DanielH2018/server/issues/8591) | low | improvement | backup-observability | Decide a shorter per-stream Loki retention for the k8s-audit stream | 2026-11-14 | 0 | - | ✓ |
-| [#8601](https://github.com/DanielH2018/server/issues/8601) | low | gap | cicd | unapplied_keys counts a key's readers in the working tree, not at the merge commit | 2026-11-14 | 0 | - | ✓ |
-| [#8602](https://github.com/DanielH2018/server/issues/8602) | low | gap | backup-observability | A rotation of arr_discord_webhook_url leaves the old webhook in Sonarr, Radarr and Lidarr until each app rolls | 2026-11-14 | 0 | - | ✓ |
+| [#8601](https://github.com/DanielH2018/server/issues/8601) | low | gap | cicd | unapplied_keys counts a key's readers in the working tree, not at the merge commit | 2026-11-14 | 0 | worktree-orchestrator-wave20 | ✓ |
+| [#8602](https://github.com/DanielH2018/server/issues/8602) | low | gap | backup-observability | A rotation of arr_discord_webhook_url leaves the old webhook in Sonarr, Radarr and Lidarr until each app rolls | 2026-11-14 | 0 | worktree-orchestrator-wave20 | ✓ |
 | [#8603](https://github.com/DanielH2018/server/issues/8603) | low | gap | security | MCP clients' homelab_mcp_token and n8n's credential store may hold SOPS key copies no deploy reaches | 2026-11-14 | 0 | - | ✓ |
-| [#8604](https://github.com/DanielH2018/server/issues/8604) | low | gap | container | karakeep runs its role files/ code on Python 3.14 while CI tests on 3.15 | 2026-11-14 | 0 | - | ✓ |
 | [#8608](https://github.com/DanielH2018/server/issues/8608) | low | gap | container | Delete the four Longhorn _LONGHORN_UNSIZED exemptions once #8550 and #8605 have both merged | 2026-11-14 | 1 | - | ✓ |
-| [#8609](https://github.com/DanielH2018/server/issues/8609) | low | improvement | cicd | Three guards rest on a rationale only the retired deployer gave them | 2026-11-14 | 0 | - | ✓ |
-| [#8610](https://github.com/DanielH2018/server/issues/8610) | low | improvement | backup-observability | daniel-pi's remaining load spikes follow each homelab-daniel-pi publish, through the updater poll — *no vetted remediation* | 2026-11-14 | 0 | - | ✓ |
-| [#8617](https://github.com/DanielH2018/server/issues/8617) | low | gap | container | Longhorn's v1 instance-manager has no memory request and a 1.3-1.5 GiB p95 working set | 2026-11-14 | 0 | - | ✓ |
-| [#8618](https://github.com/DanielH2018/server/issues/8618) | low | improvement | docs | Markdown docs and host templates still name the retired deployer as a live actor | 2026-11-14 | 0 | - | ✓ |
+| [#8610](https://github.com/DanielH2018/server/issues/8610) | low | improvement | backup-observability | daniel-pi's remaining load spikes follow each homelab-daniel-pi publish, through the updater poll — *no vetted remediation* | 2026-11-14 | 0 | worktree-orchestrator-wave20 | ✓ |
+| [#8617](https://github.com/DanielH2018/server/issues/8617) | low | gap | container | Longhorn's v1 instance-manager has no memory request and a 1.3-1.5 GiB p95 working set | 2026-11-14 | 0 | worktree-orchestrator-wave20 | ✓ |
+| [#8631](https://github.com/DanielH2018/server/issues/8631) | low | improvement | backup-observability | monitor-bridge origin_sel and PROM_ORIGIN have no caller outside tests | 2026-11-14 | 0 | worktree-orchestrator-wave20 | ✓ |
+| [#8632](https://github.com/DanielH2018/server/issues/8632) | low | improvement | cicd | Dead-code sweep: production names that only tests call are untriaged | 2026-11-14 | 0 | worktree-orchestrator-wave20 | ✓ |
+| [#8633](https://github.com/DanielH2018/server/issues/8633) | low | improvement | cicd | new-container eval case's sha256 must_match is satisfied by the image pin quoted in the prompt | 2026-11-14 | 0 | - | ✓ |
+| [#8635](https://github.com/DanielH2018/server/issues/8635) | low | improvement | docs | Python, k8s role comments and shared host components still name the retired deployer as a live actor | 2026-11-14 | 0 | worktree-orchestrator-wave20 | ✓ |
+| [#8644](https://github.com/DanielH2018/server/issues/8644) | low | improvement | container | No node reserves kubelet memory, so allocatable counts Longhorn instance-manager's ~1.4 GiB as free | 2026-11-14 | 0 | worktree-orchestrator-wave20 | ✓ |
+| [#8650](https://github.com/DanielH2018/server/issues/8650) | low | improvement | security | daniel-pi's rkhunter baseline refresh forks ~6,600 processes on every homelab-daniel-pi install — *no vetted remediation* | 2026-11-14 | 0 | worktree-orchestrator-wave20 | ✓ |
+| [#8651](https://github.com/DanielH2018/server/issues/8651) | low | improvement | cicd | homelab-reconcile asks one systemctl or dpkg question per unit, about 800 commands per run | 2026-11-14 | 0 | worktree-orchestrator-wave20 | - |
+| [#8658](https://github.com/DanielH2018/server/issues/8658) | low | improvement | security | claude-guardrail-ack posts the renovate-agent settings copy as unexplained | 2026-11-14 | 0 | - | ✓ |
+| [#8663](https://github.com/DanielH2018/server/issues/8663) | low | gap | security | renovate-agent's pinned deny floor drifts from the dotfiles repo with no signal | 2026-11-14 | 0 | worktree-orchestrator-wave20 | ✓ |
+| [#8665](https://github.com/DanielH2018/server/issues/8665) | low | gap | cicd | The git-tree lock wait is no longer derived from any holder's bound | 2026-11-14 | 0 | - | ✓ |
+| [#8670](https://github.com/DanielH2018/server/issues/8670) | low | improvement | - | homelab-reconcile runs one systemctl reset-failed per unit it starts, restarts or stops | 2026-11-14 | 0 | - | - |
 
 ## Deferred, by date
 
@@ -150,9 +130,9 @@ Open findings with an open "blocked by" issue. `findings.py next` withholds each
 | [#8310](https://github.com/DanielH2018/server/issues/8310) | #8296 | daniel-box's kubelet has no graceful node shutdown, so its reboots may drop Longhorn iSCSI sessions under mounted filesystems |
 | [#8458](https://github.com/DanielH2018/server/issues/8458) | #8456 | Run only the pytest modules a PR's diff can affect, with the full sweep on master |
 | [#8539](https://github.com/DanielH2018/server/issues/8539) | #8193 | Add Explo: ListenBrainz discovery playlists in Navidrome |
-| [#8582](https://github.com/DanielH2018/server/issues/8582) | #8252 | Drop the ExtraProbeFailed:wg-easy triage pin once its 30s probe timeout holds for a week |
-| [#8591](https://github.com/DanielH2018/server/issues/8591) | #8512 | Decide a shorter per-stream Loki retention for the k8s-audit stream |
-| [#8608](https://github.com/DanielH2018/server/issues/8608) | #8447, #8543 | Delete the four Longhorn _LONGHORN_UNSIZED exemptions once #8550 and #8605 have both merged |
+| [#8608](https://github.com/DanielH2018/server/issues/8608) | #8447 | Delete the four Longhorn _LONGHORN_UNSIZED exemptions once #8550 and #8605 have both merged |
+| [#8663](https://github.com/DanielH2018/server/issues/8663) | #8392 | renovate-agent's pinned deny floor drifts from the dotfiles repo with no signal |
+| [#8670](https://github.com/DanielH2018/server/issues/8670) | #8651 | homelab-reconcile runs one systemctl reset-failed per unit it starts, restarts or stops |
 
 ## Settled findings — do not re-flag
 

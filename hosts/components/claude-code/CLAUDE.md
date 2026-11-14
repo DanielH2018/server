@@ -377,8 +377,9 @@ runs `files/claude_dotfiles_mirror.py` as root on both hosts.
 
 - **Scope:** `rsync --delete` of `claude_code_memory_sync_dir` (follows `claude_code_user`) to
   `claude_code_memory_sync_target_dir` (the operator's store)
-  on `claude_code_memory_sync_target`, one-way. A memory a daniel-server session writes is lost
-  at the next run, by the operator's decision (#3123); `docs/claude-memory-sync.md` has why.
+  on `claude_code_memory_sync_target`, one-way, by the operator's decision (#3123). The copy
+  strips every write bit from the target (`--chmod=a-w`), so a memory a daniel-server session
+  tries to write fails at once; `docs/claude-memory-sync.md` has why.
 - **Mode:** `claude_code_memory_sync_enabled`, true only in daniel-box's host_vars; false
   drops the timer and its units from the next package version.
 - **Abort valve:** the unit skips unless the source `MEMORY.md` is non-empty.

@@ -8,9 +8,9 @@ The unit's ExecStartPost writes the textfile verdict that RenovateAgentNotReport
 The tick is gated before it costs anything: no open Renovate PRs means no session. The decision
 lives in agent_logic, which is pure.
 
-The session runs in a dedicated worktree, never in the primary checkout. `run_worktree`
-decides whether that tree can be recreated and recreates it; `agent_toolbox` holds the
-process boundaries both halves inject.
+The session runs in its own unit, as its own user, in a dedicated worktree that
+`renovate_session.py` prepares; this runner only starts it and reads what it left in the
+exchange directory. `agent_toolbox` holds the process boundaries both inject.
 
 Config from /etc/renovate-agent/config.env (KEY=VALUE) — see templates/config.env.j2.
 Stdlib only.
@@ -20,18 +20,15 @@ Usage: renovate_agent.py   (takes no arguments; -h/--help prints this text)
 Run by renovate-agent.service from renovate-agent.timer (daily), installed as
 /usr/lib/homelab/renovate-agent/renovate_agent.py. To start a tick by hand, run
 `sudo systemctl start renovate-agent`. RENOVATE_AGENT_CONFIG overrides the config path.
-REPO, REPO_DIR and PROMPT_FILE are required in the config file.
+REPO, REPO_DIR, EXCHANGE_DIR and SESSION_USER are required in the config file.
 """
 
 from __future__ import annotations
 
 import json
 import os
-import pwd
-import subprocess
 import sys
 import time
-from collections.abc import Mapping
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from agent_logic import (
@@ -44,10 +41,10 @@ from agent_logic import (
     resume_command,
     run_record,
 )
-from agent_toolbox import TOOLS, AgentTools, log, read_file
+from agent_toolbox import TOOLS, AgentTools, log, start_unit
 from host_lib import atomic_write, install_excepthook, parse_env_file
-from run_requests import Outcome, carry_out, fresh_dir
-from run_worktree import prepare_worktree, worktree_is_reusable
+from renovate_session import BLOCKED_FILE, OUT_DIR, OUTPUT_FILE, SESSION_ENV_FILE
+from run_requests import Outcome, carry_out, fresh_dir, read_untrusted
 
 # The env override exists so the I/O shell can be exercised end-to-end against a throwaway
 # config before the timer is ever armed. Without it the only way to run this code is to deploy
@@ -63,12 +60,10 @@ RENOVATE_AUTHOR = "app/renovate"
 OPEN_PR_LIMIT = 200
 # One JSON line per tick under STATE_DIR, from agent_logic.run_record.
 RUNS_FILE = "runs.jsonl"
-# The unit's EnvironmentFile: the session's GitHub token and Claude credential, root 0600.
-SESSION_ENV_FILE = "/etc/renovate-agent/session.env"
-# The read-only token in SESSION_ENV_FILE that `session_env` hands the session as GH_TOKEN.
-SESSION_TOKEN_KEY = "RENOVATE_SESSION_GH_TOKEN"
-# Every other variable the unit sets for the session. A resume has to set each again, because
-# sudo resets the environment (#4603). test_session_resume.py holds this to the unit template.
+# The unit the session runs in; polkit lets this process's user start it.
+SESSION_UNIT = "homelab-renovate-agent-session.service"
+# Every variable the session unit sets. A resume has to set each again, because sudo resets the
+# environment (#4603). test_session_resume.py holds this to the session unit's template.
 SESSION_ENV_KEYS = (
     "PATH",
     "HOME",
@@ -162,65 +157,42 @@ def pr_states(
     return states
 
 
-def session_env(env: Mapping[str, str]) -> dict[str, str]:
-    """The runner's environment with `GH_TOKEN` swapped for the session's read-only token.
+def session_files(out: str) -> tuple[str, str]:
+    """(blocked reason, session output) from the session's `out/` directory, read as untrusted.
 
-    The runner keeps its own token for the GitHub writes it makes on the session's behalf. A
-    missing read token raises, so a session never starts holding the runner's token.
+    The session wrote both, so a symlink there (to this controller's token file, say) is refused
+    rather than followed into the digest. A refused file reads as "".
     """
-    if not env.get(SESSION_TOKEN_KEY):
-        raise RuntimeError(f"{SESSION_TOKEN_KEY} is unset; {SESSION_ENV_FILE} lacks it")
-    out = {k: v for k, v in env.items() if k != SESSION_TOKEN_KEY}
-    out["GH_TOKEN"] = env[SESSION_TOKEN_KEY]
-    return out
+    found = []
+    for name in (BLOCKED_FILE, OUTPUT_FILE):
+        try:
+            found.append(read_untrusted(out, name))
+        except (OSError, ValueError) as exc:
+            log(f"refused the session's {name}: {type(exc).__name__}")
+            found.append("")
+    return found[0].strip(), found[1]
 
 
-def run_session(
-    cfg: dict[str, str], cwd: str, log_path: str, requests_dir: str
-) -> tuple[str, int, bool]:
-    """Run the headless Claude session in `cwd`, teeing its stdout to `log_path`.
+def session_unit_env(tools: AgentTools) -> dict[str, str]:
+    """The session unit's own Environment= values, for the resume command to set again.
 
-    `requests_dir` is outside the worktree, so it is added as a working directory: a headless
-    session has no one to approve a Write there, and its request files would never land.
-
-    stdin is /dev/null: without it Claude Code waits 3s for piped input on every start, and
-    under systemd there is no stdin to wait for.
+    The runner runs as the controller, so its own environment is not the session's.
     """
-    prompt = read_file(cfg["PROMPT_FILE"])
-    if not prompt.strip():
-        raise RuntimeError(f"prompt file {cfg['PROMPT_FILE']} is empty or missing")
-    argv = [
-        cfg.get("CLAUDE_BIN", "claude"),
-        "-p",
-        prompt,
-        "--permission-mode",
-        cfg.get("PERMISSION_MODE", "auto"),
-        "--model",
-        cfg.get("MODEL", "opus"),
-        "--output-format",
-        "json",
-        "--max-budget-usd",
-        cfg.get("BUDGET_USD", "25"),
-        "--add-dir",
-        requests_dir,
-    ]
-    timeout = int(cfg.get("SESSION_TIMEOUT_S", "3600"))
-    log(f"starting session (timeout {timeout}s, budget ${cfg.get('BUDGET_USD', '25')})")
-    try:
-        p = subprocess.run(
-            argv,
-            cwd=cwd,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            stdin=subprocess.DEVNULL,
-            env=session_env(os.environ),
-        )
-    except subprocess.TimeoutExpired as e:
-        atomic_write(log_path, (e.stdout or "") if isinstance(e.stdout, str) else "")
-        return "", 124, True
-    atomic_write(log_path, p.stdout or "")
-    return p.stdout or "", p.returncode, False
+    _, out = tools.run(
+        ["systemctl", "show", "-p", "Environment", "--value", SESSION_UNIT]
+    )
+    pairs = dict(item.split("=", 1) for item in out.split() if "=" in item)
+    return {k: pairs[k] for k in SESSION_ENV_KEYS if k in pairs}
+
+
+def request_line(request: Outcome) -> str:
+    """The journal line for one request, in fixed words only.
+
+    The file name and a refusal's detail are session text. They stay in requests.jsonl, a file,
+    and never reach the journal, where loki-homelab's rules read them (#967's I3 and I6, #8676).
+    """
+    done = "done" if request.done else "not done"
+    return f"request {request.action or 'refused'} #{request.pr} {done}"
 
 
 def landings(requests: list[Outcome]) -> list[str]:
@@ -244,16 +216,19 @@ def main(tools: AgentTools = TOOLS, config_path: str = CONFIG) -> int:
     cfg = parse_env_file(config_path)
     # One deadline for the whole run: the session, then the landings it nominated.
     deadline = time.time() + int(cfg.get("RUN_TIMEOUT_S", "14400"))
-    missing = [k for k in ("REPO", "REPO_DIR", "PROMPT_FILE") if not cfg.get(k)]
+    missing = [
+        k
+        for k in ("REPO", "REPO_DIR", "EXCHANGE_DIR", "SESSION_USER")
+        if not cfg.get(k)
+    ]
     if missing:
         raise RuntimeError(f"{config_path} is missing {', '.join(missing)}")
     host = os.uname().nodename
     webhook = cfg.get("DISCORD_WEBHOOK", "")
-    state_dir = cfg.get("STATE_DIR", "/var/lib/renovate-agent")
-    repo_dir = cfg["REPO_DIR"]
-    branch = cfg.get("BRANCH", "worktree-renovate-auto")
+    state_dir = cfg.get("STATE_DIR", "/var/lib/renovate-agent-ctl")
+    exchange = cfg["EXCHANGE_DIR"]
     path = os.path.join(
-        repo_dir, ".claude", "worktrees", cfg.get("WORKTREE", "renovate-auto")
+        cfg["REPO_DIR"], ".claude", "worktrees", cfg.get("WORKTREE", "renovate-auto")
     )
     log_path = os.path.join(state_dir, "last_session.json")
     spool = discord_spool(state_dir)
@@ -272,23 +247,28 @@ def main(tools: AgentTools = TOOLS, config_path: str = CONFIG) -> int:
             )
         return 0
 
-    reusable, why = worktree_is_reusable(repo_dir, path, branch, tools, cfg["REPO"])
-    if not reusable:
-        # The previous tick left work in flight, so leave the tree alone — removing it is how
-        # unlanded work is lost. But it IS a unit failure: the tree stays blocked until a person
-        # clears it, and this skip repeated for five days behind a green Alive tile before
-        # #2014, because exit 0 let ExecStartPost beat. A `down` pushed here would be laundered
-        # by that same beat, so the exit code carries it: no beat, and OnFailure pages.
+    log(f"{gate.reason}; starting {SESSION_UNIT}")
+    requests_dir = fresh_dir(exchange)
+    out = fresh_dir(exchange, OUT_DIR)
+    wait = min(
+        int(cfg.get("SESSION_TIMEOUT_S", "2700")) + 300, int(deadline - time.time())
+    )
+    end = start_unit(SESSION_UNIT, tools, max(wait, 1))
+    why, stdout = session_files(out)
+    if why:
+        # The previous tick left work in flight, so the session left the tree alone — removing
+        # it is how unlanded work is lost. But it IS a unit failure: the tree stays blocked until
+        # a person clears it, and this skip repeated for five days behind a green Alive tile
+        # before #2014, because exit 0 let ExecStartPost beat. A `down` pushed here would be
+        # laundered by that same beat, so the exit code carries it: no beat, and OnFailure pages.
         msg = f"renovate-agent: skipped on {host} — {why}. Clear it, then the next tick runs."
         log(msg)
         tools.discord_post(webhook, msg, USER_AGENT, log=log, spool_dir=spool)
         record_run(state_dir, run_record(int(time.time()), "blocked", why))
         return EXIT_WORKTREE_BLOCKED
-
-    log(f"{gate.reason}; preparing {path}")
-    prepare_worktree(repo_dir, path, branch, tools)
-    requests_dir = fresh_dir(state_dir)
-    stdout, rc, timed_out = run_session(cfg, path, log_path, requests_dir)
+    atomic_write(log_path, stdout)
+    timed_out = end.result in ("timeout", "deadline")
+    rc = 0 if end.result == "success" else max(end.status, 1)
     outcome = parse_run(stdout, rc, timed_out)
     census = {p.number for p in before}
     requests = carry_out(
@@ -301,10 +281,7 @@ def main(tools: AgentTools = TOOLS, config_path: str = CONFIG) -> int:
         deadline=deadline,
     )
     for request in requests:
-        log(
-            f"request {request.name or '-'}: {request.action or '?'} "
-            f"#{request.pr or '?'} {'done' if request.done else 'not done'}: {request.detail}"
-        )
+        log(request_line(request))
 
     after = open_prs(cfg["REPO"], tools)
     gone = sorted({p.number for p in before} - {p.number for p in after})
@@ -316,16 +293,13 @@ def main(tools: AgentTools = TOOLS, config_path: str = CONFIG) -> int:
     )
     resume = ""
     if outcome.session_id:
-        # The unit runs this process as renovate_agent_user, so the effective user is the
-        # session's owner.
-        owner = pwd.getpwuid(os.geteuid()).pw_name
         resume = resume_command(
             outcome.session_id,
             path,
-            owner,
+            cfg["SESSION_USER"],
             cfg.get("CLAUDE_BIN", "claude"),
             SESSION_ENV_FILE,
-            {k: os.environ[k] for k in SESSION_ENV_KEYS if k in os.environ},
+            session_unit_env(tools),
         )
     tools.discord_post(
         webhook,

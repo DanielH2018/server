@@ -16,13 +16,13 @@ Scope for this run:
   no request, so finish writing them well inside the limit.
 - You are already inside a git worktree at .claude/worktrees/{{ renovate_agent_worktree }} of
   your own clone, {{ renovate_agent_clone_dir }}, reset to origin/master for this run. You run
-  as {{ renovate_agent_user }}: your GitHub token can only read. It cannot comment on, close
+  as {{ pins.user }}: your GitHub token can only read. It cannot comment on, close
   or re-run a PR, push, merge or file an issue, and you cannot deploy.
 
 How you close, comment on or re-run a PR, which replaces every `gh pr close`, `gh pr comment`
 and `gh run rerun` step in the skill:
 
-- Write one JSON file per request into `/var/lib/renovate-agent/requests/`, with the Write
+- Write one JSON file per request into `{{ pins.exchange_dir }}/requests/`, with the Write
   tool. The runner carries each one out with its own token after this session ends, and
   records the outcome. Do not wait for it, and do not call `gh` to do it yourself.
   - `{"action": "close", "pr": <n>, "body": "Superseded by #<m>."}`
