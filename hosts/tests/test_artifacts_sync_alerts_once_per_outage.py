@@ -187,6 +187,7 @@ def test_the_verdict_stays_up_below_the_threshold_and_names_the_streak(tmp_path)
 
 def test_the_verdict_goes_down_at_the_threshold_and_stays_down_past_it(tmp_path):
     """Past the threshold matters: the stderr line's `-eq` test would turn the verdict up again."""
+    # fact: hosts/components/claude-code/CLAUDE.md#Autonomous-role contract (`sync-artifacts`, a mirror of another host's tree)
     run = _runner(tmp_path)
     for _ in range(THRESHOLD + 3):
         run("fail")
@@ -204,6 +205,7 @@ def test_a_recovery_logs_up_again(tmp_path):
 
 def test_the_star_list_is_pushed_to_the_peer_after_the_pull(tmp_path):
     """The peer prunes its own tree, so it keeps a starred artifact only once the list lands."""
+    # fact: hosts/components/claude-code/CLAUDE.md#Autonomous-role contract (`sync-artifacts`, a mirror of another host's tree)
     run = _runner(tmp_path)
     run.stars.write_text(f"{PEER}/plan.html\n")
     assert run("ok").returncode == 0

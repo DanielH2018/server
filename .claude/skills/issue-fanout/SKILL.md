@@ -210,17 +210,23 @@ runs the copy in its own snapshot of this repo's `origin/master`, which `launch`
 the batch's `.fanout/server`. The snapshot also supplies that batch's system prompt and
 `fanout-stop` hook.
 The agent stops at its PR on every host, and the pipeline decides what happens next. In
-this repo the agent opens that PR as a draft, and `ci.yml` runs no job on a draft. The pipeline
-marks the PR ready after the review and its fix round, so CI runs once, on the head that lands
-(#5563). A fresh reviewer then reads only the issue text and the diff, and returns findings with
+this repo the agent opens that PR as a draft, and `ci.yml` runs no job on a draft. On
+daniel-server the pipeline marks the PR ready after the review and its fix round, so CI runs
+once, on the reviewed head (#5563). On daniel-box a PR the pipeline lands stays a draft until its landing, and a held batch's
+PR is marked ready as on daniel-server.
+A fresh reviewer then reads only the issue text and the diff, and returns findings with
 a severity and a confidence. A finding of severity medium or worse, or a test the reviewer
 marks vacuous at any severity, resumes the agent for one fix round when its
 confidence is 0.5 or more, and a second reviewer reads only the fix. A finding of
 severity medium or worse at confidence 0.8 or more that survives the fix round holds the PR:
 the batch ends `needs input:`, naming the finding, and nothing lands it. Otherwise, on
-both hosts, the pipeline waits for the PR's CI with `cc-wait gh-ci --pr` after the fix round
-(`scripts/dev/fanout_lib/review/review_ci.py`, #4737 for daniel-server, #5498 for daniel-box).
-On daniel-box it then runs `land.sh` itself, from a fresh detached checkout of `origin/master` rather than the batch worktree, whose landing code a master change since launch would make stale. It resumes the agent only for an `unhealthy`,
+daniel-server, the pipeline waits for the PR's CI with `cc-wait gh-ci --pr` after the fix round
+(`scripts/dev/fanout_lib/review/review_ci.py`, #4737).
+On daniel-box it lands the draft with `land.sh` itself
+(`scripts/dev/fanout_lib/review/review_ci.py:land_draft`), from a fresh detached checkout of `origin/master` rather than the batch worktree, whose landing code a master change since launch would make stale.
+The landing marks the draft ready, or a landing batch tests it with other drafts, so the PR's
+first CI run is the one it merges on (`docs/ci-throughput.md`, D9). A landing that ends
+`pr-ci-red` resumes the agent once, and the pipeline lands the PR again. It also resumes the agent for an `unhealthy`,
 `deploy-failed`, `needs-manual-apply` or `blocked` verdict, with the verdict and the end of the
 landing's log. Any other verdict ends the batch. On daniel-server, `homelab-claude-fanout-server-lander.timer` on daniel-box lands the PR within about
 ten minutes when the review record and the PR both pass `scripts/dev/fanout_lib/autoland.py:problems`:
@@ -228,14 +234,14 @@ a reviewed batch with a passed CI gate and no leftover finding, whose PR is open
 head, with no operator step in its body. Run `probe.py lander` before
 landing a server batch's PR by hand, because `land.sh` holds no per-PR lock and a second landing would
 arm the merge twice. The orchestrator lands every other server PR, `--no-review` batches included,
-after that wait. A red CI verdict resumes the agent once, with
+after that wait. A red CI verdict resumes the agent once on either host, with
 each failed check's name and the end of its job's log, and the pipeline waits again on the new
-head. When the resume pushed nothing, the pipeline first re-runs the failed jobs once, because
+head, or lands again on daniel-box. When the resume pushed nothing, the pipeline first re-runs the failed jobs once, because
 half the red-after-resume batches measured were flakes. A batch whose CI is still red then ends
 `needs input:` naming the checks. A `cancelled` run is no verdict: the pipeline waits on it
 again. A wait that spends its 35 minutes with no verdict also ends `needs input:`, unless the
-head's checks are still running, which extends it to 60 minutes. Only this repo's batches wait, on either host; another repo's
-batch does not. The review's counts and costs go on the PR as
+head's checks are still running, which extends it to 60 minutes. Only this repo's daniel-server batches wait; a daniel-box batch
+reads its run from its landing, and another repo's batch has no wait. The review's counts and costs go on the PR as
 a comment, with only the actionable findings listed and security findings as a count only. The full record goes to `~/.local/state/fanout-review/`.
 Each phase's Claude Code telemetry also carries `fanout_batch` and `fanout_phase` labels in
 Prometheus (`fanout_lib/review/processes.py:otel_attributes`), so spend per batch and phase is one query across both hosts.

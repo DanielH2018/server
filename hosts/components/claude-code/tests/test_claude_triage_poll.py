@@ -41,6 +41,7 @@ def test_the_first_poll_records_what_is_down_and_starts_nothing() -> None:
 
 
 def test_a_fall_opens_one_episode_once_it_has_held_for_the_streak() -> None:
+    # fact: hosts/components/claude-code/CLAUDE.md#Autonomous-role contract (`claude-triage@`, a session started by a monitor episode)
     state, _ = advance({}, {})
     state, episodes = advance(state, DOWN)
     assert episodes == []  # one poll is a flap
@@ -82,6 +83,7 @@ def test_a_failed_read_keeps_the_state_rather_than_reading_as_recovered() -> Non
 
 
 def test_more_falls_than_the_storm_size_make_one_storm_episode() -> None:
+    # fact: hosts/components/claude-code/CLAUDE.md#Autonomous-role contract (`claude-triage@`, a session started by a monitor episode)
     down = {
         f"alert:A{i}:": {"source": "alertmanager", "monitor": f"m{i}"} for i in range(4)
     }
@@ -104,6 +106,7 @@ def test_falls_up_to_the_storm_size_each_get_their_own_episode() -> None:
 
 
 def test_an_unrouted_fall_is_skipped_once_and_never_makes_a_storm() -> None:
+    # fact: hosts/components/claude-code/CLAUDE.md#Autonomous-role contract (`claude-triage@`, a session started by a monitor episode)
     down = {f"alert:W{i}:": {"monitor": f"w{i}"} for i in range(4)}
     down["alert:TargetDown:sonarr"] = {"monitor": "TargetDown", "service": "sonarr"}
     routes = {"TargetDown": "triage"}
@@ -124,6 +127,7 @@ def test_an_unrouted_fall_is_skipped_once_and_never_makes_a_storm() -> None:
 
 @pytest.mark.parametrize("gate", ["hold", "muted"])
 def test_a_hold_or_the_reboot_mute_defers_the_episode_until_it_lifts(gate) -> None:
+    # fact: hosts/components/claude-code/CLAUDE.md#Autonomous-role contract (`claude-triage@`, a session started by a monitor episode)
     state, _ = advance({}, {})
     state, _ = advance(state, DOWN, **{gate: True})
     state, episodes = advance(state, DOWN, **{gate: True})
@@ -292,6 +296,7 @@ def test_a_routed_warning_fall_opens_with_its_profile(tmp_path, mode) -> None:
 
 @pytest.mark.parametrize("mode", ["armed", "shadow"])
 def test_armed_mode_starts_a_run_and_shadow_mode_only_logs_it(tmp_path, mode) -> None:
+    # fact: hosts/components/claude-code/CLAUDE.md#Autonomous-role contract (`claude-triage@`, a session started by a monitor episode)
     config = _config(tmp_path, mode)
     started = []
     read = _reads([], _fall("Memory"))
@@ -313,6 +318,7 @@ def test_armed_mode_starts_a_run_and_shadow_mode_only_logs_it(tmp_path, mode) ->
 
 def test_queued_episodes_start_one_at_a_time_as_the_lock_frees(tmp_path) -> None:
     """Three falls in one poll: a busy lock must leave them queued, not exit them 75."""
+    # fact: hosts/components/claude-code/CLAUDE.md#Autonomous-role contract (`claude-triage@`, a session started by a monitor episode)
     config = _config(tmp_path, "armed")
     falls = _fall("a", "b", "c")
     started = []
@@ -332,6 +338,7 @@ def test_queued_episodes_start_one_at_a_time_as_the_lock_frees(tmp_path) -> None
 
 
 def test_a_queued_episode_whose_run_crashed_is_not_started_again(tmp_path) -> None:
+    # fact: hosts/components/claude-code/CLAUDE.md#Autonomous-role contract (`claude-triage@`, a session started by a monitor episode)
     config = _config(tmp_path, "armed")
     started = []
     memory = _fall("Memory")

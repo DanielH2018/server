@@ -46,6 +46,7 @@ def test_the_registry_runs_every_row_gate_rows_first_in_table_order():
 
 
 def test_the_gate_rows_are_the_two_gates_the_run_loop_skips_by():
+    # fact: k8s/roles/monitor-bridge/CLAUDE.md#Gates and hysteresis
     assert {row.name for row in CHECKS if row.is_gate} == _GATES == set(check.GATE_SKIP)
 
 

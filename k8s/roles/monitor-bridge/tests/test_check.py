@@ -200,6 +200,7 @@ def _gated_cycle(cfg, gate, result, export=None):
 @pytest.mark.parametrize("gate", sorted(check.GATE_SKIP))
 def test_a_down_gate_skips_its_dependents_and_exports_zero_for_both(cfg, gate, capsys):
     """One page for the outage, not one per dependent — and not zero."""
+    # fact: k8s/roles/monitor-bridge/CLAUDE.md#Gates and hysteresis
     ran, exported = _gated_cycle(cfg, gate, (False, "gate says down"))
     assert ran == ["free"]
     # The gate's own gauge reads 0 and pages through its rule. The dependent's body never ran,

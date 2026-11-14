@@ -83,6 +83,7 @@ def test_a_startup_grace_row_exports_its_raw_down_with_no_hold(cfg):
 
 
 def test_a_raising_body_exports_zero_and_the_next_row_still_runs(cfg):
+    # fact: k8s/roles/monitor-bridge/CLAUDE.md#The two exporters
     ran, export = _cycle(cfg, wan_up=True)
     assert ran.index("boom") < ran.index("after")
     success = _series(export, "homelab_check_success")

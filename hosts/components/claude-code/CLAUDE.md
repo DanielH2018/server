@@ -281,54 +281,74 @@ template carries why it is a host timer at all.
 ## Autonomous-role contract (`claude-guardrail-audit`, the audit watches on the guardrail paths)
 
 server#8250, the host half of dotfiles#967's slice 2. `homelab-claude-guardrail-audit.timer`
-runs `templates/claude-guardrail-audit.sh.j2` as root on both hosts.
+runs `hosts/components/claude-code/templates/claude-guardrail-audit.sh.j2` as root on both hosts.
 
 - **Scope:** auditd watches under the keys `claude-guardrail` and `claude-memory`, one per
   path in `claude_code_guardrail_audit_paths` and `claude_code_guardrail_audit_memory_dirs`
   that exists. Each run loads a missing watch and removes one the lists no longer name. It
-  touches no rule under any other key, so the host-hardening watches stay as they are.
+  touches no rule under any other key, so the host-hardening watches stay as they are
+  (`hosts/tests/test_claude_guardrail_audit.py::test_a_watch_the_list_dropped_is_removed_and_other_keys_are_kept`).
 - **Why a timer, not a rules file:** `augenrules` stops at the first watch whose directory is
   missing, which would also drop the hardening rules. The agent's memory store exists only
   after the agent's first session in its clone, and the next run then watches it.
 - **Mode:** `claude_code_guardrail_audit_enabled`. The timer ships either way, so false
-  reaches a run that removes every watch under both keys and reports up.
+  reaches a run that removes every watch under both keys and reports up
+  (`hosts/tests/test_claude_guardrail_audit.py::test_disarming_removes_every_watch_under_both_keys`).
 - **Abort valves:** a run stops at its first failed `auditctl` read and reports down, loading
   nothing. It removes a watch only under its own two keys, and only one the lists no longer
   name.
 - **Evidence:** a `status=` line under `journalctl -t claude-guardrail-audit`, and
-  `claude-guardrail-audit.prom`. `ClaudeGuardrailAuditFailed` pages a stopped auditd, kernel
-  auditing switched off, or a present path with no watch. `ClaudeGuardrailAuditNotReporting`
-  pages a timer that stopped. Each watched write lands in `/var/log/audit/audit.log`, which
-  loki-homelab's Alloy ships as `{job="audit"}`. Its SYSCALL line carries the key and the
+  `claude-guardrail-audit.prom`. `ClaudeGuardrailAuditFailed` pages a stopped auditd
+  (`hosts/tests/test_claude_guardrail_audit.py::test_a_stopped_auditd_is_flagged`), kernel
+  auditing switched off
+  (`hosts/tests/test_claude_guardrail_audit.py::test_kernel_auditing_off_is_flagged`), or a
+  present path with no watch
+  (`hosts/tests/test_claude_guardrail_audit.py::test_a_watch_that_will_not_load_is_flagged_by_path`).
+  `ClaudeGuardrailAuditNotReporting` pages a timer that stopped. Each watched write lands in
+  `/var/log/audit/audit.log`, which loki-homelab's Alloy ships as `{job="audit"}`
+  (`tests/k8s/test_alloy_ships_audit_log.py::test_the_source_tails_auditds_log_into_this_block`). Its SYSCALL line carries the key and the
   writing process, so a Bash write shows apart from the Write tool's.
 - **Next-run review:** before adding a path, check that a write to it is rare. Every write to
   a watched path is a shipped record.
 
 ## Autonomous-role contract (`claude-guardrail-ack`, the post for each unexplained guardrail change)
 
-server#8250 slice 2. `homelab-claude-guardrail-ack.timer` runs `files/claude_guardrail_ack.py`
-as root on both hosts, two minutes after each audit run.
+server#8250 slice 2. `homelab-claude-guardrail-ack.timer` runs
+`hosts/components/claude-code/files/claude_guardrail_ack.py` as root on both hosts, two minutes
+after each audit run (`hosts/components/claude-code/units/homelab-claude-guardrail-ack.timer.j2`).
 
 - **Scope:** every file under `claude_code_guardrail_audit_paths`, never the memory stores.
   A change is explained, and stays quiet, when the file matches the md5 recorded inside the
-  `.deb` an apt source serves for the installed version, when it
-  matches what chezmoi renders for its owner from the dotfiles repo's `main`, or when a
-  settings.json change touches only `claude_code_guardrail_ack_quiet_settings_keys`. A file
-  under a `copies` destination in `templates/claude-guardrail-ack.json.j2` is explained when
+  `.deb` an apt source serves for the installed version
+  (`hosts/components/claude-code/tests/test_claude_guardrail_ack.py::test_a_package_file_matching_its_md5_is_not_posted_and_a_drifted_one_is`), when it
+  matches what chezmoi renders for its owner from the dotfiles repo's `main`
+  (`hosts/components/claude-code/tests/test_claude_guardrail_ack.py::test_a_change_that_matches_the_dotfiles_main_render_is_not_posted`), or when a
+  settings.json change touches only `claude_code_guardrail_ack_quiet_settings_keys`
+  (`hosts/components/claude-code/tests/test_claude_guardrail_ack.py::test_claude_codes_own_model_write_is_quiet_and_a_permissions_change_is_posted`). A file
+  under a `copies` destination in `hosts/components/claude-code/templates/claude-guardrail-ack.json.j2` is explained when
   its content would be explained at its source: renovate-agent's settings copy against the
-  packaged file, and its hooks copy against the operator's hooks. The operator ruled on 2026-11-13 to post only the rest. The run fetches that `.deb` with
+  packaged file
+  (`hosts/components/claude-code/tests/test_claude_guardrail_ack.py::test_a_copy_of_a_published_package_file_is_not_posted_and_a_hand_edit_is`),
+  and its hooks copy against the operator's hooks
+  (`hosts/components/claude-code/tests/test_claude_guardrail_ack.py::test_a_copy_of_a_hook_matching_the_render_at_its_source_is_not_posted`). The operator ruled on 2026-11-13 to post only the rest. The run fetches that `.deb` with
   `apt-get download`, which checks it against the signed index. A package installed with
   `dpkg -i` matches its own md5sums but not a published `.deb`, so its change posts with the
-  installed version (#8415). Reconcile's `applied.json`
+  installed version (#8415,
+  `hosts/components/claude-code/tests/test_claude_guardrail_ack.py::test_a_hand_installed_package_change_is_posted_with_both_versions`). Reconcile's `applied.json`
   cannot make that split: the postinst starts reconcile, which records the hand-installed
   version as well. A posted diff masks any line naming a
-  token, key, secret, password or webhook, and any long credential-shaped value.
+  token, a secret, a password, an API key, a webhook, a credential, a cookie, a bearer or an
+  authorization, and any long credential-shaped value
+  (`hosts/components/claude-code/files/claude_guardrail_ack.py:mask_line`,
+  `hosts/components/claude-code/tests/test_claude_guardrail_ack.py::test_a_hand_edit_to_a_hook_is_posted_with_its_secret_masked`).
 - **Mode:** `claude_code_guardrail_ack_enabled`. False drops the timer, its units and the
   config from the next package version, and keeps the state under
   `/var/lib/homelab-claude-guardrail-ack`.
 - **Abort valves:** a failed post leaves the kept copies where they were, so the next run
-  posts the same changes again rather than losing them. The first run on a host keeps a copy
-  of every file and posts nothing.
+  posts the same changes again rather than losing them
+  (`hosts/components/claude-code/tests/test_claude_guardrail_ack.py::test_a_failed_post_is_retried_on_the_next_run`).
+  The first run on a host keeps a copy of every file and posts nothing
+  (`hosts/components/claude-code/tests/test_claude_guardrail_ack.py::test_the_first_run_baselines_and_posts_nothing`).
 - **Evidence:** a `status=` line under `journalctl -t claude-guardrail-ack`, and
   `claude-guardrail-ack.prom`, which `ClaudeGuardrailAckFailed` and
   `ClaudeGuardrailAckNotReporting` read. The auditd record of the same change names the
@@ -339,20 +359,28 @@ as root on both hosts, two minutes after each audit run.
 ## Autonomous-role contract (`claude-dotfiles-mirror`, the verified dotfiles tag for T2)
 
 dotfiles#967 D13, the root half of the T2 config source. `homelab-claude-dotfiles-mirror.timer`
-runs `files/claude_dotfiles_mirror.py` as root on both hosts.
+runs `hosts/components/claude-code/files/claude_dotfiles_mirror.py` as root on both hosts.
 
 - **Scope:** a bare mirror of the dotfiles repo under `/var/lib/homelab-claude-dotfiles-mirror`,
   which only root writes. Each run fetches, takes the newest tag, and records its name and
   commit in `verified.json` only when its signature verifies against
-  `/etc/claude-dotfiles/allowed_signers` and its commit descends from the last recorded one.
-  git runs with no system or global config, so nothing in the mirror changes how it checks.
-- **The signer:** `templates/claude-dotfiles-allowed-signers.j2` holds one key, the operator's
+  `/etc/claude-dotfiles/allowed_signers`
+  (`hosts/components/claude-code/tests/test_claude_dotfiles_mirror.py::test_a_tag_without_the_operators_signature_is_refused`)
+  and its commit descends from the last recorded one
+  (`hosts/components/claude-code/tests/test_claude_dotfiles_mirror.py::test_a_signed_descendant_tag_moves_the_record_forward`).
+  git runs with no system or global config, so nothing in the mirror changes how it checks
+  (`hosts/components/claude-code/files/claude_dotfiles_mirror.py:git`).
+- **The signer:** `hosts/components/claude-code/templates/claude-dotfiles-allowed-signers.j2` holds one key, the operator's
   "Daniel Box Key", as a literal the inventory cannot override. The operator chose that key on
-  2026-11-13. The template and the script are on the lander's approval list.
+  2026-11-13. The template and the script are on the lander's approval list
+  (`hosts/tests/test_claude_lander.py::test_the_approval_list_land_sh_reads_is_the_floor`).
 - **Mode:** `claude_code_dotfiles_mirror_enabled`. False drops the timer, its units, the config
   and the signers file from the next package version, and keeps the mirror and the record.
 - **Abort valves:** a refused tag leaves the last record in place, so a bad or rolled-back tag
-  never replaces a good one. A run that finds no tag records nothing and reports up.
+  never replaces a good one
+  (`hosts/components/claude-code/tests/test_claude_dotfiles_mirror.py::test_a_newer_tag_on_an_older_commit_is_refused_and_the_last_is_kept`).
+  A run that finds no tag records nothing and reports up
+  (`hosts/components/claude-code/tests/test_claude_dotfiles_mirror.py::test_a_repo_with_no_tag_is_up_and_records_nothing`).
 - **Evidence:** a `status=` line under `journalctl -t claude-dotfiles-mirror`, and
   `claude-dotfiles-mirror.prom`, which `ClaudeDotfilesMirrorFailed` and
   `ClaudeDotfilesMirrorNotReporting` read.
@@ -363,15 +391,19 @@ runs `files/claude_dotfiles_mirror.py` as root on both hosts.
 
 - **Scope:** `rsync --delete` of each `claude_code_artifacts_peer_sources` entry's `path` into
   `claude_code_artifacts_peer_dir/<name>` on daniel-box, then a copy of
-  `claude_code_artifacts_stars_file` to the peer's `stars_path`. It deletes on daniel-box only
-  what the peer has already deleted.
-- **Mode:** always on where it is installed, which is `claude_code_artifacts_node` alone;
+  `claude_code_artifacts_stars_file` to the peer's `stars_path`
+  (`hosts/tests/test_artifacts_sync_alerts_once_per_outage.py::test_the_star_list_is_pushed_to_the_peer_after_the_pull`).
+  It deletes on daniel-box only what the peer has already deleted.
+- **Mode:** always on where it is installed, which is `claude_code_artifacts_node` alone
+  (`hosts/lib/tests/test_claude_artifacts_node_timers.py::test_only_the_artifacts_node_ships_them`);
   removing the entry from `claude_code_artifacts_peer_sources` (and its twin) stops that peer's
   sync.
 - **Abort valve:** a `flock` holds runs to one at a time, and ssh runs in `BatchMode` with a
-  10-second connect timeout, so an unreachable peer fails the run rather than hanging it.
+  10-second connect timeout, so an unreachable peer fails the run rather than hanging it
+  (`hosts/components/claude-code/templates/sync-artifacts.sh.j2`).
 - **Evidence:** `journalctl -t sync-artifacts`, whose `status=down` line starts at
-  `claude_code_artifacts_sync_alert_after_failures` consecutive failures, and
+  `claude_code_artifacts_sync_alert_after_failures` consecutive failures
+  (`hosts/tests/test_artifacts_sync_alerts_once_per_outage.py::test_the_verdict_goes_down_at_the_threshold_and_stays_down_past_it`), and
   `sync-artifacts.prom`, which carries the same verdict for the `ArtifactsSyncFailed` and
   `ArtifactsSyncNotReporting` rules.
 
@@ -392,40 +424,68 @@ runs `files/claude_dotfiles_mirror.py` as root on both hosts.
 ## Autonomous-role contract (`claude-triage@`, a session started by a monitor episode)
 
 - **Scope:** one episode per run. Slice 1 diagnoses only: Edit, Write, a landing and a push
-  are denied. The later slices widen this to a fix landed through `homelab-claude-land@` and a
+  are denied (`hosts/components/claude-code/files/claude_triage_session.py:DENIED_TOOLS`,
+  `hosts/components/claude-code/tests/test_claude_triage_session.py::test_the_session_is_diagnose_only_and_capped`). The later slices widen this to a fix landed through `homelab-claude-land@` and a
   restart through an allowlisted broker, under the operator's 2026-10-15 rulings.
 - **Identity:** the controller, `claude-triage-ctl`, runs the poller and the runner and alone may
-  start the units. The session user, `claude-triage`, holds no GitHub token and no start right,
-  and reads the clone and its toolchain read-only. Neither is `claude` (dotfiles#967's I1).
-- **Mode:** `claude_code_triage_enabled`, false by default; false stops the poller, then removes
+  start the units (`hosts/tests/test_claude_triage.py::test_the_poller_runs_as_the_controller`).
+  The session user, `claude-triage`, holds no GitHub token and no start right,
+  and reads the clone and its toolchain read-only
+  (`hosts/tests/test_claude_triage.py::test_the_session_shares_only_read_access_with_the_controller`).
+  Neither is `claude` (dotfiles#967's I1).
+- **Mode:** `hosts/components/claude-code/defaults/main.yml:claude_code_triage_enabled`, false
+  by default; false stops the poller, then removes
   the rule, the units, the code and the config, and keeps the records.
   `claude_code_triage_poll_mode` is `off`, `shadow` or `armed`, pinned at `shadow` in
-  `templates/claude-triage-pins.j2`, so arming the trigger needs the operator's approval.
+  `hosts/components/claude-code/templates/claude-triage-pins.j2`, so arming the trigger needs
+  the operator's approval
+  (`hosts/tests/test_claude_triage.py::test_the_template_pins_equal_the_defaults`).
 - **Abort valves:** `$10`, 60 turns and a 30-minute wall clock per run, and six runs a UTC day,
-  all pinned in `templates/claude-triage-pins.j2`, plus a lock that holds runs to one at a time. The runner
-  enforces the daily cap, because polkit lets the controller start a run without the poller. The
-  poller opens an episode only on a fall that holds for two polls and that the pinned route
-  table (`poll_routes`) names. It logs an unrouted fall as skipped, makes one storm episode of
-  more than three falls of one profile at once, and opens nothing while `DeployHoldActive` fires or the weekly
-  reboot's mute is open. It queues episodes and starts the next only when the lock is free,
-  and never restarts one whose run crashed.
+  all pinned in `hosts/components/claude-code/templates/claude-triage-pins.j2`, plus a lock that holds runs to one at a time. The runner
+  enforces the daily cap, because polkit lets the controller start a run without the poller
+  (`hosts/components/claude-code/tests/test_claude_triage_run.py::test_the_daily_cap_stops_a_run_before_any_session_starts`). The
+  poller opens an episode only on a fall that holds for two polls
+  (`hosts/components/claude-code/tests/test_claude_triage_poll.py::test_a_fall_opens_one_episode_once_it_has_held_for_the_streak`)
+  and that the pinned route table (`poll_routes`) names. It logs an unrouted fall as skipped
+  (`hosts/components/claude-code/tests/test_claude_triage_poll.py::test_an_unrouted_fall_is_skipped_once_and_never_makes_a_storm`),
+  makes one storm episode of more than three falls of one profile at once
+  (`hosts/components/claude-code/tests/test_claude_triage_poll.py::test_more_falls_than_the_storm_size_make_one_storm_episode`),
+  and opens nothing while `DeployHoldActive` fires or the weekly reboot's mute is open
+  (`hosts/components/claude-code/tests/test_claude_triage_poll.py::test_a_hold_or_the_reboot_mute_defers_the_episode_until_it_lifts`).
+  It queues episodes and starts the next only when the lock is free
+  (`hosts/components/claude-code/tests/test_claude_triage_poll.py::test_queued_episodes_start_one_at_a_time_as_the_lock_frees`),
+  and never restarts one whose run crashed
+  (`hosts/components/claude-code/tests/test_claude_triage_poll.py::test_a_queued_episode_whose_run_crashed_is_not_started_again`).
 - **Evidence:** `/var/lib/claude-triage-ctl/state/runs/<episode>.json`, the report under
-  `/a/<host>-claude-triage/`, and a Discord page for every run; a crash pages separately, and a
-  poller failure pages at most once an hour. In shadow
+  `/a/<host>-claude-triage/`, and a Discord page for every run
+  (`hosts/components/claude-code/tests/test_claude_triage_run.py::test_a_run_with_no_diagnosis_still_leaves_a_record_a_report_and_a_page`);
+  a crash pages separately, and a poller failure pages at most once an hour
+  (`hosts/components/claude-code/units/homelab-claude-triage-poll-alert.service`). In shadow
   mode, `/var/lib/claude-triage-ctl/state/shadow.jsonl` and `journalctl -u homelab-claude-triage-poll` list each
-  run the poller would have started. `claude-triage-poll.prom` pages a poller that stopped.
+  run the poller would have started
+  (`hosts/components/claude-code/tests/test_claude_triage_poll.py::test_armed_mode_starts_a_run_and_shadow_mode_only_logs_it`). `claude-triage-poll.prom` pages a poller that stopped.
 - **Next-run review:** before widening the scope or a cap, read the last week's records for
   what the runs diagnosed and what they cost.
 
 ## Autonomous-role contract (`claude-clone-sync`, `claude-dotfiles-sync`)
 
-- **Scope:** per agent: a `--ff-only` pull of its clone, then the venv if its lock moved;
-  and a pull and `chezmoi apply` of the operator's dotfiles.
-- **Mode:** the agent's `state` and `dotfiles`; off removes its `<name>-*-sync` units.
-- **Abort valve:** the clone sync skips unless the clone is a clean `master`; the dotfiles sync
-  refuses a source without the agent variant.
-- **Evidence:** `journalctl -u <name>-{clone,dotfiles}-sync`; a failure pages Discord, and
-  `<name>-{clone,dotfiles}-sync.prom` pages a timer that stopped. A clone left dirty or off
+- **Scope:** per agent: a `--ff-only` pull of its clone
+  (`hosts/tests/test_agent_clone_fast_forward.py::test_a_clean_master_advances_to_origin`),
+  then the venv if its lock moved
+  (`hosts/tests/test_agent_clone_fast_forward.py::test_a_moved_lock_resyncs_the_venv_and_installs_no_collections`);
+  and a pull and `chezmoi apply` of the operator's dotfiles
+  (`hosts/tests/test_agent_dotfiles.py::test_the_agent_variant_is_applied_in_two_passes_that_spare_the_role_owned_dirs`).
+- **Mode:** `claude_code_agent_user_enabled` gates both, and `claude_code_agent_dotfiles` gates
+  the dotfiles sync as well; false drops the `homelab-claude-{clone,dotfiles}-sync` units from
+  the next package version.
+- **Abort valve:** the clone sync skips unless the clone is a clean `master`
+  (`hosts/tests/test_agent_clone_fast_forward.py::test_the_agents_work_in_progress_is_left_alone`);
+  the dotfiles sync refuses a source without the agent variant
+  (`hosts/tests/test_agent_dotfiles.py::test_a_source_without_the_agent_variant_is_refused`).
+- **Evidence:** `journalctl -u homelab-claude-{clone,dotfiles}-sync`; a failure pages Discord, and
+  `claude-{clone,dotfiles}-sync.prom` pages a timer that stopped
+  (`hosts/lib/tests/test_claude_code_component.py::test_each_packaged_unit_names_its_packaged_sibling`).
+  A clone left dirty or off
   `master` skips with exit 0 and still writes its file, so the file says the timer runs, not
   that the clone is current.
 
