@@ -208,8 +208,8 @@ before deciding what is due. Examples:
 - `*_api_key` (sonarr/radarr/jellyfin/prowlarr): Settings → General → regenerate API key.
   **Bazarr is a consumer of `sonarr_api_key` and `radarr_api_key` that no deploy reaches**, so
   `stale_copies.OUTSIDE_THE_TREE` lists both, and a landing that rotates either ends
-  `needs-manual-apply`. It stores both in its own config on the `bazarr-config` PVC, entered through its UI, so there is
-  no Ansible template holding them and no redeploy that updates them. After rotating either key,
+  `needs-manual-apply`. It stores both in its own config on the `bazarr-config` PVC,
+  entered through its UI, so there is no Ansible template holding them and no redeploy that updates them. After rotating either key,
   set it in Bazarr → Settings → Sonarr → API Key and Settings → Radarr → API Key, then restart
   Bazarr from System → Restart. The restart is required, not cosmetic: Bazarr's SignalR client
   raises `UnAuthorizedHubError` and its thread exits, so it does not retry on a key change alone.
