@@ -77,6 +77,7 @@ wrong is worth more than the record of one that did not.
 | [0030](0030-the-ansible-tree-is-renamed-for-what-it-holds.md) | The ansible/ tree is renamed for what it holds, after its installed readers accept both paths | Accepted | 2026-11-13 |
 | [0031](0031-each-kind-of-fact-has-one-stateless-detector.md) | Each kind of documented fact has one home and one stateless detector | Accepted | 2026-11-13 |
 | [0032](0032-cis-heavy-jobs-may-run-on-runner-pods.md) | CI's two heavy jobs may run on runner pods, and the repository stays public | Accepted | 2026-11-13 |
+| [0033](0033-skeptic-and-implementer-carry-no-maxturns.md) | The skeptic and implementer agents carry no turn cap | Accepted | 2026-11-14 |
 
 ## The long-form behind a record
 

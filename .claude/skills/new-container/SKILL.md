@@ -4,13 +4,10 @@ description: Add a new DOCKER service for daniel-pi — a `pi-compose` service i
 allowed-tools: Read, Write, Edit, Glob, Bash, WebFetch, WebSearch
 ---
 
-> **STOP — check the target host first.** Since the k3s migration completed (2026-08-14),
-> `daniel-server` and `daniel-box` have **no Docker at all**. This skill applies **only to
-> `daniel-pi`** (LAN-only utilities, WireGuard).
->
-> For anything on the cluster — which is where nearly every new service belongs — do NOT use
-> this skill. Use the `new-k8s-service` skill. See repo-root `CLAUDE.md` → "Project
-> Overview".
+> This skill applies only to `daniel-pi` (LAN-only utilities, WireGuard), the one Docker host:
+> daniel-box and daniel-server have no Docker. A cluster service, which is nearly every new
+> service, uses the `new-k8s-service` skill. Root `CLAUDE.md` → *Project Overview* says where a
+> new service goes.
 
 The Pi's Docker services are one Compose project, `homelab`, which the `homelab-daniel-pi`
 host package installs and `homelab-compose.service` runs. There is no Ansible role for
