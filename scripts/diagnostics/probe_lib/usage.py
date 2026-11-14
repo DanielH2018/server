@@ -1,11 +1,12 @@
-"""`probe.py usage` -- how the services are used, read from Prometheus.
+"""`probe.py usage` -- how the services are used, read from Prometheus and the IngressRoutes.
 
 Three tables:
 
 1. Requests per service over the whole retention window, summed across the service's
    IngressRoutes. Traefik labels each route `<namespace>-<route>-<hash>@kubernetescrd`, and a
    route is named `<service>[-public|-monitoring|-push-monitoring|-read|-public-<path>]`, so
-   the service is the name up to the first `ROUTE_WORDS` segment.
+   the service is the name up to the first `ROUTE_WORDS` segment. Traefik creates a route's
+   series only on its first request, so the live IngressRoutes seed every service at 0.
 2. Each container's memory request, limit and 7-day p95 working set.
 3. Each PVC's fill and its projected days to full.
 
@@ -25,12 +26,13 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 from diagnostics.probe_lib import core
 from diagnostics.probe_lib.health_alerts import prom_query
 from diagnostics.probe_lib.metrics import SPAN_PROMQL, format_span
+from lib.kubectl import DEFAULT_CLUSTER, kubectl_json
 
 ROUTE_WORDS = frozenset({"public", "monitoring", "push", "read"})
 KINDS = ("lan", "public", "api", "monitoring")
 _CRD_HASH = re.compile(r"-[0-9a-f]{20}$")
 
-NAMESPACES_QUERY = "group by (namespace) (kube_pod_info)"
+INGRESSROUTES_ARGS = ("get", "ingressroutes.traefik.io", "-A", "-o", "json")
 
 
 def requests_query(window_s):
@@ -73,12 +75,7 @@ _WORKLOAD_SUFFIXES = (
 
 
 def route_service(label: str, namespaces: set[str]):
-    """`(service, kind)` for a Traefik `service` label, or None for Traefik's own. Pure.
-
-    `kind` is one of `KINDS`: `monitoring` for a route with a `monitoring` segment, `public`
-    for `<service>-public`, `lan` for the bare `<service>`, and `api` for any other suffix,
-    such as `-public-api-trpc` or `-read`.
-    """
+    """`(service, kind)` for a Traefik `service` label, or None for Traefik's own. Pure."""
     name, _, provider = label.partition("@")
     if provider == "internal":
         return None
@@ -88,6 +85,16 @@ def route_service(label: str, namespaces: set[str]):
             if name.startswith(ns + "-"):
                 name = name[len(ns) + 1 :]
                 break
+    return route_kind(name)
+
+
+def route_kind(name):
+    """`(service, kind)` for an IngressRoute name. Pure.
+
+    `kind` is one of `KINDS`: `monitoring` for a route with a `monitoring` segment, `public`
+    for `<service>-public`, `lan` for the bare `<service>`, and `api` for any other suffix,
+    such as `-public-api-trpc` or `-read`.
+    """
     parts = name.split("-")
     cut = next((i for i, p in enumerate(parts) if i and p in ROUTE_WORDS), len(parts))
     rest = parts[cut:]
@@ -106,13 +113,16 @@ def _value(series):
     return float(series["value"][1])
 
 
-def format_requests(series, namespaces, window_s):
+def format_requests(series, routes, window_s):
     """The requests table, one row per service, busiest first. Pure.
 
-    `total` sums the LAN, public and API routes; the monitoring routes carry probe traffic,
-    so they sit in their own column and stay out of the total.
+    `routes` is the live IngressRoutes as `(namespace, name)` pairs. Each one seeds its
+    service at 0, so a service no client has requested still gets a row. `total` sums the
+    LAN, public and API routes; the monitoring routes carry probe traffic, so they sit in
+    their own column and stay out of the total.
     """
-    counts = {}
+    namespaces = {namespace for namespace, _ in routes}
+    counts = {route_kind(name)[0]: dict.fromkeys(KINDS, 0.0) for _, name in routes}
     for s in series:
         parsed = route_service(s.get("metric", {}).get("service", ""), namespaces)
         if parsed is None:
@@ -121,9 +131,11 @@ def format_requests(series, namespaces, window_s):
         row = counts.setdefault(service, dict.fromkeys(KINDS, 0.0))
         row[kind] += _value(s)
     width = max([len("service"), *map(len, counts)]) + 2
+    unused = sum(1 for row in counts.values() if not any(row.values()))
     lines = [
-        f"Requests: {len(counts)} services over the last {format_span(window_s)}, the "
-        "whole Prometheus retention window; `total` excludes the monitoring routes",
+        f"Requests: {len(counts)} services, {unused} with no request, over the last "
+        f"{format_span(window_s)}, the whole Prometheus retention window; `total` "
+        "excludes the monitoring routes",
         f"  {'service':<{width}}{'total':>10}{'lan':>10}{'public':>10}{'api':>10}"
         f"{'monitoring':>12}",
     ]
@@ -261,12 +273,31 @@ def format_pvcs(used_series, capacity_series, growth_series, show_all=False):
     return lines
 
 
-def report(query=prom_query, show_all=False):
+def ingressroutes(cluster=DEFAULT_CLUSTER):
+    """The live IngressRoutes as `(namespace, name)` pairs.
+
+    Raises:
+        core.Unreadable: kubectl failed or listed none.
+    """
+    doc: dict = kubectl_json(cluster, *INGRESSROUTES_ARGS) or {}
+    routes = [
+        (i["metadata"]["namespace"], i["metadata"]["name"])
+        for i in doc.get("items") or []
+    ]
+    if not routes:
+        raise core.Unreadable(
+            f"kubectl {' '.join(INGRESSROUTES_ARGS)} listed no routes"
+        )
+    return routes
+
+
+def report(query=prom_query, routes=(), show_all=False):
     """The three tables as lines.
 
     Args:
         query: returns an instant query's result list; raises `core.Unreadable` on a failed
             read.
+        routes: the live IngressRoutes, as `ingressroutes` returns them.
         show_all: list every container and PVC, not just the flagged ones.
 
     Raises:
@@ -276,8 +307,7 @@ def report(query=prom_query, show_all=False):
     if not span:
         raise core.Unreadable(f"Prometheus returned no series for {SPAN_PROMQL}")
     window_s = _value(span[0])
-    namespaces = {s["metric"]["namespace"] for s in query(NAMESPACES_QUERY)}
-    lines = format_requests(query(requests_query(window_s)), namespaces, window_s)
+    lines = format_requests(query(requests_query(window_s)), routes, window_s)
     lines.append("")
     lines += format_memory(
         query(P95_QUERY), query(REQUEST_QUERY), query(LIMIT_QUERY), show_all
@@ -291,5 +321,6 @@ def report(query=prom_query, show_all=False):
 
 def run_usage(ns):
     """Print the usage report; 0 once every query answered."""
-    print("\n".join(report(show_all=ns.all)))
+    routes = ingressroutes(getattr(ns, "cluster", DEFAULT_CLUSTER))
+    print("\n".join(report(routes=routes, show_all=ns.all)))
     return 0

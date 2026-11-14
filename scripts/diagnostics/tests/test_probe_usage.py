@@ -51,9 +51,18 @@ def test_a_services_requests_sum_its_lan_public_and_api_routes_but_not_monitorin
         _series(3000, service=f"homelab-karakeep-public-api-v1-{HASH}@kubernetescrd"),
         _series(9999, service=f"homelab-karakeep-monitoring-{HASH}@kubernetescrd"),
     ]
-    lines = usage.format_requests(series, NAMESPACES, 21.7 * 86400)
+    routes = [("homelab", "karakeep"), ("homelab", "karakeep-public")]
+    lines = usage.format_requests(series, routes, 21.7 * 86400)
     assert "over the last 21.7d" in lines[0]
     assert lines[2].split() == ["karakeep", "3210", "10", "200", "3000", "9999"]
+
+
+def test_a_route_no_client_has_requested_still_lists_its_service_at_zero():
+    series = [_series(5, service=f"homelab-sonarr-{HASH}@kubernetescrd")]
+    routes = [("homelab", "sonarr"), ("homelab", "bento-pdf-public")]
+    lines = usage.format_requests(series, routes, 86400)
+    assert lines[0].startswith("Requests: 2 services, 1 with no request")
+    assert lines[3].split() == ["bento-pdf", "0", "0", "0", "0", "0"]
 
 
 @pytest.mark.parametrize(
