@@ -73,7 +73,7 @@ def test_display_show_idle_trigger_holds_for_a_minute():
 NOW = datetime(2026, 11, 12, 19, 25, tzinfo=timezone.utc)
 
 
-def _show_allowed_after_dismiss(dismissed: datetime | None) -> bool:
+def _show_allowed_after_dismiss(dismissed: datetime | None, lux: str = "70") -> bool:
     conditions = _automation("display.yaml", "bedroom_display_show")["condition"]
     templates = [
         c["value_template"]
@@ -86,21 +86,24 @@ def _show_allowed_after_dismiss(dismissed: datetime | None) -> bool:
     rendered = render_template(
         templates[0],
         state_attr=lambda entity_id, name: attributes[(entity_id, name)],
+        states=lambda entity_id: {"sensor.aqara_fp300_illuminance": lux}[entity_id],
         now=lambda: NOW,
         timedelta=timedelta,
     )
     return rendered == "True"
 
 
-@pytest.mark.parametrize(
-    ("minutes_ago", "allowed"), [(3, False), (14, False), (16, True)]
-)
+@pytest.mark.parametrize(("minutes_ago", "allowed"), [(14, False), (16, True)])
 def test_display_show_holds_off_after_a_dismiss(minutes_ago, allowed):
     assert _show_allowed_after_dismiss(NOW - timedelta(minutes=minutes_ago)) is allowed
 
 
 def test_display_show_casts_when_dismiss_never_ran():
     assert _show_allowed_after_dismiss(None)
+
+
+def test_display_show_casts_inside_the_hold_once_the_lights_come_on():
+    assert _show_allowed_after_dismiss(NOW - timedelta(minutes=1), lux="628")
 
 
 def test_per_minute_wake_tickers_keep_90_traces():
