@@ -26,6 +26,7 @@ from _edge_property_rows import EDGE_PROPERTIES
 from _helpers import REPO, manifests_rollout_timeout_s
 from _image_property_rows import IMAGE_PROPERTIES
 from _k8s_render import pod_spec
+from _monitoring_property_rows import MONITORING_PROPERTIES
 from _port_property_rows import PORT_PROPERTIES
 from _property_table import Property, check
 from _rbac_property_rows import RBAC_PROPERTIES
@@ -396,6 +397,7 @@ PROPERTIES = (
     + IMAGE_PROPERTIES
     + SCRAPE_PROPERTIES
     + EDGE_PROPERTIES
+    + MONITORING_PROPERTIES
     + PORT_PROPERTIES
     + RBAC_PROPERTIES
     + VOLUME_PROPERTIES

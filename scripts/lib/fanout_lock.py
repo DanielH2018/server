@@ -10,8 +10,13 @@ The lock's owner is the unit, so the unit's state decides. Every doubt reads as 
 manager that cannot be asked, a tree another user owns (its units sit under that user's
 manager, not the caller's), and a lock younger than `GRACE_S`, because launch takes the lock
 before `systemd-run` starts the unit and a fresh tree at master already reads as merged.
+
+A caller that only reports, never removes, can judge another user's tree with
+`process_unit_state`. It reads the unit names in `/proc/<pid>/cgroup`, which every user can
+read, where that user's manager answers only its owner.
 """
 
+import functools
 import os
 import re
 import subprocess
@@ -52,6 +57,48 @@ def unit_state(unit: str) -> str | None:
     return proc.stdout.strip() if proc.returncode == 0 else None
 
 
+def running_units(proc: str = "/proc") -> frozenset[str] | None:
+    """The systemd units, under any user's manager, that hold at least one process.
+
+    Returns:
+        Unit names without the `.service` suffix, or None when `proc` cannot be listed.
+    """
+    try:
+        pids = [entry for entry in os.listdir(proc) if entry.isdigit()]
+    except OSError:
+        return None
+    units = set()
+    for pid in pids:
+        try:
+            text = Path(proc, pid, "cgroup").read_text()
+        except OSError:
+            continue
+        for line in text.splitlines():
+            units.update(
+                part.removesuffix(".service")
+                for part in line.split("/")
+                if part.endswith(".service")
+            )
+    return frozenset(units)
+
+
+def process_unit_state(proc: str = "/proc") -> Callable[[str], str | None]:
+    """A `unit_state`-shaped reader for any user's units, from one scan of `proc`.
+
+    The scan runs on the first call, and every later call reuses it. A unit with no process
+    reads `inactive`; an unreadable `proc` reads None.
+    """
+    units = functools.cache(lambda: running_units(proc))
+
+    def state(unit: str) -> str | None:
+        found = units()
+        if found is None:
+            return None
+        return "active" if unit in found else "inactive"
+
+    return state
+
+
 def lock_age(tree: str, now: float) -> float | None:
     """Seconds from `git worktree lock` writing `tree`'s lock file to `now`, or None."""
     try:
@@ -70,6 +117,8 @@ def batch_is_live(
     reason: str,
     state: Callable[[str], str | None] = unit_state,
     now: float | None = None,
+    foreign: Callable[[str], str | None] | None = None,
+    uid: int | None = None,
 ) -> bool:
     """Whether the batch unit named by lock `reason` may still be using `tree`.
 
@@ -78,13 +127,19 @@ def batch_is_live(
         reason: its lock reason, which `is_fanout_reason` has accepted.
         state: `unit_state`-shaped; a test seam.
         now: the time to measure the lock's age at; the clock's when None.
+        foreign: `unit_state`-shaped, for a tree another user owns. None reads every such
+            tree as live, which a caller that removes trees needs.
+        uid: the caller's uid; the process's when None. A test seam.
     """
     try:
-        if Path(tree).stat().st_uid != os.getuid():
-            return True
+        owner = Path(tree).stat().st_uid
     except OSError:
         return True
     age = lock_age(tree, time.time() if now is None else now)
     if age is None or age < GRACE_S:
         return True
+    if owner != (os.getuid() if uid is None else uid):
+        if foreign is None:
+            return True
+        return foreign(reason) not in DEAD_STATES
     return state(reason) not in DEAD_STATES

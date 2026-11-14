@@ -53,19 +53,21 @@ def _shipped_py(subject: Subject) -> list[tuple[int, str]]:
     ]
 
 
-# The same two shapes for a `.md`, plus a bare YAML list entry: `home-assistant`'s four
-# `*_files` lists in `defaults/main.yml` name what its ConfigMap ships that way.
+# The same two shapes for a `.md`, a `role_file(...)` call wherever it sits (a `*_modules`
+# list's `src: "{{ role_file('files/x') }}"`), plus a bare YAML list entry: `home-assistant`'s
+# four `*_files` lists in `defaults/main.yml` name what its ConfigMap ships that way.
 #
 # WHAT THIS SCAN DOES NOT SEE: a ship that names no basename. `with_fileglob`/`fileglob` over a
 # directory, a directory-shaped `src:` in a copy task, and `unarchive`/`synchronize` of a tree all
 # put files on a host without a literal name to match. None of them ships a `.md` today — the two
 # globs in the tree take `*.json` and `*.pub`, the three `unarchive` tasks take remote tarballs,
 # and no task carries a directory `src:` — so the hole is latent rather than live. A `.md` added
-# under one of those globs would pass this row and was skipped by the retired deployer, which is the
-# one failure mode to check when a role starts globbing a directory that holds prose.
+# under one of those globs would pass this row and map to no deploy tag in `role_paths.role_for`,
+# which is the one failure mode to check when a role starts globbing a directory that holds prose.
 SHIPPED_MD = re.compile(
     r"""(?:src|dest)\s*:\s*['"]?\S*?(?P<a>[\w.-]+\.md)"""
     r"""|lookup\(\s*['"]file['"]\s*,\s*['"]?\S*?(?P<b>[\w.-]+\.md)"""
+    r"""|role_file\(\s*['"][^'"]*?(?P<d>[\w.-]+\.md)"""
     r"""|^\s*-\s+['"]?(?P<c>[\w.-]+\.md)['"]?\s*$"""
 )
 
@@ -104,11 +106,12 @@ ROWS = (
     Census(
         name="no-role-ships-a-pytest-file",
         reason=(
-            "`deploy_changes._is_test_only_path` and `reach.is_role_test_path` drop test-suite "
-            "paths before mapping a change to a host or a tag, so a change to a role's own "
-            "`tests/` or to a `test_*.py`/`conftest.py` deploys nothing. That is safe only while "
-            "a file they drop is also one no host or ConfigMap receives. Rename the shipped "
-            "file, or narrow those predicates."
+            "`role_paths.is_test_path` drops test-suite paths before `land.sh` maps a change to "
+            "a deploy tag, and `path_kinds.is_test_only_path` before it decides whether the "
+            "change moves the bundle, so a change to a role's own `tests/` or to a "
+            "`test_*.py`/`conftest.py` gates no workload. That is safe only while a file they "
+            "drop is also one no ConfigMap receives. Rename the shipped file, or narrow those "
+            "predicates."
         ),
         files=lambda: _role_files("templates"),
         offence=lambda s: [
@@ -143,11 +146,12 @@ ROWS = (
     Census(
         name="no-role-ships-a-markdown-file",
         reason=(
-            "The retired deployer's `deploy_logic.is_doc` read every `.md` as prose no playbook "
-            "applied, and its tick and both narrowings asked it. That was safe only while a "
-            "`.md` it skipped was also one no host received. Rename the "
-            "shipped file, or give is_doc back a carve-out; this scan matches a literal basename "
-            "and the comment above SHIPPED_MD names the glob shapes it cannot see."
+            "`role_paths.role_for` maps every `.md` to no role, so `land.sh` gates no deploy tag "
+            "for it, `land_tags.doc_paths` reads it as a change nothing renders, and "
+            "`cluster_pins` lets a pin-bump PR carry it as docs. That is safe only while a `.md` "
+            "they skip is also one no ConfigMap receives. Rename the shipped file, or give "
+            "role_for a carve-out; this scan matches a literal basename and the comment above "
+            "SHIPPED_MD names the glob shapes it cannot see."
         ),
         # `defaults/` and `vars/` too: a list of basenames there ships files no task names.
         files=lambda: _role_files("templates", "defaults", "vars"),
@@ -161,9 +165,19 @@ ROWS = (
                 "    src: RUNBOOK.md\n    dest: /opt/example/RUNBOOK.md\n",
             ),
             Subject("b.yml", "example_config_files:\n  - listed.md\n"),
+            Subject(
+                "c.yml",
+                "example_modules:\n  - name: README.md\n"
+                "    src: \"{{ role_file('files/README.md', role='other') }}\"\n",
+            ),
         ),
         green=(
             Subject("a.yml", "# src: COMMENTED.md is not a ship\n"),
+            Subject(
+                "c.yml",
+                "example_modules:\n  - name: run.py\n"
+                "    src: \"{{ role_file('files/run.py') }}\"\n",
+            ),
             Subject("b.yml", "example_config_files:\n  - settings.yaml\n"),
         ),
         # 501 files under those directories before H7.52 deleted gitops_deploy's four task files

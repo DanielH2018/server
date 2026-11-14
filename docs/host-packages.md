@@ -52,10 +52,9 @@ lists.
 - `homelab-daniel-box` ships reconcile (H6.2), and since H6.3b the secrets unit and the
   `k3s-restart` component, with the `k3s-gates` component that ships the script the restart
   imports. Its one credential is `k3s_readonly_token`, which
-  `secrets/hosts/daniel-box.sops.yaml` carries. Ansible keeps the builder, the repository and
-  every other daniel-box timer until H7, and the deployer keeps k3s's files until H6.4a. To
-  remove the package before H6.4a, run `sudo apt-get remove homelab-daniel-box`. After H6.4a the
-  package owns files that `k3s.service`'s `ExecStart` names, and removing it deletes them.
+  `secrets/hosts/daniel-box.sops.yaml` carries. Before H7, Ansible kept the builder, the
+  repository and every other daniel-box timer, and before H6.4a the GitOps deployer kept k3s's
+  files. Since H6.4a the package owns files that `k3s.service`'s `ExecStart` names, and removing it deletes them.
   daniel-server's package does not ship `k3s-restart` yet, so a k3s-agent restart there stays a
   hand step.
 
@@ -239,8 +238,9 @@ its module in `hosts/lib/reconcile_lib/`.
 | `libvirt` | `libvirt:` with networks and network filters, each XML pinning its name and UUID | the objects, defined when their XML hash changes or libvirt lost them | a failed define | a removal that libvirt refuses |
 | `lines` | `lines:` with line or block edits and an optional `activate:` | one anchored line or one marker-delimited block per edit | an edit of an owned file that is not a conffile | none |
 
-Reconcile runs the users arm and then the line arm before it starts any unit, so a unit that
-runs as a new user starts, and the activation step reads the file the line arm edited. It runs
+Reconcile runs the users arm before `homelab-secrets`, so an output can belong to a user or
+group the same package version adds. It runs the line arm next, before it starts any unit, so the
+activation step reads the file the line arm edited. It runs
 the libvirt arm and then the UFW arm last. The line arm therefore edits `/etc/ufw/sysctl.conf`
 before an enable of UFW applies it.
 
@@ -759,7 +759,7 @@ daniel-box serves the repository, so it builds its own packages from the clone.
     ~/.local/bin/uv python list --only-installed
     ```
 
-1. To let the deployer's CI gate and `renovate_agent` read an authenticated token, log in to GitHub,
+1. To let `await_ci.py`'s CI wait and `renovate_agent` read an authenticated token, log in to GitHub,
    then apply the dotfiles once more. The `.gitconfig` template selects the `gh` credential helper
    only when `gh` is on PATH as chezmoi renders it, and a host whose first apply ran before `gh` was
    there holds the fallback:

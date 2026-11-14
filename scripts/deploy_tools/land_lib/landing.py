@@ -22,7 +22,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from deploy_tools.land_lib.ledger import Ledger
 from deploy_tools.land_lib.options import Options
 from deploy_tools.land_lib.outcome import Outcome
-from deploy_tools.land_lib.pr_json import PrView, parse_view
+from deploy_tools.land_lib.pr_json import PrView, parse_view, rest_filter
 from deploy_tools.land_lib import gh_read
 from deploy_tools.land_lib.tools import Classifier, Tools
 from lib.json_types import as_object
@@ -134,7 +134,10 @@ class Landing:
     # -- shared reads -------------------------------------------------------------------
 
     def view(self, fields: str) -> PrView:
-        """`gh pr view --json <fields>` for this PR, or die.
+        """This PR's `fields`, in the shape `gh pr view --json <fields>` gives, or die.
+
+        The answer comes from the REST pull object when it carries every field, and from
+        `gh pr view` otherwise (`pr_json.rest_filter`).
 
         Three ways the read fails, each named rather than escaping as a traceback: gh
         exiting non-zero, gh not answering inside its timeout, and gh answering with
@@ -146,13 +149,19 @@ class Landing:
         A timeout or a 5xx is retried first (`gh_read`, #5503).
         """
         pr = self.opts.pr
+        rest = rest_filter(fields)
+        label = f"gh api pulls/{pr}" if rest else f"gh pr view #{pr}"
 
         def call() -> PrView:
-            got = self.tools.gh_json("pr", "view", pr, "--json", fields)
-            return parse_view(as_object(got or {}, "gh pr view"))
+            if rest:
+                url = f"repos/{{owner}}/{{repo}}/pulls/{pr}"
+                got = self.tools.gh_json("api", url, "--jq", rest)
+            else:
+                got = self.tools.gh_json("pr", "view", pr, "--json", fields)
+            return parse_view(as_object(got or {}, label))
 
         try:
-            return gh_read.read(call, self.tools.sleep, f"gh pr view #{pr}")
+            return gh_read.read(call, self.tools.sleep, label)
         except gh_read.GhReadFailed as exc:
             self.die(f"could not read PR #{pr}: {exc}", 1)
         except ValueError as exc:

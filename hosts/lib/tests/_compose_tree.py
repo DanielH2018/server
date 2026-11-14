@@ -26,7 +26,6 @@ NAMES = ("domain", "monitor_discord_webhook_url", "alloy_pi_http_password")
 # A `ComposeTree.listing` value that omits the Pi's `compose_services` key.
 MISSING = object()
 DIGEST = "@sha256:" + "ab" * 32
-DATA = "/home/ubuntu/server/containers"
 AUTOHEAL = f"""services:
   autoheal:
     container_name: autoheal

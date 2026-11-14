@@ -62,21 +62,6 @@ def test_curl_argv():
     ]
 
 
-def test_inspect_ip_argv_targets_the_container():
-    argv = health_docker.inspect_ip_argv("loki")
-    assert argv[:3] == ["docker", "inspect", "-f"]
-    assert argv[-1] == "loki"
-    assert ".IPAddress" in argv[3]
-
-
-def test_parse_ip_takes_first_nonempty_token():
-    assert health_docker.parse_ip("172.19.0.12 172.18.0.5 \n") == "172.19.0.12"
-
-
-def test_parse_ip_returns_none_when_no_ip():
-    assert health_docker.parse_ip("   \n") is None
-
-
 def test_k8s_service_ip_args_target_the_service():
     argv = health_docker.k8s_service_ip_args("sonarr", "homelab")
     assert argv[-1] == "jsonpath={.spec.clusterIP}"

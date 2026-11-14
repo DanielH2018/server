@@ -64,7 +64,6 @@ class HunkCheck:
     # Hunks no test could notice: the revert leaves the module's code unchanged, or the file
     # is not one `runnable` accepts.
     skipped: int = 0
-    untried: int = 0
     error: str = ""
 
 
@@ -101,7 +100,6 @@ def red_detection(run: Runner, worktree: Path, start: str, gate: Gate) -> HunkCh
                 continue
             for hunk in hunks:
                 if check.hunks >= MAX_HUNKS:
-                    check.untried += 1
                     continue
                 _try(run, tree, head, path, header + hunk, gate.nodes, check)
     return check
@@ -140,7 +138,6 @@ def _try(
     applied = bare_git(run, tree, "apply", "-R", "--unidiff-zero", "-", stdin=patch)
     try:
         if applied.returncode:
-            check.untried += 1
             return
         after = file.read_text() if file.is_file() else ""
         if path.endswith(".py") and _code(before) == _code(after):

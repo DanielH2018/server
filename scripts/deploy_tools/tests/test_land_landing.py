@@ -67,6 +67,25 @@ def test_view_dies_when_a_field_has_the_wrong_type(landing):
     assert exc.value.rc == 1 and "headRefOid: expected a string" in exc.value.error
 
 
+def test_view_asks_rest_when_rest_carries_every_field_and_gh_pr_view_otherwise(landing):
+    ln, _ = landing(
+        Fakes(
+            gh_views={
+                "state,headRefOid": {"state": "OPEN", "headRefOid": "abc"},
+                "state,title": {"state": "OPEN", "title": "A title"},
+            }
+        )
+    )
+    asked = []
+    answer = ln.tools.gh_json
+    ln.tools.gh_json = lambda *a, **k: asked.append(a[:2]) or answer(*a, **k)
+
+    ln.view("state,headRefOid")
+    ln.view("state,title")
+    # `gh pr view` spends GraphQL quota, which the merge wait's poll must not.
+    assert asked == [("api", "repos/{owner}/{repo}/pulls/999"), ("pr", "view")]
+
+
 def test_git_runs_in_the_primary_checkout_without_raising(landing):
     ln, calls = landing(Fakes(fetch_rc=1))
     assert ln.git("fetch", "-q", "origin", "master").returncode == 1
