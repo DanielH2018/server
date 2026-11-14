@@ -19,6 +19,10 @@ PYTHON_PIN_SITES = [
     (".python-version", "pyenv", "docker"),
     ("k8s/roles/ical-proxy/templates/Dockerfile.j2", "dockerfile", "docker"),
     ("k8s/roles/homelab-mcp/templates/Dockerfile.j2", "dockerfile", "docker"),
+    # One role on the k8s_autodeploy denylist and one off it: the denylist rule and the plain
+    # automerge path each claimed these pins before #8532.
+    ("k8s/roles/monitor-bridge/defaults/main.yml", "custom.regex", "docker"),
+    ("k8s/roles/sonarr/defaults/main.yml", "custom.regex", "docker"),
 ]
 
 GROUP_PREFIX = "python (manual"
@@ -55,12 +59,18 @@ def test_a_python_site_outside_the_rule_is_flagged() -> None:
     assert _group(rules, PYTHON_PIN_SITES[1], "minor") is None
 
 
-def test_python_patch_bumps_and_k8s_image_pins_stay_out_of_the_manual_group() -> None:
-    """A patch bump edits the CI pin alone, and the alpine image pins belong to the k8s plane."""
-    image = (
-        "k8s/roles/monitor-bridge/defaults/main.yml",
-        "custom.regex",
-        "docker",
-    )
+def test_python_patch_and_digest_bumps_stay_out_of_the_manual_group() -> None:
+    """A patch bump edits the CI pin alone, and a digest bump moves no interpreter."""
+    image = PYTHON_PIN_SITES[-1]
     assert _group(_PACKAGE_RULES, PYTHON_PIN_SITES[0], "patch") == "{{depName}}"
-    assert not (_group(_PACKAGE_RULES, image, "minor") or "").startswith(GROUP_PREFIX)
+    assert not (_group(_PACKAGE_RULES, image, "digest") or "").startswith(GROUP_PREFIX)
+
+
+def test_a_k8s_python_image_minor_bump_never_automerges() -> None:
+    """Before #8532 sonarr's pin automerged a minor bump, so pods could run ahead of CI."""
+    for site in PYTHON_PIN_SITES[-2:]:
+        path, manager, datasource = site
+        automerge = _resolve_setting(
+            "automerge", "python", path, "minor", datasource, manager=manager
+        )
+        assert automerge is False, f"{path}: automerge resolves to {automerge!r}"

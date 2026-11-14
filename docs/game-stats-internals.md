@@ -68,7 +68,7 @@ Two things exist to make a mismatch visible rather than silent:
 
 ## Shipping `stats_lib.py` beside each entry script
 
-Both exporters run as `python:3.14-alpine` pods with `stats_lib.py` mounted alongside their
+Both exporters run as `python:3.15-alpine` pods with `stats_lib.py` mounted alongside their
 own entry script by a ConfigMap. A script invoked directly gets only its own directory on
 `sys.path`, so a copy has to sit beside each script. Each game's ConfigMap is a rendered
 template, `templates/configmap-terraria.yaml.j2` and `templates/configmap-valheim.yaml.j2`,

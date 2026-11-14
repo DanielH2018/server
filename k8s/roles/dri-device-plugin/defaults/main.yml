@@ -43,7 +43,7 @@ dri_device_plugin_count: 4
 # pin for one more predicate. It runs as its own CronJob and ServiceAccount in kube-system; the
 # cronjob template's DECIDED note says why. Rationale in this role's CLAUDE.md.
 dri_device_plugin_reaper_job_namespaces: [kube-system, longhorn-system]
-dri_device_plugin_reaper_image: python:3.14-alpine@sha256:f6a589d43c42b9e7f7dc67a12d37132491f362859a5d750607710cc56da3bc72
+dri_device_plugin_reaper_image: python:3.15-alpine@sha256:0f9552bb28711333da16915ec146f5e6bb44a7fdac9ced15dc17c2e0206346dd
 dri_device_plugin_reaper_schedule: "*/15 * * * *"
 # One list and a delete or two take seconds; `open_url` retries a refused connect for 60s.
 dri_device_plugin_reaper_deadline_seconds: 120
