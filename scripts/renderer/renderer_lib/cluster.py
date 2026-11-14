@@ -28,6 +28,7 @@ A role's vendored files are no template, and `attach_vendored` adds them to `DIR
 byte for byte after every pass that edits rendered text (H1.1a). `rendered_docs()` in
 `tests/_k8s_render.py` reads `render_tag`'s output, which holds none of them, so the
 fleet guards never read them; H1's *Vendored upstream manifests* names the guards that bypasses and why it is accepted.
+The per-container resources guard is the exception and reads them through `vendored_files`.
 
 A value a role task computes, such as a content tag or a script checksum, comes from
 `task_inputs.derived_facts` and goes in as a `set_fact` would, over every file layer.
