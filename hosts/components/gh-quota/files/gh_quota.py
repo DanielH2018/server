@@ -133,19 +133,12 @@ def session_key(
     return unit if unit.endswith(".service") else "operator"
 
 
-def _identity(env: Mapping[str, str]) -> str:
-    token = env.get("GH_TOKEN") or env.get("GITHUB_TOKEN")
-    if token:
-        return "tok-" + hashlib.sha256(token.encode()).hexdigest()[:12]
-    return f"uid-{os.getuid()}"
-
-
 @dataclass(frozen=True)
 class Window:
     """One identity's spend in one bucket, for the quota window GitHub has open.
 
     Attributes:
-        identity: `uid-<n>` for a `gh` login, `tok-<fingerprint>` for a `GH_TOKEN`.
+        identity: `tok-<fingerprint>` of the token `gh` used, or `uid-<n>` when it had none.
         bucket: `graphql` or `core`.
         used: what GitHub counted at the last sample.
         quota: GitHub's limit for the bucket.
@@ -193,9 +186,10 @@ class Ledger:
         root: the directory that holds one SQLite file per identity and uid.
         conf: the file whose `mode=` line turns recording on.
         env: the environment of the `gh` call being counted.
-        gh: the program the caller runs as `gh`, which also takes the sample.
+        gh: the program the caller runs as `gh`, which also names its token and takes the
+            sample.
         now: the clock.
-        run: runs the `gh api rate_limit` sample.
+        run: runs `gh auth token` and the `gh api rate_limit` sample.
     """
 
     root: Path = LEDGER_DIR
@@ -297,8 +291,31 @@ class Ledger:
             if (stamp := line.partition(" ")[0]).isdigit() and int(stamp) >= oldest
         ]
 
+    def _gh_env(self) -> dict[str, str]:
+        return dict(self.env, GH_PROMPT_DISABLED="1", GH_NO_UPDATE_NOTIFIER="1")
+
+    def _identity(self) -> str:
+        # GitHub meters per token owner, and `gh` alone knows which token this environment
+        # gives it: a variable, another config directory, or the login it has stored.
+        token = self.env.get("GH_TOKEN") or self.env.get("GITHUB_TOKEN")
+        if not token:
+            try:
+                token = self.run(
+                    [self.gh, "auth", "token"],
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                    check=True,
+                    env=self._gh_env(),
+                ).stdout.strip()
+            except (OSError, subprocess.SubprocessError):
+                token = ""
+        if token:
+            return "tok-" + hashlib.sha256(token.encode()).hexdigest()[:12]
+        return f"uid-{os.getuid()}"
+
     def _open(self) -> sqlite3.Connection:
-        path = self.root / f"{_identity(self.env)}@{os.getuid()}.sqlite"
+        path = self.root / f"{self._identity()}@{os.getuid()}.sqlite"
         if not path.exists():
             path.touch()
             path.chmod(0o644)
@@ -335,7 +352,7 @@ class Ledger:
                 text=True,
                 timeout=10,
                 check=True,
-                env=dict(self.env, GH_PROMPT_DISABLED="1", GH_NO_UPDATE_NOTIFIER="1"),
+                env=self._gh_env(),
             ).stdout
             resources = json.loads(out)["resources"]
             for bucket in BUCKETS:

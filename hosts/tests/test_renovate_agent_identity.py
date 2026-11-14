@@ -290,7 +290,7 @@ def test_the_agent_gets_claude_guard_where_the_hook_looks_for_it() -> None:
     """Without the package block-footguns asks on every `gh` command, which is the session's
     whole job, and an unattended `ask` is a denial."""
     lookup = re.search(
-        r'^_CLAUDE_GUARD_DIR = Path\("~(/[^"]+)"\)',
+        r'"CLAUDE_GUARD_HOME", "~(/[^"]+)"',
         (HOOKS / "_claude_guard.py").read_text(),
         re.M,
     )
