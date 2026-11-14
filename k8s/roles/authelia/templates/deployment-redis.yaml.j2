@@ -32,7 +32,7 @@ spec:
         netpol-baseline: enforced
     spec:
       # Pinned with the rest of the home-critical chain to the node announcing its VIPs
-      # (#3452); the DECIDED marker in roles/k8s/home-assistant/templates/deployment.yaml.j2
+      # (#3452); the DECIDED marker in k8s/roles/home-assistant/templates/deployment.yaml.j2
       # has why.
       nodeSelector:
         kubernetes.io/hostname: {{ k8s_primary_node }}
@@ -53,7 +53,7 @@ spec:
           ports:
             - containerPort: 6379
           # 6379 is the containerPort, the Service port AND the NetworkPolicy port. All three
-          # must agree; ansible/tests/services/test_authelia_redis_sessions.py pins that.
+          # must agree; tests/services/test_authelia_redis_sessions.py pins that.
 {{ hardened_security_context(read_only=true, non_root=true, run_as_user=999, run_as_group=1000) }}
           env:
             # redis-cli reads REDISCLI_AUTH from the environment, so the probes below

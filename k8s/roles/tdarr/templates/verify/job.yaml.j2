@@ -19,7 +19,7 @@
   see. The Deployment's render is what rolls tdarr's pod, so keying on it reruns the Job on
   every roll. A revision that changes only the Service or the route does not rerun it, and
   neither the device nor the library depends on those.
-  ansible/roles/k8s/tdarr/tests/test_tdarr_verify.py runs the census over this render.
+  k8s/roles/tdarr/tests/test_tdarr_verify.py runs the census over this render.
 #}
 {% set script_name = 'tdarr_verify.py' %}
 {% set script_dir = '/verify' %}

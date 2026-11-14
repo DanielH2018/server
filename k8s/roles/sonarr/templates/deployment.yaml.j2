@@ -1,6 +1,6 @@
 {% from 'arr-deployment.yml.j2' import arr_deployment with context %}
 {# additional_metrics is sonarr's alone: the episode collector it gates publishes series
-   nothing on radarr or prowlarr has a block behind. See ansible/templates/exportarr.yml.j2. #}
+   nothing on radarr or prowlarr has a block behind. See k8s/templates/exportarr.yml.j2. #}
 {{ arr_deployment('sonarr',
                   image=sonarr_k8s_image,
                   port=container_item.port,

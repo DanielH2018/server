@@ -15,7 +15,7 @@
   one-alert group is that alert's own annotations.
 
   Discord renders <t:UNIX:R> as a relative time in the reader's own timezone. Email cannot,
-  so homelab.email prints UTC. ansible/roles/k8s/observability/tests/alertmanager/ holds the
+  so homelab.email prints UTC. k8s/roles/observability/tests/alertmanager/ holds the
   rendered output for four groups, which scripts/validate/alert_rules.py compares against
   amtool's render of this file.
 */}}

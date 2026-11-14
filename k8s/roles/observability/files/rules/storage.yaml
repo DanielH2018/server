@@ -17,7 +17,7 @@
 # the same page on purpose, so two criticals for one dead kubelet target is the accepted outcome.
 #
 # THE LITERALS. Each threshold mirrors a value the deleted bridge rows carried, and
-# ansible/tests/services/test_storage_rule_literals.py pins it (M1 convention 1).
+# tests/services/test_storage_rule_literals.py pins it (M1 convention 1).
 #
 # THE `for:` HOLDS. A bridge streak of N cycles is N x 300s, as in A2. The rows with no streak
 # (fullness, the free-space floor, the read-only mount and the etcd size) hold for one bridge
