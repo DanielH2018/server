@@ -31,9 +31,10 @@ lander deploys what the session picks — not a sign the component is unfinished
 own GitHub token and Claude credential are declared outputs, so `host_secrets.py check` fails a
 host file that lacks them; `docs/renovate-agent-bounds-and-digest.md` has the checklist.
 
-**The session can neither push nor merge.** It runs as `renovate_agent_user`, with a read-only
-token, in its own clone, inside `homelab-renovate-agent-session.service`, which the runner starts and
-waits for (`files/renovate_session.py`). It closes, comments on or re-runs a PR only by writing a request file,
+**The session can neither push nor merge.** It runs as `renovate-agent`, with a read-only
+token, in its own clone, inside `homelab-renovate-agent-session.service`. The runner runs as
+`renovate-agent-ctl`, which alone holds the write token and may start the session and lander
+units; it starts the session and waits for it (`files/renovate_session.py`). It closes, comments on or re-runs a PR only by writing a request file,
 which the runner carries out with its own token after the session ends (`files/run_requests.py`).
 It lands nothing: it nominates a PR with a `land` request, and after the session ends the
 runner starts `renovate-agent-land@<n>.service` for each nomination, which runs `land.sh` as
@@ -118,7 +119,8 @@ the caps or the schedule cannot quietly widen it.
   `renovate_agent_unit_timeout` backstop, and `renovate_agent_budget_usd` as a runaway catch.
   The templates read each cap, and the permission mode, from the literals in
   `templates/renovate-agent-pins.j2`, which is on the lander's approval list, so a host_vars
-  edit moves none of them. The defaults hold the same values for the docs fragments
+  edit moves none of them. The same file pins both users, the controller's home and the
+  exchange directory. The defaults hold the same values for the docs fragments
   (`hosts/tests/test_renovate_agent_unit.py::test_an_inventory_value_moves_no_cap`).
   `docs/renovate-agent-bounds-and-digest.md` has why each is the var it is and why the budget
   must never be the one that binds.

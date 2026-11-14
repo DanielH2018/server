@@ -199,14 +199,15 @@ class TestConfigGuard:
     def test_a_complete_config_is_clean(self, tmp_path) -> None:
         cfg = tmp_path / "config.env"
         cfg.write_text(
-            f"REPO=o/r\nREPO_DIR=/repo\nPROMPT_FILE=/p.txt\nSTATE_DIR={tmp_path}\n"
+            f"REPO=o/r\nREPO_DIR=/repo\nEXCHANGE_DIR={tmp_path}/x\n"
+            f"SESSION_USER=agent\nSTATE_DIR={tmp_path}\n"
         )
         assert renovate_agent.main(_tools(_FakeHost(prs=[])), str(cfg)) == 0
 
     def test_a_missing_key_is_flagged_by_name(self, tmp_path) -> None:
         cfg = tmp_path / "config.env"
         cfg.write_text("REPO=o/r\n")
-        with pytest.raises(RuntimeError, match="REPO_DIR, PROMPT_FILE"):
+        with pytest.raises(RuntimeError, match="REPO_DIR, EXCHANGE_DIR, SESSION_USER"):
             renovate_agent.main(config_path=str(cfg))
 
 
@@ -379,14 +380,14 @@ class TestSkipExitCodes:
         (tmp_path / ".claude" / "worktrees" / "renovate-auto").mkdir(parents=True)
         cfg = tmp_path / "config.env"
         cfg.write_text(
-            f"REPO=o/r\nREPO_DIR={tmp_path}\nPROMPT_FILE=/p.txt\n"
-            f"STATE_DIR={tmp_path}/state\n"
+            f"REPO=o/r\nREPO_DIR={tmp_path}\nEXCHANGE_DIR={tmp_path}/exchange\n"
+            f"SESSION_USER=agent\nSTATE_DIR={tmp_path}/state\n"
         )
         return str(cfg)
 
     def test_a_worktree_blocked_skip_is_flagged(self, tmp_path) -> None:
         reason = "the run branch holds 1 commit(s) not on origin/master"
-        host = _FakeHost(prs=[1], blocked=reason, state=tmp_path / "state")
+        host = _FakeHost(prs=[1], blocked=reason, state=tmp_path / "exchange" / "out")
 
         rc = renovate_agent.main(_tools(host), self._cfg(tmp_path))
 

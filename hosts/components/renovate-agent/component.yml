@@ -11,16 +11,19 @@
 users:
   # The homelab band 900-949 sits below the uids Ubuntu hands out from 999 down (#8100).
   - {name: renovate-agent, uid: 901, home: /var/lib/renovate-agent, shell: /bin/bash, comment: Unattended Renovate agent}
+  # The controller (dotfiles#967's I1): runs the runner, owns its state and the write token, and
+  # alone may start the session and lander units. No login.
+  - {name: renovate-agent-ctl, uid: 905, home: /var/lib/renovate-agent-ctl, shell: /usr/sbin/nologin, comment: Renovate agent controller}
 units:
   homelab-renovate-agent.service: {policy: manual}
   homelab-renovate-agent-session.service: {policy: manual}
 outputs:
-  # Readable by the agent, writable by root alone: a session steered by text it read could otherwise
-  # raise its own budget or timeout, or point PROMPT_FILE at a prompt of its own for the next run.
+  # The controller's config, with the Discord webhook: readable by the controller, writable by
+  # root alone, and unreadable by the session user.
   - src: templates/config.env.j2
     path: /etc/renovate-agent/config.env
     owner: root
-    group: renovate-agent
+    group: renovate-agent-ctl
     mode: "0640"
     keys: [discord_alert_webhook]
     persist: false
@@ -31,7 +34,16 @@ outputs:
     owner: root
     group: root
     mode: "0600"
-    keys: [renovate_agent_gh_token, renovate_agent_gh_read_token, renovate_agent_claude_oauth_token]
+    keys: [renovate_agent_gh_read_token, renovate_agent_claude_oauth_token]
+    persist: false
+    link: true
+  # The controller's write token, for the runner's unit alone.
+  - src: templates/ctl.env.j2
+    path: /etc/renovate-agent/ctl.env
+    owner: root
+    group: root
+    mode: "0600"
+    keys: [renovate_agent_gh_token]
     persist: false
     link: true
 files:
@@ -48,6 +60,7 @@ files:
   - {src: files/t2-approval-floor, dst: /usr/lib/homelab/t2-approval-floor}
   - {lib: host_lib.py, dst: /usr/lib/homelab/renovate-agent/host_lib.py}
   - {src: templates/prompt.txt.j2, dst: /usr/lib/homelab/renovate-agent/prompt.txt}
+  - {src: templates/session.conf.j2, dst: /usr/lib/homelab/renovate-agent/session.conf}
   # The agent's user-scope Claude Code settings: the shared guard hooks and the deny floor. The setup
   # script copies them into its home on every run.
   - {src: files/claude-settings.json, dst: /usr/lib/homelab/renovate-agent/claude-settings.json, activate: "try-restart:homelab-renovate-agent-setup.service"}
