@@ -1971,9 +1971,9 @@ jobs:
     runs-on: ubuntu-26.04
     needs: [prove, hooks, pr_gates, pytest, deck_mod, lockfile, flux_roundtrip, sops_manifest_type_proof, host_packages_build, host_packages, host_packages_bootstrap, host_tools_arm64]
     # On a draft the gate skips with its dependents. A red gate there would pin the head red
-    # for every reader that takes the worst check run per name (`deploy_git.ci_verdict`), even
+    # for every reader that takes the worst check run per name (`hosts/lib/ci_verdict.py`), even
     # after the ready run passes. The skipped gate is not a pass: GitHub refuses to merge a
-    # draft, `deploy_git.ci_verdict` (which `land.sh` reads) leaves a skipped gate out, and
+    # draft, `ci_verdict` (which `land.sh` reads) leaves a skipped gate out, and
     # `review_ci.ready_for_ci` waits for the ready run and turns the PR back into a draft if
     # none starts.
     if: ${{ always() && github.event.pull_request.draft != true }}
