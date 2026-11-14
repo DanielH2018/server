@@ -7,7 +7,7 @@
 # reach neither, and the k3s API server's own :6443 is firewalled off from daniel-server too
 # (measured 2026-08-07: connect fails outright). This route is the deliberate exception.
 #
-# Modelled on the n8n-monitoring route (roles/k8s/n8n/templates/ingressroute.yaml.j2), which
+# Modelled on the n8n-monitoring route (k8s/roles/n8n/templates/ingressroute.yaml.j2), which
 # exists for exactly this problem and is the pattern to copy rather than invent from: LAN-only
 # host, matched paths only, rate-limited.
 #
