@@ -95,6 +95,8 @@ otherwise; none of the values below are secrets themselves, only names and locat
    so beside it keep the `claude` issue register exported by `findings.py export`: every
    refuted and accepted ruling lives only on GitHub, and without it the next review re-files
    them.
+   Each refresh ends with `scripts/secrets_mgmt/recovery_kit.py record`, whose stamp the daily secret-rotation
+   audit reads; the audit reads down once the kit is older than its limit.
    The bundle is also the render source for break-glass promotion (*Scenario: GitHub, GHCR or
    Sigstore is unreachable*), so a refresh covers that use too. Beside it the kit holds the
    **break-glass private key**, a password-protected cosign key whose public half the flux role
@@ -730,7 +732,8 @@ steps below on production.
    the Secret `flux-break-glass-key` instead of the keyless identity.
 1. Check that the commit to render equals or descends from the commit that the cluster's
    OCIRepository status names in `org.opencontainers.image.revision`. Item 8's bundle is
-   refreshed only with the age-key backup, so it can predate `prod`. A render from an older
+   refreshed only with the age-key backup, so it can predate `prod`; `secrets/recovery_kit.yml`
+   records the date of its last refresh. A render from an older
    tree prunes every tag added since and reverts every change since. If the bundle fails the
    check, render from a surviving host checkout that holds that commit.
 1. Render with `homelab-render cluster` in placeholder mode, as the `render` job in
