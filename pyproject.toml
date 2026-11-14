@@ -358,8 +358,8 @@ ignore_names = [
   "server_version", "protocol_version", "daemon_threads", "keep_trailing_newline",
   # A BaseHTTPRequestHandler override and the attribute its log methods read.
   "log_request", "client_address",
-  # deploy-ui's App method its WRITES table names as a string.
-  "cancel",
+  # deploy-ui's App methods its WRITES table names as a string.
+  "cancel", "game_action",
   # The option pytest-xdist reads for the run's id.
   "testrunuid",
   # Parameter of a yaml Dumper override, kept for the base signature.

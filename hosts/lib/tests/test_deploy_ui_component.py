@@ -59,15 +59,16 @@ def test_the_daemon_runs_from_the_package_as_the_operator_on_the_hosts_address(
     assert "deploy-ui.service" in manifest["enable_links"]
 
 
-def test_the_unit_hands_the_daemon_the_game_registry_loki_and_a_kubeconfig(
+def test_the_unit_hands_the_daemon_the_games_their_token_loki_and_a_kubeconfig(
     package, context
 ):
     unit = package.files[UNIT][0].decode()
-    games = ";".join(
-        f"{g['name']}={','.join(g['deployments'])}" for g in context["game_servers"]
-    )
-    assert "valheim=valheim,valheim-stats" in games
-    assert f"Environment=DEPLOY_UI_GAMES={games}\n" in unit
+    games_file = f"{DEFAULTS['deploy_ui_dir']}/games.json"
+    games = json.loads(package.files[games_file][0])
+    assert games == context["game_servers"]
+    assert {"name": "valheim", "deployments": ["valheim", "valheim-stats"]} in games
+    assert f"Environment=DEPLOY_UI_GAMES_FILE={games_file}\n" in unit
+    assert "ImportCredential=games_panel_token\n" in unit
     assert f"Environment=DEPLOY_UI_NAMESPACE={context['k8s_namespace']}\n" in unit
     assert f"Environment=KUBECONFIG=/home/{context['sys_user']}/.kube/config\n" in unit
     assert (

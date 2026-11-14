@@ -16,32 +16,39 @@ class Game:
     Attributes:
         name: the name the page shows and the API takes.
         deployments: the server's Deployment first, then the ones that follow it.
+        start_refused: why the panel refuses to start the game, or "" when it may.
     """
 
     name: str
     deployments: tuple[str, ...]
+    start_refused: str = ""
 
     @property
     def server(self) -> str:
         return self.deployments[0]
 
 
-def parse_games(spec: str) -> tuple[Game, ...]:
-    """The registry from `DEPLOY_UI_GAMES`, written `name=server,dep;name=server,dep`.
+def load_games(text: str) -> tuple[Game, ...]:
+    """The registry from the JSON the component renders from `game_servers`.
 
     Raises:
-        ValueError: an entry has no name or no Deployment.
+        ValueError: the text is not a JSON list, or an entry has no name or no Deployment.
     """
+    entries = json.loads(text)
+    if not isinstance(entries, list):
+        raise ValueError("the game registry is not a JSON list")
     games = []
-    for entry in filter(None, (e.strip() for e in spec.split(";"))):
-        name, _, deps = entry.partition("=")
-        deployments = tuple(d.strip() for d in deps.split(",") if d.strip())
-        if not name.strip() or not deployments:
-            raise ValueError(
-                f"game entry {entry!r} is not name=deployment[,deployment]"
-            )
-        games.append(Game(name.strip(), deployments))
+    for entry in entries:
+        name = str(entry.get("name") or "")
+        deployments = tuple(str(d) for d in entry.get("deployments") or [])
+        if not name or not deployments:
+            raise ValueError(f"game entry {entry!r} needs a name and a deployment")
+        games.append(Game(name, deployments, str(entry.get("start_refused") or "")))
     return tuple(games)
+
+
+def find_game(games: tuple[Game, ...], name: str) -> Game | None:
+    return next((g for g in games if g.name == name), None)
 
 
 def pod_selector(games: tuple[Game, ...]) -> str:
@@ -116,7 +123,12 @@ def game_rows(
             for name in game.deployments
         ]
         rows.append(
-            {"name": game.name, "state": game_state(parts), "deployments": parts}
+            {
+                "name": game.name,
+                "state": game_state(parts),
+                "start_refused": game.start_refused,
+                "deployments": parts,
+            }
         )
     return rows
 

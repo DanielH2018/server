@@ -31,7 +31,8 @@ from lib.repo_paths import REPO
 # 15030 once #8185 moved the template filters from ansible/filter_plugins/ into the renderer.
 # 15028 once #8345 moved the `cluster-vars.source` path into `lib.repo_paths`.
 # 15022 once #8517 deleted an unused tuple from secret_checks.py.
-LINE_CEILING = 15022
+# 14997 once the games' replica counts left the render, and `replicas_var` with them (ADR-0033).
+LINE_CEILING = 14997
 # Exit 6's command, `git ls-files 'scripts/renderer/*.py' | grep -v /tests/ | xargs cat | wc -l`.
 PATHSPEC = "scripts/renderer/*.py"
 
