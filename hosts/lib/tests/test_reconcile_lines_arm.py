@@ -174,6 +174,54 @@ def test_edits_sharing_a_path_ask_dpkg_about_it_once_and_all_apply(node):
     assert len(node.calls("dpkg-query")) == 2  # the status read, then one conffile list
 
 
+def test_one_dpkg_call_names_every_path_and_each_answer_reaches_its_own_edit(node):
+    write(node, SYSCTL, "")
+    write(node, BLOCK["path"], "")
+    write(node, "/etc/demo/app.conf", "keep=1\n")
+    own(node, SYSCTL, conffile=True)
+    node.state["owned"].append("/etc/demo/app.conf")
+    declare(node, SWAPPY, BLOCK, {**SWAPPY, "path": "/etc/demo/app.conf"})
+
+    result = node.run()
+
+    assert [c["argv"] for c in node.calls("dpkg")] == [
+        ["dpkg", "-S", SYSCTL, BLOCK["path"], "/etc/demo/app.conf"]
+    ]
+    assert read(node, SYSCTL) == "vm.swappiness=10\n"
+    assert read(node, BLOCK["path"]) == WRAPPED
+    assert read(node, "/etc/demo/app.conf") == "keep=1\n"
+    assert "/etc/demo/app.conf is owned by some-package" in result.stderr
+    assert result.returncode == 1
+
+
+def test_a_dpkg_error_refuses_every_edit_and_edits_nothing(node):
+    write(node, SYSCTL, "a=1\n")
+    write(node, BLOCK["path"], "b=1\n")
+    node.state["dpkg_error"] = "error: cannot read /var/lib/dpkg/info"
+    declare(node, SWAPPY, BLOCK)
+
+    result = node.run()
+
+    assert result.returncode == 1
+    assert result.stderr.count("failed: dpkg-query: error") == 2
+    assert read(node, SYSCTL) == "a=1\n"
+    assert read(node, BLOCK["path"]) == "b=1\n"
+
+
+def test_a_path_dpkg_neither_owns_nor_reports_unmatched_is_refused(node):
+    write(node, SYSCTL, "a=1\n")
+    write(node, BLOCK["path"], "")
+    node.state["diverted"] = [SYSCTL]
+    declare(node, SWAPPY, BLOCK)
+
+    result = node.run()
+
+    assert result.returncode == 1
+    assert f"dpkg -S {SYSCTL} failed" in result.stderr
+    assert read(node, SYSCTL) == "a=1\n"
+    assert read(node, BLOCK["path"]) == WRAPPED
+
+
 def test_a_cached_refusal_still_refuses_every_edit_on_its_path(node):
     write(node, "/etc/demo/app.conf", "keep=1\n")
     own(node, "/etc/demo/app.conf", conffile=False)

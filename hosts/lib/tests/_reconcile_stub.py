@@ -12,7 +12,10 @@ state.json keys:
         "enabled": enabled|disabled|static}. A unit missing here is not loaded.
     fail: "<verb> <unit>" strings, each a systemctl call that exits 1, and "udevadm <subcommand>"
         strings, each a udevadm call that exits 1.
-    owned: paths `dpkg -S` reports a package owns.
+    owned: paths `dpkg -S` reports a package owns. `dpkg -S` takes several paths, and like dpkg
+        it exits 1 when any of them is unmatched.
+    diverted: paths `dpkg -S` reports only a diversion for: no owner, and no unmatched line.
+    dpkg_error: when set, `dpkg -S` prints it and exits 2, dpkg's exit for an error.
     crontabs: user -> crontab text. A user missing here has no crontab.
     effects: "<verb> <unit>" -> {"write": {absolute path: text}, "queue": [unit, ...]}, what a
         successful call of that verb leaves on disk under HOMELAB_ROOT: the files it writes and
@@ -92,11 +95,19 @@ def dpkg_query(state: dict, args: list[str]) -> int:
 def dpkg(state: dict, args: list[str]) -> int:
     if args[0] != "-S":
         raise SystemExit(f"stub dpkg: unexpected {args}")
-    if args[1] in state["owned"]:
-        print(f"some-package: {args[1]}")
-        return 0
-    print(f"dpkg-query: no path found matching pattern {args[1]}", file=sys.stderr)
-    return 1
+    if state.get("dpkg_error"):
+        print(f"dpkg-query: {state['dpkg_error']}", file=sys.stderr)
+        return 2
+    code = 0
+    for path in args[1:]:
+        if path in state["owned"]:
+            print(f"some-package: {path}")
+        elif path in state.get("diverted", []):
+            print(f"diversion by other-package from: {path}")
+        else:
+            print(f"dpkg-query: no path found matching pattern {path}", file=sys.stderr)
+            code = 1
+    return code
 
 
 def crontab(state: dict, args: list[str]) -> int:

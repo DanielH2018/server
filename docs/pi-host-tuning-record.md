@@ -607,6 +607,28 @@ The first live publish confirmed the trigger on 2026-11-03. The poll logged
 `homelab-updater.service` ran until 22:58:22 UTC with no manual start, and
 `homelab_host_applied_info{host="daniel-pi"}` reads that version.
 
+## The load spike after each package install (#8610)
+
+After AIDE left the Pi on 2026-11-12, every `PiLoadHigh` episode began 9 to 20 minutes after a
+`homelab-daniel-pi` publish, inside the updater run that installed it. The load is blocked
+tasks, not CPU. Prometheus read `node_procs_blocked` at 13 to 20 in four of five episodes and
+`node_procs_running` at 4 to 10. `sar -q` at 04:00:06 on 2026-11-14 read 11 blocked tasks and an
+empty run queue. `Nice=` and an idle IO class therefore lower none of it. Only less disk reading
+does.
+
+`dump-acct` over `/var/log/account/pacct*` named four parts of every install run:
+
+| Step | Cost per run | Change |
+|---|---|---|
+| The kernel check of `needrestart`, inside the `apt` lock | 4 `vmlinuz-get-version` runs, 23-124 s of a 35-255 s `needrestart` run | `$nrconf{kernelhints} = 0` in `/etc/needrestart/conf.d/50-homelab.conf` |
+| The line arm of `homelab-reconcile`, one `dpkg -S` per path | 19 calls, 51.5 s at 03:59 on 2026-11-14; 13.1 s on an idle Pi | one `dpkg -S` naming every path: 0.6 s on an idle Pi |
+| `homelab-rkhunter-propupd` | about 4,800 `rkhunter` and 2,800 `grep`/`sed`/`tr` processes, about 60 s CPU | none here: filed as #8650 |
+| `apt-get install` | about 26 s CPU | none |
+
+At 03:52 on 2026-11-14, `needrestart` held the `dpkg` lock from 03:55:15 to about 03:59:30. That
+outlasted `homelab-reconcile-wait.service`'s 5-minute limit, so the wait failed with a timeout.
+`50-motd-news`' `cloud-id` ran 321 s beside it and was not seen in any other episode.
+
 ## See also
 
 - `hosts/components/pi-heartbeats/component.yml` — the container-recovery contract.
