@@ -63,6 +63,20 @@ k3s_longhorn_global_manager_replicas: 2
 # the request.
 k3s_longhorn_csi_sidecar_memory_request: 192Mi
 
+# The engine-image DaemonSet (`engine-image-ei-<hash>`) has no key here, and its pods run
+# BestEffort. longhorn-manager v1.13.0 builds it at runtime in
+# controller/engine_image_controller.go:createEngineImageDaemonSetSpec with no `resources`, and
+# no Longhorn Setting sets them.
+#
+# DECIDED: accept BestEffort for the engine-image pods (#8500). The render does not contain the
+# DaemonSet, so a kustomize patch cannot reach it. A CronJob patch or a mutating webhook would be
+# a second writer beside longhorn-manager, the conflict #5958 removed for the csi-* sidecars. A
+# LimitRange in `longhorn-system` would also give the instance-managers default limits, which can
+# OOM-kill them. The exposure is low: each pod copies the `longhorn` binary onto the host and
+# sleeps, with a 2-7Mi working set and a 30-day peak of 40Mi, and its DaemonSet recreates an
+# evicted pod. Revisit this when upstream adds a Setting for engine-image resources; it then
+# belongs in templates/settings.yaml.j2 like the csi-* request above.
+
 # The Longhorn Settings this role renders (templates/settings.yaml.j2), each under the name
 # it had in setup/k3s's defaults. Flux applies them, so a change here is a change to the live
 # Setting once the tag promotes. Longhorn-manager creates each with its upstream default and
