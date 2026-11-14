@@ -8,7 +8,7 @@ the real `urlopen`, resolved at call time. What the suite still patches on this 
 `_get_json` in the Loki parsing tests. Callers reach it as `bridge.net._get_json`, never by
 from-import, because a from-import would copy the function into the caller's globals at import
 time and the stub would change nothing that runs. That rule is enforced by
-ansible/tests/services/test_bridge_patch_boundary.py.
+tests/services/test_bridge_patch_boundary.py.
 
 CONFIGURATION IS A PARAMETER, NOT A GLOBAL. Every helper that reads a URL or the origin pin
 takes the frozen `Config` as its FIRST argument, so this module holds no env-derived state and

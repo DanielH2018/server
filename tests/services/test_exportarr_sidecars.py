@@ -1,13 +1,13 @@
 """Guards the exportarr sidecars across the three *arr roles.
 
-The sidecar is one shared macro (`ansible/templates/exportarr.yml.j2`) invoked from three
+The sidecar is one shared macro (`k8s/templates/exportarr.yml.j2`) invoked from three
 Deployments, which is what keeps the three from drifting. What a shared macro cannot pin is
 everything AROUND the invocation — the Service port, the Secret, the image pin, the scrape
 job — and every one of those is per-role and silently omissible: leave one out and that *arr
 alone goes unmonitored while the other two prove the pattern works.
 
 The image pin is deliberately duplicated three times rather than shared from group_vars.
-Renovate's k8s-images manager matches `roles/k8s/*/defaults` and `_image:` keys only, so a
+Renovate's k8s-images manager matches `k8s/roles/*/defaults` and `_image:` keys only, so a
 shared var one directory up is invisible to it — the escape `crowdsec_k8s_image` made, recorded
 in renovate.json. Duplication that a test keeps in lockstep beats a single copy nothing tracks.
 
@@ -192,7 +192,7 @@ def test_the_image_pins_stay_in_lockstep():
 
     Read off the RENDERED container rather than regexed out of each role's defaults.
     The pin reaches the pod as a macro ARGUMENT — `exportarr(app, image, ...)` in
-    `ansible/templates/exportarr.yml.j2`, passed as `exportarr_image=` by each role — and every
+    `k8s/templates/exportarr.yml.j2`, passed as `exportarr_image=` by each role — and every
     role renders in its OWN defaults context. So an invocation naming another role's variable
     ships `image: STUB` while all three text pins still read identical and agree. Measured on
     this tree: crossing radarr's argument to `sonarr_k8s_exportarr_image` renders
@@ -211,7 +211,7 @@ def test_each_pin_is_a_variable_renovate_can_see():
     A pin inlined into the macro invocation renders an identical manifest and is offered no
     updates, because Renovate's k8s-images manager matches an `_image:` key and nothing else. A
     pin hoisted into group_vars is still offered updates, but it loses automerge and the
-    deployer's rollback (`ansible/templates/exportarr.yml.j2` has the reason, #3277). No render
+    deployer's rollback (`k8s/templates/exportarr.yml.j2` has the reason, #3277). No render
     assertion can see either, because the manifest is the same every way.
     """
     for arr in ARRS:

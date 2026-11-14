@@ -38,7 +38,7 @@ Environment:
 Exit 0 when every check passes or the preferences match, 1 when one fails, naming it.
 
 Run: python3 qbittorrent_job.py (in the Job; it takes no arguments)
-     uv run pytest ansible/roles/k8s/qbittorrent/tests/test_qbittorrent_job.py
+     uv run pytest k8s/roles/qbittorrent/tests/test_qbittorrent_job.py
 """
 
 import argparse

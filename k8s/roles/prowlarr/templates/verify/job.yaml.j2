@@ -24,12 +24,12 @@
   `app: prowlarr-verify` in `k8s_namespace`, and it dials two ports and execs into nothing:
     - prowlarr:<port>, the control. prowlarr's role-owned fence,
       `networkpolicy-prowlarr.yaml.j2`, admits only its `netpol_from` list, so prowlarr's
-      `services` entry lists `prowlarr-verify`. `ansible/tests/k8s/test_netpol_from.py`
+      `services` entry lists `prowlarr-verify`. `tests/k8s/test_netpol_from.py`
       reads the label from this render in VERIFY_CALLERS.
       If that peer went, the control would be refused and the Job would fail closed;
     - flaresolverr:<port>. `networkpolicy-flaresolverr.yaml.j2` must REFUSE this pod, so no
       peer is added there: admitting `prowlarr-verify` would open the hole the Job proves
-      closed. ansible/roles/k8s/prowlarr/tests/test_prowlarr_verify.py fails if that fence
+      closed. k8s/roles/prowlarr/tests/test_prowlarr_verify.py fails if that fence
       admits the label.
 #}
 {% set script_name = 'prowlarr_verify.py' %}

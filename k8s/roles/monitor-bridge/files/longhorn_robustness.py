@@ -4,7 +4,7 @@ Two readers classify a volume's robustness, over different transports:
 
 - The `LonghornVolumeDegraded` rule in observability's `storage.yaml` selects the one-hot
   `longhorn_volume_robustness` metric with `state!~"healthy|unknown"`, a regex that
-  `ansible/tests/services/test_storage_rule_literals.py` holds to `SAFE_ROBUSTNESS`. Until M6
+  `tests/services/test_storage_rule_literals.py` holds to `SAFE_ROBUSTNESS`. Until M6
   batch A5 deleted the `longhorn_volumes` check, monitor-bridge called `unsafe_volumes` on the
   same metric inside its stdlib-only pod.
 - `scripts/deploy_tools/runbook_gates.py` reads `status.robustness` off each `volumes.longhorn.io`

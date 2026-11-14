@@ -12,7 +12,7 @@ metadata:
 data:
   # Rendered from the same templates as the Docker copy's bind mounts
   # (this role's templates/config/pihole-*.j2 — moved out of the old shared
-  # ansible/templates/ during the macro-bridge inlining) — one source, two deployment shapes.
+  # k8s/templates/ during the macro-bridge inlining) — one source, two deployment shapes.
   # A Jinja include (not lookup('template', ...)) is deliberate: it shares this template's
   # local set-variable scope (pihole_wildcard_ip, pihole_unbound_port below) with the
   # included file, which a separate lookup() render would not.

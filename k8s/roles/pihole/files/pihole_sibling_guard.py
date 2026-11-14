@@ -30,7 +30,7 @@ Any other error answer, such as a 403 from a missing grant, fails the Job at onc
 Exit 0 when instance 1 may roll, 1 when it may not or a call fails, naming why.
 
 Run: python3 pihole_sibling_guard.py (in the Job; it takes no arguments)
-     uv run pytest ansible/roles/k8s/pihole/tests/test_pihole_sibling_guard.py
+     uv run pytest k8s/roles/pihole/tests/test_pihole_sibling_guard.py
 """
 
 import argparse

@@ -32,9 +32,9 @@
       (`rate-limit-proxied`); the `.local.` name is DNS-only and reached direct, where the
       remote address is the client and a forwarded-header key would pool every LAN client
       into one bucket. A Rule carries one middleware list. The full reasoning is with the
-      middlewares in roles/k8s/traefik/templates/dynamic.yaml.j2.
+      middlewares in k8s/roles/traefik/templates/dynamic.yaml.j2.
     - TLS options. The public name requires Cloudflare's origin-pull client certificate
-      (`cloudflare-origin-pull`, ansible/templates/origin-pull.yml.j2); the `.local.`
+      (`cloudflare-origin-pull`, k8s/templates/origin-pull.yml.j2); the `.local.`
       name must not, since a LAN or WireGuard client holds none. `spec.tls.options` is per
       IngressRoute and Traefik picks it by SNI, so one object holding both hosts would demand
       the certificate of LAN clients too. Hence two objects, not two Rules.
@@ -169,7 +169,7 @@ spec:
   priority, the ClientIP matcher or reconciliation timing changes nothing. A field-by-field
   diff against n8n-monitoring, which works from the same caller and carries `tls:`, isolates it.
 
-  Guard: ansible/tests/k8s/test_k8s_manifests.py fails any rendered IngressRoute that serves the
+  Guard: tests/k8s/test_k8s_manifests.py fails any rendered IngressRoute that serves the
   https entrypoint without a tls block, so this cannot regress silently.
 
   The guards it is MEANT to provide, kept in the rule so they are real once it routes:

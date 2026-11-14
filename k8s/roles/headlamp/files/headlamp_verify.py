@@ -28,7 +28,7 @@ Inputs come from the Job's environment: `CONTROL_URL` and `HEADLAMP_URL`.
 Exit 0 when both legs pass, 1 when one fails, naming it.
 
 Run: python3 headlamp_verify.py (in the Job; it takes no arguments)
-     uv run pytest ansible/roles/k8s/headlamp/tests/test_headlamp_verify.py
+     uv run pytest k8s/roles/headlamp/tests/test_headlamp_verify.py
 """
 
 import argparse

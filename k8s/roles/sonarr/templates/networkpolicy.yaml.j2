@@ -1,6 +1,6 @@
 {% from 'networkpolicy.yml.j2' import networkpolicy with context %}
 ---
-# Slice 2 of the ingress default-deny. The baseline (roles/k8s/netpol-baseline) admits traefik,
+# Slice 2 of the ingress default-deny. The baseline (k8s/roles/netpol-baseline) admits traefik,
 # prometheus and the node bridges to every pod carrying `netpol-baseline: enforced`. This file adds
 # sonarr's own callers, which are all direct pod → ClusterIP and therefore invisible to the
 # baseline.
@@ -20,7 +20,7 @@
 # rule is ever port-scoped, or this pod template loses the label, this line is what keeps the UI up.
 #
 # bazarr addresses sonarr by BARE NAME from its own application database, not from any manifest
-# (roles/k8s/bazarr/defaults/main.yml). It is in this list because of that comment, not because a
+# (k8s/roles/bazarr/defaults/main.yml). It is in this list because of that comment, not because a
 # grep found it — dropping it would break subtitle fetching silently.
 #
 # prowlarr is here for the REVERSE of the sonarr→prowlarr direction documented elsewhere: its
@@ -33,7 +33,7 @@
 # this breakage does not touch.
 #
 # homepage's dashboard widget reads /api/v3/queue over the ClusterIP
-# (roles/k8s/homepage/templates/config/services.yaml.j2). It goes direct rather than through Traefik
+# (k8s/roles/homepage/templates/config/services.yaml.j2). It goes direct rather than through Traefik
 # because sonarr's public route is Authelia-gated and its monitoring IngressRoute exposes only
 # that one path — so this entry is the whole grant, and fencing it out breaks the widget.
 #
@@ -43,12 +43,9 @@
 # Flux flip (#5535), so the Jobs were admitted on their first run. The `sonarr-air-date-guard`
 # CronJob's pod carries the same label, so this entry admits it too; its template says why.
 #
-# janitorr-verify is the pod label of janitorr's verify Job in roles/k8s/janitorr/templates/verify-inert/.
-# Nothing renders that directory while Ansible owns janitorr, so no pod carries the label yet and
-# the entry admits nothing today. It is here ahead of janitorr's Flux flip, which moves the
-# directory to templates/verify/: from then the Job dials sonarr:8989/ping from the
-# `janitorr-verify` Kustomization, and without this entry the fence would refuse it.
-# ansible/tests/k8s/test_netpol_from.py holds it in STAGED_CALLERS until the flip (#5709).
+# janitorr-verify is the pod label of janitorr's verify Job in k8s/roles/janitorr/templates/verify/.
+# The Job dials sonarr:8989/ping from the `janitorr-verify` Kustomization, and without this
+# entry the fence would refuse it.
 #
 # The caller list is `netpol_from:` on this role's containers_list entry
 # (cluster/services.yml), each caller's reason beside it. The entry's

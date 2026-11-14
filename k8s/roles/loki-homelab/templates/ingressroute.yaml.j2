@@ -54,7 +54,7 @@
    loki-labels` from a daniel-server shell returned `404 page not found` while `probe.py
    metric` through prometheus's route (which admits 10.42.x.0/31) returned 200 from the same
    shell. Both lists, because probe.py runs from either node and traefik's pin can move.
-   ansible/tests/k8s/test_loki_read_route_admits_probe_py.py is the guard.
+   tests/k8s/test_loki_read_route_admits_probe_py.py is the guard.
 
    Residual, accepted: /loki/api/v1/ still contains push and delete, because PathPrefix cannot
    exclude. Those are now reachable only from the two nodes rather than from any pod. #}

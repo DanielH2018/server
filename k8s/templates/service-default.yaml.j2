@@ -17,7 +17,7 @@
                           itself whenever this is non-empty.
 
    A role whose Service does not fit keeps its own `templates/service.yaml.j2`, which wins
-   over this file. `ansible/templates/service.yml.j2`'s header lists the five disqualifiers
+   over this file. `k8s/templates/service.yml.j2`'s header lists the five disqualifiers
    and names the role behind each. #}
 {% from 'service.yml.j2' import service with context %}
 ---

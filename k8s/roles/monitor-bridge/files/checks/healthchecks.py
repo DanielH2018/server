@@ -10,7 +10,7 @@ This reads `GET /api/v3/checks/` with the project's READ-ONLY key and compares e
 slug's schedule type, period or cron expression, timezone and grace against
 `HEALTHCHECKS_EXPECTED`, which the env Secret renders from monitor-bridge's
 `monitor_bridge_healthchecks_expected`. Tests tie that list to the cron variables and to the
-doc's table (ansible/tests/services/test_monitor_bridge_healthchecks_expected.py).
+doc's table (tests/services/test_monitor_bridge_healthchecks_expected.py).
 
 Same cache idiom as `checks/cloudflare_ips.py`: a success is cached for
 HEALTHCHECKS_PROBE_INTERVAL_S (a day), a failure is never cached, so a red tile re-probes every

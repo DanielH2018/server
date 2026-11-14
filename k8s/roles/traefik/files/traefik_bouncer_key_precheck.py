@@ -18,7 +18,7 @@ Inputs come from the Job's environment: `LAPI_URL` and `BOUNCER_KEY`. Exit 0 whe
 accepts the key, 1 otherwise, naming the cause.
 
 Run: python3 traefik_bouncer_key_precheck.py (in the Job; it takes no arguments)
-     uv run pytest ansible/roles/k8s/traefik/tests/test_traefik_bouncer_key_precheck.py
+     uv run pytest k8s/roles/traefik/tests/test_traefik_bouncer_key_precheck.py
 """
 
 import argparse
