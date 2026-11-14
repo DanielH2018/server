@@ -46,7 +46,11 @@ files:
   - {src: files/t2-approval-floor, dst: /usr/lib/homelab/t2-approval-floor}
   - {lib: host_lib.py, dst: /usr/lib/homelab/renovate-agent/host_lib.py}
   - {src: templates/prompt.txt.j2, dst: /usr/lib/homelab/renovate-agent/prompt.txt}
-  - {src: templates/renovate-agent-setup.sh.j2, dst: /usr/lib/homelab/renovate-agent-setup, mode: "0755"}
+  # The agent's user-scope Claude Code settings: the shared guard hooks and the deny floor. The setup
+  # script copies them into its home on every run.
+  - {src: files/claude-settings.json, dst: /usr/lib/homelab/renovate-agent/claude-settings.json, activate: "try-restart:homelab-renovate-agent-setup.service"}
+  - {src: templates/renovate-agent-setup.sh.j2, dst: /usr/lib/homelab/renovate-agent-setup, mode: "0755", activate: "try-restart:homelab-renovate-agent-setup.service"}
+  - {src: templates/homelab-renovate-agent-setup.service.j2, dst: /usr/lib/systemd/system/homelab-renovate-agent-setup.service}
   - {src: templates/homelab-renovate-agent.service.j2, dst: /usr/lib/systemd/system/homelab-renovate-agent.service}
   - {src: templates/homelab-renovate-agent.timer.j2, dst: /usr/lib/systemd/system/homelab-renovate-agent.timer}
   - {src: "templates/renovate-agent-land@.service.j2", dst: "/usr/lib/systemd/system/renovate-agent-land@.service"}
@@ -59,6 +63,8 @@ files:
 # this link from the next package version, and reconcile stops the timer on that install.
 enable:
   homelab-renovate-agent.timer: {target: timers.target, when: renovate_agent_enabled}
+  # Armed or not, so the agent's Claude Code settings exist before the first session.
+  homelab-renovate-agent-setup.service: multi-user.target
 # What the renovate_agent role installed before H7.37. Reconcile retires each once the units above
 # have started, and leaves a legacy service alone while a session still runs in it.
 legacy:

@@ -19,6 +19,17 @@ tunable it reads. A commit that skipped prek fails
 `test_every_committed_fragment_matches_what_the_generator_writes_now` in CI; the repair is
 `uv run python scripts/docs/gen_doc_fragments.py` and a commit of what it writes.
 
+**A value stated inside a sentence is rewritten at commit time too.** A fragment is a whole
+table. For one number in hand-written prose, `scripts/docs/doc_values.py` holds a row: the
+doc, a regex that captures the stated value, and a reader of the file the value comes from.
+The `regen-doc-values` prek hook runs that script on a commit that touches a row's doc or
+source. It rewrites the value and fails once, so read the sentence around it, stage the doc
+and commit again. The hook corrects a count, never the list written beside it. A row whose
+sentence was reworded fails until the row or the sentence changes. To add a row, extend
+`VALUES` and the hook's `files` pattern; `tests/repo/test_doc_values_hook.py` holds the
+pattern against the rows. A value Renovate bumps gets no row, and neither does a path the
+docs-refresh cron stages.
+
 **A role `CLAUDE.md`'s `## At a glance` block is generated the same way, in place.**
 `scripts/docs/gen_role_glance.py` writes one field set between two `generated_from` markers
 under that heading: a k8s role's **Applied by** line and deploy tag, image repositories, route,

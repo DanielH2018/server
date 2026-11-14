@@ -314,7 +314,7 @@ def test_live_tree_includes_the_gitops_deploy_lock_order_marker():
         r
         for r in rows
         if r["path"] == "scripts/deploy_tools/land_lib/land_tags.py"
-        and "fire on ANY change" in r["text"]
+        and "name the changed keys by comparing ciphertext" in r["text"]
     ]
     assert matches, "expected the secrets-rotation marker in land_tags.py"
 

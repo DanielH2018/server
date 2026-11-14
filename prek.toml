@@ -435,6 +435,28 @@ language = "system"
 pass_filenames = false
 files = "^(hosts/lib/host_lib\\.py|scripts/lib/longhorn_lib/longhorn_backups\\.py|cluster/services\\.yml|(k8s|inventory)/.*|scripts/renderer/template_filters/.*|hosts/components/.*|hosts/[^/]+/package\\.yml|secrets/secret_rotation\\.yml|scripts/.*\\.py|docs/assets/generated/fragments/.*)$"
 
+# Rewrites a value a doc states in a sentence, in the commit that moves the value, and fails
+# like a formatter so the author reads the sentence, stages the doc and commits again. The
+# rows are `VALUES` in scripts/docs/doc_values.py. A fragment is a whole generated table; this
+# is one number inside hand-written prose.
+#
+# `files` is each row's doc and source, and the Python the script imports.
+# tests/repo/test_doc_values_hook.py holds the pattern against the rows. No row names a path the
+# docs-refresh cron stages, so the hook stays out of the cron's commit: a doc rewritten there
+# would be left unstaged, and one unstaged file parks homelab-checkout-sync.
+#
+# It is its own hook, not a mode of `regen-doc-fragments`, because the cron also runs the
+# fragment generator, and a second entry point cannot rewrite a doc from the cron by mistake.
+#
+# Cost, measured: 0.1s wall.
+[[repos.hooks]]
+id = "regen-doc-values"
+name = "Stated values in docs match the tree"
+entry = "uv run --frozen python scripts/docs/doc_values.py"
+language = "system"
+pass_filenames = false
+files = "^(docs/deploying\\.md|docs/claude-tooling\\.md|\\.claude/rules/generated-docs\\.md|scripts/diagnostics/probe_lib/health_rollout\\.py|hosts/components/docs-refresh/templates/docs-refresh\\.sh\\.j2|scripts/(docs|lib)/.*\\.py)$"
+
 # Lower each ratchet allowlist entry to what its file is today, so a PR that SHRINKS a listed
 # module needs no hand edit. An entry has to MATCH its file (the `DECIDED:` marker in
 # tests/_ratchet.py), which made every such PR edit a line by hand: 70 commits touched

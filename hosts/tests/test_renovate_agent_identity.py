@@ -11,11 +11,13 @@ Run: uv run pytest hosts/tests/test_renovate_agent_identity.py
 """
 
 import importlib.util
+import json
 import re
 import shlex
 import sys
 
 import pytest
+import run_requests
 from _helpers import REPO
 from _setup_render import COMPONENTS, render_component_text
 from lib import yaml_fast
@@ -50,6 +52,17 @@ MOVED = {
 }
 # Any PR number the lander accepts, standing in for the prompt's `<n>`.
 PR = "3337"
+
+
+class _Starts:
+    """Records each process the runner starts and answers it as a lander that settled."""
+
+    def __init__(self) -> None:
+        self.calls: list[list[str]] = []
+
+    def __call__(self, argv, cwd=None, timeout=120, stdin_text=None):
+        self.calls.append(argv)
+        return 0, "success\n"
 
 
 def render(template: str, overrides: dict | None = None) -> str:
@@ -173,20 +186,14 @@ def _seconds(span: str) -> int:
     return int(minutes.group(1)) * 60
 
 
-def test_the_sessions_bash_ceiling_and_run_timeout_outlast_one_landing() -> None:
-    """The session blocks in `systemctl start` for the whole landing."""
+def _config(key: str) -> int:
+    return int(render(CONFIG_ENV).split(f"\n{key}=")[1].split("\n")[0])
+
+
+def test_the_runs_deadline_holds_the_session_and_one_whole_landing() -> None:
+    """The runner lands after the session, inside RUN_TIMEOUT_S."""
     landing_s = _seconds(directive(render(LANDER), "TimeoutStartSec")[-1])
-    ceilings = [
-        e.split("=", 1)[1]
-        for e in directive(render(UNIT), "Environment")
-        if e.startswith("BASH_MAX_TIMEOUT_MS=")
-    ]
-    assert ceilings and int(ceilings[-1]) > landing_s * 1000
-    assert f"Bash timeout of {ceilings[-1]} ms" in " ".join(render(PROMPT).split()), (
-        "the prompt must quote the ceiling the unit sets"
-    )
-    run_timeout = int(render(CONFIG_ENV).split("\nRUN_TIMEOUT_S=")[1].split("\n")[0])
-    assert run_timeout > landing_s
+    assert _config("SESSION_TIMEOUT_S") + landing_s <= _config("RUN_TIMEOUT_S")
 
 
 def prompt_commands() -> list[str]:
@@ -195,17 +202,24 @@ def prompt_commands() -> list[str]:
     return [c.replace("<n>", PR) for c in re.findall(r"`(systemctl [^`]+)`", prompt)]
 
 
-def test_the_prompt_lands_through_the_lander_the_polkit_rule_admits() -> None:
-    commands = prompt_commands()
+def test_the_runner_lands_through_the_lander_the_polkit_rule_admits() -> None:
+    """The runner starts the unit the rule admits and reads the file the lander writes."""
+    # fact: hosts/components/renovate-agent/CLAUDE.md#Autonomous-role contract (it merges and deploys with no human in the loop)
+    gh = _Starts()
+    run_requests._land(int(PR), run_requests.AgentTools(run=gh), 60)
     unit = f"renovate-agent-land@{PR}.service"
-    assert f"systemctl start {unit}" in commands, commands
-    assert (COMPONENT / "templates" / LANDER).is_file()
+    assert ["systemctl", "start", unit] in gh.calls
     rule = render("50-renovate-agent-land.rules.j2")
     pattern = re.search(r"if \(!/(.+?)/\.test\(action\.lookup\(\"unit\"\)\)\)", rule)
     assert pattern and re.fullmatch(pattern.group(1).strip("^$"), unit)
     lander = (COMPONENT / "files" / "land_renovate_pr.py").read_text()
     results = re.search(r'^RESULTS_DIR = "([^"]+)"', lander, re.M)
-    assert results and f"`{results.group(1)}/<n>.verdict`" in render(PROMPT)
+    assert results and results.group(1) == run_requests.VERDICT_DIR
+
+
+def test_the_session_is_told_to_nominate_and_never_to_land() -> None:
+    assert prompt_commands() == []
+    assert '"action": "land"' in render(PROMPT)
     assert "findings.py open" not in render(PROMPT), (
         "the token has no issues write, so a prompt asking for a finding fails every time"
     )
@@ -247,6 +261,97 @@ def test_the_agent_gets_claude_guard_where_the_hook_looks_for_it() -> None:
     )
 
 
+SETTINGS_SRC = "files/claude-settings.json"
+
+
+def session_settings() -> dict:
+    return json.loads((COMPONENT / SETTINGS_SRC).read_text())
+
+
+def hook_commands(settings: dict, event: str, matcher: str) -> list[str]:
+    return [
+        hook["command"]
+        for entry in settings.get("hooks", {}).get(event, [])
+        if entry.get("matcher") == matcher
+        for hook in entry["hooks"]
+    ]
+
+
+def test_the_session_settings_run_the_shared_guard_hooks() -> None:
+    """claude-guard on every Bash call, and the secret-file deny on every file tool."""
+    settings = session_settings()
+    assert hook_commands(settings, "PreToolUse", "Bash") == [
+        "~/.claude/hooks/guard-pre-tool-use.sh"
+    ]
+    assert hook_commands(settings, "PermissionRequest", "Bash") == [
+        "~/.claude/hooks/guard-permission-request.sh"
+    ]
+    assert hook_commands(settings, "PreToolUse", "Read|Edit|Write|NotebookEdit") == [
+        "~/.claude/hooks/protect-secrets.sh"
+    ]
+
+
+@pytest.mark.parametrize(
+    "rule",
+    [
+        "Bash(sudo:*)",
+        "Bash(su:*)",
+        "Bash(kubectl delete:*)",
+        "Bash(git push --force)",
+        "Read(~/.config/gh/**)",
+        "Read(//run/homelab-secrets/**)",
+        "Edit(~/.claude/settings.json)",
+        "Edit(~/.claude/hooks/**)",
+        "Edit(~/.local/share/claude-guard/**)",
+    ],
+)
+def test_the_session_settings_deny_the_floor(rule: str) -> None:
+    assert rule in session_settings()["permissions"]["deny"]
+
+
+def test_the_session_settings_lock_out_bypass_mode() -> None:
+    permissions = session_settings()["permissions"]
+    assert permissions["disableBypassPermissionsMode"] == "disable"
+    assert "allow" not in permissions, (
+        "the floor ships denies only; the wrapper's permission mode decides the rest"
+    )
+
+
+def test_setup_installs_the_settings_at_the_path_the_guardrail_audit_watches() -> None:
+    shipped = [f for f in SPEC["files"] if f.get("src") == SETTINGS_SRC]
+    assert len(shipped) == 1
+    setup = render("renovate-agent-setup.sh.j2", MOVED)
+    assert f"\nsettings={shipped[0]['dst']}\n" in setup
+    assert (
+        'as_agent cp --remove-destination "$settings" "$home/.claude/settings.json"'
+        in setup
+    ), "the agent, not root, must write into its own home"
+    assert 'copy_from_operator "$operator/.claude/hooks" "$home/.claude/hooks"' in setup
+
+
+def test_the_session_settings_carry_the_auto_mode_deny_floor() -> None:
+    """The wrapper runs the session in auto mode, where the classifier reads these rules."""
+    auto = session_settings()["autoMode"]
+    assert auto["classifyAllShell"] is True
+    assert any("`master`" in rule for rule in auto["hard_deny"])
+    assert auto["soft_deny"] and auto["environment"]
+    assert "allow" not in auto
+
+
+def test_the_guardrail_ack_explains_the_copies_setup_makes() -> None:
+    """A rollout of the settings or the operator's hooks must not post as unexplained."""
+    ack = json.loads(
+        render_component_text("claude-code", "claude-guardrail-ack.json.j2")
+    )
+    [shipped] = [f["dst"] for f in SPEC["files"] if f.get("src") == SETTINGS_SRC]
+    home = "/var/lib/renovate-agent"
+    assert {c["dst"]: c["src"] for c in ack["copies"]} == {
+        f"{home}/.claude/settings.json": shipped,
+        f"{home}/.claude/hooks": "/home/ubuntu/.claude/hooks",
+    }
+    assert {c["dst"] for c in ack["copies"]} <= set(ack["paths"])
+
+
 def guard_decision(command: str) -> str | None:
     """The decision the repo's PreToolUse:Bash dispatcher reaches for `command`, or None."""
     sys.path.insert(0, str(HOOKS))  # the arms import _hook_common
@@ -267,13 +372,6 @@ def guard_decision(command: str) -> str | None:
         if (verdict := dispatcher.load_arm(filename, module).decision(payload))
     ]
     return dispatcher.merge(verdicts)[0]
-
-
-def test_the_project_guard_lets_the_session_land_and_read_the_verdict() -> None:
-    """An unattended `ask` is a denial, so a guard rule that catches these ends every landing."""
-    commands = prompt_commands() + [f"cat /var/lib/renovate-agent-land/{PR}.verdict"]
-    assert len(commands) == 4, commands
-    assert {c: guard_decision(c) for c in commands} == dict.fromkeys(commands)
 
 
 def test_the_project_guard_still_denies_what_it_should() -> None:
@@ -336,15 +434,9 @@ def test_a_lock_wait_that_times_out_leaves_no_earlier_verdict(tmp_path) -> None:
     assert stale.read_text().startswith("VERDICT: none")
 
 
-def test_the_prompt_reads_how_the_lander_ended_before_trusting_its_file() -> None:
-    """A lander systemd stops mid-landing leaves `PENDING`, which is no verdict (#5205)."""
-    assert (
-        f"systemctl show -p Result renovate-agent-land@{PR}.service"
-        in prompt_commands()
-    )
+def test_the_landers_placeholder_stops_the_run() -> None:
+    """A lander systemd stops mid-landing leaves its placeholder, which is no verdict (#5205)."""
     script = (COMPONENT / "files" / "land_renovate_pr.py").read_text()
     (pending,) = re.findall(r'atomic_write\(result, "([A-Z]+)\\n"\)', script)
-    # The bullet that reads the Result is the one that must name the placeholder: a mention
-    # anywhere else in the prompt does not tell the session to treat it as no verdict.
-    (bullet,) = [b for b in render(PROMPT).split("\n- ") if "-p Result" in b]
-    assert f"`{pending}`" in bullet, bullet
+    landed, go_on, _ = run_requests.grade("exit-code", pending + "\n")
+    assert not landed and not go_on

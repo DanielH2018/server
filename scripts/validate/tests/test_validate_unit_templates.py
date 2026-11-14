@@ -150,6 +150,7 @@ def test_discover_templates_finds_the_known_set():
     assert {
         "deploy-ui.service.j2",
         "homelab-renovate-agent.timer.j2",
+        "homelab-renovate-agent-setup.service.j2",
         "renovate-agent-land@.service.j2",
         "claude-land@.service.j2",
         "claude-triage@.service.j2",
@@ -166,7 +167,7 @@ def test_discover_templates_finds_the_known_set():
         "homelab-rootq.socket.j2",
         "homelab-rootq@.service.j2",
     } <= names
-    assert len(names) == 28
+    assert len(names) == 29
 
 
 def test_unit_context_layers_the_owning_roles_real_defaults(fixture_unit):
