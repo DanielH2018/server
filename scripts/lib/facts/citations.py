@@ -164,6 +164,38 @@ def macro_citations(text: str) -> list[str]:
     return _MACRO.findall(text)
 
 
+# A pointer to one part of another doc: a backticked Markdown path, then the part's name in
+# italics, as in "`docs/landing.md`, *Reading the verdict*". The path needs a slash, as
+# ``_FILE`` does: a bare `CLAUDE.md` names whichever doc the sentence is about, so it is no
+# claim about one file. A bold span is not a pointer.
+_HEADING_POINTER = re.compile(
+    rf"`(?P<doc>{_FILE}\.md)`(?:,|'s| →)?\s+\(?(?<!\*)\*(?!\*)(?P<part>[^*]{{3,90}})\*(?!\*)"
+)
+_BOLD = re.compile(r"\*\*([^*]{3,160})\*\*")
+
+
+def heading_pointers(text: str) -> list[tuple[str, str]]:
+    """Every ``(doc, part)`` pointer in ``text`` outside a fence, in document order."""
+    found = _HEADING_POINTER.finditer(_FENCE.sub("", text))
+    return [(m["doc"], m["part"]) for m in found]
+
+
+def _plain(text: str) -> str:
+    return re.sub(r"\s+", " ", text.replace("`", "").replace("*", "")).strip(" .:")
+
+
+def names_a_part(part: str, doc_text: str) -> bool:
+    """Whether ``doc_text`` holds a heading or a bold lead-in whose text contains ``part``.
+
+    Backticks, emphasis marks and line breaks are ignored on both sides, and so is a
+    trailing period or colon. A pointer may shorten the heading it names, so containment
+    is enough. Text that appears only in a paragraph names no part.
+    """
+    parts = [s.heading for s in sections("", doc_text)] + _BOLD.findall(doc_text)
+    wanted = _plain(part)
+    return any(wanted in _plain(p) for p in parts)
+
+
 # A paragraph or bullet that opens with this string is history: a deliberate statement about
 # something that no longer holds ("retired 2026-08-14", "went on 2026-09-28"). Rules that read
 # prose for a claim about THIS tree skip it -- `retired-host`, `version-as-fact` and
