@@ -162,9 +162,36 @@ def test_reconcile_never_restarts_a_session() -> None:
     """A package install must not kill a landing or spend a session as a side effect."""
     assert SPEC["units"]["homelab-renovate-agent.service"] == {"policy": "manual"}
     activates = [
-        f for f in SPEC["files"] if "homelab-renovate-agent" in f.get("activate", "")
+        f
+        for f in SPEC["files"]
+        if f.get("activate", "").partition(":")[2]
+        in ("homelab-renovate-agent.service", "homelab-renovate-agent.timer")
     ]
     assert activates == []
+
+
+SETUP_UNIT = "homelab-renovate-agent-setup.service"
+
+
+def test_a_disarmed_agent_still_gets_its_claude_settings() -> None:
+    """The guardrail audit watches the settings file whether or not the timer is armed."""
+    assert SPEC["enable"][SETUP_UNIT] == "multi-user.target"
+    activated = {
+        f["src"]
+        for f in SPEC["files"]
+        if f.get("activate") == f"try-restart:{SETUP_UNIT}"
+    }
+    assert activated == {
+        "files/claude-settings.json",
+        "templates/renovate-agent-setup.sh.j2",
+    }
+    unit = render(f"{SETUP_UNIT}.j2")
+    assert directive(unit, "RemainAfterExit") == ["yes"], (
+        "try-restart reruns only an active unit"
+    )
+    assert directive(unit, "ExecStart")[0].endswith(
+        " /usr/lib/homelab/renovate-agent-setup"
+    )
 
 
 CONFIG = "config.env.j2"

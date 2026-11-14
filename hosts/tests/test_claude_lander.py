@@ -268,6 +268,10 @@ FLOOR = [
     "hosts/components/renovate-agent/templates/prompt.txt.j2",
     "hosts/components/renovate-agent/templates/homelab-renovate-agent.service.j2",
     "hosts/components/renovate-agent/templates/homelab-renovate-agent.timer.j2",
+    # The session's Claude Code settings and what installs them joined it on 2026-11-14 (#8392).
+    "hosts/components/renovate-agent/files/claude-settings.json",
+    "hosts/components/renovate-agent/templates/renovate-agent-setup.sh.j2",
+    "hosts/components/renovate-agent/templates/homelab-renovate-agent-setup.service.j2",
     "hosts/components/renovate-agent/component.yml",
     "scripts/deploy_tools/land",
     "pyproject.toml",

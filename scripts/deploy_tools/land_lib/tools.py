@@ -252,7 +252,9 @@ def declared_tags_at(ref: str, primary: Path) -> set[str] | None:
 class PlaneNote(Protocol):
     """`land_tags.plane_note`: what a PR still needs a HUMAN to apply, or ""."""
 
-    def __call__(self, files: list[str], range_: str = "", /) -> str: ...
+    def __call__(
+        self, files: list[str], range_: str = "", deployed: str = "", /
+    ) -> str: ...
 
 
 class Derive(Protocol):
