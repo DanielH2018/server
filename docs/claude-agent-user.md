@@ -579,14 +579,14 @@ restarting, and leaves a report to read later. The four rulings:
   image.
 - **Landing** follows the approval floor of `homelab-claude-land@` unchanged. Every file that sets a run's caps
   or identity is on that floor, so the agent cannot raise its own budget unattended.
-- **The report** is an HTML page in the agent's artifacts tree, served under
-  `/a/daniel-box-claude/`. A JSON record in `/var/lib/claude/triage/runs/` sits beside it, and a
-  Discord page links the report. It is not a GitHub issue, because the repo is public. The page
+- **The report** is an HTML page in the triage controller's report tree, served under
+  `/a/daniel-box-claude-triage/`. A JSON record in `/var/lib/claude-triage-ctl/state/runs/` sits
+  beside it, and a Discord page links the report. It is not a GitHub issue, because the repo is public. The page
   prunes after 30 days, and the record stays.
 - **The budget** is 6 runs a day, $10 to diagnose and $25 to fix. One run goes at a time, and a
   storm of monitors going down together gets one run.
 
-A timer running as `claude` is the trigger. It polls Prometheus for alerts that started firing. A webhook into the host was rejected. Host services bind to loopback, so a webhook
+A timer running as the triage controller is the trigger. It polls Prometheus for alerts that started firing. A webhook into the host was rejected. Host services bind to loopback, so a webhook
 would need a non-loopback port, a firewall rule, and a network input that starts Claude.
 
 The build runs in slices, and each slice is exercised before the next starts:
@@ -604,16 +604,26 @@ The build runs in slices, and each slice is exercised before the next starts:
 The `claude-code` host component installs the run. `claude_code_triage_enabled`
 switches it on, and it installs only while `claude_code_agent_user_enabled` is also true.
 
-- **The unit** `claude-triage@<episode>.service` runs as `claude`, with the hardening the
-  `renovate-agent` unit carries. It reads `<state_dir>/inbox/<episode>.json` and runs
+- **Two users, neither of them `claude`** (dotfiles#967's I1, guardrails plan B2).
+  `claude-triage-ctl` (uid 906) runs the poller and the runner. It owns the records, the
+  reports, the clone the session reads and the session's toolchain, and polkit lets it alone
+  start the run, the session and the page. `claude-triage` (uid 907) runs the session. It holds
+  no GitHub token and no start right, and it reads the clone, the toolchain and the prompt
+  through its group. So no interactive session as `claude` can start a run, plant an episode,
+  or change what a run reads. `templates/claude-triage-pins.j2` pins both users and every path.
+  `claude-triage-setup`, which the runner runs as root before each run, keeps the controller's
+  toolchain, the clone and its venv current while no run holds the lock, and copies the operator's read-only kubeconfig to
+  `/etc/claude-triage/kubeconfig` for the session.
+- **The unit** `claude-triage@<episode>.service` runs as `claude-triage-ctl`, with the hardening
+  the `renovate-agent` unit carries. It reads `<state_dir>/inbox/<episode>.json` and runs
   `files/claude_triage_run.py` under `flock -n`, so one run goes at a time. A busy lock exits
   75. That exit is not a failure, and the episode waits in the inbox.
 - **The session runs in its own unit**, `homelab-claude-triage-session.service`
-  (guardrails plan B2). The runner writes the framed prompt to `<state_dir>/session/in/`,
+  (guardrails plan B2). The runner writes the framed prompt to the exchange's `in/`,
   starts the unit through `host_lib.start_unit` and waits for it. The unit runs
   `files/claude_triage_session.py`, which feeds the prompt to `claude -p` on stdin, so the
   episode text is on no command line. The script writes the session's JSON result to
-  `<state_dir>/session/out/` and prints nothing the session said, because a journal line the
+  the exchange's `out/` and prints nothing the session said, because a journal line the
   session shaped could raise the next episode. The runner reads the result without following a
   link, up to 1 MiB, and its journal lines carry the episode id and the state only. The record
   and the report keep the session's stop reason.
@@ -621,7 +631,9 @@ switches it on, and it installs only while `claude_code_agent_user_enabled` is a
   `--permission-prompts none` denies anything that would wait on an answer. The session has a
   $10 budget, 60 turns and a 30-minute wall clock, the session unit's `TimeoutStartSec`, and it
   returns a diagnosis in a fixed JSON schema. The runner reads `Result=timeout` as a timed-out
-  run.
+  run. `--settings` loads `/opt/claude-triage/claude-settings.json`, root-owned: the shared guard
+  hooks and the deny floor the Renovate session carries, with the hooks run from the
+  controller's toolchain.
 - **The credential** is the run's own `claude setup-token` token. It is the SOPS key
   `claude_code_triage_claude_oauth_token`, which the session unit loads as a `LoadCredential=`
   file, and the role refuses to install without it. The runner never holds it. The
@@ -631,9 +643,8 @@ switches it on, and it installs only while `claude_code_agent_user_enabled` is a
   report shares an origin with the operator's own artifacts.
 - **Every run leaves a record, a report and a page.** An inconclusive or timed-out run does too.
   The page is `claude-triage-report-alert@<episode>:<state>.service`, which holds the webhook. A
-  polkit rule lets `claude` start the page and the run, in fixed shapes only. A run that crashes
-  pages through `OnFailure=homelab-alert@%n.service`. The same rule lets `claude` start the
-  session unit, until B2's user split moves every start right to a controller user.
+  polkit rule lets the controller start the page, the run and the session unit, in fixed shapes
+  only. A run that crashes pages through `OnFailure=homelab-alert@%n.service`.
 - **The caps are pinned** as literals in the role's `templates/claude-triage-pins.j2`, which
   every triage template imports, the same way `claude-land-pins.j2` pins the landing settings.
   No inventory value reaches them.
@@ -646,22 +657,24 @@ To switch it on, the operator:
 1. Sets `claude_code_triage_enabled: true` in daniel-box's `host_vars`, runs `host_secrets.py
    sync daniel-box`, and lets the next daniel-box package version install it.
 
-To run a drill, as `claude`:
+To run a drill (**operator-only**, because only root and the controller may write the inbox or
+start a run):
 
 ```bash
 printf '%s\n' '{"monitor": "Drill", "message": "drill: no real fault"}' \
-  > /var/lib/claude/triage/inbox/drill-1.json
-systemctl start claude-triage@drill-1
+  | sudo install -o claude-triage-ctl -g claude-triage-ctl -m 0640 /dev/stdin \
+    /var/lib/claude-triage-ctl/state/inbox/drill-1.json
+sudo systemctl start claude-triage@drill-1
 ```
 
-The drill writes `/var/lib/claude/triage/runs/drill-1.json` and `triage-drill-1.html` under
-`/a/daniel-box-claude/`, and Discord gets the page. To switch triage off, set
+The drill writes `/var/lib/claude-triage-ctl/state/runs/drill-1.json` and `triage-drill-1.html`
+under `/a/daniel-box-claude-triage/`, and Discord gets the page. To switch triage off, set
 `claude_code_triage_enabled: false` and apply. The records stay.
 
 ### Slice 2: the poller
 
-`homelab-claude-triage-poll.timer` runs `files/claude_triage_poll.py` as `claude` every two
-minutes.
+`homelab-claude-triage-poll.timer` runs `files/claude_triage_poll.py` as `claude-triage-ctl`
+every two minutes.
 The code is root-owned under `/opt/claude-triage`, like the runner's.
 
 - **It reads the firing `ALERTS` vector**, without `Watchdog`, shadow and drill alerts, and
@@ -722,14 +735,14 @@ The code is root-owned under `/opt/claude-triage`, like the runner's.
   around the weekly reboot, read from the same `weekly_reboot_*` group vars as the Alertmanager
   mute. A deferred key opens its episode once the gate lifts, if it is still down.
 - **The runner holds the daily cap.** A run past six in a UTC day writes a `capped` record and
-  page, and starts no session. The cap sits in the runner, because polkit lets `claude` start a
-  run directly.
+  page, and starts no session. The cap sits in the runner, because polkit lets the controller
+  start a run directly, without the poller.
 
 `claude_code_triage_poll_mode` picks what an episode does:
 
 - `off` reads nothing.
 - `shadow` logs `would queue <episode>` to the journal and appends the episode to
-  `/var/lib/claude/triage/shadow.jsonl`, with each unrouted fall beside them. It ships in
+  `/var/lib/claude-triage-ctl/state/shadow.jsonl`, with each unrouted fall beside them. It ships in
   this mode.
 - `armed` queues the episode in the inbox. Each poll starts the oldest queued episode when no
   run holds the runner's lock, so episodes run one after another. A queued episode whose run

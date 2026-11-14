@@ -11,7 +11,7 @@ decision. The ledger records and refuses nothing.
 
 | Slice | What it delivers | State |
 |---|---|---|
-| 1 | A ledger that `ghread` and `lib/gh.py` record each call in, and `gh-quota status` | Built for `lib/gh.py`. `ghread`, `cc-wait` and the claude-guard rule are open in the dotfiles repo. |
+| 1 | A ledger that `ghread` and `lib/gh.py` record each call in, and `gh-quota status` | Deployed on 2026-11-14: [server#8717](https://github.com/DanielH2018/server/pull/8717) for the module and `lib/gh.py`, and [dotfiles#1336](https://github.com/DanielH2018/dotfiles/pull/1336) for `ghread`, `cc-wait` and the claude-guard rule. Its week of measurement ends on 2026-11-21. |
 | 2 | The session ceiling, the reserve and the write pace, enforced inside those two wrappers | Planned |
 | 3 | The REST readers that do not run `gh` record and obey the same ledger | Planned |
 | 4 | Identical reads from many sessions cost one GitHub call | Planned |
@@ -151,7 +151,7 @@ below applies.
 session shell read ── ghread ──────────────┐
 repo Python tool ──── lib/gh.py ───────────┼── gh_quota: record, and admit from slice 2
 host REST reader ──── host_lib.github_get ─┘       │
-                                                   └── ledger under /run/gh-quota/
+                                                   └── ledger under /var/lib/gh-quota/
 cc-wait gh-pr, gh-ci ─ ghread, from slice 1 on
 
 bare gh (a session's write, the operator's terminal)
@@ -171,10 +171,20 @@ bare gh (a session's write, the operator's terminal)
 imports the packaged path when it exists. On a host without the package, such as the
 operator's PC, `ghread` runs as it does without this design.
 
-**The ledger** is one SQLite file per quota identity under `/run/gh-quota/`. `/run` is a
-tmpfs, and a quota window lasts one hour, so a reboot loses nothing worth keeping. The
-identity is the calling uid when the token comes from that user's `gh` login. It is a
-fingerprint of the token when the caller sets `GH_TOKEN`.
+**The ledger** is one SQLite file per quota identity under `/var/lib/gh-quota/`. The
+directory is on disk because the record is read days later: a spike is investigated after
+the hour it happened in, and the ledger keeps each window for 8 days. Both hosts reboot
+every Sunday, and a ledger on a tmpfs loses those days at each reboot. A write to the disk
+costs a `gh` call about 4 ms, measured on daniel-box, against 0.3 ms on a tmpfs. The
+identity is a fingerprint of the token `gh` uses for the call: `GH_TOKEN` or `GITHUB_TOKEN`
+when the caller sets one, and otherwise what `gh auth token` prints in the caller's
+environment. `gh` owns that choice, which also depends on its config directory and on the
+login it has stored, so the module asks `gh` and does not repeat the rule. The question
+costs about 30 ms per counted call and no GitHub call. The uid alone is not an identity:
+on 2026-11-14 one uid's ledger held two live windows per bucket, which one token cannot have
+([#8738](https://github.com/DanielH2018/server/issues/8738)), and a call was
+counted in whichever window ended later. A caller whose `gh` has no token gets the uid as
+its identity. Two tokens of one GitHub user spend one quota and get two ledger files.
 
 **The session key** is the first of these that exists:
 
@@ -208,8 +218,9 @@ environment is `off` for that call: the test suite sets it, so a test's fake `gh
 lands in the host's ledger.
 
 **The module fails open.** A ledger it cannot open, lock or parse lets the call through and
-counts the failure in a second file that `gh-quota status` reads. The ledger's own outage
-must not become a GitHub outage. For the same reason `scripts/lib/gh.py` imports the module
+counts the failure in a second file that `gh-quota status` reads. `status` counts the
+failures of the same 8 days the ledger keeps, and a failure file at its size limit drops
+the older lines. The ledger's own outage must not become a GitHub outage. For the same reason `scripts/lib/gh.py` imports the module
 optionally: a copy of the tree without it runs `gh` uncounted. A fan-out batch from another
 repo runs `findings.py` from a snapshot of this tree, and `SNAPSHOT_PATHS` carries the
 module so those calls are counted.
@@ -282,7 +293,7 @@ run `findings.py claims` in the same quarter minute cost one call, not 39.
 
 ```text
 $ gh-quota status
-uid-1000 graphql: 3120/5000 used, resets 15:20 UTC; 2 sessions made 1012 calls; 2108 beyond the ledger (68%); 1 at or over 20%; --all lists 1 more
+tok-2edb9dd14a9a graphql: 3120/5000 used, resets 15:20 UTC; 2 sessions made 1012 calls; 2108 beyond the ledger (68%); 1 at or over 20%; --all lists 1 more
   7c1e90aa-0000-4000-8000-000000000001  1000 calls  issue list x960, pr view x40
 ```
 
@@ -298,7 +309,7 @@ the sessions at or above `ATTENTION_SHARE` of the bucket's limit.
 | `gh-quota release <session>`, from slice 2 | Lifts that session's ceiling until the window resets. Operator only. |
 
 `release` is the way out of a refusal, and `status` is the way to see one. `release` writes
-`/run/gh-quota/override`, which the operator's user owns. While a session still runs as
+`/var/lib/gh-quota/override`, which the operator's user owns. While a session still runs as
 `ubuntu`, that session can write the file too. Slice 6 of the agent-user plan closes that.
 
 `gh-quota` is a reporting tool. It runs no `gh` call for a caller, so it is not a second shim.
@@ -356,8 +367,14 @@ same PR.
 
 ### Slice 1: record, and read the record
 
-The module runs in `record` mode on both hosts. It refuses nothing. The half in this repo is
-built. The dotfiles half is open, so a session's `ghread` reads are not in the ledger yet.
+The module runs in `record` mode on both hosts. It refuses nothing. Both halves are deployed:
+`gh-quota mode` prints `record` on daniel-box and daniel-server, and a session's `ghread`
+reads appear in `gh-quota status --all` under its session id.
+
+A repo tool's calls join the ledger as its worktree picks up master. A session runs the
+`scripts/lib/gh.py` of its own branch, so a worktree cut before 2026-11-14 records nothing
+through it until it is rebased. `ghread` is installed per user, so its reads are counted for
+every session at once.
 
 ```diff
  hosts/components/
@@ -367,7 +384,7 @@ built. The dotfiles half is open, so a session's `ghread` reads are not in the l
 +    files/gh_quota.py      -> /usr/lib/homelab/gh_quota.py, the module, and
 +                           -> /usr/bin/gh-quota, the same file as a command
 +    templates/gh-quota.conf.j2
-+    tmpfiles.d/homelab-gh-quota.conf   creates /run/gh-quota
++    tmpfiles.d/homelab-gh-quota.conf   creates /var/lib/gh-quota
 +    tests/test_gh_quota.py
  hosts/daniel-box/package.yml, hosts/daniel-server/package.yml   + gh-quota
  scripts/lib/gh.py          gh(): record each call
@@ -387,7 +404,7 @@ built. The dotfiles half is open, so a session's `ghread` reads are not in the l
 - **The claude-guard change ships as a case table,** not as prose: each bare read it must
   refuse, and each write and each `gh api` call with a method or a field that it must pass.
 - **The tests** cover the classification, the session key order, the count per session in
-  both buckets, the sample interval, the token fingerprint, the status lines and the two
+  both buckets, the sample interval, the identity of each token, the status lines and the two
   fail-open paths. One more drives `lib.gh.gh` and reads the count back from the ledger.
 - **It is done when** a week of ledger rows gives the three missing figures: the spend of a
   normal session-hour, the points per call class, and the share of spend beyond the ledger.

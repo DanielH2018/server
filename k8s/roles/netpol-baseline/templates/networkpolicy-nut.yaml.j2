@@ -1,7 +1,7 @@
 {# DECIDED: nut admits daniel-server's host-side shutdown chain through node-CIDR and flannel.1
    ipBlocks, so this fence stays bespoke.
    The callers model (`netpol_from` / `netpol_fences`, macro in
-   ansible/templates/networkpolicy.yml.j2) renders one TCP port admitting same-namespace `app:`
+   k8s/templates/networkpolicy.yml.j2) renders one TCP port admitting same-namespace `app:`
    peers, and its header rules out growing it to absorb another shape. Census: #3701.
 #}
 ---
@@ -25,7 +25,7 @@ spec:
     # peanut is the web UI in-cluster.
     #
     # nut-exporter reads UPS variables anonymously and renders them as network_ups_tools_*
-    # series for Prometheus (roles/k8s/nut-exporter). It is a pod like peanut and
+    # series for Prometheus (k8s/roles/nut-exporter). It is a pod like peanut and
     # home-assistant, so it needs a podSelector for the reason spelled out below: pod ->
     # ClusterIP -> pod traffic keeps the caller's pod IP and never arrives as a node address.
     #

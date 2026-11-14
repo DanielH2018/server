@@ -191,6 +191,7 @@ nav:
       - "ADR-0032 CI's heavy jobs may run on runner pods": adr/0032-cis-heavy-jobs-may-run-on-runner-pods.md
       - "ADR-0033 A game server's replica count is runtime state": adr/0033-game-server-replicas-are-runtime-state.md
       - "ADR-0034 GitHub quota is budgeted per session, in the wrappers": adr/0034-github-quota-is-budgeted-per-session-in-the-wrappers.md
+      - "ADR-0035 The skeptic and implementer agents carry no turn cap": adr/0035-skeptic-and-implementer-carry-no-maxturns.md
       # The long-form documents three of the records above compress. They sit under Decisions
       # rather than in a section of their own: each one is the working-out behind a single
       # ADR, and a reader who wants that depth arrives from the record, not from a
@@ -216,6 +217,8 @@ nav:
           - Landing a merged PR: landing.md
           # What the 20-job runner cap costs a landing, and the phased plan to get under it.
           - CI throughput: ci-throughput.md
+          # One coverage run with per-test contexts: deletion candidates, not a gate.
+          - Test coverage snapshot: test-coverage-snapshot.md
           # What exhausts the shared GitHub API quota, and the proposed per-session budget.
           - GitHub API quota: github-quota.md
           - Host packages: host-packages.md

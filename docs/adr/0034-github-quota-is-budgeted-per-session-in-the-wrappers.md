@@ -48,7 +48,7 @@ claude-guard's `ghread-route` rule denies the bare `gh` form of each read and na
 ## Decision
 
 The budget is a library, `gh_quota`, that those three owners call. It adds no executable to
-the path a `gh` call takes. A ledger under `/run/gh-quota` counts each call against the
+the path a `gh` call takes. A ledger under `/var/lib/gh-quota` counts each call against the
 session that made it and stores GitHub's own count beside it, and `gh-quota status` reports
 both. The same ledger later refuses a session that has spent its ceiling, holds a reserve for
 the lander and the operator, paces the identity's writes, and answers an identical read from
@@ -82,7 +82,7 @@ set from measured spend.
   optional, so neither repo breaks without the other, but a slice that touches `ghread`
   needs a pull request in each.
 - **The ledger fails open.** A ledger that cannot be written lets the call through and counts
-  the failure, so a full tmpfs or a corrupt file costs attribution, never GitHub access. A
+  the failure, so a full disk or a corrupt file costs attribution, never GitHub access. A
   silent stretch of failures therefore reads as low spend, and `gh-quota status` prints the
   failure count for that reason.
 - **Call counts are not GraphQL points.** The ledger counts calls, and one GraphQL call can

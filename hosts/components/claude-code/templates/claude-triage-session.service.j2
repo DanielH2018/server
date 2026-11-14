@@ -2,30 +2,48 @@
 # Shipped by the claude-code host component. claude-triage@<episode>.service starts it and waits
 # for it; nothing enables it, and reconcile never restarts it (`policy: manual`).
 [Unit]
-Description=Unattended triage session for the episode claude-triage@ prepared, as the agent user
+Description=Unattended triage session for the episode claude-triage@ prepared, as the session user
 
 [Service]
 Type=oneshot
-# The agent user, never {{ sys_user }}: the episode text is untrusted, and this user has no
-# sudo, no age key, read-only kubectl and no read on /home. docs/claude-agent-user.md,
-# "Alert-triggered triage", has the design.
-User={{ pins.agent_user }}
-WorkingDirectory={{ pins.agent_home }}/server
-Environment=HOME={{ pins.agent_home }}
+# The session user (dotfiles#967's I1): the episode text is untrusted, and this user holds no
+# GitHub token, no start right, no sudo and no read on /home. It reads the controller's clone and
+# toolchain through its group and writes only its home and the exchange's out/.
+# docs/claude-agent-user.md, "Alert-triggered triage", has the design.
+User={{ pins.session_user }}
+WorkingDirectory={{ pins.clone_dir }}
+Environment=HOME={{ pins.session_home }}
+# systemd sets SHELL from the passwd entry, which is nologin for this user; the Bash tool needs a
+# real shell.
+Environment=SHELL=/bin/bash
 # systemd's PATH is as minimal as cron's: without /usr/local/bin the session loses kubectl and
 # reports an empty cluster rather than failing.
-Environment=PATH={{ pins.agent_home }}/.local/bin:/usr/local/bin:/usr/bin:/bin
-Environment=KUBECONFIG={{ pins.agent_home }}/.kube/config
+Environment=PATH={{ pins.tools_dir }}/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=KUBECONFIG={{ pins.kubeconfig }}
+# The clone belongs to the controller, so git would refuse it as dubious ownership. The unit
+# names it safe here, where the session has no file to edit.
+Environment=GIT_CONFIG_COUNT=1
+Environment=GIT_CONFIG_KEY_0=safe.directory
+Environment=GIT_CONFIG_VALUE_0={{ pins.clone_dir }}
 # The repo's hook shim resolves the clone and uv from these. A guard that cannot start turns
-# every Bash call into an ask, and nobody answers one here.
-Environment=RUN_HOOK_PROJECT_DIR={{ pins.agent_home }}/server
-Environment=RUN_HOOK_UV={{ pins.agent_home }}/.local/bin/uv
+# every Bash call into an ask, and nobody answers one here. The controller syncs the clone's venv
+# before each run, so a hook never tries to write it.
+Environment=RUN_HOOK_PROJECT_DIR={{ pins.clone_dir }}
+Environment=RUN_HOOK_UV={{ pins.tools_dir }}/.local/bin/uv
+Environment=UV_NO_SYNC=1
+Environment=UV_PYTHON_INSTALL_DIR={{ pins.tools_dir }}/python
+Environment=UV_CACHE_DIR={{ pins.session_home }}/.cache/uv
+# The guard hooks, the dotfiles' and the repo's, find their packages here, not under this user's
+# home.
+Environment=CLAUDE_GUARD_HOME={{ pins.tools_dir }}/.local/share/claude-guard
+Environment=CLAUDE_WORKTREE_HOME={{ pins.tools_dir }}/.local/share/claude-worktree
+# The controller owns the binary; the session cannot update it.
+Environment=DISABLE_AUTOUPDATER=1
 Environment=PYTHONDONTWRITEBYTECODE=1
 # The Claude credential from `claude setup-token`, read by systemd as root (0600) into
 # $CREDENTIALS_DIRECTORY, so it is in no unit line `systemctl show` publishes. A credential rather
 # than an EnvironmentFile=, because a token pasted across a line wrap would end at the newline
-# there; the session script joins the whole file. It is this unit's own token: the interactive
-# login claude-rc.service uses can lapse while idle (#4618).
+# there; the session script joins the whole file.
 LoadCredential=claude_oauth_token:/etc/claude-triage/oauth-token
 SyslogLevel=notice
 # The session's wall clock. SIGINT ends its turn cleanly; SIGTERM exits 143 with the turn
@@ -33,11 +51,11 @@ SyslogLevel=notice
 KillSignal=SIGINT
 TimeoutStartSec={{ pins.run_timeout_s }}
 NoNewPrivileges=yes
-# DECIDED: UMask=0027, as claude-rc.service.j2 sets it. The result lands in the triage state
-# directory, which gives the operator's group traverse.
+# DECIDED: UMask=0027, so the result the session writes is readable by the controller through
+# the session's group and by nobody else.
 UMask=0027
 ProtectHome=yes
 ProtectProc=invisible
 PrivateTmp=yes
-ExecStart={{ pins.agent_home }}/.local/bin/uv run --no-project --no-python-downloads \
+ExecStart={{ pins.tools_dir }}/.local/bin/uv run --no-project --no-python-downloads \
   --python {{ host_python_version }} /opt/claude-triage/claude_triage_session.py

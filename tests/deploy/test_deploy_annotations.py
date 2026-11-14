@@ -37,7 +37,7 @@ _EMITTERS = (_PROMOTE,)
 _SOAK = _REPO / "scripts/renderer/job_files/flux_soak.py"
 
 
-def test_the_query_matches_what_the_deployers_actually_log():
+def test_the_query_matches_what_the_emitters_actually_log():
     """The join that nothing else can check.
 
     The emitters and the annotation query are edited independently, in different languages. If

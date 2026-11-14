@@ -31,16 +31,24 @@ a reader runs that older reader against the merge commit. On 2026-11-09 such a r
 landing has loaded from its checkout, and every module those import, function bodies included.
 With `--arm-merge --await-merge`, the landing first compares them with `origin/master` before
 it merges anything (#7830), and ends `refused` with nothing merged. After resolving the merge
-commit, step 1 compares them with the merge commit's first parent. It ends `refused` when master
-changed one the checkout lacks.
-`land_lib/classify.py:refuse_stale_code` has the rule.
+commit, step 1 compares them with the merge commit's first parent.
 
-**Both refusals name `--fresh` as the re-run** (#7933). With `--fresh`, `land.sh` fetches
-`origin/master` in the primary and adds a detached worktree of it under `/tmp`. It runs that
-checkout's `land.sh` with the same arguments, then removes the worktree. A checkout made by
-hand went stale again within minutes when master moved, and the `git -C <primary> worktree
-add` that made it is a command a worktree-isolated session's guard refuses. The landing
-still refuses rather than re-running on its own, so `land.sh` keeps running the release it
+**After the merge, a stale checkout hands the grading to a fresh one without asking** (#8679).
+Step 1 then runs `land.sh --pr <n> --since <pre-merge>` from a fresh checkout of
+`origin/master`. That landing prints the `VERDICT:` line and records the verdict, and the
+stale landing records nothing. On 2026-11-14 three of one session's four landings ended
+`refused` here with the PR merged, and each `--fresh` re-run waited on master CI a second time.
+The caller's answer to that refusal was always the same command, so the landing runs it.
+`land_lib/classify.py:refuse_stale_code` has the rule. It still ends `refused` under a lander
+unit, and when git could not make the comparison.
+
+**The refusal before the merge names `--fresh` as the re-run** (#7933). With `--fresh`,
+`land.sh` fetches `origin/master` in the primary and adds a detached worktree of it under
+`/tmp`. It runs that checkout's `land.sh` with the same arguments, then removes the worktree.
+The post-merge hand-off uses the same mechanics. A checkout made by hand went stale again
+within minutes when master moved, and the `git -C <primary> worktree add` that made it is a
+command a worktree-isolated session's guard refuses. Before the merge the landing still
+refuses rather than re-running on its own, so a landing merges only from the release it
 ships with unless the caller asks. With `--detach`, the fork runs the fresh checkout, so the
 checkout lives until the landing ends. `land_lib/fresh.py` has the mechanics. A lander
 unit's caller cannot pass `--fresh`, because the unit runs a fixed command line. Under a unit,
@@ -214,6 +222,17 @@ jobs. `LAND_QUEUE=0` turns the turn off for one landing.
   a push, and the run it starts tests the master of the turn.
 - A landing that stood in line reads its PR again before it acts, because the PR may have
   moved or merged in the meantime.
+- A landing that waits with a draft that has had no CI run stands in the line for the turn:
+  a file named for its PR in `/run/lock/homelab-land-line` on daniel-box, holding the head
+  it would test (`land_lib/line.py`). The holder of the turn reads the line to test those
+  drafts with its own, which is slice B3 of [CI throughput](ci-throughput.md). A landing
+  whose place reads `merged` stops waiting, because the holder merged its PR. The line is
+  no gate: a landing that cannot reach it waits for the turn without it.
+- With `LAND_BATCH=1`, a landing that takes the turn with a draft tests the drafts in the
+  line with its own in one CI run and merges them behind its own PR (`land_lib/batch.py`).
+  Its log names each PR it stacks, each one it leaves out with the reason, and each merge.
+  A landing whose PR another landing merged this way prints `the landing that holds the
+  turn merged PR #N with its own` and goes on to the deploy.
 - A head with a run that ran jobs keeps it, finished or not, and the stale-base rules above
   judge it once it is green. An update those rules make then runs inside the turn. A head the landing policy admitted on an approval is never
   updated, because the update voids the approval. An update that GitHub refuses does not
