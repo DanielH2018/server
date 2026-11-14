@@ -1,6 +1,6 @@
 """Guards and writes for the deploy UI. A guard returns None to allow, else the refusal text.
 
-A landing refuses itself under `DEPLOY_HOLD`, so no guard here reads the hold.
+`land.sh` meets `DEPLOY_HOLD` on its own, so no guard here reads the hold.
 """
 
 import os

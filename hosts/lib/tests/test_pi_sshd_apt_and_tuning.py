@@ -204,6 +204,7 @@ def test_ufw_and_login_defs_edits_keep_the_anchors_of_the_tasks_they_replace(pac
 
 
 def test_journald_and_limits_ship_as_drop_ins(package):
+    # fact: hosts/components/deploy-ui/CLAUDE.md#Usage count
     journald = _text(package, "/etc/systemd/journald.conf.d/50-homelab.conf")
     assert "SystemMaxUse=1G\nMaxLevelStore=notice\nMaxLevelSyslog=info\n" in journald
     assert (

@@ -120,12 +120,14 @@ def test_page_offers_land_and_no_deploy_control_is_clean(app):
 
 
 def test_page_links_pr_numbers_to_github_is_clean(app):
+    # fact: hosts/components/deploy-ui/CLAUDE.md#In flight
     _, html = app.get("/")
     assert "const REPO='https://github.com/DanielH2018/server'" in html
     assert "r.pr?prLink(r.pr)" in html and "<td>${prLink(p.number)}</td>" in html
 
 
 def test_inflight_landing_carries_its_pr_title_once_fetched_is_clean(app):
+    # fact: hosts/components/deploy-ui/CLAUDE.md#In flight
     app.run.table[("gh", "pr", "view", "1543")] = ("Fix the thing\n", 0)
     app.get("/api/inflight")
     rows = {r["pid"]: r for r in body(app.get("/api/inflight"))["runs"]}
@@ -134,6 +136,7 @@ def test_inflight_landing_carries_its_pr_title_once_fetched_is_clean(app):
 
 
 def test_inflight_title_lookup_failure_leaves_panel_up_is_flagged(app):
+    # fact: hosts/components/deploy-ui/CLAUDE.md#In flight
     app.run.table[("gh", "pr", "view")] = ("", 1)
     b = body(app.get("/api/inflight"))
     assert "unavailable" not in b
@@ -172,6 +175,7 @@ def test_stale_route_is_gone_and_runs_nothing_is_flagged(app):
 
 
 def test_inflight_lists_the_tree_lock_holder_and_waiter_is_clean(app):
+    # fact: hosts/components/deploy-ui/CLAUDE.md#In flight
     b = body(app.get("/api/inflight"))
     rows = {r["pid"]: r for r in b["runs"]}
     assert set(rows) == {4321, 5000}
@@ -194,6 +198,7 @@ def test_inflight_ignores_other_lock_files_in_the_tree_locks_directory_is_flagge
     tmp_path, lock_dir, monkeypatch
 ):
     """A stale unit may still export DEPLOY_UI_LOCKS; nothing reads it."""
+    # fact: hosts/components/deploy-ui/CLAUDE.md#In flight
     (lock_dir / "server-deploy-x.lock").touch()
     monkeypatch.setenv("DEPLOY_UI_TREE_LOCK", str(lock_dir / TREE_LOCK_NAME))
     monkeypatch.setenv("DEPLOY_UI_LOCKS", str(lock_dir))
@@ -209,6 +214,7 @@ def test_inflight_ignores_other_lock_files_in_the_tree_locks_directory_is_flagge
 
 def test_inflight_with_no_lock_files_says_so_is_flagged(tmp_path):
     """`free` over no files is the empty-panel trap; the page needs the count to tell."""
+    # fact: hosts/components/deploy-ui/CLAUDE.md#In flight
     empty = tmp_path / "nolocks"
     empty.mkdir()
     (tmp_path / "proc_locks").write_text("")
@@ -279,6 +285,7 @@ def test_post_non_dict_body_is_flagged(app):
 
 
 def test_land_spawns_land_sh_is_clean(app, monkeypatch, tmp_path):
+    # fact: hosts/components/deploy-ui/CLAUDE.md#Writes
     spawned = {}
     monkeypatch.setattr(
         deploy_ui.writes,
@@ -310,6 +317,7 @@ def test_land_duplicate_is_refused_is_flagged(app):
 
 def test_cancel_lock_row_is_flagged(app):
     """A lock row is listed in flight but is not cancellable: only a landing is."""
+    # fact: hosts/components/deploy-ui/CLAUDE.md#In flight
     status, text = app.post("/api/cancel", HDRS, json.dumps({"pid": 5000}))
     assert status == 409 and "5000" in text
 
@@ -361,6 +369,7 @@ def test_request_line_names_a_page_load_and_its_user_is_clean():
 def test_request_line_drops_the_query_and_neuters_a_hostile_user_is_flagged():
     """A log path in the query and a header carrying spaces must not reach journald raw:
     either would split the logfmt line the usage count parses."""
+    # fact: hosts/components/deploy-ui/CLAUDE.md#Usage count
     line = deploy_ui.request_line(
         "GET", "/api/log?path=/x/y z", 200, 'a b="c"\nrequest method=POST'
     )
@@ -371,6 +380,7 @@ def test_request_line_drops_the_query_and_neuters_a_hostile_user_is_flagged():
 
 def test_request_line_quotes_a_path_logfmt_would_split_is_flagged():
     """The line is host_lib's logfmt (#6202): a path with a space stays one `path` value."""
+    # fact: hosts/components/deploy-ui/CLAUDE.md#Usage count
     assert deploy_ui.request_line("GET", "/a b", 404, "u") == (
         'request method=GET path="/a b" status=404 user=u'
     )
@@ -390,6 +400,7 @@ def test_client_closing_mid_response_logs_one_line_no_traceback_is_flagged(
 ):
     """A disconnect raised out of the handler, and socketserver printed its traceback,
     which HostLogErrors counts (#7921)."""
+    # fact: hosts/components/deploy-ui/CLAUDE.md#Usage count
     handler = object.__new__(deploy_ui.make_handler(app))
     handler.rfile = io.BytesIO(b"GET / HTTP/1.1\r\nRemote-User: daniel\r\n\r\n")
     handler.wfile = _ClosedSocket(error())

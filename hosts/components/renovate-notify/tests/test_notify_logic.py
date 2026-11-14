@@ -174,6 +174,7 @@ def test_fingerprint_manual_pr_never_gets_age_suffix():
 
 
 def test_should_notify_repages_when_stuck_pr_crosses_age_threshold():
+    # fact: hosts/components/renovate-notify/CLAUDE.md#Notification is fingerprint-gated, not state-gated
     # The escalation this closes: a stuck PR's fingerprint at day 1 differs from its fingerprint
     # at day 3, so should_notify fires again instead of staying silent forever after the day-1 page.
     day1 = nl.fingerprint(
@@ -189,6 +190,7 @@ def test_should_notify_repages_when_stuck_pr_crosses_age_threshold():
 
 
 def test_should_notify_unchanged_is_silent():
+    # fact: hosts/components/renovate-notify/CLAUDE.md#Notification is fingerprint-gated, not state-gated
     assert nl.should_notify("#8:stuck", "#8:stuck") == (False, "none")
 
 
@@ -197,6 +199,7 @@ def test_should_notify_new_backlog_is_digest():
 
 
 def test_should_notify_changed_backlog_is_digest():
+    # fact: hosts/components/renovate-notify/CLAUDE.md#Notification is fingerprint-gated, not state-gated
     assert nl.should_notify("#8:stuck", "#8:stuck,#9:manual") == (True, "digest")
 
 
