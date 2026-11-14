@@ -17,6 +17,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 import pytest
+from _template_scan import scan_template
 
 from lib.repo_paths import SHARED_TPL
 from renderer.renderer_lib.cluster import RenderedTag
@@ -39,7 +40,6 @@ from renderer.renderer_lib.secret_checks import (
     output_violations,
     rule5,
     rule5_members,
-    scan_template,
 )
 
 SENTINEL = "r2-sentinel"

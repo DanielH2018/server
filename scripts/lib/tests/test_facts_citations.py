@@ -6,7 +6,6 @@ from lib.git_testing import git, init_repo
 from lib.facts.citations import (
     FORMS,
     HISTORY_MARKER,
-    REJECT_REASONS,
     Citation,
     Rejected,
     Section,
@@ -124,7 +123,6 @@ def test_fenced_code_is_skipped():
 
 def test_form_census():
     assert FORMS == frozenset({"path", "symbol", "yaml", "test", "marker"})
-    assert REJECT_REASONS == frozenset({"file:line"})
 
 
 @pytest.mark.parametrize(
