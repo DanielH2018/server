@@ -1,8 +1,10 @@
 # nut — NUT primary (upsd + driver + upsmon), in-cluster
 
-Successor to the Docker `nut` sidecar (D6 reversed 2026-08-14 so Docker could leave
-daniel-server entirely). Pinned to daniel-server — the APC UPS is USB-attached there;
-the pin is physical and never unwinds.
+**HISTORY —** Successor to the Docker `nut` sidecar (D6 reversed 2026-08-14 so Docker could leave
+daniel-server entirely).
+
+Pinned to daniel-server — the APC UPS is USB-attached there;
+the pin is physical and never unwinds (`k8s/roles/nut/templates/deployment.yaml.j2`).
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in k8s/roles/longhorn-reconcile/defaults/main.yml. -->

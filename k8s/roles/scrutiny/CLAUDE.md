@@ -1,7 +1,9 @@
 # scrutiny — SMART disk monitoring
 
 Scrutiny's web UI plus a collector DaemonSet and an InfluxDB backend that holds the
-SMART trend history. See repo-root `CLAUDE.md` for shared conventions.
+SMART trend history (`k8s/roles/scrutiny/templates/web.yaml.j2`,
+`k8s/roles/scrutiny/templates/collector-daemonset.yaml.j2`,
+`k8s/roles/scrutiny/templates/influxdb.yaml.j2`). See repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in k8s/roles/longhorn-reconcile/defaults/main.yml. -->
