@@ -20,7 +20,7 @@
   (the census's name row), and a Secret here would make `sonarr-verify` substitute, which
   needs `substituteFrom` and the `cluster-vars` edge for a value `sonarr` already applies.
   `sonarr-verify` starts only once `sonarr` is applied and Ready, so the Secret exists.
-  ansible/roles/k8s/sonarr/tests/test_sonarr_verify.py fails if that Secret or key goes away.
+  k8s/roles/sonarr/tests/test_sonarr_verify.py fails if that Secret or key goes away.
 #}
 {% set script_name = 'sonarr_verify.py' %}
 {% set script_dir = '/verify' %}

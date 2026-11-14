@@ -49,7 +49,7 @@ spec:
           env:
 {{ lsio_env() }}
             # Prowlarr:Log, reached through the unprefixed environment-variable provider.
-            # Upstream defaults are debug / 50 files; see roles/k8s/sonarr/defaults/main.yml.
+            # Upstream defaults are debug / 50 files; see k8s/roles/sonarr/defaults/main.yml.
             - name: PROWLARR__LOG__LEVEL
               value: "{{ prowlarr_k8s_log_level }}"
             - name: PROWLARR__LOG__ROTATE

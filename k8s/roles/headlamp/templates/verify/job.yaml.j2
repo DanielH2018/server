@@ -27,7 +27,7 @@
       control would be refused and the Job would fail closed;
     - headlamp:<port>. `networkpolicy.yaml.j2` must REFUSE this pod, so no peer is added to
       headlamp's `netpol_from`: admitting `headlamp-verify` would open the hole the Job
-      proves closed. ansible/roles/k8s/headlamp/tests/test_headlamp_verify.py fails if that
+      proves closed. k8s/roles/headlamp/tests/test_headlamp_verify.py fails if that
       fence admits the label.
 #}
 {% set script_name = 'headlamp_verify.py' %}

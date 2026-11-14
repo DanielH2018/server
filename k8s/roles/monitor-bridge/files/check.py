@@ -15,8 +15,8 @@ A name the suite patches is read QUALIFIED from the module that binds it — `br
 — never from-imported, because a from-import copies the value in at import time and never sees
 the patch. Nothing here is a module table any more: the checks arrive as the `checks` argument
 and the queries through `src`, so a test states them instead of patching them. Enforced by
-ansible/tests/services/test_bridge_patch_boundary.py; the census of what is patched where is
-ansible/tests/services/test_monitor_bridge_modules.py.
+tests/services/test_bridge_patch_boundary.py; the census of what is patched where is
+tests/services/test_monitor_bridge_modules.py.
 
 Design: docs/monitor-bridge-internals.md.
 
