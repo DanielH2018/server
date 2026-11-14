@@ -2,12 +2,12 @@
 
 Two callers that cannot share anything else share this. probe.py and postflight.py run on a
 host and reach both stores through the VIP-pinned edge with curl (`core.fetch`,
-`core.get_status`). homelab-mcp runs in a pod built from `python:3.14-slim`, which ships no
+`core.get_status`). homelab-mcp runs in a pod built from `python:3.15-slim`, which ships no
 curl, and reaches both stores by their in-cluster Service names. Before this module each
 built its own query strings and its own Loki window.
 
 STDLIB ONLY, AND NO FIRST-PARTY IMPORT. homelab-mcp's image carries this file flat at
-`/app/obs_api.py` (`ansible/roles/k8s/homelab-mcp/defaults/main.yml`), where neither `scripts/`
+`/app/obs_api.py` (`k8s/roles/homelab-mcp/defaults/main.yml`), where neither `scripts/`
 nor any `sys.path` bootstrap exists. A first-party import here breaks that pod at import time,
 which no host-side test notices. `test_obs_api.py` imports this file with `scripts/` off
 `sys.path` to catch exactly that.

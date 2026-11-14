@@ -32,9 +32,17 @@ To confirm the two stores match, run this on daniel-box. It prints nothing when 
 
 ```bash
 rsync -ani --delete \
-  /var/lib/claude/.claude/projects/-var-lib-claude-server/memory/ \
-  daniel-server:.claude/projects/-home-ubuntu-server/memory/
+  /home/ubuntu/.claude/projects/-home-ubuntu-server/memory/ \
+  daniel-server:/home/ubuntu/.claude/projects/-home-ubuntu-server/memory/
 ```
+
+The source path is `claude_code_memory_sync_dir`, which follows `claude_code_user`.
+daniel-box's host_vars set `claude_code_user: ubuntu`, so the source is the store under `/home/ubuntu`. When
+`claude_code_user` names the agent, the source becomes
+`/var/lib/claude/.claude/projects/-var-lib-claude-server/memory/`. The target path is
+`claude_code_memory_sync_target_dir`, the operator's store, whichever user is set. To read
+both paths as the installed unit has them, run
+`systemctl cat homelab-claude-memory-sync.service`; its `ExecStart` names source, then target.
 
 To see what the last runs changed, run `journalctl -u homelab-claude-memory-sync -n 50`.
 

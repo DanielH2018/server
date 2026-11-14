@@ -256,12 +256,12 @@ class _FakeHost:
             f"main() reached a process this test does not answer: {argv}"
         )
 
-    def discord_post(self, webhook, text, ua, log=None, spool_dir=None):
+    def discord_post(self, webhook, text, _ua, log=None, spool_dir=None):
         self.posts.append(text)
         self.spools.add(spool_dir)
         return True
 
-    def flush_discord_spool(self, spool_dir, webhook, ua, log=None):
+    def flush_discord_spool(self, spool_dir, webhook, _ua, log=None):
         self.flushed.append(spool_dir)
         return True
 

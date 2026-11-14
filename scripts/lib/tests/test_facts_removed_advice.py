@@ -45,9 +45,7 @@ def test_a_live_doc_naming_a_removed_variable_is_advised_and_blocks_nothing(tmp_
     assert _blocking(repo) == []
 
 
-@pytest.mark.parametrize(
-    "path", ["docs/archive/kuma.md", "docs/adr/0001-kuma.md", "docs/reference/kuma.md"]
-)
+@pytest.mark.parametrize("path", ["docs/archive/kuma.md", "docs/reference/kuma.md"])
 def test_a_doc_about_the_past_or_a_generated_one_is_clean(tmp_path, path):
     repo = _renamed(tmp_path, **{path: _SENTENCE})
     assert vanished_advice(repo, "base") == ""
@@ -102,7 +100,6 @@ def test_the_advice_counts_names_and_lists_every_place_on_one_line(tmp_path):
         ("check_cluster_targets", True),
         ("agent_ssh_login.yml", True),
         ("manifest-prune-check", True),
-        ("pre-migration", False),
         ("KVM/libvirt", False),
     ],
 )

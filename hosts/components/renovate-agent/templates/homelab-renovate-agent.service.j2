@@ -10,13 +10,15 @@ OnFailure=homelab-alert@%n.service
 Type=oneshot
 # Its own user, not {{ sys_user }}: the session reads third-party release notes and PR text, so
 # it holds nothing that can reach master. No sudo, no read on /home/{{ sys_user }}, and a GitHub
-# token that cannot push or merge. Landing is renovate-agent-land@<n>.service, which polkit
-# lets this user start and which runs land.sh as {{ sys_user }} on a PR it re-checks itself.
+# token that cannot push or merge. The session nominates PRs; after it ends, the runner starts
+# renovate-agent-land@<n>.service for each, which runs land.sh as {{ sys_user }} on a PR it
+# re-checks itself.
 User={{ renovate_agent_user }}
 # `-`: on a rebuilt host the clone does not exist until the setup line below has run.
 WorkingDirectory=-{{ renovate_agent_clone_dir }}
-# The wrapper's own RUN_TIMEOUT_S ({{ pins.run_timeout_s }}s) should always trip
-# first: it kills the session and still posts a digest naming the timeout, where this ceiling
+# The runner's own RUN_TIMEOUT_S ({{ pins.run_timeout_s }}s), its deadline for the session and the
+# landings after it, should always trip first: the runner stops waiting and still posts a
+# digest naming why, where this ceiling
 # kills the whole cgroup and posts only the OnFailure alert. Keep this strictly above
 # RUN_TIMEOUT_S plus the two `gh pr list` censuses either side of it. A landing in flight runs
 # in the lander's own unit, so this kill no longer reaches an Ansible run.
@@ -31,11 +33,6 @@ Environment=PYTHONDONTWRITEBYTECODE=1
 # run_worktree.prepare_worktree syncs this tree's `.venv` before the session starts.
 Environment=RUN_HOOK_PROJECT_DIR={{ renovate_agent_clone_dir }}/.claude/worktrees/{{ renovate_agent_worktree }}
 Environment=RUN_HOOK_UV={{ renovate_agent_home }}/.local/bin/uv
-# A landing blocks in `systemctl start` for up to the lander's 1071-minute TimeoutStartSec, and
-# Claude Code caps a Bash call at 10 minutes unless this raises it. A call killed early leaves
-# the landing running, but the session would then read a verdict file the lander has not yet
-# rewritten (it writes PENDING only once it holds its lock).
-Environment=BASH_MAX_TIMEOUT_MS={{ pins.bash_timeout_ms }}
 # The GitHub token and the Claude credential. Read by systemd as root, so the file is root 0600
 # and neither value appears in a unit line `systemctl show` publishes.
 EnvironmentFile=/etc/renovate-agent/session.env

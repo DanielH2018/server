@@ -175,7 +175,7 @@ PINNED = (
     "budget_usd",
     "run_timeout_s",
     "unit_timeout",
-    "bash_timeout_ms",
+    "session_timeout_s",
 )
 
 
@@ -202,14 +202,13 @@ def test_the_config_unit_and_prompt_quote_the_pins(unit: str) -> None:
         ("PERMISSION_MODE", "permission_mode"),
         ("BUDGET_USD", "budget_usd"),
         ("RUN_TIMEOUT_S", "run_timeout_s"),
+        ("SESSION_TIMEOUT_S", "session_timeout_s"),
+        ("MAX_PRS", "max_prs"),
     ):
         assert f"{key}={pinned[name]}\n" in config, key
     assert directive(unit, "TimeoutStartSec") == [pinned["unit_timeout"]]
-    assert f"BASH_MAX_TIMEOUT_MS={pinned['bash_timeout_ms']}" in directive(
-        unit, "Environment"
-    )
     prompt = render(PROMPT)
-    for name in ("max_prs", "run_timeout_s", "budget_usd", "bash_timeout_ms"):
+    for name in ("max_prs", "session_timeout_s", "budget_usd"):
         assert str(pinned[name]) in prompt, name
 
 
@@ -224,7 +223,7 @@ def test_an_inventory_value_moves_no_cap(template: str) -> None:
         "renovate_agent_budget_usd": 9731,
         "renovate_agent_run_timeout_s": 973100,
         "renovate_agent_unit_timeout": "9731min",
-        "renovate_agent_bash_timeout_ms": 97310000,
+        "renovate_agent_session_timeout_s": 97310,
     }
     assert render(template, moved) == render(template)
 

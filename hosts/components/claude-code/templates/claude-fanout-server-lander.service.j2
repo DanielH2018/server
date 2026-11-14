@@ -26,7 +26,7 @@ Environment=PATH=/home/{{ sys_user }}/.local/bin:/usr/local/bin:/usr/bin:/bin
 Environment=KUBECONFIG=/home/{{ sys_user }}/.kube/config
 Environment=PYTHONDONTWRITEBYTECODE=1
 # land.sh's own policy, behind the command's checks (scripts/deploy_tools/land_lib/policy.py).
-# With the prefix set it also refuses while the deployer holds a SHA, and pins the merge to the
+# Its pin gate refuses while `DEPLOY_HOLD` holds, and with the prefix set it pins the merge to the
 # head it checked, so a push after the checks fails the merge instead of landing unchecked.
 Environment=LAND_REQUIRE_BRANCH_PREFIX={{ claude_code_fanout_server_lander_branch_prefix }}
 Environment=LAND_REQUIRE_AUTHOR={{ claude_code_fanout_server_lander_author }}

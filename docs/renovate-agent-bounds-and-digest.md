@@ -29,7 +29,7 @@ ENFORCED:
 `renovate-agent-land@<n>.service` lands one Renovate PR for the agent. It runs
 `files/land_renovate_pr.py` as the operator's user, because `land.sh` deploys. The agent's own
 user, `renovate_agent_user`, may start it through `templates/50-renovate-agent-land.rules.j2`
-and do nothing else with privilege. The session then reads
+and do nothing else with privilege. The runner starts it, never the session, and then reads
 `/var/lib/renovate-agent-land/<n>.verdict`.
 
 The lander re-reads the PR from GitHub with the operator's token and lands it only when every
@@ -64,15 +64,31 @@ head that moved and, when asked, a head the operator has not approved. The test
 `hosts/components/renovate-agent/tests/test_renovate_floor.py` fails when a new top-level entry
 is neither on the floor nor listed with a reason.
 
-The session starts the lander with a plain `systemctl start`, which blocks until the landing
-ends. The unit raises Claude Code's 10-minute Bash cap to `renovate_agent_bash_timeout_ms`
-through `BASH_MAX_TIMEOUT_MS`, so the call outlasts the 1071-minute `TimeoutStartSec` of the lander unit. A
-call cut short leaves the landing running, so the prompt waits on the unit's `ActiveState`
-before it reads the file. The unit's `ExecStartPre` replaces the last run's line with a `VERDICT:
-none` line before the lock wait, and the script writes `PENDING` once it holds the lock. A unit
-that systemd stops mid-landing, by `TimeoutStartSec` or a kill, leaves `PENDING` behind. The
-prompt therefore also reads the unit's `Result`: only `success` and `exit-code` mean the script
-wrote its outcome, and anything else is no verdict (#5205).
+**The session nominates and the runner lands** (#967's I9, guardrails plan B2r). The session
+writes a `land` request for each PR it would land, and lands nothing itself. After the session
+ends and the other requests are carried out, `files/run_requests.py` starts the lander for each
+nomination in file order, one at a time, with a plain `systemctl start` that blocks until the
+landing ends. It goes on after `VERDICT: settled`, `VERDICT: nothing-to-deploy` or a pre-merge
+`REFUSED:` from the lander, and starts no further landing after anything else. It lands at most
+`renovate_agent_max_prs`, skips a PR the run closed, and starts nothing once
+`renovate_agent_run_timeout_s`, the deadline for the session and the landings together, has
+passed. A wait cut short by that deadline leaves the landing running in its own unit. The
+digest names each nomination the runner did not land, with why. Session and runner share a uid
+until B2r's second half splits them, so polkit still lets the session start the lander; the
+prompt no longer tells it to.
+
+This runner and triage's `claude_triage_run.py` stay separate modules (decided 2026-11-14).
+They share only the call that starts a session, and even that differs: the flags, how each
+hands the session its token, and how each reads the output. B2r's second half replaces that call
+with a session unit the controller starts, so a module shared now would hold one
+`subprocess.run` that the next change deletes. The shared session start belongs to B2r's
+second half and to B2.
+
+The lander unit's `ExecStartPre` replaces the last run's line with a `VERDICT: none` line before
+the lock wait, and the script writes `PENDING` once it holds the lock. A unit that systemd stops
+mid-landing, by `TimeoutStartSec` or a kill, leaves `PENDING` behind. The runner therefore reads
+the unit's `Result` first: only `success` and `exit-code` mean the script wrote its outcome, and
+anything else is no verdict (#5205).
 
 ## The session's own identity
 
@@ -120,7 +136,7 @@ The session reads third-party text: release notes, changelogs and PR bodies. It 
 - **The run lock moved into the agent's home.** `fs.protected_regular=2` refuses an `O_CREAT`
   open of another user's file in sticky `/run/lock`, and the old lock there belongs to the
   operator.
-- **Deployer holds.** The wrapper reads no hold. `land.sh`, run by the lander as the operator,
+- **Deploy holds.** The wrapper reads no hold. `land.sh`, run by the lander as the operator,
   refuses a landing under `DEPLOY_HOLD`.
 
 ENFORCED: `hosts/tests/test_renovate_agent_identity.py`, which also runs the prompt's
@@ -137,7 +153,7 @@ ENFORCED: `hosts/tests/test_renovate_agent_identity.py`, which also runs the pro
 4. Set `renovate_agent_enabled: true` in `inventory/host_vars/daniel-box.yml`, and let the next
    package version arm the timer.
 5. Start one run by hand and watch it. Auto mode's classifier decides whether the session may
-   run `systemctl start` on a system unit, and nothing short of a real run tests that.
+   write its request files, and nothing short of a real run tests that.
 
 ## Exercising the wrapper without arming anything
 
@@ -181,7 +197,7 @@ budget only catches a loop. A landing in flight runs in the lander unit, so a se
 killed at either limit leaves that landing to finish, but the digest then cannot report it.
 
 **The session never runs in the primary checkout.** One untracked file in `/home/<user>/server`
-parks the GitOps deployer silently, and a session that edits, renders and tests is guaranteed to
+parks `homelab-checkout-sync` silently, and a session that edits, renders and tests is guaranteed to
 leave some. Each tick recreates `.claude/worktrees/renovate-auto` at `origin/master` inside the
 agent's own clone and runs there. The lander runs `land.sh` in the primary checkout as the
 operator.

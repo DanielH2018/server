@@ -52,8 +52,10 @@ k3s_longhorn_global_manager_replicas: 2
 # `system-managed-csi-components-resource-limits` Setting (templates/settings.yaml.j2).
 # longhorn-driver-deployer creates the Deployments at runtime with `resources: {}`, which gives
 # BestEffort QoS and oom_score_adj 1000, the same exposure as the manager above. Measured at the
-# OOM kill: a csi-* sidecar held 97 MB anon-rss. The request is roughly double that, for the same
-# reasons as the manager's.
+# OOM kill: a csi-* sidecar held 97 MB anon-rss. Over the 7 days to 2026-11-14 the four ran a p95
+# working set of 39-63Mi and a maximum of 65Mi, across 12 pods. The request covers the OOM-kill
+# reading rather than the p95, and changing it rolls the four Deployments once.
+# instance-manager runs with no memory request: Longhorn v1.13 has no setting for it (#8617).
 #
 # DECIDED: the Setting is the one writer. longhorn-manager's SettingController treats the Setting
 # as the source of truth for these four containers' `resources` and clears any field it does not
@@ -61,7 +63,45 @@ k3s_longhorn_global_manager_replicas: 2
 # Deployments, the manager cleared it, and each Deployment rolled about twice an hour. The driver
 # deployer also reads the Setting when it creates a Deployment, so a recreated one starts with
 # the request.
-k3s_longhorn_csi_sidecar_memory_request: 192Mi
+k3s_longhorn_csi_sidecar_memory_request: 96Mi
+
+# Memory REQUESTS only (no limit) for the longhorn-csi-plugin DaemonSet's three containers,
+# through the same Setting (#8326). The driver deployer creates the DaemonSet with no
+# `resources`, so its pods ran BestEffort. The first key is for the `longhorn-csi-plugin`
+# container, the second for `node-driver-registrar` and `longhorn-liveness-probe`. Each container
+# gets a request, because a container without one in a Burstable pod keeps an oom_score_adj near
+# 1000. Measured 2026-11-14, 30-day peak working set: 47Mi for the plugin, 24Mi for the
+# registrar and 28Mi for the liveness probe; each request is the peak rounded up to a power of
+# two.
+#
+# Changing either value rolls the plugin DaemonSet once. The roll is safe for RWX mounts: the
+# driver deployer gives the DaemonSet maxUnavailable 1, and with
+# `endpoint-network-for-rwx-volume` unset the plugin mounts each NFS share in the host's mount
+# namespace, so the share outlives the plugin pod (longhorn-manager v1.13.0,
+# csi/node_server.go:getMounter).
+k3s_longhorn_csi_plugin_memory_request: 64Mi
+k3s_longhorn_csi_node_sidecar_memory_request: 32Mi
+
+# Requests and limits for the containers upstream ships with no `resources`: longhorn-ui,
+# longhorn-driver-deployer and its wait-longhorn-manager init container, and the manager
+# DaemonSet's pre-pull-share-manager-image sidecar (#8326, #8543). Applied by
+# files/patches/longhorn-ui.yaml, longhorn-driver-deployer.yaml and
+# longhorn-manager-pre-pull.yaml; a test holds each patch equal to its key. Peak working set over
+# the 21.7 days Prometheus retained on 2026-11-14: 6.6Mi UI, 18.7Mi driver deployer, 0.9Mi wait,
+# 2.1Mi pre-pull; every peak CPU rate was under 1m. Each memory limit is at least 3x its peak,
+# because an OOMKill restarts the container just as an eviction would.
+k3s_longhorn_ui_resources:
+  requests: {cpu: 10m, memory: 16Mi}
+  limits: {cpu: 200m, memory: 64Mi}
+k3s_longhorn_driver_deployer_resources:
+  requests: {cpu: 10m, memory: 32Mi}
+  limits: {cpu: 200m, memory: 128Mi}
+k3s_longhorn_driver_deployer_wait_resources:
+  requests: {cpu: 10m, memory: 16Mi}
+  limits: {cpu: 100m, memory: 32Mi}
+k3s_longhorn_share_manager_pre_pull_resources:
+  requests: {cpu: 5m, memory: 8Mi}
+  limits: {cpu: 50m, memory: 32Mi}
 
 # The Longhorn Settings this role renders (templates/settings.yaml.j2), each under the name
 # it had in setup/k3s's defaults. Flux applies them, so a change here is a change to the live

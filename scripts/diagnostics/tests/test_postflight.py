@@ -50,8 +50,6 @@ def stub_host(monkeypatch):
     return resolved
 
 
-# Collection-time aliases: @parametrize is evaluated at import, before a test body runs.
-OK_, FAIL_ = postflight.OK, postflight.FAIL
 # The unstubbed resolver, taken before the autouse fixture replaces it.
 real_resolve_service_ip = postflight.health_docker.resolve_service_ip
 
@@ -77,10 +75,6 @@ def missing_secret(monkeypatch, name, err=""):
     monkeypatch.setattr(
         postflight, "secret", lambda n: ("", err) if n == name else ("x", "")
     )
-
-
-def targets_body(*targets):
-    return json.dumps({"data": {"activeTargets": list(targets)}})
 
 
 def target(job, health="up", last_error=""):

@@ -18,8 +18,8 @@ Three things can break it silently, so each gets an assertion:
 
 - A later rule that matches these pins and sets `timestamp-required` again. `_resolve_setting`
   walks the rules in order, so the resolved value, not the rule's own body, is asserted.
-- The key spreading past the k8s plane. Only there do the autodeploy denylist and the
-  deployer's health gate stand behind an update that skips its soak, so a pin outside it must
+- The key spreading past the k8s plane. Only there do the autodeploy denylist and
+  `land.sh`'s health gate stand behind an update that skips its soak, so a pin outside it must
   still resolve unset.
 - The key spreading past the `docker` datasource. A github-releases or pypi pin in a k8s role
   has a timestamp, but nothing here has decided its soak may lapse when one is missing.

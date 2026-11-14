@@ -494,7 +494,7 @@ Mint a new value in the provider, then `sops set` + redeploy the consumer:
 - `homelab_builder_github_token`: GitHub → Settings → Developer settings → Fine-grained
   tokens, owner DanielH2018, *Public repositories (read-only)*, no permissions. The
   host-package builder reads CI check runs with it, because its system user has no gh login
-  and an anonymous read shares one quota per source IP with the deployer's CI gate. A leaked
+  and an anonymous read shares one quota per source IP with `await_ci.py`'s CI wait. A leaked
   copy reads only public data.
 - `monitor_bridge_deploy_pipeline_github_token`: GitHub → Settings → Developer settings →
   Fine-grained tokens, named `homelab-deploy-pipeline-exporter`, owner DanielH2018, only the

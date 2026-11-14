@@ -20,7 +20,7 @@ ends, and prints the state on its last `WAIT:` line. Exit 1 does not say which o
 cancelled, so the line decides.
 
 NO VERDICT. A `cancelled` conclusion means GitHub stopped the run, not that the change is bad
-(`docs/landing.md`; `deploy_git._CI_NO_VERDICT_CONCLUSIONS` lists the conclusions). A cancelled
+(`docs/landing.md`; `ci_verdict._CI_NO_VERDICT_CONCLUSIONS` lists the conclusions). A cancelled
 run, a failed read and a slice that ended all read the same here: wait again after
 `CI_RECHECK_S`, until `CI_WAIT_S` is spent. A wait that spends it without a verdict ends the
 batch `needs input:` with the last `WAIT:` line. It never reads as a pass or as red.

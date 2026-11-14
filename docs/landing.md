@@ -140,6 +140,18 @@ the admin role and Renovate update master. Auto-merge applies no bypass (github/
 so a PR armed with `gh pr merge --auto` sits `BLOCKED` from any account. `land.sh` merges as
 the operator, whose admin role the bypass covers, and is the one merge path.
 
+Nothing on an armed PR names the hold. PR #8270 was armed at 00:42 UTC on 2026-11-13, 42
+minutes after the ruleset went live. At 01:22 it still read `mergeStateStatus: BLOCKED` with
+`autoMergeRequest: SQUASH` and every required check green. `land.sh --fresh` then
+merged it directly. The same `BLOCKED` shows on every open PR into master, armed or not.
+
+The ruleset's creation time is what separates a held arm from one that merges. The PR timelines
+show it (#8294). Before 00:00:45 UTC on 2026-11-13, an armed PR merged within minutes: #8078
+merged 4 minutes after its arm on 2026-11-12. After that time, #8271 waited 36 minutes and
+#8368 waited 6 hours, each until a session merged it. The master CI gate's `pull_request` rule carried
+`require_extra_approval_for_unattributed_changes: true` through both periods. Its history shows
+the flag set since at least 2026-10-11, so that flag is not the hold.
+
 `--arm-merge` refuses a `CHANGES_REQUESTED` PR before any merge call, because someone asked for
 it to change. `--await-merge` merges the PR through the REST merge endpoint on the first poll
 where `await_ci` reads its head green, pinned to that head SHA. The master CI gate still refuses
@@ -190,8 +202,15 @@ then tests the master the merge lands on, so master's own run proves the tree an
 jobs. [CI throughput](ci-throughput.md) has the measurements and the plan this is slice B2 of.
 
 - The landing waits for the turn first, and prints `waiting for the landing turn` once.
-- With the turn, it marks a draft PR ready, which starts the PR's one CI run. A PR that is
-  ready already keeps the run it has.
+- It marks a draft PR ready. With the turn, it then updates the PR's branch from master when
+  the head has had no CI run that ran jobs and master is ahead of it. GitHub builds the tree
+  a pull-request run tests when the PR's branch is pushed, and a ready flip does not build it
+  again, so a run that a ready flip starts tests the master of the last push. The update is
+  a push, and the run it starts tests the master of the turn.
+- A head with a run that ran jobs keeps it, finished or not, and the stale-base rules above
+  judge it once it is green. A head the landing policy admitted on an approval is never
+  updated, because the update voids the approval. An update that GitHub refuses does not
+  stop the landing: the PR keeps the run the ready flip started.
 - A landing that holds the turn is not paced. No other landing with a turn merges ahead of
   it, and a paced holder would stop every landing behind it.
 - The turn ends when the merge wait does, whether the PR merged or the wait gave up. It is a
@@ -336,8 +355,9 @@ base moving under a PR flips it for one poll.
 
 **A PR whose own CI is red ends the wait too**, exit `LAND_FAILED` with `VERDICT: pr-ci-red`, quoting what
 `await_ci.py` said. GitHub reports it only as `mergeStateStatus: BLOCKED`, the same word it
-uses while the checks are still running. No other rule blocks a PR into master, so the wait
-treats `BLOCKED` as a question about checks. The wait keeps going
+uses while the checks are still running. Ruleset 27167149's update restriction also holds
+every PR into master at `BLOCKED` with every check green, so the word says nothing about the
+checks. The wait never reads it: `await_ci.py` owns the verdict. The wait keeps going
 while `await_ci.py` answers `pending`, which is what it answers until a required check
 registers; that is the grace period, so no landing is cut short for polling before CI started.
 
