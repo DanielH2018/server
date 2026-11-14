@@ -221,9 +221,18 @@ def _wait(ln: Landing, draft: str) -> tuple[Callable[[], None] | None, int]:
                     f"merge_timeout={o.merge_timeout}s; going on without a turn"
                 )
                 return None, waited
-            if place.stand() == line.MERGED:
+            answer = place.stand()
+            if answer == line.MERGED:
                 say(f"the landing that holds the turn merged PR #{o.pr} with its own")
                 return None, waited
+            if answer == line.ALONE:
+                say(
+                    f"a batch that tested PR #{o.pr} was not green; it leaves the line "
+                    "and lands alone"
+                )
+                ln.lands_alone = True
+                place.leave()
+                place = line.Place(None, o.pr, "", say)
             waiting(
                 "waiting for the landing turn: another landing is between its CI run and "
                 "its merge (`probe.py landing` lists the landings in flight)"

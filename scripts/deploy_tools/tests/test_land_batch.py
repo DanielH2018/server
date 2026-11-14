@@ -240,8 +240,26 @@ def test_a_batch_that_is_not_green_leaves_every_pr_to_land_alone(
     assert hub.labels_at_ready == {OWN: set()}
     assert hub.labels == {OWN: set(), "7": set(), "9": set()}
     assert hub.branches == {}
-    assert _answers(the_line, "7", "9") == ["", ""]
+    # Each member is told, so the next landing to take the turn does not stack it again.
+    assert the_line("waiting", str(line.FRESH_S)) == ""
+    assert _answers(the_line, "7", "9") == [line.ALONE, line.ALONE]
     assert f"the batch is not green: {said}" in capsys.readouterr().out
+
+
+def test_a_landing_told_to_land_alone_leaves_the_line_and_forms_no_batch(batch_of):
+    ln, hub, the_line = batch_of(drafts=("7",), fakes=Fakes(turn=[False, False, True]))
+    nap = ln.tools.sleep
+
+    def sleep(seconds: float) -> None:
+        # The landing that holds the turn answers while this one waits in the line.
+        the_line("answer", OWN, head_of(OWN), line.ALONE)
+        nap(seconds)
+
+    ln.tools = replace(ln.tools, sleep=sleep)
+    _land(ln)
+    assert hub.stacked == {} and hub.batch_prs == []
+    assert hub.merged == [OWN]
+    assert the_line("waiting", str(line.FRESH_S)).split() == ["7", head_of("7")]
 
 
 def test_the_batchs_run_counts_as_waited(batch_of, capsys):

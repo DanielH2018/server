@@ -274,6 +274,17 @@ B3 lands in four steps, each one exercised before the next:
    of four is red about one time in seven, which is where the estimate of 0.3 to 0.4 runs a
    merge comes from.
 
+   The landing that held the turn writes `alone` into each member's place when the batch's
+   run is red or gives no verdict in 45 minutes. A member's own landing reads it on its next
+   poll, leaves the line, and waits on for the turn as a ready PR does. When it takes the
+   turn it forms no batch and gets its own run, which says whether it was the red one. A
+   place that carries an answer is not listed as waiting, so the next landing to take the
+   turn does not stack that PR again in the seconds before it leaves.
+
+   Without the answer the members stayed in the line, and each later landing stacked the
+   red one again: a batch of four whose last PR is red cost three red batches and four
+   runs alone. With it the same batch costs its one run and four runs alone.
+
 Four facts about the workflows shaped those steps:
 
 - Only the `prek` gate reports on a push to master. The other three required contexts
