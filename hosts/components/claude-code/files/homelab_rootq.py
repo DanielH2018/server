@@ -68,8 +68,9 @@ TIER1 = ("stat", "sha256", "matches")
 # DECIDED: the allowlist is deliberately minimal: the files #6323's sessions needed and the
 # operator named on 2026-10-25. To add a file, add an entry here plus a must-pass case and a
 # must-refuse neighbour case in tests/test_rootq.py. Each entry is a directory and a glob over
-# one file name, so `*` never crosses `/`, and the match runs on the resolved path. An entry
-# earns its place only by matching a file the caller cannot read without root.
+# one file name, so `*` never crosses `/`, and the match runs on the resolved path. No script
+# calls an entry: the caller is a session's own read, which docs/claude-tooling.md documents.
+# So an entry stays only while the hosts hold a file it matches that needs root to read.
 # /var/lib/gitops-deploy's files are not here, though the operator named them: sys_user owns
 # that directory, so the caller already reads them without root, and the ancestor-owner rule
 # below would refuse every path in it anyway.

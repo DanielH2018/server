@@ -103,8 +103,6 @@ UNLISTED = [
     "/usr/local/bin/sync-artifacts.sh",
     "/etc/systemd/system/claude-rc.service.d",
     "/etc/systemd/system/claude.slice",
-    "/etc/systemd/system/claude-rc-restart.timer",
-    "/etc/polkit-1/rules.d/50-claude-land.rules",
     "/etc/crontab",
     "/etc/cron.daily/aide",
     "/usr/local/sbin/homelab-rootq",
@@ -196,10 +194,21 @@ def test_a_hard_denied_path_is_refused(rig, capsys, verb, path) -> None:
     assert_refused(run(rig, capsys, verb, path), rig, "deny list")
 
 
-@pytest.mark.parametrize("verb", ["stat", "sha256"])
-def test_a_hard_denied_file_matching_an_allowlist_glob_is_refused(rig, capsys, verb):
+def test_stat_refuses_a_hard_denied_file_matching_an_allowlist_glob(rig, capsys):
     path = rig.file("/etc/cron.d/agent.env", "TOKEN=sentinel\n")
-    assert_refused(run(rig, capsys, verb, path), rig, "deny list")
+    assert_refused(run(rig, capsys, "stat", path), rig, "deny list")
+
+
+@pytest.mark.parametrize(
+    "live",
+    [
+        "/etc/systemd/system/claude-rc-restart.timer",
+        "/etc/polkit-1/rules.d/50-claude-land.rules",
+    ],
+)
+@pytest.mark.parametrize("verb", ["stat", "sha256"])
+def test_a_path_whose_row_was_retired_is_refused(rig, capsys, verb, live) -> None:
+    assert_refused(run(rig, capsys, verb, rig.file(live)), rig, "not on the allowlist")
 
 
 @pytest.mark.parametrize("live", UNLISTED)
@@ -468,10 +477,11 @@ def test_the_root_script_parses_with_the_3_12_grammar() -> None:
     ast.parse(Path(rootq.__file__).read_text(), feature_version=(3, 12))
 
 
-@pytest.mark.parametrize("name", ["alert-webhook.env", "other.env"])
-def test_stat_refuses_a_deny_path_alike_whether_or_not_it_exists(rig, capsys, name):
-    path = str(Path(rig.file("/etc/claude-rc/x")).parent / name)
+def test_stat_refuses_the_retired_webhook_row_alike_whether_or_not_it_exists(
+    rig, capsys
+):
+    path = str(Path(rig.file("/etc/claude-rc/x")).parent / "alert-webhook.env")
     missing = run(rig, capsys, "stat", path)
     assert_refused(missing, rig, "deny list")
-    rig.file(f"/etc/claude-rc/{name}", "WEBHOOK=sentinel\n")
+    rig.file("/etc/claude-rc/alert-webhook.env", "WEBHOOK=sentinel\n")
     assert run(rig, capsys, "stat", path) == missing
