@@ -1999,8 +1999,11 @@ jobs:
     # land.sh's CI budget sums this chain's timeouts (test_land_ci_budget.py), so the gate
     # names its own rather than inheriting GitHub's 360 minutes.
     timeout-minutes: 5
-    # `statuses: write` is for the record step below, on a pull request only. The job runs no
-    # checkout and no repository code.
+    # `statuses: write` is for the record steps below, on a pull request only. The job runs
+    # no checkout and no repository code, except on a landing batch, whose last two steps
+    # check the batch out and run `tested_tree.py` from it. A batch is a `queue/` branch of
+    # this repository, which only a collaborator can push, and the landing that pushes one
+    # stacks no fork's head.
     permissions:
       contents: read
       statuses: write
@@ -2083,6 +2086,42 @@ jobs:
           gh api "repos/$GITHUB_REPOSITORY/statuses/$HEAD_SHA" \
             -f state=success -f context=ci/tested-tree -f description="$tree" -f target_url="$RUN_URL"
           echo "Recorded tree $tree on $HEAD_SHA."
+
+      # A landing batch is a pull request from a `queue/` branch of this repository that holds
+      # up to four PRs stacked on master, and this run is the one full run they share
+      # (`docs/ci-throughput.md`, slice B3). `tested_tree.py record-batch` reads the members'
+      # numbers from the PR's body, stacks their heads on this run's base itself, and records a
+      # tree on each head only when the last stacked tree is the tree this run tested. The
+      # body travels in the environment, because it is free text.
+      #
+      # The checkout is this job's only one, and only a batch pays for it. It takes the whole
+      # history without blobs: a merge needs each head's merge base, and git fetches the few
+      # blobs a merge reads. Both steps carry `continue-on-error`, as the record above does:
+      # a batch whose trees are not recorded lands its members one at a time, and a red gate
+      # here would fail a batch that passed. Each has its own timeout for the same reason: a
+      # fetch that hangs would otherwise run into the job's timeout and cancel the gate.
+      - name: Check out the batch's history
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.head_ref, 'queue/') && !(needs.prove.result == 'success' && needs.prove.outputs.proven == 'true')
+        continue-on-error: true
+        timeout-minutes: 2
+        uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+          filter: blob:none
+          persist-credentials: false
+      - name: Record the tested tree on each batch member's head
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.head_ref, 'queue/') && !(needs.prove.result == 'success' && needs.prove.outputs.proven == 'true')
+        continue-on-error: true
+        timeout-minutes: 2
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          BATCH_BODY: ${{ github.event.pull_request.body }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          python3 scripts/dev/tested_tree.py record-batch --repo "$GITHUB_REPOSITORY" \
+            --base "$(git rev-parse "$GITHUB_SHA^1")" \
+            --tested-tree "$(git rev-parse "$GITHUB_SHA^{tree}")" --run-url "$RUN_URL"
 
   renovate-config:
     name: renovate config validator
