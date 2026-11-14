@@ -1,6 +1,7 @@
 # G11 — The binding sweep
 
-Status: PLANNED.
+Status: IN PROGRESS. The measure is corrected: `report` leaves out a section with no
+prose. The pilot batch, step 1, is next.
 
 Depends on: [G7](g7-removed-names.md) and [G10](g10-value-rows.md). The sweep reads the
 doc set the first defines and binds sentences to the rows the second builds.
@@ -55,6 +56,16 @@ shares, and they are the measure.
 2. Roughly 25 batches over the nested `CLAUDE.md` files, skills and agents, through the
    issue fan-out.
 3. `.claude/rules/facts.md` and the freshness reviewer's tiers.
+
+## Before the pilot: the measure
+
+`fact_status.py report` ranked a section with no prose as citing nothing. On 2026-11-14
+five of its ten most-read rows were of that kind: the root `CLAUDE.md` title, and the
+frontmatter that opens four rule files. 14 of the 582 sections in the instruction files
+hold no prose: 10 preambles and 4 headings whose text all sits under subheadings.
+`scripts/lib/facts/citations.py:has_prose` leaves them out, and the backlog fell from 262
+rows to 248. The exit criterion reads this ranking, so the correction comes before the
+first batch.
 
 ## Verification
 

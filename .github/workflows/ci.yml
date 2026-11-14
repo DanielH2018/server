@@ -110,9 +110,18 @@ jobs:
   # status, a token without access and a failed lookup, is `proven=false`, and the run proceeds
   # in full as it did before. The script exits 0 either way.
   #
-  # The job runs on a push only. On every other event it is skipped, its output is empty, and
-  # every dependent runs: a dispatch, a merge_group run and a PR run are never proven. Nothing
-  # here is push-only except this job, so there is no push-only job to keep running.
+  # The job runs on a push, and on a pull request that carries the `landing-batch` label. On
+  # every other event it is skipped, its output is empty, and every dependent runs: a
+  # dispatch, a merge_group run and an unlabelled PR run are never proven. Nothing here is
+  # push-only except this job, so there is no push-only job to keep running.
+  #
+  # A landing batch tests up to four PRs stacked on master in one run, and that run records a
+  # tested tree on each PR's head (`docs/ci-throughput.md`, slice B3). The landing then labels
+  # each PR and marks it ready. The run that starts asks `tested_tree.py prove-head` whether
+  # the head carries a record, and skips as a proven push does. The label only decides
+  # whether this job takes a runner: an unlabelled PR run pays nothing for the proof, and a
+  # labelled head with no record runs in full. A fork's PR is never proven, because its
+  # token cannot have written the record.
   #
   # The `prek` gate stays green on the proven path because a `skipped` dependency counts as a
   # pass only when this job succeeded and said `proven=true`. checkout-sync's CI gate and
@@ -139,7 +148,12 @@ jobs:
   # and the 41st is the hang above. A hang delays the sweep by the whole timeout, so it is short.
   prove:
     name: prove the pushed tree was tested
-    if: github.event_name == 'push'
+    if: >-
+      github.event_name == 'push'
+      || (github.event_name == 'pull_request'
+      && contains(github.event.pull_request.labels.*.name, 'landing-batch')
+      && github.event.pull_request.draft != true
+      && github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-26.04
     timeout-minutes: 2
     permissions:
@@ -156,10 +170,15 @@ jobs:
         id: prove
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
-          python3 scripts/dev/tested_tree.py prove \
-            --repo "$GITHUB_REPOSITORY" --sha "$GITHUB_SHA" --tree "$(git rev-parse "$GITHUB_SHA^{tree}")"
+          if [ "$GITHUB_EVENT_NAME" = push ]; then
+            python3 scripts/dev/tested_tree.py prove \
+              --repo "$GITHUB_REPOSITORY" --sha "$GITHUB_SHA" --tree "$(git rev-parse "$GITHUB_SHA^{tree}")"
+          else
+            python3 scripts/dev/tested_tree.py prove-head --repo "$GITHUB_REPOSITORY" --head "$PR_HEAD"
+          fi
 
   # The hook sweep is split two ways — `pytest`, and this job for everything else. Neither
   # carries the branch-protection required context; the `prek` gate job at the bottom does,
@@ -2037,7 +2056,7 @@ jobs:
             "host-packages-build=$HOST_PACKAGES_BUILD host-packages=$HOST_PACKAGES" \
             "host-packages-bootstrap=$HOST_PACKAGES_BOOTSTRAP" \
             "host-tools-arm64=$HOST_TOOLS_ARM64 run-cases=${RUN_CASES:-} arm64-tools=${ARM64_TOOLS:-}"
-          # `prove` runs on a push only, so it is `skipped` on every other event. A `cancelled`
+          # `prove` runs on a push and on a labelled PR, so it is `skipped` on every other run. A `cancelled`
           # or `failure` `prove` broke on the runner, so whatever it said is unproven and every
           # dependent ran (#5783).
           case "$PROVE" in success | skipped | cancelled | failure) ;; *) exit 1 ;; esac
@@ -2062,8 +2081,13 @@ jobs:
       # squash commit of a fork PR then finds no status, `prove` answers false, and the push run
       # sweeps in full. `continue-on-error` keeps a failed write from turning the gate red: the
       # cost of a missing status is one full master run, never a wrong skip.
+      #
+      # A proven run records nothing. It ran no job on GITHUB_SHA's tree, and that tree is the
+      # merge GitHub built at the PR's last push, which no run tested. Proven is the gate's
+      # own reading: `prove` succeeded and said `true`. A `prove` that set `true` and was then
+      # cancelled ran the sweep, and that run records.
       - name: Record the tested tree on the PR head
-        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && !(needs.prove.result == 'success' && needs.prove.outputs.proven == 'true')
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
