@@ -23,8 +23,8 @@ shared conventions.
   so the Kustomization lists them in `dependsOn`, and Flux applies this tag only after their
   Kustomizations are Ready. The Deployment is `Recreate`, so a change that rolls it takes the
   service down briefly.
-- **The `bazarr-snapshot` Job snapshots `bazarr-config` before each revision applies**
-  (D5.2a). The bazarr Kustomization depends on `bazarr-snapshot`, so a revision applies only
+- **The `bazarr-snapshot` Job snapshots `bazarr-config` before each revision applies**.
+  The bazarr Kustomization depends on `bazarr-snapshot`, so a revision applies only
   after the snapshot is ready; `docs/flux-deploy-plane.md` lists the Job's checks. A failed
   revision that changes bazarr writes the stateful hold, and `promote` does not reset `prod`,
   because the failed image may already have migrated the database. Nothing reverts the claim

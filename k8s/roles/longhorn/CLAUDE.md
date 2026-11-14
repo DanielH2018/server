@@ -23,7 +23,7 @@ host probes stay green.
 - **Merging a bump of `k3s_longhorn_version` is the upgrade.** `land.sh`
   runs the `longhorn-upgrade` gates before it merges, Longhorn supports no downgrade and one
   minor per hop, so read `docs/longhorn-upgrade.md` before you bump the pin.
-- **Eight patches change upstream objects**, all under `files/patches/`. The renderer lists them
+- **Nine patches change upstream objects**, all under `files/patches/`. The renderer lists them
   as the Kustomization's `patches:`, and each names its target by kind, name and namespace.
     - `longhorn-manager.yaml` adds a memory request and no limit to the manager container.
       A kustomize patch is copied verbatim and cannot read a variable, so
@@ -36,12 +36,14 @@ host probes stay green.
       and `::test_global_manager_patch_holds_the_replicas_of_the_defaults_key` hold the
       literals equal to `k3s_longhorn_global_manager_memory_request` and
       `k3s_longhorn_global_manager_replicas`.
-    - `longhorn-ui.yaml` and `longhorn-driver-deployer.yaml` give those two Deployments a
-      memory request and no limit (#8326). Upstream ships both with no `resources`, so their
-      pods ran BestEffort.
-      `tests/longhorn/test_longhorn_control_plane_resources.py::test_ui_and_driver_deployer_patches_request_the_defaults_value_and_no_limit`
-      holds the literals equal to `k3s_longhorn_ui_memory_request` and
-      `k3s_longhorn_driver_deployer_memory_request`, and
+    - `longhorn-ui.yaml`, `longhorn-driver-deployer.yaml` and `longhorn-manager-pre-pull.yaml`
+      give requests and limits to the four containers upstream ships with no `resources`:
+      longhorn-ui, longhorn-driver-deployer, its `wait-longhorn-manager` init container, and the
+      manager DaemonSet's `pre-pull-share-manager-image` sidecar (#8326, #8543). None of them
+      sits in the storage data path, so unlike the manager they take a limit. The sidecar has
+      its own file because `longhorn-manager.yaml` names only the manager container.
+      `tests/longhorn/test_longhorn_control_plane_resources.py::test_unsized_upstream_containers_get_the_defaults_requests_and_limits`
+      holds each block equal to its `k3s_longhorn_*_resources` key in `defaults/main.yml`, and
       `tests/longhorn/test_longhorn_control_plane_resources.py::test_no_vendored_longhorn_workload_runs_besteffort`
       fails a render that leaves any upstream Deployment or DaemonSet without a request.
     - `longhorn-manager-update-strategy.yaml` rolls the manager DaemonSet one pod at a time

@@ -53,15 +53,15 @@ CI_REPO = "DanielH2018/server"
 # check.
 #
 # This must equal the gate every deploy path grades by, which is `ci_required_contexts` in
-# inventory/group_vars/all.yml (the deployer renders it to CI_CONTEXTS in its settings
-# file, root-owned on daniel-box, which a worktree session cannot read). Equal in BOTH
-# directions: a name here the deployer does not require blocks a landing the deployer would
-# have deployed. `renovate config validator` is the live instance. It is a PR check: the
-# ci.yml job skips push, so a master commit carries no check-run of that name, and the daily
-# renovate-config-canary.yml schedule validates master instead. The deployer deliberately
-# excludes it because a red renovate.json changes nothing a deploy renders. Requiring it here
-# would park every landing waiting on a check-run that master never gets.
-# tests/repo/test_ci_contexts_match_workflows.py pins both directions.
+# inventory/group_vars/all.yml (checkout-sync and the builder render it to CI_CONTEXTS in their
+# units and settings on daniel-box). Equal in BOTH directions: a name here that
+# `ci_required_contexts` lacks blocks a landing that checkout-sync's gate would pass. `renovate
+# config validator` is the live instance. It is a PR check: the ci.yml job skips push, so a master
+# commit carries no check-run of that name, and the daily renovate-config-canary.yml schedule
+# validates master instead. `ci_required_contexts` deliberately excludes it because a red
+# renovate.json changes nothing a deploy renders. Requiring it here would park every landing waiting
+# on a check-run that master never gets. tests/repo/test_ci_contexts_match_workflows.py pins both
+# directions.
 REQUIRED_CONTEXTS = frozenset({"prek (lint + validate + tests + secrets)"})
 
 
@@ -75,11 +75,11 @@ DROPPED_PUSH_GRACE_S = 180
 # request against the hourly budget `fetch_check_runs` describes.
 DESCENDANT_LIMIT = 10
 
-# The most polls an anonymous wait makes, whatever its budget (#6148, #6857). Anonymous reads
-# share 60 per hour per source IP with the deployer's gate on the same host, and a poll before
-# any required run registers costs 2 requests (check-runs, then check-suites), so 15 polls
-# spend at most 30. `poll_interval` stretches the interval to fit the budget into them, never
-# below ANONYMOUS_INTERVAL_S. An anonymous wait also never walks descendants (`wait`'s
+# The most polls an anonymous wait makes, whatever its budget (#6148, #6857). Anonymous reads share
+# 60 per hour per source IP with every other anonymous read from the same host, and a poll before
+# any required run registers costs 2 requests (check-runs, then check-suites), so 15 polls spend at
+# most 30. `poll_interval` stretches the interval to fit the budget into them, never below
+# ANONYMOUS_INTERVAL_S. An anonymous wait also never walks descendants (`wait`'s
 # `walk_descendants`).
 ANONYMOUS_MAX_POLLS = 15
 ANONYMOUS_INTERVAL_S = 90
@@ -135,8 +135,8 @@ def fetch_check_runs(sha: str) -> list[dict]:
     """Check-runs for one SHA.
 
     Authenticated through `gh auth token` when the CLI is logged in, anonymous otherwise.
-    The anonymous limit is 60/hour per source IP and this poll shares it with the deployer's
-    own gate on the same host. An anonymous wait therefore polls every
+    The anonymous limit is 60/hour per source IP and this poll shares it with every
+    other anonymous read from the same host. An anonymous wait therefore polls every
     `ANONYMOUS_INTERVAL_S` (90s) rather than every 20s, and skips the descendant walk:
     land.sh's 1200s budget then costs at most 30 requests, not 60 or more.
     `ANONYMOUS_INTERVAL_S` has the arithmetic. Authenticated, a poll also reads up to

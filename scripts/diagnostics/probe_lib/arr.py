@@ -61,7 +61,7 @@ def arr_curl_config(api_key):
 def resolve_arr_ip(app, cluster=DEFAULT_CLUSTER):
     """Resolve the *arr app's k8s Service ClusterIP.
 
-    resolve_ip's k8s equivalent, used instead of k8s_endpoint because sonarr/radarr/prowlarr
+    Used instead of k8s_endpoint because sonarr/radarr/prowlarr
     have no Authelia bypass rule for /api/* (see the comment above ARR_PORTS). A ClusterIP is
     stable across pod restarts and redeploys, so this doesn't reintroduce the hand-copied-IP
     staleness `docker inspect` was resolving around in the first place.

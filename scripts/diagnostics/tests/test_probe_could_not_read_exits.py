@@ -63,13 +63,6 @@ def _decided_at(func, anchor):
     return any(DECIDED in line for line in lines[start : end + 1])
 
 
-def _decided_in(func):
-    """Whether `func`, or the comment block directly above it, carries a DECIDED marker."""
-    return DECIDED in inspect.getsource(func) or DECIDED in (
-        inspect.getcomments(func) or ""
-    )
-
-
 def test_wrong_cluster_refusal_from_a_handler_exits_unreadable(
     tmp_path, monkeypatch, capsys
 ):

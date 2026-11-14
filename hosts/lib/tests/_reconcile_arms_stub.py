@@ -15,9 +15,7 @@ keys are the ones the three arms read:
         in `_reconcile_stub.py` names the paths `dpkg -S` reports as owned by `some-package`.
 """
 
-import re
 import sys
-from pathlib import Path
 
 NOT_FOUND = 2
 
@@ -59,7 +57,10 @@ def virsh(state: dict, args: list[str]) -> int:
     kind = "nwfilters" if verb.startswith("nwfilter") else "networks"
     objects = model.setdefault(kind, {})
     if verb.endswith("-define"):
-        xml = Path(rest[0]).read_text()
+        import re
+
+        with open(rest[0]) as handle:
+            xml = handle.read()
         pattern = (
             r"<filter name='(.*?)'" if kind == "nwfilters" else r"<name>(.*?)</name>"
         )

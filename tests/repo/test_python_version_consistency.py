@@ -16,6 +16,7 @@ import tomllib
 
 from lib import yaml_fast
 from _helpers import REPO
+from _k8s_render import rendered_build_texts
 
 
 PYTHON_VERSION_FILE = REPO / ".python-version"
@@ -108,6 +109,30 @@ def test_an_unquoted_two_part_pin_is_read_as_one():
     """The case the quoted-string pattern skipped: YAML reads `3.14` bare as a float."""
     text = "jobs:\n  t:\n    steps:\n      - uses: actions/setup-python@v6\n        with:\n          python-version: 3.14\n"
     assert workflow_pins("ci.yml", text) == [("ci.yml", "3.14")]
+
+
+def dockerfile_python_minors(text: str) -> list[str]:
+    """The Python minor each `FROM` names, as `python:3.15-slim` or uv's `uv:python3.15-trixie-slim`."""
+    return re.findall(r"^FROM\s+(?:\S*/)?(?:python:|uv:python)(\d+\.\d+)", text, re.M)
+
+
+def test_role_dockerfiles_build_on_the_canonical_python():
+    """A built image runs role code on its base's interpreter, so the base must be the minor CI tests."""
+    canonical = _canonical()
+    found = {
+        f"{role}/{template}": minors
+        for role, template, text in rendered_build_texts()
+        if (minors := dockerfile_python_minors(text))
+    }
+    assert {
+        "karakeep/Dockerfile.j2",
+        "ical-proxy/Dockerfile.j2",
+        "homelab-mcp/Dockerfile.j2",
+    } <= found.keys(), f"census lost a known Python base image: {sorted(found)}"
+    mismatched = {p: m for p, m in found.items() if set(m) != {canonical}}
+    assert not mismatched, (
+        f"Dockerfile Python base images disagree with .python-version ({canonical}): {mismatched}"
+    )
 
 
 def test_a_composite_actions_pin_is_read():

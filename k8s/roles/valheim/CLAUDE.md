@@ -50,6 +50,8 @@ longer exists. `k8s/terraria` is the sibling this role copies.
   stay. Setting the value to 1 in one merge restarts all three, and `promote` applies it. The
   first start after a long gap runs SteamCMD's update check before the port binds, and the
   startup probe allows 15 minutes for it.
+  The `PVCFreeFloorUnmonitored` alert holds quiet while kube-state-metrics reads zero valheim
+  replicas, because a parked claim has no mounting pod and the kubelet reports no volume stats.
 - **The join-password Secret substitutes from `homelab-cluster-vars`.** `valheim_server_pass`
   is a `${<key>}` placeholder in the published render. Flux substitutes the value from the
   `homelab-cluster-vars` Secret, which it decrypts from `secrets/cluster-vars.sops.env`.

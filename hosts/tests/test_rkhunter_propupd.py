@@ -5,7 +5,8 @@ held the dpkg lock for about 2 minutes on the Pi after every package change. The
 component turns APT_AUTOGEN off and ships a hook that starts homelab-rkhunter-propupd.service
 without blocking. The unit's script waits for apt to release the lock, refreshes, and refreshes
 again when dpkg changed packages during the refresh, because a start while the unit is active
-does nothing.
+does nothing. A needrestart override keeps apt's own needrestart hook from restarting the unit
+while it waits, which deadlocked daniel-box on 2026-11-14.
 
 Run: uv run pytest hosts/tests/test_rkhunter_propupd.py
 """
@@ -25,6 +26,7 @@ SCRIPT = (
 )
 HOOK = "/etc/apt/apt.conf.d/91homelab-rkhunter-propupd"
 UNIT = "homelab-rkhunter-propupd.service"
+NEEDRESTART_OVERRIDE = "/etc/needrestart/conf.d/homelab-rkhunter-propupd.conf"
 
 
 @pytest.mark.parametrize("host", HOSTS)
@@ -39,6 +41,15 @@ def test_every_host_refreshes_from_its_own_hook_and_not_from_apt_autogen(host):
     assert f"systemctl start --no-block {UNIT}" in shipped_text(host, HOOK)
     unit = shipped_text(host, f"/usr/lib/systemd/system/{UNIT}")
     assert "ExecStart=/usr/lib/homelab/rkhunter-propupd\n" in unit
+
+
+@pytest.mark.parametrize("host", HOSTS)
+def test_needrestart_never_restarts_the_refresh_unit_that_waits_on_apts_lock(host):
+    override = shipped_text(host, NEEDRESTART_OVERRIDE)
+    assert (
+        r"$nrconf{override_rc}{qr(^homelab-rkhunter-propupd\.service$)} = 0;"
+        in override
+    )
 
 
 def _refresh(tmp_path: Path, changes_during_refresh: int) -> tuple[list[str], str]:

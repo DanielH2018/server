@@ -1,10 +1,11 @@
 """Every entry at the repo root is tracked by git or in the set the root ignore expects.
 
-`.gitignore` opens with `/*` and allow-lists each tracked root entry by name, so a new
-root-level file is invisible to `git status` and never reaches a commit. A tool's output
-directory left untracked at the root parks the deployer (repo CLAUDE.md, *Pre-commit Hooks*: "one untracked file parks the deployer"). The
-inverse also hides: a tool that writes a root file nobody expects, e.g. a `.pytest_cache` or
-a `site/` from a bare `mkdocs build`, sits there ignored and unexplained.
+`.gitignore` opens with `/*` and allow-lists each tracked root entry by name, so a new root-level
+file is invisible to `git status` and never reaches a commit. A tool's output directory left
+untracked at the root parks `homelab-checkout-sync` (repo CLAUDE.md, *Pre-commit Hooks*: "one
+untracked file parks `homelab-checkout-sync`"). The inverse also hides: a tool that writes a root
+file nobody expects, e.g. a `.pytest_cache` or a `site/` from a bare `mkdocs build`, sits there
+ignored and unexplained.
 
 Run: uv run pytest tests/repo/test_root_entries_are_tracked_or_expected.py
 """

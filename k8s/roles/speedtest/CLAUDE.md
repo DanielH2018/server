@@ -21,8 +21,8 @@ repo-root `CLAUDE.md` for shared conventions.
   Kustomization lists them in `dependsOn`, and Flux applies this tag only after their
   Kustomizations are Ready. The Deployment is `Recreate`, so a change that rolls it takes the
   service down briefly.
-- **The `speedtest-snapshot` Job snapshots `speedtest-config` before each revision applies**
-  (D5.2a). The speedtest Kustomization depends on `speedtest-snapshot`, so a revision applies
+- **The `speedtest-snapshot` Job snapshots `speedtest-config` before each revision applies**.
+  The speedtest Kustomization depends on `speedtest-snapshot`, so a revision applies
   only after the snapshot is ready; `docs/flux-deploy-plane.md` lists the Job's checks. The
   snapshot is Longhorn-local, because the claim is `longhorn-nobackup`. A failed revision that
   changes speedtest writes the stateful hold, and `promote` does not reset `prod`. Nothing
