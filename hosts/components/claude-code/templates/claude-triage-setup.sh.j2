@@ -113,5 +113,9 @@ fi
 # The session reads all of it through its group. A file uv hardlinked from the controller's cache,
 # or an installer moved into place, keeps the group and mode it was made with, which the setgid
 # directory cannot change, so both trees are regrouped and opened to the group on every run.
-as_ctl chgrp -R "$session" "$tools" "$clone"
+# Root regroups, because the controller is not in the session's group and chgrp refuses a group
+# its caller lacks. -h and -R without -L change each link itself and follow none, so a link in
+# the controller's tree regroups nothing outside it. The controller owns every file, so it sets
+# the modes.
+chgrp -R -h "$session" "$tools" "$clone"
 as_ctl chmod -R g+rX,g-w "$tools" "$clone"

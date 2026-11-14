@@ -78,6 +78,10 @@ Say which of these applies, then stop. `probe.py landing` reads `DEPLOY_HOLD` an
   operator's decision.
 - A classifier denial. Report the denied command; do not reach for a bypass flag.
 
+To resume after a red master CI or a set hold, wait with `cc-wait landing-clear`
+(`.claude/wait-sources/landing-clear`), then re-run `land.sh`. The source ends 0 once neither
+blocks, and its detail names the blocker while it waits. It only waits for the hold to clear.
+
 ## Shell Commands — Shape Them to Auto-Approve
 
 - **Auto-approves:** read-only commands and pipelines, read-only stages joined with `;`, `&&`,

@@ -25,6 +25,7 @@ def test_a_token_pasted_across_a_wrapped_line_reaches_the_session_whole(
 
 
 def test_the_session_is_diagnose_only_and_capped() -> None:
+    # fact: hosts/components/claude-code/CLAUDE.md#Autonomous-role contract (`claude-triage@`, a session started by a monitor episode)
     argv = session.build_argv(
         {"CLAUDE_BIN": "claude", "BUDGET_USD": "10", "MAX_TURNS": "60"}
     )

@@ -86,6 +86,7 @@ def test_the_selector_roster_covers_the_known_selectors(cfg):
 
 
 def test_loki_selectors_use_real_stream_labels(cfg):
+    # fact: k8s/roles/monitor-bridge/CLAUDE.md#Traps
     for name in _logql_selector_names(cfg):
         selector = getattr(cfg, name)
         unknown = _selector_labels(selector) - LOKI_STREAM_LABELS

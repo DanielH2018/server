@@ -133,6 +133,7 @@ def _live() -> tuple[list[str], set[tuple[str, str]]]:
 
 
 def test_no_substituting_directory_holds_a_value_that_unquotes_to_a_non_string():
+    # fact: k8s/roles/monitor-bridge/CLAUDE.md#Checks
     offences, read = _live()
     assert MEMBERS <= read, f"the census never read {sorted(MEMBERS - read)}"
     assert not offences, (

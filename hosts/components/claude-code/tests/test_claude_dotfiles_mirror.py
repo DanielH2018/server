@@ -76,6 +76,7 @@ def _record(state):
 
 
 def test_a_repo_with_no_tag_is_up_and_records_nothing(world):
+    # fact: hosts/components/claude-code/CLAUDE.md#Autonomous-role contract (`claude-dotfiles-mirror`, the verified dotfiles tag for T2)
     origin, _, _, config, state = world
     _commit(origin, "one")
     assert mirror.run(config, state) == (True, "no tag yet; nothing verified")
@@ -84,6 +85,7 @@ def test_a_repo_with_no_tag_is_up_and_records_nothing(world):
 
 @pytest.mark.parametrize("signer", ["other", None], ids=["another key", "lightweight"])
 def test_a_tag_without_the_operators_signature_is_refused(world, signer):
+    # fact: hosts/components/claude-code/CLAUDE.md#Autonomous-role contract (`claude-dotfiles-mirror`, the verified dotfiles tag for T2)
     origin, _, other, config, state = world
     _commit(origin, "one")
     _tag(origin, "t2-1", other if signer else None)
@@ -93,6 +95,7 @@ def test_a_tag_without_the_operators_signature_is_refused(world, signer):
 
 
 def test_a_newer_tag_on_an_older_commit_is_refused_and_the_last_is_kept(world):
+    # fact: hosts/components/claude-code/CLAUDE.md#Autonomous-role contract (`claude-dotfiles-mirror`, the verified dotfiles tag for T2)
     origin, allowed, _, config, state = world
     first = _commit(origin, "one")
     second = _commit(origin, "two")
@@ -107,6 +110,7 @@ def test_a_newer_tag_on_an_older_commit_is_refused_and_the_last_is_kept(world):
 
 
 def test_a_signed_descendant_tag_moves_the_record_forward(world):
+    # fact: hosts/components/claude-code/CLAUDE.md#Autonomous-role contract (`claude-dotfiles-mirror`, the verified dotfiles tag for T2)
     origin, allowed, _, config, state = world
     _commit(origin, "one")
     _tag(origin, "t2-1", allowed)

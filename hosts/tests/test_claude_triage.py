@@ -86,6 +86,7 @@ def pins() -> dict:
 
 def test_the_template_pins_equal_the_defaults() -> None:
     """The host package reads the pins, so a changed default has to change them too."""
+    # fact: hosts/components/claude-code/CLAUDE.md#Autonomous-role contract (`claude-triage@`, a session started by a monitor episode)
     for name, var in PINNED.items():
         assert pins()[name] == defaults()[var], name
 
@@ -247,6 +248,7 @@ def test_the_artifacts_pod_mounts_the_report_tree_the_host_creates() -> None:
 
 
 def test_the_poller_runs_as_the_controller() -> None:
+    # fact: hosts/components/claude-code/CLAUDE.md#Autonomous-role contract (`claude-triage@`, a session started by a monitor episode)
     text = re.sub(
         r"\\\n\s*",
         " ",
@@ -507,6 +509,7 @@ def test_no_triage_path_sits_where_the_agent_or_the_session_could_rename_it() ->
 def test_the_session_shares_only_read_access_with_the_controller() -> None:
     """The session reads the clone, the toolchain and the exchange through its group; tmpfiles
     gives it no write on any of them. The runner recreates the exchange's out/ for each run."""
+    # fact: hosts/components/claude-code/CLAUDE.md#Autonomous-role contract (`claude-triage@`, a session started by a monitor episode)
     declared = tmpfiles(True)
     module = (
         template_env(ROLE / "templates")

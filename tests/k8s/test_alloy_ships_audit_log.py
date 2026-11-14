@@ -84,6 +84,7 @@ def test_the_unkeyed_bookkeeping_is_dropped(
 
 
 def test_the_source_tails_auditds_log_into_this_block(alloy_config: str) -> None:
+    # fact: hosts/components/claude-code/CLAUDE.md#Autonomous-role contract (`claude-guardrail-audit`, the audit watches on the guardrail paths)
     m = re.search(
         r'local\.file_match "host_audit" \{\s*path_targets = \[\{"__path__" = "([^"]+)", "job" = "([^"]+)"',
         alloy_config,

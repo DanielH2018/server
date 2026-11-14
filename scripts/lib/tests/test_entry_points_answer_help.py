@@ -331,7 +331,9 @@ def test_an_in_process_main_ignores_the_host_processes_help_flag(
 
 WAIT_SOURCES = REPO / ".claude" / "wait-sources"
 PROBES = sorted(path.name for path in WAIT_SOURCES.iterdir() if path.is_file())
-MUST_FIND_PROBES = frozenset({"land", "fanout", "fanout-headroom", "flux"})
+MUST_FIND_PROBES = frozenset(
+    {"land", "landing-clear", "fanout", "fanout-headroom", "flux"}
+)
 
 # cc-wait reports a refused `--describe` with only the last 400 characters of its stderr
 # (dotfiles `cc_wait/repo.py`, `ProbeWait.describe`), so the usage has to land inside them.

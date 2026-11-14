@@ -305,6 +305,7 @@ def floor_prefixes(tmp_path) -> list[str]:
 
 
 def test_the_approval_list_land_sh_reads_is_the_floor(tmp_path) -> None:
+    # fact: hosts/components/claude-code/CLAUDE.md#Autonomous-role contract (`claude-dotfiles-mirror`, the verified dotfiles tag for T2)
     assert floor_prefixes(tmp_path) == FLOOR
 
 

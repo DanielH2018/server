@@ -81,6 +81,7 @@ def test_each_family_row_has_one_rule():
 
 
 def test_a_rule_has_for_10m_exactly_when_its_row_is_startup_grace():
+    # fact: k8s/roles/monitor-bridge/CLAUDE.md#Gates and hysteresis
     assert for_problems(all_rules()) == []
 
 
