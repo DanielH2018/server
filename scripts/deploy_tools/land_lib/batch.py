@@ -1,0 +1,463 @@
+"""A landing batch: the drafts in the line, tested with the holder's own in one CI run.
+
+A landing that takes the turn with a draft that has had no CI run would start that draft's
+one run and hold the turn until it ends, while every landing behind it waits. `form` gives
+the drafts in the line (`line.py`) that same run. It stacks their heads on the holder's own
+on a `queue/<PR>` branch, opens the batch's pull request and waits for its run. That run's
+gate records, on each head, the tree its squash merge makes (`scripts/dev/tested_tree.py`).
+
+`land` then merges the holder's PR and each member's in the order they were stacked. Each
+carries the `landing-batch` label when it is marked ready, so its own run asks whether the
+head has that record and skips every other job. Each squash merge makes the tree the batch
+tested, so master's run for it skips too (`docs/ci-throughput.md`, slice B3).
+
+The stack is built on GitHub, one `merges` call a head, so the landing pushes nothing and
+the same code serves both hosts. A merge commit there has two parents and a squash merge has
+one, and both make the same tree.
+
+What a member is. A draft from the line, written there by a landing of this landing's own
+user, that this landing would have been allowed to land: `merge.arm_merge` runs on it with
+this landing's options, the landing policy included. Its own landing ran the same checks
+with its own options before it stood in the line. A fork's branch and a PR that changes a
+forward-only pin, the `flux` role or cluster-vars are left in the line. A member merges
+under its PR's title, whatever `--subject` its own landing was given.
+
+What the label must never do. A labelled run on a head that carries a record skips every
+job, and it compares no tree. So a PR is labelled only by the landing that is about to merge
+it, only at the head the batch stacked, and only while master is the commit that head was
+stacked on (`stale_base.batch_tested`). A PR that was labelled and marked ready and then did
+not merge gets a full run before anything else lands it (`_full_run`).
+
+`LAND_BATCH=1` turns batches on for one landing, which is how the pilot runs. Without it a
+landing forms none, and it can still be a member of another landing's batch.
+
+A batch never makes a landing fail. A batch that cannot be formed, a run that is red and a
+member that cannot merge each leave the PRs concerned to land alone, as they would have
+without the batch. The holder's own landing goes on with its own PR either way.
+
+The time a batch takes. Its run counts in the holder's merge wait, which still ends inside
+two merge budgets. The members' merges come after that wait: up to `MEMBER_TIMEOUT_S` each,
+which `LAND_DEADLINE` does not count. A lander unit therefore needs its deadline sized
+before it sets `LAND_BATCH`.
+"""
+
+import subprocess
+from dataclasses import dataclass, replace
+
+import sys as _sys
+from pathlib import Path as _Path
+
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
+from deploy_tools import await_ci
+from deploy_tools.land_lib import (
+    classify,
+    gh_read,
+    line,
+    live_limit,
+    merge,
+    stale_base,
+    turn,
+)
+from deploy_tools.land_lib.landing import BRANCH, Landing
+from deploy_tools.land_lib.outcome import Outcome, say
+from lib.exit_codes import CI_GREEN, CI_PENDING, CI_RED
+from lib.json_types import JsonValue, as_object
+
+# The label a member carries while its own run stands in for the batch's (`ci.yml`'s `prove`).
+LABEL = "landing-batch"
+# How many PRs one batch holds, the holder's own included; the batch's gate reads no more.
+MAX_STACKED = 4
+# The seconds the batch's one full run may take. A run took 993 s under a saturated pool.
+RUN_TIMEOUT_S = 2700
+# The seconds one member's merge may take: its own run is two short jobs, which took 164 s
+# from the ready flip on 2026-11-14 with the runner pool saturated.
+MEMBER_TIMEOUT_S = 600
+
+# What GitHub failing to answer looks like, for a call the batch makes.
+_GH_FAILED = (subprocess.CalledProcessError, subprocess.TimeoutExpired, ValueError)
+
+
+@dataclass
+class Member:
+    """A draft from the line that the batch tests after the holder's own PR.
+
+    Attributes:
+        ln: A landing of the member's PR, armed with the holder's options.
+        head: The head its own landing stood in the line with.
+    """
+
+    ln: Landing
+    head: str
+
+
+def members_line(numbers: list[str]) -> str:
+    """The line of the batch PR's body that names its PRs, as the batch's gate reads it."""
+    return "Members: " + " ".join(f"#{number}" for number in numbers)
+
+
+def _api(ln: Landing, method: str, path: str, *fields: str, jq: str = "") -> JsonValue:
+    """One call to this repository's REST API; the decoded answer, or None for no body."""
+    args = ["api", "-X", method, f"repos/{{owner}}/{{repo}}/{path}"]
+    for field in fields:
+        args += ["-f", field]
+    return ln.tools.gh_json(*args, *(["--jq", jq] if jq else []))
+
+
+def _alone(ln: Landing, pr: str, reads: live_limit.Reads) -> str:
+    """Why `pr` must land alone, by the files it changes; "" when it may be stacked."""
+    try:
+        paths = gh_read.read(
+            lambda: reads.pr_paths(pr), ln.tools.sleep, f"gh pr view #{pr} files"
+        )
+    except (gh_read.GhReadFailed, ValueError, KeyError) as exc:
+        return f"its files could not be read ({exc})"
+    if live_limit.kind(paths) == live_limit.SERIAL:
+        return "it changes a forward-only pin, the flux role or cluster-vars"
+    return ""
+
+
+def _unfit(member: Landing, head: str) -> str:
+    """Why the PR `member` lands cannot be stacked at `head`; "" when it can."""
+    view = member.view("isDraft,state,mergeable,headRefOid")
+    if view.get("state") != "OPEN" or view.get("isDraft") is not True:
+        return "it is no longer an open draft"
+    if view.get("headRefOid") != head:
+        return "its head moved after its landing stood in the line"
+    if view.get("mergeable") == "CONFLICTING":
+        return f"it conflicts with {BRANCH}"
+    where = member.view("baseRefName,isCrossRepository")
+    if (
+        where.get("isCrossRepository") is not False
+        or where.get("baseRefName") != BRANCH
+    ):
+        return f"it is not a branch of this repository into {BRANCH}"
+    return ""
+
+
+def _admit(ln: Landing, pr: str, head: str, reads: live_limit.Reads) -> Member | None:
+    """The draft `pr` as a member, or None, with the reason said, when it lands alone."""
+    opts = replace(ln.opts, pr=pr, subject="", merge_timeout=MEMBER_TIMEOUT_S)
+    member = Landing(opts, ln.tools, ln.classifier)
+    say(f"checking PR #{pr} from the line, as this landing checked its own PR")
+    try:
+        why = _alone(ln, pr, reads) or _unfit(member, head)
+        if not why:
+            merge.arm_merge(member)
+        if not why and member.pinned_head not in ("", head):
+            why = "the landing policy checked another head"
+    except Outcome as exc:
+        why = exc.error
+    if why:
+        say(f"leaving PR #{pr} out of the batch: {why}")
+        return None
+    # The merge wait ends, and merges nothing, if the head moves from the one stacked.
+    member.pinned_head = member.tested_head = head
+    return Member(member, head)
+
+
+def _members(ln: Landing) -> list[Member]:
+    """The drafts in the line this landing may stack behind its own, in line order."""
+    try:
+        rows = turn.line_of(ln)("waiting", str(line.FRESH_S)).splitlines()
+    except OSError as exc:
+        say(f"could not read the line for the landing turn ({exc}); no batch")
+        return []
+    places = [row.split() for row in rows]
+    # Another landing of this landing's own PR may stand in the line too.
+    waiting = [p for p in places if len(p) == 2 and p[0] != ln.opts.pr]
+    if not waiting:
+        return []
+    reads = live_limit.github_reads(ln.tools.gh_json)
+    # DECIDED: the landing's code is compared with master here, once, and not again before a
+    # member's merge. Until the last member merges, master moves only by this batch's own
+    # merges, so a member merges under the code and the policy that admitted it.
+    why = _alone(ln, ln.opts.pr, reads) or classify.code_lags_master(ln)
+    if why:
+        say(f"no batch: PR #{ln.opts.pr} lands alone, because {why}")
+        return []
+    members: list[Member] = []
+    for pr, head in waiting:
+        if len(members) == MAX_STACKED - 1:
+            break
+        member = _admit(ln, pr, head, reads)
+        if member:
+            members.append(member)
+    return members
+
+
+def _merge_into(ln: Landing, branch: str, head: str, subject: str) -> str:
+    """Merge `head` into `branch` on GitHub; the new tip, or "" when it does not merge."""
+    try:
+        merged = _api(
+            ln,
+            "POST",
+            "merges",
+            f"base={branch}",
+            f"head={head}",
+            f"commit_message={subject}",
+            jq="{sha}",
+        )
+    except subprocess.CalledProcessError as exc:
+        if "HTTP 409" in (exc.stderr or ""):
+            return ""
+        raise
+    # GitHub answers a head the branch already holds with no body.
+    return str(as_object(merged, "a merge").get("sha") or "") if merged else ""
+
+
+def _drop_branch(ln: Landing, branch: str, may_be_gone: bool = False) -> None:
+    """Delete `branch`, which closes its pull request.
+
+    A failure is said, with the branch's name, unless `may_be_gone` allows for a branch that
+    was never there.
+    """
+    try:
+        _api(ln, "DELETE", f"git/refs/heads/{branch}")
+    except _GH_FAILED as exc:
+        if not may_be_gone:
+            say(
+                f"could not delete the batch's branch {branch} ({exc}); its pull request "
+                "stays open until the branch is deleted"
+            )
+
+
+def _stack(
+    ln: Landing, branch: str, head: str, members: list[Member]
+) -> tuple[str, str]:
+    """Build `branch`: master, then `head`, then each member that merges onto it.
+
+    A member that conflicts with the PRs before it is removed from `members` and said.
+
+    Returns:
+        The master commit the branch starts at and the branch's tip. The tip is "" when the
+        holder's own head does not merge.
+    """
+    ref = gh_read.read(
+        lambda: _api(ln, "GET", f"git/ref/heads/{BRANCH}", jq="{sha: .object.sha}"),
+        ln.tools.sleep,
+        "gh api git/ref",
+    )
+    base = str(as_object(ref, BRANCH).get("sha") or "")
+    # An earlier landing of this PR may have left its branch behind.
+    _drop_branch(ln, branch, may_be_gone=True)
+    _api(ln, "POST", "git/refs", f"ref=refs/heads/{branch}", f"sha={base}")
+    tip = _merge_into(ln, branch, head, ln.direct_merge_subject)
+    if not tip:
+        return base, ""
+    for member in list(members):
+        merged = _merge_into(ln, branch, member.head, member.ln.direct_merge_subject)
+        if merged:
+            tip = merged
+        else:
+            members.remove(member)
+            say(
+                f"leaving PR #{member.ln.opts.pr} out of the batch: it does not merge "
+                "onto the PRs stacked before it"
+            )
+    return base, tip
+
+
+def _await_run(ln: Landing, tip: str) -> tuple[int, str]:
+    """Wait for the batch's run on `tip`.
+
+    Returns:
+        The seconds waited, and why the run is no green one, or "" when it is green.
+    """
+    waited = 0
+    while True:
+        try:
+            rc, said = ln.tools.await_ci(tip, 0)
+        except await_ci.RateLimitedError as exc:
+            rc, said = CI_PENDING, str(exc)
+        if rc == CI_GREEN:
+            return waited, ""
+        if rc == CI_RED:
+            return waited, f"its run is red ({said})"
+        if rc != CI_PENDING:
+            return waited, said
+        if waited >= RUN_TIMEOUT_S:
+            return waited, f"its run gave no verdict in {waited}s ({said})"
+        ln.tools.sleep(ln.opts.merge_poll)
+        waited += ln.opts.merge_poll
+
+
+def _label(ln: Landing, pr: str) -> None:
+    _api(ln, "POST", f"issues/{pr}/labels", f"labels[]={LABEL}")
+
+
+def _full_run(ln: Landing, pr: str) -> None:
+    """Take the label off `pr`, and give it a full CI run if it was marked ready.
+
+    A PR that was marked ready under the label has a run that skipped every job. Converting
+    it to draft and back starts a run with no label, which runs them all, so no later
+    landing merges the PR on the skipped one.
+    """
+    try:
+        _api(ln, "DELETE", f"issues/{pr}/labels/{LABEL}")
+        now = _api(ln, "GET", f"pulls/{pr}", jq="{state, draft}")
+        seen = as_object(now, "a pull request")
+        if seen.get("state") != "open" or seen.get("draft") is not False:
+            return
+        ln.tools.gh("pr", "ready", "--undo", pr)
+        ln.tools.gh("pr", "ready", pr)
+        say(
+            f"PR #{pr} gets a full run: converted it to draft and back without the label"
+        )
+    except _GH_FAILED as exc:
+        say(
+            f"could not give PR #{pr} a full run ({exc}); remove its {LABEL} label and "
+            f"convert it to draft and back before it lands"
+        )
+
+
+def form(ln: Landing, head: str) -> int:
+    """Test the drafts in the line with this landing's own draft, in one CI run.
+
+    The caller holds the landing turn, and `head` is the head of its draft, which has had no
+    CI run. On a green run the landing's `tested_on` and `tested_head` name the master commit
+    and the head the batch stacked, its `batch` holds the members, and its own PR carries the
+    label for the run its ready flip starts.
+
+    Returns:
+        The seconds the batch's run took; 0 when no run was started.
+    """
+    pr = ln.opts.pr
+    members = _members(ln)
+    if not members:
+        return 0
+    branch = f"queue/{pr}"
+    waited = 0
+    try:
+        try:
+            base, tip = _stack(ln, branch, head, members)
+            if not tip:
+                say(f"no batch: PR #{pr}'s own head does not merge onto {BRANCH}")
+            if not tip or not members:
+                return 0
+            numbers = [pr, *(member.ln.opts.pr for member in members)]
+            named = " ".join(f"#{number}" for number in numbers)
+            body = (
+                f"The landing of #{pr} holds the landing turn and tests these pull "
+                "requests in one CI run, stacked in this order. Each one is then "
+                "squash-merged by itself, and this pull request is closed unmerged.\n\n"
+                f"{members_line(numbers)}\n"
+            )
+            _api(
+                ln,
+                "POST",
+                "pulls",
+                f"title=Landing batch: {named}",
+                f"head={branch}",
+                f"base={BRANCH}",
+                f"body={body}",
+                jq="{number}",
+            )
+            say(f"testing {named} in one run, stacked on {base[:8]} as {branch}")
+            waited, why = _await_run(ln, tip)
+            if why:
+                say(f"the batch is not green: {why}; each of its PRs lands alone")
+                return waited
+            _label(ln, pr)
+        finally:
+            _drop_branch(ln, branch, may_be_gone=True)
+    except (*_GH_FAILED, gh_read.GhReadFailed) as exc:
+        say(f"could not form a landing batch ({exc}); PR #{pr} lands alone")
+        return waited
+    ln.tested_on, ln.tested_head, ln.batch = base, head, members
+    say(f"the batch is green after {waited}s; merging {named} in that order")
+    return waited
+
+
+def _merge_commit(ln: Landing) -> str:
+    """The commit `ln`'s PR merged as; "" when GitHub does not read it as merged."""
+    got = gh_read.read(
+        lambda: _api(
+            ln, "GET", f"pulls/{ln.opts.pr}", jq="{merged, sha: .merge_commit_sha}"
+        ),
+        ln.tools.sleep,
+        f"gh api pulls/{ln.opts.pr}",
+    )
+    pull = as_object(got, "a pull request")
+    return str(pull.get("sha") or "") if pull.get("merged") is True else ""
+
+
+def _merge_member(ln: Landing, member: Member, before: Landing) -> str:
+    """Merge `member` behind `before`, whose PR just merged; "" on success, else why not.
+
+    The member is labelled only once every check here has passed, and it gets a full run
+    if it does not merge after that.
+    """
+    pr = member.ln.opts.pr
+    labelled = False
+    try:
+        member.ln.tested_on = _merge_commit(before)
+        if not member.ln.tested_on:
+            return f"PR #{before.opts.pr}'s merge commit could not be read"
+        waiting = turn.line_of(ln)("waiting", str(line.FRESH_S)).splitlines()
+        if f"{pr} {member.head}" not in waiting:
+            return "its own landing left the line"
+        head = member.ln.view("headRefOid").get("headRefOid") or ""
+        if not stale_base.batch_tested(member.ln, head):
+            return "the batch's run no longer stands for it"
+        _label(ln, pr)
+        labelled = True
+        say(f"merging PR #{pr}, which the batch tested after #{before.opts.pr}")
+        merge.await_merge(member.ln, lambda _draft: (True, 0))
+        return ""
+    except Outcome as exc:
+        why = exc.error
+    except (*_GH_FAILED, gh_read.GhReadFailed, OSError) as exc:
+        why = str(exc)
+    if labelled:
+        _full_run(ln, pr)
+    return why
+
+
+def _merge_members(ln: Landing) -> None:
+    """Merge each member the batch tested, in order, behind this landing's own merge."""
+    if ln.batch and not ln.tested_on:
+        say("the batch's run no longer stands, so its other PRs land alone")
+        return
+    before = ln
+    for member in ln.batch:
+        pr = member.ln.opts.pr
+        why = _merge_member(ln, member, before)
+        if why:
+            say(f"PR #{pr} is not merged ({why}); it and the PRs after it land alone")
+            return
+        try:
+            turn.line_of(ln)("answer", pr, member.head, line.MERGED)
+        except OSError as exc:
+            say(f"could not tell PR #{pr}'s landing that it merged ({exc})")
+        before = member.ln
+
+
+def land(ln: Landing, take_turn: merge.TakeTurn) -> None:
+    """Merge this landing's PR, and the members of the batch it formed, if it formed one.
+
+    The batch is formed as soon as the landing takes the turn with a draft that has had no
+    CI run, which is the one case `merge.await_merge` asks for the turn with a head.
+    """
+
+    def take(draft: str) -> tuple[bool, int]:
+        in_turn, waited = take_turn(draft)
+        if in_turn and draft and ln.opts.batch:
+            try:
+                ln.batched_s = form(ln, draft)
+            except Exception as exc:
+                # DECIDED: a batch never fails the landing that forms it.
+                say(f"the landing batch failed ({exc!r}); PR #{ln.opts.pr} lands alone")
+                ln.tested_on, ln.batch = "", []
+        return in_turn, waited + ln.batched_s
+
+    try:
+        merge.await_merge(ln, take)
+    except Outcome:
+        if ln.tested_head:
+            _full_run(ln, ln.opts.pr)
+        raise
+    try:
+        _merge_members(ln)
+    except Exception as exc:
+        # DECIDED: the same. This landing's own PR has merged, and its deploy comes next.
+        say(f"the landing batch ended early ({exc!r}); its other PRs land alone")

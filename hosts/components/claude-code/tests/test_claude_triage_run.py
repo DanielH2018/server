@@ -67,13 +67,14 @@ def test_session_output_is_escaped_in_the_report() -> None:
             "evidence": [{"source": HOSTILE, "finding": HOSTILE}],
             "proposed_fix": HOSTILE,
         },
-        "session_id": "abc",
+        "session_id": HOSTILE,
     }
     page = run.render_report(record, "2026-10-15 18:00")
     assert "<script>" not in page
     assert "<img" not in page
     assert "&lt;script&gt;" in page
-    assert "cd ~/server &amp;&amp; claude --resume abc" in page
+    # The operator ruled out resuming an unattended session in place (2026-11-14).
+    assert "claude --resume" not in page
 
 
 @pytest.mark.parametrize(
@@ -140,7 +141,14 @@ def test_a_run_with_no_diagnosis_still_leaves_a_record_a_report_and_a_page(
     tmp_path,
 ) -> None:
     pages = []
-    body = json.dumps({"subtype": "error_max_budget_usd", "session_id": "s1"})
+    denied = [{"tool_name": "Bash", "tool_input": {"command": "secret-sentinel"}}] * 2
+    body = json.dumps(
+        {
+            "subtype": "error_max_budget_usd",
+            "session_id": "s1",
+            "permission_denials": denied,
+        }
+    )
     config, state, reports = _setup(tmp_path, body)
 
     assert (
@@ -156,6 +164,9 @@ def test_a_run_with_no_diagnosis_still_leaves_a_record_a_report_and_a_page(
     record = json.loads((tmp_path / "state" / "runs" / "drill.json").read_text())
     assert record["state"] == "inconclusive"
     assert record["diagnosis"] is None
+    # A count a reader can act on, with nothing the session chose in it.
+    assert record["denials"] == 2
+    assert "secret-sentinel" not in json.dumps(record)
     assert record["report"].endswith("/a/daniel-box-claude/triage-drill.html")
     report = os.path.join(reports, "triage-drill.html")
     # Readable by the operator's group and the artifacts pod: 0600 would hide it from both.

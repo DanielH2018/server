@@ -40,11 +40,11 @@ produced there and is not generalisable.
 Run: uv run pytest tests/k8s/test_configmap_keys_not_absorbed.py
 """
 
+import functools
 import re
 from collections import defaultdict
 from pathlib import Path
 
-import pytest
 from _helpers import REPO
 from _k8s_render import rendered_docs
 
@@ -111,6 +111,7 @@ def unconditional_source_keys(template: Path) -> list[str]:
     return keys
 
 
+@functools.cache
 def rendered_keys_by_template() -> dict[tuple[str, str], set[str]]:
     keys: dict[tuple[str, str], set[str]] = defaultdict(set)
     for role, tpl, doc in rendered_docs():
@@ -122,12 +123,10 @@ def rendered_keys_by_template() -> dict[tuple[str, str], set[str]]:
     return keys
 
 
-RENDERED = rendered_keys_by_template()
-
-
+@functools.cache
 def cases() -> list[tuple[Path, str, str, list[str]]]:
     """(template, role, template name, source keys) for every template the render covers."""
-    rendered = RENDERED
+    rendered = rendered_keys_by_template()
     found = []
     for role_dir in role_dirs():
         for template in sorted(role_dir.glob("templates/*.j2")):
@@ -141,13 +140,10 @@ def cases() -> list[tuple[Path, str, str, list[str]]]:
     return found
 
 
-CASES = cases()
-
-
 def test_the_scan_finds_keys_across_most_configmaps() -> None:
     """Guard the guard: a broken scan reports no keys and every assertion below vacuously passes."""
-    templates = len(CASES)
-    keys = sum(len(k) for _, _, _, k in CASES)
+    templates = len(cases())
+    keys = sum(len(k) for _, _, _, k in cases())
     # Measured: 51 templates, 321 keys; 290 keys since monitor-bridge's 44 push tokens moved
     # into a loop (#3659), and 154 since the two bridges' 162 settings left their Secrets for
     # the Deployment's `env` (#5574). The floors sit just under that, high enough
@@ -162,19 +158,29 @@ def test_the_scan_finds_keys_across_most_configmaps() -> None:
     assert keys >= 150, f"only {keys} keys are being checked — the source scan broke"
 
 
-@pytest.mark.parametrize(
-    ("template", "role", "name", "source_keys"),
-    [pytest.param(t, r, n, k, id=f"{r}/{n}") for t, r, n, k in CASES],
-)
-def test_no_source_key_is_absorbed_into_the_value_above_it(
-    template: Path, role: str, name: str, source_keys: list[str]
-) -> None:
-    rendered = RENDERED.get((role, name), set())
-    missing = [k for k in source_keys if k not in rendered]
-    assert not missing, (
-        f"{template.relative_to(REPO)} writes {missing} at the data indent, but the "
-        "rendered ConfigMap has no such key — it was absorbed into the block scalar above it "
-        "(check the indentation of the preceding key, its value, and any Jinja comment between "
-        f"them). The render still parses as YAML, so no other check sees this. Rendered keys: "
-        f"{sorted(rendered)}"
+def absorbed_keys(source_keys: list[str], rendered: set[str]) -> list[str]:
+    """The keys written at the data indent that the rendered ConfigMap does not hold."""
+    return [k for k in source_keys if k not in rendered]
+
+
+def test_no_source_key_is_absorbed_into_the_value_above_it() -> None:
+    rendered = rendered_keys_by_template()
+    problems = [
+        f"{template.relative_to(REPO)} writes {missing}; rendered keys: "
+        f"{sorted(rendered[(role, name)])}"
+        for template, role, name, source_keys in cases()
+        if (missing := absorbed_keys(source_keys, rendered[(role, name)]))
+    ]
+    assert not problems, (
+        "Each template below writes these keys at the data indent, but its rendered "
+        "ConfigMap has no such key. Each was absorbed into the block scalar above it (check "
+        "the indentation of the preceding key, its value, and any Jinja comment between "
+        "them). The render still parses as YAML, so no other check sees this.\n"
+        + "\n".join(problems)
     )
+
+
+def test_an_absorbed_key_is_flagged() -> None:
+    """The rejecting half: a source key the render lost is reported, a kept one is not."""
+    assert absorbed_keys(["a.py", "b.json"], {"a.py"}) == ["b.json"]
+    assert absorbed_keys(["a.py"], {"a.py", "extra"}) == []

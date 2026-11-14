@@ -92,8 +92,8 @@ groups:
           description: >-
             homelab-k3s-restart has refused to restart k3s.service on daniel-box at every window
             for 72 hours. Read `journalctl -u homelab-k3s-restart -p notice` for the refusing
-            gate, which is a Longhorn volume, a node, CoreDNS, a SUC run, a Flux promotion, the
-            deployer's lock or hold, or an unreadable API.
+            gate, which is a Longhorn volume, a node, CoreDNS, a SUC run, a Flux promotion, or an
+            unreadable API.
       # An absent series reads as clean on the two rules above, so this one pages it. daniel-box
       # alone has a term: daniel-server ships no k3s-restart component yet (H6.3b, Amended
       # 2026-10-24), and a term for it would fire at once. The follow-up that adds the component

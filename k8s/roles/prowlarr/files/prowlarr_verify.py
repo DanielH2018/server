@@ -28,7 +28,7 @@ Inputs come from the Job's environment: `CONTROL_URL` and `FLARESOLVERR_URL`.
 Exit 0 when both legs pass, 1 when one fails, naming it.
 
 Run: python3 prowlarr_verify.py (in the Job; it takes no arguments)
-     uv run pytest ansible/roles/k8s/prowlarr/tests/test_prowlarr_verify.py
+     uv run pytest k8s/roles/prowlarr/tests/test_prowlarr_verify.py
 """
 
 import argparse

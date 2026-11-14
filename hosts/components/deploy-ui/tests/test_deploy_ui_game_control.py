@@ -148,9 +148,17 @@ def test_a_restart_whose_pods_never_go_leaves_the_game_stopped_is_flagged(tmp_pa
 
 def test_a_restart_stops_the_game_then_starts_it_again_is_clean(tmp_path):
     control, audited = _control(tmp_path, {**APISERVER, PODS: ("", 0)})
+    restarted = threading.Event()
+
+    def audit(line: str) -> None:
+        audited.append(line)
+        if "result=" in line:
+            restarted.set()
+
+    control.audit = audit
     status, text = _act(control, "valheim", "restart")
-    [thread] = [t for t in threading.enumerate() if t.name == "game-restart-valheim"]
-    thread.join(timeout=5)
+    # The restart's thread can end before this line, so wait on its last effect, not on it.
+    assert restarted.wait(timeout=5)
     assert (status, "starts again" in text) == (200, True)
     replicas = [
         json.loads(argv[argv.index("--data") + 1])["spec"]["replicas"]

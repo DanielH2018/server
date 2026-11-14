@@ -308,6 +308,9 @@ class Tools:
     # Takes the landing turn without waiting: the call that gives it up, or None while another
     # landing holds it. None here means `turn.try_take`, for the same reason.
     try_turn: Callable[[], Callable[[], None] | None] | None = None
+    # The line for the landing turn (`line.py`): one operation, by name. None means the line
+    # on the turn's host, which `turn` reaches by this host's name.
+    line: Callable[..., str] | None = None
     wait_for_hosts: Callable[..., None] | None = None
 
 

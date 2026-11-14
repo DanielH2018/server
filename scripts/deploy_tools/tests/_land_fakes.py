@@ -19,7 +19,7 @@ from deploy_tools.promote_lib.wait import WaitResult
 from typing import Any
 
 from deploy_tools.land_lib.health_gate import GateResult
-from deploy_tools.land_lib import landing as landing_mod
+from deploy_tools.land_lib import fresh, landing as landing_mod
 from deploy_tools.land_lib import pr_json
 from _land_host_fakes import host_fakes
 from deploy_tools.land_lib.options import Options
@@ -99,6 +99,10 @@ class Fakes:
     merge_applied_rc: int = 1
     # `tools.stale_code`: the landing's own modules that lag master; None is git failing.
     stale_code: list[str] | None = field(default_factory=list)
+    # The exit code of the landing `tools.fresh_landing` runs from a fresh checkout.
+    fresh_rc: int = 0
+    # Why `tools.fresh_landing` could not start that landing; "" starts it.
+    fresh_fails: str = ""
     # `git show <ref>:<path>` text by ref. An absent ref answers as a missing file.
     show_at: dict[str, str] = field(default_factory=dict)
     hostname: str = "daniel-box"
@@ -146,6 +150,9 @@ class Fakes:
     # What each `tools.try_turn` call answers: True takes the landing turn, False finds another
     # landing holding it, and an exception is raised in place of an answer.
     turn: list[bool | Exception] = field(default_factory=lambda: [True])
+    # What each operation on the line for the turn answers (`tools.line`), one entry a call.
+    # Only `join` and `stand` return theirs. An exception is raised in place of an answer.
+    line: list[str | Exception] = field(default_factory=lambda: [""])
     # What the PR head's `ci.yml` runs listing answers on every call, as `merge._ready_run_on`
     # reads it: `{id, status, conclusion}` per run. The default is one draft run that skipped,
     # and an exception is raised in place of an answer.
@@ -394,8 +401,23 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
             raise answer
         return (lambda: calls.append(("release_turn", (), {}))) if answer else None
 
+    def fresh_landing(primary, argv):
+        calls.append(("fresh_landing", (primary, argv), {}))
+        if f.fresh_fails:
+            raise fresh.CheckoutFailed(f.fresh_fails)
+        return f.fresh_rc
+
+    line_seq = _seq(f.line, calls, "line")
+
+    def line(op, *args):
+        answer = line_seq(op, *args)
+        if isinstance(answer, Exception):
+            raise answer
+        return answer if op in ("join", "stand") else ""
+
     tools = Tools(
         try_turn=try_turn,
+        line=line,
         gh_json=gh_json,
         gh=gh_run,
         git=git_run,
@@ -406,6 +428,7 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
         declared_at=lambda ref, primary: f.declared_at,
         flux=FluxReads(land_wait, pins, k8s_tags_at),
         stale_code=lambda base: f.stale_code,
+        fresh_landing=fresh_landing,
         **host_fakes(f, calls),
         hostname=lambda: f.hostname,
         logger=lambda line: calls.append(("logger", (line,), {})),

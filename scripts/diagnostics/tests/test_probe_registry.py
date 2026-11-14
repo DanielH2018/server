@@ -51,6 +51,7 @@ EXPECTED_MODULES = frozenset(
         "readonly_rbac",
         "shed_set",
         "takeover",
+        "uptime_robot",
         "usage",
         "vip_placement",
     }
@@ -76,7 +77,7 @@ def test_list_flag_prints_every_subcommand_with_a_description(capsys):
     assert probe.main(["--list"]) == 0
     out = capsys.readouterr().out
     lines = out.strip().splitlines()
-    assert len(lines) == len(subcommands.SUBCOMMANDS) == 28
+    assert len(lines) == len(subcommands.SUBCOMMANDS) == 29
     for name, description, _module, _func in subcommands.SUBCOMMANDS:
         assert any(line.startswith(name) and description in line for line in lines), (
             name,

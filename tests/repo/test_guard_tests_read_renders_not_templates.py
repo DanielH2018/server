@@ -32,7 +32,7 @@ Two things the rule deliberately does not reach:
 
 * **A role's `files/` copy.** It ships verbatim, so there is no render to read and the text
   IS the artifact.
-#3196 named one blind spot, `test_healthchecks_pings.py`, whose `ANSIBLE.rglob("*")` census
+#3196 named one blind spot, `test_healthchecks_pings.py`, whose `rglob("*")` census
 put no template path at its read site. #3190 converted that census to a render in the same
 wave, and the control read it kept IS visible here — so the module is a listed reader rather
 than a declared gap, and no blind-spot map is needed.
@@ -125,7 +125,7 @@ TEMPLATE_SOURCE_READERS = {
     "deploy/test_tree_lock_single_definition.py": (
         "whether a host cron CALLS git-tree-lock.j2's macro or writes the `exec 9>` idiom out "
         "by hand; both render the same two lines, so only the source tells them apart. The "
-        "rendered wait is checked by gitops_deploy's timeout-budget census"
+        "rendered wait is checked by hosts/tests/test_tree_lock_wait_covers_holders.py"
     ),
     "k8s/test_arr_deployments_share_one_macro.py": (
         "whether radarr's and sonarr's templates CALL the shared macro or write its body out "

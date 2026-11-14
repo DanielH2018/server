@@ -103,9 +103,9 @@ DRAFT_SKIPPED_GRACE_S = await_ci.DROPPED_PUSH_GRACE_S
 # A poll that pacing holds sleeps this many merge polls. On 2026-11-11 thirteen landers polling
 # every 30s spent the hourly quota, and a held lander cannot merge sooner for polling sooner.
 HELD_POLL_FACTOR = 4
-# Takes the landing turn (`turn.held`): whether the landing holds it, and the seconds the call
-# waited in line.
-type TakeTurn = Callable[[], tuple[bool, int]]
+# Takes the landing turn (`turn.held`), given the head of a draft that has had no CI run or
+# "": whether the landing holds it, and the seconds the call waited in line.
+type TakeTurn = Callable[[str], tuple[bool, int]]
 
 
 def _reference_is_deliberate(prefix: str) -> bool:
@@ -449,7 +449,7 @@ def _mark_ready(ln: Landing) -> None:
     say(f"PR #{pr} was a draft; marked it ready")
 
 
-def _no_turn() -> tuple[bool, int]:
+def _no_turn(draft: str) -> tuple[bool, int]:
     """`await_merge`'s `take_turn` for a caller that has no landing turn to offer."""
     return False, 0
 
@@ -458,7 +458,8 @@ def _start_run(ln: Landing, take_turn: TakeTurn) -> tuple[str, bool, int]:
     """Give a PR that has had no CI run its one run, unless `LAND_QUEUE=0`.
 
     A head with no CI run that ran jobs takes the landing turn first (`turn.py`), so that the
-    run it is about to get tests the master its merge lands on. A draft is then marked ready,
+    run it is about to get tests the master its merge lands on. A draft stands in the line
+    for the turn while it waits (`line.py`). A draft is then marked ready,
     because a draft's run runs no job and a draft cannot merge. With the turn, the PR's branch
     is updated from master when master is ahead of it. GitHub builds the tree a pull-request
     run tests when the PR's branch is pushed. A ready flip does not build it again: PR #8551
@@ -469,7 +470,9 @@ def _start_run(ln: Landing, take_turn: TakeTurn) -> tuple[str, bool, int]:
     the turn once that head is green, so no landing holds the turn while a run that started
     before it finishes. The branch is also left as it is for a head that moved after the
     landing policy pinned it, a head admitted on an approval, a PR GitHub reads as
-    conflicting, and an update that fails.
+    conflicting, and an update that fails. A head a landing batch tested is left too
+    (`batch.py`): the batch stacked it on the master of the turn, and an update would make a
+    head no run tested.
 
     Returns:
         The head the branch was updated from, or "" when it was not updated; whether the
@@ -486,13 +489,14 @@ def _start_run(ln: Landing, take_turn: TakeTurn) -> tuple[str, bool, int]:
         untested = not _ready_run_on(ln, head)
         if not untested or in_turn or queued:
             break
-        in_turn, queued = take_turn()
+        in_turn, queued = take_turn(head if view.get("isDraft") is True else "")
         if not queued:
             break
     if view.get("isDraft") is True:
         _mark_ready(ln)
     if (
         not (in_turn and untested)
+        or stale_base.batch_tested(ln, head)
         or view.get("mergeable") == "CONFLICTING"
         or head == ln.approved_head
         or (ln.pinned_head and head != ln.pinned_head)
@@ -538,6 +542,11 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
     together stay inside the two merge budgets LAND_DEADLINE counts.
     Without --arm-merge this only polls, for a PR merged some other way.
 
+    A head a landing batch tested (`batch.py`) merges with no stale-base check while it is
+    the head the batch stacked and master is still the commit the batch stacked it on
+    (`stale_base.batch_tested`). The seconds of the batch's run reach this wait with the
+    seconds in line for the turn, and the wait then ends inside the two merge budgets.
+
     A head whose every CI run skipped as a draft is named on the poll that first reads it. Once
     it has stayed so for `DRAFT_SKIPPED_GRACE_S`, a PR that is no longer a draft is converted
     to draft and back once for that head (`_retrigger_ready_run`) and the grace starts again.
@@ -576,6 +585,8 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
         waited = queued
     # The `waited + held` at which the wait ends; the update after a green head moves it, once.
     wait_ends_at = waited + o.merge_timeout
+    if ln.batched_s:
+        wait_ends_at = min(wait_ends_at, wait_cap)
     # The head the pin gate last passed, so a merge GitHub refuses and the wait retries runs
     # the gate and posts the status again only for a new head.
     gated_head = ""
@@ -670,7 +681,7 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
             if rc == CI_DISARMED and ln.direct_merge_subject:
                 ln.die(disarmed(f" at {head[:8]}", f"PR #{o.pr} not merged"), 1)
             if rc == CI_GREEN and ln.direct_merge_subject and not in_turn:
-                in_turn, in_line = take_turn()
+                in_turn, in_line = take_turn("")
                 if in_line:
                     # The PR may have moved while this landing stood in line, so read it again.
                     queued += in_line
@@ -689,7 +700,7 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
                 conflicts = view.get("mergeable") == "CONFLICTING"
                 moved = (
                     []
-                    if updated_from
+                    if updated_from or stale_base.batch_tested(ln, head)
                     else stale_base.stale_paths(ln, head, conflicts, no_overlap)
                 )
                 if moved:
@@ -746,8 +757,10 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
             held += step
         else:
             waited += step
+    in_line = queued - ln.batched_s
     notes = [
-        f"{queued}s of it waiting for the landing turn" if queued else "",
+        f"{in_line}s of it waiting for the landing turn" if in_line else "",
+        f"{ln.batched_s}s of it on its batch's run" if ln.batched_s else "",
         f"{held}s of it held by pacing" if held else "",
     ]
     say(", ".join([f"merged after {waited + held}s", *filter(None, notes)]))

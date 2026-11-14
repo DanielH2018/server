@@ -24,7 +24,7 @@ def test_a_token_pasted_across_a_wrapped_line_reaches_the_session_whole(
     assert session.session_env({"HOME": "/h"}) == {"HOME": "/h"}
 
 
-def test_the_session_is_diagnose_only_capped_and_kept_for_resume() -> None:
+def test_the_session_is_diagnose_only_and_capped() -> None:
     argv = session.build_argv(
         {"CLAUDE_BIN": "claude", "BUDGET_USD": "10", "MAX_TURNS": "60"}
     )
@@ -40,8 +40,9 @@ def test_the_session_is_diagnose_only_capped_and_kept_for_resume() -> None:
     assert argv[argv.index("--max-turns") + 1] == "60"
     assert argv[argv.index("--permission-prompts") + 1] == "none"
     assert json.loads(argv[argv.index("--json-schema") + 1]) == session.SCHEMA
-    # The report's resume command needs the transcript on disk.
-    assert "--no-session-persistence" not in argv
+    assert "--settings" not in argv
+    with_settings = session.build_argv({"SETTINGS_FILE": "/opt/s.json"})
+    assert with_settings[with_settings.index("--settings") + 1] == "/opt/s.json"
 
 
 def test_the_prompt_reaches_claude_on_stdin_and_the_result_lands_in_the_exchange(

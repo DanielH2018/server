@@ -31,6 +31,7 @@ EVENTS = [
     {"activity_type": "push", "actor": {"login": "renovate[bot]"}, "after": HEAD},
     {"activity_type": "branch_creation", "actor": {"login": "renovate[bot]"}},
 ]
+UNMERGED = (0, json.dumps({"merged": False}))
 SOAKED = [
     {
         "context": "renovate/stability-days",
@@ -106,9 +107,10 @@ class _Run:
         files=REST_FILES,
         events=EVENTS,
         statuses=SOAKED,
+        rest_pr=UNMERGED,
     ):
         self.pr, self.land_out, self.land_rc, self.calls = pr, land_out, land_rc, []
-        self.denylist, self.cwds = denylist, []
+        self.denylist, self.cwds, self.rest_pr = denylist, [], rest_pr
         self.api = {"/files?": files, "/activity?": events, "/statuses?": statuses}
 
     def __call__(self, argv, cwd=None, timeout=120, stdin_text=None):
@@ -118,6 +120,8 @@ class _Run:
             return 0, json.dumps(self.pr)
         if argv == list(lander.DENYLIST_ARGV):
             return self.denylist
+        if argv == ["gh", "api", "repos/DanielH2018/server/pulls/3340"]:
+            return self.rest_pr
         if argv[:2] == ["gh", "api"]:
             (answer,) = [v for k, v in self.api.items() if k in argv[-1]]
             return (0, json.dumps([answer])) if answer is not None else (1, "HTTP 502")
@@ -138,7 +142,7 @@ def _main(tmp_path, run, floor_file=FLOOR_FILE):
 def test_a_missing_floor_file_refuses_before_land_sh(tmp_path):
     run = _Run(GOOD)
     rc, result = _main(tmp_path, run, floor_file=tmp_path / "absent")
-    assert rc == 3 and "floor is unusable" in result
+    assert rc == lander.REFUSED_EXIT and "floor is unusable" in result
     assert not any("land.sh" in " ".join(argv) for argv in run.calls)
 
 
@@ -161,7 +165,7 @@ def test_a_denied_role_from_the_derivation_refuses_the_pr(tmp_path):
     files = [{"path": "k8s/roles/authelia/defaults/main.yml"}]
     run = _Run({**GOOD, "files": files})
     rc, result = _main(tmp_path, run)
-    assert rc == 3 and "authelia" in result
+    assert rc == lander.REFUSED_EXIT and "authelia" in result
     assert not any(argv[0].endswith("land.sh") for argv in run.calls)
 
 
@@ -173,6 +177,52 @@ def test_a_passing_pr_is_landed_and_only_the_verdict_line_is_recorded(tmp_path):
     assert land[:2] == ["env", f"LAND_REQUIRE_HEAD={HEAD}"]
     assert land[2].endswith("scripts/deploy_tools/land.sh")
     assert land[3:] == ["--pr", "3340", "--arm-merge", "--await-merge"]
+
+
+LAND_REFUSED = (
+    "LAND-RESULT: verdict=refused cause=- exit=1 pr=3340 sha=- tags=0\n"
+    "VERDICT: refused (PR #3340 — could not read PR #3340: GraphQL: API rate limit "
+    "already exceeded)\n"
+)
+
+
+def test_a_land_sh_refusal_on_an_unmerged_pr_exits_as_a_refusal(tmp_path):
+    rc, result = _main(tmp_path, _Run(GOOD, land_out=LAND_REFUSED, land_rc=1))
+    assert rc == lander.REFUSED_EXIT
+    assert result.startswith("VERDICT: refused (PR #3340")
+
+
+@pytest.mark.parametrize(
+    "rest_pr",
+    [
+        (0, json.dumps({"merged": True})),
+        (1, "HTTP 403: API rate limit exceeded"),
+        (0, "not json"),
+        (0, json.dumps({})),
+    ],
+)
+def test_a_land_sh_refusal_on_a_merged_or_unread_pr_keeps_its_exit(tmp_path, rest_pr):
+    run = _Run(GOOD, land_out=LAND_REFUSED, land_rc=1, rest_pr=rest_pr)
+    rc, _ = _main(tmp_path, run)
+    assert rc == 1
+
+
+def test_a_land_sh_crash_on_an_unmerged_pr_keeps_its_exit(tmp_path):
+    out = (
+        "LAND-RESULT: verdict=refused cause=- exit=1 pr=3340 sha=- tags=0\n"
+        "VERDICT: refused (PR #3340 — the landing raised KeyError: 'files')\n"
+        "Traceback (most recent call last):\n"
+        '  File "land.py", line 332, in main\n'
+        "KeyError: 'files'\n"
+    )
+    rc, _ = _main(tmp_path, _Run(GOOD, land_out=out, land_rc=1))
+    assert rc == 1
+
+
+def test_a_failure_after_the_merge_keeps_land_sh_s_exit(tmp_path):
+    out = "VERDICT: ci-red (master CI failed on abcdef12)\n"
+    rc, result = _main(tmp_path, _Run(GOOD, land_out=out, land_rc=1))
+    assert rc == 1 and result == out
 
 
 def test_a_floor_path_lands_only_with_the_operators_approval(tmp_path):
@@ -197,20 +247,20 @@ def test_another_pusher_makes_the_landing_need_approval(tmp_path):
 def test_a_soak_status_another_account_posted_is_refused(tmp_path):
     statuses = [{**SOAKED[0], "creator": {"login": "DanielClaudeBot"}}]
     rc, result = _main(tmp_path, _Run(GOOD, statuses=statuses))
-    assert rc == 3 and "posted by DanielClaudeBot" in result
+    assert rc == lander.REFUSED_EXIT and "posted by DanielClaudeBot" in result
 
 
 def test_an_unreadable_branch_activity_refuses(tmp_path):
     run = _Run(GOOD, events=None)
     rc, result = _main(tmp_path, run)
-    assert rc == 3 and "branch activity" in result
+    assert rc == lander.REFUSED_EXIT and "branch activity" in result
     assert not any("land.sh" in " ".join(argv) for argv in run.calls)
 
 
 def test_a_refused_pr_never_reaches_land_sh(tmp_path):
     run = _Run({**GOOD, "author": {"login": "DanielH2018"}})
     rc, result = _main(tmp_path, run)
-    assert rc == 3 and result.startswith("REFUSED: its author")
+    assert rc == lander.REFUSED_EXIT and result.startswith("REFUSED: its author")
     assert not any(argv[0].endswith("land.sh") for argv in run.calls)
 
 
@@ -228,7 +278,7 @@ def test_a_refused_pr_never_reaches_land_sh(tmp_path):
 def test_a_failed_denylist_refuses_before_asking_github(tmp_path, denylist, names):
     run = _Run(GOOD, denylist=denylist)
     rc, result = _main(tmp_path, run)
-    assert rc == 3 and "--denylist" in result and names in result
+    assert rc == lander.REFUSED_EXIT and "--denylist" in result and names in result
     assert run.calls == [list(lander.DENYLIST_ARGV)]
 
 
@@ -238,7 +288,9 @@ def test_an_earlier_verdict_is_overwritten_before_the_checks_run(tmp_path):
         "VERDICT: settled (an older landing)\n"
     )
     rc, result = _main(tmp_path, _Run("not a dict"))
-    assert rc == 3 and result.startswith("REFUSED: cannot read the PR")
+    assert rc == lander.REFUSED_EXIT and result.startswith(
+        "REFUSED: cannot read the PR"
+    )
 
 
 def test_the_polkit_rule_admits_exactly_the_unit_names_the_lander_accepts():

@@ -242,6 +242,7 @@ FLOOR = [
     "hosts/components/claude-code/templates/50-claude-triage.rules.j2",
     "hosts/components/claude-code/files/claude_triage_run.py",
     "hosts/components/claude-code/files/claude_triage_session.py",
+    "hosts/components/claude-code/files/claude-triage-settings.json",
     "hosts/components/claude-code/files/claude_triage_poll.py",
     # The root inspector joined the floor with its grant (#6323).
     "hosts/components/claude-code/files/homelab_rootq.py",

@@ -2,7 +2,7 @@
 """Count each GitHub call a session makes, and report the count beside GitHub's own.
 
 GitHub meters API calls per identity, per hour, and every session on a host spends the same
-identity's quota. `record` adds one to a ledger under /run/gh-quota, keyed by session, for each
+identity's quota. `record` adds one to a ledger under /var/lib/gh-quota, keyed by session, for each
 `gh` call a wrapper is about to make. About every 30 seconds it also stores what GitHub itself
 counted. `gh-quota status` prints the two side by side, so a spike has a session's name on it.
 docs/github-quota.md holds the design.
@@ -36,7 +36,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
-LEDGER_DIR = Path("/run/gh-quota")
+LEDGER_DIR = Path("/var/lib/gh-quota")
 CONF = Path("/etc/gh-quota.conf")
 BUCKETS = ("graphql", "core")
 SAMPLE_EVERY_S = 30
@@ -133,19 +133,12 @@ def session_key(
     return unit if unit.endswith(".service") else "operator"
 
 
-def _identity(env: Mapping[str, str]) -> str:
-    token = env.get("GH_TOKEN") or env.get("GITHUB_TOKEN")
-    if token:
-        return "tok-" + hashlib.sha256(token.encode()).hexdigest()[:12]
-    return f"uid-{os.getuid()}"
-
-
 @dataclass(frozen=True)
 class Window:
     """One identity's spend in one bucket, for the quota window GitHub has open.
 
     Attributes:
-        identity: `uid-<n>` for a `gh` login, `tok-<fingerprint>` for a `GH_TOKEN`.
+        identity: `tok-<fingerprint>` of the token `gh` used, or `uid-<n>` when it had none.
         bucket: `graphql` or `core`.
         used: what GitHub counted at the last sample.
         quota: GitHub's limit for the bucket.
@@ -193,9 +186,10 @@ class Ledger:
         root: the directory that holds one SQLite file per identity and uid.
         conf: the file whose `mode=` line turns recording on.
         env: the environment of the `gh` call being counted.
-        gh: the program the caller runs as `gh`, which also takes the sample.
+        gh: the program the caller runs as `gh`, which also names its token and takes the
+            sample.
         now: the clock.
-        run: runs the `gh api rate_limit` sample.
+        run: runs `gh auth token` and the `gh api rate_limit` sample.
     """
 
     root: Path = LEDGER_DIR
@@ -284,13 +278,44 @@ class Ledger:
         return list(found.values())
 
     def failures(self) -> int:
-        """How many times a `record` or a sample failed since boot, across every caller."""
+        """How many times a `record` or a sample failed within `KEEP_S`, across every caller."""
         return sum(
-            len(path.read_text().splitlines()) for path in self.root.glob("failures.*")
+            len(self._recent_failures(path)) for path in self.root.glob("failures.*")
         )
 
+    def _recent_failures(self, log: Path) -> list[str]:
+        oldest = self.now() - KEEP_S
+        return [
+            line
+            for line in log.read_text().splitlines()
+            if (stamp := line.partition(" ")[0]).isdigit() and int(stamp) >= oldest
+        ]
+
+    def _gh_env(self) -> dict[str, str]:
+        return dict(self.env, GH_PROMPT_DISABLED="1", GH_NO_UPDATE_NOTIFIER="1")
+
+    def _identity(self) -> str:
+        # GitHub meters per token owner, and `gh` alone knows which token this environment
+        # gives it: a variable, another config directory, or the login it has stored.
+        token = self.env.get("GH_TOKEN") or self.env.get("GITHUB_TOKEN")
+        if not token:
+            try:
+                token = self.run(
+                    [self.gh, "auth", "token"],
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                    check=True,
+                    env=self._gh_env(),
+                ).stdout.strip()
+            except (OSError, subprocess.SubprocessError):
+                token = ""
+        if token:
+            return "tok-" + hashlib.sha256(token.encode()).hexdigest()[:12]
+        return f"uid-{os.getuid()}"
+
     def _open(self) -> sqlite3.Connection:
-        path = self.root / f"{_identity(self.env)}@{os.getuid()}.sqlite"
+        path = self.root / f"{self._identity()}@{os.getuid()}.sqlite"
         if not path.exists():
             path.touch()
             path.chmod(0o644)
@@ -327,7 +352,7 @@ class Ledger:
                 text=True,
                 timeout=10,
                 check=True,
-                env=dict(self.env, GH_PROMPT_DISABLED="1", GH_NO_UPDATE_NOTIFIER="1"),
+                env=self._gh_env(),
             ).stdout
             resources = json.loads(out)["resources"]
             for bucket in BUCKETS:
@@ -355,6 +380,9 @@ class Ledger:
     def _failed(self, exc: Exception) -> None:
         log = self.root / f"failures.{os.getuid()}"
         try:
+            if log.exists() and log.stat().st_size >= _FAILURE_LOG_MAX:
+                kept = self._recent_failures(log)
+                log.write_text("".join(f"{line}\n" for line in kept))
             if not log.exists() or log.stat().st_size < _FAILURE_LOG_MAX:
                 with log.open("a") as out:
                     out.write(f"{int(self.now())} {type(exc).__name__}: {exc}\n")
@@ -413,7 +441,7 @@ def render(windows: Sequence[Window], failures: int, *, every: bool) -> list[str
             )
     if failures:
         lines.append(
-            f"{failures} ledger failures since boot; see {LEDGER_DIR}/failures.*"
+            f"{failures} ledger failures in {KEEP_S // 86400} days; see {LEDGER_DIR}/failures.*"
         )
     return lines
 
