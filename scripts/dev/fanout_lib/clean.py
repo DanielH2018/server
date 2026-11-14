@@ -157,10 +157,10 @@ def clean_one(
 ) -> tuple[str, str]:
     """Remove `tree` when its branch landed and it is clean; otherwise keep it and say why.
 
-    `classify` reads a locked tree carrying an unrecognized lock reason (a `fanout-<batch>`
-    launch lock, not a Claude session lock) as a live session and keeps it forever — Ruling
-    13. This judges an in-memory unlocked copy so classify decides on merged/dirty state
-    instead, but only touches the REAL lock when a tree is actually about to be removed: the
+    `classify` reads a `fanout-<batch>` launch lock as live for a day after launch, and while
+    the batch's unit is active (`lib.fanout_lock`). The caller has already checked the unit,
+    so this judges an in-memory unlocked copy and classify decides on merged/dirty state
+    instead — Ruling 13. It only touches the REAL lock when a tree is actually about to be removed: the
     lock is released right before `remover` runs, and put back with its original reason if
     `remover` then fails. Every KEEP verdict leaves the lock exactly as it found it — a batch
     that is still running or still unmerged is never unlocked at all.
