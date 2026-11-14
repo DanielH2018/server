@@ -14,6 +14,11 @@ Typical usage example, in a template:
     {{ lookup('file', cluster_vars_source()) }}
 """
 
+import sys as _sys
+from pathlib import Path as _Path
+
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+
 from pathlib import Path
 
 from jinja2 import UndefinedError, pass_context
