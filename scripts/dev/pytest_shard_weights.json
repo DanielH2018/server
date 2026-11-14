@@ -1224,7 +1224,7 @@
  "tests/repo/test_promote_workflow_verify.py": 0.0,
  "tests/repo/test_prune_artifacts_workflow.py": 0.0,
  "tests/repo/test_pytest_shards_partition_the_suite.py": 0.48,
- "tests/repo/test_python_version_consistency.py": 0.0,
+ "tests/repo/test_python_version_consistency.py": 0.28,
  "tests/repo/test_ratchet_rules.py": 0.0,
  "tests/repo/test_ratchet_tighten.py": 0.0,
  "tests/repo/test_render_gate.py": 0.0,
