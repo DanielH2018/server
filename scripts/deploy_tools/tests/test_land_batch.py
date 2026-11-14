@@ -241,24 +241,34 @@ def test_a_batch_that_is_not_green_leaves_every_pr_to_land_alone(
     assert hub.labels == {OWN: set(), "7": set(), "9": set()}
     assert hub.branches == {}
     # Each member is told, so the next landing to take the turn does not stack it again.
-    assert the_line("waiting", str(line.FRESH_S)) == ""
     assert _answers(the_line, "7", "9") == [line.ALONE, line.ALONE]
     assert f"the batch is not green: {said}" in capsys.readouterr().out
 
 
-def test_a_landing_told_to_land_alone_leaves_the_line_and_forms_no_batch(batch_of):
-    ln, hub, the_line = batch_of(drafts=("7",), fakes=Fakes(turn=[False, False, True]))
+@pytest.mark.parametrize(
+    "turn",
+    [
+        pytest.param([False, False, True], id="read-on-a-poll"),
+        # The holder answered and gave the turn up inside one poll of this landing.
+        pytest.param([False, True], id="read-on-taking-the-turn"),
+    ],
+)
+def test_a_landing_told_to_land_alone_forms_no_batch_of_its_own(batch_of, turn):
+    ln, hub, the_line = batch_of(drafts=("7",), fakes=Fakes(turn=turn))
     nap = ln.tools.sleep
+    answers = [line.ALONE]
 
     def sleep(seconds: float) -> None:
-        # The landing that holds the turn answers while this one waits in the line.
-        the_line("answer", OWN, head_of(OWN), line.ALONE)
+        # The landing that holds the turn answers once, during this landing's first wait.
+        if answers:
+            the_line("answer", OWN, head_of(OWN), answers.pop())
         nap(seconds)
 
     ln.tools = replace(ln.tools, sleep=sleep)
     _land(ln)
     assert hub.stacked == {} and hub.batch_prs == []
-    assert hub.merged == [OWN]
+    # Its own PR gets a run of its own, with no label, and the other draft waits on.
+    assert hub.merged == [OWN] and hub.labels_at_ready == {OWN: set()}
     assert the_line("waiting", str(line.FRESH_S)).split() == ["7", head_of("7")]
 
 

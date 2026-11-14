@@ -133,8 +133,11 @@ def _line_calls(calls) -> list[tuple[str, ...]]:
 def test_a_draft_stands_in_the_line_while_it_waits_and_leaves_with_the_turn(landing):
     ln, calls = _landing(landing, turn=[False, False, True])
     _land(ln)
+    # The last `stand` reads its place once more with the turn taken, for an answer the
+    # holder wrote after its last poll.
     assert _line_calls(calls) == [
         ("join", "999", HEAD),
+        ("stand", "999", HEAD),
         ("stand", "999", HEAD),
         ("leave", "999"),
     ]

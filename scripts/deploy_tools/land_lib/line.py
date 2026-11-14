@@ -209,6 +209,10 @@ class Place:
         op, self._stood = ("stand" if self._stood else "join"), True
         return self._run(op, self._pr, self._head)
 
+    def answer(self) -> str:
+        """What the holder of the turn answered a landing that stood here; "" for any other."""
+        return self._run("stand", self._pr, self._head) if self._stood else ""
+
     def leave(self) -> None:
         """Give the place up, if this landing took it."""
         if self._stood:
