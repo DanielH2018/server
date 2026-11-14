@@ -189,8 +189,8 @@ def test_the_zram_swappiness_prefers_swap_and_no_drop_in_overrides_it(package):
 # The log RAM budget.
 
 
-def _journal_caps(package: host_mode.Package) -> tuple[float, float]:
-    """The journal's SystemMaxUse and its SD-card worst case, SystemMaxFiles x SystemMaxFileSize."""
+def _journal_caps(package: host_mode.Package) -> tuple[float, float, float]:
+    """The journal's SystemMaxUse, SystemMaxFiles x SystemMaxFileSize, and SystemMaxFileSize."""
     text = _text(package, JOURNALD_CAP)
     use = re.search(r"^SystemMaxUse=(\d+[KMG])$", text, re.M)
     size = re.search(r"^SystemMaxFileSize=(\d+[KMG])$", text, re.M)
@@ -198,18 +198,50 @@ def _journal_caps(package: host_mode.Package) -> tuple[float, float]:
     assert use and size and files, (
         "the cap needs SystemMaxUse, SystemMaxFileSize and SystemMaxFiles"
     )
-    return _mb(use.group(1)), int(files.group(1)) * _mb(size.group(1))
+    file_mb = _mb(size.group(1))
+    return _mb(use.group(1)), int(files.group(1)) * file_mb, file_mb
 
 
-def test_the_journal_fits_the_log2ram_tmpfs_and_its_sd_copy_leaves_half_for_the_rest(
-    package,
-):
+# Measured on daniel-pi: pacct grows about 28 MB a day, and savelog gzips it to about a fifth.
+# sysstat writes about 1.4 MB a day. Each budget counts today's file beside the kept ones.
+# The rest of /var/hdd.log, outside these four trees, held 3 MB on 2026-11-14.
+PACCT_MB_PER_DAY = 28
+PACCT_GZIP_RATIO = 0.2
+SYSSTAT_MB_PER_DAY = 1.4
+UNCAPPED_REST_MB = 3
+JOURNAL_ACTIVE_FILES = 2  # system.journal and user-1000.journal
+
+
+def _edit_value(package: host_mode.Package, path: str, key: str) -> str:
+    """The value the package's edit of `path` sets for `key`."""
+    for line in _edits(package, path):
+        match = re.fullmatch(rf"{re.escape(key)}\s*=\s*\"?([^\"]+)\"?", line)
+        if match:
+            return match.group(1)
+    raise AssertionError(f"no edit of {path} sets {key}")
+
+
+def sd_copy_worst_mb(package: host_mode.Package) -> float:
+    """The largest the log2ram SD copy grows to under the package's caps, in MB."""
+    _, journal_archives, file_mb = _journal_caps(package)
+    journal = journal_archives + JOURNAL_ACTIVE_FILES * file_mb
+    # savelog leaves pacct.0 uncompressed and gzips the generations after it.
+    generations = int(_edit_value(package, "/etc/default/acct", "ACCT_LOGGING"))
+    pacct = PACCT_MB_PER_DAY * (2 + (generations - 1) * PACCT_GZIP_RATIO)
+    audit = int(_edit_value(package, AUDITD_CONF, "max_log_file")) * int(
+        _edit_value(package, AUDITD_CONF, "num_logs")
+    )
+    days = int(_edit_value(package, "/etc/sysstat/sysstat", "HISTORY")) + 1
+    return journal + pacct + audit + days * SYSSTAT_MB_PER_DAY + UNCAPPED_REST_MB
+
+
+def test_the_whole_sd_copy_fits_under_the_log2ram_boot_guard(package):
     tmpfs = _mb(_edits(package, LOG2RAM_CONF)["SIZE=128M"]["line"].split("=")[1])
-    use, sd_worst = _journal_caps(package)
+    use, _, _ = _journal_caps(package)
     assert use < tmpfs
     # log2ram's boot guard `du`s the SD copy against SIZE and refuses to start when it is over
-    # (#4583). `--sparse` is patched out, so every archive lands there at its full size.
-    assert sd_worst <= tmpfs / 2
+    # (#4583, #8234). `--sparse` is patched out, so every archive lands there at its full size.
+    assert sd_copy_worst_mb(package) <= tmpfs
 
 
 def test_a_journal_cap_without_a_file_count_reads_as_unbounded():
