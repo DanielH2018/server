@@ -16,6 +16,13 @@ homelab_mcp_k8s_mem_limit: 256Mi
 homelab_mcp_k8s_cpu_request: 50m
 homelab_mcp_k8s_mem_request: 32Mi
 
+# The checkout directories read_file/list_files serve, each a read-only hostPath mount from the
+# pinned node's /home/<sys_user>/server. secrets/ stays out.
+homelab_mcp_source_dirs:
+  - k8s
+  - inventory
+  - tests
+
 image_builder_builds:
   - image_builder_name: homelab-mcp
     image_builder_dockerfile: "{{ role_file('templates/Dockerfile.j2') }}"

@@ -18,9 +18,11 @@ import forge
 from changed_set import changed_set
 from deploy_tools.promote_lib import wait as promote_wait
 from deploy_tools.promote_lib import wait_reads
+import flux_host
 from flux_host import FluxHost
 from _land_wait_fakes import D, M, P, Sim, at, digests, kustomization
 from _promote_fakes import FakeTransport, digest_of
+from lib import kubectl as lib_kubectl
 
 
 # -- the three outcomes ----------------------------------------------------------------------
@@ -151,6 +153,16 @@ def test_an_unreadable_hold_keeps_the_wait_going():
 def test_an_unreadable_kustomization_list_never_reads_as_settled():
     sim = Sim(polls=[forge.ForgeError("kubectl exited 1")])
     assert sim.wait().verdict == "gave-up"
+
+
+def test_a_host_with_no_readable_kubeconfig_gives_up_at_the_first_poll():
+    """#8295: four landings held every slot for an hour retrying a read no retry fixes."""
+    error = flux_host.KubectlSetupError("no readable kubeconfig (tried $KUBECONFIG)")
+    sim = Sim(polls=[error, at(M)])
+    result = sim.wait()
+    assert (result.verdict, result.cause) == ("gave-up", "gate-unreadable")
+    assert sim.sleeps == 0
+    assert "no readable kubeconfig" in result.detail
 
 
 # -- the soak's verdict (D5.3b3) -------------------------------------------------------------
@@ -398,3 +410,17 @@ def test_the_kustomization_list_is_read_with_the_read_only_kubectl():
             ),
         )
     ]
+
+
+def test_a_missing_kubeconfig_is_a_setup_error_and_a_wrong_cluster_is_not():
+    def missing(cluster, *args, timeout):
+        raise lib_kubectl.MissingKubectl("no readable kubeconfig")
+
+    def wrong(cluster, *args, timeout):
+        raise lib_kubectl.WrongCluster("staging")
+
+    with pytest.raises(flux_host.KubectlSetupError, match="no readable kubeconfig"):
+        FluxHost(kubectl=missing).kustomizations()
+    with pytest.raises(forge.ForgeError) as exc:
+        FluxHost(kubectl=wrong).kustomizations()
+    assert not isinstance(exc.value, flux_host.KubectlSetupError)

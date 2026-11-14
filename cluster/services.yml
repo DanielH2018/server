@@ -830,9 +830,9 @@ containers_list:
     # Flux applies game-stats through `promote` (D5.19).
     weekly_backup_claims: {terraria-stats-data: 0, valheim-stats-data: 1}  # Sun, Mon
     depends_on: [loki-homelab]
-    # One job per game, each a single replica behind its own Service. terraria-stats runs as
-    # many pods as the server, so its job is dropped at `terraria_k8s_replicas: 0`: a Service
-    # with no endpoint reads `up == 0` and pages the scrape-target check (#2877).
+    # One job per game, each behind its own Service. Each exporter runs as many pods as its
+    # server, so its job is dropped at `terraria_k8s_replicas: 0` or `valheim_k8s_replicas: 0`:
+    # a Service with no endpoint reads `up == 0` and pages the scrape-target check (#2877).
     metrics:
       - job: terraria-stats
         service: terraria-stats
@@ -841,6 +841,7 @@ containers_list:
       - job: valheim-stats
         service: valheim-stats
         port: 9420
+        replicas_var: valheim_k8s_replicas
   # The bridge twins, neither of which has a route — both are pushers. monitor-bridge runs
   # every metric/API check; autofix-bridge is the *arr remediation loop.
   - name: monitor-bridge
@@ -949,7 +950,7 @@ containers_list:
     tier: platform
   # system-upgrade-controller, its CRD and the two k3s Plans (docs/target-architecture/host/
   # h6-k3s-suc.md, H6.1b). Born Flux-owned, so every Ansible path skips it from its first commit.
-  # The Plans select no node until H6.3c and H6.3d widen `system_upgrade_nodes`. No port and no
+  # The Plans select the nodes in `system_upgrade_nodes`, both since H6.3d. No port and no
   # hostname: nothing dials the controller, and the namespace denies all ingress.
   - name: system-upgrade
     tier: platform

@@ -312,7 +312,7 @@ before deciding what is due. Examples:
   only with a new Google project.
 - The Google Cast system user's refresh token is not in SOPS: HA mints and stores it. Rotate it
   in HA by deleting and re-adding the Google Cast integration, then restarting HA.
-  `ansible/roles/k8s/home-assistant/docs/platform.md`, *Rotating the cast user's refresh
+  `k8s/roles/home-assistant/docs/platform.md`, *Rotating the cast user's refresh
   token*, has the steps and the traps.
 - `pi_peer_backup_ssh_key`: generate a new ed25519 keypair, store the private half with
   `sops set`, and commit the public half over

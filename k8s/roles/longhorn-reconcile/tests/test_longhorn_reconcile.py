@@ -77,18 +77,6 @@ TRANSITIONS = [
         id="weekly-listed-volume-is-never-moved-out-of-nobackup",
     ),
     pytest.param(
-        "homelab/radarr-config",
-        ["weekly-backup"],
-        ["weekly-backup-d5"],
-        id="legacy-flat-label-migrates-to-its-shard",
-    ),
-    pytest.param(
-        "homelab/authelia-config",
-        ["weekly-backup"],
-        ["default"],
-        id="legacy-flat-label-off-the-list-returns-to-daily",
-    ),
-    pytest.param(
         "homelab/authelia-config",
         ["weekly-backup-d2"],
         ["default"],
@@ -128,7 +116,7 @@ def test_each_group_transition_writes_the_live_labels(
     assert len(world.writes()) == (0 if before == after else 1)
 
 
-def test_a_volume_with_no_claim_is_left_alone_unless_it_is_on_the_legacy_label(env):
+def test_a_volume_with_no_claim_is_left_alone(env):
     bound = _volume("pvc-1", "homelab/x", "default")
     bound["status"] = {}
     world = World([bound], [])
@@ -142,7 +130,7 @@ def test_a_second_run_changes_nothing(env, capsys):
         [
             _volume("pvc-1", "homelab/crowdsec-db", "default"),
             _volume("pvc-2", "homelab/authelia-config", "no-backup"),
-            _volume("pvc-3", "homelab/radarr-config", "weekly-backup"),
+            _volume("pvc-3", "homelab/radarr-config", "default"),
             _volume("pvc-4", "homelab/sonarr-config", "default"),
             _volume("pvc-5", "homelab/traefik-acme", "default", target=""),
             _volume("pvc-6", "homelab/authelia-config", "default", target="r2"),
@@ -162,7 +150,6 @@ def test_the_group_names_are_the_ones_setup_k3s_and_the_recurring_jobs_use():
     """The label contract, typed out and held equal to the module the RecurringJobs read."""
     assert lr.label(lr.DEFAULT) == "recurring-job-group.longhorn.io/default"
     assert lr.label(lr.NO_BACKUP) == "recurring-job-group.longhorn.io/no-backup"
-    assert lr.label(lr.LEGACY_WEEKLY) == "recurring-job-group.longhorn.io/weekly-backup"
     assert (
         lr.label(lr.shard_group(6))
         == "recurring-job-group.longhorn.io/weekly-backup-d6"

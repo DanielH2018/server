@@ -27,7 +27,10 @@ may promote a newer commit. The plan is docs/target-architecture/deploy/d2-first
                    moved to a descendant of R keeps the wait going instead: a later
                    revision superseded R's soak (D7.2), and R's own verdict comes from it.
     gave-up        LAND_WAIT_TIMEOUT_S passed, or the later deadline below. Cause
-                   `promote-timeout`.
+                   `promote-timeout`. Or the first Kustomization read found no kubectl
+                   or no readable kubeconfig, a setup fault no later poll outlasts, so
+                   the wait ends at once and frees its landing slot. Cause
+                   `gate-unreadable`.
     suspended      Every one of the PR's tags is `suspended` in M's `digests.json`, so Flux
                    applies nothing for them until a PR resumes them (D5.1d): the first poll
                    that reads M's file and a `none` DEPLOY_HOLD.
@@ -48,7 +51,8 @@ may promote a newer commit. The plan is docs/target-architecture/deploy/d2-first
 - It reads the Kustomizations with the read-only `kubectl`, ancestry with
   `git merge-base --is-ancestor`, DEPLOY_HOLD with `gh variable get`, R's `flux/soak` status
   once the Kustomizations have settled, and `prod` and `last-good` from GHCR. A read that fails keeps the wait
-  going and never reads as settled. A failed `prod` read moves no deadline.
+  going and never reads as settled, except a missing kubectl or kubeconfig, which ends it
+  `gave-up`. A failed `prod` read moves no deadline.
 
 It prints a line each time what it waits on changes. Its last line is `verdict=<outcome>
 cause=<cause> merge=<M> revision=<R> widened=<why the set was every name, or empty>`.
@@ -98,6 +102,7 @@ from deploy_tools.kustomizations import (
     origin_commit,
 )
 from deploy_tools.promote_lib import reboot_window
+from flux_host import KubectlSetupError
 
 HOLD_VARIABLE = forge.HOLD_VARIABLE
 # The annotation `flux push artifact --revision` writes on a bundle's manifest. promote.py
@@ -151,6 +156,8 @@ ANNOTATION_TAG = "deploy-annotation"
 HOLD_CAUSE = "promote-held"
 TIMEOUT_CAUSE = "promote-timeout"
 SUSPENDED_CAUSE = "promote-suspended"
+# The cause the health gate records when it cannot read its store, as land's Cause names it.
+UNREADABLE_CAUSE = "gate-unreadable"
 SOAK_CAUSE = "soak-failed"
 SOAK_CONTEXT = "flux/soak"
 SOAK_FAILED_STATES = frozenset({"failure", "error"})
@@ -207,7 +214,8 @@ class WaitResult:
     Attributes:
         verdict: `settled`, `deploy-failed`, `gave-up` or `suspended`.
         cause: HOLD_CAUSE or SOAK_CAUSE beside `deploy-failed`, TIMEOUT_CAUSE or
-            SUSPENDED_CAUSE beside the last two, "" beside `settled`.
+            UNREADABLE_CAUSE beside `gave-up`, SUSPENDED_CAUSE beside `suspended`, "" beside
+            `settled`.
         detail: why, in one sentence.
         revision: R, the commit `homelab` applied, for `settled`.
         widened: why the set was every name, or "" when the digests decided it.
@@ -390,6 +398,15 @@ def land_wait(
     while True:
         try:
             items = reads.kustomizations()
+        except KubectlSetupError as err:
+            return WaitResult(
+                "gave-up",
+                UNREADABLE_CAUSE,
+                f"this host cannot read the cluster, and no retry fixes that: {err}. "
+                "Give the landing user a readable kubeconfig, then re-run land.sh",
+                widened=widened,
+                tags=tuple(tags),
+            )
         except READ_ERRORS as err:
             items, line = None, f"the Kustomizations could not be read: {err}"
         if items is not None:

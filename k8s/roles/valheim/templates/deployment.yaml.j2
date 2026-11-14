@@ -11,7 +11,8 @@ spec:
   # Same reasoning as terraria: RWO claims on single-replica Longhorn deadlock a rolling
   # update, and two servers writing one world would be worse than the deadlock.
 {{ spec_shell('Recreate') }}
-  replicas: 1
+  # From inventory, like terraria's: game-stats and observability render the same count.
+  replicas: {{ valheim_k8s_replicas }}
   # The same budget as Flux's health-check `timeout`, which is why both read one variable. See
   # manifests_rollout_timeout in defaults/main.yml for the 2026-08-13 measurement behind it
   # and for why the deadline and the wait have to move together.

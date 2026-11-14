@@ -36,8 +36,8 @@ toolkit, and the `homelab-network-diagnostician` agent is a read-only diagnostic
 ### What the history covers
 
 **HISTORY —** the counts in this section were taken on 2026-10-12, when `probe.py alerts`
-rebuilt DOWN episodes from Loki. M6's PR B-2 moved it onto Prometheus' `ALERTS`, which keeps 30
-days, so `--limit` and the Loki cap below no longer apply to it.
+rebuilt DOWN episodes from Loki. M6's PR B-2 moved it onto Prometheus' `ALERTS`, whose history its size
+cap bounds below the configured 30 days, so `--limit` and the Loki cap below no longer apply to it.
 
 `probe.py alerts` read the DOWN lines from two streams in the `loki-homelab` store:
 monitor-bridge's checks, and the host crons that pushed to Kuma through syslog. Loki keeps 744h
