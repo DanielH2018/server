@@ -281,7 +281,7 @@ def remove_legacy(node: Node, rules: list, legacy: list, current: list) -> None:
     args = json.dumps([rules, legacy, current])
     result = run([argv[0], "-c", REMOVE_LEGACY, str(node.script.parent), args], env=env)
     assert result.returncode == 0, result.stderr
-    node.state = json.loads((node.stub / "state.json").read_text())
+    node.load_state()
 
 
 def step_4_skips_an_adopted_spec(node: Node) -> None:
