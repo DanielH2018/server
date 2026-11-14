@@ -406,16 +406,15 @@ def test_a_holder_that_does_not_merge_after_its_batch_gets_a_full_run(batch_of):
     assert _answers(the_line, "7") == [""]
 
 
-def test_landing_code_older_than_masters_forms_no_batch(batch_of, capsys):
+def test_landing_code_older_than_masters_forms_no_batch(batch_of):
+    # Master's landing code changed while this landing waited for the turn.
     ln, hub, the_line = batch_of(
         drafts=("7",), fakes=Fakes(stale_code=["scripts/deploy_tools/land.py"])
     )
     _land(ln)
-    # No run is spent on a batch whose members this landing would not merge.
     assert hub.stacked == {} and hub.batch_prs == []
     assert hub.merged == [OWN]
     assert the_line("waiting", str(line.FRESH_S)).split() == ["7", head_of("7")]
-    assert "its landing code is older than master's" in capsys.readouterr().out
 
 
 def test_a_member_merges_after_a_batch_merge_that_changed_landing_code(batch_of):

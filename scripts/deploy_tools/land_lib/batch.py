@@ -168,8 +168,9 @@ def _members(ln: Landing) -> list[Member]:
     if not waiting:
         return []
     reads = live_limit.github_reads(ln.tools.gh_json)
-    # The landing's code is compared with master here, once. Until the last member merges,
-    # master then moves only by this batch's own merges, which its run tested.
+    # DECIDED: the landing's code is compared with master here, once, and not again before a
+    # member's merge. Until the last member merges, master moves only by this batch's own
+    # merges, so a member merges under the code and the policy that admitted it.
     why = _alone(ln, ln.opts.pr, reads) or classify.code_lags_master(ln)
     if why:
         say(f"no batch: PR #{ln.opts.pr} lands alone, because {why}")
