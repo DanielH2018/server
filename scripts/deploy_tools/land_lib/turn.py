@@ -8,17 +8,24 @@ other landing that takes turns merges in between. `docs/ci-throughput.md` has th
 measurements: a merge cost 1.4 pull-request runs and 0.7 full master runs before the turn,
 against one run with it.
 
-The turn is an advisory lock on one file, held by the landing's own process, so a landing that
-dies gives it up. It is not a safety gate. A landing that cannot take it within `merge_timeout`
-goes on without it and merges as a landing without the turn does. A landing on another host,
-and a landing without `LAND_QUEUE`, take no turn and can still move master.
+The turn is an advisory lock on one file on `TURN_HOST`. A landing there locks the file itself.
+A landing on another host holds the same lock through an ssh session that lasts as long as
+the landing, so both hosts take turns with each other. Either way the lock ends with the
+landing's process, so a landing that dies gives the turn up.
+
+The turn is not a safety gate. A landing that cannot take it within `merge_timeout`, or
+cannot reach `TURN_HOST`, goes on without it and merges as a landing without the turn does.
+A landing without `LAND_QUEUE` takes no turn and can still move master.
 
 `LAND_QUEUE` turns it on, for a landing that merges its PR directly.
 """
 
 import contextlib
 import fcntl
+import inspect
 import os
+import shlex
+import subprocess
 from collections.abc import Callable, Generator
 
 import sys as _sys
@@ -34,17 +41,24 @@ from lib.progress import OnChange
 LOCK = _Path("/run/lock/homelab-land-turn.lock")
 
 
-def try_take(path: _Path = LOCK) -> Callable[[], None] | None:
-    """Take the turn without waiting.
+# The host whose file is the turn. The lander units run there.
+TURN_HOST = "daniel-box"
+# How long a landing on another host waits for `TURN_HOST` to give up the lock it released.
+_SSH_EXIT_S = 10
+
+
+def _lock(path: str) -> int | None:
+    """Open the turn's file and lock it without waiting.
 
     The lock needs only a read-only descriptor, so a landing run by one user can lock a file
-    that another user's landing created.
+    that another user's landing created. It names nothing but `os` and `fcntl`, because
+    `_HOLD` runs this source on `TURN_HOST`.
 
     Returns:
-        The call that gives the turn up, or None while another landing holds it.
+        The locked descriptor, or None while another landing holds the lock.
 
     Raises:
-        OSError: The lock file can be neither opened nor created.
+        OSError: The file can be neither opened nor created.
     """
     try:
         fd = os.open(path, os.O_RDONLY)
@@ -61,13 +75,97 @@ def try_take(path: _Path = LOCK) -> Callable[[], None] | None:
         if isinstance(exc, BlockingIOError):
             return None
         raise
-    return lambda: os.close(fd)
+    return fd
+
+
+# What a landing on another host runs on `TURN_HOST`: take the lock, say which way it went,
+# and hold it until stdin closes, which is when the landing's ssh session ends.
+_HOLD = f"""import fcntl, os, sys
+{inspect.getsource(_lock)}
+fd = _lock(sys.argv[1])
+print("busy" if fd is None else "held", flush=True)
+if fd is not None:
+    sys.stdin.read()
+"""
+
+
+def try_take(path: _Path = LOCK) -> Callable[[], None] | None:
+    """Take the turn on this host without waiting.
+
+    Returns:
+        The call that gives the turn up, or None while another landing holds it.
+
+    Raises:
+        OSError: The lock file can be neither opened nor created.
+    """
+    fd = _lock(str(path))
+    return None if fd is None else lambda: os.close(fd)
+
+
+def try_take_over_ssh(
+    path: _Path = LOCK, host: str = TURN_HOST
+) -> Callable[[], None] | None:
+    """Take the turn on `host` without waiting, through an ssh session that holds it.
+
+    Returns:
+        The call that gives the turn up, or None while another landing holds it.
+
+    Raises:
+        OSError: `host` did not answer, or could not open the lock file.
+    """
+    remote = f"python3 -c {shlex.quote(_HOLD)} {shlex.quote(str(path))}"
+    session = subprocess.Popen(
+        [
+            "ssh",
+            "-o",
+            "BatchMode=yes",
+            "-o",
+            "ConnectTimeout=10",
+            "-o",
+            "ServerAliveInterval=5",
+            "-o",
+            "ServerAliveCountMax=3",
+            host,
+            remote,
+        ],  # fmt: skip
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    stdin, stdout, stderr = session.stdin, session.stdout, session.stderr
+    assert stdin and stdout and stderr
+
+    def release() -> None:
+        stdin.close()
+        try:
+            session.wait(_SSH_EXIT_S)
+        except subprocess.TimeoutExpired:
+            session.kill()
+            session.wait()
+        stdout.close()
+        stderr.close()
+
+    answer = stdout.readline().strip()
+    if answer == "held":
+        return release
+    why = stderr.read().strip().splitlines()
+    release()
+    if answer == "busy":
+        return None
+    raise OSError(f"ssh {host}: {why[-1] if why else 'no answer'}")
+
+
+def _taker(hostname: str) -> Callable[[], Callable[[], None] | None]:
+    """The call that takes the turn from the host named `hostname`, qualified or not."""
+    here = hostname.split(".")[0] == TURN_HOST
+    return try_take if here else try_take_over_ssh
 
 
 def _wait(ln: Landing) -> Callable[[], None] | None:
     """Poll for the turn for up to `merge_timeout`; None when the landing goes on without it."""
     o = ln.opts
-    try_turn = ln.tools.try_turn or try_take
+    try_turn = ln.tools.try_turn or _taker(ln.tools.hostname())
     waiting = OnChange(say)
     waited = 0
     while True:
