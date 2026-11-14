@@ -121,13 +121,14 @@ def test_a_tests_dir_absent_from_testpaths_is_flagged() -> None:
 
 
 def test_a_role_with_a_collected_tests_dir_is_clean() -> None:
-    files = ["ansible/roles/setup/thing/files/sub/mod.py"]
-    tests = ["ansible/roles/setup/thing/tests/test_mod.py"]
+    files = ["k8s/roles/thing/files/sub/mod.py"]
+    tests = ["k8s/roles/thing/tests/test_mod.py"]
+    assert roles_shipping_python(files) == {"k8s/thing"}
     missing = roles_missing_tests(
         roles_shipping_python(files),
         roles_with_tests(tests),
         roles_in_testpaths(
-            ["tests", "ansible/roles/setup/thing/tests"],
+            ["tests", "k8s/roles/thing/tests"],
             roles_with_tests(tests),
         ),
     )
