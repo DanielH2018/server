@@ -78,21 +78,33 @@ def _patched_containers() -> dict[tuple[str, str], dict]:
     }
 
 
+def _missing_keys(container: dict) -> list[str]:
+    resources = container.get("resources") or {}
+    return [f"{s}.{k}" for s, k in RESOURCE_KEYS if not (resources.get(s) or {}).get(k)]
+
+
 def test_the_patches_give_every_metallb_container_requests_and_limits():
     # fact: k8s/roles/metallb/CLAUDE.md#At a glance
     # Without all four keys the pod is BestEffort or inherits no default: metallb-system has no
     # LimitRange, and the kubelet evicts a BestEffort speaker first, dropping every VIP.
     containers = _patched_containers()
     assert set(containers) == {("controller", "controller"), ("speaker", "speaker")}
-    missing = {
-        member: [
-            f"{s}.{k}"
-            for s, k in RESOURCE_KEYS
-            if not (c.get("resources") or {}).get(s, {}).get(k)
-        ]
-        for member, c in containers.items()
-    }
+    missing = {member: _missing_keys(c) for member, c in containers.items()}
     assert missing == {member: [] for member in containers}, (
         f"these MetalLB containers lack resource keys: {missing}. Set them in "
         "k8s/roles/metallb/files/patches/."
     )
+
+
+def test_a_container_missing_a_resource_key_is_flagged():
+    sized = {
+        "resources": {
+            "requests": {"cpu": "10m", "memory": "64Mi"},
+            "limits": {"cpu": "200m", "memory": "256Mi"},
+        }
+    }
+    partial = copy.deepcopy(sized)
+    del partial["resources"]["limits"]["memory"]
+    assert _missing_keys(sized) == []
+    assert _missing_keys(partial) == ["limits.memory"]
+    assert _missing_keys({"name": "speaker"}) == [f"{s}.{k}" for s, k in RESOURCE_KEYS]
