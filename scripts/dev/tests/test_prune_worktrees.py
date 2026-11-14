@@ -8,6 +8,7 @@ the orphan-directory and orphan-branch scans, and `prune_all`/`main`, which act.
 Run: uv run pytest scripts/dev/tests/test_prune_worktrees.py
 """
 
+import os
 import shutil
 import subprocess
 import sys
@@ -22,6 +23,7 @@ from lib.git_testing import (
     scrubbed_env,
 )
 from lib.proc_testing import run
+from lib.worktree_testing import ignore_foreign_slice_holds
 from lib.worktrees import REMOVABLE, Worktree
 from prune_worktrees import (
     delete_branch,
@@ -238,6 +240,24 @@ def test_the_default_reaper_skips_a_checkout_with_no_findings_script(tmp_path):
 # whole reason the dotfiles hook swept so few, and a mock would happily accept it.
 
 
+def _prune_from(
+    repo: Path, monkeypatch, capsys, *argv: str
+) -> subprocess.CompletedProcess:
+    """`main(argv)` run from `repo`, counting only the test's own processes as holders.
+
+    In-process, because a subprocess cannot be patched: see `lib.worktree_testing`. The
+    cwd is what `main` resolves the checkout from, so `primary_checkout` stays unpatched.
+    """
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", os.devnull)
+    monkeypatch.setenv("GIT_CONFIG_SYSTEM", os.devnull)
+    ignore_foreign_slice_holds(monkeypatch)
+    monkeypatch.chdir(repo)
+    capsys.readouterr()
+    code = main(list(argv))
+    out, err = capsys.readouterr()
+    return subprocess.CompletedProcess(argv, code, out, err)
+
+
 def _branch_names(repo: Path) -> list[str]:
     return git_out(repo, "branch", "--format=%(refname:short)").split()
 
@@ -327,30 +347,26 @@ def test_the_shallow_sweep_stops_at_the_bulk_ancestry_layer(tmp_path, monkeypatc
 
 
 def test_one_prune_removes_a_worktree_and_deletes_the_branch_it_freed(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, capsys
 ):
     # One pass converges. A branch is only orphan once its worktree is gone, so a list read
     # before the removals names none of the branches those removals free — and the sweep
     # would leave its own leavings for the next run, forever.
-    #
-    # A subprocess, so main() resolves the checkout itself from cwd: the alternative is
-    # patching primary_checkout, and the monkeypatch ratchet in tests/repo/ only ever
-    # falls. CLAUDE_WORKTREE_HOME is inherited, which is how the stand-in reaches it in CI.
     scrub_process_git_env(monkeypatch)
     repo = tmp_path / "repo"
     _init_scratch_repo(repo)
     git(repo, "worktree", "add", "-q", "-b", "worktree-done", str(tmp_path / "done"))
     git(repo, "update-ref", "refs/remotes/origin/master", "master")
 
-    done = run([sys.executable, str(PRUNER), "--prune"], cwd=repo, env=scrubbed_env())
+    done = _prune_from(repo, monkeypatch, capsys, "--prune")
 
     assert done.returncode == 0, done.stderr
-    assert not (tmp_path / "done").exists()
+    assert not (tmp_path / "done").exists(), done.stderr
     assert "worktree-done" not in _branch_names(repo)
 
 
 def test_a_weekly_prune_that_skips_a_worktree_a_live_process_holds_exits_0(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, capsys
 ):
     # #7949: one session running at 04:20 kept the sweep's check down for a week. The skip is
     # still named on stderr; the next run removes the tree once its holder exits.
@@ -362,11 +378,7 @@ def test_a_weekly_prune_that_skips_a_worktree_a_live_process_holds_exits_0(
     git(repo, "update-ref", "refs/remotes/origin/master", "master")
     holder = subprocess.Popen(["sleep", "120"], cwd=held)
     try:
-        done = run(
-            [sys.executable, str(PRUNER), "--prune", "--brief"],
-            cwd=repo,
-            env=scrubbed_env(),
-        )
+        done = _prune_from(repo, monkeypatch, capsys, "--prune", "--brief")
     finally:
         holder.kill()
         holder.wait()
@@ -461,20 +473,16 @@ def test_report_still_names_the_live_worktrees_beside_a_vanished_one(
 
 
 def test_the_weekly_prune_removes_merged_worktrees_beside_a_vanished_one(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, capsys
 ):
     # `--prune --brief` is the weekly cron's invocation; the stale registration blocked it.
     scrub_process_git_env(monkeypatch)
     repo = _repo_with_a_vanished_worktree(tmp_path)
 
-    done = run(
-        [sys.executable, str(PRUNER), "--prune", "--brief"],
-        cwd=repo,
-        env=scrubbed_env(),
-    )
+    done = _prune_from(repo, monkeypatch, capsys, "--prune", "--brief")
 
     assert done.returncode == 0, done.stderr
-    assert not (tmp_path / "done").exists()
+    assert not (tmp_path / "done").exists(), done.stderr
 
 
 def test_report_names_the_vanished_tree_and_does_not_offer_to_remove_it(

@@ -17,6 +17,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from lib.git_testing import commit, git, init_repo, scrub_process_git_env
+from lib.worktree_testing import ignore_foreign_slice_holds
 from _worktree_proc import _unreadable_proc
 from lib.worktrees import (
     KEEP,
@@ -119,6 +120,7 @@ def test_remove_actually_deletes_a_locked_worktree_on_disk(tmp_path, monkeypatch
     # of the live repo. The fixture's own calls go through lib.git_testing, which scrubs
     # for itself.
     scrub_process_git_env(monkeypatch)
+    ignore_foreign_slice_holds(monkeypatch)
 
     repo = tmp_path / "repo"
     _init_scratch_repo(repo)
@@ -137,6 +139,7 @@ def test_remove_actually_deletes_a_locked_worktree_on_disk(tmp_path, monkeypatch
 def test_remove_deletes_a_never_locked_worktree_on_disk(tmp_path, monkeypatch):
     # The unlocked half of the pair above: no lock to release, and the tree still goes.
     scrub_process_git_env(monkeypatch)
+    ignore_foreign_slice_holds(monkeypatch)
     repo = tmp_path / "repo"
     _init_scratch_repo(repo)
     wt = tmp_path / "wt"
@@ -156,6 +159,7 @@ def test_remove_never_forces_past_an_untracked_file(tmp_path, monkeypatch):
     # guaranteed merged AND clean as of the read, so git's own refusal on a file that
     # appeared since is the backstop -- and this is the one input where it must fire.
     scrub_process_git_env(monkeypatch)
+    ignore_foreign_slice_holds(monkeypatch)
     repo = tmp_path / "repo"
     _init_scratch_repo(repo)
     wt = tmp_path / "wt"
@@ -245,6 +249,7 @@ def test_a_process_in_a_sibling_tree_does_not_block_removal_is_clean(
     # sleeper's project dir is the repo, the parent of every tree, as the primary
     # checkout's session's is.
     scrub_process_git_env(monkeypatch)
+    ignore_foreign_slice_holds(monkeypatch)
     repo = tmp_path / "repo"
     _init_scratch_repo(repo)
     wt, wt2 = tmp_path / "wt", tmp_path / "wt2"
@@ -269,6 +274,19 @@ def test_another_uids_process_in_my_login_slice_holds_every_tree_is_flagged(tmp_
     )
 
     assert [pid for pid, _ in processes_using(str(tmp_path), proc=proc)] == [4242]
+
+
+def test_a_test_that_ignores_foreign_slice_holds_sees_no_holder_is_clean(
+    tmp_path, monkeypatch
+):
+    # The flagged half is the test above: the same process, with the rule left on.
+    me = os.getuid()
+    proc = _unreadable_proc(
+        tmp_path / "proc", 4242, me + 1, f"/user.slice/user-{me}.slice/session-7.scope"
+    )
+    ignore_foreign_slice_holds(monkeypatch)
+
+    assert processes_using(str(tmp_path), proc=proc) == []
 
 
 def test_unreadable_processes_outside_that_rule_do_not_block_removal_is_clean(tmp_path):

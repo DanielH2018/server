@@ -107,6 +107,10 @@ class Landing:
         self.batch: list[Any] = []
         # The seconds the run of this landing's batch took, which its merge wait counts.
         self.batched_s = 0
+        # The seconds `merge.await_merge` took to merge the PR, the wait for the turn included.
+        self.merge_wait_s = 0
+        # Set once a batch that tested this landing's PR was not green: it forms no batch.
+        self.lands_alone = False
 
     @property
     def plane(self) -> str:

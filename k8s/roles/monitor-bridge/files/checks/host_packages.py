@@ -20,8 +20,7 @@ def check_host_packages(
     under `EXPORTER_DEPENDENT["node"]`: a dead exporter then pages once through Scrape Targets
     instead of also as an absent builder series. With Prometheus and the exporter both up, an
     absent series pages, because it means the builder's metric file never reached the exporter.
-    The query names no origin, because only daniel-box runs the builder, and
-    `bridge.net.origin_sel` would pin daniel-server.
+    The query names no origin, because only daniel-box runs the builder.
 
     A third query reads `homelab_host_reconcile_drift` on every host and puts a non-zero count
     in the message. It never changes the verdict (`verdicts.service.host_packages`).

@@ -28,7 +28,6 @@ Run: uv run pytest tests/longhorn/test_pvc_sizes_match_block_size.py
 
 import re
 
-import pytest
 from lib import yaml_fast
 from _helpers import K8S_ROLES
 from _k8s_render import rendered_docs
@@ -88,32 +87,46 @@ def test_the_census_names_every_role_that_sizes_a_volume() -> None:
     assert len(sizes) >= 18, f"only {len(sizes)} volume sizes found: {sizes}"
 
 
-@pytest.mark.parametrize(
-    ("where", "size"),
-    [pytest.param(w, s, id=f"{w}:{s}") for w, s in declared_sizes()],
-)
-def test_pvc_size_is_a_multiple_of_the_backup_block_size(where: str, size: str) -> None:
+def size_problem(where: str, size: str, block: int) -> str | None:
+    """Why `size` at `where` breaks the block-size rule, or None when it holds."""
     match = SIZE_RE.match(size)
-    assert match, (
-        f"{where} requests {size!r}, which is not a literal quantity. Every size is literal "
-        "once rendered, so an expression here means the render left a variable unresolved"
-    )
-    bytes_requested = int(match.group(1)) * UNITS[match.group(2)]
+    if not match:
+        return (
+            f"{where} requests {size!r}, which is not a literal quantity. Every size is "
+            "literal once rendered, so an expression here means the render left a variable "
+            "unresolved"
+        )
+    if (int(match.group(1)) * UNITS[match.group(2)]) % block:
+        return (
+            f"{where} requests {size}, which is not an integer multiple of the "
+            f"{block // UNITS['Mi']}Mi backup block size"
+        )
+    return None
+
+
+def test_pvc_size_is_a_multiple_of_the_backup_block_size() -> None:
     block = block_size_bytes()
-    assert bytes_requested % block == 0, (
-        f"{where} requests {size}, which is not an integer "
-        f"multiple of the {block // UNITS['Mi']}Mi backup block size. Longhorn's admission "
-        "webhook refuses to create it — the existing volume keeps working, so this only "
-        "fails when the volume is recreated, i.e. during a rebuild or a restore."
+    problems = [
+        problem
+        for where, size in declared_sizes()
+        if (problem := size_problem(where, size, block))
+    ]
+    assert not problems, (
+        "Longhorn's admission webhook refuses to create these volumes. The existing volume "
+        "keeps working, so this only fails when the volume is recreated, i.e. during a "
+        "rebuild or a restore:\n" + "\n".join(problems)
     )
 
 
 def test_a_non_multiple_size_fails_the_rule() -> None:
-    """The rejecting half: the arithmetic above must be able to refuse a size.
+    """The rejecting half: the rule must be able to refuse a size.
 
     100Mi is a multiple of 2Mi and not of 16Mi — the exact kind of value the webhook refuses.
     """
-    assert (100 * UNITS["Mi"]) % block_size_bytes() != 0, (
+    block = block_size_bytes()
+    assert size_problem("x/claim", "100Mi", block), (
         "100Mi is a multiple of the configured block size, so this reject case proves nothing "
         "— pick a size that is not, or the block size changed and this test needs rewriting."
     )
+    assert size_problem("x/claim", "{{ size }}", block)
+    assert size_problem("x/claim", "128Mi", block) is None

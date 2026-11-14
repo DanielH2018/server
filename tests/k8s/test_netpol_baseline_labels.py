@@ -223,6 +223,7 @@ def _labelled_roles() -> set[str]:
 
 
 def test_exactly_the_fenced_roles_carry_the_baseline_label() -> None:
+    # fact: k8s/roles/pihole-exporter/CLAUDE.md#NetworkPolicy
     expected = (
         SLICE_1_ROLES
         | SLICE_2_ROLES

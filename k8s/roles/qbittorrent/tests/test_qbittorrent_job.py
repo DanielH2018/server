@@ -152,6 +152,7 @@ def test_traffic_leaving_in_the_clear_fails_the_job(webui, cache, capsys):
 
 
 def test_no_external_address_within_the_wait_fails_the_tunnel_check(webui):
+    # fact: k8s/roles/qbittorrent/CLAUDE.md#The Flux Jobs in `templates/verify/`
     webui.external = ""
     ui = qbittorrent_job.WebUI(webui.url)
     ui.login("admin", "hunter2")
@@ -181,6 +182,7 @@ def test_a_modcache_with_no_tarball_fails_the_job(webui, tmp_path, capsys):
 
 
 def test_a_modcache_lock_beside_a_tarball_warns_and_passes(cache):
+    # fact: k8s/roles/qbittorrent/CLAUDE.md#The modcache, and the lock file it can leave behind
     (cache / "wireguard-mullvad.lock").write_text("")
     lines = qbittorrent_job.modcache(str(cache))
     assert lines[1].startswith(
@@ -197,6 +199,7 @@ def test_a_rejected_login_fails_the_job_after_one_attempt(webui, cache, capsys):
 
 def test_a_second_apply_writes_nothing(webui, capsys):
     """The `homelab/rerun-safe` test: a second run of the mutation Job writes no preference."""
+    # fact: k8s/roles/qbittorrent/CLAUDE.md#The Flux Jobs in `templates/verify/`
     webui.prefs |= {"connection_speed": 30, "preallocate_all": False}
     env = _env(webui, job="apply-prefs")
     assert qbittorrent_job.main([], env) == 0
@@ -219,6 +222,7 @@ def test_an_ignored_write_fails_the_apply(webui, capsys):
 
 
 def test_the_job_applies_the_preferences_apply_prefs_holds():
+    # fact: k8s/roles/qbittorrent/CLAUDE.md#The Flux Jobs in `templates/verify/`
     assert qbittorrent_job.DESIRED == apply_prefs.DESIRED
 
 
@@ -267,6 +271,7 @@ def test_the_tree_renders_qbittorrent_verify(stubs, flipped_tag):
 
 
 def test_the_flipped_jobs_pass_every_job_census_row(flipped):
+    # fact: k8s/roles/qbittorrent/CLAUDE.md#The Flux Jobs in `templates/verify/`
     kinds = sorted(doc["kind"] for doc in flipped)
     assert kinds == ["ConfigMap", "ConfigMap", "Job", "Job", "ServiceAccount"]
     assert sorted(_jobs(flipped)) == ["mutation", "verify"]
@@ -286,6 +291,7 @@ def test_qbittorrents_fence_admits_both_job_pods_on_the_webui_port(
     flipped, flipped_tag
 ):
     """The caller census: each Job dials the WebUI, which the role-owned fence guards."""
+    # fact: k8s/roles/qbittorrent/CLAUDE.md#The Flux Jobs in `templates/verify/`
     (policy,) = [
         doc for doc in _docs(flipped_tag.files) if doc["kind"] == "NetworkPolicy"
     ]
@@ -305,6 +311,7 @@ def test_the_verify_job_mounts_the_sidecars_modcache_from_the_config_claim(
     flipped, flipped_tag
 ):
     """The Job reads the cache where the sidecar writes it, so a tarball there is on the volume."""
+    # fact: k8s/roles/qbittorrent/CLAUDE.md#The Flux Jobs in `templates/verify/`
     (deployment,) = [
         doc for doc in _docs(flipped_tag.files) if doc["kind"] == "Deployment"
     ]
@@ -380,6 +387,7 @@ def _rotate_the_wireguard_key(tree) -> None:
 )
 def test_a_change_that_rolls_the_pod_renames_both_jobs(edit, stubs, tmp_path):
     """Each rolls qbittorrent through `checksum/restart` and leaves the Deployment's text alone."""
+    # fact: k8s/roles/qbittorrent/CLAUDE.md#Throughput settings live on the PVC, not in this role
     before = _render_tree_copy(tmp_path / "a", stubs)
     after = _render_tree_copy(tmp_path / "b", stubs, edit)
     assert len(_roll_digests(before)) == 1

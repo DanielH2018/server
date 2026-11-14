@@ -130,12 +130,8 @@ def test_main_leaves_helps_zero_alone():
     assert exc.value.code == 0
 
 
-@pytest.mark.parametrize(
-    ("value", "batch"), [("1", True), ("true", False), (None, False)]
-)
-def test_a_landing_forms_a_batch_only_with_land_batch_set_to_1(
-    monkeypatch, value, batch
-):
+@pytest.mark.parametrize(("value", "batch"), [("0", False), ("1", True), (None, True)])
+def test_a_landing_forms_a_batch_unless_land_batch_is_0(monkeypatch, value, batch):
     if value is not None:
         monkeypatch.setenv("LAND_BATCH", value)
     assert options.parse_args(["--pr", "7"], "d").batch is batch

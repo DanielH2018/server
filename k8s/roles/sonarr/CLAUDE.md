@@ -1,7 +1,9 @@
 # sonarr — TV library management (\*arr)
 
-Sonarr with an exportarr metrics sidecar and a striptracks mod. Shares the `media-data`
-RWX volume with the rest of the \*arr stack. See repo-root `CLAUDE.md` for shared
+Sonarr with an exportarr metrics sidecar and a striptracks mod
+(`k8s/roles/sonarr/defaults/main.yml:sonarr_k8s_docker_mods`). Shares the `media-data`
+RWX volume with the rest of the \*arr stack
+(`k8s/roles/sonarr/defaults/main.yml:sonarr_k8s_media_claim`). See repo-root `CLAUDE.md` for shared
 conventions.
 
 ## At a glance

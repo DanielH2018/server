@@ -10,7 +10,8 @@ The board holds three fields findings.py owns, each derived from the issue alone
 THE ISSUE STAYS THE RECORD. `next`, `claim` and the fan-out read labels and comments, never
 the board, so a board write is best-effort: `findings.main` syncs every issue a command
 wrote to, prints `board_warning`'s one line when that fails, and keeps the command's own
-exit code. `findings.py sync-board` is the repair path.
+exit code. `findings.py sync-board` is the repair path, and daniel-box's
+`homelab-board-sync.timer` runs it hourly for the edits findings.py never saw.
 
 Every call is `gh api graphql`. Issues are read in chunks of aliased lookups. A chunk's
 writes go out as aliased mutations, a few to a request: the adds first, because the field

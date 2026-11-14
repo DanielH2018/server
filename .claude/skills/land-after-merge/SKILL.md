@@ -56,6 +56,14 @@ spends no GitHub calls. A PR opened as a draft gets its one CI run inside its tu
 master of that moment, so master's run for the merge skips its jobs. `LAND_QUEUE=0` turns the turn off for one
 landing; `land_lib/turn.py` owns the rule.
 
+**A draft that waits in line may be merged by the landing ahead of it.** The landing that
+holds the turn tests the drafts standing in line with its own in one CI run and merges them
+in order (`land_lib/batch.py`). Your landing then prints `the landing that holds the turn
+merged PR #N with its own` and goes on to the deploy and its verdict as usual. If that
+batch's run was red it prints `a batch that tested PR #N was not green; it lands alone` and
+gets a run of its own. Neither line is a fault. `LAND_BATCH=0` stops one landing forming a
+batch.
+
 `cc-wait` waits at most 570s per run. Exit 75 means the landing is still running: re-run only
 `cc-wait land <n>`, never `land.sh`, which would start a second landing. State `gave-up` (exit 3)
 is `land.sh`'s own give-up, a resume point for the whole command. State `deferred` (exit 4) is
