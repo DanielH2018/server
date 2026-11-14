@@ -182,6 +182,11 @@ def _line(hostname: str, directory: _Path = line.DIR) -> line.Line:
     return line.over_ssh(TURN_HOST, directory)
 
 
+def line_of(ln: Landing) -> line.Line:
+    """The line for the turn, as `ln`'s landing reaches it."""
+    return ln.tools.line or _line(ln.tools.hostname())
+
+
 def _wait(ln: Landing, draft: str) -> tuple[Callable[[], None] | None, int]:
     """Poll for the turn for up to `merge_timeout`, standing in the line with `draft`.
 
@@ -194,7 +199,7 @@ def _wait(ln: Landing, draft: str) -> tuple[Callable[[], None] | None, int]:
     """
     o = ln.opts
     try_turn = ln.tools.try_turn or _taker(ln.tools.hostname())
-    place = line.Place(ln.tools.line or _line(ln.tools.hostname()), o.pr, draft, say)
+    place = line.Place(line_of(ln), o.pr, draft, say)
     waiting = OnChange(say)
     waited = 0
     try:
