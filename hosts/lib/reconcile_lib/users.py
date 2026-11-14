@@ -66,12 +66,13 @@ def check(user: dict) -> str:
         return "fault"
     if int(fields[2]) != user["uid"]:
         name, old, new = user["name"], fields[2], user["uid"]
+        find = f"find {user['home']} /tmp /var/tmp /var/spool/cron/crontabs -xdev"
         log(
             f"{name} has uid {old}; the package declares {new}. To move it, as root: stop every"
-            f" unit running as {name}; usermod -u {new} {name}; groupmod -g {new} {name} if"
-            f" {name}'s primary group is {name} with gid {old}; find {user['home']} /tmp /var/tmp"
-            f" /var/spool/cron/crontabs -uid {old} -exec chown -h {name} {{}} +; start the"
-            " units again; then sudo /usr/lib/homelab/homelab-updater --clear-hold",
+            f" unit running as {name}; usermod -u {new} {name}; {find} -uid {old} -exec chown"
+            f" -h {new} {{}} +; if {name}'s primary group is {name} with gid {old}, also"
+            f" groupmod -g {new} {name} and {find} -gid {old} -exec chown -h :{new} {{}} +;"
+            " start the units again; then sudo /usr/lib/homelab/homelab-updater --clear-hold",
             ERR,
         )
         return "fault"
