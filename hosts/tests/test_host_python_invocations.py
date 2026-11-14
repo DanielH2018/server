@@ -314,16 +314,36 @@ _REGISTRY_GC = _REPO / "hosts/components/registry-gc/templates/registry-gc.sh.j2
 _K8S = K8S_ROLES
 
 
+def _embedded_in_a_manifest(path) -> bool:
+    """Whether a manifest in `path`'s own templates directory embeds it with `lookup`.
+
+    Such a script ships in a ConfigMap and runs in a pod, as the restore drill's does.
+    """
+    needle = f"lookup('template', role_file('templates/{path.name}'))"
+    return any(
+        needle in other.read_text()
+        for other in path.parent.glob("*.j2")
+        if other != path and is_manifest_template(other)
+    )
+
+
 def _runs_in_a_container(path) -> bool:
-    """A k8s manifest template or the app config it embeds. Its `python3` is the container
-    image's interpreter, not the host's. A `.sh.j2` beside the manifests is a host script."""
+    """A k8s manifest template, the app config it embeds, or a `.sh.j2` a manifest embeds.
+
+    Its `python3` is the container image's interpreter, not the host's. A `.sh.j2` beside the
+    manifests that no manifest embeds is treated as a host script.
+    """
     try:
         parts = path.relative_to(_K8S).parts
     except ValueError:
         return False
     if len(parts) < 3 or parts[1] != "templates":
         return False
-    return parts[2] == "config" or is_manifest_template(path)
+    return (
+        parts[2] == "config"
+        or is_manifest_template(path)
+        or _embedded_in_a_manifest(path)
+    )
 
 
 def _bare_python3_lines(text: str) -> list[int]:
@@ -397,3 +417,18 @@ def test_a_k8s_manifest_runs_in_a_container_and_a_host_script_beside_it_does_not
     assert _runs_in_a_container(_K8S / "configarr/templates/config/config.yml.j2")
     assert not _runs_in_a_container(_REGISTRY_GC)
     assert not _runs_in_a_container(_REPO / "hosts/components/x/templates/y.yml.j2")
+
+
+def test_a_shell_script_a_manifest_embeds_runs_in_a_container():
+    drill = _K8S / "longhorn-restore-drill/templates/longhorn-restore-drill.sh.j2"
+    assert _runs_in_a_container(drill)
+
+
+def test_a_shell_script_no_manifest_embeds_is_a_host_script(tmp_path, monkeypatch):
+    templates = tmp_path / "role" / "templates"
+    templates.mkdir(parents=True)
+    script = templates / "job.sh.j2"
+    script.write_text("python3 -c 1\n")
+    (templates / "cronjob.yaml.j2").write_text("kind: CronJob\n")
+    monkeypatch.setitem(globals(), "_K8S", tmp_path)
+    assert not _runs_in_a_container(script)

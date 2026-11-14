@@ -24,6 +24,7 @@ import json
 import os
 import pwd
 import socket
+import subprocess
 import sys
 import time
 from collections.abc import Callable
@@ -34,6 +35,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from lib import _claude_worktree  # noqa: F401
+from lib import fanout_lock
 from lib.cli_help import warn
 from lib.git import git, git_dirty, git_stdout, merge_tree
 from lib.repo_paths import REPO
@@ -58,11 +60,14 @@ __all__ = [
     "Worktree",
     "cherry_says_landed",
     "classify",
+    "contained_in_merged_pr",
     "default_ref",
+    "forge_says_landed",
     "forge_says_merged",
     "is_dirty",
     "is_merged",
     "local_landed_layer",
+    "lock_is_live",
     "locally_landed",
     "memoised_merged",
     "merge_tree_says_contained",
@@ -83,13 +88,33 @@ REMOVABLE = "removable"
 KEEP = "keep"
 
 
-def classify(tree: Worktree, merged: bool, dirty: bool) -> tuple[str, str]:
+def lock_is_live(
+    tree: Worktree,
+    state: Callable[[str], str | None] = fanout_lock.unit_state,
+    now: float | None = None,
+) -> bool:
+    """Whether `tree`'s lock owner may still be using it: a Claude session or a fan-out unit.
+
+    `state` and `now` are `fanout_lock.batch_is_live`'s test seams.
+    """
+    if fanout_lock.is_fanout_reason(tree.lock_reason):
+        return fanout_lock.batch_is_live(tree.path, tree.lock_reason, state, now)
+    return session_is_alive(tree.lock_reason)
+
+
+def classify(
+    tree: Worktree,
+    merged: bool,
+    dirty: bool,
+    lock_live: Callable[[Worktree], bool] = lock_is_live,
+) -> tuple[str, str]:
     """Return (verdict, reason) for one worktree.
 
     Reasons are reported in priority order so the output names the blocking condition a
     person would act on first, rather than listing every condition that happens to fail.
+    `lock_live` is a test seam.
     """
-    if tree.locked and session_is_alive(tree.lock_reason):
+    if tree.locked and lock_live(tree):
         return KEEP, f"in use — {tree.lock_reason or 'locked'}"
     if dirty:
         return KEEP, "uncommitted changes"
@@ -134,12 +159,73 @@ def is_merged(
     return merged_layer(repo, head, branch, base=base) is not None
 
 
+# What GitHub's compare calls a base that is an ancestor of its head, or the same commit.
+CONTAINED = frozenset({"ahead", "identical"})
+
+
+def _forge_gh(*args: str, check: bool, cwd: str) -> subprocess.CompletedProcess[str]:
+    """`lib.gh.gh` on `forge_says_merged`'s executable: `GH_BIN` when set, which tests stub."""
+    env = dict(os.environ, GH_PROMPT_DISABLED="1", GH_NO_UPDATE_NOTIFIER="1")
+    return subprocess.run(
+        [os.environ.get("GH_BIN", "gh"), *args],
+        cwd=cwd,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=check,
+        timeout=10,
+    )
+
+
+def contained_in_merged_pr(repo: str, head: str, branch: str, run_gh=_forge_gh) -> bool:
+    """True when a merged PR for `branch` has a head containing `head`: no local commit is unlanded.
+
+    `forge_says_merged` matches the forge's merged head to the local tip exactly (Ruling 38).
+    That misses the batch `land.sh` landed after merging master into it on the remote: the
+    merged head is the local tip plus that merge commit, so the SHAs differ (#6365). GitHub's
+    compare answers `ahead` (or `identical`) when `head` is an ancestor of the merged head,
+    which proves every local commit was in the merged PR. A tip that was never pushed, or has
+    commits the merged head lacks, compares `diverged`, `behind` or 404, and a `gh` that fails
+    reads as not contained.
+
+    Still keyed on the SHA relation and never on "a merged PR exists under this name", so a
+    reused branch name cannot delete work that never landed.
+    """
+    if not head or not branch:
+        return False
+    try:
+        heads = run_gh(
+            "pr", "list", "--state", "merged", "--head", branch,
+            "--json", "headRefOid", "--jq", ".[].headRefOid",
+            check=False, cwd=repo,
+        )  # fmt: skip
+        if heads.returncode != 0:
+            return False
+        for merged_head in heads.stdout.split():
+            compared = run_gh(
+                "api", f"repos/{{owner}}/{{repo}}/compare/{head}...{merged_head}",
+                "--jq", ".status", check=False, cwd=repo,
+            )  # fmt: skip
+            if compared.returncode == 0 and compared.stdout.strip() in CONTAINED:
+                return True
+    except OSError, subprocess.TimeoutExpired:
+        return False
+    return False
+
+
+def forge_says_landed(repo: str, branch: str, head: str) -> bool:
+    """The ladder's forge layer: GitHub merged `head` itself, or a merged PR's head holds it."""
+    return forge_says_merged(repo, branch, head) or contained_in_merged_pr(
+        repo, head, branch
+    )
+
+
 def merged_layer(
     repo: str,
     head: str,
     branch: str = "",
     base: str = "origin/master",
-    forge: Callable[[str, str, str], bool] = forge_says_merged,
+    forge: Callable[[str, str, str], bool] = forge_says_landed,
 ) -> str | None:
     """The layer of is_merged's ladder that settled `head` as landed, or None when none did.
 
@@ -594,7 +680,7 @@ def remove(repo: str, tree: Worktree) -> tuple[bool, str]:
 
     Never --force: git's own refusal on a tree with uncommitted or untracked files is the backstop
     that makes auto-unlock safe here — classify() only marks a locked tree REMOVABLE once
-    session_is_alive() has confirmed the owner is dead, so this never releases a lock a live session
+    lock_is_live() has confirmed the owner is dead, so this never releases a lock a live owner
     still holds. Without the unlock, `git worktree remove` fails outright on a locked tree ("cannot
     remove a locked working tree") and the caller would report success while removing nothing.
     """
@@ -649,7 +735,7 @@ def memoised_merged(
     command. It spares even the cache read; the on-disk cache at VERDICT_CACHE is what carries
     a verdict from one command to the next. It deliberately does NOT touch `classify`: guarding on `not tree.locked` would
     re-derive `classify`'s branch structure outside `classify` and get it wrong — `classify`
-    skips the merged read only on `locked AND session_is_alive`. `classify` still receives an
+    skips the merged read only on `locked AND lock_is_live`. `classify` still receives an
     eagerly-computed bool.
 
     ``ask`` is the read itself, defaulted to `is_merged`. A test counts its calls through
