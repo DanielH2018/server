@@ -39,10 +39,6 @@ def scoping_step(workflow_text: str, job: str) -> dict:
     return matches[0]
 
 
-def scoping_script(workflow_text: str, job: str = "hooks") -> str:
-    return scoping_step(workflow_text, job)["run"]
-
-
 def make_clone(tmp_path: Path) -> Path:
     """A clone of a bare `origin` whose master holds one commit, checked out on master.
 
