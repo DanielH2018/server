@@ -97,6 +97,8 @@ REVIEW_SCRIPT = "scripts/dev/fanout.py"
 SNAPSHOT_DIR = ".fanout/server"
 SNAPSHOT_PATHS = (
     "scripts",
+    # The ledger scripts/lib/gh.py counts each gh call into, so a batch's findings.py is counted.
+    "hosts/components/gh-quota/files",
     ".claude/hooks",
     "pyproject.toml",
     "uv.lock",

@@ -451,9 +451,7 @@ claude_code_lander_enabled: false
 claude_code_triage_enabled: false
 # Pinned again in templates/claude-triage-pins.j2, which wins over any inventory override; the
 # values here are what the validator renders with. Literals, for the reason the lander's are.
-claude_code_triage_agent_user: claude
-claude_code_triage_agent_home: /var/lib/claude
-claude_code_triage_state_dir: /var/lib/claude/triage
+claude_code_triage_state_dir: /var/lib/claude-triage-ctl/state
 claude_code_triage_model: opus
 # The operator's budget (2026-10-15): $10 to diagnose. The fix phase gets its own cap later.
 claude_code_triage_budget_usd: 10

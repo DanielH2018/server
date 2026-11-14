@@ -1,6 +1,8 @@
 # G6 — Repair what the facts audit found
 
-Status: IN PROGRESS. Step 1, the hook's tree rule, is done.
+Status: DONE. Step 1 landed as dotfiles#1278 and dotfiles#1280. Step 2 ran on daniel-box
+on 2026-11-14, with the operator's approval. Step 3 closed with
+[#8417](https://github.com/DanielH2018/server/issues/8417).
 
 Depends on: none.
 
@@ -42,9 +44,9 @@ directory.
    ([#8420](https://github.com/DanielH2018/server/issues/8420)). The same session replaces
    each `file:line` span with a symbol or a test node where the line number carried
    meaning, and adds `enforced_by: <test node>` to each entry the index marks `[ENFORCED]`.
-   This step is operator-reserved: daniel-server holds a copy that the sync overwrites.
+   Done: *Step 2 result* below.
 3. **The sync doc's check command**
-   ([#8417](https://github.com/DanielH2018/server/issues/8417)).
+   ([#8417](https://github.com/DanielH2018/server/issues/8417)). Done.
 
 ## Step 1 result
 
@@ -77,6 +79,33 @@ renamed is missing even while a worktree that lags still defines it.
 
 Two costs: an ignored file that `origin/master` once tracked reads as gone, and a symbol
 added to a tracked file on an unlanded branch is missing until it lands.
+
+## Step 2 result
+
+The step was reserved for the operator because the store lives on daniel-box. The
+operator approved the edits on 2026-11-14 and they ran there over ssh, each checked
+against the live text before the first write.
+
+- **The three entries of #8420.** The agent-polling memory states at most 30 requests a
+  wait. The operator ruled that the other two are archived, not rewritten: the kubectl
+  entry, whose claim `.claude/rules/k8s-templates.md` states, and the slice-priority
+  entry, which ranked slices that are all finished or declined.
+- **The tree rename.** `fact_status.py mv --root` rewrote 22 references over six
+  mappings. Five of them named tests that had moved from `ansible/tests/setup/` to
+  `hosts/tests/`, which the `ansible/tests` mapping alone left behind.
+- **Nine memories needed a sentence, not a path.** Two were safety memories whose claim
+  had gone false. One said a pickaxe over `ansible/` covers the secrets file, which moved
+  to `secrets/`. The other said a hook denies whole-line reads of deployed scripts, and
+  that hook's reader was deleted on 2026-11-12. Two held a paragraph about the retired
+  GitOps deployer. Five named a path in dated evidence without saying it is gone.
+- **Five `enforced_by:` keys.** Every live entry the index marks `[ENFORCED]` carries one
+  that resolves.
+- **Left as written:** five `file:line` spans in two memories and those in the dated
+  review ledgers. Each cites evidence from one incident, where the line number carries
+  no claim about the tree today.
+
+Afterwards the hook printed nothing on daniel-box: no stale path, no stale check and no
+index finding, down from 16 memories and 4 entries. `MEMORY.md` holds 96 lines.
 
 ## Verification
 

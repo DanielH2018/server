@@ -78,6 +78,11 @@ spec:
               mountPath: /srv/artifacts/{{ artifacts_k8s_node }}-claude
               readOnly: true
 {% endif %}
+{% if artifacts_triage_dir | length > 0 %}
+            - name: artifacts-triage
+              mountPath: /srv/artifacts/{{ artifacts_k8s_node }}-claude-triage
+              readOnly: true
+{% endif %}
 {% for peer in artifacts_peer_sources %}
             - name: artifacts-{{ peer.name }}
               mountPath: /srv/artifacts/{{ peer.name }}
@@ -111,6 +116,14 @@ spec:
         - name: artifacts-agent
           hostPath:
             path: {{ artifacts_agent_dir }}
+            type: Directory
+{% endif %}
+{% if artifacts_triage_dir | length > 0 %}
+        # type: Directory for the agent tree's reason. The claude-code host component's triage
+        # tmpfiles entry creates it; until then the new pod waits and the old one keeps serving.
+        - name: artifacts-triage
+          hostPath:
+            path: {{ artifacts_triage_dir }}
             type: Directory
 {% endif %}
 {% for peer in artifacts_peer_sources %}

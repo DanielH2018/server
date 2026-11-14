@@ -47,7 +47,13 @@ WINDOW_GRACE_ENV = "LAND_WINDOW_GRACE"
 PACE_ENV = "LAND_PACE_MASTER_RUNS"
 # DECIDED: hold the merge while two master runs are unfinished. A full sweep runs 25 jobs, and
 # 20 measured sweeps peaked at 18 in progress at once, against a 20-job runner cap, so a second
-# unfinished sweep already queues (#5526, #8143). A cap of 1
+# unfinished sweep already queues (#5526, #8143). Those peaks came from a busy pool. On
+# 2026-11-14, three uncontended sweeps, where no job waited more than 4 s for a runner and at
+# most 3 other jobs ran, each peaked at 17 jobs in progress, `host_tools_arm64` included
+# (#8257). The arm job's `ubuntu-24.04-arm` runners share the 20-job pool: in a busy window
+# that day, jobs in progress across the repo never exceeded 20 while 36 x64 jobs queued, and
+# the 20 included up to 2 arm jobs. One sweep alone therefore fits the pool, and two do not.
+# A cap of 1
 # was tried from 2026-10-25 (#6308), on the theory that a re-tested PR merged into an idle
 # master more often merges the tree it tested, so `prove` skips the push sweep. It did not
 # raise that share (#6309). Before the change, 74 of 155 master push runs ran only `prove` and
