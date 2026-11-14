@@ -1093,24 +1093,13 @@ spec:
             periodSeconds: 30
             timeoutSeconds: 5
             failureThreshold: 10
-          # 896Mi, not 512Mi and not 128Mi, and the REQUEST is the half that matters. The
-          # kubelet ranks eviction by usage-above-request, so a 128Mi request against a
-          # measured 893.6MiB peak working set (2026-08-29) put Prometheus in the worst bucket
-          # on a node already at 151% memory-limit overcommit — i.e. the workload every other
-          # check here reads from was among the first to be evicted under node pressure.
-          # 512Mi fixed the worst of that and still sat BELOW the peak, which leaves the same
-          # ranking in place whenever Prometheus is at its busiest. 896Mi covers the measured
-          # peak: 806.6MiB max working set over the 7 days to 2026-09-28
-          # (`max_over_time(container_memory_working_set_bytes{namespace="observability",
-          # container="prometheus",job="kubernetes-cadvisor"}[7d])`), against 490.7MiB at rest.
-          # A request is a reservation, so raising it costs schedulable memory — daniel-box
-          # requests 33.4% of its allocatable memory (measured the same day), so 384MiB more
-          # changes nothing about what fits.
-          # 2Gi against that same 893.6MiB peak: 94.5% of the old 1Gi ceiling, never
-          # OOMKilled, but 57MiB of headroom on a TSDB is not headroom — an OOMKill loses
-          # the unflushed head block. Cheap insurance; a limit is a ceiling, not a
-          # reservation, so it costs nothing if the scrape-interval cut above reclaims it.
-{{ container_resources(cpu_limit='1', mem_limit='2Gi', cpu_request='50m', mem_request='896Mi') }}
+          # The REQUEST is the half that matters for eviction: the kubelet ranks it by
+          # usage-above-request, and a request below the working set puts Prometheus, which
+          # every other check here reads, near the front of the queue under node pressure.
+          # 7 days to 2026-11-14: p95 working set 1665Mi, max 1853Mi. The request is that p95
+          # rounded up to 64Mi. The limit puts p95 at 54% and the max at 60%, because an
+          # OOMKill loses the unflushed head block; a limit is a ceiling, not a reservation.
+{{ container_resources(cpu_limit='1', mem_limit='3Gi', cpu_request='50m', mem_request='1728Mi') }}
       volumes:
         - name: prometheus-config
           configMap:
