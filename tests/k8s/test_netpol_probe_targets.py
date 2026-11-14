@@ -23,21 +23,20 @@ def test_every_plane_names_a_namespace() -> None:
     assert planes <= set(DEFAULTS["netpol_baseline_probe_namespaces"])
 
 
-def test_terraria_is_absent_while_it_is_scaled_to_zero() -> None:
-    """terraria runs at replicas 0, so gating it on a ready endpoint can only fail.
+def test_terraria_is_absent_while_its_start_is_refused() -> None:
+    """The Games panel refuses to start terraria, so gating it on a ready endpoint can only fail.
 
-    One direction only. A count above 0 does not require the row: its `expect: open` leg dials
-    :7777, which can crash a 1.4.5.7 server (#822), so the row comes back with the image fix
-    rather than with the replica count. defaults/main.yml records the decision (#3848).
+    One direction only. Lifting the refusal does not require the row: its `expect: open` leg
+    dials :7777, which can crash a 1.4.5.7 server (#822), so the row comes back with the image
+    fix. defaults/main.yml records the decision (#3848).
     """
-    # In inventory, not terraria's defaults — k8s/game-stats renders the exporter
-    # at the same count and a role default does not cross a role boundary.
-    all_vars = yaml_fast.safe_load(ALL_VARS.read_text())
+    games = yaml_fast.safe_load(ALL_VARS.read_text())["game_servers"]
+    [terraria] = [g for g in games if g["name"] == "terraria"]
     services = {r["service"] for r in TARGETS}
-    if int(all_vars["terraria_k8s_replicas"]) == 0:
+    if terraria.get("start_refused"):
         assert "terraria" not in services, (
-            "terraria is scaled to zero but is still a probe target, so every revision's "
-            "verify Job fails its readiness gate"
+            "the Games panel refuses to start terraria but it is still a probe target, so "
+            "every revision's verify Job fails its readiness gate"
         )
 
 
