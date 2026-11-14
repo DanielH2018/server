@@ -48,6 +48,19 @@ class B2ProbeCache(TypedDict):
     ttl: float
 
 
+class RegistrationCache(TypedDict):
+    """The RDAP probe's last outcome and the registration expiry it last read.
+
+    `ts` None means never probed. `expiry` is the Unix time of the registration's expiration
+    event, kept through a failed probe, because a registry's answer going missing does not move
+    the date it last gave.
+    """
+
+    ts: float | None
+    ok: bool
+    expiry: float | None
+
+
 def _never_probed() -> ProbeCache:
     return {"ts": None, "ok": True, "msg": ""}
 
@@ -66,6 +79,8 @@ class State:
       email_probe: The SMTP backstop cache (`checks.notify.email_backstop`).
       cloudflare_ips_probe: The Cloudflare allowlist drift cache (`checks.cloudflare_ips`).
       healthchecks_probe: The Healthchecks.io console drift cache (`checks.healthchecks`).
+      domain_registration_probe: The RDAP registration-expiry cache
+        (`checks.domain_registration`).
     """
 
     down_streaks: dict[str, int] = field(default_factory=dict)
@@ -87,6 +102,9 @@ class State:
     )
     cloudflare_ips_probe: ProbeCache = field(default_factory=_never_probed)
     healthchecks_probe: ProbeCache = field(default_factory=_never_probed)
+    domain_registration_probe: RegistrationCache = field(
+        default_factory=lambda: {"ts": None, "ok": False, "expiry": None}
+    )
 
 
 def down_streak(

@@ -29,6 +29,10 @@ CLUSTER = "prod"
 KUBECTL_TIMEOUT_S = 60
 
 
+class KubectlSetupError(ForgeError):
+    """This host has no kubectl or no readable kubeconfig, a setup fault no retry fixes."""
+
+
 class FluxHost:
     """The read-only `kubectl` and `logger` on the host that runs `promote.py land-wait`."""
 
@@ -44,7 +48,8 @@ class FluxHost:
         """Every Kustomization in `FLUX_NAMESPACE`, as `kubectl get -o json` lists them.
 
         Raises:
-            ForgeError: kubectl is missing, reaches the wrong cluster, exits non-zero or
+            KubectlSetupError: kubectl or a readable kubeconfig is missing on this host.
+            ForgeError: kubectl reaches the wrong cluster, exits non-zero, times out or
                 prints something other than a list.
         """
         try:
@@ -58,10 +63,11 @@ class FluxHost:
                 "json",
                 timeout=KUBECTL_TIMEOUT_S,
             )
+        except _kubectl.MissingKubectl as err:
+            raise KubectlSetupError(f"kubectl get {KUSTOMIZATIONS}: {err}") from err
         except (
             OSError,
             subprocess.SubprocessError,
-            _kubectl.MissingKubectl,
             _kubectl.WrongCluster,
         ) as err:
             raise ForgeError(f"kubectl get {KUSTOMIZATIONS}: {err}") from err

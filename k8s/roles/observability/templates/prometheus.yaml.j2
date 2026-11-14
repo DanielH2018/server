@@ -245,7 +245,7 @@ data:
       # config fixes, as scrape_jobs.py explains. The item's comment there says what the job
       # feeds. A job needing anything more stays hand-written below, and reads its target's
       # port from the entry with `entry_port` (#3816).
-      # ansible/filter_plugins/scrape_jobs.py documents the keys.
+      # scripts/renderer/template_filters/scrape_jobs.py documents the keys.
 {% for job in services | scrape_jobs(k8s_namespace) %}
 {% if job.replicas_var is not defined or lookup('vars', job.replicas_var) | int > 0 %}
       - job_name: {{ job.job }}

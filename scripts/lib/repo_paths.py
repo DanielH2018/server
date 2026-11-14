@@ -70,6 +70,8 @@ SHARED_TPL = K8S / "templates"  # shared macros
 INVENTORY = REPO / "inventory"
 # The SOPS files, their creation rules and the plaintext rotation register.
 SECRETS = REPO / "secrets"
+# Each cluster key's ciphertext digest, which `checksum/restart` and the verify Jobs' roll hash.
+CLUSTER_VARS_SOURCE = SECRETS / "cluster-vars.source"
 ALL_VARS = INVENTORY / "group_vars" / "all.yml"
 HOST_VARS = INVENTORY / "host_vars"
 # The k3s service list, every template's `services` (render_guard.k8s_services).

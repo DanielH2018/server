@@ -21,6 +21,7 @@ import verify_janitorr
 from flux_job_connect import open_url
 from lib import yaml_fast
 from lib.k8s_roles import K8S_ROLES
+from lib.role_files import cluster_vars_source_path
 from lib.repo_paths import HOST_LIB_FILES, SECRETS
 from renderer import shadow_diff
 from renderer.renderer_lib import cluster
@@ -354,7 +355,7 @@ def _edit_the_policy(role) -> None:
 
 
 def _rotate_the_sonarr_key(role) -> None:
-    source = role.parents[2] / "secrets" / "cluster-vars.source"
+    source = cluster_vars_source_path(role)
     lines = source.read_text().splitlines()
     (row,) = [n for n, line in enumerate(lines) if line.startswith("sonarr_api_key ")]
     key, _digest, *rest = lines[row].split()

@@ -10,7 +10,7 @@ ServiceAccount and the RBAC. The CronJob shipped `suspend: true` at H2.3d, and H
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in k8s/roles/longhorn-reconcile/defaults/main.yml. -->
 - **Applied by:** Flux, through `promote`; `land.sh --tags=longhorn-restore-drill` gates the
   rollout
-- **Images:** `alpine/k8s` (`longhorn_restore_drill_runner_image`), `busybox`
+- **Images:** `alpine/k8s` (`longhorn_restore_drill_runner_image`), `python`
   (`k3s_longhorn_restore_drill_image`)
 - **Route:** none (no `templates/ingressroute.yaml.j2`)
 - **Claim:** `${DRILL}` (no declared tier (runtime claim named by a shell variable))
@@ -47,6 +47,17 @@ The CronJob `longhorn-restore-drill` (`templates/cronjob.yaml.j2`) runs
 `templates/longhorn-restore-drill.sh.j2` from the script ConfigMap at 04:10 UTC. It restores the
 newest backup of ONE volume into a NEW volume, mounts it in a throwaway pod, checks the data is
 real, and tears everything down (H2.3d).
+
+- **SQLite databases must pass `PRAGMA integrity_check`.** A block snapshot taken mid-write can
+  restore cleanly and still hold a corrupt database. The probe pod checks every file with a
+  SQLite header, and any result but `ok` fails the run before the success stamps. A database
+  the read-only mount cannot open, because it has a hot `-journal` or a `-wal` without `-shm`,
+  is copied with its sidecars into the pod's emptyDir and checked there. The run writes
+  `sqlite.<pvc>` as `<epoch> checked=<n> bad=<n>` on a pass and on a failure. A probe log with no
+  summary line fails the run. The probe image (`k3s_longhorn_restore_drill_image`) is
+  `python:3.14-alpine`, for Python's `sqlite3` module. ENFORCED:
+  `tests/longhorn/test_longhorn_restore_drill_sqlite.py::test_a_corrupt_database_fails_the_drill_and_stamps_no_success`,
+  `tests/longhorn/test_longhorn_restore_drill_sqlite.py::test_the_probe_reports_a_corrupt_database_as_bad`.
 
 - **Scope.** It creates and deletes the Volume, PV, PVC and probe pod named
   `restore-drill-<pvc>`, and patches the stamp ConfigMap. It never touches the live volume. It

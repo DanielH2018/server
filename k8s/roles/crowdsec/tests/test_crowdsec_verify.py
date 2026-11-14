@@ -23,6 +23,7 @@ import crowdsec_verify as cv
 from _k8s_render import render_role_template
 from lib import yaml_fast
 from lib.k8s_roles import K8S_ROLES
+from lib.role_files import cluster_vars_source_path
 from lib.repo_paths import HOST_LIB_FILES, SCRIPTS, SECRETS
 from renderer import shadow_diff
 from renderer.renderer_lib import cluster
@@ -389,7 +390,7 @@ def _edit_a_job(role) -> None:
 
 
 def _rotate_the_bouncer_key(role) -> None:
-    source = role.parents[2] / "secrets" / "cluster-vars.source"
+    source = cluster_vars_source_path(role)
     lines = source.read_text().splitlines()
     (row,) = [
         n

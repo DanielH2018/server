@@ -19,6 +19,7 @@ from _restore_drill import DRILL_DEFAULTS, harness
 
 # n8n-files' own recorded actualSize, the reading the ceiling was derived from.
 RECORDED_BARE_EXT4_BYTES = 51712000
+EMPTY_PROBE = "files=0 bytes=0\nsqlite_checked=0 sqlite_bad=0"
 
 
 def _ceiling() -> int:
@@ -39,7 +40,7 @@ def test_a_still_empty_declared_volume_passes_and_stamps(tmp_path: Path) -> None
     """CLEAN half: the waiver's whole point, at the size the declaring volume actually reads."""
     pvc = _declared()
     run = harness(tmp_path, [pvc], actual_sizes={pvc: RECORDED_BARE_EXT4_BYTES})
-    proc = run(restore="pass", env={"K3S_STUB_PROBE": "files=0 bytes=0"})
+    proc = run(restore="pass", env={"K3S_STUB_PROBE": EMPTY_PROBE})
     assert proc.returncode == 0, proc.stderr
     assert "last-success" in run.cm
     assert f"success.{pvc}" in run.cm
@@ -50,7 +51,7 @@ def test_a_filled_declared_volume_fails_and_stamps_nothing(tmp_path: Path) -> No
     # fact: k8s/roles/longhorn-restore-drill/CLAUDE.md#What the drill is and what it writes (the autonomous-role contract)
     pvc = _declared()
     run = harness(tmp_path, [pvc], actual_sizes={pvc: _ceiling() + 1})
-    proc = run(restore="pass", env={"K3S_STUB_PROBE": "files=0 bytes=0"})
+    proc = run(restore="pass", env={"K3S_STUB_PROBE": EMPTY_PROBE})
     assert proc.returncode == 1
     assert "the waiver does not apply" in proc.stderr, proc.stderr
     # Neither stamp: check 7 would read the first as "the nightly drill is alive" and check 8 the

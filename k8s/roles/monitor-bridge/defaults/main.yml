@@ -59,6 +59,7 @@ monitor_bridge_modules:
   - checks/notify.py
   - checks/cloudflare_ips.py
   - checks/healthchecks.py
+  - checks/domain_registration.py
   - checks/wan.py
   - bridge/common.py
   - bridge/parsing.py
