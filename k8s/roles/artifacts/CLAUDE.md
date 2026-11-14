@@ -13,15 +13,14 @@ how that sync behaves.
 - **Claims:** none (no PVC)
 <!-- /generated_from -->
 
-- **Flux applies it, not Ansible** (D5.19, the first Wave D PR). Its `containers_list` entry
+- **Flux applies it.** Its `containers_list` entry
   is in `cluster/services.yml`, so nothing applies it by hand, and a
   merged change reaches the cluster when `promote` publishes and verifies the next bundle. The
   Deployment is `RollingUpdate`
   with one replica, so a roll keeps one pod serving. The host directories it mounts are the
   setup plane's (below), so Flux creates none of them.
-- **Where the task went.** The Kustomization's `wait` replaces the
-  rollout wait, and the restart checksum the renderer stamps replaces the shared restart, so a
-  ConfigMap edit still rolls the pod.
+- **Its rollout.** The Kustomization's `wait` holds the rollout. The restart checksum the
+  renderer stamps on the Deployment rolls the pod, so a ConfigMap edit reaches it.
 
 - **Host:** pinned to `daniel-box` (`artifacts_k8s_node`), because it bind-mounts that host's own
   artifact tree.
@@ -96,7 +95,7 @@ Consequences worth knowing before debugging a missing artifact:
 The pod runs `python3 /app/artifact_server.py` against the whole ConfigMap mounted at `/app`,
 and `templates/configmap.yaml.j2` builds one key per entry in `artifacts_modules`
 (`defaults/main.yml`). **Adding a file to `files/` without adding its name there ships nothing**
-— the pod dies at import with `ModuleNotFoundError`, which no Ansible output reports.
+— the pod dies at import with `ModuleNotFoundError`.
 `tests/services/test_artifacts_configmap.py` compares the list against `files/` in
 both directions.
 

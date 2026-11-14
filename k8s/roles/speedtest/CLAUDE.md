@@ -14,7 +14,7 @@ repo-root `CLAUDE.md` for shared conventions.
 - **`speedtest-config` is `longhorn-nobackup`**, 1Gi. `/config` holds a real
   `database.sqlite`, but its Laravel `APP_KEY` lives in SOPS so a rebuilt instance still
   works — losing the volume loses history, not function.
-- **Flux applies it, not Ansible** (D5.9, the first Wave B PR). Its `containers_list` entry is
+- **Flux applies it.** Its `containers_list` entry is
   in `cluster/services.yml`, so nothing applies it by hand, and a merged change reaches the cluster when
   `promote` publishes and verifies the next bundle. Its image-bump PRs therefore draw no
   `land-wait` and no `probe.py health` run. authelia and traefik are flux-owned too, so the
@@ -37,9 +37,8 @@ repo-root `CLAUDE.md` for shared conventions.
   operator runs after a hand rotation and the rotation cron runs after it rotates an
   `auto`-tier key. The renderer stamps a restart checksum on the Deployment, so a changed
   value rolls the pod.
-- **Where the task went.** Its pre-apply snapshot through
-  `k8s/volume-snapshot` became the `speedtest-snapshot` Job, and the Kustomization's `wait`
-  replaces the rollout wait.
+- **Its snapshot and rollout.** The `speedtest-snapshot` Job takes the pre-apply snapshot,
+  and the Kustomization's `wait` holds the rollout.
 - **REQUIRED one-time post-deploy step (#996):** log in at `speedtest.<domain>`, open
   **Settings -> Data Integration**, and turn on **Prometheus**. Without this the
   `speedtest` scrape job in observability's `prometheus.yaml.j2` returns 404 forever — see

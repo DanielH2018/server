@@ -17,13 +17,13 @@ CouchDB backend for the Obsidian Self-hosted LiveSync plugin. See repo-root `CLA
 - **No Authelia because** CouchDB enforces its own auth (`require_valid_user = true`); the
   LiveSync client uses basic auth and can't pass Authelia 2FA
 - **Depends on:** traefik
-- **Flux applies it, not Ansible** (D5.9, the first Wave B PR). Its `containers_list` entry is
+- **Flux applies it.** Its `containers_list` entry is
   in `cluster/services.yml`, so nothing applies it by hand, and a merged change reaches the cluster when
   `promote` publishes and verifies the next bundle. traefik is flux-owned too, so the
   Kustomization lists it in `dependsOn`, and Flux applies this tag only after its Kustomization is
   Ready. The Deployment is `Recreate`, so a change that rolls it takes sync down briefly.
-- **`k8s_autodeploy: false` still stops Renovate automerging the image bump.** The deployer
-  skips the tag, so the flag no longer gates an apply. The denial reason above is about the
+- **`k8s_autodeploy: false` still stops Renovate automerging the image bump.** The flag
+  gates no apply: Flux applies every merged change. The denial reason above is about the
   revert, not the snapshot.
 - **The `livesync-snapshot` Job snapshots `livesync-data` before each revision applies**.
   The livesync Kustomization depends on `livesync-snapshot`, so a revision applies
@@ -41,11 +41,10 @@ CouchDB backend for the Obsidian Self-hosted LiveSync plugin. See repo-root `CLA
   `cluster_vars.py write`, which the operator runs after a hand rotation and the rotation cron
   runs after it rotates an `auto`-tier key. The renderer stamps a restart checksum on the
   Deployment, so a changed value or a `local.ini` edit rolls the pod.
-- **Where the task went.** Its pre-apply snapshot through
-  `k8s/volume-snapshot` became the `livesync-snapshot` Job, and the Kustomization's `wait`
-  replaces the rollout wait. The renderer reads the role's `manifests_exclude_files:
-  [ingressroute.yaml]`, so the published render holds no IngressRoute, and traefik's
-  file-provider gate stays the only router for the livesync names.
+- **Its snapshot, rollout and routes.** The `livesync-snapshot` Job takes the pre-apply
+  snapshot, and the Kustomization's `wait` holds the rollout. The renderer reads the role's
+  `manifests_exclude_files: [ingressroute.yaml]`, so the published render holds no
+  IngressRoute, and traefik's file-provider gate is the only router for the livesync names.
 
 ## Notable
 - `templates/config/local.ini.j2` sets `require_valid_user` and smoosh auto-compaction ratios

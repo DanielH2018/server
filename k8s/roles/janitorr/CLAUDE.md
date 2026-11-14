@@ -84,17 +84,17 @@ See repo-root `CLAUDE.md` for shared conventions.
   post-boot crash loop for an indefinite `Init` stall, with no restart count and no
   CrashLoopBackOff to notice — see the docstring of
   `tests/services/test_karakeep_backend_policies.py`, which is where that pattern
-  DOES apply and what it costs. (3) `k8s_autodeploy` is false here, so a pod that never leaves
-  Init waits for a human rather than being caught by a rollout gate, on the one role in the
-  fleet that deletes real media. Contradict this at a cited `file:line` with new evidence.
+  DOES apply and what it costs. (3) A pod that never leaves `Init` after a node reboot waits for
+  a human, because no apply runs then and no Kustomization `wait` sees it, and this is the one
+  role in the fleet that deletes real media. Contradict this at a cited `file:line` with new evidence.
 - **The `containers_list` `depends_on: [media-volume, sonarr, radarr, jellyfin]` is not a fix
   for the above.** The renderer toposorts it into the bundle's `dependsOn` edges, which order
   Flux's applies; it does not gate pod start after a node reboot, when no apply runs at all.
 
 ## The Flux verify Job
 
-`templates/verify/` holds `janitorr-verify`, which replaced the retired verify tasks at janitorr's
-flip with no `pods/exec` grant. `files/verify_janitorr.py` reads the mounted `application.yml`,
+`templates/verify/` holds `janitorr-verify`, which runs the role's checks with no `pods/exec`
+grant. `files/verify_janitorr.py` reads the mounted `application.yml`,
 dials sonarr, radarr and jellyfin over HTTP, and writes, reads and removes the leaving-soon
 probe link through jellyfin's mount layout; its docstring maps each proof. Its pod is
 `app: janitorr-verify`, which sonarr's and radarr's `netpol_from` list (#5709).

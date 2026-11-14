@@ -682,7 +682,7 @@ The code is root-owned under `/opt/claude-triage`, like the runner's.
   | `K8sDeploymentZeroAvailable` | `triage` | A Deployment with no available replica |
   | `K8sContainerCrashLooping` | `triage` | A crash-looping container |
   | `ScrapeTargetDown` | `triage` | A scrape target |
-  | `ExtraProbeFailed:wg-easy` | `none` | wg-easy's probe, held out until its flap is fixed (#8252) |
+  | `ExtraProbeFailed:wg-easy` | `none` | wg-easy's probe, held out until its 30s probe timeout (#8252) runs a week with no fall (#8582) |
 
   The table replaced a `critical` severity floor (#8242). Every down-class alert is a
   `warning`, so from 2026-10-31 to 2026-11-12 the floor logged 168 skipped falls and opened
@@ -864,7 +864,7 @@ operator can log in as `claude`, so only the operator can run the checks that st
 | Capability | Why | Where it goes instead |
 |---|---|---|
 | A dry run against the cluster before a merge | It needs decrypted SOPS values, and the agent has no age key | Merged work deploys through the lander (slice 3). A pre-merge dry run returns with slice 7. |
-| The `probe.py` subcommands that read a credential from SOPS: `arr`, `ha`, `ha-state`, `b2-longhorn` and `b2-budget`, plus `postflight.py` and `ui_login.py` | `core.sops_extract` decrypts the credential, and the agent has no age key. The failure says so and exits 75. | The operator. `probe.py health` reads no SOPS value and works for the agent, and the domain comes from inventory. |
+| The `probe.py` subcommands that read a credential from SOPS: `arr`, `ha`, `ha-state`, `b2-longhorn` and `b2-budget`, plus `postflight.py` and `ui_login.py` | `core.sops_extract` decrypts the credential, and the agent has no age key. The failure says so and exits 75. | The operator. `probe.py health` reads no SOPS value and works for the agent. The domain and the B2 bucket come from inventory, so `b2-longhorn --dry-run` and `b2-budget --dry-run` work for the agent too. |
 | `sudo` | No sudo rights and no `SUDO_ASKPASS` helper | The operator, or the deployer after a merge |
 | Adding or rotating a secret | `sops` needs the data key to write a value | The operator. Key names stay readable, because SOPS encrypts values only. |
 | ssh as `ubuntu` to the peers | That shell has sudo | The operator. The agent reaches daniel-server as its own `claude` agent user, for fan-out only (slice 5). The Pi has no agent login, because the one `probe.py` ssh path needs its `docker` group. |

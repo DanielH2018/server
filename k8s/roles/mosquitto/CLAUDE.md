@@ -11,16 +11,15 @@ web UI, no route — infra role.
 - **Claim:** `mosquitto-data` (no backup (StorageClass longhorn-nobackup))
 <!-- /generated_from -->
 
-- **Flux applies it, not Ansible** (D5.20, a Wave D PR with sonarr and radarr). Its
+- **Flux applies it.** Its
   `containers_list` entry is in `cluster/services.yml`, so nothing applies it by hand, and a merged change reaches the cluster when `promote` publishes and
   verifies the next bundle. zigbee2mqtt is Flux-owned too and depends on it. The Deployment is
   `Recreate`, so a change
   that rolls it drops every MQTT client briefly. `mosquitto-data` is on `longhorn-nobackup`,
   and the role declares no snapshot claim, so the tag renders no `-snapshot` Job.
-- **Where the tasks went.** Its two asserts each have a successor.
-  The colon refusal moved into `cluster_vars.py write` (below). The LAN-address assert became
-  observability's `MosquittoLanAddressNotPinned` rule, which the soak reads. The
-  Kustomization's `wait` replaces the rollout wait.
+- **Its checks.** `cluster_vars.py write` refuses a hash that holds a colon (below).
+  Observability's `MosquittoLanAddressNotPinned` rule, which the soak reads, checks the LAN
+  address. The Kustomization's `wait` holds the rollout.
 - **Must deploy before `zigbee2mqtt`** — z2m resolves the broker by bare Service name. The edge is
   `depends_on: [mosquitto]` on zigbee2mqtt's `containers_list` entry, pinned by
   `tests/deploy/test_k8s_toposort.py::test_documented_pairwise_ordering_survives_an_adversarial_list`.

@@ -66,7 +66,7 @@ tighter or looser allow-list than the baseline. Deploys no workload of its own.
 - **A failed workload change leaves these policies unapplied.** The role depends on every
   other tag, so a revision whose workload change fails its `wait` never reaches
   `netpol-baseline` or its verify Job. The flip PR repeats D4's drill on this edge.
-- **Flux applies it, not Ansible** (D5, Wave D's last flip). The `containers_list` entry
+- **Flux applies it.** The `containers_list` entry
   is in `cluster/services.yml`, so nothing applies it by hand, and a
   merged change reaches the cluster when `promote` publishes and verifies the next bundle.
   `defaults/main.yml` holds the deferred file list.

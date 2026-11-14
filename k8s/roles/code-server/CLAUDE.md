@@ -16,7 +16,7 @@ it is built from (`templates/Dockerfile.j2` + `files/extensions.sh`); the invent
 - **Image:** built by the promote workflow's `images` job from `templates/Dockerfile.j2`,
   pushed to `ghcr.io/danielh2018/code-server:<content tag>`.
 - **Host:** daniel-box (k3s), pinned by a required node affinity · **Port:** 8443
-- **Flux applies it, not Ansible** (D5.16, Wave C). Its `containers_list` entry is
+- **Flux applies it.** Its `containers_list` entry is
   in `cluster/services.yml`, so nothing applies it by hand, and a merged
   change reaches the cluster when `promote` publishes and verifies the next bundle. `k8s_autodeploy:
   false` still stops Renovate's
@@ -43,11 +43,11 @@ it is built from (`templates/Dockerfile.j2` + `files/extensions.sh`); the invent
   Kustomization (below) pulls the image onto the node while the old pod still serves, so the
   Deployment keeps the default rollout budget and the editor is down only for the container
   start.
-- **Where the tasks went.** The defaults name
+- **Its image, snapshot and rollout.** The defaults name
   `<k8s_registry_pull_host>/code-server`; the renderer rewrites both refs to the GHCR one with
   `imagePullPolicy: IfNotPresent` (`scripts/renderer/renderer_lib/images.py:ghcr_refs`). The
-  snapshot Job replaces k8s/volume-snapshot's pre-apply snapshot, and the Kustomization's
-  `wait` replaces the rollout wait.
+  `code-server-snapshot` Job takes the pre-apply snapshot, and the Kustomization's `wait`
+  holds the rollout.
 - **Ported WITHOUT docker plumbing** (operator decision 2026-08-10): no DOCKER_HOST, so the
   in-IDE docker CLI and devcontainers are gone; docker-proxy-codeserver and the `codeserver`
   net dissolved with the Docker copy (`has_code_server: false` in daniel-server host_vars).

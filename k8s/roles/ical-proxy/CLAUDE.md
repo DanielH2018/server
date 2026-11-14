@@ -18,7 +18,7 @@ calendar widget. See repo-root `CLAUDE.md` for shared conventions.
   image as `app.py`.
 - **Host:** daniel-box (k8s), since 2026-08-10 — slice-7 Phase C
 - **The route guards by ClientIP** so only Homepage reads the unauthenticated private feeds
-- **Flux applies it, not Ansible** (D5.14, the first Wave C PR). Its `containers_list` entry is
+- **Flux applies it.** Its `containers_list` entry is
   in `cluster/services.yml`, so nothing applies it by hand, and a merged change reaches the cluster when
   `promote` publishes and verifies the next bundle. traefik is flux-owned too, so the
   Kustomization lists it in `dependsOn`, and Flux applies this tag only after its Kustomization is
@@ -39,12 +39,11 @@ calendar widget. See repo-root `CLAUDE.md` for shared conventions.
   through `cluster_vars.py write`, which the operator runs after the hand rotation: all three
   keys are `assisted`-tier in `secrets/secret_rotation.yml`. The rotation rolls the pod through
   the restart checksum.
-- **Where the tasks went.** The `k8s/image-builder` include became promote's `images` job
-  (D5.4a2) and the GHCR ref (D5.4b). The role's `manifests_rollout:
-  ical-proxy` names the Deployment for the stabilisation gate and the shared restart. The
-  Kustomization's `wait` replaces the gate, and the restart checksum the renderer stamps
-  replaces the restart. `k8s_autodeploy: true` no longer gates an apply, because the deployer
-  skips the tag.
+- **Its image build and rollout.** Promote's `images` job builds the image and pushes it to
+  GHCR. The role's `manifests_rollout: ical-proxy` names the Deployment that the
+  Kustomization's `wait` holds and that the renderer stamps the restart checksum on.
+  `k8s_autodeploy: true` gates no apply: Flux applies every merged
+  change. It still decides whether Renovate automerges the image bump.
 
 ## Notable
 - Aggregates Google + Obsidian ICS URLs (`calendar_1/2/4` from secrets), refreshing every

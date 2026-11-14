@@ -17,17 +17,16 @@ repo's first Traefik→host route. Two facts follow:
 - **Claims:** none (no PVC)
 <!-- /generated_from -->
 
-- **Flux applies it, not Ansible** (D5.6, the second Wave A PR). Its `containers_list` entry
+- **Flux applies it.** Its `containers_list` entry
   is in `cluster/services.yml`, so nothing applies it by hand, and a
   merged change reaches the cluster when `promote` publishes and verifies the next bundle.
-- **Where the task went.** Its `manifests_rollout: ''` default has
-  nothing
-  to replace: there is no workload to roll, so the Kustomization's `wait` checks only that the
-  Service, EndpointSlice and IngressRoute applied.
+- **Its checks.** Its `manifests_rollout: ''` default names no workload, because the role
+  renders none. The Kustomization's `wait` checks only that the Service, EndpointSlice and
+  IngressRoute applied.
 - **The EndpointSlice address is baked in at render time.** The renderer writes
   `k8s_node_client_ip` into the bundle, so a change to that variable reaches the cluster only
   with the next promotion that publishes this tag.
-- **A bad route change exposes a page that starts landings and clears the deployer's hold.**
+- **A bad route change exposes a page that starts and cancels landings.**
   Flux applies every merged change on the next promotion, so review is the gate.
   `k8s_autodeploy: false` stays in `defaults/main.yml` with its reason, but it gates nothing
   here: the flag only holds back Renovate's automerge, and the role has no image for Renovate

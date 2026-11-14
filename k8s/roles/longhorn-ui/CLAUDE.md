@@ -11,19 +11,18 @@ and the middlewares it references, nothing else.
 - **Claims:** none (no PVC)
 <!-- /generated_from -->
 
-- **Flux applies it, not Ansible** (D5.6, the second Wave A PR). Its `containers_list` entry
+- **Flux applies it.** Its `containers_list` entry
   is in `cluster/services.yml`, so nothing applies it by hand, and a
   merged change reaches the cluster when `promote` publishes and verifies the next bundle.
-- **Where the task went.** Its three vars map onto the render:
-    - The prune namespace is gone from the apply. Every object carries
-      `namespace: longhorn-system` in its template, and kustomize-controller applies them
-      there; its `cluster-reconciler-flux-system` binding grants `cluster-admin`
-      (`k8s/roles/flux/files/gotk-components.yaml`). Flux's prune follows its own
-      inventory, not a namespace.
-    - `manifests_rollout: ''` has nothing to replace. There is no Deployment of ours to roll,
-      so the Kustomization's `wait` checks only that the route and middlewares applied.
+- **Its render.** Three settings shape it:
+    - Every object carries `namespace: longhorn-system` in its template, and
+      kustomize-controller applies them there. Its `cluster-reconciler-flux-system` binding
+      grants `cluster-admin` (`k8s/roles/flux/files/gotk-components.yaml`). Flux's prune
+      follows its own inventory, not a namespace.
+    - `manifests_rollout: ''` names no Deployment, because the role has none to roll. The
+      Kustomization's `wait` checks only that the route and middlewares applied.
     - The render honours `manifests_exclude_files: [service.yaml]`, so the bundle holds no
-      Service. The route targets the upstream `longhorn-frontend` Service, as before.
+      Service. The route targets the upstream `longhorn-frontend` Service.
 - **A bad route change** (auth dropped, wrong Service targeted) is a platform-class exposure
   risk even though this role has no workload to roll back. Flux applies every merged change
   on the next promotion, so review is the gate. `k8s_autodeploy: false` stays in

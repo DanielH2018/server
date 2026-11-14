@@ -20,7 +20,7 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
 - **This role is both the workload and the config-authoring home** — validate-ha-config, the
   macro tests, `sanctioned_writers.yml` and the skills all anchor here, and its ConfigMap
   ships `files/` into the cluster. Edit HA config HERE, then merge; `promote` applies it.
-- **Flux applies it, not Ansible** (D5.11, an own-window flip). Its `containers_list` entry
+- **Flux applies it.** Its `containers_list` entry
   is in `cluster/services.yml`, so nothing applies it by hand, and a
   merged change reaches the cluster when `promote` publishes and verifies the next bundle. The
   Deployment is `Recreate`, so a
@@ -41,9 +41,8 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   `homelab-cluster-vars`.** Their values are `${<key>}` placeholders in the published
   render, and Flux substitutes the values from the `homelab-cluster-vars` Secret. A rotation
   reaches the cluster only through `cluster_vars.py write`.
-- **Where the task went.** Its pre-apply snapshot through
-  `k8s/volume-snapshot` became the
-  `home-assistant-snapshot` Job, and the Kustomization's `wait` replaces the rollout wait.
+- **Its snapshot and rollout.** The `home-assistant-snapshot` Job takes the pre-apply
+  snapshot, and the Kustomization's `wait` holds the rollout.
 - **Port 8123, no Authelia**, so the companion app works unchanged. MQTT goes via the
   in-cluster `mosquitto` Service, NUT via the in-cluster `nut` Service (admitted by
   `k8s/roles/netpol-baseline/templates/networkpolicy-nut.yaml.j2`).

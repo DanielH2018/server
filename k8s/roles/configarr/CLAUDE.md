@@ -20,7 +20,7 @@ x265 re-encode instead, which made Jellyfin buffer and seek slowly.
 - **Claims:** none (no PVC)
 <!-- /generated_from -->
 
-- **Flux applies it, not Ansible** (D5, Wave D). Its `containers_list` entry is
+- **Flux applies it.** Its `containers_list` entry is
   in `cluster/services.yml`, so nothing applies it by hand. A merged change
   reaches the cluster when `promote` publishes and verifies the next bundle.
 - **Host: daniel-box (k8s CronJob).** This role renders `templates/config/config.yml.j2` and

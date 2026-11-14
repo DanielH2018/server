@@ -16,7 +16,7 @@ FreshRSS with a small nginx feed-cache sidecar. See repo-root `CLAUDE.md`.
   `files/nginx-feed-cache.conf`. Edit the cache conf / extensions HERE, then merge; `promote`
   applies it.
 - **Port:** 80
-- **Flux applies it, not Ansible** (D5.9, the first Wave B PR). Its `containers_list` entry is
+- **Flux applies it.** Its `containers_list` entry is
   in `cluster/services.yml`, so nothing applies it by hand, and a merged change reaches the cluster when
   `promote` publishes and verifies the next bundle. Its image-bump PRs therefore draw no
   `land-wait` and no `probe.py health` run. authelia and traefik are flux-owned too, so the
@@ -31,12 +31,11 @@ FreshRSS with a small nginx feed-cache sidecar. See repo-root `CLAUDE.md`.
   reverts the claim on its own: the operator follows the revert runbook in
   `docs/volume-snapshot-drills.md`. `k8s_autodeploy: true` still lets Renovate automerge the
   digest bump.
-- **Where the task went.** Its pre-apply snapshot through
-  `k8s/volume-snapshot` became the `freshrss-snapshot` Job, and the Kustomization's `wait`
-  replaces the rollout wait. The `freshrss-feed-cache` entry in `manifests_extra_rollouts`
-  rolled nginx after a cache-config edit, because nginx rereads `conf.d` only on start. The
-  restart checksum the renderer stamps on the feed-cache Deployment replaces it, so an edit
-  to `files/nginx-feed-cache.conf` still rolls nginx.
+- **Its snapshot and rollout.** The `freshrss-snapshot` Job takes the pre-apply snapshot, and
+  the Kustomization's `wait` holds the rollout. The `freshrss-feed-cache` entry in
+  `manifests_extra_rollouts` makes the feed-cache Deployment a restart target, because nginx
+  rereads `conf.d` only on start. The restart checksum the renderer stamps on it rolls nginx,
+  so an edit to `files/nginx-feed-cache.conf` reaches it.
 
 ## Notable
 - Bundles FreshRSS extensions shipped in `files/`: Karakeep button, Wallabag button,
