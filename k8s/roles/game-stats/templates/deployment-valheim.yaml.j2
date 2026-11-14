@@ -11,7 +11,10 @@ metadata:
 spec:
   # ReadWriteOnce PVC — two pods can't both mount /data during a rolling update.
 {{ spec_shell('Recreate') }}
-  replicas: 1
+  # Follows the game server, from inventory: this exporter tails valheim's console out of Loki,
+  # so at `valheim_k8s_replicas: 0` it polls for a server that cannot log. observability's
+  # `valheim-stats` scrape job is gated on the same value.
+  replicas: {{ valheim_k8s_replicas }}
   selector:
     matchLabels:
       app: valheim-stats

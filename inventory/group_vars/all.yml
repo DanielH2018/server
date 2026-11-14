@@ -200,6 +200,16 @@ jellyfin_k8s_lan_ip: 10.0.0.241
 # two steps and the port monitor is deliberately NOT the second — do not restore a port probe
 # until the image is past 1.4.5.7.
 terraria_k8s_replicas: 0
+# The valheim server's replica count. Global for the same reason as terraria's above: the
+# server Deployment (k8s/roles/valheim), the valheim-stats exporter (k8s/roles/game-stats) and
+# observability's `valheim-stats` Prometheus scrape job all follow it, and a role default does
+# not cross a role boundary.
+#
+# Parked at 0 on 2026-11-13 to free daniel-box memory for the Claude fan-out. The PVCs
+# (valheim-config, valheim-server, valheim-stats-data) stay, so no data is lost. Setting this
+# to 1 restarts the server, the exporter and the scrape job in one merge. The exporter's
+# playtime totals miss the parked window.
+valheim_k8s_replicas: 0
 # Shared between k8s/roles/crowdsec (the engine that runs LAPI+AppSec) and k8s/roles/traefik
 # (the bouncer plugin middleware + the log-tailing agent sidecar). Cross-role, and role
 # defaults are invisible across roles.
