@@ -58,6 +58,8 @@ PACE_ENV = "LAND_PACE_MASTER_RUNS"
 # untested tree comes from master moving during the PR's re-test, which no merge-time read
 # prevents. Batching the merges is the remaining route (#6521).
 PACE_MASTER_RUNS = 2
+# Set, a landing takes the landing turn before it merges (`turn.py`).
+QUEUE_ENV = "LAND_QUEUE"
 # Named as a set so the deploy-tools tests can clear all of them: the renovate agent's unit
 # exports LAND_REQUIRE_AUTHOR, and a test that inherited it exercised a refusal rather than the
 # landing it was written for.
@@ -74,6 +76,7 @@ ENV_KNOBS = (
     DEADLINE_ENV,
     WINDOW_GRACE_ENV,
     PACE_ENV,
+    QUEUE_ENV,
 )
 
 
@@ -136,6 +139,8 @@ class Options:
     merge_timeout: int = CI_TIMEOUT_S
     merge_poll: int = MERGE_POLL_S
     pace_master_runs: int = PACE_MASTER_RUNS
+    # `LAND_QUEUE`: take the landing turn for the merge wait.
+    queue: bool = False
     primary: Path = PRIMARY_CHECKOUT
     # `--detach` forks the landing into a logfile this script names and returns; `cc-wait land
     # <pr>` is the wait. It defaults off, so an invocation that omits it reaches the same code
@@ -260,6 +265,7 @@ def parse_args(argv: list[str] | None, description: str) -> Options:
         verdict_file=ns.verdict_file,
         merge_poll=_merge_poll_from_env(),
         pace_master_runs=int(os.environ.get(PACE_ENV) or PACE_MASTER_RUNS),
+        queue=bool(os.environ.get(QUEUE_ENV)),
         primary=_primary_from_env(),
         detach=ns.detach,
         log_dir=ns.log_dir,
