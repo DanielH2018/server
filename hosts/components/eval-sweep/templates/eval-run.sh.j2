@@ -361,6 +361,13 @@ TREND_OUT="$(mktemp)"
   --epoch "${CLAUDE_EVAL_EPOCH:-$CLAUDE_EPOCH}" >"$TREND_OUT" 2>&1
 TREND_RC=$?
 
+# trend.py exits 2 on a sweep with no healthy trial in any case (a rejected key, an engine that
+# cannot start) and writes nothing. That run measured nothing, so it reports down, not up.
+if [ "$TREND_RC" -eq 2 ]; then
+  say_failure "eval-run: sweep produced no healthy trial, nothing recorded" "$TREND_OUT"
+  exit 1
+fi
+
 git add evals/history.json
 
 # A successful hermetic run always appends one entry per graded case and writes atomically
@@ -376,8 +383,8 @@ if git diff --cached --quiet; then
   exit 1
 fi
 
-# Past the check above, trend.py definitely wrote — its only exit codes are 0 (clean) and 1
-# (a case regressed), so TREND_RC now means exactly that, not "did it crash".
+# Past the check above, trend.py definitely wrote — its only exit codes after a write are 0
+# (clean) and 1 (a case regressed), so TREND_RC now means exactly that, not "did it crash".
 if [ "$TREND_RC" -ne 0 ]; then
   REGRESSED=1
 else

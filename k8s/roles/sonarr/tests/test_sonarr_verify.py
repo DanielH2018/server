@@ -307,7 +307,8 @@ def test_a_deployment_change_renames_the_job(stubs, tmp_path):
 def test_the_staged_job_reads_no_other_roles_file():
     """The helper and the image come from `render_tag`, never a lookup into another role.
 
-    The deployer redeploys a role when a file it `lookup()`s in another role changes, and its
+    A role's bundle re-renders, and Flux redeploys it, when a file it `lookup()`s in another
+    role changes, and its
     scan reads `templates/verify/` too. tdarr's test has the same guard and its red case.
     `notification.yaml.j2` is arr-notification's seed Job, and its lookups into that role are
     deliberate: arr-notification's own test_seed_job.py pins them.

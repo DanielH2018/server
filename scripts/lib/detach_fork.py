@@ -17,9 +17,8 @@ does for a command it starts, applied to a process that is already running. Stop
 fan-out unit then leaves the work running. Its way out is `systemctl --user stop <scope>`, and
 the line this writes into the run's log names the scope.
 
-Only a `.service` under `user@<uid>.service` is left. A system unit such as
-`gitops-deploy.service` is left alone on purpose: moving out of it needs root, and the deployer
-waits for its own deploys. A login session's scope is left alone too.
+Only a `.service` under `user@<uid>.service` is left. A system unit is left
+alone on purpose: moving out of it needs root. A login session's scope is left alone too.
 
 A SYSTEM UNIT'S CALLER STARTS THE RUN IN THE USER MANAGER INSTEAD (issue #6864). The cron units
 such as `homelab-docs-refresh.service` run as the operator with `KillMode=control-group`, so a

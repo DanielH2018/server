@@ -28,7 +28,7 @@ each changed snapshot role's `digest8` and claims, every snapshot role R renders
 name when R renders one, and `sha-<R>`'s manifest digest, which `decide` read from GHCR.
 
 THE POST. `promote.py hold` runs in its own job after `settle`, once `settle` has written the
-stateful hold. It posts to the deployer's Discord channel:
+stateful hold. It posts to the deploy Discord channel:
   - the held SHA, the hold's value, and that `prod` was not reset;
   - every changed tag and every Kustomization that failed or timed out, each marked as a
     snapshot role or not, so the operator can pick the runbook's branch;
@@ -452,7 +452,7 @@ def add_parser(commands) -> None:
     cmd = commands.add_parser(
         "hold",
         help="post the stateful hold settle wrote, or the suspended-changed hold decide "
-        "wrote, to the deployer's channel",
+        "wrote, to the deploy Discord channel",
     )
     cmd.add_argument("target", help="R, the held commit")
     cmd.add_argument("--hold", required=True, help="the DEPLOY_HOLD value written")

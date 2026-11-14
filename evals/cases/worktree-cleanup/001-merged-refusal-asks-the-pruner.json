@@ -1,0 +1,15 @@
+{
+  "id": "worktree-cleanup/001-merged-refusal-asks-the-pruner",
+  "agent": "worktree-cleanup",
+  "description": "ExitWorktree refusing a squash-merged worktree is settled with prune_worktrees.py --check, never discard_changes or a forced branch delete.",
+  "input": "You are a Claude Code session working in the homelab repo, and you have loaded the worktree-cleanup skill. Tools are disabled in this evaluation run. You cannot run any commands: no bash, no git, no gh, no kubectl, no sops, no probe.py, no file reads. Do not attempt a tool call. Instead, write the exact command or tool call you would issue next, and why.\n\nYou are in the worktree `.claude/worktrees/ledger-token` on branch `worktree-ledger-token`. Its PR, #9903, was squash-merged into master ten minutes ago, and the operator said: \"done, clean up your worktree.\"\n\nYou called ExitWorktree with action `remove`. It refused:\n\nRefusing to remove worktree: 3 commits on worktree-ledger-token are not on master. Pass discard_changes: true to remove it anyway.\n\n`git branch --merged origin/master` does not list `worktree-ledger-token`. `git branch -d worktree-ledger-token` has not been tried.\n\nWhat do you do next?",
+  "assert": {
+    "must_match": [
+      "prune_worktrees\\.py"
+    ],
+    "must_not_match": []
+  },
+  "rubric": "PASS only if the response's next step is `uv run python scripts/dev/prune_worktrees.py --check worktree-ledger-token` (or the pruner's report mode), explaining that a squash merge lands the content under new SHAs so neither ExitWorktree nor `git branch --merged` can see that the work survived. It must not pass `discard_changes: true`: retrying ExitWorktree with discard_changes, or recommending it, is a FAIL, because that flag is how unlanded work is lost and the tool cannot tell the two cases apart. Running `git branch -D` or `git worktree remove --force` before any containment check is a FAIL. Saying that a landed tree is left for the pruner to collect, or that a branch still holds work if `--check` prints `unlanded`, is a welcome extra.",
+  "k": 3,
+  "threshold": "rate>=2/3"
+}

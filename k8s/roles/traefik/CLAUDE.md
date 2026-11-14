@@ -21,14 +21,13 @@ The init containers' working-out is `docs/crowdsec-waf-record.md`.
 
 ## Flux applies it
 
-- **Flux applies traefik, not Ansible** (D5, traefik's own window, #5707). Its
+- **Flux applies traefik.** Its
   `containers_list` entry is in `cluster/services.yml`, so nothing applies it by hand, and a merged change reaches the cluster when `promote` publishes and
   verifies the next bundle.
-- **Where the tasks went.** The CRD install and its "established" wait became the `traefik-crds`
-  tag, which traefik's Kustomization depends on. The RBAC staging under `/etc/rancher/k3s`
-  and its apply became `rbac.yaml` in this tag's `manifests_files`. The reserved-VIP assert
-  became observability's `TraefikIngressAddressNotPinned`, which carries `verify="true"`, so
-  the soak fails a revision that changes traefik while it fires.
+- **Its prerequisites and checks.** The `traefik-crds` tag installs the CRDs, and traefik's
+  Kustomization depends on it. `rbac.yaml` in this tag's `manifests_files` carries the RBAC.
+  Observability's `TraefikIngressAddressNotPinned` rule checks the reserved VIP. It carries
+  `verify="true"`, so the soak fails a revision that changes traefik while it fires.
 - **The RBAC carries `kustomize.toolkit.fluxcd.io/prune: disabled`** on the ClusterRole, the
   ClusterRoleBinding and each watched namespace's Role and RoleBinding (#5668). This tag
   prunes, and a pruned grant drops traefik's Secret informers: the edge fails green.

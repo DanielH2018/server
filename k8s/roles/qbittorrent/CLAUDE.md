@@ -23,25 +23,25 @@ finding and why the prefs plane is shaped this way.
   cannot undo what the tracker and the `/data/torrents` tree already saw. `media-data` is the
   shared claim — mounted here, owned elsewhere.
 
-- **Flux applies it, not Ansible** (D5, Wave D). Its `containers_list` entry is
+- **Flux applies it.** Its `containers_list` entry is
   in `cluster/services.yml`, so nothing applies it by hand. A merged change
   reaches the cluster when `promote` publishes and verifies the next bundle. `k8s_autodeploy: false`
   still stops Renovate's
   automerge of a pin bump.
 - **The Mullvad account reaches the pod through a SOPS manifest.** `mullvad_account` is all
   digits, which no Flux placeholder can carry as a string, so `render_sops_manifests` ships
-  `mullvad-account-secret.yaml` as D3's SOPS-encrypted copy, and the `qbittorrent`
+  `mullvad-account-secret.yaml` as a SOPS-encrypted copy, and the `qbittorrent`
   Kustomization renders `decryption`.
 
 ## Traps
 
 ### A VPN kill-switch outlives the container it fenced
-The mod's iptables rules live in the **pod's** network namespace, which survives a container restart,
-and the sidecar's own mod fetch and Mullvad API call route through the dead `wg0` they fence — so a
-dropped tunnel used to sustain itself until someone deleted the pod (9 hours on 2026-08-16, 3.5 days
-on 2026-09-13, #1838). It presents as a restart loop rather than an error, because the init container
-exits **0**. The netns reset below clears it without a human, and `delete pod` is the escape hatch if
-that reset is ever removed.
+The mod's iptables rules live in the **pod's** network namespace, which survives a container
+restart, and the sidecar's own mod fetch and Mullvad API call route through the dead `wg0` they
+fence — so a dropped tunnel sustains itself until someone deletes the pod (9 hours on 2026-08-16,
+3.5 days on 2026-09-13, #1838) unless the reset below runs. It presents as a restart loop rather
+than an error, because the init container exits **0**. The netns reset below clears it without a
+human, and `delete pod` is the escape hatch if that reset is ever removed.
 
 ## The sidecar resets the netns on every start
 
@@ -86,7 +86,7 @@ logs a skip or a lock timeout rather than `Downloading` or `found in modcache`, 
 
 The role templates `WEBUI_PORT` and `TORRENTING_PORT` and nothing else. Connection limits, hashing
 threads and the libtorrent working-set bound live in `qBittorrent.conf` on the `qbittorrent-config`
-PVC, so **a WebUI change to any of them is live state no Ansible run reproduces and a volume restore
+PVC, so **a WebUI change to any of them is live state no render reproduces and a volume restore
 silently reverts.**
 
 `files/apply_prefs.py` is the repo-side source of truth for the settings tuned for throughput on
@@ -103,10 +103,9 @@ stack unpacks them, so a RAR release cannot be imported anyway. The comment abov
 
 **Flux applies `DESIRED` on every revision that rolls the pod.** The `prefs.yaml.j2` Job in
 `qbittorrent-verify` (below) runs the apply once the `qbittorrent` Kustomization reads Ready, so a
-changed value in `DESIRED` goes live on the next roll without a human. While Ansible owned the role
-the apply was manual, because a deploy task would have waited out the sidecar's five-minute
-startupProbe window. Run `apply_prefs.py` by hand after a PVC restore that no roll follows — the
-docs page has the command.
+changed value in `DESIRED` goes live on the next roll without a human. The Job starts after the
+sidecar's five-minute startupProbe window. Run `apply_prefs.py` by hand after a PVC restore that
+no roll follows — the docs page has the command.
 
 ### The daily drift check is log-only, and does not apply anything
 
@@ -128,11 +127,10 @@ the docs page has why.
   it, so the renderer copies its jobTemplate into `qbittorrent-prefs-check-deploy-gate-<spec
   digest8>`, a verify gate. The Job starts once the tag is Ready, so it meets a rolled-out pod
   rather than the sidecar's startup window. It carries no ownerReference to the CronJob, so
-  `concurrencyPolicy: Forbid` no longer keeps the 06:37 firing off it; the check only reads, so
+  `concurrencyPolicy: Forbid` does not keep the 06:37 firing off it; the check only reads, so
   an overlap is harmless.
-- **It was a daniel-box host cron until H2.5d.** The cron and
-  `/usr/local/bin/qbittorrent-prefs-check.sh` are
-  `legacy:` entries in `hosts/daniel-box/package.yml` since H7.48, and `homelab-reconcile`
+- **No daniel-box cron runs it.** The old cron and `/usr/local/bin/qbittorrent-prefs-check.sh`
+  are `legacy:` entries in `hosts/daniel-box/package.yml`, and `homelab-reconcile`
   removes each from a host that still holds it.
 
 ### The login trap
@@ -146,7 +144,7 @@ login that succeeded. Check for the `QBT_SID` cookie instead; a bad password set
 The renderer emits two Jobs from that directory into `qbittorrent-verify`, beside the drift
 check's gate Job. Both run `files/qbittorrent_job.py` with no `pods/exec` grant:
 
-- **`job.yaml.j2` replaced the Ansible verify tasks at the flip.** The Job dials the WebUI from the pod CIDR,
+- **`job.yaml.j2` runs the verify checks.** The Job dials the WebUI from the pod CIDR,
   lists the mod cache through its own read-only mount of the sidecar's claim and subPath, and
   compares qBittorrent's `last_external_address_v4` with its own egress address. The script's
   docstring maps each proof to its Job form.

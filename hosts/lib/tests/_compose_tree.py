@@ -89,7 +89,11 @@ class ComposeTree:
     """A fixture `hosts/` tree whose daniel-pi package lists `secrets-unit` and `pi-compose`."""
 
     def __init__(
-        self, tmp_path, services=None, keys=("domain", "monitor_discord_webhook_url")
+        self,
+        tmp_path,
+        services=None,
+        keys=("domain", "monitor_discord_webhook_url"),
+        names=NAMES,
     ):
         self.root = tmp_path / "hosts"
         self.scratch = tmp_path
@@ -98,7 +102,7 @@ class ComposeTree:
         self.secrets = tmp_path / "secrets.yml"
         self.sops_dir = tmp_path / "host-sops"
         self.component = self.root / "components" / "pi-compose"
-        self.secrets.write_text(yaml.safe_dump({name: "ENC[x]" for name in NAMES}))
+        self.secrets.write_text(yaml.safe_dump({name: "ENC[x]" for name in names}))
         self.sops_dir.mkdir()
         (self.sops_dir / "daniel-pi.sops.yaml").write_text("sops: {}\ndomain: ENC[x]\n")
         (self.root / "lib").mkdir(parents=True)

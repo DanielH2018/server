@@ -17,15 +17,15 @@ See repo-root `CLAUDE.md` for shared conventions.
   config HERE, then merge; `promote` applies it.
 - **Port:** 8080 · reaches the coordinator at `tcp://{{ slzb_ip }}:6638`, broker at the
   in-cluster `mosquitto` Service name
-- **Flux applies it, not Ansible** (D5.10, an own-window flip). Its `containers_list` entry
+- **Flux applies it.** Its `containers_list` entry
   is in `cluster/services.yml`, so nothing applies it by hand, and a
   merged change reaches the cluster when `promote` publishes and verifies the next bundle. mosquitto
   is Flux-owned too, so the
   Kustomization depends on it. The Deployment is `Recreate` and the SLZB-06M coordinator
   accepts one client, so a change that rolls the pod drops every Zigbee device from MQTT until
   the new pod connects.
-- **The `zigbee2mqtt-snapshot` Job snapshots `zigbee2mqtt-data` before each revision applies**
-  (D5.2a). The zigbee2mqtt Kustomization depends on `zigbee2mqtt-snapshot`, so a revision
+- **The `zigbee2mqtt-snapshot` Job snapshots `zigbee2mqtt-data` before each revision applies**.
+  The zigbee2mqtt Kustomization depends on `zigbee2mqtt-snapshot`, so a revision
   applies only after the snapshot is ready; `docs/flux-deploy-plane.md` lists the Job's checks.
   A failed revision that changes zigbee2mqtt writes the stateful hold, and `promote` does not
   reset `prod`. A volume revert is not the default answer to that hold here: the coordinator's
@@ -37,14 +37,13 @@ See repo-root `CLAUDE.md` for shared conventions.
   `zigbee_network_key`, `mqtt_username` and `mqtt_password` are `${<key>}` placeholders in the
   published render. Flux substitutes the values from the `homelab-cluster-vars` Secret. A
   rotation reaches the cluster only through `cluster_vars.py write`.
-- **Where the task went.** Its pre-apply snapshot through
-  `k8s/volume-snapshot` became the `zigbee2mqtt-snapshot` Job, and the Kustomization's `wait`
-  replaces the rollout wait.
+- **Its snapshot and rollout.** The `zigbee2mqtt-snapshot` Job takes the pre-apply snapshot,
+  and the Kustomization's `wait` holds the rollout.
 
 ## Notable
 - **Network coordinator, not USB.** The SLZB-06M is reached as `serial.port: tcp://<ip>:6638`,
   `adapter: ember` (Silabs EFR32 EmberZNet). No `network_mode: host`, no `devices:`.
-- **`configuration.yaml` is templated** (`data/configuration.yaml`) and is the Ansible source
+- **`configuration.yaml` is templated** (`data/configuration.yaml`) and is the source
   of truth — overwritten on deploy. The **Zigbee network identity is pinned**
   (`network_key` from SOPS `zigbee_network_key`, `pan_id`/`ext_pan_id` from host_vars) so a
   redeploy can NEVER regenerate it and un-pair every device. Do not switch these to GENERATE.

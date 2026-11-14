@@ -292,7 +292,7 @@ class Builder(RolloutGate):
             if c.strip()
         )
         walk = self.config.get("CI_ANCESTOR_WALK_MAX", "").strip()
-        # An empty context set would grade every commit green (deploy_git.ci_verdict says so,
+        # An empty context set would grade every commit green (ci_verdict.ci_verdict says so,
         # and await_ci.py's DisarmedGateError refuses it), so refuse it before grading.
         if not contexts:
             raise Failure("ci", "CI_CONTEXTS in config.env is empty")
@@ -378,7 +378,7 @@ class Builder(RolloutGate):
         result = ci_verdict(runs, contexts)
         # DECIDED: only `pass` is cached. GitHub's check-runs API returns the latest run per
         # name, so `gh run rerun --failed` turns a red SHA green, and a cached `fail` would
-        # never see it while the deployer's gate, which caches nothing, deploys the SHA
+        # never see it while checkout-sync's gate, which caches nothing, takes the SHA
         # (#5786). Re-reading a fail costs one request per page of a red commit's runs, in a
         # walk that CI_ANCESTOR_WALK_MAX bounds.
         if result == "pass":
