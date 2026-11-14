@@ -49,11 +49,16 @@ The setup script copies it to the agent's `~/.claude/settings.json` on every run
 operator's `~/.claude/hooks` beside it. The file registers three hooks: claude-guard on Bash,
 the permission-request guard, and `protect-secrets` on the file tools. It also carries the
 operator's deny list plus `sudo` and edits to the session's own settings, hooks and claude_guard,
-and it disables bypass mode. It holds no allow rules and no `env`, because the operator's carry
-`/home` paths that `ProtectHome=` hides. `homelab-renovate-agent-setup.service` runs the setup at
+and it disables bypass mode. The wrapper runs the session in auto mode, so the file also carries
+the operator's `autoMode` deny rules, environment and `classifyAllShell`. It holds no allow rules
+and no `env`, because the operator's carry `/home` paths that `ProtectHome=` hides. Both lists are
+a snapshot of the operator's: a dotfiles change reaches the session only through a PR that edits
+this file. `homelab-renovate-agent-setup.service` runs the setup at
 boot and when the script or the settings change, so the file exists while the agent is disarmed and
-`claude-guardrail-audit` watches it. The agent owns the copy, so a session can edit it until the
-next run replaces it; the auditd watch records that write. The settings, the setup script and its
+`claude-guardrail-audit` watches it and the hooks copy. The agent owns both copies, so a session can
+edit them until the next run replaces them; the auditd watch records that write, and
+`claude-guardrail-ack` posts any copy that matches neither the packaged file nor the operator's
+rendered hooks. The settings, the setup script and its
 unit are on both landers' approval lists
 (`hosts/components/claude-code/templates/claude-land-approval-paths.j2`, and `hosts/` in
 `hosts/components/renovate-agent/files/t2-approval-floor`).

@@ -311,8 +311,10 @@ as root on both hosts, two minutes after each audit run.
   A change is explained, and stays quiet, when the file matches the md5 recorded inside the
   `.deb` an apt source serves for the installed version, when it
   matches what chezmoi renders for its owner from the dotfiles repo's `main`, or when a
-  settings.json change touches only `claude_code_guardrail_ack_quiet_settings_keys`. The
-  operator ruled on 2026-11-13 to post only the rest. The run fetches that `.deb` with
+  settings.json change touches only `claude_code_guardrail_ack_quiet_settings_keys`. A file
+  under a `copies` destination in `templates/claude-guardrail-ack.json.j2` is explained when
+  its content would be explained at its source: renovate-agent's settings copy against the
+  packaged file, and its hooks copy against the operator's hooks. The operator ruled on 2026-11-13 to post only the rest. The run fetches that `.deb` with
   `apt-get download`, which checks it against the signed index. A package installed with
   `dpkg -i` matches its own md5sums but not a published `.deb`, so its change posts with the
   installed version (#8415). Reconcile's `applied.json`

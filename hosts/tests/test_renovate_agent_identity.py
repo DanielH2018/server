@@ -313,6 +313,30 @@ def test_setup_installs_the_settings_at_the_path_the_guardrail_audit_watches() -
         'as_agent cp --remove-destination "$settings" "$home/.claude/settings.json"'
         in setup
     ), "the agent, not root, must write into its own home"
+    assert 'copy_from_operator "$operator/.claude/hooks" "$home/.claude/hooks"' in setup
+
+
+def test_the_session_settings_carry_the_auto_mode_deny_floor() -> None:
+    """The wrapper runs the session in auto mode, where the classifier reads these rules."""
+    auto = session_settings()["autoMode"]
+    assert auto["classifyAllShell"] is True
+    assert any("`master`" in rule for rule in auto["hard_deny"])
+    assert auto["soft_deny"] and auto["environment"]
+    assert "allow" not in auto
+
+
+def test_the_guardrail_ack_explains_the_copies_setup_makes() -> None:
+    """A rollout of the settings or the operator's hooks must not post as unexplained."""
+    ack = json.loads(
+        render_component_text("claude-code", "claude-guardrail-ack.json.j2")
+    )
+    [shipped] = [f["dst"] for f in SPEC["files"] if f.get("src") == SETTINGS_SRC]
+    home = "/var/lib/renovate-agent"
+    assert {c["dst"]: c["src"] for c in ack["copies"]} == {
+        f"{home}/.claude/settings.json": shipped,
+        f"{home}/.claude/hooks": "/home/ubuntu/.claude/hooks",
+    }
+    assert {c["dst"] for c in ack["copies"]} <= set(ack["paths"])
 
 
 def guard_decision(command: str) -> str | None:
