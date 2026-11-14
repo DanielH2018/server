@@ -26,8 +26,9 @@ From 1024px the Calendar group's grid is fifteen columns rather than five. A lin
 so five still fill a row, and a Deploy, Artifacts or Docs tile spans five, so three fill the
 row. Those three tiles carry an `id:` starting `calendar-tool-`, which keeps them out of the
 icon-only rules, so they show a name and a description. At the same width each one is drawn
-like a one-stat widget. Its name sits level with the Services tiles' names, and its description
-fills a stat-block panel along the bottom of the card.
+as one large link centred in its card: a 48px icon, a larger name and description, and the
+whole card clickable. With no stats, a widget tile's top-aligned header left the card half
+empty.
 
 `Top Row` is ITSELF a `div.services-group` wrapping the two column groups, so a
 `:has(#my-calendar)` selector matches the outer group too and reaches the Services list — which
