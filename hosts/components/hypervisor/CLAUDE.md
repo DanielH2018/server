@@ -1,8 +1,7 @@
 # `hosts/components/hypervisor` — KVM/libvirt on daniel-server
 
 Makes daniel-server able to run VMs. What it runs is the monthly etcd restore drill's throwaway
-guest, plus the network and egress fence that guest attaches to; it carried the staging cluster
-until #2941 retired that cluster.
+guest, plus the network and egress fence that guest attaches to.
 
 This file holds the rules. `docs/hypervisor-libvirt-internals.md` holds the working-out behind
 them — the staging reap, the subnet census, the inert UFW attempt, the fence's tiles, the UUID

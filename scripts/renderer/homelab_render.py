@@ -78,7 +78,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 from lib import yaml_fast
 from lib.cli_help import ArgumentParser
 from lib.exit_codes import RENDER_FAILED, RENDER_OK, RENDER_REFUSED
-from lib.repo_paths import K8S_ROLES, SECRETS as SECRETS_DIR
+from lib.repo_paths import CLUSTER_VARS_SOURCE, K8S_ROLES, SECRETS as SECRETS_DIR
 from renderer.renderer_lib import secret_checks
 from renderer.renderer_lib.bundle import (
     CLUSTER_DIR,
@@ -132,8 +132,6 @@ from renderer.template_filters.secret_stubs import (
 SECRETS = SECRETS_DIR / "secrets.yml"
 # The cluster file `cluster_vars.py write` keeps. The bundle's copy keeps its basename.
 CLUSTER_FILE = SECRETS_DIR / CLUSTER_VARS_FILE
-# Each cluster key's ciphertext digest, which `checksum/restart` hashes in place of a value.
-SOURCE_FILE = SECRETS_DIR / "cluster-vars.source"
 # The SOPS manifests `cluster_vars.py write` keeps, one per `render_sops_manifests` entry.
 MANIFESTS_DIR = SECRETS_DIR / "cluster-manifests"
 
@@ -160,7 +158,7 @@ def cluster(
     kinds: frozenset[str] = SHARED_KINDS,
     cluster_file: Path = CLUSTER_FILE,
     shared_only: bool = False,
-    source_file: Path = SOURCE_FILE,
+    source_file: Path = CLUSTER_VARS_SOURCE,
     manifests_dir: Path = MANIFESTS_DIR,
     ordering: Callable[[set[str]], Ordering] = bundle_ordering,
     vendored: Path = K8S_ROLES,

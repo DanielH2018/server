@@ -104,7 +104,8 @@ the per-volume map and each exclusion's rationale:
   absorb a batch). Acceptable by design — configs, largely regenerable.
   A volume added to the tier recently holds fewer recovery points than the retain until it
   has run that many weeks.
-- **No-backup** (16 volumes): rebuilt, not restored. The notable rebuild paths:
+- **No-backup** (the listed volumes plus every `longhorn-nobackup` PV): rebuilt, not
+  restored. The notable rebuild paths:
   `scrutiny` (TSDB refills from collector runs),
   Pi-hole (`pihole -g` rebuilds gravity; config is Ansible-rendered), `livesync` (a client
   runs "Rebuild everything" — the vault's source of truth is the markdown on each

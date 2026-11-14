@@ -11,7 +11,8 @@ metadata:
 spec:
   # ReadWriteOnce PVC — two pods can't both mount /data during a rolling update.
 {{ spec_shell('Recreate') }}
-  replicas: 1
+  # No `replicas:`. deploy.local's Games panel starts and stops this exporter with the valheim
+  # server (ADR-0033), because it tails a console that only exists while the server runs.
   selector:
     matchLabels:
       app: valheim-stats

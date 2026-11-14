@@ -89,7 +89,7 @@ admin reset-admin-password` from the `grafana-admin` Secret before every Grafana
 rotated `grafana_admin_password` changes `grafana-secret.yaml`, the annotation rolls grafana,
 and the initContainer writes the new password. grafana is `Recreate`, so no server holds the
 SQLite file while the CLI runs. The renderer's restart annotation rolls grafana when the
-Secret changes (D5.1e).
+Secret changes.
 
 Two kinds of ConfigMap carry no hash. Prometheus mounts `prometheus-rules`
 as a directory and runs with `--config.auto-reload`, so a rule edit reloads in place and never
@@ -234,7 +234,9 @@ still shadow, left with B9's Cutover-1b, the last batch to hold a term in it.
 **`files/rules/hosts.yaml` holds the host rules, one copy per host.** Its disk, memory,
 temperature and UPS rules replace monitor-bridge's `disk`, `memory`, `host_temp` and `ups`
 checks and page since M6's batch A1 Cutover-b. Its Pi pressure rules replace the Prometheus half
-of `pi_pressure` and page since B8's. A rule's `service` is a literal, so a host gets its
+of `pi_pressure` and page since B8's. `HostClockUnsynchronised` ports no bridge check: it pages
+a host whose kernel reports its clock unsynchronised, or more than 0.5s off, for 15 minutes
+(#8518). A rule's `service` is a literal, so a host gets its
 own copy, and a fourth host needs rules added. A1 has no Alertmanager inhibit on
 `ScrapeTargetDown`, by the `DECIDED:` marker in the file's header. A missing-data arm starts from
 `up == 1`, so it fires only while the scrape succeeds and the series is absent. A dead exporter

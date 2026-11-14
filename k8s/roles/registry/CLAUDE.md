@@ -1,11 +1,10 @@
 # registry — in-cluster Docker image cache
 
 A local `registry` (`registry_k8s_image`), the push store, that holds images
-`k8s/image-builder` builds in-cluster for an Ansible-owned consumer. Every consumer is
-flux-owned and pulls from GHCR, so the store serves only the verify Job's seed, and break-glass
-pushes its artifact there. It still holds the images it served n8n, homelab-mcp, ical-proxy, nut,
-pi-peer-backup, code-server, terraria, valheim and karakeep before they moved. See repo-root
-`CLAUDE.md` for shared conventions.
+`k8s/image-builder` builds in-cluster. Every consumer pulls from GHCR, so the store serves only
+the verify Job's seed, and break-glass pushes its artifact there. It also holds the old images
+of n8n, homelab-mcp, ical-proxy, nut, pi-peer-backup, code-server, terraria, valheim and
+karakeep, which no consumer pulls. See repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in k8s/roles/longhorn-reconcile/defaults/main.yml. -->
@@ -32,7 +31,7 @@ pi-peer-backup, code-server, terraria, valheim and karakeep before they moved. S
 
 ## Notable
 - **The role runs a second registry, `ghcr-mirror`, as a pull-through mirror of `ghcr.io`**
-  (D5 Open question 2, ruled 2026-10-16). Every node's `registries.yaml` names it as the
+  (ruled 2026-10-16). Every node's `registries.yaml` names it as the
   `ghcr.io` mirror (`hosts/components/k3s-server/templates/registries.yaml.j2` and
   `hosts/components/k3s-agent/templates/registries.yaml.j2`), so a node keeps a
   LAN copy of each flux-owned GHCR image it pulled and nut can cold-start during a WAN outage.
@@ -115,14 +114,12 @@ pi-peer-backup, code-server, terraria, valheim and karakeep before they moved. S
     has why.
   - containerd falls back to `ghcr.io` while the GC scales the mirror to zero. No build writes
     the mirror's store, so the GC does not wait for builds.
-  - **Nothing but `registry-gc.sh` writes the mirror's `spec.replicas`**, so the operator
-    accepted it as an exception to contract C4 on field ownership (#5732). #6536 extends the
-    exception to the dockerhub-mirror's `spec.replicas`. The script stays a host script after
-    the flip, in the `registry-gc` host component.
-  - **No deploy restores the mirror.** Until the flip, a deploy task restored a mirror a
-    stopped GC left at zero, under the script's flock (#5736). Flux owns the role now and
-    renders no `replicas:` for the mirror, so nothing but `registry-gc.sh` writes the count
-    and the deploy-time restore was deleted with the tasks.
+  - **Nothing but `registry-gc.sh` writes the mirror's `spec.replicas`**, an exception the
+    operator accepted to single-owner field ownership (#5732). The exception covers the
+    dockerhub-mirror's `spec.replicas` too (#6536). The script is a host script in the
+    `registry-gc` host component.
+  - **No deploy restores the mirror.** Flux renders no `replicas:` for the mirror, so a mirror
+    a stopped GC left at zero stays there until the next GC run restores it.
   - **A run killed mid-phase is repaired by the next one.** The stamp
     `/var/lib/registry-gc/ghcr-mirror-down` exists from before the scale-down until the mirror
     serves again, and a run that finds it restores the mirror first. Observability's
@@ -170,9 +167,9 @@ pi-peer-backup, code-server, terraria, valheim and karakeep before they moved. S
     `ghcr-mirror-pull` sidecar below does for the ghcr-mirror (#6535). It GETs the exporter's
     own image by digest through port 5005, and observability's `DockerhubMirrorPullFailed` and
     `DockerhubMirrorPullNotReporting` page on it.
-- **The push store is not collected** (D5, Wave D's registry bullet). Its GC scaled
-  `deploy/registry`, whose `replicas: 1` Flux renders after the flip, so Flux would restore
-  the pod mid-GC, the corruption the stop-the-world rule exists to prevent. Every
+- **The push store is not collected.** A GC would scale `deploy/registry`, whose
+  `replicas: 1` Flux renders, so Flux would restore the pod mid-GC, the corruption the
+  stop-the-world rule exists to prevent. Every
   `k8s/image-builder` caller is flux-owned and pulls from GHCR, so no build reaches the store.
   It still grows. The verify Job's seed adds each new `flux_job_image` pin, 20.38 MB
   compressed when measured on 2026-10-19, under a new tag. Each upstream rebuild of
@@ -215,11 +212,9 @@ pi-peer-backup, code-server, terraria, valheim and karakeep before they moved. S
   `defaults/main.yml`, and
   `hosts/components/registry-gc/tests/test_registry_gc_component.py` holds them equal to this
   role's.
-- **Flux owns registry (D5, Wave D).** `promote` applies it, and no Ansible run reaches
-  the role. The self-tests
-  and the netpol probe are the `registry-verify`
-  Jobs in `templates/verify/`, which the renderer emits once the `registry` Kustomization
-  reads Ready. `files/registry_verify.py` runs one check per Job:
+- **Flux applies it.** `promote` publishes it. The self-tests and the netpol probe are the
+  `registry-verify` Jobs in `templates/verify/`, which the renderer emits once the `registry`
+  Kustomization reads Ready. `files/registry_verify.py` runs one check per Job:
   - `push` writes a fixed image through the distribution API, then seeds the pull Jobs'
     image. It copies `flux_job_image`'s linux/amd64 image into the push store under a tag
     named for the pin's digest, reading Docker Hub only when the store lacks that tag.

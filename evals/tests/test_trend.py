@@ -5,6 +5,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from trend import (
+    NO_SIGNAL_RC,
     RUNS_KEY,
     _epoch_shift,
     classify,
@@ -215,6 +216,43 @@ def test_main_subscription_does_not_write(tmp_path):
     rc = main(["--history", str(hist), "--mode", "subscription", str(report)])
     assert rc == 0
     assert not hist.exists()
+
+
+def test_main_refuses_a_run_with_no_healthy_trial(tmp_path, capsys):
+    hist = tmp_path / "history.json"
+    write_json(hist, {"a/1": [_entry(True)] * 3})
+    before = hist.read_text()
+    reason = 'is_error: "Invalid API key"'
+    dead = {"_runs": [{"status": "infra_error", "reason": reason}] * 3}
+    report = tmp_path / "report.json"
+    report.write_text(
+        json.dumps(
+            [
+                _report_case(cid, "INCONCLUSIVE", False, passes=0, healthy=0, **dead)
+                for cid in ("a/1", "b/1")
+            ]
+        )
+    )
+    rc = main(["--history", str(hist), str(report)])
+    assert rc == NO_SIGNAL_RC
+    assert hist.read_text() == before
+    assert reason in capsys.readouterr().out
+
+
+def test_main_records_a_run_where_only_some_cases_had_no_healthy_trial(tmp_path):
+    hist = tmp_path / "history.json"
+    report = tmp_path / "report.json"
+    report.write_text(
+        json.dumps(
+            [
+                _report_case("a/1", "PASS", True),
+                _report_case("b/1", "INCONCLUSIVE", False, passes=0, healthy=0),
+            ]
+        )
+    )
+    assert main(["--history", str(hist), str(report)]) == 0
+    saved = load_history(hist)
+    assert saved["b/1"][-1]["status"] == "INCONCLUSIVE"
 
 
 def test_record_run_stamps_epoch():

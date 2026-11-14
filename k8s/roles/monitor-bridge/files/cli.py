@@ -24,6 +24,7 @@ from bridge.config import load_config
 from bridge.sources import Sources
 from bridge.types import Check
 from check_table import CHECKS
+from checks.domain_registration import days_remaining
 
 # `lib/exit_codes.py:USAGE_ERROR`, which the pod cannot import: it mounts only this role's
 # `files/` (#4487). 2 stays the config-fault exit `main()` documents.
@@ -165,6 +166,10 @@ def main(
             only=only,
             export=check_exposition,
         )
+        if check_exposition is not None:
+            check_exposition.set_registration_days(
+                days_remaining(sources.state.domain_registration_probe, time.time())
+            )
         if exposition is not None:
             deploy_pipeline.refresh(cfg, sources, exposition, now=time.time())
         bridge.common.touch_heartbeat(cfg.HEARTBEAT_FILE)

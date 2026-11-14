@@ -1,7 +1,7 @@
 """`await_ci`'s check-runs and check-suites reads walk every page (#5977).
 
 One page of 100 hid a run past the 100th, so a landing could read a red commit as green.
-`deploy_git.read_check_pages` holds the walk; this pins that `await_ci` reaches it through the
+`builder_ci_grade.read_check_pages` holds the walk; this pins that `await_ci` reaches it through the
 real request path, with `urlopen` replaced on the stdlib so no first-party module is patched.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_await_ci_pages.py

@@ -1,6 +1,6 @@
 """The app-facing half of monitor-bridge's configuration.
 
-n8n, the *arr stack, the deployer's own state files, the etcd restore drill, the
+n8n, the *arr stack, the etcd restore drill, the
 staging-gate backfill, Home Assistant and the deploy-pipeline exporter — every threshold read by a check in
 `checks/service.py`.
 
@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 
 @dataclass(frozen=True)
 class ServiceConfig:
-    """n8n, the *arr stack, the deployer state files, the drills and Home Assistant."""
+    """n8n, the *arr stack, the drills, the deploy pipeline and Home Assistant."""
 
     N8N_URL: str
     N8N_API_KEY: str = field(repr=False)

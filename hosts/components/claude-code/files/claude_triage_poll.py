@@ -370,7 +370,7 @@ def main(
     mode = cfg.get("POLL_MODE", "off")
     if mode == "off":
         return 0
-    state_dir = cfg.get("STATE_DIR", "/var/lib/claude/triage")
+    state_dir = cfg["STATE_DIR"]
     state_path = os.path.join(state_dir, "poll-state.json")
     try:
         with open(state_path, encoding="utf-8") as f:

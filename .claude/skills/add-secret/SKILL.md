@@ -6,7 +6,7 @@ disable-model-invocation: false
 ---
 
 Add a new secret end-to-end, following the repo's documented flow (CLAUDE.md "Secrets
-Management" + `docs/secret-rotation.md`). Run everything from `/home/ubuntu/server`.
+Management" + `docs/secret-rotation.md`). Run everything from the repo root (your worktree).
 
 **Never print or echo a secret value.** It must not land in the transcript, the shell
 history, or a log. When a value must be supplied by the user, hand them the command to run

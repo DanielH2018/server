@@ -109,9 +109,9 @@ SECRETS_MANIFEST=/usr/lib/homelab/secrets.json
 PERSIST='^/(etc/(sudoers$|sudoers\.d/|ssh/|pam\.d/|pam\.conf$|security/|ld\.so\.preload$|ld\.so\.conf$|ld\.so\.conf\.d/|crontab$|cron\.[a-z]+/|passwd$|shadow$|group$|gshadow$|environment$|profile$|profile\.d/|bash\.bashrc$|apt/apt\.conf\.d/|udev/rules\.d/|modprobe\.d/|modules-load\.d/|modules$|systemd/system/|apt/(sources\.list\.d/|trusted\.gpg\.d/|keyrings/)|update-motd\.d/|rc\.local$|init\.d/)|usr/local/sbin/|var/spool/cron/|root/\.(bashrc|profile|bash_profile)$|root/\.ssh/authorized_keys|home/[^/]+/\.ssh/authorized_keys|var/lib/[^/]+/\.ssh/authorized_keys)'
 SYSTEM='^/(usr|bin|sbin|lib|lib32|lib64|libx32|boot)(/|$)'
 # Unpackaged files under PERSIST that this repo's own tooling writes, so a deploy does not page.
-# Each is judged only while no package owns it. A symlink to one (a `systemctl enable` link) is
-# explained too. The names are the k3s installer's units and snapd's mounts; the host packages
-# install their own units under /usr/lib/systemd/system, which a package owns.
+# Each is passed over only while no package owns it. A symlink to one (a `systemctl enable` link)
+# is explained too. The names are the k3s installer's units and snapd's mounts; the host
+# packages install their own units under /usr/lib/systemd/system, which a package owns.
 # hosts/tests/test_aide_check_role_written.py holds the installer names to this list.
 ROLE_WRITTEN='^/etc/systemd/system/(k3s(-agent)?\.service(\.env)?|snap-[a-z0-9-]+-[0-9]+\.mount)$'
 # DECIDED: snapd's generated udev rules are not ROLE_WRITTEN (#7929). A udev rule runs as root

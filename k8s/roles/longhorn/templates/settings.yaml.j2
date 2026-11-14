@@ -13,10 +13,10 @@
 #
 # `system-managed-csi-components-resource-limits` is a JSON object serialised as a string too:
 # component name -> Kubernetes ResourceRequirements (longhorn-manager v1.12.1,
-# types/setting.go:ComponentResourceLimits). It names the four CSI sidecar Deployments and no
-# other component, because the manager clears the resources of every component the object
-# names and rolls it to match; naming `longhorn-csi-plugin` would roll the plugin DaemonSet.
-# Each entry carries `requests` alone. The manager compares the parsed entry with the live
+# types/setting.go:ComponentResourceLimits). It names every component the manager reads from it:
+# the four CSI sidecar Deployments and the three containers of the longhorn-csi-plugin
+# DaemonSet. The manager clears the resources of any component the object omits and rolls it to
+# match. Each entry carries `requests` alone. The manager compares the parsed entry with the live
 # container's `resources` field by field, so an empty `limits: {}` here would never equal the
 # absent `limits` the API server returns, and the manager would rewrite the Deployments on every
 # tick. ENFORCED by
@@ -80,4 +80,6 @@ metadata:
   name: system-managed-csi-components-resource-limits
   namespace: longhorn-system
 {% set csi_request = {"requests": {"memory": k3s_longhorn_csi_sidecar_memory_request | string}} %}
-value: {{ {"csi-attacher": csi_request, "csi-provisioner": csi_request, "csi-resizer": csi_request, "csi-snapshotter": csi_request} | to_json(separators=(',', ':')) | to_json }}
+{% set plugin_request = {"requests": {"memory": k3s_longhorn_csi_plugin_memory_request | string}} %}
+{% set node_sidecar_request = {"requests": {"memory": k3s_longhorn_csi_node_sidecar_memory_request | string}} %}
+value: {{ {"csi-attacher": csi_request, "csi-provisioner": csi_request, "csi-resizer": csi_request, "csi-snapshotter": csi_request, "longhorn-csi-plugin": plugin_request, "node-driver-registrar": node_sidecar_request, "longhorn-liveness-probe": node_sidecar_request} | to_json(separators=(',', ':')) | to_json }}

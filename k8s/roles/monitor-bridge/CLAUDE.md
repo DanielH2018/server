@@ -21,7 +21,7 @@ two exporters, prerequisites, gate-set membership and test-patching rules.
 **Host:** daniel-box, pinned by `nodeSelector` because the `etcd_restore_drill` check reads the
 drill's stamp directory over a hostPath. Every source is reached by in-cluster Service name.
 
-**Flux applies it, not Ansible.** Its Secrets substitute from `homelab-cluster-vars`, so a new
+**Flux applies it.** Its Secrets substitute from `homelab-cluster-vars`, so a new
 credential reaches the pod only after `cluster_vars.py write` (operator-only).
 
 ## Gates and hysteresis
@@ -57,7 +57,7 @@ observability's `bridge-exporter.yaml`** for it to page.
 
 ## The two exporters
 
-`files/verdict_export.py` serves the check verdicts and `files/deploy_pipeline.py` serves five
+`files/verdict_export.py` serves the check verdicts and the domain registration's days left, and `files/deploy_pipeline.py` serves five
 `homelab_deploy_*` gauges from the `promote` workflow's state. Each has its own port and scrape
 job. The internals page has their series and wiring.
 
@@ -94,8 +94,9 @@ default**; the `cfg` fixture is that render. A `verdicts/` module reads no `cfg`
 Unit tests are `uv run pytest k8s/roles/monitor-bridge/tests`, one file per domain.
 **A shared test helper goes under `tests/`, never beside `cli.py`** — every `.py` in `files/` is
 production code to `_runtime_modules()`. Smoke test one pass with
-`sudo k3s kubectl -n homelab exec deploy/monitor-bridge -- python /app/cli.py --once`;
-`--check <name>` refuses a gated check without its gate.
+`sudo k3s kubectl -n homelab exec deploy/monitor-bridge -- python /app/cli.py --once`
+(**operator-only**); `--check <name>` refuses a gated check without its gate. A session's
+`kubectl` cannot exec, so it reads the live pass's result with `probe.py monitors`.
 
 ## Traps
 
