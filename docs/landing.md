@@ -31,16 +31,24 @@ a reader runs that older reader against the merge commit. On 2026-11-09 such a r
 landing has loaded from its checkout, and every module those import, function bodies included.
 With `--arm-merge --await-merge`, the landing first compares them with `origin/master` before
 it merges anything (#7830), and ends `refused` with nothing merged. After resolving the merge
-commit, step 1 compares them with the merge commit's first parent. It ends `refused` when master
-changed one the checkout lacks.
-`land_lib/classify.py:refuse_stale_code` has the rule.
+commit, step 1 compares them with the merge commit's first parent.
 
-**Both refusals name `--fresh` as the re-run** (#7933). With `--fresh`, `land.sh` fetches
-`origin/master` in the primary and adds a detached worktree of it under `/tmp`. It runs that
-checkout's `land.sh` with the same arguments, then removes the worktree. A checkout made by
-hand went stale again within minutes when master moved, and the `git -C <primary> worktree
-add` that made it is a command a worktree-isolated session's guard refuses. The landing
-still refuses rather than re-running on its own, so `land.sh` keeps running the release it
+**After the merge, a stale checkout hands the grading to a fresh one without asking** (#8679).
+Step 1 then runs `land.sh --pr <n> --since <pre-merge>` from a fresh checkout of
+`origin/master`. That landing prints the `VERDICT:` line and records the verdict, and the
+stale landing records nothing. On 2026-11-14 three of one session's four landings ended
+`refused` here with the PR merged, and each `--fresh` re-run waited on master CI a second time.
+The caller's answer to that refusal was always the same command, so the landing runs it.
+`land_lib/classify.py:refuse_stale_code` has the rule. It still ends `refused` under a lander
+unit, and when git could not make the comparison.
+
+**The refusal before the merge names `--fresh` as the re-run** (#7933). With `--fresh`,
+`land.sh` fetches `origin/master` in the primary and adds a detached worktree of it under
+`/tmp`. It runs that checkout's `land.sh` with the same arguments, then removes the worktree.
+The post-merge hand-off uses the same mechanics. A checkout made by hand went stale again
+within minutes when master moved, and the `git -C <primary> worktree add` that made it is a
+command a worktree-isolated session's guard refuses. Before the merge the landing still
+refuses rather than re-running on its own, so a landing merges only from the release it
 ships with unless the caller asks. With `--detach`, the fork runs the fresh checkout, so the
 checkout lives until the landing ends. `land_lib/fresh.py` has the mechanics. A lander
 unit's caller cannot pass `--fresh`, because the unit runs a fixed command line. Under a unit,
