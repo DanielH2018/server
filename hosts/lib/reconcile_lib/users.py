@@ -65,8 +65,13 @@ def check(user: dict) -> str:
         log(f"getent passwd {user['name']} failed: {found.stderr.strip()}", ERR)
         return "fault"
     if int(fields[2]) != user["uid"]:
+        name, old, new = user["name"], fields[2], user["uid"]
         log(
-            f"{user['name']} has uid {fields[2]}; the package declares {user['uid']}. To move it, renumber the user by hand, then sudo /usr/lib/homelab/homelab-updater --clear-hold",
+            f"{name} has uid {old}; the package declares {new}. To move it, as root: stop every"
+            f" unit running as {name}; usermod -u {new} {name}; groupmod -g {new} {name} if"
+            f" {name}'s primary group is {name} with gid {old}; find {user['home']} /tmp /var/tmp"
+            f" /var/spool/cron/crontabs -uid {old} -exec chown -h {name} {{}} +; start the"
+            " units again; then sudo /usr/lib/homelab/homelab-updater --clear-hold",
             ERR,
         )
         return "fault"
