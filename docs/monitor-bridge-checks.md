@@ -134,7 +134,11 @@ checks each gate suppresses.
   and only daniel-box runs the builder. Pure `host_packages()` and the arm pairs are unit-tested.)
 - **`b2_reachable`** (authenticates against B2's native API (`b2_authorize_account`, Basic auth with
   `B2_PROBE_KEY_ID` + the file-mounted `B2_PROBE_APPLICATION_KEY_FILE`), because Longhorn's own
-  B2-backed backups need it. The gate comes from the 2026-08-02 transaction-cap incident
+  B2-backed backups need it. B2 caps Class B and Class C transactions separately, and
+  authorizing is a Class C call, so the probe then makes one Class B call:
+  `b2_download_file_by_name` for a name that does not exist. B2's 404 `not_found` reads up,
+  and any other answer, such as a 403 `transaction_cap_exceeded`, reads down with a
+  `Class B probe:` prefix. The gate comes from the 2026-08-02 transaction-cap incident
   (`docs/archive/b2-transaction-cap-monitoring-gaps.md`): B2 caps **transactions** separately from
   storage bytes, and five kopia-era state-file checks read green for nine and a half hours because
   they reported their cron's LAST SUCCESSFUL RUN rather than current B2 health. Those checks left
@@ -144,7 +148,7 @@ checks each gate suppresses.
   transaction-cap incident does not page twice for one root cause. This check reports B2's own
   `transaction_cap_exceeded` error text directly.
   **Throttled**, unlike the other two gates: the probe runs at most once per
-  `B2_PROBE_INTERVAL_S` (1800 s = 48 calls/day) and a BILLED outcome is cached, because the fault
+  `B2_PROBE_INTERVAL_S` (1800 s = 48 calls/day in each class) and a BILLED outcome is cached, because the fault
   being detected is a transaction cap and an every-cycle probe (288/day), or `email_backstop`'s
   cache-successes-only idiom (which retries on failure), would spend the budget it is watching.
   The cached verdict is still pushed every cycle so the push monitor's heartbeat stays alive.
@@ -161,9 +165,10 @@ checks each gate suppresses.
   `test_check_b2_gate.py` does this. `test_check_table.py` derives each gate's members from the live
   `CHECKS`.
   **Assumption, stated in the code because it cannot be tested without a live breach:** that
-  `b2_authorize_account` is itself subject to the cap (Backblaze's endpoint docs list
-  403/`transaction_cap_exceeded` among its errors). If a future breach leaves this monitor green,
-  point `B2_PROBE_URL` at a Class C call instead; it is a URL swap by design.)
+  each call is subject to its class's cap, and that B2 checks the Class B cap before it looks
+  the probe name up. Backblaze's endpoint docs list 403/`transaction_cap_exceeded` among the
+  errors of both calls. If a future breach leaves this monitor green, the probe needs a call
+  B2 cannot answer before it checks the cap.)
 - **`b2_storage`** (`files/checks/b2.py:b2_storage_usage`. Lists every file version
   in the bucket the `B2_PROBE_*` key is scoped to, sums `contentLength` including hidden
   versions and unfinished large-file parts, and compares the total with `B2_STORAGE_CAP_BYTES`

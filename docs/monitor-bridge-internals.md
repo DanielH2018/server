@@ -19,8 +19,9 @@ The rules below shaped those memberships.
 - **There is no Loki gate.** The `loki_reachable` gate left with M5's PR 4a, and a Loki fault
   pages from the `loki-homelab` ruler's `LokiHomelabMetricsMissing`. `ha_heartbeat` reads Loki
   and fails open on a Loki error, so it keeps its own verdict and sits in no gate set.
-- **`b2_reachable`**: the gate runs one `b2_authorize_account` per `B2_PROBE_INTERVAL_S`
-  (1800 s) with a BILLED outcome cached, because the fault it detects is a transaction cap. A
+- **`b2_reachable`**: the gate runs one `b2_authorize_account` (Class C) and one
+  `b2_download_file_by_name` (Class B) per `B2_PROBE_INTERVAL_S` (1800 s) with a BILLED
+  outcome cached, because the fault it detects is a transaction cap. A
   failure that never reached B2 takes the short `B2_TRANSPORT_RETRY_S` TTL.
 - **`wan_reachable`**: the gate reads two provider URLs by hostname and is DOWN only when
   NEITHER answers, so one provider's outage cannot silence a dependent reading the other. It
