@@ -1,10 +1,14 @@
 """`land.sh --fresh`: land from a detached checkout of origin/master made for this run (#7933).
 
-`classify.refuse_stale_code` refuses a landing whose own code lags master. A checkout the caller
-makes by hand goes stale again as soon as master moves, and the `git -C <primary> worktree add`
-it took is a command a worktree-isolated session's guard refuses. `--fresh` makes that checkout
-inside the landing, from the primary so it shares the primary's refs, runs the `land.sh` in it
-with the same arguments minus `--fresh`, and removes it afterwards. The refusals name the flag.
+`classify.refuse_stale_code_before_merge` refuses a landing whose own code lags master, and
+names the flag. A checkout the caller makes by hand goes stale again as soon as master moves,
+and the `git -C <primary> worktree add` it took is a command a worktree-isolated session's
+guard refuses. `--fresh` makes that checkout inside the landing, from the primary so it shares
+the primary's refs, runs the `land.sh` in it with the same arguments minus `--fresh`, and
+removes it afterwards.
+
+After the merge, `classify.refuse_stale_code` raises `GradeFresh` instead, and land.py runs the
+merged PR's grading from the same kind of checkout without asking (#8679).
 
 The checkout's `land.sh` is a child process, not an exec, so this process outlives it and the
 `finally` removes the checkout whatever the child's exit code. Under `--detach`, land.py forks
@@ -19,6 +23,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
+from deploy_tools.land_lib.options import Options
 from lib.git import git as _git
 
 FRESH_FLAG = "--fresh"
@@ -41,6 +46,36 @@ def child_argv(argv: list[str], since: str) -> list[str]:
     return out
 
 
+class GradeFresh(Exception):
+    """A merged PR whose grading moves to a fresh checkout, because this one lags master.
+
+    Attributes:
+      argv: the arguments for the fresh checkout's `land.sh`.
+    """
+
+    def __init__(self, argv: list[str], why: str) -> None:
+        super().__init__(why)
+        self.argv = argv
+
+
+class CheckoutFailed(Exception):
+    """The fresh checkout's `land.sh` never started: the checkout or the exec failed."""
+
+
+def grading_argv(opts: Options, since: str) -> list[str]:
+    """`argv` that grades the merged PR `opts` names, with no flag that merges or forks.
+
+    Without `--await-merge`, the child's checkout is made after the merge, so it holds the
+    merge commit's parent and cannot find its own code stale again.
+    """
+    argv = ["--pr", opts.pr, "--since", since, "--ci-timeout", str(opts.ci_timeout)]
+    if opts.tags:
+        argv += ["--tags", opts.tags]
+    if opts.verdict_file:
+        argv += ["--verdict-file", opts.verdict_file]
+    return argv
+
+
 def land_fresh(
     primary: Path,
     argv: list[str],
@@ -54,7 +89,10 @@ def land_fresh(
       argv: the arguments for the checkout's `land.sh`, already without `--fresh`.
 
     Returns:
-      The child landing's exit code, or 1 when the checkout could not be made.
+      The child landing's exit code.
+
+    Raises:
+      CheckoutFailed: no child landing started, so nothing printed or recorded a verdict.
     """
     path = Path(tempfile.mkdtemp(prefix="land-fresh-"))
     try:
@@ -64,16 +102,18 @@ def land_fresh(
         ):
             why = _failed(git, primary, step)
             if why:
-                print(
-                    f"land: --fresh could not make a checkout of {BASE} "
-                    f"(git {step[0]}: {why}); nothing was landed",
-                    file=sys.stderr,
+                raise CheckoutFailed(
+                    f"--fresh could not make a checkout of {BASE} (git {step[0]}: {why})"
                 )
-                return 1
         print(
             f"land: landing from a fresh checkout of {BASE} at {path}", file=sys.stderr
         )
-        return run([str(path / LAND_SH), *argv], check=False).returncode
+        try:
+            return run([str(path / LAND_SH), *argv], check=False).returncode
+        except OSError as exc:
+            raise CheckoutFailed(
+                f"--fresh could not start {LAND_SH} in its checkout ({exc})"
+            ) from exc
     finally:
         git(
             "worktree",

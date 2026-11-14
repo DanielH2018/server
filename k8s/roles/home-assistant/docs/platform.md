@@ -190,7 +190,7 @@ was retired with the pin.
 **`HomeAssistantCastHeartbeatStorm` is the loop's signal.** pychromecast logs `Heartbeat
 timeout, resetting connection` at INFO each time it drops the Hub's socket, and no logger filter
 drops it. The loki-homelab rule in
-`ansible/roles/k8s/loki-homelab/files/rules/homelab-logs.yaml` pages when the container logs
+`k8s/roles/loki-homelab/files/rules/homelab-logs.yaml` pages when the container logs
 more than 30 of those lines in an hour. On 2026-11-12 the storm logged 57 to 119 an hour for
 six hours, and the quiet hours from 2026-11-06 to 2026-11-13 logged at most 19.
 

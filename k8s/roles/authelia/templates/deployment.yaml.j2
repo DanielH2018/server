@@ -23,7 +23,7 @@ spec:
         netpol-baseline: enforced
     spec:
       # Pinned with the rest of the home-critical chain to the node announcing its VIPs
-      # (#3452); the DECIDED marker in roles/k8s/home-assistant/templates/deployment.yaml.j2
+      # (#3452); the DECIDED marker in k8s/roles/home-assistant/templates/deployment.yaml.j2
       # has why.
       nodeSelector:
         kubernetes.io/hostname: {{ k8s_primary_node }}
@@ -183,7 +183,7 @@ spec:
                   key: REDISCLI_AUTH
           # read_only: the whole program is the shell loop above and it writes nothing. non_root
           # rather than leaning on the pod-level runAsUser, so the container carries its own
-          # assertion — ansible/tests/k8s/test_container_security_context.py requires one here.
+          # assertion — tests/k8s/test_container_security_context.py requires one here.
 {{ hardened_security_context(read_only=true, non_root=true) }}
 {{ container_resources(cpu_limit='100m', mem_limit='32Mi', cpu_request='10m', mem_request='16Mi') }}
 {% endif %}

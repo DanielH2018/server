@@ -100,8 +100,10 @@ not read its store or found its tree older than origin/master (exit 75), so the 
 ungraded. Re-run land.sh to grade it.
 `refused` is every other exit-1 stop: the landing policy, a PR closed unmerged or with
 changes requested, a read or a fetch that failed, or a checkout whose landing code master
-has changed since (`classify.refuse_stale_code`, and before `--arm-merge` merges anything,
-`classify.refuse_stale_code_before_merge`); re-run that one with `--fresh`. The `land:` line on stderr, repeated in the
+has changed since, before `--arm-merge` merges anything
+(`classify.refuse_stale_code_before_merge`); re-run that one with `--fresh`. After the merge, such
+a checkout hands the grading to a fresh checkout of origin/master itself, whose landing prints
+the verdict (`classify.refuse_stale_code`). The `land:` line on stderr, repeated in the
 verdict's detail, says which. `handoff-timeout` is land.sh giving up on a lander unit that is
 still running (`LAND_HANDOFF_UNIT` below); a re-run waits on it again. `unbuilt` replaces a
 host's `deferred` when the builder reports a failing reason and has published no package of
@@ -135,6 +137,7 @@ from collections.abc import Callable
 import dataclasses
 import functools
 import os
+import shlex
 import sys
 from pathlib import Path
 
@@ -214,7 +217,7 @@ def main(
         opts = _resolve_since(opts)
     if opts.fresh:
         child = fresh.child_argv(sys.argv[1:] if argv is None else argv, opts.since)
-        landing = functools.partial(tools.fresh_landing, opts.primary, child)
+        landing = functools.partial(_land_fresh, opts.primary, tools, child)
     else:
         landing = functools.partial(_land, opts, tools, classifier)
     reads = live_limit.github_reads(tools.gh_json)
@@ -315,15 +318,29 @@ def _detached(
     return 0
 
 
+def _land_fresh(primary: Path, tools: Tools, argv: list[str]) -> int:
+    """`--fresh`: the fresh checkout's landing's exit code, or 1 when none started."""
+    try:
+        return tools.fresh_landing(primary, argv)
+    except fresh.CheckoutFailed as failed:
+        print(f"land: {failed}; nothing was landed", file=sys.stderr)
+        return 1
+
+
 def _land(opts: Options, tools: Tools, classifier: Classifier | None) -> int:
     """Run one landing to its verdict; its exit code.
 
     The path every invocation took before `--detach` existed, unchanged: a caller that passes
     neither new flag reaches this from `main` directly.
+
+    A merged PR whose grading moves to a fresh checkout (`fresh.GradeFresh`) gets its verdict,
+    record and annotation from that checkout's landing, so this one writes none of them. When
+    that landing never starts (`fresh.CheckoutFailed`), this one ends `refused` and records it.
     """
     _prepare_stdio()
     ln = Landing(opts, tools, classifier)
     rc = 1
+    graded_here = True
     # PENDING first, so a reader never takes an earlier landing's line for this one's.
     line = "STOPPED: rc=1 the landing raised before it reached a verdict"
     if opts.verdict_file:
@@ -334,6 +351,23 @@ def _land(opts: Options, tools: Tools, classifier: Classifier | None) -> int:
         print(result_line(ln.ledger, outcome))
         outcome.emit()
         line = outcome.file_line()
+    except fresh.GradeFresh as moved:
+        print(f"land: {moved}", file=sys.stderr)
+        try:
+            rc = tools.fresh_landing(opts.primary, moved.argv)
+            graded_here = False
+        except fresh.CheckoutFailed as failed:
+            rerun = f"land.sh {shlex.join(moved.argv)} {fresh.FRESH_FLAG}"
+            refused = Outcome(
+                1,
+                f"PR #{opts.pr} — {moved}, but {failed}; this landing graded nothing; "
+                f"re-run it as `{rerun}`",
+            )
+            ln.ledger.verdict = refused.verdict or ""
+            rc = refused.rc
+            print(result_line(ln.ledger, refused))
+            refused.emit()
+            line = refused.file_line()
     except Exception as exc:
         # Still one VERDICT line, as every exit-1 end prints (#4451), and the same verdict a
         # crash reaches through the handoff unit's STOPPED line. The traceback follows, and
@@ -346,19 +380,23 @@ def _land(opts: Options, tools: Tools, classifier: Classifier | None) -> int:
         line = crashed.file_line()
         raise
     finally:
-        if opts.verdict_file:
-            with contextlib.suppress(OSError):
-                write_verdict_file(opts.verdict_file, line)
-        # `probe.py landing-verdicts` reads this, so a caller never greps a task's output.
-        with contextlib.suppress(OSError):
-            tools.record_verdict(opts.pr, rc, line)
-        # Fire-and-forget: a landing that succeeded must never report failure because
-        # logging it did not. An unexpected exception still annotates, as `aborted`.
-        with contextlib.suppress(Exception):
-            tools.logger(
-                annotation_line(ln.ledger, rc, tools.clock() - ln.ledger.t_start)
-            )
+        if graded_here:
+            _record(opts, tools, ln, rc, line)
     return rc
+
+
+def _record(opts: Options, tools: Tools, ln: Landing, rc: int, line: str) -> None:
+    """Write the landing's verdict file, its verdict record and its annotation."""
+    if opts.verdict_file:
+        with contextlib.suppress(OSError):
+            write_verdict_file(opts.verdict_file, line)
+    # `probe.py landing-verdicts` reads this, so a caller never greps a task's output.
+    with contextlib.suppress(OSError):
+        tools.record_verdict(opts.pr, rc, line)
+    # Fire-and-forget: a landing that succeeded must never report failure because
+    # logging it did not. An unexpected exception still annotates, as `aborted`.
+    with contextlib.suppress(Exception):
+        tools.logger(annotation_line(ln.ledger, rc, tools.clock() - ln.ledger.t_start))
 
 
 if __name__ == "__main__":

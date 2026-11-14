@@ -19,7 +19,7 @@ Inputs come from the Job's environment: `CAP_NAMESPACE` and `CAP_CLAIM` name the
 Exit 0 when the cap holds the value, 1 when a call fails, naming it.
 
 Run: python3 jellyfin_snapshot_cap.py (in the Job; it takes no arguments)
-     uv run pytest ansible/roles/k8s/jellyfin/tests/test_jellyfin_snapshot_cap.py
+     uv run pytest k8s/roles/jellyfin/tests/test_jellyfin_snapshot_cap.py
 """
 
 import argparse

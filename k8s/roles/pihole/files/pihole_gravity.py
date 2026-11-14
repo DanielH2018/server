@@ -32,7 +32,7 @@ Environment:
 Exit 0 when both instances match the declaration, 1 when anything fails, naming it.
 
 Run: python3 pihole_gravity.py (in the Job; it takes no arguments)
-     uv run pytest ansible/roles/k8s/pihole/tests/test_pihole_gravity.py
+     uv run pytest k8s/roles/pihole/tests/test_pihole_gravity.py
 """
 
 import argparse

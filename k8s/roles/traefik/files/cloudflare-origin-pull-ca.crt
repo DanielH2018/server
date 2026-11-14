@@ -1,7 +1,7 @@
 # Cloudflare's Authenticated Origin Pulls client-certificate CA. Public and static: Cloudflare
 # presents a client certificate issued by this CA on every connection it opens to an origin
 # in a zone with Authenticated Origin Pulls enabled, and `cloudflare-origin-pull` (the
-# TLSOption ansible/templates/origin-pull.yml.j2 renders) requires and verifies one on every
+# TLSOption k8s/templates/origin-pull.yml.j2 renders) requires and verifies one on every
 # public Host route. Not a secret, so it lives here rather than in SOPS (#1990). Named `.crt`
 # rather than `.pem` because the shell guard denies every read of a `.pem` path as a secret.
 #

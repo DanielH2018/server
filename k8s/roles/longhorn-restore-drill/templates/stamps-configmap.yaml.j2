@@ -11,7 +11,8 @@
   render can restore. Contract C3 exempts it by name (*Prune exemptions*).
 
   The namespace is `longhorn_drill_namespace`. No Namespace object renders here, because a second
-  writer of `homelab` beside ansible/deploy.yml is what C4 forbids.
+  writer of `homelab` beside the renderer's shared `homelab-namespace` kind
+  (scripts/renderer/renderer_lib/namespace.py) is what C4 forbids.
 #}
 apiVersion: v1
 kind: ConfigMap

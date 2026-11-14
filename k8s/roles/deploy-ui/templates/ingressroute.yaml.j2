@@ -1,7 +1,7 @@
 {% from 'ingressroute.yml.j2' import ingressroute with context %}
 {#
    public=false: a deploy button never gets a public Host rule. LAN + WireGuard only, behind
-   Authelia two_factor (roles/k8s/authelia config-secret.yaml.j2).
+   Authelia two_factor (k8s/roles/authelia config-secret.yaml.j2).
 #}
 ---
 {{ ingressroute(
