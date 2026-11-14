@@ -42,10 +42,10 @@ karakeep_k8s_rollout_timeout: "{{ manifests_rollout_timeout }}"
 # for a published tag alone, so an Ansible deploy ignores it.
 flux_prepull_timeout: 4500s
 karakeep_k8s_meili_image: getmeili/meilisearch:v1.55.0@sha256:ff546679970126f8822e15d1b6a06bfbff1f2ce2e43f810cfb5258012f92de5c
-# Built in-cluster. The base-image pin (uv `python3.14-bookworm-slim` digest) lives in
+# Built in-cluster. The base-image pin (uv `python3.15-trixie-slim` digest) lives in
 # `templates/Dockerfile.j2`'s `FROM` line, where Renovate's dockerfile manager reads it. All five
 # pinned pip deps below must resolve wheel-only under the base's interpreter, because
-# bookworm-slim ships no compiler and an sdist fallback crashloops the boot-time
+# trixie-slim ships no compiler and an sdist fallback crashloops the boot-time
 # `uv pip install`.
 #
 # `k8s_built_image_tags` is a play-scoped fact k8s/image-builder publishes, so the `.get` fallback
