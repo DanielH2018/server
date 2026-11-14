@@ -119,6 +119,14 @@ design is [the H4 plan](target-architecture/host/h4-secrets-unit.md), *The resta
   empty: reconcile runs `rmdir`, never a recursive delete. A non-empty one stays and fails the
   run. A package therefore lists the directory after the files in it, as the Pi's does for
   `/etc/homelab/interim`.
+- **A scratch or cache directory.** A directory entry is only for a directory whose every file the
+  package can name. A unit's scratch or cache directory fails that rule, because the unit writes
+  files with unpredictable names into it. Step 1 stops a dropped unit mid-run, so its scratch tree
+  stays behind, and an `rmdir` in step 4 would fail the run and hold the host. The package lists
+  only the files with fixed names, such as a lock file, and leaves the directory out. The operator
+  removes the directory by hand if it matters. `hosts/tests/test_legacy_cache_directories.py`
+  refuses a `legacy:` path that is `/var/cache` or any `.cache` directory, such as
+  `/var/lib/claude/.cache` in the agent user's home, or a directory directly inside one.
 - **A legacy template unit.** A `unit` entry such as `claude-land@.service` is disabled and its
   file removed, but never stopped, because `systemctl` refuses a template's own name. While any
   instance is active, activating or reloading, the entry stays and counts as drift, as a running

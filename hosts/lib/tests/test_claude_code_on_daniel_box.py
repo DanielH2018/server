@@ -133,10 +133,7 @@ def test_daniel_box_ships_each_slice_three_subject_and_retires_its_ansible_copy(
         "claude-triage-poll-alert.service",
     } <= legacy
     retired = {entry.get("path") for entry in box.legacy}
-    assert {
-        "/etc/polkit-1/rules.d/50-claude-triage.rules",
-        "/var/cache/claude-agent-node",
-    } <= retired
+    assert "/etc/polkit-1/rules.d/50-claude-triage.rules" in retired
 
 
 def test_daniel_box_ships_each_slice_four_subject(box):
