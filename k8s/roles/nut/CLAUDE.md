@@ -13,7 +13,7 @@ the pin is physical and never unwinds.
 <!-- /generated_from -->
 
 - **Flux's render pulls `ghcr.io/danielh2018/nut:<content tag>`**, with `imagePullPolicy:
-  IfNotPresent` (D5.4b), and the *Image* line above names that repository. The role's defaults
+  IfNotPresent`, and the *Image* line above names that repository. The role's defaults
   still name the in-cluster registry. The image is built from
   `templates/Dockerfile.j2` (debian:bookworm-slim + nut). Config is **not** baked in, because
   the image is public on GHCR and `upsd.users` carries passwords. It mounts from the
@@ -32,7 +32,7 @@ the pin is physical and never unwinds.
   (#5542). Only this role's render sees its own tag. No nut pod names the ConfigMap, so it
   adds nothing to the restart checksum the renderer stamps on nut, and adding it rolled
   nothing.
-- **Flux applies it, not Ansible** (D5.17, Wave C's UPS PR, which went alone). Its
+- **Flux applies it.** Its
   `containers_list` entry is in `cluster/services.yml`, so nothing applies it by hand. A merged change reaches the cluster when `promote` publishes and
   verifies the next bundle. The Deployment is `Recreate`, so every roll stops upsd for the container
   start, plus a pull
@@ -45,13 +45,12 @@ the pin is physical and never unwinds.
   does not serve it yet (`scripts/deploy_tools/ci_images.py`). So a merged edit to
   `files/entrypoint.sh`, `files/upssched-cmd` or `templates/Dockerfile.j2` moves the content
   tag, and the next promotion builds the image and rolls the pod.
-- **Where the tasks went.** The `k8s/image-builder` include became promote's `images` job
-  (D5.4a2) and the GHCR ref (D5.4b). The role's `manifests_rollout: nut`
-  names the Deployment for the stabilisation gate and the shared restart. The Kustomization's
-  `wait` replaces the gate, and the restart checksum the renderer stamps replaces the restart.
-  Its `manifests_prune: false` still keeps the `homelab/role` label off nut's objects in the
-  render. Flux's own `prune: true` tracks them by the Kustomization's inventory instead, so it
-  needs no label and caused no extra restart.
+- **Its image build and rollout.** Promote's `images` job builds the image, and the
+  Deployment's ref reads the GHCR tag. The role's `manifests_rollout: nut` names the
+  Deployment the renderer stamps with the restart checksum, and the Kustomization's `wait`
+  holds the rollout. Its `manifests_prune: false` keeps the `homelab/role` label off nut's
+  objects in the render. Flux's own `prune: true` tracks them by the Kustomization's inventory,
+  so it needs no label.
 - **Exposure:** hostPort `127.0.0.1:3493` (host secondary upsmon) + ClusterIP Service
   `nut:3493` (peanut web UI, Home Assistant's NUT integration).
 - **privileged: true** — k8s has no compose `devices:` equivalent; a hostPath'd
@@ -89,7 +88,7 @@ lowbatt` raises FSD as soon as the UPS asserts LB (`battery.charge.low` 10,
 roughly 11 minutes for the poweroffs. `hosts/tests/test_nut_host_secondary.py` asserts the
 delay stays inside that band while a host beyond `ups_host` is armed.
 
-**Pinned ClusterIP.** The Service pins `spec.clusterIP` (H7.33), because daniel-box's package
+**Pinned ClusterIP.** The Service pins `spec.clusterIP`, because daniel-box's package
 renders the address literally into `upsmon.conf`. A Service recreate keeps the address. The
 package's copy is `nut_host_upsd_clusterip` in `hosts/components/nut-secondary/component.yml`,
 and `hosts/tests/test_nut_host_secondary.py` pins the two together.

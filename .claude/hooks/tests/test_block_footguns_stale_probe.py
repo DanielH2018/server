@@ -82,7 +82,7 @@ def test_a_master_change_outside_what_the_probe_reads_is_clean(repo):
 
 
 def test_the_primary_checkout_behind_origin_is_clean(repo):
-    """The deployer applies the primary's HEAD, so its tree is what the cluster runs."""
+    """`homelab-checkout-sync` holds the primary at master's newest green commit."""
     primary, _ = repo
     _move_origin(primary, _ROLE_FILE, "replicas: 2\n")
     git(primary, "reset", "-q", "--hard", "HEAD~1")

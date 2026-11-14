@@ -23,7 +23,25 @@ Got handshake from client 76561198108936133       <- connect
 Got character ZDOID from Testvazz : 954855457:113  <- spawn (ALSO fires on respawn)
 Got character ZDOID from Testvazz : 0:0            <- death
 Closing socket 76561198108936133                   <- disconnect
+Game - OnApplicationQuit                           <- shutdown
+ZNet.LoadWorld: Midgard (Midgard), save number 1750 <- start
+ Connections 0 ZDOS:919563  sent:0 recv:0          <- heartbeat, every ~10 min
 ```
+
+The last three lines are observed on this server. A shutdown or a start closes every open
+session, and so does a heartbeat that reports 0 connections. That heartbeat is what recovers
+a session whose `Closing socket` line was missed. A heartbeat whose count is above 0 but
+below the open sessions closes nothing, because the count cannot say which session is stale,
+and a wrong guess would bank the live player's hours on the stale one. Until the next
+heartbeat that settles it, the exporter caps `valheim_players_online` at the server's count
+and stops each open session's playtime at that player's last evidence, never below the
+value the counter already showed. The live player's own
+`Closing socket` then banks their hours, and the next count of 0 closes the stale session.
+Until #8528 the restart pattern searched
+for `Load world: `, a line this server never logs, so a missed disconnect left two players
+online for three weeks. A reconciling close ends each session at the later of the player's
+last event and the last heartbeat whose count covered every open session. Another player's
+presence never extends a stale session, so the time it sat stale is not counted as playtime.
 
 Three consequences, each of which is a trap:
 
@@ -55,8 +73,10 @@ Two things exist to make a mismatch visible rather than silent:
 - `valheim_stats_unmatched_player_lines_total` — player-shaped lines that did not parse.
   Expect a flat zero; a step up with frozen player metrics means upstream reworded.
 - `valheim_connections` vs `valheim_players_online` — the server's own ~10 min heartbeat
-  against the session-derived count. They should agree; a persistent gap means the session
-  state machine has drifted. Both are on the dashboard side by side.
+  against the session-derived count. The derived count is capped at the server's while the
+  two disagree, so it never reads higher. It can still read lower: a gap in that direction
+  means a spawn line was missed or reworded. Both are on the dashboard
+  side by side.
 
 ## Notable
 

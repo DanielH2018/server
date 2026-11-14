@@ -19,19 +19,16 @@ separate from the `observability` Loki (decision KL1, `docs/archive/.../slice-7-
 - **The monitors that read from here:** the ruler's own rules and monitor-bridge's remaining
   LogQL checks. A broken apply blinds the LogQL checks without paging. The host crons'
   `status=` lines land here too, as the local record of each verdict.
-- **Flux applies it, not Ansible** (D5.8, Wave A'). Its `containers_list` entry is `platform:
+- **Flux applies it.** Its `containers_list` entry is `platform:
   k8s`, so nothing applies it by hand, and a merged change reaches the cluster when `promote`
   publishes and verifies the next bundle. Its image-bump PRs therefore draw no `land-wait` and no
   `probe.py health` run. traefik is flux-owned too, so the Kustomization lists it in `dependsOn`,
   and Flux applies this tag only after its Kustomization is Ready. The Loki Deployment is
   `Recreate`, so a change that rolls it takes log queries, pushes and the ruler down briefly.
-- **Where the task went.** Its default `manifests_rollout:
-  loki-homelab`
-  and the `alloy` entry in `manifests_extra_rollouts` name the two workloads for the
-  stabilisation gate and the shared restart. The Kustomization's `wait` replaces the gate, and
-  the restart checksum the renderer stamps replaces the restart. `k8s_autodeploy: false` no longer
-  gates an apply, because the deployer skips the tag. It still stops Renovate automerging the
-  image bump.
+- **Its rollout.** Its default `manifests_rollout: loki-homelab` and the `alloy` entry in
+  `manifests_extra_rollouts` name the two workloads the renderer stamps with the restart
+  checksum. The Kustomization's `wait` holds both rollouts. `k8s_autodeploy: false` gates no
+  apply: Flux applies every merged change. It still stops Renovate automerging the image bump.
 - **Flux prunes the cluster-scoped RBAC.** Flux prunes by its own inventory, which holds the Alloy ClusterRole and
   ClusterRoleBinding, so dropping one
   from `alloy-daemonset.yaml.j2` deletes it live at the next promotion.

@@ -49,7 +49,6 @@ monitor_bridge_modules:
   - bridge/net.py
   - bridge/sources.py
   - bridge/streaks.py
-  - bridge/msgfmt.py
   - checks/b2.py
   - checks/r2.py
   - checks/host_thermal.py

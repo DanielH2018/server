@@ -22,6 +22,7 @@ Run: uv run pytest hosts/tests/test_k3s_control_plane_hardening.py
 
 import functools
 
+import pytest
 from _helpers import ALL_VARS, load_defaults, load_yaml
 from _k8s_render import render_role_template, rendered_k8s_text
 from _setup_render import role_context
@@ -194,6 +195,104 @@ def test_secret_reads_are_logged_at_metadata():
             "wholesale anyway. The first matching rule wins, so this rule swallows the "
             "human and ServiceAccount Secret reads the Metadata rule exists to record."
         )
+
+
+KUSTOMIZE_CONTROLLER = "system:serviceaccount:flux-system:kustomize-controller"
+LONGHORN_MANAGER = "system:serviceaccount:longhorn-system:longhorn-service-account"
+METRICS_SERVER = "system:serviceaccount:kube-system:metrics-server"
+OPERATOR = "system:admin"
+
+
+def _audit_level(user: str, verb: str, group: str, resource: str) -> str:
+    """The level of the first rule matching a ServiceAccount or user's resource request.
+
+    `resource` takes the policy's `name/subresource` form. A rule naming `nonResourceURLs`
+    matches only non-resource requests, so it never matches here.
+    """
+    for rule in _audit_policy()["rules"]:
+        if rule.get("nonResourceURLs"):
+            continue
+        if rule.get("users") and user not in rule["users"]:
+            continue
+        if rule.get("userGroups"):
+            continue
+        if rule.get("verbs") and verb not in rule["verbs"]:
+            continue
+        entries = rule.get("resources")
+        if entries and not any(
+            entry.get("group", "") == group
+            and resource in (entry.get("resources") or [])
+            for entry in entries
+        ):
+            continue
+        return rule["level"]
+    return "None"
+
+
+@pytest.mark.parametrize(
+    ("user", "verb", "group", "resource", "level"),
+    [
+        (
+            KUSTOMIZE_CONTROLLER,
+            "patch",
+            "kustomize.toolkit.fluxcd.io",
+            "kustomizations/status",
+            "None",
+        ),
+        (LONGHORN_MANAGER, "update", "longhorn.io", "engines/status", "None"),
+        (LONGHORN_MANAGER, "update", "longhorn.io", "volumes/status", "None"),
+        (LONGHORN_MANAGER, "update", "longhorn.io", "instancemanagers/status", "None"),
+        (
+            METRICS_SERVER,
+            "create",
+            "authorization.k8s.io",
+            "subjectaccessreviews",
+            "None",
+        ),
+        (KUSTOMIZE_CONTROLLER, "patch", "", "events", "None"),
+        (KUSTOMIZE_CONTROLLER, "create", "events.k8s.io", "events", "None"),
+        # The same writes by anyone but the owning controller stay logged.
+        (
+            OPERATOR,
+            "patch",
+            "kustomize.toolkit.fluxcd.io",
+            "kustomizations/status",
+            "Metadata",
+        ),
+        (KUSTOMIZE_CONTROLLER, "update", "longhorn.io", "volumes/status", "Metadata"),
+        (
+            OPERATOR,
+            "create",
+            "authorization.k8s.io",
+            "subjectaccessreviews",
+            "Metadata",
+        ),
+        (OPERATOR, "delete", "", "events", "Metadata"),
+        # The controllers' other writes and their Secret reads stay logged.
+        (
+            KUSTOMIZE_CONTROLLER,
+            "patch",
+            "kustomize.toolkit.fluxcd.io",
+            "kustomizations",
+            "Metadata",
+        ),
+        (KUSTOMIZE_CONTROLLER, "patch", "", "configmaps", "Metadata"),
+        (KUSTOMIZE_CONTROLLER, "get", "", "secrets", "Metadata"),
+        (LONGHORN_MANAGER, "delete", "longhorn.io", "volumes", "Metadata"),
+    ],
+)
+def test_controller_status_churn_is_dropped_and_other_writes_are_kept(
+    user: str, verb: str, group: str, resource: str, level: str
+):
+    """The audit stream's largest producers are controller status writes (#8512).
+
+    Each drop names the controller's own identity, so the same write by a person still lands.
+    """
+    assert _audit_level(user, verb, group, resource) == level, (
+        f"{user} {verb} {group or 'core'}/{resource} should be audited at {level}. A status "
+        "drop that loses its `users` scope hides an operator's write; one that goes missing "
+        "puts about half of loki-homelab's audit ingest back."
+    )
 
 
 def test_alloy_tails_the_audit_log():

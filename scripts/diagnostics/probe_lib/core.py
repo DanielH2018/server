@@ -75,21 +75,38 @@ def domain(group_vars_path=None):
     Args:
         group_vars_path: The group_vars file to read. None reads the repo's `all.yml`.
     """
-    path = group_vars_path or GROUP_VARS_PATH
-    with open(path) as f:
-        for line in f:
-            if line.startswith("domain:"):
-                return line.split(":", 1)[1].strip()
-    raise SystemExit(f"domain not found in {path}")
+    return group_var("domain", group_vars_path)
 
 
 def metallb_vip():
     """The cluster's MetalLB ingress VIP, read from inventory (plaintext, not a secret)."""
-    with open(GROUP_VARS_PATH) as f:
+    return group_var("k3s_metallb_ingress_vip")
+
+
+def longhorn_b2_bucket():
+    """The B2 bucket Longhorn's `default` BackupTarget writes to, read from inventory.
+
+    The bucket name grants nothing without the B2 key pair, so reading it needs no age key.
+    """
+    return group_var("longhorn_b2_bucket")
+
+
+def group_var(key, group_vars_path=None):
+    """The scalar value of top-level `key` in the inventory's group vars.
+
+    Args:
+        key: The variable name.
+        group_vars_path: The group_vars file to read. None reads the repo's `all.yml`.
+
+    Raises:
+        SystemExit: The file defines no `key`.
+    """
+    path = group_vars_path or GROUP_VARS_PATH
+    with open(path) as f:
         for line in f:
-            if line.startswith("k3s_metallb_ingress_vip:"):
+            if line.startswith(f"{key}:"):
                 return line.split(":", 1)[1].strip()
-    raise SystemExit(f"k3s_metallb_ingress_vip not found in {GROUP_VARS_PATH}")
+    raise SystemExit(f"{key} not found in {path}")
 
 
 def k8s_endpoint(hostname):
@@ -184,7 +201,7 @@ SECRETS_PATH = os.path.join(
     "secrets.yml",
 )
 
-# Inventory group vars (plaintext) — source of the domain and the MetalLB ingress VIP.
+# Inventory group vars (plaintext), which `group_var` reads.
 GROUP_VARS_PATH = os.path.join(
     REPO,
     "inventory",
@@ -424,11 +441,7 @@ def fetch_json(url, resolve=None, timeout=None):
 
 def k8s_namespace():
     """The workload namespace, read from inventory (plaintext, not a secret)."""
-    with open(GROUP_VARS_PATH) as f:
-        for line in f:
-            if line.startswith("k8s_namespace:"):
-                return line.split(":", 1)[1].strip()
-    raise SystemExit(f"k8s_namespace not found in {GROUP_VARS_PATH}")
+    return group_var("k8s_namespace")
 
 
 _AGE_KEY_ENV = (

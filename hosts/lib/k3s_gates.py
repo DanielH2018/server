@@ -30,7 +30,6 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import errno
 import json
 import os
 import ssl
@@ -85,7 +84,6 @@ _SOURCE_PATHS = {
 
 # ── host files, read under `--host-root` ─────────────────────────────────────────────────────
 RESTART_MARKER = "/run/homelab-k3s-restart"
-_MAX_SYMLINK_HOPS = 40
 
 _SA_DIR = "/var/run/secrets/kubernetes.io/serviceaccount"
 
@@ -397,37 +395,6 @@ def check_flux_settled(get: Getter, notes: list[str]) -> list[str]:
 
 
 # ── host checks, read under --host-root ──────────────────────────────────────────────────────
-
-
-def resolve_under(root: str, path: str) -> str:
-    """`path` with every symlink resolved inside `root`, an absolute target re-rooted there.
-
-    Under `/host`, `/var/lock` is an absolute link to `/run/lock`, and the kernel would follow
-    it to the container's own `/run/lock`. Raises OSError (ELOOP) past 40 hops.
-    """
-    resolved: list[str] = []
-    queue = [p for p in path.split("/") if p]
-    hops = 0
-    while queue:
-        part = queue.pop(0)
-        if part == ".":
-            continue
-        if part == "..":
-            if resolved:
-                resolved.pop()
-            continue
-        candidate = os.path.join(root, *resolved, part)
-        if os.path.islink(candidate):
-            hops += 1
-            if hops > _MAX_SYMLINK_HOPS:
-                raise OSError(errno.ELOOP, "too many symlinks", path)
-            target = os.readlink(candidate)
-            if target.startswith("/"):
-                resolved = []
-            queue = [p for p in target.split("/") if p] + queue
-        else:
-            resolved.append(part)
-    return os.path.join(root, *resolved)
 
 
 def check_restart_marker(root: str) -> list[str]:

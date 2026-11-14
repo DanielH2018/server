@@ -34,7 +34,7 @@ longer exists. `k8s/terraria` is the sibling this role copies.
   (#1875).
 - **Auth:** none possible — a raw UDP game protocol reaches no Traefik, Authelia or CrowdSec
   chain, so the join password is the only access control.
-- **Flux applies it, not Ansible** (D5.15, Wave C). Its `containers_list` entry is
+- **Flux applies it.** Its `containers_list` entry is
   in `cluster/services.yml`, so nothing applies it by hand, and a merged
   change reaches the cluster when `promote` publishes and verifies the next bundle. `k8s_autodeploy:
   false` still stops Renovate's
@@ -50,6 +50,8 @@ longer exists. `k8s/terraria` is the sibling this role copies.
   stay. Setting the value to 1 in one merge restarts all three, and `promote` applies it. The
   first start after a long gap runs SteamCMD's update check before the port binds, and the
   startup probe allows 15 minutes for it.
+  The `PVCFreeFloorUnmonitored` alert holds quiet while kube-state-metrics reads zero valheim
+  replicas, because a parked claim has no mounting pod and the kubelet reports no volume stats.
 - **The join-password Secret substitutes from `homelab-cluster-vars`.** `valheim_server_pass`
   is a `${<key>}` placeholder in the published render. Flux substitutes the value from the
   `homelab-cluster-vars` Secret, which it decrypts from `secrets/cluster-vars.sops.env`.
@@ -57,12 +59,12 @@ longer exists. `k8s/terraria` is the sibling this role copies.
   reconciles. A rotation reaches the cluster only through `cluster_vars.py write`, which the
   operator runs after a hand rotation. The renderer stamps a restart checksum on the
   Deployment, so a changed value rolls the pod.
-- **Where the tasks went.** The mods build
-  became the `images` job (D5.4), which pushes `ghcr.io/danielh2018/valheim:<content tag>`. The
-  defaults name `<k8s_registry_pull_host>/valheim`; the renderer rewrites the `mods`
-  initContainer's ref to the GHCR one with `imagePullPolicy: IfNotPresent`
+- **Its image build and rollout.** The `images` job builds the mods image and pushes
+  `ghcr.io/danielh2018/valheim:<content tag>`. The defaults name
+  `<k8s_registry_pull_host>/valheim`; the renderer rewrites the `mods` initContainer's ref to
+  the GHCR one with `imagePullPolicy: IfNotPresent`
   (`scripts/renderer/renderer_lib/images.py:ghcr_refs`). The server image is third-party and
-  keeps its own ref. The Kustomization's `wait` replaces the rollout wait.
+  keeps its own ref. The Kustomization's `wait` holds the rollout.
 
 ## Notable
 - **The join password lives in SOPS as `valheim_server_pass`.** The value it replaced was
