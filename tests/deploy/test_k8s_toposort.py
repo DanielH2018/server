@@ -65,7 +65,8 @@ def _k8s_entries(path: Path) -> list[dict]:
 SERVICE_FILES = [K8S_SERVICES]
 
 
-def _roles_rendering_traefik_crds() -> set[str]:
+@functools.cache
+def traefik_crd_roles() -> frozenset[str]:
     """Roles whose rendered manifests include any traefik.io/* object -- render ground truth.
 
     Derived from the rendered output, not a filename or text scan: an IngressRoute that
@@ -75,14 +76,11 @@ def _roles_rendering_traefik_crds() -> set[str]:
     under its own name. Compared below against the edge set build_k8s_dep_map derives at
     deploy time, which has to agree with this on every role or the derived edges are wrong.
     """
-    return {
+    return frozenset(
         role
         for role, _tpl, doc in rendered_docs()
         if doc and str(doc.get("apiVersion", "")).split("/")[0] == "traefik.io"
-    }
-
-
-TRAEFIK_CRD_ROLES = _roles_rendering_traefik_crds()
+    )
 
 
 def _index(entries: list[dict]) -> dict[str, int]:
@@ -104,8 +102,8 @@ def test_the_render_found_traefik_crd_roles_at_all():
     # An empty set would make every comparison below vacuously pass -- the "unreadable
     # input and an empty result are indistinguishable" shape. Assert a concrete floor and
     # named members, not just a count: a count can hold while a specific role drops out.
-    assert len(TRAEFIK_CRD_ROLES) > 10, TRAEFIK_CRD_ROLES
-    assert {"traefik", "authelia", "crowdsec", "freshrss"} <= TRAEFIK_CRD_ROLES
+    assert len(traefik_crd_roles()) > 10, traefik_crd_roles()
+    assert {"traefik", "authelia", "crowdsec", "freshrss"} <= traefik_crd_roles()
 
 
 def _derived_traefik_edge(entries: list[dict]) -> set[str]:
@@ -157,7 +155,7 @@ def test_the_derived_traefik_edge_agrees_with_the_render(host):
         name = c["name"]
         if name == "traefik" or name in K8S_CRD_EDGE_EXEMPT:
             continue
-        rendered = name in TRAEFIK_CRD_ROLES
+        rendered = name in traefik_crd_roles()
         if name in OVER_DERIVED_TRAEFIK_EDGE:
             assert (name in derived) >= rendered, (
                 f"{name}: build_k8s_dep_map derives no traefik edge while the render says it "
@@ -214,7 +212,7 @@ def test_crowdsec_still_needs_the_crd_edge_exemption(host):
     _path, _entries, idx = host
     if "crowdsec" not in idx:
         pytest.skip("host does not deploy crowdsec")
-    assert "crowdsec" in TRAEFIK_CRD_ROLES, (
+    assert "crowdsec" in traefik_crd_roles(), (
         "crowdsec no longer renders a Traefik CRD -- delete it from K8S_CRD_EDGE_EXEMPT "
         "in toposort.py so a real traefik edge is derived for it again."
     )
@@ -246,7 +244,7 @@ def test_shuffled_list_still_sorts_to_respect_every_edge(host):
     late_crd = [
         name
         for name in sorted_names
-        if name in TRAEFIK_CRD_ROLES
+        if name in traefik_crd_roles()
         and name not in K8S_CRD_EDGE_EXEMPT
         and idx[name] < idx["traefik"]
     ]
