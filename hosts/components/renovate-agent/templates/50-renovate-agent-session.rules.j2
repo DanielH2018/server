@@ -1,0 +1,20 @@
+// Shipped by the renovate-agent component.
+//
+// Lets the runner's user START the session unit, and nothing else. The runner and the session
+// still share renovate_agent_user until guardrails plan B2r's second half moves this rule to the
+// controller user, which the session user will not be.
+polkit.addRule(function (action, subject) {
+    if (action.id !== "org.freedesktop.systemd1.manage-units") {
+        return undefined;
+    }
+    if (subject.user !== "{{ renovate_agent_user }}") {
+        return undefined;
+    }
+    if (action.lookup("unit") !== "homelab-renovate-agent-session.service") {
+        return undefined;
+    }
+    if (action.lookup("verb") !== "start") {
+        return undefined;
+    }
+    return polkit.Result.YES;
+});

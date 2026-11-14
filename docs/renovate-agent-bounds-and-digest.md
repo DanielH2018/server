@@ -77,12 +77,23 @@ digest names each nomination the runner did not land, with why. Session and runn
 until B2r's second half splits them, so polkit still lets the session start the lander; the
 prompt no longer tells it to.
 
+**The session runs in its own unit** (guardrails plan B2r-2a). The runner starts
+`homelab-renovate-agent-session.service`, which polkit lets `renovate_agent_user` start
+(`templates/50-renovate-agent-session.rules.j2`), and waits for it through
+`agent_toolbox.py:start_unit`, the helper the landings use too. The unit runs
+`files/renovate_session.py`: the worktree gate and its recreation, then the headless session.
+Its `TimeoutStartSec` is `renovate_agent_session_timeout_s`, so systemd stops a session at its
+wall clock and the runner reads `Result=timeout`. The script captures the session's output and
+writes it to `session.out` in the state directory, and a blocked worktree's reason to
+`session.blocked`, so session text never reaches the journal. The runner's journal line for each
+request carries fixed words only, for the same reason (#8676). The runner and the session still
+share `renovate_agent_user`; B2r-2b moves the runner, its state and both polkit rules to a
+controller user.
+
 This runner and triage's `claude_triage_run.py` stay separate modules (decided 2026-11-14).
 They share only the call that starts a session, and even that differs: the flags, how each
-hands the session its token, and how each reads the output. B2r's second half replaces that call
-with a session unit the controller starts, so a module shared now would hold one
-`subprocess.run` that the next change deletes. The shared session start belongs to B2r's
-second half and to B2.
+hands the session its token, and how each reads the output. `start_unit` is the part a shared
+session start needs, and triage can adopt it when B2 moves its session into a unit.
 
 The lander unit's `ExecStartPre` replaces the last run's line with a `VERDICT: none` line before
 the lock wait, and the script writes `PENDING` once it holds the lock. A unit that systemd stops

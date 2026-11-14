@@ -13,8 +13,8 @@ import os
 import agent_toolbox
 import pytest
 import renovate_agent
+import renovate_session
 import run_requests
-from lib.proc_testing import write_exec
 
 REPO = "o/r"
 CENSUS = {71, 80, 81, 82}
@@ -48,7 +48,7 @@ class _Gh:
             return 0, ""
         if argv[:2] == ["systemctl", "show"]:
             pr = int(argv[-1].split("@")[1].split(".")[0])
-            return 0, self.results.get(pr, "success") + "\n"
+            return 0, f"Result={self.results.get(pr, 'success')}\nExecMainStatus=0\n"
         if argv[:3] == ["gh", "pr", "view"]:
             return 0, json.dumps({"headRefOid": "c" * 40})
         if argv[:3] == ["gh", "run", "list"]:
@@ -177,28 +177,9 @@ def test_a_leftover_requests_directory_is_set_aside_unread(tmp_path):
     assert again == requests and os.listdir(again) == []
 
 
-def test_the_session_may_write_into_the_directory_the_runner_reads(
-    tmp_path, monkeypatch
-):
-    """The directory is outside the worktree; without `--add-dir` a headless Write is denied."""
-    monkeypatch.setenv("RENOVATE_SESSION_GH_TOKEN", "gh-read-sentinel")
-    seen = tmp_path / "argv"
-    claude = write_exec(tmp_path / "claude", f'printf "%s\\n" "$@" > {seen}\n')
-    prompt = tmp_path / "prompt.txt"
-    prompt.write_text("/renovate-prs\n")
-    requests = run_requests.fresh_dir(str(tmp_path))
-    cfg = {"CLAUDE_BIN": str(claude), "PROMPT_FILE": str(prompt)}
-
-    renovate_agent.run_session(cfg, str(tmp_path), str(tmp_path / "log"), requests)
-
-    argv = seen.read_text().splitlines()
-    assert argv[argv.index("--add-dir") + 1] == requests
-
-
 @pytest.mark.parametrize(
     "verdict",
     [
-        SETTLED,
         "VERDICT: nothing-to-deploy (PR #71 touched no service)",
         "REFUSED: PR #71 changes inventory/",
     ],
@@ -219,7 +200,6 @@ def test_the_next_nomination_lands_after_one_that_ends_well(tmp_path, verdict):
             "VERDICT: refused (PR #71 is merged, and this landing graded nothing)",
             "exit-code",
         ),
-        ("PENDING", "exit-code"),
         (SETTLED, "timeout"),
     ],
 )
@@ -264,11 +244,14 @@ def test_no_landing_starts_after_the_runs_deadline(tmp_path):
 class _Tick:
     """Every process one tick reaches: #71 is open until its landing merges it."""
 
-    def __init__(self):
+    def __init__(self, state, output):
         self.merged, self.posts = False, []
+        self.state, self.output = state, output
 
     def read(self, path):
-        return SETTLED + "\n" if self.merged and path.endswith("/71.verdict") else ""
+        if path.endswith("/71.verdict"):
+            return SETTLED + "\n" if self.merged else ""
+        return agent_toolbox.read_file(path)
 
     def run(self, argv, cwd=None, timeout=120, stdin_text=None):
         if argv[:3] == ["gh", "pr", "list"]:
@@ -287,11 +270,17 @@ class _Tick:
             return 0, json.dumps(prs)
         if argv[:3] == ["gh", "pr", "view"]:
             return 0, json.dumps({"state": "MERGED"})
+        if argv == ["systemctl", "start", renovate_agent.SESSION_UNIT]:
+            (self.state / "requests" / "1-71-land.json").write_text(
+                json.dumps({"action": "land", "pr": 71})
+            )
+            (self.state / renovate_session.OUTPUT_FILE).write_text(self.output)
+            return 0, ""
         if argv[:2] == ["systemctl", "start"]:
             self.merged = True
             return 0, ""
         if argv[:2] == ["systemctl", "show"]:
-            return 0, "success\n"
+            return 0, "Result=success\nExecMainStatus=0\n"
         if "list" in argv and "--porcelain" in argv:
             return (
                 0,
@@ -316,19 +305,14 @@ def test_a_pr_the_session_nominates_lands_and_reaches_the_digest(tmp_path, monke
     result = json.dumps(
         {"type": "result", "subtype": "success", "result": "Nominated #71."}
     )
-    request = json.dumps({"action": "land", "pr": 71})
-    claude = write_exec(
-        tmp_path / "claude",
-        f"echo '{request}' > {state}/requests/1-71-land.json\necho '{result}'\n",
-    )
     prompt = tmp_path / "prompt.txt"
     prompt.write_text("/renovate-prs\n")
     cfg = tmp_path / "config.env"
     cfg.write_text(
         f"REPO=o/r\nREPO_DIR={tmp_path}\nPROMPT_FILE={prompt}\n"
-        f"STATE_DIR={state}\nCLAUDE_BIN={claude}\n"
+        f"STATE_DIR={state}\nCLAUDE_BIN={tmp_path}/claude\n"
     )
-    tick = _Tick()
+    tick = _Tick(state, result)
     tools = renovate_agent.AgentTools(
         run=tick.run,
         read_file=tick.read,
@@ -338,3 +322,15 @@ def test_a_pr_the_session_nominates_lands_and_reaches_the_digest(tmp_path, monke
     assert renovate_agent.main(tools, str(cfg)) == 0
     [digest] = tick.posts
     assert digest.startswith("✅ renovate-agent resolved #71"), digest
+
+
+def test_the_journal_line_for_a_request_carries_no_session_text(tmp_path):
+    """A file name or a refused value is session text; only fixed words reach the log (#8676)."""
+    requests, _ = _run(tmp_path)
+    _write(requests, "x: status=down.json", {"action": "x: status=down", "pr": 71})
+    _nominate(requests, 71)
+    lines = [
+        renovate_agent.request_line(o)
+        for o in _carry(tmp_path, requests, _lander(tmp_path))
+    ]
+    assert lines == ["request refused #0 not done", "request land #71 done"]

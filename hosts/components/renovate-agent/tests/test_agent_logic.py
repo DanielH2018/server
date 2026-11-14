@@ -7,10 +7,12 @@ Run: uv run pytest hosts/components/renovate-agent/tests/test_agent_logic.py
 """
 
 import json
+from pathlib import Path
 
 import agent_logic as al
 import pytest
 import renovate_agent
+import renovate_session
 
 
 def _pr(number: int) -> al.OpenPR:
@@ -209,22 +211,29 @@ class TestConfigGuard:
 
 
 class _FakeHost:
-    """Answers every process `main()` reaches before it would spend a session.
+    """Answers every process `main()` reaches up to the session unit's end.
 
-    `prs` is what `gh pr list` returns; `ahead` is what `rev-list --count` says the run
-    branch holds beyond origin/master, and `contained` whether `merge-tree` reproduces
-    master's tree for it. The run worktree is always registered and clean.
+    `prs` is what `gh pr list` returns. `blocked`, when set, is the reason the session unit
+    writes into `state` for a worktree it would not recreate.
     """
 
-    def __init__(self, prs: list[int], ahead: int = 0, contained: bool = False) -> None:
+    def __init__(
+        self, prs: list[int], blocked: str = "", state: Path = Path("/nonexistent")
+    ) -> None:
         self.prs = prs
-        self.ahead = ahead
-        self.contained = contained
+        self.blocked, self.state = blocked, state
         self.posts: list[str] = []
         self.spools: set[str | None] = set()
         self.flushed: list[str] = []
 
     def run(self, argv, cwd=None, timeout=120):
+        if argv[:2] == ["systemctl", "start"]:
+            # The session unit: it records why the worktree blocked it, or writes no output.
+            if self.blocked:
+                (self.state / renovate_session.BLOCKED_FILE).write_text(self.blocked)
+            return 0, ""
+        if argv[:2] == ["systemctl", "show"]:
+            return 0, "Result=success\nExecMainStatus=0\n"
         if argv[0] == "gh" and "merged" in argv:
             return 0, "[]"
         if argv[0] == "gh":
@@ -239,19 +248,6 @@ class _FakeHost:
                     for n in self.prs
                 ]
             )
-        if "list" in argv and "--porcelain" in argv:
-            return (
-                0,
-                f"worktree {argv[2]}/.claude/worktrees/renovate-auto\nHEAD abc\n\n",
-            )
-        if "status" in argv:
-            return 0, ""
-        if "rev-list" in argv:
-            return 0, f"{self.ahead}\n"
-        if "rev-parse" in argv:
-            return 0, "0123abcd\n"
-        if "merge-tree" in argv:
-            return 0, "0123abcd\n" if self.contained else "89abcdef\n"
         raise AssertionError(
             f"main() reached a process this test does not answer: {argv}"
         )
@@ -271,7 +267,6 @@ def _tools(host: _FakeHost) -> renovate_agent.AgentTools:
         run=host.run,
         discord_post=host.discord_post,
         flush_discord_spool=host.flush_discord_spool,
-        read_file=lambda path: "",
     )
 
 
@@ -390,7 +385,8 @@ class TestSkipExitCodes:
         return str(cfg)
 
     def test_a_worktree_blocked_skip_is_flagged(self, tmp_path) -> None:
-        host = _FakeHost(prs=[1], ahead=1, contained=False)
+        reason = "the run branch holds 1 commit(s) not on origin/master"
+        host = _FakeHost(prs=[1], blocked=reason, state=tmp_path / "state")
 
         rc = renovate_agent.main(_tools(host), self._cfg(tmp_path))
 

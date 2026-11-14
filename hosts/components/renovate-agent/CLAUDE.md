@@ -32,7 +32,8 @@ own GitHub token and Claude credential are declared outputs, so `host_secrets.py
 host file that lacks them; `docs/renovate-agent-bounds-and-digest.md` has the checklist.
 
 **The session can neither push nor merge.** It runs as `renovate_agent_user`, with a read-only
-token, in its own clone. It closes, comments on or re-runs a PR only by writing a request file,
+token, in its own clone, inside `homelab-renovate-agent-session.service`, which the runner starts and
+waits for (`files/renovate_session.py`). It closes, comments on or re-runs a PR only by writing a request file,
 which the runner carries out with its own token after the session ends (`files/run_requests.py`).
 It lands nothing: it nominates a PR with a `land` request, and after the session ends the
 runner starts `renovate-agent-land@<n>.service` for each nomination, which runs `land.sh` as

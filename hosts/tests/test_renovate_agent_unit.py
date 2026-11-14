@@ -239,7 +239,30 @@ def test_the_config_unit_and_prompt_quote_the_pins(unit: str) -> None:
         assert str(pinned[name]) in prompt, name
 
 
-@pytest.mark.parametrize("template", [CONFIG, UNIT, PROMPT])
+SESSION_UNIT = "homelab-renovate-agent-session.service.j2"
+SESSION_RULE = "50-renovate-agent-session.rules.j2"
+
+
+def test_the_session_unit_runs_the_session_script_under_its_wall_clock() -> None:
+    """systemd stops the session at session_timeout_s; the runner reads Result=timeout."""
+    session = render(SESSION_UNIT, {"renovate_agent_user": "session-sentinel"})
+    assert directive(session, "User") == ["session-sentinel"]
+    assert directive(session, "TimeoutStartSec") == [str(pins()["session_timeout_s"])]
+    assert directive(session, "ExecStart")[0].endswith("/renovate_session.py")
+    assert SPEC["units"]["homelab-renovate-agent-session.service"] == {
+        "policy": "manual"
+    }
+
+
+def test_the_session_rule_admits_only_starting_the_session_unit() -> None:
+    rule = render(SESSION_RULE, {"renovate_agent_user": "session-sentinel"})
+    assert 'subject.user !== "session-sentinel"' in rule
+    assert 'action.lookup("unit") !== "homelab-renovate-agent-session.service"' in rule
+    assert 'action.lookup("verb") !== "start"' in rule
+    assert rule.count("polkit.Result.YES") == 1
+
+
+@pytest.mark.parametrize("template", [CONFIG, UNIT, PROMPT, SESSION_UNIT])
 def test_an_inventory_value_moves_no_cap(template: str) -> None:
     """A PR that edits only host_vars must not raise a cap or widen the permission mode."""
     # fact: hosts/components/renovate-agent/CLAUDE.md#Autonomous-role contract (it merges and deploys with no human in the loop)

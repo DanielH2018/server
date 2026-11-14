@@ -35,7 +35,7 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from agent_toolbox import AgentTools
+from agent_toolbox import AgentTools, start_unit
 
 REQUESTS_DIR = "requests"
 REQUEST_LOG = "requests.jsonl"
@@ -190,14 +190,12 @@ def _land(
     timeout: int,
 ) -> tuple[bool, bool, str]:
     """Start the lander for `pr`, wait for it, and grade how it ended."""
-    unit = f"renovate-agent-land@{pr}.service"
-    rc, _ = tools.run(["systemctl", "start", unit], timeout=timeout)
-    if rc == 124:
+    end = start_unit(f"renovate-agent-land@{pr}.service", tools, timeout)
+    if end.result == "deadline":
         # The lander keeps running in its own unit; only this wait ended.
         return False, False, "still running at the run's deadline"
-    _, result = tools.run(["systemctl", "show", "-p", "Result", "--value", unit])
     verdict = tools.read_file(os.path.join(VERDICT_DIR, f"{pr}.verdict"))
-    return grade(result.strip(), verdict[:4096])
+    return grade(end.result, verdict[:4096])
 
 
 def _land_all(
