@@ -61,6 +61,12 @@ the pod's default route.
   `KEY_LIMIT_REACHED`. Every later start then had no route to CoreDNS or Mullvad until a pod delete
   (#8402). The reset stashes the route in routing table 51819 and re-adds it from there. The table
   sits below 51820 because wg-quick counts its own table and fwmark up from 51820.
+- **A SIGKILLed tunnel leaves the pod's resolv.conf at Mullvad's resolver, and the reset puts the
+  kubelet's back.** The kubelet bind-mounts one resolv.conf into every container of the pod, and
+  only LSIO's graceful finish script removes wg-quick's `resolvconf -a wg0` entry. A start that
+  finds no openresolv signature saves the file to `/config/.netns-reset-resolv.conf`. A start
+  that finds the signature writes that copy back (#8489).
+  `tests/services/test_netns_reset_restores_resolv_conf.py` holds it.
 - **The reset does not fetch the mod or bring the tunnel up.** A start whose API call still fails
   restarts every ~5 minutes on the startup probe, gate holding.
 
