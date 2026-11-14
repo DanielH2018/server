@@ -11,7 +11,7 @@ built. On acceptance, *The design* becomes an ADR in the PR that builds slice 1.
 | Slice | What it delivers | State |
 |---|---|---|
 | 1 | A ledger that `ghread` and `lib/gh.py` record each call in, and `gh-quota status` | Planned |
-| 2 | The session ceiling and the reserve, enforced inside those two wrappers | Planned |
+| 2 | The session ceiling, the reserve and the write pace, enforced inside those two wrappers | Planned |
 | 3 | The REST readers that do not run `gh` record and obey the same ledger | Planned |
 | 4 | Identical reads from many sessions cost one GitHub call | Planned |
 | Identity | Agent sessions stop spending the operator's quota | Owned by [slice 6 of the agent-user plan](claude-agent-user.md#status) |
@@ -43,6 +43,24 @@ Three figures are not measured: what one session spends in a normal hour, how ma
 points each `gh` subcommand costs, and how much quota is spent outside the wrappers that
 already exist. Slice 1 exists to measure all three, and slice 2 takes its numbers from them.
 
+### What other sessions reported the same day
+
+Two other sessions measured these on 2026-11-14. This page's session did not repeat them.
+
+- **A burst of writes blocks every session through a second limit.** A backfill sent about
+  130 project-board writes in a few seconds. GitHub allows 80 content-creating requests per
+  minute, and it refused GraphQL for every session on the login for about 5 minutes. The
+  session that ran the backfill then paced its own writes: batches of 10 with an 8-second
+  pause.
+- **The `findings.py claims` read is frequent, not expensive.** One call costs 1 to 2
+  GraphQL points. Its caller was `probe.py landing --json`, which sessions ran repeatedly.
+- **The hourly spend is bursty.** After the 15:21 UTC reset the login spent about 40 points
+  per minute for 20 minutes. In the hour that ran dry it spent about 180 per minute. A
+  15-minute watch after the reset caught no burst.
+- **The landing limit reads one bucket.** `land_lib/live_limit.py` lowers the number of live
+  landings when the REST quota runs low. It does not read the GraphQL quota, and it counts
+  landings per host.
+
 ## GitHub's rules the design rests on
 
 | Rule | Source |
@@ -64,7 +82,9 @@ as automated abuse costs more than a rate limit.
 
 Three properties hold together, and each one alone is harmless.
 
-1. **One pool.** Every caller on a host spends one identity's quota.
+1. **One pool, metered twice.** Every caller on a host spends one identity's quota. GitHub
+   meters it per hour, and it meters bursts per minute, so one session can empty the hour or
+   trip the minute for all of them.
 2. **Demand grows with the session count.** Each session polls GitHub on its own, so 39
    sessions ask the same question 39 times.
 3. **No owner.** No module admits or refuses a call before it is made. Each caller handles
@@ -118,9 +138,11 @@ Two bare paths remain that read, and slice 1 closes both in the dotfiles repo:
 - **`cc-wait`'s `gh-pr` and `gh-ci` sources.** `cc_wait/github.py` runs a bare `gh` every 30
   seconds for each distinct wait. It reads through `ghread` instead.
 
-A write stays bare on purpose. `ghread` refuses every write by construction, which is what
-makes its blanket allow rule safe. A session writes a few times per pull request, and
-GitHub's own limit of 80 content-creating requests per minute bounds a loop of them.
+A session's write stays bare. `ghread` refuses every write by construction, which is what
+makes its blanket allow rule safe, and a session writes a few times per pull request. The
+ledger therefore cannot pace a bare write, and a session that loops on one can still trip
+GitHub's burst limit. A repo tool's write goes through `lib/gh.py`, where the write pace
+below applies.
 
 ### A ledger the three owners call
 
@@ -181,13 +203,18 @@ the host package renders from a host variable. In `off`, each function returns a
 counts the failure in a second file that `gh-quota status` reads. The ledger's own outage
 must not become a GitHub outage.
 
-### The two rules `admit` enforces
+### The three rules `admit` enforces
 
 | Rule | Condition | Who it stops |
 |---|---|---|
 | Session ceiling | The session's scaled spend in the window has reached its ceiling for that bucket. | That session only |
 | Reserve | GitHub's `remaining` for the bucket is at or below the reserve. | Every caller except class `priority` and `operator` |
+| Write pace | The identity's last write through a wrapper was less than one second ago. | That write, until its turn |
 
+- The write pace is one queue for the identity, not one per session, because GitHub's burst
+  limit is per identity. Each write takes the identity's next one-second turn and waits for
+  it. One write a second is GitHub's own guidance for mutations, and it stays under the limit
+  of 80 a minute. A backfill of 130 writes then takes 130 seconds and trips nothing.
 - A caller is class `priority` when it exports `GH_QUOTA_CLASS=priority`. `land.sh` and the
   lander unit set it. The ledger records the class, so a session that sets it for itself
   shows in `gh-quota status`.
@@ -217,7 +244,7 @@ change of their own.
 ### REST readers that do not run `gh`
 
 `host_lib.github_get` is the one request shape every host REST reader shares. It calls
-`admit` and `record` itself, so those readers obey the two rules and appear in the ledger.
+`admit` and `record` itself, so those readers obey the same rules and appear in the ledger.
 
 `github_get` also sends `If-None-Match` with the `ETag` of its last answer for the same path,
 kept in the ledger. `await_ci.py` polls the same run list every 20 seconds, and a poll that
@@ -350,11 +377,11 @@ The module runs in `record` mode on both hosts. It refuses nothing.
 - **It is done when** a week of ledger rows gives the three missing figures: the spend of a
   normal session-hour, the points per subcommand, and the `unattributed` share.
 
-### Slice 2: enforce the two rules
+### Slice 2: enforce the three rules
 
 ```diff
  hosts/components/gh-quota/
-   files/gh_quota.py        + admit(): the session ceiling and the reserve
+   files/gh_quota.py        + admit(): the session ceiling, the reserve and the write pace
    files/gh_quota_cli.py    + release
  scripts/lib/gh.py              + hold under 20 s, else fail with the GH-QUOTA line
  scripts/lib/gh_rate_limit.py   + reads the GH-QUOTA line
@@ -368,6 +395,8 @@ The module runs in `record` mode on both hosts. It refuses nothing.
 - **To exercise it,** set a ceiling of 5 points for one session through the override file,
   run six `ghread pr list`, and read the refusal. Run `ghread pr list` in a second session
   and see it pass. Run `gh-quota release` and see the first session pass.
+- **To exercise the write pace,** run ten `gh issue comment` calls through `lib/gh.py` from
+  two sessions at once and read their start times: no two fall inside one second.
 - **The tests** pair each rule with one caller it must refuse and one it must pass, and hold
   `gh_rate_limit.wait_s` against the refusal line's `retry_s`.
 - **It waits on a decision** when slice 1 measured `unattributed` above 20%: enforcing a
@@ -416,3 +445,6 @@ The module runs in `record` mode on both hosts. It refuses nothing.
    session is worth its extra rule.
 5. **Does anything outside the repo call GitHub with the session's token?** The desktop
    app's pull-request pane is one candidate. `unattributed` measures it.
+6. **Which path did the 2026-11-14 backfill's writes take?** The write pace covers a write
+   through `lib/gh.py`. If the backfill ran a bare `gh` in a shell loop, the pace would not
+   have held it, and a session's bare write needs an owner too.
