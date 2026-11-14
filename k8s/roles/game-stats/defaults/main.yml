@@ -1,7 +1,7 @@
 ---
 # Stock image, not an image-builder build: both stats scripts and stats_lib.py are pure stdlib,
 # mounted from a ConfigMap, so a build would add a layer and change nothing that runs.
-game_stats_k8s_image: python:3.14-alpine@sha256:f6a589d43c42b9e7f7dc67a12d37132491f362859a5d750607710cc56da3bc72
+game_stats_k8s_image: python:3.15-alpine@sha256:0f9552bb28711333da16915ec146f5e6bb44a7fdac9ced15dc17c2e0206346dd
 
 # Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
 # Games: companion stats exporters for the hand-operated terraria and valheim servers — grouped

@@ -11,10 +11,8 @@ metadata:
 spec:
   # ReadWriteOnce PVC — two pods can't both mount /data during a rolling update.
 {{ spec_shell('Recreate') }}
-  # Follows the game server, from inventory (#2877): this exporter tails terraria's console
-  # out of Loki, so at `terraria_k8s_replicas: 0` it polls for a server that cannot log.
-  # observability's `terraria-stats` scrape job is gated on the same value.
-  replicas: {{ terraria_k8s_replicas }}
+  # No `replicas:`. deploy.local's Games panel starts and stops this exporter with the terraria
+  # server (ADR-0033), because it tails a console that only exists while the server runs.
   selector:
     matchLabels:
       app: terraria-stats

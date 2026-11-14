@@ -18,7 +18,8 @@ from pathlib import Path
 
 import pytest
 
-from _restore_drill import DRILL_TEMPLATE, harness
+from _helpers import load_yaml
+from _restore_drill import DRILL_DEFAULTS, DRILL_TEMPLATE, harness
 from _shell_render import rendered_shell_text
 from lib.proc_testing import run as launch
 
@@ -136,6 +137,19 @@ def test_the_probe_pod_runs_the_program_over_a_read_only_mount(tmp_path: Path) -
         f"restore-drill-{PVC}"
     )
     assert "emptyDir" in volumes[mounts["/scratch"]["name"]]
+
+
+def test_the_scratch_copy_is_capped_at_the_candidate_size_cap(tmp_path: Path) -> None:
+    """A database copied for the read-write check cannot grow the node's ephemeral storage unbounded."""
+    # fact: k8s/roles/longhorn-restore-drill/CLAUDE.md#What the drill is and what it writes (the autonomous-role contract)
+    run = harness(tmp_path, [PVC])
+    proc = run(restore="pass")
+    assert proc.returncode == 0, proc.stderr
+    (created,) = [c for c in run.calls if " run restore-drill-" in c]
+    spec = json.loads(created.split("--overrides=", 1)[1])["spec"]
+    (scratch,) = [v for v in spec["volumes"] if v["name"] == "scratch"]
+    cap = load_yaml(DRILL_DEFAULTS)["k3s_longhorn_restore_drill_max_actual_bytes"]
+    assert scratch["emptyDir"]["sizeLimit"] == str(cap)
 
 
 def test_the_probe_skips_a_fifo_instead_of_blocking_on_it(tmp_path: Path) -> None:

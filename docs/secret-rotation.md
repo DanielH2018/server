@@ -86,7 +86,9 @@ peanut, and a host package can read it too. Every step that handles the value is
 3. Run `uv run python scripts/secrets_mgmt/secret_rotation.py consumers <key>`. It prints the
    Flux path for each k8s consumer, and a command for each host package.
 4. Land the PR with `land.sh`. A PR that changes either cluster file waits on the
-   `cluster-vars` Kustomization and on every Kustomization that depends on it.
+   `cluster-vars` Kustomization and on every Kustomization that depends on it. The landing
+   ends `settled` when the PR refreshed every copy of each rotated key, and
+   `needs-manual-apply` naming each key it left stale.
 5. Run any host-package command from step 3.
 
 ### Changing secrets.yml's recipients
@@ -204,15 +206,40 @@ redeploy the app **and** every consumer (for example, Homepage, monitor-bridge, 
 date left behind is not fatal: `audit` advances it to the commit that changed the ciphertext
 before deciding what is due. Examples:
 - `*_api_key` (sonarr/radarr/jellyfin/prowlarr): Settings → General → regenerate API key.
-  **Bazarr is a consumer of `sonarr_api_key` and `radarr_api_key` that no deploy reaches.** It
-  stores both in its own config on the `bazarr-config` PVC, entered through its UI, so there is
-  no Ansible template holding them and no redeploy that updates them. After rotating either key,
+  **Bazarr is a consumer of `sonarr_api_key` and `radarr_api_key` that no deploy reaches**, so
+  `stale_copies.OUTSIDE_THE_TREE` lists both, and a landing that rotates either ends
+  `needs-manual-apply`. It stores both in its own config on the `bazarr-config` PVC,
+  entered through its UI, so there is no Ansible template holding them and no redeploy that updates them. After rotating either key,
   set it in Bazarr → Settings → Sonarr → API Key and Settings → Radarr → API Key, then restart
   Bazarr from System → Restart. The restart is required, not cosmetic: Bazarr's SignalR client
   raises `UnAuthorizedHubError` and its thread exits, so it does not retry on a key change alone.
   Missing this on 2026-08-29 left Bazarr reconnecting in a loop that leaked 173 MiB → its 1Gi cap
   in 90 minutes and OOM-killed it; the only visible signal was the "k3s Container OOM" monitor,
   which self-clears one hour after the kill while subtitle fetching stays silently broken.
+- **Other apps store copies in their own settings, and no deploy reaches those copies either.**
+  `stale_copies.OUTSIDE_THE_TREE` lists each one below, so a landing that rotates the key ends
+  `needs-manual-apply`. The hand step follows each copy.
+  - Prowlarr holds `sonarr_api_key`, `radarr_api_key` and `lidarr_api_key` in its application
+    entries. After rotating one, set it in Prowlarr → Settings → Apps → that app → API Key.
+  - Sonarr, Radarr and Lidarr hold `prowlarr_api_key` in every indexer Prowlarr synced to
+    them. After rotating it, run Prowlarr → Settings → Apps → Sync App Indexers. Then check
+    that `probe.py arr <app> indexerstatus` reports no failing indexer in each app.
+  - Sonarr, Radarr and Lidarr hold `qbittorrent_password` in their download client entry. After
+    rotating it, set it in each app under `Settings → Download Clients → qBittorrent →
+    Password`.
+  - Home Assistant's MQTT integration holds `mqtt_password`, and its NUT integration holds
+    `nut_ha_password`. Both are config entries created through its UI. After rotating either,
+    set it under Settings → Devices & services → that integration → Reconfigure.
+  - Each Obsidian LiveSync client holds `livesync_db_password` and `livesync_sync_token` in the
+    plugin's settings on its own device. After rotating either, enter it on every device.
+  - InfluxDB holds `scrutiny_influxdb_admin_password` and `scrutiny_influxdb_token` in its own
+    database. It reads both from its `INIT_*` env only at first-run setup, and the rotation does
+    not roll it. Change the password in InfluxDB with `influx user password`. InfluxDB issues
+    the token itself, so create the new one with `influx auth create` before `sops set` stores
+    it.
+  - The CrowdSec LAPI holds `crowdsec_k8s_bouncer_api_key` and `crowdsec_k8s_agent_password`
+    in its registrations. The CrowdSec bullet below gives the deletes that let them
+    re-register.
 - `k3s_readonly_token` (H6.3b): the token of the cluster's read-only ServiceAccount
   (`homelab-readonly` in `kube-system`), which `homelab-k3s-restart` loads to read the API and
   `homelab-k3s-kubeconfig` writes into the read-only `~/.kube/config` on daniel-box and

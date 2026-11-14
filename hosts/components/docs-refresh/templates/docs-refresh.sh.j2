@@ -38,7 +38,8 @@
 # push discarded their output to /dev/null.
 #
 # A PR satisfies the ruleset (the check runs on the PR), and the landing publish_pr.py starts
-# merges it once CI is green, so the cron stays unattended. Nobody reviews the PR, which is
+# merges it once CI is green, so the cron stays unattended. When every landing slot is busy no
+# landing starts, and the next run's unlanded check merges the green PR instead. Nobody reviews the PR, which is
 # acceptable because every byte it commits was produced by a generator whose output is itself
 # tested.
 #

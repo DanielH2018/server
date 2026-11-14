@@ -3,7 +3,8 @@ id: "0031"
 title: Each kind of documented fact has one home and one stateless detector
 status: Accepted
 date: 2026-11-13
-governs: []
+governs:
+  - "hosts/components/claude-code/templates/claude-memory-sync.service.j2#the far store is read-only"
 ---
 
 # ADR-0031: Each kind of documented fact has one home and one stateless detector

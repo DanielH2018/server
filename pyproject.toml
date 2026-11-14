@@ -174,6 +174,9 @@ pythonpath = [
   "hosts/components/fake-remux/files",
   "hosts/components/hypervisor/files",
   "hosts/components/worktree-holders/files",
+  # gh_quota.py is the ledger scripts/lib/gh.py records each call into, so every test that
+  # imports lib.gh needs it, as does the component's own test.
+  "hosts/components/gh-quota/files",
   # `scripts` resolves the cross-directory `from lib.docs_provenance import ...` form (a PEP 420
   # namespace package — the subdirectories deliberately have no __init__.py, which would change
   # how pytest names the test modules under them). Each remaining subdirectory is listed as well
@@ -227,7 +230,7 @@ extend-exclude = [
 # rootq's root script runs under /usr/bin/python3 too, because uv's interpreter sits under a
 # user's home, which root must not execute from; hosts/components/claude-code/tests/test_rootq.py
 # parses it with the 3.12 grammar.
-per-file-target-version = { "hosts/components/claude-code/files/homelab_rootq.py" = "py312", "hosts/components/claude-code/files/homelab_rootq_socket.py" = "py312", "hosts/components/claude-code/files/rootq_socket.py" = "py312", "hosts/lib/homelab-reconcile" = "py312", "hosts/lib/reconcile_lib/*.py" = "py312", "hosts/lib/ci_verdict.py" = "py312", "hosts/lib/k3s_gates.py" = "py312", "hosts/lib/homelab-k3s-restart" = "py312", "hosts/lib/homelab_repo_sign.py" = "py312", "hosts/lib/host_lib.py" = "py312" }
+per-file-target-version = { "hosts/components/gh-quota/files/gh_quota.py" = "py312", "hosts/components/claude-code/files/homelab_rootq.py" = "py312", "hosts/components/claude-code/files/homelab_rootq_socket.py" = "py312", "hosts/components/claude-code/files/rootq_socket.py" = "py312", "hosts/lib/homelab-reconcile" = "py312", "hosts/lib/reconcile_lib/*.py" = "py312", "hosts/lib/ci_verdict.py" = "py312", "hosts/lib/k3s_gates.py" = "py312", "hosts/lib/homelab-k3s-restart" = "py312", "hosts/lib/homelab_repo_sign.py" = "py312", "hosts/lib/host_lib.py" = "py312" }
 
 [tool.ruff.lint]
 # Bug-catching rules only — pyflakes F (unused imports, undefined names, f-string bugs),
@@ -338,9 +341,9 @@ select = [
 
 # A one-off dead-code sweep reads this, not a hook or CI job (#8517): `uvx vulture` from the
 # repo root. It scans every tracked Python root, so a caller outside scripts/, hosts/lib and the
-# role files/ trees still counts; only those three trees were triaged (#8623 has the rest). The
-# extensionless hosts/lib/homelab-* scripts are not read, so `refresh_pending` reports as
-# unused. Every name below was triaged as live on 2026-11-14.
+# role files/ trees still counts. The extensionless hosts/lib/homelab-* scripts are not read, so
+# `refresh_pending` is the one line it reports. Every name below was triaged as live on
+# 2026-11-14 (#8517, #8623).
 # A test counts as a caller here, because many library functions exist for a guard under
 # tests/. To list production code that only tests call, run a second pass with
 # `--exclude '*/tests/*,*conftest.py,*/test_*.py,*/_*_harness.py'` (#8632 has its triage).
@@ -356,6 +359,12 @@ ignore_names = [
   "do_*", "on_config", "on_files", "on_page_content", "pytest_*",
   # Class attributes a stdlib base class or jinja2.Environment reads.
   "server_version", "protocol_version", "daemon_threads", "keep_trailing_newline",
+  # A BaseHTTPRequestHandler override and the attribute its log methods read.
+  "log_request", "client_address",
+  # deploy-ui's App methods its WRITES table names as a string.
+  "cancel", "game_action",
+  # The option pytest-xdist reads for the run's id.
+  "testrunuid",
   # Parameter of a yaml Dumper override, kept for the base signature.
   "indentless",
   # Module globals or attributes a test monkeypatches.
@@ -418,6 +427,8 @@ ignore_names = [
   "no_project_spans",
   # setup_templates.py: tests/_setup_render.py, which every setup-template census renders.
   "standalone_templates",
+  # Fields of a test dataclass, read through dataclasses.fields().
+  "KUMA_URL", "NEW_SERVICE_TOKEN", "NEW_DISCORD_WEBHOOK_URL",
 ]
 
 [tool.ty.environment]
@@ -433,6 +444,7 @@ python-version = "3.15"
 extra-paths = [
   "tests",
   "hosts/components/worktree-holders/files",
+  "hosts/components/gh-quota/files",
   "hosts/lib",
   "hosts/components/deploy-ui/files",
   "k8s/roles/monitor-bridge/files",

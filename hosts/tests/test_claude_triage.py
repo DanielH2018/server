@@ -23,6 +23,7 @@ from lib import yaml_fast
 
 ROLE = CLAUDE_CODE
 UNIT = "claude-triage@.service.j2"
+SESSION_UNIT = "claude-triage-session.service.j2"
 RULE = "50-claude-triage.rules.j2"
 RUNNER = ROLE / "files" / "claude_triage_run.py"
 CONFIG = "claude-triage-config.env.j2"
@@ -132,10 +133,23 @@ def test_the_unit_runs_as_the_agent_with_its_own_credential_and_a_clean_stop() -
     text = unit()
     agent = defaults()["claude_code_agent_user"]
     assert directive(text, "User") == [agent]
-    assert directive(text, "LoadCredential") == [
+    # The session unit holds the credential; the runner never needs it.
+    assert directive(text, "LoadCredential") == []
+    session = re.sub(
+        r"\\\n\s*", " ", render_component_text("claude-code", SESSION_UNIT)
+    )
+    assert directive(session, "User") == [agent]
+    assert directive(session, "LoadCredential") == [
         "claude_oauth_token:/etc/claude-triage/oauth-token"
     ]
-    assert directive(text, "KillSignal") == ["SIGINT"]
+    assert directive(session, "KillSignal") == ["SIGINT"]
+    # The session's own wall clock trips before the runner's, so the runner still records it.
+    assert int(directive(session, "TimeoutStartSec")[0]) < int(
+        directive(text, "TimeoutStartSec")[0]
+    )
+    assert directive(session, "ExecStart")[0].endswith(
+        "/opt/claude-triage/claude_triage_session.py"
+    )
     assert directive(text, "OnFailure") == ["homelab-alert@%n.service"]
     # A busy lock is a wait, not a failure.
     assert directive(text, "SuccessExitStatus") == ["75"]
@@ -151,10 +165,9 @@ def rule_patterns(rendered: str) -> list[re.Pattern]:
 
 
 def admitted(name: str) -> bool:
-    return any(
-        p.search(name)
-        for p in rule_patterns(render_component_text("claude-code", RULE))
-    )
+    rendered = render_component_text("claude-code", RULE)
+    exact = re.findall(r'unit !== "([^"]+)"', rendered)
+    return name in exact or any(p.search(name) for p in rule_patterns(rendered))
 
 
 @pytest.mark.parametrize(
@@ -165,6 +178,8 @@ def admitted(name: str) -> bool:
         ("claude-triage-report-alert@drill:diagnosed.service", True),
         ("claude-triage-report-alert@drill:failed.service", True),
         ("claude-triage-report-alert@drill:capped.service", True),
+        ("homelab-claude-triage-session.service", True),
+        ("homelab-claude-triage-session@drill.service", False),
         ("claude-triage@Drill.service", False),
         ("claude-triage@-drill.service", False),
         ("claude-triage@drill.service.d", False),
@@ -189,6 +204,31 @@ def test_the_rule_and_the_runner_agree_on_the_episode_id_and_states() -> None:
     assert f'subject.user !== "{agent}"' in rendered
     assert 'action.lookup("verb") !== "start"' in rendered
     assert rendered.count("polkit.Result.YES") == 1
+
+
+def test_the_artifacts_pod_mounts_the_report_tree_the_host_creates() -> None:
+    """The host plane creates the tree and the Flux plane mounts it; one path, two owners."""
+    # fact: k8s/roles/artifacts/CLAUDE.md#At a glance
+    env = template_env(ROLE / "templates")
+    module = env.get_template("claude-triage-pins.j2").make_module(role_context(ROLE))
+    report_dir, ctl_home, agent_home = (
+        getattr(module, name) for name in ("report_dir", "ctl_home", "agent_home")
+    )
+    deployment = yaml_fast.safe_load(
+        render_role_template(
+            "artifacts", "deployment.yaml.j2", {"claude_code_triage_enabled": True}
+        )
+    )
+    paths = {
+        v["hostPath"]["path"]
+        for v in deployment["spec"]["template"]["spec"]["volumes"]
+        if "hostPath" in v
+    }
+    assert report_dir in paths
+    tmpfiles = render_component_text("claude-code", "claude-triage-tmpfiles.conf.j2")
+    assert re.search(rf"^d {re.escape(report_dir)} 2750 ", tmpfiles, re.M)
+    assert report_dir.startswith(ctl_home + "/")
+    assert not ctl_home.startswith(agent_home + "/")
 
 
 def test_the_poller_runs_as_the_agent() -> None:

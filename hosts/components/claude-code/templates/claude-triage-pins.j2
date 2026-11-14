@@ -10,6 +10,12 @@ the component's defaults/main.yml.
 {%- set agent_user = "claude" -%}
 {%- set agent_home = "/var/lib/claude" -%}
 {%- set state_dir = "/var/lib/claude/triage" -%}
+{#- The controller (guardrails plan B2) and the tree it owns, outside the agent's home so a
+session as the agent can neither rename nor replace it. report_dir equals artifacts_triage_dir
+in k8s/roles/artifacts/defaults/main.yml, which mounts it. -#}
+{%- set ctl_user = "claude-triage-ctl" -%}
+{%- set ctl_home = "/var/lib/claude-triage-ctl" -%}
+{%- set report_dir = "/var/lib/claude-triage-ctl/reports" -%}
 {%- set model = "opus" -%}
 {%- set budget_usd = 10 -%}
 {%- set max_turns = 60 -%}

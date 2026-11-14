@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
-"""Run one unattended triage session for one monitor episode, as the agent user.
+"""Run one unattended triage session for one monitor episode, and record what it found.
 
 Usage: claude_triage_run.py <episode-id>
 
 `claude-triage@<episode-id>.service` starts this. The episode file
 `<STATE_DIR>/inbox/<episode-id>.json` names the monitor that went down and the message it
-carried. The script runs one headless Claude session over it, diagnose-only (Edit and Write
-are denied), and writes three things whatever the session achieved:
+carried. The script writes the framed prompt into the exchange directory and starts
+`homelab-claude-triage-session.service`, which runs one headless, diagnose-only Claude session
+over it (`claude_triage_session.py`) and leaves the result there. The script reads that result
+as untrusted, and writes three things whatever the session achieved:
 
 - the record, `<STATE_DIR>/runs/<episode-id>.json`, which outlives the report;
 - the report, `<REPORT_DIR>/triage-<episode-id>.html`, an artifact the operator opens later;
@@ -35,7 +37,19 @@ from collections.abc import Callable
 
 # The runner runs from /opt/claude-triage, where component.yml's `lib: host_lib.py` entry
 # ships host_lib.py beside it.
-from host_lib import ERR, WARNING, log, parse_env_file, write_textfile
+from claude_triage_session import IN_DIR, OUT_DIR, PROMPT_NAME, RESULT_NAME
+from host_lib import (
+    ERR,
+    WARNING,
+    UnitEnd,
+    atomic_write,
+    fresh_dir,
+    log,
+    parse_env_file,
+    read_untrusted,
+    start_unit,
+    write_textfile,
+)
 
 CONFIG = "/etc/claude-triage/config.env"
 # The instance name reaches systemd, polkit's regex and a file name, so it is held to one
@@ -43,44 +57,14 @@ CONFIG = "/etc/claude-triage/config.env"
 EPISODE_ID = re.compile(r"^[a-z0-9][a-z0-9-]{0,62}$")
 # The states the report unit may be started with. 50-claude-triage.rules.j2 admits exactly these.
 STATES = ("diagnosed", "inconclusive", "timeout", "failed", "capped")
-
-# The structure the session must return. Kept small: every field becomes a report section.
-SCHEMA = {
-    "type": "object",
-    "properties": {
-        "summary": {"type": "string"},
-        "root_cause": {"type": "string"},
-        "confidence": {"type": "string", "enum": ["low", "medium", "high"]},
-        "evidence": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "source": {"type": "string"},
-                    "finding": {"type": "string"},
-                },
-                "required": ["source", "finding"],
-            },
-        },
-        "proposed_fix": {"type": "string"},
-        "follow_up": {"type": "string"},
-    },
-    "required": ["summary", "root_cause", "confidence", "evidence", "proposed_fix"],
-}
+# The unit that runs the session. 50-claude-triage.rules.j2 lets the agent start it.
+SESSION_UNIT = "homelab-claude-triage-session.service"
+# The session's JSON result carries its whole diagnosis; the cap only stops a session filling
+# the runner's memory.
+SESSION_OUTPUT_MAX = 1 << 20
 
 # The prefix on every journal line, as `log` writes it.
 TAG = "claude-triage"
-
-# Diagnose-only. The agent user cannot reach root or write the cluster anyway; these keep a
-# diagnosis from editing the clone or starting a landing it was not asked for.
-DENIED_TOOLS = (
-    "Edit",
-    "Write",
-    "NotebookEdit",
-    "Bash(systemctl start homelab-claude-land@*)",
-    "Bash(gh pr create*)",
-    "Bash(git push*)",
-)
 
 
 def build_prompt(instructions: str, episode: dict) -> str:
@@ -94,85 +78,48 @@ def build_prompt(instructions: str, episode: dict) -> str:
     )
 
 
-def build_argv(cfg: dict[str, str], prompt: str) -> list[str]:
-    return [
-        cfg.get("CLAUDE_BIN", "claude"),
-        "-p",
-        prompt,
-        "--model",
-        cfg.get("MODEL", "opus"),
-        "--permission-mode",
-        "auto",
-        # Nobody answers a prompt here, so anything that would ask is denied at once rather
-        # than holding the run until its wall clock.
-        "--permission-prompts",
-        "none",
-        "--output-format",
-        "json",
-        "--json-schema",
-        json.dumps(SCHEMA, separators=(",", ":")),
-        "--max-budget-usd",
-        cfg.get("BUDGET_USD", "10"),
-        "--max-turns",
-        cfg.get("MAX_TURNS", "60"),
-        "--disallowedTools",
-        *DENIED_TOOLS,
-        # Session persistence stays on: the report's resume command needs the transcript.
-    ]
-
-
-TOKEN_ENV = "CLAUDE_CODE_OAUTH_TOKEN"
-# The unit's LoadCredential= name for the token file.
-TOKEN_CREDENTIAL = "claude_oauth_token"
-
-
-def session_env(environ: dict[str, str]) -> dict[str, str]:
-    """`environ` with the session's Claude token set from the unit's credential, whitespace removed.
-
-    The credential file holds the token as it was pasted, and `claude setup-token` wraps it onto
-    an indented second line: the 2026-10-17 paste kept the wrap, and Claude answered "Not
-    logged in". A token holds no whitespace, so joining the whole file loses nothing and rejoins
-    a wrapped token. Without the credential, a token already in `environ` is joined the same way.
-    """
-    env = dict(environ)
-    token = env.get(TOKEN_ENV)
-    credentials = env.get("CREDENTIALS_DIRECTORY")
-    if credentials:
-        path = os.path.join(credentials, TOKEN_CREDENTIAL)
-        if os.path.exists(path):
-            with open(path, encoding="utf-8") as f:
-                token = f.read()
-    if token is not None:
-        env[TOKEN_ENV] = "".join(token.split())
-    return env
-
-
-def run_session(argv: list[str], cwd: str, timeout: int) -> tuple[dict, bool]:
-    """Run the session; return (parsed JSON result or {}, timed_out)."""
+def run(argv: list[str], timeout: int = 120) -> tuple[int, str]:
+    """Run `argv`; (returncode, stdout+stderr), and 124 when it outran `timeout`."""
     try:
         p = subprocess.run(
             argv,
-            cwd=cwd,
-            env=session_env(dict(os.environ)),
             capture_output=True,
             text=True,
             timeout=timeout,
             stdin=subprocess.DEVNULL,
+            check=False,
         )
     except subprocess.TimeoutExpired:
-        return {}, True
-    if p.returncode != 0:
+        return 124, ""
+    return p.returncode, (p.stdout or "") + (p.stderr or "")
+
+
+def start_session(unit: str, timeout: int) -> UnitEnd:
+    return start_unit(unit, run, timeout)
+
+
+def session_result(out: str, end: UnitEnd) -> tuple[dict, bool]:
+    """(the session's parsed JSON result or {}, timed_out), read from the exchange's `out/`.
+
+    The session wrote the file, so a link, a FIFO or an oversized file there reads as no result
+    rather than being followed. The journal line names only the refusal's class.
+    """
+    timed_out = end.result in ("timeout", "deadline")
+    try:
+        text = read_untrusted(out, RESULT_NAME, SESSION_OUTPUT_MAX)
+    except (OSError, ValueError) as exc:
         log(
-            f"session exited {p.returncode}: {(p.stderr or '').strip()[-400:]}",
+            f"refused the session's {RESULT_NAME}: {type(exc).__name__}",
             WARNING,
             tag=TAG,
         )
+        return {}, timed_out
     try:
-        result = json.loads(p.stdout or "{}")
+        result = json.loads(text or "{}")
     except json.JSONDecodeError:
-        log("session output is not JSON", WARNING, tag=TAG)
+        log("the session's result is not JSON", WARNING, tag=TAG)
         result = {}
-    return (result if isinstance(result, dict) else {}), False
+    return (result if isinstance(result, dict) else {}), timed_out
 
 
 def classify(result: dict, timed_out: bool) -> str:
@@ -300,8 +247,9 @@ def main(
     config_path: str = CONFIG,
     page: Callable[[str, str], None] = start_report_unit,
     now: Callable[[], float] = time.time,
+    start: Callable[[str, int], UnitEnd] = start_session,
 ) -> int:
-    """Run one episode; `page` and `now` are the seams a test replaces for systemd and the clock."""
+    """Run one episode; `page`, `start` and `now` are the seams for systemd and the clock."""
     parser = argparse.ArgumentParser(
         prog="claude_triage_run.py",
         description="Run one unattended triage session for <STATE_DIR>/inbox/<episode>.json.",
@@ -341,11 +289,15 @@ def main(
             f"episode {episode_id}: starting (budget ${cfg.get('BUDGET_USD', '10')})",
             tag=TAG,
         )
-        result, timed_out = run_session(
-            build_argv(cfg, build_prompt(instructions, episode)),
-            cfg.get("WORKDIR", os.path.expanduser("~/server")),
-            int(cfg.get("RUN_TIMEOUT_S", "1800")),
+        exchange = cfg.get("EXCHANGE_DIR", os.path.join(state_dir, "session"))
+        atomic_write(
+            os.path.join(fresh_dir(exchange, IN_DIR), PROMPT_NAME),
+            build_prompt(instructions, episode),
         )
+        out = fresh_dir(exchange, OUT_DIR)
+        # The unit's own TimeoutStartSec stops the session; this wait only outlasts it.
+        end = start(SESSION_UNIT, int(cfg.get("RUN_TIMEOUT_S", "1800")) + 300)
+        result, timed_out = session_result(out, end)
         state = classify(result, timed_out)
         error = stop_reason(result, timed_out)
     finished = time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime())
@@ -365,8 +317,6 @@ def main(
         "finished": finished,
         "report": f"{cfg.get('REPORT_BASE_URL', '')}triage-{episode_id}.html",
     }
-    if record["error"]:
-        log(f"episode {episode_id}: {record['error']}", WARNING, tag=TAG)
     os.makedirs(os.path.join(state_dir, "runs"), exist_ok=True)
     # The mode is explicit because the artifacts tree's default ACL cannot widen a file created
     # 0600: neither the operator nor the artifacts pod could then read the report.

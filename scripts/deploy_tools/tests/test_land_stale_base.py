@@ -267,6 +267,23 @@ def test_the_updated_heads_budget_still_ends_the_wait(landing):
     assert _gh_writes(calls) == ["update-branch aaaa"]
 
 
+def test_an_update_never_moves_the_end_of_the_wait_past_two_merge_budgets(landing):
+    """LAND_DEADLINE counts two merge budgets, and the wait for the landing turn spends from them."""
+    in_line = [2]
+    ln, calls = _landing(
+        landing,
+        _polls(OLD, OLD, NEW),
+        [INCIDENT_2922],
+        ci=[(75, "pending"), (0, "CI green"), (75, "pending")],
+        merge_timeout=2,
+        merge_poll=1,
+    )
+    with pytest.raises(Outcome) as exc:
+        merge.await_merge(ln, lambda: (False, in_line.pop() if in_line else 0))
+    assert "still OPEN after 4s" in exc.value.error
+    assert _gh_writes(calls) == ["update-branch aaaa"]
+
+
 def test_a_refused_update_dies_without_merging(landing):
     ln, calls = _landing(landing, _polls(OLD), [INCIDENT_2922], gh_rc=(1,))
     with pytest.raises(Outcome) as exc:

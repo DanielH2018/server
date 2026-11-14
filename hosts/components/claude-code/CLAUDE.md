@@ -86,9 +86,9 @@ The operator's own Claude Code install is the dotfiles repo's (H7.38).
   timer ships wherever the agent exists, so the way out runs, and a pin bump or a failed run
   converges on the next run. The Node and `@playwright/mcp` pins are in the component's
   `defaults:`, where Renovate and `asset_pins.py --refresh node` read them.
-- **Triage's token is a `LoadCredential=` file, `/etc/claude-triage/oauth-token`.** The runner
-  joins the whole file without whitespace, so a token pasted across `setup-token`'s line wrap
-  still reaches the session whole.
+- **Triage's token is a `LoadCredential=` file, `/etc/claude-triage/oauth-token`,** which only
+  the session unit loads. The session script joins the whole file without whitespace, so a token
+  pasted across `setup-token`'s line wrap still reaches the session whole.
 - **Not packaged:** the operator's own Claude Code install, which the dotfiles repo owns since
   H7.38.
   ENFORCED: `hosts/lib/tests/test_claude_code_component.py`,
@@ -230,6 +230,7 @@ What it does not restore:
 
 `claude-triage@<episode>.service` runs one unattended, diagnose-only session as `claude` and
 leaves a report (shipped off behind `claude_code_triage_enabled`, and in daniel-box's package).
+It starts the session in `homelab-claude-triage-session.service` and waits for it.
 `homelab-claude-triage-poll.timer` starts one when an alert starts firing, and ships in `shadow`
 mode, which only logs. The templates, runner and poller are on the lander's approval list, and the caps and the poll mode are pinned in `templates/claude-triage-pins.j2`. `docs/claude-agent-user.md`,
 *Alert-triggered triage*, has the design.
@@ -311,8 +312,10 @@ as root on both hosts, two minutes after each audit run.
   A change is explained, and stays quiet, when the file matches the md5 recorded inside the
   `.deb` an apt source serves for the installed version, when it
   matches what chezmoi renders for its owner from the dotfiles repo's `main`, or when a
-  settings.json change touches only `claude_code_guardrail_ack_quiet_settings_keys`. The
-  operator ruled on 2026-11-13 to post only the rest. The run fetches that `.deb` with
+  settings.json change touches only `claude_code_guardrail_ack_quiet_settings_keys`. A file
+  under a `copies` destination in `templates/claude-guardrail-ack.json.j2` is explained when
+  its content would be explained at its source: renovate-agent's settings copy against the
+  packaged file, and its hooks copy against the operator's hooks. The operator ruled on 2026-11-13 to post only the rest. The run fetches that `.deb` with
   `apt-get download`, which checks it against the signed index. A package installed with
   `dpkg -i` matches its own md5sums but not a published `.deb`, so its change posts with the
   installed version (#8415). Reconcile's `applied.json`
@@ -375,8 +378,9 @@ runs `files/claude_dotfiles_mirror.py` as root on both hosts.
 
 - **Scope:** `rsync --delete` of `claude_code_memory_sync_dir` (follows `claude_code_user`) to
   `claude_code_memory_sync_target_dir` (the operator's store)
-  on `claude_code_memory_sync_target`, one-way. A memory a daniel-server session writes is lost
-  at the next run, by the operator's decision (#3123); `docs/claude-memory-sync.md` has why.
+  on `claude_code_memory_sync_target`, one-way, by the operator's decision (#3123). The copy
+  strips every write bit from the target (`--chmod=a-w`), so a memory a daniel-server session
+  tries to write fails at once; `docs/claude-memory-sync.md` has why.
 - **Mode:** `claude_code_memory_sync_enabled`, true only in daniel-box's host_vars; false
   drops the timer and its units from the next package version.
 - **Abort valve:** the unit skips unless the source `MEMORY.md` is non-empty.

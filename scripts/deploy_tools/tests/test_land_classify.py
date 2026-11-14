@@ -63,6 +63,36 @@ def test_classify_fills_tags_and_plane(landing):
     )
 
 
+def test_a_rotation_that_refreshed_every_copy_classifies_with_no_plane(landing):
+    """The PR's own range reaches `plane_note`, which a blanket note would ignore (#8369)."""
+    ranges = []
+
+    def read_stale(old, new, deployed):
+        ranges.append((old, new, deployed))
+        return {}
+
+    ln, _ = landing(
+        Fakes(
+            gh_views={
+                "files,changedFiles": {
+                    "files": [{"path": "secrets/secrets.yml"}],
+                    "changedFiles": 1,
+                }
+            }
+        )
+    )
+    ln.classifier = dataclasses.replace(
+        ln.classifier,
+        plane_note=lambda paths, range_="", deployed="": land_tags.plane_note(
+            paths, range_, deployed, read_stale=read_stale
+        ),
+    )
+    ln.merge_sha = MERGE_SHA
+    classify.classify(ln)
+    assert ranges == [("prbase", "prhead", MERGE_SHA)]
+    assert ln.plane == ""
+
+
 def test_classify_records_the_derived_tags(landing):
     ln, _ = landing(Fakes(derived=(["sonarr", "radarr"], "pr")))
     ln.merge_sha = MERGE_SHA

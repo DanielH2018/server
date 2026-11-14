@@ -43,11 +43,29 @@ reachout_verdict() {{ REACHOUT_STATUS=down; REACHOUT_NOTE=""; }}
 """
 
 
-def ruleset_body(contexts, enforcement="active", bypass_actors=(), approvals=0):
+# The GitHub Actions app, which every required context is pinned to. A literal for the same reason.
+ACTIONS_APP_ID = 15368
+
+
+def _required_check(context, pins):
+    """One required context, pinned to `pins[context]`; a `None` pin leaves the key out."""
+    app = pins.get(context, ACTIONS_APP_ID)
+    return (
+        {"context": context}
+        if app is None
+        else {"context": context, "integration_id": app}
+    )
+
+
+def ruleset_body(
+    contexts, enforcement="active", bypass_actors=(), approvals=0, pins=None
+):
     """A ruleset payload in the shape the live endpoint returns to an admin token.
 
     `bypass_actors=None` is the anonymous shape, where GitHub returns null for the list.
-    `approvals=None` leaves out the pull_request rule.
+    `approvals=None` leaves out the pull_request rule. `pins` maps a context to the app it is
+    pinned to, and `None` leaves it unpinned, as GitHub returns it; every other context is pinned
+    to GitHub Actions.
     """
     rules = [
         {"type": "deletion"},
@@ -55,7 +73,7 @@ def ruleset_body(contexts, enforcement="active", bypass_actors=(), approvals=0):
             "type": "required_status_checks",
             "parameters": {
                 "required_status_checks": [
-                    {"context": c, "integration_id": 15368} for c in contexts
+                    _required_check(c, pins or {}) for c in contexts
                 ]
             },
         },

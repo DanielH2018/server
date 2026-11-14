@@ -41,6 +41,9 @@
 # initial_setup keeps no task for them. The dotfiles
 # repo owns the per-user uv, prek and Python, and the cluster-node procedure runs `prek install`.
 #
+# `gh-quota` ships the GitHub spend ledger that scripts/lib/gh.py and ghread record into
+# (docs/github-quota.md), as on daniel-box.
+#
 # H7.59 adds the host baseline and the Loki witness: `host-hardening` ships the sudo cache,
 # auditd's rules, the module blacklist, the core-dump drop-in, the login banner, the i915 option
 # and the base packages; `rsyslog-filter` ships the info filter; `loki-route-witness` replaces the
@@ -68,7 +71,7 @@ users:
 # the live line until it is deleted by hand.
 lines:
   - {path: /etc/hosts, line: "{{ hosts['daniel-pi'].server_ip }} daniel-pi", regexp: '^\S+\s+daniel-pi(\s|$)', mode: "0644"}
-components: [reconcile, secrets-unit, nut-secondary, apt-github-cli, unattended-upgrades, sshd, host-tuning, k3s-gates, k3s-agent, failure-alert, claude-code, sops, check-lib, hypervisor, fail2ban, integrity-scans, aide-scan, postfix, accounting, host-maintenance, ssh-firewall, worktree-sweep, uv, vale, worktree-holders, host-hardening, rsyslog-filter, loki-route-witness]
+components: [reconcile, secrets-unit, nut-secondary, apt-github-cli, unattended-upgrades, sshd, host-tuning, k3s-gates, k3s-agent, failure-alert, claude-code, sops, check-lib, hypervisor, fail2ban, integrity-scans, aide-scan, postfix, accounting, host-maintenance, ssh-firewall, worktree-sweep, uv, vale, worktree-holders, gh-quota, host-hardening, rsyslog-filter, loki-route-witness]
 units:
   k3s-agent.service: {policy: windowed}
 credentials:

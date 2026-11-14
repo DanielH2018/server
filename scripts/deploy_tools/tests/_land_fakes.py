@@ -20,6 +20,7 @@ from typing import Any
 
 from deploy_tools.land_lib.health_gate import GateResult
 from deploy_tools.land_lib import landing as landing_mod
+from deploy_tools.land_lib import pr_json
 from _land_host_fakes import host_fakes
 from deploy_tools.land_lib.options import Options
 from deploy_tools.land_lib.land_flux import FluxReads
@@ -199,7 +200,7 @@ def build_classifier(f: Fakes, calls: list | None = None) -> Classifier:
     ordering record as a boundary call.
     """
     return Classifier(
-        plane_note=lambda paths: f.plane,
+        plane_note=lambda paths, range_="", deployed="": f.plane,
         derive=lambda files, changed_files, declared=None, quiet=(): Derivation(
             list(f.derived[0]), DeriveSource(f.derived[1])
         ),
@@ -213,6 +214,12 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
         k: (list(v) if isinstance(v, list) else [v]) for k, v in f.gh_views.items()
     }
     views.setdefault("mergeCommit", [{"mergeCommit": {"oid": MERGE_SHA}}])
+    # What `merge._start_run` reads before the first poll: the PR as that poll finds it, ready.
+    polls = views.get("state,mergeable,headRefOid")
+    if polls:
+        views.setdefault(
+            "isDraft,state,mergeable,headRefOid", [{"isDraft": False, **polls[0]}]
+        )
     views.setdefault("commits", [{"commits": []}])
     views.setdefault(
         "files,changedFiles",
@@ -224,6 +231,10 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
         ],
     )
     view_seq = {k: _seq(v, calls, f"gh:{k}") for k, v in views.items()}
+    # The views `Landing.view` reads from the REST pull object, by the filter it sends.
+    rest_seq = {
+        asked: seq for k, seq in view_seq.items() if (asked := pr_json.rest_filter(k))
+    }
     compare_seq = _seq(f.compare, calls, "gh:compare")
     runs_seq = _seq(f.master_runs, calls, "gh:master-runs")
     closing_refs_seq = _seq(f.closing_refs, calls, "gh:closing-refs")
@@ -267,6 +278,8 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
             if isinstance(answer, Exception):
                 raise answer
             return answer
+        if args[0] == "api" and args[1].rpartition("/")[0].endswith("/pulls"):
+            return rest_seq[args[args.index("--jq") + 1]]()
         return view_seq[args[args.index("--json") + 1]]()
 
     gh_rc = _seq(f.gh_merge_rc, calls, "gh")

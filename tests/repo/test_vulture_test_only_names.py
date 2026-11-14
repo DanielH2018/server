@@ -13,6 +13,7 @@ import ast
 import fnmatch
 import re
 import tomllib
+from pathlib import Path
 
 import pytest
 from _helpers import REPO
@@ -21,7 +22,6 @@ from lib.proc_testing import run
 PYPROJECT = REPO / "pyproject.toml"
 
 TEST_ONLY_NAMES = (
-    ("scripts/lib/facts/citations.py", "REJECT_REASONS"),
     ("scripts/lib/kubectl.py", "RETIRED_CLUSTER_NODES"),
     ("scripts/dev/review_metrics.py", "COVERAGE_DIR"),
     ("scripts/dev/review_metrics.py", "validate_row"),
@@ -31,7 +31,6 @@ TEST_ONLY_NAMES = (
     ("scripts/renderer/renderer_lib/host_package.py", "installed_paths"),
     ("scripts/lib/stdlib_only.py", "stdlib_only_set"),
     ("scripts/lib/stdlib_only.py", "runtime_import"),
-    ("scripts/renderer/renderer_lib/secret_checks.py", "scan_template"),
     ("scripts/renderer/renderer_lib/restart.py", "any_pod_template"),
     ("scripts/deploy_tools/land_lib/options.py", "ENV_KNOBS"),
     ("scripts/deploy_tools/promote_lib/reboot_window.py", "end_cron"),
@@ -60,17 +59,25 @@ TEST_ONLY_NAMES = (
 )
 
 
+DELETED_NAMES = (
+    ("scripts/lib/facts/citations.py", "REJECT_REASONS"),
+    ("scripts/renderer/renderer_lib/secret_checks.py", "scan_template"),
+)
+
+CENSUS = Path(__file__).resolve().relative_to(REPO).as_posix()
+
+
 def _tracked(*patterns: str) -> list[str]:
     out = run(["git", "ls-files", "--", *patterns], cwd=REPO, check=True)
     return out.stdout.split()
 
 
-def _defines(path: str, name: str) -> bool:
-    """Whether the tracked module still binds `name` anywhere: a def, a class or an assignment."""
-    if path not in _tracked(path):
+def _defines(path: str, name: str, root: Path = REPO) -> bool:
+    """Whether the module at `root/path` binds `name` anywhere: a def, a class or an assignment."""
+    module = root / path
+    if not module.is_file():
         return False
-    tree = ast.parse((REPO / path).read_text())
-    for node in ast.walk(tree):
+    for node in ast.walk(ast.parse(module.read_text())):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
             if node.name == name:
                 return True
@@ -84,15 +91,15 @@ def _defines(path: str, name: str) -> bool:
     return False
 
 
-def _ignore_entry(name: str) -> str | None:
+def _ignore_entry(name: str, pyproject: Path = PYPROJECT) -> str | None:
     """The `ignore_names` entry that matches `name` the way vulture does, by glob."""
-    entries = tomllib.loads(PYPROJECT.read_text())["tool"]["vulture"]["ignore_names"]
+    entries = tomllib.loads(pyproject.read_text())["tool"]["vulture"]["ignore_names"]
     return next((e for e in entries if fnmatch.fnmatchcase(name, e)), None)
 
 
-def _reason(entry: str) -> list[str]:
+def _reason(entry: str, pyproject: Path = PYPROJECT) -> list[str]:
     """The comment lines directly above the run of entry lines that holds `entry`."""
-    lines = PYPROJECT.read_text().splitlines()
+    lines = pyproject.read_text().splitlines()
     start = next(
         i for i, line in enumerate(lines) if line.startswith("ignore_names = [")
     )
@@ -108,11 +115,16 @@ def _reason(entry: str) -> list[str]:
     return comment
 
 
-def _test_tree_mentions(name: str) -> bool:
-    for path in _tracked("*.py"):
-        if "/tests/" in f"/{path}" and name in (REPO / path).read_text():
-            return True
-    return False
+def _test_tree_names(
+    name: str, paths: list[str] | None = None, root: Path = REPO
+) -> bool:
+    """Whether a file under a tests/ directory, other than this census, names `name` as a whole word."""
+    word = re.compile(rf"(?<!\w){re.escape(name)}(?!\w)")
+    return any(
+        word.search((root / path).read_text())
+        for path in (_tracked("*.py") if paths is None else paths)
+        if "/tests/" in f"/{path}" and path != CENSUS
+    )
 
 
 @pytest.mark.parametrize(
@@ -120,9 +132,14 @@ def _test_tree_mentions(name: str) -> bool:
     TEST_ONLY_NAMES,
     ids=[f"{p.rsplit('/', 1)[-1]}::{n}" for p, n in TEST_ONLY_NAMES],
 )
-def test_a_test_only_name_is_deleted_or_ignored_with_a_reason(path, name):
-    if not _defines(path, name):
-        return
+def test_a_test_only_name_is_ignored_with_a_reason(path, name):
+    assert path in _tracked(path), (
+        f"{path} is not tracked: repoint its TEST_ONLY_NAMES rows to the module's new path"
+    )
+    assert _defines(path, name), (
+        f"{path} no longer binds {name!r}: if #8632's triage deleted it, move the row to "
+        "DELETED_NAMES, otherwise repoint it to where the name went"
+    )
     entry = _ignore_entry(name)
     assert entry is not None, (
         f"{path} still defines {name!r}, which only tests call, and [tool.vulture] "
@@ -132,63 +149,87 @@ def test_a_test_only_name_is_deleted_or_ignored_with_a_reason(path, name):
     assert _reason(entry), (
         f"ignore_names lists {entry!r} with no comment above it giving a reason"
     )
-    assert _test_tree_mentions(name), (
-        f"ignore_names keeps {name!r} for a guard, but no file under a tests/ directory names it"
-    )
-
-
-def test_defines_finds_a_bound_name_is_clean():
-    assert _defines("scripts/lib/kubectl.py", "CLUSTER_NODES")
-    assert _defines("scripts/lib/kubectl.py", "WrongCluster")
-
-
-def test_defines_misses_an_unbound_name_is_flagged():
-    assert not _defines("scripts/lib/kubectl.py", "no_such_name_8632")
-    assert not _defines("scripts/lib/no_such_module_8632.py", "CLUSTER_NODES")
-
-
-def test_ignore_entry_matches_by_glob_is_clean():
-    assert _ignore_entry("server_hostname") == "server_hostname"
-    assert _ignore_entry("do_GET") == "do_*"
-    assert _reason("server_hostname")
-
-
-def test_ignore_entry_misses_an_unlisted_name_is_flagged():
-    assert _ignore_entry("no_such_name_8632") is None
-
-
-@pytest.mark.parametrize("path", sorted({p for p, _ in TEST_ONLY_NAMES}))
-def test_every_row_names_a_tracked_module(path):
-    """A moved module would make its rows pass as deleted; the row must follow the move."""
-    assert path in _tracked(path), (
-        f"{path} is not tracked: repoint its TEST_ONLY_NAMES rows"
-    )
-
-
-def _test_tree_names(name: str) -> bool:
-    word = re.compile(rf"(?<![\w]){re.escape(name)}(?![\w])")
-    return any(
-        word.search((REPO / path).read_text())
-        for path in _tracked("*.py")
-        if "/tests/" in f"/{path}"
-        and path != "tests/repo/test_vulture_test_only_names.py"
+    assert _test_tree_names(name), (
+        f"ignore_names keeps {name!r} for a guard, but no test under a tests/ directory "
+        "other than this census names it as a whole word"
     )
 
 
 @pytest.mark.parametrize(
     ("path", "name"),
-    TEST_ONLY_NAMES,
-    ids=[f"{p.rsplit('/', 1)[-1]}::{n}" for p, n in TEST_ONLY_NAMES],
+    DELETED_NAMES,
+    ids=[f"{p.rsplit('/', 1)[-1]}::{n}" for p, n in DELETED_NAMES],
 )
-def test_a_kept_name_is_named_whole_by_a_test_outside_this_census(path, name):
-    if not _defines(path, name):
-        return
-    assert _test_tree_names(name), (
-        f"{name!r} is kept for a guard, but no test under a tests/ directory other than this "
-        "census names it as a whole word"
+def test_a_deleted_name_stays_deleted(path, name):
+    assert not _defines(path, name), (
+        f"{path} binds {name!r} again after #8632 deleted it with its unit test"
     )
 
 
-def test_a_name_only_inside_a_longer_word_is_flagged():
-    assert not _test_tree_names("no_such_name_8632")
-    assert not _test_tree_names("ORMS_8632")
+def test_defines_finds_every_binding_form_is_clean(tmp_path):
+    (tmp_path / "mod.py").write_text(
+        "def func(): pass\n"
+        "async def coro(): pass\n"
+        "class Klass: pass\n"
+        "ASSIGNED = 1\n"
+        "ANNOTATED: int = 2\n"
+    )
+    for name in ("func", "coro", "Klass", "ASSIGNED", "ANNOTATED"):
+        assert _defines("mod.py", name, tmp_path), name
+
+
+def test_defines_misses_an_unbound_name_is_flagged(tmp_path):
+    (tmp_path / "mod.py").write_text(
+        "import os\nresult = os.getcwd()\nobj.attr = 1\nprint('quoted_name')\n"
+    )
+    assert not _defines("mod.py", "quoted_name", tmp_path)
+    assert not _defines("mod.py", "attr", tmp_path)
+    assert not _defines("gone.py", "result", tmp_path)
+
+
+PYPROJECT_TEXT = """\
+[tool.vulture]
+ignore_names = [
+  "bare_entry",
+  # A reason for the run below.
+  "reasoned_entry",
+  "run_mate",
+  "do_*",
+]
+
+[tool.other]
+key = 1
+"""
+
+
+def test_ignore_entry_and_reason_find_a_listed_name_is_clean(tmp_path):
+    pyproject = tmp_path / "pyproject.toml"
+    pyproject.write_text(PYPROJECT_TEXT)
+    assert _ignore_entry("do_GET", pyproject) == "do_*"
+    assert _ignore_entry("reasoned_entry", pyproject) == "reasoned_entry"
+    assert _reason("reasoned_entry", pyproject) == ["# A reason for the run below."]
+    assert _reason("run_mate", pyproject) == ["# A reason for the run below."]
+
+
+def test_ignore_entry_and_reason_miss_an_unlisted_or_unreasoned_name_is_flagged(
+    tmp_path,
+):
+    pyproject = tmp_path / "pyproject.toml"
+    pyproject.write_text(PYPROJECT_TEXT)
+    assert _ignore_entry("unlisted_name", pyproject) is None
+    assert _ignore_entry("xdo_GET", pyproject) is None
+    assert _reason("bare_entry", pyproject) == []
+
+
+def test_test_tree_names_matches_a_whole_word_is_clean(tmp_path):
+    (tmp_path / "pkg" / "tests").mkdir(parents=True)
+    (tmp_path / "pkg" / "tests" / "test_a.py").write_text("x = foo(1)\n")
+    assert _test_tree_names("foo", ["pkg/tests/test_a.py"], tmp_path)
+
+
+def test_test_tree_names_rejects_a_longer_word_or_a_non_test_file_is_flagged(tmp_path):
+    (tmp_path / "pkg" / "tests").mkdir(parents=True)
+    (tmp_path / "pkg" / "tests" / "test_a.py").write_text("foobar(1)\n_foo = 2\n")
+    (tmp_path / "pkg" / "prod.py").write_text("foo(1)\n")
+    paths = ["pkg/tests/test_a.py", "pkg/prod.py"]
+    assert not _test_tree_names("foo", paths, tmp_path)

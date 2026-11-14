@@ -289,7 +289,9 @@ truth, with a reason beside each entry. It holds:
   read-only token, the token and config templates, `templates/renovate-agent-pins.j2`, which
   sets the caps and the permission mode as literals, the prompt, the unit and timer, and
   `component.yml`. The operator added them on 2026-11-13 with the guardrails plan's B1. The
-  component's defaults, tests and `CLAUDE.md` stay off.
+  session's Claude Code settings `files/claude-settings.json`, the setup script that installs
+  them and its boot unit joined on 2026-11-14 (#8392), so no unapproved PR weakens the
+  session's deny floor. The component's defaults, tests and `CLAUDE.md` stay off.
 - `k8s/roles/cluster-base/` and its path after the rename, `k8s/roles/cluster-base/`,
   the agent's read-only cluster RBAC. The operator added it
   on 2026-10-16 (H1 Open question 7). Before H1, that RBAC applies only through
@@ -606,21 +608,32 @@ switches it on, and it installs only while `claude_code_agent_user_enabled` is a
   `renovate-agent` unit carries. It reads `<state_dir>/inbox/<episode>.json` and runs
   `files/claude_triage_run.py` under `flock -n`, so one run goes at a time. A busy lock exits
   75. That exit is not a failure, and the episode waits in the inbox.
+- **The session runs in its own unit**, `homelab-claude-triage-session.service`
+  (guardrails plan B2). The runner writes the framed prompt to `<state_dir>/session/in/`,
+  starts the unit through `host_lib.start_unit` and waits for it. The unit runs
+  `files/claude_triage_session.py`, which feeds the prompt to `claude -p` on stdin, so the
+  episode text is on no command line. The script writes the session's JSON result to
+  `<state_dir>/session/out/` and prints nothing the session said, because a journal line the
+  session shaped could raise the next episode. The runner reads the result without following a
+  link, up to 1 MiB, and its journal lines carry the episode id and the state only. The record
+  and the report keep the session's stop reason.
 - **The session** is `claude -p`. Edit, Write, a landing and a push are denied, and
   `--permission-prompts none` denies anything that would wait on an answer. The session has a
-  $10 budget, 60 turns and a 30-minute wall clock, and it returns a diagnosis in a fixed JSON
-  schema.
+  $10 budget, 60 turns and a 30-minute wall clock, the session unit's `TimeoutStartSec`, and it
+  returns a diagnosis in a fixed JSON schema. The runner reads `Result=timeout` as a timed-out
+  run.
 - **The credential** is the run's own `claude setup-token` token. It is the SOPS key
-  `claude_code_triage_claude_oauth_token`, in a root 0600 `EnvironmentFile`, and the role
-  refuses to install without it. The interactive login `claude-rc.service` uses can lapse while
-  idle (#4618).
+  `claude_code_triage_claude_oauth_token`, which the session unit loads as a `LoadCredential=`
+  file, and the role refuses to install without it. The runner never holds it. The
+  interactive login `claude-rc.service` uses can lapse while idle (#4618).
 - **The episode text can be hostile.** A monitor message can carry log text anyone wrote. The prompt
   frames it as data. The runner HTML-escapes every field the session returns, because the
   report shares an origin with the operator's own artifacts.
 - **Every run leaves a record, a report and a page.** An inconclusive or timed-out run does too.
   The page is `claude-triage-report-alert@<episode>:<state>.service`, which holds the webhook. A
   polkit rule lets `claude` start the page and the run, in fixed shapes only. A run that crashes
-  pages through `OnFailure=homelab-alert@%n.service`.
+  pages through `OnFailure=homelab-alert@%n.service`. The same rule lets `claude` start the
+  session unit, until B2's user split moves every start right to a controller user.
 - **The caps are pinned** as literals in the role's `templates/claude-triage-pins.j2`, which
   every triage template imports, the same way `claude-land-pins.j2` pins the landing settings.
   No inventory value reaches them.
@@ -779,16 +792,11 @@ the operator's.
 1. Run `files/claude-dotfiles-sync.sh` every 15 minutes from the timer, since a dotfiles merge
    ships no host package version here.
 
-The script has three guards:
+The script has two guards:
 
 - It refuses a source that does not render `is-agent` as true. Applied anyway, such a source
   would write the operator's `.gitconfig` over the agent's identity. The refusal is not fatal
   to the apply, so a host can switch the flag on before the dotfiles change lands.
-- After that check, and only then, it renames each root-owned subset tree to
-  `~/.claude/.subset-copy-<name>`. chezmoi, running as the agent, cannot write into a root-owned
-  directory, and the agent cannot delete one. It owns `~/.claude`, though, so it can rename one
-  in place. The component ships no subset and deletes no renamed tree. A refused source therefore
-  leaves the subset where it was, and the agent always has one of the two.
 - It applies in two passes, every directory but `~/.claude` and `~/.config/gh` and then
   everything but directories. The first pass is non-recursive. chezmoi applies a directory
   target's whole tree below it, so applying `~/.config` reopened `~/.config/gh` to `0755`.

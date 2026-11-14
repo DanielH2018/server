@@ -2,7 +2,7 @@
 
 Two callers that cannot share anything else share this. probe.py and postflight.py run on a
 host and reach both stores through the VIP-pinned edge with curl (`core.fetch`,
-`core.get_status`). homelab-mcp runs in a pod built from `python:3.14-slim`, which ships no
+`core.get_status`). homelab-mcp runs in a pod built from `python:3.15-slim`, which ships no
 curl, and reaches both stores by their in-cluster Service names. Before this module each
 built its own query strings and its own Loki window.
 

@@ -180,45 +180,24 @@ dns_k8s_cluster_ip: 10.43.252.187
 # ingress VIP. Global for the same cross-role reason: k8s/roles/jellyfin's service-lan
 # claims it, and observability's prometheus.yaml.j2 probes it.
 jellyfin_k8s_lan_ip: 10.0.0.241
-# The terraria server's replica count. Global because two roles render it and neither owns
-# the other: k8s/roles/terraria's Deployment IS the server, and k8s/roles/game-stats'
-# terraria-stats exporter only has a console to tail while the server is up. Role defaults
-# are invisible across roles, so a `terraria_k8s_replicas | default(1)` written in game-stats
-# would render 1 forever and never say so.
+# The game servers deploy.local's Games panel starts and stops (hosts/components/deploy-ui,
+# ADR-0033). Each lists the server's Deployment first, then every Deployment that runs only while
+# it does. Their replica count is runtime state: no template renders it, and the deploy-ui role's
+# `homelab-games` Role may scale exactly these Deployments. The panel finds a Deployment's pods by
+# `app=<deployment name>` and the server's console by Loki's `container=<server deployment name>`,
+# so a game whose names differ needs the panel changed.
 #
-# Scaled to zero on operator request — the server is not wanted up, and on 1.4.5.7 it cannot
-# stay up while anything opens a TCP connection to it (issue #822).
-#
-# Declarative rather than a live `kubectl scale`, for two reasons. terraria is flux-owned, so
-# Flux's drift correction re-applies that Deployment at its next reconcile and would reset a
-# live scale back to the rendered count; and the read-only ServiceAccount cannot scale anything
-# anyway, so a merged change to this value is the only write path. `session-health.py`'s `_is_scaled_to_zero` already reads a deliberate
-# `spec.replicas: 0` as intentional rather than as an outage, so the SessionStart banner stays
-# quiet without a suppression list.
-#
-# This is NOT covered by test_every_snapshot_role_restores_its_own_replicas, which requires
-# `replicas >= 1`: that guard reads roles declaring `k8s_autodeploy_snapshot_pvcs`, and terraria
-# declares none. If terraria ever opts into pre-deploy snapshots, this zero and that guard
-# collide, and the guard is the one that is right.
-#
-# Three renders follow this value, and all three must move together — the server Deployment,
-# the terraria-stats Deployment, and observability's `terraria-stats` Prometheus scrape job,
-# which is gated on it because a job whose target has no pod pages the scrape-target check.
-#
-# To bring it back, see the restore checklist on issue #822. Setting this to 1 is the first of
-# two steps and the port monitor is deliberately NOT the second — do not restore a port probe
-# until the image is past 1.4.5.7.
-terraria_k8s_replicas: 0
-# The valheim server's replica count. Global for the same reason as terraria's above: the
-# server Deployment (k8s/roles/valheim), the valheim-stats exporter (k8s/roles/game-stats) and
-# observability's `valheim-stats` Prometheus scrape job all follow it, and a role default does
-# not cross a role boundary.
-#
-# Parked at 0 on 2026-11-13 to free daniel-box memory for the Claude fan-out. The PVCs
-# (valheim-config, valheim-server, valheim-stats-data) stay, so no data is lost. Setting this
-# to 1 restarts the server, the exporter and the scrape job in one merge. The exporter's
-# playtime totals miss the parked window.
-valheim_k8s_replicas: 0
+# `start_refused` makes the panel refuse to start or restart the game, with that text as the
+# reason. Stop stays allowed, so a refusal never strands a running game.
+game_servers:
+  - name: terraria
+    deployments: [terraria, terraria-stats]
+    # Version 1.4.5.7 cannot stay up while anything opens a TCP connection to it. Starting it is
+    # step one of issue #822's restore checklist, and the port monitor stays off until the image is
+    # past 1.4.5.7.
+    start_refused: "issue #822: Terraria 1.4.5.7 crashes on a bare TCP connect; follow the restore checklist first"
+  - name: valheim
+    deployments: [valheim, valheim-stats]
 # Shared between k8s/roles/crowdsec (the engine that runs LAPI+AppSec) and k8s/roles/traefik
 # (the bouncer plugin middleware + the log-tailing agent sidecar). Cross-role, and role
 # defaults are invisible across roles.
