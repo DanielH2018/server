@@ -1,11 +1,16 @@
 # longhorn-backup — the backup targets, their credentials and the RecurringJobs
 
 The Longhorn backup plane: the credential Secrets `longhorn-b2` and `longhorn-r2`, the
-BackupTargets `default` (B2) and `r2`, and the RecurringJobs `daily-backup` and
-`weekly-backup-d0` to `weekly-backup-d6`, and the `trim` RecurringJob. Which target a volume
-uses is `longhorn-reconcile`'s decision, and this role only declares the targets. It also
-renders `k3s-etcd-snapshot-s3-config` in `kube-system`, the Secret k3s reads for its native etcd
-snapshot uploads to R2.
+BackupTargets `default` (B2) and `r2` (`scripts/lib/longhorn_lib/longhorn_backups.py:B2_TARGET`,
+`scripts/lib/longhorn_lib/longhorn_backups.py:R2_TARGET`), and the RecurringJobs `daily-backup`
+and `weekly-backup-d0` to `weekly-backup-d6`
+(`scripts/lib/longhorn_lib/longhorn_backups.py:weekly_shard_group`), and the `trim`
+RecurringJob (`k8s/roles/longhorn-backup/templates/longhorn-recurringjob.yaml.j2`). Which target
+a volume uses is `longhorn-reconcile`'s decision
+(`k8s/roles/longhorn-reconcile/files/longhorn_reconcile.py:desired_target`), and this role only
+declares the targets. It also renders `k3s-etcd-snapshot-s3-config` in `kube-system`
+(`k8s/roles/longhorn-backup/templates/k3s-etcd-snapshot-s3-secret.yaml.j2`), the Secret k3s
+reads for its native etcd snapshot uploads to R2.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in k8s/roles/longhorn-reconcile/defaults/main.yml. -->
@@ -107,9 +112,11 @@ in the loop, and the contract is written here so a later edit cannot quietly wid
 
 ## Editing
 
-- Manifests: `templates/longhorn-b2-secret.yaml.j2`, `templates/longhorn-r2-secret.yaml.j2`,
-  `templates/k3s-etcd-snapshot-s3-secret.yaml.j2`,
-  `templates/longhorn-backuptarget-default.yaml.j2`, `templates/longhorn-backuptarget-r2.yaml.j2`
-  and `templates/longhorn-recurringjob.yaml.j2`.
-- Render the tag before you push:
+- Manifests: `k8s/roles/longhorn-backup/templates/longhorn-b2-secret.yaml.j2`,
+  `k8s/roles/longhorn-backup/templates/longhorn-r2-secret.yaml.j2`,
+  `k8s/roles/longhorn-backup/templates/k3s-etcd-snapshot-s3-secret.yaml.j2`,
+  `k8s/roles/longhorn-backup/templates/longhorn-backuptarget-default.yaml.j2`,
+  `k8s/roles/longhorn-backup/templates/longhorn-backuptarget-r2.yaml.j2`
+  and `k8s/roles/longhorn-backup/templates/longhorn-recurringjob.yaml.j2`.
+- Render the tag before you push (`scripts/renderer/homelab_render.py`):
   `uv run python scripts/renderer/homelab_render.py cluster --out <dir> --role longhorn-backup`.

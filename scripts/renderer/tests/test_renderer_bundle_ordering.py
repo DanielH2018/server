@@ -384,6 +384,7 @@ def test_a_verify_after_that_is_not_a_list_of_other_tags_is_a_problem(tmp_path, 
 
 
 def test_a_snapshot_kind_inherits_its_tags_edges_and_the_tag_waits_on_it():
+    # fact: k8s/roles/volume-snapshot/CLAUDE.md#What fails the Job
     ordering = Ordering(deps={"pihole": ["bento-pdf", "traefik"]})
     docs = _docs(ordering, ["bento-pdf", "pihole"], _every_kind())
     assert _depends(docs["pihole-snapshot"]) == ["bento-pdf"]

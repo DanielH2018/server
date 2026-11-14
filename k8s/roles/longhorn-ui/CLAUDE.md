@@ -1,8 +1,9 @@
 # longhorn-ui — the door in front of the upstream Longhorn UI
 
 Route-only role. Longhorn itself (namespace, Deployments, Services) is the `longhorn` role's
-vendored upstream manifest (H1.5a), which Flux applies — this role adds only the IngressRoute
-and the middlewares it references, nothing else.
+vendored upstream manifest (H1.5a, `k8s/roles/longhorn/files/upstream/longhorn.yaml`), which
+Flux applies — this role adds only the IngressRoute and the middlewares it references, nothing
+else (`k8s/roles/longhorn-ui/defaults/main.yml:manifests_exclude_files`).
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in k8s/roles/longhorn-reconcile/defaults/main.yml. -->
@@ -30,4 +31,5 @@ and the middlewares it references, nothing else.
   Renovate's automerge, and the role has no image for Renovate to bump.
 
 ## Editing
-- Route/middlewares: `templates/ingressroute.yaml.j2`, `templates/middlewares.yaml.j2`.
+- Route/middlewares: `k8s/roles/longhorn-ui/templates/ingressroute.yaml.j2`,
+  `k8s/roles/longhorn-ui/templates/middlewares.yaml.j2`.

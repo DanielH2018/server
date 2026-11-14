@@ -1,7 +1,11 @@
 # pi-peer-backup — nightly pull of daniel-pi's WireGuard peer keys
 
 The Pi's wg-easy peer configs (wg0.conf/wg0.json — client private keys, un-rebuildable) rsync
-nightly into a Longhorn PVC. The Saturday weekly shard (weekly-backup-d6) carries it to B2.
+nightly (`k8s/roles/pi-peer-backup/defaults/main.yml:pi_peer_backup_k8s_schedule`,
+`k8s/roles/pi-peer-backup/defaults/main.yml:pi_peer_backup_src_dir`) into a Longhorn PVC
+(`k8s/roles/pi-peer-backup/defaults/main.yml:pi_peer_backup_k8s_storage_class`). The Saturday
+weekly shard (weekly-backup-d6) carries it to B2; the pi-peer-backup entry's
+`weekly_backup_claims` in `cluster/services.yml` names the shard.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in k8s/roles/longhorn-reconcile/defaults/main.yml. -->
