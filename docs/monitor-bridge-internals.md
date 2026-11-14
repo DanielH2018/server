@@ -81,6 +81,9 @@ The role `CLAUDE.md` keeps the rules; this is the wiring.
   `check="<row>"`. `homelab_check_rows` counts the enabled rows of `CHECKS`, gate rows
   included, so it is not `registry.build_checks`' length, which drops every gate row.
   `BridgeCheckStale` compares the exported row count against it.
+  `homelab_domain_registration_expiry_days` carries no label: `cli.main()` sets it after each
+  cycle from the `domain_registration` row's cached RDAP expiry, and it is absent until a
+  read succeeds.
 - **The deploy-pipeline family.** `files/deploy_pipeline.py` reads `promote`'s state after
   every check has run and serves its gauges on `monitor_bridge_deploy_pipeline_port` through
   `templates/service.yaml.j2`. observability's `deploy-pipeline` scrape job collects them and
@@ -155,10 +158,10 @@ The role `CLAUDE.md` keeps the rules; this is the wiring.
 | `check_table.py` | `CHECKS`, one `PushCheck` per check and gate: its body, gate, `critical` flag and runbook slug |
 | `registry.py` | `build_checks()`, a `Check` for every row of `CHECKS`, the two gate rows first, each with its row's `gate` |
 | `deploy_pipeline.py` | the deploy-pipeline exporter: `collect(cfg, src, now)` reads `promote`'s state with three `api.github.com` GETs and two `ghcr.io` GETs into four `homelab_deploy_*` gauges, adds `homelab_deploy_reboot_window_active` from the `WEEKLY_REBOOT_*` schedule, and `Exposition` serves them on `DEPLOY_PIPELINE_PORT` from a daemon thread. `cli.main()` starts the listener and calls `refresh` after each cycle |
-| `verdict_export.py` | the check exporter: `CheckExposition` (a `deploy_pipeline.Exposition` on its own port, `CHECK_EXPORTER_PORT`) serves `homelab_check_success`, `homelab_check_last_run_timestamp_seconds` and `homelab_check_deadline_seconds` per row and `homelab_check_rows` for the table. `check.run_once` records each row's verdict through `export`; `cli.main()` sets the row count from `check_table.CHECKS` |
+| `verdict_export.py` | the check exporter: `CheckExposition` (a `deploy_pipeline.Exposition` on its own port, `CHECK_EXPORTER_PORT`) serves `homelab_check_success`, `homelab_check_last_run_timestamp_seconds` and `homelab_check_deadline_seconds` per row, `homelab_check_rows` for the table and `homelab_domain_registration_expiry_days`. `check.run_once` records each row's verdict through `export`; `cli.main()` sets the row count from `check_table.CHECKS` |
 | `longhorn_robustness.py` | `SAFE_ROBUSTNESS` and `unsafe_volumes` — which Longhorn robustness states are lost redundancy. Checkout-only: it does not ship in the pod, and `scripts/deploy_tools/runbook_gates_lib/gate_runner.py` imports it from the checkout to judge the CRs (#3668) |
 | `bridge/types.py` | `PushCheck`, `Check`, `CheckResult`, `CheckFn` — shared by `registry.py` and `check.py` without either importing the other |
-| `checks/<domain>.py` | the `check_*` bodies by domain: `service`, `host_packages`, `notify`, `host_thermal` (Scrutiny), `host_edge`, `b2`, `r2`, `cloudflare_ips`, `healthchecks`, `wan`. `host_edge`'s entry points take the probe function as `tcp_open` so a test injects a port map |
+| `checks/<domain>.py` | the `check_*` bodies by domain: `service`, `host_packages`, `notify`, `host_thermal` (Scrutiny), `host_edge`, `b2`, `r2`, `cloudflare_ips`, `healthchecks`, `domain_registration`, `wan`. `host_edge`'s entry points take the probe function as `tcp_open` so a test injects a port map |
 | `bridge/config.py` + `config_{host,service,cluster,io}.py` | the `_env`/`_int`/`_num`/`_env_file` parsers, `class Config(HostConfig, ServiceConfig, ClusterConfig, IoConfig)`, `load_config(env)`; one builder per domain. `PVC_EXCLUDE` stays in `config.py` because a repo test greps for it by text |
 | `bridge/net.py` | the transport: `_get_json`, `_get_bytes`, `_post_json`, `prom_scalar`, `prom_vector`, `loki_count`, and the selector builder (`origin_sel`). Every helper that reads a URL or the origin pin takes `cfg` FIRST. No check body calls its fetchers; they go through `bridge/sources.py` |
 | `bridge/sources.py` | `Sources(cfg)`, every query a gate or check body sends (`prom_scalar`, `prom_vector`, `loki_count`, `get_json`, `get_bytes`, `post_json`). `cli.main()` builds one; `run_once` hands it to every body as `src`. |

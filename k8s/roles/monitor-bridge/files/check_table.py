@@ -23,6 +23,7 @@ from bridge.types import PushCheck
 from checks import (
     b2,
     cloudflare_ips,
+    domain_registration,
     healthchecks,
     host_edge,
     host_packages,
@@ -60,6 +61,8 @@ CHECKS: tuple[PushCheck, ...] = (
     PushCheck(name="cloudflare_ips_drift", fn=cloudflare_ips.check_cloudflare_ips_drift, gate="wan_reachable"),
     # #2566. Same cache shape as cloudflare_ips_drift.
     PushCheck(name="healthchecks_drift", fn=healthchecks.check_healthchecks_drift, gate="wan_reachable"),
+    # Down only when RDAP cannot be read; the days-left gauge carries the expiry thresholds.
+    PushCheck(name="domain_registration", fn=domain_registration.check_domain_registration, gate="wan_reachable"),
     PushCheck(name="b2_storage", fn=b2.check_b2_storage, gate="b2_reachable", critical=True, runbook="longhorn-backup-tiering"),
     # The two reachability gates. A gate has no gate of its own: a gate that cannot go red is
     # not coverage (#2825). The `prometheus` gate left with Cutover-2: the Watchdog covers a dead

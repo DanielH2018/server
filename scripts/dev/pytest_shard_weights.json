@@ -370,6 +370,7 @@
  "k8s/roles/monitor-bridge/tests/test_check_b2_gate.py": 0.0,
  "k8s/roles/monitor-bridge/tests/test_check_cli.py": 0.0,
  "k8s/roles/monitor-bridge/tests/test_check_cloudflare_ips.py": 0.0,
+ "k8s/roles/monitor-bridge/tests/test_check_domain_registration.py": 0.03,
  "k8s/roles/monitor-bridge/tests/test_check_etcd_drill.py": 0.04,
  "k8s/roles/monitor-bridge/tests/test_check_exporters.py": 0.04,
  "k8s/roles/monitor-bridge/tests/test_check_ha.py": 0.0,
