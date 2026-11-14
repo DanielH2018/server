@@ -279,7 +279,7 @@ def test_an_update_never_moves_the_end_of_the_wait_past_two_merge_budgets(landin
         merge_poll=1,
     )
     with pytest.raises(Outcome) as exc:
-        merge.await_merge(ln, lambda: (False, in_line.pop() if in_line else 0))
+        merge.await_merge(ln, lambda _: (False, in_line.pop() if in_line else 0))
     assert "still OPEN after 4s" in exc.value.error
     assert _gh_writes(calls) == ["update-branch aaaa"]
 

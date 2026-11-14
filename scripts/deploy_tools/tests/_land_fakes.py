@@ -146,6 +146,9 @@ class Fakes:
     # What each `tools.try_turn` call answers: True takes the landing turn, False finds another
     # landing holding it, and an exception is raised in place of an answer.
     turn: list[bool | Exception] = field(default_factory=lambda: [True])
+    # What each operation on the line for the turn answers (`tools.line`), one entry a call.
+    # Only `join` and `stand` return theirs. An exception is raised in place of an answer.
+    line: list[str | Exception] = field(default_factory=lambda: [""])
     # What the PR head's `ci.yml` runs listing answers on every call, as `merge._ready_run_on`
     # reads it: `{id, status, conclusion}` per run. The default is one draft run that skipped,
     # and an exception is raised in place of an answer.
@@ -394,8 +397,17 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
             raise answer
         return (lambda: calls.append(("release_turn", (), {}))) if answer else None
 
+    line_seq = _seq(f.line, calls, "line")
+
+    def line(op, *args):
+        answer = line_seq(op, *args)
+        if isinstance(answer, Exception):
+            raise answer
+        return answer if op in ("join", "stand") else ""
+
     tools = Tools(
         try_turn=try_turn,
+        line=line,
         gh_json=gh_json,
         gh=gh_run,
         git=git_run,
