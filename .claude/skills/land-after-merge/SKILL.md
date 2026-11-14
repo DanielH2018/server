@@ -153,7 +153,8 @@ waits until a promotion covers the merge commit (`promote.py land-wait`) and the
 k8s tags. A `deploy-failed` with cause `promote-held` means `DEPLOY_HOLD` holds
 promotion, and clearing it is **operator-only**: stop and name the hold. To resume once the
 operator clears it, or once a red master CI goes green, run `cc-wait landing-clear` in the
-background and re-run the same `land.sh` command when it ends 0. Cause
+background and re-run the same `land.sh` command when it ends 0. It ends 1 as
+`gh-unauthenticated` when `gh` has no login, which needs the operator, not a retry. Cause
 `soak-failed` means the soak Job failed on the promoted revision, which `verify` holds next:
 report the services the printed `kubectl` command names, and stop. A
 `nothing-to-deploy` whose detail says a tag "is suspended" means Flux applies nothing for that
