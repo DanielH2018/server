@@ -11,7 +11,7 @@ from types import SimpleNamespace
 import pytest
 
 from _land_fakes import PRIMARY, Fakes, make_landing
-from deploy_tools.land_lib import classify, own_checkout
+from deploy_tools.land_lib import classify, fresh, own_checkout
 from deploy_tools.land_lib.outcome import Outcome
 from lib import git_testing
 from lib.git_testing import commit, init_repo, scrubbed_env
@@ -116,22 +116,30 @@ def test_a_current_checkout_lets_the_landing_continue():
     classify.refuse_stale_code(ln)
 
 
-def test_a_stale_checkout_names_the_file_and_the_fresh_rerun():
-    ln, _ = make_landing(Fakes(stale_code=["scripts/lib/render_guard.py"]), since="pre")
+def test_a_stale_checkout_after_the_merge_hands_the_grading_to_a_fresh_checkout():
+    ln, _ = make_landing(
+        Fakes(stale_code=["scripts/lib/render_guard.py"]),
+        since="pre",
+        arm_merge=True,
+        await_merge=True,
+        ci_timeout=60,
+    )
     ln.merge_sha = "m" * 40
-    with pytest.raises(Outcome) as raised:
+    with pytest.raises(fresh.GradeFresh) as raised:
         classify.refuse_stale_code(ln)
-    msg = raised.value.detail
-    assert raised.value.rc == 1 and "scripts/lib/render_guard.py" in msg
-    assert "`land.sh --pr 999 --since pre --fresh`" in msg
+    assert "scripts/lib/render_guard.py" in str(raised.value)
+    assert raised.value.argv == ["--pr", "999", "--since", "pre", "--ci-timeout", "60"]
 
 
-def test_a_stale_checkout_without_since_reruns_from_the_merges_parent():
-    ln, _ = make_landing(Fakes(stale_code=["a.py"]))
+def test_a_stale_checkout_without_since_grades_from_the_merges_parent():
+    ln, _ = make_landing(Fakes(stale_code=["a.py"]), tags="glance", verdict_file="/v")
     ln.merge_sha = "m" * 40
-    with pytest.raises(Outcome) as raised:
+    with pytest.raises(fresh.GradeFresh) as raised:
         classify.refuse_stale_code(ln)
-    assert f"--since '{'m' * 40}^1' --fresh" in raised.value.detail
+    argv = raised.value.argv
+    assert argv[argv.index("--since") + 1] == f"{'m' * 40}^1"
+    assert argv[argv.index("--tags") + 1] == "glance"
+    assert argv[argv.index("--verdict-file") + 1] == "/v"
 
 
 def test_a_comparison_git_could_not_make_refuses():
@@ -141,12 +149,31 @@ def test_a_comparison_git_could_not_make_refuses():
         classify.refuse_stale_code(ln)
 
 
-def test_a_stale_checkout_ends_the_landing_refused_before_it_classifies(land_run):
-    fakes = Fakes(stale_code=["scripts/lib/render_guard.py"])
-    rc, out, _, calls, _ = land_run([], fakes)
-    assert rc == 1 and "VERDICT: refused" in out
-    assert "scripts/lib/render_guard.py" in out
+def test_a_stale_checkout_lets_the_fresh_landing_grade_and_record(
+    land_run, verdict_record
+):
+    """#8679: the merged PR was refused ungraded, and the caller re-ran with `--fresh`."""
+    fakes = Fakes(stale_code=["scripts/lib/render_guard.py"], fresh_rc=75)
+    rc, out, err, calls, logline = land_run([], fakes)
+    assert rc == 75
+    assert "VERDICT:" not in out and "scripts/lib/render_guard.py" in err
+    [(primary, argv)] = [c[1] for c in calls if c[0] == "fresh_landing"]
+    assert primary == PRIMARY and argv[:2] == ["--pr", "999"]
+    assert not {"--arm-merge", "--await-merge", "--detach", "--fresh"} & set(argv)
     assert not any(c[0] == "deploy_tags" for c in calls)
+    assert not logline and not verdict_record.exists()
+
+
+def test_a_hand_off_whose_checkout_failed_ends_refused_and_records_it(
+    land_run, verdict_record
+):
+    """No child landing started, so nothing else prints or records this PR's verdict."""
+    fakes = Fakes(stale_code=["a.py"], fresh_fails="git fetch: offline")
+    rc, out, _, _, logline = land_run([], fakes)
+    assert rc == 1 and "VERDICT: refused" in out
+    assert "git fetch: offline" in out and "--fresh`" in out
+    assert "verdict=refused" in logline
+    assert "refused" in verdict_record.read_text()
 
 
 def test_an_armed_landing_from_a_stale_checkout_refuses_before_it_merges(land_run):
@@ -315,16 +342,22 @@ def test_a_stale_landing_needs_no_hand_made_checkout(land_run, case):
     assert "worktree add" not in printed
 
 
-@pytest.mark.parametrize("case", sorted(_STALE_LANDINGS))
-def test_a_stale_landing_refuses_and_names_fresh(land_run, case):
+def test_a_stale_landing_before_the_merge_refuses_and_names_fresh(land_run):
     """The absence checks above pass for a landing that never reached the refusal."""
-    argv, views = _STALE_LANDINGS[case]
-    fakes = Fakes(stale_code=["scripts/deploy_tools/land_lib/classify.py"])
-    if views is not None:
-        fakes.gh_views = views
+    fakes = Fakes(
+        stale_code=["scripts/deploy_tools/land_lib/classify.py"],
+        gh_views=_armed_open_pr(),
+    )
+    argv, _ = _STALE_LANDINGS["before-merge"]
     rc, out, err, _, _ = land_run(argv, fakes)
     assert rc == 1 and "VERDICT: refused" in out
     assert "land_lib/classify.py" in out and "--fresh`" in out + err
+
+
+def test_a_stale_landing_after_the_merge_reaches_the_hand_off(land_run):
+    """The absence checks above pass for a landing that never reached the hand-off."""
+    printed = _stale_landing_output(land_run, "after-merge")
+    assert "land_lib/classify.py" in printed and "grades it" in printed
 
 
 @pytest.mark.parametrize(

@@ -47,13 +47,22 @@ def test_a_fresh_landing_runs_land_sh_from_a_checkout_of_the_fetched_tip(primary
     assert str(checkout) not in listed
 
 
-def test_a_checkout_git_could_not_make_lands_nothing(tmp_path, capsys):
+def test_a_checkout_git_could_not_make_lands_nothing(tmp_path):
     not_a_repo = tmp_path / "plain"
     not_a_repo.mkdir()
     seen: list = []
-    rc = fresh.land_fresh(not_a_repo, ["--pr", "7"], run=_child(seen))
-    assert rc == 1 and seen == []
-    assert "nothing was landed" in capsys.readouterr().err
+    with pytest.raises(fresh.CheckoutFailed, match="git fetch"):
+        fresh.land_fresh(not_a_repo, ["--pr", "7"], run=_child(seen))
+    assert seen == []
+
+
+def test_land_fresh_reports_a_checkout_it_could_not_make(capsys):
+    import land
+
+    tools, _ = build_tools(Fakes(fresh_fails="git fetch: offline"))
+    rc = land.main(["--pr", "999", "--fresh"], tools=tools)
+    assert rc == 1
+    assert "git fetch: offline; nothing was landed" in capsys.readouterr().err
 
 
 def test_the_child_argv_drops_fresh_and_detach_and_keeps_the_resolved_since():
