@@ -1,3 +1,4 @@
+{% import 'templates/renovate-agent-pins.j2' as pins with context -%}
 # Shipped by the renovate-agent component. Started by homelab-renovate-agent.timer.
 [Unit]
 Description=Unattended Renovate agent (one headless Claude session over the open Renovate PRs)
@@ -14,12 +15,12 @@ Type=oneshot
 User={{ renovate_agent_user }}
 # `-`: on a rebuilt host the clone does not exist until the setup line below has run.
 WorkingDirectory=-{{ renovate_agent_clone_dir }}
-# The wrapper's own RUN_TIMEOUT_S ({{ renovate_agent_run_timeout_s }}s) should always trip
+# The wrapper's own RUN_TIMEOUT_S ({{ pins.run_timeout_s }}s) should always trip
 # first: it kills the session and still posts a digest naming the timeout, where this ceiling
 # kills the whole cgroup and posts only the OnFailure alert. Keep this strictly above
 # RUN_TIMEOUT_S plus the two `gh pr list` censuses either side of it. A landing in flight runs
 # in the lander's own unit, so this kill no longer reaches an Ansible run.
-TimeoutStartSec={{ renovate_agent_unit_timeout }}
+TimeoutStartSec={{ pins.unit_timeout }}
 # The user's own ~/.local/bin for `claude` and `uv`; systemd supplies a minimal PATH exactly as
 # cron does. `gh` and `git` are in /usr/bin.
 Environment=PATH={{ renovate_agent_home }}/.local/bin:/usr/bin:/bin
@@ -34,7 +35,7 @@ Environment=RUN_HOOK_UV={{ renovate_agent_home }}/.local/bin/uv
 # Claude Code caps a Bash call at 10 minutes unless this raises it. A call killed early leaves
 # the landing running, but the session would then read a verdict file the lander has not yet
 # rewritten (it writes PENDING only once it holds its lock).
-Environment=BASH_MAX_TIMEOUT_MS={{ renovate_agent_bash_timeout_ms }}
+Environment=BASH_MAX_TIMEOUT_MS={{ pins.bash_timeout_ms }}
 # The GitHub token and the Claude credential. Read by systemd as root, so the file is root 0600
 # and neither value appears in a unit line `systemctl show` publishes.
 EnvironmentFile=/etc/renovate-agent/session.env

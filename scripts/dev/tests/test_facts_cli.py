@@ -189,6 +189,7 @@ def test_notice_with_an_unresolvable_ref_exits_2(tmp_path, capsys):
         ("markdown", "| moved | symbol | CLAUDE.md#Gate | `t/m.py:LIMIT` | no |"),
         ("github", "::notice title=CLAUDE.md#Gate::moved symbol t/m.py:LIMIT"),
         ("json", '"kind": "moved"'),
+        ("reread", "  CLAUDE.md#Gate: moved t/m.py:LIMIT"),
     ],
 )
 def test_notice_format_reaches_the_renderer(tmp_path, capsys, fmt, expected):

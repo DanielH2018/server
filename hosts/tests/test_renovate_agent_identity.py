@@ -31,6 +31,7 @@ CONFIG_ENV = "config.env.j2"
 HOOKS = REPO / ".claude" / "hooks"
 
 GH = "renovate_agent_gh_token"
+GH_READ = "renovate_agent_gh_read_token"
 CLAUDE = "renovate_agent_claude_oauth_token"
 # Values no secret, path or login holds, so a render carrying one carries THAT variable.
 HOME = "/srv/identity-sentinel-home"
@@ -153,7 +154,7 @@ def test_the_tokens_reach_the_session_only_through_session_env() -> None:
         "root",
         "0600",
     )
-    assert sorted(written["keys"]) == sorted([GH, CLAUDE])
+    assert sorted(written["keys"]) == sorted([GH, GH_READ, CLAUDE])
 
 
 def test_the_session_cannot_rewrite_its_own_config() -> None:

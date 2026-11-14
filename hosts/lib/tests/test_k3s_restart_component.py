@@ -43,6 +43,7 @@ _KEYS = (
     "wifi_password: x\n"
     "renovate_agent_claude_oauth_token: x\n"
     "renovate_agent_gh_token: x\n"
+    "renovate_agent_gh_read_token: x\n"
     "arr_discord_webhook_url: x\n"
     "sonarr_api_key: x\n"
 )

@@ -84,11 +84,10 @@ what this unit is: a per-user install that runs as `claude_code_user`, with that
 OAuth token.
 
 **`memory.high` counts page cache**, so the fleet touches this bound during an ordinary multi-agent
-pytest fan-out and reclaims cache. The anon budget is what the number is derived from, not what it
-throttles on, and the derivation itself lives in `defaults/main.yml` beside
-`claude_code_fleet_memory_high`: 28.2 GiB of RAM, a 10 GiB budget for the homelab plane's anon,
-`SUnreclaim` and a page-cache floor, against a measured 24h fleet peak of 11.2 GiB. Re-derive it
-there, not from this page.
+pytest fan-out and reclaims cache. The host-RAM floor is what the number is derived from, not what
+it throttles on, and the derivation itself lives in `defaults/main.yml` beside
+`claude_code_fleet_memory_high`: the operator-set floor of about 8 GiB of `MemAvailable`, worked
+backward from a measured `MemAvailable` and fleet size. Re-derive it there, not from this page.
 
 ## Verifying a caps deploy from `cgroupfs`
 

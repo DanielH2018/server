@@ -85,61 +85,69 @@ the 159 of the two days before, at the same rate of merges. The longest wait for
 fell from a median of 1.0 minute to 0.2, and from a p90 of 5.6 minutes to 1.9. The time from
 a merge to the end of its landing did not move, at a median of 9.6 minutes.
 
-### Phase B: a merge queue whose test is the real workflow
+### Phase B: a merge queue whose run is a PR's only full run
 
-The queue orders the merges and tests each stacked tree once, by running `ci.yml` on a branch
-that holds that tree. Landings keep merging their own pull requests, so every rule in
-`scripts/deploy_tools/land_lib/` stays where it is. The run's own token records the tested
-trees, as a pull-request run does, so `scripts/dev/tested_tree.py` trusts the record as it
-trusts one today.
+In the day from 2026-11-13 00:30 UTC, 123 pull requests merged. They cost 177 pull-request
+runs that ran jobs, which is 1.44 a merge, and 123 master runs, about 0.7 of them full per
+merge. 6 of 164 finished pull-request runs were red. The pull-request runs are the larger
+share, and most of them test a master that has moved on by the time the PR merges.
 
-The queue works in this order:
+The queue therefore gives each PR one run, at the moment it lands. A PR stays a draft, and a
+draft runs no job. At its turn the landing marks the PR ready, and the run that starts tests
+the PR on the master it merges into. Master's own run then proves that tree and skips. Every
+rule in `scripts/deploy_tools/land_lib/` stays where it is, and so does every check a
+pull-request run makes, because the one run is still a pull-request run.
 
-1. It takes the first queued heads that stack on master without a conflict.
-1. It builds the tree of master with the first pull request, then with the second added, and
-   so on. A pull request whose own run already recorded its tree needs no queue run.
-1. It pushes one commit that holds the last tree to a `queue/` branch, and dispatches `ci.yml`
-   on it with the batch's pull-request numbers.
-1. Every job of that run runs in full. Its gate rebuilds each tree from master and the heads,
-   checks that the run's own tree is the last one, and records each tree on its head.
-1. On green, each landing merges in turn, and each push run proves its tree and skips.
-1. On red, the queue dispatches each half and evicts the pull request that fails.
-
-The gate rebuilds the trees because a dispatch takes inputs. Anyone who can dispatch could
-name a head and a tree of their choosing. The gate therefore takes pull-request numbers only,
-and records what it built.
+The queue is never what makes a merge correct. When master moves between a PR's run and its
+merge, the trees differ, nothing is proven, and master's run sweeps in full as it did before.
 
 The slices:
 
 1. **B1, ended.** A shadow sweep of master, and replays of pull-request runs that hosted CI
    read red. *What the shadow sweep found* below has the result, which changed this plan.
 1. **R1, landed.** The shadow sweep's timer, its tool and its probe are deleted.
-1. **B2, planned.** A queue of one, behind a flag, for the fan-out server lander. It saves no
-   runs. It moves the full run that follows a merge to before the merge, so master stops
-   taking a tree that no run tested.
-1. **B3, planned.** Batches of up to four, with each half dispatched when the stacked tree is
-   red.
-1. **B4, planned.** Every landing goes through the queue, and the merge pacing and the
-   branch-update re-test are deleted.
+1. **B2, in progress.** A queue of one. With `LAND_QUEUE` set, a landing takes the landing
+   turn, marks its draft PR ready and merges after that one run
+   ([Landing a merged PR](landing.md)). The fan-out's server lander follows: it stops
+   marking a batch's PR ready before the landing, and lands the draft.
+1. **B3, planned.** Batches of up to four. The queue opens one pull request that holds the
+   batch's heads stacked on master, and that PR's run is the batch's one full run. Its gate
+   rebuilds each stacked tree from master and the heads and records it on each head. Each
+   member then merges in turn, and its own run and master's prove the recorded tree and skip.
+   A red batch splits in half.
+1. **B4, planned.** Every landing goes through the queue, on both hosts, and the merge pacing
+   and the branch-update re-test are deleted.
 
-B2 first settles three things on a throwaway pull request. The tree of a squash merge must
-equal what `git merge-tree` builds for the same base and head. The token the lander uses must
-be able to create and delete a `queue/` branch under the rulesets. The token of a dispatch
-run must be able to write a status on a head the run did not check out.
+Three things were settled before B2. The tree of a squash merge equals what `git merge-tree`
+builds for the same base and head: for #8474 both read `dfa8d4331c36`, with master 11 paths
+past the PR's base. The token the lander uses can create and delete a `queue/` branch under
+the rulesets. A workflow dispatch was the first design for the queue's run, and it was
+dropped: a dispatched run skips every step that reads a pull request, so the render-diff
+gates and the cluster-pin gate would run nowhere.
 
-B3 first checks what `promote` publishes when the commits of one batch reach master seconds
-apart, because only the last of them is a tree that a run tested.
+B3's gate rebuilds the trees because the batch's pull request names its members. Anyone who
+can open a pull request could name a head and a tree of their choosing, so the gate takes
+pull-request numbers only and records what it built. B3 first checks what `promote` publishes
+when the commits of one batch reach master seconds apart, because only the last of them is a
+tree that a run tested.
 
-What the queue is worth is an estimate, from one afternoon's counts on 2026-11-12:
+What the queue is worth is an estimate. The measured row is one afternoon's counts on
+2026-11-12, and the batch row assumes the 3.7% red rate above, with a red batch run again in
+halves:
 
 | Configuration | Full runs per merge on the hosted pool |
 |---|---|
 | After Phase A, measured | 2.1: 1.5 pull-request runs and 0.7 full master runs |
-| A queue of one | About 2.1, with the 0.7 ahead of the merge |
-| Batches of four | About 1.7 |
-| Batches of four, heavy jobs on runner pods | About 1.5 |
+| A queue of one | About 1.0 |
+| Batches of four | About 0.3 to 0.4 |
 
 The decisions, all the operator's:
+
+- **Whether a PR may go without a run of its own until it lands. Decided on 2026-11-14:
+  yes.** The run at the PR's turn tests the tree that lands, so an earlier run is weaker
+  evidence of the same thing. An author gets no hosted verdict before the landing, and
+  sessions still run `prek` and their tests on the hosts. The first plan kept every
+  pull-request run and trimmed only master's, which reached about 1.7 runs a merge.
 
 - **What tests a stacked tree. Decided on 2026-11-13: the real workflow.** The first plan
   ran a sweep on daniel-box and trusted its verdict. The replays showed that a sweep on the
@@ -209,25 +217,43 @@ running, the same suite took 841 s.
 
 ### Phase C: runner pods for `hooks` and `pytest`
 
-One full run spends 1,243 of its 1,424 runner-seconds in seven jobs: `hooks` and the six
-`pytest` shards (run 43354559178). Those seven move to runner pods in the cluster. The other
-eight jobs stay hosted, because they are short or need what a pod does not have.
+**Phase C stopped at C1 on 2026-11-14.** The queue of Phase B removes more runs than runner
+pods could take, and it needs no runner. C2 and C3 are kept here as they were planned, with
+what the survey for C2 found. The operator's direction is to look at them again after B3 only
+if runs still queue, and to change the set-up of the tests first so that a pod costs less.
 
-1. **C1, planned.** An ADR supersedes
-   [ADR-0018](adr/0018-the-repository-stays-public-and-ci-stays-hosted.md), and a check
-   reports a fork approval policy other than `all_external_contributors`.
-1. **C2, planned.** Runner pods run a shadow `hooks` and a shadow `pytest` that gate nothing,
-   and a probe sets each beside its hosted twin. The suite's Docker tests move to a job of
-   their own, which stays hosted. The slice ends after a week with no shadow job green where
-   its twin was red.
-1. **C3, planned.** A repository variable routes the heavy jobs of a queue run to the pods. A
+One full run spends 1,243 of its 1,424 runner-seconds in seven jobs: `hooks` and the six
+`pytest` shards (run 43354559178). Those seven would move to runner pods in the cluster. The
+other eight jobs stay hosted, because they are short or need what a pod does not have.
+
+1. **C1, done.** [ADR-0032](adr/0032-cis-heavy-jobs-may-run-on-runner-pods.md) supersedes
+   ADR-0018, and the `github-checks` component alerts on a fork approval policy other than
+   `all_external_contributors`.
+1. **C2, paused.** A launcher on daniel-box starts one runner pod for each heavy job of a run
+   it dispatches, and the `workflow-runners-are-pinned` row accepts the one `runs-on` expression
+   that routes a job to a pod. A timer dispatches shadow runs of master that gate nothing, and
+   a probe sets each beside the hosted run of the same commit. The suite's Docker tests move to
+   a job of their own, which stays hosted. The slice ends after a week with no shadow job green
+   where its twin was red.
+1. **C3, paused.** A repository variable routes the heavy jobs of a queue run to the pods. A
    value of 0 sends every job back to the hosted pool, and a watch sets it to 0 when no
    runner answers.
-1. **C4, planned.** Pull-request shards follow, a count at a time, for a run that a person
-   started from a branch of this repository. A bot's run and a fork's run stay hosted.
 
-The order of work is R1, C1, C2, B2, B3, C3, C4 and then B4. C2's week runs while B2 and B3
-are built.
+A pull-request run would stay hosted, because the launcher starts pods only for a run it
+dispatched. The pods would therefore serve one or two runs an hour and sit idle for the rest.
+
+The survey for C2 found three costs the plan had not counted:
+
+- **The jobs need root.** `hooks` and `pytest` call `sudo`, install apt packages and write to
+  `/usr/local/bin`, and a pod under the `restricted` standard can do none of it. A pod needs
+  an image of its own with those tools in it, and steps that differ between a pod and a
+  hosted runner. That is a second copy of the environment, which is how the sweep went wrong.
+- **A test refuses any ResourceQuota.** `test_no_resourcequota_is_declared_anywhere` fails on
+  one, and ADR-0032 names a quota as a bound on the launcher.
+- **The launcher's token takes operator steps.** It would reach daniel-box as the read-only
+  token does: copied from the cluster into SOPS by hand, then synced to the host.
+
+The order of work is R1, C1, B2, B3 and then B4.
 
 The decisions, all the operator's:
 
@@ -236,16 +262,23 @@ The decisions, all the operator's:
   key, a `gh` token and a cluster node. A runner pod holds none of the three: it has no host
   mount, no ServiceAccount token and no privilege, and it runs one job. Two things stay
   true. Egress NetworkPolicies are not enforced on this cluster, so a job in a pod can reach
-  the LAN. A container escape would land on a production node. C1 writes the ADR.
-- **Which credential registers a runner. Open.** A runner controller in the cluster needs a
-  credential with the repository's `Administration: write` permission, which also covers the
-  rulesets. The alternative keeps that credential out of the cluster: the queue on daniel-box
-  mints a one-job runner token with the token the lander uses and hands it to a waiting pod. C1
-  prices both.
+  the LAN. A container escape would land on a production node. ADR-0032 is the record.
+- **Which credential registers a runner. Decided on 2026-11-13: it stays on daniel-box.** The
+  launcher mints a one-job runner configuration with the token the lander uses, and creates the
+  pod that holds it. A runner therefore exists only while a dispatched run waits for it. The
+  launcher creates pods through a ServiceAccount that can write Jobs in the runner namespace and
+  nothing else. That is a second write path to the cluster beside Flux, bounded by the
+  namespace, its Pod Security standard and a ResourceQuota. The option refused was GitHub's
+  runner controller in the cluster. It starts a pod for any queued job, so a pull-request run
+  could use one, and it needs no launcher. It needs a credential with the repository's
+  `Administration: write` permission in a cluster Secret, which can rewrite the rulesets and
+  delete the repository, and no credential in the cluster can do either. The operator minted
+  one configuration by hand on 2026-11-13 with the token the lander uses, so that token may.
+  GitHub gave the runner exactly the labels the call passed and no `self-hosted` label.
 - **Which node, and whose memory. Open.** A pod lives under `kubepods`, outside the agent
   fleet's bound on `user.slice`. daniel-box has 16 cores and 14 GiB of 28 available.
   daniel-server has 8 cores and 22 GiB of 30 available, and ran the suite four times slower.
-  C2 measures one run on each node.
+  C2 would measure one run on each node.
 
 ## See also
 

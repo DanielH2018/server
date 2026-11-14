@@ -1,11 +1,13 @@
 # G7 — A PR that removes a name fails while a doc or comment still uses it
 
-Status: IN PROGRESS. Step 1, the shared predicate, is done.
+Status: IN PROGRESS. Steps 1 and 2, the shared predicate and the heading pointer guard,
+are done.
 
 Depends on: the tree rename of
 [#8186](https://github.com/DanielH2018/server/issues/8186), which landed on 2026-11-13.
 
-Unblocks: [G9](g9-blocking-gate.md), whose replay reads the doc set this slice defines.
+Unblocks: [G9](g9-blocking-gate.md), whose replay reads the doc set this slice defines,
+and [G11](g11-binding-sweep.md), which sweeps that set.
 
 [ADR-0031](../../adr/0031-each-kind-of-fact-has-one-stateless-detector.md) records the
 decision this slice serves.
@@ -51,9 +53,16 @@ hook, and the hook names both lines.
   received, and a sample is graded. A class becomes an error once fewer than one graded
   row in five is a false alarm. The existing `CLAUDE.md` error class changes only when the
   holder change passes the same test.
-- **An anchor form.** A section anchor joins the citation forms in the two shapes the tree
-  uses: `<doc>#<heading text>` and a link's slug. The lint fails when the heading does not
-  exist ([#8221](https://github.com/DanielH2018/server/issues/8221) is this class).
+- **A heading pointer.** A doc that sends its reader to one part of another doc writes the
+  doc's path in backticks and the part's name in italics. A docs guard fails when the doc
+  is not tracked, or when no heading or bold lead-in in it holds that text
+  ([#8221](https://github.com/DanielH2018/server/issues/8221) is this class). The plan
+  first named two other shapes, `<doc>#<heading text>` in backticks and a link's slug. The
+  instruction files held none of the first and one of the second, so the guard reads the
+  shape the tree uses. It is a guard and not a citation form, because a form would make
+  every edit under the heading a notice row, and G9 measured what such rows are worth.
+  The guard skips the plans under `docs/target-architecture/`, which point at the tree as
+  it stood when each was written.
 - **A rename fixer.** `fact_status.py mv <old> <new> [--root <dir>]` rewrites citations
   and absolute links after a rename. A session runs it; no hook does. It skips
   `**HISTORY —` text and archives. `--root` points it at a store outside the repo, such as
@@ -64,7 +73,7 @@ hook, and the hook names both lines.
    citations.py
 -    repo_docs(): CLAUDE.md only
 +    is_fact_doc(path): CLAUDE.md, .claude/rules, skills, agents; repo_docs() calls it
-+    FORMS += anchor (heading text, or a link's slug)
++    heading_pointers(), names_a_part(): a doc path, then a part's name in italics
    notice.py
 -    Tree.docs: its own CLAUDE.md basename filter
 +    Tree.docs: calls is_fact_doc
@@ -79,6 +88,8 @@ hook, and the hook names both lines.
 +  mv <old> <new> [--root <dir>]
  prek: facts-lint-changed
 +  its files pattern follows is_fact_doc
+ tests/repo/test_documented_paths_exist.py
++  every heading pointer in the live docs names a part that exists
 ```
 
 ## Steps, as PRs
@@ -87,7 +98,10 @@ hook, and the hook names both lines.
    there are fixed in this PR. Done: the widened lint found one error and four warnings.
    At `1559855d5` the doc set is 109 files and 577 sections, 258 of which cite nothing.
    The 30-day replay shows 98 moved rows over it, against 93 over `CLAUDE.md` alone.
-2. The anchor form.
+2. The heading pointer guard. Done: at `4356e0993` the live docs and instruction files
+   held 85 pointers. 2 were stale and both were real: a skill named a heading that
+   `docs/landing.md` had renamed, and a runbook named a doc by its path from before the
+   tree rename. The PR fixes both.
 3. The widened `vanished-identifier` targets and the comment-holder change, as warnings,
    with the replay that counts their rows.
 4. `fact_status.py mv`.
@@ -107,5 +121,5 @@ replay prints rows per merged PR over 30 days, by target class.
 
 ## Complexity delta
 
-Adds one citation form, one subcommand and one module. Replaces two doc-set definitions
+Adds one docs guard, one subcommand and one module. Replaces two doc-set definitions
 with one. Widens one rule.

@@ -1,6 +1,6 @@
-# The primary checkout's fast-forward on daniel-box (H7.51, docs/target-architecture/host/
-# h7-delete-ansible.md, *The deployer retires last, and checkout-sync replaces its fast-forward*).
-# It takes the git-tree lock, so it never races another tree job, and a fast-forward to a
+# The primary checkout's fast-forward on daniel-box (H7.51). checkout-sync is the only process
+# that fast-forwards the primary checkout. It takes the git-tree lock, which publish_pr.py and
+# the docs-refresh cron also take, so it never races another tree job, and a fast-forward to a
 # commit HEAD already contains does nothing.
 #
 # homelab-checkout-sync.timer starts homelab-checkout-sync.service every 10 minutes as sys_user in

@@ -92,11 +92,12 @@ here must satisfy this summary.
 - **RENAME GOTCHA — don't "fix" it:** the exporter's `check` label is `arr-autoblock`, not
   the container's name, because it names the *check* and the rules select it. A grep hitting
   `arr-autoblock` here is CORRECT, not a missed rename.
-- **journald cap is NOT owned here.** It lives in initial_setup's `50-homelab.conf`. A `60-`
-  drop-in this role once shipped silently won, because systemd merges drop-ins
-  last-wins-by-filename, so the role now REMOVES any stale one.
+- **journald cap is NOT owned here.** The `host-tuning` component ships it as
+  `/etc/systemd/journald.conf.d/50-homelab.conf` (`hosts/components/host-tuning/component.yml`).
+  systemd merges drop-ins last-wins-by-filename, so a `60-` drop-in from anywhere else would
+  silently override it.
 - **Don't re-propose the rejected auto-fix candidates** — prowlarr indexers, b2, recyclarr
-  and targets were surveyed and refused ([[autofix-bridge-auto-remediation]]).
+  and targets were surveyed and refused (`docs/autofix-bridge-actuators.md`).
 
 ## Editing & testing
 - Sidecar: `files/autofix.py`, mounted from a ConfigMap along with monitor-bridge's
@@ -104,8 +105,7 @@ here must satisfy this summary.
   (`defaults/main.yml`'s `autofix_bridge_modules` names all three). **Never fork a second copy of any of them here** —
   edit the owning role's. `templates/script-configmap.yaml.j2` embeds
   every module into the rendered ConfigMap `autofix-bridge-script`, so an edit to any of the
-  three changes this role's render, and an edit to `jobs_metrics.py` rolls the crowdsec pod too. Under Ansible the shared role's rollout restart then rolls
-  the pod. Under Flux the renderer's restart annotation (`RESTART_ANNOTATION` in
+  three changes this role's render, and an edit to `jobs_metrics.py` rolls the crowdsec pod too. The renderer's restart annotation (`RESTART_ANNOTATION` in
   `scripts/renderer/renderer_lib/restart.py`) hashes the ConfigMap into the pod template. `scripts/renderer/tests/test_renderer_autofix_bridge_script.py` holds both the
   embed and the checksum.
 - Manifests: `templates/deployment.yaml.j2`, which carries every setting as an `env` value,

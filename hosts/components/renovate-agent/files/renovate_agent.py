@@ -31,6 +31,7 @@ import pwd
 import subprocess
 import sys
 import time
+from collections.abc import Mapping
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from agent_logic import (
@@ -45,6 +46,7 @@ from agent_logic import (
 )
 from agent_toolbox import TOOLS, AgentTools, log, read_file
 from host_lib import atomic_write, install_excepthook, parse_env_file
+from run_requests import carry_out, fresh_dir
 from run_worktree import prepare_worktree, worktree_is_reusable
 
 # The env override exists so the I/O shell can be exercised end-to-end against a throwaway
@@ -63,6 +65,8 @@ OPEN_PR_LIMIT = 200
 RUNS_FILE = "runs.jsonl"
 # The unit's EnvironmentFile: the session's GitHub token and Claude credential, root 0600.
 SESSION_ENV_FILE = "/etc/renovate-agent/session.env"
+# The read-only token in SESSION_ENV_FILE that `session_env` hands the session as GH_TOKEN.
+SESSION_TOKEN_KEY = "RENOVATE_SESSION_GH_TOKEN"
 # Every other variable the unit sets for the session. A resume has to set each again, because
 # sudo resets the environment (#4603). test_session_resume.py holds this to the unit template.
 SESSION_ENV_KEYS = (
@@ -159,8 +163,26 @@ def pr_states(
     return states
 
 
-def run_session(cfg: dict[str, str], cwd: str, log_path: str) -> tuple[str, int, bool]:
+def session_env(env: Mapping[str, str]) -> dict[str, str]:
+    """The runner's environment with `GH_TOKEN` swapped for the session's read-only token.
+
+    The runner keeps its own token for the GitHub writes it makes on the session's behalf. A
+    missing read token raises, so a session never starts holding the runner's token.
+    """
+    if not env.get(SESSION_TOKEN_KEY):
+        raise RuntimeError(f"{SESSION_TOKEN_KEY} is unset; {SESSION_ENV_FILE} lacks it")
+    out = {k: v for k, v in env.items() if k != SESSION_TOKEN_KEY}
+    out["GH_TOKEN"] = env[SESSION_TOKEN_KEY]
+    return out
+
+
+def run_session(
+    cfg: dict[str, str], cwd: str, log_path: str, requests_dir: str
+) -> tuple[str, int, bool]:
     """Run the headless Claude session in `cwd`, teeing its stdout to `log_path`.
+
+    `requests_dir` is outside the worktree, so it is added as a working directory: a headless
+    session has no one to approve a Write there, and its request files would never land.
 
     stdin is /dev/null: without it Claude Code waits 3s for piped input on every start, and
     under systemd there is no stdin to wait for.
@@ -180,6 +202,8 @@ def run_session(cfg: dict[str, str], cwd: str, log_path: str) -> tuple[str, int,
         "json",
         "--max-budget-usd",
         cfg.get("BUDGET_USD", "25"),
+        "--add-dir",
+        requests_dir,
     ]
     timeout = int(cfg.get("RUN_TIMEOUT_S", "14400"))
     log(f"starting session (timeout {timeout}s, budget ${cfg.get('BUDGET_USD', '25')})")
@@ -191,6 +215,7 @@ def run_session(cfg: dict[str, str], cwd: str, log_path: str) -> tuple[str, int,
             text=True,
             timeout=timeout,
             stdin=subprocess.DEVNULL,
+            env=session_env(os.environ),
         )
     except subprocess.TimeoutExpired as e:
         atomic_write(log_path, (e.stdout or "") if isinstance(e.stdout, str) else "")
@@ -254,8 +279,15 @@ def main(tools: AgentTools = TOOLS, config_path: str = CONFIG) -> int:
 
     log(f"{gate.reason}; preparing {path}")
     prepare_worktree(repo_dir, path, branch, tools)
-    stdout, rc, timed_out = run_session(cfg, path, log_path)
+    requests_dir = fresh_dir(state_dir)
+    stdout, rc, timed_out = run_session(cfg, path, log_path, requests_dir)
     outcome = parse_run(stdout, rc, timed_out)
+    census = {p.number for p in before}
+    for request in carry_out(requests_dir, census, cfg["REPO"], tools, state_dir):
+        log(
+            f"request {request.name or '-'}: {request.action or '?'} "
+            f"#{request.pr or '?'} {'done' if request.done else 'not done'}: {request.detail}"
+        )
 
     after = open_prs(cfg["REPO"], tools)
     gone = sorted({p.number for p in before} - {p.number for p in after})

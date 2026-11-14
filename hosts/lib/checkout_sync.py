@@ -50,7 +50,13 @@ from typing import Any
 
 from builder_ci_grade import read_check_pages, token_refused
 from ci_verdict import ci_verdict, ci_walk_candidates
-from host_lib import ERR, github_get, github_token, write_textfile
+from host_lib import (
+    ERR,
+    github_get,
+    github_token,
+    write_check_textfile,
+    write_textfile,
+)
 from host_lib import log as host_log
 
 TAG = "homelab-checkout-sync"
@@ -295,22 +301,16 @@ class CheckoutSync:
                 "# TYPE homelab_checkout_dirty gauge",
                 f"homelab_checkout_dirty {int(dirty)}",
             ]
-        lines += [
-            "# HELP homelab_check_success 1 when the check's last verdict was up, 0 when down.",
-            "# TYPE homelab_check_success gauge",
-            f'homelab_check_success{{check="{CHECK}"}} {int(reason is None)}',
-            "# HELP homelab_check_last_run_timestamp_seconds Unix time the check's last verdict was taken.",
-            "# TYPE homelab_check_last_run_timestamp_seconds gauge",
-            f'homelab_check_last_run_timestamp_seconds{{check="{CHECK}"}} {now}',
-            "# HELP homelab_check_deadline_seconds Longest legitimate gap between two of the check's writes.",
-            "# TYPE homelab_check_deadline_seconds gauge",
-            f'homelab_check_deadline_seconds{{check="{CHECK}"}} {DEADLINE_S}',
-            "# HELP homelab_check_duration_seconds Seconds the check's run took to reach its verdict.",
-            "# TYPE homelab_check_duration_seconds gauge",
-            f'homelab_check_duration_seconds{{check="{CHECK}"}} {now - self.started}',
-        ]
         try:
-            write_textfile(self.textfile_dir / PROM, "\n".join(lines) + "\n")
+            write_check_textfile(
+                self.textfile_dir / PROM,
+                CHECK,
+                success=reason is None,
+                deadline_s=DEADLINE_S,
+                started=self.started,
+                now=now,
+                detail=lines,
+            )
         except OSError as exc:
             log(f"could not write {PROM}: {exc}", err=True)
 

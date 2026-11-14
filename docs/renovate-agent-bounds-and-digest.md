@@ -94,10 +94,20 @@ The session reads third-party text: release notes, changelogs and PR bodies. It 
   only under the operator's home; without it the guard asks on every command naming `gh`. The
   `renovate-agent-setup` copies the operator's package into the agent's `~/.local/share/claude-guard` on each
   apply.
-- **GitHub token.** `renovate_agent_gh_token` is a fine-grained token for this repo alone:
-  pull requests and actions read-write, contents, checks and metadata read. With no contents
-  write it cannot push or merge, and with no issues write it cannot file a finding, so the
-  digest is the session's only hand-off. The lander merges with the operator's token.
+- **GitHub tokens.** Two fine-grained tokens for this repo alone (guardrails plan B1).
+  `renovate_agent_gh_token` is the runner's: pull requests and actions read-write, contents,
+  checks and metadata read. `renovate_agent_gh_read_token` is the session's, with no write
+  permission at all. The runner swaps it in as the session's `GH_TOKEN`
+  (`renovate_agent.py:session_env`), and a session whose read token is unset never starts.
+  The session asks for a close, a comment or a re-run by writing a JSON request into
+  `/var/lib/renovate-agent/requests/`, which `run_session` passes to Claude Code with
+  `--add-dir` so a headless Write there needs no approval. The runner carries each request out with its own token
+  after the session ends, through `files/run_requests.py`, and logs each outcome to
+  `requests.jsonl` in the state directory. A request must be a regular file under 16 KiB,
+  opened without following a link and without blocking, and must name an open Renovate PR the
+  run counted. Anything else is refused and logged. The session and the runner still share a
+  uid until B2r splits them, so the read token bounds what the session's own `gh` calls can
+  do, not what a steered session could reach. The lander merges with the operator's token.
 - **Claude credential.** `renovate_agent_claude_oauth_token`, from `claude setup-token`. Both
   reach the session as environment variables through `/etc/renovate-agent/session.env` (root
   0600), which systemd reads as root.

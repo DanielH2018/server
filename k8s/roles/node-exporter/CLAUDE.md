@@ -48,10 +48,10 @@ mounted at `/textfile` and read by `--collector.textfile.directory`. A host prod
 
 - **Four producers.** One is a host timer writing into the hostPath, and the other three are
   sidecars of this DaemonSet, each writing into its own directory.
-- **The host producer: `claude_cgroup.prom`.** The `setup/claude_code` role installs
+- **The host producer: `claude_cgroup.prom`.** The `claude-code` host component installs
   `hosts/components/claude-code/files/claude-cgroup-metrics.sh` and
-  `claude-cgroup-metrics.timer`, which runs it as root every 30s on both nodes (every host
-  with `has_claude_code: true`). The script writes a `mktemp` file in the same directory,
+  `homelab-claude-cgroup-metrics.timer`, which runs it as root every 30s on both nodes:
+  daniel-box's and daniel-server's host packages both list the component. The script writes a `mktemp` file in the same directory,
   sets it to 0644 and moves it over `claude_cgroup.prom`, so the collector never reads a
   partial file.
 - **Alertmanager pages on it.** The `ClaudeCgroup*` rules in
@@ -70,8 +70,7 @@ mounted at `/textfile` and read by `--collector.textfile.directory`. A host prod
   `/sys/class/iscsi_session/*` and writes one `homelab_iscsi_session_info` series per
   session into the `node-exporter-iscsi-textfile` emptyDir. The exporter reads that
   directory through a second `--collector.textfile.directory`, a repeatable flag. A sidecar
-  reaches both nodes on the next `promote`, where a timer in `setup/k3s` would be a hand
-  apply that misses the agent node. observability's `IscsiSessionStale` pages on a session
+  reaches both nodes on the next `promote`. observability's `IscsiSessionStale` pages on a session
   that is not `LOGGED_IN` for 15 minutes, and `IscsiSessionsNotReporting` pages on a file
   older than the script's `DEADLINE_S`.
   `k8s/roles/node-exporter/tests/test_iscsi_sessions.py::test_both_not_reporting_rules_carry_the_scripts_deadline`

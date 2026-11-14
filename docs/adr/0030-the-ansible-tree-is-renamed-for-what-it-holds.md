@@ -122,7 +122,9 @@ The rename lands in two steps:
   a preference, not a requirement. If daniel-server is down, the pod schedules on daniel-box,
   where the synced checkout holds no `ansible/` tree, and it fails to mount or serves an
   ignored-file leftover. Moving it waits for a checkout the pod's node keeps current
-  ([#8409](https://github.com/DanielH2018/server/issues/8409)).
+  ([#8409](https://github.com/DanielH2018/server/issues/8409)). #8409 resolved it: the pod
+  requires `k8s_primary_node`, daniel-box, whose checkout `checkout-sync` keeps current, and
+  mounts `k8s/`, `inventory/` and `tests/` in place of `ansible/`.
 - The readers that compare two commits, the forward-only pin gate in `cluster_pins.py` and
   `promote_lib/forward_only.py`, read both layouts. A range whose base predates the rename
   would otherwise read no pin and no forward-only role on that side.

@@ -160,25 +160,23 @@ def test_an_override_landing_past_the_end_of_a_fields_list_is_rejected():
     assert len(flagged) == 1, flagged
 
 
-def alertmanager_tile() -> dict:
+def karma_tile() -> dict:
     """The body of the one tile linking to Karma, the alert UI."""
     found = [body for _name, body in tiles() if "karma." in (body.get("href") or "")]
     assert len(found) == 1, f"expected one tile linking to karma., got {len(found)}"
     return found[0]
 
 
-def test_the_alertmanager_tile_names_its_blocks_in_config():
+def test_the_karma_tile_names_its_blocks_in_config():
     """prometheusmetric takes a `label:` per block, so the tile needs no CSS rename.
 
-    The blocks render in `metrics:` order: what pages at critical, what pages at warning,
-    and the Watchdog that proves the alert plane evaluates at all.
+    The blocks render in `metrics:` order: what pages at critical, then what pages at warning.
     """
-    widget = alertmanager_tile()["widget"]
+    widget = karma_tile()["widget"]
     assert widget["type"] == "prometheusmetric"
     assert [m["label"] for m in widget["metrics"]] == [
         "Critical",
         "Warning",
-        "Watchdog",
     ]
     assert not [key for key in css_overrides(custom_css()) if "karma." in key[0]]
 
@@ -199,7 +197,7 @@ def blackholed_matchers() -> set[str]:
     }
 
 
-def test_the_alertmanager_tile_counts_only_alerts_that_page():
+def test_the_karma_tile_counts_only_alerts_that_page():
     """Each severity count negates every matcher the routing tree blackholes.
 
     A blackholed alert pages nobody, so counting it would show a page nobody received.
@@ -208,7 +206,7 @@ def test_the_alertmanager_tile_counts_only_alerts_that_page():
     """
     matchers = blackholed_matchers()
     assert 'shadow="true"' in matchers, matchers  # non-vacuity
-    metrics = {m["label"]: m["query"] for m in alertmanager_tile()["widget"]["metrics"]}
+    metrics = {m["label"]: m["query"] for m in karma_tile()["widget"]["metrics"]}
     for label in ("Critical", "Warning"):
         assert f'severity="{label.lower()}"' in metrics[label], metrics[label]
         missing = {m for m in matchers if m.replace("=", "!=", 1) not in metrics[label]}

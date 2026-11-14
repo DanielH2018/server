@@ -149,3 +149,29 @@ def test_the_ack_rules_are_flagged_when_its_timer_moves_without_them():
             "the `>` threshold reads 900s, and the producer renders 3900",
             "the absent_over_time window reads 900s, and the producer renders 3900",
         ]
+
+
+def mirror_deadline(minute: str | None = None) -> int:
+    """The deadline claude-dotfiles-mirror's rendered config carries, at the default or `minute`."""
+    overrides = (
+        None if minute is None else {"claude_code_dotfiles_mirror_minute": minute}
+    )
+    text = render_component_text(
+        "claude-code", "claude-dotfiles-mirror.json.j2", overrides
+    )
+    return json.loads(text)["deadline_s"]
+
+
+def test_the_mirror_rules_carry_the_deadline_its_config_renders():
+    assert mirror_deadline() == 2100
+    for expr in rule_exprs("ClaudeDotfilesMirrorNotReporting"):
+        assert literal_problems("ClaudeDotfilesMirrorNotReporting", expr, 2100) == []
+
+
+def test_the_mirror_rules_are_flagged_when_its_timer_moves_without_them():
+    deadline = mirror_deadline("*/30")
+    for expr in rule_exprs("ClaudeDotfilesMirrorNotReporting"):
+        assert literal_problems("ClaudeDotfilesMirrorNotReporting", expr, deadline) == [
+            "the `>` threshold reads 2100s, and the producer renders 3900",
+            "the absent_over_time window reads 2100s, and the producer renders 3900",
+        ]

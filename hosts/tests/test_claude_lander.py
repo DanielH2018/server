@@ -251,6 +251,24 @@ FLOOR = [
     "hosts/components/claude-code/files/rootq_socket.py",
     "hosts/components/claude-code/templates/homelab-rootq.socket.j2",
     "hosts/components/claude-code/templates/homelab-rootq@.service.j2",
+    # The dotfiles root mirror's signer key and verifier joined it on 2026-11-13 (dotfiles#967 D13).
+    "hosts/components/claude-code/templates/claude-dotfiles-allowed-signers.j2",
+    "hosts/components/claude-code/files/claude_dotfiles_mirror.py",
+    # The Renovate agent's grant points joined it on 2026-11-13 (guardrails plan B1).
+    "hosts/components/renovate-agent/files/t2-approval-floor",
+    "hosts/components/renovate-agent/files/renovate_floor.py",
+    "hosts/components/renovate-agent/files/land_renovate_pr.py",
+    "hosts/components/renovate-agent/templates/renovate-agent-land@.service.j2",
+    "hosts/components/renovate-agent/templates/50-renovate-agent-land.rules.j2",
+    "hosts/components/renovate-agent/files/run_requests.py",
+    "hosts/components/renovate-agent/files/renovate_agent.py",
+    "hosts/components/renovate-agent/templates/session.env.j2",
+    "hosts/components/renovate-agent/templates/config.env.j2",
+    "hosts/components/renovate-agent/templates/renovate-agent-pins.j2",
+    "hosts/components/renovate-agent/templates/prompt.txt.j2",
+    "hosts/components/renovate-agent/templates/homelab-renovate-agent.service.j2",
+    "hosts/components/renovate-agent/templates/homelab-renovate-agent.timer.j2",
+    "hosts/components/renovate-agent/component.yml",
     "scripts/deploy_tools/land",
     "pyproject.toml",
     "uv.lock",
@@ -297,6 +315,7 @@ LANDER_FILES = [
     "hosts/components/claude-code/component.yml",
     "hosts/components/host-hardening/templates/10-timestamp",
     "hosts/components/sshd/component.yml",
+    "hosts/components/renovate-agent/files/run_requests.py",
     "scripts/deploy_tools/land.sh",
     "scripts/deploy_tools/land.py",
     "scripts/deploy_tools/land_lib/policy.py",
@@ -338,6 +357,7 @@ def test_a_pr_changing_a_role_named_like_cluster_base_lands_without_the_operator
 OFF_THE_FLOOR = [
     "docs/landing.md",
     "hosts/components/claude-code/defaults/main.yml",
+    "hosts/components/renovate-agent/defaults/main.yml",
     "inventory/host_vars/daniel-box.yml",
 ]
 

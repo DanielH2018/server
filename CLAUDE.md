@@ -31,7 +31,6 @@ A task a skill covers routes through the skill listing; this table holds the res
 | Picking up an open issue | `findings.py next` names what is free. Claim first: `findings.py claim <n> --worktree <branch>`. |
 | Recording a finding you will not fix this session | `findings.py open`; `findings.py list` is the register. |
 | Answering "what runs here / where / behind what" | `docs/reference/`. A page with a `generated_from:` banner is generated: change its generator (`scripts/docs/build_docs.py` lists them). |
-| Changing code that a `CLAUDE.md` section cites | `uv run python scripts/dev/fact_status.py notice --since origin/master`, then re-read each listed section the PR left unchanged. |
 | Choosing where a new Python module or test goes | `.claude/rules/python-layout.md` |
 | Chasing a reliability / monitoring "gap" | The role's `CLAUDE.md` and `k8s/roles/monitor-bridge/files/registry.py` **first** — most gaps are handled. |
 | Checking that a UI renders, not just that its pod is Ready | The `homelab-ui` MCP server. Grafana is the exception: `uv run pytest -m ui -k grafana`. |
@@ -134,7 +133,8 @@ the `add-secret` skill; `.claude/rules/secrets.md` and `docs/secret-rotation.md`
 the suite**, except that at commit time it runs twenty-five static ratchet, lint and census test
 files through the `static-ratchet-tests` hooks. CI's `pytest` job runs the whole suite on every
 PR. To see a red test first, run `uv run pytest`, and run `uv run python
-scripts/dev/repo_guards.py` once before `gh pr create`. A fan-out batch runs named test paths
-instead of the whole suite.
+scripts/dev/repo_guards.py` once before `gh pr create`. Its last lines name each instruction
+section that cites code the branch changed and left unedited: re-read those. A fan-out batch
+runs named test paths instead of the whole suite.
 
 `.gitignore` denies every root-level file, and one untracked file parks `homelab-checkout-sync`.

@@ -403,7 +403,7 @@ def resolve_base(repo: Path, ref: str, head: str = "HEAD") -> str | None:
     return sha if done.returncode == 0 and sha else None
 
 
-FORMATS = ("text", "markdown", "github", "json")
+FORMATS = ("text", "markdown", "github", "json", "reread")
 
 # Content-form rows come before path rows, so a rename's path rows cannot push a content row
 # past the annotation cap. Within one form, kinds come in this order.
@@ -449,6 +449,9 @@ def render(rows: list[Notice], summary: Summary, fmt: str = "text") -> str:
       its message, each escaped as GitHub requires of a property or a message.
     - ``json``: a list of objects with the keys ``unit``, ``atom``, ``form``, ``kind`` and
       ``prose_edited``, and no summary.
+    - ``reread``: for the session that made the diff. One count line, then one
+      ``<unit>: <kind> <atom>, ...`` line per section whose prose the diff left unchanged.
+      Empty when no row is left, and no summary.
 
     Raises:
       ValueError: ``fmt`` is not one of ``FORMATS``.
@@ -485,4 +488,34 @@ def render(rows: list[Notice], summary: Summary, fmt: str = "text") -> str:
         return "\n".join(lines)
     if fmt == "json":
         return json.dumps([asdict(r) for r in rows], indent=2)
+    if fmt == "reread":
+        unedited: dict[str, list[str]] = {}
+        for r in rows:
+            if not r.prose_edited:
+                unedited.setdefault(r.unit, []).append(f"{r.kind} {r.atom}")
+        if not unedited:
+            return ""
+        lines = [
+            f"facts notice: {len(unedited)} to re-read. Each section below cites code "
+            "this branch changed, and the branch left its prose unchanged. Edit any "
+            "sentence the change made false."
+        ]
+        lines += [f"  {unit}: {', '.join(atoms)}" for unit, atoms in unedited.items()]
+        return "\n".join(lines)
     raise ValueError(f"unknown notice format {fmt!r}; expected one of {FORMATS}")
+
+
+def branch_notice(
+    repo: Path, ref: str, head: str | None = None, fmt: str = "text"
+) -> str | None:
+    """The notice in ``fmt`` for the diff from the merge base of ``ref`` to ``head``.
+
+    ``head`` None reads the working tree. Returns None when git gives no merge base.
+
+    Raises:
+      MissingObject: a revision lists a blob that the object store does not hold.
+    """
+    base = resolve_base(repo, ref, head or "HEAD")
+    if base is None:
+        return None
+    return render(*scan(repo, base, head), fmt)

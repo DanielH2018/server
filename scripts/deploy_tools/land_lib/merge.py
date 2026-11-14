@@ -572,7 +572,7 @@ def _retrigger_ready_run(ln: Landing, head: str) -> str:
     return ""
 
 
-def await_merge(ln: Landing) -> None:
+def await_merge(ln: Landing, in_turn: bool = False) -> None:
     """Poll until merged, merging directly once CI is green. Bail early on two dead ends.
 
     Only CONFLICTING may bail, and only on two consecutive polls: GitHub computes
@@ -588,7 +588,9 @@ def await_merge(ln: Landing) -> None:
     CI chain, so it gives the wait one more `merge_timeout` from there, and LAND_DEADLINE counts
     two. A green head also waits while master CI has a backlog (`pace.hold`). A held poll never
     ends the wait at `merge_timeout`: once held and unheld time reach it, the merge goes ahead
-    without pacing.
+    without pacing. A landing that holds the landing turn (`in_turn`, `turn.py`) is not paced:
+    no other landing with a turn merges ahead of it, and a paced holder would stop every
+    landing behind it.
     Without --arm-merge this only polls, for a PR merged some other way.
 
     A head whose every CI run skipped as a draft is named on the poll that first reads it. Once
@@ -716,7 +718,7 @@ def await_merge(ln: Landing) -> None:
                 ln.die(disarmed(f" at {head[:8]}", f"PR #{o.pr} not merged"), 1)
             hold = (
                 pace.hold(ln, held, waited)
-                if rc == CI_GREEN and ln.direct_merge_subject
+                if rc == CI_GREEN and ln.direct_merge_subject and not in_turn
                 else ""
             )
             if hold and hold != paced:

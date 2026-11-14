@@ -133,8 +133,8 @@ def test_a_failed_reap_warns_and_the_launch_still_claims(tmp_path, capsys):
 
 
 def test_a_placement_refusal_claims_nothing(tmp_path):
-    """Four batches on one host is over the ssh budget: exit 3 before any launch."""
-    issues = [Issue(n, str(n), "b", ("claude",)) for n in (1, 2, 3, 4)]
+    """Seven batches on one host is over what it admits: exit 3 before any launch."""
+    issues = [Issue(n, str(n), "b", ("claude",)) for n in range(1, 8)]
     tools, run = fake_tools(answers={"daniel-box": ok(HEADROOM)}, issues=issues)
-    assert _launch(tools, tmp_path, "1", "2", "3", "4") == 3
+    assert _launch(tools, tmp_path, *map(str, range(1, 8))) == 3
     assert _findings(run) == []

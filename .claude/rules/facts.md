@@ -120,18 +120,22 @@ continuation lines and nested bullets with it; a history paragraph ends at the n
   `scripts/lib/facts/replay.py:notice_replay` has the counts.
   `--json` prints the same as one object. Under `notice_replay`, `moved` counts the replay's
   `moved` rows, and `moved_prose_edited` counts the ones whose commit also edited the
-  section's prose. `content_notices` names the commit and section of each row whose atom is
-  not a path atom.
+  section's prose. `content_notices` holds each row whose atom is not a path atom: its
+  commit, section, atom and kind, and whether the commit edited the section's prose. That
+  list is what a grading of the notice's yield reads.
 - `fact_status.py notice --since <ref> [--head <rev>]` lists every section that cites an
   atom the diff moved. The diff runs from the merge base of `<ref>` and the head to the head,
   and the head is the working tree unless `--head` names a revision. It compares the atom
   at the two ends of the diff, never against a recorded hash, so a row means the diff itself
   moved the atom. A row's kind is `moved`, `gone`, `ambiguous` or `unparsable`, and each row
   says whether the diff also edited the section's prose. `--format` takes `text`,
-  `markdown`, `github` or `json`. The rules for each row and each format are on
+  `markdown`, `github`, `json` or `reread`. The rules for each row and each format are on
   `scripts/lib/facts/notice.py:moved_sections` and `scripts/lib/facts/notice.py:render`. The
   command exits 0 with rows or without, and exits 2 only when git cannot resolve the merge
   base. `docs/target-architecture/docs-guard/g1-diff-notice.md` is the plan that built it.
+  `scripts/dev/repo_guards.py` ends by printing the `reread` format, which lists only the
+  sections whose prose the branch left unchanged. That is how the notice reaches the
+  session that made the change, and it changes no exit code.
 
 `docs/adr/0023-fact-support-is-a-diff-notice.md` records why the notice replaced the stored
 hashes and their blocking test. A moved atom gets a notice and never blocks a merge. `lint`

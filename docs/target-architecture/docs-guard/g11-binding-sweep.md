@@ -2,8 +2,10 @@
 
 Status: PLANNED.
 
-Depends on: [G9](g9-blocking-gate.md) and [G10](g10-value-rows.md). The sweep binds
-sentences to the gate and the rows they build.
+Depends on: [G7](g7-removed-names.md) and [G10](g10-value-rows.md). The sweep reads the
+doc set the first defines and binds sentences to the rows the second builds.
+[G9](g9-blocking-gate.md) stopped at its measurement on 2026-11-13, so the sweep binds a
+description to the advisory notice, not to a gate.
 
 Unblocks: none.
 
@@ -12,7 +14,7 @@ decision this slice serves.
 
 ## Goal and exit criterion
 
-G7, G9 and G10 build detectors. This slice gives them something to read. It is a fan-out
+G7 and G10 build detectors. This slice gives them something to read. It is a fan-out
 over the instruction files: `CLAUDE.md`, rules, skills and agents.
 
 Exit: `fact_status.py report` shows the five root `CLAUDE.md` sections citing content
@@ -32,7 +34,7 @@ Each batch classifies every sentence in its sections and moves it to its home:
 ```diff
 +  a value                 → a VALUES row (G10)
 +  a behaviour             → a test node with "# fact:"
-+  a description of code   → a symbol, YAML or marker citation, which the gate reads (G9)
++  a description of code   → a symbol, YAML or marker citation, which the notice lists
 +  history                 → **HISTORY —
    a directive             → stays, cites nothing
  .claude/rules/facts.md   rewritten to the end-state model
@@ -47,8 +49,9 @@ shares, and they are the measure.
 
 ## Steps, as PRs
 
-1. The root `CLAUDE.md` and `.claude/rules/`, as the pilot batch. After it, G9's ack
-   projection is re-checked against the real rate.
+1. The root `CLAUDE.md` and `.claude/rules/`, as the pilot batch. Thirty days after it,
+   the notice's unedited rows per content citation are compared with the 0.29 that G9
+   measured.
 2. Roughly 25 batches over the nested `CLAUDE.md` files, skills and agents, through the
    issue fan-out.
 3. `.claude/rules/facts.md` and the freshness reviewer's tiers.
@@ -61,7 +64,8 @@ inert.
 ## Risks and what is not verified
 
 - Prose that cites nothing and names nothing stays undetected. The sweep shrinks it.
-- The sweep raises the number of gated sections. G9's exit rule bounds the cost.
+- The sweep raises the number of notice rows. G9 measured 0.29 unedited rows per content
+  citation in 30 days, and 6% of them left a false sentence.
 
 ## Complexity delta
 

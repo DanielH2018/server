@@ -39,9 +39,9 @@ spec:
       # so they sit 0:0 644 and a uid-1000 truncate would EACCES on the backup step — the exact
       # failure the removed DAC_OVERRIDE comment warned about. fsGroup has the kubelet chown the
       # volume's group and OR in group-write at every mount, which fixes them declaratively where
-      # a one-shot chown would drift back. Same mechanism valheim-stats documents on its own
-      # Longhorn claim.
-{{ pod_shell('homelab-standard', run_as_user=puid, run_as_group=pgid, fs_group=pgid, non_root=true) }}
+      # a one-shot chown would drift back. That needs `Always`: under `OnRootMismatch` the
+      # kubelet skips the walk once the root is right, and a stray 0:0 file stays unwritable.
+{{ pod_shell('homelab-standard', run_as_user=puid, run_as_group=pgid, fs_group=pgid, non_root=true, fs_group_change_policy='Always') }}
       containers:
         - name: terraria
           image: {{ terraria_k8s_image }}

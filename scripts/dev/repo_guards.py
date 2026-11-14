@@ -7,6 +7,9 @@ A fan-out brief and a hand-run session both call this script, so the list has on
     uv run python scripts/dev/repo_guards.py                    # takes one to two minutes
     uv run python scripts/dev/repo_guards.py --drop-candidates  # what the list could lose
 
+After the guards, the run lists each instruction-file section that cites code the branch
+changed and whose prose the branch left unchanged. The list is advice: it changes no exit code.
+
 The whole suite is out of scope. It costs about five times this set, and the operator ruled it
 out for fan-out batches (`.claude/hooks/block-batch-full-suite.py`).
 
@@ -32,6 +35,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from lib.cli_help import ArgumentParser
 from lib.exit_codes import FAILED, OK
+from lib.facts.notice import branch_notice
 from lib.repo_paths import REPO
 
 DEFAULT_WEEKS = 8
@@ -99,11 +103,39 @@ def drop_candidates(
 
 Run = Callable[..., subprocess.CompletedProcess]
 
+NOTICE_REF = "origin/master"
 
-def run_guards(run: Run = subprocess.run) -> int:
-    """Run every guard under pytest from the repo root and return pytest's exit code."""
+
+def reread_notice(
+    repo: Path = REPO, notice: Callable[..., str | None] = branch_notice
+) -> str:
+    """The instruction-file sections this branch should re-read, or why none could be listed.
+
+    The sections are those that cite code the branch changed and whose prose it left alone.
+    Empty when there is none.
+    """
+    try:
+        text = notice(repo, NOTICE_REF, fmt="reread")
+    except Exception as exc:  # the notice is advice, so its crash is one line
+        return f"facts notice skipped: {type(exc).__name__}: {exc}"
+    if text is None:
+        return f"facts notice skipped: no merge base with {NOTICE_REF}; is it fetched?"
+    return text
+
+
+def run_guards(
+    run: Run = subprocess.run, notice: Callable[[], str] = reread_notice
+) -> int:
+    """Run every guard under pytest from the repo root and return pytest's exit code.
+
+    The lines of ``notice`` follow pytest's output and never change the exit code.
+    """
     argv = [sys.executable, "-m", "pytest", "-q", "-n", "auto", *GUARDS]
-    return run(argv, cwd=REPO, check=False).returncode
+    code = run(argv, cwd=REPO, check=False).returncode
+    text = notice()
+    if text:
+        print(text)
+    return code
 
 
 Survey = Callable[[date, date], tuple[set[str], int]]

@@ -70,7 +70,7 @@ continuity. Coexisted with a Docker-era copy through the DNS cutover; that copy 
   it, so an invalid pattern in `pihole_k8s_regex_deny` fails the Job rather than sitting unused.
   netpol-baseline's `networkpolicy-pihole.yaml.j2` admits its label, `app: pihole-gravity`, on
   port 80.
-- **`roll_one.yml`'s one-at-a-time roll is Kustomization order.** Instance 1 renders in
+- **The one-at-a-time roll is Kustomization order.** Instance 1 renders in
   `pihole`, instance 2 in `pihole-deferred`, and `pihole-deferred` depends on `pihole` with
   `wait: true`. A shared ConfigMap edit moves the restart annotation the renderer stamps on
   both instances, and instance 2 rolls only after instance 1 is Ready. `pihole-verify` depends
@@ -88,7 +88,7 @@ continuity. Coexisted with a Docker-era copy through the DNS cutover; that copy 
 
 ## The sibling guard and its break-glass
 
-- **`roll_one.yml`'s sibling check is `templates/precheck/guard.yaml.j2`.** Under Flux,
+- **The sibling check is `templates/precheck/guard.yaml.j2`.** Under Flux,
   `pihole` rolls instance 1 whatever state instance 2 is in, and `pihole` cannot depend on
   `pihole-deferred` without a cycle (#5695). The renderer writes `templates/precheck/` to
   `pihole-precheck`, which `pihole` depends on (#5719). `files/pihole_sibling_guard.py` reads the

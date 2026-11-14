@@ -15,11 +15,20 @@ grid chain all failed.
 
 `custom.css.j2` instead makes the group a flex column, lets the wrapper grow as a block, then
 gives the list `height: calc(100% - 0.75rem)` and splits it into ten equal `minmax(0, 1fr)`
-tracks with the same `0.75rem` gap the Services grid uses. The calendar spans eight tracks and
-each link row takes one: with track `t = (r - g) / 2`, eight tracks and seven gaps are four
-Services rows (`4r + 3g`), and two tracks plus a gap are one (`2t + g = r`). Nothing is a pixel
-constant, so it holds for wrapped titles and every width. A Services group that renders a
-different row count needs twice that many tracks and a matching `span`.
+tracks with the same `0.75rem` gap the Services grid uses. The calendar spans six tracks, the
+Deploy, Artifacts and Docs row spans two, and each link row takes one. With track
+`t = (r - g) / 2`, six tracks and five gaps are three Services rows (`3r + 2g`), and two tracks
+plus a gap are one (`2t + g = r`). Nothing is a pixel constant, so it holds for wrapped titles
+and every width. A Services group that renders a different row count needs twice that many
+tracks and a calendar `span` four fewer.
+
+From 1024px the Calendar group's grid is fifteen columns rather than five. A link spans three,
+so five still fill a row, and a Deploy, Artifacts or Docs tile spans five, so three fill the
+row. Those three tiles carry an `id:` starting `calendar-tool-`, which keeps them out of the
+icon-only rules, so they show a name and a description. At the same width each one is drawn
+as one large link centred in its card: a 48px icon, a larger name and description, and the
+whole card clickable. With no stats, a widget tile's top-aligned header left the card half
+empty.
 
 `Top Row` is ITSELF a `div.services-group` wrapping the two column groups, so a
 `:has(#my-calendar)` selector matches the outer group too and reaches the Services list — which
@@ -65,8 +74,9 @@ The exception is the music row: the Navidrome and `slskd` tiles are link-only ti
 `Services`. They share a row with the Lidarr widget, and that row takes the widget's height.
 Two groups became four on 2026-09-10: the `Media` group's three surviving tiles moved into
 `Services` to make that column four rows deep, and `Admin` and `Tools` merged into one group of
-eight, which still divides by four. Jellyfin was dropped rather than moved, its widget having
-erred since #1457.
+eight, which still divides by four. On 2026-11-13 Deploy, Artifacts and Docs moved under the
+calendar and the texbrain tile was dropped, leaving `Admin & Tools` one row of four. Jellyfin
+was dropped rather than moved, its widget having erred since #1457.
 
 ### An icon-only tile stretches its name anchor, rather than hiding it
 
@@ -93,7 +103,7 @@ height — every widget carries two to four stats, so all of them occupy two sta
 and three span the full width. Two and four divide evenly at a 50% basis; one and three do not,
 so `custom.css.j2` gives those their own basis via `:has(> :first-child:last-child)` and
 `:has(> :nth-child(3):last-child)` — an only child, and a third child that is also the last. A widget whose stat count changes moves between these automatically; nothing needs
-updating by hand. The Alertmanager tile is the one three-stat widget; every other widget
+updating by hand. The Navidrome tile is the one three-stat widget; every other widget
 holds one or two.
 
 **Reserve a stat row or a whole grid row shrinks.** `.services-list` sizes each grid row to its
@@ -121,11 +131,11 @@ can express arithmetic), and the `peanut` widget names its two `battery_charge` 
 Three tiles take a different shape. The Home Assistant widget has no `fields:` at all — its
 `custom:` entries ARE the blocks, so pruning it means deleting entries. The Headlamp tile's
 blocks come from `mappings:` paired positionally to the PromQL operands in `defaults/main.yml`,
-so pruning it means editing both files together. The Alertmanager tile is a `prometheusmetric`
+so pruning it means editing both files together. The Karma tile is a `prometheusmetric`
 widget: each entry under `metrics:` is one block, with its own `label:` and PromQL `query:`, so
 its headings need no CSS rename. Its Critical and Warning counts drop every matcher the
 Alertmanager routing tree sends to its `blackhole` receiver (`shadow="true"` and
-`drill="true"`), and its Watchdog reads 1 while Prometheus evaluates rules.
+`drill="true"`).
 
 The `::after` rename in `custom.css.j2` uses `font-size: 0` rather than `visibility: hidden`,
 because the box must be sized by the NEW text: "Battery Charge" wrapped to two lines in an 85px
