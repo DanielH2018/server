@@ -4,6 +4,7 @@ Run: uv run pytest scripts/deploy_tools/tests/test_land_turn.py
 """
 
 import os
+from dataclasses import replace
 
 import pytest
 
@@ -11,6 +12,7 @@ from _land_fakes import Fakes
 from deploy_tools.land_lib import merge, options, turn
 from deploy_tools.land_lib.outcome import Outcome
 from lib.exit_codes import CI_RED
+from lib.proc_testing import fake_bin, path_with
 
 HEAD = "a" * 40
 OPEN = {"state": "OPEN", "mergeable": "MERGEABLE", "headRefOid": HEAD}
@@ -249,3 +251,57 @@ def test_the_lock_file_is_readable_by_every_user_whatever_the_umask(tmp_path):
     assert give_up is not None
     give_up()
     assert lock.stat().st_mode & 0o777 == 0o644
+
+
+@pytest.fixture
+def ssh_here(tmp_path, monkeypatch):
+    """An `ssh` that runs the command it is given on this host, in place of the turn host."""
+    stubs = fake_bin(
+        tmp_path / "bin", ssh='#!/usr/bin/env bash\nexec sh -c "${@: -1}"\n'
+    )
+    monkeypatch.setenv("PATH", path_with(stubs))
+
+
+def test_a_landing_on_another_host_holds_the_same_lock_over_ssh(tmp_path, ssh_here):
+    lock = tmp_path / "turn.lock"
+    give_up = turn.try_take_over_ssh(lock)
+    assert give_up is not None
+    # The lock a landing on the turn host takes is the one the ssh session holds.
+    assert turn.try_take(lock) is None
+    give_up()
+    here = turn.try_take(lock)
+    assert here is not None
+    assert turn.try_take_over_ssh(lock) is None
+    here()
+
+
+def test_a_turn_host_that_does_not_answer_raises_oserror(tmp_path, monkeypatch):
+    stubs = fake_bin(
+        tmp_path / "bin",
+        ssh="#!/usr/bin/env bash\necho 'Warning: added a key' >&2\necho 'ssh: no route' >&2\nexit 255\n",
+    )
+    monkeypatch.setenv("PATH", path_with(stubs))
+    with pytest.raises(OSError, match="ssh daniel-box: ssh: no route"):
+        turn.try_take_over_ssh(tmp_path / "turn.lock")
+
+
+def test_a_landing_off_the_turn_host_takes_the_turn_over_ssh(
+    landing, tmp_path, monkeypatch, capsys
+):
+    seen = tmp_path / "ssh-args"
+    stubs = fake_bin(
+        tmp_path / "bin",
+        ssh=f"#!/usr/bin/env bash\nprintf '%s\\n' \"$@\" > {seen}\necho held\ncat >/dev/null\n",
+    )
+    monkeypatch.setenv("PATH", path_with(stubs))
+    ln, _ = _landing(landing)
+    ln.tools = replace(ln.tools, try_turn=None, hostname=lambda: "daniel-server")
+    _land(ln)
+    assert turn.TURN_HOST in seen.read_text().splitlines()
+    assert "took the landing turn after 0s" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("hostname", [turn.TURN_HOST, f"{turn.TURN_HOST}.lan"])
+def test_a_landing_on_the_turn_host_locks_the_file_itself(hostname):
+    # By value, not by effect: taking the turn here would lock the host's real file.
+    assert turn._taker(hostname) is turn.try_take
