@@ -82,13 +82,26 @@ k3s_longhorn_csi_sidecar_memory_request: 96Mi
 k3s_longhorn_csi_plugin_memory_request: 64Mi
 k3s_longhorn_csi_node_sidecar_memory_request: 32Mi
 
-# Memory REQUESTS only (no limit) for longhorn-ui and longhorn-driver-deployer, applied by
-# files/patches/longhorn-ui.yaml and files/patches/longhorn-driver-deployer.yaml (#8326).
-# Upstream ships both with no `resources` (BestEffort). Measured 2026-11-14, 30-day peak working
-# set: 6.6Mi for the UI and 12.9Mi for the driver deployer; each request is the peak rounded up
-# to a power of two. A test holds each patch equal to its key.
-k3s_longhorn_ui_memory_request: 16Mi
-k3s_longhorn_driver_deployer_memory_request: 32Mi
+# Requests and limits for the containers upstream ships with no `resources`: longhorn-ui,
+# longhorn-driver-deployer and its wait-longhorn-manager init container, and the manager
+# DaemonSet's pre-pull-share-manager-image sidecar (#8326, #8543). Applied by
+# files/patches/longhorn-ui.yaml, longhorn-driver-deployer.yaml and
+# longhorn-manager-pre-pull.yaml; a test holds each patch equal to its key. Peak working set over
+# the 21.7 days Prometheus retained on 2026-11-14: 6.6Mi UI, 18.7Mi driver deployer, 0.9Mi wait,
+# 2.1Mi pre-pull; every peak CPU rate was under 1m. Each memory limit is at least 3x its peak,
+# because an OOMKill restarts the container just as an eviction would.
+k3s_longhorn_ui_resources:
+  requests: {cpu: 10m, memory: 16Mi}
+  limits: {cpu: 200m, memory: 64Mi}
+k3s_longhorn_driver_deployer_resources:
+  requests: {cpu: 10m, memory: 32Mi}
+  limits: {cpu: 200m, memory: 128Mi}
+k3s_longhorn_driver_deployer_wait_resources:
+  requests: {cpu: 10m, memory: 16Mi}
+  limits: {cpu: 100m, memory: 32Mi}
+k3s_longhorn_share_manager_pre_pull_resources:
+  requests: {cpu: 5m, memory: 8Mi}
+  limits: {cpu: 50m, memory: 32Mi}
 
 # The Longhorn Settings this role renders (templates/settings.yaml.j2), each under the name
 # it had in setup/k3s's defaults. Flux applies them, so a change here is a change to the live
