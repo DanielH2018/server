@@ -1,10 +1,10 @@
 """Stack pull-request heads on a base, one merge each, as a landing batch lands them.
 
 A landing batch tests several PRs in one CI run: each head merged in turn onto master
-(`docs/ci-throughput.md`, slice B3). The landing builds that stack to push it, and the run's
-gate builds it again to record what it tested, so both call `stack`. The tree after each merge
-is the tree GitHub's squash merge of that head makes when the heads before it have merged:
-for #8474, `git merge-tree` and the squash both gave `dfa8d4331c36`.
+(`docs/ci-throughput.md`, slice B3). The landing builds that stack on GitHub, and the run's
+gate builds it again here to record what it tested. The tree after each merge is the tree
+GitHub's squash merge of that head makes when the heads before it have merged: for #8474,
+`git merge-tree` and the squash both gave `dfa8d4331c36`.
 
 Run: uv run pytest scripts/lib/tests/test_tree_stack.py
 """
