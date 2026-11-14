@@ -142,10 +142,15 @@ def parse_md5sums(text: str) -> dict[str, str]:
     return sums
 
 
-def apt_published_md5s(package: str, version: str) -> dict[str, str] | None:
-    """The md5sums inside the `.deb` an apt source serves for `package` at `version`, or None if none serves it."""
+def apt_published_md5s(package: str, version: str) -> dict[str, str]:
+    """The md5sums inside the `.deb` an apt source serves for `package` at `version`.
+
+    Raises:
+        subprocess.SubprocessError: The download or the read failed.
+        OSError: The download left no single `.deb`.
+    """
     with tempfile.TemporaryDirectory() as tmp:
-        fetch = subprocess.run(
+        subprocess.run(
             [
                 "apt-get",
                 "download",
@@ -157,10 +162,13 @@ def apt_published_md5s(package: str, version: str) -> dict[str, str] | None:
             cwd=tmp,
             capture_output=True,
             timeout=300,
+            check=True,
         )
         debs = list(Path(tmp).glob("*.deb"))
-        if fetch.returncode != 0 or len(debs) != 1:
-            return None
+        if len(debs) != 1:
+            raise OSError(
+                f"apt-get download {package}={version} left {len(debs)} .deb files"
+            )
         info = subprocess.run(
             ["dpkg-deb", "--info", str(debs[0]), "md5sums"],
             capture_output=True,
@@ -173,9 +181,13 @@ def apt_published_md5s(package: str, version: str) -> dict[str, str] | None:
 def apt_published(package: str) -> list[str]:
     """The versions of `package` the apt sources publish, newest first."""
     proc = subprocess.run(
-        ["apt-cache", "policy", package], capture_output=True, text=True, timeout=60
+        ["apt-cache", "policy", package],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=True,
     )
-    return published_versions(proc.stdout) if proc.returncode == 0 else []
+    return published_versions(proc.stdout)
 
 
 def chezmoi_render(user: str, chezmoi: str, source: str, target: str) -> bytes | None:
@@ -273,14 +285,15 @@ class Boundaries:
     Attributes:
         owner: The installed package that owns a path, or None when no package owns it.
         published: The versions of a package the apt sources publish, newest first.
-        published_md5s: The md5sums of the published `.deb` for (package, version), or None.
+        published_md5s: The md5sums of the published `.deb` for (package, version). Raises when
+            the download fails, so the run reports down and retries rather than posting.
         render: What chezmoi renders for (user, chezmoi binary, source, target), or None.
         sync: Bring the dotfiles clone to `main` from (repo, clone); returns its commit.
     """
 
     owner: Callable[[str], Owner | None] = dpkg_owner
     published: Callable[[str], list[str]] = apt_published
-    published_md5s: Callable[[str, str], dict[str, str] | None] = apt_published_md5s
+    published_md5s: Callable[[str, str], dict[str, str]] = apt_published_md5s
     render: Callable[[str, str, str, str], bytes | None] = chezmoi_render
     sync: Callable[[str, str], str] = sync_dotfiles
 
@@ -295,16 +308,18 @@ def classify(
     digest = hashlib.md5(change.new or b"").hexdigest()
     owner = tools.owner(change.path) if change.new is not None else None
     if owner is not None and owner.md5 == digest:
-        sums = tools.published_md5s(owner.package, owner.version)
-        if sums is not None and sums.get(change.path) == digest:
-            return Change(change.path, change.old, change.new, "package")
-        if sums is None:
-            published = tools.published(owner.package)
+        published = tools.published(owner.package)
+        if owner.version not in published:
             newest = published[0] if published else "none"
             note = (
                 f"{owner.package} {owner.version} is installed, and no apt source "
                 f"serves it; the newest published version is {newest}"
             )
+        elif (
+            tools.published_md5s(owner.package, owner.version).get(change.path)
+            == digest
+        ):
+            return Change(change.path, change.old, change.new, "package")
         else:
             note = (
                 f"{owner.package} {owner.version} is installed, and the file differs "

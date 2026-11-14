@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import subprocess
 
 import claude_guardrail_ack as ack
 import pytest
@@ -31,6 +32,13 @@ def tree(tmp_path):
 PUBLISHED = {"homelab-daniel-box": ["0.7465+g203fe8f7bc22", "0.7460+g840813a2285a"]}
 
 
+def _download(debs, package, version):
+    """The fake `apt-get download`: a .deb from `debs`, or the error an unreachable source gives."""
+    if (package, version) not in (debs or {}):
+        raise subprocess.CalledProcessError(100, ["apt-get", "download"])
+    return debs[(package, version)]
+
+
 def _run(tmp_path, config, *, rendered=None, owners=None, debs=None, deliver=True):
     """One pass; returns (ok, verdict, the posts made)."""
     posts = []
@@ -42,7 +50,7 @@ def _run(tmp_path, config, *, rendered=None, owners=None, debs=None, deliver=Tru
     tools = ack.Boundaries(
         owner=lambda path: (owners or {}).get(path),
         published=lambda package: PUBLISHED.get(package, []),
-        published_md5s=lambda package, version: (debs or {}).get((package, version)),
+        published_md5s=lambda package, version: _download(debs, package, version),
         render=lambda user, chezmoi, source, target: (rendered or {}).get(target),
         sync=lambda repo, clone: "b0b8bf3f",
     )
@@ -189,3 +197,18 @@ def test_bytecode_under_a_hooks_directory_is_ignored(tmp_path, tree):
     _run(tmp_path, config)
     (home / "hooks" / "__pycache__" / "guard.cpython-312.pyc").write_bytes(b"\x00\x01")
     assert _run(tmp_path, config)[2] == []
+
+
+def test_a_failed_download_fails_the_run_and_the_next_run_classifies_the_change(
+    tmp_path, tree
+):
+    _, package_file, config = tree
+    _run(tmp_path, config)
+    package_file.write_text("scripts/lib/\nscripts/deploy_tools/\n")
+    installed = _owned(package_file, "0.7465+g203fe8f7bc22")
+    with pytest.raises(subprocess.CalledProcessError):
+        _run(tmp_path, config, owners=installed)
+    deb = _deb(package_file, "0.7465+g203fe8f7bc22", package_file.read_bytes())
+    ok, line, posts = _run(tmp_path, config, owners=installed, debs=deb)
+    assert (ok, posts) == (True, [])
+    assert "1 explained, 0 posted" in line
