@@ -107,9 +107,15 @@ The SLZB's own API reported this on 2026-11-14, from `http://<slzb_ip>/ha_info`:
 | `zb_type` | `0`, coordinator |
 
 The device reports itself as an SLZB-06MU, although this doc calls it the SLZB-06M. The
-`zb_version` field is a build date, not an EmberZNet version. The EmberZNet/EZSP version was
-not read. Zigbee2MQTT logs it at startup, and the frontend's About page shows it. Re-read
-the API after any firmware update and change this table in the same edit.
+`zb_version` field is a build date, not an EmberZNet version. The build's EZSP protocol version
+was not read, but its range is known. The ember adapter refuses a radio whose EZSP version is
+outside 13 to 19, the `EZSP_MIN_PROTOCOL_VERSION` and `EZSP_PROTOCOL_VERSION` constants in
+zigbee-herdsman's [`ezsp/consts.ts`][herdsman-consts]. This coordinator runs under Zigbee2MQTT,
+so build `20250220` is inside that range. Zigbee2MQTT logs the exact version at startup, and
+the frontend's About page shows it; add it to the table the first time someone reads it.
+Re-read the API after any firmware update and change this table in the same edit.
+
+[herdsman-consts]: https://github.com/Koenkk/zigbee-herdsman/blob/master/src/adapter/ember/ezsp/consts.ts
 
 ### What the restore carries, and what it does not
 
@@ -122,13 +128,21 @@ centre link key and the old coordinator's IEEE address. It does not carry these:
   `Coordinator address changed`. Zigbee2MQTT's FAQ says to copy the old adapter's IEEE address
   into the new one when moving to another adapter. Whether the paired devices keep working
   without that copy has not been tested here.
-- **A frame counter increment.** The restore sets the network key's outgoing frame counter to
-  the backup's value unchanged. Devices drop frames whose counter is lower than the last one
-  they saw. Zigbee2MQTT writes the backup at startup only when the file is missing, daily,
-  and on a clean stop. A dead coordinator gets no clean stop, so the backup can be up to a day
-  behind. The coordinator's transmissions from that day then sit above the restored counter,
-  and devices can ignore the new coordinator until it catches up. The newer the backup, the
-  smaller that gap.
+- **A frame counter increment.** The restore passes the backup's `network_key.frame_counter`
+  to `ezspSetNWKFrameCounter` unchanged, in `formNetwork` in zigbee-herdsman's
+  [`emberAdapter.ts`][herdsman-ember]. A device drops a frame whose counter is not above the
+  last one it saw from the coordinator. Zigbee2MQTT writes the backup at startup only when the
+  file is missing, daily, and on a clean stop. A dead coordinator gets no clean stop, so the
+  backup can be up to a day behind.
+
+  **The backup's age sets no safe threshold; the frames the coordinator sent after it do.**
+  Without an offset, a backup of any age leaves the new coordinator below the counter that
+  devices last saw. The devices then ignore it until it has sent that many frames again,
+  which can take as long as the backup is old. With an offset larger than those frames, age
+  does not matter. Procedure step 2 therefore raises the counter before the restore. The
+  counter is 32-bit, and the adapter warns only above `0xfeeeeeee` (about 4.0 billion), so
+  a generous offset costs nothing.
+
 - **Device tables.** The backup holds no child or routing table, and its per-device link keys
   are empty with Zigbee2MQTT's defaults. Devices re-announce and routes rebuild on their own.
   A battery device that stays silent may need a button press or a power cycle.
@@ -145,33 +159,44 @@ from config and logs `Config does not match backup`:
   `templates/config/configuration.yaml.j2`).
 - The backup's channel is in config's channel list. Config sets none, so Zigbee2MQTT's default
   list applies.
-- The backup was written by EZSP version 12 or later. The adapter renames an older one to
-  `.old` and forms fresh.
+- The backup file records EZSP version 12 or later (`BACKUP_OLDEST_SUPPORTED_EZSP_VERSION`).
+  The adapter renames an older file to `.old` and forms fresh. This floor applies to the
+  backup file. The radio itself must still run EZSP 13 to 19, as the firmware section says.
 
 A fresh network means every device has to rejoin, and the new radio is then on that network.
 If that happens, stop and read the log before trying again.
+
+[herdsman-ember]: https://github.com/Koenkk/zigbee-herdsman/blob/master/src/adapter/ember/adapter/emberAdapter.ts
 
 ### Procedure (operator-only)
 
 1. **Keep the backup.** Copy `coordinator_backup.json` and `database.db` off the
    `zigbee2mqtt-data` volume before anything starts the pod against the new radio. If the
    volume is also gone, restore it from its R2 backup first (`docs/longhorn-disaster-recovery.md`).
-2. **Power off the old coordinator** if it still runs. The radio accepts one client, and two
+2. **Raise the frame counter in the copy you restore from.** Add an offset to
+   `network_key.frame_counter` in `coordinator_backup.json`, then put the file back on the
+   volume. To size the offset, compare that field with the same field in an older backup of
+   the volume, such as the previous day's R2 backup. Use at least ten times the daily
+   growth, and never less than 100000.
+3. **Power off the old coordinator** if it still runs. The radio accepts one client, and two
    radios on the same PAN conflict.
-3. **Flash the replacement** to the firmware in the table above: the same SMLIGHT core
-   firmware and the same Zigbee build, in coordinator mode. Zigbee2MQTT's ember adapter needs
-   EmberZNet 7.4.x to 9.1.x (EZSP v13).
-4. **Copy the old IEEE address onto the new radio**, following Zigbee2MQTT's
+4. **Flash the replacement** to the firmware in the table above: the same SMLIGHT core
+   firmware and the same Zigbee build `20250220`, in coordinator mode. That build is known to
+   be in the EZSP 13 to 19 range the adapter accepts. If that build is unavailable, use a
+   build whose release notes state an EZSP version in that range. A build outside the range
+   stops Zigbee2MQTT at startup with `Adapter EZSP protocol version (...) is not supported by
+   Host`.
+5. **Copy the old IEEE address onto the new radio**, following Zigbee2MQTT's
    "copy the IEEE address" guide. The address is `coordinatorIeeeAddress` in the backup.
-5. **Give the replacement the old address and port.** Either reserve `10.0.0.127` for it on
+6. **Give the replacement the old address and port.** Either reserve `10.0.0.127` for it on
    the LAN and set its Zigbee TCP port to 6638, or change `slzb_ip` in
    `inventory/group_vars/all.yml`. That variable feeds both the Zigbee2MQTT config and the
    blackbox probe in `k8s/roles/observability/templates/prometheus.yaml.j2`, so changing it
    is a merged change.
-6. **Let the pod reconnect.** Zigbee2MQTT exits when it cannot reach the coordinator, and the
+7. **Let the pod reconnect.** Zigbee2MQTT exits when it cannot reach the coordinator, and the
    kubelet restarts it. Once the new radio answers on port 6638, the next start connects with
    no manual restart. The log should read `Forming from backup` and then `restored`.
-7. **Check the devices.** Each one should report within its availability timeout. Toggle a
+8. **Check the devices.** Each one should report within its availability timeout. Toggle a
    bulb and press the Tap Dial. A device that stays offline may need a power cycle, and
    re-pairing it is the last resort.
 
