@@ -5,7 +5,9 @@
 # first start of a pod finds nothing to remove. A restart within a running pod finds the
 # previous container's tunnel state, because the netns belongs to the pod and outlives the
 # container: the wg0 link, wg-quick's policy-routing rules, the LAN routes the Mullvad mod's
-# PostUp added, and the kill-switch REJECT in the OUTPUT chain. Left in place, that state is
+# PostUp added, and the kill-switch REJECT in the OUTPUT chain. A start whose tunnel failed also
+# leaves the netns without its default route, which the image's own init deleted; the reset puts
+# it back. Left in place, that state is
 # self-sustaining twice over — the mod's api.mullvad.net call routes into the dead wg0 and
 # fails, and even when it succeeds, PostUp's `ip route add` hits the routes that already exist
 # and wg-quick tears the tunnel back down (see this role's CLAUDE.md, "A VPN kill-switch
@@ -93,5 +95,28 @@ ip -4 rule show | sed -n 's/^\([0-9][0-9]*\):.*\(fwmark\|suppress_prefixlength\)
 for net in $(echo "$lan" | tr ',' ' '); do
     ip route del "$net" 2>/dev/null || true
 done
+
+# The pod's default route. LSIO's svc-wireguard runs `ip route del default` when a tunnel fails
+# to come up, and the route belongs to the pod netns, so every later start had no route to
+# CoreDNS, lscr.io or api.mullvad.net until a pod delete (#8402). A start that finds the route
+# stashes it in a routing table no rule reads, which dies with the netns; a start that finds it
+# gone re-adds it from there. The stash sits below 51820 because wg-quick picks its table and
+# fwmark by counting up from 51820 past any non-empty table, and the gate exempts 51820 only.
+# After the gate, because the route is what opens eth0.
+stash=51819
+route=$(ip -4 route show default)
+if [ -n "$route" ]; then
+    # shellcheck disable=SC2086 # the route's words are ip's arguments
+    ip -4 route replace $route table "$stash"
+else
+    saved=$(ip -4 route show table "$stash" default)
+    if [ -n "$saved" ]; then
+        log "no default route, as a failed tunnel start leaves the netns: restoring ${saved}"
+        # shellcheck disable=SC2086
+        ip -4 route add $saved
+    else
+        log "WARNING: no default route and none stashed; only a pod delete restores it"
+    fi
+fi
 
 log "netns clean; uid-${uid} egress gated to wg0 and ${lan}"
