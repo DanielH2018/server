@@ -145,6 +145,7 @@ nav:
       - State of the lab: reference/state.md
       - Networking: reference/networking.md
       - Scripts: reference/scripts.md
+      - Repo size: reference/size.md
       - Topology: reference/topology.md
       - Doc freshness: reference/freshness.md
       - Decision markers: reference/decisions.md

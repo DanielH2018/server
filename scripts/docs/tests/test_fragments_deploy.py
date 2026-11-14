@@ -61,7 +61,7 @@ def _lock_tree(root: Path, *, cron_body: str, unit_exec: str) -> Path:
     templates.mkdir(parents=True)
     (templates / "nightly.sh.j2").write_text(cron_body)
     (templates / "bystander.sh.j2").write_text("echo no lock here\n")
-    unit_dir = root / fd.HOST_COMPONENTS / "deployer" / "units"
+    unit_dir = root / fd.HOST_COMPONENTS / "ticker" / "units"
     unit_dir.mkdir(parents=True)
     (unit_dir / "tick.service.j2").write_text(unit_exec)
     return root
