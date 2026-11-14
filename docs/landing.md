@@ -142,8 +142,15 @@ the operator, whose admin role the bypass covers, and is the one merge path.
 
 Nothing on an armed PR names the hold. PR #8270 was armed at 00:42 UTC on 2026-11-13, 42
 minutes after the ruleset went live. At 01:22 it still read `mergeStateStatus: BLOCKED` with
-`autoMergeRequest: SQUASH` and every required check green (#8294). `land.sh --fresh` then
+`autoMergeRequest: SQUASH` and every required check green. `land.sh --fresh` then
 merged it directly. The same `BLOCKED` shows on every open PR into master, armed or not.
+
+The ruleset's creation time is what separates a held arm from one that merges. The PR timelines
+show it (#8294). Before 00:00:45 UTC on 2026-11-13, an armed PR merged within minutes: #8078
+merged 4 minutes after its arm on 2026-11-12. After that time, #8271 waited 36 minutes and
+#8368 waited 6 hours, each until a session merged it. The master CI gate's `pull_request` rule carried
+`require_extra_approval_for_unattributed_changes: true` through both periods. Its history shows
+the flag set since at least 2026-10-11, so that flag is not the hold.
 
 `--arm-merge` refuses a `CHANGES_REQUESTED` PR before any merge call, because someone asked for
 it to change. `--await-merge` merges the PR through the REST merge endpoint on the first poll
