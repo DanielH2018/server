@@ -110,6 +110,51 @@ sample at 02:50:43Z and the next at 02:51:01Z. kube-state-metrics' `up` has a sa
 ([#4786](https://github.com/DanielH2018/server/issues/4786)) therefore has no alert
 evaluations from 02:49:45Z to 02:53:45Z.
 
+### The reconcile rate
+
+**Every Kustomization reconciles once per promotion, not once per 10-minute interval.** All
+125 Kustomizations follow the one `OCIRepository` `homelab`. Each `promote` run pushes
+`sha-<commit>` with the revision `master@sha1:<commit>`, so the digest changes even when the
+bundle does not. When `prod` moves, the Kustomize controller reconciles every Kustomization, and
+the reconcile restarts its 10-minute interval. The interval fires only when no promotion
+lands within 10 minutes of the last one. This is accepted as a cost of the one-artifact
+design. Flux reconciles every Kustomization whose source revision changes, and it has no
+setting that skips a Kustomization whose path is unchanged. Scoping the reconciles would need
+one source per tag. `verify` does not need the extra reconciles, because it expects statuses
+only from T's changed set (*Verification*). For a Kustomization outside that set, the
+reconcile is an apply that changes nothing.
+
+**Dependency requeues add more reconcile attempts than the applies do.** When `prod` moves,
+a Kustomization whose dependency has not yet applied the new revision reads
+`DependencyNotReady`. It requeues every 30 seconds, the `--requeue-dependency` default, until
+the dependency is Ready (*The timeout follows the chain*). Each attempt patches the
+Kustomization's status, but it builds nothing and applies nothing. The deepest chain ends
+requeue most, and a Kustomization with no `dependsOn` never requeues. The requeues are
+accepted too. A longer `--requeue-dependency` would cut them, but each `dependsOn` hop of
+every rollout could then wait up to that longer interval. `chained_timeout.py` also sizes `verify`'s wait from
+the default, and `scripts/deploy_tools/tests/test_chained_timeout.py` fails a vendored install
+or role default that sets the flag.
+
+The rate follows the merge rate on master, so it has no fixed value. One hour of
+the Kustomize controller's log on 2026-11-14, from 07:51Z to 08:51Z, held 8 `prod` revisions:
+
+- 1062 `Reconciliation finished` lines, about 8.5 per Kustomization: one per revision, plus
+  one interval pass after a 10-minute gap.
+- 1873 `Dependencies do not meet ready condition` lines, about 15 per Kustomization.
+  `netpol-baseline-verify` logged 43 of them and each `<tag>-verify` about 28.
+  `cluster-vars`, `cluster-base` and `homelab-namespace` logged none.
+
+Over whole days the rate is lower. The `history` of the Kustomization `nut` counted 1137
+reconciliations from 2026-11-02 to 2026-11-09, about 6.9 an hour, and 371 from 2026-11-12 to
+2026-11-14, about 8.4 an hour.
+
+To read the rate, use `gotk_reconcile_duration_seconds_count` from the `flux` scrape job. The
+audit log does not carry it, because the audit policy drops the Kustomize controller's status
+patches ([#8512](https://github.com/DanielH2018/server/issues/8512)). A full reconcile and a
+requeue each count once. Over the same hour,
+`sum(increase(gotk_reconcile_duration_seconds_count{kind="Kustomization"}[1h]))` read 2952,
+against 2935 for the two log lines together.
+
 ## Alerts
 
 The `flux` rule group, `k8s/roles/observability/files/rules/flux.yaml`, pages through
