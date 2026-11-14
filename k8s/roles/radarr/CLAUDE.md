@@ -30,7 +30,7 @@ when both paths share one mount.
   only after their Kustomizations are Ready. The Deployment is `Recreate`, so a change that rolls
   it takes the service down briefly.
 - **The `radarr-snapshot` Job snapshots `radarr-config` before each revision applies**
-  (D5.2a). The radarr Kustomization depends on `radarr-snapshot`, so a revision applies only
+  The radarr Kustomization depends on `radarr-snapshot`, so a revision applies only
   after the snapshot is ready; `docs/flux-deploy-plane.md` lists the Job's checks. A failed
   revision that changes radarr writes the stateful hold, and `promote` does not reset `prod`,
   because the failed image may already have migrated the database. Nothing reverts the claim

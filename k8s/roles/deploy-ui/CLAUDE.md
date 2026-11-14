@@ -33,8 +33,7 @@ repo's first Traefik→host route. Two facts follow:
   here: the flag only holds back Renovate's automerge, and the role has no image for Renovate
   to bump.
 
-The daemon the route fronts ships in daniel-box's host package (`hosts/components/deploy-ui/`,
-H7.50), which reaches the host when the builder publishes the next `homelab-daniel-box`.
+The daemon the route fronts ships in daniel-box's host package (`hosts/components/deploy-ui/`), which reaches the host when the builder publishes the next `homelab-daniel-box`.
 
 Authelia policy: `auth_tier: two_factor` on the containers_list entry, which the authelia role
 renders into its access_control rules. ENFORCED for every SSO entry by

@@ -24,7 +24,7 @@ FreshRSS with a small nginx feed-cache sidecar. See repo-root `CLAUDE.md`.
   Kustomizations are Ready. The FreshRSS Deployment is `Recreate`, so a change that rolls it takes
   the service down briefly. The feed cache is a one-replica `RollingUpdate`.
 - **The `freshrss-snapshot` Job snapshots `freshrss-config` before each revision applies**
-  (D5.2a). The freshrss Kustomization depends on `freshrss-snapshot`, so a revision applies
+  The freshrss Kustomization depends on `freshrss-snapshot`, so a revision applies
   only after the snapshot is ready; `docs/flux-deploy-plane.md` lists the Job's checks. A
   failed revision that changes freshrss writes the stateful hold, and `promote` does not reset
   `prod`, because a `:latest` digest swap may already have migrated the config volume. Nothing

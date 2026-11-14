@@ -13,7 +13,7 @@ the pin is physical and never unwinds.
 <!-- /generated_from -->
 
 - **Flux's render pulls `ghcr.io/danielh2018/nut:<content tag>`**, with `imagePullPolicy:
-  IfNotPresent` (D5.4b), and the *Image* line above names that repository. The role's defaults
+  IfNotPresent`, and the *Image* line above names that repository. The role's defaults
   still name the in-cluster registry. The image is built from
   `templates/Dockerfile.j2` (debian:bookworm-slim + nut). Config is **not** baked in, because
   the image is public on GHCR and `upsd.users` carries passwords. It mounts from the

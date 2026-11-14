@@ -1,11 +1,9 @@
 # artifacts — the Claude Code artifact browser, and the cross-host sync behind it
 
 Serves the HTML/Markdown artifacts Claude Code sessions write to `~/.claude/artifacts/`, so a
-report generated in a terminal session is readable in a browser behind Authelia. Written
-2026-08-24: this role had no `CLAUDE.md` at all, and it was the only role under `k8s/roles/` in
-that state — which mattered because it installed a **cross-host cron** that nothing else in the
-tree documented. Since H7.40 daniel-box's host package ships that sync as a timer, and this
-file still documents how it behaves.
+report generated in a terminal session is readable in a browser behind Authelia. The
+cross-host sync that feeds it is a timer in daniel-box's host package, and this file documents
+how that sync behaves.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in k8s/roles/longhorn-reconcile/defaults/main.yml. -->
