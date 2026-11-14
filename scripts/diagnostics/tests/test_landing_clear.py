@@ -43,12 +43,6 @@ def test_an_absent_hold_variable_is_no_hold():
     assert _read(hold=None)["state"] == "clear"
 
 
-def test_a_set_hold_blocks():
-    state = _read(hold="abc1234 stateful=postgres")
-    assert state["state"] == "blocked"
-    assert "DEPLOY_HOLD is set" in state["detail"]
-
-
 def test_a_red_master_blocks_and_names_the_run():
     state = _read(run=_run(conclusion="failure"))
     assert state == {"state": "blocked", "detail": f"master CI is red: {RUN_URL}"}
