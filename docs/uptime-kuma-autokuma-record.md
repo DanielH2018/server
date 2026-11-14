@@ -186,9 +186,11 @@ A test rendered it the same three ways.
 The test engine is python-liquid; Kuma's is liquidjs. The template stays in the subset both accept —
 `assign x = a == b` is the one divergence found, which is why `down` is set through an `if` — and the
 pinned liquidjs rendered the same three contexts to the same payloads on 2026-09-18. The text inside
-the message is the producer's job. **HISTORY —** `bridge/msgfmt.py` in monitor-bridge was the
-grammar for a multi-item DOWN (group by reason, names once), and `probe.py releases --stale-only
---kuma` was its first cron-side caller. #8517 deleted the module once no check imported it.
+the message is the producer's job.
+
+**HISTORY —** `bridge/msgfmt.py` in monitor-bridge was the grammar for a multi-item DOWN (group
+by reason, names once), and `probe.py releases --stale-only --kuma` was its first cron-side
+caller. #8517 deleted the module once no check imported it.
 
 Four things the arrangement depends on:
 
