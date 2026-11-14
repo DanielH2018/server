@@ -20,8 +20,14 @@
   in the cluster file because autofix-bridge reads it.
 
   The spec embeds a digest of the rendered Deployment, so the seed runs again on every revision
-  that rolls the app, as the Ansible seed runs on every deploy. A webhook rotation alone renames
-  nothing, so the rotated URL reaches the app on the next revision that rolls it.
+  that rolls the app, as the Ansible seed runs on every deploy.
+
+  DECIDED: the spec also embeds the `cluster-vars.source` digest of `arr_discord_webhook_url`,
+  so a rotation of that key alone renames the Job and the seed writes the new URL into the app's
+  database. The rendered `<app>-notification` Secret cannot carry it: it reads
+  `${arr_discord_webhook_url}` in the placeholder render and a stub in the stub render, and
+  neither moves when the key rotates. `cluster-vars.source` holds a digest of the key's
+  ciphertext, so no value enters the hash.
 #}
 {% set app = container_item.name %}
 {% set seed_defaults = lookup('file', role_file('defaults/main.yml', role='arr-notification')) | from_yaml %}
@@ -33,6 +39,11 @@
 } %}
 {% set configmap_name = app + '-notification-seed-' + ({'data': data, 'binaryData': {}} | to_json(sort_keys=True, separators=(',', ':')) | hash('sha256'))[:8] %}
 {% set deployment_digest8 = (lookup('template', 'deployment.yaml.j2') | hash('sha256'))[:8] %}
+{% set webhook = namespace(source=[]) %}
+{% for line in lookup('file', cluster_vars_source()).splitlines() if line.split()[:1] == ['arr_discord_webhook_url'] %}
+{% set webhook.source = webhook.source + [line] %}
+{% endfor %}
+{% set webhook_digest8 = (webhook.source[0] | hash('sha256'))[:8] %}
 {% set spec_text %}
 # One retry. The seed adopts and never deletes, so a second run after a transient error reads
 # the row again and writes only what is still missing.
@@ -93,6 +104,9 @@ template:
           # Renames the Job whenever the app's Deployment changes; see the note above.
           - name: ARR_DEPLOYMENT_DIGEST8
             value: "{{ deployment_digest8 }}"
+          # Renames the Job whenever `arr_discord_webhook_url` rotates; see the note above.
+          - name: ARR_WEBHOOK_DIGEST8
+            value: "{{ webhook_digest8 }}"
           - name: PYTHONDONTWRITEBYTECODE
             value: "1"
         resources:
