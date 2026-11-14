@@ -1,18 +1,13 @@
 {#
 The one way a host cron in this role takes the shared git-tree lock (#3722).
 
-docs-refresh and eval-run each mutate the primary checkout, and so do
-gitops-deploy.service and homelab-checkout-sync.service, whose units wrap `flock` themselves. The lock makes those mutations mutually exclusive; fd 9 is held for the
+docs-refresh and eval-run each mutate the primary checkout, and so does
+homelab-checkout-sync.service, whose unit wraps `flock` itself. The lock makes those mutations mutually exclusive; fd 9 is held for the
 calling script's whole life, so the lock releases only when the script exits.
 
-THE WAIT must clear the DEPLOYER's worst-case hold, not a round number. gitops-deploy.service
-wraps its whole ExecStart in this lock, and one activation can run the forward deploy and then,
-in the failure path, the rollback redeploy, sequentially inside that one hold. A waiter that gives
-up early does not fail safe: it fires its unit's OnFailure= for ordinary contention AND skips the
-run. Each copy of this wait was once hand-written and they drifted apart (2700 against 3000, then
-both short of the deployer, #585). ENFORCED by
-gitops_deploy/tests/test_gitops_deploy_timeout_budgets.py, which reads the wait from each
-caller's RENDERED script and derives the floor from the deployer's own budgets.
+A waiter that gives up early does not fail safe: it fires its unit's OnFailure= for ordinary
+contention AND skips the run. HISTORY — the 2400 s wait was sized to clear the retired GitOps
+deployer's worst-case hold (#585), and the test that derived that floor retired with it.
 
 The caller supplies `alert`, its own failure reporter: each script's alert records its own
 verdict. `job` names the script in the message, and `consequence` says what a skip costs that job.

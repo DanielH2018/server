@@ -3,10 +3,10 @@
 # Route-only role: it renders no Deployment of its own, only a
 # selector-less Service, its EndpointSlice and the IngressRoute onto deploy-ui.service on
 # daniel-box. There is no workload to wait
-# on. But the page behind this route starts landings and clears the deployer's hold, so a bad
+# on. But the page behind this route starts landings, so a bad
 # route change (auth accidentally dropped, the EndpointSlice pointed elsewhere) hands that to
 # whoever reaches it — the deploy plane itself, with no workload here to roll back.
 k8s_autodeploy: false
-k8s_autodeploy_reason: "renders no Deployment — route-only (Service + EndpointSlice + IngressRoute) in front of deploy-ui.service on daniel-box; a bad route change exposes a page that starts landings and clears the deployer's hold"
+k8s_autodeploy_reason: "renders no Deployment — route-only (Service + EndpointSlice + IngressRoute) in front of deploy-ui.service on daniel-box; a bad route change exposes a page that starts landings"
 
 manifests_rollout: ''

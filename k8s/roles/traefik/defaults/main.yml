@@ -71,12 +71,11 @@ traefik_k8s_manage_acme: true
 # `crowdsec:8080` does not resolve there, the sidecar crashloops, and the pod never reaches
 # Ready — a false failure rather than a real one.
 #
-# DECIDED: role-local, and paired with authelia_k8s_manage_crowdsec rather than shared. One
-# variable in group_vars/all.yml would be an `inventory/` path, which the GitOps
-# deployer treats as broad — it defers and returns WITHOUT fast-forwarding, so the change
-# would need clearing by hand. The two surfaces are also asymmetric: Traefik carries a
-# bouncer plugin and a Middleware and ENFORCES bans, where Authelia carries only an agent
-# and produces the failed-login lines the scenarios read.
+# DECIDED: role-local, and paired with authelia_k8s_manage_crowdsec rather than shared. The
+# two surfaces are asymmetric: Traefik carries a bouncer plugin and a Middleware and
+# ENFORCES bans, where Authelia carries only an agent and produces the failed-login lines
+# the scenarios read. HISTORY — a shared variable would have lived in group_vars/all.yml,
+# which the retired GitOps deployer deferred as broad.
 traefik_k8s_manage_crowdsec: true
 
 # The `traefik-precheck` Job, which refuses a bouncer key the LAPI rejects before Traefik rolls

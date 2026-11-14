@@ -862,7 +862,7 @@ below, so D6 adds no annotation query (#5425).
   docstring draws the chain from `deploy.sh / gitops_deploy.py`, and its rewrite names the
   same three sources.
   `test_deploy_annotations.py:test_both_deploy_paths_annotate` and
-  `test_the_query_matches_what_the_deployers_actually_log` drop `deploy_io.py` and keep
+  `test_the_query_matches_what_the_emitters_actually_log` drop `deploy_io.py` and keep
   `deploy.sh` and `land-wait`, which D2.3 adds to both.
 
 ### D2's ownership readers after D6
