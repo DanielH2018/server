@@ -206,6 +206,31 @@ def test_the_rule_and_the_runner_agree_on_the_episode_id_and_states() -> None:
     assert rendered.count("polkit.Result.YES") == 1
 
 
+def test_the_artifacts_pod_mounts_the_report_tree_the_host_creates() -> None:
+    """The host plane creates the tree and the Flux plane mounts it; one path, two owners."""
+    # fact: k8s/roles/artifacts/CLAUDE.md#At a glance
+    env = template_env(ROLE / "templates")
+    module = env.get_template("claude-triage-pins.j2").make_module(role_context(ROLE))
+    report_dir, ctl_home, agent_home = (
+        getattr(module, name) for name in ("report_dir", "ctl_home", "agent_home")
+    )
+    deployment = yaml_fast.safe_load(
+        render_role_template(
+            "artifacts", "deployment.yaml.j2", {"claude_code_triage_enabled": True}
+        )
+    )
+    paths = {
+        v["hostPath"]["path"]
+        for v in deployment["spec"]["template"]["spec"]["volumes"]
+        if "hostPath" in v
+    }
+    assert report_dir in paths
+    tmpfiles = render_component_text("claude-code", "claude-triage-tmpfiles.conf.j2")
+    assert re.search(rf"^d {re.escape(report_dir)} 2750 ", tmpfiles, re.M)
+    assert report_dir.startswith(ctl_home + "/")
+    assert not ctl_home.startswith(agent_home + "/")
+
+
 def test_the_poller_runs_as_the_agent() -> None:
     text = re.sub(
         r"\\\n\s*",
