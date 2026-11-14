@@ -12,6 +12,11 @@ are the lines git counts as added. Textconv is off: `secrets/secrets.yml` carrie
 `diff=sops`, and a textconv diff would decrypt it. Binary files count as files with no
 lines.
 
+The page body changes only when a measured file does. Every snapshot counts back from 00:00
+UTC on the day of the run, so the cron's two daily runs agree. The paths the docs-refresh cron
+commits are not measured, so the cron's own commit never moves the page. The body names no
+commit and no date; the run's day is the banner's `generated_at`.
+
 Usage::
 
     uv run python scripts/docs/reference/size.py --out docs/reference/size.md
@@ -33,6 +38,13 @@ from lib.repo_paths import REPO
 SOURCE = "scripts/docs/reference/size.py"
 OFFSETS = (0, 30, 90)
 ROOT_TREE = "(root files)"
+# The paths docs-refresh.sh.j2 stages; measuring them would make each cron commit move the page.
+CRON_STAGED = (
+    "docs/reference/",
+    "docs/assets/generated/",
+    "scripts/dev/pytest_shard_weights.json",
+    "scripts/dev/pytest_shard_runner_weights.json",
+)
 
 _TEST_FILE = re.compile(r"(.*/)?test_[^/]*\.py")
 _CLAUDE_MD = re.compile(r"(.*/)?CLAUDE\.md")
@@ -53,8 +65,6 @@ class Snapshot:
     """The tracked files of one commit, with each file's line count."""
 
     days: int
-    sha: str
-    date: str
     lines: dict[str, int]
 
     def tree(self, name: str) -> tuple[int, int]:
@@ -90,9 +100,20 @@ def _commit_before(repo: _Path, when: datetime) -> str | None:
     return sha or None
 
 
+def _midnight(now: datetime) -> datetime:
+    # DECIDED: count back from the run's UTC midnight, never from HEAD or the clock: the
+    # docs-refresh cron runs twice a day and commits this page, so a moving anchor rewrites it
+    # on every run with no content change.
+    utc = now.astimezone(timezone.utc)
+    return utc.replace(hour=0, minute=0, second=0, microsecond=0)
+
+
 def snapshot(repo: _Path, days: int, now: datetime) -> Snapshot | None:
-    """The last commit at least `days` before `now`, or None when the history is shorter."""
-    sha = _commit_before(repo, now - timedelta(days=days))
+    """The last commit before `days` days ahead of `now`'s UTC midnight, minus the cron's paths.
+
+    Returns None when the history does not reach back that far.
+    """
+    sha = _commit_before(repo, _midnight(now) - timedelta(days=days))
     if sha is None:
         return None
     out = git(
@@ -108,9 +129,9 @@ def snapshot(repo: _Path, days: int, now: datetime) -> Snapshot | None:
     lines = {}
     for row in out.splitlines():
         added, _deleted, path = row.split("\t", 2)
-        lines[path] = int(added) if added.isdigit() else 0
-    date = git_stdout("show", "-s", "--format=%cs", sha, cwd=repo)
-    return Snapshot(days=days, sha=sha[:9], date=date, lines=lines)
+        if not path.startswith(CRON_STAGED):
+            lines[path] = int(added) if added.isdigit() else 0
+    return Snapshot(days=days, lines=lines)
 
 
 def _cells(snaps: list[Snapshot | None], value) -> str:
@@ -121,13 +142,13 @@ def _label(days: int) -> str:
     return "today" if days == 0 else f"{days} days earlier"
 
 
-def _snapshot_line(snaps: list[Snapshot | None]) -> str:
-    return "; ".join(
-        f"*{_label(d)}* is `{s.sha}` ({s.date})"
-        if s
-        else f"*{_label(d)}* has no commit, so its cells read —"
+def _missing_line(snaps: list[Snapshot | None]) -> str:
+    missing = [
+        f"*{_label(d)}* has no commit, so its cells read —"
         for s, d in zip(snaps, OFFSETS, strict=True)
-    )
+        if s is None
+    ]
+    return "; ".join(missing) + ".\n" if missing else ""
 
 
 def render_markdown(snaps: list[Snapshot | None]) -> str:
@@ -140,12 +161,17 @@ def render_markdown(snaps: list[Snapshot | None]) -> str:
     columns = [_label(d) for d in OFFSETS]
     parts = [generated_banner(SOURCE), "# Repo size\n"]
     parts.append(
-        "Tracked files and lines at HEAD and at the last commit 30 and 90 days before this "
-        "page was generated. A proposal names its net complexity delta against these "
-        "numbers. A line is one line of a tracked file as `git diff --numstat` counts it "
-        "from the empty tree; a binary file counts as a file with no lines.\n"
+        "Tracked files and lines at the last commit before 00:00 UTC on the day in "
+        "`generated_at`, and at the last commit before 00:00 UTC 30 and 90 days earlier. "
+        "A proposal names its net complexity delta against these numbers. A line is one "
+        "line of a tracked file as `git diff --numstat` counts it from the empty tree; a "
+        "binary file counts as a file with no lines. The files the docs-refresh cron "
+        "commits are not counted: "
+        + ", ".join(f"`{path}`" for path in CRON_STAGED)
+        + ".\n"
     )
-    parts.append(_snapshot_line(snaps) + ".\n")
+    if missing := _missing_line(snaps):
+        parts.append(missing)
     parts.append("## Files and lines per top-level tree\n")
     parts.append(
         "| Tree | " + " | ".join(f"Files {c} | Lines {c}" for c in columns) + " |"

@@ -12,6 +12,7 @@ import re
 from datetime import datetime, timedelta, timezone
 
 import build_docs
+from _shell_render import rendered_shell_text
 from lib.git_testing import git, init_repo, scrub_process_git_env, scrubbed_env
 
 MODULE = "docs.reference.size"
@@ -214,3 +215,60 @@ def test_a_history_shorter_than_90_days_reads_as_no_commit(tmp_path, monkeypatch
     page = out.read_text()
     assert "*90 days earlier* has no commit" in page
     assert _tree_lines(MID, "k8s") in _tree_numbers(page, "k8s")
+
+
+def _size_run(size, repo, out, now, capsys):
+    assert size.main(["--out", str(out)], repo=repo, now=now) == 0
+    return capsys.readouterr().out
+
+
+def test_a_cron_commit_leaves_the_page_unwritten_the_next_day(
+    tmp_path, monkeypatch, capsys
+):
+    size = importlib.import_module(MODULE)
+    scrub_process_git_env(monkeypatch)
+    repo = init_repo(tmp_path / "repo")
+    _commit_state(repo, OLD, 120)
+    _commit_state(repo, MID, 60)
+    _commit_state(repo, NEW, 5)
+    out = tmp_path / "size.md"
+    assert "wrote" in _size_run(size, repo, out, _NOW, capsys)
+    cron = NEW | {
+        "docs/reference/size.md": 40,
+        "docs/assets/generated/map.svg": 12,
+        "scripts/dev/pytest_shard_weights.json": 9,
+    }
+    _commit_state(repo, cron, -0.25)
+    assert "unchanged" in _size_run(size, repo, out, _NOW + timedelta(hours=7), capsys)
+    assert "unchanged" in _size_run(size, repo, out, _NOW + timedelta(days=1), capsys)
+    _commit_state(repo, cron | {"k8s/e/v.yml": 5}, -1.25)
+    assert "wrote" in _size_run(size, repo, out, _NOW + timedelta(days=2), capsys)
+
+
+def _cells_of(page, first):
+    for row in page.splitlines():
+        if row.lstrip().startswith("|") and _first_cell(row).startswith(first):
+            return [
+                int(c.strip().replace(",", ""))
+                for c in row.strip().strip("|").split("|")[1:]
+            ]
+    raise AssertionError(f"no row {first!r}")
+
+
+def test_each_value_sits_in_its_own_column(tmp_path, monkeypatch):
+    page = _page(tmp_path, monkeypatch)
+    states = (NEW, MID, OLD)
+    assert _cells_of(page, "k8s/") == [
+        v for s in states for v in (_tree_files(s, "k8s"), _tree_lines(s, "k8s"))
+    ]
+    assert _cells_of(page, "Test files") == [_test_files(s) for s in states]
+    assert _cells_of(page, "Hooks") == [_kind_count(s, "hook") for s in states]
+
+
+def test_the_unmeasured_paths_are_the_ones_the_docs_refresh_cron_stages():
+    size = importlib.import_module(MODULE)
+    cron = rendered_shell_text("components", "docs-refresh", "docs-refresh.sh.j2")
+    match = re.search(r"^git add ((?:.*\\\n)*.*)$", cron, re.MULTILINE)
+    assert match, "docs-refresh.sh.j2 has no `git add` line"
+    staged = set(match.group(1).replace("\\\n", " ").split())
+    assert staged == {path.rstrip("/") for path in size.CRON_STAGED}
