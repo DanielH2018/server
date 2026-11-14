@@ -8,13 +8,13 @@ code under test reads is the object it was handed.
 
 That replaces the module-constant-plus-`monkeypatch` arrangement this file carried until
 2026-09-04, where 118 test sites patched attributes on this module and two more `importlib
-.reload()`d it to re-derive `PROM_ORIGIN` from a different environment. A patched module
+.reload()`d it to re-derive a field from a different environment. A patched module
 constant is a process-wide global with a test-shaped hole in it; a parameter is not.
 
-THE FIELDS LIVE IN FOUR DOMAIN MODULES, composed here by inheritance so that flat `cfg.X`
+THE FIELDS LIVE IN THREE DOMAIN MODULES, composed here by inheritance so that flat `cfg.X`
 access survives: `config_host` (disks, SMART, temperatures, the UPS, the Pi), `config_service`
-(n8n, the *arr stack, the drills, Home Assistant), `config_cluster` (the Prometheus
-origin pin) and `config_io` (B2, R2, Loki, the webhooks).
+(n8n, the *arr stack, the drills, Home Assistant) and `config_io` (B2, R2, Loki, the
+webhooks).
 Each declares a frozen dataclass and a builder taking `load_config`'s parsers as arguments, so
 a leaf never imports this facade. What stays HERE is the loop and endpoint fields every domain
 needs and the check filter.
@@ -39,17 +39,16 @@ Constants only. The mutable per-check state (the streak counters and probe cache
 from collections.abc import Mapping
 from dataclasses import dataclass
 
-from bridge.config_cluster import ClusterConfig, cluster_config
 from bridge.config_host import HostConfig, host_config
 from bridge.config_io import IoConfig, io_config
 from bridge.config_service import ServiceConfig, service_config
 
 
 @dataclass(frozen=True)
-class Config(HostConfig, ServiceConfig, ClusterConfig, IoConfig):
+class Config(HostConfig, ServiceConfig, IoConfig):
     """One process's configuration, as read from the environment by `load_config`.
 
-    Frozen, and built once in `main()`. The four bases contribute the domain fields; what is
+    Frozen, and built once in `main()`. The three bases contribute the domain fields; what is
     declared here is what every domain needs or what has to stay in this file by name. Each
     field is documented at its read — that is where the env var name sits, and
     most of the reasoning is about the default rather than the type.
@@ -175,7 +174,6 @@ def load_config(env: Mapping[str, str], problems: list[str] | None = None) -> Co
     return Config(
         **vars(host_config(_env, _int, _num, _env_file)),
         **vars(service_config(_env, _int, _num, _env_file)),
-        **vars(cluster_config(_env, _int, _num)),
         **vars(io_config(_env, _int, _num, _env_file, INTERVAL, problems)),
         INTERVAL=INTERVAL,
         # Touched after every completed cycle; the container healthcheck compares its mtime
