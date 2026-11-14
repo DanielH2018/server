@@ -6,9 +6,7 @@
         "containers/code-server/config/extensions": true
     },
     "search.exclude": {
-        "containers/code-server/config/extensions": true,
-        "Email-to-RSS/node_modules": true,
-        "Email-to-RSS/.wrangler": true
+        "containers/code-server/config/extensions": true
     },
     "files.associations": {
         "*.yml.j2": "jinja-yaml"
