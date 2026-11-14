@@ -552,16 +552,22 @@ jobs:
       # select step below reads `strategy.job-total` for `--of`, and the required context is
       # the `prek` gate, not any individual leg — nothing outside this file counts the legs.
       #
-      # The trade is close to even and rests on a projection, so it is reversible on
-      # evidence. `pytest_shard.py --of N --summary` projected 59.5s per shard at four and
-      # 39.7s at six (local serial seconds, which are NOT the runner's
-      # step time — the runner runs each shard under xdist). The split packs on the runner's
-      # own seconds since #6149, and `--summary` prints those: about 467 per shard at six,
-      # which the test step runs in about 1.5 x 467 / 4, near 180s, on its four xdist workers
-      # (the factor is fitted to run 40125170130). Against that, two more legs pay
-      # ~20s of setup each in runner minutes. Keep six only if a master run's per-shard step
-      # times say the run wall dropped by more than the extra setup costs; the `--durations`
-      # report on every leg is what to read that off.
+      # The count is chosen on two numbers, not on one run's unloaded wall: the slot-seconds a
+      # landing's CI uses, and the p90 queue wait under normal load. The account runs at most 20
+      # hosted jobs at once and a full sweep asks for 25, so every leg's fixed cost also
+      # lengthens the queue every other run waits in. `scripts/dev/ci_slot_cost.py --recent 20`
+      # prints both, per job family. Re-decide the count from its output, never from a projection.
+      #
+      # Its reading over 20 green master runs on 2026-11-14 kept six. A run used a median 1,414
+      # slot-seconds (a full sweep about 3,800), pytest about 1,020 of them, and the pooled
+      # queue wait was 10s at p50 and 161s at p90. The p90 comes from the
+      # `host_packages_bootstrap` legs, which wait a median 56s for a runner; the pytest legs
+      # wait 12s. A leg's fixed cost is about 66 slot-seconds: 29.5s outside `Run the test
+      # suite`, plus about 37s of collection and render prebuild before its first test (the
+      # `phase timing` section of run 43594559130). Five shards would save about 66 of the
+      # 1,414 and one of the 25 queued jobs, and add about 20s to the wall of every run that
+      # skips the host package legs, where pytest is the last job to finish. Four would save
+      # about 130 and add about 50s. Neither moves the p90.
       #
       # A shard can never finish faster than its largest `--dist loadscope` group, a module or
       # a class within one, so the floor rises as the matrix grows. On master runs 42541064791
@@ -590,6 +596,10 @@ jobs:
       # amd64 `version` and `sha256` of `sops` in homelab-tools' package.yml, as the
       # sops_manifest_type_proof job does, so a sops bump has no CI copy to move. Renovate moves
       # the version and the digest together there. age comes from apt, as the hosts install it.
+      # apt-utils is for the repository signer's tests, which drive apt-ftparchive as the
+      # signer does on daniel-box (hosts/lib/tests/test_repo_signer.py). Both share one
+      # apt-get, and NEEDRESTART_SUSPEND skips needrestart's post-install scan, which no
+      # runner needs; each apt-get it ran cost a leg about 1.5s.
       - name: Read the sops pin
         id: sops
         run: |
@@ -605,7 +615,7 @@ jobs:
         with:
           path: ${{ runner.temp }}/pinned/sops
           key: sops-${{ runner.os }}-${{ steps.sops.outputs.version }}-${{ steps.sops.outputs.sha256 }}
-      - name: Install sops and age for the cluster_vars tests
+      - name: Install sops, age and apt-utils for the tests
         env:
           SOPS_VERSION: ${{ steps.sops.outputs.version }}
           SOPS_SHA256: ${{ steps.sops.outputs.sha256 }}
@@ -626,17 +636,10 @@ jobs:
           mkdir -p "$RUNNER_TEMP/bin"
           install -m 0755 "$sops" "$RUNNER_TEMP/bin/sops"
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
-          sudo apt-get install -y --no-install-recommends age \
-            || { sudo apt-get update -q && sudo apt-get install -y --no-install-recommends age; }
+          apt_install=(sudo env NEEDRESTART_SUSPEND=1 apt-get install -y --no-install-recommends age apt-utils)
+          "${apt_install[@]}" || { sudo apt-get update -q && "${apt_install[@]}"; }
           "$RUNNER_TEMP/bin/sops" --version --disable-version-check
           age-keygen --version
-      # The repository signer's tests drive apt-ftparchive, as the signer does on daniel-box
-      # (hosts/lib/tests/test_repo_signer.py).
-      - name: Install apt-utils for the repository signer tests
-        run: |
-          set -euo pipefail
-          sudo apt-get install -y --no-install-recommends apt-utils \
-            || { sudo apt-get update -q && sudo apt-get install -y --no-install-recommends apt-utils; }
           command -v apt-ftparchive
       # The Bash hooks split commands with the dotfiles repo's `claude_guard` package, and the
       # worktree pruner reads `claude_worktree` from it. A host gets both from `chezmoi apply`;
@@ -1709,6 +1712,16 @@ jobs:
   # the script's local build under its `[DONE]` line to find the rest (#7982). Keep the shard
   # count equal to the number of offline builds `bootstrap_plan.plan` lists;
   # `test_bootstrap_case.py` holds it.
+  #
+  # The count meets the criterion the pytest matrix is chosen on: slot-seconds per landing and
+  # the p90 queue wait, as `scripts/dev/ci_slot_cost.py --recent 20` prints them. Over 20 green
+  # master runs on 2026-11-14 these six legs used about 1,740 slot-seconds of a full sweep's
+  # 3,800, and they set the p90 wait. They wait for runners because they become ready while the
+  # six pytest legs still hold slots. Only about 30s of a leg's 294s median is fixed setup
+  # (checkout, the setup action, the hand-off, the image build), so two shards per release
+  # would save about 60 slot-seconds and two queued jobs. They would also put two offline builds
+  # on one leg, each 224-244s with a runner to itself, which lengthens the sweep's last leg by
+  # more than the queue it saves.
   # The `name:` leaves the shard out, so a release's three shards share the check-run name
   # `hosts/lib/ci_verdict.py` lists. An installed host package holds that list, and a renamed
   # leg would read as pending to every copy installed before the rename.
