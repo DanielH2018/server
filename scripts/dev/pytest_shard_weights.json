@@ -761,6 +761,7 @@
  "scripts/lib/tests/test_exit_codes.py": 0.62,
  "scripts/lib/tests/test_facts_atoms.py": 0.01,
  "scripts/lib/tests/test_facts_citations.py": 0.02,
+ "scripts/lib/tests/test_facts_heading_pointers.py": 0.0,
  "scripts/lib/tests/test_facts_lint.py": 0.15,
  "scripts/lib/tests/test_facts_lint_vanished.py": 0.21,
  "scripts/lib/tests/test_facts_notice.py": 0.96,
