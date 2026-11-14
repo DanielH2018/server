@@ -1,15 +1,17 @@
 """Do the public endpoints still serve the keyword each Uptime Robot monitor is set to look for?
 
 `docs/uptime-robot-monitors.md` is the only record of the monitors: they were created in the
-console by hand, no API key exists in the tree, and nothing here can read the console back.
+console by hand. `probe.py uptime-robot` reads the console back; this test cannot.
 What this test CAN check is the rule the console is meant to apply — that each documented
 URL serves its documented keyword, case-sensitively, the way the monitor reads it. A body
 that stops carrying the keyword pages Uptime Robot; a doc row that drifts from what the
 endpoint serves is caught here first.
 
-The rows are parsed from the doc's *What is configured* table, so the doc is the oracle:
-changing a documented keyword to a string the endpoint does not serve turns this red, and
-adding a monitor to the table enrols it here without a code change.
+The rows are parsed from the doc's *What is configured* table by
+`scripts/diagnostics/probe_lib/uptime_robot.py`, the parser `probe.py uptime-robot` uses to
+check the same ids against the console. The doc is the oracle: changing a documented keyword
+to a string the endpoint does not serve turns this red, and adding a monitor to the table
+enrols it here without a code change.
 
 **Marked `ui`, so CI never runs it.** It fetches the public hostnames over the real network,
 which is what `-m ui` lifts the leakguard for. One GET per URL per run — bursting a public
@@ -20,36 +22,15 @@ timeout is 25x the observed latency.
     uv run pytest -m ui -k uptime_robot
 """
 
-import re
 import urllib.request
-from _helpers import REPO
 
 import pytest
 
+from diagnostics.probe_lib.uptime_robot import documented_monitors
+
 pytestmark = pytest.mark.ui
 
-DOC = REPO / "docs" / "uptime-robot-monitors.md"
-
-# One row of the *What is configured* table: `| name | `id` | `url` | `keyword` must exist |`.
-_ROW = re.compile(
-    r"^\| (?P<name>[^|]+?) \| `(?P<id>\d+)` \| `(?P<url>https://[^`]+)` \|"
-    r" `(?P<keyword>[^`]+)` must (?P<rule>exist|not exist) \|$",
-    re.MULTILINE,
-)
-
-# The two monitors the table lists. The parse is a regex over prose, so a reworded table
-# would otherwise yield an empty set and a vacuously green parametrize.
-KNOWN_MONITORS = frozenset({"Auth Health", "Jellyfin Health"})
-
 TIMEOUT_S = 10
-
-
-def documented_monitors() -> list[dict[str, str]]:
-    rows = [m.groupdict() for m in _ROW.finditer(DOC.read_text())]
-    names = {row["name"] for row in rows}
-    missing = KNOWN_MONITORS - names
-    assert not missing, f"{DOC.name}: monitor table no longer lists {sorted(missing)}"
-    return rows
 
 
 def fetch(url: str) -> str:
