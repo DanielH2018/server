@@ -67,36 +67,37 @@ def _roles_naming_the_login() -> set[str]:
     return roles | components | compose
 
 
-def _roles_rendering(overrides: dict, marker: str) -> set[str]:
-    """`<plane>/<role>` for every role or component whose render carries `marker`."""
+def _census_rows(overrides: dict) -> list[tuple[str, str]]:
+    """(`<plane>/<role>`, rendered text) for every template the census renders."""
     planes = (
         ("k8s", k8s_render_texts(overrides)),
         ("k8s", render_build_texts(overrides)),
         ("components", render_setup_texts(overrides)),
         ("components", pi_compose_texts(pi_package(), overrides)),
     )
-    rendered = {
-        f"{plane}/{role}"
-        for plane, texts in planes
-        for role, _, text in texts
-        if marker in text
-    }
+    rows = [
+        (f"{plane}/{role}", text) for plane, texts in planes for role, _, text in texts
+    ]
     # Shell rows name their own plane: `*.sh.j2` lives on both.
-    return rendered | {
-        f"{plane}/{role}"
+    return rows + [
+        (f"{plane}/{role}", text)
         for plane, role, _, text in render_shell_texts(overrides)
-        if marker in text
-    }
+    ]
 
 
 @cache
+def _login_census_rows() -> tuple[tuple[str, str], ...]:
+    """`_census_rows` with the primary login set to the sentinel."""
+    return tuple(_census_rows({"nut_monitor_password": SENTINEL}))
+
+
 def _roles_rendering_the_login() -> frozenset[str]:
     """Every role whose render carries the primary login's VALUE, not just its name.
 
     The password is set to a sentinel, so a template that reaches it through an alias is
     counted, where a source scan for the name sees nothing.
     """
-    return frozenset(_roles_rendering({"nut_monitor_password": SENTINEL}, SENTINEL))
+    return frozenset(role for role, text in _login_census_rows() if SENTINEL in text)
 
 
 def test_an_alias_of_the_login_reaches_a_component_render(tmp_path):
@@ -154,8 +155,8 @@ PI_SERVICES = frozenset({"alloy", "autoheal", "docker-proxy", "wg-easy"})
 
 
 def test_the_census_renders_every_pi_compose_service():
-    rendered = {component for component, _, _ in pi_compose_texts(pi_package())}
-    missing = {f"{PI_COMPOSE}/{s}" for s in PI_SERVICES} - rendered
+    rendered = {role for role, _ in _login_census_rows()}
+    missing = {f"components/{PI_COMPOSE}/{s}" for s in PI_SERVICES} - rendered
     assert not missing, f"no census row for: {sorted(missing)}"
 
 
