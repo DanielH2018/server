@@ -5,9 +5,12 @@ A push must carry the recorded tree. A pull-request head needs a record for any 
 Run: uv run pytest scripts/dev/tests/test_tested_tree.py
 """
 
+import json
+
 import pytest
 
 import tested_tree
+from lib.git_testing import commit, git, git_out, init_repo
 
 REPO_NAME = "o/r"
 SQUASH = "a" * 40
@@ -157,3 +160,167 @@ def test_main_writes_the_answer_and_exits_zero_when_the_lookup_fails(
     assert tested_tree.main(argv, _api(OSError("down"), [])) == 0
     assert output.read_text() == "proven=false\n"
     assert "proven=false" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    ("body", "members"),
+    [
+        ("Landing batch.\n\nMembers: #7 #8 #9\n", [7, 8, 9]),
+        ("Members: #7 #8\r\nmore\r\n", [7, 8]),
+        ("Members: #1 #2 #3 #4", [1, 2, 3, 4]),
+        ("Members: #1 #2 #3 #4 #5", []),
+        ("Members: 7 8", []),
+        ("see Members: #7", []),
+        ("Members: #7 #8 and more", []),
+        ("Members: #7\nMembers: #8", []),
+        ("Members: #7 #7", []),
+    ],
+    ids=[
+        *["named", "crlf", "four", "five", "bare", "inline", "trailing"],
+        *["two-lines", "repeated"],
+    ],
+)
+def test_a_batch_names_its_members_on_one_line_or_names_none(body, members):
+    assert tested_tree.batch_members(body) == members
+
+
+def _batch(tmp_path, second: dict[str, str] | None = None):
+    """A checkout whose origin serves two member heads; (checkout, base, heads, trees).
+
+    The checkout holds master alone, as a pull-request run's does, so the heads reach it only
+    through the fetch. The trees are what git's own squash merge of each head makes, in turn.
+    `second` is what the second member changes; the first changes `a.txt`.
+    """
+    origin = init_repo(tmp_path / "origin")
+    git(origin, "config", "uploadpack.allowAnySHA1InWant", "true")
+    base = commit(origin, "base", **{"a.txt": "a\n", "b.txt": "b\n"})
+    heads = []
+    for name, files in (
+        ("one", {"a.txt": "one\n"}),
+        ("two", second or {"b.txt": "two\n"}),
+    ):
+        git(origin, "checkout", "-q", "-b", name, base)
+        heads.append(commit(origin, name, **files))
+    git(origin, "checkout", "-q", "-b", "squashed", base)
+    trees = []
+    for head in heads:
+        if git(origin, "merge", "--squash", "-q", head, check=False).returncode:
+            break
+        git(origin, "commit", "-q", "-m", "squash", "--no-gpg-sign")
+        trees.append(git_out(origin, "rev-parse", "HEAD^{tree}"))
+    url = f"file://{origin}"
+    git(tmp_path, "clone", "-q", "--single-branch", "-b", "master", url, "checkout")
+    return tmp_path / "checkout", base, heads, trees
+
+
+def _pull(head, state="open", head_repo=REPO_NAME):
+    return {"state": state, "head": {"sha": head, "repo": {"full_name": head_repo}}}
+
+
+def _record(checkout, base, pulls, tested):
+    """`record_batch` for members #1 and #2; (what it says, the statuses it posted)."""
+    posted = []
+
+    def get(path):
+        answer = pulls[int(path.rsplit("/", 1)[1]) - 1]
+        if isinstance(answer, Exception):
+            raise answer
+        return answer
+
+    told = tested_tree.record_batch(
+        get,
+        lambda path, body: posted.append((path, body)),
+        REPO_NAME,
+        [1, 2],
+        base,
+        tested,
+        RUN_URL,
+        cwd=checkout,
+    )
+    return told, posted
+
+
+def _statuses(heads, trees):
+    return [
+        (
+            f"repos/{REPO_NAME}/statuses/{head}",
+            {
+                "state": "success",
+                "context": tested_tree.CONTEXT,
+                "description": tree,
+                "target_url": RUN_URL,
+            },
+        )
+        for head, tree in zip(heads, trees, strict=True)
+    ]
+
+
+def test_a_batch_records_each_members_stacked_tree_on_its_head(tmp_path):
+    checkout, base, heads, trees = _batch(tmp_path)
+    told, posted = _record(checkout, base, [_pull(h) for h in heads], trees[-1])
+    assert posted == _statuses(heads, trees)
+    assert told == f"recorded #1 {heads[0][:8]}, #2 {heads[1][:8]}"
+    # What it wrote is what the readers accept.
+    assert _prove_head([{**posted[0][1], "creator": {"login": tested_tree.CREATOR}}])
+
+
+@pytest.mark.parametrize(
+    ("case", "why"),
+    [
+        ("another-tree", "and the run tested"),
+        ("fork", "nothing: #2 is not an open pull request from a branch of this"),
+        ("closed", "nothing: #1 is not an open pull request from a branch of this"),
+        ("conflict", "nothing: #2 does not merge onto the run's base"),
+        ("unreadable", "recording failed: OSError"),
+        ("unfetchable", "recording failed: CalledProcessError"),
+    ],
+)
+def test_a_batch_the_gate_refuses_or_cannot_rebuild_records_nothing(
+    tmp_path, case, why
+):
+    second = {"a.txt": "two\n"} if case == "conflict" else None
+    checkout, base, heads, trees = _batch(tmp_path, second)
+    pulls = [_pull(h) for h in heads]
+    tested = trees[-1]
+    if case == "another-tree":
+        # The run tested the first member alone, so the batch is not the stack it names.
+        tested = trees[0]
+    elif case == "fork":
+        pulls[1] = _pull(heads[1], head_repo="fork/r")
+    elif case == "closed":
+        pulls[0] = _pull(heads[0], state="closed")
+    elif case == "unreadable":
+        pulls[1] = OSError("down")
+    elif case == "unfetchable":
+        pulls[1] = _pull("f" * 40)
+    told, posted = _record(checkout, base, pulls, tested)
+    assert posted == []
+    assert why in told
+
+
+def test_main_records_the_batch_its_body_names_and_exits_zero(
+    tmp_path, monkeypatch, capsys
+):
+    checkout, base, heads, trees = _batch(tmp_path)
+    monkeypatch.chdir(checkout)
+    monkeypatch.setenv(tested_tree.BODY_ENV, "A batch.\n\nMembers: #1 #2\n")
+    posted = []
+    argv = ["record-batch", "--repo", REPO_NAME, "--base", base]
+    argv += ["--tested-tree", trees[-1], "--run-url", RUN_URL]
+
+    def get(path):
+        return _pull(heads[int(path.rsplit("/", 1)[1]) - 1])
+
+    assert tested_tree.main(argv, get, lambda *call: posted.append(call)) == 0
+    assert posted == _statuses(heads, trees)
+    assert "recorded #1" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("body", [None, {"state": "success"}])
+def test_a_request_with_a_body_is_a_post_of_that_body_as_json(body):
+    request = tested_tree._request("the-token", "repos/o/r/statuses/abc", body)
+    assert request.full_url == "https://api.github.com/repos/o/r/statuses/abc"
+    assert request.get_header("Authorization") == "Bearer the-token"
+    assert request.get_method() == ("GET" if body is None else "POST")
+    sent = request.data
+    assert (json.loads(sent) if isinstance(sent, bytes) else sent) == body
