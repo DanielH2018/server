@@ -10,6 +10,7 @@ files:
   - {src: files/deploy_ui.html, dst: /usr/lib/homelab/deploy-ui/deploy_ui.html}
   - {src: files/deploy_ui_lib/deploy_ui_reads.py, dst: /usr/lib/homelab/deploy-ui/deploy_ui_lib/deploy_ui_reads.py, activate: "try-restart:deploy-ui.service"}
   - {src: files/deploy_ui_lib/deploy_ui_writes.py, dst: /usr/lib/homelab/deploy-ui/deploy_ui_lib/deploy_ui_writes.py, activate: "try-restart:deploy-ui.service"}
+  - {src: files/deploy_ui_lib/deploy_ui_games.py, dst: /usr/lib/homelab/deploy-ui/deploy_ui_lib/deploy_ui_games.py, activate: "try-restart:deploy-ui.service"}
   - {lib: host_lib.py, dst: /usr/lib/homelab/deploy-ui/host_lib.py, activate: "try-restart:deploy-ui.service"}
   - {src: templates/deploy-ui.service.j2, dst: /usr/lib/systemd/system/deploy-ui.service}
 enable:

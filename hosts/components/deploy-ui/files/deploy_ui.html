@@ -9,7 +9,7 @@ th{color:var(--sub);font-size:12px;text-transform:uppercase}
 code{font-family:ui-monospace,monospace;background:var(--surface0);padding:1px 4px;border-radius:3px}
 button{background:var(--blue);color:var(--crust);border:0;padding:4px 10px;border-radius:3px;font-weight:600;cursor:pointer}
 button.danger{background:var(--red)}button.warn{background:var(--yellow)}button.plain{background:var(--surface0);color:var(--text)}
-.unavail{color:var(--red)}.clear{color:var(--green)}.mute{color:var(--mute)}
+.unavail{color:var(--red)}.warn-text{color:var(--yellow)}.clear{color:var(--green)}.mute{color:var(--mute)}
 pre{background:var(--mantle);border:1px solid var(--surface1);padding:10px;overflow:auto;white-space:pre-wrap;margin:0}
 #msg{min-height:1.4em;color:var(--yellow)}
 a{color:var(--blue)}
@@ -41,6 +41,8 @@ button.link{background:none;color:var(--blue);font-size:12px;font-weight:500;pad
 <div id="logbody"></div><div id="vverdict"></div><div id="vbar" class="bar"></div></section>
 <h2>Recently finished landings <button id="finToggle" class="link" onclick="setFin({hidden:!fin.hidden})"></button></h2><div id="landings"></div>
 <h2>Open pull requests</h2><div id="prs"></div>
+<h2>Game servers</h2><div id="games"></div>
+<section id="console" hidden><h2>Console <button class="link" onclick="closeConsole()">close</button></h2><div id="conbody"></div></section>
 <script>
 const H={'X-Deploy-UI':'1','Content-Type':'application/json'};
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -136,7 +138,23 @@ function renderLog(){const d=view.data,body=document.getElementById('logbody');
     live?(view.follow?'<button class="plain" onclick="view.follow=false;renderLog()">following</button>':'<button onclick="view.follow=true;const b=document.getElementById(\'logbody\');b.scrollTop=b.scrollHeight;renderLog()">jump to live</button>'):''].filter(Boolean).join(' ');}
 document.getElementById('logbody').addEventListener('scroll',e=>{const b=e.target;const bottom=b.scrollTop+b.clientHeight>=b.scrollHeight-24;
   if(view.follow!==bottom&&view.data){view.follow=bottom;}});
-function refresh(){panel('inflight','/api/inflight',inflight).then(()=>{if(!fin.hidden)panel('landings','/api/landings',landings);});panel('prs','/api/prs',prs);}
+// A game's state word, coloured: settled states plain, transitions yellow, a missing Deployment red.
+const GAME_TONE={running:'clear',starting:'warn-text',stopping:'warn-text',partial:'warn-text',stopped:'mute',missing:'unavail'};
+const up=t=>ago(t).replace(' ago','');
+function podNote(p){return `<span class="mute">${esc(p.phase)}${p.started?', up '+up(p.started):''}${p.restarts?`, ${p.restarts} restarts`:''}</span>`;}
+function gameServers(b){if(!b.games.length)return '<p class="mute">no game servers registered</p>';
+  return '<table><tr><th>game</th><th>state</th><th>deployments (ready/desired)</th><th></th></tr>'+b.games.map(g=>`<tr><td>${esc(g.name)}</td><td class="${GAME_TONE[g.state]||''}">${esc(g.state)}</td><td>${g.deployments.map(d=>`<code>${esc(d.name)}</code> ${d.missing?'<span class="unavail">missing</span>':`${d.ready}/${d.desired} `+d.pods.map(podNote).join(' ')}`).join('<br>')}</td><td><button class="plain" onclick="openConsole('${esc(g.name)}')">console</button></td></tr>`).join('')+'</table>';}
+let consoleGame=null;
+function openConsole(name){consoleGame=name;document.getElementById('console').hidden=false;pollConsole();document.getElementById('console').scrollIntoView({behavior:'smooth'});}
+function closeConsole(){consoleGame=null;document.getElementById('console').hidden=true;}
+const clock=t=>new Date(t*1000).toLocaleString([], {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit'});
+function consoleView(b){if(!b.lines.length)return `<p class="mute">${esc(b.game)}: no console lines in the last 7 days</p>`;
+  return `<p class="mute">${esc(b.game)} · newest ${b.lines.length} lines, from Loki</p><pre id="conlines" style="max-height:420px">${b.lines.map(l=>`<span class="mute">${clock(l.ts)}</span> ${esc(l.line)}`).join('\n')}</pre>`;}
+async function pollConsole(){if(!consoleGame)return;const old=document.getElementById('conlines');
+  const atBottom=!old||old.scrollTop+old.clientHeight>=old.scrollHeight-24;
+  await panel('conbody',`/api/game-console?game=${encodeURIComponent(consoleGame)}`,consoleView);
+  const el=document.getElementById('conlines');if(el&&atBottom)el.scrollTop=el.scrollHeight;}
+function refresh(){panel('games','/api/games',gameServers);pollConsole();panel('inflight','/api/inflight',inflight).then(()=>{if(!fin.hidden)panel('landings','/api/landings',landings);});panel('prs','/api/prs',prs);}
 document.getElementById('finToggle').textContent=fin.hidden?'show':'hide';document.getElementById('landings').hidden=fin.hidden;
 function fromHash(){const m=location.hash.match(/^#log\/(.+)$/);if(m&&decodeURIComponent(m[1])!==view.name)openLog(decodeURIComponent(m[1]));}
 window.addEventListener('hashchange',fromHash);fromHash();
