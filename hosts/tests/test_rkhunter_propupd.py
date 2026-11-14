@@ -167,21 +167,19 @@ def test_a_dpkg_run_that_changed_only_homelab_packages_keeps_the_baseline(tmp_pa
     assert stdout.endswith("only homelab-* packages changed; rkhunter baseline kept\n")
 
 
-def test_a_dpkg_run_that_changed_another_package_refreshes(tmp_path):
+@pytest.mark.parametrize(
+    "change",
+    ["another package", "rkhunter config", "missing database"],
+)
+def test_a_change_beyond_homelab_packages_defeats_the_skip(tmp_path, change):
     _refresh(tmp_path)
-    calls, _ = _refresh(tmp_path, status_text=STATUS.replace("8.9", "8.12"))
-    assert calls == REFRESH
-
-
-def test_a_changed_rkhunter_config_refreshes(tmp_path):
-    _refresh(tmp_path)
-    (tmp_path / "rkhunter.conf.local").write_text("ALLOW_SSH_ROOT_USER=no\n")
-    calls, _ = _refresh(tmp_path)
-    assert calls == REFRESH
-
-
-def test_a_missing_database_refreshes(tmp_path):
-    _refresh(tmp_path)
-    (tmp_path / "rkhunter.dat").unlink()
-    calls, _ = _refresh(tmp_path)
+    assert _refresh(tmp_path)[0] == ["wait --wait-for-apt"]
+    status_text = STATUS
+    if change == "another package":
+        status_text = STATUS.replace("8.9", "8.12")
+    elif change == "rkhunter config":
+        (tmp_path / "rkhunter.conf.local").write_text("ALLOW_SSH_ROOT_USER=no\n")
+    else:
+        (tmp_path / "rkhunter.dat").unlink()
+    calls, _ = _refresh(tmp_path, status_text=status_text)
     assert calls == REFRESH
