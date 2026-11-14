@@ -1,5 +1,7 @@
 """`probe.py alerts`, firing history from `ALERTS`, and the Loki transport `loki-query` uses."""
 
+import json
+
 import pytest
 
 from diagnostics.probe_lib import alerts
@@ -248,13 +250,27 @@ def test_a_shadow_episode_is_marked():
     assert text.splitlines()[-1].endswith("daniel-box/EvalSweepFailed  warning shadow")
 
 
-def _fetch_returns(monkeypatch, reply):
-    def fetch_parsed(url, resolve=None):
+def _fetch_returns(monkeypatch, reply, held_s=None):
+    """Stub the ALERTS read with `reply`, and the retention-span read with `held_s` seconds."""
+
+    def fetch(url, resolve=None):
+        if "lowest_timestamp" in _query_params(url).get("query", [""])[0]:
+            return json.dumps({"data": {"result": [{"value": [NOW, str(held_s)]}]}})
         if isinstance(reply, BaseException):
             raise reply
-        return reply
+        return json.dumps(reply)
 
-    monkeypatch.setattr(core, "fetch_parsed", fetch_parsed)
+    monkeypatch.setattr(core, "fetch", fetch)
+
+
+def test_a_window_past_the_held_history_names_the_oldest_sample_age():
+    warning = alerts.history_shortfall_warning(30, 22.6 * 86400)
+    assert "22.6d old" in warning and "30d requested" in warning
+
+
+def test_a_window_the_history_covers_or_an_unread_span_warns_nothing():
+    assert alerts.history_shortfall_warning(7, 22.6 * 86400) is None
+    assert alerts.history_shortfall_warning(30, None) is None
 
 
 def test_alerts_prints_the_episodes_it_read(monkeypatch, capsys):
@@ -275,3 +291,16 @@ def test_alerts_that_cannot_read_prometheus_is_unreadable_not_an_all_clear(
     ns = cli_parser._build_parser().parse_args(["alerts"])
     assert alerts.run_alerts(ns, now=NOW) == PROBE_UNREADABLE
     assert "no firing alerts" not in capsys.readouterr().out
+
+
+def test_alerts_over_a_window_past_retention_warns_on_stderr_not_stdout(
+    monkeypatch, capsys
+):
+    _fetch_returns(
+        monkeypatch, {"status": "success", "data": {"result": []}}, 22.6 * 86400
+    )
+    ns = cli_parser._build_parser().parse_args(["alerts", "--days", "30", "--json"])
+    assert alerts.run_alerts(ns, now=NOW) == 0
+    out = capsys.readouterr()
+    assert out.out.strip() == "[]"
+    assert "22.6d old" in out.err
