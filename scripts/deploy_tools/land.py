@@ -137,6 +137,7 @@ from collections.abc import Callable
 import dataclasses
 import functools
 import os
+import shlex
 import sys
 from pathlib import Path
 
@@ -216,7 +217,7 @@ def main(
         opts = _resolve_since(opts)
     if opts.fresh:
         child = fresh.child_argv(sys.argv[1:] if argv is None else argv, opts.since)
-        landing = functools.partial(tools.fresh_landing, opts.primary, child)
+        landing = functools.partial(_land_fresh, opts.primary, tools, child)
     else:
         landing = functools.partial(_land, opts, tools, classifier)
     reads = live_limit.github_reads(tools.gh_json)
@@ -317,6 +318,15 @@ def _detached(
     return 0
 
 
+def _land_fresh(primary: Path, tools: Tools, argv: list[str]) -> int:
+    """`--fresh`: the fresh checkout's landing's exit code, or 1 when none started."""
+    try:
+        return tools.fresh_landing(primary, argv)
+    except fresh.CheckoutFailed as failed:
+        print(f"land: {failed}; nothing was landed", file=sys.stderr)
+        return 1
+
+
 def _land(opts: Options, tools: Tools, classifier: Classifier | None) -> int:
     """Run one landing to its verdict; its exit code.
 
@@ -324,7 +334,8 @@ def _land(opts: Options, tools: Tools, classifier: Classifier | None) -> int:
     neither new flag reaches this from `main` directly.
 
     A merged PR whose grading moves to a fresh checkout (`fresh.GradeFresh`) gets its verdict,
-    record and annotation from that checkout's landing, so this one writes none of them.
+    record and annotation from that checkout's landing, so this one writes none of them. When
+    that landing never starts (`fresh.CheckoutFailed`), this one ends `refused` and records it.
     """
     _prepare_stdio()
     ln = Landing(opts, tools, classifier)
@@ -341,9 +352,22 @@ def _land(opts: Options, tools: Tools, classifier: Classifier | None) -> int:
         outcome.emit()
         line = outcome.file_line()
     except fresh.GradeFresh as moved:
-        graded_here = False
         print(f"land: {moved}", file=sys.stderr)
-        rc = tools.fresh_landing(opts.primary, moved.argv)
+        try:
+            rc = tools.fresh_landing(opts.primary, moved.argv)
+            graded_here = False
+        except fresh.CheckoutFailed as failed:
+            rerun = f"land.sh {shlex.join(moved.argv)} {fresh.FRESH_FLAG}"
+            refused = Outcome(
+                1,
+                f"PR #{opts.pr} — {moved}, but {failed}; this landing graded nothing; "
+                f"re-run it as `{rerun}`",
+            )
+            ln.ledger.verdict = refused.verdict or ""
+            rc = refused.rc
+            print(result_line(ln.ledger, refused))
+            refused.emit()
+            line = refused.file_line()
     except Exception as exc:
         # Still one VERDICT line, as every exit-1 end prints (#4451), and the same verdict a
         # crash reaches through the handoff unit's STOPPED line. The traceback follows, and

@@ -58,6 +58,10 @@ class GradeFresh(Exception):
         self.argv = argv
 
 
+class CheckoutFailed(Exception):
+    """The fresh checkout's `land.sh` never started: the checkout or the exec failed."""
+
+
 def grading_argv(opts: Options, since: str) -> list[str]:
     """`argv` that grades the merged PR `opts` names, with no flag that merges or forks.
 
@@ -85,7 +89,10 @@ def land_fresh(
       argv: the arguments for the checkout's `land.sh`, already without `--fresh`.
 
     Returns:
-      The child landing's exit code, or 1 when the checkout could not be made.
+      The child landing's exit code.
+
+    Raises:
+      CheckoutFailed: no child landing started, so nothing printed or recorded a verdict.
     """
     path = Path(tempfile.mkdtemp(prefix="land-fresh-"))
     try:
@@ -95,16 +102,18 @@ def land_fresh(
         ):
             why = _failed(git, primary, step)
             if why:
-                print(
-                    f"land: --fresh could not make a checkout of {BASE} "
-                    f"(git {step[0]}: {why}); nothing was landed",
-                    file=sys.stderr,
+                raise CheckoutFailed(
+                    f"--fresh could not make a checkout of {BASE} (git {step[0]}: {why})"
                 )
-                return 1
         print(
             f"land: landing from a fresh checkout of {BASE} at {path}", file=sys.stderr
         )
-        return run([str(path / LAND_SH), *argv], check=False).returncode
+        try:
+            return run([str(path / LAND_SH), *argv], check=False).returncode
+        except OSError as exc:
+            raise CheckoutFailed(
+                f"--fresh could not start {LAND_SH} in its checkout ({exc})"
+            ) from exc
     finally:
         git(
             "worktree",

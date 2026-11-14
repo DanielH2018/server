@@ -164,6 +164,18 @@ def test_a_stale_checkout_lets_the_fresh_landing_grade_and_record(
     assert not logline and not verdict_record.exists()
 
 
+def test_a_hand_off_whose_checkout_failed_ends_refused_and_records_it(
+    land_run, verdict_record
+):
+    """No child landing started, so nothing else prints or records this PR's verdict."""
+    fakes = Fakes(stale_code=["a.py"], fresh_fails="git fetch: offline")
+    rc, out, _, _, logline = land_run([], fakes)
+    assert rc == 1 and "VERDICT: refused" in out
+    assert "git fetch: offline" in out and "--fresh`" in out
+    assert "verdict=refused" in logline
+    assert "refused" in verdict_record.read_text()
+
+
 def test_an_armed_landing_from_a_stale_checkout_refuses_before_it_merges(land_run):
     """#7830: the refusal at step 1 came after await_merge had already merged the PR."""
     fakes = Fakes(
