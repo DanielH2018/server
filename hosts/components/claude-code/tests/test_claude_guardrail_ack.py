@@ -6,6 +6,7 @@ import subprocess
 
 import claude_guardrail_ack as ack
 import pytest
+from lib.proc_testing import fake_bin
 
 TOKEN = "ghp_" + "A" * 36
 
@@ -39,7 +40,16 @@ def _download(debs, package, version):
     return debs[(package, version)]
 
 
-def _run(tmp_path, config, *, rendered=None, owners=None, debs=None, deliver=True):
+def _run(
+    tmp_path,
+    config,
+    *,
+    rendered=None,
+    owners=None,
+    debs=None,
+    download=None,
+    deliver=True,
+):
     """One pass; returns (ok, verdict, the posts made)."""
     posts = []
 
@@ -50,7 +60,8 @@ def _run(tmp_path, config, *, rendered=None, owners=None, debs=None, deliver=Tru
     tools = ack.Boundaries(
         owner=lambda path: (owners or {}).get(path),
         published=lambda package: PUBLISHED.get(package, []),
-        published_md5s=lambda package, version: _download(debs, package, version),
+        published_md5s=download
+        or (lambda package, version: _download(debs, package, version)),
         render=lambda user, chezmoi, source, target: (rendered or {}).get(target),
         sync=lambda repo, clone: "b0b8bf3f",
     )
@@ -200,14 +211,18 @@ def test_bytecode_under_a_hooks_directory_is_ignored(tmp_path, tree):
 
 
 def test_a_failed_download_fails_the_run_and_the_next_run_classifies_the_change(
-    tmp_path, tree
+    tmp_path, tree, monkeypatch
 ):
     _, package_file, config = tree
     _run(tmp_path, config)
     package_file.write_text("scripts/lib/\nscripts/deploy_tools/\n")
     installed = _owned(package_file, "0.7465+g203fe8f7bc22")
+    monkeypatch.setenv(
+        "PATH", str(fake_bin(tmp_path / "bin", **{"apt-get": "exit 100\n"}))
+    )
     with pytest.raises(subprocess.CalledProcessError):
-        _run(tmp_path, config, owners=installed)
+        _run(tmp_path, config, owners=installed, download=ack.apt_published_md5s)
+    monkeypatch.undo()
     deb = _deb(package_file, "0.7465+g203fe8f7bc22", package_file.read_bytes())
     ok, line, posts = _run(tmp_path, config, owners=installed, debs=deb)
     assert (ok, posts) == (True, [])
