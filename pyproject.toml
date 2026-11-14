@@ -590,7 +590,9 @@ import-not-found = "ignore"
 # check with it, and the import test loses the check on `import claude_worktree`.
 # `test_claude_worktree_import.py` and `test_worktrees.py` run against the real module in CI
 # and on every host, and that is what catches a renamed reader.
+# `test_prune_worktrees_orphan_dirs.py` patches the module's slice rule out of its process scan.
 include = [
+  "scripts/dev/tests/test_prune_worktrees_orphan_dirs.py",
   "scripts/lib/_claude_worktree.py",
   "scripts/lib/worktrees.py",
   "scripts/lib/tests/test_claude_worktree_import.py",
