@@ -733,7 +733,14 @@ own (*The promotion wait*).
 One thing sits in the position of needing a hand:
 
 - **A rotated secret** has no path to match: a secret's value lives in no role's template, so
-  `secrets/secrets.yml` derives zero tags however many roles consume it. Run
+  `secrets/secrets.yml` derives zero tags however many roles consume it. The landing compares
+  each key's ciphertext across the PR's own range, without decrypting, and names each changed
+  key it leaves stale (`stale_copies.unapplied_keys`). A k8s reader's copy is fresh when
+  `cluster-vars.source` records the key's new ciphertext. A host's copy is fresh when the PR
+  also changed that key in `secrets/hosts/<host>.sops.yaml`. A key with a copy in
+  `stale_copies.OUTSIDE_THE_TREE`, such as Bazarr's API keys, is always named, and so is a
+  key no file reads. A rotation that refreshed every copy ends `settled`. Without a readable range the
+  landing names no key and ends `needs-manual-apply`. Run
   `uv run python scripts/secrets_mgmt/secret_rotation.py consumers <secret>` for who holds a
   stale copy and the repair command per plane.
 
@@ -753,8 +760,8 @@ When no host differs, the candidate is cleared and the landing ends
 waits rather than skips.
 
 A PR with host targets and no service tag deploys nothing in step 4. A PR that also rotates a
-secret, which no deploy tag or host package applies, still ends `needs-manual-apply`, and the
-output names each host it did not wait on.
+secret and leaves a copy of it stale still ends `needs-manual-apply`, and the output names each
+host it did not wait on.
 
 Step 5, `host_wait.wait_for_hosts`, queries Prometheus on loopback and then on the ClusterIP.
 A host settles when `homelab_host_applied_info` equals or descends from the merge commit and
