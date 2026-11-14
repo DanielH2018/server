@@ -118,7 +118,9 @@ measurements stand behind the ruling:
   for a PR opened ready.
 
 The cost is the one this phase accepted when it gave each PR one run: the author of a draft
-gets no hosted verdict until the landing. `LAND_BATCH=0` lands one PR with no batch.
+gets no hosted verdict until the landing. With `LAND_BATCH=0` a landing forms no batch.
+Its draft still stands in the line, so another landing can stack it; `LAND_QUEUE=0` keeps a
+landing out of the turn and the line both.
 
 The slices:
 

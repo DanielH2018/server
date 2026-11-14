@@ -165,7 +165,8 @@ def _members(ln: Landing) -> list[Member]:
     places = [row.split() for row in rows]
     # Another landing of this landing's own PR may stand in the line too.
     waiting = [p for p in places if len(p) == 2 and p[0] != ln.opts.pr]
-    if not waiting:
+    # `_merge_members` merges a member only inside this landing's two merge budgets.
+    if not waiting or ln.opts.merge_timeout < MEMBER_TIMEOUT_S:
         return []
     reads = live_limit.github_reads(ln.tools.gh_json)
     # DECIDED: the landing's code is compared with master here, once, and not again before a
