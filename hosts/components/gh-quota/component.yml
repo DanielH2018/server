@@ -9,12 +9,13 @@
 # in its host_vars: the module returns at once from that host's next package version on, and
 # `gh-quota mode` prints which it is.
 #
-# /run/gh-quota is world-writable with the sticky bit, because each user that calls GitHub
+# /var/lib/gh-quota is world-writable with the sticky bit, because each user that calls GitHub
 # writes its own ledger file there. The files hold call counts and a token's fingerprint, never
-# a token.
+# a token. The directory is on disk so the record outlives the weekly reboot.
 #
-# Each file carries `has_claude_code`, so a host that stops running Claude sessions loses the
-# ledger with its next package version.
+# Each file carries `has_claude_code`, so a host that stops running Claude sessions stops
+# recording with its next package version. /var/lib/gh-quota stays behind, because the package
+# removes no state directory.
 defaults:
   gh_quota_mode: record
 files:

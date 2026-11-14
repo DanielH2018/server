@@ -151,7 +151,7 @@ below applies.
 session shell read ── ghread ──────────────┐
 repo Python tool ──── lib/gh.py ───────────┼── gh_quota: record, and admit from slice 2
 host REST reader ──── host_lib.github_get ─┘       │
-                                                   └── ledger under /run/gh-quota/
+                                                   └── ledger under /var/lib/gh-quota/
 cc-wait gh-pr, gh-ci ─ ghread, from slice 1 on
 
 bare gh (a session's write, the operator's terminal)
@@ -171,8 +171,11 @@ bare gh (a session's write, the operator's terminal)
 imports the packaged path when it exists. On a host without the package, such as the
 operator's PC, `ghread` runs as it does without this design.
 
-**The ledger** is one SQLite file per quota identity under `/run/gh-quota/`. `/run` is a
-tmpfs, and a quota window lasts one hour, so a reboot loses nothing worth keeping. The
+**The ledger** is one SQLite file per quota identity under `/var/lib/gh-quota/`. The
+directory is on disk because the record is read days later: a spike is investigated after
+the hour it happened in, and the ledger keeps each window for 8 days. Both hosts reboot
+every Sunday, and a ledger on a tmpfs loses those days at each reboot. A write to the disk
+costs a `gh` call about 4 ms, measured on daniel-box, against 0.3 ms on a tmpfs. The
 identity is the calling uid when the token comes from that user's `gh` login. It is a
 fingerprint of the token when the caller sets `GH_TOKEN`.
 
@@ -208,8 +211,9 @@ environment is `off` for that call: the test suite sets it, so a test's fake `gh
 lands in the host's ledger.
 
 **The module fails open.** A ledger it cannot open, lock or parse lets the call through and
-counts the failure in a second file that `gh-quota status` reads. The ledger's own outage
-must not become a GitHub outage. For the same reason `scripts/lib/gh.py` imports the module
+counts the failure in a second file that `gh-quota status` reads. `status` counts the
+failures of the same 8 days the ledger keeps, and a failure file at its size limit drops
+the older lines. The ledger's own outage must not become a GitHub outage. For the same reason `scripts/lib/gh.py` imports the module
 optionally: a copy of the tree without it runs `gh` uncounted. A fan-out batch from another
 repo runs `findings.py` from a snapshot of this tree, and `SNAPSHOT_PATHS` carries the
 module so those calls are counted.
@@ -298,7 +302,7 @@ the sessions at or above `ATTENTION_SHARE` of the bucket's limit.
 | `gh-quota release <session>`, from slice 2 | Lifts that session's ceiling until the window resets. Operator only. |
 
 `release` is the way out of a refusal, and `status` is the way to see one. `release` writes
-`/run/gh-quota/override`, which the operator's user owns. While a session still runs as
+`/var/lib/gh-quota/override`, which the operator's user owns. While a session still runs as
 `ubuntu`, that session can write the file too. Slice 6 of the agent-user plan closes that.
 
 `gh-quota` is a reporting tool. It runs no `gh` call for a caller, so it is not a second shim.
@@ -373,7 +377,7 @@ every session at once.
 +    files/gh_quota.py      -> /usr/lib/homelab/gh_quota.py, the module, and
 +                           -> /usr/bin/gh-quota, the same file as a command
 +    templates/gh-quota.conf.j2
-+    tmpfiles.d/homelab-gh-quota.conf   creates /run/gh-quota
++    tmpfiles.d/homelab-gh-quota.conf   creates /var/lib/gh-quota
 +    tests/test_gh_quota.py
  hosts/daniel-box/package.yml, hosts/daniel-server/package.yml   + gh-quota
  scripts/lib/gh.py          gh(): record each call

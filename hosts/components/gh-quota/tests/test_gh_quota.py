@@ -5,12 +5,13 @@ Run: uv run pytest hosts/components/gh-quota/tests/test_gh_quota.py
 
 import hashlib
 import json
+import os
 import subprocess
 from collections import Counter
 from pathlib import Path
 
 import pytest
-from gh_quota import Ledger, Window, classify, main, render, session_key
+from gh_quota import KEEP_S, Ledger, Window, classify, main, render, session_key
 
 NOW = 1_794_668_400.0  # 15:00:00 UTC
 RESET = int(NOW) + 1200
@@ -225,6 +226,49 @@ def test_record_lets_the_call_through_when_the_ledger_file_is_corrupt(recording)
     ledger.record(["pr", "list"])
 
     assert ledger.failures() == 1
+
+
+def test_a_failure_older_than_the_ledger_keeps_its_rows_is_not_counted(recording):
+    ledger, clock, gh = recording
+    gh.fail = OSError("gh is not installed")
+    ledger.record(["pr", "list"])
+    gh.fail = None
+
+    clock.t += KEEP_S - 60
+    assert ledger.failures() == 1
+    clock.t += 120
+    assert ledger.failures() == 0
+
+
+def test_a_failure_log_at_its_size_limit_drops_its_old_lines_and_takes_the_new_one(
+    recording,
+):
+    ledger, _clock, gh = recording
+    log = ledger.root / f"failures.{os.getuid()}"
+    recent = f"{int(NOW) - 60} OSError: disk full"
+    log.write_text(
+        f"{int(NOW) - KEEP_S - 60} OSError: disk full\n" * 4000 + f"{recent}\n"
+    )
+    gh.fail = OSError("gh is not installed")
+
+    ledger.record(["pr", "list"])
+
+    assert log.read_text().splitlines() == [
+        recent,
+        f"{int(NOW)} OSError: gh is not installed",
+    ]
+
+
+def test_a_failure_log_full_of_recent_lines_takes_no_new_line(recording):
+    ledger, _clock, gh = recording
+    log = ledger.root / f"failures.{os.getuid()}"
+    full = f"{int(NOW) - 60} OSError: disk full\n" * 4000
+    log.write_text(full)
+    gh.fail = OSError("gh is not installed")
+
+    ledger.record(["pr", "list"])
+
+    assert log.read_text() == full
 
 
 def test_the_command_prints_status_as_one_line_of_json(recording, capsys):
