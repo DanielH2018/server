@@ -1,8 +1,10 @@
 # code-server — Browser-based VS Code
 
-Moved to k3s on 2026-08-10 (slice-7 Phase C). This role owns both the workload and the image
-it is built from (`templates/Dockerfile.j2` + `files/extensions.sh`); the inventory entry is in
-`daniel-box.yml`.
+**HISTORY —** Moved to k3s on 2026-08-10 (slice-7 Phase C).
+
+This role owns both the workload and the image it is built from
+(`k8s/roles/code-server/templates/Dockerfile.j2` + `k8s/roles/code-server/files/extensions.sh`);
+its `containers_list` entry is in `cluster/services.yml`.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in k8s/roles/longhorn-reconcile/defaults/main.yml. -->

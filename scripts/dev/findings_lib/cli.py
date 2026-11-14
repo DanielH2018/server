@@ -406,4 +406,21 @@ def _parser(description: str) -> argparse.ArgumentParser:
         help="list the deferred and blocked issues one line each, in place of their count",
     )
 
+    ni = sub.add_parser(
+        "new-issues",
+        help="the `findings` source for cc-wait: a free issue filed above a baseline",
+    )
+    _add_dry_run(ni, suppress=True)
+    _add_repo(ni)
+    ni.add_argument(
+        "--describe", action="store_true", help="print cc-wait's description"
+    )
+    ni.add_argument(
+        "--after",
+        type=int,
+        metavar="N",
+        help="end on a free issue numbered above N; the highest open number when the "
+        "wait starts by default",
+    )
+
     return p

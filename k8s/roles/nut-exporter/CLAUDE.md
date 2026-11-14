@@ -1,8 +1,10 @@
 # nut-exporter — UPS variables as Prometheus series
 
 DRuggeri's nut_exporter as a NUT network client. It dials upsd on the `nut` ClusterIP, reads the
-UPS variables, and serves them as `network_ups_tools_*` on `:9199`. One Deployment, one Service,
-no volume, no route, no secret.
+UPS variables, and serves them as `network_ups_tools_*` on `:9199`
+(`scripts/renderer/template_filters/scrape_jobs.py:metrics_port`). One Deployment, one Service,
+no volume, no route, no secret (`k8s/roles/nut-exporter/templates/deployment.yaml.j2`,
+`k8s/roles/nut-exporter/templates/service.yaml.j2`).
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in k8s/roles/longhorn-reconcile/defaults/main.yml. -->
@@ -22,22 +24,25 @@ no volume, no route, no secret.
 
 ## Why it exists separately from `nut`
 
-Before this role, UPS state reached Grafana only as `hass_*` series — Prometheus scraped Home
+**HISTORY —** Before this role, UPS state reached Grafana only as `hass_*` series — Prometheus scraped Home
 Assistant's `/api/prometheus`, and HA's NUT integration was the only thing talking to upsd. That
 routes a power-loss signal through a workload the UPS itself protects. These series do not.
 
 It is **not** a sidecar in the nut pod, deliberately. That pod is `privileged`, holds the UPS's
 USB device, is pinned to daniel-server for that reason, uses `Recreate`, and is the pod half of
-the emergency-shutdown chain. A sidecar would inherit all of it and would restart the shutdown
+the emergency-shutdown chain (`k8s/roles/nut/templates/deployment.yaml.j2`). A sidecar would inherit all of it and would restart the shutdown
 chain on every exporter image bump. This pod holds no device, so it can schedule on either node
-and its `k8s_autodeploy` stance is `true` where `nut`'s is `false`.
+and its `k8s_autodeploy` stance is `true` where `nut`'s is `false`
+(`k8s/roles/nut-exporter/defaults/main.yml:k8s_autodeploy`,
+`k8s/roles/nut/defaults/main.yml:k8s_autodeploy`).
 
 ## It holds no credential, and that is upsd's design
 
 upsd permits reading variables anonymously; authentication gates the upsmon roles and instant
 commands, not `LIST VAR`. Confirmed on daniel-server 2026-09-10 — `upsc apc-ups@127.0.0.1`
 returns every variable with no credentials — and the nut pod's own livenessProbe already relies
-on it. So there is no `upsd.users` entry for this workload and nothing to rotate. Do not add one
+on it (`k8s/roles/nut/templates/deployment.yaml.j2`). So there is no `upsd.users` entry for this
+workload (`k8s/roles/nut/templates/config-secret.yaml.j2`) and nothing to rotate. Do not add one
 on the assumption that a scrape must authenticate.
 
 ## Two things that bite
@@ -60,7 +65,7 @@ Loki ingest.
 
 ## Which variables
 
-`nut_exporter_k8s_variables` in `defaults/main.yml`, stated in full rather than defaulted:
+`k8s/roles/nut-exporter/defaults/main.yml:nut_exporter_k8s_variables`, stated in full rather than defaulted:
 upstream's default omits `battery.runtime`, which is the one an operator reads during an outage.
 A variable this UPS does not report is simply absent from the output, not an error.
 
@@ -71,7 +76,8 @@ than one that exists only during an outage.
 
 ## NetworkPolicy
 
-The pod carries `netpol-baseline: enforced`, which is what admits Prometheus to it. Its outbound
+The pod carries `netpol-baseline: enforced` (`k8s/roles/nut-exporter/templates/deployment.yaml.j2`),
+which is what admits Prometheus to it. Its outbound
 call to upsd is admitted by the `app: nut-exporter` podSelector in
-`netpol-baseline/templates/networkpolicy-nut.yaml.j2` — a podSelector and not an ipBlock, because
+`k8s/roles/netpol-baseline/templates/networkpolicy-nut.yaml.j2` — a podSelector and not an ipBlock, because
 pod → ClusterIP → pod traffic keeps the caller's pod IP and never arrives as a node address.

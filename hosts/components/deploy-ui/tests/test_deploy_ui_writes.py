@@ -69,6 +69,7 @@ def test_spawn_logged_never_takes_a_name_already_on_disk(tmp_path):
     process was still writing to, plus overwrite its `.pid`. Staging it is what makes this
     deterministic: two live spawns need not land in the same second.
     """
+    # fact: hosts/components/deploy-ui/CLAUDE.md#Writes
     logs = tmp_path / "logs"
     logs.mkdir()
     victim = logs / f"land-{time.strftime('%Y%m%dT%H%M%SZ', time.gmtime())}.log"

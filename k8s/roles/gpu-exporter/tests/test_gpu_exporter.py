@@ -84,6 +84,7 @@ def test_the_card_number_is_not_assumed(tmp_path):
 
 
 def test_amdgpu_busy_percent_is_the_sysfs_value(tmp_path):
+    # fact: k8s/roles/gpu-exporter/CLAUDE.md#The utilization series is not the same series on both nodes
     samples = _by_name(gpu_exporter.collect(_amd_tree(tmp_path, busy=37)))
     assert samples[gpu_exporter._BUSY][1] == 37.0
     assert samples[gpu_exporter._BUSY][0] == {"card": "card1", "driver": "amdgpu"}
@@ -91,6 +92,7 @@ def test_amdgpu_busy_percent_is_the_sysfs_value(tmp_path):
 
 def test_amdgpu_frequency_is_converted_from_hwmon_hz_to_mhz(tmp_path):
     # daniel-box reported 800000000 Hz, which must not surface as 800000000 MHz.
+    # fact: k8s/roles/gpu-exporter/CLAUDE.md#The utilization series is not the same series on both nodes
     samples = _by_name(gpu_exporter.collect(_amd_tree(tmp_path, freq_hz=800_000_000)))
     assert samples[gpu_exporter._FREQ][1] == 800.0
 
@@ -118,6 +120,7 @@ def test_i915_frequency_is_read_in_mhz_without_hwmon(tmp_path):
 
 def test_i915_emits_no_busy_percent(tmp_path):
     """i915 exposes none, so a series here would be invented rather than measured."""
+    # fact: k8s/roles/gpu-exporter/CLAUDE.md#The utilization series is not the same series on both nodes
     assert gpu_exporter._BUSY not in _by_name(
         gpu_exporter.collect(_intel_tree(tmp_path))
     )
@@ -138,6 +141,7 @@ def test_a_node_with_no_gpu_renders_nothing_rather_than_zeroes(tmp_path):
 
 def test_rc6_is_a_counter_and_busy_is_a_gauge(tmp_path):
     """The TYPE lines are what make `rate()` legal on one and not the other."""
+    # fact: k8s/roles/gpu-exporter/CLAUDE.md#The utilization series is not the same series on both nodes
     amd = gpu_exporter.render(gpu_exporter.collect(_amd_tree(tmp_path / "a")))
     intel = gpu_exporter.render(gpu_exporter.collect(_intel_tree(tmp_path / "i")))
     assert "# TYPE %s gauge" % gpu_exporter._BUSY in amd

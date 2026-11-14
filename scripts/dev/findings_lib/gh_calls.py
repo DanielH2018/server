@@ -23,6 +23,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from dev.findings_lib.issue_model import (
     _LIST_FIELDS,
+    PR_REPO,
     REGISTER_AUTHOR,
     comment_cap_warning,
     find_by_fingerprint,
@@ -276,6 +277,94 @@ def open_pr_refs(tools: FindingsTools) -> set[int]:
         ),
         "gh pr list",
     )
+    return pr_refs([str(pr.get("body") or "") for pr in prs])
+
+
+# The REST reads below serve the `findings` cc-wait source, which polls for hours. `gh issue
+# list` and `gh pr list` spend the GraphQL quota, the one sessions exhaust
+# (`docs/github-quota.md`); REST is a separate 5,000-request bucket. A whole read must fit
+# inside cc-wait's 60s per-read limit, hence the short per-call timeout.
+REST_TIMEOUT = 20.0
+
+
+def _rest_list(tools: FindingsTools, path: str) -> list[JsonObject]:
+    """``GET repos/<register>/<path>`` as a list of objects; `aimed` adds no `--repo` to it."""
+    url = f"repos/{tools.repo or PR_REPO}/{path}"
+    return as_object_list(tools.gh_json("api", url, timeout=REST_TIMEOUT), url)
+
+
+def newest_open_issues(tools: FindingsTools) -> list[dict]:
+    """The 100 newest open `claude` issues, newest first, in REST's own shape.
+
+    One request. Issue numbers rise with creation time, so the first entry is the highest
+    open number. REST's issue list includes pull requests, which are dropped here.
+    """
+    raw = _rest_list(
+        tools,
+        "issues?labels=claude&state=open&sort=created&direction=desc&per_page=100",
+    )
+    return [i for i in raw if "pull_request" not in i]
+
+
+def _gh_comment(comment: dict) -> dict:
+    """One REST comment in the fields `current_claim` reads from `gh issue list`."""
+    return {
+        "body": comment.get("body") or "",
+        "author": {"login": (comment.get("user") or {}).get("login") or ""},
+        "authorAssociation": comment.get("author_association") or "",
+        "createdAt": comment.get("created_at") or "",
+    }
+
+
+def threaded_issues(raw: list[dict], tools: FindingsTools) -> list[dict]:
+    """``raw`` REST issues in `gh issue list`'s shape, comments and open blockers included.
+
+    Each issue costs one more request per thread it has: its comments when it has any, and
+    its blockers when it has an open one. Issues another account opened are dropped with
+    `load_issues`'s warning.
+    """
+    issues = []
+    for i in raw:
+        number = i["number"]
+        comments = (
+            _rest_list(tools, f"issues/{number}/comments?per_page=100")
+            if i.get("comments")
+            else []
+        )
+        blockers = (
+            _rest_list(tools, f"issues/{number}/dependencies/blocked_by")
+            if (i.get("issue_dependencies_summary") or {}).get("blocked_by")
+            else []
+        )
+        issues.append(
+            {
+                "number": number,
+                "title": i.get("title") or "",
+                "state": "OPEN",
+                "labels": [{"name": lab["name"]} for lab in i.get("labels") or []],
+                "body": i.get("body") or "",
+                "createdAt": i.get("created_at") or "",
+                "url": i.get("html_url") or "",
+                "author": {"login": (i.get("user") or {}).get("login") or ""},
+                "comments": [_gh_comment(c) for c in comments],
+                "blockedBy": {
+                    "nodes": [
+                        {
+                            "number": b["number"],
+                            "state": str(b.get("state")).upper(),
+                            "url": b.get("html_url"),
+                        }
+                        for b in blockers
+                    ]
+                },
+            }
+        )
+    return _operator_issues(issues)
+
+
+def rest_open_pr_refs(tools: FindingsTools) -> set[int]:
+    """`open_pr_refs` read through REST, in one request."""
+    prs = _rest_list(tools, "pulls?state=open&per_page=100")
     return pr_refs([str(pr.get("body") or "") for pr in prs])
 
 

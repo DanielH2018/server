@@ -101,6 +101,7 @@ def test_a_lookup_into_templates_config_is_clean():
 
 
 def test_a_lookup_into_templates_top_level_is_flagged():
+    # fact: k8s/roles/homepage/CLAUDE.md#Where the config lives
     src = (_EMBED % "services.yaml.j2") + "\n" + (_EMBED % "config/widgets.yaml.j2")
     assert misplaced_template_lookups(src) == ["services.yaml.j2"]
 

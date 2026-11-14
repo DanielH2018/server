@@ -1,8 +1,11 @@
 # homelab-mcp — the read-only MCP server backing Claude's cluster tools
 
 Serves `list_pods` / `workload_status` / `list_nodes` / `pod_logs` over its own narrow
-read-only RBAC identity. Rehomed here from daniel-server (Phase E, 2026-08-13) — the last
-routed tenant of the retired Docker edge. See repo-root `CLAUDE.md` for shared conventions.
+read-only RBAC identity (`k8s/roles/homelab-mcp/templates/rbac.yaml.j2`). See repo-root
+`CLAUDE.md` for shared conventions.
+
+**HISTORY —** Rehomed here from daniel-server (Phase E, 2026-08-13) — the last
+routed tenant of the retired Docker edge.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in k8s/roles/longhorn-reconcile/defaults/main.yml. -->

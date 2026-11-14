@@ -1,6 +1,7 @@
 """Guards and writes for the deploy UI. A guard returns None to allow, else the refusal text.
 
-A landing refuses itself under `DEPLOY_HOLD`, so no guard here reads the hold.
+`land.sh` meets `DEPLOY_HOLD` on its own: it refuses a forward-only pin bump before the merge,
+and any other landing merges and ends `promote-held`. So no guard here reads the hold.
 """
 
 import os

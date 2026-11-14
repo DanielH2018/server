@@ -14,8 +14,9 @@ GHCR, deploy-ui, worktrees, claims) block nothing and are not made.
 
 THE STATE.
 
-    blocked  (open)  a blocker holds; the detail names each one
-    clear    0       DEPLOY_HOLD reads `none` or is absent, and master CI is not red
+    blocked             (open)  a blocker holds; the detail names each one
+    clear               0       DEPLOY_HOLD reads `none` or is absent, and master CI is not red
+    gh-unauthenticated  1       `gh` has no login configured, so no read can succeed
 
 A pending or cancelled master run is not red (`docs/landing.md`), so it reads `clear`:
 `land.sh` waits on a pending run itself.
@@ -23,6 +24,13 @@ A pending or cancelled master run is not red (`docs/landing.md`), so it reads `c
 A FAILED READ IS NEVER CLEAR. `collect` leaves a failed source `null` and `blockers` reads
 `null` as no blocker, which is right for a band and wrong for a gate. So this reads both facts
 itself and exits 1 on any failure, and cc-wait retries the read.
+
+ONE FAILURE NO WAIT FIXES. cc-wait refuses a source that declares no terminal state with a
+non-zero code, since a source that can only succeed reads a crash as still waiting. `gh` exits
+4 when no login is configured (`gh help exit-codes`), and no retry changes that, so it ends the
+wait as `gh-unauthenticated`. A rejected token is HTTP 401, which `gh` exits 1 for, so it stays
+a failed read. The CI read goes first because it sees `gh`'s exit code; the hold read reports
+only text.
 
 THE COST. Each read is two REST calls through `lib.gh`, so the quota ledger counts them
 (docs/github-quota.md): `gh variable get DEPLOY_HOLD` and one page of master `ci.yml` runs
@@ -37,27 +45,44 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1] / "deploy_tools"))
 
 import json
 from collections.abc import Callable
+from subprocess import CompletedProcess
 
 import forge
 from diagnostics.probe_lib.landing_blockers import blockers, ci_state
 from diagnostics.probe_lib.promote_state import LIVE_PROMOTE_READS
 from lib.cli_help import ArgumentParser, refuse_help_under_describe
+from lib.exit_codes import FAILED, OK
 from lib.gh import gh
 
-TERMINAL = {"clear": 0}
+TERMINAL = {"clear": OK, "gh-unauthenticated": FAILED}
+GH_AUTH_REQUIRED = 4
 INTERVAL_S = 180
 READ_TIMEOUT_S = 20
 DETAIL_MAX = 600
 
 
-def _master_ci_run() -> dict | None:
-    """The newest `ci.yml` run on master, or None when there is none."""
-    proc = gh(
+class NoGhLogin(Exception):
+    """`gh` has no login configured, so every GitHub read fails until someone logs in."""
+
+
+def _master_ci_run(run_gh: Callable[..., CompletedProcess[str]] = gh) -> dict | None:
+    """The newest `ci.yml` run on master, or None when there is none.
+
+    Args:
+        run_gh: runs `gh` with these arguments; `lib.gh.gh` unless a test hands in a fake.
+
+    Raises:
+        NoGhLogin: `gh` exited 4, its code for a command that needs a login.
+        RuntimeError: any other failed call, which cc-wait retries.
+    """
+    proc = run_gh(
         "api",
         f"repos/{forge.REPOSITORY}/actions/workflows/ci.yml/runs?branch=master&per_page=1",
         check=False,
         timeout=READ_TIMEOUT_S,
     )
+    if proc.returncode == GH_AUTH_REQUIRED:
+        raise NoGhLogin(proc.stderr.strip())
     if proc.returncode != 0:
         raise RuntimeError(f"gh api exited {proc.returncode}: {proc.stderr.strip()}")
     runs = json.loads(proc.stdout)["workflow_runs"]
@@ -74,8 +99,14 @@ def read(
         deploy_hold: reads DEPLOY_HOLD; None means the variable is absent. Raises on failure.
         master_ci_run: reads the newest master `ci.yml` run in REST's shape. Raises on failure.
     """
+    try:
+        run = master_ci_run()
+    except NoGhLogin as exc:
+        return {
+            "state": "gh-unauthenticated",
+            "detail": " ".join(str(exc).split())[:DETAIL_MAX],
+        }
     hold = deploy_hold()
-    run = master_ci_run()
     ci = {
         "state": ci_state(run),
         "sha": (run or {}).get("head_sha", "")[:8],

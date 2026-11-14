@@ -128,14 +128,24 @@ def aimed(tools: FindingsTools, repo: str | None) -> FindingsTools:
     The worktree read moves with them, to the checkout `REGISTER_CHECKOUTS` names, since a
     claim names a branch in the repo that owns the issue. A repo with no entry keeps this
     repo's read; `findings.main` refuses one on the subcommands that read worktrees.
+
+    A `gh api` read is left alone: gh rejects `--repo` there, and its path names the repo.
     """
     if repo is None:
         return tools
     read, facts = tools.gh_json, tools.worktree_facts
     checkout = REGISTER_CHECKOUTS.get(repo)
+
+    def aimed_read(*argv: str, **kw: object) -> JsonValue:
+        return (
+            read(*argv, **kw)
+            if argv[:1] == ("api",)
+            else read(*argv, "--repo", repo, **kw)
+        )
+
     return dataclasses.replace(
         tools,
         repo=repo,
-        gh_json=lambda *argv, **kw: read(*argv, "--repo", repo, **kw),
+        gh_json=aimed_read,
         worktree_facts=facts if checkout is None else lambda: facts(checkout),
     )

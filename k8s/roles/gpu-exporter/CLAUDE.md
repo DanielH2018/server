@@ -1,9 +1,11 @@
 # gpu-exporter — GPU utilization per node, read from DRM sysfs
 
 A DaemonSet serving `homelab_gpu_*` on `:9101`, one pod per node. The port is the `port` on
-its `containers_list` entry, which the `gpu` scrape job's pod filter reads too. It reads
-`/sys/class/drm/card*` and turns what the kernel exposes into series. No Service, no route, no
-secret, no volume. See repo-root `CLAUDE.md` for shared conventions.
+its `containers_list` entry, which the `gpu` scrape job's pod filter reads too
+(`scripts/renderer/template_filters/scrape_jobs.py:entry_port`). It reads
+`/sys/class/drm/card*` and turns what the kernel exposes into series
+(`k8s/roles/gpu-exporter/files/gpu_exporter.py:discover_cards`). No Service, no route, no
+secret, no volume (`k8s/roles/gpu-exporter/defaults/main.yml:manifests_exclude_files`). See repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in k8s/roles/longhorn-reconcile/defaults/main.yml. -->
@@ -34,19 +36,26 @@ Measured 2026-09-10:
 
 The issue asked for an `intel_gpu_top`-based exporter. That would have instrumented
 daniel-server — where, on the day it was filed, **no transcoding was happening**. jellyfin and
-tdarr both request `devic.es/dri` and both were scheduled on daniel-box, the AMD node. Neither
-is pinned, so either can move. Hence a driver-agnostic exporter that follows the pods.
+tdarr both request `devic.es/dri`
+(`tests/services/test_dri_resource_name_agrees.py::test_every_consumer_requests_the_same_resource_name`)
+and both were scheduled on daniel-box, the AMD node. Both are pinned to `k8s_primary_node` by a required node affinity
+(`k8s/roles/jellyfin/templates/deployment.yaml.j2`, `k8s/roles/tdarr/templates/deployment.yaml.j2`),
+so a change to that pin moves them both.
+Hence a driver-agnostic exporter that follows the pods.
 
 ## The utilization series is not the same series on both nodes
 
 This is the one thing to know before writing a panel.
 
-- **amdgpu** exposes `gpu_busy_percent`, a direct 0-100 gauge → `homelab_gpu_busy_percent`.
+- **amdgpu** exposes `gpu_busy_percent`, a direct 0-100 gauge → `homelab_gpu_busy_percent`
+  (`k8s/roles/gpu-exporter/tests/test_gpu_exporter.py::test_amdgpu_busy_percent_is_the_sysfs_value`).
 - **i915 exposes no busy percentage in sysfs at all.** `intel_gpu_top` gets it from the perf
   PMU (`/sys/devices/i915/events/*-busy`), which needs `CAP_PERFMON` and a privileged pod. The
   unprivileged stand-in is `power/rc6_residency_ms`, a monotonic counter of milliseconds spent
   in the RC6 **idle** state → `homelab_gpu_rc6_residency_seconds_total`, a COUNTER whose
-  complement is the busy fraction.
+  complement is the busy fraction
+  (`k8s/roles/gpu-exporter/tests/test_gpu_exporter.py::test_i915_emits_no_busy_percent`,
+  `k8s/roles/gpu-exporter/tests/test_gpu_exporter.py::test_rc6_is_a_counter_and_busy_is_a_gauge`).
 
 So a board covering both nodes plots two expressions, not one:
 
@@ -56,11 +65,13 @@ homelab_gpu_busy_percent / 100                                  # daniel-box
 ```
 
 `homelab_gpu_frequency_mhz` is normalised to MHz on both — i915 reports MHz at the card,
-amdgpu reports Hz through hwmon.
+amdgpu reports Hz through hwmon
+(`k8s/roles/gpu-exporter/tests/test_gpu_exporter.py::test_amdgpu_frequency_is_converted_from_hwmon_hz_to_mhz`).
 
 `homelab_gpu_info` is always 1, one series per card, labelled by driver. It exists so that "the
 node has a GPU that reports nothing" is distinguishable from "the exporter is not reading
-sysfs" — a flat zero looks identical to a broken read path otherwise.
+sysfs" — a flat zero looks identical to a broken read path otherwise
+(`k8s/roles/gpu-exporter/files/gpu_exporter.py:card_samples`).
 
 ## Notable
 

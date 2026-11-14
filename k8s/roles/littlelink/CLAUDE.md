@@ -1,6 +1,7 @@
 # littlelink — the public link-in-bio page
 
-`techno-tim/littlelink-server`, a static link-page server with no config beyond its image.
+`techno-tim/littlelink-server`, a static link-page server configured entirely by the `env:`
+list in `k8s/roles/littlelink/templates/deployment.yaml.j2`: the name, bio, avatar and buttons.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in k8s/roles/longhorn-reconcile/defaults/main.yml. -->
@@ -24,4 +25,4 @@
   and readinessProbe-backed.
 
 ## Editing
-- Image bump: `defaults/main.yml` (`littlelink_k8s_image`).
+- Image bump: `k8s/roles/littlelink/defaults/main.yml` (`littlelink_k8s_image`).
