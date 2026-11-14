@@ -1,6 +1,6 @@
 {#
   The reconcile job's identity. Its rules are the calls files/longhorn_reconcile.py makes and
-  nothing else; ansible/tests/k8s/test_rbac_against_rest_script.py runs the script with a
+  nothing else; tests/k8s/test_rbac_against_rest_script.py runs the script with a
   recording client and holds these rules to the calls it records.
 
     list volumes.longhorn.io            the one read of every Volume CR, in longhorn-system

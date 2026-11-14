@@ -227,6 +227,7 @@ _SERVER_LANDER = (
 _PIPELINE_TIMELINE = (
     "hosts/components/claude-code/templates/claude-pipeline-timeline.service.j2"
 )
+_BOARD_SYNC = "hosts/components/board-sync/units/homelab-board-sync.service.j2"
 _LOKI_WITNESS = (
     "hosts/components/loki-route-witness/units/homelab-loki-route-witness.service.j2"
 )
@@ -277,6 +278,11 @@ UNITS_REACHING_THE_CLUSTER_SET_KUBECONFIG = Census(
         }
     ),
     allow={
+        _BOARD_SYNC: (
+            "findings.py sync-board reads and writes the Project board through gh and runs no "
+            "kubectl. The row counts it because findings_lib/precomputed.py imports "
+            "land_lib.land_tags, whose own imports reach kubectl"
+        ),
         _LOKI_WITNESS: (
             "probe.py loki-labels reads Loki over HTTP and runs no kubectl. The row counts it "
             "because probe.py imports every subcommand, some of which reach lib.kubectl"

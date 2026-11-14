@@ -41,7 +41,9 @@ restart, and the sidecar's own mod fetch and Mullvad API call route through the 
 fence — so a dropped tunnel sustains itself until someone deletes the pod (9 hours on 2026-08-16,
 3.5 days on 2026-09-13, #1838) unless the reset below runs. It presents as a restart loop rather
 than an error, because the init container exits **0**. The netns reset below clears it without a
-human, and `delete pod` is the escape hatch if that reset is ever removed.
+human
+(`tests/services/test_qbittorrent_sidecar_resets_the_netns.py::test_the_sidecar_runs_the_reset_before_init_and_keeps_init_as_pid_1`),
+and `delete pod` is the escape hatch if that reset is ever removed.
 
 ## The sidecar resets the netns on every start
 
@@ -72,39 +74,47 @@ the pod's default route.
 
 ## The modcache, and the lock file it can leave behind
 
-`deployment.yaml.j2` mounts the config claim again at `/modcache` (`subPath: modcache`), and that one
-mount is the whole fix: `docker-mods.v3` already falls back to a cached tarball when the registry
+The shared sidecar macro, `k8s/templates/wireguard-sidecar.yml.j2`, mounts the config claim again
+at `/modcache` (`subPath: modcache`), and that one mount is the whole fix: `docker-mods.v3` already falls back to a cached tarball when the registry
 lookup fails, and before the mount the cache died with each pod. **A cold cache still fetches over
 the network** — survivable, not impossible.
 
 Its one new failure mode: a pod killed mid-download leaves `/modcache/<name>.lock` behind, and later
 starts **wait on it and then skip the mod** — *the same symptom as the outage this cache prevents*.
-The verify Job warns rather than fails on a lock, which is legitimate mid-download. If the sidecar
+The verify Job warns rather than fails on a lock, which is legitimate mid-download
+(`k8s/roles/qbittorrent/tests/test_qbittorrent_job.py::test_a_modcache_lock_beside_a_tarball_warns_and_passes`). If the sidecar
 logs a skip or a lock timeout rather than `Downloading` or `found in modcache`, delete the lock file.
 
 ## Throughput settings live on the PVC, not in this role
 
-The role templates `WEBUI_PORT` and `TORRENTING_PORT` and nothing else. Connection limits, hashing
+Of qBittorrent's own settings, the role templates only `WEBUI_PORT` and `TORRENTING_PORT`
+(`k8s/roles/qbittorrent/templates/deployment.yaml.j2`), beside the LinuxServer user and umask
+env. No throughput setting reaches the container from the role. Connection limits, hashing
 threads and the libtorrent working-set bound live in `qBittorrent.conf` on the `qbittorrent-config`
 PVC, so **a WebUI change to any of them is live state no render reproduces and a volume restore
 silently reverts.**
 
-`files/apply_prefs.py` is the repo-side source of truth for the settings tuned for throughput on
-2026-08-26. It diffs before writing, sends only the keys that differ, and reads back to prove the
-write, so a second run reports "nothing to do".
+`k8s/roles/qbittorrent/files/apply_prefs.py:DESIRED` is the repo-side source of truth for the
+settings tuned for throughput on 2026-08-26. It diffs before writing
+(`k8s/roles/qbittorrent/files/apply_prefs.py:diff_prefs`), sends only the keys that differ, and
+reads back to prove the write, so a second run reports "nothing to do".
 
 **`DESIRED` also holds the excluded-file-name list, which is not a throughput setting.**
-qBittorrent marks a file matching `*.exe`, `*.7z`, `*.iso` or another listed pattern "do not
+qBittorrent marks a file matching `*.exe`, `*.7z`, `*.iso` or another pattern in
+`k8s/roles/qbittorrent/files/apply_prefs.py:EXCLUDED_FILE_NAMES` "do not
 download" when a torrent is added (#6274). A fake episode that is only such a file then
 downloads and seeds nothing. Sonarr still flags the empty download, so Arr Queue Warnings still
 pages and a human still removes it. RAR volumes are on the list too, because nothing in this
-stack unpacks them, so a RAR release cannot be imported anyway. The comment above the keys in
+stack unpacks them, so a RAR release cannot be imported anyway
+(`k8s/roles/qbittorrent/tests/test_apply_prefs.py::test_excluded_file_names_skip_fakes_and_keep_real_releases`). The comment above the keys in
 `apply_prefs.py` has the observed fake shapes.
 
 **Flux applies `DESIRED` on every revision that rolls the pod.** The `prefs.yaml.j2` Job in
 `qbittorrent-verify` (below) runs the apply once the `qbittorrent` Kustomization reads Ready, so a
-changed value in `DESIRED` goes live on the next roll without a human. The Job starts after the
-sidecar's five-minute startupProbe window. Run `apply_prefs.py` by hand after a PVC restore that
+changed value in `DESIRED` goes live on the next roll without a human
+(`k8s/roles/qbittorrent/tests/test_qbittorrent_job.py::test_a_change_that_rolls_the_pod_renames_both_jobs`).
+The Job starts after the sidecar's five-minute startupProbe window
+(`k8s/templates/wireguard-sidecar.yml.j2`). Run `apply_prefs.py` by hand after a PVC restore that
 no roll follows — the docs page has the command.
 
 ### The daily drift check is log-only, and does not apply anything
@@ -136,28 +146,45 @@ the docs page has why.
 ### The login trap
 qBittorrent 5.2.3 answers a successful `POST /api/v2/auth/login` with **HTTP 204 and an empty
 body**, where older builds answered `200 "Ok."` — so a client checking for that string rejects a
-login that succeeded. Check for the `QBT_SID` cookie instead; a bad password sets none.
+login that succeeded. Check for the `QBT_SID` cookie instead, as
+`k8s/roles/qbittorrent/files/qbittorrent_job.py:SESSION_COOKIE` does; a bad password sets none.
 `web_ui_max_auth_fail_count` is 5, so don't debug a login by retrying it.
 
 ## The Flux Jobs in `templates/verify/`
 
-The renderer emits two Jobs from that directory into `qbittorrent-verify`, beside the drift
-check's gate Job. Both run `files/qbittorrent_job.py` with no `pods/exec` grant:
+The renderer emits two Jobs from that directory into `qbittorrent-verify`
+(`k8s/roles/qbittorrent/tests/test_qbittorrent_job.py::test_the_flipped_jobs_pass_every_job_census_row`),
+beside the drift check's gate Job
+(`k8s/roles/qbittorrent/defaults/main.yml:flux_cronjob_gates`). Both run
+`k8s/roles/qbittorrent/files/qbittorrent_job.py` with no `pods/exec` grant
+(`k8s/roles/qbittorrent/templates/verify/rbac.yaml.j2`):
 
-- **`job.yaml.j2` runs the verify checks.** The Job dials the WebUI from the pod CIDR,
-  lists the mod cache through its own read-only mount of the sidecar's claim and subPath, and
-  compares qBittorrent's `last_external_address_v4` with its own egress address. The script's
+- **`job.yaml.j2` runs the verify checks.** The Job dials the WebUI from the pod CIDR
+  (`k8s/roles/qbittorrent/files/qbittorrent_job.py:reach`),
+  lists the mod cache through its own read-only mount of the sidecar's claim and subPath
+  (`k8s/roles/qbittorrent/tests/test_qbittorrent_job.py::test_the_verify_job_mounts_the_sidecars_modcache_from_the_config_claim`), and
+  compares qBittorrent's `last_external_address_v4` with its own egress address
+  (`k8s/roles/qbittorrent/files/qbittorrent_job.py:tunnel`). The script's
   docstring maps each proof to its Job form.
 - **`prefs.yaml.j2` runs the prefs apply on every revision that rolls the pod.** The sidecar's
   startup window has passed by then, because `<tag>-verify` starts once the tag is Ready. It
-  reruns safely: a second run writes nothing.
+  reruns safely: a second run writes nothing
+  (`k8s/roles/qbittorrent/tests/test_qbittorrent_job.py::test_a_second_apply_writes_nothing`).
 - **Their pods reuse two labels the fence already admits**, `qbittorrent-reach-probe` and
-  `qbittorrent-prefs-check`; each template's `DECIDED:` note says why.
+  `qbittorrent-prefs-check`
+  (`k8s/roles/qbittorrent/tests/test_qbittorrent_job.py::test_qbittorrents_fence_admits_both_job_pods_on_the_webui_port`);
+  each template's `DECIDED:` note says why
+  (`k8s/roles/qbittorrent/templates/verify/job.yaml.j2:DECIDED: the pod carries`,
+  `k8s/roles/qbittorrent/templates/verify/prefs.yaml.j2:DECIDED: the pod carries`).
 - **The script cannot import `apply_prefs.py`**, because the Job census admits no
   `urllib.request`. Its `DESIRED` is a copy, and `tests/test_qbittorrent_job.py` holds the two
-  equal, renders the directory through the Job census, and runs each check against a
+  equal
+  (`k8s/roles/qbittorrent/tests/test_qbittorrent_job.py::test_the_job_applies_the_preferences_apply_prefs_holds`),
+  renders the directory through the Job census, and runs each check against a
   stand-in WebUI.
 - **The first live run proves two assumptions, and each fails closed.** A PUID-1000 pod lists
   the sidecar's mod cache through a second read-only mount of the ReadWriteOnce claim, and
-  qBittorrent reports a non-empty `last_external_address_v4` within 120 seconds. If either is
-  wrong, `qbittorrent-verify` fails and holds the revision.
+  qBittorrent reports a non-empty `last_external_address_v4` within 120 seconds
+  (`k8s/roles/qbittorrent/files/qbittorrent_job.py:EXTERNAL_WAIT_SECONDS`). If either is
+  wrong, `qbittorrent-verify` fails and holds the revision
+  (`k8s/roles/qbittorrent/tests/test_qbittorrent_job.py::test_no_external_address_within_the_wait_fails_the_tunnel_check`).

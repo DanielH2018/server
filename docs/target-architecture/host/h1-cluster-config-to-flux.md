@@ -764,6 +764,11 @@ After H1, merging a pin is the upgrade. Two pieces move the runbook gates to the
       `tests/k8s/test_namespace_resource_defaults.py:test_no_resourcequota_is_declared_anywhere`
       runs `git grep` over `ansible/`. H1.3 and H1.5a therefore grep their vendored file for
       each kind such a guard forbids, and strip or exempt each match in the same PR.
+    - **One render-time guard reads them (#8447).**
+      `tests/k8s/test_namespace_resource_defaults.py` merges each vendored workload's
+      patches into its upstream object and requires requests and limits on every container.
+      A container left at upstream's default needs an exemption with its reason. The guard
+      went in after system-upgrade-controller ran BestEffort past the render walk (#8225).
     - The templated objects of the same roles join `rendered_docs()` like any template. Each
       PR that moves one meets the guards for it.
 
@@ -2399,7 +2404,9 @@ subject's tests.
 - **The vendored workloads bypass the render-time fleet guards.** The guards read
   `rendered_docs()`, which renders templates only. This is accepted because the same bytes
   reach the cluster unchecked at `70591c307`. The sha256 pin, the object census, the health
-  targets and the takeover census check them instead (*Vendored upstream manifests*).
+  targets and the takeover census check them instead (*Vendored upstream manifests*). The
+  per-container resources guard is the exception: it reads the vendored workloads with
+  their patches applied (#8447).
 - **Failure class 5, sequences treated as transactions.** Each PR hands a whole object set to
   Flux at once. H1.5a moves everything that would otherwise fight over the manager and the
   ConfigMap. The RecurringJobs move with the targets, so no window has two writers on them. A

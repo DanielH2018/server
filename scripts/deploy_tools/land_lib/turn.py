@@ -19,7 +19,9 @@ turn while a run that started before it finishes.
 
 A landing that waits with a draft stands in the line beside the lock (`line.py`), so the
 landing that holds the turn can test that draft's head with its own. A landing whose place
-reads `merged` stops waiting: the holder merged its PR.
+reads `merged` stops waiting: the holder merged its PR. One whose place reads `alone` leaves
+the line and waits on for the turn: a batch that tested its PR was not green, and it forms no
+batch of its own (`batch.py`).
 
 The turn is not a safety gate. A landing that cannot take it within `merge_timeout`, or
 cannot reach `TURN_HOST`, goes on without it and merges as a landing without the turn does.
@@ -182,6 +184,16 @@ def _line(hostname: str, directory: _Path = line.DIR) -> line.Line:
     return line.over_ssh(TURN_HOST, directory)
 
 
+def line_of(ln: Landing) -> line.Line:
+    """The line for the turn, as `ln`'s landing reaches it."""
+    return ln.tools.line or _line(ln.tools.hostname())
+
+
+def _lands_alone(ln: Landing) -> None:
+    say(f"a batch that tested PR #{ln.opts.pr} was not green; it lands alone")
+    ln.lands_alone = True
+
+
 def _wait(ln: Landing, draft: str) -> tuple[Callable[[], None] | None, int]:
     """Poll for the turn for up to `merge_timeout`, standing in the line with `draft`.
 
@@ -194,7 +206,7 @@ def _wait(ln: Landing, draft: str) -> tuple[Callable[[], None] | None, int]:
     """
     o = ln.opts
     try_turn = ln.tools.try_turn or _taker(ln.tools.hostname())
-    place = line.Place(ln.tools.line or _line(ln.tools.hostname()), o.pr, draft, say)
+    place = line.Place(line_of(ln), o.pr, draft, say)
     waiting = OnChange(say)
     waited = 0
     try:
@@ -208,6 +220,9 @@ def _wait(ln: Landing, draft: str) -> tuple[Callable[[], None] | None, int]:
                 )
                 return None, waited
             if release:
+                # The holder may have answered after this landing's last poll of its place.
+                if place.answer() == line.ALONE:
+                    _lands_alone(ln)
                 say(f"took the landing turn after {waited}s")
                 return release, waited
             if waited >= o.merge_timeout:
@@ -216,9 +231,14 @@ def _wait(ln: Landing, draft: str) -> tuple[Callable[[], None] | None, int]:
                     f"merge_timeout={o.merge_timeout}s; going on without a turn"
                 )
                 return None, waited
-            if place.stand() == line.MERGED:
+            answer = place.stand()
+            if answer == line.MERGED:
                 say(f"the landing that holds the turn merged PR #{o.pr} with its own")
                 return None, waited
+            if answer == line.ALONE:
+                _lands_alone(ln)
+                place.leave()
+                place = line.Place(None, o.pr, "", say)
             waiting(
                 "waiting for the landing turn: another landing is between its CI run and "
                 "its merge (`probe.py landing` lists the landings in flight)"

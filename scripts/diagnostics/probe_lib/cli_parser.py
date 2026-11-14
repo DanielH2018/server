@@ -337,6 +337,17 @@ def _build_parser():
         ),
     )
     _dry_run(vp, "print the kubectl calls without making them")
+    ur = sub.add_parser(
+        "uptime-robot",
+        **_verdict_help(
+            "assert every Uptime Robot monitor docs/uptime-robot-monitors.md names exists and "
+            "is not paused. Lists monitors through the API with the SOPS key "
+            "uptimerobot_api_key, fed via stdin; changes nothing.",
+            "every documented monitor runs",
+            "a documented monitor is missing or paused",
+        ),
+    )
+    _dry_run(ur, "print the curl call without making it")
     fx = sub.add_parser("flux", **_verdict_help(*FLUX_HELP))
     fx.add_argument("tags", nargs="*", help=FLUX_TAGS_HELP)
     _flag(fx, "--all", "list every Kustomization, not only the unsettled ones")

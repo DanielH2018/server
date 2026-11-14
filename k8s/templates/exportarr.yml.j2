@@ -14,9 +14,8 @@
    `image` is a PARAMETER, not a literal. `test_no_literal_image_lines_in_k8s_templates` fails a
    hardcoded image in a k8s template. Each *arr pins its own copy in its `defaults/main.yml`
    rather than sharing one var in `group_vars/all.yml`. Renovate does read group_vars, but its
-   no-automerge `k8s_autodeploy: false` rule names that file, and the deployer applies an
-   inventory change as a forward-only broad deploy. All three *arr roles are auto-deployable, so
-   a shared pin would turn an automerged bump with a rollback into a hand-merged one without
+   no-automerge `k8s_autodeploy: false` rule names that file. All three *arr roles are
+   auto-deployable, so a shared pin would turn an automerged bump into a hand-merged one
    (#3277). Renovate's per-depName grouping already bumps the three copies in one PR, and
    `test_the_image_pins_stay_in_lockstep` fails if they drift apart.
 

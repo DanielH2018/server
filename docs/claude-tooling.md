@@ -43,9 +43,9 @@ landing's log carries `probe.py health` output and is grepped for `^VERDICT:`.
 accepts equal the registry's names, and that every `probe_lib` module with a `run_*`/`main` entry point is
 registered.
 
-### Measurements and invariant checks: `b2-spend`, `usage`, `vip-placement`, `readonly-rbac`, `shed-set`, `takeover`
+### Measurements and invariant checks: `b2-spend`, `usage`, `vip-placement`, `readonly-rbac`, `shed-set`, `takeover`, `uptime-robot`
 
-Six subcommands turn a fact an operator once had to remember into one they can re-derive. Each
+Seven subcommands turn a fact an operator once had to remember into one they can re-derive. Each
 has its own test under `scripts/diagnostics/tests/`.
 
 - **`b2-spend [--since 24h]`** sums the Class B spend per volume out of Longhorn's own "changed
@@ -75,6 +75,10 @@ has its own test under `scripts/diagnostics/tests/`.
   `get`/`list` on Secrets and `create`/`delete` on pods, and exits 1 naming any verb it gained
   (`probe_lib/readonly_rbac.py`). A refused control verb exits 75, because then the denials
   prove nothing.
+- **`uptime-robot`** lists the account's Uptime Robot monitors through the API, and exits 1
+  naming any id `docs/uptime-robot-monitors.md` documents that no longer exists or is paused
+  (`probe_lib/uptime_robot.py`). Its key is the SOPS key `uptimerobot_api_key`, which the
+  operator holds, so an agent session gets exit 75.
 - **`shed-set`** prints the Deployments and StatefulSets to scale to zero when one node is
   lost, so the tiered services fit on the survivor (`probe_lib/shed_set.py`). The set is every
   k8s entry with no `tier:`, derived by `shed_entries` in `template_filters/service_tier.py`, and
@@ -543,9 +547,8 @@ script through one `NOPASSWD` sudoers line, and its verbs come in two tiers:
 - **Tier 1 prints no content.** `stat PATH`, `sha256 PATH` and `matches PATH REPO_FILE` take
   a file on an explicit allowlist, such as `/etc/netplan/*.yaml`, `/etc/cron.d/*` or
   `/usr/lib/homelab/registry-gc.sh`. `matches` exits 0 when the live file is byte-identical to
-  REPO_FILE in your checkout. The shim hashes REPO_FILE, so root never opens it. On a
-  credential path that matches `DENY`, only `stat` answers, with mode, type, owner and group
-  and never size or mtime. It answers only when the allowlist names the path.
+  REPO_FILE in your checkout. The shim hashes REPO_FILE, so root never opens it. Every verb
+  refuses a credential path that matches `DENY`.
 - **Tier 2 prints, redacted by default.** `nft`, `ufw`, `sshd`, `crontab` and
   `cat /etc/netplan/*.yaml` keep only the tokens their grammar makes provably plain, such as
   rule keywords, addresses, ports, paths and flag names. Every other value becomes a

@@ -52,6 +52,7 @@ def _rendered_corefile() -> tuple[str, str]:
 
 
 def test_the_configmap_carries_only_the_corefile_key():
+    # fact: k8s/roles/coredns/CLAUDE.md#coredns — cluster DNS, derived from k3s's bundled addon
     cm = yaml_fast.safe_load(render_role_template("coredns", "configmap.yaml.j2"))
     assert cm["kind"] == "ConfigMap"
     assert list(cm["data"]) == ["Corefile"], (

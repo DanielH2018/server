@@ -12,7 +12,7 @@
 # A unit's failure was covered only by its own OnFailure=homelab-alert@ hook or its own textfile
 # verdict. A unit with neither failed silently, and one whose hook posted once to Discord stayed
 # failed with no alert series behind it. The SystemdUnits* rules in
-# ansible/roles/k8s/observability/files/rules/host-checks.yaml read the file this writes.
+# k8s/roles/observability/files/rules/host-checks.yaml read the file this writes.
 #
 # System units only: a user manager's units belong to that user's session, and a failed one
 # says nothing about the host.

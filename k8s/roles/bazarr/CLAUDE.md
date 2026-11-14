@@ -39,13 +39,15 @@ shared conventions.
 
 ## Notable
 - `-lsNN` linuxserver tagging hides a breaking bump as a routine patch bump — the reason the
-  `k8s_autodeploy_reason` in `defaults/main.yml` calls this out explicitly even after
-  promotion.
-- `templates/networkpolicy-bazarr.yaml.j2` admits monitor-bridge to bazarr's API port on top
-  of the netpol-baseline default set (traefik, prometheus, the two cni0 gateways) — without
-  it monitor-bridge's health check gets refused, which happened on the check's first three
-  cycles (2026-08-29) before the policy existed. The caller list is `netpol_from` on bazarr's
-  `containers_list` entry, rendered through the shared `networkpolicy` macro.
+  `k8s/roles/bazarr/defaults/main.yml:k8s_autodeploy_reason` calls this out explicitly even
+  after promotion.
+- `k8s/roles/bazarr/templates/networkpolicy-bazarr.yaml.j2` admits monitor-bridge to bazarr's
+  API port on top of the netpol-baseline default set (traefik, prometheus, the two cni0
+  gateways) — without it monitor-bridge's health check gets refused. The caller list is
+  `netpol_from` on bazarr's `containers_list` entry, rendered through the shared
+  `networkpolicy` macro (`scripts/renderer/template_filters/homepage_tiles.py:netpol_callers`).
+- **HISTORY —** the refusal happened on the health check's first three cycles (2026-08-29),
+  before the policy existed.
 
 ## Subtitle providers — PVC state, recorded here because the repo cannot hold it
 
@@ -86,7 +88,8 @@ case outstanding here. `GET /api/episodes/wanted` and `GET /api/movies/wanted` b
 `"total": 0` on 2026-09-10: the three providers satisfy the only language profile with nothing
 missing. Against that, Whisper needs an ASR sidecar (`whisperai.endpoint` is already stubbed at
 `http://whisper:9001` in Bazarr's own defaults, pointing at nothing) and a CPU budget on
-`daniel-box`, which is also the node running the GPU transcoder and every other workload. So
+`daniel-box` (`inventory/group_vars/all.yml:k8s_primary_node`), which is also the node running
+the GPU transcoder and most other workloads. So
 the cost is real and the benefit was zero on 2026-09-10. **Revisit when a wanted count stays
 non-zero** — that is the measurement that would change the answer, not a judgement about the
 library.

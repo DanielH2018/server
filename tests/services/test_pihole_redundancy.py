@@ -39,6 +39,7 @@ def _pihole_deployments() -> dict[str, dict]:
 
 
 def test_two_instances_are_rendered():
+    # fact: k8s/roles/pihole/CLAUDE.md#pihole — LAN DNS resolver, running two instances
     assert set(_pihole_deployments()) == INSTANCES
 
 
@@ -49,6 +50,7 @@ def test_both_instances_are_selected_by_the_dns_service():
     test_only_the_web_service_is_pinned_to_one_instance — so it deliberately does NOT select
     pihole-2; this test covers DNS only.
     """
+    # fact: k8s/roles/pihole-exporter/CLAUDE.md#Both instances, and why that is the whole point
     dns_selector = next(
         doc["spec"]["selector"]
         for role, _tpl, doc in rendered_docs()
@@ -67,6 +69,7 @@ def test_instances_do_not_share_a_volume():
     """Assert the claim each instance mounts, not just that the two differ — swapping the
     claim names (moving pihole onto pihole-etc-2) would also pass a uniqueness-only check
     and put the live instance on a blank volume."""
+    # fact: k8s/roles/pihole/CLAUDE.md#At a glance
     claim_by_instance = {}
     for name, dep in _pihole_deployments().items():
         for vol in dep["spec"]["template"]["spec"].get("volumes", []):
@@ -123,6 +126,7 @@ def test_only_the_web_service_is_pinned_to_one_instance():
     Pi-hole v6 keeps sessions in FTL memory, so the web UI cannot be balanced; each DNS query is
     stateless and redundancy is the point.
     """
+    # fact: k8s/roles/pihole-exporter/CLAUDE.md#Both instances, and why that is the whole point
     services = _pihole_services()
     assert services["pihole"]["spec"]["selector"].get("instance") == "pihole", (
         "the web Service must pin to instance 1 or admin sessions 401 at random between "

@@ -15,7 +15,7 @@
 #
 # Each deadline is the DEADLINE_S its producer renders, which equalled the interval of the
 # tile it replaced. Both literals of a NotReporting rule are pinned to it by
-# ansible/tests/services/test_not_reporting_rule_deadlines.py (M1 convention 1).
+# tests/services/test_not_reporting_rule_deadlines.py (M1 convention 1).
 #
 # The weekly reboot (about 07:35 to 07:50) leaves every writer's gap inside its deadline: the
 # hourly witness writes at 07:23 and 08:23, and the daily and weekly checks run outside the
@@ -116,6 +116,20 @@ groups:
             daniel-box's textfile collector, so nothing confirms secret rotation is being
             audited. Read `systemctl status homelab-secret-rotation-audit` on daniel-box,
             then /var/lib/node-exporter-textfile/secret-rotation-audit.prom on the host.
+      - alert: RecoveryKitStale
+        expr: homelab_check_success{check="recovery-kit",origin="daniel-box"} == 0
+        labels:
+          severity: warning
+          service: daniel-box
+        annotations:
+          summary: The off-site recovery kit is overdue for a refresh.
+          description: >-
+            The secret-rotation audit on daniel-box ran `recovery_kit.py check`, which found
+            secrets/recovery_kit.yml missing, unreadable, dated after today, or older than
+            MAX_AGE_DAYS. Run `uv run python scripts/secrets_mgmt/recovery_kit.py check` to read
+            which. Refresh the kit (docs/longhorn-disaster-recovery.md, The off-site recovery
+            kit), then run `recovery_kit.py record` and commit the stamp.
+          runbook_url: https://docs.local.daniel-hunter.com/longhorn-disaster-recovery/
       # Replaced the "Loki Read Route (daniel-box)" tile.
       - alert: LokiReadRouteFailed
         expr: homelab_check_success{check="loki-read-route-health",origin="daniel-box"} == 0
@@ -180,7 +194,7 @@ groups:
             daniel-server's textfile collector, so nothing confirms the Loki read route is being
             witnessed. Read `systemctl status homelab-loki-route-witness` on daniel-server, then
             /var/lib/node-exporter-textfile/loki-read-route-health.prom on the host.
-      # H7.51's checkout-sync, which takes over the deployer's dirty-tree page.
+      # H7.51's checkout-sync, which took over the retired deployer's dirty-tree page.
       - alert: CheckoutSyncFailed
         expr: homelab_check_success{check="checkout-sync",origin="daniel-box"} == 0
         labels:

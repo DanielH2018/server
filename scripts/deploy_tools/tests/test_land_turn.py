@@ -133,8 +133,11 @@ def _line_calls(calls) -> list[tuple[str, ...]]:
 def test_a_draft_stands_in_the_line_while_it_waits_and_leaves_with_the_turn(landing):
     ln, calls = _landing(landing, turn=[False, False, True])
     _land(ln)
+    # The last `stand` reads its place once more with the turn taken, for an answer the
+    # holder wrote after its last poll.
     assert _line_calls(calls) == [
         ("join", "999", HEAD),
+        ("stand", "999", HEAD),
         ("stand", "999", HEAD),
         ("leave", "999"),
     ]
@@ -176,6 +179,20 @@ def test_a_draft_the_holder_of_the_turn_merged_stops_waiting_and_merges_nothing(
     out = capsys.readouterr().out
     assert "the landing that holds the turn merged PR #999 with its own" in out
     assert "merged after 7s, 7s of it waiting for the landing turn" in out
+
+
+def test_a_draft_told_to_land_alone_waits_on_for_the_turn_outside_the_line(landing):
+    ln, calls = _landing(
+        landing, turn=[False, False, False, True], line=["", line.ALONE]
+    )
+    _land(ln)
+    assert _order(calls)[-2:] == ["merge", "release_turn"]
+    # It gives its place up at once and does not take it again on the third poll.
+    assert _line_calls(calls) == [
+        ("join", "999", HEAD),
+        ("stand", "999", HEAD),
+        ("leave", "999"),
+    ]
 
 
 def test_a_line_that_fails_leaves_the_landing_waiting_for_the_turn(landing, capsys):

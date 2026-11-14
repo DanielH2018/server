@@ -1,0 +1,19 @@
+# Shipped by homelab-daniel-box. Started by homelab-board-sync.timer.
+[Unit]
+Description=Resync the Project board with every open issue's state and labels
+After=network-online.target
+Wants=network-online.target
+# The script exits 1 only on the third consecutive failed run, then once a day while it lasts.
+OnFailure=homelab-alert@%n.service
+
+[Service]
+SyslogLevel=notice
+Type=oneshot
+User={{ sys_user }}
+# Holds `failures`, the count of consecutive failed runs.
+StateDirectory=homelab-board-sync
+StateDirectoryMode=0700
+ExecStart=/usr/lib/homelab/board-sync
+SyslogIdentifier=board-sync
+# Well under the hourly interval. A full catch-up of every open issue takes about two minutes.
+TimeoutStartSec=900
