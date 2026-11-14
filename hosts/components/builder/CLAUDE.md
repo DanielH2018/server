@@ -245,34 +245,49 @@ publish that fails before its index goes live removes the pool files it added. O
 ## Autonomous-role contract (the builder and the signer publish host packages with no human in the loop)
 
 Every 2 minutes, `homelab-builder.timer` may build the host packages from a master commit and
-replace the contents of `staged/`. After each such run, `homelab-repo-sign.service` may sign
-and publish what was staged, so every host's updater installs it at its next fire.
+replace the contents of `staged/` (`hosts/lib/tests/test_builder_component.py::test_the_timer_fires_every_two_minutes_and_is_enabled`,
+`hosts/lib/tests/test_host_package_builder.py::test_an_unconsumed_staged_set_is_replaced_at_the_new_commit`). After each such run,
+`homelab-repo-sign.service` may sign and publish what was staged
+(`hosts/lib/tests/test_builder_component.py::test_every_successful_builder_run_starts_the_signer_and_waits_for_a_running_one`), so every host's updater installs it at its next fire.
 
 - **Scope / exclusions:** the builder writes `/var/lib/homelab-builder/` alone, which its
-  unit's `ReadWritePaths=` enforces, plus its metric through `publish-textfile`. It **never**
+  unit's `ReadWritePaths=` enforces (`hosts/lib/tests/test_builder_component.py::test_each_unit_carries_the_plans_sandbox`), plus
+  its metric through `publish-textfile`. It **never**
   signs, publishes or touches `/var/lib/homelab-signer/`, and never builds a commit off
-  master's first-parent chain or one whose CI is not green. The signer writes
-  `/var/lib/homelab-signer/` and empties `staged/`, with no network. It **never** publishes a
-  package outside the refusal rule, and never runs code from the builder's clone.
-- **Mode (explicit + reversible):** the timer's enable link arms the builder. `sudo systemctl mask
+  master's first-parent chain (`hosts/lib/tests/test_host_package_builder.py::test_a_green_second_parent_is_never_chosen`) or one
+  whose CI is not green (`hosts/lib/tests/test_host_package_builder.py::test_a_pending_or_red_tip_over_a_green_parent_builds_the_parent`).
+  The signer writes `/var/lib/homelab-signer/` and empties `staged/`, with no network
+  (`hosts/lib/tests/test_builder_component.py::test_a_signer_with_a_network_or_a_second_writable_path_is_flagged`). It **never**
+  publishes a package outside the refusal rule, and never runs code from the builder's clone.
+- **Mode (explicit + reversible):** the timer's enable link arms the builder
+  (`hosts/lib/tests/test_builder_component.py::test_the_timer_fires_every_two_minutes_and_is_enabled`). `sudo systemctl mask
   --now homelab-builder.timer` pauses it, and `unmask` then `start` resumes it
   (**operator-only**). Dropping the link
   from a package version stops the timer on the install that drops it.
 - **Authoritative sources:** `origin/master` as fetched this run, GitHub's check-runs API
-  graded over `CI_CONTEXTS`, and `archive-key.fpr`. The builder reads nothing from its clone
+  graded over `CI_CONTEXTS`
+  (`hosts/lib/tests/test_builder_component.py::test_the_settings_carry_the_shared_ci_contexts_and_the_prometheus_cluster_ip`), and `archive-key.fpr`. The builder reads nothing from its clone
   to decide what to trust. The signer trusts only `staged/chosen` and the control fields of
   the packages it checks, and signs with the key `archive-key.fpr` names.
 - **Abort valves:** an empty `CI_CONTEXTS` or a walk bound that is not a positive integer
-  (`ci`), a tip that does not descend from the last built commit (`ancestry`), and a keyring
-  that differs from `archive-key.fpr` (`keyring`). Each builds nothing. An open rollout gate
-  (`canary`) builds no host package but the canary's. The signer's refusal
-  rule publishes nothing from a set it refuses. The operator's root-owned
-  `/etc/homelab-builder/hold` stops both from publishing anything new, and a
+  (`ci`, `hosts/lib/tests/test_host_package_builder.py::test_a_disarmed_ci_config_asks_nothing_builds_nothing_and_pages_once`), a tip
+  that does not descend from the last built commit (`ancestry`,
+  `hosts/lib/tests/test_host_package_builder.py::test_a_tip_that_does_not_descend_from_the_last_built_is_refused`), and a keyring
+  that differs from `archive-key.fpr` (`keyring`,
+  `hosts/lib/tests/test_host_package_builder.py::test_a_keyring_refusal_stages_nothing_and_pages_once`). Each builds nothing. An open
+  rollout gate (`canary`) builds no host package but the canary's
+  (`hosts/lib/tests/test_host_package_builder_rollout.py::test_two_changed_host_packages_stage_the_canary_and_the_shared_one`). The signer's
+  refusal rule publishes nothing from a set it refuses
+  (`hosts/lib/tests/test_repo_signer.py::test_a_staged_set_the_rule_refuses_publishes_nothing`). The operator's root-owned
+  `/etc/homelab-builder/hold` stops both from publishing anything new
+  (`hosts/lib/tests/test_host_package_builder.py::test_a_held_builder_fetches_and_builds_nothing`,
+  `hosts/lib/tests/test_repo_signer.py::test_a_hold_leaves_staged_alone_and_publishes_nothing`), and a
   masked timer stops both.
 - **Required evidence:** `homelab_builder.prom` on every run past the fetch,
   `homelab_repo.prom` on every publish, a refused set kept under
-  the signer's `refused/` directory, and one Discord page per new failure of either unit
-  through `OnFailure=`.
+  the signer's `refused/` directory (`hosts/lib/tests/test_repo_signer.py::test_a_staged_set_the_rule_refuses_publishes_nothing`),
+  and one Discord page per new failure of either unit
+  through `OnFailure=` (`hosts/lib/tests/test_builder_component.py::test_both_oneshots_page_through_the_shared_alert_template`).
 - **Next-run review:** before widening scope, read `journalctl -u homelab-builder -u
   homelab-repo-sign` for the refusals since the last change, and the builder metric's `reason`
   label.

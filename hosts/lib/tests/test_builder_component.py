@@ -89,6 +89,7 @@ def sandbox_problems(unit: str, wanted: dict[str, list[str]]) -> list[str]:
 
 @pytest.mark.parametrize("dst", sorted(SANDBOX))
 def test_each_unit_carries_the_plans_sandbox(package, dst):
+    # fact: hosts/components/builder/CLAUDE.md#Autonomous-role contract (the builder and the signer publish host packages with no human in the loop)
     assert sandbox_problems(text(package, dst), SANDBOX[dst]) == []
 
 
@@ -100,6 +101,7 @@ def test_a_builder_unit_without_no_new_privileges_is_flagged(package):
 
 
 def test_a_signer_with_a_network_or_a_second_writable_path_is_flagged(package):
+    # fact: hosts/components/builder/CLAUDE.md#Autonomous-role contract (the builder and the signer publish host packages with no human in the loop)
     unit = text(package, SIGNER).replace("PrivateNetwork=yes\n", "")
     assert sandbox_problems(unit, SANDBOX[SIGNER])
     assert sandbox_problems(unit + "ReadWritePaths=/etc\n", SANDBOX[SIGNER])
@@ -121,6 +123,7 @@ def test_a_unit_left_at_the_default_log_level_is_flagged(package):
 
 
 def test_both_oneshots_page_through_the_shared_alert_template(package):
+    # fact: hosts/components/builder/CLAUDE.md#Autonomous-role contract (the builder and the signer publish host packages with no human in the loop)
     builder = directives(text(package, BUILDER))
     signer = directives(text(package, SIGNER))
     assert builder["User"] == ["homelab-builder"]
@@ -132,6 +135,7 @@ def test_both_oneshots_page_through_the_shared_alert_template(package):
 def test_every_successful_builder_run_starts_the_signer_and_waits_for_a_running_one(
     package,
 ):
+    # fact: hosts/components/builder/CLAUDE.md#Autonomous-role contract (the builder and the signer publish host packages with no human in the loop)
     builder = directives(text(package, BUILDER))
     assert builder["OnSuccess"] == ["homelab-repo-sign.service"]
     assert "homelab-repo-sign.service" in builder["After"]
@@ -146,6 +150,7 @@ def test_every_successful_builder_run_starts_the_signer_and_waits_for_a_running_
 
 
 def test_the_timer_fires_every_two_minutes_and_is_enabled(package):
+    # fact: hosts/components/builder/CLAUDE.md#Autonomous-role contract (the builder and the signer publish host packages with no human in the loop)
     assert directives(text(package, TIMER))["OnUnitActiveSec"] == ["2min"]
     assert package.links[f"{UNITS}/timers.target.wants/homelab-builder.timer"] == (
         "../homelab-builder.timer"
@@ -217,6 +222,7 @@ def test_both_units_publish_their_own_series_as_root(package):
 def test_the_settings_carry_the_shared_ci_contexts_and_the_prometheus_cluster_ip(
     package,
 ):
+    # fact: hosts/components/builder/CLAUDE.md#Autonomous-role contract (the builder and the signer publish host packages with no human in the loop)
     # fact: hosts/components/builder/CLAUDE.md#The rollout gate (H3.12)
     # fact: hosts/components/builder/CLAUDE.md#What the component installs
     settings = dict(

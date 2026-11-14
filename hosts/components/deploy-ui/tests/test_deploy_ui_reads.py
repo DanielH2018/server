@@ -37,6 +37,7 @@ def test_parse_ps_keys_every_process_by_pid_is_clean():
 
 def test_runs_fold_each_family_to_its_root_is_clean():
     """One row per landing, whatever the wrapper depth."""
+    # fact: hosts/components/deploy-ui/CLAUDE.md#In flight
     assert set(_rows()) == {4321, 4400, 4500}
 
 
@@ -71,6 +72,7 @@ def test_runs_open_but_ungranted_file_is_not_held_is_flagged():
 
 def test_runs_bare_lock_holder_is_a_row_is_clean():
     """A holder that matches no run pattern still shows by its tree-lock hold."""
+    # fact: hosts/components/deploy-ui/CLAUDE.md#In flight
     ps = " 6000     1    20 /x/python3 /opt/homelab/other_holder.py\n 6001  6000     2 git fetch\n"
     rows = reads.runs(
         reads.parse_ps(ps),
@@ -83,6 +85,7 @@ def test_runs_bare_lock_holder_is_a_row_is_clean():
 
 
 def test_runs_ignore_grep_shells_is_flagged():
+    # fact: hosts/components/deploy-ui/CLAUDE.md#In flight
     assert not {412, 7000} & set(_rows())
 
 

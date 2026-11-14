@@ -236,6 +236,7 @@ def test_every_published_file_is_world_readable(lab):
     ],
 )
 def test_a_staged_set_the_rule_refuses_publishes_nothing(lab, stage):
+    # fact: hosts/components/builder/CLAUDE.md#Autonomous-role contract (the builder and the signer publish host packages with no human in the loop)
     lab.stage("homelab-daniel-pi")
     stage(lab)
     assert lab.signer().main() == 1
@@ -276,6 +277,7 @@ def test_a_symlinked_entry_is_recorded_without_its_target(lab):
 
 
 def test_a_hold_leaves_staged_alone_and_publishes_nothing(lab):
+    # fact: hosts/components/builder/CLAUDE.md#Autonomous-role contract (the builder and the signer publish host packages with no human in the loop)
     lab.stage("homelab-daniel-pi")
     lab.hold.touch()
     assert lab.signer().main() == 0
