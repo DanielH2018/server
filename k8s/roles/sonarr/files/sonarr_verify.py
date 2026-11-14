@@ -14,7 +14,7 @@ goes through `flux_job_connect.open_url`, which retries a refusal while kube-rou
 new pod's address. Exit 0 when every check passes, 1 when one fails, naming it.
 
 Run: python3 sonarr_verify.py (in the Job; it takes no arguments)
-     uv run pytest ansible/roles/k8s/sonarr/tests/test_sonarr_verify.py
+     uv run pytest k8s/roles/sonarr/tests/test_sonarr_verify.py
 """
 
 import argparse

@@ -14,7 +14,7 @@
   The spec embeds a digest of jellyfin's rendered Deployment, as tdarr's verify Job does and
   for its reason: every revision that rolls jellyfin renames the Job, so Flux runs it again,
   as Ansible runs `verify.yml` on every deploy.
-  ansible/roles/k8s/jellyfin/tests/test_jellyfin_verify.py runs the census over this render.
+  k8s/roles/jellyfin/tests/test_jellyfin_verify.py runs the census over this render.
 #}
 {% set script_name = 'jellyfin_verify.py' %}
 {% set script_dir = '/verify' %}
