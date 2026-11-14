@@ -1,6 +1,6 @@
 # The Prometheus arms of monitor-bridge's `disk`, `memory`, `host_temp` and `ups` checks, and the
-# Prometheus half of `pi_pressure`, as rules. Plain YAML, never Jinja: prometheus-rules.yaml.j2
-# carries this file verbatim. The design is M6's batch A1
+# Prometheus half of `pi_pressure`, as rules, plus HostClockUnsynchronised, which ports no bridge
+# check. Plain YAML, never Jinja: prometheus-rules.yaml.j2 carries this file verbatim. The design is M6's batch A1
 # (docs/target-architecture/monitoring/m6-retire-kuma.md, "Phase A") on M2's recipe.
 #
 # THESE RULES PAGE since A1's Cutover-b, and the Pi pressure arms since B8's. They ran with
@@ -401,8 +401,8 @@ groups:
             A Processor cooling device on {{ $labels.origin }} has held a non-zero cur_state for 15
             minutes, so the kernel is throttling the CPU for heat. CFS throttling is
             ContainerCPUThrottled's. Read the cooling devices under /sys/class/thermal.
-      # The missing-series arms of check_disk (`metric unavailable for <mount>`), check_mem and the
-      # thermal-throttle arm, one `arm` label each. `for: 15m` is HOST_ORIGINS_CONSECUTIVE (3) x
+      # The missing-series arms of check_disk (`metric unavailable for <mount>`), check_mem, the
+      # thermal-throttle arm and HostClockUnsynchronised's `clock`, one `arm` label each. `for: 15m` is HOST_ORIGINS_CONSECUTIVE (3) x
       # 300s.
       - alert: HostMetricsMissing
         expr: |
@@ -435,6 +435,12 @@ groups:
             unless on (origin, instance)
               node_cooling_device_cur_state{origin="daniel-box", type="Processor"},
             "arm", "thermal-throttle", "", "")
+          or
+          label_replace(
+            up{job="node", origin="daniel-box"} == 1
+            unless on (origin, instance)
+              node_timex_sync_status{origin="daniel-box"},
+            "arm", "clock", "", "")
         for: 15m
         labels:
           severity: warning
@@ -476,6 +482,12 @@ groups:
             unless on (origin, instance)
               node_cooling_device_cur_state{origin="daniel-server", type="Processor"},
             "arm", "thermal-throttle", "", "")
+          or
+          label_replace(
+            up{job="node", origin="daniel-server"} == 1
+            unless on (origin, instance)
+              node_timex_sync_status{origin="daniel-server"},
+            "arm", "clock", "", "")
         for: 15m
         labels:
           severity: warning
@@ -541,6 +553,70 @@ groups:
             The host temperature check needs a non-NVMe hwmon sensor from each of the three hosts,
             and {{ $value | printf "%.0f" }} answer. The rest are unmonitored, not cool. Read the
             node scrape targets on Prometheus.
+      # Clock skew breaks TOTP logins, ACME, etcd and Loki ingestion, and none of those failures
+      # names the clock. The kernel's NTP state, from node-exporter's timex collector: the
+      # `unsynchronised` arm is a sync_status of 0, the `offset` arm an offset past 0.5s either
+      # way. No bridge check preceded these, so `for: 15m` is the host rules' common hold, not a
+      # ported streak. A host with no timex series is the `clock` arm of HostMetricsMissing or
+      # PiMetricsMissing.
+      - alert: HostClockUnsynchronised
+        expr: |
+          label_replace(
+            max by (origin, job, instance) (node_timex_sync_status{job="node", origin="daniel-box"}) == 0,
+            "arm", "unsynchronised", "", "")
+          or
+          label_replace(
+            max by (origin, job, instance) (abs(node_timex_offset_seconds{job="node", origin="daniel-box"})) > 0.5,
+            "arm", "offset", "", "")
+        for: 15m
+        labels:
+          severity: warning
+          service: daniel-box
+        annotations:
+          summary: "{{ $labels.origin }}'s clock is not in sync ({{ $labels.arm }})."
+          description: >-
+            The kernel on {{ $labels.origin }} reports its clock unsynchronised or more than 0.5s
+            off, which breaks TOTP logins, ACME renewals, etcd and Loki ingestion. Read
+            `timedatectl timesync-status` on the host.
+      - alert: HostClockUnsynchronised
+        expr: |
+          label_replace(
+            max by (origin, job, instance) (node_timex_sync_status{job="node", origin="daniel-server"}) == 0,
+            "arm", "unsynchronised", "", "")
+          or
+          label_replace(
+            max by (origin, job, instance) (abs(node_timex_offset_seconds{job="node", origin="daniel-server"})) > 0.5,
+            "arm", "offset", "", "")
+        for: 15m
+        labels:
+          severity: warning
+          service: daniel-server
+        annotations:
+          summary: "{{ $labels.origin }}'s clock is not in sync ({{ $labels.arm }})."
+          description: >-
+            The kernel on {{ $labels.origin }} reports its clock unsynchronised or more than 0.5s
+            off, which breaks TOTP logins, ACME renewals, etcd and Loki ingestion. Read
+            `timedatectl timesync-status` on the host.
+      - alert: HostClockUnsynchronised
+        expr: |
+          label_replace(
+            max by (origin, job, instance) (node_timex_sync_status{job="node-pi", origin="daniel-pi"}) == 0,
+            "arm", "unsynchronised", "", "")
+          or
+          label_replace(
+            max by (origin, job, instance) (abs(node_timex_offset_seconds{job="node-pi", origin="daniel-pi"})) > 0.5,
+            "arm", "offset", "", "")
+        for: 15m
+        labels:
+          severity: warning
+          service: daniel-pi
+        annotations:
+          summary: "{{ $labels.origin }}'s clock is not in sync ({{ $labels.arm }})."
+          description: >-
+            The kernel on {{ $labels.origin }} reports its clock unsynchronised or more than 0.5s
+            off, which breaks TOTP logins, ACME renewals, etcd and Loki ingestion. The Pi has no
+            RTC, so a boot without network starts it at a stale time. Read
+            `timedatectl timesync-status` on the host.
       # The bridge's undervoltage arm of check_host_temp. No `for:`: UNDERVOLTAGE_CONSECUTIVE is 1,
       # and the firmware latched the bit.
       - alert: PiUndervoltage
@@ -618,8 +694,8 @@ groups:
             itself after an I/O error. Every other arm stays green through it. A reboot does not
             come back from it.
       # The missing-series arms of the retired pi_pressure check: a renamed series or a blind
-      # collector must surface. The bridge paged the same cycle, so `for: 10m` is
-      # ScrapeTargetDown's floor. The undervoltage arm is check_host_temp's, so it is
+      # collector must surface. The `clock` arm is HostClockUnsynchronised's. The bridge paged the
+      # same cycle, so `for: 10m` is ScrapeTargetDown's floor. The undervoltage arm is check_host_temp's, so it is
       # PiUndervoltageMissing below and paged with A1.
       - alert: PiMetricsMissing
         expr: |
@@ -646,6 +722,12 @@ groups:
             unless on (origin, instance)
               node_filesystem_readonly{origin="daniel-pi", mountpoint=~"/|/boot/firmware"},
             "arm", "read-only", "", "")
+          or
+          label_replace(
+            up{job="node-pi", origin="daniel-pi"} == 1
+            unless on (origin, instance)
+              node_timex_sync_status{origin="daniel-pi"},
+            "arm", "clock", "", "")
         for: 10m
         labels:
           severity: warning

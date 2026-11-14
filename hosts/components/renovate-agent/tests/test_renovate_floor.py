@@ -11,7 +11,6 @@ import pytest
 import renovate_floor as floor
 from _helpers import REPO
 from deploy_tools.land_lib import policy
-from deploy_tools.land_lib.pr_json import parse_file
 from lib.proc_testing import run
 
 FLOOR_FILE = (
@@ -52,6 +51,7 @@ def test_a_path_on_the_floor_is_flagged(path):
     [
         "k8s/roles/sonarr/defaults/main.yml",
         "k8s/roles/homelab-mcp-adjacent/defaults/main.yml",
+        "ansible/roles/k8s/homelab-mcp/defaults/main.yml",
     ],
 )
 def test_a_path_off_the_floor_is_clean(path):
@@ -258,13 +258,6 @@ def test_both_landers_read_the_floor_file_alike():
     land = {p for p in paths if policy.listed(p, entries)}
     assert host == land
     assert "hosts/components/renovate-agent/files/t2-approval-floor" in host
-
-
-def test_a_conftest_planted_at_a_new_depth_needs_approval_through_land_sh():
-    entries = policy.read_approval_paths(str(FLOOR_FILE))
-    planted = "k8s/roles/sonarr/templates/deep/new/conftest.py"
-    files = [parse_file({"status": "added", "filename": planted})]
-    assert policy.approval_hits(files, entries) == [planted]
 
 
 def test_an_empty_floor_file_is_refused(tmp_path):

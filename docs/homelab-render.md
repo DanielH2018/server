@@ -277,7 +277,9 @@ A template names a file it looks up from its role, never from the tree's root.
 `role_file('files/x.py')` is the path of a file in the role being rendered, and
 `role_file('files/x.yaml', role='crowdsec')` is one in a sibling role.
 `repo_file('hosts/lib/host_lib.py')` is a path from the repository root, for a file no role
-holds. `scripts/lib/role_files.py` defines both, and `make_env` registers them in every
+holds. `cluster_vars_source()` is the path of `secrets/cluster-vars.source`, which a verify Job
+hashes into its roll digest, so rotating a key it reads re-runs it; `lib.repo_paths.CLUSTER_VARS_SOURCE` places it.
+`scripts/lib/role_files.py` defines all three, and `make_env` registers them in every
 environment. Each resolves from `role_path`, the rendering role's directory, which
 `render_context` sets. A test that renders a copy of a role therefore reads the copy, and a
 copy whose templates call `repo_file()` or name a sibling role is laid out as

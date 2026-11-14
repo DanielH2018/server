@@ -6,12 +6,15 @@ one, and the Mullvad mod cannot bring a tunnel up behind them. That deadlock sur
 container restart and clears only on a pod delete. `files/netns-reset.sh` is what makes a container restart equivalent to that delete;
 these guards hold the wiring that gets it run, and the two properties of the script itself that
 a functional test cannot see without a netns: it gates before it tears down, and it fails closed.
+The default-route restore runs against a stub `ip`, because it is a decision on what `ip` prints.
 """
 
+import os
 import re
 
 from _helpers import K8S_ROLES
 from _k8s_render import rendered_docs
+from lib.proc_testing import fake_bin, run
 
 SCRIPT = K8S_ROLES / "qbittorrent/files/netns-reset.sh"
 
@@ -94,3 +97,55 @@ def test_the_gate_exempts_wireguards_own_carrier_packets():
         "the uid gate must exempt WireGuard's fwmark-51820 carrier packets, or it rejects "
         "the tunnel it is meant to force traffic through"
     )
+
+
+STUB_IP = """#!/bin/sh
+echo "ip $*" >> "$STUB_DIR/calls"
+case "$*" in
+  "-4 route show default") cat "$STUB_DIR/main_default" 2>/dev/null ;;
+  "-4 route show table 51819 default") cat "$STUB_DIR/stashed_default" 2>/dev/null ;;
+  "link show wg0") exit 1 ;;
+esac
+exit 0
+"""
+
+
+def _run_reset(tmp_path, main_default="", stashed_default=""):
+    stubs = fake_bin(
+        tmp_path / "bin",
+        ip=STUB_IP,
+        **{"iptables-restore": "#!/bin/sh\ncat >/dev/null\n"},
+    )
+    (tmp_path / "main_default").write_text(main_default)
+    (tmp_path / "stashed_default").write_text(stashed_default)
+    env = {
+        **os.environ,
+        "STUB_DIR": str(tmp_path),
+        "LAN_NETWORKS": "10.42.0.0/15",
+        "PUID": "1000",
+    }
+    result = run(["sh", str(SCRIPT)], env=env, stub_bin=stubs, check=True)
+    return (tmp_path / "calls").read_text().splitlines(), result.stdout
+
+
+def test_a_start_with_a_default_route_stashes_it_in_the_netns(tmp_path):
+    calls, _out = _run_reset(tmp_path, main_default="default via 10.42.1.1 dev eth0\n")
+    assert "ip -4 route replace default via 10.42.1.1 dev eth0 table 51819" in calls, (
+        calls
+    )
+
+
+def test_a_start_after_a_failed_tunnel_restores_the_default_route(tmp_path):
+    # LSIO's svc-wireguard deletes the default route when a tunnel fails to come up, and the
+    # route belongs to the pod netns: without it no later start reaches CoreDNS or Mullvad.
+    calls, out = _run_reset(
+        tmp_path, stashed_default="default via 10.42.1.1 dev eth0\n"
+    )
+    assert "ip -4 route add default via 10.42.1.1 dev eth0" in calls, calls
+    assert "restoring default via 10.42.1.1" in out
+
+
+def test_the_default_route_comes_back_only_after_the_gate():
+    # The route is what opens eth0 to qbittorrent's uid, so the REJECT must already be in place.
+    text = SCRIPT.read_text()
+    assert text.index("--uid-owner ${uid}") < text.index("ip -4 route add $saved")

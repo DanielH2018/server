@@ -19,24 +19,20 @@ What one run does, in this order, for each volume:
    set would be the transaction blowup this job exists to prevent.
 3. A volume in `default` whose claim is on the weekly list moves to its weekday shard,
    `weekly-backup-d<N>`, the shard its `containers_list` entry declares (0=Sunday).
-4. A volume carrying the retired flat `weekly-backup` label moves to its shard if its claim is
-   on the weekly list, and returns to `default` if not. No RecurringJob selects the flat label,
-   so a volume stuck with it is silently unprotected, and this stays as the guard against a
-   hand-applied legacy label.
-5. A volume in a weekly shard group whose claim is off the weekly list returns to `default`.
+4. A volume in a weekly shard group whose claim is off the weekly list returns to `default`.
    One whose claim declares another shard moves to that shard.
 
 The steps run against each volume's own labels, in that order. Then one more step sets the
 backup target:
 
-6. A volume whose claim is on the `r2` list and whose `spec.backupTargetName` is not `r2` moves
+5. A volume whose claim is on the `r2` list and whose `spec.backupTargetName` is not `r2` moves
    to `r2`. A volume on `r2` whose claim is on no `r2` list returns to `default`, the B2 target.
    A volume whose target is blank, or any other name, and whose claim is not listed is left
    alone, as the Ansible routing tasks left it.
 
 Then one more step sets the trim label (H2.2a, the H2 plan's *Native trim*):
 
-7. A volume that is `attached` and has a Running ReplicaSet or StatefulSet workload gets the
+6. A volume that is `attached` and has a Running ReplicaSet or StatefulSet workload gets the
    per-job label `recurring-job.longhorn.io/trim: enabled`, which puts it in Longhorn's `trim`
    RecurringJob. It loses the label when either condition stops holding. A volume that gains the
    label and sits in the daily tier also gets `recurring-job-group.longhorn.io/default`
@@ -92,7 +88,6 @@ CALL_TIMEOUT = 10
 LABEL_PREFIX = "recurring-job-group.longhorn.io/"
 DEFAULT = "default"
 NO_BACKUP = "no-backup"
-LEGACY_WEEKLY = "weekly-backup"
 SHARDS = range(7)
 ENABLED = "enabled"
 
@@ -263,10 +258,7 @@ def desired_labels(
     #    as the Ansible query was.
     if in_default and claim in weekly:
         move(shard_group(weekly[claim]), DEFAULT)
-    # 4. The retired flat weekly label.
-    if has(LEGACY_WEEKLY):
-        move(shard_group(weekly[claim]) if claim in weekly else DEFAULT, LEGACY_WEEKLY)
-    # 5. Each shard's membership, in shard order.
+    # 4. Each shard's membership, in shard order.
     for shard in SHARDS:
         if not has(shard_group(shard)):
             continue
@@ -274,13 +266,13 @@ def desired_labels(
             move(DEFAULT, shard_group(shard))
         elif weekly[claim] != shard:
             move(shard_group(weekly[claim]), shard_group(shard))
-    # 7. The trim label. A volume that gains it and sits in the daily tier is also put in
+    # 6. The trim label. A volume that gains it and sits in the daily tier is also put in
     #    `default` explicitly, so it keeps exactly one group label.
     if not trim:
         state.pop(TRIM_LABEL, None)
         return state
     state[TRIM_LABEL] = ENABLED
-    other_groups = [NO_BACKUP, LEGACY_WEEKLY, *(shard_group(s) for s in SHARDS)]
+    other_groups = [NO_BACKUP, *(shard_group(s) for s in SHARDS)]
     if (
         claim not in weekly
         and claim not in nobackup
@@ -327,7 +319,7 @@ def desired_target(current: str, claim: str, r2: set[str]) -> str | None:
 
 def group_keys() -> set[str]:
     """Every group label key this job writes or removes."""
-    groups = [DEFAULT, NO_BACKUP, LEGACY_WEEKLY, *(shard_group(s) for s in SHARDS)]
+    groups = [DEFAULT, NO_BACKUP, *(shard_group(s) for s in SHARDS)]
     return {label(group) for group in groups}
 
 

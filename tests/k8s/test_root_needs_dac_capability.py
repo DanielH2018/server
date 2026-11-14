@@ -25,12 +25,11 @@ root site.
 
 The hazard is the COMBINATION, never root by itself.
 
-WHAT IT READS. Every role template in all three planes, as the deploy renders it: the k8s
-manifests from `_k8s_render.rendered_texts`, each role's `Dockerfile*.j2` from
-`rendered_build_texts`, the setup plane from `_setup_render.rendered_setup_texts`, the Pi's
-Docker roles from `_compose_render.rendered_texts`, and every `*.sh.j2` in any plane from
+WHAT IT READS. Every role template, as the deploy renders it: the k8s manifests from
+`_k8s_render.rendered_texts`, each role's `Dockerfile*.j2` from `rendered_build_texts`, the
+setup plane from `_setup_render.rendered_setup_texts`, and every `*.sh.j2` in any plane from
 `_shell_render.rendered_shell_texts`. No single render covers that file set, so `template_texts`
-indexes all five by (plane, role, template name) and reads the SOURCE only for the three
+indexes all four by (plane, role, template name) and reads the SOURCE only for the three
 templates none of them reaches — `FALLBACK_TEMPLATES`, held by
 `test_the_render_reaches_every_role_template`. Reading the render is what lets the scan see a
 securityContext a Jinja macro builds, or a `runAsUser` that arrives through a variable.
@@ -51,7 +50,6 @@ the block's own `drop:`/`add:`.
 import re
 from pathlib import Path
 
-from _compose_render import rendered_texts as _rendered_compose_texts
 from _helpers import K8S_ROLES
 
 from _k8s_render import rendered_build_texts as _rendered_build_texts
@@ -92,7 +90,7 @@ def _manifest_files() -> list[Path]:
 def _rendered_index() -> dict[tuple[str, str, str], str]:
     """Every plane's renders, keyed (plane, role, template name).
 
-    The plane is part of the key because all five readers return a bare role name, and a role
+    The plane is part of the key because all four readers return a bare role name, and a role
     name that existed in two planes would otherwise hand one plane's guard the other's render.
     """
     index: dict[tuple[str, str, str], str] = {}
@@ -100,7 +98,6 @@ def _rendered_index() -> dict[tuple[str, str, str], str]:
         ("k8s", _rendered_k8s_texts()),
         ("k8s", _rendered_build_texts()),
         ("setup", _rendered_setup_texts()),
-        ("containers", _rendered_compose_texts()),
     ):
         for role, template, text in texts:
             index[(plane, role, template)] = text

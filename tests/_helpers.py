@@ -27,9 +27,6 @@ from lib.repo_paths import (
     TESTS as TESTS,
 )
 
-# The retired Docker roles tree; _compose_render still defaults to it.
-CONTAINER_ROLES = REPO / "ansible" / "roles" / "containers"
-
 
 def load_yaml(path: Path):
     """The parsed document, or None for an empty file."""

@@ -89,6 +89,17 @@ row to show it. Some lint rules therefore read the prose itself.
   `monitor-bridge-script-` prefix a template joins to each module's name, never appears
   literally, so a doc naming one rendered ConfigMap reads as vanished. Name it as the tree
   spells it.
+- Two more classes of removed name are advice, not lint rules. `scripts/dev/repo_guards.py`
+  prints them after its guards as a `removed names:` list, and they change no exit code.
+  The first is a section of a live doc that names the identifier in backticks: any Markdown
+  file that is no instruction file and is outside the archive, the ADRs, the slice plans
+  and the generated pages (`scripts/lib/facts/citations.py:is_live_doc`). The second is a
+  full-line `#` or `//` comment that names an identifier the branch took out of code, when
+  only comments still hold it. A comment has no backticks, so its identifier needs an
+  underscore, a dot or two hyphens (`scripts/lib/facts/removed.py:comment_name`).
+  `scripts/lib/facts/lint.py:vanished_advice` builds the list. A class becomes an error
+  when fewer than one graded row in five is a false alarm;
+  `docs/target-architecture/docs-guard/g7-removed-names.md` holds the measured shares.
 
 A paragraph or bullet that opens with `**HISTORY —` is history, and every prose rule skips it.
 A sentence such as "it lived on the staging guest until 2026-09-28" is correct exactly because

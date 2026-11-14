@@ -22,14 +22,17 @@ That is why there is no allowlist here. Every exclusion a bare-path version need
 narrowing someone would later have to defend, and an allowlist is where a real finding goes
 to hide. The pattern earns the zero-entry list.
 
-Two more citation shapes are checked here. A bare `tests/...py` path -- that
+Three more citation shapes are checked here. A bare `tests/...py` path -- that
 directory exists nowhere but this tree, so a bare citation of it is still a claim about this
-tree now. And a `file.py::test_name` node id, in docs AND in runtime modules, which names the
-check that holds an invariant closed. `scripts/lib/facts/citations.py` owns all three
-grammars (`line_numbered_citations`, `guard_path_citations`, `node_citations`), beside the
+tree now. A `file.py::test_name` node id, in docs AND in runtime modules, which names the
+check that holds an invariant closed. And a pointer at one part of another doc, written as
+the doc's path and the part's name in italics, which sends a reader to a heading that a
+rename leaves behind. `scripts/lib/facts/citations.py` owns all four
+grammars (`line_numbered_citations`, `guard_path_citations`, `node_citations`,
+`heading_pointers`), beside the
 `CLAUDE.md` citation forms, and their paired tests sit beside it. This module keeps what
 depends on the tree: resolution, the extension filter, and the corpus. One corpus walk and one
-tracked-file set serve all three.
+tracked-file set serve all four.
 """
 
 import re
@@ -39,7 +42,9 @@ import pytest
 from _helpers import REPO, discover_docs
 from lib.facts.citations import (
     guard_path_citations,
+    heading_pointers,
     line_numbered_citations,
+    names_a_part,
     node_citations,
     tracked_files,
 )
@@ -422,3 +427,69 @@ def test_the_walk_still_finds_this_repos_own_docs():
     names = {d.name for d in DOCS}
     assert "CLAUDE.md" in names
     assert any(d.as_posix().endswith("docs/secret-rotation.md") for d in DOCS)
+
+
+# --- `path/doc.md`, *Part name* pointers ------------------------------------------------
+#
+# The citing doc is still right about the file, so no path check sees a renamed heading. The
+# reader who follows the pointer searches a long page for text that is gone.
+
+# A plan points at the tree as it stood when the plan was written, and a finished plan is
+# not rewritten when a heading it names moves.
+_PLANS = "docs/target-architecture/"
+POINTER_CORPUS = [
+    d
+    for d in DOCS
+    if d.is_file() and not d.relative_to(REPO).as_posix().startswith(_PLANS)
+]
+
+
+def dangling_pointers(corpus: list[Path]) -> list[str]:
+    """Every heading pointer in ``corpus`` whose doc is untracked or holds no such part."""
+    dangling = []
+    for path in corpus:
+        for doc, part in heading_pointers(path.read_text()):
+            if doc not in REPO_FILES:
+                dangling.append(f"{path.as_posix()}: {doc} is not a tracked file")
+            elif not names_a_part(part, (REPO / doc).read_text()):
+                dangling.append(
+                    f"{path.as_posix()}: {doc} has no heading or bold lead-in "
+                    f"holding '{' '.join(part.split())}'"
+                )
+    return dangling
+
+
+def test_a_pointer_at_a_renamed_heading_or_a_moved_doc_is_flagged(tmp_path):
+    doc = tmp_path / "runbook.md"
+    doc.write_text(
+        "Read `docs/adr/index.md`, *A heading nobody wrote*, then\n"
+        "`docs/no-such-page.md`, *Superseding*.\n"
+    )
+    assert dangling_pointers([doc]) == [
+        f"{doc.as_posix()}: docs/adr/index.md has no heading or bold lead-in "
+        "holding 'A heading nobody wrote'",
+        f"{doc.as_posix()}: docs/no-such-page.md is not a tracked file",
+    ]
+
+
+def test_a_pointer_at_a_real_heading_is_clean(tmp_path):
+    doc = tmp_path / "runbook.md"
+    doc.write_text("Read `docs/adr/index.md`, *Superseding*.\n")
+    assert dangling_pointers([doc]) == []
+
+
+def test_the_pointer_walk_finds_pointers_to_check():
+    """A shrunken walk is a bug: about 80 pointers stood in the live docs on 2026-11-14."""
+    found = sum(len(heading_pointers(d.read_text())) for d in POINTER_CORPUS)
+    assert found >= 50, found
+    assert not any(_PLANS in d.as_posix() for d in POINTER_CORPUS)
+
+
+def test_every_heading_pointer_in_the_live_docs_resolves():
+    dangling = [
+        d.removeprefix(f"{REPO.as_posix()}/") for d in dangling_pointers(POINTER_CORPUS)
+    ]
+    assert not dangling, (
+        "a doc sends its reader to a part of another doc that is not there; name the "
+        "heading as the target doc spells it:\n  " + "\n  ".join(dangling)
+    )

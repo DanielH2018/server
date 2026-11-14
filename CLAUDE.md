@@ -133,8 +133,9 @@ the `add-secret` skill; `.claude/rules/secrets.md` and `docs/secret-rotation.md`
 the suite**, except that at commit time it runs twenty-five static ratchet, lint and census test
 files through the `static-ratchet-tests` hooks. CI's `pytest` job runs the whole suite on every
 PR. To see a red test first, run `uv run pytest`, and run `uv run python
-scripts/dev/repo_guards.py` once before `gh pr create`. Its last lines name each instruction
-section that cites code the branch changed and left unedited: re-read those. A fan-out batch
-runs named test paths instead of the whole suite.
+scripts/dev/repo_guards.py` once before `gh pr create`. Its last lines are advice: each
+instruction section that cites code the branch changed and left unedited, and each name the
+branch removed that a doc or a comment still uses. Act on both. A fan-out batch runs named
+test paths instead of the whole suite.
 
 `.gitignore` denies every root-level file, and one untracked file parks `homelab-checkout-sync`.

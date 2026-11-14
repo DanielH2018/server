@@ -35,7 +35,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from lib import yaml_fast
 from lib.git import git
-from lib.role_files import repo_file, role_file
+from lib.role_files import cluster_vars_source, repo_file, role_file
 from lib.inventory_lists import K8S_HOST, containers_entries_in, host_names
 from lib.repo_paths import (
     ALL_VARS,
@@ -174,7 +174,7 @@ def make_env(dirs=(), undefined_cls=StubUndefined) -> Environment:
 
     Carries the given template dirs on the loader, the stub-undefined class, and the whitespace
     flags matching Ansible's Templar so rendered output matches a real deploy. Its globals are
-    ``lib.role_files``' ``role_file`` and ``repo_file``. It registers no filter: ``lib.guard_jinja_env.register_ansible_filters(make_env(...))`` adds the Ansible
+    ``lib.role_files``' ``role_file``, ``repo_file`` and ``cluster_vars_source``. It registers no filter: ``lib.guard_jinja_env.register_ansible_filters(make_env(...))`` adds the Ansible
     ones, and ``template_env`` does that over a template directory and ``k8s/templates/``.
 
     With no ``dirs`` the environment has an empty loader, which is the form a test takes to
@@ -191,7 +191,11 @@ def make_env(dirs=(), undefined_cls=StubUndefined) -> Environment:
         keep_trailing_newline=True,
     )
     # jinja2 leaves `Environment.globals` unannotated, so its inferred type rejects a callable.
-    cast(dict[str, Any], env.globals).update(role_file=role_file, repo_file=repo_file)
+    cast(dict[str, Any], env.globals).update(
+        role_file=role_file,
+        repo_file=repo_file,
+        cluster_vars_source=cluster_vars_source,
+    )
     return env
 
 

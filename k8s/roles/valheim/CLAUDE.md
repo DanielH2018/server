@@ -43,6 +43,13 @@ longer exists. `k8s/terraria` is the sibling this role copies.
   the 2026-10-14 roll, with the install claim already populated. Every roll restarts the
   console that game-stats' `valheim-stats` tails, which closes each open session at the
   restart line.
+- **Parked at `replicas: 0`** since 2026-11-13, to free daniel-box memory.
+  `inventory/group_vars/all.yml:valheim_k8s_replicas` is 0, so the render holds `replicas: 0`
+  and a roll starts no pod. The value has three readers: this role's Deployment, game-stats'
+  `valheim-stats` Deployment and observability's `valheim-stats` scrape job. The three PVCs
+  stay. Setting the value to 1 in one merge restarts all three, and `promote` applies it. The
+  first start after a long gap runs SteamCMD's update check before the port binds, and the
+  startup probe allows 15 minutes for it.
 - **The join-password Secret substitutes from `homelab-cluster-vars`.** `valheim_server_pass`
   is a `${<key>}` placeholder in the published render. Flux substitutes the value from the
   `homelab-cluster-vars` Secret, which it decrypts from `secrets/cluster-vars.sops.env`.

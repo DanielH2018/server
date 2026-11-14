@@ -76,6 +76,12 @@ The rename lands in two steps:
    and the readers in step 1 drop their `ansible/` paths in a follow-up, once the moved
    tree's packages are installed.
 
+The follow-up ran in two parts. 83aed3de3 ([#8407](https://github.com/DanielH2018/server/issues/8407)) dropped the
+`ansible/` paths from the installed readers and their tests. The T2 approval floor kept
+`ansible/roles/k8s/homelab-mcp/` while the homelab-mcp pod still mounted the node's `ansible/`
+tree. [#8372](https://github.com/DanielH2018/server/issues/8372) dropped that last entry once [#8409](https://github.com/DanielH2018/server/issues/8409) moved the pod to
+`k8s/`.
+
 ## Consequences
 
 - Between the two steps, the approval list carries entries that match nothing. The list
@@ -122,7 +128,9 @@ The rename lands in two steps:
   a preference, not a requirement. If daniel-server is down, the pod schedules on daniel-box,
   where the synced checkout holds no `ansible/` tree, and it fails to mount or serves an
   ignored-file leftover. Moving it waits for a checkout the pod's node keeps current
-  ([#8409](https://github.com/DanielH2018/server/issues/8409)).
+  ([#8409](https://github.com/DanielH2018/server/issues/8409)). #8409 resolved it: the pod
+  requires `k8s_primary_node`, daniel-box, whose checkout `checkout-sync` keeps current, and
+  mounts `k8s/`, `inventory/` and `tests/` in place of `ansible/`.
 - The readers that compare two commits, the forward-only pin gate in `cluster_pins.py` and
   `promote_lib/forward_only.py`, read both layouts. A range whose base predates the rename
   would otherwise read no pin and no forward-only role on that side.
