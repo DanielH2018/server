@@ -1,14 +1,36 @@
 """The shared gh runner: prompts and the update notifier are off, JSON is parsed."""
 
 import json
+import shutil
 import subprocess
+import sys
 
 import gh as ghmod
 import gh_quota
 import pytest
+from lib.proc_testing import run as run_proc
+from lib.repo_paths import REPO
 
 # 2100-01-01, so the quota window in the ledger test stays open under the real clock.
 WINDOW_END = 4_102_444_800
+
+
+def test_gh_imports_in_a_copy_of_the_tree_that_has_no_ledger(tmp_path):
+    lib = tmp_path / "scripts/lib"
+    lib.mkdir(parents=True)
+    for name in ("gh.py", "json_types.py"):
+        shutil.copy2(REPO / "scripts/lib" / name, lib / name)
+
+    run = run_proc(
+        [
+            sys.executable,
+            "-c",
+            "from lib.gh import count_call; count_call(('pr', 'list'))",
+        ],
+        cwd=tmp_path / "scripts",
+    )
+
+    assert run.returncode == 0, run.stderr
 
 
 def test_gh_disables_prompts_and_the_notifier(monkeypatch):

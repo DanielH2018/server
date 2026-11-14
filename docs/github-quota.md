@@ -209,7 +209,10 @@ lands in the host's ledger.
 
 **The module fails open.** A ledger it cannot open, lock or parse lets the call through and
 counts the failure in a second file that `gh-quota status` reads. The ledger's own outage
-must not become a GitHub outage.
+must not become a GitHub outage. For the same reason `scripts/lib/gh.py` imports the module
+optionally: a copy of the tree without it runs `gh` uncounted. A fan-out batch from another
+repo runs `findings.py` from a snapshot of this tree, and `SNAPSHOT_PATHS` carries the
+module so those calls are counted.
 
 ### The three rules `admit` enforces
 
@@ -368,6 +371,7 @@ built. The dotfiles half is open, so a session's `ghread` reads are not in the l
 +    tests/test_gh_quota.py
  hosts/daniel-box/package.yml, hosts/daniel-server/package.yml   + gh-quota
  scripts/lib/gh.py          gh(): record each call
+ scripts/dev/fanout_lib/launch.py   the fan-out snapshot carries the module
  tests/leakguard.py         GH_QUOTA_MODE=off for the whole suite
  docs/adr/0034-…            the decision
 
