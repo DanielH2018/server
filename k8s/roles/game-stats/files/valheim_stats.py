@@ -3,7 +3,7 @@
 
 Sibling of terraria-stats and deliberately the same shape: read console lines already
 ingested into Loki, fold them into all-time per-player stats kept in SQLite (the source
-of truth), serve Prometheus metrics for Grafana. Stdlib only (python:3.14-alpine, no
+of truth), serve Prometheus metrics for Grafana. Stdlib only (python:3.15-alpine, no
 deps). The Valheim container is never touched.
 
 The Loki fetch, cursor handling, metric rendering/escaping, the HTTP handler, the run loop

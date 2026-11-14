@@ -329,7 +329,7 @@ The exit criterion has three parts:
   reads host pushers through `k8s/roles/monitor-bridge/files/checks/logs.py:SWALLOWED_VERDICTS_LOGQL`
   and pod pushers through `SWALLOWED_VERDICTS_POD_LOGQL`, which names only `pi-peer-backup`.
 - **No in-cluster job runs `kubectl` today.** The repo's Python jobs use a digest-pinned
-  `python:3.14-alpine` (for example `k8s/roles/uptime-kuma/defaults/main.yml:uptime_kuma_k8s_status_page_sync_image`).
+  `python:3.15-alpine` (for example `k8s/roles/uptime-kuma/defaults/main.yml:uptime_kuma_k8s_status_page_sync_image`).
   `registry.k8s.io/kubectl` exists (its tag list answers, read 2026-10-11) and is distroless,
   so it has no shell to copy its binary out. The fleet rule
   `tests/k8s/test_base_images_digest_pinned.py::test_every_external_image_pin_carries_a_digest`
@@ -508,7 +508,7 @@ The exit criterion has three parts:
       `curl` and `kubectl`. They run in one community image that carries all four,
       `alpine/k8s` at a tag whose kubectl minor is within one of the server's (v1.37).
     - *Python jobs* (the remote allowlist, the bouncer prune, configarr and janitorr health)
-      run in the repo's pinned `python:3.14-alpine`. An init container from the same
+      run in the repo's pinned `python:3.15-alpine`. An init container from the same
       `alpine/k8s` digest copies its `kubectl` binary into an `emptyDir`. The qbittorrent
       prefs check calls no `kubectl` and needs no init container.
   Each family PR quotes, for its pinned digest, `command -v` of every tool its script calls,
@@ -2120,7 +2120,7 @@ carries `prune: disabled`.
    **Operator ruling, 2026-10-18 (#5655): the sidecar form, for all four jobs.** They run in a
    sidecar of the crowdsec LAPI pod that shares its `crowdsec-db` and config volumes and runs
    `cscli` locally. No `pods/exec` grant is made, and no Job mounts `crowdsec-db` from outside
-   the pod. The suggested shape keeps both Python modules and gives a `python:3.14-alpine`
+   the pod. The suggested shape keeps both Python modules and gives a `python:3.15-alpine`
    sidecar the `cscli` binary from the crowdsec image, copied by an initContainer. Porting the
    helpers to shell in the crowdsec image was the fallback if the copied binary did not run.
    **Measured 2026-10-18 (H2.4b):** `file` on `/usr/local/bin/cscli` in the amd64 layer of the
@@ -2497,7 +2497,7 @@ handed over as cross-slice notes.
   died.** Fixed. H2.8b edits the contract with its facts-lock step. G2's PR 3 has since retired the lock, and #7231 removed this step. The disarm is `etcd-s3:
   false` in `k3s_server_config`, and check 12 reports it as DOWN.
 - **H2-R10-19 (medium): the images were unspecified.** Fixed. Shell jobs run in a
-  digest-pinned `alpine/k8s`. Python jobs run in the pinned `python:3.14-alpine` with
+  digest-pinned `alpine/k8s`. Python jobs run in the pinned `python:3.15-alpine` with
   `kubectl` copied from that image by an init container. Each PR quotes the tools in its
   digest, and *Open questions* 9 asks the operator to accept the publisher.
   `registry.k8s.io/kubectl` was measured and rejected: it has no shell.

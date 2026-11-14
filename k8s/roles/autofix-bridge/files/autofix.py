@@ -7,7 +7,7 @@ malware-signature classes), tracks a consecutive-cycle streak in-process for a g
 caps the per-cycle blast radius, then — unless DRY_RUN — DELETEs the item with blocklist=true
 (removes from client + blocklists the release) and fires a series/movie re-search so the *arr
 grabs a clean replacement. Health -> the `homelab_check_*` gauges Prometheus scrapes; each
-action -> the *arr Discord webhook. Stdlib only (python:3.14-alpine); config is env-driven so this stays testable.
+action -> the *arr Discord webhook. Stdlib only (python:3.15-alpine); config is env-driven so this stays testable.
 
 Fake-remux detection moved OUT of this sidecar (2026-07-17) to the host-plane fake_remux_scan.py:
 it needs ffprobe, which this zero-privilege container (cap_drop ALL, no docker) can't run. See the

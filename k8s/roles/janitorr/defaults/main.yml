@@ -62,7 +62,7 @@ janitorr_k8s_health_verdict_configmap: janitorr-health-verdict
 # The health reader runs in the repo's pinned python image and gets kubectl from an init
 # container of alpine/k8s, which keeps the binary at /usr/bin/kubectl. The same two digests as
 # configarr's health reader (configarr_k8s_health_image), whose defaults record the evidence.
-janitorr_k8s_health_image: python:3.14-alpine@sha256:f6a589d43c42b9e7f7dc67a12d37132491f362859a5d750607710cc56da3bc72
+janitorr_k8s_health_image: python:3.15-alpine@sha256:0f9552bb28711333da16915ec146f5e6bb44a7fdac9ced15dc17c2e0206346dd
 janitorr_k8s_health_kubectl_image: alpine/k8s:1.37.2@sha256:dcb7185e112a453aa72f426754849a97357727ef8f40168fb208c8cf59952042
 
 # Above the reader's worst case: two 30 s kubectl calls (JANITORR_KUBECTL_TIMEOUT_S) plus
