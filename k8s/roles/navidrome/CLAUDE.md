@@ -22,7 +22,7 @@ until 2026-11-12, and unparked with an empty library for the music pipeline to f
   like the rest of the media volume.
 - **`navidrome-data`** (`navidrome_k8s_claim`), Longhorn, 2Gi — SQLite index and transcoding
   cache, sized as headroom rather than a measurement.
-- **The `navidrome-snapshot` Job snapshots `navidrome-data` before each revision applies**
+- **The `navidrome-snapshot` Job snapshots `navidrome-data` before each revision applies**,
   so `k8s_autodeploy: true` lets Renovate automerge an image bump that migrates the
   index. A failed revision writes the stateful hold, and the operator reverts the claim
   through `docs/volume-snapshot-drills.md`.

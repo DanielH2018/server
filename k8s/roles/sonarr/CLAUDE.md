@@ -23,7 +23,7 @@ conventions.
   are flux-owned too, so the Kustomization lists them in `dependsOn`, and Flux applies this tag
   only after their Kustomizations are Ready. The Deployment is `Recreate`, so a change that rolls
   it takes the service down briefly.
-- **The `sonarr-snapshot` Job snapshots `sonarr-config` before each revision applies**
+- **The `sonarr-snapshot` Job snapshots `sonarr-config` before each revision applies**.
   The sonarr Kustomization depends on `sonarr-snapshot`, so a revision applies only
   after the snapshot is ready; `docs/flux-deploy-plane.md` lists the Job's checks. A failed
   revision that changes sonarr writes the stateful hold, and `promote` does not reset `prod`,
