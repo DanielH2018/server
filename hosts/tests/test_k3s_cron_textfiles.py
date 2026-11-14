@@ -21,7 +21,6 @@ from lib.repo_paths import REPO
 
 CHECK_LIB = "/usr/lib/homelab/homelab-check-lib.sh"
 REAL_CHECK_LIB = REPO / "hosts/components/check-lib/files/homelab-check-lib.sh"
-HC_ENV = "/etc/healthchecks/ping.env"
 UV = "/usr/bin/uv"
 SHELL_PRODUCERS = {
     "longhorn-backup-health": "longhorn-backup-health.sh.j2",

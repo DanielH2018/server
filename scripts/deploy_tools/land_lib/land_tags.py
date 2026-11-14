@@ -25,6 +25,8 @@ from enum import StrEnum
 from pathlib import Path
 from typing import NamedTuple
 
+import yaml
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
 
 from lib.git import git, git_stdout
@@ -35,10 +37,11 @@ from lib.render_guard import (  # noqa: F401  (`service_tags_at` is read through
 )
 from lib.repo_paths import REPO
 from lib.role_paths import SECRETS_FILE, tag_for
+from secrets_mgmt.stale_copies import unapplied_keys
 
-# The remediation for a rotated secret. Flat text rather than derived from the file list,
-# because the consuming role is not knowable from here: a secret's value lives in no role's
-# template, so the changed-path matching every other rule uses has nothing to match on.
+# The remediation for a rotated secret. A secret's value lives in no role's template, so the
+# changed-path matching every other rule uses has nothing to match on; `plane_note` names the
+# stale keys after it when the PR's range can say which they are.
 #
 # Named for the rotation it describes, not for the file that triggers it. CodeQL classifies a
 # constant whose name reads as `SECRET` as sensitive data, so `print(plane_note(...))` was
@@ -67,20 +70,37 @@ def declared_tags() -> set[str]:
     return {tag for entry in k8s_services() for tag in entry_tags(entry)}
 
 
-def plane_note(files) -> str:
+def plane_note(
+    files, range_: str = "", deployed: str = "", /, *, read_stale=unapplied_keys
+) -> str:
     """What this PR still needs a HUMAN to apply, or "" if nothing.
 
     A rotated secret is the one shape left. A secret's value lives in no role's template, so
-    `secrets/secrets.yml` derives zero tags however many roles consume it: every consumer
-    keeps rendering the old value, and the landing would report `nothing-to-deploy`.
+    `secrets/secrets.yml` derives zero tags however many roles consume it. `range_` is the
+    PR's own `<base>..<head>`: with it, the note names only the changed keys whose copies
+    the landing leaves stale (`stale_copies.unapplied_keys`), and is "" when the PR
+    refreshed every copy it applies. `deployed` is the merge commit the landing applies, where
+    the copies and their readers are read; it defaults to the range's head. `read_stale` answers that question; a test replaces it.
     """
-    # DECIDED: fire on ANY change to secrets.yml, and never try to name which keys moved.
-    # Naming them means decrypting both revisions, and no plaintext may reach a terminal, a
-    # transcript or a log. Over-firing on a key that needed no redeploy costs one exit code;
-    # under-firing leaves a rotated credential stale in a consumer this file list cannot show.
-    if SECRETS_FILE in files:
+    # DECIDED: name the changed keys by comparing ciphertext across the PR's range, never by
+    # decrypting. This contradicts the marker that fired on ANY change because naming the keys
+    # "means decrypting": SOPS leaves an untouched value's ciphertext alone, and
+    # `git_dates.rotation_evidence` already reads rotations that way. PR #8362 refreshed every
+    # copy it applied and still ended needs-manual-apply (#8369). Anything the range cannot
+    # answer keeps the blanket note: a missing range, an unreadable side, a key no file reads.
+    if SECRETS_FILE not in files:
+        return ""
+    old, sep, new = range_.partition("..")
+    if not (sep and old and new):
         return f"{_ROTATION_NOTE} {_K8S_READERS_NOTE}"
-    return ""
+    try:
+        stale = read_stale(old, new, deployed=deployed or None)
+    except subprocess.CalledProcessError, OSError, ValueError, yaml.YAMLError:
+        return f"{_ROTATION_NOTE} {_K8S_READERS_NOTE}"
+    if not stale:
+        return ""
+    listed = "; ".join(f"`{name}`: {why}" for name, why in stale.items())
+    return f"{_ROTATION_NOTE} Left stale by this landing: {listed}."
 
 
 class DeriveSource(StrEnum):

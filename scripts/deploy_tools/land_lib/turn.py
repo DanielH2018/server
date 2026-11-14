@@ -2,10 +2,11 @@
 
 A PR's CI run tests the tree of master with the PR merged in. Master's own run after the merge
 skips its jobs only when the merge made that same tree (`scripts/dev/tested_tree.py`), so
-master must stay where the PR's run found it. A landing that holds the turn marks its draft PR
-ready, waits for that one run and merges, and no other landing that takes turns merges in
-between. `docs/ci-throughput.md` has the measurements: a merge cost 1.4 pull-request runs and
-0.7 full master runs before the turn, against one run with it.
+master must stay where the PR's run found it. A landing that holds the turn starts its PR's
+one run on the master of that moment (`merge._start_run`), waits for it and merges, and no
+other landing that takes turns merges in between. `docs/ci-throughput.md` has the
+measurements: a merge cost 1.4 pull-request runs and 0.7 full master runs before the turn,
+against one run with it.
 
 The turn is an advisory lock on one file, held by the landing's own process, so a landing that
 dies gives it up. It is not a safety gate. A landing that cannot take it within `merge_timeout`
@@ -18,7 +19,6 @@ and a landing without `LAND_QUEUE`, take no turn and can still move master.
 import contextlib
 import fcntl
 import os
-import subprocess
 from collections.abc import Callable, Generator
 
 import sys as _sys
@@ -32,10 +32,6 @@ from lib.progress import OnChange
 # /run/lock is a tmpfs every user can create a file in, and one file there serves every
 # landing on the host, whichever user runs it.
 LOCK = _Path("/run/lock/homelab-land-turn.lock")
-# How often, and how far apart in seconds, `_mark_ready` reads `mergeable` while GitHub still
-# answers UNKNOWN.
-MERGEABLE_READS = 6
-MERGEABLE_POLL_S = 5
 
 
 def try_take(path: _Path = LOCK) -> Callable[[], None] | None:
@@ -99,45 +95,9 @@ def _wait(ln: Landing) -> Callable[[], None] | None:
         waited += o.merge_poll
 
 
-def _mark_ready(ln: Landing) -> None:
-    """Mark a draft PR ready, which starts the CI run the merge waits for.
-
-    That run tests the merge of the PR into master as GitHub last built it, and GitHub builds
-    it again only when something asks whether the PR merges. The read of `mergeable` asks, so
-    it comes first, and the run tests the PR on the master this landing merges into.
-    """
-    if ln.view("isDraft").get("isDraft") is not True:
-        return
-    pr = str(ln.opts.pr)
-    for _ in range(MERGEABLE_READS):
-        if ln.view("mergeable").get("mergeable") != "UNKNOWN":
-            break
-        ln.tools.sleep(MERGEABLE_POLL_S)
-    try:
-        ln.tools.gh("pr", "ready", pr)
-    except subprocess.CalledProcessError as exc:
-        why = (exc.stderr or "").strip() or f"gh exited {exc.returncode}"
-        ln.die(
-            f"PR #{pr} is a draft and could not be marked ready ({why}); run "
-            f"`gh pr ready {pr}`, then re-run this",
-            1,
-        )
-    except subprocess.TimeoutExpired:
-        ln.die(
-            f"PR #{pr} is a draft and marking it ready timed out; run `gh pr ready {pr}`, "
-            "then re-run this",
-            1,
-        )
-    say(f"PR #{pr} was a draft; marked it ready, which starts its CI run")
-
-
 @contextlib.contextmanager
 def held(ln: Landing) -> Generator[bool]:
     """Hold the landing turn for the merge wait, and give it up however that wait ends.
-
-    Inside the turn it marks a draft PR ready, so the PR's one CI run starts after every
-    earlier landing's merge. The draft is marked ready even when the turn never came, because
-    a draft cannot merge.
 
     Yields:
         Whether this landing holds the turn. False for a landing without `LAND_QUEUE`, for one
@@ -148,7 +108,6 @@ def held(ln: Landing) -> Generator[bool]:
         return
     release = _wait(ln)
     try:
-        _mark_ready(ln)
         yield release is not None
     finally:
         if release:

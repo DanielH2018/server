@@ -1,12 +1,16 @@
 #!/bin/bash
 # Shipped by the renovate-agent component. homelab-renovate-agent.service runs it as root through
 # `ExecStartPre=+` before each session, so a pin bump or a rebuilt host converges on the next tick.
+# homelab-renovate-agent-setup.service runs it at boot and when it or the packaged Claude Code
+# settings change, so the agent has its settings while it is disarmed.
 #
 # Usage: renovate-agent-setup [-h|--help]
 # Takes no arguments. Running it by hand as root applies every step below.
 #
 # Gives {{ renovate_agent_user }} its home, the operator's pinned uv, uvx and prek, the operator's
-# claude_guard package and claude_worktree module, the pinned Python, Claude Code and its own clone.
+# claude_guard package, claude_worktree module and Claude Code hook scripts, the packaged Claude
+# Code settings, the pinned Python, Claude Code and its own clone. Each run copies the settings
+# over the agent's, so an edit a session makes to them lasts until the next run.
 # Every step is idempotent. The agent runs every command that writes into its home, because the
 # session could have replaced any path there with a link. Root only reads the operator's copies,
 # which the agent cannot read, into a staging directory the agent then copies from.
@@ -20,6 +24,7 @@ agent={{ renovate_agent_user }}
 home={{ renovate_agent_home }}
 clone={{ renovate_agent_clone_dir }}
 operator=/home/{{ sys_user }}
+settings=/usr/lib/homelab/renovate-agent/claude-settings.json
 
 as_agent() {
   runuser -u "$agent" -- env HOME="$home" TMPDIR=/tmp PATH=/usr/bin:/bin "$@"
@@ -28,7 +33,7 @@ as_agent() {
 # Group sys_user and setgid, so the operator reads what the agent writes. /var/lib is root's, so the
 # agent cannot have replaced the home itself.
 install -d -o "$agent" -g {{ sys_user }} -m 2750 "$home"
-as_agent mkdir -p "$home/.local/bin" "$home/.local/share/claude-guard" "$home/.local/share/claude-worktree"
+as_agent mkdir -p "$home/.local/bin" "$home/.local/share/claude-guard" "$home/.local/share/claude-worktree" "$home/.claude"
 
 stage=$(mktemp -d)
 trap 'rm -rf "$stage"' EXIT
@@ -50,6 +55,8 @@ copy_from_operator "$operator/.local/bin/uvx" "$home/.local/bin/uvx"
 copy_from_operator "$operator/.local/share/uv/tools/prek/bin/prek" "$home/.local/bin/prek"
 copy_from_operator "$operator/.local/share/claude-guard/claude_guard" "$home/.local/share/claude-guard/claude_guard"
 copy_from_operator "$operator/.local/share/claude-worktree/claude_worktree.py" "$home/.local/share/claude-worktree/claude_worktree.py"
+copy_from_operator "$operator/.claude/hooks" "$home/.claude/hooks"
+as_agent cp --remove-destination "$settings" "$home/.claude/settings.json"
 
 (cd "$home" && as_agent "$home/.local/bin/uv" python install {{ host_python_version }})
 

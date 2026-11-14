@@ -189,7 +189,9 @@ def classify(ln: Landing) -> None:
     plane = (
         ""
         if ln.resolved_tags
-        else _classified(ln, "plane classification", c.plane_note, paths)
+        else _classified(
+            ln, "plane classification", c.plane_note, paths, recorded, ln.merge_sha
+        )
     )
     ln.classification = Classification(
         pr_paths=tuple(paths),

@@ -80,7 +80,7 @@ CASCADE = (
     "both: claude-land's "
     "TimeoutStartSec and land_lib/handoff.py:START_TIMEOUT_S; renovate-agent-land's "
     "TimeoutStartSec, land_renovate_pr.py:LAND_TIMEOUT_S, and renovate_agent's "
-    "bash_timeout_ms, run_timeout_s and unit_timeout"
+    "session_timeout_s, run_timeout_s and unit_timeout"
 )
 
 

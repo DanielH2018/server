@@ -658,6 +658,7 @@ claude_code_guardrail_audit_paths:
   - "{{ claude_code_agent_user_home }}/.claude/CLAUDE.md"
   - "{{ claude_code_agent_user_home }}/.claude/rules"
   - /var/lib/renovate-agent/.claude/settings.json
+  - /var/lib/renovate-agent/.claude/hooks
 # Watched under the key `claude-memory`: the memory stores a session reads at its next start. The
 # audit record names the writing process, so a Bash write shows apart from the Write tool's.
 claude_code_guardrail_audit_memory_dirs:

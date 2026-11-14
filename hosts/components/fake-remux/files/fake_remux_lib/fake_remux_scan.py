@@ -119,13 +119,6 @@ class Sonarr:
     def delete_episodefile(self, file_id):
         self._request("/api/v3/episodefile/%s" % file_id, method="DELETE")
 
-    def series_search(self, series_id):
-        self._request(
-            "/api/v3/command",
-            method="POST",
-            data={"name": "SeriesSearch", "seriesId": series_id},
-        )
-
 
 def ffprobe(ffprobe_bin: str, path: str, args, timeout: int) -> str:
     """Probe a library file with the host's ffprobe.

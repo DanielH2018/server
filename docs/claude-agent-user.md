@@ -289,7 +289,9 @@ truth, with a reason beside each entry. It holds:
   read-only token, the token and config templates, `templates/renovate-agent-pins.j2`, which
   sets the caps and the permission mode as literals, the prompt, the unit and timer, and
   `component.yml`. The operator added them on 2026-11-13 with the guardrails plan's B1. The
-  component's defaults, tests and `CLAUDE.md` stay off.
+  session's Claude Code settings `files/claude-settings.json`, the setup script that installs
+  them and its boot unit joined on 2026-11-14 (#8392), so no unapproved PR weakens the
+  session's deny floor. The component's defaults, tests and `CLAUDE.md` stay off.
 - `k8s/roles/cluster-base/` and its path after the rename, `k8s/roles/cluster-base/`,
   the agent's read-only cluster RBAC. The operator added it
   on 2026-10-16 (H1 Open question 7). Before H1, that RBAC applies only through
@@ -779,16 +781,11 @@ the operator's.
 1. Run `files/claude-dotfiles-sync.sh` every 15 minutes from the timer, since a dotfiles merge
    ships no host package version here.
 
-The script has three guards:
+The script has two guards:
 
 - It refuses a source that does not render `is-agent` as true. Applied anyway, such a source
   would write the operator's `.gitconfig` over the agent's identity. The refusal is not fatal
   to the apply, so a host can switch the flag on before the dotfiles change lands.
-- After that check, and only then, it renames each root-owned subset tree to
-  `~/.claude/.subset-copy-<name>`. chezmoi, running as the agent, cannot write into a root-owned
-  directory, and the agent cannot delete one. It owns `~/.claude`, though, so it can rename one
-  in place. The component ships no subset and deletes no renamed tree. A refused source therefore
-  leaves the subset where it was, and the agent always has one of the two.
 - It applies in two passes, every directory but `~/.claude` and `~/.config/gh` and then
   everything but directories. The first pass is non-recursive. chezmoi applies a directory
   target's whole tree below it, so applying `~/.config` reopened `~/.config/gh` to `0755`.

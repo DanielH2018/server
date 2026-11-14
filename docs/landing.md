@@ -202,8 +202,15 @@ then tests the master the merge lands on, so master's own run proves the tree an
 jobs. [CI throughput](ci-throughput.md) has the measurements and the plan this is slice B2 of.
 
 - The landing waits for the turn first, and prints `waiting for the landing turn` once.
-- With the turn, it marks a draft PR ready, which starts the PR's one CI run. A PR that is
-  ready already keeps the run it has.
+- It marks a draft PR ready. With the turn, it then updates the PR's branch from master when
+  the head has had no CI run that ran jobs and master is ahead of it. GitHub builds the tree
+  a pull-request run tests when the PR's branch is pushed, and a ready flip does not build it
+  again, so a run that a ready flip starts tests the master of the last push. The update is
+  a push, and the run it starts tests the master of the turn.
+- A head with a run that ran jobs keeps it, finished or not, and the stale-base rules above
+  judge it once it is green. A head the landing policy admitted on an approval is never
+  updated, because the update voids the approval. An update that GitHub refuses does not
+  stop the landing: the PR keeps the run the ready flip started.
 - A landing that holds the turn is not paced. No other landing with a turn merges ahead of
   it, and a paced holder would stop every landing behind it.
 - The turn ends when the merge wait does, whether the PR merged or the wait gave up. It is a
@@ -726,7 +733,17 @@ own (*The promotion wait*).
 One thing sits in the position of needing a hand:
 
 - **A rotated secret** has no path to match: a secret's value lives in no role's template, so
-  `secrets/secrets.yml` derives zero tags however many roles consume it. Run
+  `secrets/secrets.yml` derives zero tags however many roles consume it. The landing compares
+  each key's ciphertext across the PR's own range, without decrypting, and names each changed
+  key it leaves stale (`stale_copies.unapplied_keys`). It reads every copy and every reader
+  at the merge commit, so a reader that another PR merged first counts. A k8s reader's copy
+  is fresh when `cluster-vars.source` records the key's new ciphertext. A host's copy is
+  fresh when the PR changed that key in `secrets/hosts/<host>.sops.yaml` and the merge
+  commit still holds the PR's copy. Another PR's sync changes the ciphertext too, but it can
+  carry the old value. A key with a copy in
+  `stale_copies.OUTSIDE_THE_TREE`, such as Bazarr's API keys, is always named, and so is a
+  key no file reads. A rotation that refreshed every copy ends `settled`. Without a readable range the
+  landing names no key and ends `needs-manual-apply`. Run
   `uv run python scripts/secrets_mgmt/secret_rotation.py consumers <secret>` for who holds a
   stale copy and the repair command per plane.
 
@@ -746,8 +763,8 @@ When no host differs, the candidate is cleared and the landing ends
 waits rather than skips.
 
 A PR with host targets and no service tag deploys nothing in step 4. A PR that also rotates a
-secret, which no deploy tag or host package applies, still ends `needs-manual-apply`, and the
-output names each host it did not wait on.
+secret and leaves a copy of it stale still ends `needs-manual-apply`, and the output names each
+host it did not wait on.
 
 Step 5, `host_wait.wait_for_hosts`, queries Prometheus on loopback and then on the ClusterIP.
 A host settles when `homelab_host_applied_info` equals or descends from the merge commit and

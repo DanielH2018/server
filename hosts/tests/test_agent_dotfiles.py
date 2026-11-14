@@ -62,23 +62,6 @@ class Agent:
         self.chezmoi = root / "chezmoi"
         write_exec(self.chezmoi, CHEZMOI_STUB)
         self.calls = root / "calls.log"
-        # The test cannot make a root-owned directory, so a `stat` ahead of the real one on
-        # PATH names root as the owner of every tree listed in ROOT_OWNED.
-        self.bin = root / "bin"
-        self.root_owned = root / "root-owned"
-        self.root_owned.write_text("")
-        write_exec(
-            self.bin / "stat",
-            f'for a; do last=$a; done; if grep -qxF "$last" {self.root_owned}; then echo root; '
-            f'else exec /usr/bin/stat "$@"; fi\n',
-        )
-
-    def copied_subset(self, *trees: str) -> None:
-        """Lay down trees the way a subset copy made by root leaves them: root's."""
-        for tree in trees:
-            (self.home / ".claude" / tree).mkdir(parents=True)
-            with self.root_owned.open("a") as f:
-                f.write(f"{self.home}/.claude/{tree}\n")
 
     def push(self) -> None:
         commit(self.pusher, "upstream", **{"home/dot_bashrc": "2\n"})
@@ -94,7 +77,6 @@ class Agent:
                 STUB_SOURCE=str(self.source),
                 STUB_IS_AGENT=is_agent,
             ),
-            stub_bin=self.bin,
         )
 
     def log(self) -> list[str]:
@@ -144,28 +126,6 @@ def test_a_moved_source_reports_the_range(agent: Agent) -> None:
     result = agent.sync()
     assert result.returncode == 0, result.stderr
     assert result.stdout.startswith("applied ") and ".." in result.stdout
-
-
-def test_the_root_owned_subset_is_moved_aside_before_chezmoi_writes(
-    agent: Agent,
-) -> None:
-    """chezmoi, as the agent, cannot write into it; the agent owns ~/.claude and can rename."""
-    agent.copied_subset("skills", "rules")
-    (agent.home / ".claude" / "output-styles").mkdir()
-    assert agent.sync().returncode == 0
-    claude = agent.home / ".claude"
-    assert sorted(p.name for p in claude.iterdir()) == [
-        ".subset-copy-rules",
-        ".subset-copy-skills",
-        "output-styles",
-    ], "only the root-owned trees move, and the agent's own stays"
-
-
-def test_a_refused_source_leaves_the_subset_in_place(agent: Agent) -> None:
-    """Moved aside without an apply, the agent would have neither the subset nor the dotfiles."""
-    agent.copied_subset("skills")
-    assert agent.sync(is_agent="").returncode == 1
-    assert (agent.home / ".claude" / "skills").is_dir()
 
 
 def test_the_unit_runs_the_script_as_the_agent_with_its_seed() -> None:

@@ -1,0 +1,20 @@
+# Shipped by the renovate-agent component. Enabled at boot, and restarted by reconcile when the setup
+# script or the Claude Code settings it installs change. homelab-renovate-agent.service also runs the
+# script before each session; this unit gives a disarmed agent its settings, which the guardrail
+# audit watches.
+[Unit]
+Description=Give the {{ renovate_agent_user }} agent its home, tooling and Claude Code settings
+OnFailure=homelab-alert@%n.service
+# The first run installs Claude Code and clones the repo over HTTPS.
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+# Active after a clean run, so reconcile's try-restart reruns it when its inputs change.
+RemainAfterExit=yes
+SyslogLevel=notice
+ExecStart=/usr/bin/env -i PATH=/usr/bin:/bin:/usr/sbin:/sbin /usr/lib/homelab/renovate-agent-setup
+
+[Install]
+WantedBy=multi-user.target
