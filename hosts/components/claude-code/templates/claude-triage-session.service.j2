@@ -33,8 +33,10 @@ Environment=RUN_HOOK_UV={{ pins.tools_dir }}/.local/bin/uv
 Environment=UV_NO_SYNC=1
 Environment=UV_PYTHON_INSTALL_DIR={{ pins.tools_dir }}/python
 Environment=UV_CACHE_DIR={{ pins.session_home }}/.cache/uv
-# The shared guard hooks find their package here, not under this user's home.
+# The guard hooks, the dotfiles' and the repo's, find their packages here, not under this user's
+# home.
 Environment=CLAUDE_GUARD_HOME={{ pins.tools_dir }}/.local/share/claude-guard
+Environment=CLAUDE_WORKTREE_HOME={{ pins.tools_dir }}/.local/share/claude-worktree
 # The controller owns the binary; the session cannot update it.
 Environment=DISABLE_AUTOUPDATER=1
 Environment=PYTHONDONTWRITEBYTECODE=1

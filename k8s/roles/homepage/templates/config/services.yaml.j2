@@ -40,7 +40,7 @@
             # The widget reads PROMETHEUS, NOT HEADLAMP, and that is the whole design decision.
             # Headlamp has no service API of its own — its backend only proxies the Kubernetes
             # API — so the only "Headlamp widget" would be homepage dialling headlamp's
-            # ClusterIP. That is exactly the exposure roles/k8s/headlamp/networkpolicy.yaml.j2
+            # ClusterIP. That is exactly the exposure k8s/roles/headlamp/templates/networkpolicy.yaml.j2
             # closes: the pod runs `-unsafe-use-service-account-token`, so anything that reaches
             # it acts as a cluster-wide reader with no auth, and netpol-probe-job.yaml.j2
             # re-asserts on every deploy that no non-traefik pod can. Admitting homepage there
@@ -51,7 +51,7 @@
             # ClusterIP, not the `prometheus.local.{{ domain }}` Traefik route: monitor-bridge
             # and homelab-mcp already read prometheus this way, and that route's ClientIP list
             # is written for callers that cannot reach the ClusterIP. Cross-namespace, so
-            # `prometheus-callers` (roles/k8s/netpol-baseline/networkpolicy-prometheus.yaml.j2)
+            # `prometheus-callers` (k8s/roles/netpol-baseline/templates/networkpolicy-prometheus.yaml.j2)
             # must name homepage — fenced out, this fails as a widget-proxy error that reads
             # nothing like a NetworkPolicy problem.
             # DECIDED: hand-written, not homepage_widget_url. Prometheus is in another
@@ -238,7 +238,7 @@
         # reaches their widget APIs. These tiles therefore address the ClusterIP directly, which
         # bypasses Traefik and Authelia entirely and leaves `monitoring_route`
         # (k8s/templates/ingressroute.yml.j2) as narrow as it was. Same URL shape
-        # monitor-bridge already uses (roles/k8s/monitor-bridge/templates/config/env.yaml.j2).
+        # monitor-bridge already uses (k8s/roles/monitor-bridge/templates/config/env.yaml.j2).
         #
         # Reaching a ClusterIP is pod → pod, so each target's NetworkPolicy must admit
         # `app: homepage` on that port. `homepage_widget: true` on each entry does that, through

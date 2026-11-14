@@ -28,7 +28,7 @@ groups:
       # target for a controller with no pod, so a Deployment at 0 replicas or a pod that never
       # schedules leaves no up series at all. One absent() per controller, because a job-wide
       # absent(up{job="flux"}) waits for all three to vanish. The names mirror the flux role's
-      # flux_controllers, and ansible/tests/services/test_flux_rule_literals.py holds them
+      # flux_controllers, and tests/services/test_flux_rule_literals.py holds them
       # equal. The last arm pages a scrape that works but carries no controller-runtime
       # series, as after an upgrade that renamed them. It is conjoined with up == 1, so this
       # rule never pages ScrapeTargetDown's condition a second time.

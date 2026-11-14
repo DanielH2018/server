@@ -21,7 +21,7 @@
 #
 # Each deadline is the DEADLINE_S its producer renders, which equals the interval of the tile
 # the rule replaced. Both literals of a NotReporting rule are pinned to it by
-# ansible/tests/services/test_gitops_check_rule_literals.py (M1 convention 1).
+# tests/services/test_gitops_check_rule_literals.py (M1 convention 1).
 groups:
   - name: gitops-checks
     rules:

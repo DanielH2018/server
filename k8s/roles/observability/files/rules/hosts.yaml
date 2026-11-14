@@ -46,7 +46,7 @@
 # THERMAL_THROTTLE_CONSECUTIVE (3) is 15m, UPS_CONSECUTIVE (2) and CLAUDE_CGROUP_CONSECUTIVE (2)
 # are 10m. The disk, memory, undervoltage and Pi pressure thresholds had no streak, so they have
 # no `for:`. The numeric literals equal the retired bridge env keys, which
-# ansible/tests/services/test_host_check_rule_literals.py holds as RETIRED_ENV.
+# tests/services/test_host_check_rule_literals.py holds as RETIRED_ENV.
 #
 # DROPPED ON PURPOSE. The retired-uid note on the Memory tile never paged (#5125), so it has no
 # rule. The Pi's published-port arm is `PiPortDead` in extra-probes.yaml.
@@ -197,7 +197,7 @@ groups:
             the last 5 minutes, for 10 minutes running. No task in the cgroup made progress, which
             is the 2026-09-05 shape (#1243) while it is still only a stall.
       # Arm 3: an expected cgroup is missing for its host, per (origin, cgroup) as in
-      # CLAUDE_CGROUP_EXPECTED (#4870). ansible/tests/services/test_host_check_rule_literals.py
+      # CLAUDE_CGROUP_EXPECTED (#4870). tests/services/test_host_check_rule_literals.py
       # holds the pairs equal to that env key. `max_over_time(...[5m:1m])` holds the arm true
       # through a crash-looping unit's brief reappearances, which reset a bare `for:` while the
       # bridge's two sampled cycles still page (#6621). A gap under 5m stays quiet.
