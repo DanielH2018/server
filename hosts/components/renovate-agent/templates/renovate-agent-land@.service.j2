@@ -41,6 +41,9 @@ SyslogLevel=notice
 # counts the lock wait too: a landing queued 40 minutes behind another would otherwise be
 # killed 20 minutes in, with no verdict line (#5203).
 TimeoutStartSec=1071min
+# land_renovate_pr.py's REFUSED_EXIT: a refusal before any merge is an expected end, so it leaves
+# the unit inactive and SystemdUnitsFailed quiet. The runner reads the verdict file, not this.
+SuccessExitStatus=3
 # Replaces any earlier run's verdict before the lock wait. land_renovate_pr.py writes PENDING only
 # once it holds the lock, so a wait that times out would otherwise leave yesterday's verdict for
 # this PR for the session to read as today's. The prompt stops landing on any VERDICT line but
