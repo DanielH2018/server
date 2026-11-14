@@ -42,8 +42,8 @@ shared conventions.
     - the Deployment's `vaapi-encode` initContainer runs the encode;
     - the `tdarr-verify` Job proves the render node opens and the library is writable.
 - **`templates/verify/` is the `tdarr-verify` Job.** The renderer emits it once the `tdarr`
-  Kustomization reads Ready. The Job runs `files/tdarr_verify.py`, which replaced the two exec
-  checks of the Ansible verify tasks: the render node opens, and the library is writable. Its
+  Kustomization reads Ready. The Job runs `files/tdarr_verify.py`, which makes two checks: the
+  render node opens, and the library is writable. Its
   pod is built like tdarr's, with the same device request, render group, PUID and `media-data`
   subPath, so it checks that wiring and not the live pod. Its spec embeds a digest of tdarr's
   rendered Deployment, so every change that rolls tdarr renames the Job and Flux runs it again.
@@ -58,8 +58,8 @@ shared conventions.
 - **The rollout budget is the 600s default.** The literal
   `k8s/roles/tdarr/defaults/main.yml:manifests_rollout_timeout` is Flux's `timeout`,
   and the template's `progressDeadlineSeconds` reads it through `tdarr_k8s_rollout_timeout`,
-  so the deadline moves with the wait. It was 3000s until the flip, because a cold pull of the
-  1432 MiB image took 25m37s on 2026-10-08 (#3689) and Ansible's pre-pull shared the budget.
+  so the deadline moves with the wait. A cold pull of the 1432 MiB image took 25m37s on
+  2026-10-08 (#3689); `tdarr-prepull`, below, keeps that pull out of the rollout budget.
 - **`tdarr-prepull` pulls the image before the Recreate (#3875).** `Recreate` stops the old pod
   first, so without the pre-pull tdarr is down for the whole 25-minute pull. The renderer adds
   the Kustomization because `k8s/roles/tdarr/defaults/main.yml:flux_prepull_timeout`

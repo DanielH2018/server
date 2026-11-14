@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Renovate automerges a k8s image bump only for a role the deployer may auto-deploy.
+"""Renovate automerges a k8s image bump only for a role whose flag allows auto-deploy.
 
 renovate.json automerges minor/patch and digest image bumps under
 `k8s/roles/**`, and `promote` applies what merges. A role on the denylist that
@@ -10,15 +10,15 @@ tests below hold the two readers to one derivation.
 
 One `automerge: false` rule whose `matchFileNames` is the denylist spelled as paths.
 That list is typed into renovate.json, so this guard is what stops it drifting from the flags:
-it derives the expected set the same way the deployer does and asserts equality, and its
+it derives the expected set through `k8s_autodeploy_denylist` and asserts equality, and its
 failure message prints the exact line to add or drop. It also pins the rule's position, which
 is load-bearing — later rules win in Renovate, so the rule must follow the two automerge rules
 it overrides and precede the per-package manual rules that override its groupName.
 
 One path in the rule is not a role's defaults: `inventory/group_vars/all.yml`.
 `crowdsec_k8s_image` lives there because traefik's and authelia's sidecars read it too, and a
-per-role rule would leave it automerging while the deployer routes the merged bump through its
-broad plane — which applies every role reading the key with no denylist check. That path is
+per-role rule would leave it automerging while `promote` re-renders every role reading the
+key and Flux applies them all with no denylist check. That path is
 safe in this rule only while every `_image:` pin in group_vars belongs to denied roles, so the
 census below reads each pin's Jinja readers out of the role trees and asserts they are all
 denied. A pin no role reads fails too: an unmappable pin must not pass as "not eligible".

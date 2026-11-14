@@ -1,11 +1,16 @@
 """One stub for every command `homelab-reconcile` runs, dispatched on the name it is called as.
 
-`_reconcile_host.py` puts a wrapper per command on reconcile's `PATH`. Each wrapper runs
-`_reconcile_stub.py <command> <args>`. The stub reads the host it fakes from
-`$STUB_STATE/state.json`, writes back what a call changed, and appends one line per call to
-`$STUB_STATE/calls.jsonl`: the argv, and whether dpkg's frontend lock was free at that moment.
+`_reconcile_host.py` puts a wrapper per command on reconcile's `PATH`. Each wrapper imports
+this module and calls `main(<command>, <args>)`. The stub reads the host it fakes from
+`$STUB_STATE/state.marshal`, writes back what a call changed, and appends one record per call
+to `$STUB_STATE/calls.marshal`: the argv, and whether dpkg's frontend lock was free at that
+moment. `Node` in `_reconcile_host.py` owns both files' format.
 
-state.json keys:
+A reconcile run makes about 800 calls, so the module's top-level imports skip `json` and
+`fnmatch`, which pull in `re`, and `pathlib`. A handler that needs one imports it itself.
+`hosts/lib/tests/test_reconcile_stub_imports.py` holds this.
+
+State keys:
     host: what `hostname` prints.
     installed: package -> [three-letter dpkg status, version].
     units: unit -> {"load": loaded|masked|not-found, "active": active|inactive|failed,
@@ -38,31 +43,30 @@ state.json keys:
 
 import _reconcile_arms_stub as arms
 import fcntl
-import fnmatch
-import json
+import marshal
 import os
 import sys
-from pathlib import Path
 
-STATE = Path(os.environ["STUB_STATE"])
-LOCK = Path(os.environ["HOMELAB_ROOT"]) / "var/lib/dpkg/lock-frontend"
+STATE = os.path.join(os.environ["STUB_STATE"], "state.marshal")
+CALLS = os.path.join(os.environ["STUB_STATE"], "calls.marshal")
+LOCK = os.path.join(os.environ["HOMELAB_ROOT"], "var/lib/dpkg/lock-frontend")
 
 
 def main(command: str, args: list[str]) -> int:
-    state = json.loads((STATE / "state.json").read_text())
-    with (STATE / "calls.jsonl").open("a") as calls:
-        calls.write(
-            json.dumps({"argv": [command, *args], "lock_free": _lock_free()}) + "\n"
-        )
+    with open(STATE, "rb") as handle:
+        state = marshal.load(handle)
+    with open(CALLS, "ab") as calls:
+        marshal.dump({"argv": [command, *args], "lock_free": _lock_free()}, calls)
     code = HANDLERS[command](state, args)
-    (STATE / "state.json").write_text(json.dumps(state))
+    with open(STATE, "wb") as handle:
+        marshal.dump(state, handle)
     return code
 
 
 def _lock_free() -> bool:
-    if not LOCK.exists():
+    if not os.path.exists(LOCK):
         return True
-    with LOCK.open("r+") as handle:
+    with open(LOCK, "r+") as handle:
         try:
             fcntl.lockf(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except OSError:
@@ -165,6 +169,8 @@ def _list_units(units: dict, args: list[str]) -> int:
     (states,) = [
         a.removeprefix("--state=").split(",") for a in args if a.startswith("--state=")
     ]
+    import fnmatch
+
     (pattern,) = [a for a in args if not a.startswith("--")]
     for name, known in sorted(units.items()):
         if fnmatch.fnmatch(name, pattern) and known["active"] in states:
@@ -173,6 +179,9 @@ def _list_units(units: dict, args: list[str]) -> int:
 
 
 def _effects(state: dict, call: str) -> None:
+    import json
+    from pathlib import Path
+
     root = Path(os.environ["HOMELAB_ROOT"])
     effect = state.get("effects", {}).get(call, {})
     for path, text in effect.get("write", {}).items():
@@ -196,6 +205,8 @@ def _show(units: dict, args: list[str]) -> int:
         else:
             print(known["load"] if known else "not-found")
         return 0
+    import fnmatch
+
     (pattern,) = names
     blocks = [
         f"Id={unit}\nLoadState={known['load']}\n"
@@ -349,6 +360,3 @@ HANDLERS = {
     "udevadm": udevadm,
     **arms.HANDLERS,
 }
-
-if __name__ == "__main__":
-    sys.exit(main(sys.argv[1], sys.argv[2:]))

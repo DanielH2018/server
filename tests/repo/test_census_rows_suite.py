@@ -123,8 +123,8 @@ ROWS = (
         name="role-tree-walks-use-role-dirs",
         reason=(
             "A retired role's gitignored `__pycache__/` keeps `roles/<plane>/<role>/` on disk "
-            "after the deployer removes its tracked files, so a bare `iterdir()` reads the shell "
-            "as a role. That fails or miscensuses only in the long-lived primary checkout where "
+            "after checkout-sync's fast-forward removes its tracked files, so a bare `iterdir()` "
+            "reads the shell as a role. That fails or miscensuses only in the long-lived primary checkout where "
             "the crons run the suite, never in CI (#2952, #2964). Use `_role_census.role_dirs`."
         ),
         files=lambda: tracked("tests/*.py", "hosts/tests/*.py"),
