@@ -41,10 +41,17 @@ from agent_logic import (
     resume_command,
     run_record,
 )
-from agent_toolbox import TOOLS, AgentTools, log, start_unit
-from host_lib import atomic_write, install_excepthook, parse_env_file
+from agent_toolbox import TOOLS, AgentTools, log
+from host_lib import (
+    atomic_write,
+    fresh_dir,
+    install_excepthook,
+    parse_env_file,
+    read_untrusted,
+    start_unit,
+)
 from renovate_session import BLOCKED_FILE, OUT_DIR, OUTPUT_FILE, SESSION_ENV_FILE
-from run_requests import Outcome, carry_out, fresh_dir, read_untrusted
+from run_requests import REQUESTS_DIR, Outcome, carry_out
 
 # The env override exists so the I/O shell can be exercised end-to-end against a throwaway
 # config before the timer is ever armed. Without it the only way to run this code is to deploy
@@ -56,6 +63,9 @@ EXIT_WORKTREE_BLOCKED = 2
 # The login gh reports for Renovate's PRs. The unit's LAND_REQUIRE_AUTHOR must match it, and
 # test_renovate_agent_unit.py reads it from here.
 RENOVATE_AUTHOR = "app/renovate"
+# The session's JSON result carries its whole closing summary, so it gets far more room than a
+# request file; the cap only stops a session filling the controller's memory.
+SESSION_OUTPUT_MAX = 1 << 20
 # The census lists every open PR and filters locally, so the cap covers all authors.
 OPEN_PR_LIMIT = 200
 # One JSON line per tick under STATE_DIR, from agent_logic.run_record.
@@ -166,7 +176,7 @@ def session_files(out: str) -> tuple[str, str]:
     found = []
     for name in (BLOCKED_FILE, OUTPUT_FILE):
         try:
-            found.append(read_untrusted(out, name))
+            found.append(read_untrusted(out, name, SESSION_OUTPUT_MAX))
         except (OSError, ValueError) as exc:
             log(f"refused the session's {name}: {type(exc).__name__}")
             found.append("")
@@ -248,12 +258,12 @@ def main(tools: AgentTools = TOOLS, config_path: str = CONFIG) -> int:
         return 0
 
     log(f"{gate.reason}; starting {SESSION_UNIT}")
-    requests_dir = fresh_dir(exchange)
+    requests_dir = fresh_dir(exchange, REQUESTS_DIR)
     out = fresh_dir(exchange, OUT_DIR)
     wait = min(
         int(cfg.get("SESSION_TIMEOUT_S", "2700")) + 300, int(deadline - time.time())
     )
-    end = start_unit(SESSION_UNIT, tools, max(wait, 1))
+    end = start_unit(SESSION_UNIT, tools.run, max(wait, 1))
     why, stdout = session_files(out)
     if why:
         # The previous tick left work in flight, so the session left the tree alone — removing
