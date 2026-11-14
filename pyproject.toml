@@ -379,6 +379,45 @@ ignore_names = [
   "pytestmark",
   # Keyword a fake's signature accepts because the real call passes it.
   "server_hostname",
+  # Guard libraries: a guard under a tests/ directory is the designed caller (#8632).
+  # citations.py: FORMS is the grammar .claude/rules/facts.md cites; the rest feed
+  # test_documented_paths_exist.py, test_census_rows_text.py, test_failure_class_detectors.py.
+  "FORMS", "node_citations", "line_numbered_citations", "guard_path_citations",
+  "macro_citations", "heading_pointers", "names_a_part",
+  # invocation_sites.py: the sources test_invoker_paths_resolve.py walks.
+  "prek_hook_entries", "workflow_run_steps", "systemd_exec_lines", "claude_settings_entries",
+  # systemd_timer.py: test_renderer_host_update_limits.py, test_updater_package.py.
+  "longest_gap_s", "timeout_start_s",
+  # cli_registry.py: test_probe_registry.py, test_runbook_gates_dispatch.py.
+  "assert_complete", "package_entry_points",
+  # stdlib_only.py: test_stdlib_only.py's census of every no-venv module.
+  "stdlib_only_set", "runtime_import",
+  # git_dates.py: test_departed_secrets_are_accounted_for.py over secrets.yml's history.
+  "historical_names", "undeclared_departures", "revived_departures",
+  # kubectl.py: test_every_named_node_is_a_host_in_the_inventory.
+  "RETIRED_CLUSTER_NODES",
+  # review_metrics.py: evals/tests/test_review_outcomes.py and the committed-ledger check.
+  "validate_row", "COVERAGE_DIR",
+  # secret_registry.py: the live-registry check in test_secret_registry.py.
+  "record_names",
+  # dialect.py: test_renderer_dialect.py's census of every template and variable value.
+  "off_the_list",
+  # bundle.py: the census that every shared kind has a footprint rule.
+  "rules_missing",
+  # host_package.py: the homelab-tools check in test_renderer_host_tools.py.
+  "installed_paths",
+  # restart.py: the rendered-tree restart censuses under scripts/renderer/tests/.
+  "any_pod_template",
+  # land_lib/options.py: the deploy-tools conftest clears each knob before every test.
+  "ENV_KNOBS",
+  # reboot_window.py: the check that promote.yml's cron is the derived window end.
+  "end_cron",
+  # grafana_panel_report.py: the live Grafana smoke, test_ui_smoke_grafana.py.
+  "worth_renavigating",
+  # role_installs.py: test_host_python_invocations.py's shebang check.
+  "no_project_spans",
+  # setup_templates.py: tests/_setup_render.py, which every setup-template census renders.
+  "standalone_templates",
 ]
 
 [tool.ty.environment]

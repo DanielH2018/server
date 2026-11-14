@@ -51,7 +51,6 @@ from renderer.renderer_lib.environment import renderer_env
 from renderer.renderer_lib.jinja_aliases import scan_templates
 from renderer.renderer_lib.jinja_uses import (
     Policy,
-    TemplateScan,
     Use,
     embed_refusals,
     resolve_embed,
@@ -306,20 +305,6 @@ def output_members(render: PlaceholderRender, known_keys: Iterable[str]) -> list
 
 
 # -- rule 5: the template sources ----------------------------------------------------------
-
-
-def scan_template(
-    source: str,
-    keys: frozenset[str],
-    non_secret: frozenset[str] = frozenset(),
-    passthrough: frozenset[str] = PASSTHROUGH_FILTERS,
-    env=None,
-) -> TemplateScan:
-    """Rule 5's walk over one template, with `passthrough` and `SOPS_MANIFEST_KEYS`."""
-    env = env or renderer_env(SHARED_TPL)
-    policy = Policy(passthrough, SOPS_MANIFEST_KEYS)
-    path = Path("template.j2")
-    return scan_templates({path: source}, keys, policy, env, {path: non_secret})[path]
 
 
 @dataclass

@@ -9,12 +9,12 @@ Run: uv run pytest scripts/renderer/tests/test_renderer_secret_aliases.py
 """
 
 import pytest
+from _template_scan import scan_template
 
 from renderer.renderer_lib.secret_checks import (
     NO_SECRET_EXPRESSION,
     PASSTHROUGH_FILTERS,
     rule5,
-    scan_template,
 )
 from renderer.renderer_lib.var_aliases import not_alias_problems
 
