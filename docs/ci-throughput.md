@@ -107,22 +107,23 @@ The slices:
 1. **B1, ended.** A shadow sweep of master, and replays of pull-request runs that hosted CI
    read red. *What the shadow sweep found* below has the result, which changed this plan.
 1. **R1, landed.** The shadow sweep's timer, its tool and its probe are deleted.
-1. **B2, in progress.** A queue of one. With `LAND_QUEUE` set, a landing takes the landing
-   turn, marks its draft PR ready, updates its branch and merges after that one run
-   ([Landing a merged PR](landing.md)). The turn spans both hosts. The fan-out's server
-   lander follows: it stops marking a batch's PR ready before the landing, and lands the
-   draft.
+1. **B2, in progress.** A queue of one. Every landing that merges its PR takes the landing
+   turn, marks a draft PR ready, updates its branch and merges after that one run
+   ([Landing a merged PR](landing.md)). The turn spans both hosts, and `LAND_QUEUE=0` turns
+   it off for one landing. Two steps remain, and both wait for B3, because a queue of one
+   merges at most one untested head per CI run: sessions open their PRs as drafts, and the
+   fan-out stops marking a batch's PR ready before its landing.
 1. **B3, planned.** Batches of up to four. The queue opens one pull request that holds the
    batch's heads stacked on master, and that PR's run is the batch's one full run. Its gate
    rebuilds each stacked tree from master and the heads and records it on each head. Each
    member then merges in turn, and its own run and master's prove the recorded tree and skip.
    A red batch splits in half.
-1. **B4, planned.** Every landing goes through the queue. The merge pacing is
-   deleted, and so is the branch update that follows a green run on a stale base. A landing
-   then takes its slot under the limit on live landings when it gets the turn. That limit
-   exists because every live landing polls GitHub on one token. A landing that waits for the
-   turn polls only a lock file, so any number can wait, and the limit bounds the landings
-   that spend quota.
+1. **B4, planned.** The merge pacing is deleted, and so is the branch update that follows a
+   green run on a stale base. A landing then takes its slot under the limit on live landings
+   when it gets the turn, and the limit counts the landings of both hosts. That limit exists
+   because every live landing polls GitHub on one token. A landing that waits for the turn
+   polls only a lock file, so any number can wait, and the limit bounds the landings that
+   spend quota.
 
 Three things were settled before B2. The tree of a squash merge equals what `git merge-tree`
 builds for the same base and head: for #8474 both read `dfa8d4331c36`, with master 11 paths
@@ -147,6 +148,24 @@ master of the turn. Master's run still swept in full, in 8 minutes 40 seconds: a
 without the turn merged 68 s before the pilot did. The pilot also waited 16 minutes for a
 slot under the limit on live landings before it could ask for the turn, which is the wait B4
 removes.
+
+The first master run the turn proved was #8674's, the next landing. Its run recorded the tree
+`31fc245857a5`, the merge made the same tree, and master's run took 15 seconds. That is what
+shortens a landing: its slot is held mostly after the merge, while master's run waits for
+runners.
+
+The limit on live landings was what held the backlog of 2026-11-14, not CI. At 12:55 UTC, 25
+of 29 open PRs were green. The fan-out's lander on daniel-box had been refused a slot 70
+times in six hours and had started two landings, because sessions' landings held all three
+slots. Two facts about the limit came out of it:
+
+- A landing takes its slot before it waits for anything and holds it to its verdict. Read
+  from the code, one landing spends about 6 GitHub calls a minute while its PR's CI runs, 6
+  while master's CI runs, 2 to 4 during the promotion, and none while it waits for the turn
+  or for health.
+- The count is a directory of pid files on the host that runs the landing. daniel-box and
+  daniel-server therefore each admit three landings against the one token, and seven were
+  live at once that afternoon.
 
 B3's gate rebuilds the trees because the batch's pull request names its members. Anyone who
 can open a pull request could name a head and a tree of their choosing, so the gate takes

@@ -13,11 +13,15 @@ A landing on another host holds the same lock through an ssh session that lasts 
 the landing, so both hosts take turns with each other. Either way the lock ends with the
 landing's process, so a landing that dies gives the turn up.
 
+A landing asks for the turn when it is ready to use it (`merge.await_merge`): before the one
+run of a head that has had none, and otherwise once its head is green. It never holds the
+turn while a run that started before it finishes.
+
 The turn is not a safety gate. A landing that cannot take it within `merge_timeout`, or
 cannot reach `TURN_HOST`, goes on without it and merges as a landing without the turn does.
-A landing without `LAND_QUEUE` takes no turn and can still move master.
 
-`LAND_QUEUE` turns it on, for a landing that merges its PR directly.
+Every landing that merges its PR directly takes the turn. `LAND_QUEUE=0` turns it off, and a
+landing run that way can still move master under the holder.
 """
 
 import contextlib
@@ -162,8 +166,13 @@ def _taker(hostname: str) -> Callable[[], Callable[[], None] | None]:
     return try_take if here else try_take_over_ssh
 
 
-def _wait(ln: Landing) -> Callable[[], None] | None:
-    """Poll for the turn for up to `merge_timeout`; None when the landing goes on without it."""
+def _wait(ln: Landing) -> tuple[Callable[[], None] | None, int]:
+    """Poll for the turn for up to `merge_timeout`.
+
+    Returns:
+        The call that gives the turn up, or None when the landing goes on without it, and the
+        seconds the wait took.
+    """
     o = ln.opts
     try_turn = ln.tools.try_turn or _taker(ln.tools.hostname())
     waiting = OnChange(say)
@@ -175,16 +184,16 @@ def _wait(ln: Landing) -> Callable[[], None] | None:
             say(
                 f"could not open the landing turn's lock ({exc}); going on without a turn"
             )
-            return None
+            return None, waited
         if release:
             say(f"took the landing turn after {waited}s")
-            return release
+            return release, waited
         if waited >= o.merge_timeout:
             say(
                 f"another landing has held the turn for {waited}s, reaching "
                 f"merge_timeout={o.merge_timeout}s; going on without a turn"
             )
-            return None
+            return None, waited
         waiting(
             "waiting for the landing turn: another landing is between its CI run and its "
             "merge (`probe.py landing` lists the landings in flight)"
@@ -194,19 +203,28 @@ def _wait(ln: Landing) -> Callable[[], None] | None:
 
 
 @contextlib.contextmanager
-def held(ln: Landing) -> Generator[bool]:
-    """Hold the landing turn for the merge wait, and give it up however that wait ends.
+def held(ln: Landing) -> Generator[Callable[[], tuple[bool, int]]]:
+    """Offer the landing turn to the merge wait, and give it up however that wait ends.
 
     Yields:
-        Whether this landing holds the turn. False for a landing without `LAND_QUEUE`, for one
-        that merges nothing itself, and for one that waited `merge_timeout` without getting it.
+        The call that takes the turn. It waits in line for up to `merge_timeout` and returns
+        whether this landing holds the turn and the seconds that call waited. It asks once:
+        a later call answers at once with what the first one got. It never asks for a landing
+        with `LAND_QUEUE=0` or for one that merges nothing itself.
     """
-    if not (ln.opts.queue and ln.direct_merge_subject):
-        yield False
-        return
-    release = _wait(ln)
+    release: Callable[[], None] | None = None
+    asked = not (ln.opts.queue and ln.direct_merge_subject)
+
+    def take() -> tuple[bool, int]:
+        nonlocal release, asked
+        if asked:
+            return release is not None, 0
+        asked = True
+        release, waited = _wait(ln)
+        return release is not None, waited
+
     try:
-        yield release is not None
+        yield take
     finally:
         if release:
             release()
