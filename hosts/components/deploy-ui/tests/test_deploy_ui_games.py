@@ -6,7 +6,7 @@ import pytest
 
 from deploy_ui_lib import deploy_ui_games as games
 
-GAMES = games.parse_games("valheim=valheim,valheim-stats")
+GAMES = (games.Game("valheim", ("valheim", "valheim-stats")),)
 
 
 def _deployment(name, replicas, ready=0):
@@ -34,18 +34,28 @@ def _rows(deployments, pods):
     )
 
 
-def test_parse_games_reads_each_game_and_its_server_first_is_clean():
-    parsed = games.parse_games(
-        "terraria=terraria,terraria-stats; valheim=valheim,valheim-stats"
+def test_load_games_reads_each_game_its_server_and_refusal_is_clean():
+    loaded = games.load_games(
+        json.dumps(
+            [
+                {
+                    "name": "terraria",
+                    "deployments": ["terraria", "terraria-stats"],
+                    "start_refused": "issue #822",
+                },
+                {"name": "valheim", "deployments": ["valheim", "valheim-stats"]},
+            ]
+        )
     )
-    assert [g.name for g in parsed] == ["terraria", "valheim"]
-    assert parsed[1].server == "valheim"
-    assert parsed[1].deployments == ("valheim", "valheim-stats")
+    assert [g.name for g in loaded] == ["terraria", "valheim"]
+    assert loaded[1].server == "valheim"
+    assert loaded[1].deployments == ("valheim", "valheim-stats")
+    assert (loaded[0].start_refused, loaded[1].start_refused) == ("issue #822", "")
 
 
-def test_parse_games_entry_without_deployments_is_flagged():
+def test_load_games_entry_without_deployments_is_flagged():
     with pytest.raises(ValueError, match="valheim"):
-        games.parse_games("terraria=terraria;valheim=")
+        games.load_games('[{"name": "valheim", "deployments": []}]')
 
 
 def test_running_game_reports_each_deployment_and_its_pod_is_clean():

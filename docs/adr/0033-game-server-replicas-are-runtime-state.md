@@ -72,7 +72,7 @@ manager. Flux's takeover leaves that manager alone, so the count survives the cu
   cluster-base before anything creates `homelab`, so a `homelab` object there would stall the
   bring-up. The deploy-ui tag prunes, so removing the identity from the render deletes it.
 - **The token is operator-minted.** The operator reads the token Secret, stores it in
-  daniel-box's host secrets, and the deploy-ui unit loads it with `LoadCredential=`. It never
+  daniel-box's host secrets, and the deploy-ui unit imports it with `ImportCredential=`. It never
   lands in `~/.kube/config`, which `claude-agent-setup.sh` copies to the agent user.
 
 ## Governs

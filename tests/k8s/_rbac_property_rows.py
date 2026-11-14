@@ -1,4 +1,4 @@
-"""Rendered-manifest property rows about who a role binds to which RBAC role.
+"""Rendered-manifest property rows about who a role binds to which RBAC role, and what it may scale.
 
 `test_rendered_properties.py` runs these rows beside its own. A row lives here only to keep that
 file under the test-module length cap; the rules for what makes a row are in its docstring.
@@ -151,6 +151,24 @@ def _games_subject() -> dict:
     return {"kind": "ServiceAccount", "name": GAMES_SA, "namespace": GAMES_NS}
 
 
+def _game_deployments(role: str, tpl: str, doc: dict):
+    meta = doc.get("metadata", {})
+    if doc.get("kind") == "Deployment" and meta.get("name") in GAME_DEPLOYMENTS:
+        yield f"{role}:Deployment/{meta['name']}", doc
+
+
+def _renders_a_replica_count(role: str, doc: dict) -> str | None:
+    if "replicas" in doc.get("spec", {}):
+        return (
+            f"renders spec.replicas: {doc['spec']['replicas']}, which Flux would reset"
+        )
+    return None
+
+
+def _game_deployment(spec: dict) -> dict:
+    return {"kind": "Deployment", "metadata": {"name": "valheim"}, "spec": spec}
+
+
 RBAC_PROPERTIES = (
     Property(
         name="read-only-identity-is-bound-only-to-read-roles",
@@ -294,6 +312,28 @@ RBAC_PROPERTIES = (
             {
                 f"deploy-ui:Role/{GAMES_SA}",
                 f"deploy-ui:RoleBinding/{GAMES_SA}",
+            }
+        ),
+    ),
+    Property(
+        name="game-deployments-render-no-replica-count",
+        reason=(
+            "deploy.local's Games panel owns the replica count of every Deployment "
+            "`game_servers` lists, through the homelab-games identity (ADR-0033). A template "
+            "that renders `spec.replicas` there makes Flux reset each start or stop at its next "
+            "reconcile, so a game the operator started stops again within the interval."
+        ),
+        select=_game_deployments,
+        offence=_renders_a_replica_count,
+        red=("valheim", _game_deployment({"replicas": 0, "selector": {}})),
+        green=("valheim", _game_deployment({"selector": {}})),
+        min_matches=len(GAME_DEPLOYMENTS),
+        must_find=frozenset(
+            {
+                "terraria:Deployment/terraria",
+                "valheim:Deployment/valheim",
+                "game-stats:Deployment/terraria-stats",
+                "game-stats:Deployment/valheim-stats",
             }
         ),
     ),

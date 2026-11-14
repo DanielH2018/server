@@ -20,15 +20,17 @@ Configuration comes from the environment, which deploy-ui.service sets:
   DEPLOY_UI_CLI_LOGS   where `land.sh --detach` logs (default /tmp/homelab-landings-<user>)
   DEPLOY_UI_BIND       listen address (default 127.0.0.1)
   DEPLOY_UI_PORT       listen port (default 8790)
-  DEPLOY_UI_GAMES      game registry, `name=server,dep;...` (default: none)
+  DEPLOY_UI_GAMES_FILE the game registry, JSON rendered from `game_servers` (default: none)
   DEPLOY_UI_NAMESPACE  namespace of the game Deployments (default homelab)
   DEPLOY_UI_LOKI       Loki base URL for the game consoles (default: none)
   KUBECONFIG           the read-only kubeconfig `kubectl` reads the games with
+  CREDENTIALS_DIRECTORY  systemd's credential dir, holding `games_panel_token` once imported
 """
 
 import functools
 import getpass
 import json
+import operator
 import os
 import re
 import subprocess
@@ -43,8 +45,10 @@ from pathlib import Path
 from typing import ClassVar
 
 from deploy_ui_lib import deploy_ui_games as game_reads
+from deploy_ui_lib.deploy_ui_game_control import GameControl
 from deploy_ui_lib import deploy_ui_reads as reads
 from deploy_ui_lib import deploy_ui_writes as writes
+from deploy_ui_lib.deploy_ui_reads import Unavailable
 from host_lib import logfmt
 
 # The tree lock's path is not named here: the unit passes `server_git_tree_lock` in as
@@ -70,10 +74,14 @@ class Config:
     console_lines: int = 200
     # A parked server's last run stays readable for a week; Loki refuses a range past ~30d.
     console_window_s: int = 7 * 24 * 3600
+    credentials_dir: Path | None = None
+    # A restart waits this long for the game's pods to go before it gives up, stopped.
+    restart_wait_s: int = 300
 
     @classmethod
     def from_env(cls) -> "Config":
         e = os.environ.get
+        games_file, creds = e("DEPLOY_UI_GAMES_FILE"), e("CREDENTIALS_DIRECTORY")
         return cls(
             # The unit always sets DEPLOY_UI_REPO; the default is the operator's checkout,
             # because this file ships to the host and has no repo to derive one from.
@@ -89,21 +97,21 @@ class Config:
             cli_log_dir=Path(
                 e("DEPLOY_UI_CLI_LOGS", f"/tmp/homelab-landings-{getpass.getuser()}")
             ),
-            games=game_reads.parse_games(e("DEPLOY_UI_GAMES", "")),
+            games=game_reads.load_games(Path(games_file).read_text())
+            if games_file
+            else (),
             namespace=e("DEPLOY_UI_NAMESPACE", "homelab"),
             loki_url=e("DEPLOY_UI_LOKI", "").rstrip("/"),
+            credentials_dir=Path(creds) if creds else None,
         )
-
-
-class Unavailable(Exception):
-    pass
 
 
 class App:
     """Routing plus the subprocess edges. `run` is `subprocess.run` or a test double."""
 
-    def __init__(self, config: Config, run=subprocess.run) -> None:
-        self.cfg, self.run = config, run
+    def __init__(self, config: Config, run=subprocess.run, sleep=time.sleep) -> None:
+        self.cfg, self.run, self.sleep = config, run, sleep
+        self.games = GameControl(config, self._out, sleep=sleep)
         # A concurrent cache miss collapses to a single `gh` fetch.
         self._prs_lock = threading.Lock()
         self._prs_cache: tuple[float, list] | None = None
@@ -114,13 +122,19 @@ class App:
 
     # ---- subprocess edge ----
     def _out(
-        self, argv: list[str], timeout: int, ok_rcs=(0,), merge_stderr: bool = False
+        self,
+        argv: list[str],
+        timeout: int,
+        ok_rcs=(0,),
+        merge_stderr: bool = False,
+        stdin: str | None = None,
     ) -> str:
         """Run argv in the repo and return its stdout.
 
         `merge_stderr` folds stderr into stdout in write order, for a command whose two
         streams only mean something together (fuser names the file on one and its holders
-        on the other).
+        on the other). `stdin` carries what must stay out of argv, which `ps` shows to
+        every user, such as a bearer token.
 
         Raises:
             Unavailable: the command could not be run, timed out, or exited outside `ok_rcs`.
@@ -129,6 +143,7 @@ class App:
             r = self.run(
                 argv,
                 cwd=self.cfg.repo,
+                input=stdin,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT if merge_stderr else subprocess.PIPE,
                 text=True,
@@ -296,65 +311,6 @@ class App:
             "raw": text,
         }
 
-    def game_servers(self) -> dict:
-        """Each registered game's state, from its Deployments and their pods."""
-        if not self.cfg.games:
-            return {"games": []}
-        kubectl = ["kubectl", "-n", self.cfg.namespace, "get"]
-        names = [d for g in self.cfg.games for d in g.deployments]
-        deployments = self._out(
-            [*kubectl, "deployments", *names, "--ignore-not-found", "-o", "json"], 15
-        )
-        pods = self._out(
-            [
-                *kubectl,
-                "pods",
-                "-l",
-                game_reads.pod_selector(self.cfg.games),
-                "-o",
-                "json",
-            ],
-            15,
-        )
-        return {"games": game_reads.game_rows(self.cfg.games, deployments, pods)}
-
-    def game_console(self, name: str) -> dict:
-        """The newest console lines of one game's server container, read from Loki.
-
-        Raises:
-            Unavailable: `name` is not a registered game, no Loki URL is set, or the
-                query failed.
-        """
-        game = next((g for g in self.cfg.games if g.name == name), None)
-        if game is None:
-            raise Unavailable(f"no game named {name!r}")
-        if not self.cfg.loki_url:
-            raise Unavailable("DEPLOY_UI_LOKI is not set")
-        start_ns = int(time.time() - self.cfg.console_window_s) * 10**9
-        raw = self._out(
-            [
-                "curl",
-                "-fsS",
-                "--max-time",
-                "10",
-                "-G",
-                f"{self.cfg.loki_url}/loki/api/v1/query_range",
-                "--data-urlencode",
-                f"query={game_reads.console_query(self.cfg.namespace, game)}",
-                "--data-urlencode",
-                f"limit={self.cfg.console_lines}",
-                "--data-urlencode",
-                "direction=backward",
-                "--data-urlencode",
-                f"start={start_ns}",
-            ],
-            15,
-        )
-        return {
-            "game": name,
-            "lines": game_reads.parse_console(raw, self.cfg.console_lines),
-        }
-
     # ---- writes ----
     def land(self, body: dict) -> tuple[int, str]:
         pr, since = str(body.get("pr", "")), str(body.get("since", ""))
@@ -404,11 +360,12 @@ class App:
         "/api/inflight": "inflight",
         "/api/prs": "prs",
         "/api/landings": "landings",
-        "/api/games": "game_servers",
+        "/api/games": "games.game_servers",
     }
     WRITES: ClassVar[dict[str, str]] = {
         "/api/land": "land",
         "/api/cancel": "cancel",
+        "/api/game": "games.game_action",
     }
 
     def get(self, path: str) -> tuple[int, str]:
@@ -420,9 +377,9 @@ class App:
             read = functools.partial(self.log, q.get("name", ""), q.get("size", ""))
         elif url.path == "/api/game-console":
             q = {k: v[0] for k, v in urllib.parse.parse_qs(url.query).items()}
-            read = functools.partial(self.game_console, q.get("game", ""))
+            read = functools.partial(self.games.game_console, q.get("game", ""))
         elif url.path in self.READS:
-            read = getattr(self, self.READS[url.path])
+            read = operator.attrgetter(self.READS[url.path])(self)
         else:
             return 404, "no such route"
         try:
@@ -448,7 +405,7 @@ class App:
         if not isinstance(body, dict):
             return 400, "body must be a JSON object"
         try:
-            return getattr(self, name)(body)
+            return operator.attrgetter(name)(self)(body)
         except Unavailable as exc:
             return 503, str(exc)
 

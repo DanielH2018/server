@@ -488,8 +488,8 @@ containers_list:
     bridge_bypass_prefixes:
       - /rest/
     # ND_PROMETHEUS_ENABLED serves /metrics beside the UI. db_model_totals feeds homepage's
-    # Navidrome tile. No replicas_var: navidrome_k8s_replicas is a role default, which
-    # observability cannot read, so parking navidrome means dropping this item too.
+    # Navidrome tile. Parking navidrome means dropping this item too, or its scrape target
+    # reads `up == 0` and pages.
     metrics:
       - job: navidrome
   # CouchDB for Obsidian LiveSync. use_authelia is false because the LiveSync client uses
@@ -829,18 +829,16 @@ containers_list:
     # Flux applies game-stats through `promote` (D5.19).
     weekly_backup_claims: {terraria-stats-data: 0, valheim-stats-data: 1}  # Sun, Mon
     depends_on: [loki-homelab]
-    # One job per game, each behind its own Service. Each exporter runs as many pods as its
-    # server, so its job is dropped at `terraria_k8s_replicas: 0` or `valheim_k8s_replicas: 0`:
-    # a Service with no endpoint reads `up == 0` and pages the scrape-target check (#2877).
+    # One job per game, each behind its own Service. The jobs render whether or not the Games
+    # panel has the exporter running (ADR-0033). A parked exporter's Service has no endpoint,
+    # and its ScrapeTargetDown rule mutes while kube-state-metrics reads 0 replicas.
     metrics:
       - job: terraria-stats
         service: terraria-stats
         port: 9420
-        replicas_var: terraria_k8s_replicas
       - job: valheim-stats
         service: valheim-stats
         port: 9420
-        replicas_var: valheim_k8s_replicas
   # The bridge twins, neither of which has a route — both are pushers. monitor-bridge runs
   # every metric/API check; autofix-bridge is the *arr remediation loop.
   - name: monitor-bridge

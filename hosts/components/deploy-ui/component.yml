@@ -11,8 +11,14 @@ files:
   - {src: files/deploy_ui_lib/deploy_ui_reads.py, dst: /usr/lib/homelab/deploy-ui/deploy_ui_lib/deploy_ui_reads.py, activate: "try-restart:deploy-ui.service"}
   - {src: files/deploy_ui_lib/deploy_ui_writes.py, dst: /usr/lib/homelab/deploy-ui/deploy_ui_lib/deploy_ui_writes.py, activate: "try-restart:deploy-ui.service"}
   - {src: files/deploy_ui_lib/deploy_ui_games.py, dst: /usr/lib/homelab/deploy-ui/deploy_ui_lib/deploy_ui_games.py, activate: "try-restart:deploy-ui.service"}
+  - {src: files/deploy_ui_lib/deploy_ui_game_control.py, dst: /usr/lib/homelab/deploy-ui/deploy_ui_lib/deploy_ui_game_control.py, activate: "try-restart:deploy-ui.service"}
   - {lib: host_lib.py, dst: /usr/lib/homelab/deploy-ui/host_lib.py, activate: "try-restart:deploy-ui.service"}
   - {src: templates/deploy-ui.service.j2, dst: /usr/lib/systemd/system/deploy-ui.service}
+  - {src: templates/games.json.j2, dst: /usr/lib/homelab/deploy-ui/games.json, activate: "try-restart:deploy-ui.service"}
+# The homelab-games ServiceAccount's token, which the Games panel scales the game servers with
+# (ADR-0033). The unit imports it with ImportCredential=; it never reaches ~/.kube/config.
+credentials:
+  - games_panel_token
 enable:
   deploy-ui.service: multi-user.target
 # The daemon does no authentication, so the port admits the cluster only: the pod CIDR and both node

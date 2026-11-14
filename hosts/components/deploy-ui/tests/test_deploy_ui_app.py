@@ -19,10 +19,11 @@ class FakeRun:
     """Answers each argv prefix with canned (stdout, rc); records what was run."""
 
     def __init__(self, table):
-        self.table, self.calls = table, []
+        self.table, self.calls, self.inputs = table, [], []
 
     def __call__(self, argv, **kw):
         self.calls.append(argv)
+        self.inputs.append(kw.get("input"))
         for prefix, (out, rc) in self.table.items():
             if tuple(argv[: len(prefix)]) == prefix:
                 if rc == "raise":
@@ -402,65 +403,19 @@ def test_client_closing_mid_response_logs_one_line_no_traceback_is_flagged(
     ]
 
 
-def _games_app(tmp_path, table, loki_url="https://loki.example"):
-    cfg = dataclasses.replace(
-        _bare_config(tmp_path),
-        games=deploy_ui.game_reads.parse_games("valheim=valheim,valheim-stats"),
-        loki_url=loki_url,
+def test_the_games_routes_reach_the_game_control_is_clean(app):
+    """The panel's routes answer through `App.games`; GameControl's own tests cover the rest."""
+    assert body(app.get("/api/games")) == {"games": []}
+    status, text = app.post(
+        "/api/game", HDRS, json.dumps({"game": "minecraft", "action": "start"})
     )
-    return deploy_ui.App(cfg, run=FakeRun(table))
+    assert (status, text) == (404, "no game named 'minecraft'")
+    console = body(app.get("/api/game-console?game=minecraft"))
+    assert console == {"unavailable": "no game named 'minecraft'"}
 
 
-def test_games_reads_the_deployments_and_their_pods_is_clean(tmp_path):
-    deployments = {
-        "items": [
-            {"metadata": {"name": n}, "spec": {"replicas": 0}, "status": {}}
-            for n in ("valheim", "valheim-stats")
-        ]
-    }
-    app = _games_app(
-        tmp_path,
-        {
-            ("kubectl", "-n", "homelab", "get", "deployments"): (
-                json.dumps(deployments),
-                0,
-            ),
-            ("kubectl", "-n", "homelab", "get", "pods"): ('{"items": []}', 0),
-        },
-    )
-    [game] = body(app.get("/api/games"))["games"]
-    assert (game["name"], game["state"]) == ("valheim", "stopped")
-    pods_call = next(c for c in app.run.calls if "pods" in c)
-    assert pods_call[pods_call.index("-l") + 1] == "app in (valheim,valheim-stats)"
-
-
-def test_games_when_kubectl_fails_is_unavailable_is_flagged(tmp_path):
-    app = _games_app(tmp_path, {("kubectl",): ("", 1)})
-    assert "kubectl exited 1" in body(app.get("/api/games"))["unavailable"]
-
-
-def test_game_console_queries_loki_for_the_server_container_is_clean(tmp_path):
-    loki = {"data": {"result": [{"values": [["2000000000", "Game server connected"]]}]}}
-    app = _games_app(tmp_path, {("curl",): (json.dumps(loki), 0)})
-    got = body(app.get("/api/game-console?game=valheim"))
-    assert got == {
-        "game": "valheim",
-        "lines": [{"ts": 2, "line": "Game server connected"}],
-    }
-    [call] = app.run.calls
-    assert "https://loki.example/loki/api/v1/query_range" in call
-    assert 'query={namespace="homelab",container="valheim"}' in call
-
-
-@pytest.mark.parametrize(
-    ("path", "loki_url", "reason"),
-    [
-        ("/api/game-console?game=minecraft", "https://loki.example", "no game named"),
-        ("/api/game-console?game=valheim", "", "DEPLOY_UI_LOKI is not set"),
-    ],
-)
-def test_game_console_refusals_are_unavailable_is_flagged(
-    tmp_path, path, loki_url, reason
-):
-    app = _games_app(tmp_path, {}, loki_url=loki_url)
-    assert reason in body(app.get(path))["unavailable"]
+def test_a_command_gets_its_stdin_and_never_in_argv_is_clean(app):
+    """The games token reaches curl this way, so `ps` never shows it."""
+    app._out(["curl", "-H", "@-"], 5, stdin="Authorization: Bearer t\n")
+    assert app.run.calls[-1] == ["curl", "-H", "@-"]
+    assert app.run.inputs[-1] == "Authorization: Bearer t\n"
