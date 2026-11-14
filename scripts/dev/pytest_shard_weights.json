@@ -911,6 +911,7 @@
  "scripts/secrets_mgmt/tests/test_secret_rotation.py": 0.0,
  "scripts/secrets_mgmt/tests/test_secrets_lib_layout.py": 2.08,
  "scripts/secrets_mgmt/tests/test_sops_type_proof_fixture.py": 0.12,
+ "scripts/secrets_mgmt/tests/test_stale_copies.py": 0.65,
  "scripts/tests/test_census_pass_prebuild.py": 4.83,
  "scripts/tests/test_census_roots_cover_host_lib.py": 0.02,
  "scripts/tests/test_census_rows_parse_once.py": 0.96,
