@@ -823,6 +823,7 @@
  "scripts/lib/tests/test_worktree_label.py": 0.0,
  "scripts/lib/tests/test_worktree_privileged_holders.py": 0.0,
  "scripts/lib/tests/test_worktrees.py": 0.65,
+ "scripts/lib/tests/test_worktrees_forge_landed.py": 0.05,
  "scripts/lib/tests/test_yaml_fast.py": 0.0,
  "scripts/renderer/tests/test_apt_source_components.py": 4.79,
  "scripts/renderer/tests/test_deletion_drill.py": 0.84,
