@@ -98,10 +98,11 @@ home_assistant_script_files:
 # Memory limit 2Gi: across 9 pod generations the working set ran 949Mi-1414Mi, with the
 # peak pod at 1387Mi. 2Gi puts steady state near 65% and leaves room for recorder growth.
 # Don't trim the recorder further to buy headroom; purge_keep_days is already 7.
+# The request is the 7-day p95 working set (1412Mi on 2026-11-14) rounded up to 64Mi.
 home_assistant_k8s_cpu_limit: "1"
 home_assistant_k8s_mem_limit: 2Gi
 home_assistant_k8s_cpu_request: "100m"
-home_assistant_k8s_mem_request: 256Mi
+home_assistant_k8s_mem_request: 1472Mi
 
 # 140 M at planning (71 M of it the recorder SQLite); sized for recorder growth. `longhorn`
 # (backed up): .storage carries the device/entity registries — the highest-value,

@@ -17,15 +17,15 @@ See repo-root `CLAUDE.md` for shared conventions.
   config HERE, then merge; `promote` applies it.
 - **Port:** 8080 · reaches the coordinator at `tcp://{{ slzb_ip }}:6638`, broker at the
   in-cluster `mosquitto` Service name
-- **Flux applies it, not Ansible** (D5.10, an own-window flip). Its `containers_list` entry
+- **Flux applies it.** Its `containers_list` entry
   is in `cluster/services.yml`, so nothing applies it by hand, and a
   merged change reaches the cluster when `promote` publishes and verifies the next bundle. mosquitto
   is Flux-owned too, so the
   Kustomization depends on it. The Deployment is `Recreate` and the SLZB-06M coordinator
   accepts one client, so a change that rolls the pod drops every Zigbee device from MQTT until
   the new pod connects.
-- **The `zigbee2mqtt-snapshot` Job snapshots `zigbee2mqtt-data` before each revision applies**
-  (D5.2a). The zigbee2mqtt Kustomization depends on `zigbee2mqtt-snapshot`, so a revision
+- **The `zigbee2mqtt-snapshot` Job snapshots `zigbee2mqtt-data` before each revision applies**.
+  The zigbee2mqtt Kustomization depends on `zigbee2mqtt-snapshot`, so a revision
   applies only after the snapshot is ready; `docs/flux-deploy-plane.md` lists the Job's checks.
   A failed revision that changes zigbee2mqtt writes the stateful hold, and `promote` does not
   reset `prod`. A volume revert is not the default answer to that hold here: the coordinator's
@@ -37,14 +37,13 @@ See repo-root `CLAUDE.md` for shared conventions.
   `zigbee_network_key`, `mqtt_username` and `mqtt_password` are `${<key>}` placeholders in the
   published render. Flux substitutes the values from the `homelab-cluster-vars` Secret. A
   rotation reaches the cluster only through `cluster_vars.py write`.
-- **Where the task went.** Its pre-apply snapshot through
-  `k8s/volume-snapshot` became the `zigbee2mqtt-snapshot` Job, and the Kustomization's `wait`
-  replaces the rollout wait.
+- **Its snapshot and rollout.** The `zigbee2mqtt-snapshot` Job takes the pre-apply snapshot,
+  and the Kustomization's `wait` holds the rollout.
 
 ## Notable
 - **Network coordinator, not USB.** The SLZB-06M is reached as `serial.port: tcp://<ip>:6638`,
   `adapter: ember` (Silabs EFR32 EmberZNet). No `network_mode: host`, no `devices:`.
-- **`configuration.yaml` is templated** (`data/configuration.yaml`) and is the Ansible source
+- **`configuration.yaml` is templated** (`data/configuration.yaml`) and is the source
   of truth — overwritten on deploy. The **Zigbee network identity is pinned**
   (`network_key` from SOPS `zigbee_network_key`, `pan_id`/`ext_pan_id` from host_vars) so a
   redeploy can NEVER regenerate it and un-pair every device. Do not switch these to GENERATE.
@@ -85,6 +84,25 @@ See repo-root `CLAUDE.md` for shared conventions.
   radio). HA layers a second,
   software-side alert on `binary_sensor.zigbee2mqtt_bridge_connection_state` (the home-assistant role's
   `zigbee_bridge_offline` automation, fed by Z2M's MQTT Last-Will).
+- **Why the container restarts: three exit classes, read from Loki 2026-10-15 to 2026-11-14
+  (#8322).** Loki lines carry pod-local time from the `TZ` env; alerts are UTC.
+  - *Coordinator socket reset.* The SLZB drops the link with `Port Error: read ECONNRESET`, Z2M
+    logs `Adapter disconnected` and exits code 2, and the next start connects within 2 s. The
+    device stays up. 8 events. `Z2M_WATCHDOG` in `templates/deployment.yaml.j2` restarts the
+    stack in-process for these, so they no longer count as container restarts.
+  - *Coordinator off the network.* `read ETIMEDOUT`, then `connect EHOSTUNREACH` for 11 to 42
+    minutes, and a crash loop behind it (2026-10-18, 2026-10-27 twice, 2026-11-11). The SLZB's
+    own `uptime` (`http://<slzb_ip>/ha_sensors`) reset at the end of the 2026-11-11 outage, so
+    the device lost power or rebooted. Most of the restart count is these loops, and the fix is
+    on the device side: its power and switch port. `ExtraProbeFailed` pages for them.
+  - *Broker not ready at first start.* `MQTT failed to connect` (`ECONNREFUSED` or `connack
+    timeout`) right after a node event, one restart each, 6 events. The watchdog arms only
+    after a successful first start, so it does not cover these. The `mqtt-broker-wait` init
+    container does (#8586). It sends mosquitto an anonymous MQTT CONNECT and starts z2m only
+    once a CONNACK comes back. A TCP wait would pass the `connack timeout` cases, where the
+    port accepts before the broker answers. mosquitto refuses the anonymous login, and that
+    refusal is the CONNACK, so the pod spec carries no credential. After 180 s the init
+    container fails, and the pod shows `Init:CrashLoopBackOff`.
 - **Pairing is closed by default** (no `permit_join` in 2.x). Enable join from the Z2M UI
   (`zigbee2mqtt.<domain>`) when adding devices, then disable.
 

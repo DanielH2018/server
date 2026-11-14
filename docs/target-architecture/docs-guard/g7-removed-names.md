@@ -1,7 +1,7 @@
 # G7 — A PR that removes a name fails while a doc or comment still uses it
 
-Status: IN PROGRESS. Steps 1 to 3 are done: the shared predicate, the heading pointer
-guard, and the two new target classes as advice.
+Status: IN PROGRESS. Steps 1 to 4 are done: the shared predicate, the heading pointer
+guard, the two new target classes as advice, and the rename fixer.
 
 Depends on: the tree rename of
 [#8186](https://github.com/DanielH2018/server/issues/8186), which landed on 2026-11-13.
@@ -69,10 +69,13 @@ hook, and the hook names both lines.
   every edit under the heading a notice row, and G9 measured what such rows are worth.
   The guard skips the plans under `docs/target-architecture/`, which point at the tree as
   it stood when each was written.
-- **A rename fixer.** `fact_status.py mv <old> <new> [--root <dir>]` rewrites citations
-  and absolute links after a rename. A session runs it; no hook does. It skips
-  `**HISTORY —` text and archives. `--root` points it at a store outside the repo, such as
-  the memory store on daniel-box.
+- **A rename fixer.** `fact_status.py mv <old> <new> [--root <dir>]` rewrites the
+  references a rename left behind. A session runs it; no hook does. It rewrites the places
+  the removed-name rules read: instruction files, live docs and full-line comments. It
+  skips `**HISTORY —` text, generated blocks and archives. `--root` points it at a store
+  outside the repo, such as the memory store on daniel-box. Under a moved directory it
+  rewrites a reference only when the resulting path is tracked, because a directory
+  seldom moves whole.
 
 ```diff
  scripts/lib/facts/
@@ -89,9 +92,9 @@ hook, and the hook names both lines.
 +    Code: the tracked non-Markdown tree, read once; holds(), comment_uses()
 +    vanished_advice(): live docs and code comments, printed by repo_guards.py
 +    a class is advice until its replay sample grades under 20% false alarms
-+  renames.py     rewrite citations and absolute links for one old-to-new mapping
++  renames.py     move(): rewrite one old-to-new mapping in docs and comments
  scripts/dev/fact_status.py
-+  mv <old> <new> [--root <dir>]
++  mv <old> <new> [--root <dir>] [--dry-run]
  prek: facts-lint-changed
 +  its files pattern follows is_fact_doc
  tests/repo/test_documented_paths_exist.py
@@ -110,7 +113,10 @@ hook, and the hook names both lines.
    tree rename. The PR fixes both.
 3. The two new target classes, as advice. Done: *Step 3 result* below has the replay and
    the graded samples.
-4. `fact_status.py mv`.
+4. `fact_status.py mv`. Done. On the tree at `fc561e541` a dry run of the mapping
+   `ansible/tests` to `tests` finds 68 references in 53 files, and every one lands on a
+   tracked path. On the memory store the same mapping finds 7 it can rewrite and leaves 5,
+   all under `ansible/tests/setup/`, whose tests moved somewhere else.
 5. One PR per target class that the graded replay clears, turning its warnings into
    errors.
 

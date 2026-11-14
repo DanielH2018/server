@@ -50,7 +50,7 @@ _UNIT_SECONDS = {
 # The retention floor as one instant query through `/api/v1/query`. The prometheus IngressRoute
 # admits only `/api/v1/query` and `/api/v1/targets`, so `/api/v1/status/tsdb` is unreachable.
 # `time()` is Prometheus' own clock, which keeps the answer free of this host's clock skew.
-_SPAN_PROMQL = "time() - min(prometheus_tsdb_lowest_timestamp_seconds)"
+SPAN_PROMQL = "time() - min(prometheus_tsdb_lowest_timestamp_seconds)"
 
 # An empty TSDB reports a max-int sentinel as its lowest timestamp, so the subtraction lands
 # hugely negative; a bad parse can land absurdly high. Neither is a retention span.
@@ -85,7 +85,7 @@ def covered_span_seconds(base, pin):
     failing the `metric` command it annotates.
     """
     try:
-        data = json.loads(core.fetch(prom_query_url(base, _SPAN_PROMQL), resolve=pin))
+        data = json.loads(core.fetch(prom_query_url(base, SPAN_PROMQL), resolve=pin))
         result = ((data.get("data") or {}).get("result")) or []
         span = float(result[0]["value"][1])
     except SystemExit, OSError, ValueError, KeyError, IndexError, TypeError:

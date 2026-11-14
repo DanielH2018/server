@@ -22,15 +22,15 @@ runbooks, design documents and generated reference pages are readable in a brows
   `mkdocs.yml`'s `exclude_docs`.
 - **Built by:** `scripts/docs/build_docs.py`, run by `homelab-docs-refresh.service`. **Not by this role** —
   a deploy renders manifests, it does not rebuild the site.
-- **Flux applies it, not Ansible** (D5.19, the first Wave D PR). Its `containers_list` entry is
+- **Flux applies it.** Its `containers_list` entry is
   in `cluster/services.yml`, so nothing applies it by hand, and a merged change reaches the cluster when
   `promote` publishes and verifies the next bundle. authelia and traefik are flux-owned too, so
   the Kustomization lists them in `dependsOn`, and Flux applies this tag only after their
   Kustomizations are Ready. The Deployment is `RollingUpdate` with one replica, so a roll keeps
   one pod serving.
-- **Where the task went.** The Kustomization's `wait` replaces the
-  rollout wait, and the restart checksum the renderer stamps replaces the shared restart, so
-  an nginx config edit still rolls the pod. The site directory is the host package's (below).
+- **Its rollout.** The Kustomization's `wait` holds the rollout. The restart checksum the
+  renderer stamps on the Deployment rolls the pod, so an nginx config edit reaches it. The
+  site directory is the host package's (below).
 
 ## The build runs on the host, never in the pod
 
@@ -68,9 +68,8 @@ than as a scheduling mistake, which is the expensive kind of wrong.
 The `hostPath` volume is `type: Directory`, not `DirectoryOrCreate`. kubelet would create a
 missing path as root, and the build script runs as the unprivileged user, so it could then never
 write into it. `hosts/components/docs-refresh/tmpfiles.d/homelab-docs-site.conf.j2` creates the directory
-with the right ownership first, through the daniel-box host package: D5 moved it out of this
-role, because a Flux-owned role runs no task, and H7.10a moved it from the setup plane into
-that component. The docs-refresh service runs `systemd-tmpfiles --create` on the file in
+with the right ownership first, through the daniel-box host package, because a Flux-owned
+role runs no task. The docs-refresh service runs `systemd-tmpfiles --create` on the file in
 `ExecStartPre=`, and `systemd-tmpfiles-setup.service` applies it at boot. The file's path must
 equal this role's `docs_host_site_dir`, which
 `hosts/lib/tests/test_docs_refresh_component.py` holds.

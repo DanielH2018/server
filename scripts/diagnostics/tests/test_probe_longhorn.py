@@ -421,3 +421,105 @@ def test_the_b2_budget_timer_passes_no_retain():
     text = unit.read_text()
     assert "scripts/diagnostics/probe.py b2-budget\n" in text
     assert "--retain" not in text
+
+
+# ── the bucket name is read from inventory, not SOPS (#8355) ────────────────────────────────
+
+
+def _inventory_bucket():
+    """The `longhorn_b2_bucket:` value a tracked inventory file holds, or None if none does."""
+    from lib import proc_testing
+    from lib.repo_paths import REPO
+
+    tracked = proc_testing.run(
+        ["git", "ls-files", "inventory"], cwd=REPO, check=True
+    ).stdout.split()
+    for name in tracked:
+        if not name.endswith((".yml", ".yaml")):
+            continue
+        for line in (REPO / name).read_text().splitlines():
+            if line.startswith("longhorn_b2_bucket:"):
+                return line.split(":", 1)[1].strip().strip("'\"")
+    return None
+
+
+def _bucket_b2_was_asked_for(monkeypatch, tmp_path, subcommand):
+    """Run `subcommand` up to its B2 bucket lookup, and return the bucket name it sent.
+
+    A fake `sops` answers every key, the bucket included, so a run that still decrypts the
+    bucket sends `bucket-from-sops`. B2 itself is faked at `urlopen`: the authorize names no
+    bucket, so the run looks one up by name, and the lookup fails, which stops the run before
+    the ledger write and the cluster reads.
+    """
+    import urllib.error
+    import urllib.request
+
+    from diagnostics.probe_lib import cli_parser, core
+    from lib import proc_testing
+
+    stubs = proc_testing.fake_bin(
+        tmp_path / "bin",
+        sops='case "$3" in *_bucket*) echo bucket-from-sops ;; *) echo stub-value ;; esac\n',
+    )
+    monkeypatch.setenv("PATH", proc_testing.path_with(stubs))
+    asked = []
+
+    class _Authorized:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_exc):
+            return False
+
+        def read(self):
+            return json.dumps(
+                {
+                    "accountId": "acct",
+                    "authorizationToken": "tok",
+                    "apiInfo": {"storageApi": {"apiUrl": "https://api.example"}},
+                    "allowed": {},
+                }
+            ).encode()
+
+    def urlopen(request, timeout=None):
+        if request.data is None:
+            return _Authorized()
+        asked.append(json.loads(request.data)["bucketName"])
+        raise urllib.error.URLError("lookup stopped by the test")
+
+    monkeypatch.setattr(urllib.request, "urlopen", urlopen)
+    ns = cli_parser._build_parser().parse_args([subcommand])
+    run = {"b2-longhorn": longhorn.run_b2_longhorn, "b2-budget": longhorn.run_b2_budget}
+    with pytest.raises(core.Unreadable, match="lookup stopped by the test"):
+        run[subcommand](ns)
+    assert len(asked) == 1
+    return asked[0]
+
+
+@pytest.mark.parametrize("subcommand", ["b2-longhorn", "b2-budget"])
+def test_b2_listing_asks_for_the_bucket_named_in_inventory_not_the_sops_one(
+    monkeypatch, tmp_path, subcommand
+):
+    bucket = _bucket_b2_was_asked_for(monkeypatch, tmp_path, subcommand)
+    assert bucket != "bucket-from-sops"
+    assert bucket == _inventory_bucket()
+
+
+def test_b2_longhorn_dry_run_names_the_real_bucket_without_an_age_key(
+    monkeypatch, tmp_path, capsys
+):
+    """The claude user holds no age key, and its dry-run still names the bucket it would list."""
+    from diagnostics.probe_lib import cli_parser
+    from lib import proc_testing
+
+    stubs = proc_testing.fake_bin(
+        tmp_path / "bin", sops="echo no age key >&2\nexit 1\n"
+    )
+    monkeypatch.setenv("PATH", proc_testing.path_with(stubs))
+    ns = cli_parser._build_parser().parse_args(["--dry-run", "b2-longhorn"])
+    assert longhorn.run_b2_longhorn(ns) == 0
+    out = capsys.readouterr().out
+    assert "<longhorn_b2_bucket>" not in out
+    bucket = _inventory_bucket()
+    assert bucket, "no tracked inventory file defines longhorn_b2_bucket"
+    assert f"bucket={bucket} " in out

@@ -102,29 +102,46 @@ def _scrape_jobs(role: str, tpl: str, doc: dict):
         yield job["job_name"], job
 
 
-def _scrape_timeout_offence(role: str, job: dict) -> str | None:
-    on_pi = any(
-        target.startswith(f"{pi_ip()}:")
-        for block in job.get("static_configs") or []
-        for target in block.get("targets") or []
-    )
-    timeout = job.get("scrape_timeout")
-    if not on_pi:
-        if timeout is None:
-            return None
-        return f"overrides scrape_timeout ({timeout}); only the Pi jobs may"
+def _targets_pi(target: str) -> bool:
+    # A blackbox target carries a scheme, so `http://<pi>:51821` is as much the Pi as `<pi>:9100`.
+    return target.split("://", 1)[-1].startswith(f"{pi_ip()}:")
+
+
+def _timeout_offence(timeout: str | None, interval: str) -> str | None:
     if timeout is None:
-        return "targets daniel-pi but has no scrape_timeout, so it flaps at 10s"
+        return "has no scrape_timeout, so it flaps at 10s"
     if _seconds(timeout) <= _DEFAULT_SCRAPE_TIMEOUT_S:
         return f"sets scrape_timeout {timeout}, no longer than the 10s default"
-    interval = job.get("scrape_interval", "1m")
     if _seconds(timeout) > _seconds(interval):
         return f"sets scrape_timeout {timeout} above its {interval} interval"
     return None
 
 
-def _job(target: str, timeout: str | None = None) -> dict:
-    job = {"scrape_interval": "1m", "static_configs": [{"targets": [target]}]}
+def _scrape_timeout_offence(role: str, job: dict) -> str | None:
+    """A Pi target's effective timeout is its own `__scrape_timeout__`, else the job's."""
+    job_timeout = job.get("scrape_timeout")
+    interval = job.get("scrape_interval", "1m")
+    blocks = job.get("static_configs") or []
+    pi_blocks = [b for b in blocks if any(map(_targets_pi, b.get("targets") or []))]
+    for block in blocks:
+        own = (block.get("labels") or {}).get("__scrape_timeout__")
+        if block in pi_blocks:
+            if problem := _timeout_offence(own or job_timeout, interval):
+                return f"targets daniel-pi at {block['targets']} but {problem}"
+        elif own is not None:
+            return f"gives {block['targets']} a scrape_timeout ({own}); only Pi targets may"
+    if job_timeout is not None and len(pi_blocks) != len(blocks):
+        return f"overrides scrape_timeout ({job_timeout}); only the Pi jobs may"
+    return None
+
+
+def _job(
+    target: str, timeout: str | None = None, target_timeout: str | None = None
+) -> dict:
+    block: dict = {"targets": [target]}
+    if target_timeout is not None:
+        block["labels"] = {"__scrape_timeout__": target_timeout}
+    job = {"scrape_interval": "1m", "static_configs": [block]}
     if timeout is not None:
         job["scrape_timeout"] = timeout
     return job
@@ -162,6 +179,7 @@ def _callers(*peers: dict, port: int = 9090) -> dict:
 
 
 _PI_TARGET = f"{pi_ip()}:9100"
+_PI_PROBE_TARGET = f"http://{pi_ip()}:51821"
 _CLUSTER_TARGET = "longhorn-backend.longhorn-system.svc:9500"
 
 SCRAPE_PROPERTIES = (
@@ -222,7 +240,10 @@ SCRAPE_PROPERTIES = (
             "`k8s_pi_client_ip` therefore sets a scrape_timeout above 10s and within its "
             "interval (Prometheus refuses the config otherwise). The override is deliberately "
             "not global: an in-cluster target that takes 30s is the failure the monitor exists "
-            "to surface, so every other job keeps the default."
+            "to surface, so every other job keeps the default. A blackbox job that probes one Pi "
+            "target among cluster ones gives that target alone its budget through the "
+            "per-target `__scrape_timeout__` label: wg-easy's http probe flapped at the 10s "
+            "default (#8252)."
         ),
         select=_scrape_jobs,
         offence=_scrape_timeout_offence,
@@ -233,10 +254,18 @@ SCRAPE_PROPERTIES = (
             ("observability", _job(_PI_TARGET, "10s")),
             ("observability", _job(_PI_TARGET, "2m")),
             ("observability", _job(_CLUSTER_TARGET, "30s")),
+            ("observability", _job(_PI_PROBE_TARGET)),
+            ("observability", _job(_PI_PROBE_TARGET, target_timeout="10s")),
+            ("observability", _job(_CLUSTER_TARGET, target_timeout="30s")),
         ),
-        more_green=(("observability", _job(_CLUSTER_TARGET)),),
+        more_green=(
+            ("observability", _job(_CLUSTER_TARGET)),
+            ("observability", _job(_PI_PROBE_TARGET, target_timeout="30s")),
+        ),
         min_matches=10,
-        must_find=frozenset({"node-pi", "alloy-pi", "dockerd-pi", "containerd-pi"}),
+        must_find=frozenset(
+            {"node-pi", "alloy-pi", "dockerd-pi", "containerd-pi", "blackbox-extra"}
+        ),
     ),
     Property(
         name="prometheus-admits-the-soak-job",

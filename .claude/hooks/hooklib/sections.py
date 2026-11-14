@@ -10,6 +10,7 @@ Package name is `hooklib`, not `lib`, so it never shares a namespace-package nam
 `scripts/lib` (see session-health.py's own import comment).
 """
 
+import queue
 import threading
 import time
 from collections.abc import Callable
@@ -56,3 +57,47 @@ def run_sections(
             lines = [f"  ⚠ {name} did not finish within {deadline:g}s, skipped"]
         out.append(lines)
     return out
+
+
+def keep_where[T](
+    items: list[T], check: Callable[[T], bool], deadline: float, workers: int = 16
+) -> list[T]:
+    """The items `check` holds for, in the order given, judged on `workers` daemon threads.
+
+    Args:
+        items: what to judge.
+        check: one item's verdict.
+        deadline: seconds, from the call, that the whole set may take.
+        workers: how many checks run at once.
+
+    Returns:
+        Every item whose check returned true, raised, or had not returned by the deadline:
+        a check that cannot answer keeps its item rather than hiding it. Daemon threads, for
+        the reason `run_sections` gives, so a hung check never holds the interpreter's exit.
+    """
+    verdicts: list[bool | None] = [None] * len(items)
+    pending: queue.SimpleQueue[int] = queue.SimpleQueue()
+    for i in range(len(items)):
+        pending.put(i)
+
+    def work():
+        while True:
+            try:
+                i = pending.get_nowait()
+            except queue.Empty:
+                return
+            try:
+                verdicts[i] = bool(check(items[i]))
+            except Exception:
+                verdicts[i] = True
+
+    threads = [
+        threading.Thread(target=work, daemon=True)
+        for _ in range(min(workers, len(items)))
+    ]
+    for thread in threads:
+        thread.start()
+    end = time.monotonic() + deadline
+    for thread in threads:
+        thread.join(max(0.0, end - time.monotonic()))
+    return [item for item, ok in zip(items, verdicts, strict=True) if ok is not False]
