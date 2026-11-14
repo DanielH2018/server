@@ -49,7 +49,7 @@ spec:
         # its Service endpoints, which broke SSO on every protected route. The authelia container
         # itself was healthy throughout.
         # The three pods running this sidecar are traefik, authelia and the node-agent DaemonSet
-        # (`grep -rl crowdsec-agent ansible/roles/k8s --include='*.j2'`); all three are admitted here.
+        # (`grep -rl crowdsec-agent k8s/roles --include='*.j2'`); all three are admitted here.
         - podSelector:
             matchLabels:
               app: authelia

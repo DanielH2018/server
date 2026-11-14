@@ -107,7 +107,10 @@ under the same subdirectory names, after every pass that edits rendered text. Th
 placeholder, because Flux would then substitute into the upstream bytes. No `$` in those bytes
 is escaped. `tests/_k8s_render.py:rendered_docs` reads `render_tag`'s output, which
 holds no vendored file, so the fleet guards never read them. H1's *Vendored upstream manifests*
-(`docs/target-architecture/host/h1-cluster-config-to-flux.md`) says why that is accepted.
+(`docs/target-architecture/host/h1-cluster-config-to-flux.md`) says why that is accepted. The
+one exception is the per-container resources guard in
+`tests/k8s/test_namespace_resource_defaults.py`, which reads each vendored workload with its
+patches applied.
 
 A placeholder render with `--role` also writes the publish bundle, `DIR/flux/` and
 `DIR/digests.json`, for the k8s tags it names, plus each shared kind's

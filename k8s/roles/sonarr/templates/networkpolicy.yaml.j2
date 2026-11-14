@@ -44,8 +44,11 @@
 # CronJob's pod carries the same label, so this entry admits it too; its template says why.
 #
 # janitorr-verify is the pod label of janitorr's verify Job in k8s/roles/janitorr/templates/verify/.
-# The Job dials sonarr:8989/ping from the `janitorr-verify` Kustomization, and without this
-# entry the fence would refuse it.
+# Nothing renders that directory while Ansible owns janitorr, so no pod carries the label yet and
+# the entry admits nothing today. It is here ahead of janitorr's Flux flip, which moves the
+# directory to templates/verify/: from then the Job dials sonarr:8989/ping from the
+# `janitorr-verify` Kustomization, and without this entry the fence would refuse it.
+# tests/k8s/test_netpol_from.py holds it in STAGED_CALLERS until the flip (#5709).
 #
 # The caller list is `netpol_from:` on this role's containers_list entry
 # (cluster/services.yml), each caller's reason beside it. The entry's

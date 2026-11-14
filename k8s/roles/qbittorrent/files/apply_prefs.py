@@ -32,8 +32,8 @@ calls main() with `--dry-run --connect-wait 60` and logs the verdict. It never w
 Credentials come from the environment, never from a SOPS call inside this script, so
 nothing here can print a secret:
 
-    QBT_USERNAME=$(sops -d --extract '["qbittorrent_username"]' ansible/vars/secrets.yml) \
-    QBT_PASSWORD=$(sops -d --extract '["qbittorrent_password"]' ansible/vars/secrets.yml) \
+    QBT_USERNAME=$(sops -d --extract '["qbittorrent_username"]' secrets/secrets.yml) \
+    QBT_PASSWORD=$(sops -d --extract '["qbittorrent_password"]' secrets/secrets.yml) \
     uv run python k8s/roles/qbittorrent/files/apply_prefs.py --dry-run
 """
 
