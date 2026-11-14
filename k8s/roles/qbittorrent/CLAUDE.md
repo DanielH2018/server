@@ -87,8 +87,9 @@ logs a skip or a lock timeout rather than `Downloading` or `found in modcache`, 
 
 ## Throughput settings live on the PVC, not in this role
 
-The role templates `WEBUI_PORT` and `TORRENTING_PORT` and nothing else
-(`k8s/roles/qbittorrent/templates/deployment.yaml.j2`). Connection limits, hashing
+Of qBittorrent's own settings, the role templates only `WEBUI_PORT` and `TORRENTING_PORT`
+(`k8s/roles/qbittorrent/templates/deployment.yaml.j2`), beside the LinuxServer user and umask
+env. No throughput setting reaches the container from the role. Connection limits, hashing
 threads and the libtorrent working-set bound live in `qBittorrent.conf` on the `qbittorrent-config`
 PVC, so **a WebUI change to any of them is live state no render reproduces and a volume restore
 silently reverts.**
