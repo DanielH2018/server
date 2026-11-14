@@ -168,13 +168,10 @@ def test_every_authed_service_carries_forward_auth_and_rate_limit():
                 # login portal (use_authelia: false) is the route that needs it most. It
                 # applies to bypass routes too: skipping auth never means skipping this.
                 assert any(m.startswith("rate-limit") for m in middlewares), name
-                # A strangler-bridge route carries no forward-auth on purpose — the Docker
-                # edge it is reachable from has already applied Authelia. Exempting it by
-                # metadata.name would exempt the service's normal route too, since both live
-                # in one document, so the exemption is the ClientIP clause itself. That makes
-                # the two conditions inseparable: drop the guard and this test starts
-                # demanding the auth back.
-                if "ClientIP(" in route["match"]:
+                # monitoring_route() names its document `<name>-monitoring` and confines it to
+                # the LAN host and a ClientIP set; test_no_monitoring_route_serves_a_bare_path_prefix
+                # bounds its path. A ClientIP clause anywhere else exempts nothing.
+                if name.endswith("-monitoring"):
                     continue
                 if entry.get("use_authelia") and name not in AUTHELIA_BYPASS_ROUTES:
                     assert "authelia" in middlewares, name
