@@ -212,7 +212,8 @@ the batch's `.fanout/server`. The snapshot also supplies that batch's system pro
 The agent stops at its PR on every host, and the pipeline decides what happens next. In
 this repo the agent opens that PR as a draft, and `ci.yml` runs no job on a draft. On
 daniel-server the pipeline marks the PR ready after the review and its fix round, so CI runs
-once, on the reviewed head (#5563). On daniel-box the PR stays a draft until its landing.
+once, on the reviewed head (#5563). On daniel-box a PR the pipeline lands stays a draft until its landing, and a held batch's
+PR is marked ready as on daniel-server.
 A fresh reviewer then reads only the issue text and the diff, and returns findings with
 a severity and a confidence. A finding of severity medium or worse, or a test the reviewer
 marks vacuous at any severity, resumes the agent for one fix round when its

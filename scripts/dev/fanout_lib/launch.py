@@ -66,11 +66,11 @@ def stop_hook_settings(root: str) -> dict:
 # (286 minutes; the next longest was 104) and bounds one that waits on something forever.
 RUNTIME_MAX_S = 5 * 3600
 # A `--review` batch runs up to six sessions under one unit (`fanout_lib.review.review`): the
-# implementer, a review, a fix, a delta review, the landing and, on a host that does not land,
-# a CI fix. The reviews and the fixes are far shorter than the implementer, and the CI wait
-# adds at most two `review_ci.CI_WAIT_MAX_S`, so three and a half hours on top of its five
-# covers them. `review_land.LAND_MARGIN_S` skips the landing rather than start it too close to this
-# cap.
+# implementer, a review, a fix, a delta review, a CI fix and the landing. The reviews and the
+# fixes are far shorter than the implementer. On a host that does not land, the CI wait adds at
+# most two `review_ci.CI_WAIT_MAX_S`, and on the deploy host a red run adds a second landing,
+# so three and a half hours on top of its five covers them. `review_land.LAND_MARGIN_S` skips
+# a landing rather than start it too close to this cap.
 REVIEW_RUNTIME_MAX_S = 8 * 3600 + 30 * 60
 # DECIDED: each batch gets its own runaway limits, on its host's cgroups rather than in a k8s
 # pod (ADR-0027). They bound a runaway and never a normal batch: over the 7 days to 2026-10-31

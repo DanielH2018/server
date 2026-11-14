@@ -599,13 +599,16 @@ class Pipeline:
         # Reverting hunks under red tests that fail anyway, after a contest, measures nothing.
         if red is not None and not green and not self.record.green_contest:
             self._detection(red)
-        # Whatever the review found, since a PR nothing lands gets no CI while it is a draft.
-        ready = ready_gate(self)
-        final = (
+        held = (
             held_for_green(self.record, green)
             if green
             else held_for_findings(self.record, self.state_dir)
-        ) or ready
+        )
+        # A PR this pipeline lands stays a draft for `land_draft`. Any other is marked ready,
+        # a held one included, since a PR left a draft gets no CI.
+        lands_it = held is None and lands(self.host, self.target.repo)
+        ready = None if lands_it else ready_gate(self)
+        final = held or ready
         if final is None and awaits_ci(self.host, self.target):
             # Before the comment, so the comment carries the CI gate beside the others.
             last, final = ci_gate(self, last)

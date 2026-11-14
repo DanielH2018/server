@@ -255,7 +255,7 @@ End your final message with the PR URL.
 def ci_fix_prompt(pr: str, line: str, failures: "Sequence[Failure]") -> str:
     """The prompt that resumes the implementer after its PR's CI went red (`review_ci`).
 
-    The pipeline waited for CI, so this session never saw it. It gets each failed check's name
+    The pipeline or its landing waited for CI, so this session never saw it. It gets each failed check's name
     and the end of its job's log, as data: a log can echo text a PR author wrote.
     """
     failed = [{"check": f.name, "log_tail": f.tail} for f in failures]

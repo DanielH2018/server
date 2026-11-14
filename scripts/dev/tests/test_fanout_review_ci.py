@@ -9,6 +9,8 @@ Run: uv run pytest scripts/dev/tests/test_fanout_review_ci.py
 import json
 import subprocess
 
+import pytest
+
 from _review_fakes import PR, _finding, _pipeline, _report
 from fanout_lib.launch import REVIEW_RUNTIME_MAX_S, RUNTIME_MAX_S
 from fanout_lib.review.review_ci import (
@@ -298,6 +300,44 @@ def test_a_daniel_box_landing_still_pr_ci_red_after_its_resume_ends_needs_input(
     assert len(run.lands) == 4
     record = _record(tmp_path)
     assert record["outcome"] == "needs-input" and record["verdict"] == PR_CI_RED
+    assert record["ci_gate"] == "failed after one resume: pytest"
+
+
+def test_a_daniel_box_resume_that_pushes_nothing_re_runs_the_failed_jobs_then_lands(
+    tmp_path,
+):
+    pipeline, run = _red_landing(tmp_path, [PR_CI_RED])
+    run.fix_pushes = False
+    run.failed_runs = [[9, 1]]
+    assert pipeline.run_all()["result"] == f"VERDICT: settled (deployed)\n{PR}"
+    (rerun,) = run.reruns
+    assert rerun[3:5] == ["9", "--failed"]
+    gate = _record(tmp_path)["ci_gate"]
+    assert gate == "passed after one resume and a re-run of the failed jobs"
+
+
+def test_a_second_landing_that_ends_before_the_merge_records_no_ci_verdict(tmp_path):
+    stopped = "VERDICT: merge-timeout (PR #4000 did not merge)"
+    pipeline, _ = _red_landing(tmp_path, [PR_CI_RED, stopped])
+    final = pipeline.run_all()
+    assert final["result"].startswith("needs input: the landing of")
+    assert _record(tmp_path)["ci_gate"] == f"no verdict after one resume: {stopped}"
+
+
+def test_a_ci_fix_that_leaves_too_little_run_time_is_not_landed_again(tmp_path):
+    pipeline, run = _red_landing(tmp_path, [PR_CI_RED])
+    clock, inner = pipeline.clock, pipeline.run
+
+    def slow_fix(argv, stdin):
+        out = inner(argv, stdin)
+        if run.claude and run.claude[-1][2] == "ci-fix":
+            clock.now = REVIEW_RUNTIME_MAX_S - LAND_MARGIN_S + 1
+        return out
+
+    pipeline.run = slow_fix
+    final = pipeline.run_all()
+    assert final["result"].startswith("needs input: the review phases left too little")
+    assert [c[0].endswith("land.sh") for c in run.lands] == [True, False]
 
 
 def test_another_repos_batch_on_daniel_server_waits_for_no_ci(tmp_path):
@@ -341,12 +381,13 @@ def test_a_ready_pr_whose_ci_run_never_starts_ends_needs_input_without_a_wait(
         f"needs input: no CI run started on PR #4000's head bbb within {READY_WAIT_S}s of "
         "marking it ready; the PR is back to a draft."
     )
-    assert run.ci_calls == [] and run.lands == []
+    assert run.ci_calls == []
     assert run.log[1] == ("ready",) and run.log[-1] == ("undo",)
     assert sum(clock.sleeps) == READY_WAIT_S
 
 
-def test_a_draft_held_for_its_findings_is_still_marked_ready(tmp_path):
+@pytest.mark.parametrize("host", ["daniel-server", "daniel-box"])
+def test_a_draft_held_for_its_findings_is_still_marked_ready(tmp_path, host):
     """A PR left a draft gets no CI and nothing reports it, so a held batch readies it too."""
     finding = _finding("Drops the lock", severity="critical", confidence=0.95)
     reports = [
@@ -356,7 +397,7 @@ def test_a_draft_held_for_its_findings_is_still_marked_ready(tmp_path):
         _report(structured={"summary": "", "findings": [finding]}),
         _report(f"Could not fix it either. {PR}"),
     ]
-    pipeline, run, _ = _server_batch(tmp_path, reports)
+    pipeline, run, _ = _server_batch(tmp_path, reports, host=host)
     run.draft = True
     run.ci_runs = [[1], [1, 2]]
     final = pipeline.run_all()

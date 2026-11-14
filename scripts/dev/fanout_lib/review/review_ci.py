@@ -31,7 +31,7 @@ run, a failed read and a slice that ended all read the same here: wait again aft
 `CI_RECHECK_S`, until `CI_WAIT_S` is spent. A wait that spends it without a verdict ends the
 batch `needs input:` with the last `WAIT:` line. It never reads as a pass or as red.
 
-THE BUDGET, `CI_WAIT_S`, applies to each wait, and a batch makes at most two: one before the
+THE BUDGET, `CI_WAIT_S`, applies to each wait, and a batch that waits makes at most two: one before the
 resume and one after it. On 2026-10-13 the last 34 `ci.yml` pull-request runs that finished
 with success or failure took 143s at the shortest, 176s at the median and 344s at the longest.
 That sized the first budget at 15 minutes. On 2026-10-24 and 2026-10-29 a fan-out launching
@@ -84,6 +84,7 @@ from fanout_lib.review.review_land import (
     Landing,
     land,
     login,
+    out_of_time,
 )
 from fanout_lib.review.review_prompts import ci_fix_prompt
 from fanout_lib.review.review_record import Phase, Record
@@ -411,11 +412,8 @@ def ready_for_ci(
 
 
 def ready_gate(pipe: "Pipeline") -> dict | None:
-    """Mark this repo's draft PR ready (`ready_for_ci`); a `needs input:` report if it fails.
-
-    A batch that lands its own PR leaves it a draft, for `land_draft`.
-    """
-    if not drafts_pr(pipe.target) or lands(pipe.host, pipe.target.repo):
+    """Mark this repo's draft PR ready (`ready_for_ci`); a `needs input:` report if it fails."""
+    if not drafts_pr(pipe.target):
         return None
     why = ready_for_ci(
         pipe.run, pipe.record.pr, pipe.target.repo, pipe.clock, pipe.sleep
@@ -464,10 +462,11 @@ def land_draft(pipe: "Pipeline") -> tuple[Landing, dict | None]:
     """Land the PR the pipeline left a draft, resuming the implementer once on a red run.
 
     A landing that ends `pr-ci-red` resumes the implementer as `ci_gate` does, and the PR is
-    landed once more. After an upheld contest nobody is resumed, as in `ci_gate`.
+    landed once more if `LAND_MARGIN_S` of run time is left. After an upheld contest nobody is
+    resumed, as in `ci_gate`.
 
     Returns the landing that ended last, and a `needs input:` report when the PR's CI is red
-    with no resume left; else None.
+    with no resume left or the resume left too little time to land; else None.
     """
     record, repo = pipe.record, pipe.target.repo
     pr = record.pr.rstrip("/").rsplit("/", 1)[-1]
@@ -483,9 +482,11 @@ def land_draft(pipe: "Pipeline") -> tuple[Landing, dict | None]:
     contest = record.green_contest.removeprefix("upheld: ")
     if contest != record.green_contest:
         return landing, ci_hold(record, CiResult(FAILED, landing.line), contest)
-    if not pipe.session or pipe.time_left() < LAND_MARGIN_S:
+    if not pipe.session:
         return landing, None
     _ci_fix(pipe, landing.line, failing_checks(pipe.run, pr, repo))
+    if pipe.time_left() < LAND_MARGIN_S:
+        return landing, out_of_time(record.pr)
     landing = landed()
     again = _again(record)
     if landing.verdict == PR_CI_RED:

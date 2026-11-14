@@ -247,8 +247,8 @@ def _review_landing(target: Target) -> str:
     create = "`gh pr create --draft`" if drafts_pr(target) else "`gh pr create`"
     draft = (
         "\nThe PR stays a draft, with no CI, until the review and its fix round are done. Do "
-        "not mark it ready: the pipeline does, or lands the draft, and CI runs once on the "
-        "head that lands.\n"
+        "not mark it ready: the pipeline does, or lands the draft, so no CI run is spent on a "
+        "head the review replaces.\n"
         if drafts_pr(target)
         else ""
     )
