@@ -2,9 +2,9 @@
 
 The Job `snapshot-<tag>-<spec digest8>` runs this in `flux-system`, as the only work of the
 Kustomization `<tag>-snapshot`, which `<tag>` depends on (target slice D5, *Snapshots as a Job
-per role revision (D5.2a)*). It keeps every check `ansible/roles/k8s/volume-snapshot/tasks/
-claim.yml` makes. Every claim is resolved, named and checked against its snapshot-space cap
-before any snapshot is created, so a failing claim leaves nothing behind. Then, per claim, it
+per role revision (D5.2a)*). It keeps every check the retired volume-snapshot task
+`tasks/claim.yml` made. Every claim is resolved, named and checked against its snapshot-space
+cap before any snapshot is created, so a failing claim leaves nothing behind. Then, per claim, it
 creates `autodeploy-<tag>-<digest8>-<claim>-<token>`, waits for `readyToUse`, and prunes that
 claim's `autodeploy-<tag>-` snapshots down to the retention window.
 

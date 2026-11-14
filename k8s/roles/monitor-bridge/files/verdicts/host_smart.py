@@ -1,7 +1,7 @@
 """SMART verdicts for check.py — what scrutiny reports about the drives.
 
 Its own module rather than a section of `verdicts/host.py`, which had reached the 600-line cap
-in `ansible/tests/repo/test_module_length_ratchet.py` exactly, so the next line added to it
+in `tests/repo/test_module_length_ratchet.py` exactly, so the next line added to it
 failed CI (issue #1708).
 
 Three arms, all read by `check_scrutiny` (checks/host_thermal.py): the collector's freshness,

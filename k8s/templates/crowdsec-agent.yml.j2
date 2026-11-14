@@ -19,7 +19,7 @@
   sidecar carries the HOST pod's labels, so Prometheus reaches it as `app=<app>`, which is why
   both the job and the grant select the app label plus port 6060. Then the three calls here,
   and a `<app>-crowdsec` Secret carrying `AGENT_PASSWORD`, `acquis.yaml` and the three whitelist
-  parsers. `ansible/tests/k8s/test_crowdsec_sidecars_are_scraped.py` holds the job, the port
+  parsers. `tests/k8s/test_crowdsec_sidecars_are_scraped.py` holds the job, the port
   and the grant together.
 
   DECIDED: the Secret stays a template per app rather than a shared macro (#4088). The two copies are
@@ -29,7 +29,7 @@
   The root seeding containers are written out in full rather than built through
   hardened_security_context(), which refuses uid 0 by convention: each one's comment says which
   uid owns the files and why root is reached for.
-  ansible/tests/k8s/test_root_security_context_is_written_out_in_full.py scans this file for
+  tests/k8s/test_root_security_context_is_written_out_in_full.py scans this file for
   that.
 
   Arguments:

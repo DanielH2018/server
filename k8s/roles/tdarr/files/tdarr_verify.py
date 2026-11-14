@@ -22,7 +22,7 @@ the Job, and the script prints it. The probe file is named after the pod's `HOST
 two runs never collide. Exit 0 when both checks pass, 1 when either fails, naming it.
 
 Run: python3 tdarr_verify.py (in the Job; it takes no arguments)
-     uv run pytest ansible/roles/k8s/tdarr/tests/test_tdarr_verify.py
+     uv run pytest k8s/roles/tdarr/tests/test_tdarr_verify.py
 """
 
 import argparse

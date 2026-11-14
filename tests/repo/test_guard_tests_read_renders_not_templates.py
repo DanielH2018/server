@@ -32,7 +32,7 @@ Two things the rule deliberately does not reach:
 
 * **A role's `files/` copy.** It ships verbatim, so there is no render to read and the text
   IS the artifact.
-#3196 named one blind spot, `test_healthchecks_pings.py`, whose `ANSIBLE.rglob("*")` census
+#3196 named one blind spot, `test_healthchecks_pings.py`, whose `rglob("*")` census
 put no template path at its read site. #3190 converted that census to a render in the same
 wave, and the control read it kept IS visible here — so the module is a listed reader rather
 than a declared gap, and no blind-spot map is needed.

@@ -48,7 +48,7 @@
 {#- The pod's roll inputs, as `checksum/restart` hashes them; see the note above. The Secret
     templates and the files they embed are read raw, never rendered, and `cluster-vars.source`
     holds a digest of each key's ciphertext, so no value enters the hash. The ConfigMap holds no
-    secret (`ansible/tests/k8s/test_no_secret_in_a_moved_jobs_configmap.py`), so it renders. -#}
+    secret (`tests/k8s/test_no_secret_in_a_moved_jobs_configmap.py`), so it renders. -#}
 {% set roll = namespace(
   text=lookup('template', 'deployment.yaml.j2') + lookup('template', 'jobs-configmap.yaml.j2'),
   secrets=lookup('file', role_file('templates/config-secret.yaml.j2'))
