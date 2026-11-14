@@ -21,11 +21,13 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 import subprocess
+import sys
 from collections.abc import Callable, Collection, Mapping
 from dataclasses import dataclass, replace
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 from dev.fanout_lib.batch_holds import BatchHold
+from dev.findings_lib.boundaries import FindingsTools
 from dev.findings_lib.issue_model import (
     _CLAIM_RE,
     _RELEASE_RE,
@@ -33,7 +35,9 @@ from dev.findings_lib.issue_model import (
     is_operator_comment,
     label_names,
     ordered_comments,
+    pickable,
 )
+from dev.findings_lib.solo_only import solo_only_reasons
 from lib.worktree_owner import other_clone_owner
 from lib.worktrees import REMOVABLE, Worktree, classify
 
@@ -329,3 +333,44 @@ def _claim_age_days(issue: dict, held: str, now: datetime | None = None) -> int 
         return None
 
     return ((now if now is not None else datetime.now(UTC)) - when).days
+
+
+def free_issues(
+    issues: list[dict], tools: FindingsTools, *, pr_refs: set[int], today: date
+) -> tuple[list[dict], dict[int, str]]:
+    """The rows of ``issues`` a session may pick up, best first, and who holds each stale claim.
+
+    The one definition of "free" that `findings.py next` prints and the `findings` cc-wait
+    source ends on. Each row is `pickable`'s, plus `solo_only` and `stale_claim_by` (the
+    holder of a claim `claim` would reap, null when unclaimed).
+
+    A git-read failure cannot be read as "no claims are live": that would hand a claimed
+    issue to a second session. So on failure this withholds every issue that is CURRENTLY
+    claimed, stale or not, and warns on stderr.
+
+    Args:
+        issues: open register issues in gh's JSON shape, comments included.
+        tools: the boundaries the worktree, running-batch and peer-host reads go through.
+        pr_refs: issue numbers an open PR says it closes.
+        today: the date a `not-before:` label is compared to.
+    """
+    trees, dirty, merged, ok = tools.worktree_facts()
+    stale: dict[int, str] = {}
+    if ok:
+        states = claim_states(
+            issues, trees, dirty, merged, tools.batch_holds, peer_trees=tools.peer_trees
+        )
+        live = {s.number for s in states if s.live}
+        stale = {s.number: s.worktree for s in states if not s.live}
+    else:
+        sys.stderr.write(
+            "warning: worktree read failed; withholding every currently claimed issue\n"
+        )
+        live = {i["number"] for i in issues if current_claim(i)}
+    rows = pickable(issues, live_claims=live, pr_refs=pr_refs, today=today)
+    text_of = {i["number"]: (i["title"], i.get("body") or "") for i in issues}
+    for r in rows:
+        r["solo_only"] = bool(solo_only_reasons(*text_of[r["number"]], tools.repo))
+        # An orchestrator reading `--json` told a free issue from one `claim` reaps (#3927).
+        r["stale_claim_by"] = stale.get(r["number"])
+    return rows, stale

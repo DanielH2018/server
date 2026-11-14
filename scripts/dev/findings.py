@@ -48,6 +48,7 @@ Usage (every subcommand also takes `--repo OWNER/NAME`; see below)::
     uv run python scripts/dev/findings.py verify --all
     uv run python scripts/dev/findings.py verify 688 701
     uv run python scripts/dev/findings.py next [--limit N] [--waiting] [--json]
+    uv run python scripts/dev/findings.py new-issues [--after N] [--describe]
     uv run python scripts/dev/findings.py sync-board [688 701] [--dry-run]
 
 THE PROJECT BOARD FOLLOWS THE ISSUE. After any subcommand that writes an issue, `main` makes
@@ -153,7 +154,8 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 # `scripts/` on sys.path, so a bare `from issue_model import ...` would raise
 # ModuleNotFoundError under the docs-refresh cron while pytest stayed green.
 from dev.findings_lib.board import FAILED, UNCHANGED, UPDATED, board_warning
-from dev.findings_lib.claim import claim_states
+from dev.findings_lib.claim import free_issues
+from lib.cli_help import refuse_help_under_describe
 from lib.exit_codes import FINDINGS_BAD_ARGS
 from lib.progress import count_line
 from dev.findings_lib.claim_cli import cmd_claim, cmd_claims, cmd_reap, cmd_release
@@ -175,7 +177,6 @@ from dev.findings_lib.issue_model import (
     NO_REOPEN,
     PR_REPO,
     cited_paths,
-    current_claim,
     recorded_blockers,
     is_deferred_row,
     now_iso,
@@ -183,7 +184,6 @@ from dev.findings_lib.issue_model import (
     issue_rows,
     label_names,
     not_before_label,
-    pickable,
     sort_key,
     today_utc,
     waiting,
@@ -209,8 +209,8 @@ from dev.findings_lib.boundaries import (
     read_peer_worktrees,
 )
 from dev.findings_lib.red_green import RED_GREEN_LABEL, red_green_eligible
-from dev.findings_lib.solo_only import solo_only_reasons
 from dev.findings_lib.verify import verification_report
+from dev.findings_lib.new_issue_probe import cmd_new_issues
 
 
 def cmd_open(args: argparse.Namespace, tools: FindingsTools) -> int:
@@ -630,39 +630,18 @@ def waiting_summary(rows: list[dict]) -> list[str]:
 def cmd_next(args: argparse.Namespace, tools: FindingsTools) -> int:
     """Handles the ``next`` subcommand: prints the issues a session may pick up, best first.
 
-    A git-read failure cannot be read as "no claims are live" — that would hand a stale
-    guess a claimed issue to a second session. So on failure this withholds every issue that
-    is CURRENTLY claimed regardless of whether the claim would otherwise read as stale,
-    rather than `reap`'s outright refusal: `next` never writes, so it degrades to the more
-    conservative read instead of refusing to answer at all.
+    `claim.free_issues` decides the free set. On a failed worktree read it withholds every
+    claimed issue rather than refusing like `reap`: `next` never writes, so it degrades to
+    the more conservative read instead of refusing to answer at all.
 
     Args:
         args: parsed CLI namespace carrying ``limit``, ``json`` and ``waiting``.
         tools: the process boundaries every gh call goes through.
     """
-    trees, dirty, merged, ok = tools.worktree_facts()
     issues = load_issues("open", tools)
-    stale: dict[int, str] = {}
-    if ok:
-        states = claim_states(
-            issues, trees, dirty, merged, tools.batch_holds, peer_trees=tools.peer_trees
-        )
-        live = {s.number for s in states if s.live}
-        stale = {s.number: s.worktree for s in states if not s.live}
-    else:
-        sys.stderr.write(
-            "warning: worktree read failed; withholding every currently claimed issue\n"
-        )
-        live = {i["number"] for i in issues if current_claim(i)}
     today = today_utc()
-    rows = pickable(issues, live_claims=live, pr_refs=open_pr_refs(tools), today=today)
+    rows, stale = free_issues(issues, tools, pr_refs=open_pr_refs(tools), today=today)
     rows = rows[: args.limit]
-    text_of = {i["number"]: (i["title"], i.get("body") or "") for i in issues}
-    for r in rows:
-        r["solo_only"] = bool(solo_only_reasons(*text_of[r["number"]], tools.repo))
-        # The holder the text render names as `[stale claim by ...]`, null when unclaimed:
-        # an orchestrator reading `--json` told a free issue from one `claim` reaps (#3927).
-        r["stale_claim_by"] = stale.get(r["number"])
     # Named, not hidden: withheld silently, a waiting issue reads as a closed one. Under
     # `--json` the note goes to stderr, because the array IS the free set an orchestrator
     # claims (`issue-fanout`), and a waiting row inside it would be claimed.
@@ -702,7 +681,7 @@ def cmd_next(args: argparse.Namespace, tools: FindingsTools) -> int:
 
 
 # The subcommands whose verdict depends on which worktrees exist, so `--repo` needs a checkout.
-_READS_WORKTREES = frozenset({"claim", "claims", "reap", "next"})
+_READS_WORKTREES = frozenset({"claim", "claims", "reap", "next", "new-issues"})
 
 
 def main(argv: list[str] | None, tools: FindingsTools) -> int:
@@ -725,7 +704,9 @@ def main(argv: list[str] | None, tools: FindingsTools) -> int:
     # none at all. Reading the line rather than restating it keeps one copy that cannot
     # drift.
     summary = next(line for line in __doc__.splitlines() if line.strip())
-    args = _parser(summary).parse_args(argv)
+    parser = _parser(summary)
+    refuse_help_under_describe(parser, argv)
+    args = parser.parse_args(argv)
     if (
         args.repo is not None
         and args.cmd in _READS_WORKTREES
@@ -761,6 +742,7 @@ def main(argv: list[str] | None, tools: FindingsTools) -> int:
         "close": cmd_close,
         "verify": cmd_verify,
         "next": cmd_next,
+        "new-issues": cmd_new_issues,
     }[args.cmd]
     if args.cmd != "sync-board" and args.repo in (None, PR_REPO):
         tools, written = _recording_writes(tools)
