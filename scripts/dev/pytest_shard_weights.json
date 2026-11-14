@@ -1195,6 +1195,7 @@
  "tests/repo/test_component_contract_row.py": 0.0,
  "tests/repo/test_cross_directory_importer_bootstraps_sys_path.py": 0.03,
  "tests/repo/test_doc_fragments_hook.py": 0.52,
+ "tests/repo/test_doc_values_hook.py": 0.01,
  "tests/repo/test_docs_relative_links_resolve.py": 0.03,
  "tests/repo/test_documented_paths_exist.py": 1.19,
  "tests/repo/test_entry_points_outside_scripts_answer_help.py": 3.24,
