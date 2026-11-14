@@ -148,8 +148,8 @@ def test_a_fix_reply_that_names_its_test_and_cites_its_change_is_no_contest():
     assert contested(UNMET, by_name, RED_GATE) == [RED_NODE]
 
 
-def test_ci_red_after_an_upheld_contest_holds_for_a_hand_without_a_resume(tmp_path):
-    """A resume that rewrote the contested red test would face no gate and no reviewer."""
+def _red_ci_after_an_upheld_contest(tmp_path, host):
+    """The final text and the runner of a batch whose PR fails CI after an upheld contest."""
     reports = [
         _report(structured={"behaviours": [{"behaviour": "b", "tests": [RED_NODE]}]}),
         _report(f"Opened {PR}"),
@@ -160,14 +160,29 @@ def test_ci_red_after_an_upheld_contest_holds_for_a_hand_without_a_resume(tmp_pa
     ]
     gates = Gates(red=lambda *_: RED_GATE, green=lambda *_: UNMET)
     pipeline, run = _pipeline(
-        tmp_path, reports, heads=("base", "red1", "aaa", "bbb"), gates=gates
+        tmp_path, reports, heads=("base", "red1", "aaa", "bbb"), gates=gates, host=host
     )
     run.ci = [(1, "WAIT: failed abcd1234: pytest failed\n")]
-    result = pipeline.run_all()["result"]
+    run.verdict = "VERDICT: pr-ci-red (PR #4000 cannot merge: its own CI is red)"
+    return pipeline.run_all()["result"], run
+
+
+def test_ci_red_after_an_upheld_contest_holds_for_a_hand_without_a_resume(tmp_path):
+    """A resume that rewrote the contested red test would face no gate and no reviewer."""
+    result, run = _red_ci_after_an_upheld_contest(tmp_path, "daniel-server")
     assert result.startswith("needs input: CI is not green on a PR whose contest of")
     assert RED_NODE in result
     assert "ci-fix" not in [phase for _, _, phase in run.claude]
-    assert run.lands == []
+
+
+def test_a_red_landing_after_an_upheld_contest_holds_for_a_hand_without_a_resume(
+    tmp_path,
+):
+    result, run = _red_ci_after_an_upheld_contest(tmp_path, "daniel-box")
+    assert result.startswith("needs input: CI is not green on a PR whose contest of")
+    assert "ci-fix" not in [phase for _, _, phase in run.claude]
+    # One landing: `land.sh`, then the wait on it.
+    assert len(run.lands) == 2
 
 
 def test_a_hold_with_no_fix_round_counts_the_first_reviews_findings(tmp_path):

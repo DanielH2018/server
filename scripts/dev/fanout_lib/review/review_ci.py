@@ -1,17 +1,23 @@
-"""The review pipeline's CI wait: `cc-wait gh-ci` run by the pipeline before its PR lands.
+"""The review pipeline's answer to a red CI run: one resume of the implementer, on both hosts.
 
 WHY (#4737). A daniel-server batch stops at its open PR, and the orchestrator lands it. A check
 that runs only in CI, or in a suite the agent did not run, therefore first showed up as
 `pr-ci-red` at the orchestrator's `land.sh` (#4727, #4736, #4753, #4869), and the orchestrator
 repaired the branch by hand. The daniel-box pipeline had the same gap one step later (#5498):
 `review_land` runs `land.sh`, which waits for CI but ends `pr-ci-red` on a red run, and
-`RESUME_VERDICTS` does not resume for it. This module gives both hosts the same two steps, a
-wait and one resume, after the review and its fix round. On daniel-box they run before
-`land.sh`.
+`RESUME_VERDICTS` does not resume for it. This module gives both hosts one resume for a red
+run, after the review and its fix round.
+
+WHERE THE RUN COMES FROM differs by host. A daniel-server batch waits for its PR's own run
+here (`ready_gate`, then `ci_gate`), because the landing happens later and elsewhere. A
+daniel-box batch lands its PR as a draft (`land_draft`): `land.sh` marks it ready, or a landing
+batch tests it with other drafts, so no run is spent before the landing
+(`docs/ci-throughput.md`, D9). A landing that ends `pr-ci-red` is that batch's red run.
 
 THE DRAFT (#5563). This repo's review batch opens its PR as a draft, and `ci.yml` runs no job on
-a draft. `ready_gate` marks the PR ready once the review and its fix round are done. It then
-waits for the run that marking ready starts, before any wait reads the head's checks.
+a draft. On daniel-server, `ready_gate` marks the PR ready once the review and its fix round are
+done. It then waits for the run that marking ready starts, before any wait reads the head's
+checks.
 
 THE WAIT is `cc-wait gh-ci --pr <n>`, the waiter every other wait in this repo uses. It reads
 every check run on the PR's current head, so a push from the resume moves the wait to the new
@@ -25,7 +31,7 @@ run, a failed read and a slice that ended all read the same here: wait again aft
 `CI_RECHECK_S`, until `CI_WAIT_S` is spent. A wait that spends it without a verdict ends the
 batch `needs input:` with the last `WAIT:` line. It never reads as a pass or as red.
 
-THE BUDGET, `CI_WAIT_S`, applies to each wait, and a batch makes at most two: one before the
+THE BUDGET, `CI_WAIT_S`, applies to each wait, and a batch that waits makes at most two: one before the
 resume and one after it. On 2026-10-13 the last 34 `ci.yml` pull-request runs that finished
 with success or failure took 143s at the shortest, 176s at the median and 344s at the longest.
 That sized the first budget at 15 minutes. On 2026-10-24 and 2026-10-29 a fan-out launching
@@ -69,10 +75,20 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
-from fanout_lib.review.review_land import WAIT_MARGIN_S, login
+from fanout_lib.review.review_land import (
+    FINISHED_VERDICTS,
+    LAND_MARGIN_S,
+    PR_CI_RED,
+    RESUME_VERDICTS,
+    WAIT_MARGIN_S,
+    Landing,
+    land,
+    login,
+    out_of_time,
+)
 from fanout_lib.review.review_prompts import ci_fix_prompt
 from fanout_lib.review.review_record import Phase, Record
-from fanout_lib.brief import drafts_pr
+from fanout_lib.brief import drafts_pr, lands
 from fanout_lib.status import PR_URL
 from fanout_lib.target import Target
 
@@ -410,17 +426,79 @@ def ready_gate(pipe: "Pipeline") -> dict | None:
     return {"type": "result", "is_error": False, "result": f"needs input: {why}.\n{pr}"}
 
 
-def awaits_ci(target: Target) -> bool:
-    """Whether a batch waits for its PR's CI: any batch in this repo, on either host.
+def awaits_ci(host: str, target: Target) -> bool:
+    """Whether a batch waits for its PR's CI here: this repo's batch on a host that does not land.
 
-    On the deploy host the wait runs before `review_land` starts `land.sh` (#5498). Left to
-    `land.sh`, a red CI ended `pr-ci-red` and the batch `needs-input`, 9 of 24 box
-    `needs-input` outcomes over 2026-10-15 to 2026-10-17. A green PR's CI is waited on
-    either way, so the extra wait falls on red runs only. Another repo's batch is left alone:
-    this module knows nothing of that repo's CI, and a repo with no CI would wait out the
-    whole budget.
+    A batch that lands its own PR gets its run from the landing (`land_draft`). Another repo's
+    batch is left alone: this module knows nothing of that repo's CI, and a repo with no CI
+    would wait out the whole budget.
     """
-    return target.is_server
+    return target.is_server and not lands(host, target.repo)
+
+
+def _ci_fix(pipe: "Pipeline", line: str, failures: list[Failure]) -> Phase:
+    """Resume the implementer for a red run, and re-run the failed jobs if it pushed nothing."""
+    record, repo = pipe.record, pipe.target.repo
+    record.ci_resumed = True
+    before = pr_head(pipe.run, record.pr, repo)
+    fix = pipe._claude(
+        "ci-fix", pipe._resume(), ci_fix_prompt(record.pr, line, failures)
+    )
+    if before and pr_head(pipe.run, record.pr, repo) == before:
+        record.ci_rerun = rerun_failed(pipe.run, repo, before, pipe.clock, pipe.sleep)
+        if record.ci_rerun:
+            record.ci_rerun_jobs = [f.name for f in failures]
+    return fix
+
+
+def _again(record: Record) -> str:
+    again = " after one resume" if record.ci_resumed else ""
+    return again + (" and a re-run of the failed jobs" if record.ci_rerun else "")
+
+
+# DECIDED: a daniel-box batch spends no CI run before its landing (D9, `docs/ci-throughput.md`).
+# 6.5% of first runs were red on 2026-11-14, and a draft can share a landing batch's run.
+def land_draft(pipe: "Pipeline") -> tuple[Landing, dict | None]:
+    """Land the PR the pipeline left a draft, resuming the implementer once on a red run.
+
+    A landing that ends `pr-ci-red` resumes the implementer as `ci_gate` does, and the PR is
+    landed once more if `LAND_MARGIN_S` of run time is left. After an upheld contest nobody is
+    resumed, as in `ci_gate`.
+
+    Returns the landing that ended last, and a `needs input:` report when the PR's CI is red
+    with no resume left or the resume left too little time to land; else None.
+    """
+    record, repo = pipe.record, pipe.target.repo
+    pr = record.pr.rstrip("/").rsplit("/", 1)[-1]
+
+    def landed() -> Landing:
+        return land(
+            pipe.run, pipe.worktree, record.pr, pipe.time_left, pipe.target.base
+        )
+
+    landing = landed()
+    if landing.verdict != PR_CI_RED:
+        return landing, None
+    contest = record.green_contest.removeprefix("upheld: ")
+    if contest != record.green_contest:
+        return landing, ci_hold(record, CiResult(FAILED, landing.line), contest)
+    if not pipe.session:
+        return landing, None
+    _ci_fix(pipe, landing.line, failing_checks(pipe.run, pr, repo))
+    if pipe.time_left() < LAND_MARGIN_S:
+        return landing, out_of_time(record.pr)
+    landing = landed()
+    again = _again(record)
+    if landing.verdict == PR_CI_RED:
+        names = CiResult(FAILED, failures=failing_checks(pipe.run, pr, repo)).names()
+        record.ci_gate = f"failed{again}: {names}"
+        why = f"CI is red{again}, so the PR needs a hand: {names}"
+        return landing, _needs_input(record, why)
+    if landing.verdict in FINISHED_VERDICTS | RESUME_VERDICTS:
+        record.ci_gate = f"passed{again}"
+    else:
+        record.ci_gate = f"no verdict{again}: {landing.line or f'exit {landing.rc}'}"
+    return landing, None
 
 
 # DECIDED: the CI resume gets no delta review. It repairs a check CI named, and the next CI run
@@ -452,24 +530,10 @@ def ci_gate(pipe: "Pipeline", last: Phase) -> tuple[Phase, dict | None]:
     if contest != record.green_contest:
         return last, ci_hold(record, result, contest)
     if result.state == FAILED and pipe.session:
-        record.ci_resumed = True
-        repo = pipe.target.repo
-        before = pr_head(pipe.run, record.pr, repo)
-        fix = pipe._claude(
-            "ci-fix",
-            pipe._resume(),
-            ci_fix_prompt(record.pr, result.line, result.failures),
-        )
+        fix = _ci_fix(pipe, result.line, result.failures)
         last = fix if PR_URL.search(fix.text) else last
-        if before and pr_head(pipe.run, record.pr, repo) == before:
-            record.ci_rerun = rerun_failed(
-                pipe.run, repo, before, pipe.clock, pipe.sleep
-            )
-            if record.ci_rerun:
-                record.ci_rerun_jobs = [f.name for f in result.failures]
         result = wait()
-    again = " after one resume" if record.ci_resumed else ""
-    again += " and a re-run of the failed jobs" if record.ci_rerun else ""
+    again = _again(record)
     if result.state == PASSED:
         record.ci_gate = f"passed{again}"
         return last, None
