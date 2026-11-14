@@ -11,7 +11,11 @@ revert #6508. The exit criterion's pair ran naturally on 2026-11-12: promote run
 printed `superseded`, and run
 [43292081624](https://github.com/DanielH2018/server/actions/runs/43292081624) for #8149 (T)
 printed `good` and moved `last-good` to T. *The exit pair's result, 2026-11-12* under
-*Verification* quotes both runs and names the one part the pair did not exercise.
+*Verification* quotes both runs and names the one part the pair did not exercise. A natural
+pair on 2026-11-13 exercised that part: run
+[43485800678](https://github.com/DanielH2018/server/actions/runs/43485800678) for #8433 (T)
+expected the names of both commits and printed `good`, and both landings settled. *The
+union pair's result, 2026-11-13* under *Verification* quotes it.
 
 Depends on: D5, through #5704's soak fix (the soak Job exits once `homelab` no longer
 holds its revision). D2.5's in-flight guard and D5.2b1's hold without a reset are the
@@ -47,8 +51,9 @@ bullets in full. It meets the third and fourth only in part, because T changed n
 - **Fourth bullet.** `land.sh` read `settled` for P and `nothing-to-deploy` for T. With no
   verification of T's own, the timing comparison was not measured.
 
-No run has yet shown a superseding T with its own change that both verifies the union and
-settles `good`; #8208 tracks that run.
+The pair of 2026-11-13 meets all four bullets. P was #8429 and T was #8433, and T added
+`flux/slskd` to P's ten names. *The union pair's result, 2026-11-13* under *Verification*
+quotes both runs.
 
 ## Baseline at `53fe3f196`
 
@@ -454,6 +459,56 @@ supersedes another.
       of 2026-10-29 is the run in which T's `verify` expected names from both commits.
       The fourth bullet's timing comparison has no T verification to weigh, for the same
       reason.
+- **The union pair's result, 2026-11-13.** A natural burst of merges produced it; nobody
+  merged to force it. A sweep of the 414 promote runs from 2026-11-12 to 2026-11-14 found
+  36 `decide` lines reading `supersedes the verification of`. This is the first pair in
+  which P printed `superseded` and T's expected set held a name absent from P's. The two PRs
+  were:
+    - P, #8429, merge 55df8b1ec5 at 18:36:33Z: the fact notice in `scripts/lib/facts/`. Its
+      expected set against `last-good` held ten names from earlier commits.
+    - T, #8433, merge 7e877092e5 at 18:45:41Z: slskd's DNS resolved through CoreDNS, which
+      adds `flux/slskd`.
+
+  P's promote run is
+  [43484934178](https://github.com/DanielH2018/server/actions/runs/43484934178), and T's is
+  [43485800678](https://github.com/DanielH2018/server/actions/runs/43485800678). Their logs,
+  quoted without their timestamps, check each exit bullet.
+    - P's `tag` moved `prod` to P at 18:43:21Z. T's `tag` tagged T `superseding` and moved
+      `prod` to T at 18:48:13Z, before P's `verify` ended at 18:48:26Z:
+
+      ```text
+      promote.py: 7e877092e5b1536e9747a8b01bad34cc6793bf9c supersedes the verification of 55df8b1ec5b26929d9cb2e87a7c7d4c2e947df01
+      tagged sha-7e877092e5b1536e9747a8b01bad34cc6793bf9c superseding: it supersedes the verification of 55df8b1ec5b26929d9cb2e87a7c7d4c2e947df01
+      ```
+    - P's `verify` printed `superseded`, and P's `settle` wrote nothing:
+
+      ```text
+      verify: prod is at sha256:f4f23a8ca806db42092430432280032ff976672da3d8530bd89cdacf2711518f, not T's sha256:c6bf5e6202899315f2e44bf7cbea8cddd6772ccd40126785cc5afe02b13335dd: a later run moved it, so this verification is superseded
+      target=55df8b1ec5b26929d9cb2e87a7c7d4c2e947df01 verdict=superseded failed=
+      verify read prod moved past sha-55df8b1ec5b26929d9cb2e87a7c7d4c2e947df01, so this run writes nothing and dispatches nothing
+      ```
+    - T's `verify` expected P's ten names plus `flux/slskd` from T's own change, and printed
+      `good`. P's `verify` had expected the same list without `flux/slskd`. T's `settle`
+      moved `last-good` to T:
+
+      ```text
+      verify: expecting flux/headlamp-deferred, flux/headlamp-verify, flux/homelab, flux/netpol-baseline, flux/netpol-baseline-deferred, flux/netpol-baseline-verify, flux/observability, flux/observability-prepull, flux/observability-verify, flux/slskd, flux/soak on 7e877092 within 19800s
+      target=7e877092e5b1536e9747a8b01bad34cc6793bf9c verdict=good failed=
+      last-good moved to sha-7e877092e5b1536e9747a8b01bad34cc6793bf9c
+      dispatched promote for 5c173be2f1743ee7f6b53a5aba956adefc5a4b83, master's newest green commit, which is newer than 7e877092e5b1536e9747a8b01bad34cc6793bf9c
+      ```
+    - `probe.py landing-verdicts` recorded both landings as settled:
+
+      ```text
+      #8429  2026-11-13T18:56:24Z  rc=0  VERDICT: settled (PR #8429, 55df8b1ec5b26929d9cb2e87a7c7d4c2e947df01, tags: headlamp,netpol-baseline,observability)
+      #8433  2026-11-13T18:56:39Z  rc=0  VERDICT: settled (PR #8433, 7e877092e5b1536e9747a8b01bad34cc6793bf9c, tags: netpol-baseline,slskd)
+      ```
+    - T's landing saved about three minutes, as an estimate. T's `settle` moved `last-good`
+      at 18:55:56Z, and T's `verify` job took 7 minutes 2 seconds. Without the supersession,
+      T would have waited for P to settle. P's `flux/homelab` read `success` 5 minutes 12
+      seconds before T's did, so P's soak would have ended about 18:50:30Z. T's `decide`,
+      `tag` and own verification would then have settled T at about 18:59Z. The estimate
+      assumes P would have printed `good`.
 
 ## Rollback
 
