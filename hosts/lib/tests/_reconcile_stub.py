@@ -134,6 +134,8 @@ def systemctl(state: dict, args: list[str]) -> int:
         return 0
     if verb == "list-units":
         return _list_units(units, rest)
+    if verb == "reset-failed":
+        return _reset_failed(units, rest)
     (unit,) = rest
     if "@." in unit and verb in ("start", "stop", "restart"):
         print(f"Unit name {unit} is missing the instance name.", file=sys.stderr)
@@ -163,8 +165,6 @@ def systemctl(state: dict, args: list[str]) -> int:
         known["active"] = "active"
         known["invocation"] = known.get("invocation", "inv0") + "+"
         _effects(state, f"{verb} {unit}")
-    elif verb == "reset-failed":
-        known.pop("limit", None)
     elif verb in ("try-restart", "reload"):
         known["invocation"] = known.get("invocation", "inv0") + "+"
     elif verb == "disable":
@@ -172,6 +172,26 @@ def systemctl(state: dict, args: list[str]) -> int:
     else:
         raise SystemExit(f"stub systemctl: unexpected {args}")
     return 0
+
+
+def _reset_failed(units: dict, names: list[str]) -> int:
+    """Clear each name's start limit, as systemd 255 did when measured on 2026-11-14 (#8670).
+
+    It carries on past a name that is not loaded and exits 1 at the end. With no name it would
+    clear every failed unit on the host, which reconcile must never ask for.
+    """
+    if not names:
+        raise SystemExit(
+            "stub systemctl: reset-failed with no unit clears every failed unit"
+        )
+    code = 0
+    for unit in names:
+        if unit in units:
+            units[unit].pop("limit", None)
+        else:
+            print(f"Unit {unit} not loaded.", file=sys.stderr)
+            code = 1
+    return code
 
 
 def _list_units(units: dict, args: list[str]) -> int:

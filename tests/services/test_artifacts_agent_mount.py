@@ -1,4 +1,4 @@
-"""The artifacts Deployment mounts the agent user's tree only when `artifacts_agent_dir` is set.
+"""The artifacts Deployment mounts the agent's tree and triage's report tree only when each is set.
 
 An empty `artifacts_agent_dir` has to remove the volume, the mount and the index source
 together: a volume without a mount is dead weight, and a mount of a path that does not exist
@@ -47,3 +47,24 @@ def test_an_empty_agent_dir_removes_the_volume_and_the_mount() -> None:
 def test_the_default_follows_whether_the_agent_user_is_enabled() -> None:
     assert _agent(_pod({"claude_code_agent_user_enabled": True}))[0] != []
     assert _agent(_pod({"claude_code_agent_user_enabled": False})) == ([], [])
+
+
+TRIAGE_DIR = "/var/lib/claude-triage-ctl/reports"
+TRIAGE_MOUNT = "/srv/artifacts/daniel-box-claude-triage"
+
+
+def _triage(pod: dict) -> tuple[list[dict], list[dict]]:
+    volumes = [
+        v for v in pod["volumes"] if v.get("hostPath", {}).get("path") == TRIAGE_DIR
+    ]
+    mounts = [m for m in pod["mounts"] if m["mountPath"] == TRIAGE_MOUNT]
+    return volumes, mounts
+
+
+def test_the_triage_report_tree_is_mounted_read_only_while_triage_is_enabled() -> None:
+    volumes, mounts = _triage(_pod({"claude_code_triage_enabled": True}))
+    assert len(volumes) == 1 and len(mounts) == 1
+    assert volumes[0]["hostPath"]["type"] == "Directory"
+    assert mounts[0]["readOnly"] is True
+    assert mounts[0]["name"] == volumes[0]["name"]
+    assert _triage(_pod({"claude_code_triage_enabled": False})) == ([], [])

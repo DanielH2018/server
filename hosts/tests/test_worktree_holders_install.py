@@ -75,8 +75,11 @@ def _package_agent_roots() -> dict[str, dict[str, str]]:
             continue
         package = REPO / "hosts" / host_vars.stem / "package.yml"
         users = (yaml_fast.safe_load(package.read_text()) or {}).get("users", [])
+        # A service user such as triage's controller has no login shell and runs no session.
         out[host_vars.stem] = {
-            u["name"]: f"{u['home']}/server/.claude/worktrees" for u in users
+            u["name"]: f"{u['home']}/server/.claude/worktrees"
+            for u in users
+            if u.get("shell") != "/usr/sbin/nologin"
         }
     return out
 

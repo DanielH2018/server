@@ -9,12 +9,20 @@ day, which a caller that reads stderr as an error message then reports as one.
 
 This is for the authenticated CLI on this machine. It does not take a token: `gh` reads
 `~/.config/gh/hosts.yml` for the invoking user, which is how every cron here already works.
+
+Every call is counted against the session that made it, in the ledger `gh-quota status` reads
+(docs/github-quota.md). The count costs nothing on a host that does not record. A copy of
+the tree without the ledger module runs `gh` uncounted, because the ledger must never be the
+reason a GitHub call fails.
 """
 
 import sys as _sys
 from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+_sys.path.insert(
+    0, str(_Path(__file__).resolve().parents[2] / "hosts/components/gh-quota/files")
+)
 
 import json
 import os
@@ -22,6 +30,13 @@ import subprocess
 from pathlib import Path
 
 from lib.json_types import JsonValue
+
+try:
+    from gh_quota import record as count_call
+except ImportError:
+
+    def count_call(args: tuple[str, ...]) -> None:
+        """Count nothing: this copy of the tree has no ledger module."""
 
 
 def gh(
@@ -37,6 +52,10 @@ def gh(
     ``returncode`` yourself. ``cwd`` is for a call that resolves the repository from the
     working tree (``gh pr list --head`` with no ``--repo``); most calls need none.
     """
+    # DECIDED: the budget lives in the wrappers that already run gh, not in a shim ahead of gh
+    # on PATH: GitHub has one shim, ghread, and a second is a second thing to understand.
+    # (ADR-0034)
+    count_call(args)
     env = dict(os.environ, GH_PROMPT_DISABLED="1", GH_NO_UPDATE_NOTIFIER="1")
     return subprocess.run(
         ["gh", *args],

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""The agent's unattended triage unit runs capped, as the agent, and only the agent may start it.
+"""Unattended triage runs capped, as its own controller and session users, and only the controller
+may start it.
 
 The claude-code host component ships claude-triage@.service, its polkit rule and its two pages
 from `hosts/components/claude-code/templates/`. Each test pins one leg of the design in docs/claude-agent-user.md,
@@ -23,13 +24,12 @@ from lib import yaml_fast
 
 ROLE = CLAUDE_CODE
 UNIT = "claude-triage@.service.j2"
+SESSION_UNIT = "claude-triage-session.service.j2"
 RULE = "50-claude-triage.rules.j2"
 RUNNER = ROLE / "files" / "claude_triage_run.py"
 CONFIG = "claude-triage-config.env.j2"
 # Each pin claude-triage-pins.j2 exports, and the role variable that carried it before.
 PINNED = {
-    "agent_user": "claude_code_triage_agent_user",
-    "agent_home": "claude_code_triage_agent_home",
     "state_dir": "claude_code_triage_state_dir",
     "model": "claude_code_triage_model",
     "budget_usd": "claude_code_triage_budget_usd",
@@ -94,6 +94,7 @@ def test_the_template_pins_equal_the_defaults() -> None:
 # puts the inventory above a component's defaults, so only a template's own pin holds here.
 RAISED = {
     "claude_code_triage_agent_user": "triage-sentinel-user",
+    "claude_code_agent_user": "agent-sentinel-user",
     "claude_code_triage_state_dir": "/srv/triage-sentinel",
     "claude_code_triage_budget_usd": 999,
     "claude_code_triage_max_turns": 999,
@@ -105,7 +106,15 @@ RAISED = {
 
 
 @pytest.mark.parametrize(
-    "template", [UNIT, RULE, CONFIG, "claude-triage-poll.service.j2"]
+    "template",
+    [
+        UNIT,
+        RULE,
+        CONFIG,
+        SESSION_UNIT,
+        "claude-triage-poll.service.j2",
+        "claude-triage-tmpfiles.conf.j2",
+    ],
 )
 def test_an_inventory_value_under_the_role_names_moves_nothing(template) -> None:
     assert render_component_text(
@@ -128,14 +137,33 @@ def test_the_config_carries_the_pins() -> None:
     assert config["STATE_DIR"] == pinned["state_dir"]
 
 
+# The pinned users (claude-triage-pins.j2): dotfiles#967's I1 controller and session.
+CTL_USER = "claude-triage-ctl"
+SESSION_USER = "claude-triage"
+
+
 def test_the_unit_runs_as_the_agent_with_its_own_credential_and_a_clean_stop() -> None:
     text = unit()
-    agent = defaults()["claude_code_agent_user"]
-    assert directive(text, "User") == [agent]
-    assert directive(text, "LoadCredential") == [
+    assert directive(text, "User") == [CTL_USER]
+    # The controller reads the session's result through the session user's group.
+    assert directive(text, "SupplementaryGroups") == [SESSION_USER]
+    # The session unit holds the credential; the runner never needs it.
+    assert directive(text, "LoadCredential") == []
+    session = re.sub(
+        r"\\\n\s*", " ", render_component_text("claude-code", SESSION_UNIT)
+    )
+    assert directive(session, "User") == [SESSION_USER]
+    assert directive(session, "LoadCredential") == [
         "claude_oauth_token:/etc/claude-triage/oauth-token"
     ]
-    assert directive(text, "KillSignal") == ["SIGINT"]
+    assert directive(session, "KillSignal") == ["SIGINT"]
+    # The session's own wall clock trips before the runner's, so the runner still records it.
+    assert int(directive(session, "TimeoutStartSec")[0]) < int(
+        directive(text, "TimeoutStartSec")[0]
+    )
+    assert directive(session, "ExecStart")[0].endswith(
+        "/opt/claude-triage/claude_triage_session.py"
+    )
     assert directive(text, "OnFailure") == ["homelab-alert@%n.service"]
     # A busy lock is a wait, not a failure.
     assert directive(text, "SuccessExitStatus") == ["75"]
@@ -151,10 +179,9 @@ def rule_patterns(rendered: str) -> list[re.Pattern]:
 
 
 def admitted(name: str) -> bool:
-    return any(
-        p.search(name)
-        for p in rule_patterns(render_component_text("claude-code", RULE))
-    )
+    rendered = render_component_text("claude-code", RULE)
+    exact = re.findall(r'unit !== "([^"]+)"', rendered)
+    return name in exact or any(p.search(name) for p in rule_patterns(rendered))
 
 
 @pytest.mark.parametrize(
@@ -165,6 +192,8 @@ def admitted(name: str) -> bool:
         ("claude-triage-report-alert@drill:diagnosed.service", True),
         ("claude-triage-report-alert@drill:failed.service", True),
         ("claude-triage-report-alert@drill:capped.service", True),
+        ("homelab-claude-triage-session.service", True),
+        ("homelab-claude-triage-session@drill.service", False),
         ("claude-triage@Drill.service", False),
         ("claude-triage@-drill.service", False),
         ("claude-triage@drill.service.d", False),
@@ -185,19 +214,45 @@ def test_the_rule_and_the_runner_agree_on_the_episode_id_and_states() -> None:
     constants = runner_constants()
     assert constants["EPISODE_ID"].strip("^$") in rendered
     assert f":({'|'.join(constants['STATES'])})\\.service$" in rendered
-    agent = defaults()["claude_code_agent_user"]
-    assert f'subject.user !== "{agent}"' in rendered
+    assert f'subject.user !== "{CTL_USER}"' in rendered
+    # Neither the agent, whose interactive sessions read untrusted text, nor the session user.
+    assert f'"{defaults()["claude_code_agent_user"]}"' not in rendered
+    assert f'"{SESSION_USER}"' not in rendered
     assert 'action.lookup("verb") !== "start"' in rendered
     assert rendered.count("polkit.Result.YES") == 1
 
 
-def test_the_poller_runs_as_the_agent() -> None:
+def test_the_artifacts_pod_mounts_the_report_tree_the_host_creates() -> None:
+    """The host plane creates the tree and the Flux plane mounts it; one path, two owners."""
+    # fact: k8s/roles/artifacts/CLAUDE.md#At a glance
+    env = template_env(ROLE / "templates")
+    module = env.get_template("claude-triage-pins.j2").make_module(role_context(ROLE))
+    report_dir, ctl_home = (getattr(module, n) for n in ("report_dir", "ctl_home"))
+    agent_home = defaults()["claude_code_agent_user_home"]
+    deployment = yaml_fast.safe_load(
+        render_role_template(
+            "artifacts", "deployment.yaml.j2", {"claude_code_triage_enabled": True}
+        )
+    )
+    paths = {
+        v["hostPath"]["path"]
+        for v in deployment["spec"]["template"]["spec"]["volumes"]
+        if "hostPath" in v
+    }
+    assert report_dir in paths
+    tmpfiles = render_component_text("claude-code", "claude-triage-tmpfiles.conf.j2")
+    assert re.search(rf"^d {re.escape(report_dir)} 2750 ", tmpfiles, re.M)
+    assert report_dir.startswith(ctl_home + "/")
+    assert not ctl_home.startswith(agent_home + "/")
+
+
+def test_the_poller_runs_as_the_controller() -> None:
     text = re.sub(
         r"\\\n\s*",
         " ",
         render_component_text("claude-code", "claude-triage-poll.service.j2"),
     )
-    assert directive(text, "User") == [defaults()["claude_code_agent_user"]]
+    assert directive(text, "User") == [CTL_USER]
     assert directive(text, "OnFailure") == ["homelab-claude-triage-poll-alert.service"]
     (start,) = directive(text, "ExecStart")
     assert start.endswith("/opt/claude-triage/claude_triage_poll.py")
@@ -243,16 +298,58 @@ def test_the_poller_mutes_for_the_whole_weekly_reboot_window() -> None:
     assert "REBOOT_GRACE_MIN=45\n" in config()
 
 
-TRIAGE_FILES = [
-    f"hosts/components/claude-code/templates/{UNIT}",
-    f"hosts/components/claude-code/templates/{RULE}",
-    "hosts/components/claude-code/templates/claude-triage-config.env.j2",
-    "hosts/components/claude-code/templates/claude-triage-prompt.txt.j2",
-    "hosts/components/claude-code/templates/claude-triage-poll.service.j2",
-    "hosts/components/claude-code/templates/claude-triage-poll.timer.j2",
-    "hosts/components/claude-code/files/claude_triage_run.py",
-    "hosts/components/claude-code/files/claude_triage_poll.py",
-]
+# What the component ships for triage that may change without the operator, and why.
+TRIAGE_OFF_THE_FLOOR = {
+    # It pages a failing poller; it reads no pin and starts nothing.
+    "units/homelab-claude-triage-poll-alert.service": "a page with no input a run sets",
+}
+
+
+def _triage_files() -> list[str]:
+    """Every file the component ships for triage, from component.yml, plus the pins it imports.
+
+    Derived, so a triage file added to the package without a line on the approval list fails here.
+    """
+    spec = yaml_fast.safe_load((ROLE / "component.yml").read_text())
+    shipped = sorted(
+        f"hosts/components/claude-code/{e['src']}"
+        for e in spec["files"]
+        if "triage" in e.get("src", "") and e["src"] not in TRIAGE_OFF_THE_FLOOR
+    )
+    return [*shipped, "hosts/components/claude-code/templates/claude-triage-pins.j2"]
+
+
+TRIAGE_FILES = _triage_files()
+
+
+def test_the_triage_file_census_names_the_runner_the_session_and_the_rule() -> None:
+    assert {
+        "hosts/components/claude-code/files/claude_triage_run.py",
+        "hosts/components/claude-code/files/claude_triage_session.py",
+        "hosts/components/claude-code/files/claude-triage-settings.json",
+        f"hosts/components/claude-code/templates/{RULE}",
+        "hosts/components/claude-code/templates/claude-triage-setup.sh.j2",
+    } <= set(TRIAGE_FILES)
+
+
+def test_the_sessions_settings_are_renovates_with_the_hooks_moved_to_the_controllers_tools() -> (
+    None
+):
+    """One deny floor for both unattended sessions; only where the hook scripts live differs."""
+    renovate = json.loads(
+        (
+            REPO / "hosts/components/renovate-agent/files/claude-settings.json"
+        ).read_text()
+    )
+    triage = json.loads((ROLE / "files" / "claude-triage-settings.json").read_text())
+    assert triage["permissions"] == renovate["permissions"]
+    assert triage.get("autoMode") == renovate.get("autoMode")
+    moved = json.loads(
+        json.dumps(renovate["hooks"]).replace(
+            '"~/.claude/hooks/', '"/var/lib/claude-triage-tools/.claude/hooks/'
+        )
+    )
+    assert triage["hooks"] == moved
 
 
 @pytest.mark.parametrize("path", TRIAGE_FILES)
@@ -293,14 +390,14 @@ def tmpfiles(operator_read: bool) -> dict[str, tuple[str, str, str]]:
 
 @pytest.mark.parametrize(
     "operator_read, group, mode",
-    [(True, "ubuntu", "0710"), (False, "claude", "0750")],
+    [(True, "ubuntu", "0710"), (False, CTL_USER, "0750")],
 )
 def test_the_operator_traverses_the_triage_state_dir_only_under_operator_read(
     operator_read, group, mode
 ) -> None:
     """0710 lets `probe.py applied` stat the inbox without listing the records (#6452)."""
     state_dir = pins()["state_dir"]
-    assert tmpfiles(operator_read)[state_dir] == (mode, "claude", group)
+    assert tmpfiles(operator_read)[state_dir] == (mode, CTL_USER, group)
 
 
 def test_the_runners_own_directories_are_declared_without_a_listing() -> None:
@@ -383,3 +480,44 @@ def test_the_log_count_check_flags_the_rules_it_exists_for() -> None:
     assert session_can_raise(
         "prometheus", "rate(loki_distributor_lines_received_total[5m]) > 1000"
     )
+
+
+def test_no_triage_path_sits_where_the_agent_or_the_session_could_rename_it() -> None:
+    """A path inside a home its user owns can be renamed and replaced by that user (I1)."""
+    pinned = {
+        name: getattr(
+            template_env(ROLE / "templates")
+            .get_template("claude-triage-pins.j2")
+            .make_module(role_context(ROLE)),
+            name,
+        )
+        for name in (
+            "state_dir",
+            "exchange_dir",
+            "tools_dir",
+            "clone_dir",
+            "report_dir",
+        )
+    }
+    homes = (defaults()["claude_code_agent_user_home"], "/var/lib/claude-triage")
+    for name, path in pinned.items():
+        assert not any(path.startswith(home + "/") for home in homes), name
+
+
+def test_the_session_shares_only_read_access_with_the_controller() -> None:
+    """The session reads the clone, the toolchain and the exchange through its group; tmpfiles
+    gives it no write on any of them. The runner recreates the exchange's out/ for each run."""
+    declared = tmpfiles(True)
+    module = (
+        template_env(ROLE / "templates")
+        .get_template("claude-triage-pins.j2")
+        .make_module(role_context(ROLE))
+    )
+    expected = {
+        "exchange_dir": ("2750", CTL_USER, SESSION_USER),
+        "tools_dir": ("2750", CTL_USER, SESSION_USER),
+        "clone_dir": ("2750", CTL_USER, SESSION_USER),
+        "session_home": ("0700", SESSION_USER, SESSION_USER),
+    }
+    for name, entry in expected.items():
+        assert declared[getattr(module, name)] == entry, name
