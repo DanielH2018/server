@@ -1,7 +1,11 @@
 # homepage — Application dashboard
 
-The landing dashboard (gethomepage) with service tiles, widgets and bookmarks. Live on
-daniel-box since E3 (2026-08-12). See repo-root `CLAUDE.md` for shared conventions.
+The landing dashboard (gethomepage) with service tiles, widgets and bookmarks. Its Deployment
+prefers daniel-server (`node_affinity_preference` in
+`k8s/roles/homepage/templates/deployment.yaml.j2`). See repo-root `CLAUDE.md` for shared
+conventions.
+
+**HISTORY —** It went live on daniel-box in E3 (2026-08-12).
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in k8s/roles/longhorn-reconcile/defaults/main.yml. -->
@@ -38,17 +42,21 @@ daniel-box since E3 (2026-08-12). See repo-root `CLAUDE.md` for shared conventio
   <key>` names every role that reads it.
 
 ## Where the config lives
-All of it renders into one Secret (`config-secret.yaml.j2`), which mounts read-only:
+All of it renders into one Secret (`k8s/roles/homepage/templates/config-secret.yaml.j2`). The
+`seed-config` initContainer mounts it read-only and copies it into the writable emptyDir the app
+reads as `/app/config` (`k8s/roles/homepage/templates/deployment.yaml.j2`):
 
 - `templates/config/{settings,bookmarks,widgets,services,docker,kubernetes}.yaml.j2` +
   `custom.css.j2` — every app config file, one level down because
-  `validate/k8s_manifests.py` parses every `templates/*.j2` as a manifest and fails a
-  `lookup('template')` that names one outside `config/`. `services.yaml` is the tile list;
-  edit it here and nowhere else.
-- `templates/icons-configmap.yaml.j2` — base64s the PNGs in `files/` into a ConfigMap.
+  `scripts/validate/k8s_manifests.py` parses every `templates/*.j2` as a manifest and fails a
+  `lookup('template')` that names one outside `config/`
+  (`scripts/validate/tests/test_skip_roles_classes_hold.py::test_a_lookup_into_templates_top_level_is_flagged`).
+  `services.yaml` is the tile list; edit it here and nowhere else.
+- `k8s/roles/homepage/templates/icons-configmap.yaml.j2` — base64s the PNGs in `files/` into a
+  ConfigMap.
 
-Edit the `.j2` files, never the live config: homepage seeds any missing file into
-`/app/config` at startup, which EROFSes on the read-only mount and crash-loops the pod.
+Edit the `.j2` files, never the live config: the emptyDir is reseeded from the Secret on every
+pod start, so a live edit is lost at the next restart.
 
 ## Notable
 

@@ -1,7 +1,9 @@
 # docs — the MkDocs site, and why the build does not happen here
 
-Serves the built MkDocs Material site over `docs/`, behind Traefik and Authelia, so the repo's
-runbooks, design documents and generated reference pages are readable in a browser.
+Serves the built MkDocs Material site over `docs/`
+(`k8s/roles/docs/defaults/main.yml:docs_host_site_dir`), behind Traefik and Authelia
+(`k8s/roles/docs/templates/ingressroute.yaml.j2`), so the repo's runbooks, design documents
+and generated reference pages are readable in a browser.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in k8s/roles/longhorn-reconcile/defaults/main.yml. -->
@@ -76,14 +78,17 @@ equal this role's `docs_host_site_dir`, which
 
 ## `/healthz` is answered by nginx, not from the mounted tree
 
-The probe must not depend on the site being built. A cluster brought up before the first cron run
+The probe must not depend on the site being built: both probes dial `/healthz`
+(`k8s/roles/docs/templates/deployment.yaml.j2`), and nginx answers it with a fixed 200
+(`k8s/roles/docs/templates/configmap.yaml.j2`). A cluster brought up before the first cron run
 has an empty `docs_host_site_dir`, and the right behaviour there is a 404 on `/`, not a
 crashlooping pod — "the site is not built" is an operator problem, not a rollout failure.
 
 ## Verifying a change actually landed
 
-Under Flux, `promote`'s `verify` gates the rollout, and a merge draws no `land.sh` health run.
-`uv run python scripts/diagnostics/probe.py health docs` still reads the pod and the route by hand. It
+Under Flux, `promote`'s `verify` gates the rollout, and `land.sh` runs the health gate on every
+tag a promotion applied (`scripts/deploy_tools/land_lib/promotion.py:gated_tags`).
+`uv run python scripts/diagnostics/probe.py health docs` reads the pod and the route by hand too. It
 cannot see whether the site rendered: the Authelia middleware answers with a 302 before Traefik
 reaches nginx, so a green probe plus a working redirect proves nothing about content.
 
