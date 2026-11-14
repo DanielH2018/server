@@ -321,21 +321,28 @@ def unit_hash(unit: str) -> dict:
 
 
 def show(names: list[str]) -> list[dict]:
-    """The Id, LoadState and ActiveState of each name or glob, one dict per unit, in order."""
-    out = systemctl("show", "-p", "Id,LoadState,ActiveState", *names).stdout
-    return [
-        dict(row.partition("=")[::2] for row in b.split()) for b in out.split("\n\n")
-    ]
+    """The Id, LoadState and ActiveState of each name or glob, one dict per unit, in order.
+
+    An empty list when systemctl refuses the call.
+    """
+    result = systemctl("show", "-p", "Id,LoadState,ActiveState", *names)
+    blocks = result.stdout.split("\n\n") if result.returncode == 0 else []
+    return [dict(row.partition("=")[::2] for row in b.split()) for b in blocks]
 
 
 def unit_states(units: set[str]) -> dict[str, dict]:
-    """Each unit's `show` dict, from one call; none for a name `show` would refuse.
+    """Each unit's `show` dict, from one call when systemctl answers for every unit.
 
-    One refused name, such as a template's own, fails the whole call. The dicts pair with the
-    names by position, because `show` reports an alias by its target's Id.
+    The dicts pair with the names by position, because `show` reports an alias by its target's
+    Id. One name systemctl refuses fails the whole call, so a refused or short answer is read
+    again one unit at a time, and a unit systemctl still refuses gets an empty dict.
     """
     names = sorted(u for u in units if UNIT_NAME.fullmatch(u) and not template_unit(u))
-    return dict(zip(names, show(names) if names else [], strict=False))
+    states = show(names) if names else []
+    if len(states) != len(names):
+        log("systemctl show did not answer for every unit; asking about each alone")
+        states = [next(iter(show([name])), {}) for name in names]
+    return dict(zip(names, states, strict=True))
 
 
 def is_active(unit: str) -> bool:

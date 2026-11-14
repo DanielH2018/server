@@ -17,7 +17,8 @@ State keys:
         "enabled": enabled|disabled|static}. A unit missing here is not loaded.
     fail: "<verb> <unit>" strings, each a systemctl call that exits 1, "udevadm <subcommand>"
         strings, each a udevadm call that exits 1, and "dpkg -S", which makes every `dpkg -S`
-        exit 2. `systemctl show` refuses a whole call that names a template's own name.
+        exit 2. `systemctl show` refuses a whole call that names a template's own name, or a
+        unit with a "show <unit>" string here.
     owned: paths `dpkg -S` reports a package owns.
     crontabs: user -> crontab text. A user missing here has no crontab.
     effects: "<verb> <unit>" -> {"write": {absolute path: text}, "queue": [unit, ...],
@@ -128,7 +129,7 @@ def systemctl(state: dict, args: list[str]) -> int:
     verb, rest = args[0], args[1:]
     units = state["units"]
     if verb == "show":
-        return _show(units, rest)
+        return _show(units, rest, state["fail"])
     if verb == "daemon-reload":
         return 0
     if verb == "list-units":
@@ -206,7 +207,7 @@ def _effects(state: dict, call: str) -> None:
         pending.write_text(json.dumps(sorted(set(queue) | set(effect["queue"]))))
 
 
-def _show(units: dict, args: list[str]) -> int:
+def _show(units: dict, args: list[str], fail: list[str]) -> int:
     names = [arg for i, arg in enumerate(args) if arg != "-p" and args[i - 1] != "-p"]
     if "--value" in names:
         (unit,) = [name for name in names if name != "--value"]
@@ -218,7 +219,7 @@ def _show(units: dict, args: list[str]) -> int:
         return 0
     import fnmatch
 
-    if any("@." in name for name in names):
+    if any("@." in name or f"show {name}" in fail for name in names):
         print(
             "Failed to get properties: a template's name is not a unit", file=sys.stderr
         )

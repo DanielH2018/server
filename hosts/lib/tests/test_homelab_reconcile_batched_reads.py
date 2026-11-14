@@ -82,6 +82,18 @@ def test_a_template_in_the_manifest_does_not_hide_the_other_units_state(node):
     assert all("claude-land@.service" not in argv for argv in show_calls(node))
 
 
+def test_a_unit_systemctl_refuses_leaves_the_others_read_one_at_a_time(node):
+    node.unit("homelab-a.timer", linked=True)
+    node.unit("homelab-pi-sd.timer", linked=True, load="masked")
+    node.state["fail"].append("show homelab-a.timer")
+
+    result = node.run()
+
+    assert result.returncode == 0, result.stderr
+    assert ["restart", "homelab-pi-sd.timer"] not in node.actions()
+    assert ["homelab-pi-sd.timer"] in show_calls(node)
+
+
 def test_a_run_after_every_legacy_entry_retired_asks_dpkg_nothing(node):
     for name in ("owned", "stray"):
         path = node.root / "usr/local/bin" / name
