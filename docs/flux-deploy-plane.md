@@ -117,17 +117,23 @@ evaluations from 02:49:45Z to 02:53:45Z.
 `sha-<commit>` with the revision `master@sha1:<commit>`, so the digest changes even when the
 bundle does not. When `prod` moves, the Kustomize controller reconciles every Kustomization, and
 the reconcile restarts its 10-minute interval. The interval fires only when no promotion
-lands within 10 minutes of the last one. This is intended. The `commit-status` Alert posts
-`flux/<kustomization>` on each promoted commit, and `verify` reads those statuses for T's
-changed set (*Verification*). A Kustomization whose directory did not change still has to
-report on T.
+lands within 10 minutes of the last one. This is accepted as a cost of the one-artifact
+design. Flux reconciles every Kustomization whose source revision changes, and it has no
+setting that skips a Kustomization whose path is unchanged. Scoping the reconciles would need
+one source per tag. `verify` does not need the extra reconciles, because it expects statuses
+only from T's changed set (*Verification*). For a Kustomization outside that set, the
+reconcile is an apply that changes nothing.
 
 **Dependency requeues add more reconcile attempts than the applies do.** When `prod` moves,
 a Kustomization whose dependency has not yet applied the new revision reads
 `DependencyNotReady`. It requeues every 30 seconds, the `--requeue-dependency` default, until
 the dependency is Ready (*The timeout follows the chain*). Each attempt patches the
 Kustomization's status, but it builds nothing and applies nothing. The deepest chain ends
-requeue most, and a Kustomization with no `dependsOn` never requeues.
+requeue most, and a Kustomization with no `dependsOn` never requeues. The requeues are
+accepted too. A longer `--requeue-dependency` would cut them, but each `dependsOn` hop of
+every rollout could then wait up to that longer interval. `chained_timeout.py` also sizes `verify`'s wait from
+the default, and `scripts/deploy_tools/tests/test_chained_timeout.py` fails a vendored install
+or role default that sets the flag.
 
 The rate follows the merge rate on master, so it has no fixed value. One hour of
 the Kustomize controller's log on 2026-11-14, from 07:51Z to 08:51Z, held 8 `prod` revisions:
