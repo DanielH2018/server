@@ -1,6 +1,6 @@
 # G8 — Memory: one resolver, a checked index, a read-only replica
 
-Status: PLANNED.
+Status: IN PROGRESS. Step 1, the shared resolver and the index check, is done.
 
 Depends on: [G6](g6-repair-audit-defects.md) for the tree rule and the `enforced_by:`
 keys.
@@ -59,7 +59,7 @@ the memory store on daniel-server fails at once, with the route in the session-s
 
 ```diff
  ~/.claude/hooks/                                       (dotfiles)
-+  memory_resolver.py   one resolver: body paths, index links, promoted_to, enforced_by
++  lib/memory_resolver.py   one resolver: body paths, index links, promoted_to, enforced_by
    memory-upkeep.py
 -    its own resolver
 +    calls memory_resolver; index check: missing, gone, duplicate, marker mismatch
@@ -76,11 +76,34 @@ the memory store on daniel-server fails at once, with the route in the session-s
 
 ## Steps, as PRs
 
-1. The shared resolver and the index check, in the dotfiles repo.
+1. The shared resolver and the index check, in the dotfiles repo. Done.
 2. The `promoted_to:` keys on archived files, the generated archive table and
    `--fix-index`, in the dotfiles repo and the memory store on daniel-box.
 3. The read-only target, in this repo's `claude-memory-sync` unit, with its
    autonomous-role contract and `docs/claude-memory-sync.md` updated in the same PR.
+
+## Step 1 result
+
+[dotfiles#1299](https://github.com/DanielH2018/dotfiles/pull/1299) landed
+`hooks/lib/memory_resolver.py` on 2026-11-14, and the hook and the survey both import it.
+On daniel-box and daniel-server the hook prints the same 17 lines, and the survey lists
+the same 7 dangling citations.
+
+- **The survey's answer depended on its checkout.** On daniel-server the primary checkout
+  was two days behind `origin/master`. The survey listed 1 dangling `[ENFORCED]` citation
+  where 7 are gone, and reported `k8s/roles/authelia/CLAUDE.md`, which the default branch
+  tracks, as a dead index link. Both callers judge a path by the default branch.
+- **A marked entry with no `enforced_by:` key is not a finding.** On 2026-11-14 no memory
+  carries the key, so the strict rule would print a row per marked entry. The hook's
+  second section still resolves such an entry's check from its prose. [G6](g6-repair-audit-defects.md) step 2 adds the keys, and the rule tightens after
+  that.
+- **A repo doc linked from several index lines is not a duplicate.** One doc owns the
+  claims of several retired memories, a line each. The first cut flagged it and the live
+  store produced 2 findings. Only a memory file linked twice is listed.
+- **The live store has 0 index findings.**
+
+Deferred to step 2: the `promoted_to:` key, and `archive/`, which the index check does
+not read.
 
 ## Verification
 
@@ -89,8 +112,11 @@ a memory and read the failure and the session-start line.
 
 ## Risks and what is not verified
 
-- Whether the harness tolerates a memory directory it cannot write, without failing the
-  session. If it does not, step 3 falls back to a hook that denies the write.
+- The harness tolerates a memory directory it cannot write. Measured on 2026-11-14 with
+  Claude Code 2.1.312, on a scratch project whose store had every write bit removed: a
+  headless session started, read the index, and a Write to the store failed at once with
+  `EACCES: permission denied`. An interactive session is not measured. Step 3 needs no
+  hook that denies the write.
 - A session on daniel-server cannot save a memory. ADR-0031 defers an outbox until a count
   of refused writes justifies it.
 

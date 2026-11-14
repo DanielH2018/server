@@ -1,7 +1,9 @@
 # G10 — A row re-derives each stated value, and a hook rewrites it
 
-Status: IN PROGRESS. Steps 1 and 2 are done: the registry with its check, and the fixer
-with its hook. The exit criterion is met.
+Status: DONE. Step 1, the registry with its check, merged as
+[#8565](https://github.com/DanielH2018/server/pull/8565). Step 2, the fixer with its hook,
+merged as [#8675](https://github.com/DanielH2018/server/pull/8675) and met the exit
+criterion. The operator declined step 3 on 2026-11-14.
 
 Depends on: the tree rename of
 [#8186](https://github.com/DanielH2018/server/issues/8186), which moves the test file this
@@ -53,8 +55,6 @@ Exit: a commit that changes the list the docs-refresh cron stages rewrites the c
 - A Renovate-managed value never gets a row, because Renovate runs no hook and a bump PR
   must not arrive red ([#4012](https://github.com/DanielH2018/server/issues/4012)).
   `version-as-fact` stays a warning.
-- The slice tables in `docs/target-architecture/design.md` become a fragment generated
-  from each slice file's status line.
 - A row is added in the PR that fixes a value escape, and by G11. No lint guesses which
   numbers are values.
 
@@ -64,8 +64,6 @@ Exit: a commit that changes the list the docs-refresh cron stages rewrites the c
 +    VALUES: rows of (doc, one capture regex, source, read)
 +    stale(): fails a row that matches nothing, or twice
 +    fix(): rewrites the captured value; main() exits 1 when a doc changed
-   gen_doc_fragments.py
-+    FRAGMENTS += the slice status table
  prek
 +  regen-doc-values      files: each row's doc and source
 -test_docs_quote_current_values.py     its two rows move into VALUES
@@ -82,7 +80,11 @@ Exit: a commit that changes the list the docs-refresh cron stages rewrites the c
    stages. Done. Two rows hold that count in `.claude/rules/generated-docs.md`: the
    cardinal that opens the list, and the ordinal in "adding a fifth". With a fifth path
    added to the cron's `git add`, the script rewrote both and exited 1, then exited 0.
-3. The slice status fragment.
+3. The slice status fragment. Declined on 2026-11-14. The plan had the slice tables in
+   `docs/target-architecture/design.md` generated from each slice file's status line.
+   That page was archived on 2026-11-13, and its opening paragraph says a slice's
+   `Status:` line records what merged and that the page does not repeat it. A generated
+   fragment would add a second copy of the status to an archived page.
 
 ## Verification
 
