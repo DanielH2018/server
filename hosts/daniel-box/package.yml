@@ -265,7 +265,7 @@ legacy:
   - {cron: "Clear ansible log file", user: root}
   # R1 of docs/ci-throughput.md: what the shadow sweep's unit and tool wrote outside the package.
   # The package no longer ships the timer, so reconcile stops it. A file goes before its directory.
+  # The cache directory is not listed: a stopped sweep leaves a randomly named scratch tree in it.
   - {path: /var/lib/homelab-local-sweep/last-swept}
   - {path: /var/lib/homelab-local-sweep}
   - {path: "/home/{{ sys_user }}/.cache/local-sweep/lock"}
-  - {path: "/home/{{ sys_user }}/.cache/local-sweep"}

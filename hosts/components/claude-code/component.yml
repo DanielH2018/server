@@ -333,8 +333,6 @@ legacy:
   # The triage credential as an EnvironmentFile=, before it became a LoadCredential= file.
   - {path: /etc/claude-triage/session.env}
   - {path: /var/lib/homelab/setup-deployed-manifest.d/claude-code-triage}
-  # Where root downloaded the agent's Node before homelab-claude-agent-browser.service did it.
-  - {path: /var/cache/claude-agent-node}
   - {path: /var/lib/homelab/setup-render-manifest.d/claude-code}
   - {path: /var/lib/homelab/setup-render-manifest.d/claude-code-ansible}
   - {path: /var/lib/homelab/setup-deployed-manifest.d/claude-code-bg-resume}
