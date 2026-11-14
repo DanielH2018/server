@@ -1,7 +1,11 @@
 # G8 — Memory: one resolver, a checked index, a read-only replica
 
-Status: IN PROGRESS. Steps 1 and 3 are done, and the exit criterion is met. Step 2's code
-is done, and its edit to the store on daniel-box is open.
+Status: DONE. The three steps landed on 2026-11-14 as
+[dotfiles#1299](https://github.com/DanielH2018/dotfiles/pull/1299),
+[dotfiles#1310](https://github.com/DanielH2018/dotfiles/pull/1310),
+[dotfiles#1311](https://github.com/DanielH2018/dotfiles/pull/1311) and
+[#8687](https://github.com/DanielH2018/server/pull/8687). The store on daniel-box carries
+the owner keys.
 
 Depends on: [G6](g6-repair-audit-defects.md) for the tree rule and the `enforced_by:`
 keys.
@@ -79,8 +83,7 @@ the memory store on daniel-server fails at once, with the route in the session-s
 
 1. The shared resolver and the index check, in the dotfiles repo. Done.
 2. The `promoted_to:` keys on archived files and the generated archive table, in the
-   dotfiles repo and the memory store on daniel-box. The code is done. The store edit is
-   open: it writes 47 keys and rewrites `archive/README.md` on daniel-box.
+   dotfiles repo and the memory store on daniel-box. Done.
 3. The read-only target, in this repo's `claude-memory-sync` unit, with its
    autonomous-role contract and `docs/claude-memory-sync.md` updated in the same PR.
    Done, with the hook's one-line message for a store it cannot write, in the dotfiles
@@ -131,6 +134,15 @@ not read.
 - **`--fix-index` is not built.** The live index has 0 findings for it to repair. An
   index line holds several links, so removing a dead one rewrites a sentence, which a
   mechanical edit gets wrong.
+
+The operator approved the store edit on 2026-11-14, and it ran on daniel-box the same
+day. A dry run on a copy of that store gave the result the live run then gave, file for
+file: 47 archived memories carry a key, 44 `promoted_to:` and 3 `enforced_by:`, and
+`archive/README.md` holds the generated table of 47 rows. The 31 rows whose owner does
+not resolve stay in the hand-kept tables for a person to judge. Afterwards the survey read
+`archive: 47/142 archived memories name an owner`, with no owner gone and the table
+current. A copy of `archive/` from before the edit is beside the store, as
+`memory-archive-before-2026-11-14.tgz`.
 
 ## Step 3 result
 

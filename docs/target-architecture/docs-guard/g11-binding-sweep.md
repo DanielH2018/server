@@ -1,7 +1,9 @@
 # G11 — The binding sweep
 
-Status: IN PROGRESS. The measure is corrected, and the pilot batch, step 1, is done. Its
-30-day comparison is due on 2026-12-14.
+Status: IN PROGRESS. The measure is corrected
+([#8699](https://github.com/DanielH2018/server/pull/8699)), and the pilot batch, step 1,
+is done ([#8707](https://github.com/DanielH2018/server/pull/8707)). Its 30-day comparison
+is due on 2026-12-14.
 
 Depends on: [G7](g7-removed-names.md) and [G10](g10-value-rows.md). The sweep reads the
 doc set the first defines and binds sentences to the rows the second builds.
