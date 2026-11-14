@@ -142,8 +142,8 @@
           },
           "expr": "quantile_over_time(0.5, {job=\"syslog\"} |= \"event=landing\" | logfmt | pr !~ \"^(939|999|999999|unknown)$\" | keep wait_merge | unwrap wait_merge [$__range])",
           "legendFormat": "median wait_merge",
-          "refId": "A",
-          "queryType": "instant"
+          "queryType": "instant",
+          "refId": "A"
         },
         {
           "datasource": {
@@ -152,8 +152,8 @@
           },
           "expr": "quantile_over_time(0.5, {job=\"syslog\"} |= \"event=landing\" | logfmt | pr !~ \"^(939|999|999999|unknown)$\" | keep wait_ci | unwrap wait_ci [$__range])",
           "legendFormat": "median wait_ci",
-          "refId": "B",
-          "queryType": "instant"
+          "queryType": "instant",
+          "refId": "B"
         },
         {
           "datasource": {
@@ -162,8 +162,8 @@
           },
           "expr": "quantile_over_time(0.5, {job=\"syslog\"} |= \"event=landing\" | logfmt | pr !~ \"^(939|999|999999|unknown)$\" | keep deploy | unwrap deploy [$__range])",
           "legendFormat": "median deploy",
-          "refId": "C",
-          "queryType": "instant"
+          "queryType": "instant",
+          "refId": "C"
         },
         {
           "datasource": {
@@ -172,8 +172,8 @@
           },
           "expr": "quantile_over_time(0.5, {job=\"syslog\"} |= \"event=landing\" | logfmt | pr !~ \"^(939|999|999999|unknown)$\" | keep total | unwrap total [$__range])",
           "legendFormat": "median total",
-          "refId": "D",
-          "queryType": "instant"
+          "queryType": "instant",
+          "refId": "D"
         }
       ],
       "title": "Medians over the range",
