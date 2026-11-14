@@ -70,13 +70,8 @@ def test_every_metrics_item_renders_as_a_scrape_job():
     ctx = host_context()
     derived = scrape_jobs(ctx["services"], ctx["k8s_namespace"])
     assert {job["job"] for job in derived} == _DERIVED
-    # The games' replica gates are the one thing that can drop a derived job, so pin them open.
     rendered = _scrape_targets(
-        render_role_template(
-            "observability",
-            "prometheus.yaml.j2",
-            {"terraria_k8s_replicas": 1, "valheim_k8s_replicas": 1},
-        )
+        render_role_template("observability", "prometheus.yaml.j2")
     )
     for job in derived:
         assert rendered.get(job["job"]) == [job["target"]], job

@@ -3,9 +3,18 @@
 Run: uv run pytest scripts/deploy_tools/tests/test_land_pr_json.py
 """
 
+import json
+import shutil
+import subprocess
+
 import pytest
 
-from deploy_tools.land_lib.pr_json import parse_file, parse_review, parse_view
+from deploy_tools.land_lib.pr_json import (
+    parse_file,
+    parse_review,
+    parse_view,
+    rest_filter,
+)
 
 
 def test_a_view_keeps_the_fields_the_lander_reads():
@@ -74,3 +83,40 @@ def test_a_review_by_a_deleted_account_has_no_user():
         "submitted_at": "",
         "commit_id": "abc",
     }
+
+
+def _pull(**fields):
+    """A REST pull object: open, ready and mergeable unless `fields` says otherwise."""
+    pull = {"state": "open", "merged": False, "draft": False, "mergeable": True}
+    return {**pull, "head": {"sha": "abc", "ref": "a-branch"}, **fields}
+
+
+@pytest.mark.parametrize(
+    ("fields", "pull", "view"),
+    [
+        ("state,mergeable", _pull(), {"state": "OPEN", "mergeable": "MERGEABLE"}),
+        ("mergeable", _pull(mergeable=None), {"mergeable": "UNKNOWN"}),
+        ("mergeable", _pull(mergeable=False), {"mergeable": "CONFLICTING"}),
+        ("state", _pull(state="closed"), {"state": "CLOSED"}),
+        ("state", _pull(state="closed", merged=True), {"state": "MERGED"}),
+        ("isDraft,headRefOid", _pull(), {"isDraft": False, "headRefOid": "abc"}),
+        ("isDraft", _pull(draft=True), {"isDraft": True}),
+    ],
+)
+def test_the_rest_filter_answers_as_gh_pr_view_does(fields, pull, view):
+    jq, asked = shutil.which("jq"), rest_filter(fields)
+    assert jq, "this test runs the filter with jq; gh applies it with its own"
+    assert asked
+    answer = subprocess.run(
+        [jq, "-c", asked],
+        input=json.dumps(pull),
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=30,
+    )
+    assert parse_view(json.loads(answer.stdout)) == view
+
+
+def test_a_field_the_rest_pull_object_lacks_has_no_rest_filter():
+    assert rest_filter("state,reviewDecision") is None

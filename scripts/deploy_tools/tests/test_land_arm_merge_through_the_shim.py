@@ -19,21 +19,26 @@ no service tag and no plane. That is far enough to prove `LAND_PRIMARY` reaches 
 -- `git` runs with the primary checkout as its cwd, and the recorded cwd is asserted.
 """
 
+import shlex
 import subprocess
 from pathlib import Path
+from deploy_tools.land_lib import pr_json
 from lib.git_testing import scrubbed_env
 from lib.proc_testing import fake_bin, path_with
 
 
 _LAND_SH = Path(__file__).resolve().parents[1] / "land.sh"
-_POLL_ARGV = "pr view 939 --json state,mergeable,headRefOid"
+_POLL_ARGV = (
+    "api repos/{owner}/{repo}/pulls/939 --jq "
+    f"{pr_json.rest_filter('state,mergeable,headRefOid')}"
+)
 
 _GH_STUB = """#!/bin/sh
 printf '%s\\t%s\\n' "$PWD" "$*" >> "{calls}/gh-calls"
 case "$*" in
   *"--json state,title"*)
     printf '{{"state":"{state}","title":"Bump vale to 3.19.0"}}\\n' ;;
-  *"--json state,mergeable,headRefOid"*)
+  {poll})
     printf '{{"state":"MERGED","mergeable":"MERGEABLE","headRefOid":""}}\\n' ;;
   "api repos/{{owner}}/{{repo}}")
     printf '{{"visibility":"public"}}\\n' ;;
@@ -58,7 +63,7 @@ def _stub_bin(tmp_path: Path, state: str) -> Path:
         (tmp_path / f"{name}-calls").touch()
     return fake_bin(
         tmp_path / "bin",
-        gh=_GH_STUB.format(calls=tmp_path, state=state),
+        gh=_GH_STUB.format(calls=tmp_path, state=state, poll=shlex.quote(_POLL_ARGV)),
         git=_GIT_STUB.format(calls=tmp_path, state=state),
     )
 
@@ -76,6 +81,8 @@ def _run(tmp_path: Path, state: str) -> subprocess.CompletedProcess[str]:
         **scrubbed_env(),
         "PATH": path_with(bin_dir),
         "LAND_PRIMARY": str(tmp_path),
+        # The landing turn is a real lock on daniel-box, and this run uses the real tools.
+        "LAND_QUEUE": "0",
     }
     return subprocess.run(
         [

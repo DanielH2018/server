@@ -115,6 +115,8 @@ class Calls:
     launched: list[tuple[str, str]] = field(default_factory=list)
     # The (repo, None for this one; stale issue numbers) each running-batch read was asked for.
     batch_holds: list[tuple[str, list[int]]] = field(default_factory=list)
+    # The (issue numbers, repo) each board sync was asked for.
+    board: list[tuple[list[int], str | None]] = field(default_factory=list)
 
     def none(self) -> bool:
         """Whether neither boundary was reached at all."""
@@ -155,6 +157,9 @@ class Fakes:
     # Keyed by the same `issue list` / `label list` / `issue view` pair `gh_json` dispatches
     # on, so a test can fail the issue read while the label read still answers.
     json_errors: dict[str, BaseException] = field(default_factory=dict)
+    # What the board sync answers per issue, `(outcome, detail)`; an issue absent here reads
+    # `unchanged`, so no test reaches the real board.
+    board: dict[int, tuple[str, str]] = field(default_factory=dict)
 
 
 def facts(trees=(), *, dirty=False, merged=False, ok=True):
@@ -278,6 +283,12 @@ def build_tools(f: Fakes | None = None) -> tuple[FindingsTools, Calls]:
         calls.batch_holds.append((repo, sorted(issues)))
         return {n: why for n, why in f.batch_holds.items() if n in issues}
 
+    board = f.board
+
+    def sync_board(numbers, repo, *, dry_run=False):
+        calls.board.append((list(numbers), repo))
+        return {n: board.get(n, ("unchanged", "")) for n in numbers}
+
     return (
         FindingsTools(
             gh_json,
@@ -285,6 +296,7 @@ def build_tools(f: Fakes | None = None) -> tuple[FindingsTools, Calls]:
             worktree_facts,
             launched_branches=launched_branches,
             running_batch_holds=running_batch_holds,
+            sync_board=sync_board,
         ),
         calls,
     )

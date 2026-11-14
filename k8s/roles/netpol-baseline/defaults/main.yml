@@ -148,16 +148,17 @@ netpol_baseline_obs_node_cidrs: "{{ k3s_cni0_gateways + k3s_flannel_node_ips }}"
 # every `refused` row must refuse it. Its `netpol-probe: control` label admits it to speedtest:80,
 # the sentinel, and to nothing else.
 #
-# terraria is ABSENT while `terraria_k8s_replicas` is 0. Its EndpointSlice is empty then, so its
-# row would fail the gate on every full `deploy.yml`.
+# terraria is ABSENT while the Games panel refuses to start it (`start_refused` on its
+# `game_servers` entry in group_vars/all.yml). Its EndpointSlice is empty then, so its row would
+# fail the gate on every netpol-baseline deploy.
 #
-# DECIDED: terraria's row stays a hand toggle and is not derived from `terraria_k8s_replicas`
+# DECIDED: terraria's row stays a hand toggle and is not derived from whether terraria runs
 # (#3848). Its `expect: open` leg opens a TCP connection to :7777, and on 1.4.5.7 a bare TCP
-# connect can crash the server (#822). Scaling to 1 is only the first step of #822's restore
-# checklist, so a row that followed the replica count would dial a server that is not yet safe
+# connect can crash the server (#822). Starting it is only the first step of #822's restore
+# checklist, so a row that followed the running state would dial a server that is not yet safe
 # to dial, on every netpol-baseline deploy. Add the row once the image is past 1.4.5.7:
 # `{service: terraria, plane: homelab, port: 7777, expect: open, policy: networkpolicy-terraria.yaml.j2}`.
-# `tests/k8s/test_netpol_probe_targets.py` fails if the row is present while the count is 0.
+# `tests/k8s/test_netpol_probe_targets.py` fails if the row is present while the start is refused.
 netpol_baseline_probe_targets:
   # The namespace baseline: an app with no in-cluster caller. The probe's HTTPS liveness leg
   # reaches the same app through traefik, which is the allowed path.

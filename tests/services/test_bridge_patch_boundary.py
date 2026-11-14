@@ -8,8 +8,7 @@ stubbed a network call would really make it.
 
 The consumers are derived, not listed: every k8s role whose `files/` imports a runtime module
 defined under ANOTHER role's `files/`, plus that other role. That pair is monitor-bridge and
-autofix-bridge; a hardcoded pair would let a third role join the rule silently unchecked. The
-retired deployer derived the same set in `deploy_changes.shared_module_consumers`.
+autofix-bridge; a hardcoded pair would let a third role join the rule silently unchecked.
 
 A module is identified by its dotted path under `files/`, so the census sees a module at any
 depth and a test's own alias for it (`from bridge import config as cfg`) resolves to the

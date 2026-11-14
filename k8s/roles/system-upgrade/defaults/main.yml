@@ -57,9 +57,9 @@ system_upgrade_vendored_manifests:
 system_upgrade_controller_image: rancher/system-upgrade-controller:v0.20.2@sha256:61b68d4372baf7ae90fb0f879feea1c082381a8b7547cc5ec85d393c497b11cb
 
 # The image of each Plan's `prepare` container, which runs the gate script from the host's
-# /usr/lib/homelab/ (H6.3a). The same python:3.14-alpine digest the other stdlib-only Jobs run,
+# /usr/lib/homelab/ (H6.3a). The same python:3.15-alpine digest the other stdlib-only Jobs run,
 # and Renovate's k8s-images manager moves them in one PR.
-system_upgrade_gate_image: python:3.14-alpine@sha256:f6a589d43c42b9e7f7dc67a12d37132491f362859a5d750607710cc56da3bc72
+system_upgrade_gate_image: python:3.15-alpine@sha256:0f9552bb28711333da16915ec146f5e6bb44a7fdac9ced15dc17c2e0206346dd
 
 # The nodes the Plans select, by `kubernetes.io/hostname`. EMPTY SELECTS NO NODE: the Plans
 # render `[no-node-selected]`, a valid label value that no node carries. A PR widens the list

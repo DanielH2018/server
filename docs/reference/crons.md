@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/crons.py
-generated_at: 2026-11-13 20:48 UTC
-generated_sha: 24dddf5c4
+generated_at: 2026-11-14 06:17 UTC
+generated_sha: ddd758e77
 ---
 
 !!! warning "Generated file — do not edit"
@@ -28,6 +28,7 @@ generated_sha: 24dddf5c4
 | homelab-claude-agent-browser.timer | `OnBootSec=10min, OnUnitInactiveSec=6h` | daniel-box, daniel-server | `claude` | read the script | `hosts/components/claude-code/units/homelab-claude-agent-browser.timer` |
 | homelab-claude-cgroup-metrics.timer | `OnBootSec=30s, OnUnitActiveSec=30s` | daniel-box, daniel-server | `root` | read the script | `hosts/components/claude-code/templates/claude-cgroup-metrics.timer.j2` |
 | homelab-claude-clone-sync.timer | `OnBootSec=10min, OnUnitActiveSec=15min` | daniel-box, daniel-server | `claude` | read the script | `hosts/components/claude-code/templates/claude-clone-sync.timer.j2` |
+| homelab-claude-dotfiles-mirror.timer | `OnCalendar=*-*-* *:07/15:00` | daniel-box, daniel-server | `root` | read the script | `hosts/components/claude-code/units/homelab-claude-dotfiles-mirror.timer.j2` |
 | homelab-claude-dotfiles-sync.timer | `OnBootSec=10min, OnUnitActiveSec=15min` | daniel-box, daniel-server | `claude` | read the script | `hosts/components/claude-code/templates/claude-dotfiles-sync.timer.j2` |
 | homelab-claude-fanout-server-lander.timer | `OnBootSec=5min, OnUnitActiveSec=10min` | daniel-box | `ubuntu` | read the script | `hosts/components/claude-code/templates/claude-fanout-server-lander.timer.j2` |
 | homelab-claude-guardrail-ack.timer | `OnCalendar=*-*-* *:02/5:00` | daniel-box, daniel-server | `root` | read the script | `hosts/components/claude-code/units/homelab-claude-guardrail-ack.timer.j2` |
@@ -55,7 +56,6 @@ generated_sha: 24dddf5c4
 | homelab-github-ruleset-drift.timer | `OnCalendar=*-*-* 06:40:00` | daniel-box | `root` | read the script | `hosts/components/github-checks/units/homelab-github-ruleset-drift.timer.j2` |
 | homelab-infra-map.timer | `OnCalendar=*-*-* *:00,15,30,45:00` | daniel-box | `ubuntu` | read the script | `hosts/components/infra-map/units/homelab-infra-map.timer` |
 | homelab-k3s-restart.timer | `OnCalendar=Mon..Fri *-*-02..31 11:32:00` | daniel-box | `root` | yes (restart) | `hosts/components/k3s-restart/units/homelab-k3s-restart.timer.j2` |
-| homelab-local-sweep.timer | `OnBootSec=15min, OnUnitInactiveSec=15min` | daniel-box | `ubuntu` | yes (deploy) | `hosts/components/local-sweep/units/homelab-local-sweep.timer` |
 | homelab-loki-route-witness.timer | `OnCalendar=*-*-* *:23:00` | daniel-box, daniel-server | `ubuntu` | read the script | `hosts/components/loki-route-witness/units/homelab-loki-route-witness.timer` |
 | homelab-longhorn-backup-health.timer | `OnCalendar=*:00/10` | daniel-box | `ubuntu` | yes (backup) | `hosts/components/k3s-host-checks/units/homelab-longhorn-backup-health.timer.j2` |
 | homelab-mkv-attachment-repair.timer | `OnCalendar=*:0/15:00` | daniel-box | `ubuntu` | read the script | `hosts/components/fake-remux/units/homelab-mkv-attachment-repair.timer.j2` |

@@ -119,6 +119,43 @@ tests:
                 series have gone stale. Read the exporter pod's events and log, or the host's
                 unit for a static target.
 
+  # A game exporter parked from deploy.local (ADR-0033): its Service has no endpoint, so `up` is 0,
+  # and kube-state-metrics reads 0 replicas for the Deployment of the same name, so it stays quiet.
+  - interval: 1m
+    input_series:
+      - series: 'up{job="valheim-stats", instance="valheim-stats.homelab.svc:9420"}'
+        values: '1x2 0x30'
+      - series: 'kube_deployment_spec_replicas{namespace="homelab", deployment="valheim-stats", job="kube-state-metrics"}'
+        values: '0x32'
+    alert_rule_test:
+      - eval_time: 25m
+        alertname: ScrapeTargetDown
+        exp_alerts: []
+
+  # The same exporter while its Deployment wants a pod: the failed scrape pages.
+  - interval: 1m
+    input_series:
+      - series: 'up{job="valheim-stats", instance="valheim-stats.homelab.svc:9420"}'
+        values: '1x2 0x20'
+      - series: 'kube_deployment_spec_replicas{namespace="homelab", deployment="valheim-stats", job="kube-state-metrics"}'
+        values: '1x22'
+    alert_rule_test:
+      - eval_time: 14m
+        alertname: ScrapeTargetDown
+        exp_alerts:
+          - exp_labels:
+              job: valheim-stats
+              instance: valheim-stats.homelab.svc:9420
+              severity: warning
+              service: game-stats
+            exp_annotations:
+              summary: Prometheus cannot scrape the valheim-stats target valheim-stats.homelab.svc:9420.
+              description: >-
+                valheim-stats.homelab.svc:9420 of job valheim-stats has failed its scrape for 10
+                minutes, so its exporter is down or unreachable from Prometheus and its series
+                have gone stale. Read the exporter pod's events and log, or the host's unit for
+                a static target.
+
   # The homelab Loki's failed scrape. LokiHomelabDown went in Cutover-b, so this rule is its pager.
   - interval: 1m
     input_series:

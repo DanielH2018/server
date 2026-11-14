@@ -15,6 +15,8 @@ kept, and classifies each change:
   renders for that user from the dotfiles repo's `main`;
 - Claude Code's own write: a settings.json whose changed top-level keys are all in
   `quiet_settings_keys`, the keys `/config` and `/model` write;
+- explained as a copy: the path is under a `copies` entry's `dst`, and its content would be
+  explained by one of the classes above at the matching path under that entry's `src`;
 - otherwise unexplained, and posted with its diff. A value that looks like a credential is masked.
 
 Every change is acknowledged once: the kept copy moves to the new content whatever the class. The
@@ -342,6 +344,21 @@ def classify(
                 return Change(
                     change.path, change.old, change.new, f"dotfiles main {commit}"
                 )
+    for copy in config.get("copies", []):
+        dst = copy["dst"].rstrip("/")
+        if change.path != dst and not change.path.startswith(dst + "/"):
+            continue
+        source = copy["src"].rstrip("/") + change.path[len(dst) :]
+        at_source = classify(
+            Change(source, None, change.new), {**config, "copies": []}, tools, dotfiles
+        )
+        if at_source.explained:
+            return Change(
+                change.path,
+                change.old,
+                change.new,
+                f"copy of {source} ({at_source.reason})",
+            )
     return change
 
 
