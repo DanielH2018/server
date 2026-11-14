@@ -102,10 +102,11 @@ journald could see the real size of its archives and vacuumed them to `SystemMax
 
 The journal cap had assumed the other half of `SIZE` held everything else. On 2026-11-14 the
 SD copy was 99 MB: 45 MB of journal and 37 MB of pacct, mostly the uncompressed 22 MB
-`pacct.0`. At 32 archives the worst case was about 151 MB. 16 archives bring it to about 119
-MB. `test_the_whole_sd_copy_fits_under_the_log2ram_boot_guard` in
+`pacct.0`. With 2 MiB archives the worst case was about 154 MB. 1 MiB archives bring it to
+about 120 MB, which leaves about 8 MB of headroom, most of it set by the 28 MB/day pacct
+estimate. `test_the_whole_sd_copy_fits_under_the_log2ram_boot_guard` in
 `hosts/lib/tests/test_pi_tuning_component.py` sums the journal, pacct, auditd and sysstat caps
-against `SIZE`.
+and the measured rest of the tree against `SIZE`.
 
 ## Watchdog and debloat
 
@@ -214,12 +215,14 @@ H7.25 a task also counted the DISTINCT `JOURNALD_AWARE=` values and failed on an
 The caps themselves, set when the tmpfs was 81% full on 2026-06-11:
 
 - A Pi journald drop-in, `60-homelab-pi.conf` with `SystemMaxUse=32M`, overrides
-  initial_setup's server-sized 1G cap. Its `SystemMaxFiles=16` and `SystemMaxFileSize=2M`
+  initial_setup's server-sized 1G cap. Its `SystemMaxFiles=32` and `SystemMaxFileSize=1M`
   bound the journal's SD copy at 32 MiB plus the two active files, because `SystemMaxUse`
   cannot see the zeros written to the card (#4583, #8234, above). The files are small rather
-  than few: a day's system journal held 786 entries, so 2 MiB holds a day. log2ram's daily
-  rotate archives the system and user journals together, so 16 archives keep about 8 days of
-  history. That outlasts the weekly rkhunter report, which logs to the journal.
+  than few, because every rotation writes a full-size archive whatever it holds. The Pi made
+  about 4 archives a day on 2026-11-12 and 11-13: log2ram's daily rotate archives the system
+  and user journals, and each journald restart and boot adds more. An archive held about
+  270 KB, so 1 MiB holds one, and 32 archives keep about a week of history. That covers the
+  weekly rkhunter report, which logs to the journal.
 - `ACCT_LOGGING="3"` cuts pacct retention from 30 daily generations (savelog via
   `/etc/cron.daily/acct`, about 28 MB/day of healthcheck exec churn) to 3. savelog leaves
   `pacct.0` uncompressed, so pacct holds about 62 MB at its daily peak.

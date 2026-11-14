@@ -204,12 +204,12 @@ def _journal_caps(package: host_mode.Package) -> tuple[float, float, float]:
 
 # Measured on daniel-pi: pacct grows about 28 MB a day, and savelog gzips it to about a fifth.
 # sysstat writes about 1.4 MB a day. Each budget counts today's file beside the kept ones.
+# The rest of /var/hdd.log, outside these four trees, held 3 MB on 2026-11-14.
 PACCT_MB_PER_DAY = 28
 PACCT_GZIP_RATIO = 0.2
 SYSSTAT_MB_PER_DAY = 1.4
-JOURNAL_ACTIVE_FILES = (
-    2  # system.journal and user-1000.journal; SystemMaxFiles counts archives
-)
+UNCAPPED_REST_MB = 3
+JOURNAL_ACTIVE_FILES = 2  # system.journal and user-1000.journal
 
 
 def _edit_value(package: host_mode.Package, path: str, key: str) -> str:
@@ -232,7 +232,7 @@ def sd_copy_worst_mb(package: host_mode.Package) -> float:
         _edit_value(package, AUDITD_CONF, "num_logs")
     )
     days = int(_edit_value(package, "/etc/sysstat/sysstat", "HISTORY")) + 1
-    return journal + pacct + audit + days * SYSSTAT_MB_PER_DAY
+    return journal + pacct + audit + days * SYSSTAT_MB_PER_DAY + UNCAPPED_REST_MB
 
 
 def test_the_whole_sd_copy_fits_under_the_log2ram_boot_guard(package):
