@@ -1,7 +1,10 @@
 # node-exporter — Prometheus host metrics, both nodes
 
-Prometheus `node_exporter` as a DaemonSet, added at the Phase F drain so daniel-box gains
-`node_*` coverage it never had while daniel-server's LAN-published 9100 retires.
+Prometheus `node_exporter` as a DaemonSet
+(`k8s/roles/node-exporter/templates/daemonset.yaml.j2`).
+
+**HISTORY —** It was added at the Phase F drain so daniel-box gains `node_*` coverage it never
+had while daniel-server's LAN-published 9100 retires.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in k8s/roles/longhorn-reconcile/defaults/main.yml. -->
@@ -29,7 +32,8 @@ Prometheus `node_exporter` as a DaemonSet, added at the Phase F drain so daniel-
   readinessProbe gates the rollout, and the image is version-pinned.
 
 ## Notable
-- **CPU limit is 1 core, not the usual 200m.** node-exporter renders ~320 metric families per
+- **CPU limit is 1 core, not the usual 200m**
+  (`k8s/roles/node-exporter/templates/daemonset.yaml.j2`). node-exporter renders ~320 metric families per
   request; under a tighter limit it was throttled on 42% of CFS periods, and kubelet's probes
   read a bounded prefix of `/metrics` and close early — a slow render meant the probe cut off
   mid-body, logging a `connection reset by peer` line per unwritten family. That flood was 97%
@@ -107,4 +111,5 @@ mounted at `/textfile` and read by `--collector.textfile.directory`. A host prod
   compares them.
 
 ## Editing
-`templates/daemonset.yaml.j2` (all the tuning history lives in its comments).
+`k8s/roles/node-exporter/templates/daemonset.yaml.j2` (all the tuning history lives in its
+comments).
