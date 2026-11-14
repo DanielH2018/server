@@ -31,7 +31,7 @@ def tree(tmp_path):
 PUBLISHED = {"homelab-daniel-box": ["0.7465+g203fe8f7bc22", "0.7460+g840813a2285a"]}
 
 
-def _run(tmp_path, config, *, rendered=None, owners=None, published=None, deliver=True):
+def _run(tmp_path, config, *, rendered=None, owners=None, debs=None, deliver=True):
     """One pass; returns (ok, verdict, the posts made)."""
     posts = []
 
@@ -41,7 +41,8 @@ def _run(tmp_path, config, *, rendered=None, owners=None, published=None, delive
 
     tools = ack.Boundaries(
         owner=lambda path: (owners or {}).get(path),
-        published=lambda package: (published or PUBLISHED).get(package, []),
+        published=lambda package: PUBLISHED.get(package, []),
+        published_md5s=lambda package, version: (debs or {}).get((package, version)),
         render=lambda user, chezmoi, source, target: (rendered or {}).get(target),
         sync=lambda repo, clone: "b0b8bf3f",
     )
@@ -89,6 +90,12 @@ def _owned(path, version):
     return {str(path): ack.Owner("homelab-daniel-box", version, digest)}
 
 
+def _deb(path, version, content):
+    """A published .deb of `version` whose md5sums record `content` for `path`."""
+    digest = hashlib.md5(content).hexdigest()
+    return {("homelab-daniel-box", version): {str(path): digest}}
+
+
 def test_a_package_file_matching_its_md5_is_not_posted_and_a_drifted_one_is(
     tmp_path, tree
 ):
@@ -96,9 +103,10 @@ def test_a_package_file_matching_its_md5_is_not_posted_and_a_drifted_one_is(
     _run(tmp_path, config)
     package_file.write_text("scripts/lib/\nscripts/deploy_tools/\n")
     installed = _owned(package_file, "0.7465+g203fe8f7bc22")
-    assert _run(tmp_path, config, owners=installed)[2] == []
+    deb = _deb(package_file, "0.7465+g203fe8f7bc22", package_file.read_bytes())
+    assert _run(tmp_path, config, owners=installed, debs=deb)[2] == []
     package_file.write_text("scripts/lib/\n")
-    [post] = _run(tmp_path, config, owners=installed)[2]
+    [post] = _run(tmp_path, config, owners=installed, debs=deb)[2]
     assert f"`{package_file}` changed\n" in post
 
 
@@ -111,10 +119,24 @@ def test_a_hand_installed_package_change_is_posted_with_both_versions(tmp_path, 
     assert ok and "0 explained, 1 posted" in line
     assert (
         f"`{package_file}` changed (homelab-daniel-box 0.7466+g0123456789ab is installed, "
-        "and no apt source publishes it; the newest published version is "
+        "and no apt source serves it; the newest published version is "
         "0.7465+g203fe8f7bc22)"
     ) in post
     assert "+scripts/deploy_tools/" in post
+
+
+def test_a_hand_build_reusing_a_published_version_is_posted(tmp_path, tree):
+    _, package_file, config = tree
+    _run(tmp_path, config)
+    package_file.write_text("scripts/lib/\nscripts/deploy_tools/\n")
+    reused = _owned(package_file, "0.7465+g203fe8f7bc22")
+    deb = _deb(package_file, "0.7465+g203fe8f7bc22", b"scripts/lib/\n")
+    ok, line, [post] = _run(tmp_path, config, owners=reused, debs=deb)
+    assert ok and "0 explained, 1 posted" in line
+    assert (
+        f"`{package_file}` changed (homelab-daniel-box 0.7465+g203fe8f7bc22 is installed, "
+        "and the file differs from the one in the published package of that version)"
+    ) in post
 
 
 def test_published_versions_skips_one_only_dpkg_status_lists():

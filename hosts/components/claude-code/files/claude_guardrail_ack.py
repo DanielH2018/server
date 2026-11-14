@@ -5,11 +5,12 @@ server#8250 slice 2. homelab-claude-guardrail-ack.timer runs this as root on bot
 reads every file under the guardrail paths in the config, compares it with the copy the last run
 kept, and classifies each change:
 
-- explained by a package: dpkg owns the path, the file matches the installed package's md5, and
-  the installed version is one the apt sources publish. A package built elsewhere and installed
-  with `dpkg -i` matches its own md5 but no published version, so its change is posted with the
-  installed version and the newest published one. Reconcile's record cannot make this split,
-  because the postinst starts reconcile, which records the hand-installed version too;
+- explained by a package: dpkg owns the path, and the file matches the md5 recorded inside the
+  `.deb` an apt source publishes for the installed version. apt checks that `.deb` against the
+  signed index. A package built elsewhere and installed with `dpkg -i` matches its own md5sums,
+  but not a published `.deb` of its version, so its change is posted with the installed
+  version. Reconcile's record cannot make this split, because the postinst starts reconcile,
+  which records the hand-installed version too;
 - explained by the dotfiles: the path is under a user's home, and the file matches what chezmoi
   renders for that user from the dotfiles repo's `main`;
 - Claude Code's own write: a settings.json whose changed top-level keys are all in
@@ -110,11 +111,8 @@ def dpkg_owner(path: str) -> Owner | None:
         capture_output=True,
         text=True,
     ).stdout.strip()
-    for line in sums.read_text().splitlines():
-        digest, _, name = line.partition("  ")
-        if "/" + name == path:
-            return Owner(package, version, digest)
-    return None
+    digest = parse_md5sums(sums.read_text()).get(path)
+    return Owner(package, version, digest) if digest is not None else None
 
 
 _POLICY_VERSION = re.compile(r"^ (?:\*\*\*| {3}) (\S+) -?\d+$")
@@ -132,6 +130,44 @@ def published_versions(policy: str) -> list[str]:
             if m.group(1) != "/var/lib/dpkg/status" and version not in found:
                 found.append(version)
     return found
+
+
+def parse_md5sums(text: str) -> dict[str, str]:
+    """A package's md5sums file as {absolute path: md5}."""
+    sums = {}
+    for line in text.splitlines():
+        digest, _, name = line.partition("  ")
+        if name:
+            sums["/" + name] = digest
+    return sums
+
+
+def apt_published_md5s(package: str, version: str) -> dict[str, str] | None:
+    """The md5sums inside the `.deb` an apt source serves for `package` at `version`, or None if none serves it."""
+    with tempfile.TemporaryDirectory() as tmp:
+        fetch = subprocess.run(
+            [
+                "apt-get",
+                "download",
+                "-q",
+                "-o",
+                "APT::Sandbox::User=root",
+                f"{package}={version}",
+            ],
+            cwd=tmp,
+            capture_output=True,
+            timeout=300,
+        )
+        debs = list(Path(tmp).glob("*.deb"))
+        if fetch.returncode != 0 or len(debs) != 1:
+            return None
+        info = subprocess.run(
+            ["dpkg-deb", "--info", str(debs[0]), "md5sums"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    return parse_md5sums(info.stdout)
 
 
 def apt_published(package: str) -> list[str]:
@@ -237,12 +273,14 @@ class Boundaries:
     Attributes:
         owner: The installed package that owns a path, or None when no package owns it.
         published: The versions of a package the apt sources publish, newest first.
+        published_md5s: The md5sums of the published `.deb` for (package, version), or None.
         render: What chezmoi renders for (user, chezmoi binary, source, target), or None.
         sync: Bring the dotfiles clone to `main` from (repo, clone); returns its commit.
     """
 
     owner: Callable[[str], Owner | None] = dpkg_owner
     published: Callable[[str], list[str]] = apt_published
+    published_md5s: Callable[[str, str], dict[str, str] | None] = apt_published_md5s
     render: Callable[[str, str, str, str], bytes | None] = chezmoi_render
     sync: Callable[[str, str], str] = sync_dotfiles
 
@@ -254,19 +292,25 @@ def classify(
     change: Change, config: dict, tools: Boundaries, dotfiles: Callable[[], str]
 ) -> Change:
     """The change with its reason filled in when something explains it."""
+    digest = hashlib.md5(change.new or b"").hexdigest()
     owner = tools.owner(change.path) if change.new is not None else None
-    if owner is not None and owner.md5 == hashlib.md5(change.new or b"").hexdigest():
-        published = tools.published(owner.package)
-        if owner.version in published:
+    if owner is not None and owner.md5 == digest:
+        sums = tools.published_md5s(owner.package, owner.version)
+        if sums is not None and sums.get(change.path) == digest:
             return Change(change.path, change.old, change.new, "package")
-        newest = published[0] if published else "none"
-        change = Change(
-            change.path,
-            change.old,
-            change.new,
-            note=f"{owner.package} {owner.version} is installed, and no apt source "
-            f"publishes it; the newest published version is {newest}",
-        )
+        if sums is None:
+            published = tools.published(owner.package)
+            newest = published[0] if published else "none"
+            note = (
+                f"{owner.package} {owner.version} is installed, and no apt source "
+                f"serves it; the newest published version is {newest}"
+            )
+        else:
+            note = (
+                f"{owner.package} {owner.version} is installed, and the file differs "
+                "from the one in the published package of that version"
+            )
+        change = Change(change.path, change.old, change.new, note=note)
     if change.path.endswith("/settings.json") and quiet_settings_change(
         change.old, change.new, set(config["quiet_settings_keys"])
     ):
