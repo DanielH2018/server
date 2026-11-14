@@ -8,6 +8,7 @@ directory, because the stub never runs the pod and so cannot show the program ca
 Run: uv run pytest tests/longhorn/test_longhorn_restore_drill_sqlite.py
 """
 
+import json
 import os
 import re
 import sqlite3
@@ -116,21 +117,83 @@ def test_the_probe_reports_a_corrupt_database_as_bad(tmp_path: Path) -> None:
     assert lines[-1] == "sqlite_checked=2 sqlite_bad=1"
 
 
+def test_the_probe_pod_runs_the_program_over_a_read_only_mount(tmp_path: Path) -> None:
+    """The pod spec delivers the lifted program, its scratch emptyDir and a read-only restore."""
+    run = harness(tmp_path, [PVC])
+    proc = run(restore="pass")
+    assert proc.returncode == 0, proc.stderr
+    created = [c for c in run.calls if " run restore-drill-" in c]
+    assert len(created) == 1, run.calls
+    spec = json.loads(created[0].split("--overrides=", 1)[1])["spec"]
+    (container,) = spec["containers"]
+    assert container["command"][:2] == ["sh", "-c"]
+    assert 'python3 -c "$SQLITE_CHECK" /drill /scratch' in container["command"][2]
+    assert {"name": "SQLITE_CHECK", "value": _probe_program()} in container["env"]
+    mounts = {m["mountPath"]: m for m in container["volumeMounts"]}
+    volumes = {v["name"]: v for v in spec["volumes"]}
+    assert mounts["/drill"]["readOnly"] is True
+    assert volumes[mounts["/drill"]["name"]]["persistentVolumeClaim"]["claimName"] == (
+        f"restore-drill-{PVC}"
+    )
+    assert "emptyDir" in volumes[mounts["/scratch"]["name"]]
+
+
+def test_the_probe_skips_a_fifo_instead_of_blocking_on_it(tmp_path: Path) -> None:
+    """Opening a named pipe waits for a writer; the scan reads regular files only."""
+    root = tmp_path / "drill"
+    root.mkdir()
+    _make_db(root / "good.db")
+    os.mkfifo(root / "pipe")
+    proc = launch(
+        [sys.executable, "-I", "-c", _probe_program(), str(root), str(tmp_path)],
+        env={"PATH": os.environ["PATH"]},
+        timeout=30,
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout.splitlines() == [
+        "sqlite ok good.db",
+        "sqlite_checked=1 sqlite_bad=0",
+    ]
+
+
+def _wal_only_corruption(conn: sqlite3.Connection) -> None:
+    """Point the index at the table's root page, a schema change that lives only in the WAL."""
+    root = conn.execute(
+        "SELECT rootpage FROM sqlite_master WHERE name = 't'"
+    ).fetchone()
+    conn.execute("PRAGMA writable_schema = ON")
+    conn.execute("UPDATE sqlite_master SET rootpage = ? WHERE name = 't_v'", root)
+    conn.commit()
+
+
 @pytest.mark.skipif(
     os.geteuid() == 0, reason="root ignores the read-only mode bits this test relies on"
 )
+@pytest.mark.parametrize(
+    ("corrupt_wal", "verdict"),
+    [(False, "sqlite ok app.db"), (True, "sqlite bad app.db: ")],
+)
 def test_a_database_a_read_only_open_refuses_is_checked_from_a_copy(
-    tmp_path: Path,
+    tmp_path: Path, corrupt_wal: bool, verdict: str
 ) -> None:
-    """A `-wal` without its `-shm` cannot open read-only; the copy replays it and passes."""
+    """A `-wal` without its `-shm` cannot open read-only, so the copy with its WAL is checked.
+
+    The main file holds only the clean state, and the corruption exists only in the WAL. So the
+    corrupt case reads `bad` only if the copy took the WAL with it and replayed it.
+    """
     live = tmp_path / "live"
     live.mkdir()
     writer = sqlite3.connect(live / "app.db")
+    writer.execute("CREATE TABLE t(id INTEGER PRIMARY KEY, v TEXT)")
+    writer.execute("CREATE INDEX t_v ON t(v)")
+    writer.executemany("INSERT INTO t(v) VALUES (?)", [(f"v{i}",) for i in range(2000)])
+    writer.commit()
     writer.execute("PRAGMA journal_mode=wal")
     writer.execute("PRAGMA wal_autocheckpoint=0")
-    writer.execute("CREATE TABLE t(x)")
-    writer.executemany("INSERT INTO t VALUES (?)", [(i,) for i in range(500)])
+    writer.executemany("INSERT INTO t(v) VALUES (?)", [(f"w{i}",) for i in range(500)])
     writer.commit()
+    if corrupt_wal:
+        _wal_only_corruption(writer)
     root = tmp_path / "drill"
     root.mkdir()
     for name in ("app.db", "app.db-wal"):
@@ -144,8 +207,7 @@ def test_a_database_a_read_only_open_refuses_is_checked_from_a_copy(
     finally:
         root.chmod(0o755)
     assert proc.returncode == 0, proc.stderr
-    assert proc.stdout.splitlines() == [
-        "sqlite ok app.db",
-        "sqlite_checked=1 sqlite_bad=0",
-    ]
+    lines = proc.stdout.splitlines()
+    assert lines[0].startswith(verdict), lines
+    assert lines[1:] == [f"sqlite_checked=1 sqlite_bad={int(corrupt_wal)}"]
     assert not any((tmp_path / "scratch").iterdir()), "the copy must be removed"

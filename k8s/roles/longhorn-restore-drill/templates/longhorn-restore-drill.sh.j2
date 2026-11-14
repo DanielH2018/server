@@ -452,7 +452,7 @@ done
 # pod's emptyDir and opens the copy read-write, which replays them the way the app does at
 # start. The restored volume itself stays mounted read-only. Only paths and verdicts are printed.
 SQLITE_CHECK=$(cat <<'PY'
-import os, shutil, sqlite3, sys
+import os, shutil, sqlite3, stat, sys
 from urllib.parse import quote
 
 MAGIC = b"SQLite format 3\x00"
@@ -503,7 +503,7 @@ for dirpath, dirnames, filenames in os.walk(root):
     dirnames.sort()
     for name in sorted(filenames):
         path = os.path.join(dirpath, name)
-        if os.path.islink(path) or not is_sqlite(path):
+        if not stat.S_ISREG(os.lstat(path).st_mode) or not is_sqlite(path):
             continue
         result = check(path)
         checked += 1
