@@ -1,0 +1,41 @@
+# Shipped by daniel-box's package while claude_code_config_render_enabled. Started by
+# homelab-claude-config-render.timer. dotfiles#967 D13 and I7: renders the unattended sessions'
+# Claude Code config from the verified dotfiles tag, as a user no session runs as.
+[Unit]
+Description=Render the unattended sessions' Claude Code config from the verified dotfiles tag
+After=homelab-claude-dotfiles-mirror.service
+ConditionPathExists=/var/lib/homelab-claude-dotfiles-mirror/verified.json
+OnFailure=homelab-alert@%n.service
+
+[Service]
+Type=oneshot
+# The render runs the dotfiles repo's templates, which can run commands, so it runs as its own
+# user with no network and nothing writable but its runtime directory. Root never runs chezmoi.
+User=claude-triage-render
+Group=claude-triage-render
+RuntimeDirectory=homelab-claude-config-render
+RuntimeDirectoryMode=0700
+UMask=0077
+Environment=HOME=/run/homelab-claude-config-render/home
+Environment=PATH=/usr/lib/homelab/bin:/usr/bin:/bin
+Environment=PYTHONDONTWRITEBYTECODE=1
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectProc=invisible
+PrivateTmp=yes
+PrivateDevices=yes
+PrivateNetwork=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+CapabilityBoundingSet=
+TimeoutStartSec=10min
+SyslogLevel=notice
+SyslogIdentifier=claude-config-render
+# The host's python3, standard library only.
+ExecStart=/usr/bin/python3 -I /usr/lib/homelab/claude-config-render/claude_config_render.py render
+# `+` runs the publish as root outside the sandbox: it reads the stage without following a link
+# and writes the root-owned directory the sessions read.
+ExecStartPost=+/usr/bin/python3 -I /usr/lib/homelab/claude-config-render/claude_config_render.py publish

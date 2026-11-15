@@ -695,6 +695,12 @@ claude_code_dotfiles_mirror_enabled: true
 # A `*/N` minute, read as the timer's period.
 claude_code_dotfiles_mirror_minute: "*/15"
 claude_code_dotfiles_mirror_repo: https://github.com/DanielH2018/dotfiles.git
+# homelab-claude-config-render.timer renders the unattended sessions' Claude Code config from the
+# mirror's record as claude-triage-render, which only daniel-box's package.yml declares, and
+# publishes it to /var/lib/homelab-claude-config. The triage and Renovate sessions read only that,
+# and refuse to start without it. False drops the timer, its unit, the code and the config from
+# the next package version, and keeps what was last published.
+claude_code_config_render_enabled: false
 
 # ── The weekly summary of the unattended runs (dotfiles#967 C7) ──────────────────────────
 # homelab-claude-weekly-summary.timer runs files/claude_weekly_summary.py as root every Monday

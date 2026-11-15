@@ -25,6 +25,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from agent_toolbox import log, read_file
+from claude_config_lock import hold_settings
 from host_lib import atomic_write, export_transcript, install_excepthook, parse_env_file
 from run_requests import REQUESTS_DIR
 
@@ -36,13 +37,13 @@ OUTPUT_FILE = "session.out"
 SESSION_ENV_FILE = "/etc/renovate-agent/session.env"
 
 
-def session_argv(cfg: dict[str, str], requests_dir: str) -> list[str]:
+def session_argv(cfg: dict[str, str], requests_dir: str, settings: str) -> list[str]:
     """The headless Claude command line for this run's prompt.
 
     `requests_dir` is outside the clone, so it is added as a working directory: a headless
     session has no one to approve a Write there, and its request files would never land.
-    `SETTINGS_FILE` is the packaged, root-owned settings file: the guard hooks and the deny floor,
-    which the session cannot edit.
+    `settings` is the root-owned file homelab-claude-config-render published from the verified
+    dotfiles tag: the guard hooks and the deny floor, which the session cannot edit.
     """
     prompt = read_file(cfg["PROMPT_FILE"])
     if not prompt.strip():
@@ -51,7 +52,8 @@ def session_argv(cfg: dict[str, str], requests_dir: str) -> list[str]:
         cfg.get("CLAUDE_BIN", "claude"),
         "-p",
         prompt,
-        *(["--settings", cfg["SETTINGS_FILE"]] if cfg.get("SETTINGS_FILE") else []),
+        "--settings",
+        settings,
         "--permission-mode",
         cfg.get("PERMISSION_MODE", "auto"),
         "--model",
@@ -72,9 +74,10 @@ def main(config_path: str = CONFIG) -> int:
     under systemd there is no stdin to wait for.
     """
     cfg = parse_env_file(config_path)
+    settings = hold_settings(cfg["SETTINGS_FILE"])
     exchange = cfg["EXCHANGE_DIR"]
     out = os.path.join(exchange, OUT_DIR)
-    argv = session_argv(cfg, os.path.join(exchange, REQUESTS_DIR))
+    argv = session_argv(cfg, os.path.join(exchange, REQUESTS_DIR), settings)
     log("starting session")
     # systemd sends the wall clock's SIGINT to the whole unit. A handler, not SIG_IGN, which
     # claude would inherit: claude still stops, and this script lives on to copy the transcript.

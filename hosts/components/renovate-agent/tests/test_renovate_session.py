@@ -17,11 +17,16 @@ def _config(tmp_path, claude_body: str) -> str:
     claude = write_exec(tmp_path / "claude", claude_body)
     prompt = tmp_path / "prompt.txt"
     prompt.write_text("/renovate-prs\n")
+    published = tmp_path / "published"
+    (published / "versions" / "v1").mkdir(parents=True)
+    (published / "versions" / "v1" / "renovate.json").write_text("{}")
+    (published / "lock").touch()
+    (published / "current").symlink_to("versions/v1")
     cfg = tmp_path / "config.env"
     cfg.write_text(
         f"REPO=o/r\nREPO_DIR={tmp_path}\nPROMPT_FILE={prompt}\n"
         f"EXCHANGE_DIR={tmp_path}/exchange\nCLAUDE_BIN={claude}\n"
-        "SETTINGS_FILE=/usr/lib/homelab/renovate-agent/claude-settings.json\n"
+        f"SETTINGS_FILE={published}/current/renovate.json\n"
     )
     return str(cfg)
 
@@ -41,8 +46,8 @@ def test_the_session_writes_its_output_and_may_write_requests(tmp_path):
     assert json.loads(out.read_text()) == {"type": "result"}
     argv = seen.read_text().splitlines()
     assert argv[argv.index("--add-dir") + 1] == str(tmp_path / "exchange" / "requests")
-    assert argv[argv.index("--settings") + 1] == (
-        "/usr/lib/homelab/renovate-agent/claude-settings.json"
+    assert argv[argv.index("--settings") + 1] == str(
+        tmp_path / "published" / "versions" / "v1" / "renovate.json"
     )
     assert (tmp_path / "argv.cwd").read_text().strip() == str(tmp_path)
 

@@ -111,6 +111,10 @@ def _setup(tmp_path, claude_body: str) -> tuple[str, str, str]:
     reports.mkdir()
     prompt = tmp_path / "prompt.txt"
     prompt.write_text("Diagnose it.")
+    published = tmp_path / "published"
+    (published / "current").mkdir(parents=True)
+    (published / "lock").touch()
+    (published / "current" / "triage.json").write_text("{}")
     config = tmp_path / "config.env"
     config.write_text(
         "\n".join(
@@ -122,6 +126,7 @@ def _setup(tmp_path, claude_body: str) -> tuple[str, str, str]:
                 f"PROMPT_FILE={prompt}",
                 f"WORKDIR={tmp_path}",
                 f"CLAUDE_BIN={_fake_claude(tmp_path, claude_body)}",
+                f"SETTINGS_FILE={published}/current/triage.json",
                 "RUN_TIMEOUT_S=30",
             ]
         )

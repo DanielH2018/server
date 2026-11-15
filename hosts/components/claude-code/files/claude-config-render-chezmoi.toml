@@ -1,0 +1,8 @@
+# The chezmoi config homelab-claude-config-render passes with --config: the answers the dotfiles
+# repo's .chezmoi.toml.tmpl would otherwise prompt for. Root-owned, so the render user cannot
+# change which variant it renders. `agent = true` is the variant the claude-code component's
+# agent user gets.
+[data]
+    work = false
+    profile = "server"
+    agent = true

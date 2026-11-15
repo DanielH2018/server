@@ -242,7 +242,7 @@ FLOOR = [
     "hosts/components/claude-code/templates/50-claude-triage.rules.j2",
     "hosts/components/claude-code/files/claude_triage_run.py",
     "hosts/components/claude-code/files/claude_triage_session.py",
-    "hosts/components/claude-code/files/claude-triage-settings.json",
+    "hosts/components/claude-code/files/claude-triage-settings-overlay.json",
     "hosts/components/claude-code/files/claude_triage_poll.py",
     # The root inspector joined the floor with its grant (#6323).
     "hosts/components/claude-code/files/homelab_rootq.py",
@@ -256,6 +256,11 @@ FLOOR = [
     # The dotfiles root mirror's signer key and verifier joined it on 2026-11-13 (dotfiles#967 D13).
     "hosts/components/claude-code/templates/claude-dotfiles-allowed-signers.j2",
     "hosts/components/claude-code/files/claude_dotfiles_mirror.py",
+    # The render of T2's config from that tag joined it on 2026-11-15 (dotfiles#967 I7).
+    "hosts/components/claude-code/files/claude_config_render.py",
+    "hosts/components/claude-code/files/claude-config-render-chezmoi.toml",
+    "hosts/components/claude-code/units/homelab-claude-config-render.",
+    "hosts/lib/claude_config_lock.py",
     # The Renovate agent's grant points joined it on 2026-11-13 (guardrails plan B1).
     "hosts/components/renovate-agent/files/t2-approval-floor",
     "hosts/components/renovate-agent/files/renovate_floor.py",
@@ -279,7 +284,7 @@ FLOOR = [
     "hosts/components/renovate-agent/templates/homelab-renovate-agent.service.j2",
     "hosts/components/renovate-agent/templates/homelab-renovate-agent.timer.j2",
     # The session's Claude Code settings and what installs them joined it on 2026-11-14 (#8392).
-    "hosts/components/renovate-agent/files/claude-settings.json",
+    "hosts/components/renovate-agent/files/claude-settings-overlay.json",
     "hosts/components/renovate-agent/templates/renovate-agent-setup.sh.j2",
     "hosts/components/renovate-agent/templates/homelab-renovate-agent-setup.service.j2",
     "hosts/components/renovate-agent/component.yml",

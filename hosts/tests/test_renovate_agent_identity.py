@@ -17,6 +17,7 @@ import re
 import shlex
 import sys
 
+import claude_config_render
 import pytest
 import run_requests
 from _helpers import REPO
@@ -64,7 +65,7 @@ MOVED = {
     "discord_alert_webhook": WEBHOOK_SENTINEL,
     "renovate_agent_ctl_home": "/srv/identity-sentinel-ctl",
 }
-SETTINGS_SRC = "files/claude-settings.json"
+SETTINGS = "/var/lib/homelab-claude-config/current/renovate.json"
 # Any PR number the lander accepts, standing in for the prompt's `<n>`.
 PR = "3337"
 
@@ -122,8 +123,7 @@ def test_the_session_runs_as_its_own_user_in_its_own_clone() -> None:
     )
     assert guard, "the hook no longer names its claude_guard directory"
     assert f"CLAUDE_GUARD_HOME={TOOLS_DIR}{guard.group(1)}" in envs
-    [settings] = [f["dst"] for f in SPEC["files"] if f.get("src") == SETTINGS_SRC]
-    assert f"\nSETTINGS_FILE={settings}\n" in config
+    assert f"\nSETTINGS_FILE={SETTINGS}\n" in config
 
 
 def test_the_runner_runs_as_the_controller_with_its_own_lock() -> None:
@@ -301,7 +301,13 @@ def test_the_hooks_run_in_the_clone_the_session_works_in() -> None:
 
 
 def session_settings() -> dict:
-    return json.loads((COMPONENT / SETTINGS_SRC).read_text())
+    """What homelab-claude-config-render publishes for the session from the t2-1 render."""
+    render = REPO / "hosts/components/claude-code/tests/fixtures/config-render"
+    base = claude_config_render.floor(
+        json.loads((render / "t2-1-settings.base.json").read_text())
+    )
+    overlay = json.loads((COMPONENT / "files/claude-settings-overlay.json").read_text())
+    return claude_config_render.merge(base, overlay)
 
 
 def hook_commands(settings: dict, event: str, matcher: str) -> list[str]:

@@ -13,6 +13,17 @@ import host_lib
 import pytest
 
 
+def _published(tmp_path) -> tuple[str, str]:
+    """A published config as homelab-claude-config-render leaves it; (SETTINGS_FILE, its target)."""
+    root = tmp_path / "published"
+    version = root / "versions" / "v1"
+    version.mkdir(parents=True)
+    (version / "triage.json").write_text("{}")
+    (root / "lock").touch()
+    (root / "current").symlink_to("versions/v1")
+    return str(root / "current" / "triage.json"), str(version / "triage.json")
+
+
 def test_a_token_pasted_across_a_wrapped_line_reaches_the_session_whole(
     tmp_path,
 ) -> None:
@@ -30,7 +41,7 @@ def test_a_token_pasted_across_a_wrapped_line_reaches_the_session_whole(
 def test_the_session_is_diagnose_only_and_capped() -> None:
     # fact: hosts/components/claude-code/CLAUDE.md#Autonomous-role contract (`claude-triage@`, a session started by a monitor episode)
     argv = session.build_argv(
-        {"CLAUDE_BIN": "claude", "BUDGET_USD": "10", "MAX_TURNS": "60"}
+        {"CLAUDE_BIN": "claude", "BUDGET_USD": "10", "MAX_TURNS": "60"}, "/s.json"
     )
     after = argv[argv.index("--disallowedTools") + 1 :]
     for tool in (
@@ -44,9 +55,7 @@ def test_the_session_is_diagnose_only_and_capped() -> None:
     assert argv[argv.index("--max-turns") + 1] == "60"
     assert argv[argv.index("--permission-prompts") + 1] == "none"
     assert json.loads(argv[argv.index("--json-schema") + 1]) == session.SCHEMA
-    assert "--settings" not in argv
-    with_settings = session.build_argv({"SETTINGS_FILE": "/opt/s.json"})
-    assert with_settings[with_settings.index("--settings") + 1] == "/opt/s.json"
+    assert argv[argv.index("--settings") + 1] == "/s.json"
 
 
 def test_the_prompt_reaches_claude_on_stdin_and_the_result_lands_in_the_exchange(
@@ -64,13 +73,16 @@ def test_the_prompt_reaches_claude_on_stdin_and_the_result_lands_in_the_exchange
         'echo \'{"result": "session-text-sentinel"}\'\necho stderr-sentinel >&2\n'
     )
     fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
+    settings, target = _published(tmp_path)
     config = tmp_path / "config.env"
     config.write_text(
         f"EXCHANGE_DIR={exchange}\nCLAUDE_BIN={fake}\nWORKDIR={tmp_path}\n"
+        f"SETTINGS_FILE={settings}\n"
     )
 
     assert session.main(["claude_triage_session.py"], str(config)) == 0
 
+    assert f"--settings {target} " in (tmp_path / "seen.argv").read_text()
     assert "episode-sentinel" not in (tmp_path / "seen.argv").read_text()
     assert (tmp_path / "seen.stdin").read_text() == "episode-sentinel"
     result = (exchange / session.OUT_DIR / session.RESULT_NAME).read_text()
@@ -94,9 +106,21 @@ def _transcript_run(tmp_path, claude_body: str) -> tuple:
     config = tmp_path / "config.env"
     config.write_text(
         f"EXCHANGE_DIR={exchange}\nCLAUDE_BIN={fake}\nWORKDIR={tmp_path}\n"
-        f"SESSION_HOME={home}\n"
+        f"SESSION_HOME={home}\nSETTINGS_FILE={_published(tmp_path)[0]}\n"
     )
     return config, exchange / session.OUT_DIR / host_lib.TRANSCRIPT_NAME
+
+
+def test_no_session_starts_without_the_published_settings(tmp_path) -> None:
+    """A missing publish leaves the session with no deny floor, so claude never starts."""
+    started = tmp_path / "started"
+    config, _ = _transcript_run(tmp_path, f"touch {started}")
+    (tmp_path / "published" / "current").unlink()
+
+    with pytest.raises(RuntimeError, match="no published Claude Code settings"):
+        session.main(["claude_triage_session.py"], str(config))
+
+    assert not started.exists()
 
 
 @pytest.fixture

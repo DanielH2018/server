@@ -328,24 +328,25 @@ def test_the_triage_file_census_names_the_runner_the_session_and_the_rule() -> N
     assert {
         "hosts/components/claude-code/files/claude_triage_run.py",
         "hosts/components/claude-code/files/claude_triage_session.py",
-        "hosts/components/claude-code/files/claude-triage-settings.json",
+        "hosts/components/claude-code/files/claude-triage-settings-overlay.json",
         f"hosts/components/claude-code/templates/{RULE}",
         "hosts/components/claude-code/templates/claude-triage-setup.sh.j2",
     } <= set(TRIAGE_FILES)
 
 
-def test_the_sessions_settings_are_renovates_with_the_hooks_moved_to_the_controllers_tools() -> (
+def test_the_sessions_overlay_is_renovates_with_the_hooks_moved_to_the_controllers_tools() -> (
     None
 ):
-    """One deny floor for both unattended sessions; only where the hook scripts live differs."""
+    """One server floor for both unattended sessions; only where the hook scripts live differs."""
     renovate = json.loads(
         (
-            REPO / "hosts/components/renovate-agent/files/claude-settings.json"
+            REPO / "hosts/components/renovate-agent/files/claude-settings-overlay.json"
         ).read_text()
     )
-    triage = json.loads((ROLE / "files" / "claude-triage-settings.json").read_text())
+    triage = json.loads(
+        (ROLE / "files" / "claude-triage-settings-overlay.json").read_text()
+    )
     assert triage["permissions"] == renovate["permissions"]
-    assert triage.get("autoMode") == renovate.get("autoMode")
     moved = json.loads(
         json.dumps(renovate["hooks"]).replace(
             '"/var/lib/renovate-agent-tools/', '"/var/lib/claude-triage-tools/'

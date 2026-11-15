@@ -1,0 +1,13 @@
+# Shipped by daniel-box's package with its enable link while claude_code_config_render_enabled.
+# Four minutes after each run of homelab-claude-dotfiles-mirror.timer, which fires at :07/15. A run
+# whose render matches what is published writes nothing, so the period only bounds how long a
+# newly verified tag or a changed overlay waits.
+[Unit]
+Description=Render the unattended sessions' Claude Code config every 15 minutes
+
+[Timer]
+OnCalendar=*-*-* *:11/15:00
+AccuracySec=60s
+
+[Install]
+WantedBy=timers.target

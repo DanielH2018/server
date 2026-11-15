@@ -27,6 +27,7 @@ import sys
 
 # The script runs from /opt/claude-triage, where component.yml's `lib: host_lib.py` entry
 # ships host_lib.py beside it.
+from claude_config_lock import hold_settings
 from host_lib import atomic_write, export_transcript, parse_env_file
 
 CONFIG = "/etc/claude-triage/config.env"
@@ -75,17 +76,17 @@ TOKEN_ENV = "CLAUDE_CODE_OAUTH_TOKEN"
 TOKEN_CREDENTIAL = "claude_oauth_token"
 
 
-def build_argv(cfg: dict[str, str]) -> list[str]:
+def build_argv(cfg: dict[str, str], settings: str) -> list[str]:
     """The session's argv. The prompt is not in it: `claude -p` reads it from stdin.
 
-    `SETTINGS_FILE` is the packaged, root-owned settings file: the shared guard hooks and the deny
-    floor, which the session user cannot edit.
+    `settings` is the root-owned file homelab-claude-config-render published from the verified
+    dotfiles tag: the shared guard hooks and the deny floor, which the session user cannot edit.
     """
-    settings = cfg.get("SETTINGS_FILE")
     return [
         cfg.get("CLAUDE_BIN", "claude"),
         "-p",
-        *(["--settings", settings] if settings else []),
+        "--settings",
+        settings,
         "--model",
         cfg.get("MODEL", "opus"),
         "--permission-mode",
@@ -135,6 +136,7 @@ def main(argv: list[str], config_path: str = CONFIG) -> int:
         print(__doc__)
         return 0
     cfg = parse_env_file(config_path)
+    settings = hold_settings(cfg["SETTINGS_FILE"])
     exchange = cfg["EXCHANGE_DIR"]
     with open(os.path.join(exchange, IN_DIR, PROMPT_NAME), encoding="utf-8") as f:
         prompt = f.read()
@@ -142,7 +144,7 @@ def main(argv: list[str], config_path: str = CONFIG) -> int:
     # claude would inherit: claude still stops, and this script lives on to copy the transcript.
     signal.signal(signal.SIGINT, lambda signum, frame: None)
     p = subprocess.run(
-        build_argv(cfg),
+        build_argv(cfg, settings),
         cwd=cfg.get("WORKDIR", os.path.expanduser("~/server")),
         env=session_env(dict(os.environ)),
         input=prompt,
