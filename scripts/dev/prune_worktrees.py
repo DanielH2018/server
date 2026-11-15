@@ -281,7 +281,7 @@ def reap_claims(repo: str) -> list[str]:
     findings = Path(repo) / "scripts" / "dev" / "findings.py"
     if not findings.is_file():
         return [f"claims not reaped: no {findings}"]
-    # This interpreter, not `uv`: the weekly cron's PATH omits ~/.local/bin, and it already
+    # This interpreter, not `uv`: the weekly timer's PATH omits ~/.local/bin, and it already
     # runs this script under `uv run`, so sys.executable is the repo's env.
     try:
         proc = subprocess.run(
@@ -393,7 +393,7 @@ def brief(prune: bool = False, reap: bool = True) -> int:
             "origin/master"
         )
     if prune:
-        # Unconditional, unlike the report above: the weekly cron runs this path for the
+        # Unconditional, unlike the report above: the weekly timer runs this path for the
         # object-store repair at prune_all's tail, which must still happen on a week with
         # nothing to remove.
         failed = prune_all(
