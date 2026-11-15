@@ -89,7 +89,7 @@ REVIEW_SCRIPT = "scripts/dev/fanout.py"
 # Another repo's batch runs this repo's code from a snapshot of `origin/master` inside its own
 # worktree, never from the host's primary checkout, which can lag it (#3684, #3762). The
 # snapshot holds what such a batch reads: the review pipeline and everything it imports under
-# `scripts/`, the headless system prompt beside it, and the `fanout-stop` hook. It also holds
+# `scripts/` and `hosts/lib`, the headless system prompt beside it, and the `fanout-stop` hook. It also holds
 # the uv project files, so the brief's `findings.py` command can `uv run --project` the
 # snapshot rather than the primary checkout (#3783). It lives under `.fanout/`, which
 # `exclude_fanout_command` keeps out of git, so `clean` reads the tree as clean and removes the
@@ -99,6 +99,8 @@ SNAPSHOT_PATHS = (
     "scripts",
     # The ledger scripts/lib/gh.py counts each gh call into, so a batch's findings.py is counted.
     "hosts/components/gh-quota/files",
+    # `host_lib` and `ci_verdict`, which `probe.py` and the longhorn libs under `scripts/` import.
+    "hosts/lib",
     ".claude/hooks",
     "pyproject.toml",
     "uv.lock",
