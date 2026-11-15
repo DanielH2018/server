@@ -169,6 +169,21 @@ def test_the_whole_shutdown_fits_inside_the_ups_low_battery_margin(package):
     assert sum(shutdown_groups(package).values()) < 120
 
 
+def test_logind_lets_kubelet_delay_the_shutdown_for_every_group(package):
+    """kubelet's shutdown manager refuses to start while logind's delay is below the groups' sum.
+
+    logind merges drop-ins in filename order across /etc and /usr/lib, and the last one wins, so
+    the file must sort after kubelet's own and after unattended-upgrades', which sets 30 s.
+    """
+    (path,) = [p for p in package.files if "/logind.conf.d/" in p]
+    name = path.rsplit("/", 1)[1]
+    assert name > "unattended-upgrades-logind-maxdelay.conf"
+    assert name > "99-kubelet.conf"
+    assert package.activations[path] == "reload:systemd-logind.service"
+    delay = settings(text(package, path))["InhibitDelayMaxSec"]
+    assert delay == [str(sum(shutdown_groups(package).values()))]
+
+
 def test_the_kubeconfig_oneshot_names_the_server_and_the_ca_the_agent_fetched(
     package, tmp_path
 ):
