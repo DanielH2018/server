@@ -10,7 +10,8 @@ A landing gives a head one run on the master its merge lands on in two places, b
 landing turn. A head that has had no CI run gets its branch updated when the landing takes the
 turn (`merge._start_run`, `update_branch`). A green head of a ready PR that master moved past
 is converted to draft and updated before the landing asks for the turn, so it waits in the
-line like any draft (`rejoin_line`).
+line like any draft (`rejoin_line`). One that master moved past while it waited for the turn is
+rejoined once it takes the turn, and gives the turn back (`merge.await_merge`).
 
 A green head that reaches the merge with a stale base anyway merges as it stands, and master's
 own run tests it. The one exception is a head the landing policy admitted on an approval,

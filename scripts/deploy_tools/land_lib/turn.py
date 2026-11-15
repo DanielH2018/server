@@ -311,7 +311,7 @@ def held(ln: Landing) -> Generator[Callable[[str], tuple[bool, int]]]:
         run, which stands in the line during the wait, or "" for any other head. It waits for
         up to `merge_timeout` and returns whether this landing holds the turn and the seconds
         that call waited. It asks once: a later call answers at once with what the first one
-        got.
+        got, until `ln.give_back_turn` gives the turn up and the next call asks again.
     """
     release: Callable[[], None] | None = None
     asked = False
@@ -324,8 +324,16 @@ def held(ln: Landing) -> Generator[Callable[[str], tuple[bool, int]]]:
         release, waited = _wait(ln, draft)
         return release is not None, waited
 
+    def give_back() -> None:
+        nonlocal release, asked
+        if release:
+            release()
+        release, asked = None, False
+
+    ln.give_back_turn = give_back
     try:
         yield take
     finally:
+        ln.give_back_turn = None
         if release:
             release()

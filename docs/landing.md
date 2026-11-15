@@ -214,7 +214,10 @@ jobs. Every landing that merges its PR directly takes the turn.
   updates its branch, prints `converted it to draft and updated its branch`, and stands the
   new head in the line as a draft. A holder can then stack it, and its own turn gives it one
   run on the master its merge lands on. Merged as it stood, it made a tree no run tested,
-  and master's run swept in full: 16 of 26 master runs on 2026-11-14 did.
+  and master's run swept in full: 16 of 26 master runs on 2026-11-14 did. A green ready head
+  that master moved past while it waited for the turn rejoins the same way once it takes the
+  turn: the landing gives the turn back, prints `gave the landing turn back to wait in the line
+  as a draft`, and asks for it again as a draft (`merge.await_merge`).
 - A head the update would void or cannot make is left as it stands: a head GitHub reads as
   conflicting, one the landing policy admitted on an approval, and one `LAND_REQUIRE_HEAD`
   names. It merges as it stands, except an approved head that master moved past on a path

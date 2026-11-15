@@ -61,6 +61,43 @@ def test_a_green_ready_head_master_moved_past_waits_in_the_line_as_a_draft(landi
     assert merged_sha(calls) == UPDATED
 
 
+def test_a_ready_head_master_moved_past_while_it_waited_gives_the_turn_back(
+    landing, capsys
+):
+    # fact: docs/ci-throughput.md#What B4 measured, and D10
+    updated = {**OPEN, "headRefOid": UPDATED}
+    ln, calls = turn_landing(
+        landing,
+        polls=(OPEN, OPEN, updated, updated, {**MERGED, "headRefOid": UPDATED}),
+        start=(READY, REJOINED, REJOINED),
+        head_runs=_ran_then_skipped,
+        compare=[[], ["docs/other.md"], []],
+        turn=[False, True, True],
+    )
+    land_in_turn(ln)
+    order = call_order(calls)
+    assert _undo_calls(calls) == 1
+    gave_back = order.index("release_turn")
+    # It asks for the turn again as a draft, so its run is the one its next turn starts.
+    assert "try_turn" in order[gave_back : order.index("merge")]
+    assert merged_sha(calls) == UPDATED
+    assert "gave the landing turn back" in capsys.readouterr().out
+
+
+def test_a_ready_head_master_left_alone_while_it_waited_keeps_the_turn(landing):
+    ln, calls = turn_landing(
+        landing,
+        polls=(OPEN, OPEN, MERGED),
+        start=READY,
+        head_runs=_ran_then_skipped,
+        compare=[[], []],
+        turn=[False, True],
+    )
+    land_in_turn(ln)
+    assert _undo_calls(calls) == 0
+    assert call_order(calls)[-2:] == ["merge", "release_turn"]
+
+
 def test_a_rejoined_head_whose_draft_run_is_still_running_waits_in_the_line(landing):
     updated = {**OPEN, "headRefOid": UPDATED}
     running = [{"id": 3, "status": "in_progress", "conclusion": None}]
