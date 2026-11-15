@@ -75,7 +75,7 @@ def test_the_gate_matches_a_source_the_generator_reads(path):
     ],
 )
 def test_the_gate_skips_a_path_the_generator_does_not_read(path):
-    """The docs-refresh cron commits the first three, so it never writes under ansible/roles/."""
+    """The docs-refresh cron commits the first three, so it never writes under k8s/roles/."""
     assert not re.search(_hook()["files"], path)
 
 

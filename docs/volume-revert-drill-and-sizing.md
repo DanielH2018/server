@@ -43,9 +43,9 @@ the last step.
 
 ## The ninth step, removed 2026-09-01
 
-The sequence's ninth step, which stripped the PVC's `homelab.daniel-hunter.com/seeded`
-annotation, was removed on 2026-09-01 because `k8s/volume-claim` stopped seeding and nothing
-reads that key.
+**HISTORY — the sequence's ninth step was removed on 2026-09-01.** It stripped the PVC's
+`homelab.daniel-hunter.com/seeded` annotation. `k8s/volume-claim` had stopped seeding, and
+nothing read that key.
 
 ## The dry-run guard is per-task, not tag-keyed
 
@@ -74,7 +74,7 @@ Read from longhorn-manager v1.12.1: `manager.Attach` stores the attachment ticke
   document a guarantee that does not exist.
 
 The wait on `state: detached` after the detach is the only check that a 200 detach actually
-detached. It must never be suppressed with `failed_when: false`.
+detached. Its failure must never be swallowed.
 
 **Why the revert needs no equivalent state check.** `api.SnapshotRevert` calls
 `manager.RevertSnapshot`, which talks to the running engine through the proxy and returns the

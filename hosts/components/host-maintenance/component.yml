@@ -68,8 +68,8 @@ legacy:
   - {cron: "Weekly apt autoremove", user: root}
   - {cron: "Weekly dpkg purge orphaned configs", user: root}
   - {cron: "Weekly system restart", user: root}
-  # Root's crontab, not sys_user's: the task named `ansible_facts.user_id`, which the escalated fact
-  # gather (ansible/pre_tasks/load_secrets.yml) resolves to root.
+  # Root's crontab, not sys_user's: the task named `ansible_facts.user_id`, which Ansible's
+  # escalated fact gather resolved to root.
   - {cron: "Clean unused Docker images", user: root}
   - {cron: "Weekly firmware update", user: root, when: has_fwupd}
   # What the crons above ran and sourced. They sit here so a kept cron keeps them too. daniel-box

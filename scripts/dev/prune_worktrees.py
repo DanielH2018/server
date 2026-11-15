@@ -362,7 +362,7 @@ def brief(prune: bool = False, reap: bool = True) -> int:
     `gh pr list --state merged --head <branch>` themselves — the lookup is_merged() already
     performs. This prints the answer instead of the homework.
 
-    # DECIDED: the banner REPORTS, the weekly cron PRUNES. Both halves of the sweep are
+    # DECIDED: the banner REPORTS, the weekly timer PRUNES. Both halves of the sweep are
     # automatic, and neither runs from a SessionStart hook. `--prune` removes worktrees and
     # deletes branches in the PRIMARY checkout, which every concurrent session shares, and it
     # ends in `repair_object_store` — a `git gc` whose duration is unbounded against a hook

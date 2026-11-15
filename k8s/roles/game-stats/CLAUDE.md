@@ -90,7 +90,7 @@ Added 2026-08-13 with the Valheim reactivation, the same shape as terraria-stats
 ## stats_lib.py — the skeleton both games share
 
 `files/stats_lib.py` is the Loki-tail → Prometheus-exporter skeleton the two exporters share
-(~250 non-comment lines; its own docstring lists the functions). It holds no per-game state
+(its own docstring lists the functions). It holds no per-game state
 and takes every game-specific bit as an argument, so it needs no test doubles patched onto it.
 
 `k8s/roles/game-stats/files/stats_lib.py:SqliteStore` is the one class a game extends rather than calls: it owns the connection

@@ -16,8 +16,7 @@ STUB_PREFIX = "stub-"
 # so neither the stub file nor the stub content check names them.
 NEVER_STUB = {
     "become_password": (
-        "ansible/pre_tasks/load_secrets.yml hands it to privilege escalation, and no "
-        "template reads it"
+        "Ansible's privilege escalation read it, and no template reads it"
     ),
 }
 
