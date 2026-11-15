@@ -15,7 +15,7 @@ challenges for the indexers by rendering attacker-supplied pages in a headless b
 <!-- /generated_from -->
 
 - **The `-lsNN` linuxserver tag scheme** means a breaking bump can hide as a routine patch
-  bump. `prowlarr_k8s_flaresolverr_image` and `prowlarr_k8s_exportarr_image` are sidecars.
+  bump. `prowlarr_k8s_flaresolverr_image` is its own Deployment, and `prowlarr_k8s_exportarr_image` is a sidecar in the prowlarr pod.
 - **Port:** 9696
 - **Persists:** `prowlarr-config` PVC (`longhorn`, ~84Mi) — indexer definitions and their API
   keys. flaresolverr's browser profile is disposable and sits on an emptyDir.
