@@ -301,6 +301,11 @@ def _parser(description: str) -> argparse.ArgumentParser:
     )
     c.add_argument("--pr", type=int, help="the PR that fixed it")
     c.add_argument(
+        "--pr-repo",
+        metavar="OWNER/NAME",
+        help="the repo --pr belongs to (default: DanielH2018/server)",
+    )
+    c.add_argument(
         "--reason",
         help="required with --refuted (what disproved it) and with --accepted (why the "
         "trade-off stands)",
