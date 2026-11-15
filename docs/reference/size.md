@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/size.py
-generated_at: 2026-11-14 07:08 UTC
-generated_sha: 7abd7c96f
+generated_at: 2026-11-15 14:48 UTC
+generated_sha: 8ddb8b045
 ---
 
 !!! warning "Generated file — do not edit"
@@ -18,22 +18,22 @@ Tracked files and lines at the last commit before 00:00 UTC on the day in `gener
 
 | Tree | Files today | Lines today | Files 30 days earlier | Lines 30 days earlier | Files 90 days earlier | Lines 90 days earlier |
 |---|---:|---:|---:|---:|---:|---:|
-| `scripts/` | 1,135 | 243,397 | 866 | 197,371 | 43 | 11,886 |
-| `k8s/` | 959 | 169,264 | 0 | 0 | 0 | 0 |
-| `docs/` | 191 | 115,343 | 163 | 98,875 | 30 | 9,055 |
-| `hosts/` | 779 | 97,026 | 34 | 2,762 | 0 | 0 |
-| `tests/` | 466 | 79,069 | 0 | 0 | 0 | 0 |
-| `.claude/` | 109 | 18,797 | 103 | 19,046 | 48 | 4,467 |
-| `.github/` | 18 | 5,799 | 11 | 2,272 | 3 | 445 |
-| `evals/` | 54 | 5,759 | 53 | 4,113 | 24 | 836 |
-| (root files) | 17 | 4,735 | 19 | 4,591 | 16 | 2,015 |
-| `secrets/` | 13 | 1,146 | 0 | 0 | 0 | 0 |
-| `inventory/` | 5 | 1,105 | 0 | 0 | 0 | 0 |
-| `cluster/` | 1 | 1,019 | 0 | 0 | 0 | 0 |
+| `scripts/` | 1,177 | 253,280 | 894 | 207,434 | 51 | 14,640 |
+| `k8s/` | 968 | 171,977 | 0 | 0 | 0 | 0 |
+| `docs/` | 197 | 118,228 | 165 | 100,949 | 37 | 12,465 |
+| `hosts/` | 816 | 103,137 | 35 | 2,772 | 0 | 0 |
+| `tests/` | 475 | 81,022 | 0 | 0 | 0 | 0 |
+| `.claude/` | 112 | 19,041 | 103 | 19,100 | 48 | 4,590 |
+| `evals/` | 63 | 6,086 | 53 | 4,113 | 24 | 836 |
+| `.github/` | 18 | 5,909 | 11 | 2,661 | 3 | 445 |
+| (root files) | 15 | 4,877 | 19 | 4,668 | 16 | 2,095 |
+| `secrets/` | 13 | 1,147 | 0 | 0 | 0 | 0 |
+| `inventory/` | 5 | 1,113 | 0 | 0 | 0 | 0 |
+| `cluster/` | 1 | 1,017 | 0 | 0 | 0 | 0 |
 | `styles/` | 3 | 684 | 3 | 666 | 0 | 0 |
-| `.vscode/` | 1 | 16 | 1 | 18 | 1 | 18 |
-| `ansible/` | 0 | 0 | 1,845 | 314,963 | 925 | 99,490 |
-| **Total** | 3,751 | 743,159 | 3,098 | 644,677 | 1,090 | 128,212 |
+| `.vscode/` | 1 | 14 | 1 | 18 | 1 | 18 |
+| `ansible/` | 0 | 0 | 1,909 | 326,195 | 945 | 104,274 |
+| **Total** | 3,864 | 767,532 | 3,193 | 668,576 | 1,125 | 139,363 |
 
 ## Tests and instructions
 
@@ -41,8 +41,8 @@ A test file is a `test_*.py` anywhere in the tree. Instruction lines are the lin
 
 | Measure | today | 30 days earlier | 90 days earlier |
 |---|---:|---:|---:|
-| Test files | 1,403 | 1,178 | 75 |
-| Instruction lines (every `CLAUDE.md` plus `.claude/`) | 27,617 | 26,350 | 8,664 |
+| Test files | 1,447 | 1,221 | 89 |
+| Instruction lines (every `CLAUDE.md` plus `.claude/`) | 28,523 | 26,671 | 8,943 |
 | Rules (`.claude/rules/*.md`) | 7 | 7 | 3 |
 | Skills (`.claude/skills/*/SKILL.md`) | 13 | 13 | 10 |
 | Agents (`.claude/agents/*.md`) | 8 | 8 | 7 |
