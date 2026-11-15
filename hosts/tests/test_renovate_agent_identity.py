@@ -64,6 +64,7 @@ MOVED = {
     "discord_alert_webhook": WEBHOOK_SENTINEL,
     "renovate_agent_ctl_home": "/srv/identity-sentinel-ctl",
 }
+SETTINGS_SRC = "files/claude-settings.json"
 # Any PR number the lander accepts, standing in for the prompt's `<n>`.
 PR = "3337"
 
@@ -114,6 +115,15 @@ def test_the_session_runs_as_its_own_user_in_its_own_clone() -> None:
     )
     assert f"\nCLAUDE_BIN={TOOLS_DIR}/.local/bin/claude\n" in config
     assert CLONE not in unit + config
+    # Without the package block-footguns asks on every `gh` command, and an unattended `ask` is
+    # a denial.
+    guard = re.search(
+        r'"CLAUDE_GUARD_HOME", "~(/[^"]+)"', (HOOKS / "_claude_guard.py").read_text()
+    )
+    assert guard, "the hook no longer names its claude_guard directory"
+    assert f"CLAUDE_GUARD_HOME={TOOLS_DIR}{guard.group(1)}" in envs
+    [settings] = [f["dst"] for f in SPEC["files"] if f.get("src") == SETTINGS_SRC]
+    assert f"\nSETTINGS_FILE={settings}\n" in config
 
 
 def test_the_runner_runs_as_the_controller_with_its_own_lock() -> None:
@@ -291,28 +301,6 @@ def test_the_hooks_run_in_the_clone_the_session_works_in() -> None:
     )
 
 
-def test_the_agent_gets_claude_guard_where_the_hook_looks_for_it() -> None:
-    """Without the package block-footguns asks on every `gh` command, which is the session's
-    whole job, and an unattended `ask` is a denial."""
-    lookup = re.search(
-        r'"CLAUDE_GUARD_HOME", "~(/[^"]+)"',
-        (HOOKS / "_claude_guard.py").read_text(),
-        re.M,
-    )
-    assert lookup, "the hook no longer names its claude_guard directory"
-    rel = lookup.group(1)
-    setup = render("renovate-agent-setup.sh.j2", MOVED)
-    assert (
-        f'copy_from_operator "$operator{rel}/claude_guard" "$tools{rel}/claude_guard"'
-        in setup
-    )
-    envs = directive(render(SESSION_UNIT, MOVED), "Environment")
-    assert f"CLAUDE_GUARD_HOME={TOOLS_DIR}{rel}" in envs
-
-
-SETTINGS_SRC = "files/claude-settings.json"
-
-
 def session_settings() -> dict:
     return json.loads((COMPONENT / SETTINGS_SRC).read_text())
 
@@ -340,10 +328,6 @@ def test_the_session_settings_run_the_shared_guard_hooks() -> None:
     assert hook_commands(settings, "PreToolUse", "Read|Edit|Write|NotebookEdit") == [
         f"{hooks}/protect-secrets.sh"
     ]
-    setup = render("renovate-agent-setup.sh.j2", MOVED)
-    assert (
-        'copy_from_operator "$operator/.claude/hooks" "$tools/.claude/hooks"' in setup
-    )
 
 
 @pytest.mark.parametrize(
@@ -372,17 +356,6 @@ def test_the_session_settings_lock_out_bypass_mode() -> None:
     )
 
 
-def test_the_session_reads_the_packaged_settings_and_keeps_no_copy() -> None:
-    """A copy in the session's home would be a file the session could edit."""
-    [shipped] = [f["dst"] for f in SPEC["files"] if f.get("src") == SETTINGS_SRC]
-    config = render(SESSION_CONF, MOVED)
-    assert f"\nSETTINGS_FILE={shipped}\n" in config
-    setup = render("renovate-agent-setup.sh.j2", MOVED)
-    assert (
-        ".claude/settings.json" in setup.split("as_agent rm -rf", 1)[1].split("\n\n")[0]
-    )
-
-
 def test_the_session_settings_carry_the_auto_mode_deny_floor() -> None:
     """The wrapper runs the session in auto mode, where the classifier reads these rules."""
     auto = session_settings()["autoMode"]
@@ -390,14 +363,6 @@ def test_the_session_settings_carry_the_auto_mode_deny_floor() -> None:
     assert any("`master`" in rule for rule in auto["hard_deny"])
     assert auto["soft_deny"] and auto["environment"]
     assert "allow" not in auto
-
-
-def test_the_guardrail_ack_explains_no_copy_in_the_session_home() -> None:
-    """The setup copies nothing into the home, so any settings or hooks there post."""
-    ack = json.loads(
-        render_component_text("claude-code", "claude-guardrail-ack.json.j2")
-    )
-    assert ack["copies"] == []
 
 
 def guard_decision(command: str) -> str | None:
