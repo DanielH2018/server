@@ -238,7 +238,7 @@ def issue_states(issues: Iterable[Mapping], today: str) -> dict[str, int]:
 
 
 def render_queue(states: Mapping[str, int], capacity: Mapping[str, int]) -> str:
-    """The issue-queue and batch-capacity families that `FanoutSlotsIdleWithFreeWork` reads.
+    """The issue-queue and batch-capacity gauge families.
 
     The live batch count is not written here: `claude_fanout_batch_pids_current`, from
     `claude-cgroup-metrics.sh`, already has one series per running batch on each host.

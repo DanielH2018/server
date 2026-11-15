@@ -419,7 +419,6 @@ def test_host_sets_names_every_host_check_rule():
         >= {
             "DiskHealthFailed/daniel-box",
             "DiskHealthNotReporting/daniel-box",
-            "FanoutSlotsIdleWithFreeWork/daniel-box",
         }
         | {
             f"{alert}/{host}"
