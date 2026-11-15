@@ -5,8 +5,8 @@ The publish dir holds `lock`, `current` (a link to the newest version directory)
 `versions/`. A session holds the lock shared from before it starts claude until it exits, so
 the publish, which takes it exclusive before it swaps `current` or removes a version, never
 moves a file a session runs on. The claude-code and renovate-agent components ship a copy beside
-each script that imports it (a `lib:` entry). Stdlib only: the render runs under the host's
-/usr/bin/python3.
+each script that imports it (a `lib:` entry). Stdlib only: each importer runs with
+`uv run --no-project`.
 """
 
 from __future__ import annotations
