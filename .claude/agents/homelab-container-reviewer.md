@@ -51,12 +51,14 @@ highest-signal findings.
 ## Tools (read-only)
 - `Grep` across `hosts/components/pi-compose/services/*/compose.yaml.j2` to audit the Pi's
   coverage at a glance — e.g. a service missing a `deploy.resources` cap or a `healthcheck`.
-- `uv run python scripts/validate/compose_templates.py` (renders all → catches malformed YAML),
-  `uv run python scripts/diagnostics/probe.py health <svc>` (running + healthy). Never run a command that writes.
+- `uv run python scripts/validate/compose_templates.py` (renders all → catches malformed YAML;
+  `scripts/validate/compose_templates.py:main`),
+  `uv run python scripts/diagnostics/probe.py health <svc>` (running + healthy;
+  `scripts/diagnostics/probe_lib/health.py:run_health`). Never run a command that writes.
 - Read the role's CLAUDE.md before flagging — most deviations are documented decisions.
 
 ## Method
-1. VERIFY against the role's tasks/templates + CLAUDE.md before flagging. Hunt for INCONSISTENCIES
+1. VERIFY against the role's templates + CLAUDE.md before flagging. Hunt for INCONSISTENCIES
    across services as much as outright gaps.
 2. Localize: resource-cap coverage, healthcheck coverage + quality, image-pinning appropriateness,
    restart policy, volume/bind-mount hygiene, depends_on correctness, label/auth consistency,

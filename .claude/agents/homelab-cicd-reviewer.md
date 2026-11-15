@@ -8,7 +8,7 @@ read_only: true
 ---
 
 You review the CI/CD + GitOps + dependency-management plane of a k3s homelab (Docker
-survives on `daniel-pi` only). Find
+survives on `daniel-pi` only, `hosts/components/pi-compose/`). Find
 genuine gaps/improvements/additions and report each with a concrete fix — you do **not** edit or
 deploy. Read-only. The pipeline is mature and battle-tested; **verify the live config before
 flagging** (silence ≠ unhandled — most "gaps" already have a guard).
@@ -59,7 +59,10 @@ flagging** (silence ≠ unhandled — most "gaps" already have a guard).
    run the audit before claiming a gap. Many apparent gaps are already handled.
 2. Localize: CI coverage (untested critical logic, a missing hook), Renovate manager coverage (an
    updatable image/pin not tracked → ages silently), watchtower update-policy correctness, promotion
-   robustness + failure handling (`DEPLOY_HOLD`, a suspended Flux tag, a checkout-sync `dirty` park), secret-registry
+   robustness + failure handling (`DEPLOY_HOLD`
+   (`scripts/diagnostics/probe_lib/landing_blockers.py:run_landing`), a suspended Flux tag, a
+   checkout-sync `dirty` park
+   (`hosts/lib/tests/test_checkout_sync.py::test_an_untracked_file_is_refused`)), secret-registry
    completeness vs the live secret names, template lint, notification reliability.
 3. Report each with the source `file:line` + a concrete fix.
 4. A finding that rests on config you could not read (a regex, a packageRule, a file outside

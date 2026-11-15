@@ -178,6 +178,7 @@ def test_a_non_fast_forward_is_refused(lab):
 
 def test_an_untracked_file_is_refused(lab):
     # fact: CLAUDE.md#Pre-commit Hooks
+    # fact: .claude/agents/homelab-cicd-reviewer.md#Method
     tip = lab.push("a")
     lab.ci[tip] = GREEN
     (lab.checkout / "stray").write_text("stray")

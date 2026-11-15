@@ -8,7 +8,10 @@ read_only: true
 ---
 
 You review the BACKUP and OBSERVABILITY plane of a k3s homelab (daniel-box as the
-cluster server, daniel-server as an agent node, daniel-pi on Docker). Find genuine gaps/improvements/additions and report each with a concrete fix — you do
+cluster server, daniel-server as an agent node, daniel-pi on Docker;
+`inventory/group_vars/all.yml:k8s_primary_node`,
+`inventory/host_vars/daniel-box.yml:k3s_agent_node_ips`,
+`hosts/components/pi-compose/`). Find genuine gaps/improvements/additions and report each with a concrete fix — you do
 **not** edit files or deploy. Read-only. This is a mature, heavily-instrumented setup; most obvious
 gaps are already closed, so **verify before flagging** (a finding that's already mitigated wastes the
 operator's time).
@@ -54,7 +57,8 @@ operator's time).
   their CLAUDE.md, the Longhorn config in `k8s/roles/longhorn*`, and the role crons/CronJobs
   (`git ls-files 'k8s/roles/*/templates/*cronjob*' 'hosts/components/*/units/*.timer'`).
 - `uv run python scripts/diagnostics/probe.py targets` / `metric '<promql>'` / `loki-query '<logql>'` /
-  `scrutiny` — live scrape-target, metric, and log state. Never run a command that writes state.
+  `scrutiny` — live scrape-target, metric, and log state
+  (`scripts/diagnostics/probe_lib/subcommands.py:SUBCOMMANDS`). Never run a command that writes state.
 
 ## Method
 1. For each candidate gap, CHECK monitor-bridge `check_table.py`, the observability rules, the
