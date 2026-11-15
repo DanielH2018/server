@@ -83,13 +83,24 @@ def test_format_pi_targets_flags_a_declared_job_gone_missing():
     assert "alloy-pi: MISSING" in text
 
 
-def test_pi_containers_argv_is_a_single_ssh_call():
-    argv = pi_plane.pi_containers_argv()
-    assert argv[0] == "ssh"
-    assert argv[1] == pi_plane.PI_HOST
+def test_from_the_landing_host_the_pi_is_one_ssh_call():
     # Everything after the host is ONE remote command string — ssh spawns exactly once
     # regardless of how many docker subcommands that string chains together.
-    assert len(argv) == 3
+    assert pi_plane.pi_containers_argv("daniel-box.lan") == [
+        "ssh",
+        "daniel-pi",
+        "docker inspect $(docker ps -aq)",
+    ]
+
+
+def test_from_another_host_the_pi_is_reached_through_the_landing_host():
+    # daniel-pi accepts no key from daniel-server (#8773). The Pi's own shell must still be
+    # the one that expands the substitution, so daniel-box's shell gets it quoted.
+    assert pi_plane.pi_containers_argv("daniel-server") == [
+        "ssh",
+        "daniel-box",
+        "ssh daniel-pi 'docker inspect $(docker ps -aq)'",
+    ]
 
 
 def _container(
@@ -162,7 +173,7 @@ def test_run_pi_containers_dry_run_prints_the_ssh_argv(capsys):
 
     assert pi_plane.run_pi_containers(Ns()) == 0
     out = capsys.readouterr().out
-    assert out.strip().startswith(f"ssh {pi_plane.PI_HOST}")
+    assert out.strip() == " ".join(pi_plane.pi_containers_argv())
 
 
 def test_run_pi_targets_end_to_end_reports_a_missing_job(monkeypatch, capsys):

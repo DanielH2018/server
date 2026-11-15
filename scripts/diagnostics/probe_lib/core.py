@@ -11,6 +11,8 @@ import getpass
 import json
 import os
 import re
+import shlex
+import socket
 import subprocess
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -23,7 +25,7 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
-from lib.inventory_lists import PI_HOST  # noqa: F401  (re-exported as core.PI_HOST)
+from lib.inventory_lists import LANDING_HOST, PI_HOST
 from lib.exit_codes import PROBE_UNREADABLE, PROBE_USAGE_ERROR
 from lib.repo_paths import REPO
 
@@ -107,6 +109,23 @@ def group_var(key, group_vars_path=None):
             if line.startswith(f"{key}:"):
                 return line.split(":", 1)[1].strip()
     raise SystemExit(f"{key} not found in {path}")
+
+
+def pi_ssh_argv(remote, hostname=None):
+    """The argv that runs the shell command `remote` on daniel-pi from this host.
+
+    Only `LANDING_HOST` holds a key daniel-pi accepts, so from any other host the command
+    runs through an ssh session on `LANDING_HOST` (#8773). `remote` is parsed by the Pi's
+    shell either way.
+
+    Args:
+        remote: The command line daniel-pi's shell runs.
+        hostname: This host's name, qualified or not. None reads it from the system.
+    """
+    here = (hostname or socket.gethostname()).split(".")[0]
+    if here == LANDING_HOST:
+        return ["ssh", PI_HOST, remote]
+    return ["ssh", LANDING_HOST, shlex.join(["ssh", PI_HOST, remote])]
 
 
 def k8s_endpoint(hostname):
