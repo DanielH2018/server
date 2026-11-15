@@ -85,6 +85,7 @@ ALLOWED = {
     },
     # The landing policy's checks run inside --arm-merge, before any merge call.
     "merge": {
+        "closing_refs",
         "landing",
         "outcome",
         "pace",

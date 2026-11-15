@@ -236,7 +236,7 @@ def error_in(log: Path) -> str | None:
     `land:` lines are warnings the landing carried on past.
 
     The message runs to the next phase header or verdict line, else to the end of the log,
-    because a refusal can span lines: `merge._refuse_stray_closing_refs` lists the stray
+    because a refusal can span lines: `closing_refs.refuse_stray` lists the stray
     references and the remedy below its first line.
     """
     try:
