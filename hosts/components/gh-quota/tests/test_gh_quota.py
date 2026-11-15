@@ -10,6 +10,7 @@ import os
 import sqlite3
 import subprocess
 from collections import Counter
+from contextlib import closing
 from pathlib import Path
 
 import pytest
@@ -228,7 +229,7 @@ def test_each_sample_names_its_caller_by_session_gh_path_and_variable_names(
     ledger.record(["pr", "list"])
 
     (path,) = ledger.root.glob("*.sqlite")
-    with sqlite3.connect(path) as db:
+    with closing(sqlite3.connect(path)) as db:
         rows = db.execute(
             "SELECT window, bucket, session, gh, env_names FROM sampler ORDER BY bucket"
         ).fetchall()
