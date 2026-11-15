@@ -238,7 +238,9 @@ gate (D2 Open question 12).
   without moving `prod`, such as a run that never settles and leaves every later run
   reporting `current`. Read the workflow's recent runs. A run that ended without its
   `settle` job is named in the next run's Decide step, and that run's `reconcile` job
-  moves `last-good` or writes the hold (*Verification* below). A hold silences this alert, because
+  moves `last-good` or writes the hold (*Verification* below). After a move, `reconcile`
+  dispatches a run for master's newest green commit, so that commit does not wait for the
+  next merge. A hold silences this alert, because
   `DeployHoldActive` already pages that state. The reboot window silences it too, because
   `promote` defers inside it on purpose and the scheduled run at its end promotes. The alert
   stays quiet for 30 minutes after the window ends, which covers a late start of that run.
@@ -1113,8 +1115,10 @@ registry.
 before it, so a run that lost its `settle` still posts it. While `prod` still names the
 digest, `reconcile` acts as follows:
 
-- A `success` status described `good <digest>` moves `last-good` to the digest. The next
-  merge, or the scheduled run, promotes after it: `reconcile` dispatches nothing.
+- A `success` status described `good <digest>` moves `last-good` to the digest. Then
+  `reconcile` dispatches a run for master's newest green commit when that commit is newer,
+  as `settle` does (#7877). This run's `decide` ended `current`, so without the dispatch the
+  commit that started it would wait for the next merge.
 - A `failure` status for the digest writes the hold `settle` would have written, unless a
   hold already stands. The status's last word is that form. `stateful`, for a commit that
   changes a snapshot role, writes `<commit> stateful=unverified`. `no-reset`, for one that
