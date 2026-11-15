@@ -481,6 +481,29 @@ PR's timeline and landing log:
   `LAND_BATCH=0`, not with the turn switched off: a merge without the turn during a batch's
   run breaks that batch, which is why B4's last step removed that switch.
 
+#### What B4 changed, measured
+
+The window is 02:40 to 13:50 UTC on 2026-11-15, from the deletion of pacing (#8821) to the
+last B4 merge but one. The baseline is the window D10 measured, 22:50 UTC on 2026-11-14 to
+00:34 on 2026-11-15. Both counts come from GitHub's run and job listings. The window under
+B4 is thin: 9 merges in 11 hours, mostly overnight. Re-measure over a busy day before
+ruling on anything from it.
+
+- **Full CI runs per merge: 2.0, against 1.76.** Under B4, 18 pull-request runs ran jobs and
+  no master run swept, for 9 merges. The baseline had 29 and 15 for 25 merges. Every full
+  run moved to the pull-request side. One session's branch, which two of the 9 PRs shared,
+  ran 8 of the 18; the other 7 merges took 10, or 1.43 each.
+- **Master runs that skipped as tested: 10 of 10, against 10 of 25.** A run counts as
+  skipped when it ran 2 or fewer jobs.
+- **The waits.** In the landing logs on both hosts, 9 landings took the turn: 8 after 0 s
+  and one on daniel-server after 210 s. 5 landings took a landing slot, all after 0 s and
+  all on daniel-box; the slots have existed since 13:00. No log reads that a landing waited
+  for a slot or went on without one.
+- **The 20-job cap: 0.9 minutes at it, against 25.4.** That is about 0.1 minutes per merge
+  against 1.0. The peak was 20 in both windows. A job counts while it runs between its start
+  and end, and only when it ended in success or failure: a cancelled job carries a start
+  time it never ran from, and counting those reads a peak of 34.
+
 ### Phase C: runner pods for `hooks` and `pytest`
 
 **Phase C stopped at C1 on 2026-11-14.** The queue of Phase B removes more runs than runner
