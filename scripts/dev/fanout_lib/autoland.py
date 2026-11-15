@@ -35,8 +35,9 @@ THE UNIT SETS `LAND_REQUIRE_BRANCH_PREFIX` and `LAND_REQUIRE_AUTHOR`. With the p
 `land_lib/policy.py` also pins the merge to the head it checked, so a push after the checks
 fails the merge instead of landing unchecked.
 
-DECIDED: pace is 2 landings started per run (#5526: CI demand already exceeds the 20-runner
-cap). The rest wait for the next run, which logs them as `eligible, deferred`.
+NO START CAP. A run starts every eligible PR. Before its merge a landing waits for the landing
+turn, and only the holder runs its PR's CI; after the merge it waits for a landing slot. Those
+two order and bound the landings, so a cap here would only delay a PR by a run (#8823).
 
 DECIDED: a daniel-server that cannot be read is a logged line and exit 0, not a failure. The
 host is off for the weekly reboot and for maintenance, and a page every ten minutes for that
@@ -61,7 +62,7 @@ _sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from fanout_lib import operator_waits, own_surface
 from fanout_lib.launch_gates import LOCAL_HOST, live_batch_cap
-from fanout_lib.review.api import LAND_SH, login
+from fanout_lib.review.api import LAND_SH, VERDICT_LINE, login
 from fanout_lib.target import SERVER, SERVER_CHECKOUT
 from fanout_lib.transport import Tools
 from lib.cli_help import ArgumentParser
@@ -70,7 +71,6 @@ from lib.git import git
 from lib.detach_fork import alive, rc_path, recorded_pid
 
 SERVER_HOST = "daniel-server"
-MAX_STARTS = 2
 # Records older than this are not read. A PR that waited longer than two days has a reason.
 RECORD_WINDOW_S = 48 * 3600
 READ_TIMEOUT_S = 30.0
@@ -355,6 +355,21 @@ def tail(text: str) -> str:
     return " ".join(text.split())[-300:]
 
 
+_LAND_LINE = re.compile(r"(?m)^land: .*$")
+
+
+def refusal(done: subprocess.CompletedProcess) -> str:
+    """Why a `land.sh` start failed, from its stdout and stderr.
+
+    Its last `VERDICT:` line, else its last `land:` line, else the output's `tail`. uv's
+    virtual-environment chatter comes first in a fresh checkout, so a plain tail cut the
+    deciding line short (#8810).
+    """
+    output = f"{done.stdout or ''}\n{done.stderr or ''}"
+    found = list(VERDICT_LINE.finditer(output)) or list(_LAND_LINE.finditer(output))
+    return " ".join(found[-1].group(0).split())[:300] if found else tail(output)
+
+
 def run(
     b: Boundaries,
     primary: Path = Path(SERVER_CHECKOUT),
@@ -363,7 +378,7 @@ def run(
     out: Callable[[str], None] = print,
     gauge: Path | None = None,
 ) -> int:
-    """One pass: read, judge every candidate PR, start at most `MAX_STARTS` landings.
+    """One pass: read, judge every candidate PR, start a landing for each eligible one.
 
     Prints one line per candidate PR. Returns 0, or 1 when GitHub could not be read. With
     `gauge`, a pass that read both sources also writes the waiting gauge there
@@ -388,9 +403,7 @@ def run(
     newest = newest_per_pr(records if isinstance(records, list) else [])
     candidates = {n: r for n, r in newest.items() if n in prs}
     out(f"{len(newest)} PRs in the last records, {len(candidates)} still open")
-    started = 0
-    # A PR a rule refused comes last, so a long DEPLOY_HOLD cannot spend every start.
-    for number in sorted(candidates, key=lambda n: (refused_for_now(log_dir, n), n)):
+    for number in sorted(candidates):
         rec, label = (
             candidates[number],
             f"#{number} batch {candidates[number].get('batch')}",
@@ -402,14 +415,9 @@ def run(
             out(f"{label}: ineligible, already handed off ({log})")
         elif b.running(number):
             out(f"{label}: ineligible, a landing of it is already running")
-        elif started >= MAX_STARTS:
-            out(
-                f"{label}: eligible, deferred to the next run (pace {MAX_STARTS} a run)"
-            )
         elif dry_run:
             out(f"{label}: eligible, would hand off to land.sh (dry run)")
         else:
-            started += 1
             hand_off(b, primary, state, log_dir, number, label, out)
     if gauge is not None and not dry_run:
         write_waits(b, candidates, prs, gauge, out, state / operator_waits.STAMPS_FILE)
@@ -486,7 +494,7 @@ def hand_off(
     if done.returncode != 0:
         out(
             f"{label}: eligible, handoff failed (exit {done.returncode}): "
-            f"{tail(done.stdout + done.stderr)}"
+            f"{refusal(done)}"
         )
         b.release(primary, checkout)
         return
