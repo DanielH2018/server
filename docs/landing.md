@@ -237,14 +237,21 @@ jobs. `LAND_QUEUE=0` turns the turn off for one landing.
   alone`, leaves the line and gets a run of its own.
 - A PR lands on the fewest runs when it is opened as a draft. A draft's pushes start no
   job, so its one full run is its batch's, shared with up to three other PRs, and master's
-  run after its merge skips. A PR opened ready has a run of its own at every push, never
-  stands in the line, and its merge starts a full master run whenever master moved since
-  that run. The operator ruled on 2026-11-14 that sessions and the fan-out open their PRs
-  as drafts (D9 in [CI throughput](ci-throughput.md)).
-- A head with a run that ran jobs keeps it, finished or not, and the stale-base rules above
-  judge it once it is green. An update those rules make then runs inside the turn. A head the landing policy admitted on an approval is never
-  updated, because the update voids the approval. An update that GitHub refuses does not
-  stop the landing: the PR keeps the run the ready flip started.
+  run after its merge skips. A PR opened ready has a run of its own at every push. The
+  operator ruled on 2026-11-14 that sessions and the fan-out open their PRs as drafts (D9 in
+  [CI throughput](ci-throughput.md)).
+- A head with a run that ran jobs keeps it, finished or not. Once it is green, a landing
+  that has not yet asked for the turn compares the master that run tested with master's tip
+  (`stale_base.rejoin_line`). When master has moved, the landing converts the PR to draft and
+  updates its branch, prints `converted it to draft and updated its branch`, and stands the
+  new head in the line as a draft. A holder can then stack it, and its own turn gives it one
+  run on the master its merge lands on. Merged as it stood, it made a tree no run tested,
+  and master's run swept in full: 16 of 26 master runs on 2026-11-14 did.
+- A head the update would void or cannot make is left as it stands, and the stale-base rules
+  above judge it: a head GitHub reads as conflicting, one the landing policy admitted on an
+  approval, and one `LAND_REQUIRE_HEAD` names. A refused update marks the PR ready again.
+  An update in the turn that GitHub refuses does not stop the landing: the PR keeps the run
+  the ready flip started.
 - A landing that holds the turn is not paced. No other landing with a turn merges ahead of
   it, and a paced holder would stop every landing behind it.
 - The turn is a lock on one file on daniel-box. A landing there locks the file itself, and a

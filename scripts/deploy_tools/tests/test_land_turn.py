@@ -221,7 +221,6 @@ def test_in_turn_a_head_with_no_ci_run_is_updated_from_master_before_its_run(lan
 @pytest.mark.parametrize(
     "case",
     [
-        pytest.param({"head_runs": A_RUN}, id="a-run"),
         pytest.param({"start": {**OPEN, "mergeable": "CONFLICTING"}}, id="a-conflict"),
         pytest.param({"approved_head": HEAD}, id="an-approved-head"),
         pytest.param(

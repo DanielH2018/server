@@ -14,7 +14,9 @@ an approval, which the update would void: a stale approved head is refused with 
 remedy instead.
 
 A landing that holds the landing turn makes the same update earlier, for a head that has had
-no CI run, so that its one run tests the master of the turn (`merge._start_run`).
+no CI run, so that its one run tests the master of the turn (`merge._start_run`). A landing
+that takes turns puts a green head of a ready PR that master moved past back in the line as a
+draft instead (`rejoin_line`), so `stale_paths` judges only a head that could not rejoin.
 """
 
 import subprocess
@@ -27,7 +29,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from lib.json_types import as_list, as_object, as_object_list
 from deploy_tools.land_lib import gh_read, policy
 from deploy_tools.land_lib.landing import BRANCH, Landing
-from deploy_tools.land_lib.outcome import say
+from deploy_tools.land_lib.outcome import Outcome, say
 from deploy_tools.land_lib.pr_json import parse_file
 
 # GitHub's compare endpoint lists at most this many files; a list this long may omit a path.
@@ -213,3 +215,70 @@ def update_branch(ln: Landing, head: str, moved: list[str]) -> None:
             f"rebase it onto origin/{BRANCH}, push, and re-run this",
             1,
         )
+
+
+def _why(exc: subprocess.CalledProcessError | subprocess.TimeoutExpired) -> str:
+    return (getattr(exc, "stderr", None) or str(exc)).strip()
+
+
+def rejoin_line(ln: Landing, head: str, conflicting: bool) -> bool:
+    """Put a green ready head that master moved past back in the line for the turn.
+
+    A PR opened ready got its run on the master of its last push. Merged as it stands, it
+    makes a tree no run tested, and master's own run sweeps in full: 16 of 26 master runs on
+    2026-11-14 did (`docs/ci-throughput.md`). Converted to draft and updated from master, it
+    has a head whose only run skipped, so it stands in the line, a holder of the turn can
+    stack it, and its own turn gives it one run on the master its merge lands on.
+
+    Leaves alone a head the update would void or that it cannot make: one GitHub reads as
+    `conflicting`, one the operator approved, and one `LAND_REQUIRE_HEAD` names. An update
+    that fails marks the PR ready again, so the landing goes on as it would have; dies when
+    that fails too, because a draft never merges.
+
+    Returns:
+        Whether the PR is now a draft at an updated head, for `merge._start_run` to take
+        once GitHub has moved the head.
+    """
+    if conflicting or head == ln.approved_head or ln.opts.require_head:
+        return False
+    try:
+        moved = master_paths_since(ln, head)
+    except Outcome as exc:
+        say(f"{exc.error}; landing it as it stands")
+        return False
+    if not moved:
+        return False
+    pr = str(ln.opts.pr)
+    try:
+        ln.tools.gh("pr", "ready", "--undo", pr)
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+        say(
+            f"could not convert PR #{pr} to draft ({_why(exc)}); landing it as it stands"
+        )
+        return False
+    try:
+        ln.tools.gh(
+            "api",
+            "-X",
+            "PUT",
+            f"repos/{{owner}}/{{repo}}/pulls/{pr}/update-branch",
+            "-f",
+            f"expected_head_sha={head}",
+        )
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+        say(f"could not update PR #{pr}'s branch ({_why(exc)}); marking it ready again")
+        try:
+            ln.tools.gh("pr", "ready", pr)
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as again:
+            ln.die(
+                f"PR #{pr} is a draft and could not be marked ready ({_why(again)}); run "
+                f"`gh pr ready {pr}`, then re-run this",
+                1,
+            )
+        return False
+    say(
+        f"{BRANCH} changed {len(moved)} path(s) since the master PR #{pr}'s run tested; "
+        "converted it to draft and updated its branch, so it waits in the line for a run "
+        f"on the {BRANCH} of its turn"
+    )
+    return True

@@ -155,7 +155,7 @@ class Fakes:
     line: list[str | Exception] = field(default_factory=lambda: [""])
     # What the PR head's `ci.yml` runs listing answers on every call, as `merge._ready_run_on`
     # reads it: `{id, status, conclusion}` per run. The default is one draft run that skipped,
-    # and an exception is raised in place of an answer.
+    # and an exception is raised in place of an answer. A callable answers for the head SHA.
     head_runs: Any = field(
         default_factory=lambda: [
             {"id": 1, "status": "completed", "conclusion": "skipped"}
@@ -268,9 +268,12 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
             return answer
         if args[0] == "api" and "/workflows/ci.yml/runs?head_sha=" in args[1]:
             calls.append(("gh:head-runs", args, kwargs))
-            if isinstance(f.head_runs, Exception):
-                raise f.head_runs
-            return f.head_runs
+            runs = f.head_runs
+            if callable(runs):
+                runs = runs(args[1].split("head_sha=")[1].split("&")[0])
+            if isinstance(runs, Exception):
+                raise runs
+            return runs
         for route, answer in (
             ("/check-runs?", f.pending_checks),
             ("/check-suites?", f.completed_suites),
