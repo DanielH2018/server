@@ -20,7 +20,7 @@ import re
 from _agent_package import render_daniel_server_with
 from _helpers import load_yaml, REPO
 from _setup_render import CLAUDE_CODE, render_component_text
-from fanout_lib import autoland
+from fanout_lib import autoland, own_surface
 from lib.repo_paths import HOST_VARS
 
 ROLE = CLAUDE_CODE
@@ -68,8 +68,8 @@ def test_land_sh_is_pinned_to_the_batches_branch_and_author():
     unit = _render()
     prefix = re.search(r"^Environment=LAND_REQUIRE_BRANCH_PREFIX=(.*)$", unit, re.M)
     author = re.search(r"^Environment=LAND_REQUIRE_AUTHOR=(.*)$", unit, re.M)
-    assert prefix and prefix.group(1) == autoland.BRANCH_PREFIX
-    assert author and author.group(1) == autoland.AUTHOR
+    assert prefix and prefix.group(1) == own_surface.BRANCH_PREFIX
+    assert author and author.group(1) == own_surface.AUTHOR
 
 
 def test_the_timer_runs_every_ten_minutes_by_default():

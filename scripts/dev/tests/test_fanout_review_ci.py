@@ -55,10 +55,12 @@ def _clean_review():
     ]
 
 
-def _server_batch(tmp_path, reports, clock=None, host="daniel-server"):
+def _server_batch(
+    tmp_path, reports, clock=None, host="daniel-server", heads=("aaa", "bbb")
+):
     clock = clock or Clock()
     pipeline, run = _pipeline(
-        tmp_path, reports, host=host, clock=clock, sleep=clock.sleep
+        tmp_path, reports, host=host, heads=heads, clock=clock, sleep=clock.sleep
     )
     # A cc-wait call that returns 75 has spent its slice, and one that returns 0 or 1 took none.
     inner = pipeline.run
@@ -338,6 +340,53 @@ def test_a_ci_fix_that_leaves_too_little_run_time_is_not_landed_again(tmp_path):
     final = pipeline.run_all()
     assert final["result"].startswith("needs input: the review phases left too little")
     assert [c[0].endswith("land.sh") for c in run.lands] == [True, False]
+
+
+LANDABLE = {
+    "headRefName": "worktree-fanout-1345",
+    "baseRefName": "master",
+    "isCrossRepository": False,
+    "author": {"login": "DanielH2018"},
+    "files": [{"path": "docs/landing.md"}],
+    "body": "",
+}
+OWN_SURFACE = {**LANDABLE, "files": [{"path": "scripts/deploy_tools/land.sh"}]}
+
+
+def test_a_daniel_server_pr_the_server_lander_would_land_lands_as_a_draft(tmp_path):
+    pipeline, run, _ = _server_batch(tmp_path, _clean_review(), heads=("bbb",))
+    run.draft = True
+    run.pr_fields = LANDABLE
+    pipeline.run_all()
+    assert run.readied == [] and run.ci_calls == []
+    assert run.lands[0][0].endswith("land.sh")
+    assert _record(tmp_path)["land_hold"] == ""
+
+
+def test_a_daniel_server_pr_on_the_landers_surface_waits_for_its_ci_and_is_not_landed(
+    tmp_path,
+):
+    pipeline, run, _ = _server_batch(tmp_path, _clean_review(), heads=("bbb",))
+    run.pr_fields = OWN_SURFACE
+    assert pipeline.run_all()["result"] == f"Opened {PR}"
+    assert len(run.ci_calls) == 1 and run.lands == []
+    hold = "it changes the lander's own surface: scripts/deploy_tools/land.sh"
+    assert _record(tmp_path)["land_hold"] == hold
+    assert f"Not landed by the pipeline: {hold}." in run.comments[0]
+
+
+def test_a_ci_fix_that_reaches_the_landers_surface_is_left_for_a_person(tmp_path):
+    reports = [*_clean_review(), _report(f"Fixed the lander. {PR}")]
+    pipeline, run, _ = _server_batch(tmp_path, reports, heads=("bbb",))
+    run.pr_fields, run.pr_fields_fixed = LANDABLE, OWN_SURFACE
+    run.fix_pushes = True
+    run.verdicts = [PR_CI_RED]
+    run.rollup = [{"name": "pytest", "conclusion": "FAILURE", "detailsUrl": JOB_URL}]
+    final = pipeline.run_all()
+    assert final["result"].startswith(
+        "needs input: the CI fix left the PR for a person: it changes the lander's own"
+    )
+    assert [c[0].endswith("land.sh") for c in run.lands].count(True) == 1
 
 
 def test_another_repos_batch_on_daniel_server_waits_for_no_ci(tmp_path):

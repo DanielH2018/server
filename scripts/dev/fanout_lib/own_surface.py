@@ -1,8 +1,9 @@
-"""Which changed paths the server autolander leaves for a person (#5496, narrowed by #5659).
+"""Which daniel-server batch PRs an unattended landing leaves for a person (#5496, #5659).
 
-`autoland.problems` calls `holds` for each path a PR changes. A path under `OWN_PATHS` holds the
-PR, except `pyproject.toml` when its only change is to `testpaths`, which reads the PR's
-diff from GitHub.
+`pr_problems` is the PR half of the rule. `autoland.problems` adds the review record's half for
+the server lander, and a daniel-server review pipeline asks it before it lands its own draft
+(`review_ci.server_lands`). A path under `OWN_PATHS` holds the PR, except `pyproject.toml` when
+its only change is to `testpaths`, which reads the PR's diff from GitHub.
 """
 
 # Reach the sibling package: a directly-invoked script gets only its own directory on
@@ -23,9 +24,21 @@ from collections.abc import Callable
 from fanout_lib.target import SERVER
 from lib.gh import gh
 
-# The branch `autoland.py` lands onto, and its `gh` timeout.
+# The branch a server batch's PR lands onto, and the `gh` timeout.
 BASE = "master"
 GH_TIMEOUT_S = 60.0
+BRANCH_PREFIX = "worktree-fanout-"
+# The login every server batch's PR carries. The server lander's LAND_REQUIRE_AUTHOR pins the same.
+AUTHOR = "DanielH2018"
+# gh returns at most this many changed files, so a PR at the cap may hide a path past it.
+FILE_CAP = 100
+# A heading that names a step only a person can do, and the text that holds a PR back.
+OPERATOR_HEADING = re.compile(r"(?i)before[- ]merge|operator")
+HOLD_TEXT = re.compile(r"(?i)needs input|do not merge")
+HEADING = re.compile(r"^\s{0,3}#{1,6}\s+(.*)")
+UNCHECKED = re.compile(r"^\s*[-*]\s*\[ \]")
+# The `gh pr view --json` fields `pr_problems` reads.
+PR_FIELDS = "headRefName,headRefOid,baseRefName,body,author,files,isCrossRepository"
 # Paths whose change widens what this command or the lander may do, or that the landing path
 # imports. A PR touching one is left for a person, the way `homelab-claude-land@`'s approval
 # list leaves it. `scripts/deploy_tools/` is the whole tree because land.sh imports await_ci.py and the rest
@@ -118,3 +131,50 @@ def holds(path: str, pyproject_ok: Callable[[], bool]) -> bool:
     if path == PYPROJECT:
         return not pyproject_ok()
     return path.startswith(OWN_PATHS)
+
+
+def operator_step_in(body: str) -> str:
+    """Why the PR body holds the PR back, or "" when it does not.
+
+    An unchecked box under a heading that names an operator or before-merge step, or text
+    saying the PR needs input or must not merge. The template's own unchecked deploy boxes sit
+    under other headings and do not count.
+    """
+    heading = ""
+    for line in body.splitlines():
+        found = HEADING.match(line)
+        if found:
+            heading = found.group(1).strip()
+        elif heading and OPERATOR_HEADING.search(heading) and UNCHECKED.match(line):
+            return f"an unchecked box under '{heading}'"
+    hold = HOLD_TEXT.search(body)
+    return f"the body says '{hold.group(0)}'" if hold else ""
+
+
+def never(_key: str | int) -> bool:
+    return False
+
+
+def pr_problems(
+    pr: dict, batch: str, pyproject_ok: Callable[[str], bool] = never
+) -> str:
+    """Why batch `batch`'s PR may not land unattended, or "" when it may. First reason wins.
+
+    `pr` is the PR as `gh pr view --json` reads `PR_FIELDS`. `pyproject_ok` answers
+    `testpaths_only` for the PR's head; the default holds every PR that touches
+    `pyproject.toml`.
+    """
+    if pr.get("isCrossRepository") or pr.get("baseRefName") != BASE:
+        return f"the PR does not target {BASE} from this repo"
+    if pr.get("headRefName") != f"{BRANCH_PREFIX}{batch}":
+        return f"the head branch is '{pr.get('headRefName')}', not the batch's"
+    if (pr.get("author") or {}).get("login") != AUTHOR:
+        return f"the author is not {AUTHOR}"
+    head = str(pr.get("headRefOid") or "")
+    files = [str(f.get("path") or "") for f in pr.get("files") or []]
+    if len(files) >= FILE_CAP:
+        return f"it changes {len(files)} files, at the listing cap"
+    own = [f for f in files if holds(f, lambda: pyproject_ok(head))]
+    if own:
+        return f"it changes the lander's own surface: {', '.join(own[:3])}"
+    return operator_step_in(str(pr.get("body") or ""))

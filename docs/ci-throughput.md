@@ -129,12 +129,12 @@ Who opens a draft, and what lands it:
   pipeline lands the draft (`scripts/dev/fanout_lib/review/review_ci.py:land_draft`), so
   no run is spent before the landing. A landing that ends `pr-ci-red` resumes the batch's
   agent once, and the pipeline lands the PR again.
-- **A fan-out batch on daniel-server** is unchanged: its pipeline marks the PR ready, waits
-  for that run, and the lander unit on daniel-box lands it. The operator chose this on
-  2026-11-14. The lander unit refuses a draft and a PR whose CI gate did not pass, and it
-  has no agent to resume when a run is red. From 2026-11-08 to 2026-11-14 the review
+- **A fan-out batch on daniel-server** lands its draft the same way since option B below,
+  unless the rule of the server lander holds the PR for a person. **HISTORY —** Until option B its
+  pipeline marked the PR ready, waited for that run, and the lander unit on daniel-box
+  landed it, as the operator chose on 2026-11-14. From 2026-11-08 to 2026-11-14 the review
   pipeline wrote 245 batch records on daniel-server and 187 on daniel-box, so 57% of
-  batches keep a run of their own.
+  batches kept a run of their own.
 
 Option B, a later step: a daniel-server pipeline lands its own draft from daniel-server.
 The operator ruled on its two preconditions on 2026-11-15:
@@ -148,7 +148,14 @@ The operator ruled on its two preconditions on 2026-11-15:
   options were refused: giving daniel-server a key the Pi accepts widens what daniel-server
   can reach, and handing a Pi landing to daniel-box keeps it on the slow path.
 
-Option B's own build waits for the measurement after B4 and a recommendation on it.
+**Option B, ruled by the operator on 2026-11-15: build it, whatever the measurement shows.**
+A daniel-server review pipeline lands its own draft (`review_ci.server_lands`). It does so
+only for a PR the server lander would land unattended: `own_surface.pr_problems` holds a
+PR that changes the landing code, the fan-out tooling, `secrets/`, `.github/`, `.claude/`
+or the `claude-code` component, and one whose body names an operator step. A held PR is
+marked ready and waits for its run, as before, and the server lander leaves it for a
+person. A CI fix that reaches a held path ends the batch `needs input`. A plain daniel-server
+batch still stops at its PR.
 
 The slices:
 

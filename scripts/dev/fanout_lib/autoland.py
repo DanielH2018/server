@@ -70,10 +70,6 @@ from lib.git import git
 from lib.detach_fork import alive, rc_path, recorded_pid
 
 SERVER_HOST = "daniel-server"
-BRANCH_PREFIX = "worktree-fanout-"
-BASE = "master"
-# The login every server batch's PR carries. The unit's LAND_REQUIRE_AUTHOR pins the same.
-AUTHOR = "DanielH2018"
 MAX_STARTS = 2
 # Records older than this are not read. A PR that waited longer than two days has a reason.
 RECORD_WINDOW_S = 48 * 3600
@@ -81,13 +77,6 @@ READ_TIMEOUT_S = 30.0
 START_TIMEOUT_S = 600.0
 GH_TIMEOUT_S = 60.0
 STATE_DIR = Path.home() / ".local" / "state" / "fanout-server-lander"
-# gh returns at most this many changed files, so a PR at the cap may hide a path past it.
-FILE_CAP = 100
-# A heading that names a step only a person can do, and the text that holds a PR back.
-OPERATOR_HEADING = re.compile(r"(?i)before[- ]merge|operator")
-HOLD_TEXT = re.compile(r"(?i)needs input|do not merge")
-HEADING = re.compile(r"^\s{0,3}#{1,6}\s+(.*)")
-UNCHECKED = re.compile(r"^\s*[-*]\s*\[ \]")
 PR_FIELDS = (
     "number,isDraft,headRefName,headRefOid,baseRefName,body,author,files,"
     "isCrossRepository"
@@ -209,32 +198,10 @@ def newest_per_pr(records: Sequence[dict]) -> dict[int, dict]:
     return newest
 
 
-def operator_step_in(body: str) -> str:
-    """Why the PR body holds the PR back, or "" when it does not.
-
-    An unchecked box under a heading that names an operator or before-merge step, or text
-    saying the PR needs input or must not merge. The template's own unchecked deploy boxes sit
-    under other headings and do not count.
-    """
-    heading = ""
-    for line in body.splitlines():
-        found = HEADING.match(line)
-        if found:
-            heading = found.group(1).strip()
-        elif heading and OPERATOR_HEADING.search(heading) and UNCHECKED.match(line):
-            return f"an unchecked box under '{heading}'"
-    hold = HOLD_TEXT.search(body)
-    return f"the body says '{hold.group(0)}'" if hold else ""
-
-
-def never(_key: str | int) -> bool:
-    return False
-
-
 def problems(
     rec: dict,
     pr: dict,
-    pyproject_ok: Callable[[str], bool] = never,
+    pyproject_ok: Callable[[str], bool] = own_surface.never,
 ) -> str:
     """Why this PR may not land unattended, or "" when it may. First reason wins.
 
@@ -255,22 +222,10 @@ def problems(
         return "the record names no reviewed head (written before the field existed)"
     if pr.get("isDraft"):
         return "the PR is a draft"
-    if pr.get("isCrossRepository") or pr.get("baseRefName") != BASE:
-        return f"the PR does not target {BASE} from this repo"
-    if pr.get("headRefName") != f"{BRANCH_PREFIX}{rec.get('batch')}":
-        return f"the head branch is '{pr.get('headRefName')}', not the batch's"
-    if (pr.get("author") or {}).get("login") != AUTHOR:
-        return f"the author is not {AUTHOR}"
     head = str(pr.get("headRefOid") or "")
     if head != reviewed:
         return f"the head moved since the review ({reviewed[:8]} -> {head[:8]})"
-    files = [str(f.get("path") or "") for f in pr.get("files") or []]
-    if len(files) >= FILE_CAP:
-        return f"it changes {len(files)} files, at the listing cap"
-    own = [f for f in files if own_surface.holds(f, lambda: pyproject_ok(head))]
-    if own:
-        return f"it changes the lander's own surface: {', '.join(own[:3])}"
-    return operator_step_in(str(pr.get("body") or ""))
+    return own_surface.pr_problems(pr, str(rec.get("batch")), pyproject_ok)
 
 
 # A landing that a rule refused before its merge, which merged nothing and ends exit 75
@@ -337,8 +292,8 @@ def prepare_checkout(primary: Path, state: Path, pr: int) -> Path:
     if path.exists():
         release_checkout(primary, path)
     for argv in (
-        ["fetch", "--quiet", "origin", BASE],
-        ["worktree", "add", "--detach", str(path), f"origin/{BASE}"],
+        ["fetch", "--quiet", "origin", own_surface.BASE],
+        ["worktree", "add", "--detach", str(path), f"origin/{own_surface.BASE}"],
     ):
         done = git(*argv, cwd=primary, check=False, timeout=300)
         if done.returncode != 0:

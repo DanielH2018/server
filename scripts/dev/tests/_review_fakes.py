@@ -106,6 +106,10 @@ class FakeRunner:
         self.attempts = [2]
         # Every `gh pr ready`, run-id read and `cc-wait gh-ci` call, in the order they ran.
         self.log = []
+        # The PR fields `own_surface.pr_problems` reads, and the ones after a `ci-fix`
+        # resume when it changes them. Empty, a daniel-server PR fails that rule.
+        self.pr_fields = {}
+        self.pr_fields_fixed = None
 
     def __call__(self, argv, stdin):
         argv = unprefixed(argv)
@@ -136,8 +140,12 @@ class FakeRunner:
             return subprocess.CompletedProcess(argv, 0, json.dumps(self.labels), "")
         if argv[:3] == ["gh", "pr", "view"]:
             fixed = any(phase == "ci-fix" for *_, phase in self.claude)
+            fields = self.pr_fields
+            if fixed and self.pr_fields_fixed is not None:
+                fields = self.pr_fields_fixed
             out = json.dumps(
                 {
+                    **fields,
                     "statusCheckRollup": self.rollup,
                     "isDraft": self.draft,
                     "headRefOid": "ccc" if self.fix_pushes and fixed else "bbb",
