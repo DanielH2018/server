@@ -103,8 +103,10 @@ defaults:
   #                      indefinitely (the unit is Type=notify with TimeoutStartSec=0). Repair
   #                      with `k3s server --cluster-reset`, or wipe and re-run k3s-bringup.yml.
   #   kubelet-arg        the two unsafe sysctls wg-easy needs; setup/k3s's defaults say why.
-  #                      image-gc-high-threshold=85 is the kubelet's default value, so it
-  #                      changes no behaviour: H6.7 added it to prove the windowed restart.
+  #                      The image-gc pair starts image GC below Longhorn's 75% replica
+  #                      scheduling floor, which the root filesystem shares: at the kubelet's
+  #                      85 every superseded image stayed (#8307). The kubelet refuses a low
+  #                      threshold not below the high one, so the pair moves together.
   #                      system-reserved lowers node allocatable by memory pods use without
   #                      requesting it (#8644). With enforce-node-allocatable at its default
   #                      `pods`, the kubelet also lowers kubepods.slice memory.max to capacity
@@ -152,7 +154,8 @@ defaults:
     advertise-address: "{{ server_ip }}"
     kubelet-arg:
       - allowed-unsafe-sysctls=net.ipv4.conf.all.src_valid_mark,net.ipv4.ip_forward
-      - image-gc-high-threshold=85
+      - image-gc-high-threshold=65
+      - image-gc-low-threshold=55
       # DECIDED: user.slice counts. The Claude sessions there compete with pods for memory.
       - system-reserved=memory=7Gi
     secrets-encryption: true
