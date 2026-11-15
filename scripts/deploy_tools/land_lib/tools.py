@@ -22,7 +22,8 @@ import socket
 import subprocess
 import tempfile
 import time
-from collections.abc import Callable, Iterable, Generator
+from collections.abc import Callable, Iterable, Generator, Sequence
+from datetime import UTC, datetime
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, NamedTuple, Protocol
@@ -34,11 +35,14 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 # `land_flux` imports `forge` bare from scripts/deploy_tools. The shim puts it at sys.path[0]
 # and pytest's pythonpath lists it; this covers an interpreter import.
 _sys.path.insert(1, str(_Path(__file__).resolve().parents[1]))  # scripts/deploy_tools
+from chained_timeout import VERIFY_CAP_S
 from deploy_tools import await_ci
 from deploy_tools.land_lib import land_flux, land_tags, land_tested_base
 from deploy_tools.land_lib import fresh, own_checkout, verdict_log
 from deploy_tools.land_lib.health_gate import GateResult, gate as health_gate
+from deploy_tools.promote_lib import reboot_window
 from lib.exit_codes import CI_DISARMED
+from lib.repo_paths import REPO
 from deploy_tools.land_lib.land_tags import Derivation
 from lib.gh import gh, gh_json
 from lib.json_types import JsonValue
@@ -181,6 +185,12 @@ def await_ci_verdict(
         return CiVerdict(CI_DISARMED, f"await_ci: {exc}")
 
 
+def in_reboot_window() -> bool:
+    """Whether now is inside the weekly reboot's no-promotion window."""
+    schedule = reboot_window.read_schedule(REPO)
+    return reboot_window.window(schedule, VERIFY_CAP_S, datetime.now(UTC)) is not None
+
+
 def syslog(line: str) -> None:
     """One logfmt line into syslog, which Alloy ships to Loki for the Landings board."""
     subprocess.run(
@@ -309,10 +319,12 @@ class Tools:
     # The line for the landing turn (`line.py`): one operation, by name. None means the line
     # on the turn's host, which `turn` reaches by this host's name.
     line: Callable[..., str] | None = None
-    # Takes one of the first `cap` landing slots without waiting: the call that frees it, or
-    # None while other landings hold them all. None here means the slots `slots` reaches by
-    # this host's name.
-    try_slot: Callable[[int], Callable[[], None] | None] | None = None
+    # Locks one of the named lock files beside the turn without waiting, while other landings
+    # hold fewer than the cap of them: the call that frees it, or None. None here means the
+    # files `slots` reaches by this host's name.
+    try_slot: Callable[[Sequence[str], int], Callable[[], None] | None] | None = None
+    # Whether now is inside the weekly reboot's no-promotion window.
+    in_reboot_window: Callable[[], bool] = in_reboot_window
     wait_for_hosts: Callable[..., None] | None = None
 
 
