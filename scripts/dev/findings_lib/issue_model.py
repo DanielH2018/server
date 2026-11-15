@@ -80,7 +80,7 @@ for _d in DOMAINS:
 # renaming them would have turned that move into a rewrite. The underscore still carries what
 # it did before — internal to the findings modules, not an API another script may import.
 # Conventions for a new module: docs/python-code-organization.md.
-_LIST_FIELDS = "number,title,state,stateReason,labels,body,createdAt,closedAt,url,comments,blockedBy,author"
+_LIST_FIELDS = "number,title,state,stateReason,labels,body,createdAt,closedAt,url,comments,blockedBy,author,milestone"
 # The one account whose issues a session takes as work (dotfiles#967 slice 1). Any collaborator
 # can open a `claude`-labelled issue, and its body would reach a session as instructions.
 REGISTER_AUTHOR = "DanielH2018"

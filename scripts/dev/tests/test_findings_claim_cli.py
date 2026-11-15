@@ -24,12 +24,37 @@ STALE = facts()
 LIVE = live_worktree(WT)
 
 
+def test_claim_makes_sure_the_session_milestone_exists():
+    issue = make_issue(1132)
+    tools, calls = build_tools(Fakes(issues=[issue], view=issue, worktree_facts=LIVE))
+    assert main(["claim", "1132", "--worktree", WT], tools) == 0
+    assert calls.milestones == [(WT, "DanielH2018/server")]
+
+
+def test_reap_closes_the_milestone_of_a_gone_worktree_and_keeps_a_live_ones():
+    tools, calls = build_tools(
+        Fakes(worktree_facts=LIVE, open_milestones=[WT, "worktree-gone"])
+    )
+    assert main(["reap"], tools) == 0
+    assert calls.milestone_closes == [
+        ("DanielH2018/server", {WT: True, "worktree-gone": False})
+    ]
+
+
 def test_claim_writes_a_comment_and_a_label():
     issue = make_issue(1132)
     tools, calls = build_tools(Fakes(issues=[issue], view=issue, worktree_facts=LIVE))
     assert main(["claim", "1132", "--worktree", WT], tools) == 0
     assert calls.gh[-2][:3] == ["issue", "comment", "1132"]
-    assert calls.gh[-1] == ["issue", "edit", "1132", "--add-label", "claimed"]
+    assert calls.gh[-1] == [
+        "issue",
+        "edit",
+        "1132",
+        "--add-label",
+        "claimed",
+        "--milestone",
+        WT,
+    ]
 
 
 def test_claim_creates_the_claimed_label_before_it_adds_it():
@@ -45,7 +70,9 @@ def test_claim_creates_the_claimed_label_before_it_adds_it():
     assert any(c[2] == "claimed" for c in created)
     assert calls.gh.index(
         next(c for c in created if c[2] == "claimed")
-    ) < calls.gh.index(["issue", "edit", "1132", "--add-label", "claimed"])
+    ) < calls.gh.index(
+        ["issue", "edit", "1132", "--add-label", "claimed", "--milestone", WT]
+    )
 
 
 def test_claim_refuses_a_manual_issue_and_exits_3(capsys):

@@ -41,6 +41,8 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from dev.fanout_lib.batch_holds import BatchHold, running_batch_holds
 from dev.findings_lib.board import sync_board
+from dev.findings_lib import milestone
+from dev.findings_lib.issue_model import PR_REPO
 from dev.fanout_lib.manifest import branches_launched_by
 from dev.findings_lib.peer_trees import peer_worktree_list
 from lib.repo_paths import REPO
@@ -108,6 +110,15 @@ class FindingsTools:
     # `(issue numbers, repo, dry_run=) -> {issue: (outcome, detail)}`, `board.sync_board`'s
     # contract. None is this repo, as above.
     sync_board: Callable[..., dict[int, tuple[str, str]]] = sync_board
+    # `(title, OWNER/NAME, dry_run=)` and `(OWNER/NAME, held, dry_run=) -> closed titles`,
+    # `milestone.ensure`'s and `milestone.close_idle`'s contracts.
+    ensure_milestone: Callable[..., None] = milestone.ensure
+    close_idle_milestones: Callable[..., list[str]] = milestone.close_idle
+
+    @property
+    def owner_name(self) -> str:
+        """The register's OWNER/NAME, which a `gh api` path spells out."""
+        return self.repo or PR_REPO
 
     def batch_holds(self, issues: Collection[int]) -> Mapping[int, BatchHold]:
         """`running_batch_holds` aimed at this register, as `claim_states` takes it."""
