@@ -1,4 +1,5 @@
-"""The bootstrap cases' kit downloads and the `--tools-seed` directory, without a container.
+"""The bootstrap cases' kit downloads, the `--tools-seed` directory and the offline container's apt
+retries, without a container.
 
 Run: uv run pytest scripts/validate/tests/test_bootstrap_kit_stock.py
 """
@@ -6,13 +7,15 @@ Run: uv run pytest scripts/validate/tests/test_bootstrap_kit_stock.py
 import email.message
 import hashlib
 import io
+import subprocess
 import urllib.error
 from types import SimpleNamespace
 from typing import ClassVar
 
 import pytest
+from lib import proc_testing
 from validate.validate_lib import bootstrap_case as case
-from validate.validate_lib.host_container import CaseFailed
+from validate.validate_lib.host_container import CaseFailed, Container
 
 
 class _Body(io.BytesIO):
@@ -130,3 +133,37 @@ def test_the_kit_s_uv_sync_skips_the_lint_group(tmp_path):
 
     sync = next(argv for argv in calls if argv[1] == "sync")
     assert sync[sync.index("--no-group") + 1] == "lint"
+
+
+def test_only_an_offline_run_turns_off_apt_s_retries(monkeypatch, tmp_path):
+    written = {}
+
+    def fake_ok(self, command):
+        written.setdefault(self.name, []).append(command)
+        return ""
+
+    monkeypatch.setattr(Container, "boot", lambda self, python: None)
+    monkeypatch.setattr(Container, "ok", fake_ok)
+    monkeypatch.setattr(
+        Container,
+        "sh",
+        lambda self, command, timeout=None: subprocess.CompletedProcess(
+            command, 0, "", ""
+        ),
+    )
+    cases = SimpleNamespace(image="img", work=tmp_path, python="3.12")
+    kit = tmp_path / "kits" / "kit"
+
+    case.Bootstrap(cases, "daniel-box", tmp_path, kit, "offline").run()
+    case.Bootstrap(cases, "daniel-box", tmp_path, None, "box").run()
+
+    online = written["homelab-host-test-bootstrap-box"]
+    assert not [c for c in online if case.NO_RETRIES in c]
+    offline = written["homelab-host-test-bootstrap-offline"]
+    (write,) = [c for c in offline if case.NO_RETRIES in c]
+    conf = tmp_path / "no-retries.conf"
+    proc_testing.run(write.replace(case.NO_RETRIES, str(conf)), shell=True, check=True)
+    parsed = proc_testing.run(
+        ["apt-config", "-c", str(conf), "shell", "R", "Acquire::Retries"], check=True
+    )
+    assert parsed.stdout.strip() == "R='0'"
