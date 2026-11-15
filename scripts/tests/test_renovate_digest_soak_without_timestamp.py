@@ -84,6 +84,7 @@ def test_each_held_pin_still_sits_where_the_rule_looks(
 def test_a_digest_with_no_timestamp_is_raised_without_an_age_check(
     package: str, rel_path: str, update_type: str
 ) -> None:
+    # fact: .claude/skills/renovate-prs/SKILL.md#0. An update with no PR is still an update
     assert _behaviour(package, rel_path, update_type) == OPTIONAL
 
 
@@ -92,6 +93,7 @@ def test_a_digest_with_no_timestamp_is_raised_without_an_age_check(
 def test_a_version_bump_with_no_timestamp_is_raised_without_an_age_check(
     package: str, rel_path: str, update_type: str
 ) -> None:
+    # fact: .claude/skills/renovate-prs/SKILL.md#0. An update with no PR is still an update
     assert _behaviour(package, rel_path, update_type) == OPTIONAL
 
 

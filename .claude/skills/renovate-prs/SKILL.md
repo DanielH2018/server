@@ -22,24 +22,29 @@ A daily timer runs this same skill unattended where it is armed —
 
 `gh pr list` cannot see an update Renovate detected but never raised. Those sit in the
 Dependency Dashboard's **Pending Status Checks** section (issue #3), and they are supposed to
-leave it within their `minimumReleaseAge` — 3 days for a digest bump, 7 for a version one. The
+leave it within their `minimumReleaseAge` — 3 days for a digest bump, 7 for a version one
+(`hosts/components/renovate-notify/files/pending_logic.py:DIGEST_SOAK_DAYS`, `hosts/components/renovate-notify/files/pending_logic.py:VERSION_SOAK_DAYS`). The
 one exception is the nginx alpine digests (`nginx`, `nginxinc/nginx-unprivileged`), which soak
-1 day: upstream re-pushes those tags about every 3.6 days, and a 3-day soak restarted on each
+1 day (`scripts/tests/test_renovate_nginx_digest_soak.py::test_a_nginx_alpine_digest_soaks_one_day`): upstream re-pushes those tags about every 3.6 days, and a 3-day soak restarted on each
 re-push left an automerge window the daily Renovate run usually missed (#2886). `renovate-notify`
-measures those two rows against the 1-day soak, so their stuck threshold is 8 days, not 10.
+measures those two rows against the 1-day soak (`hosts/components/renovate-notify/files/pending_logic.py:FAST_DIGEST_SOAK_DAYS`), so their stuck
+threshold is 8 days, not 10.
 A digest with no release timestamp skips the soak entirely (#3368). Only Docker Hub returns a
 timestamp, and only for a tag that names a version. So a GHCR or lscr.io digest, or a digest on
 `latest`, `alpine` or `jvm-stable`, has none. The k8s digest rule sets
-`minimumReleaseAgeBehaviour: timestamp-optional`, so Renovate raises those at once. Without it
+`minimumReleaseAgeBehaviour: timestamp-optional`, so Renovate raises those at once
+(`scripts/tests/test_renovate_digest_soak_without_timestamp.py::test_a_digest_with_no_timestamp_is_raised_without_an_age_check`). Without it
 they sat in Pending Status Checks indefinitely. A version bump on GHCR, lscr.io or gcr.io has
 no timestamp either, so the k8s version rule sets the same behaviour for `docker` minor and
-patch bumps (#3370). Such a bump raises on its first run with no soak; a Docker Hub version
+patch bumps (#3370,
+`scripts/tests/test_renovate_digest_soak_without_timestamp.py::test_a_version_bump_with_no_timestamp_is_raised_without_an_age_check`). Such a bump raises on its first run with no soak; a Docker Hub version
 bump keeps its 7 days.
-Measured 2026-09-02, seven had not: grafana/promtail sat there for 111 days against a 7-day
+
+**HISTORY —** Measured 2026-09-02, seven had not: grafana/promtail sat there for 111 days against a 7-day
 soak, so the homelab ran promtail 3.3.0 that whole time (issue #886).
 
 `renovate-notify` measures each item's continuous dwell in that section and posts a Discord
-digest naming any that passes its soak plus a 7-day grace. To see the section without waiting
+digest naming any that passes its soak plus a 7-day grace (`hosts/components/renovate-notify/files/pending_logic.py:PENDING_GRACE_DAYS`). To see the section without waiting
 for the digest:
 
 ```bash
@@ -263,10 +268,11 @@ A half-done bump is a normal code change: worktree, fix, test, PR. Three rules s
   your own branch, then `gh pr close <renovate-pr>` naming the superseding PR. Keeping the
   bot's commit preserves the provenance of the version bump.
 - **A coupled pin moves with it.** `raise jellyfin with it` means the image bump is part of
-  the same PR, because the repo guards the pair (`test_anisync_pin_matches_server.py`). Run
+  the same PR, because the repo guards the pair (`tests/services/test_anisync_pin_matches_server.py::test_the_plugin_target_abi_does_not_exceed_the_server`). Run
   the guard the rule points at; it is the completion criterion.
 - **The unattended run cannot finish a work order.** It runs as its own user with a token
-  that cannot push, merge or file an issue, so it opens no superseding PR. Its prompt has it
+  that cannot push, merge or file an issue, so it opens no superseding PR
+  (`hosts/tests/test_renovate_agent_identity.py::test_the_session_holds_only_the_read_token_and_the_controller_the_write_one`). Its prompt has it
   put the work order in the digest instead. An interactive session finishes the work order and
   lands its own superseding PR as usual. Land it before the next Renovate PR for the same pin:
   Renovate cuts that PR from a master still carrying the old pin, and it conflicts.
@@ -283,9 +289,12 @@ the PR body:
 uv run python scripts/dev/renovate_rebase.py <n>
 ```
 
-It is idempotent (a ticked box exits 0 and writes nothing), exits 1 on a body with no
-`<!-- rebase-check -->` box, which is a PR Renovate did not author, and exits 3 on a PR still
-inside its soak, naming `renovate/stability-days` and writing nothing. Renovate refreshes the
+It is idempotent (a ticked box exits 0 and writes nothing,
+`scripts/dev/tests/test_renovate_rebase.py::test_main_is_idempotent_on_a_ticked_box`), exits 1 on a body with no
+`<!-- rebase-check -->` box, which is a PR Renovate did not author
+(`scripts/dev/tests/test_renovate_rebase.py::test_main_refuses_a_body_with_no_box_without_editing`), and exits 3 on a PR still
+inside its soak, naming `renovate/stability-days` and writing nothing
+(`scripts/dev/tests/test_renovate_rebase.py::test_main_refuses_to_tick_a_soaking_pr`). Renovate refreshes the
 branch within a cycle. Do not hand-edit the digest: the next Renovate
 run would rewrite it anyway.
 
@@ -300,7 +309,8 @@ PR, and that PR still reads `renovate/stability-days: pending` (§0).
 
 `renovate_rebase.py` now enforces that paragraph rather than relying on you to remember it: it
 reads the PR's status rollup, and on a pending `renovate/stability-days` it names the soak and
-exits 3 without ticking (#2630). It refuses even where the box is unticked, so that exit 0
+exits 3 without ticking (#2630,
+`scripts/dev/tests/test_renovate_rebase.py::test_main_names_the_soak_on_a_pr_whose_box_is_already_ticked`). It refuses even where the box is unticked, so that exit 0
 never reads as "the rebase is coming" while the soak holds it.
 
 A box Renovate left ticked through the soak should still be honoured. Renovate rereads the box
@@ -311,9 +321,11 @@ leaves the box ticked and the branch unrebased, re-request it:
 uv run python scripts/dev/renovate_rebase.py --retick <n>
 ```
 
-`--retick` writes the box unticked, then ticked, as two separate edits (#2655). It refuses with
+`--retick` writes the box unticked, then ticked, as two separate edits (#2655,
+`scripts/dev/tests/test_renovate_rebase.py::test_retick_unticks_then_reticks_a_spent_box_after_the_soak`). It refuses with
 exit 3 unless `renovate/stability-days` reads SUCCESS, so it cannot spend a tick during the
-soak. If the second edit fails, the box is left unticked; a plain run ticks it.
+soak (`scripts/dev/tests/test_renovate_rebase.py::test_retick_refuses_a_pr_still_soaking`). If the second edit fails, the box is left unticked; a plain run ticks it
+(`scripts/dev/tests/test_renovate_rebase.py::test_retick_names_the_unticked_box_when_the_second_edit_fails`).
 
 ## 6. Land them one at a time
 
@@ -321,12 +333,12 @@ Land each PR with the [`land-after-merge` invocation](../land-after-merge/SKILL.
 run as written there. Its `--arm-merge` merges inside the script
 itself, so no session answers the permission prompt a bare `gh pr merge` raises (issue #979).
 The unattended daily run lands through `renovate-agent-land@<n>.service` instead, as its
-prompt says, because its own token cannot merge.
+prompt says, because its own token cannot merge
+(`hosts/tests/test_renovate_agent_identity.py::test_the_runner_lands_through_the_lander_the_polkit_rule_admits`).
 
-**Serialize.** Two landings running at once race each other for the tree, and a landing that
-loses that race deploys nothing; the skill's verdict table says what to do with the line it
-prints. When several PRs touch nothing in common, one `land.sh` with an explicit `--tags a,b,c`
-covering all of them costs one lock acquisition instead of three.
+**Serialize.** One landing at a time holds the landing turn, and the others wait for it
+(`scripts/deploy_tools/tests/test_land_turn.py::test_a_landing_waits_while_another_holds_the_turn`);
+the skill's verdict table says what to do with the line each prints.
 
 ## 7. Verify the bump, not the rollout
 
@@ -409,6 +421,8 @@ closing summary so the count is visible over time.
   a DB format migration (`meilisearch`), a WAF component needing a deliberate redeploy
   (`crowdsec bouncer plugin`). Report what the rule asks for and leave the PR open. The
   `; k8s_autodeploy: false` those two also carry does not change this: it is the marker that
-  keeps the unattended `renovate_agent` off them (#1963), not a second work order.
+  keeps the unattended `renovate_agent` off them (#1963,
+  `hosts/components/renovate-agent/tests/test_land_renovate_pr.py::test_each_check_refuses_the_pr_that_breaks_it`),
+  not a second work order.
 - The new version's release notes name a breaking change. Renovate does not read them; you do.
 - A landing hits a genuine hold — `CLAUDE.md` → *When to wait* governs, not this skill.

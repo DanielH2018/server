@@ -14,7 +14,7 @@ verify** → report. Deduplicating before verification is what keeps the skeptic
 twice for one defect.
 
 ## 1. Resolve scope
-Default: all six areas. If the user named a subset (e.g. `homelab-review security,network`), run only
+Default: all six areas (`scripts/dev/review_metrics.py:REVIEW_DOMAINS`). If the user named a subset (e.g. `homelab-review security,network`), run only
 those. Home Assistant is NOT one of them — its review lives in the separate `/ha-review` skill; if the
 user asks for HA, point them there (or invoke it) rather than folding it in here. Map each area to its
 agent:
@@ -194,7 +194,8 @@ severity. Step 6 dispatches a skeptic per lead exactly as it does for High/Mediu
 skeptic's job is to *resolve the fact* against live state, which the reviewer could not touch.
 A lead the skeptic resolves becomes a finding at the tier the resolved fact supports, or a
 refutation; one the skeptic cannot resolve ships in the report as a lead, never as a finding.
-(Adapted from the `needs_validation` verdict in `cloudflare/security-audit-skill`, whose
+
+**HISTORY —** (Adapted from the `needs_validation` verdict in `cloudflare/security-audit-skill`, whose
 2026-09-17 trial on this repo produced 8 leads against 1 confirmed finding.)
 
 ## 5. Collect, then deduplicate (before anything is verified)
@@ -235,10 +236,12 @@ issues that need different fixes are two findings, even at one service. A merged
 highest severity of its inputs and lists every agent that raised it.
 
 ## 6. Adversarially verify High/Medium findings (before they reach the report)
-Reviews here have a misfire history (an Authelia `trusted_proxies` proposal that would have
+**HISTORY —** Reviews here have a misfire history (an Authelia `trusted_proxies` proposal that would have
 crash-looped it; a PEP-758 `except X, Y:` misread as a syntax bug; and in the 2026-08-15 run both a
 proposed `N8N_PROXY_HOPS` change and a Pi `:latest`-pinning "fix" would have caused damage) — a
-wrong finding costs the operator more than a missed one. So: for each deduplicated High/Medium
+wrong finding costs the operator more than a missed one.
+
+So: for each deduplicated High/Medium
 finding, and for each `NEEDS VALIDATION` lead from step 4, dispatch one **`skeptic`** agent, all
 in one parallel message. A lead's brief names the exact fact to resolve and the owner-observed
 check the reviewer proposed; the skeptic runs that check against live state and returns
@@ -248,8 +251,8 @@ don't-re-flag memories, `git log`/`git blame`, `gh pr list`, `probe.py`/`kubectl
 the rule that a comment or a reassuring name is not evidence, and the three verdicts. Do not restate
 it in the brief; give the skeptic the finding, its `file:line`, and which reviewer raised it.
 
-**Size the skeptic to the finder.** `skeptic` deliberately pins no `model`, so you set it per
-dispatch. It must be at least the tier of the agent that raised the finding: a High from an opus
+**Size the skeptic to the finder.** `skeptic` deliberately pins no `model`
+(`.claude/agents/skeptic.md`), so you set it per dispatch. It must be at least the tier of the agent that raised the finding: a High from an opus
 reviewer (security, backup/observability, CI/CD) gets `model: opus`; everything else runs
 `model: sonnet`. A weaker refuter plus an explicit refute-bias is a path for real findings to die in
 the appendix, and the appendix is never re-read.
@@ -279,13 +282,17 @@ appendix; UNCERTAIN ones stay but are marked unverified. Lows skip verification.
 other, and this loop is armoured against false positives and not at all against false negatives:
 refuting is cheap and always defensible, confirming carries the risk this skill warns about, so
 uncertainty resolves downward and the downward path is one-way. It has produced an invented
-refutation. Asked to rule on "qbittorrent's main container has no livenessProbe", a skeptic
+refutation.
+
+**HISTORY —** Asked to rule on "qbittorrent's main container has no livenessProbe", a skeptic
 announced it had read the real template rather than trust the prompt, then returned REFUTED citing
 "39 lines, an httpGet livenessProbe on the qbittorrent container at lines 24-30". The file is
 **183 lines**; its only `livenessProbe` is at `:91`, inside the **wireguard** container, while the
 qbittorrent container at `:116` has a `readinessProbe` at `:160` and no liveness check. The finding
 was live and the refutation was fabricated, and one `grep` settled it. (Those line numbers
-describe the file as it stood then; `6cc352588` added the missing probe on 2026-09-17.) "The decisive check wasn't
+describe the file as it stood then; `6cc352588` added the missing probe on 2026-09-17.)
+
+"The decisive check wasn't
 run" is a reason to run it, not a verdict — and when reading a past ledger, treat its refuted list
 as the least-reviewed part of it.
 
@@ -440,8 +447,9 @@ control is the "fires on nothing" case the repo warns about, and it reads exactl
 
 ## Notes
 - All six reviewer agents are read-only investigators. `security-review` is the one without `Bash`
-  (`Read, Grep, Glob` only), so it cannot run `git log`, `kubectl`, or `probe.py` — its findings reach
+  (`Read, Grep, Glob` only, `.claude/agents/security-review.md`), so it cannot run `git log`, `kubectl`, or `probe.py` — its findings reach
   live/history evidence only through the step-6 skeptic pass, which is where that verification belongs.
-- Home Assistant review is handled by the separate `/ha-review` skill.
+- Home Assistant review is handled by the separate `/ha-review` skill
+  (`.claude/skills/ha-review/SKILL.md`).
 - This skill is the **review** half of the flow only. Implementation (implement → deploy via `/deploy`
   → commit) stays an explicit, operator-gated sequence — keep it out of this skill.
