@@ -151,8 +151,8 @@ that holds for 48 hours, so it reaches Discord and email instead of repeating in
 alone (#8218). It moves the source's name and service to `escalated_from` and
 `escalated_service`, and carries `service="alert-escalation"`, a tag no health gate reads.
 To silence one escalation, match `escalated_from`. Shadow and drill alerts never escalate,
-and neither does a rule labelled `escalate: "false"`: `DeployHoldActive`,
-`FanoutSlotsIdleWithFreeWork` and `FluxSuspended` hold by design.
+and neither does a rule labelled `escalate: "false"`: `DeployHoldActive` and
+`FluxSuspended` hold by design.
 `tests/services/test_warning_escalation_exemptions.py` holds that exempt set to the
 rules. The rule has no `for:`, because a Prometheus restart resets every alert's activation
 (`docs/target-architecture/monitoring/m6-retire-kuma.md`, Open question 9). It counts the
@@ -172,11 +172,6 @@ pages when its updates stop. `docs/host-packages.md` is the runbook for both pag
 group also carries one `WiredLinkDown` warning per node whose host_vars set
 `k3s_node_static_link`, reading that link's carrier and operstate (#5124). The same test
 module holds that set to host_vars, so a node that pins a new link needs a rule edit too.
-It also carries `FanoutSlotsIdleWithFreeWork`, a warning that notifies Discord and never
-pages (#5658): free issues for an hour with no fan-out batch live on either node, read from
-the server lander's `findings_issues` gauge and the per-batch cgroup series. Its own route in
-`templates/alertmanager-secret.yaml.j2` repeats every 24h, so an idle stretch sends one
-message, and no other alert shares that route.
 
 **`HostCheckOverdue` is the host checks' catch-all deadman, never a replacement for a pair.**
 One rule per host compares each check's timestamp with the

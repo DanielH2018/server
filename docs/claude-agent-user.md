@@ -726,7 +726,7 @@ The code is root-owned under `/opt/claude-triage`, like the runner's.
   `warning`, so from 2026-10-31 to 2026-11-12 the floor logged 168 skipped falls and opened
   nothing for a down service. Replayed through the table, that journal opens 8 episodes, all
   for down falls. It holds back wg-easy's 7 falls, and every `PiLoadHigh`, `FluxNotReady` and
-  `FanoutSlotsIdleWithFreeWork` fall. The 12 critical falls the floor had opened, such as
+  idle-fan-out-slots fall. The 12 critical falls the floor had opened, such as
   `EtcdRestoreDrillFailed` and `HostReconcileFailed`, open nothing until a route names them.
 - **No routed alert counts log text a session can write.** This is invariant I6 of the
   guardrails plan ([dotfiles#967](https://github.com/DanielH2018/dotfiles/issues/967)). A

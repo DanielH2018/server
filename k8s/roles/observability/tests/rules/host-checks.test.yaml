@@ -868,42 +868,6 @@ tests:
         alertname: WiredLinkDown
         exp_alerts: []
 
-  # FanoutSlotsIdleWithFreeWork: two free issues and no batch series for 70 minutes fires at
-  # the 1h hold. The same queue beside one live batch on daniel-server stays quiet, which is
-  # the half that proves the `unless` arm reads the batch series at all.
-  - interval: 1m
-    input_series:
-      - series: 'findings_issues{state="free", instance="daniel-box", job="node", origin="daniel-box"}'
-        values: '2x70'
-    alert_rule_test:
-      - eval_time: 30m
-        alertname: FanoutSlotsIdleWithFreeWork
-        exp_alerts: []
-      - eval_time: 65m
-        alertname: FanoutSlotsIdleWithFreeWork
-        exp_alerts:
-          - exp_labels:
-              severity: warning
-              service: daniel-box
-              escalate: "false"
-            exp_annotations:
-              summary: Free fan-out issues have waited an hour with no batch running.
-              description: >-
-                findings_issues{state="free"} has been above 0 for an hour while no fan-out batch
-                ran on either node. Read `uv run python scripts/dev/findings.py next` for what is
-                free and `uv run python scripts/dev/fanout.py place read` for the hosts' headroom,
-                then launch, or record why the queue waits (`findings.py defer`).
-  - interval: 1m
-    input_series:
-      - series: 'findings_issues{state="free", instance="daniel-box", job="node", origin="daniel-box"}'
-        values: '2x70'
-      - series: 'claude_fanout_batch_pids_current{batch="5642", instance="daniel-server", job="node", origin="daniel-server"}'
-        values: '12x70'
-    alert_rule_test:
-      - eval_time: 65m
-        alertname: FanoutSlotsIdleWithFreeWork
-        exp_alerts: []
-
   # A FREE session on daniel-server, beside a logged-in one on daniel-box. IscsiSessionStale
   # fires for the FREE one after its 15m `for:` and never for the logged-in one. Both nodes'
   # check files stay fresh, so IscsiSessionsNotReporting stays quiet.
