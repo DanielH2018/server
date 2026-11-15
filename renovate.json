@@ -1387,11 +1387,11 @@
       "automerge": false
     },
     {
-      "description": "TEMPORARY, for the 2026-11-15 renovate-agent drill. uv 0.13.8 (#8828) skips its soak, so Renovate posts renovate/stability-days success and the agent can nominate it. Automerge is off, so Renovate does not merge it itself before the agent and the operator see it. Revert this rule after the drill.",
+      "description": "TEMPORARY, for the 2026-11-15 renovate-agent drill. uv 0.13.8 (#8828) soaks one hour instead of seven days, so Renovate posts renovate/stability-days success and the agent can nominate it. Not 0 days: Renovate skips the stability check, and leaves a pending status where it stands, when the age parses to zero. Automerge is off, so Renovate does not merge it itself before the agent and the operator see it. Revert this rule after the drill.",
       "matchPackageNames": [
         "astral-sh/uv"
       ],
-      "minimumReleaseAge": "0 days",
+      "minimumReleaseAge": "1 hour",
       "automerge": false
     },
     {
