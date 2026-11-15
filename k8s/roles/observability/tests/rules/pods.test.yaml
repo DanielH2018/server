@@ -255,11 +255,13 @@ tests:
               service: cloudflare-ddns
               verify: 'true'
             exp_annotations:
-              summary: A cloudflare-ddns Deployment has no available replica.
-              description: A cloudflare-ddns Deployment (direct or proxied) has had no available replica
-                for 10 minutes, or kube-state-metrics reports none, so its Cloudflare A records are not
-                being kept current. The `deployment` label says which. Read that Deployment's pod events
-                and log in the homelab namespace.
+              summary: >-
+                cloudflare-ddns-direct has no available replica.
+              description: >-
+                cloudflare-ddns-direct has had no available replica for 10 minutes,
+                or kube-state-metrics reports none, so its Cloudflare A records are
+                not being kept current. Read its pod events and log in the homelab
+                namespace.
   # The proxied Deployment alone is unavailable. The selector must reach both names.
   - interval: 1m
     input_series:
@@ -279,11 +281,13 @@ tests:
               service: cloudflare-ddns
               verify: 'true'
             exp_annotations:
-              summary: A cloudflare-ddns Deployment has no available replica.
-              description: A cloudflare-ddns Deployment (direct or proxied) has had no available replica
-                for 10 minutes, or kube-state-metrics reports none, so its Cloudflare A records are not
-                being kept current. The `deployment` label says which. Read that Deployment's pod events
-                and log in the homelab namespace.
+              summary: >-
+                cloudflare-ddns-proxied has no available replica.
+              description: >-
+                cloudflare-ddns-proxied has had no available replica for 10 minutes,
+                or kube-state-metrics reports none, so its Cloudflare A records are
+                not being kept current. Read its pod events and log in the homelab
+                namespace.
   # A rolling update: the pod is gone for 3 minutes, then returns. Quiet.
   - interval: 1m
     input_series:
@@ -311,11 +315,13 @@ tests:
               service: cloudflare-ddns
               verify: 'true'
             exp_annotations:
-              summary: A cloudflare-ddns Deployment has no available replica.
-              description: A cloudflare-ddns Deployment (direct or proxied) has had no available replica
-                for 10 minutes, or kube-state-metrics reports none, so its Cloudflare A records are not
-                being kept current. The `deployment` label says which. Read that Deployment's pod events
-                and log in the homelab namespace.
+              summary: >-
+                cloudflare-ddns-direct has no available replica.
+              description: >-
+                cloudflare-ddns-direct has had no available replica for 10 minutes,
+                or kube-state-metrics reports none, so its Cloudflare A records are
+                not being kept current. Read its pod events and log in the homelab
+                namespace.
   # A dead kube-state-metrics leaves both Deployments to ScrapeTargetDown: no series, `up` 0.
   - interval: 1m
     input_series:

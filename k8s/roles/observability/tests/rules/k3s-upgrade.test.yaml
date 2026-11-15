@@ -24,12 +24,13 @@ tests:
         exp_alerts: []
       - eval_time: 2h
         alertname: K3sNodeVersionSkew
-        exp_alerts: &skew
+        exp_alerts:
           - exp_labels:
               severity: warning
               service: system-upgrade
             exp_annotations:
-              summary: The nodes report more than one kubelet version, or none at all.
+              summary: >-
+                kube_node_info is absent, so no kubelet version skew can be judged.
               description: >-
                 For 2 hours either kube_node_info has carried more than one kubelet_version, so an
                 upgrade left one node behind, or the series has been absent, so the skew cannot be
@@ -53,7 +54,20 @@ tests:
         exp_alerts: []
       - eval_time: 2h
         alertname: K3sNodeVersionSkew
-        exp_alerts: *skew
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              service: system-upgrade
+            exp_annotations:
+              summary: >-
+                The nodes run mixed kubelet versions: daniel-box v1.37.2+k3s1, daniel-server
+                v1.37.1+k3s1.
+              description: >-
+                For 2 hours either kube_node_info has carried more than one kubelet_version, so an
+                upgrade left one node behind, or the series has been absent, so the skew cannot be
+                judged. Read `kubectl get nodes`, then the Plans with `kubectl -n system-upgrade get
+                plans`. docs/k3s-upgrade.md says how to finish or retry the upgrade.
+              runbook_url: https://docs.local.daniel-hunter.com/k3s-upgrade/
 
   # One version on both nodes stays quiet.
   - interval: 1m

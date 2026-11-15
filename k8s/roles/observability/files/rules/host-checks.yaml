@@ -835,13 +835,16 @@ groups:
           severity: warning
           service: daniel-box
         annotations:
-          summary: daniel-box has a failed system unit.
+          summary: >-
+            Failed system units on daniel-box: {{ range $i, $s := query "homelab_systemd_unit_failed{origin='daniel-box'}" | sortByLabel "unit" }}{{ if $i }}, {{ end }}{{ $s.Labels.unit }}{{ else }}none named{{ end }}.
           description: >-
-            systemd-units-check on daniel-box counted at least one system unit in the failed
-            state; homelab_systemd_failed_units{check="systemd-units"} holds how many. Run
-            `systemctl --failed` on daniel-box and read each unit's journal. Once the cause is
-            fixed, `systemctl reset-failed <unit>` or a clean run clears the state, and the
-            next check resolves this alert.
+            systemd-units-check on daniel-box found each unit above in the failed state. For each
+            one, read `systemctl status <unit>` and `journalctl -u <unit> -b` on daniel-box. Once
+            the cause is fixed, `systemctl reset-failed <unit>` or a clean run of the unit
+            clears the state, and the next check resolves this alert. "none named" means
+            the host wrote no homelab_systemd_unit_failed series: either systemctl could not
+            list the units (`journalctl -t systemd-units`) or the host package predates the
+            per-unit series, so run `systemctl --failed` on daniel-box.
       - alert: SystemdUnitsNotReporting
         expr: |
           (
@@ -871,13 +874,16 @@ groups:
           severity: warning
           service: daniel-server
         annotations:
-          summary: daniel-server has a failed system unit.
+          summary: >-
+            Failed system units on daniel-server: {{ range $i, $s := query "homelab_systemd_unit_failed{origin='daniel-server'}" | sortByLabel "unit" }}{{ if $i }}, {{ end }}{{ $s.Labels.unit }}{{ else }}none named{{ end }}.
           description: >-
-            systemd-units-check on daniel-server counted at least one system unit in the failed
-            state; homelab_systemd_failed_units{check="systemd-units"} holds how many. Run
-            `systemctl --failed` on daniel-server and read each unit's journal. Once the cause is
-            fixed, `systemctl reset-failed <unit>` or a clean run clears the state, and the
-            next check resolves this alert.
+            systemd-units-check on daniel-server found each unit above in the failed state. For each
+            one, read `systemctl status <unit>` and `journalctl -u <unit> -b` on daniel-server. Once
+            the cause is fixed, `systemctl reset-failed <unit>` or a clean run of the unit
+            clears the state, and the next check resolves this alert. "none named" means
+            the host wrote no homelab_systemd_unit_failed series: either systemctl could not
+            list the units (`journalctl -t systemd-units`) or the host package predates the
+            per-unit series, so run `systemctl --failed` on daniel-server.
       - alert: SystemdUnitsNotReporting
         expr: |
           (
@@ -907,13 +913,16 @@ groups:
           severity: warning
           service: daniel-pi
         annotations:
-          summary: daniel-pi has a failed system unit.
+          summary: >-
+            Failed system units on daniel-pi: {{ range $i, $s := query "homelab_systemd_unit_failed{origin='daniel-pi'}" | sortByLabel "unit" }}{{ if $i }}, {{ end }}{{ $s.Labels.unit }}{{ else }}none named{{ end }}.
           description: >-
-            systemd-units-check on daniel-pi counted at least one system unit in the failed
-            state; homelab_systemd_failed_units{check="systemd-units"} holds how many. Run
-            `systemctl --failed` on daniel-pi and read each unit's journal. Once the cause is
-            fixed, `systemctl reset-failed <unit>` or a clean run clears the state, and the
-            next check resolves this alert.
+            systemd-units-check on daniel-pi found each unit above in the failed state. For each
+            one, read `systemctl status <unit>` and `journalctl -u <unit> -b` on daniel-pi. Once
+            the cause is fixed, `systemctl reset-failed <unit>` or a clean run of the unit
+            clears the state, and the next check resolves this alert. "none named" means
+            the host wrote no homelab_systemd_unit_failed series: either systemctl could not
+            list the units (`journalctl -t systemd-units`) or the host package predates the
+            per-unit series, so run `systemctl --failed` on daniel-pi.
       - alert: SystemdUnitsNotReporting
         expr: |
           (
@@ -1080,7 +1089,8 @@ groups:
           severity: warning
           service: daniel-box
         annotations:
-          summary: daniel-box holds an iSCSI session that is not logged in.
+          summary: >-
+            daniel-box's iSCSI session {{ $labels.session }} to {{ $labels.target }} reads {{ $labels.state }}.
           description: >-
             {{ $labels.session }} on daniel-box has read {{ $labels.state }} for 15 minutes,
             for target {{ $labels.target }}. The next attach of that volume on daniel-box fails
@@ -1095,7 +1105,8 @@ groups:
           severity: warning
           service: daniel-server
         annotations:
-          summary: daniel-server holds an iSCSI session that is not logged in.
+          summary: >-
+            daniel-server's iSCSI session {{ $labels.session }} to {{ $labels.target }} reads {{ $labels.state }}.
           description: >-
             {{ $labels.session }} on daniel-server has read {{ $labels.state }} for 15 minutes,
             for target {{ $labels.target }}. The next attach of that volume on daniel-server fails
