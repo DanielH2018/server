@@ -127,7 +127,7 @@ def test_a_refusal_without_a_verdict_reports_its_land_line(tmp_path):
 
 
 def test_a_multi_line_refusal_is_reported_whole(tmp_path):
-    """`_refuse_stray_closing_refs` lists the refs and the remedy below its first line."""
+    """`closing_refs.refuse_stray` lists the refs and the remedy below its first line."""
     message = (
         "land: PR #939's body carries a closing keyword (issue #2513):\n"
         "  Fixes #12 in passing\n"

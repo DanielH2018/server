@@ -3,95 +3,39 @@
 Run: uv run pytest scripts/deploy_tools/tests/test_land_turn.py
 """
 
-import os
-import subprocess
 from dataclasses import replace
-from pathlib import Path
 
 import pytest
 
 from _land_fakes import Fakes
-from deploy_tools.land_lib import line, merge, turn
+from _land_turn_fakes import (
+    A_RUN,
+    HEAD,
+    MASTER_MOVED,
+    MERGED,
+    OPEN,
+    START_VIEW,
+    UPDATED,
+    first_gh,
+    land_in_turn,
+    line_calls,
+    merged_sha,
+    call_order,
+    turn_landing,
+)
+from deploy_tools.land_lib import line, turn
 from deploy_tools.land_lib.outcome import Outcome
 from lib.exit_codes import CI_RED
 from lib.proc_testing import fake_bin, path_with
 
-HEAD = "a" * 40
-OPEN = {"state": "OPEN", "mergeable": "MERGEABLE", "headRefOid": HEAD}
-MERGED = {"state": "MERGED", "mergeable": "MERGEABLE", "headRefOid": HEAD}
-# The head a branch update makes.
-UPDATED = "b" * 40
-# The fields `merge._start_run` reads before the first poll.
-START_VIEW = "isDraft,state,mergeable,headRefOid"
-# Master moved on a path the PR leaves alone, so only the turn's own rule updates the branch.
-MASTER_MOVED = [["docs/other.md"]]
-# A run that ran jobs on the head, which a landing never holds the turn to wait for.
-A_RUN = [{"id": 2, "status": "in_progress"}]
 # One unfinished master run above a cap of 1: pacing holds a landing that reads it.
 BACKLOG = [{"status": "queued", "created_at": "1970-01-12T13:40:00Z"}]
 
 
-def _landing(landing, polls=(OPEN, MERGED), start=OPEN, **fakes_or_opts):
-    """A draft's landing; its head reads green on each of `polls` that is open.
-
-    `start` is the PR as the landing reads it before its first poll, or a tuple of what it
-    reads before it stands in line for the turn and after.
-    """
-    starts = start if isinstance(start, tuple) else (start,)
-    fakes = {
-        k: fakes_or_opts.pop(k)
-        for k in (
-            "turn",
-            "line",
-            "await_ci",
-            "gh_merge_rc",
-            "master_runs",
-            "compare",
-            "head_runs",
-        )
-        if k in fakes_or_opts
-    }
-    ln, calls = landing(
-        Fakes(
-            gh_views={
-                "state,mergeable,headRefOid": list(polls),
-                START_VIEW: [{"isDraft": True, **s} for s in starts],
-            },
-            **fakes,
-        ),
-        **{"queue": True, **fakes_or_opts},
-    )
-    ln.direct_merge_subject = "Take turns"
-    return ln, calls
-
-
-def _land(ln) -> None:
-    """The merge wait as the pipeline runs it."""
-    with turn.held(ln) as take_turn:
-        merge.await_merge(ln, take_turn)
-
-
-def _first_gh(calls) -> int:
-    return next(i for i, (name, _, _) in enumerate(calls) if name == "gh")
-
-
-def _order(calls) -> list[str]:
-    """The calls that matter to the turn, in order, each under a short name."""
-    names = []
-    for name, args, _ in calls:
-        if name == "gh" and "PUT" in args:
-            names.append("update" if args[3].endswith("/update-branch") else "merge")
-        elif name == "gh":
-            names.append(" ".join(args[:2]))
-        elif name in ("try_turn", "release_turn", "gh:master-runs"):
-            names.append(name)
-    return names
-
-
 def test_a_landing_waits_while_another_holds_the_turn(landing, capsys):
     # fact: .claude/skills/renovate-prs/SKILL.md#6. Land them one at a time
-    ln, _ = _landing(landing, turn=[False, False, True], merge_poll=7)
-    _land(ln)
+    ln, _ = turn_landing(landing, turn=[False, False, True], merge_poll=7)
+    land_in_turn(ln)
     out = capsys.readouterr().out
     assert out.count("waiting for the landing turn:") == 1
     assert "took the landing turn after 14s" in out
@@ -99,9 +43,9 @@ def test_a_landing_waits_while_another_holds_the_turn(landing, capsys):
 
 
 def test_a_turn_that_never_comes_leaves_a_merge_of_a_ready_pr(landing, capsys):
-    ln, calls = _landing(landing, turn=[False], merge_timeout=2, merge_poll=1)
-    _land(ln)
-    order = _order(calls)
+    ln, calls = turn_landing(landing, turn=[False], merge_timeout=2, merge_poll=1)
+    land_in_turn(ln)
+    order = call_order(calls)
     # The draft is still marked ready and no turn is given up. The merge is not paced,
     # because the wait for the turn already spent `merge_timeout`.
     assert order[-2:] == ["pr ready", "merge"]
@@ -112,7 +56,7 @@ def test_a_turn_that_never_comes_leaves_a_merge_of_a_ready_pr(landing, capsys):
 
 
 def test_the_merge_wait_gets_a_whole_budget_after_the_wait_for_the_turn(landing):
-    ln, _ = _landing(
+    ln, _ = turn_landing(
         landing,
         polls=(OPEN,),
         turn=[False, False, True],
@@ -121,29 +65,25 @@ def test_the_merge_wait_gets_a_whole_budget_after_the_wait_for_the_turn(landing)
         merge_poll=2,
     )
     with pytest.raises(Outcome) as exc:
-        _land(ln)
+        land_in_turn(ln)
     # 4s for the turn, then polls at 4s and 6s inside the budget and the end at 8s.
     assert exc.value.verdict == "merge-timeout"
     assert "still OPEN after 8s" in exc.value.error
 
 
-def _line_calls(calls) -> list[tuple[str, ...]]:
-    return [args for name, args, _ in calls if name == "line"]
-
-
 def test_a_draft_stands_in_the_line_while_it_waits_and_leaves_with_the_turn(landing):
-    ln, calls = _landing(landing, turn=[False, False, True])
-    _land(ln)
+    ln, calls = turn_landing(landing, turn=[False, False, True])
+    land_in_turn(ln)
     # The last `stand` reads its place once more with the turn taken, for an answer the
     # holder wrote after its last poll.
-    assert _line_calls(calls) == [
+    assert line_calls(calls) == [
         ("join", "999", HEAD),
         ("stand", "999", HEAD),
         ("stand", "999", HEAD),
         ("leave", "999"),
     ]
     # It left before it used the turn, so it is not in the line it reads as the holder.
-    assert calls.index(("line", ("leave", "999"), {})) < _first_gh(calls)
+    assert calls.index(("line", ("leave", "999"), {})) < first_gh(calls)
 
 
 @pytest.mark.parametrize(
@@ -156,16 +96,16 @@ def test_a_draft_stands_in_the_line_while_it_waits_and_leaves_with_the_turn(land
 def test_a_head_that_is_no_untested_draft_waits_for_the_turn_outside_the_line(
     landing, case
 ):
-    ln, calls = _landing(landing, turn=[False, True], **case)
-    _land(ln)
-    assert _order(calls).count("try_turn") == 2
-    assert _line_calls(calls) == []
+    ln, calls = turn_landing(landing, turn=[False, True], **case)
+    land_in_turn(ln)
+    assert call_order(calls).count("try_turn") == 2
+    assert line_calls(calls) == []
 
 
 def test_a_draft_the_holder_of_the_turn_merged_stops_waiting_and_merges_nothing(
     landing, capsys
 ):
-    ln, calls = _landing(
+    ln, calls = turn_landing(
         landing,
         polls=(MERGED,),
         start=(OPEN, MERGED),
@@ -173,23 +113,23 @@ def test_a_draft_the_holder_of_the_turn_merged_stops_waiting_and_merges_nothing(
         line=["", line.MERGED],
         merge_poll=7,
     )
-    _land(ln)
+    land_in_turn(ln)
     # No ready flip, no merge and no turn to give up: the holder did all three.
-    assert _order(calls) == ["try_turn", "try_turn"]
-    assert _line_calls(calls)[-1] == ("leave", "999")
+    assert call_order(calls) == ["try_turn", "try_turn"]
+    assert line_calls(calls)[-1] == ("leave", "999")
     out = capsys.readouterr().out
     assert "the landing that holds the turn merged PR #999 with its own" in out
     assert "merged after 7s, 7s of it waiting for the landing turn" in out
 
 
 def test_a_draft_told_to_land_alone_waits_on_for_the_turn_outside_the_line(landing):
-    ln, calls = _landing(
+    ln, calls = turn_landing(
         landing, turn=[False, False, False, True], line=["", line.ALONE]
     )
-    _land(ln)
-    assert _order(calls)[-2:] == ["merge", "release_turn"]
+    land_in_turn(ln)
+    assert call_order(calls)[-2:] == ["merge", "release_turn"]
     # It gives its place up at once and does not take it again on the third poll.
-    assert _line_calls(calls) == [
+    assert line_calls(calls) == [
         ("join", "999", HEAD),
         ("stand", "999", HEAD),
         ("leave", "999"),
@@ -197,45 +137,47 @@ def test_a_draft_told_to_land_alone_waits_on_for_the_turn_outside_the_line(landi
 
 
 def test_a_line_that_fails_leaves_the_landing_waiting_for_the_turn(landing, capsys):
-    ln, calls = _landing(landing, turn=[False, False, True], line=[OSError("no route")])
-    _land(ln)
-    assert _order(calls)[-2:] == ["merge", "release_turn"]
+    ln, calls = turn_landing(
+        landing, turn=[False, False, True], line=[OSError("no route")]
+    )
+    land_in_turn(ln)
+    assert call_order(calls)[-2:] == ["merge", "release_turn"]
     # One failure ends the landing's use of the line, so it is reported once.
-    assert _line_calls(calls) == [("join", "999", HEAD)]
+    assert line_calls(calls) == [("join", "999", HEAD)]
     out = capsys.readouterr().out
     assert out.count("(no route); waiting for the turn without it") == 1
 
 
 def test_a_draft_that_takes_the_turn_at_once_never_touches_the_line(landing):
-    ln, calls = _landing(landing)
-    _land(ln)
-    assert _order(calls)[0] == "try_turn"
-    assert _line_calls(calls) == []
+    ln, calls = turn_landing(landing)
+    land_in_turn(ln)
+    assert call_order(calls)[0] == "try_turn"
+    assert line_calls(calls) == []
 
 
 def test_a_lock_that_cannot_be_opened_does_not_stop_the_landing(landing, capsys):
-    ln, calls = _landing(landing, turn=[PermissionError("denied")])
-    _land(ln)
-    assert _order(calls)[-1] == "merge"
+    ln, calls = turn_landing(landing, turn=[PermissionError("denied")])
+    land_in_turn(ln)
+    assert call_order(calls)[-1] == "merge"
     assert "(denied); going on without a turn" in capsys.readouterr().out
 
 
 def test_the_turn_is_given_up_when_the_landing_ends_without_merging(landing):
-    ln, calls = _landing(landing, await_ci=[(CI_RED, "CI red")])
+    ln, calls = turn_landing(landing, await_ci=[(CI_RED, "CI red")])
     with pytest.raises(Outcome):
-        _land(ln)
-    assert _order(calls)[-1] == "release_turn"
+        land_in_turn(ln)
+    assert call_order(calls)[-1] == "release_turn"
 
 
 def test_a_draft_that_cannot_be_marked_ready_ends_the_landing_with_the_remedy(
     landing,
 ):
-    ln, calls = _landing(landing, gh_merge_rc=[1])
+    ln, calls = turn_landing(landing, gh_merge_rc=[1])
     with pytest.raises(Outcome) as exc:
-        _land(ln)
+        land_in_turn(ln)
     assert exc.value.rc == 1
     assert "could not be marked ready (boom); run `gh pr ready 999`" in exc.value.error
-    assert _order(calls)[-1] == "release_turn"
+    assert call_order(calls)[-1] == "release_turn"
 
 
 def test_a_whole_landing_takes_the_turn_with_nothing_set(land_run):
@@ -255,26 +197,25 @@ def test_a_whole_landing_takes_the_turn_with_nothing_set(land_run):
     rc, out, _, calls, _ = land_run(["--arm-merge", "--await-merge"], fakes)
     assert rc == 0, out
     # No read of the master backlog: a landing that holds the turn is not paced.
-    assert _order(calls)[:4] == ["try_turn", "pr ready", "merge", "release_turn"]
-
-
-def _merged_sha(calls) -> str:
-    args = next(
-        c[1] for c in calls if c[0] == "gh" and any(a.endswith("/merge") for a in c[1])
-    )
-    return next(a for a in args if a.startswith("sha=")).removeprefix("sha=")
+    assert call_order(calls)[:4] == ["try_turn", "pr ready", "merge", "release_turn"]
 
 
 def test_in_turn_a_head_with_no_ci_run_is_updated_from_master_before_its_run(landing):
     updated = {**OPEN, "headRefOid": UPDATED}
-    ln, calls = _landing(
+    ln, calls = turn_landing(
         landing,
         polls=(OPEN, updated, {**MERGED, "headRefOid": UPDATED}),
         compare=MASTER_MOVED,
     )
-    _land(ln)
-    assert _order(calls) == ["try_turn", "pr ready", "update", "merge", "release_turn"]
-    assert _merged_sha(calls) == UPDATED
+    land_in_turn(ln)
+    assert call_order(calls) == [
+        "try_turn",
+        "pr ready",
+        "update",
+        "merge",
+        "release_turn",
+    ]
+    assert merged_sha(calls) == UPDATED
 
 
 @pytest.mark.parametrize(
@@ -292,41 +233,41 @@ def test_the_branch_is_left_alone_and_the_head_merges_as_it_would_without_a_turn
     landing, case
 ):
     approved = case.pop("approved_head", "")
-    ln, calls = _landing(landing, compare=MASTER_MOVED, **case)
+    ln, calls = turn_landing(landing, compare=MASTER_MOVED, **case)
     ln.approved_head = approved
-    _land(ln)
-    assert "update" not in _order(calls)
-    assert _merged_sha(calls) == HEAD
+    land_in_turn(ln)
+    assert "update" not in call_order(calls)
+    assert merged_sha(calls) == HEAD
 
 
 def test_a_head_that_moved_after_the_policy_pinned_it_is_refused_and_not_updated(
     landing,
 ):
-    ln, calls = _landing(landing, compare=MASTER_MOVED)
+    ln, calls = turn_landing(landing, compare=MASTER_MOVED)
     ln.pinned_head = "d" * 40
     with pytest.raises(Outcome) as exc:
-        _land(ln)
+        land_in_turn(ln)
     assert "after the landing policy checked it" in exc.value.error
-    assert "update" not in _order(calls)
+    assert "update" not in call_order(calls)
 
 
 def test_an_update_github_refuses_leaves_the_pr_the_run_it_has(landing, capsys):
     # gh answers: `pr ready`, then the refused update, then the merge.
-    ln, calls = _landing(landing, compare=MASTER_MOVED, gh_merge_rc=[0, 1, 0])
-    _land(ln)
-    assert _order(calls)[-3:] == ["update", "merge", "release_turn"]
-    assert _merged_sha(calls) == HEAD
+    ln, calls = turn_landing(landing, compare=MASTER_MOVED, gh_merge_rc=[0, 1, 0])
+    land_in_turn(ln)
+    assert call_order(calls)[-3:] == ["update", "merge", "release_turn"]
+    assert merged_sha(calls) == HEAD
     assert "going on with the run the PR has" in capsys.readouterr().out
 
 
 def test_a_head_with_a_run_takes_the_turn_only_once_it_is_green(landing):
-    ln, calls = _landing(
+    ln, calls = turn_landing(
         landing,
         polls=(OPEN, OPEN, MERGED),
         head_runs=A_RUN,
         await_ci=[(75, "pending"), (0, "CI green")],
     )
-    _land(ln)
+    land_in_turn(ln)
     names = [name for name, _, _ in calls if name in ("await_ci", "try_turn")]
     # The pending read and the green read both come before the one ask for the turn.
     assert names.count("try_turn") == 1
@@ -336,12 +277,12 @@ def test_a_head_with_a_run_takes_the_turn_only_once_it_is_green(landing):
 def test_a_green_head_that_stood_in_line_is_read_again_and_not_merged_twice(
     landing, capsys
 ):
-    ln, calls = _landing(
+    ln, calls = turn_landing(
         landing, polls=(OPEN, MERGED), head_runs=A_RUN, turn=[False, True]
     )
-    _land(ln)
+    land_in_turn(ln)
     # Another merge landed the PR during the wait, so this landing makes none.
-    assert _order(calls) == ["pr ready", "try_turn", "try_turn", "release_turn"]
+    assert call_order(calls) == ["pr ready", "try_turn", "try_turn", "release_turn"]
     assert (
         "merged after 30s, 30s of it waiting for the landing turn"
         in capsys.readouterr().out
@@ -349,7 +290,7 @@ def test_a_green_head_that_stood_in_line_is_read_again_and_not_merged_twice(
 
 
 def test_a_wait_in_line_at_a_green_head_counts_inside_two_merge_budgets(landing):
-    ln, _ = _landing(
+    ln, _ = turn_landing(
         landing,
         polls=(OPEN,),
         head_runs=A_RUN,
@@ -359,22 +300,22 @@ def test_a_wait_in_line_at_a_green_head_counts_inside_two_merge_budgets(landing)
         merge_poll=2,
     )
     with pytest.raises(Outcome) as exc:
-        _land(ln)
+        land_in_turn(ln)
     # 4s in line at the green head. A whole budget from there would end at 7s, and twice
     # `merge_timeout` ends it at 6s.
     assert "still OPEN after 6s" in exc.value.error
 
 
 def test_a_pr_merged_while_the_landing_waited_for_its_turn_is_not_touched(landing):
-    ln, calls = _landing(
+    ln, calls = turn_landing(
         landing,
         polls=(MERGED,),
         start=(OPEN, MERGED),
         turn=[False, True],
         compare=MASTER_MOVED,
     )
-    _land(ln)
-    assert _order(calls) == ["try_turn", "try_turn", "release_turn"]
+    land_in_turn(ln)
+    assert call_order(calls) == ["try_turn", "try_turn", "release_turn"]
 
 
 @pytest.mark.parametrize(
@@ -391,54 +332,8 @@ def test_a_landing_takes_no_turn_with_the_turn_off_or_without_a_merge_of_its_own
         Fakes(gh_views={"state,mergeable,headRefOid": [OPEN, MERGED]}), queue=queue
     )
     ln.direct_merge_subject = subject
-    _land(ln)
-    assert _order(calls) == expected
-
-
-def test_the_lock_admits_one_holder_until_it_gives_the_turn_up(tmp_path):
-    lock = tmp_path / "turn.lock"
-    give_up = turn.try_take(lock)
-    assert give_up is not None
-    assert turn.try_take(lock) is None
-    give_up()
-    again = turn.try_take(lock)
-    assert again is not None
-    again()
-
-
-def test_the_lock_file_is_readable_by_every_user_whatever_the_umask(tmp_path):
-    lock = tmp_path / "turn.lock"
-    old = os.umask(0o077)
-    try:
-        give_up = turn.try_take(lock)
-    finally:
-        os.umask(old)
-    assert give_up is not None
-    give_up()
-    assert lock.stat().st_mode & 0o777 == 0o644
-
-
-def test_a_landing_on_another_host_holds_the_same_lock_over_ssh(tmp_path, ssh_here):
-    lock = tmp_path / "turn.lock"
-    give_up = turn.try_take_over_ssh(lock)
-    assert give_up is not None
-    # The lock a landing on the turn host takes is the one the ssh session holds.
-    assert turn.try_take(lock) is None
-    give_up()
-    here = turn.try_take(lock)
-    assert here is not None
-    assert turn.try_take_over_ssh(lock) is None
-    here()
-
-
-def test_a_turn_host_that_does_not_answer_raises_oserror(tmp_path, monkeypatch):
-    stubs = fake_bin(
-        tmp_path / "bin",
-        ssh="#!/usr/bin/env bash\necho 'Warning: added a key' >&2\necho 'ssh: no route' >&2\nexit 255\n",
-    )
-    monkeypatch.setenv("PATH", path_with(stubs))
-    with pytest.raises(OSError, match="ssh daniel-box: ssh: no route"):
-        turn.try_take_over_ssh(tmp_path / "turn.lock")
+    land_in_turn(ln)
+    assert call_order(calls) == expected
 
 
 def test_a_landing_off_the_turn_host_takes_the_turn_over_ssh(
@@ -450,58 +345,8 @@ def test_a_landing_off_the_turn_host_takes_the_turn_over_ssh(
         ssh=f"#!/usr/bin/env bash\nprintf '%s\\n' \"$@\" > {seen}\necho held\ncat >/dev/null\n",
     )
     monkeypatch.setenv("PATH", path_with(stubs))
-    ln, _ = _landing(landing)
+    ln, _ = turn_landing(landing)
     ln.tools = replace(ln.tools, try_turn=None, hostname=lambda: "daniel-server")
-    _land(ln)
+    land_in_turn(ln)
     assert turn.TURN_HOST in seen.read_text().splitlines()
     assert "took the landing turn after 0s" in capsys.readouterr().out
-
-
-def test_a_landing_off_the_turn_host_reaches_the_line_over_ssh(tmp_path, monkeypatch):
-    seen = tmp_path / "ssh-args"
-    stubs = fake_bin(
-        tmp_path / "bin",
-        ssh=f"#!/usr/bin/env bash\nprintf '%s\\n' \"$@\" > {seen}\n",
-    )
-    monkeypatch.setenv("PATH", path_with(stubs))
-    turn._line("daniel-server")("leave", "7")
-    args = seen.read_text().splitlines()
-    assert turn.TURN_HOST in args
-    assert args[-1].endswith(f"{line.DIR} leave 7")
-
-
-@pytest.mark.parametrize(
-    "source", [turn._HOLD, line._REMOTE], ids=["the-turn", "the-line"]
-)
-def test_what_runs_on_the_turn_host_compiles_under_a_hosts_own_python(source):
-    """The repo's Python is newer than a host's, and the formatter writes its syntax."""
-    system_python = Path("/usr/bin/python3")
-    assert system_python.exists(), "no system python3 to stand for the turn host's"
-    compiled = subprocess.run(
-        [
-            system_python,
-            "-c",
-            "import sys; compile(sys.argv[1], 'remote', 'exec')",
-            source,
-        ],
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
-    assert compiled.returncode == 0, compiled.stderr
-
-
-@pytest.mark.parametrize("hostname", [turn.TURN_HOST, f"{turn.TURN_HOST}.lan"])
-def test_a_landing_on_the_turn_host_keeps_the_line_itself(
-    hostname, tmp_path, monkeypatch
-):
-    stubs = fake_bin(tmp_path / "bin", ssh="#!/usr/bin/env bash\nexit 255\n")
-    monkeypatch.setenv("PATH", path_with(stubs))
-    turn._line(hostname, tmp_path / "line")("join", "7", HEAD)
-    assert (tmp_path / "line" / "7").read_text().split() == [HEAD]
-
-
-@pytest.mark.parametrize("hostname", [turn.TURN_HOST, f"{turn.TURN_HOST}.lan"])
-def test_a_landing_on_the_turn_host_locks_the_file_itself(hostname):
-    # By value, not by effect: taking the turn here would lock the host's real file.
-    assert turn._taker(hostname) is turn.try_take

@@ -20,7 +20,7 @@ from pathlib import Path
 import pytest
 
 from _land_fakes import Fakes
-from deploy_tools.land_lib import merge
+from deploy_tools.land_lib import closing_refs, merge
 from deploy_tools.land_lib.outcome import Outcome
 
 _OPEN = {"state": "OPEN", "title": "Bump vale to 3.19.0", "body": "Closes #12\n"}
@@ -122,7 +122,7 @@ def test_arm_merge_accepts_the_required_authors_pr(landing):
     ],
 )
 def test_a_closing_keyword_inside_a_sentence_is_stray(body):
-    assert merge.stray_closing_refs(body) == [body]
+    assert closing_refs.stray_closing_refs(body) == [body]
 
 
 @pytest.mark.parametrize(
@@ -141,7 +141,7 @@ def test_a_closing_keyword_inside_a_sentence_is_stray(body):
     ],
 )
 def test_a_deliberate_close_and_a_bare_reference_are_clean(body):
-    assert merge.stray_closing_refs(body) == []
+    assert closing_refs.stray_closing_refs(body) == []
 
 
 def test_arm_merge_refuses_a_body_that_would_close_an_unfixed_issue(landing):
