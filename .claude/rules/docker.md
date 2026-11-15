@@ -47,8 +47,8 @@ component's `tmpfiles.d/homelab-compose.conf`
   a specific version is preferred. Every image carries a digest either way
   (`hosts/lib/tests/test_pi_compose_census.py::test_an_image_without_a_digest_is_flagged`).
 - **`read_only: true` + `tmpfs:` — the `noexec` residual is an ACCEPTED trade-off, do not re-flag.**
-  Services with an immutable rootfs still get writable `tmpfs:` scratch mounts (`/run` on the
-  three docker-proxy services, `/tmp` on alloy), and Compose's `tmpfs` long-form only exposes
+  Services with an immutable rootfs still get writable `tmpfs:` scratch mounts (`/run` on
+  docker-proxy and docker-proxy-lifecycle, `/tmp` on alloy), and Compose's `tmpfs` long-form only exposes
   `size`/`mode` — there is **no Compose-native way to set `noexec`**. So those mounts are technically
   writable-and-executable inside an otherwise-immutable container. This is defense-in-depth only and
   the `suid` half is already neutered fleet-wide by `no-new-privileges:true` + `cap_drop:[ALL]`;
