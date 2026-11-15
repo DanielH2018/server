@@ -582,7 +582,10 @@ Applying it: a new version of daniel-box's host package, which its updater insta
 ## Autonomous-role contract (`claude-fanout-server-lander`, a landing with no session behind it)
 
 Issue #5496. A daniel-server fan-out batch stops at its PR, and this timer lands the PRs that
-qualify. The operator approved it on 2026-10-18. `homelab-claude-land@` cannot do it: that unit
+qualify. The operator approved it on 2026-10-18. Since option B of `docs/ci-throughput.md`
+(2026-11-15), a daniel-server review batch lands its own draft when
+`scripts/dev/fanout_lib/own_surface.py:pr_problems` passes it, so this timer sees only the PRs
+that rule holds, which it leaves for a person, and plain batches. `homelab-claude-land@` cannot do it: that unit
 admits only the `claude` user and pins the author and branch prefix of the agent's PRs, while a
 server batch runs as `ubuntu` on `worktree-fanout-<batch>`.
 

@@ -235,8 +235,8 @@ def drafts_pr(target: Target) -> bool:
     This repo's `ci.yml` skips every job on a draft PR. A fan-out batch pushes again while its
     review runs, so CI on the first push was wasted: from 2026-10-16 to 2026-10-18, 27 PR runs
     were cancelled by such a push, and 50 more finished on a head such a push replaced.
-    After the review, `review_ci.ready_gate` marks the PR ready on a host that does not land,
-    and `review_ci.land_draft` lands the draft on the deploy host. Another repo's CI does not
+    After the review, `review_ci.land_draft` lands the draft, on daniel-server only when
+    `review_ci.server_lands` passes it. `review_ci.ready_gate` marks any other PR ready. Another repo's CI does not
     skip drafts, so a draft there would only stop `autoland` from landing it.
     """
     return target.is_server

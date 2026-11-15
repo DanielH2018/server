@@ -124,6 +124,9 @@ class Record:
     head: str = ""
     # The VERDICT line of the landing the pipeline ran (#3960), "" when it ran none.
     verdict: str = ""
+    # Why a daniel-server pipeline left its PR for the server lander rather than landing it
+    # (`review_ci.server_lands`): "" when it landed it, or on daniel-box.
+    land_hold: str = ""
     # The CI wait a batch that does not land runs (#4737): "" when it ran none, else its
     # result in words, whether the implementer was resumed for a red verdict, and whether
     # the failed jobs were re-run after a resume that pushed nothing (#7674).
@@ -298,6 +301,8 @@ def comment_body(record: Record) -> str:
         )
     if record.ci_gate:
         lines.append(f"CI gate: {record.ci_gate}.")
+    if record.land_hold:
+        lines.append(f"Not landed by the pipeline: {record.land_hold}.")
     if record.red_hunks:
         noticed = record.red_hunks - len(record.red_hunks_missed)
         lines.append(

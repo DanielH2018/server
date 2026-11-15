@@ -10,8 +10,8 @@ and delete the page with the last one.
 
 Phase A, R1, C1, B2, B3 and B4 are landed, and so are D9 and D10. Every landing takes the landing turn
 and forms a batch, sessions open their PRs as drafts, and a fan-out batch on daniel-box
-lands its PR as a draft. A fan-out batch on daniel-server still marks its PR ready and
-waits for that run, which the operator chose. Phase C stopped at C1.
+lands its PR as a draft. A review batch on daniel-server lands its draft too, unless the
+rule of the server lander holds the PR for a person. Phase C stopped at C1.
 
 The rulings in force, all in [CI throughput](ci-throughput.md):
 
@@ -19,11 +19,12 @@ The rulings in force, all in [CI throughput](ci-throughput.md):
 - **D8.** The queue's run replaces the pull-request run, and Phase C stops at C1. Look
   at the test set-up before reopening C2.
 - **D9.** Every landing forms a batch, and PRs are opened as drafts.
-- **Option A, under D9.** daniel-server fan-out batches keep a run of their own.
+- **Option B, 2026-11-15.** A daniel-server review batch lands its own draft, unless the
+  rule of the server lander holds the PR. It replaces option A.
 - **D10.** B4's shape: a stale ready PR rejoins the line, pacing goes, and one count of 6
   is taken after the merge.
-- **Option B's preconditions, 2026-11-15.** A daniel-server fan-out pipeline may land, and
-  the health gate on daniel-server reads a Pi container through daniel-box.
+- **Option B's preconditions, 2026-11-15.** The health gate on daniel-server reads a Pi
+  container through daniel-box.
 
 ## The work left, in order
 
@@ -43,14 +44,13 @@ Each needs traffic no session controls, so watch for it and record the first run
   reads `a batch that tested PR #N was not green; it lands alone`. A member that is
   stacked a second time by a later landing is a defect in `land_lib/line.py`'s answers.
 
-### 2. Option B, after the measurement
+### 2. Option B's first live landing
 
-A daniel-server fan-out pipeline lands its own draft from daniel-server. From 2026-11-08
-to 2026-11-14, 57% of review batches ran there. The code change is small
-(`scripts/dev/fanout_lib/brief.py:lands` and `review_ci.py`). The operator ruled on both
-preconditions on 2026-11-15: such a pipeline may land, and the health gate reads a Pi
-container through daniel-box (#8773). The build waits for the measurement after B4 and a
-recommendation to the operator.
+A daniel-server review pipeline lands its own draft (`review_ci.server_lands`). Watch for
+the first one: its record under daniel-server's `~/.local/state/fanout-review/` carries a
+`verdict` and an empty `land_hold`, and its PR got no run before its landing. A held PR's
+record names the reason in `land_hold`. Record the first of each in
+[CI throughput](ci-throughput.md).
 
 ### 3. Phase C, only if D8 is reopened
 
