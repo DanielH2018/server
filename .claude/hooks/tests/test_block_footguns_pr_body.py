@@ -48,6 +48,25 @@ def test_this_repos_template_carries_the_headings_the_rule_needs():
     assert {"What changed, and why", "Verification"} <= set(headings)
 
 
+@pytest.fixture
+def landing_repo(repo: Path) -> Path:
+    (repo / "scripts" / "deploy_tools").mkdir(parents=True)
+    (repo / "scripts" / "deploy_tools" / "land.sh").write_text("#!/bin/sh\n")
+    return repo
+
+
+def test_a_draft_create_where_land_sh_lands_drafts_is_clean(landing_repo):
+    assert (
+        _verdict("gh pr create --draft --title t --body-file full.md", landing_repo)
+        is None
+    )
+
+
+def test_a_ready_create_where_land_sh_lands_drafts_is_flagged(landing_repo):
+    reason = _verdict("gh pr create --title t --body-file full.md", landing_repo)
+    assert reason is not None and "gh pr create --draft" in reason
+
+
 def test_a_create_whose_body_file_skips_a_heading_is_denied(repo):
     reason = _verdict("gh pr create --title t --body-file partial.md", repo)
     assert reason is not None

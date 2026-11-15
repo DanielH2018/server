@@ -223,7 +223,7 @@ Close a fixed issue with exactly `findings.py close <n> --fixed --pr <n>`; `--re
 
 {APPLY_OWED}"""
     return f"""## Landing
-This host is {host}, not the deploy host. Open the PR with `gh pr create` and STOP there:
+This host is {host}, not the deploy host. Open the PR with `gh pr create --draft` and STOP there:
 **do not merge**, do not deploy, do not run the land script. Print the PR URL as the last line
 of your final message. A {LANDS} session lands it and closes the issue.
 """

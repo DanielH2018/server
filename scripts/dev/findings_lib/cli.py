@@ -260,6 +260,22 @@ def _parser(description: str) -> argparse.ArgumentParser:
     _add_dry_run(rp, suppress=True)
     _add_repo(rp)
 
+    ms = sub.add_parser(
+        "milestone",
+        help="open, show or close the branch's milestone for focused work",
+        example=_example(
+            'milestone start "Opt-in session milestones" --worktree worktree-my-branch'
+        ),
+        epilog="Only `start` makes a milestone. Once one is open, `claim` files the "
+        "branch's issues under it and the session-milestone workflow files its PR. The "
+        "workflow closes it once nothing in it is open, and a later claim or PR reopens it.",
+    )
+    _add_dry_run(ms, suppress=True)
+    _add_repo(ms)
+    ms.add_argument("action", choices=["start", "status", "close"])
+    ms.add_argument("title", nargs="?", help="for `start`: what the work is")
+    ms.add_argument("--worktree", required=True, help="the branch doing the work")
+
     c = sub.add_parser(
         "close",
         help="close as fixed, refuted or accepted",

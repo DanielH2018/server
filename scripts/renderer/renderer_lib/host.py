@@ -155,7 +155,7 @@ _UNDEFINED = re.compile(r"'([^']+)' is undefined")
 
 
 def secret_names(secrets: Path = SECRETS) -> frozenset[str]:
-    """Every top-level key name of the ciphertext file, `NEVER_STUB` names included."""
+    """Every top-level key name of the ciphertext file."""
     return frozenset(str(key) for key in load_yaml(secrets) if key != "sops")
 
 

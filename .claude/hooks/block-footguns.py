@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # gen-hooks: library
 #   reason: an arm of bash-pretool.py, which run-hook.sh runs through `uv run python`
-"""PreToolUse(Bash) guard: eight commands that fail silently or cost a second write here.
+"""PreToolUse(Bash) guard: nine commands that fail silently or cost a second write here.
 
 Usage: `bash-pretool.py` loads this file as an arm on PreToolUse:Bash, and it also runs
 standalone. It reads the hook JSON payload on stdin. It prints a `deny` (or `ask`) decision JSON
@@ -51,6 +51,9 @@ a gate the repo requires, so nothing downstream notices either way.
      asks the operator. Setting a hold passes; `_deploy_plane_rule.py` has the rule.
 
   8. A `probe.py` gate from a worktree behind `origin/master` (#5912); `_stale_probe_rule.py`.
+
+  9. `gh pr create` without `--draft`. The PR opens ready, spends a CI run before its landing
+     and can never join a landing batch (D9 in `docs/ci-throughput.md`).
 
 Rules that key on a host tool or on GitHub rather than on this repo live in
 `claude_guard.footguns`, which every repo's PreToolUse hook runs.
@@ -411,6 +414,38 @@ def pr_body_problem(stage: list[str], cwd: Path, command: str) -> str | None:
     )
 
 
+_DRAFT_FLAGS = ("--draft", "-d")
+# The script that lands a draft. A repo without it has nothing that marks a draft ready.
+_LAND_SH = Path("scripts") / "deploy_tools" / "land.sh"
+
+
+def pr_draft_problem(stage: list[str], cwd: Path) -> str | None:
+    """`gh pr create` without `--draft` in a repo whose landing marks drafts ready (D9).
+
+    A ready PR gets a CI run of its own before its landing and can never join a landing
+    batch. On 2026-11-15, 9 of 34 landings were ready PRs, three of them opened by sessions
+    (`docs/ci-throughput.md`). A stage aimed at another repo, or run in a checkout with no
+    `land.sh`, is left alone.
+
+    Args:
+        stage: The stage's words, shell keywords stripped.
+        cwd: The directory the stage runs in, after any `cd` earlier in the command.
+    """
+    if not invokes(stage, ("gh", "pr", "create")) or _names_another_repo(stage):
+        return None
+    root = repo_root(cwd)
+    if root is None or not (root / _LAND_SH).is_file():
+        return None
+    if any(word in _DRAFT_FLAGS for word in stage):
+        return None
+    return (
+        "Open the PR as a draft: `gh pr create --draft ...`. A ready PR spends a CI run "
+        "before its landing and can never join a landing batch; `land.sh` marks the draft "
+        "ready at its turn (D9 in docs/ci-throughput.md). A PR that must show CI before "
+        "anyone lands it takes `gh pr ready <n>` after it opens."
+    )
+
+
 _RULES = (
     rollout_restart_problem,
     remote_git_problem,
@@ -474,7 +509,11 @@ def _first_problem(
             found = rule(words)
             if found:
                 return found
-        found = pr_body_problem(words, here, command) or stale_probe(words, here)
+        found = (
+            pr_body_problem(words, here, command)
+            or pr_draft_problem(words, here)
+            or stale_probe(words, here)
+        )
         if found:
             return found
     return None

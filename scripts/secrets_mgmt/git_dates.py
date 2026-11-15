@@ -70,6 +70,8 @@ RENAMED_FROM: dict[str, str] = {
 # needs. Names only, never values: the same rule `sops_names` keeps.
 RETIRED: frozenset[str] = frozenset(
     {
+        # Ansible's privilege escalation read it; nothing did once the Ansible tree was deleted.
+        "become_password",
         # The GitHub App that was to record a tested tree, withdrawn before anything read it.
         "tested_tree_app_private_key",
         # beszel, foundry and wallabag left with Duplicati.

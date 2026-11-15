@@ -8,7 +8,7 @@ import pytest
 from _findings_fakes import operator_comment
 
 from dev.findings_lib.issue_model import claim_comment
-from dev.findings_lib.milestone import DESCRIPTION
+from dev.findings_lib.milestone import description_for
 from dev.findings_lib.plans import (
     ClaimRefused,
     plan_claim,
@@ -18,7 +18,8 @@ from dev.findings_lib.plans import (
 
 WT = "worktree-issue-1132"
 TODAY = date(2026, 9, 11)
-SESSION_MILESTONE = {"title": WT, "description": DESCRIPTION}
+FOCUS = "Opt-in milestones"
+SESSION_MILESTONE = {"title": FOCUS, "description": description_for(WT)}
 
 
 def _issue(number=1132, labels=(), comments=(), milestone=None):
@@ -36,6 +37,13 @@ def test_claiming_an_unclaimed_issue_comments_and_labels():
     plans = plan_claim(_issue(), worktree=WT, session=None, when="t", today=TODAY)
     assert plans[0][:3] == ["issue", "comment", "1132"]
     assert f"Claim: `{WT}`" in plans[0][4]
+    assert plans[1] == ["issue", "edit", "1132", "--add-label", "claimed"]
+
+
+def test_claiming_for_a_branch_with_a_milestone_files_the_issue_under_it():
+    plans = plan_claim(
+        _issue(), worktree=WT, session=None, when="t", today=TODAY, milestone=FOCUS
+    )
     assert plans[1] == [
         "issue",
         "edit",
@@ -43,7 +51,7 @@ def test_claiming_an_unclaimed_issue_comments_and_labels():
         "--add-label",
         "claimed",
         "--milestone",
-        WT,
+        FOCUS,
     ]
 
 
@@ -112,14 +120,19 @@ def test_reclaiming_an_issue_you_already_hold_is_a_no_op():
         comments=[claim_comment(WT, None, "t")],
         milestone=SESSION_MILESTONE,
     )
-    assert plan_claim(issue, worktree=WT, session=None, when="t", today=TODAY) == []
+    assert (
+        plan_claim(
+            issue, worktree=WT, session=None, when="t", today=TODAY, milestone=FOCUS
+        )
+        == []
+    )
 
 
 def test_reclaiming_an_issue_missing_from_its_session_milestone_repairs_it():
     issue = _issue(labels=["claimed"], comments=[claim_comment(WT, None, "t")])
-    assert plan_claim(issue, worktree=WT, session=None, when="t", today=TODAY) == [
-        ["issue", "edit", "1132", "--add-label", "claimed", "--milestone", WT]
-    ]
+    assert plan_claim(
+        issue, worktree=WT, session=None, when="t", today=TODAY, milestone=FOCUS
+    ) == [["issue", "edit", "1132", "--add-label", "claimed", "--milestone", FOCUS]]
 
 
 def test_releasing_takes_the_issue_out_of_its_session_milestone():
@@ -166,7 +179,7 @@ def test_reclaiming_an_issue_whose_label_edit_failed_plans_the_label_alone():
     """
     issue = _issue(comments=[claim_comment(WT, None, "t")])
     assert plan_claim(issue, worktree=WT, session=None, when="t", today=TODAY) == [
-        ["issue", "edit", "1132", "--add-label", "claimed", "--milestone", WT]
+        ["issue", "edit", "1132", "--add-label", "claimed"]
     ]
 
 

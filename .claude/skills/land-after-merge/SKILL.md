@@ -33,8 +33,10 @@ master, and GitHub's auto-merge applies no bypass, so `gh pr merge --auto` leave
 updated from master when its landing takes the turn, and prints `updating its branch so CI
 tests it against master before the merge`. A green head of a ready PR that master moved past
 is converted to draft and updated before the landing asks for the turn, and prints `converted
-it to draft and updated its branch`. Either adds a CI run's worth of time, not a fault. A stale
-green head that reaches the merge anyway merges as it stands, and master's own run tests it.
+it to draft and updated its branch`. One that master moved past while it waited for the turn
+does the same once it takes the turn, and prints `gave the landing turn back to wait in the
+line as a draft`. Each adds a CI run's worth of time, not a fault. A stale green head that
+reaches the merge anyway merges as it stands, and master's own run tests it.
 The exception is a stale head the operator approved: the update would void the approval, so
 `land.sh` refuses it when master changed a path the PR changes, and names the remedy, which is
 to rebase onto origin/master, push and get the new head approved.

@@ -622,6 +622,22 @@ jobs:
       # signer does on daniel-box (hosts/lib/tests/test_repo_signer.py). Both share one
       # apt-get, and NEEDRESTART_SUSPEND skips needrestart's post-install scan, which adds
       # about 1.5s per apt-get and which no runner needs.
+      #
+      # The apt-get runs once per runner image version. It took a median 4.1s of a leg's 28s
+      # outside `Run the test suite` on 18 master legs of 2026-11-15: 1.1s to start, 1.0s to
+      # fetch, 1.6s for dpkg to read its database (#8684). The step copies the binaries the two
+      # packages put in /usr/bin into a cache keyed on the image version, and a later leg on
+      # the same image installs those copies. A copy that does not run falls back to apt-get,
+      # as does a runner that sets no `ImageVersion`.
+      - name: Read the runner image version
+        id: image
+        run: echo "version=${ImageVersion:-}" >> "$GITHUB_OUTPUT"
+      - name: Cache the age and apt-utils binaries
+        if: steps.image.outputs.version != ''
+        uses: actions/cache@v6.1.0
+        with:
+          path: ${{ runner.temp }}/pinned/apt-tools
+          key: apt-tools-${{ runner.os }}-${{ steps.image.outputs.version }}
       - name: Read the sops pin
         id: sops
         run: |
@@ -658,8 +674,20 @@ jobs:
           mkdir -p "$RUNNER_TEMP/bin"
           install -m 0755 "$sops" "$RUNNER_TEMP/bin/sops"
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
-          apt_install=(sudo env NEEDRESTART_SUSPEND=1 apt-get install -y --no-install-recommends age apt-utils)
-          "${apt_install[@]}" || { sudo apt-get update -q && "${apt_install[@]}"; }
+          apt_tools="$RUNNER_TEMP/pinned/apt-tools"
+          cached_apt_tools_run() {
+            [[ -x "$apt_tools/age-keygen" && -x "$apt_tools/apt-ftparchive" ]] \
+              && sudo install -m 0755 "$apt_tools"/* /usr/bin/ \
+              && age-keygen --version > /dev/null && apt-ftparchive --version > /dev/null
+          }
+          if cached_apt_tools_run; then
+            echo "age and apt-utils: cached"
+          else
+            apt_install=(sudo env NEEDRESTART_SUSPEND=1 apt-get install -y --no-install-recommends age apt-utils)
+            "${apt_install[@]}" || { sudo apt-get update -q && "${apt_install[@]}"; }
+            mkdir -p "$apt_tools"
+            dpkg -L age apt-utils | grep '^/usr/bin/' | xargs cp -t "$apt_tools"
+          fi
           "$RUNNER_TEMP/bin/sops" --version --disable-version-check
           age-keygen --version
           command -v apt-ftparchive
@@ -1758,7 +1786,10 @@ jobs:
   # with a runner to itself (runs 43146660058 and 43148777838), so a build is slow on its own, and
   # these legs still end 28-80 s after the `host_packages` legs. A local run copies the kit's uv
   # cache in under a second and builds the venv from it in less, so each item prints each phase of
-  # the script's local build under its `[DONE]` line to find the rest (#7982). Keep the shard
+  # the script's local build under its `[DONE]` line to find the rest (#7982). Those lines put
+  # 181-182 s of a 243 s offline build in its `apt-get update`, against 2 s online (run
+  # 43750408193): the image's `Acquire::Retries "10"` backs off 1+2+4+8+16+5x30 s on fetches a
+  # container with no network cannot make, so the offline item sets no retries. Keep the shard
   # count equal to the number of offline builds `bootstrap_plan.plan` lists;
   # `test_bootstrap_case.py` holds it.
   #

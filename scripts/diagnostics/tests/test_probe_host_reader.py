@@ -112,3 +112,12 @@ def test_a_log_directory_behind_an_untraversable_parent_is_unreadable_not_absent
     assert _local({"logs": [str(tmp_path / "gone"), "*", 0]})["logs"] == {
         "status": "absent"
     }
+
+
+def test_a_pi_read_from_off_the_landing_host_hops_through_it():
+    """Only daniel-box holds a key daniel-pi accepts (#8773)."""
+    hop = host_reader.reader_argv("daniel-pi", "daniel-server")
+    assert hop[-2] == "daniel-box"
+    assert hop[-1].endswith("daniel-pi 'python3 -I -'")
+    direct = host_reader.reader_argv("daniel-pi", "daniel-box")
+    assert direct[-2:] == ["daniel-pi", "python3 -I -"]
