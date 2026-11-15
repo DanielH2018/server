@@ -5,8 +5,8 @@
   the offline renderer has no fileglob lookup; a file the list does not name never reaches this
   ConfigMap, and scripts/validate/alert_rules.py fails when the two disagree.
 
-  A rules edit changes this role's rendered manifests, so the shared rollout restarts Loki and
-  the Alloy DaemonSet (this role's CLAUDE.md, *Ruler*).
+  A rules edit rolls the Loki Deployment, which restarts the ruler. The Alloy DaemonSet does
+  not mount this ConfigMap, so it does not roll (this role's CLAUDE.md, *Ruler*).
 #}
 ---
 apiVersion: v1
