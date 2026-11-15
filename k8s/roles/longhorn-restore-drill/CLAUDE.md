@@ -119,7 +119,9 @@ real, and tears everything down.
 - **Required evidence.** The pod log, with each verdict line prefixed `longhorn-restore-drill:`.
   The `PASS:` line and the stuck-probe `FAIL:` line carry `probe=<n>s`, which is the time the
   probe pod's 300-second bound limits, image pull included. Compare it against the bound for the
-  largest SQLite candidates before raising the bound. ENFORCED:
+  largest SQLite candidates before raising the bound.
+  `k8s/roles/longhorn-restore-drill/templates/longhorn-restore-drill.sh.j2:DECIDED: the probe bound stays 300 s on an ESTIMATE`
+  holds the estimated sizing and the `probe=` value at which to raise it. ENFORCED:
   `tests/longhorn/test_longhorn_restore_drill_deadline.py::test_the_pass_line_reports_the_probe_time_the_bound_limits`.
   Read it with `probe.py loki-query '{container="longhorn-restore-drill"}'`. Backup health's check
   7 reads the stamp ConfigMap's `last-success`, and check 8 reads the per-volume keys, so a drill
