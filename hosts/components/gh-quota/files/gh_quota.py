@@ -45,6 +45,7 @@ KEEP_S = 8 * 24 * 3600
 # `status` lists a session at or above this share of a bucket's limit.
 ATTENTION_SHARE = 0.2
 _FAILURE_LOG_MAX = 64 * 1024
+_ANCESTRY_MAX = 12
 
 _FREE = frozenset(
     {"auth", "config", "version", "completion", "help", "alias", "extension"}
@@ -70,6 +71,9 @@ CREATE TABLE IF NOT EXISTS truth(
 CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value REAL);
 CREATE TABLE IF NOT EXISTS sampler(
     window INTEGER, bucket TEXT, session TEXT, gh TEXT, env_names TEXT,
+    PRIMARY KEY (window, bucket));
+CREATE TABLE IF NOT EXISTS sampler_process(
+    window INTEGER, bucket TEXT, cgroup TEXT, ancestry TEXT,
     PRIMARY KEY (window, bucket));
 """
 
@@ -194,6 +198,7 @@ class Ledger:
             sample.
         now: the clock.
         run: runs `gh auth token` and the `gh api rate_limit` sample.
+        proc: the procfs root a sample reads its own cgroup and ancestors from.
     """
 
     root: Path = LEDGER_DIR
@@ -202,6 +207,7 @@ class Ledger:
     gh: str = "gh"
     now: Callable[[], float] = time.time
     run: Callable[..., subprocess.CompletedProcess] = subprocess.run
+    proc: Path = Path("/proc")
 
     def mode(self) -> str:
         """`record` when the host's conf file says so, else `off`.
@@ -305,6 +311,32 @@ class Ledger:
         names = sorted(n for n in self.env if n.startswith(("GH_", "GITHUB_")))
         return session_key(self.env), gh, ",".join(names)
 
+    def _process(self) -> tuple[str, str]:
+        """The sampling process's cgroup line, and its own and its ancestors' `comm`, `<`-joined.
+
+        `comm` only, never the command line: an argv can carry a token. Either part is
+        empty when procfs cannot be read, so a sample never fails on it.
+        """
+        try:
+            cgroup = (self.proc / "self" / "cgroup").read_text(errors="replace").strip()
+        except OSError:
+            cgroup = ""
+        names, pid = [], "self"
+        for _ in range(_ANCESTRY_MAX):
+            try:
+                stat = (self.proc / pid / "stat").read_text(errors="replace")
+            except OSError:
+                break
+            head, _, tail = stat.rpartition(")")
+            fields = tail.split()
+            if "(" not in head or len(fields) < 2:
+                break
+            names.append(head.partition("(")[2])
+            pid = fields[1]
+            if pid in ("0", "1"):
+                break
+        return cgroup, "<".join(names)
+
     def _gh_env(self) -> dict[str, str]:
         return dict(self.env, GH_PROMPT_DISABLED="1", GH_NO_UPDATE_NOTIFIER="1")
 
@@ -369,6 +401,7 @@ class Ledger:
                 env=self._gh_env(),
             ).stdout
             resources = json.loads(out)["resources"]
+            process = self._process()
             for bucket in BUCKETS:
                 seen = resources[bucket]
                 # An unused bucket reports a reset an hour ahead of every sample, so it has no
@@ -384,6 +417,10 @@ class Ledger:
                         "INSERT OR REPLACE INTO sampler VALUES (?, ?, ?, ?, ?)",
                         (seen["reset"], bucket, *self._caller()),
                     )
+                    db.execute(
+                        "INSERT OR REPLACE INTO sampler_process VALUES (?, ?, ?, ?)",
+                        (seen["reset"], bucket, *process),
+                    )
         except (
             OSError,
             subprocess.SubprocessError,
@@ -395,6 +432,7 @@ class Ledger:
         db.execute("DELETE FROM spend WHERE window < ?", (now - KEEP_S,))
         db.execute("DELETE FROM truth WHERE window < ?", (now - KEEP_S,))
         db.execute("DELETE FROM sampler WHERE window < ?", (now - KEEP_S,))
+        db.execute("DELETE FROM sampler_process WHERE window < ?", (now - KEEP_S,))
 
     def _failed(self, exc: Exception) -> None:
         log = self.root / f"failures.{os.getuid()}"
