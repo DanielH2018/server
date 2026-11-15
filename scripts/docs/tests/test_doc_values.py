@@ -3,7 +3,8 @@
 import pytest
 
 import doc_values
-from doc_values import Value, fix, main, stale, staged_paths
+from doc_values_lib.readers import staged_paths
+from doc_values import Value, fix, main, stale
 
 _PATTERN = r"a (\d+)-second restart window"
 
@@ -75,3 +76,29 @@ def test_staged_paths_reads_one_command_across_its_continuation_lines():
         "# git add in a comment\ngit add docs/reference \\\n  weights.json\nexit 0\n"
     )
     assert staged_paths(script) == ["docs/reference", "weights.json"]
+
+
+def test_a_value_wrapped_across_lines_is_clean(tmp_path):
+    (tmp_path / "runbook.md").write_text("The rungs are 5, 10\nand 25.\n")
+    rows = (
+        Value(
+            "runbook.md",
+            r"rungs are ([\d, ]+\s+and \d+)",
+            "x",
+            lambda _: "5, 10 and 25",
+        ),
+    )
+    assert stale(rows, tmp_path) == []
+    assert fix(rows, tmp_path) == []
+
+
+def test_a_reader_that_finds_no_value_is_flagged_not_raised(tmp_path):
+    def read(source):
+        raise ValueError("found none")
+
+    (tmp_path / "runbook.md").write_text("a 180-second restart window\n")
+    rows = (Value("runbook.md", _PATTERN, "probe.py", read),)
+    assert fix(rows, tmp_path) == []
+    assert stale(rows, tmp_path) == [
+        "runbook.md vs probe.py: the reader failed: found none"
+    ]
