@@ -39,23 +39,18 @@ from collections.abc import Callable
 
 # The runner runs from /opt/claude-triage, where component.yml's `lib: host_lib.py` entry
 # ships host_lib.py beside it.
-from claude_triage_session import (
-    IN_DIR,
-    OUT_DIR,
-    PROMPT_NAME,
-    RESULT_NAME,
-    TRANSCRIPT_MAX,
-    TRANSCRIPT_NAME,
-)
+from claude_triage_session import IN_DIR, OUT_DIR, PROMPT_NAME, RESULT_NAME
 from host_lib import (
     ERR,
     WARNING,
     UnitEnd,
     atomic_write,
     fresh_dir,
+    keep_transcript,
     log,
     parse_env_file,
     read_untrusted,
+    TRANSCRIPT_MAX,
     start_unit,
     write_textfile,
 )
@@ -129,28 +124,6 @@ def session_result(out: str, end: UnitEnd) -> tuple[dict, bool]:
         log("the session's result is not JSON", WARNING, tag=TAG)
         result = {}
     return (result if isinstance(result, dict) else {}), timed_out
-
-
-def keep_transcript(out: str, dest: str) -> int | None:
-    """Copy the session's transcript from the exchange's `out/` to `dest`; its size, or None.
-
-    Read as the result is read, so a link, a FIFO or an oversized file is refused and logged by
-    class. A run whose session wrote no transcript keeps nothing.
-    """
-    try:
-        text = read_untrusted(out, TRANSCRIPT_NAME, TRANSCRIPT_MAX)
-    except (OSError, ValueError) as exc:
-        log(
-            f"refused the session's {TRANSCRIPT_NAME}: {type(exc).__name__}",
-            WARNING,
-            tag=TAG,
-        )
-        return None
-    if not text:
-        return None
-    data = text.encode()
-    write_textfile(dest, data, 0o640)
-    return len(data)
 
 
 def classify(result: dict, timed_out: bool) -> str:
@@ -334,7 +307,7 @@ def main(
         end = start(SESSION_UNIT, int(cfg.get("RUN_TIMEOUT_S", "1800")) + 300)
         result, timed_out = session_result(out, end)
         transcript_bytes = keep_transcript(
-            out, os.path.join(runs_dir, f"{episode_id}.transcript.jsonl")
+            out, os.path.join(runs_dir, f"{episode_id}.transcript.jsonl"), TAG
         )
         # Nothing the session wrote outlives the run (dotfiles#967's I2).
         shutil.rmtree(out, ignore_errors=True)

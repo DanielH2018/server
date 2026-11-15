@@ -3,6 +3,8 @@
 # session reads it; the runner's config.env, with the Discord webhook, stays the controller's.
 REPO={{ renovate_agent_repo }}
 REPO_DIR={{ pins.clone_dir }}
+# Where the session's transcript is, for the session script to copy it out.
+SESSION_HOME={{ renovate_agent_home }}
 EXCHANGE_DIR={{ pins.exchange_dir }}
 PROMPT_FILE=/usr/lib/homelab/renovate-agent/prompt.txt
 CLAUDE_BIN={{ pins.tools_dir }}/.local/bin/claude

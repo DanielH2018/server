@@ -5,6 +5,8 @@
 It runs the headless Claude session in the controller's clone, which the session reads and cannot
 write, and writes what the session printed to `OUTPUT_FILE` in the exchange's `out/` directory.
 The runner, which runs as the controller, reads that file after the unit ends, as untrusted data.
+The session's home is a tmpfs that ends with the unit, so once claude exits, on its own or at the
+wall clock, this script also copies the transcript into `out/`, where the runner keeps it.
 
 The session's output never reaches the journal: it is captured here and written to a file, so
 text a session controls cannot become a syslog line that loki-homelab's rules read
@@ -17,12 +19,13 @@ Usage: renovate_session.py   (takes no arguments; -h/--help prints this text)
 from __future__ import annotations
 
 import os
+import signal
 import subprocess
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from agent_toolbox import log, read_file
-from host_lib import atomic_write, install_excepthook, parse_env_file
+from host_lib import atomic_write, export_transcript, install_excepthook, parse_env_file
 from run_requests import REQUESTS_DIR
 
 # Holds no secret; the runner's config.env, with the webhook, is the controller's alone.
@@ -73,6 +76,9 @@ def main(config_path: str = CONFIG) -> int:
     out = os.path.join(exchange, OUT_DIR)
     argv = session_argv(cfg, os.path.join(exchange, REQUESTS_DIR))
     log("starting session")
+    # systemd sends the wall clock's SIGINT to the whole unit. A handler, not SIG_IGN, which
+    # claude would inherit: claude still stops, and this script lives on to copy the transcript.
+    signal.signal(signal.SIGINT, lambda signum, frame: None)
     p = subprocess.run(
         argv,
         cwd=cfg["REPO_DIR"],
@@ -81,6 +87,8 @@ def main(config_path: str = CONFIG) -> int:
         stdin=subprocess.DEVNULL,
     )
     atomic_write(os.path.join(out, OUTPUT_FILE), p.stdout or "")
+    if home := cfg.get("SESSION_HOME"):
+        export_transcript(home, out)
     return p.returncode
 
 

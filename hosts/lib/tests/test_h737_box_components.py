@@ -251,11 +251,11 @@ def test_the_setup_gives_the_controller_the_tools_python_claude_and_clone(setup)
     assert f"chgrp -R -h renovate-agent {tools} {clone}" in log
 
 
-def test_the_controller_runs_every_write_into_its_trees_and_the_agent_into_its_home(
+def test_the_controller_runs_every_write_into_its_trees(
     setup,
 ):
-    """A path either user owns could be a link, so root writes into neither tree."""
-    script, home, trees, calls, env = setup
+    """A path the controller owns could be a link, so root writes into neither tree."""
+    script, _home, trees, calls, env = setup
     run(["bash", str(script)], env=env, check=True)
     log = calls.with_name("calls.runuser").read_text()
     tools, clone = trees["tools"], trees["clone"]
@@ -276,7 +276,6 @@ def test_the_controller_runs_every_write_into_its_trees_and_the_agent_into_its_h
         ("renovate-agent-ctl", r"env HOME=\S+ CLAUDE_INSTALL_ALLOW_SUDO=1 bash \S+"),
         ("renovate-agent-ctl", rf"git clone --quiet \S+ {clone}"),
         ("renovate-agent-ctl", rf"chmod -R g\+rX,g-w {tools} {clone}"),
-        ("renovate-agent", rf"rm -rf {home}/\.claude/settings\.json .*"),
     ]
     for user, write in writes:
         assert re.search(rf"^{user} env .*{write}$", log, re.M), write
@@ -302,3 +301,19 @@ def test_a_run_holding_the_lock_leaves_the_tools_and_clone_alone(setup):
         run(["bash", str(script)], env=env, check=True)
     assert not (trees["tools"] / ".local/bin/uv").exists()
     assert not calls.exists()
+
+
+def test_the_setup_clears_the_home_mountpoint_without_following_a_link(
+    setup, tmp_path
+) -> None:
+    """The tmpfs would hide what earlier sessions left there; a link must not reach past it."""
+    script, home, _trees, _calls, env = setup
+    outside = tmp_path / "outside.txt"
+    outside.write_text("keep")
+    (home / ".local/share/uv").mkdir(parents=True)
+    (home / "link").symlink_to(outside)
+
+    run(["bash", str(script)], env=env, check=True)
+
+    assert list(home.iterdir()) == []
+    assert outside.read_text() == "keep"

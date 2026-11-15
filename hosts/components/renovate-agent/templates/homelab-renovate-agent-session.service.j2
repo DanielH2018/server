@@ -41,13 +41,29 @@ Environment=CLAUDE_GUARD_HOME={{ pins.tools_dir }}/.local/share/claude-guard
 Environment=CLAUDE_WORKTREE_HOME={{ pins.tools_dir }}/.local/share/claude-worktree
 # The controller owns the binary; the session cannot update it.
 Environment=DISABLE_AUTOUPDATER=1
+# A memory written here would die with the tmpfs home, and none may reach a later run (I2).
+Environment=CLAUDE_CODE_DISABLE_AUTO_MEMORY=1
 EnvironmentFile=/etc/renovate-agent/session.env
 # Only this script's own lines reach the journal: it captures the session's output and writes
 # it to a file the runner reads, so session text never becomes a syslog line (#967's I3, I6).
 SyslogLevel=notice
+# SIGINT ends the session's turn and leaves the script alive to copy the transcript out.
+KillSignal=SIGINT
 NoNewPrivileges=yes
 ProtectHome=yes
 ProtectProc=invisible
-PrivateTmp=yes
+# Nothing the session writes reaches a later run (dotfiles#967's I2): every other path is
+# read-only, and each writable one but the exchange's requests/ and out/ is a tmpfs that ends
+# with the unit. The runner keeps the transcript out of out/ and then deletes both.
+ProtectSystem=strict
+TemporaryFileSystem={{ renovate_agent_home }}:mode=0700,uid={{ pins.session_uid }},gid={{ pins.session_uid }},size={{ pins.home_size }}
+TemporaryFileSystem=/tmp:mode=1777,size={{ pins.tmp_size }}
+TemporaryFileSystem=/var/tmp:mode=1777,size={{ pins.scratch_size }}
+TemporaryFileSystem=/dev/shm:mode=1777,size={{ pins.scratch_size }}
+ReadWritePaths={{ pins.exchange_dir }}/requests {{ pins.exchange_dir }}/out
+# The run's bounds (I8), beside TimeoutStartSec above. A cap on this unit binds only the session.
+MemoryMax={{ pins.memory_max }}
+MemorySwapMax=0
+TasksMax={{ pins.tasks_max }}
 ExecStart={{ pins.tools_dir }}/.local/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }} \
   /usr/lib/homelab/renovate-agent/renovate_session.py

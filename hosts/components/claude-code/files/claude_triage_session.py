@@ -19,7 +19,6 @@ wall clock, this script copies the transcript from `<SESSION_HOME>` to
 
 from __future__ import annotations
 
-import glob
 import json
 import os
 import signal
@@ -28,16 +27,13 @@ import sys
 
 # The script runs from /opt/claude-triage, where component.yml's `lib: host_lib.py` entry
 # ships host_lib.py beside it.
-from host_lib import atomic_write, parse_env_file
+from host_lib import atomic_write, export_transcript, parse_env_file
 
 CONFIG = "/etc/claude-triage/config.env"
 IN_DIR = "in"
 OUT_DIR = "out"
 PROMPT_NAME = "prompt.txt"
 RESULT_NAME = "result.json"
-TRANSCRIPT_NAME = "transcript.jsonl"
-# The copy is cut here, so a session cannot fill the controller's disk through its transcript.
-TRANSCRIPT_MAX = 32 << 20
 
 # The structure the session must return. Kept small: every field becomes a report section.
 SCHEMA = {
@@ -131,21 +127,6 @@ def session_env(environ: dict[str, str]) -> dict[str, str]:
     if token is not None:
         env[TOKEN_ENV] = "".join(token.split())
     return env
-
-
-def export_transcript(home: str, out: str, limit: int = TRANSCRIPT_MAX) -> None:
-    """Copy the session's transcript from its home into `out`, cut at `limit` bytes.
-
-    The run's home starts empty, so it holds one transcript; the newest wins if claude wrote more.
-    No transcript, as when claude never started, writes nothing.
-    """
-    found = glob.glob(os.path.join(home, ".claude", "projects", "*", "*.jsonl"))
-    if not found:
-        return
-    with open(max(found, key=os.path.getmtime), "rb") as src:
-        data = src.read(limit)
-    with open(os.path.join(out, TRANSCRIPT_NAME), "wb") as dst:
-        dst.write(data)
 
 
 def main(argv: list[str], config_path: str = CONFIG) -> int:
