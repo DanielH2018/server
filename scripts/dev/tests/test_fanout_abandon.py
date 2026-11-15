@@ -129,6 +129,7 @@ def _abandon(tools, tmp_path, batch):
 
 
 def test_abandon_records_the_removal_and_releases_under_the_orchestrator(tmp_path):
+    # fact: .claude/skills/issue-fanout/SKILL.md#5. Report
     tools, calls = fake_tools(answers={"daniel-box": ok("removed: /w1 (abandoned)")})
     assert _abandon(tools, tmp_path, "1-2") == 0
     written = json.loads(manifest_path(RUN_ID, tmp_path).read_text())

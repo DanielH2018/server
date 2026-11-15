@@ -9,7 +9,7 @@ allowed-tools: Bash, Read, Grep, Glob, Agent
 Five steps, in order: triage, claim, spawn, land, report. Every issue is claimed **before**
 its agent starts, under the orchestrator's own worktree name. That ordering makes the fan-out
 race-free, and `fanout.py place launch` takes the claims itself, so steps 2 and 3 are one
-command.
+command (`scripts/dev/fanout_lib/place.py:cmd_launch`).
 
 ## 1. Triage
 
@@ -129,9 +129,10 @@ approved the grouping.
 
 Run `launch` (step 3) from the orchestrator's own worktree. It reads that worktree's branch
 from HEAD and claims each batch's issues under it, one claim per issue, after
-every placement gate has passed and before that batch's agent starts. It refuses a detached
+every placement gate has passed and before that batch's agent starts
+(`scripts/dev/tests/test_fanout_claim.py::test_launch_claims_each_issue_under_head_before_its_batch_starts`). It refuses a detached
 HEAD or `master` before reading any host, because neither names a worktree a claim can live
-under.
+under (`scripts/dev/tests/test_fanout_claim.py::test_a_detached_head_or_the_base_branch_is_refused_before_any_call`).
 
 **Why the orchestrator's name, not the agent's.** A fanned-out agent cannot own a worktree the
 orchestrator names — `EnterWorktree` with `name:` is refused from a subagent with a cwd
@@ -144,17 +145,23 @@ claim under it stays live for the whole fan-out.
 If the orchestrator's session dies, its worktree reads stale, but its claims do not: `next`,
 `claim` and `reap` hold any claim on an issue that a still-running batch in a run manifest names.
 They ask the batch's host with `systemctl --user is-active`, and a host they cannot read holds
-the claim as "cannot tell" (#4601). Once the batch's unit has finished, the claim reads stale again.
+the claim as "cannot tell" (#4601, `scripts/dev/fanout_lib/batch_holds.py:running_batch_holds`,
+`scripts/dev/tests/test_findings_claim_batch_holds.py::test_reap_leaves_a_claim_a_running_batch_holds_is_held`).
+Once the batch's unit has finished, the claim reads stale again.
 
 A refused claim — the issue is closed, `manual`, deferred, held by another worktree, or lost a
 race — drops that issue from its batch, and `launch` prints `<batch>: dropped #<n>: claim
-refused …`. The batch is renamed from the issues it kept, and a batch that kept none is not
-launched. `launch` then exits 7, because the other batches started; it exits 3 only when every
-claim was refused and nothing launched. Name every dropped issue out loud. A batch whose launch fails releases the claims it took.
+refused …`. The batch is renamed from the issues it kept
+(`scripts/dev/tests/test_fanout_claim.py::test_a_refused_issue_is_dropped_and_the_batch_renamed_from_what_it_kept`), and a batch that
+kept none is not launched. `launch` then exits 7 (`scripts/lib/exit_codes.py:FANOUT_PLACE_PARTLY_LAUNCHED`),
+because the other batches started; it exits 3 only when every claim was refused and nothing
+launched (`scripts/dev/tests/test_fanout_claim.py::test_a_batch_with_no_claimed_issue_launches_nothing_and_writes_no_manifest`). Name
+every dropped issue out loud. A batch whose launch fails releases the claims it took
+(`scripts/dev/tests/test_fanout_claim.py::test_a_failed_launch_releases_the_claims_it_took`).
 
 Done when: `launch` printed `claims held under <branch>`, and every `dropped` line is named
-in the report. That line also carries the run id and each batch's host, as
-`run <run-id>: <batch> -> <host>, …`.
+in the report. That line also carries the run id and each batch's host and rung, as
+`run <run-id>: <batch> -> <host> (<rung>), …; claims held under <branch>`.
 
 ## 3. Spawn
 
@@ -579,7 +586,8 @@ verdict that leaves a host apply owed.
 ## 4. Land
 
 Each agent goes through to a verified deploy, per `land-after-merge`. A `land.sh` exit 75
-means its wait ran out of budget with the landing still open; it is a retry, never a report.
+(`scripts/lib/exit_codes.py:LAND_GAVE_UP`) means its wait ran out of budget with the landing
+still open; it is a retry, never a report.
 
 Done when: every agent has either landed (a `VERDICT:` line) or is still queued on the lock, and
 none has been reported failed on a resume-point exit.
@@ -591,8 +599,10 @@ A table of issue → worktree → PR → verdict, one row per issue the fan-out 
 **Release what you don't finish.** To see what this fan-out still holds, run
 `claims --worktree` with the orchestrator's branch. It lists every claim, live or stale, that
 branch holds and the claims of every batch branch its `launch` runs started, and counts the rest
-rather than listing them. Without `--worktree`, `claims` counts the live claims and lists only
-the stale ones; `--all` lists every claim:
+rather than listing them (`scripts/dev/findings_lib/claim_cli.py:cmd_claims`). Without
+`--worktree`, `claims` counts the live claims and lists only the stale ones; `--all` lists every
+claim
+(`scripts/dev/tests/test_findings_listing_defaults.py::test_claims_counts_the_live_ones_and_lists_the_stale_ones`):
 
 ```bash
 uv run python scripts/dev/findings.py claims --worktree <orchestrator-branch>
@@ -605,10 +615,12 @@ Before this report goes out, give back every batch no agent finished. A batch th
 uv run python scripts/dev/fanout.py place abandon <run-id> <batch>
 ```
 
-`abandon` removes the batch's tree and branch and releases its claims, and `stop` releases the
-claims of every batch it stops. Run `claims --worktree` again afterwards: it lists nothing a
+`abandon` removes the batch's tree and branch and releases its claims
+(`scripts/dev/tests/test_fanout_abandon.py::test_abandon_records_the_removal_and_releases_under_the_orchestrator`),
+and `stop` releases the claims of every batch it stops (`scripts/dev/fanout_lib/abandon.py:cmd_stop`). Run `claims --worktree` again afterwards: it lists nothing a
 finished or abandoned batch held. A claim under the orchestrator's branch stays live for as
-long as that worktree exists, so `reap` never clears one this step leaves behind.
+long as that worktree exists, so `reap` never clears one this step leaves behind
+(`scripts/dev/tests/test_findings_claim_cli.py::test_reap_releases_a_stale_claim_and_leaves_a_live_one`).
 
 **Collect every `MANUAL APPLY PENDING` heading.** An agent whose landing ended
 `needs-manual-apply` or `blocked` filed the pending apply as its own issue (step 3). Carry

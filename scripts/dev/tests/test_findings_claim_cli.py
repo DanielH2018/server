@@ -148,6 +148,7 @@ def test_reap_releases_a_stale_claim_and_leaves_a_live_one():
     A reap that releases everything and a reap that releases nothing are indistinguishable
     from a fixture where every claim is stale.
     """
+    # fact: .claude/skills/issue-fanout/SKILL.md#5. Report
     live_wt = "worktree-issue-1140"
     tree = Worktree(
         path="/w/1140", head="abc", branch=live_wt, locked=False, lock_reason=""

@@ -83,6 +83,7 @@ def test_the_wireguard_port_is_published_on_every_interface_as_udp(service):
 
 
 def test_the_admin_ui_is_bound_to_the_lan_address_only(service, pi_vars):
+    # fact: .claude/rules/docker.md#Conventions
     lan = pi_vars["server_ip"]
     assert f"{lan}:{UI_PORT}:51821/tcp" in service["ports"]
     assert len(service["ports"]) == 2, service["ports"]
