@@ -8,6 +8,7 @@ the agent's setup script run against stubs.
 Run: uv run pytest hosts/lib/tests/test_h737_box_components.py
 """
 
+import fcntl
 import re
 
 import pytest
@@ -172,24 +173,26 @@ def test_each_component_retires_what_ansible_installed(component, entries):
 
 
 def _setup_script(tmp_path, stubs):
-    """The rendered setup script, pointed at `tmp_path` and at `stubs` for the agent's PATH."""
+    """The rendered setup script, pointed at `tmp_path` and at `stubs` for the users' PATH."""
     home, operator = tmp_path / "home", tmp_path / "operator"
+    trees = {name: tmp_path / name for name in ("ctl", "tools", "clone", "exchange")}
     body = render_component_text(
         "renovate-agent",
         "renovate-agent-setup.sh.j2",
-        {
-            "renovate_agent_home": str(home),
-            "renovate_agent_clone_dir": str(home / "server"),
-        },
+        {"renovate_agent_home": str(home)},
     )
     body = body.replace("operator=/home/ubuntu", f"operator={operator}")
-    body = body.replace(
-        "settings=/usr/lib/homelab/renovate-agent/claude-settings.json",
-        f"settings={tmp_path / 'claude-settings.json'}",
-    )
+    for name, pinned in (
+        ("ctl", "/var/lib/renovate-agent-ctl"),
+        ("tools", "/var/lib/renovate-agent-tools"),
+        ("clone", "/var/lib/renovate-agent-clone"),
+        ("exchange", "/var/lib/renovate-agent-exchange"),
+    ):
+        body = body.replace(pinned, str(trees[name]))
     body = body.replace("PATH=/usr/bin:/bin", f"PATH={stubs}:/usr/bin:/bin")
-    home.mkdir()
-    return write_exec(tmp_path / "setup.sh", body), home, operator
+    for tree in (home, *trees.values()):
+        tree.mkdir()
+    return write_exec(tmp_path / "setup.sh", body), home, trees, operator
 
 
 @pytest.fixture
@@ -199,11 +202,13 @@ def setup(tmp_path):
         tmp_path / "bin",
         runuser=f'user=$2\nshift 3\necho "$user $*" >> {calls}.runuser\nexec "$@"\n',
         install="true\n",
+        chown="true\n",
+        chgrp=f'echo "chgrp $*" >> {calls}\n',
         git=f'echo "git $*" >> {calls}\n',
         curl=f'echo "curl $*" >> {calls}\nwhile [ "$1" != -o ]; do shift; done\n'
         f'printf \'mkdir -p "$HOME/.local/bin"; touch "$HOME/.local/bin/claude"; chmod +x "$HOME/.local/bin/claude"\' > "$2"\n',
     )
-    script, home, operator = _setup_script(tmp_path, stubs)
+    script, home, trees, operator = _setup_script(tmp_path, stubs)
     write_exec(operator / ".local/bin/uv", f'echo "uv $*" >> {calls}\n')
     write_exec(operator / ".local/bin/uvx", "true\n")
     (operator / ".local/share/uv/tools/prek/bin").mkdir(parents=True)
@@ -215,14 +220,16 @@ def setup(tmp_path):
     worktree.mkdir(parents=True)
     (worktree / "claude_worktree.py").write_text("y = 1\n")
     write_exec(operator / ".claude/hooks/guard-pre-tool-use.sh", "true\n")
-    (tmp_path / "claude-settings.json").write_text('{"hooks": {}}\n')
+    (home / ".claude").mkdir()
+    (home / ".claude/settings.json").write_text("{}\n")
     env = {"PATH": path_with(stubs)}
-    return script, home, calls, env
+    return script, home, trees, calls, env
 
 
-def test_the_setup_gives_the_agent_its_tools_python_claude_and_clone(setup):
-    script, home, calls, env = setup
+def test_the_setup_gives_the_controller_the_tools_python_claude_and_clone(setup):
+    script, home, trees, calls, env = setup
     run(["bash", str(script)], env=env, check=True)
+    tools = trees["tools"]
     for rel in (
         ".local/bin/uv",
         ".local/bin/uvx",
@@ -232,25 +239,29 @@ def test_the_setup_gives_the_agent_its_tools_python_claude_and_clone(setup):
         ".local/share/claude-worktree/claude_worktree.py",
         ".claude/hooks/guard-pre-tool-use.sh",
     ):
-        assert (home / rel).exists(), rel
-    assert (home / ".claude/settings.json").read_text() == '{"hooks": {}}\n'
+        assert (tools / rel).exists(), rel
+    # A settings copy left in the session's home is one the session could edit.
+    assert not (home / ".claude/settings.json").exists()
     log = calls.read_text()
     assert re.search(r"^uv python install \d+\.\d+\.\d+$", log, re.M)
     assert "curl -fsSL --retry 3 -o" in log
-    assert (
-        f"git clone --quiet https://github.com/DanielH2018/server.git {home}/server"
-        in log
-    )
+    clone = trees["clone"]
+    assert f"git clone --quiet https://github.com/DanielH2018/server.git {clone}" in log
+    assert re.search(r"^uv sync --frozen --quiet$", log, re.M)
+    assert f"chgrp -R -h renovate-agent {tools} {clone}" in log
 
 
-def test_the_agent_runs_every_command_that_writes_into_its_home(setup):
-    """A session can replace any path in its home with a link, so root must not write there."""
-    script, home, calls, env = setup
+def test_the_controller_runs_every_write_into_its_trees_and_the_agent_into_its_home(
+    setup,
+):
+    """A path either user owns could be a link, so root writes into neither tree."""
+    script, home, trees, calls, env = setup
     run(["bash", str(script)], env=env, check=True)
     log = calls.with_name("calls.runuser").read_text()
+    tools, clone = trees["tools"], trees["clone"]
     writes = [
         *(
-            rf"cp -RT --remove-destination \S+ {home}/{rel}"
+            ("renovate-agent-ctl", rf"cp -RT --remove-destination \S+ {tools}/{rel}")
             for rel in (
                 ".local/bin/uv",
                 ".local/bin/uvx",
@@ -260,22 +271,34 @@ def test_the_agent_runs_every_command_that_writes_into_its_home(setup):
                 ".claude/hooks",
             )
         ),
-        rf"cp --remove-destination \S+ {home}/\.claude/settings\.json",
-        rf"mkdir -p {home}/\.local/bin .*",
-        rf"{home}/\.local/bin/uv python install \S+",
-        r"env CLAUDE_INSTALL_ALLOW_SUDO=1 bash \S+",
-        rf"git clone --quiet \S+ {home}/server",
+        ("renovate-agent-ctl", rf"mkdir -p {tools}/\.local/bin .*"),
+        ("renovate-agent-ctl", rf"{tools}/\.local/bin/uv python install \S+"),
+        ("renovate-agent-ctl", r"env HOME=\S+ CLAUDE_INSTALL_ALLOW_SUDO=1 bash \S+"),
+        ("renovate-agent-ctl", rf"git clone --quiet \S+ {clone}"),
+        ("renovate-agent-ctl", rf"chmod -R g\+rX,g-w {tools} {clone}"),
+        ("renovate-agent", rf"rm -rf {home}/\.claude/settings\.json .*"),
     ]
-    for write in writes:
-        assert re.search(rf"^renovate-agent env .*{write}$", log, re.M), write
+    for user, write in writes:
+        assert re.search(rf"^{user} env .*{write}$", log, re.M), write
 
 
 def test_a_second_setup_reinstalls_nothing_it_can_skip(setup):
-    script, home, calls, env = setup
+    script, _home, trees, calls, env = setup
     run(["bash", str(script)], env=env, check=True)
-    (home / "server/.git").mkdir(parents=True)
+    (trees["clone"] / ".git").mkdir()
     calls.write_text("")
     run(["bash", str(script)], env=env, check=True)
     log = calls.read_text()
     assert "curl" not in log and "git clone" not in log
+    assert f"git -C {trees['clone']} reset --quiet --hard origin/master" in log
     assert "uv python install" in log, "a host_python_version bump must still converge"
+
+
+def test_a_run_holding_the_lock_leaves_the_tools_and_clone_alone(setup):
+    """A refresh under a live session would reset the tree it reads."""
+    script, _home, trees, calls, env = setup
+    with open(trees["ctl"] / "run.lock", "w") as held:
+        fcntl.flock(held, fcntl.LOCK_EX)
+        run(["bash", str(script)], env=env, check=True)
+    assert not (trees["tools"] / ".local/bin/uv").exists()
+    assert not calls.exists()

@@ -12,20 +12,35 @@ User={{ pins.user }}
 # Group-readable for the controller, which reads the requests and output this unit writes
 # into the exchange directory through the session's group.
 UMask=0027
-WorkingDirectory=-{{ renovate_agent_clone_dir }}
+# The controller's clone at origin/master, read-only to the session: the repo's hooks run from it,
+# so a session that could write it could change its own guard.
+WorkingDirectory={{ pins.clone_dir }}
 # The session's wall clock. systemd stops the whole unit at it, and the runner reads
 # Result=timeout and still posts a digest naming it.
 TimeoutStartSec={{ pins.session_timeout_s }}
-# The same environment as the runner's unit: a resume sets each again, and
-# test_session_resume.py holds both templates to renovate_agent.SESSION_ENV_KEYS.
-Environment=PATH={{ renovate_agent_home }}/.local/bin:/usr/bin:/bin
+# systemd's PATH omits /usr/local/bin, and the session needs kubectl there.
+Environment=PATH={{ pins.tools_dir }}/.local/bin:/usr/local/bin:/usr/bin:/bin
 Environment=HOME={{ renovate_agent_home }}
+# systemd sets SHELL from the passwd entry; the Bash tool needs a real shell.
+Environment=SHELL=/bin/bash
 Environment=PYTHONDONTWRITEBYTECODE=1
-# The repo's hook shim defaults to the operator's checkout and uv, which this user cannot read;
-# a guard that cannot start turns each Bash call into an `ask`, and nobody answers one here.
-# run_worktree.prepare_worktree syncs this tree's `.venv` before the session starts.
-Environment=RUN_HOOK_PROJECT_DIR={{ renovate_agent_clone_dir }}/.claude/worktrees/{{ renovate_agent_worktree }}
-Environment=RUN_HOOK_UV={{ renovate_agent_home }}/.local/bin/uv
+# The clone belongs to the controller, so git would refuse it as dubious ownership.
+Environment=GIT_CONFIG_COUNT=1
+Environment=GIT_CONFIG_KEY_0=safe.directory
+Environment=GIT_CONFIG_VALUE_0={{ pins.clone_dir }}
+# The repo's hook shim resolves the clone and uv from these. A guard that cannot start turns each
+# Bash call into an `ask`, and nobody answers one here. The setup syncs the clone's venv before
+# each run, so a hook never tries to write it.
+Environment=RUN_HOOK_PROJECT_DIR={{ pins.clone_dir }}
+Environment=RUN_HOOK_UV={{ pins.tools_dir }}/.local/bin/uv
+Environment=UV_NO_SYNC=1
+Environment=UV_PYTHON_INSTALL_DIR={{ pins.tools_dir }}/python
+Environment=UV_CACHE_DIR={{ renovate_agent_home }}/.cache/uv
+# The guard hooks, the dotfiles' and the repo's, find their packages here, not under the home.
+Environment=CLAUDE_GUARD_HOME={{ pins.tools_dir }}/.local/share/claude-guard
+Environment=CLAUDE_WORKTREE_HOME={{ pins.tools_dir }}/.local/share/claude-worktree
+# The controller owns the binary; the session cannot update it.
+Environment=DISABLE_AUTOUPDATER=1
 EnvironmentFile=/etc/renovate-agent/session.env
 # Only this script's own lines reach the journal: it captures the session's output and writes
 # it to a file the runner reads, so session text never becomes a syslog line (#967's I3, I6).
@@ -34,5 +49,5 @@ NoNewPrivileges=yes
 ProtectHome=yes
 ProtectProc=invisible
 PrivateTmp=yes
-ExecStart={{ renovate_agent_home }}/.local/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }} \
+ExecStart={{ pins.tools_dir }}/.local/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }} \
   /usr/lib/homelab/renovate-agent/renovate_session.py

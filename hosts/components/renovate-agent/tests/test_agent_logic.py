@@ -7,12 +7,10 @@ Run: uv run pytest hosts/components/renovate-agent/tests/test_agent_logic.py
 """
 
 import json
-from pathlib import Path
 
 import agent_logic as al
 import pytest
 import renovate_agent
-import renovate_session
 
 
 def _pr(number: int) -> al.OpenPR:
@@ -214,24 +212,18 @@ class TestConfigGuard:
 class _FakeHost:
     """Answers every process `main()` reaches up to the session unit's end.
 
-    `prs` is what `gh pr list` returns. `blocked`, when set, is the reason the session unit
-    writes into `state` for a worktree it would not recreate.
+    `prs` is what `gh pr list` returns.
     """
 
-    def __init__(
-        self, prs: list[int], blocked: str = "", state: Path = Path("/nonexistent")
-    ) -> None:
+    def __init__(self, prs: list[int]) -> None:
         self.prs = prs
-        self.blocked, self.state = blocked, state
         self.posts: list[str] = []
         self.spools: set[str | None] = set()
         self.flushed: list[str] = []
 
     def run(self, argv, cwd=None, timeout=120):
         if argv[:2] == ["systemctl", "start"]:
-            # The session unit: it records why the worktree blocked it, or writes no output.
-            if self.blocked:
-                (self.state / renovate_session.BLOCKED_FILE).write_text(self.blocked)
+            # The session unit, which here writes no output.
             return 0, ""
         if argv[:2] == ["systemctl", "show"]:
             return 0, "Result=success\nExecMainStatus=0\n"
@@ -370,31 +362,17 @@ class TestRunRecord:
 
 
 class TestSkipExitCodes:
-    """The Alive beat is the unit's ExecStartPost, so it fires on any exit 0 — including a
-    skip that means the tree is stuck. That laundered five daily skips behind a green tile
-    from 2026-09-14 (#2014). A blocked tree exits non-zero: no beat, and OnFailure pages. The
-    quiet no-PRs skip is the healthy steady state and keeps beating.
+    """The Alive beat is the unit's ExecStartPost, so it fires on any exit 0. The quiet
+    no-PRs skip is the healthy steady state and keeps beating.
     """
 
     def _cfg(self, tmp_path) -> str:
-        (tmp_path / ".claude" / "worktrees" / "renovate-auto").mkdir(parents=True)
         cfg = tmp_path / "config.env"
         cfg.write_text(
             f"REPO=o/r\nREPO_DIR={tmp_path}\nEXCHANGE_DIR={tmp_path}/exchange\n"
             f"SESSION_USER=agent\nSTATE_DIR={tmp_path}/state\n"
         )
         return str(cfg)
-
-    def test_a_worktree_blocked_skip_is_flagged(self, tmp_path) -> None:
-        reason = "the run branch holds 1 commit(s) not on origin/master"
-        host = _FakeHost(prs=[1], blocked=reason, state=tmp_path / "exchange" / "out")
-
-        rc = renovate_agent.main(_tools(host), self._cfg(tmp_path))
-
-        assert rc == renovate_agent.EXIT_WORKTREE_BLOCKED != 0
-        assert any("holds 1 commit(s) not on origin/master" in p for p in host.posts)
-        assert host.spools == {f"{tmp_path}/state/discord-spool"}  # #3905
-        assert _records(tmp_path)[-1]["result"] == "blocked"
 
     def test_an_empty_backlog_skip_is_clean(self, tmp_path) -> None:
         host = _FakeHost(prs=[])
