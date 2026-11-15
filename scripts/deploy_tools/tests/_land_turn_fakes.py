@@ -27,10 +27,10 @@ def turn_landing(landing, polls=(OPEN, MERGED), start=OPEN, **fakes_or_opts):
         k: fakes_or_opts.pop(k)
         for k in (
             "turn",
+            "serial",
             "line",
             "await_ci",
             "gh_merge_rc",
-            "master_runs",
             "compare",
             "head_runs",
         )

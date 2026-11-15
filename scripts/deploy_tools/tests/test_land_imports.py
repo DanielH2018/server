@@ -92,6 +92,7 @@ ALLOWED = {
         "policy",
         "pr_json",
         "gh_read",
+        "slots",
         "stale_base",
         "stuck_checks",
     },
@@ -100,7 +101,7 @@ ALLOWED = {
     # The one-landing-at-a-time lock the pipeline holds from the PR's CI run to its merge.
     "turn": {"landing", "outcome", "line"},
     # The lock files that bound the landings polling GitHub after their merge, beside the turn.
-    "slots": {"landing", "outcome", "live_limit", "turn"},
+    "slots": {"landing", "outcome", "live_limit", "pin_gate", "turn"},
     # The drafts whose landings wait for the turn, which its holder reads; boundaries only.
     "line": set(),
     # The drafts in the line, tested with the turn holder's own in one run, then merged.
@@ -112,6 +113,7 @@ ALLOWED = {
         "line",
         "live_limit",
         "merge",
+        "slots",
         "stale_base",
         "turn",
     },
@@ -147,9 +149,8 @@ ALLOWED = {
     # The fork, the logfile and the verdict wait. It imports no phase: `land.py` hands it a
     # callable and it never knows what a landing is.
     "detach": set(),
-    # The number a new landing is admitted under. It reads master's run count, DEPLOY_HOLD as the pin
-    # gate judges it, and nothing that drives a landing.
-    "live_limit": {"landing", "pin_gate", "pin_reads"},
+    # A PR's kind and the quota floor: GitHub reads only, nothing that drives a landing.
+    "live_limit": set(),
     # The handoff to a lander unit reads the Options it refuses flags from, and prints its own
     # stops through Outcome so they carry the verdict a landing's would.
     "handoff": {"options", "outcome"},

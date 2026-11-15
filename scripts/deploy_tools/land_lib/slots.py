@@ -28,15 +28,15 @@ runs a whole landing never takes a real slot.
 
 import contextlib
 import os
-from collections.abc import Callable, Generator
+from collections.abc import Callable, Generator, Sequence
 from pathlib import Path
 
 import sys as _sys
 
 _sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
-from deploy_tools.land_lib import live_limit, turn
+from deploy_tools.land_lib import live_limit, pin_gate, turn
 from deploy_tools.land_lib.landing import Landing
-from deploy_tools.land_lib.outcome import say
+from deploy_tools.land_lib.outcome import Verdict, say
 from lib.progress import OnChange
 
 # DECIDED: 6. The operator set it on 2026-11-15 (D10 in docs/ci-throughput.md): on 2026-11-14,
@@ -47,12 +47,16 @@ COUNT = 6
 # set before the slots existed.
 FALLBACK_COUNT = 3
 _LOCK_DIR = turn.LOCK.parent
+SLOT_NAMES = tuple(f"homelab-land-slot-{n}.lock" for n in range(COUNT))
+# Held by a landing of a serial PR from the check before its merge until its process ends.
+SERIAL_NAME = "homelab-land-serial.lock"
 
 Release = Callable[[], None]
+Locker = Callable[[Sequence[str], int], Release | None]
 
 
 def _paths(directory: Path, count: int = COUNT) -> list[Path]:
-    return [directory / f"homelab-land-slot-{n}.lock" for n in range(count)]
+    return [directory / name for name in SLOT_NAMES[:count]]
 
 
 def try_take(paths: list[Path], cap: int) -> Release | None:
@@ -68,28 +72,29 @@ def try_take(paths: list[Path], cap: int) -> Release | None:
     return None if fd is None else lambda: os.close(fd)
 
 
-def _taker(
-    hostname: str, directory: Path = _LOCK_DIR
-) -> Callable[[int], Release | None]:
-    """The call that takes a slot in `directory` under a cap, from the host named `hostname`."""
+def _locker(hostname: str, directory: Path = _LOCK_DIR) -> Locker:
+    """The call that locks one of the named files in `directory` under a cap, from `hostname`.
+
+    Off the turn host it locks over ssh. When the turn host does not answer, it locks among
+    the first `FALLBACK_COUNT` of the names on this host instead.
+    """
     moved = os.environ.get(turn.TURN_DIR_ENV)
-    if moved:
-        return lambda cap: try_take(_paths(Path(moved)), cap)
-    if turn.is_turn_host(hostname):
-        return lambda cap: try_take(_paths(directory), cap)
+    if moved or turn.is_turn_host(hostname):
+        here = Path(moved) if moved else directory
+        return lambda names, cap: try_take([here / n for n in names], cap)
     unreachable = OnChange(say)
 
-    def take(cap: int) -> Release | None:
+    def lock(names: Sequence[str], cap: int) -> Release | None:
         try:
-            return turn.try_take_over_ssh(_paths(directory), cap)
+            return turn.try_take_over_ssh([directory / n for n in names], cap)
         except OSError as exc:
             unreachable(
-                f"{turn.TURN_HOST} did not answer for the landing slots ({exc}); taking one "
-                f"of {FALLBACK_COUNT} on this host"
+                f"{turn.TURN_HOST} did not answer for the landing slots ({exc}); counting "
+                f"{FALLBACK_COUNT} slots on this host"
             )
-            return try_take(_paths(directory, FALLBACK_COUNT), cap)
+            return try_take([directory / n for n in names[:FALLBACK_COUNT]], cap)
 
-    return take
+    return lock
 
 
 def _cap(ln: Landing) -> tuple[int, str]:
@@ -102,13 +107,13 @@ def _wait(ln: Landing) -> Release | None:
     o = ln.opts
     spent = ln.tools.clock() - ln.ledger.t_start
     budget = max(0, int(2 * o.merge_timeout - spent))
-    try_slot = ln.tools.try_slot or _taker(ln.tools.hostname())
+    lock = ln.tools.try_slot or _locker(ln.tools.hostname())
     waiting = OnChange(say)
     waited = 0
     while True:
         cap, why = _cap(ln)
         try:
-            release = try_slot(cap)
+            release = lock(SLOT_NAMES, cap)
         except OSError as exc:
             say(
                 f"could not open the landing slots' locks ({exc}); going on without one"
@@ -140,3 +145,99 @@ def held(ln: Landing) -> Generator[None]:
     finally:
         if release:
             release()
+
+
+def _held_by_another(lock: Locker, names: Sequence[str]) -> bool:
+    """Whether another landing holds one of `names`; False when the files cannot be locked."""
+    try:
+        release = lock(names, 1)
+    except OSError:
+        return False
+    if release:
+        release()
+    return release is None
+
+
+def _keep_serial(ln: Landing, lock: Locker) -> bool:
+    """Take the serial lock for the rest of the landing; whether another landing holds it."""
+    if ln.serial_lock:
+        return False
+    try:
+        ln.serial_lock = lock([SERIAL_NAME], 1)
+    except OSError:
+        return False
+    return ln.serial_lock is None
+
+
+def _bar(ln: Landing, kind: str, lock: Locker) -> str:
+    """Why `ln`'s PR, of `kind`, may not merge now; "" when nothing bars it."""
+    if kind:
+        hold = live_limit.fail_open(
+            lambda: pin_gate.hold_problem(ln.tools.flux.pins.hold())
+        )
+        if hold:
+            return f"{hold}, and this PR changes a k8s role"
+    if kind == live_limit.SERIAL:
+        if _keep_serial(ln, lock):
+            return "another landing of a forward-only pin, flux or cluster-vars change is live"
+        if _held_by_another(lock, SLOT_NAMES):
+            return (
+                "this PR changes a forward-only pin, flux or cluster-vars, and another "
+                "landing is past its merge"
+            )
+    elif _held_by_another(lock, [SERIAL_NAME]):
+        return "a landing of a forward-only pin, flux or cluster-vars change is live"
+    if (
+        kind
+        and live_limit.fail_open(ln.tools.in_reboot_window)
+        and _held_by_another(lock, SLOT_NAMES)
+    ):
+        return (
+            "inside the weekly reboot's no-promotion window, another landing is past its "
+            "merge, and this PR changes a k8s role"
+        )
+    return ""
+
+
+def _kind(ln: Landing) -> str:
+    return live_limit.pr_kind(ln.opts.pr, live_limit.github_reads(ln.tools.gh_json))
+
+
+def _lock_of(ln: Landing) -> Locker:
+    return ln.tools.try_slot or _locker(ln.tools.hostname())
+
+
+def bar_member(member: Landing) -> str:
+    """Why the PR `member` lands may not join a batch now; "" when nothing bars it.
+
+    The holder merges its members before any of them holds a slot, so inside the weekly
+    reboot's no-promotion window a k8s PR joins no batch: it waits out the window alone.
+    """
+    kind = _kind(member)
+    if kind and live_limit.fail_open(member.tools.in_reboot_window):
+        return "it changes a k8s role inside the weekly reboot's no-promotion window"
+    return _bar(member, kind, _lock_of(member))
+
+
+def refuse_before_merge(ln: Landing) -> None:
+    """End the landing with exit 75, merging nothing, while a rule bars its PR from merging.
+
+    It runs inside the landing turn, when a draft takes it and again just before the merge,
+    so a barred draft spends no CI run. The rules, for a PR of `live_limit.kind`:
+
+    - a k8s or serial PR waits while `DEPLOY_HOLD` holds;
+    - a serial PR waits while another landing holds a slot or the serial lock, and keeps the
+      serial lock until its process ends, a fresh grading included, so every other PR waits
+      for it;
+    - a k8s or serial PR waits inside the weekly reboot's no-promotion window while another
+      landing holds a slot, so one at a time waits out the window.
+
+    Every read fails open: a rule whose read fails bars nothing.
+    """
+    why = _bar(ln, _kind(ln), _lock_of(ln))
+    if why:
+        ln.die(
+            f"{why}; nothing is merged. Re-run the same command once that clears",
+            75,
+            Verdict.REFUSED,
+        )

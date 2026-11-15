@@ -20,7 +20,7 @@ from typing import Any
 
 from deploy_tools.land_lib.health_gate import GateResult
 from deploy_tools.land_lib import fresh, landing as landing_mod
-from deploy_tools.land_lib import pr_json
+from deploy_tools.land_lib import pr_json, slots
 from _land_host_fakes import host_fakes
 from deploy_tools.land_lib.options import Options
 from deploy_tools.land_lib.land_flux import FluxReads
@@ -141,19 +141,16 @@ class Fakes:
     compare: list[list[str] | Exception] = field(default_factory=lambda: [[]])
     # What `closing_refs`' GraphQL read answers, one entry per call.
     closing_refs: list[dict | Exception] = field(default_factory=lambda: [{}])
-    # What the master `ci.yml` runs listing answers, one entry per call, as `live_limit.py`
-    # reads it:
-    # `{status, created_at}` per run. Empty is a master with no CI backlog, and an exception is
-    # raised in place of an answer.
-    master_runs: list[list[dict[str, str]] | Exception] = field(
-        default_factory=lambda: [[]]
-    )
     # What each `tools.try_turn` call answers: True takes the landing turn, False finds another
     # landing holding it, and an exception is raised in place of an answer.
     turn: list[bool | Exception] = field(default_factory=lambda: [True])
-    # What each `tools.try_slot` call answers: True takes a landing slot, False finds every
-    # slot held, and an exception is raised in place of an answer.
+    # What each `tools.try_slot` call on the landing slots answers: True takes a slot, False
+    # finds the cap held, and an exception is raised in place of an answer.
     slot: list[bool | Exception] = field(default_factory=lambda: [True])
+    # The same, for each call on the serial lock.
+    serial: list[bool | Exception] = field(default_factory=lambda: [True])
+    # Whether `tools.in_reboot_window` reads now as inside the reboot's no-promotion window.
+    in_window: bool = False
     # The core quota's `(remaining, reset epoch)` as `gh api rate_limit` answers it.
     core_quota: tuple[int, int] = (5000, 0)
     # What each operation on the line for the turn answers (`tools.line`), one entry a call.
@@ -249,7 +246,6 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
         asked: seq for k, seq in view_seq.items() if (asked := pr_json.rest_filter(k))
     }
     compare_seq = _seq(f.compare, calls, "gh:compare")
-    runs_seq = _seq(f.master_runs, calls, "gh:master-runs")
     closing_refs_seq = _seq(f.closing_refs, calls, "gh:closing-refs")
 
     def gh_json(*args, **kwargs):
@@ -292,11 +288,6 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
                 if isinstance(answer, Exception):
                     raise answer
                 return answer
-        if args[0] == "api" and "/workflows/ci.yml/runs?branch=" in args[1]:
-            answer = runs_seq(*args, **kwargs)
-            if isinstance(answer, Exception):
-                raise answer
-            return answer
         if args[0] == "api" and args[1].rpartition("/")[0].endswith("/pulls"):
             return rest_seq[args[args.index("--jq") + 1]]()
         return view_seq[args[args.index("--json") + 1]]()
@@ -414,12 +405,15 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
         return (lambda: calls.append(("release_turn", (), {}))) if answer else None
 
     slot_seq = _seq(f.slot, calls, "try_slot")
+    serial_seq = _seq(f.serial, calls, "try_serial")
 
-    def try_slot(cap):
-        answer = slot_seq(cap)
+    def try_slot(names, cap):
+        serial = list(names) == [slots.SERIAL_NAME]
+        answer = (serial_seq if serial else slot_seq)(cap)
         if isinstance(answer, Exception):
             raise answer
-        return (lambda: calls.append(("release_slot", (), {}))) if answer else None
+        freed = "release_serial" if serial else "release_slot"
+        return (lambda: calls.append((freed, (), {}))) if answer else None
 
     def fresh_landing(primary, argv):
         calls.append(("fresh_landing", (primary, argv), {}))
@@ -438,6 +432,7 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
     tools = Tools(
         try_turn=try_turn,
         try_slot=try_slot,
+        in_reboot_window=lambda: f.in_window,
         line=line,
         gh_json=gh_json,
         gh=gh_run,

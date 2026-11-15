@@ -55,6 +55,7 @@ from deploy_tools.land_lib import (
     line,
     live_limit,
     merge,
+    slots,
     stale_base,
     turn,
 )
@@ -140,7 +141,7 @@ def _admit(ln: Landing, pr: str, head: str, reads: live_limit.Reads) -> Member |
     member = Landing(opts, ln.tools, ln.classifier)
     say(f"checking PR #{pr} from the line, as this landing checked its own PR")
     try:
-        why = _alone(ln, pr, reads) or _unfit(member, head)
+        why = _alone(ln, pr, reads) or _unfit(member, head) or slots.bar_member(member)
         if not why:
             merge.arm_merge(member)
         if not why and member.pinned_head not in ("", head):
@@ -458,6 +459,9 @@ def land(ln: Landing, take_turn: merge.TakeTurn) -> None:
 
     def take(draft: str) -> tuple[bool, int]:
         in_turn, waited = take_turn(draft)
+        if in_turn and draft:
+            # Before the draft's run, so a PR its merge would be refused spends no run.
+            slots.refuse_before_merge(ln)
         if in_turn and draft and ln.opts.batch and not ln.lands_alone:
             try:
                 ln.batched_s = form(ln, draft)

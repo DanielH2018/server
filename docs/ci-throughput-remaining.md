@@ -8,7 +8,7 @@ and delete the page with the last one.
 
 ## State on 2026-11-15
 
-Phase A, R1, C1, B2 and B3 are landed, and so is D9. Every landing takes the landing turn
+Phase A, R1, C1, B2, B3 and B4 are landed, and so are D9 and D10. Every landing takes the landing turn
 and forms a batch, sessions open their PRs as drafts, and a fan-out batch on daniel-box
 lands its PR as a draft. A fan-out batch on daniel-server still marks its PR ready and
 waits for that run, which the operator chose. Phase C stopped at C1.
@@ -45,22 +45,7 @@ Each needs traffic no session controls, so watch for it and record the first run
   reads `a batch that tested PR #N was not green; it lands alone`. A member that is
   stacked a second time by a later landing is a defect in `land_lib/line.py`'s answers.
 
-### 2. B4: every landing through the queue
-
-D10 in [CI throughput](ci-throughput.md) answers the three questions that came first and
-names the five pull requests, in order. Four have landed: a stale ready PR rejoins the line
-(`stale_base.rejoin_line`, #8818), and the update after a green run (#8820), the pacing
-(#8821) and the switch that turned the turn off are deleted. The fourth is in two parts. The
-6 landing slots, taken after the merge, landed first (`land_lib/slots.py`). The second
-deletes the per-host count from `--detach`, with the slow-runs drop. `DEPLOY_HOLD`, the
-reboot window and the serial rule stay as refusals before the merge, read from daniel-box.
-
-B4 edits the merge wait in `land_lib/merge.py`, which also holds the draft-skip grace,
-the re-trigger and the rate-limit backoff. Cut it into PRs that each delete one thing.
-For each deletion, break the code beside it on purpose and see a test fail: a deletion
-that took too much passes every test that did not exercise it.
-
-### 3. Option B, if the operator asks for it
+### 2. Option B, if the operator asks for it
 
 A daniel-server fan-out pipeline lands its own draft from daniel-server. From 2026-11-08
 to 2026-11-14, 57% of review batches ran there. The code change is small
@@ -69,7 +54,7 @@ both are the operator's: it reverses the rule that only daniel-box lands, and a 
 daniel-server ends `deferred` when its health gate grades a container on daniel-pi
 (#8773).
 
-### 4. Phase C, only if D8 is reopened
+### 3. Phase C, only if D8 is reopened
 
 C2 and C3 are in [CI throughput](ci-throughput.md) as planned. ADR-0032 holds the five
 conditions a runner exists under. A runner configuration must never reach a session's

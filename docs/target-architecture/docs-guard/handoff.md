@@ -2,8 +2,8 @@
 
 This page hands the rest of the facts-and-memory plan to another session. It states what
 is done as of 2026-11-15, what is open, the order to take it in, and what the sweep
-and the session after it taught. Items 1 to 3 landed on 2026-11-15, so the next session
-starts at item 4. Delete this page in the PR that closes the last open item.
+and the sessions after it taught. Items 1 to 4 landed on 2026-11-15. Item 5 and item 6 wait
+for 2026-12-15, and item 7 can run any time. Delete this page in the PR that closes the last open item.
 
 [ADR-0031](../../adr/0031-each-kind-of-fact-has-one-stateless-detector.md) holds the
 decision, and each slice plan beside this page holds its own record. Read the ADR and
@@ -16,7 +16,7 @@ decision, and each slice plan beside this page holds its own record. Read the AD
 - [G9](g9-blocking-gate.md) stopped at its measurement on 2026-11-13. The diff notice
   stays advisory.
 - [G7](g7-removed-names.md) has steps 1 to 4 done. Step 5 is open.
-- [G11](g11-binding-sweep.md) has steps 1 and 2 done. Step 3 is open.
+- [G11](g11-binding-sweep.md) has steps 1 to 3 done. The pilot's comparison, item 5, is open.
 
 ## Open work, in order
 
@@ -33,19 +33,8 @@ Take the items in this order. Each names the effort it needs from an Opus sessio
 3. **The sections the sweep kept back.** Done in
    [#8817](https://github.com/DanielH2018/server/pull/8817). The PR body lists what each
    sentence is bound to and the three `docker.md` sentences it corrected.
-4. **G11 step 3.** High effort, solo. Rewrite `.claude/rules/facts.md` to the end-state
-   model in the G11 plan's design, and replace tiers 2 and 3 of
-   `.claude/agents/homelab-docs-freshness-reviewer.md` with a read of the sections that
-   `fact_status.py report` ranks as loaded most and cited least. That agent's four
-   uncited sections are bound in the same change. `facts.md` loads with every
-   instruction file, so a wrong sentence there reaches every session.
-   Three things to carry into the rewrite:
-   - Keep the generated-block case in `facts.md#Commands`. #8815 added it to the list of
-     sections the report does not rank.
-   - The change edits a file under `.claude/agents/`, so the server lander refuses it.
-     Run `probe.py lander`, then land it by hand with `land.sh`.
-   - Re-paste any eval case that quotes an edited `facts.md` section, then run
-     `evals/tests/test_eval_cases.py`.
+4. **G11 step 3.** Done. [G11's *Step 3 result*](g11-binding-sweep.md) has what changed.
+   No eval case quotes `facts.md`, so none needed re-pasting.
 5. **The pilot's comparison, due 2026-12-14.** High effort. Count the notice rows that
    the root `CLAUDE.md`'s eight content citations drew in the 30 days after
    [#8707](https://github.com/DanielH2018/server/pull/8707), and grade each unedited

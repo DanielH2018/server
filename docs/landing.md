@@ -92,51 +92,30 @@ the slots.
   lander units' `LAND_DEADLINE` counts. Then it goes on without one. The log reads `took a
   landing slot after <N>s`, or names why it went on without one.
 
-The limit on live landings below still applies to `--detach`, beside the slots.
+### Rules that refuse a merge
 
-### The limit on live landings
+**Three rules refuse a merge inside the landing turn.** A landing checks them when a draft
+takes the turn, before its CI run, and again just before the merge. A refused landing exits
+75 with `VERDICT: refused` and merges nothing; re-run the same command once the rule clears.
+`slots.refuse_before_merge` owns the rules, and each read that fails bars nothing.
 
-**A group of landings runs at most 3 at once.** Every landing polls GitHub on one shared
-token, whose core quota is 5000 calls an hour. On 2026-11-11 thirteen live landings spent
-about 148 calls a minute and drained it (#8018). The operator set the limit to 3 per token on
-2026-11-12. `land_lib/live_limit.py` owns the number, and `land_lib/detach.py` owns the
-registry of live landings it is compared with.
-
-- A group is one UNIX user's landings, unless `LAND_ORCHESTRATOR` names another group. Every
-  `ubuntu` landing therefore shares one group: the orchestrator session, the
-  `claude-fanout-server-lander` timer, the lander units and other sessions. That matches the
-  quota, which is per token.
-- A `--detach` over the limit forks nothing and exits 75. Its `land:` line names the
-  condition that set the limit. Re-run the same command once a landing ends.
-- `LAND_MAX_LIVE` overrides the 3. The conditions below can only lower what it sets.
-- A foreground `land.sh` takes a slot while it runs, but it is never refused. The lander
-  units (`renovate-agent-land@`, `claude-land@`) run it in the foreground and have no retry,
-  so a refusal would page rather than wait. Their slot still lowers the room every
-  `--detach` beside them sees. A `--fresh` child landing runs inside its parent's slot.
-- A `--detach` handed off through `LAND_HANDOFF_UNIT` takes no slot and is never refused. The
-  `claude` agent user hands its landings to `homelab-claude-land@<pr>.service`, which runs
-  `land.sh` as `ubuntu` on the `ubuntu` token. That foreground landing holds the slot in the
-  `ubuntu` group, so the agent's own registry and its token's quota have nothing to count.
-
-**Five conditions lower the limit for a new `--detach`.** The lowest one wins.
-
-- To 1 while the core quota has fewer than 1500 calls left and resets more than 15 minutes
-  away. `gh api rate_limit` costs no core quota.
-- To 2 while 2 or more master `ci.yml` push runs have been unfinished for more than 15
-  minutes. A run unfinished more than 2 hours after its creation is wedged and does not
-  count.
-- To 0 for a PR that changes a k8s role while `DEPLOY_HOLD` holds. "Holds" means what the pin
-  gate means by it: any value but `none`.
-- To 1 for a PR that changes a k8s role inside the no-promotion window around the weekly
-  reboot. `promote_lib/reboot_window.py` derives the window from the reboot schedule.
-- To 1 while a landing of a serial PR is live, or when the new PR is one. A serial PR changes
-  the `longhorn` or `metallb` role, which hold the forward-only pins, the `flux` role, or the
+- A PR that changes a k8s role is refused while `DEPLOY_HOLD` reads anything but `none`.
+- A serial PR is refused while another landing holds a slot or the serial lock. Otherwise it
+  takes the serial lock, `/run/lock/homelab-land-serial.lock` on daniel-box, and keeps it
+  until its process ends, so every other PR is refused meanwhile. A serial PR changes the
+  `longhorn` or `metallb` role, which hold the forward-only pins, the `flux` role, or the
   cluster-vars file.
+- A PR that changes a k8s role is refused inside the no-promotion window around the weekly
+  reboot while another landing holds a slot, so one landing at a time waits out the window.
 
-**A read that fails lowers nothing.** The limit is a throughput control.
-A landing still meets `DEPLOY_HOLD` at the pin gate and at the promotion. The PR's file
-list comes from `gh pr view --json files`, which returns at most 100 files, so a serial path
-past the hundredth goes unseen.
+A batch leaves out a draft these rules bar, and inside the window it leaves out every k8s
+draft, because the holder merges its members before any of them holds a slot. A serial PR
+can still pass while another landing is between its merge and its step 1: only slots and
+the serial lock are counted. When daniel-box does not answer, the serial lock is
+on the landing's own host, as the slots are. The fan-out server lander starts a PR again on
+its next run when its last landing ended this way, after every PR it has not started. A
+lander unit has no retry, so the refusal pages through its unit.
+
 
 ### Exit codes and verdicts
 
