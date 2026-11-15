@@ -106,7 +106,7 @@ def test_a_journal_this_user_cannot_read_prints_the_state_and_exits_unreadable()
     assert "result success" in text and "unread: journalctl for unit" in text
 
 
-def test_the_read_covers_the_unit_and_both_forms_of_its_tag():
+def test_the_read_covers_the_unit_both_forms_of_its_tag_and_systemds_lines():
     plan = host_unit.plan("homelab-aide-check", host_unit.tags("homelab-aide-check"))
     assert plan["journal"]["unit"][:1] == ["homelab-aide-check.service"]
     assert {v[0] for k, v in plan["journal"].items() if k.startswith("tag:")} == {
@@ -114,6 +114,7 @@ def test_the_read_covers_the_unit_and_both_forms_of_its_tag():
         "homelab-aide-check",
     }
     assert plan["timers"] == ["homelab-aide-check.timer"]
+    assert plan["journal"]["systemd"][:1] == ["UNIT=homelab-aide-check.service"]
 
 
 def test_a_unit_name_is_trimmed_of_its_suffix_and_an_option_is_refused():
@@ -137,3 +138,34 @@ def test_a_running_service_explains_a_monotonic_timer_with_no_next_trigger():
     text, code = _report(doc)
     assert code == PROBE_OK
     assert "next after the running service ends" in text
+
+
+def _reset(doc):
+    """The state systemd reports for a unit it reloaded: Result success, no timestamps."""
+    doc["show"][f"{BASE}.service"] |= {
+        "ExecMainStartTimestamp": "",
+        "ExecMainExitTimestamp": "",
+    }
+    return doc
+
+
+def test_a_reset_unit_takes_its_last_result_from_the_journal():
+    failed = [
+        1794777101.0,
+        3,
+        "r1",
+        "systemd",
+        f"{BASE}.service: Failed with result 'exit-code'.",
+    ]
+    doc = _reset(_doc(journal={"unit": _read([*ENTRIES[:2], failed])}))
+    text, code = _report(doc)
+    assert code == PROBE_FAILED
+    assert "result exit-code (from the journal)" in text
+
+
+def test_a_reset_unit_with_no_result_in_the_journal_reads_unknown_not_ok():
+    doc = _reset(_doc(journal={"unit": _read(ENTRIES[1:2])}))
+    text, code = _report(doc)
+    assert code == PROBE_UNREADABLE
+    assert "result unknown (systemd holds no run)" in text
+    assert text.endswith("verdict: result unknown")

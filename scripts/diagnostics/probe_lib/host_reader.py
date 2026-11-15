@@ -12,7 +12,9 @@ read of daniel-pi from a host other than daniel-box makes that call through dani
 keys:
 
 - `journal`: `{key: [unit, since, until]}`, or `[unit, since, until, by, lines]`. Each read is
-  `journalctl -u <unit> -o json`. A `by` of `-t` reads a syslog identifier instead, `lines`
+  `journalctl -u <unit> -o json`. A `by` of `-t` reads a syslog identifier instead, and
+  `match` passes the first element as a `FIELD=value` match (`UNIT=<unit>` is systemd's own
+  lines about the unit). `lines`
   keeps only the newest that many, and a null `since` reads without a window. Its entries
   come back as `[epoch_s, priority, invocation_id, identifier, message]`.
 - `files`: paths whose text to return.
@@ -57,7 +59,7 @@ plan = json.loads(__PLAN__)
 out = {"host": os.uname().nodename, "user": pwd.getpwuid(os.getuid()).pw_name}
 
 def journal(unit, since, until, by="-u", lines=None):
-    argv = ["journalctl", by, unit, "-o", "json", "--no-pager",
+    argv = ["journalctl", *([] if by == "match" else [by]), unit, "-o", "json", "--no-pager",
             "--output-fields=MESSAGE,PRIORITY,_SYSTEMD_INVOCATION_ID,SYSLOG_IDENTIFIER"]
     if since:
         argv += ["--since", since]

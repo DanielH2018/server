@@ -11,6 +11,12 @@ the named host and prints:
   the stem (`aide-check`) or the full name (`homelab-builder`), so both are read. A line in
   both reads is printed once.
 
+systemd resets `Result` to `success` and clears the run timestamps when it reloads a unit, so an
+empty `ExecMainStartTimestamp` is no record of the last run. The result then comes from
+systemd's own line in the journal (`Failed with result`, `Deactivated successfully`). When
+neither holds it but the timer or the journal shows a run, the result reads unknown and the
+probe exits 75.
+
 Exit 1 when the service is not loaded, its last run did not end `success`, or its timer is
 loaded but has no next trigger while the service is idle. A monotonic timer schedules its
 next trigger only once a run ends, so a running service explains a missing one. 75 when the host could not be read; a journal this user may
@@ -51,11 +57,16 @@ TIMER_SHOW = ["LoadState", "ActiveState"]
 RUNNING = frozenset({"activating", "deactivating", "reloading"})
 # Lines read per source before the routine ones are dropped.
 READ_LINES = 200
+# systemd writes a few lines per run, so this reaches back several runs.
+OUTCOME_LINES = 20
 # A leading `-` would reach systemctl and journalctl as an option.
 _UNIT_NAME = re.compile(r"[A-Za-z0-9_@][A-Za-z0-9_@.:\\-]*")
 _ROUTINE = re.compile(
     r"^(Starting|Started|Finished|Stopping|Stopped) |Deactivated successfully|Consumed .* CPU time"
 )
+
+_FAILED = re.compile(r"Failed with result '([^']+)'")
+_SUCCEEDED = re.compile(r"Deactivated successfully|^Finished |: Succeeded\.$")
 
 UNIT_HELP = (
     "a host unit's run state: ActiveState and Result, the last start and end, the timer's "
@@ -85,6 +96,8 @@ def tags(base: str) -> list[str]:
 def plan(base: str, tag_names: list[str]) -> dict:
     journal = {"unit": [f"{base}.service", None, None, "-u", READ_LINES]}
     journal |= {f"tag:{t}": [t, None, None, "-t", READ_LINES] for t in tag_names}
+    # A run that logs more than READ_LINES pushes systemd's outcome line out of the unit read.
+    journal["systemd"] = [f"UNIT={base}.service", None, None, "match", OUTCOME_LINES]
     return {
         "show": {f"{base}.service": SHOW, f"{base}.timer": TIMER_SHOW},
         "timers": [f"{base}.timer"],
@@ -121,6 +134,19 @@ def is_routine(entry) -> bool:
     return entry.identifier == "systemd" and bool(_ROUTINE.search(entry.message))
 
 
+def journal_result(entries) -> str | None:
+    """How the newest run in the journal ended, from systemd's own line; None when none says."""
+    for e in reversed(entries):
+        if e.identifier != "systemd":
+            continue
+        failed = _FAILED.search(e.message)
+        if failed:
+            return failed.group(1)
+        if _SUCCEEDED.search(e.message):
+            return "success"
+    return None
+
+
 def report(doc: dict, base: str, *, now: float, last: int) -> tuple[str, int]:
     """The text view and the exit code for one read of the unit's host."""
     show = doc.get("show") or {}
@@ -133,18 +159,30 @@ def report(doc: dict, base: str, *, now: float, last: int) -> tuple[str, int]:
             PROBE_FAILED,
         )
     problems = []
-    result = service.get("Result")
-    if result != "success":
+    entries, unread = journal_lines(doc)
+    prev = ((doc.get("timers") or {}).get(f"{base}.timer") or {}).get("last") or 0
+    result = service.get("Result") or "?"
+    status = service.get("ExecMainStatus") or "?"
+    unknown = False
+    if not service.get("ExecMainStartTimestamp"):
+        # systemd resets Result to success and clears the timestamps when it reloads a unit.
+        result, status = journal_result(entries), "?"
+        if result is None:
+            unknown = bool(prev or entries)
+            result = "unknown (systemd holds no run)" if unknown else "none (never ran)"
+        else:
+            result += " (from the journal)"
+    if not unknown and not result.startswith(("success", "none")):
         problems.append(f"the last run ended {result}")
     lines = [
         f"{base}.service ({host}): {service.get('ActiveState')}/{service.get('SubState')}, "
-        f"result {result}, exit status {service.get('ExecMainStatus') or '?'}",
+        f"result {result}, exit status {status}",
         f"  last start {_or_never(service.get('ExecMainStartTimestamp'))}",
         f"  last end   {_or_never(service.get('ExecMainExitTimestamp'))}",
     ]
     if timer.get("LoadState") == "loaded":
         row = (doc.get("timers") or {}).get(f"{base}.timer") or {}
-        nxt, prev = row.get("next") or 0, row.get("last") or 0
+        nxt = row.get("next") or 0
         # A monotonic timer schedules its next trigger only once its service run ends.
         running = (
             service.get("ActiveState") in RUNNING
@@ -164,14 +202,19 @@ def report(doc: dict, base: str, *, now: float, last: int) -> tuple[str, int]:
         )
     else:
         lines.append(f"{base}.timer: none")
-    entries, unread = journal_lines(doc)
     shown = [e for e in entries if not is_routine(e)][-last:]
     lines.append(f"journal, newest {len(shown)} non-routine lines:")
     lines += [f"  {_stamp(e.at)}  {e.identifier}: {e.message}" for e in shown] or [
         "  none"
     ]
     lines += [f"  unread: {u}" for u in unread]
-    lines.append(f"verdict: {'; '.join(problems) or 'ok'}")
+    if unknown:
+        unread.append(
+            "the last run's result is in neither systemd nor the journal read"
+        )
+    lines.append(
+        f"verdict: {'; '.join(problems) or ('result unknown' if unknown else 'ok')}"
+    )
     code = PROBE_FAILED if problems else (PROBE_UNREADABLE if unread else PROBE_OK)
     return "\n".join(lines), code
 

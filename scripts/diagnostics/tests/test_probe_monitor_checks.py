@@ -36,7 +36,9 @@ def _check(name, value=1, age=60, deadline=900, details=()):
     return out + [s("homelab_check_detail", 1, detail=d) for d in details]
 
 
-def _report(series, held=None, gates=None, names=(), ruled=None, only=""):
+def _report(
+    series, held=None, gates=None, names=(), ruled=None, only="", suppressed=None
+):
     rows = monitor_checks.rows_of(series)
     return monitor_checks.report(
         rows,
@@ -44,6 +46,7 @@ def _report(series, held=None, gates=None, names=(), ruled=None, only=""):
         table_names=list(names),
         with_rule=set(rows) if ruled is None else ruled,
         held={} if held is None else held,
+        suppressed={} if suppressed is None else suppressed,
         now=NOW,
         only=only,
     )
@@ -137,3 +140,25 @@ def test_no_check_series_is_unreadable():
             SimpleNamespace(dry_run=False, checks=""), fetch=empty
         )
     assert exc.value.code == PROBE_UNREADABLE
+
+
+def test_a_row_behind_a_dead_exporter_is_skipped_not_down():
+    up = [{"metric": {"job": "node", "instance": "daniel-box"}, "value": [NOW, "0"]}]
+    suppressed = monitor_checks.suppressed_checks(up, {"node": {"host_packages"}})
+    text, code = _report(_check("host_packages", 0), suppressed=suppressed)
+    assert code == PROBE_OK
+    assert _line(text, "host_packages").endswith("skipped: exporter node down")
+
+
+def test_an_unread_up_leaves_the_row_down_and_says_why():
+    text, code = _report(_check("host_packages", 0), suppressed="curl: timed out")
+    assert code == PROBE_FAILED
+    assert (
+        "exporter state unread, so no row reads skipped by one: curl: timed out" in text
+    )
+    assert _line(text, "host_packages").endswith("down")
+
+
+def test_the_real_exporter_map_names_host_packages_under_node():
+    source = monitor_checks.CHECK_MODULE.read_text()
+    assert "host_packages" in monitor_checks.exporter_dependent(source)["node"]
