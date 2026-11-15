@@ -36,7 +36,8 @@ from lib.repo_paths import REPO
 # 14982 once #8632 landed on top of that.
 # 14981 once #8839 shortened the never-stub list's reason to one line.
 # 14971 once #8842 retired `become_password` and the never-stub list with it.
-LINE_CEILING = 14971
+# 15025 once #8883 gave the tools spec `tools_on`, which holds the arm64 build to the Pi's tools.
+LINE_CEILING = 15025
 # Exit 6's command, `git ls-files 'scripts/renderer/*.py' | grep -v /tests/ | xargs cat | wc -l`.
 PATHSPEC = "scripts/renderer/*.py"
 

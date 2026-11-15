@@ -391,6 +391,10 @@ tests:
     input_series:
       - series: 'node_textfile_scrape_error{instance="daniel-box", job="node", origin="daniel-box"}'
         values: '0x2 1x20'
+      - series: 'node_textfile_mtime_seconds{file="disk-health.prom", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x22'
+      - series: 'node_textfile_mtime_seconds{file="bad.prom", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x2 _x20'
       - series: 'node_textfile_scrape_error{instance="daniel-server", job="node", origin="daniel-server"}'
         values: '0x22'
     alert_rule_test:
@@ -408,12 +412,16 @@ tests:
               service: daniel-box
               shadow: "true"
             exp_annotations:
-              summary: node_exporter on daniel-box cannot read a textfile.
+              summary: >-
+                node_exporter on daniel-box cannot read a textfile, candidates: bad.prom.
               description: >-
-                node_exporter's textfile collector on daniel-box has failed for 10 minutes, so
-                a file in /var/lib/node-exporter-textfile is malformed or unreadable, and every
-                series in it is gone. Read node_textfile_mtime_seconds for the files it still
-                sees, and the node-exporter pod's log.
+                node_exporter's textfile collector on daniel-box has failed for 10 minutes, so a
+                file in /var/lib/node-exporter-textfile is malformed or unreadable, and every
+                series in it is gone.
+                Textfiles seen in the last 7 days and missing now (a rejected file drops out of
+                node_textfile_mtime_seconds, but so does a file a retired check stopped writing): bad.prom.
+                A file that was malformed from its first write never reported an mtime, so the
+                list can omit it. Confirm in the node-exporter pod's log.
 
   # The same failure on daniel-server fires its own rule, with daniel-server as `service`.
   - interval: 1m
@@ -434,12 +442,16 @@ tests:
               service: daniel-server
               shadow: "true"
             exp_annotations:
-              summary: node_exporter on daniel-server cannot read a textfile.
+              summary: >-
+                node_exporter on daniel-server cannot read a textfile, candidates: none known.
               description: >-
-                node_exporter's textfile collector on daniel-server has failed for 10 minutes,
-                so a file in /var/lib/node-exporter-textfile is malformed or unreadable, and
-                every series in it is gone. Read node_textfile_mtime_seconds for the files it
-                still sees, and the node-exporter pod's log.
+                node_exporter's textfile collector on daniel-server has failed for 10 minutes, so a
+                file in /var/lib/node-exporter-textfile is malformed or unreadable, and every
+                series in it is gone.
+                Textfiles seen in the last 7 days and missing now (a rejected file drops out of
+                node_textfile_mtime_seconds, but so does a file a retired check stopped writing): none known.
+                A file that was malformed from its first write never reported an mtime, so the
+                list can omit it. Confirm in the node-exporter pod's log.
 
   # daniel-pi's reconcile reads 0 from minute 0, so the host holds. HostReconcileFailed is
   # pending at 14 minutes and fires for daniel-pi alone at 16, past its 15-minute hold.
@@ -1307,12 +1319,16 @@ tests:
               service: daniel-pi
               shadow: "true"
             exp_annotations:
-              summary: node_exporter on daniel-pi cannot read a textfile.
+              summary: >-
+                node_exporter on daniel-pi cannot read a textfile, candidates: none known.
               description: >-
                 node_exporter's textfile collector on daniel-pi has failed for 10 minutes, so a
                 file in /var/lib/node-exporter-textfile is malformed or unreadable, and every
-                series in it is gone. Read node_textfile_mtime_seconds for the files it still
-                sees, and `journalctl -u node_exporter` on daniel-pi.
+                series in it is gone.
+                Textfiles seen in the last 7 days and missing now (a rejected file drops out of
+                node_textfile_mtime_seconds, but so does a file a retired check stopped writing): none known.
+                A file that was malformed from its first write never reported an mtime, so the
+                list can omit it. Confirm in `journalctl -u node_exporter` on daniel-pi.
 
   # The Pi's compose run reads 1, then 0 from minute 3. ComposeUpFailed fires with no hold.
   - interval: 1m

@@ -9,6 +9,9 @@ Three reads, in order:
    loki-homelab ruler sends its alerts to Alertmanager directly, so `ALERTS` never carries
    them (`HostOutOfMemoryKill`, `LokiPiLogsSilent`).
 3. Alertmanager's active silences (`alertmanager_api.report`).
+
+`--checks [NAME]` reads each monitor-bridge check's verdict instead (`monitor_checks`): the
+red checks that fire nothing, because a streak holds them, a gate skips them or no rule pages.
 """
 
 from collections import defaultdict
@@ -23,7 +26,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 # `core.<name>` for anything the tests monkeypatch -- binding those into this module's
 # globals with a `from core import ...` would take a snapshot the patch never reaches.
-from diagnostics.probe_lib import alertmanager_api, core
+from diagnostics.probe_lib import alertmanager_api, core, monitor_checks
 from diagnostics.probe_lib.core import prom_endpoint, prom_query_url
 from lib.exit_codes import PROBE_UNREADABLE
 
@@ -31,6 +34,13 @@ ALERTS_QUERY = 'ALERTS{alertstate="firing"}'
 WATCHDOG = "Watchdog"
 # The severities that make `monitors` exit 1. `info` alerts are listed as notes.
 PAGING_SEVERITIES = ("critical", "warning")
+
+MONITORS_HELP = (
+    "firing alerts (ALERTS, Alertmanager) by severity and service, and active silences; "
+    "--checks prints each monitor-bridge check's value, note and last-run age instead",
+    "no paging alert fires (--checks: no check is down or stale)",
+    "a critical or warning alert fires (--checks: a check is down or stale)",
+)
 
 
 def _result(data, source):
@@ -134,6 +144,8 @@ def run_monitors(ns):
 
     Exit 0 = no paging alert fires, and every source was read.
     """
+    if ns.checks is not None:
+        return monitor_checks.print_checks(ns)
     base, pin = prom_endpoint()
     alerts_url = prom_query_url(base, ALERTS_QUERY)
     am_base, am_pin = alertmanager_api.endpoint()
@@ -148,3 +160,16 @@ def run_monitors(ns):
     out = _sys.stderr if code == PROBE_UNREADABLE else _sys.stdout
     print("\n".join(lines), file=out)
     return alertmanager_api.report(code)
+
+
+def add_parser(sub, verdict_help) -> None:
+    """Add `monitors` to probe.py's subparsers; it lives here while cli_parser.py sits at its cap."""
+    mp = sub.add_parser("monitors", **verdict_help(*MONITORS_HELP))
+    mp.add_argument(
+        "--checks",
+        nargs="?",
+        const="",
+        metavar="NAME",
+        help="each monitor-bridge check's verdict instead of the alerts; NAME narrows to the "
+        "checks whose name contains it",
+    )

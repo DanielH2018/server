@@ -2046,7 +2046,7 @@ jobs:
             test "$(dpkg --print-architecture)" = arm64
             DEBIAN_FRONTEND=noninteractive apt-get install -y /debs/homelab-tools_*_arm64.deb
             dpkg-query -W homelab-tools:arm64
-            for tool in sops chezmoi; do
+            for tool in sops node-exporter; do
               /usr/lib/homelab/bin/$tool --version
               if command -v "$tool"; then echo "$tool is on PATH" >&2; exit 1; fi
             done

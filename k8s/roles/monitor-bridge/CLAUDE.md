@@ -126,6 +126,9 @@ one pass with
 (**operator-only**); `--check <name>` runs a gated check without its gate, which reads as up
 (`k8s/roles/monitor-bridge/tests/test_check_cli.py::test_check_flag_names_one_row_without_its_gate`).
 A session's `kubectl` cannot exec, so it reads the live pass's result with `probe.py monitors`.
+`probe.py monitors --checks [name]` prints each row's value, last-run age and note: a held
+streak, a skip behind a down gate, staleness, or a missing rule
+(`scripts/diagnostics/probe_lib/monitor_checks.py:report`).
 
 ## Traps
 

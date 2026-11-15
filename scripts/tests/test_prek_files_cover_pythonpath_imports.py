@@ -51,10 +51,19 @@ def test_the_static_ratchet_hook_covers_the_row_table_its_entry_imports():
 @pytest.mark.parametrize(
     ("hook_id", "member"),
     [
-        ("static-ratchet-tests-lander", "tests/_setup_render.py"),
+        (
+            "static-ratchet-tests-lander",
+            "scripts/renderer/template_filters/service_tier.py",
+        ),
         ("static-ratchet-tests-checksum", "scripts/validate/k8s_manifests.py"),
-        ("static-ratchet-tests-shell", "tests/_shell_render.py"),
-        ("static-ratchet-tests-renovate", "tests/_k8s_render.py"),
+        (
+            "static-ratchet-tests-shell",
+            "scripts/renderer/template_filters/scrape_jobs.py",
+        ),
+        (
+            "static-ratchet-tests-renovate",
+            "scripts/renderer/template_filters/toposort.py",
+        ),
     ],
 )
 def test_a_hook_gate_covers_the_modules_its_entry_reaches_through_pythonpath(
