@@ -66,8 +66,8 @@ files or deploy. You are read-only.
 
 - **`scripts/diagnostics/probe.py`** — read-only live queries (already allow-listed). It resolves the
   ingress address from `k3s_metallb_ingress_vip`, so prefer it over hand-written curls
-  (note its `health <svc>` subcommand still shells `docker inspect`, so that one applies to
-  Pi services only):
+  (its `health <svc>` subcommand is k8s-native and reaches the Pi's Docker containers only under
+  `--docker`, per `scripts/diagnostics/probe_lib/health.py:run_health`):
   - `uv run python scripts/diagnostics/probe.py targets` — Prometheus scrape-target up/down (fast health map)
   - `uv run python scripts/diagnostics/probe.py metric '<promql>'` — e.g. `probe_success`, `up`
   - `uv run python scripts/diagnostics/probe.py loki-query '<logql>'` — pull recent logs for a service
