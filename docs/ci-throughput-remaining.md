@@ -48,9 +48,11 @@ Each needs traffic no session controls, so watch for it and record the first run
 ### 2. B4: every landing through the queue
 
 D10 in [CI throughput](ci-throughput.md) answers the three questions that came first and
-names the five pull requests, in order. The first, a stale ready PR rejoining the line
-(`stale_base.rejoin_line`), is the one that edits this page to say so. The rest delete the
-update after a green run, the pacing, the per-host count and `LAND_QUEUE`, one each.
+names the five pull requests, in order. Four have landed: a stale ready PR rejoins the line
+(`stale_base.rejoin_line`, #8818), and the update after a green run (#8820), the pacing
+(#8821) and the switch that turned the turn off are deleted. The fourth, one count of 6 taken
+after the merge, waits for the operator to rule which of the five conditions that lower the
+limit still apply once the count is taken after the merge.
 
 B4 edits the merge wait in `land_lib/merge.py`, which also holds the draft-skip grace,
 the re-trigger and the rate-limit backoff. Cut it into PRs that each delete one thing.

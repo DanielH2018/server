@@ -44,8 +44,8 @@ to rebase onto origin/master, push and get the new head approved.
 daniel-box and daniel-server, holds the turn. A green PR asks for it and merges; the others
 print `waiting for the landing turn` once and stand in line. The wait is not a fault and
 spends no GitHub calls. A PR opened as a draft gets its one CI run inside its turn, on the
-master of that moment, so master's run for the merge skips its jobs. `LAND_QUEUE=0` turns the turn off for one
-landing; `land_lib/turn.py` owns the rule.
+master of that moment, so master's run for the merge skips its jobs. `land_lib/turn.py` owns
+the rule.
 
 **A draft that waits in line may be merged by the landing ahead of it.** The landing that
 holds the turn tests the drafts standing in line with its own in one CI run and merges them

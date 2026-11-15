@@ -26,8 +26,11 @@ batch of its own (`batch.py`).
 The turn is not a safety gate. A landing that cannot take it within `merge_timeout`, or
 cannot reach `TURN_HOST`, goes on without it and merges as a landing without the turn does.
 
-Every landing that merges its PR directly takes the turn. `LAND_QUEUE=0` turns it off, and a
-landing run that way can still move master under the holder.
+Every landing that merges its PR directly takes the turn. A merge made outside `land.sh` can
+still move master under the holder.
+
+`LAND_TURN_DIR` moves the lock and the line into a directory on this host, whatever the host,
+so a test that runs a whole landing never takes the real turn.
 """
 
 import contextlib
@@ -54,6 +57,7 @@ LOCK = _Path("/run/lock/homelab-land-turn.lock")
 
 # The host whose file is the turn. The lander units run there.
 TURN_HOST = "daniel-box"
+TURN_DIR_ENV = "LAND_TURN_DIR"
 # How long a landing on another host waits for `TURN_HOST` to give up the lock it released.
 _SSH_EXIT_S = 10
 
@@ -174,11 +178,17 @@ def _is_turn_host(hostname: str) -> bool:
 
 def _taker(hostname: str) -> Callable[[], Callable[[], None] | None]:
     """The call that takes the turn from the host named `hostname`."""
+    moved = os.environ.get(TURN_DIR_ENV)
+    if moved:
+        return lambda: try_take(_Path(moved) / LOCK.name)
     return try_take if _is_turn_host(hostname) else try_take_over_ssh
 
 
 def _line(hostname: str, directory: _Path = line.DIR) -> line.Line:
     """The line for the turn, as the host named `hostname` reaches it."""
+    moved = os.environ.get(TURN_DIR_ENV)
+    if moved:
+        return line.here(_Path(moved) / directory.name)
     if _is_turn_host(hostname):
         return line.here(directory)
     return line.over_ssh(TURN_HOST, directory)
@@ -258,11 +268,10 @@ def held(ln: Landing) -> Generator[Callable[[str], tuple[bool, int]]]:
         run, which stands in the line during the wait, or "" for any other head. It waits for
         up to `merge_timeout` and returns whether this landing holds the turn and the seconds
         that call waited. It asks once: a later call answers at once with what the first one
-        got. It never asks for a landing with `LAND_QUEUE=0` or for one that merges nothing
-        itself.
+        got.
     """
     release: Callable[[], None] | None = None
-    asked = not (ln.opts.queue and ln.direct_merge_subject)
+    asked = False
 
     def take(draft: str) -> tuple[bool, int]:
         nonlocal release, asked

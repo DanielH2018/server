@@ -43,8 +43,6 @@ DEADLINE_ENV = "LAND_DEADLINE"
 # so a landing that merges into the window waits out the deferral (#5457). A lander sets it
 # only when its caller's kill leaves that much room past LAND_DEADLINE.
 WINDOW_GRACE_ENV = "LAND_WINDOW_GRACE"
-# A landing takes the landing turn before it merges (`turn.py`); `0` turns the turn off.
-QUEUE_ENV = "LAND_QUEUE"
 # A landing that takes the turn with a draft tests the drafts in the line with its own
 # (`batch.py`); `0` turns that off.
 BATCH_ENV = "LAND_BATCH"
@@ -63,7 +61,6 @@ ENV_KNOBS = (
     HANDOFF_ENV,
     DEADLINE_ENV,
     WINDOW_GRACE_ENV,
-    QUEUE_ENV,
     BATCH_ENV,
 )
 
@@ -126,8 +123,6 @@ class Options:
     # should look at why.
     merge_timeout: int = CI_TIMEOUT_S
     merge_poll: int = MERGE_POLL_S
-    # `LAND_QUEUE`: take the landing turn for the merge wait.
-    queue: bool = True
     # `LAND_BATCH`: form a landing batch from the drafts in the line for the turn.
     batch: bool = True
     primary: Path = PRIMARY_CHECKOUT
@@ -253,7 +248,6 @@ def parse_args(argv: list[str] | None, description: str) -> Options:
         window_grace=int(os.environ.get(WINDOW_GRACE_ENV) or 0),
         verdict_file=ns.verdict_file,
         merge_poll=_merge_poll_from_env(),
-        queue=os.environ.get(QUEUE_ENV) != "0",
         batch=os.environ.get(BATCH_ENV) != "0",
         primary=_primary_from_env(),
         detach=ns.detach,

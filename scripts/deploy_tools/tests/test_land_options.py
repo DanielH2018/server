@@ -135,9 +135,3 @@ def test_a_landing_forms_a_batch_unless_land_batch_is_0(monkeypatch, value, batc
     if value is not None:
         monkeypatch.setenv("LAND_BATCH", value)
     assert options.parse_args(["--pr", "7"], "d").batch is batch
-
-
-@pytest.mark.parametrize(("value", "queue"), [("1", True), ("0", False)])
-def test_a_landing_takes_the_turn_unless_land_queue_is_0(monkeypatch, value, queue):
-    monkeypatch.setenv("LAND_QUEUE", value)
-    assert options.parse_args(["--pr", "7"], "d").queue is queue

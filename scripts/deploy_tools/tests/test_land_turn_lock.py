@@ -109,3 +109,18 @@ def test_a_landing_on_the_turn_host_keeps_the_line_itself(
 def test_a_landing_on_the_turn_host_locks_the_file_itself(hostname):
     # By value, not by effect: taking the turn here would lock the host's real file.
     assert turn._taker(hostname) is turn.try_take
+
+
+def test_a_moved_turn_dir_keeps_the_lock_and_the_line_on_this_host(
+    tmp_path, monkeypatch
+):
+    stubs = fake_bin(tmp_path / "bin", ssh="#!/usr/bin/env bash\nexit 255\n")
+    monkeypatch.setenv("PATH", path_with(stubs))
+    monkeypatch.setenv(turn.TURN_DIR_ENV, str(tmp_path / "turn"))
+    (tmp_path / "turn").mkdir()
+    give_up = turn._taker("daniel-server")()
+    assert give_up is not None
+    assert turn.try_take(tmp_path / "turn" / turn.LOCK.name) is None
+    give_up()
+    turn._line("daniel-server")("join", "7", HEAD)
+    assert (tmp_path / "turn" / line.DIR.name / "7").read_text().split() == [HEAD]
