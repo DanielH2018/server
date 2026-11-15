@@ -22,6 +22,15 @@ Each architecture block carries its own `version` and annotation, because the Re
 moves one version and one digest per match. A tool's versions must agree across architectures.
 `{version}` in a `url` or a `member` is the pin as written (`v3.13.3`); `{bare}` is the pin without its `v`.
 
+Every tool pins every architecture, and the optional `tools_on:` key beside `tools:` narrows what
+one architecture's package ships::
+
+    tools_on:
+      arm64: [node-exporter, sops]
+
+An architecture `tools_on` does not name ships every tool. The pins of a tool an architecture
+does not ship stay in the spec, because `hosts/bootstrap-host.sh` embeds two of them.
+
 A binary installs at `BIN_DIR/<tool>`. The spec cannot name another path, so a tool never lands
 on `PATH`. The renderer writes one tree per architecture, `<package>/<arch>/`, each with a
 literal `arch:` in its `nfpm.yaml`, so nfpm runs once per architecture.
@@ -79,13 +88,22 @@ def tool_path(tool: str) -> str:
     return f"{BIN_DIR}/{tool}"
 
 
-def parse_tools(raw: object, where: str) -> dict[str, dict[str, Pin]]:
+def parse_tools(spec: dict, where: str) -> dict[str, dict[str, Pin]]:
     """The `tools:` mapping of the spec at `where`, validated, as `{tool: {arch: Pin}}`.
+
+    Args:
+        spec: The package spec, which holds `tools:` and may hold `tools_on:`.
+        where: The spec's path, for a refusal.
+
+    Returns:
+        Each tool with the pins of the architectures whose package ships it.
 
     Raises:
         RenderRefused: A name is not plain, an architecture is missing or unknown, a version,
-            digest, URL or member is malformed, or one tool's versions differ by architecture.
+            digest, URL or member is malformed, one tool's versions differ by architecture, or
+            `tools_on` is malformed, names an undeclared tool or leaves a tool on no architecture.
     """
+    raw = spec.get("tools")
     if not isinstance(raw, dict) or not raw:
         raise RenderRefused(f"{where}: tools is not a non-empty mapping")
     tools: dict[str, dict[str, Pin]] = {}
@@ -107,7 +125,37 @@ def parse_tools(raw: object, where: str) -> dict[str, dict[str, Pin]]:
             raise RenderRefused(
                 f"{where}: tool {tool} pins different versions per architecture"
             )
+    shipped = _shipped(spec.get("tools_on"), set(tools), where)
+    for tool, pins in tools.items():
+        tools[tool] = {arch: pin for arch, pin in pins.items() if tool in shipped[arch]}
+        if not tools[tool]:
+            raise RenderRefused(
+                f"{where}: tools_on ships tool {tool} on no architecture"
+            )
     return tools
+
+
+def _shipped(tools_on: object, declared: set[str], where: str) -> dict[str, set[str]]:
+    """The tools each architecture's package ships: all of `declared` unless `tools_on` narrows it."""
+    if tools_on is None:
+        tools_on = {}
+    if not isinstance(tools_on, dict) or set(tools_on) - set(ARCHES):
+        raise RenderRefused(
+            f"{where}: tools_on is not a mapping of {list(ARCHES)} to tool names"
+        )
+    shipped = {arch: declared for arch in ARCHES}
+    for arch, names in tools_on.items():
+        if not isinstance(names, list) or not names or len(set(names)) != len(names):
+            raise RenderRefused(
+                f"{where}: tools_on {arch} is not a non-empty list of distinct tool names"
+            )
+        if set(names) - declared:
+            raise RenderRefused(
+                f"{where}: tools_on {arch} names {sorted(set(names) - declared)}, "
+                "which tools does not pin"
+            )
+        shipped[arch] = set(names)
+    return shipped
 
 
 def _pin(where: str, entry: object) -> Pin:
