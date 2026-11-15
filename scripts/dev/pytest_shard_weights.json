@@ -1209,6 +1209,7 @@
  "tests/repo/test_ci_k3s_download_leg_does_not_gate.py": 0.01,
  "tests/repo/test_ci_lint_group.py": 0.01,
  "tests/repo/test_ci_master_runs_are_not_evictable.py": 0.0,
+ "tests/repo/test_ci_pytest_apt_tools_cache.py": 0.0,
  "tests/repo/test_ci_pytest_job_fetch_depth.py": 0.0,
  "tests/repo/test_ci_pytest_rewrite_cache.py": 0.0,
  "tests/repo/test_ci_release_downloads_are_cached.py": 0.0,
