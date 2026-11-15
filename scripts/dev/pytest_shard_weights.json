@@ -1256,6 +1256,7 @@
  "tests/repo/test_module_length_ratchet.py": 5.35,
  "tests/repo/test_named_files.py": 0.45,
  "tests/repo/test_phase_timing.py": 8.91,
+ "tests/repo/test_phase_timing_under_session_env.py": 12.41,
  "tests/repo/test_pre_rename_paths_census.py": 0.26,
  "tests/repo/test_prek_hooks_run_only_at_commit.py": 0.0,
  "tests/repo/test_prek_uv_entries_are_frozen.py": 0.0,
