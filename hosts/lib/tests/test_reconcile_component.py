@@ -36,6 +36,7 @@ SERVICE = "/usr/lib/systemd/system/homelab-reconcile.service"
 METRICS_SERVICE = "/usr/lib/systemd/system/homelab-reconcile-metrics.service"
 WAIT_SERVICE = "/usr/lib/systemd/system/homelab-reconcile-wait.service"
 MANIFEST = "/usr/lib/homelab/manifest.json"
+NEEDRESTART = "/etc/needrestart/conf.d/homelab-units.conf"
 
 
 @pytest.fixture(scope="module")
@@ -54,7 +55,15 @@ def test_the_library_glob_finds_its_members():
 def test_the_component_renders_the_script_its_library_and_its_unit(package):
     modules = [f"{MODULES}/{path.name}" for path in library_files()]
     assert sorted(package.files) == sorted(
-        [SCRIPT, *modules, SERVICE, METRICS_SERVICE, WAIT_SERVICE, MANIFEST]
+        [
+            SCRIPT,
+            *modules,
+            SERVICE,
+            METRICS_SERVICE,
+            WAIT_SERVICE,
+            MANIFEST,
+            NEEDRESTART,
+        ]
     )
     assert package.files[SCRIPT] == (RECONCILE.read_bytes(), 0o755)
     for path in library_files():
