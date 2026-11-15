@@ -536,6 +536,12 @@ $KUBECTL -n "$PVC_NS" run "${DRILL}-probe" --restart=Never \
   --overrides="$OVERRIDES" >/dev/null 2>&1 || fail "could not create the probe pod"
 
 # `probe=<n>s` in the verdict line is the time the bound below limits, image pull included.
+# DECIDED: the probe bound stays 300 s (#8567). The largest restored content on record is 612 MB
+# (karakeep-data, 2026-10-21), which bounds every database a candidate holds. Longhorn reads at
+# 40-57 MB/s (docs/reference/decisions.md) and integrity_check runs at 43-49 MB/s of CPU, so a
+# cold read plus the check is ~20-25 MB/s: ~15 s pod start, ~15 s count, ~30 s check, ~30 s
+# fallback copy, ~90 s in all. The bound does NOT cover the cap's worst case, one 4 GiB database
+# at ~300-430 s; raise it with longhorn_restore_drill_deadline_seconds when `probe=` nears 150 s.
 PROBE_STARTED=$(date +%s)
 PROBE_DEADLINE=$(( $(date +%s) + 300 ))
 while :; do
