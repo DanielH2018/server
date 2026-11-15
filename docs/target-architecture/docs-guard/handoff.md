@@ -52,10 +52,17 @@ Take the items in this order. Each names the effort it needs from an Opus sessio
    row as a false sentence or not. G9 measured 0.29 unedited rows per content citation,
    and 6% of them left a false sentence. The sweep's citations can be measured the same
    way from 2026-12-15.
-6. **G7 step 5.** High effort, and it needs the operator's ruling first. The step moves
-   the replay into `fact_status.py report`, measures a second window, and promotes a
-   removed-name class to an error only when fewer than one graded row in five is a
-   false alarm. No class was under that bar on 2026-11-14.
+6. **G7 step 5.** High effort. The operator ruled on 2026-11-15, and
+   [G7's *Operator ruling*](g7-removed-names.md) holds the conditions. Only the comment
+   class is a candidate to block; the live-doc class stays advice. Move the replay into
+   `fact_status.py report`, measure 2026-11-15 to 2026-12-14, and have a session other
+   than the one that built the replay grade at least 50 comment rows. Promote the class
+   only if fewer than one row in five is a false alarm; otherwise close the step with both
+   classes as advice. Take it in the same session as item 5, from 2026-12-15.
+7. **The `ansible/` leftovers in comments.** Low effort, any time, independent of item 6.
+   The advice on master listed 53 removed names in 74 places, and 43 of the names are
+   `ansible/` paths the tree rename left in comments. Run `fact_status.py mv` once per
+   moved path, with `--dry-run` first.
 
 Two things are deliberately not on this list. ADR-0031 defers an outbox for memories
 written on a replica host until refused writes are counted. Two directive sections cite
@@ -65,7 +72,8 @@ in `.claude/rules/python-layout.md`, and "Never print a secret value" in
 
 ## Decisions that stay with the operator
 
-- Whether any removed-name class blocks a commit (G7 step 5).
+- What the second window's grade means, if it lands near the bar. The ruling on G7 step
+  5 sets the bar at 20% and names what happens on either side of it.
 - What the 2026-12-14 number means for the citations the sweep added.
 - Whether `.claude/rules/docker.md` should allow named volumes again. #8817 removed the
   allowance, because `hosts/lib/tests/_compose_tree.py:bind_problems` refuses every
