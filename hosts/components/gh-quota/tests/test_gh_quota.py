@@ -289,6 +289,21 @@ def test_a_sample_whose_procfs_cannot_be_read_stores_empty_process_facts(
     assert ledger.failures() == 0
 
 
+def test_a_comm_cut_inside_a_multibyte_character_does_not_fail_the_sample(
+    recording, tmp_path: Path
+):
+    ledger, _clock, _gh = recording
+    proc = tmp_path / "proc"
+    (proc / "self").mkdir(parents=True)
+    (proc / "self" / "stat").write_bytes(b"4242 (ab\xe2\x82) S 1 4242 0\n")
+    ledger = dataclasses.replace(ledger, proc=proc)
+
+    ledger.record(["pr", "list"])
+
+    assert _sampler_process_rows(ledger) == [(RESET, "graphql", "", "ab�")]
+    assert ledger.failures() == 0
+
+
 def test_a_caller_whose_gh_has_no_token_gets_a_ledger_named_by_uid(tmp_path: Path):
     ledger, _clock, gh = _ledger(tmp_path, "record", {})
     gh.logins.clear()

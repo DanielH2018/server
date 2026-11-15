@@ -318,13 +318,13 @@ class Ledger:
         empty when procfs cannot be read, so a sample never fails on it.
         """
         try:
-            cgroup = (self.proc / "self" / "cgroup").read_text().strip()
+            cgroup = (self.proc / "self" / "cgroup").read_text(errors="replace").strip()
         except OSError:
             cgroup = ""
         names, pid = [], "self"
         for _ in range(_ANCESTRY_MAX):
             try:
-                stat = (self.proc / pid / "stat").read_text()
+                stat = (self.proc / pid / "stat").read_text(errors="replace")
             except OSError:
                 break
             head, _, tail = stat.rpartition(")")
