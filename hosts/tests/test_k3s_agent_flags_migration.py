@@ -17,14 +17,13 @@ next start.
 """
 
 import functools
-import re
 
 from lib import yaml_fast
-from lib.repo_paths import K3S_HOST_CHECKS_DEFAULTS
 from renderer.renderer_lib import host as host_mode
 from test_k3s_server_flags_migration import (
     cli_flags,
     config_flags,
+    image_gc_problems,
     reserved_memory_problems,
 )
 
@@ -61,32 +60,6 @@ def test_a_flag_lost_in_the_move_is_detected():
     config = dict(rendered_config())
     del config["kubelet-arg"]
     assert config_flags(config) != cli_flags(LIVE_ARGS)
-
-
-def image_gc_problems(config: dict) -> list[str]:
-    """The kubelet's image-GC thresholds must sit below Longhorn's replica scheduling floor.
-
-    The image filesystem is the root volume Longhorn's disk shares, and
-    k3s-host-checks' `k3s_disk_max_pct` is that floor. GC that starts above it leaves every
-    superseded image on disk until Longhorn stops scheduling replicas (#8307). The kubelet
-    refuses to start when the low threshold is not below the high one.
-    """
-    match = re.search(
-        r"^k3s_disk_max_pct:\s*(\d+)\s*$", K3S_HOST_CHECKS_DEFAULTS.read_text(), re.M
-    )
-    assert match, "k3s-host-checks no longer declares k3s_disk_max_pct as a plain value"
-    floor = int(match.group(1))
-    args = dict(item.partition("=")[::2] for item in config.get("kubelet-arg", []))
-    high = args.get("image-gc-high-threshold")
-    low = args.get("image-gc-low-threshold")
-    if high is None or low is None:
-        return ["kubelet-arg lacks an image-gc-high/low-threshold pair"]
-    problems = []
-    if not int(high) < floor:
-        problems.append(f"image-gc-high-threshold {high} is not below {floor}")
-    if not int(low) < int(high):
-        problems.append(f"image-gc-low-threshold {low} is not below {high}")
-    return problems
 
 
 def test_the_agent_starts_image_gc_below_the_longhorn_floor():

@@ -89,7 +89,9 @@ otherwise.
 - `unresolved-atom`: a symbol, key, marker or test the tree does not hold.
 - `ambiguous-marker`: a marker prefix that matches more than one line. Cite more of its text.
 - `one-way-test` (warning): a cited test node whose body carries no `# fact: <doc>#<heading>`
-  for the citing section, so the support points one way.
+  for the citing section, so the support points one way. The other direction is a test, not
+  a lint rule: a `# fact:` comment whose doc or heading is gone fails
+  `tests/repo/test_fact_comments_resolve.py::test_every_fact_comment_names_a_section_that_exists`.
 - `renovate-pin`: a YAML key whose value Renovate bumps. Every bump would move the atom, which
   puts a notice on every bump PR for a section whose prose the bump cannot change. Cite the
   file as a path atom and name the key in prose. The rule derives the managed keys from
@@ -158,7 +160,7 @@ continuation lines and nested bullets with it; a history paragraph ends at the n
   rules: it fires when a stale branch's merge or rebase brings `docs/facts.lock` back, and
   the fix is to take the deletion.
 - `fact_status.py report` reads git and the instructions log over `--days` (30 by default).
-  It ranks every section that cites nothing by how often its doc loaded, the most-read
+  The window ends now, or at 00:00 UTC on the date `--until` names. It ranks every section that cites nothing by how often its doc loaded, the most-read
   first. A section with no prose is not ranked: a title, a parent whose text sits under its
   subheadings, a rule's frontmatter, or a section that holds only a `generated_from` block
   (`scripts/lib/facts/citations.py:has_prose`). The counts come from
@@ -167,12 +169,17 @@ continuation lines and nested bullets with it; a history paragraph ends at the n
   section at 0 reads. The freshness reviewer
   (`.claude/agents/homelab-docs-freshness-reviewer.md`) reads this ranking. Next, the report
   ranks the docs delivered as a head by their `form=head` rows, which is the order a trim
-  should follow. Then it prints the instruction bytes each session loaded. Last, it replays
+  should follow. Then it prints the instruction bytes each session loaded. Next, it replays
   the notice once per first-parent commit in the window, with the parent as the base, and
-  counts the rows by kind (`scripts/lib/facts/replay.py:notice_replay`). `--json` prints the
+  counts the rows by kind (`scripts/lib/facts/replay.py:notice_replay`). Last, it replays the
+  comment class of the removed-name rule over the same commits
+  (`scripts/lib/facts/replay.py:comment_replay`), which calls the function the advice calls,
+  `scripts/lib/facts/removed.py:stale_comment_uses`. `--json` prints the
   same as one object. Its `notice_replay.content_notices` list holds each row whose atom is
   not a path atom, with its commit, section, atom and kind, and whether the commit edited the
-  section's prose: that list is what a grading of the notice's yield reads.
+  section's prose: that list is what a grading of the notice's yield reads. Its
+  `comment_replay.rows` list holds each comment row as its commit, the removed name and
+  `path:line` at that commit, which is what G7 step 5's grading reads.
   `scripts/lib/facts/report.py` says where each count comes from.
 - `fact_status.py notice --since <ref> [--head <rev>]` lists every section that cites an
   atom the diff moved. The diff runs from the merge base of `<ref>` and the head to the head,

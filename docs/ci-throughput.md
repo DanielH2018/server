@@ -136,9 +136,19 @@ Who opens a draft, and what lands it:
   pipeline wrote 245 batch records on daniel-server and 187 on daniel-box, so 57% of
   batches keep a run of their own.
 
-A later step, not planned: a daniel-server pipeline lands its own draft from daniel-server.
-That reverses the rule that only daniel-box lands, and a landing from daniel-server ends
-`deferred` when its health gate grades a container on daniel-pi (#8773).
+Option B, a later step: a daniel-server pipeline lands its own draft from daniel-server.
+The operator ruled on its two preconditions on 2026-11-15:
+
+- **A daniel-server fan-out pipeline may land its own PRs.** This lifts the rule that only
+  daniel-box's lander unit lands a fan-out PR. Sessions already landed from daniel-server.
+- **The health gate on daniel-server reads a daniel-pi container through daniel-box
+  (#8773).** daniel-pi accepts no key from daniel-server, so the gate's `docker inspect`
+  ended `gate-unreadable`. `probe_lib/core.py:pi_ssh_argv` runs the Pi's command through an
+  ssh session on daniel-box, the host the turn, the line and the slots already reach. Two
+  options were refused: giving daniel-server a key the Pi accepts widens what daniel-server
+  can reach, and handing a Pi landing to daniel-box keeps it on the slow path.
+
+Option B's own build waits for the measurement after B4 and a recommendation on it.
 
 The slices:
 

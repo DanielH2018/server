@@ -111,6 +111,7 @@ components:
   - sops
   - renovate-notify
   - renovate-agent
+  - t2-egress
   - fake-remux
   - github-checks
   - deploy-ui

@@ -18,6 +18,8 @@ files:
   - {src: units/homelab-reconcile.service, dst: /usr/lib/systemd/system/homelab-reconcile.service}
   - {src: units/homelab-reconcile-wait.service, dst: /usr/lib/systemd/system/homelab-reconcile-wait.service}
   - {src: units/homelab-reconcile-metrics.service, dst: /usr/lib/systemd/system/homelab-reconcile-metrics.service}
+  # Keeps needrestart off the units the manifest gives a policy and off template instances (#8854).
+  - {src: files/needrestart-homelab-units.conf, dst: /etc/needrestart/conf.d/homelab-units.conf}
 # The boot path needs this link: the metrics unit rewrites reconcile's textfile once per boot.
 enable:
   homelab-reconcile-metrics.service: multi-user.target
