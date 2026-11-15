@@ -25,6 +25,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import sqlite3
 import subprocess
 import sys
@@ -67,6 +68,9 @@ CREATE TABLE IF NOT EXISTS truth(
     window INTEGER, bucket TEXT, used INTEGER, quota INTEGER, sampled REAL,
     PRIMARY KEY (window, bucket));
 CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value REAL);
+CREATE TABLE IF NOT EXISTS sampler(
+    window INTEGER, bucket TEXT, session TEXT, gh TEXT, env_names TEXT,
+    PRIMARY KEY (window, bucket));
 """
 
 
@@ -291,6 +295,16 @@ class Ledger:
             if (stamp := line.partition(" ")[0]).isdigit() and int(stamp) >= oldest
         ]
 
+    def _caller(self) -> tuple[str, str, str]:
+        """The session key, the resolved `gh` path, and the caller's `GH_*`/`GITHUB_*` names.
+
+        Names only, never values: the values include tokens.
+        """
+        found = shutil.which(self.gh, path=self.env.get("PATH"))
+        gh = os.path.realpath(found) if found else f"unresolved:{self.gh}"
+        names = sorted(n for n in self.env if n.startswith(("GH_", "GITHUB_")))
+        return session_key(self.env), gh, ",".join(names)
+
     def _gh_env(self) -> dict[str, str]:
         return dict(self.env, GH_PROMPT_DISABLED="1", GH_NO_UPDATE_NOTIFIER="1")
 
@@ -366,6 +380,10 @@ class Ledger:
                         "used = excluded.used, quota = excluded.quota, sampled = excluded.sampled",
                         (seen["reset"], bucket, seen["used"], seen["limit"], now),
                     )
+                    db.execute(
+                        "INSERT OR REPLACE INTO sampler VALUES (?, ?, ?, ?, ?)",
+                        (seen["reset"], bucket, *self._caller()),
+                    )
         except (
             OSError,
             subprocess.SubprocessError,
@@ -376,6 +394,7 @@ class Ledger:
             self._failed(exc)
         db.execute("DELETE FROM spend WHERE window < ?", (now - KEEP_S,))
         db.execute("DELETE FROM truth WHERE window < ?", (now - KEEP_S,))
+        db.execute("DELETE FROM sampler WHERE window < ?", (now - KEEP_S,))
 
     def _failed(self, exc: Exception) -> None:
         log = self.root / f"failures.{os.getuid()}"
@@ -385,7 +404,10 @@ class Ledger:
                 log.write_text("".join(f"{line}\n" for line in kept))
             if not log.exists() or log.stat().st_size < _FAILURE_LOG_MAX:
                 with log.open("a") as out:
-                    out.write(f"{int(self.now())} {type(exc).__name__}: {exc}\n")
+                    out.write(
+                        f"{int(self.now())} {session_key(self.env)} "
+                        f"{type(exc).__name__}: {exc}\n"
+                    )
         except OSError:
             pass
 
