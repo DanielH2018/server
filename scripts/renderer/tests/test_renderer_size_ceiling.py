@@ -34,8 +34,9 @@ from lib.repo_paths import REPO
 # 15007 once #8632 moved the test-only `scan_template` wrapper into the tests.
 # 14997 once the games' replica counts left the render, and `replicas_var` with them (ADR-0033).
 # 14982 once #8632 landed on top of that.
-# 14981 once #8839 shortened `NEVER_STUB`'s reason to one line.
-LINE_CEILING = 14981
+# 14981 once #8839 shortened the never-stub list's reason to one line.
+# 14971 once #8842 retired `become_password` and the never-stub list with it.
+LINE_CEILING = 14971
 # Exit 6's command, `git ls-files 'scripts/renderer/*.py' | grep -v /tests/ | xargs cat | wc -l`.
 PATHSPEC = "scripts/renderer/*.py"
 
