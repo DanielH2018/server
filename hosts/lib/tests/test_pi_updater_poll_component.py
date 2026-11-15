@@ -128,12 +128,14 @@ class Pi:
         self.masked = root / "masked"
         self.active = root / "active"
         self.active.write_text("")
+        self.dpkg_calls = root / "dpkg.calls"
         self.script = write_exec(
             root / "homelab-updater-poll", package.files[SCRIPT][0].decode()
         )
         self.bin = fake_bin(
             root / "bin",
             hostname="echo daniel-pi\n",
+            dpkg=f'echo "$*" >>{self.dpkg_calls}\nexec /usr/bin/dpkg "$@"\n',
             curl=(
                 'out=""; url=""\n'
                 "while [ $# -gt 0 ]; do case $1 in -o) out=$2; shift ;; http*) url=$1 ;; esac; shift; done\n"
@@ -171,6 +173,12 @@ class Pi:
             env={**os.environ, "HOMELAB_ROOT": str(self.root)},
             stub_bin=self.bin,
         )
+
+    def compares(self) -> int:
+        if not self.dpkg_calls.exists():
+            return 0
+        calls = self.dpkg_calls.read_text().splitlines()
+        return sum(call.startswith("--compare-versions ") for call in calls)
 
     def starts(self) -> int:
         if not self.calls.exists():
@@ -265,3 +273,20 @@ def test_a_failed_fetch_exits_1_and_starts_nothing(pi):
     assert result.returncode == 1
     assert "could not fetch" in result.stderr
     assert pi.starts() == 0
+
+
+def test_many_published_versions_cost_a_handful_of_dpkg_compares(pi):
+    """On 2026-11-15 the index listed 134 daniel-pi versions, each one a dpkg fork (#8884)."""
+    pi.installed.write_text("0.149+g000000000095")
+    # The highest sits in the middle, so neither the first nor the last row wins.
+    pi.publish(*(f"0.{n}+g{n:012x}" for n in (*range(1, 75), 150, *range(75, 150))))
+    result = pi.poll()
+    assert result.returncode == 0, result.stderr
+    assert "0.150+g000000000096 is published" in result.stderr
+    assert pi.compares() <= 2
+
+
+def test_a_version_the_builder_count_cannot_rank_is_still_compared(pi):
+    pi.publish(OLDER, "1.0", NEWER)
+    assert pi.poll().returncode == 0
+    assert (pi.root / "var/lib/homelab-updater-poll/triggered").read_text() == "1.0\n"

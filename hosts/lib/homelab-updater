@@ -201,9 +201,19 @@ $(apt-helper cat-file "$list" | awk '
     CANDIDATE_UPDATER=$(highest "$UPDATER")
     CANDIDATE_HOST=$(highest "$HOST_PKG")
 }
+# The awk keeps only the builder's highest 0.<count>+g<sha> by count and passes any other shape
+# through, so dpkg compares a handful of versions however many the index lists (#8884).
 highest() {
     best=""
-    for v in $(printf '%s\n' "$stanzas" | awk -v p="$1" '$1 == p { print $2 }'); do
+    for v in $(printf '%s\n' "$stanzas" | awk -v p="$1" '
+        $1 != p { next }
+        $2 ~ /^0\.[0-9]+\+g[0-9a-f]+$/ {
+            split($2, f, /[.+]/)
+            if (top == "" || f[2] + 0 > count) { count = f[2] + 0; top = $2 }
+            next
+        }
+        { print $2 }
+        END { if (top != "") print top }'); do
         if [ -z "$best" ] || dpkg --compare-versions "$v" gt "$best"; then
             best=$v
         fi
