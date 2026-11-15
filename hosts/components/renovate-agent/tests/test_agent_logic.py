@@ -392,6 +392,23 @@ class TestSkipExitCodes:
         (rec,) = _records(tmp_path)
         assert rec["result"] == "skipped" and rec["reason"]
 
+    def test_a_skip_clears_what_a_killed_run_left_in_the_exchange(
+        self, tmp_path
+    ) -> None:
+        """A run killed after its session ends leaves its files; the next tick removes them."""
+        for name in (
+            "out/session.out",
+            "out/transcript.jsonl",
+            "requests/1-8828-land.json",
+        ):
+            left = tmp_path / "exchange" / name
+            left.parent.mkdir(parents=True, exist_ok=True)
+            left.write_text("left by a killed run")
+
+        assert renovate_agent.main(_tools(_FakeHost(prs=[])), self._cfg(tmp_path)) == 0
+
+        assert [p for p in (tmp_path / "exchange").rglob("*") if p.is_file()] == []
+
 
 class TestTranscript:
     """The session's home is a tmpfs, so the transcript the runner keeps is the only copy."""
