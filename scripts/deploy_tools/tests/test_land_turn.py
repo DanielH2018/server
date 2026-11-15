@@ -118,6 +118,24 @@ def test_a_draft_the_holder_of_the_turn_merged_stops_waiting_and_merges_nothing(
     assert "merged after 7s, 7s of it waiting for the landing turn" in out
 
 
+def test_a_draft_merged_by_the_holder_that_frees_the_turn_gives_it_straight_back(
+    landing, capsys
+):
+    ln, calls = turn_landing(
+        landing,
+        polls=(MERGED,),
+        start=(OPEN, MERGED),
+        turn=[False, True],
+        line=["", line.MERGED],
+    )
+    with turn.held(ln) as take_turn:
+        assert take_turn(HEAD)[0] is False
+    assert call_order(calls) == ["try_turn", "try_turn", "release_turn"]
+    out = capsys.readouterr().out
+    assert "the landing that holds the turn merged PR #999 with its own" in out
+    assert "took the landing turn" not in out
+
+
 def test_a_draft_told_to_land_alone_waits_on_for_the_turn_outside_the_line(landing):
     ln, calls = turn_landing(
         landing, turn=[False, False, False, True], line=["", line.ALONE]
