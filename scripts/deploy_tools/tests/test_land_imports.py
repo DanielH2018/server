@@ -16,6 +16,7 @@ MODULES = frozenset(
         "landing",
         "merge",
         "turn",
+        "slots",
         "line",
         "batch",
         "stale_base",
@@ -98,6 +99,8 @@ ALLOWED = {
     "stale_base": {"landing", "outcome", "gh_read", "policy", "pr_json"},
     # The one-landing-at-a-time lock the pipeline holds from the PR's CI run to its merge.
     "turn": {"landing", "outcome", "line"},
+    # The lock files that bound the landings polling GitHub after their merge, beside the turn.
+    "slots": {"landing", "outcome", "live_limit", "turn"},
     # The drafts whose landings wait for the turn, which its holder reads; boundaries only.
     "line": set(),
     # The drafts in the line, tested with the turn holder's own in one run, then merged.
@@ -112,7 +115,6 @@ ALLOWED = {
         "stale_base",
         "turn",
     },
-    # The master CI backlog read that holds --await-merge's direct merge (#5526).
     # The read that ends --await-merge on a check GitHub never finishes (#7996).
     "stuck_checks": {"landing", "gh_read"},
     # The pin gate runs inside --await-merge's direct merge, and `land.py --regate` alone.
@@ -180,6 +182,7 @@ ALLOWED = {
         "batch",
         "merge",
         "turn",
+        "slots",
         "classify",
         "closing_refs",
         "ci",

@@ -40,14 +40,14 @@ def test_the_lock_file_is_readable_by_every_user_whatever_the_umask(tmp_path):
 
 def test_a_landing_on_another_host_holds_the_same_lock_over_ssh(tmp_path, ssh_here):
     lock = tmp_path / "turn.lock"
-    give_up = turn.try_take_over_ssh(lock)
+    give_up = turn.try_take_over_ssh([lock])
     assert give_up is not None
     # The lock a landing on the turn host takes is the one the ssh session holds.
     assert turn.try_take(lock) is None
     give_up()
     here = turn.try_take(lock)
     assert here is not None
-    assert turn.try_take_over_ssh(lock) is None
+    assert turn.try_take_over_ssh([lock]) is None
     here()
 
 
@@ -58,7 +58,7 @@ def test_a_turn_host_that_does_not_answer_raises_oserror(tmp_path, monkeypatch):
     )
     monkeypatch.setenv("PATH", path_with(stubs))
     with pytest.raises(OSError, match="ssh daniel-box: ssh: no route"):
-        turn.try_take_over_ssh(tmp_path / "turn.lock")
+        turn.try_take_over_ssh([tmp_path / "turn.lock"])
 
 
 def test_a_landing_off_the_turn_host_reaches_the_line_over_ssh(tmp_path, monkeypatch):
@@ -68,6 +68,7 @@ def test_a_landing_off_the_turn_host_reaches_the_line_over_ssh(tmp_path, monkeyp
         ssh=f"#!/usr/bin/env bash\nprintf '%s\\n' \"$@\" > {seen}\n",
     )
     monkeypatch.setenv("PATH", path_with(stubs))
+    monkeypatch.delenv(turn.TURN_DIR_ENV)
     turn._line("daniel-server")("leave", "7")
     args = seen.read_text().splitlines()
     assert turn.TURN_HOST in args
@@ -101,13 +102,15 @@ def test_a_landing_on_the_turn_host_keeps_the_line_itself(
 ):
     stubs = fake_bin(tmp_path / "bin", ssh="#!/usr/bin/env bash\nexit 255\n")
     monkeypatch.setenv("PATH", path_with(stubs))
+    monkeypatch.delenv(turn.TURN_DIR_ENV)
     turn._line(hostname, tmp_path / "line")("join", "7", HEAD)
     assert (tmp_path / "line" / "7").read_text().split() == [HEAD]
 
 
 @pytest.mark.parametrize("hostname", [turn.TURN_HOST, f"{turn.TURN_HOST}.lan"])
-def test_a_landing_on_the_turn_host_locks_the_file_itself(hostname):
+def test_a_landing_on_the_turn_host_locks_the_file_itself(hostname, monkeypatch):
     # By value, not by effect: taking the turn here would lock the host's real file.
+    monkeypatch.delenv(turn.TURN_DIR_ENV)
     assert turn._taker(hostname) is turn.try_take
 
 

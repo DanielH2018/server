@@ -204,6 +204,18 @@ def slow_runs(runs: JsonValue, now: float) -> int:
     return count
 
 
+def low_quota(reads: Reads) -> str | None:
+    """Why the core quota lowers the limit to 1, or None while it does not or cannot be read."""
+    quota = _read(reads.core_quota)
+    if not quota:
+        return None
+    remaining, reset = quota
+    resets_in = reset - int(reads.now().timestamp())
+    if remaining < QUOTA_FLOOR and resets_in > QUOTA_RESET_FAR_S:
+        return f"the core quota has {remaining} calls left and resets in {resets_in // 60}m"
+    return None
+
+
 def pr_kind(pr: str, reads: Reads) -> str:
     """`kind` of `pr`'s file list; "" when the list cannot be read."""
     paths = _read(lambda: reads.pr_paths(pr))
@@ -220,17 +232,9 @@ def admission(pr: str, reads: Reads) -> Admission:
     pr_type = pr_kind(pr, reads)
     now = reads.now()
     drops = []
-    quota = _read(reads.core_quota)
-    if quota:
-        remaining, reset = quota
-        resets_in = reset - int(now.timestamp())
-        if remaining < QUOTA_FLOOR and resets_in > QUOTA_RESET_FAR_S:
-            drops.append(
-                (
-                    1,
-                    f"the core quota has {remaining} calls left and resets in {resets_in // 60}m",
-                )
-            )
+    low = low_quota(reads)
+    if low:
+        drops.append((1, low))
     runs = _read(reads.master_runs)
     slow = _read(lambda: slow_runs(runs, now.timestamp()))
     if slow is not None and slow >= SLOW_RUNS:

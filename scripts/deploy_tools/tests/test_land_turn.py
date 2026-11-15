@@ -327,6 +327,7 @@ def test_a_landing_off_the_turn_host_takes_the_turn_over_ssh(
         ssh=f"#!/usr/bin/env bash\nprintf '%s\\n' \"$@\" > {seen}\necho held\ncat >/dev/null\n",
     )
     monkeypatch.setenv("PATH", path_with(stubs))
+    monkeypatch.delenv(turn.TURN_DIR_ENV)
     ln, _ = turn_landing(landing)
     ln.tools = replace(ln.tools, try_turn=None, hostname=lambda: "daniel-server")
     land_in_turn(ln)

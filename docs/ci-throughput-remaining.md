@@ -50,9 +50,10 @@ Each needs traffic no session controls, so watch for it and record the first run
 D10 in [CI throughput](ci-throughput.md) answers the three questions that came first and
 names the five pull requests, in order. Four have landed: a stale ready PR rejoins the line
 (`stale_base.rejoin_line`, #8818), and the update after a green run (#8820), the pacing
-(#8821) and the switch that turned the turn off are deleted. The fourth, one count of 6 taken
-after the merge, waits for the operator to rule which of the five conditions that lower the
-limit still apply once the count is taken after the merge.
+(#8821) and the switch that turned the turn off are deleted. The fourth is in two parts. The
+6 landing slots, taken after the merge, landed first (`land_lib/slots.py`). The second
+deletes the per-host count from `--detach`, with the slow-runs drop. `DEPLOY_HOLD`, the
+reboot window and the serial rule stay as refusals before the merge, read from daniel-box.
 
 B4 edits the merge wait in `land_lib/merge.py`, which also holds the draft-skip grace,
 the re-trigger and the rate-limit backoff. Cut it into PRs that each delete one thing.

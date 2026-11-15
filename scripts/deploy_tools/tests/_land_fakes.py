@@ -151,6 +151,11 @@ class Fakes:
     # What each `tools.try_turn` call answers: True takes the landing turn, False finds another
     # landing holding it, and an exception is raised in place of an answer.
     turn: list[bool | Exception] = field(default_factory=lambda: [True])
+    # What each `tools.try_slot` call answers: True takes a landing slot, False finds every
+    # slot held, and an exception is raised in place of an answer.
+    slot: list[bool | Exception] = field(default_factory=lambda: [True])
+    # The core quota's `(remaining, reset epoch)` as `gh api rate_limit` answers it.
+    core_quota: tuple[int, int] = (5000, 0)
     # What each operation on the line for the turn answers (`tools.line`), one entry a call.
     # Only `join` and `stand` return theirs. An exception is raised in place of an answer.
     line: list[str | Exception] = field(default_factory=lambda: [""])
@@ -253,6 +258,9 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
             if isinstance(answer, Exception):
                 raise answer
             return answer
+        if args[:2] == ("api", "rate_limit"):
+            remaining, reset = f.core_quota
+            return {"remaining": remaining, "reset": reset}
         if args[:2] == ("api", "repos/{owner}/{repo}"):
             calls.append(("gh:repo", args, kwargs))
             return f.repo
@@ -405,6 +413,14 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
             raise answer
         return (lambda: calls.append(("release_turn", (), {}))) if answer else None
 
+    slot_seq = _seq(f.slot, calls, "try_slot")
+
+    def try_slot(cap):
+        answer = slot_seq(cap)
+        if isinstance(answer, Exception):
+            raise answer
+        return (lambda: calls.append(("release_slot", (), {}))) if answer else None
+
     def fresh_landing(primary, argv):
         calls.append(("fresh_landing", (primary, argv), {}))
         if f.fresh_fails:
@@ -421,6 +437,7 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
 
     tools = Tools(
         try_turn=try_turn,
+        try_slot=try_slot,
         line=line,
         gh_json=gh_json,
         gh=gh_run,

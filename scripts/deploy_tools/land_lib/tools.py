@@ -309,6 +309,10 @@ class Tools:
     # The line for the landing turn (`line.py`): one operation, by name. None means the line
     # on the turn's host, which `turn` reaches by this host's name.
     line: Callable[..., str] | None = None
+    # Takes one of the first `cap` landing slots without waiting: the call that frees it, or
+    # None while other landings hold them all. None here means the slots `slots` reaches by
+    # this host's name.
+    try_slot: Callable[[int], Callable[[], None] | None] | None = None
     wait_for_hosts: Callable[..., None] | None = None
 
 

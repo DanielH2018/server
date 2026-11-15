@@ -39,7 +39,7 @@ import inspect
 import os
 import shlex
 import subprocess
-from collections.abc import Callable, Generator
+from collections.abc import Callable, Generator, Sequence
 
 import sys as _sys
 from pathlib import Path as _Path
@@ -93,11 +93,43 @@ def _lock(path: str) -> int | None:
     return fd
 
 
-# What a landing on another host runs on `TURN_HOST`: take the lock, say which way it went,
-# and hold it until stdin closes, which is when the landing's ssh session ends.
+def lock_below(paths: list[str], cap: int) -> int | None:
+    """Lock one free file of `paths` while other landings hold fewer than `cap` of them.
+
+    It locks every free file before it counts, so no landing can take one in between, then
+    keeps the first and closes the rest. It names nothing but `os` and `_lock`, because
+    `_HOLD` runs this source on `TURN_HOST`.
+
+    Returns:
+        The locked descriptor, or None while other landings hold `cap` or more of the files.
+
+    Raises:
+        OSError: A file can be neither opened nor created.
+    """
+    fds = []
+    try:
+        for path in paths:
+            fd = _lock(path)
+            if fd is not None:
+                fds.append(fd)
+    except OSError:
+        for fd in fds:
+            os.close(fd)
+        raise
+    keep = fds[0] if fds and len(paths) - len(fds) < cap else None
+    for fd in fds:
+        if fd != keep:
+            os.close(fd)
+    return keep
+
+
+# What a landing on another host runs on `TURN_HOST`: lock one of its files while fewer than
+# its cap are held, say which way it went, and hold it until stdin closes, which is when the
+# landing's ssh session ends. The arguments are the cap, then the files.
 _HOLD = f"""import fcntl, os, sys
 {inspect.getsource(_lock)}
-fd = _lock(sys.argv[1])
+{inspect.getsource(lock_below)}
+fd = lock_below(sys.argv[2:], int(sys.argv[1]))
 print("busy" if fd is None else "held", flush=True)
 if fd is not None:
     sys.stdin.read()
@@ -118,17 +150,20 @@ def try_take(path: _Path = LOCK) -> Callable[[], None] | None:
 
 
 def try_take_over_ssh(
-    path: _Path = LOCK, host: str = TURN_HOST
+    paths: Sequence[_Path] = (LOCK,), cap: int = 1, host: str = TURN_HOST
 ) -> Callable[[], None] | None:
-    """Take the turn on `host` without waiting, through an ssh session that holds it.
+    """`lock_below(paths, cap)` on `host` without waiting, through an ssh session.
+
+    The session holds the lock until the call it returns closes it. The turn is one file
+    under a cap of 1; the landing slots (`slots.py`) are several.
 
     Returns:
-        The call that gives the turn up, or None while another landing holds it.
+        The call that gives the lock up, or None while other landings hold `cap` of the files.
 
     Raises:
-        OSError: `host` did not answer, or could not open the lock file.
+        OSError: `host` did not answer, or could not open a lock file.
     """
-    remote = f"python3 -c {shlex.quote(_HOLD)} {shlex.quote(str(path))}"
+    remote = shlex.join(["python3", "-c", _HOLD, str(cap), *map(str, paths)])
     session = subprocess.Popen(
         [
             "ssh",
@@ -171,7 +206,7 @@ def try_take_over_ssh(
     raise OSError(f"ssh {host}: {why[-1] if why else 'no answer'}")
 
 
-def _is_turn_host(hostname: str) -> bool:
+def is_turn_host(hostname: str) -> bool:
     """Whether `hostname`, qualified or not, names the host that keeps the turn."""
     return hostname.split(".")[0] == TURN_HOST
 
@@ -181,7 +216,7 @@ def _taker(hostname: str) -> Callable[[], Callable[[], None] | None]:
     moved = os.environ.get(TURN_DIR_ENV)
     if moved:
         return lambda: try_take(_Path(moved) / LOCK.name)
-    return try_take if _is_turn_host(hostname) else try_take_over_ssh
+    return try_take if is_turn_host(hostname) else try_take_over_ssh
 
 
 def _line(hostname: str, directory: _Path = line.DIR) -> line.Line:
@@ -189,7 +224,7 @@ def _line(hostname: str, directory: _Path = line.DIR) -> line.Line:
     moved = os.environ.get(TURN_DIR_ENV)
     if moved:
         return line.here(_Path(moved) / directory.name)
-    if _is_turn_host(hostname):
+    if is_turn_host(hostname):
         return line.here(directory)
     return line.over_ssh(TURN_HOST, directory)
 

@@ -26,6 +26,7 @@ and frozen; `plane` is a read-only property over it:
 | `classify.classify` | `merge_sha`, `opts.since`, `opts.primary` | `classification` (frozen: the plane note and its inputs), `resolved_tags`, `needs_diff` |
 | `classify.reaches_host_inputs` (in step 1) | `classification`, `needs_diff` | `host_candidate` |
 | `classify.shortcut_if_nothing` | `resolved_tags`, `plane`, `classification`, `needs_diff`, `host_candidate` | -- |
+| `slots.held` (from step 2 to the verdict) | `opts.merge_timeout`, `opts.merge_poll`, `ledger.t_start` | -- |
 | `ci.wait_master_ci` | `merge_sha`, `opts.ci_timeout` | `ledger.t_ci` |
 | `host_wait.host_targets` (in step 2, only when `host_candidate`) | `host_candidate`, `merge_sha`, `opts.primary` | `host_targets`, and `host_candidate` cleared when none differ |
 | `deploy.deploy_phase` | `resolved_tags`, `needs_diff`, `host_targets`, `classification`, `opts.since`, `merge_sha` | `resolved_tags`, `named_k8s_tags`, `flux_tags`, `suspended_tags`, `deployed_at`, `ledger.tags_label`, `ledger.cause`, `ledger.t_deploy` |
@@ -35,6 +36,7 @@ and frozen; `plane` is a read-only property over it:
 Every phase may end the landing by raising an `Outcome`, and the last one always does.
 """
 
+import contextlib
 from collections.abc import Callable
 
 import sys as _sys
@@ -50,6 +52,7 @@ from deploy_tools.land_lib import (
     health_verdict,
     host_wait,
     merge,
+    slots,
     turn,
 )
 from deploy_tools.land_lib.landing import Landing
@@ -107,6 +110,9 @@ _STEPS: tuple[tuple[str, Callable[[Landing], None]], ...] = (
 )
 
 STEP_COUNT = len(_STEPS)
+# The first step that holds a landing slot: every step from master CI on polls GitHub until the
+# verdict (`slots.py`).
+_SLOT_FROM_STEP = 2
 
 
 def run(ln: Landing) -> Outcome:
@@ -152,6 +158,9 @@ def _phases(ln: Landing) -> None:
             classify.refuse_stale_code_before_merge(ln)
         with turn.held(ln) as take_turn:
             batch.land(ln, take_turn)
-    for number, (label, phase) in enumerate(_STEPS, 1):
-        print(f"== {number}/{STEP_COUNT}  {label.format(pr=ln.opts.pr)}")
-        phase(ln)
+    with contextlib.ExitStack() as holding:
+        for number, (label, phase) in enumerate(_STEPS, 1):
+            print(f"== {number}/{STEP_COUNT}  {label.format(pr=ln.opts.pr)}")
+            if number == _SLOT_FROM_STEP:
+                holding.enter_context(slots.held(ln))
+            phase(ln)
