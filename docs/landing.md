@@ -73,6 +73,26 @@ the host unit turns the reaper off (`CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=
 `hosts/components/claude-code/templates/claude-rc.service.j2`), so only a session started some other
 way meets it.
 
+### The landing slots
+
+**At most 6 landings poll GitHub between their merge and their verdict.** After its step 1,
+each landing takes one of 6 landing slots and holds it through the master CI wait, the
+promotion, the hosts and the health gate. Before the merge the landing turn bounds the
+polling, because only its holder polls its PR's CI. A landing that step 1 ends takes no slot:
+a docs-only PR, or one whose grading moves to a fresh checkout. `land_lib/slots.py` owns
+the slots.
+
+- A slot is a lock file in `/run/lock` on daniel-box, locked the way the turn is. A landing
+  on daniel-server holds one over ssh. A landing that dies frees its slot.
+- The count drops to 1 while the core quota has fewer than 1500 calls left and resets more
+  than 15 minutes away.
+- When daniel-box does not answer, a landing takes one of 3 slots on its own host instead.
+- A landing waits for a slot only as long as its two merge budgets leave, which is what the
+  lander units' `LAND_DEADLINE` counts. Then it goes on without one. The log reads `took a
+  landing slot after <N>s`, or names why it went on without one.
+
+The limit on live landings below still applies to `--detach`, beside the slots.
+
 ### The limit on live landings
 
 **A group of landings runs at most 3 at once.** Every landing polls GitHub on one shared

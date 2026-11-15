@@ -163,7 +163,8 @@ The slices:
     1. The merge pacing is deleted. Master's run count moves to the limit on live landings.
        Landed in #8821.
     1. The limit on live landings becomes one count of 6 across both hosts, taken after the
-       merge. The turn is the slot before the merge.
+       merge. The turn is the slot before the merge. The 6 landing slots landed first
+       (`land_lib/slots.py`); the per-host limit's count is deleted next.
     1. The switch that turned the turn off for one landing is deleted, so every landing that
        merges directly takes the turn.
        `LAND_TURN_DIR` moves the turn's lock and line for a test that runs a whole landing.

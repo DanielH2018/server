@@ -16,7 +16,7 @@ import pytest
 from _helpers import stub_logger_on_path
 from _land_batch_fakes import GREEN, OWN, GitHub, head_of
 from _land_fakes import PRIMARY, Fakes, build_classifier, build_tools, make_landing
-from deploy_tools.land_lib import detach, line, live_limit, options, tools
+from deploy_tools.land_lib import detach, line, live_limit, options, tools, turn
 from lib.proc_testing import fake_bin, path_with
 
 # Read off the modules that consume them rather than retyped, so a knob added there is cleared
@@ -57,6 +57,12 @@ def _private_live_registry(tmp_path_factory, monkeypatch):
     count against the user's real `--detach` landings while it ran.
     """
     monkeypatch.setenv(detach.LIVE_DIR_ENV, str(tmp_path_factory.mktemp("live")))
+
+
+@pytest.fixture(autouse=True)
+def _private_turn_and_slots(tmp_path_factory, monkeypatch):
+    """Keep every landing a test starts off the host's real landing turn and landing slots."""
+    monkeypatch.setenv(turn.TURN_DIR_ENV, str(tmp_path_factory.mktemp("turn")))
 
 
 @pytest.fixture(autouse=True)
