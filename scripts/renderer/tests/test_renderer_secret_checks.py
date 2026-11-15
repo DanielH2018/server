@@ -174,10 +174,13 @@ def _target_doc(url: str) -> str:
 
 def test_a_kind_exempt_placeholder_in_its_kind_is_clean():
     # H1.7b: the bucket placeholder sits in a BackupTarget's URL and nowhere else.
-    assert (
-        _rules_1_to_4(_target_doc(f"s3://{sentinel('longhorn_b2_bucket')}@us/l")) == []
-    )
     assert _rules_1_to_4(_target_doc(f"s3://{sentinel('r2_bucket')}@auto/l")) == []
+
+
+def test_the_b2_bucket_placeholder_in_a_backup_target_is_flagged():
+    # B2's bucket is plaintext inventory, so its SOPS key has no exemption left.
+    found = _rules_1_to_4(_target_doc(f"s3://{sentinel('longhorn_b2_bucket')}@us/l"))
+    assert found == [(CONFINED_TO_SECRET, "BackupTarget/default", "longhorn_b2_bucket")]
 
 
 def test_a_kind_exempt_placeholder_outside_its_kind_is_flagged():
@@ -191,31 +194,6 @@ def test_another_key_in_a_backup_target_is_flagged():
     # The pair names the key as well as the kind: the exemption does not cover every key.
     found = _rules_1_to_4(_target_doc(f"s3://{sentinel(KEY)}@auto/longhorn"))
     assert found == [(CONFINED_TO_SECRET, "BackupTarget/default", KEY)]
-
-
-KNOWN = [*FIXTURE_KEYS, *SOPS_MANIFEST_KEYS]
-
-
-def _member_render(url: str):
-    tag = RenderedTag("longhorn-backup", {"t.yaml": _target_doc(url)})
-    return apply_placeholders([tag], FIXTURE_KEYS)
-
-
-def test_the_default_backup_target_member_is_found_when_armed():
-    url = f'"s3://{sentinel("longhorn_b2_bucket")}@us-east-005/longhorn"'
-    assert output_members(_member_render(url), KNOWN) == []
-
-
-def test_the_default_backup_target_member_is_found_when_disarmed():
-    # DECIDED in secret_checks.py: a disarm PR renders a blank URL, and its render must pass.
-    assert output_members(_member_render('""'), KNOWN) == []
-
-
-def test_the_default_backup_target_member_is_gone_when_the_url_names_no_placeholder():
-    (missing,) = output_members(
-        _member_render('"s3://hard-coded@us-east-005/longhorn"'), KNOWN
-    )
-    assert "${longhorn_b2_bucket} (or a blank backupTargetURL)" in missing
 
 
 def test_no_sops_manifest_key_is_clean():
