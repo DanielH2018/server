@@ -4,7 +4,9 @@ Run: uv run pytest hosts/components/renovate-agent/tests/test_renovate_session.p
 """
 
 import json
+import signal
 
+import host_lib
 import renovate_session
 from lib.proc_testing import write_exec
 
@@ -43,3 +45,22 @@ def test_the_session_writes_its_output_and_may_write_requests(tmp_path):
         "/usr/lib/homelab/renovate-agent/claude-settings.json"
     )
     assert (tmp_path / "argv.cwd").read_text().strip() == str(tmp_path)
+
+
+def test_the_transcript_survives_the_wall_clocks_sigint(tmp_path):
+    """systemd's stop signals the whole unit, the script included, and the copy still happens."""
+    home = tmp_path / "home"
+    transcript = home / ".claude" / "projects" / "-clone" / "s1.jsonl"
+    transcript.parent.mkdir(parents=True)
+    body = f'echo stopped > {transcript}\nkill -INT "$PPID"\nsleep 0.2\n'
+    config = _config(tmp_path, body)
+    with open(config, "a") as f:
+        f.write(f"SESSION_HOME={home}\n")
+    previous = signal.getsignal(signal.SIGINT)
+    try:
+        renovate_session.main(config)
+    finally:
+        signal.signal(signal.SIGINT, previous)
+
+    copied = tmp_path / "exchange" / "out" / host_lib.TRANSCRIPT_NAME
+    assert copied.read_text() == "stopped\n"

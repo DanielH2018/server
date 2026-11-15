@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import sys
 import time
 
@@ -44,6 +45,7 @@ from host_lib import (
     atomic_write,
     fresh_dir,
     install_excepthook,
+    keep_transcript,
     parse_env_file,
     read_untrusted,
     start_unit,
@@ -66,6 +68,10 @@ SESSION_OUTPUT_MAX = 1 << 20
 OPEN_PR_LIMIT = 200
 # One JSON line per tick under STATE_DIR, from agent_logic.run_record.
 RUNS_FILE = "runs.jsonl"
+# Each session's transcript, under STATE_DIR, named by the run's Unix time. The newest
+# TRANSCRIPTS_KEPT stay: a month of daily ticks.
+TRANSCRIPTS_DIR = "transcripts"
+TRANSCRIPTS_KEPT = 30
 # The unit the session runs in; polkit lets this process's user start it.
 SESSION_UNIT = "homelab-renovate-agent-session.service"
 
@@ -184,6 +190,24 @@ def landings(requests: list[Outcome]) -> list[str]:
     ]
 
 
+def keep_run_transcript(out: str, state_dir: str, ts: int) -> tuple[str, int | None]:
+    """Keep the session's transcript as `<STATE_DIR>/transcripts/<ts>.jsonl`; (path, size).
+
+    The path is "" when the session left none. The oldest transcripts past TRANSCRIPTS_KEPT go.
+    """
+    directory = os.path.join(state_dir, TRANSCRIPTS_DIR)
+    os.makedirs(directory, exist_ok=True)
+    path = os.path.join(directory, f"{ts}.jsonl")
+    size = keep_transcript(out, path, "renovate-agent")
+    kept = sorted(
+        (n for n in os.listdir(directory) if n.removesuffix(".jsonl").isdigit()),
+        key=lambda n: int(n.removesuffix(".jsonl")),
+    )
+    for name in kept[:-TRANSCRIPTS_KEPT]:
+        os.unlink(os.path.join(directory, name))
+    return (path if size is not None else ""), size
+
+
 def record_run(state_dir: str, line: str) -> None:
     """Append one tick's record to `runs.jsonl`; a failed write must not cost the digest."""
     try:
@@ -235,6 +259,7 @@ def main(tools: AgentTools = TOOLS, config_path: str = CONFIG) -> int:
     end = start_unit(SESSION_UNIT, tools.run, max(wait, 1))
     stdout = session_output(out)
     atomic_write(log_path, stdout)
+    transcript, _ = keep_run_transcript(out, state_dir, int(time.time()))
     timed_out = end.result in ("timeout", "deadline")
     rc = 0 if end.result == "success" else max(end.status, 1)
     outcome = parse_run(stdout, rc, timed_out)
@@ -250,6 +275,9 @@ def main(tools: AgentTools = TOOLS, config_path: str = CONFIG) -> int:
     )
     for request in requests:
         log(request_line(request))
+    # Nothing the session wrote outlives the run (dotfiles#967's I2).
+    shutil.rmtree(out, ignore_errors=True)
+    shutil.rmtree(requests_dir, ignore_errors=True)
 
     after = open_prs(cfg["REPO"], tools)
     gone = sorted({p.number for p in before} - {p.number for p in after})
@@ -261,7 +289,7 @@ def main(tools: AgentTools = TOOLS, config_path: str = CONFIG) -> int:
     )
     tools.discord_post(
         webhook,
-        render_digest(outcome, moved, host, log_path, landings(requests)),
+        render_digest(outcome, moved, host, transcript or log_path, landings(requests)),
         USER_AGENT,
         log=log,
         spool_dir=spool,

@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import datetime as _dt
 import errno
+import glob
 import json
 import os
 import re
@@ -790,3 +791,49 @@ def read_untrusted(directory: str, name: str, limit: int) -> str:
         return read_regular(dir_fd, name, limit).decode("utf-8", errors="replace")
     finally:
         os.close(dir_fd)
+
+
+# What an unattended session's runner keeps of its transcript. Its home is a tmpfs that ends with
+# the session unit, so the session script copies the transcript into the exchange, and the
+# controller keeps it beside the run record. The cap stops a session filling the controller's disk.
+TRANSCRIPT_NAME = "transcript.jsonl"
+TRANSCRIPT_MAX = 32 << 20
+
+
+def export_transcript(home: str, out: str, limit: int = TRANSCRIPT_MAX) -> None:
+    """Copy the session's transcript from its home into `out`, cut at `limit` bytes.
+
+    The session script calls this once claude exits. The run's home starts empty, so it holds one
+    transcript; the newest wins if claude wrote more. No transcript, as when claude never
+    started, writes nothing.
+    """
+    found = glob.glob(os.path.join(home, ".claude", "projects", "*", "*.jsonl"))
+    if not found:
+        return
+    with open(max(found, key=os.path.getmtime), "rb") as src:
+        data = src.read(limit)
+    with open(os.path.join(out, TRANSCRIPT_NAME), "wb") as dst:
+        dst.write(data)
+
+
+def keep_transcript(out: str, dest: str, tag: str) -> int | None:
+    """Copy the transcript the session left in `out` to `dest` at 0640; its size, or None.
+
+    Read as `read_untrusted` reads, so a link, a FIFO or an oversized file is refused, and the
+    journal line under `tag` names only the refusal's class. A session that wrote no transcript
+    keeps nothing.
+    """
+    try:
+        text = read_untrusted(out, TRANSCRIPT_NAME, TRANSCRIPT_MAX)
+    except (OSError, ValueError) as exc:
+        log(
+            f"refused the session's {TRANSCRIPT_NAME}: {type(exc).__name__}",
+            WARNING,
+            tag=tag,
+        )
+        return None
+    if not text:
+        return None
+    data = text.encode()
+    write_textfile(dest, data, 0o640)
+    return len(data)
