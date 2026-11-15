@@ -35,13 +35,7 @@ from .citations import (
     tracked_files,
 )
 from .pins import image_pins, pinned_keys, split_image_ref
-from .removed import (
-    Code,
-    comment_name,
-    identifiers,
-    is_comment_line,
-    removed_lines,
-)
+from .removed import Code, identifiers, removed_lines, stale_comment_uses
 
 RULES = frozenset(
     {
@@ -362,27 +356,17 @@ def _vanished_uses(
     if not removed:
         return base, []
     docs = repo_docs(repo)
-    code_names: set[str] = set()
     if advised:
         docs += [repo / rel for rel in sorted(tracked) if is_live_doc(rel)]
-        # A name the branch took out of a comment alone was stale before the branch.
-        code_names = {
-            tok
-            for line in lines
-            if not is_comment_line(line)
-            for tok in identifiers(line)
-            if comment_name(tok)
-        }
     named = _named(docs, repo, removed)
-    if not named and not code_names:
+    if not named and not advised:
         return base, []
-    code = Code(repo, tracked)
+    code = Code.in_worktree(repo, tracked)
     uses = [
         (tok, key) for tok, keys in named.items() if not code.holds(tok) for key in keys
     ]
-    for tok, places in code.comment_uses(code_names).items():
-        if not code.holds_outside_comments(tok):
-            uses += [(tok, place) for place in places]
+    if advised:
+        uses += stale_comment_uses(code, lines)
     return base, sorted(uses)
 
 
