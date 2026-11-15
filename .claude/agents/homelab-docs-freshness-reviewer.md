@@ -39,7 +39,7 @@ keyed `<doc>#<heading>`. The fact tooling reads the sections of every instructio
    is a pointer to where a sentence is likely to be wrong, not a finding of yours: read the
    section and check its sentences like any other.
 2. **Sections loaded most and cited least.** Run
-   `uv run python scripts/dev/fact_status.py report --json`, and read its `backlog` list: each
+   `uv run python scripts/dev/fact_status.py report --json --no-replay`, and read its `backlog` list: each
    instruction-file section with prose that cites nothing, as `section` and `reads`, the most
    loaded first (`scripts/lib/facts/report.py:ranked_backlog`). No detector reaches a sentence
    there, so a stale one stays stale until a reader checks it. Take the sections in list order.

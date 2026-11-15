@@ -237,3 +237,31 @@ def test_the_replay_window_is_the_days_before_now_and_nothing_after(
 
     assert heads == inside
     assert report["notice_replay"]["commits"] == 2
+
+
+def test_a_report_without_replays_walks_no_commit_and_still_ranks_the_backlog(
+    tmp_path,
+):
+    repo = init_repo(tmp_path)
+    _dated_commit(repo, "seed", 2, README="x\n")
+    _dated_commit(repo, "move", 1, **{"t/m.py": "LIMIT = 1\n"})
+    heads = []
+
+    def stub(repo, base, head):
+        heads.append(head)
+        return []
+
+    report = build(
+        repo,
+        {"CLAUDE.md#Gate": []},
+        30,
+        tmp_path / "no.log",
+        now=_NOW,
+        notice=stub,
+        replays=False,
+    )
+
+    assert heads == []
+    assert "notice_replay" not in report and "comment_replay" not in report
+    assert report["backlog"] == [{"section": "CLAUDE.md#Gate", "reads": 0}]
+    assert "Notice replay" not in render(report, top=5)

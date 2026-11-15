@@ -62,7 +62,14 @@ def _utc_date(value: str) -> datetime:
 def cmd_report(args: argparse.Namespace) -> int:
     repo = Path(args.repo)
     log = Path(args.log) if args.log else default_log(repo)
-    report = build(repo, repo_citations(repo), args.days, log, now=args.until)
+    report = build(
+        repo,
+        repo_citations(repo),
+        args.days,
+        log,
+        now=args.until,
+        replays=not args.no_replay,
+    )
     print(json.dumps(report) if args.json else render(report, args.top))
     return 0
 
@@ -148,6 +155,11 @@ def main(argv: list[str] | None = None) -> int:
         "--top", type=int, default=15, help="sections to print in text form"
     )
     rp.add_argument("--json", action="store_true", help="print one JSON object")
+    rp.add_argument(
+        "--no-replay",
+        action="store_true",
+        help="skip the notice and comment replays, which walk every commit in the window",
+    )
     rp.set_defaults(fn=cmd_report)
     nt = sub.add_parser("notice")
     _add_common(nt)
