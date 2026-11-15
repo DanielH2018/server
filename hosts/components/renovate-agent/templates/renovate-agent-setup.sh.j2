@@ -35,6 +35,7 @@ as_ctl() {
 # directory itself stays root's and empty. What earlier sessions wrote here would only be hidden
 # by the mount. find -delete follows no link, and the session's tmpfs exists only in its own unit.
 install -d -o root -g root -m 0755 "$home"
+chmod g-s "$home"
 find "$home" -xdev -mindepth 1 -delete
 # The controller's home holds the run's state. Group sys_user and setgid, so the docs-refresh
 # reader, which runs as sys_user, reads runs.jsonl.
