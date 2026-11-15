@@ -164,7 +164,7 @@ def test_prune_skips_an_orphan_a_process_still_uses(tmp_path, monkeypatch, capsy
 def test_prune_brief_removes_an_empty_orphan_and_keeps_one_with_unstored_content(
     tmp_path, monkeypatch, capsys
 ):
-    # `--prune --brief` is the weekly cron's invocation, so it must sweep orphans as `--prune` does.
+    # `--prune --brief` is the weekly timer's invocation, so it must sweep orphans as `--prune` does.
     repo = _repo(tmp_path, monkeypatch)
     empty = _orphan(repo, "bridge-empty")
     (empty / "docs").mkdir()

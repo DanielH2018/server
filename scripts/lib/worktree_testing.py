@@ -13,6 +13,10 @@ Import it from any test, at any depth. `pyproject.toml` puts `scripts/` on `pyth
 
     ignore_foreign_slice_holds(monkeypatch)
     ok, err = remove(str(repo), tree)
+
+A monkeypatch cannot reach a removal that runs in a subprocess, such as a script under bash.
+That test merges `ignore_foreign_slice_holds_env(tmp_path)` into the subprocess's
+environment instead.
 """
 
 import sys as _sys
@@ -33,3 +37,31 @@ def ignore_foreign_slice_holds(monkeypatch) -> None:
     monkeypatch.setattr(
         claude_worktree, "_foreign_in_my_slice", lambda entry, uid: False
     )
+
+
+def ignore_foreign_slice_holds_env(tmp_path: _Path) -> dict[str, str]:
+    """The environment that switches the slice rule off in a Python subprocess.
+
+    The subprocess finds `claude_worktree` through `CLAUDE_WORKTREE_HOME`
+    (`lib._claude_worktree`). This writes a `claude_worktree.py` under `tmp_path` that runs
+    the module this process imported, under the same name, then replaces the rule.
+
+    Args:
+        tmp_path: the test's scratch directory.
+
+    Returns:
+        `CLAUDE_WORKTREE_HOME`, to merge into the subprocess's environment.
+    """
+    home = tmp_path / "claude-worktree-no-slice-rule"
+    home.mkdir()
+    (home / "claude_worktree.py").write_text(
+        "import importlib.util, sys\n"
+        "spec = importlib.util.spec_from_file_location(\n"
+        f"    'claude_worktree', {claude_worktree.__file__!r}\n"
+        ")\n"
+        "module = importlib.util.module_from_spec(spec)\n"
+        "sys.modules['claude_worktree'] = module\n"
+        "spec.loader.exec_module(module)\n"
+        "module._foreign_in_my_slice = lambda entry, uid: False\n"
+    )
+    return {"CLAUDE_WORKTREE_HOME": str(home)}

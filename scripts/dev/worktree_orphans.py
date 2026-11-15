@@ -150,7 +150,7 @@ def prune_orphans(paths: list[str]) -> int:
 
     Returns:
       How many of `paths` failed to delete, each named on stderr. The caller exits non-zero
-      on any, so the weekly cron cannot read a failed removal as a clean sweep. An orphan a
+      on any, so the weekly timer cannot read a failed removal as a clean sweep. An orphan a
       live process uses is named on stderr too but not counted: it is a skip (#7949).
     """
     failed = 0
