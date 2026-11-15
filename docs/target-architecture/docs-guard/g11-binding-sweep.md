@@ -4,8 +4,8 @@ Status: IN PROGRESS. The measure is corrected
 ([#8699](https://github.com/DanielH2018/server/pull/8699)), and the pilot batch, step 1,
 is done ([#8707](https://github.com/DanielH2018/server/pull/8707)). Its 30-day comparison
 is due on 2026-12-14. Step 2 is done: eighteen batches landed on 2026-11-14 and
-2026-11-15. Step 3 is open, and [the handoff](handoff.md) lists it with the rest of the
-open work.
+2026-11-15. Step 3 is done. The pilot's comparison is the one step left, and
+[the handoff](handoff.md) lists it with the rest of the open work.
 
 Depends on: [G7](g7-removed-names.md) and [G10](g10-value-rows.md). The sweep reads the
 doc set the first defines and binds sentences to the rows the second builds.
@@ -136,6 +136,28 @@ grouped by role family instead.
   file, and an absence. The handoff describes each.
 - **The measure is the plain count.** The instruction log rotated during the sweep, so
   the read counts before and after do not compare.
+
+## Step 3 result
+
+`.claude/rules/facts.md` now opens with the end-state model: a table of the six kinds of
+sentence, each with its home and its detector, then the three shapes no citation reaches.
+The grammar moved under its own heading, *Sections and the citation grammar*, and the
+`# fact:` comment on `test_every_cited_test_exists` moved with it. The rewrite also names
+every lint rule `fact_status.py lint` can print, since its `fix:` line points here: six of
+them had no sentence before. The *Commands* bullet for `report` keeps the generated-block
+case and points to `report.py` for the session-byte rows it used to restate.
+
+The freshness reviewer's tiers 2 and 3 are gone. Tier 2 now reads the `backlog` list of
+`fact_status.py report --json`, the sections loaded most that cite nothing. A hand-written
+`docs/` page is reviewed only when the dispatch names it. The reviewer's four sections that
+cited nothing are bound, and its unit paragraph no longer says the tooling grades
+`CLAUDE.md` only.
+
+| Measure | Before | After |
+|---|---|---|
+| Sections with prose that cite nothing | 34 | 30 |
+| Citations | 1,697 | 1,714 |
+| Citations that pin content | 669 | 677 |
 
 ## Verification
 
