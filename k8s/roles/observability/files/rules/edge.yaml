@@ -135,7 +135,8 @@ groups:
           severity: warning
           service: traefik
         annotations:
-          summary: Over 90% of the requests Traefik receives get a 404.
+          summary: >-
+            {{ $value | humanizePercentage }} of the requests Traefik receives get a 404.
           description: >-
             {{ $value | humanizePercentage }} of the entrypoint traffic in the last 5 minutes
             was 404, the shape of an edge that lost its routers (#1322). Read Traefik's startup

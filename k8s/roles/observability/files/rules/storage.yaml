@@ -140,7 +140,8 @@ groups:
           severity: critical
           service: longhorn
         annotations:
-          summary: The kubelet reports fewer than 32 claims.
+          summary: >-
+            Claims reporting kubelet volume stats: {{ $value | printf "%.0f" }}, below the floor of 32.
           description: >-
             Only {{ $value | printf "%.0f" }} claims report kubelet_volume_stats, below the floor
             of 32. PVC fullness is UNKNOWN, not OK. Read the kubernetes-kubelet targets, one
@@ -247,7 +248,8 @@ groups:
           severity: critical
           service: etcd
         annotations:
-          summary: The etcd database is over 80% of its backend quota.
+          summary: >-
+            The etcd database is at {{ $value | printf "%.0f" }}% of its 2 GiB quota.
           description: >-
             The etcd database is {{ $value | printf "%.0f" }}% of its 2 GiB quota. At the quota
             etcd rejects every write and the control plane stops. Compact and defragment, or raise

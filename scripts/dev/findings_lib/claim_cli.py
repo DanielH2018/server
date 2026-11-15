@@ -33,6 +33,7 @@ from lib.progress import count_line
 from dev.findings_lib.claim import (
     PEER_UNREADABLE,
     another_claim_blocks,
+    branch_is_held,
     claim_is_live,
     claim_states,
     stale_holder,
@@ -51,6 +52,7 @@ from dev.findings_lib.plans import (
     plan_sync_labels,
 )
 from dev.findings_lib.boundaries import FindingsTools
+from dev.findings_lib.milestone import session_title
 from dev.fanout_lib.target import SERVER
 
 
@@ -119,6 +121,10 @@ def cmd_claim(args: argparse.Namespace, tools: FindingsTools) -> int:
     # syncs first. Without this the FIRST claim posts its comment, fails the label edit and
     # exits 1; the retry then reads "already claimed" and the label is never added at all.
     run(plan_sync_labels(_existing_labels(tools)), args.dry_run, tools)
+    # `gh issue edit --milestone` fails on a title the repo lacks, as `--add-label` does.
+    title = session_title(args.worktree)
+    if title:
+        tools.ensure_milestone(title, tools.owner_name, dry_run=args.dry_run)
     # One running-batch read for the whole batch, taken on the first stale claim. Asked per
     # issue, a resumed orchestrator re-claiming its old batches would open one ssh connection
     # each, and `ufw limit ssh` rejects the sixth inside 30 seconds.
@@ -363,4 +369,13 @@ def cmd_reap(args: argparse.Namespace, tools: FindingsTools) -> int:
         )
     verb = "would be released" if args.dry_run else "released"
     print(f"reap: {reaped} stale claim(s) {verb}")
+    # One ssh read for every milestone: `ufw limit ssh` rejects the sixth inside 30 seconds.
+    peer_trees = functools.cache(tools.peer_trees)
+    closed = tools.close_idle_milestones(
+        tools.owner_name,
+        lambda branch: branch_is_held(branch, trees, dirty, merged, peer_trees),
+        dry_run=args.dry_run,
+    )
+    verb = "would be closed" if args.dry_run else "closed"
+    print(f"reap: {len(closed)} idle session milestone(s) {verb}")
     return 0

@@ -1064,7 +1064,7 @@ tests:
               service: nut-exporter
               severity: critical
             exp_annotations:
-              summary: "The UPS is on battery."
+              summary: "The UPS is on battery, 30% charged, about 1m 40s of runtime left."
               description: "NUT reports ups.status OB for 10 minutes: mains power is gone and the UPS is carrying the load. Read the UPS on the NUT host."
       - alertname: UPSBatteryLow
         eval_time: 15m
