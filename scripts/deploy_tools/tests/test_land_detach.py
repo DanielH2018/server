@@ -409,3 +409,13 @@ def test_a_log_with_no_verdict_line_reads_as_none(tmp_path, text):
 
 def test_an_unreadable_log_reads_as_none(tmp_path):
     assert detach.verdict_in(tmp_path / "absent.log") is None
+
+
+def test_fork_creates_the_log_before_the_landing_can_open_it(tmp_path):
+    """The landing never starts, so only the parent's own `touch` can have made the log."""
+    log = tmp_path / "land7-20260101-000000.log"
+
+    assert detach.fork(log, lambda: 0, spawn=lambda body: 4242) == 4242
+
+    assert log.exists()
+    assert detach.recorded_pid(log) == 4242
