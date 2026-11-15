@@ -17,12 +17,14 @@ The rulings in force, all in [CI throughput](ci-throughput.md):
 
 - **D5.** The credential that registers a runner stays on daniel-box.
 - **D8.** The queue's run replaces the pull-request run, and Phase C stops at C1. Look
-  at the test set-up before reopening C2.
+  at the test set-up before reopening C2. The operator kept it closed on 2026-11-15, after
+  the cap bound for 24.1 minutes in bursts under load.
 - **D9.** Every landing forms a batch, and PRs are opened as drafts.
 - **Option B, 2026-11-15.** A daniel-server review batch lands its own draft, unless the
   rule of the server lander holds the PR. It replaces option A.
 - **D10.** B4's shape: a stale ready PR rejoins the line, pacing goes, and one count of 6
-  is taken after the merge.
+  is taken after the merge. Amended on 2026-11-15: one that went stale while it waited for
+  the turn gives the turn back and rejoins too.
 - **Option B's preconditions, 2026-11-15.** The health gate on daniel-server reads a Pi
   container through daniel-box.
 
@@ -52,9 +54,12 @@ the first one: its record under daniel-server's `~/.local/state/fanout-review/` 
 record names the reason in `land_hold`. Record the first of each in
 [CI throughput](ci-throughput.md).
 
-### 3. Phase C, only if D8 is reopened
+### 3. Measure once more, then Phase C only if D8 is reopened
 
-C2 and C3 are in [CI throughput](ci-throughput.md) as planned. ADR-0032 holds the five
+Take the four numbers again over the next busy stretch with option B, the rejoin fix and the
+rejoin at the turn live, and set the minutes at the cap beside the 24.1 measured under load.
+Bring the operator the evidence if the cap still binds. C2 and C3 are in
+[CI throughput](ci-throughput.md) as planned. ADR-0032 holds the five
 conditions a runner exists under. A runner configuration must never reach a session's
 screen, and the operator mints or approves anything that touches the registration
 credential.

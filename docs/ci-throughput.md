@@ -481,6 +481,10 @@ PR's timeline and landing log:
   (`stale_base.rejoin_line`). The overlap rule of 2026-10-29 had saved a PR run; under the turn
   the untested merge costs a full master sweep instead, so it saves none. Updating every
   stale ready PR inside the turn was refused: each update holds the turn for a whole run.
+  **Amended by the operator on 2026-11-15:** a green ready PR that master moved past while
+  it waited for the turn gives the turn back once it takes it, and rejoins the line as a
+  draft (`merge.await_merge`). It holds no turn for its run, and a holder can stack it. Four
+  of the nine master sweeps measured under load came from such PRs.
 - **Pacing is deleted.** A landing that holds the turn skips it, so it held nothing after
   18:20 UTC on 2026-11-14, and 39 holds before that were all of landings without the turn.
   The slow-runs drop in `live_limit.py` stayed until the count was decided, and went with
@@ -578,6 +582,12 @@ About five full runs and one sweep in the window came from this. A rejoined head
 untested (`merge._start_run`), because its update made it while the PR was a draft.
 
 ### Phase C: runner pods for `hooks` and `pytest`
+
+**D8 stays closed, ruled by the operator on 2026-11-15** after the measurement under load.
+The pool spent 24.1 minutes at the cap in that window, in 245 spans of at most 0.7 minutes,
+and 17.3 of them fell from 19:00 to 21:00 UTC during a burst of daniel-server fan-out
+batches. Option B, the rejoin fix and the rejoin at the turn remove most of what held the
+slots then. Measure again on the next busy stretch with them in place.
 
 **Phase C stopped at C1 on 2026-11-14.** The queue of Phase B removes more runs than runner
 pods could take, and it needs no runner. C2 and C3 are kept here as they were planned, with
