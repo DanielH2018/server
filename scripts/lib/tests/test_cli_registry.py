@@ -78,6 +78,7 @@ def test_package_entry_points_finds_run_and_main_modules():
         "readonly_rbac",
         "shed_set",
         "takeover",
+        "unit_state",
         "uptime_robot",
         "usage",
         "vip_placement",

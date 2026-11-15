@@ -13,7 +13,7 @@ The registry carries names, descriptions, each subcommand's backing `probe_lib` 
 the `probe_lib` modules agree.
 
 This module defines no `run_*` function of its own, so `lib.cli_registry.package_entry_points`
-still reports the same twenty subcommand backends — the `run_*` names below are imported, and
+still reports the same subcommand backends — the `run_*` names below are imported, and
 that function counts only what a module defines.
 """
 
@@ -50,6 +50,7 @@ from diagnostics.probe_lib.push_rules import run_push_rules
 from diagnostics.probe_lib.readonly_rbac import run_readonly_rbac
 from diagnostics.probe_lib.shed_set import run_shed_set
 from diagnostics.probe_lib.takeover import run_takeover
+from diagnostics.probe_lib.unit_state import run_unit
 from diagnostics.probe_lib.uptime_robot import run_uptime_robot
 from diagnostics.probe_lib.usage import run_usage
 from diagnostics.probe_lib.vip_placement import run_vip_placement
@@ -71,7 +72,8 @@ SUBCOMMANDS = [
     (
         "monitors",
         "firing alerts from ALERTS and Alertmanager by severity and service, and active "
-        "Alertmanager silences (exit 0 = no paging alert)",
+        "Alertmanager silences (exit 0 = no paging alert); --checks prints each "
+        "monitor-bridge check's value, note and last-run age",
         "monitors",
         run_monitors,
     ),
@@ -197,10 +199,17 @@ SUBCOMMANDS = [
     ),
     (
         "builder",
-        "the host-package builder's reason, published versions, newest builds and failures "
-        "(exit 1 when it is not publishing)",
+        "the host-package builder's reason, published versions, newest builds, failures, "
+        "and each host's applied version (exit 1 when it is not publishing)",
         "builder",
         run_builder,
+    ),
+    (
+        "unit",
+        "a host unit's result, last start and end, next timer trigger and newest "
+        "non-routine journal lines (exit 1 when it failed or will not run again)",
+        "unit_state",
+        run_unit,
     ),
     (
         "usage",
@@ -239,6 +248,7 @@ VERDICT_SUBCOMMANDS = frozenset(
         "push-rules",
         "lander",
         "builder",
+        "unit",
         "uptime-robot",
     }
 )
