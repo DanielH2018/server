@@ -65,6 +65,7 @@ def fake_fetch(pages: dict[str, bytes]):
     ],
 )
 def test_discover_picks_the_cheapest_source(pages, verdict):
+    # fact: .claude/skills/web-to-rss/SKILL.md#1. Discover the source
     assert discover(BLOG, fake_fetch(pages))[0] == verdict
 
 
@@ -110,6 +111,8 @@ def test_working_rules_are_clean(tmp_path):
     ],
 )
 def test_broken_rules_are_flagged(tmp_path, rules, error):
+    # fact: .claude/skills/web-to-rss/SKILL.md#3. Write the OPML and check it
+    # fact: .claude/skills/web-to-rss/SKILL.md#2a. Rules for a static post list (`HTML+XPath`)
     total, failed, lines = check(
         _opml(tmp_path, **rules), fake_fetch({BLOG: LIST_PAGE})
     )
@@ -118,6 +121,8 @@ def test_broken_rules_are_flagged(tmp_path, rules, error):
 
 
 def test_unparseable_dates_and_missing_uid_are_warnings_not_failures(tmp_path):
+    # fact: .claude/skills/web-to-rss/SKILL.md#3. Write the OPML and check it
+    # fact: .claude/skills/web-to-rss/SKILL.md#2a. Rules for a static post list (`HTML+XPath`)
     rules = {"xPathItemTimestamp": "string(.//h2/a)", "xPathItemUid": ""}
     _, failed, lines = check(_opml(tmp_path, **rules), fake_fetch({BLOG: LIST_PAGE}))
     assert failed == 0

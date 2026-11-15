@@ -306,6 +306,7 @@ def test_an_unmerged_session_branch_is_never_swept(tmp_path, monkeypatch):
 def test_a_rebase_landed_branch_is_deleted_though_git_branch_d_refuses_it(
     tmp_path, monkeypatch
 ):
+    # fact: .claude/skills/worktree-cleanup/SKILL.md#Deleting the branch afterwards
     # The case the dotfiles hook could not sweep: the commit's content is on master under a
     # different sha, so the tip is not an ancestor and `-d` says "not fully merged".
     scrub_process_git_env(monkeypatch)
@@ -368,6 +369,7 @@ def test_one_prune_removes_a_worktree_and_deletes_the_branch_it_freed(
 def test_a_weekly_prune_that_skips_a_worktree_a_live_process_holds_exits_0(
     tmp_path, monkeypatch, capsys
 ):
+    # fact: .claude/skills/worktree-cleanup/SKILL.md#The pruner
     # #7949: one session running at 04:20 kept the sweep's check down for a week. The skip is
     # still named on stderr; the next run removes the tree once its holder exits.
     scrub_process_git_env(monkeypatch)
@@ -393,6 +395,7 @@ def test_a_weekly_prune_that_skips_a_worktree_a_live_process_holds_exits_0(
 def test_check_names_the_layer_that_settled_a_rebase_landed_branch(
     tmp_path, monkeypatch
 ):
+    # fact: .claude/skills/worktree-cleanup/SKILL.md#`ExitWorktree` refuses a merged worktree, and it is not wrong to
     # Not ancestry: the cherry-pick lands the content under a new sha, so only the patch-id
     # layer settles it, and naming that layer is what --check adds over a bare yes/no.
     scrub_process_git_env(monkeypatch)
@@ -417,6 +420,7 @@ def test_check_names_the_layer_that_settled_a_rebase_landed_branch(
 
 
 def test_check_exits_1_for_a_branch_holding_unlanded_work(tmp_path, monkeypatch):
+    # fact: .claude/skills/worktree-cleanup/SKILL.md#`ExitWorktree` refuses a merged worktree, and it is not wrong to
     # The RED half. GH_BIN=false keeps the forge layer offline: it fails, and a failed forge
     # lookup is no verdict, which must read as unlanded.
     scrub_process_git_env(monkeypatch)

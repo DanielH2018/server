@@ -16,11 +16,12 @@ machine line: `DISCOVER: verdict=…` and `CHECK: feeds=… failed=…`.
 uv run python scripts/freshrss/scrape_feed.py discover <url>
 ```
 
-Pass the page that lists the posts (`…/blog`, not the home page). The verdict picks the branch:
+Pass the page that lists the posts (`…/blog`, not the home page). The verdict picks the branch
+(`scripts/freshrss/tests/test_scrape_feed.py::test_discover_picks_the_cheapest_source`):
 
 | Verdict | Meaning | Next |
 |---|---|---|
-| `feed` | The site publishes a feed, advertised or at a common path | Give the user the feed URL to subscribe to normally. Stop here. |
+| `feed` | The site publishes a feed, advertised or at a common path (`scripts/freshrss/scrape_feed.py:FEED_PATHS`) | Give the user the feed URL to subscribe to normally. Stop here. |
 | `html` | The page's static HTML holds the post links | Step 2a |
 | `sitemap` | The post list is rendered by JavaScript, but the sitemap lists the posts | Step 2b |
 | `none` | Neither | Step 2c |
@@ -34,11 +35,14 @@ matched item. All rules are XPath 1.0.
 - **Item:** the repeated element that wraps one post. Match a hashed CSS-module class by prefix,
   `//section[contains(@class,'Blog_post')]`, because the suffix changes when the site rebuilds.
 - **Title:** `normalize-space(.//h2/a)`.
-- **Uri:** make it absolute in the XPath; FreshRSS's docs do not say it resolves relative links.
+- **Uri:** make it absolute in the XPath
+  (`scripts/freshrss/tests/test_scrape_feed.py::test_broken_rules_are_flagged`); FreshRSS's
+  docs do not say it resolves relative links.
   `concat(substring('https://site', 1, N * not(starts-with(.//a/@href, 'http'))), .//a/@href)`,
   where N is the length of `https://site`.
 - **Uid:** the same expression as Uri. Without one, FreshRSS hashes the item, and a changed
-  title or date posts it again.
+  title or date posts it again
+  (`scripts/freshrss/tests/test_scrape_feed.py::test_unparseable_dates_and_missing_uid_are_warnings_not_failures`).
 - **Timestamp:** the date text, cut with `substring-before()` if it shares an element with
   other text. FreshRSS reads it with `strtotime()`; add `frss:xPathItemTimeFormat` (PHP
   `DateTime::createFromFormat`) only when strtotime cannot read it.
@@ -65,22 +69,26 @@ publish date.
 ## 2c. No usable source
 
 Say so, and name what the site needs: a headless-browser scraper such as changedetection.io,
-which this homelab does not run. Adding it is a new k3s service (`new-k8s-service` skill), so
+which this homelab does not run. Adding it is a new k3s service (`new-k8s-service` skill,
+`.claude/skills/new-k8s-service/SKILL.md`), so
 ask before starting one. Do not write rules against a page whose raw HTML lacks the posts.
 
 ## 3. Write the OPML and check it
 
 Write the outlines into an OPML file in the scratchpad: the `frss` namespace is
-`https://freshrss.org/opml`, and each feed is one `<outline text=… type="HTML+XPath"|"XML+XPath"
-xmlUrl=… htmlUrl=… frss:xPathItem…=…/>`. Then:
+`https://freshrss.org/opml` (`scripts/freshrss/scrape_feed.py:FRSS`), and each feed is one
+`<outline text=… type="HTML+XPath"|"XML+XPath" xmlUrl=… htmlUrl=… frss:xPathItem…=…/>`
+(`scripts/freshrss/scrape_feed.py:SCRAPE_TYPES`). Then:
 
 ```bash
 uv run python scripts/freshrss/scrape_feed.py check <file.opml> --sample 3
 ```
 
 Done when it prints `failed=0` and the sampled items read right: real titles, links that open
-the post, plausible dates. An `error:` line is a broken feed; fix the rule and re-run. A
-`warning:` line is a cost to tell the user, not a blocker.
+the post, plausible dates. An `error:` line is a broken feed
+(`scripts/freshrss/tests/test_scrape_feed.py::test_broken_rules_are_flagged`); fix the rule
+and re-run. A `warning:` line is a cost to tell the user, not a blocker
+(`scripts/freshrss/tests/test_scrape_feed.py::test_unparseable_dates_and_missing_uid_are_warnings_not_failures`).
 
 ## 4. Hand it over
 
@@ -93,5 +101,5 @@ their account, so ask first.
 
 The site changed its markup. Ask the user to export the feed from FreshRSS (Subscription
 management → Import / export → Export), then run `check` on that file. The `error:` line names
-the rule that broke. Redo step 1, because the site may now publish a feed or have moved its
+the rule that broke (`scripts/freshrss/scrape_feed.py:check_outline`). Redo step 1, because the site may now publish a feed or have moved its
 posts behind JavaScript.
