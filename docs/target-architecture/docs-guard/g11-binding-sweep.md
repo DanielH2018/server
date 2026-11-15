@@ -3,7 +3,9 @@
 Status: IN PROGRESS. The measure is corrected
 ([#8699](https://github.com/DanielH2018/server/pull/8699)), and the pilot batch, step 1,
 is done ([#8707](https://github.com/DanielH2018/server/pull/8707)). Its 30-day comparison
-is due on 2026-12-14.
+is due on 2026-12-14. Step 2 is done: eighteen batches landed on 2026-11-14 and
+2026-11-15. Step 3 is open, and [the handoff](handoff.md) lists it with the rest of the
+open work.
 
 Depends on: [G7](g7-removed-names.md) and [G10](g10-value-rows.md). The sweep reads the
 doc set the first defines and binds sentences to the rows the second builds.
@@ -101,6 +103,39 @@ five: the fifth was the file's title, which holds no prose.
   fan-out batch that was editing that file on 2026-11-14.
 - The root file grew by eight citations. The 30-day comparison counts the notice rows they
   draw against the 0.29 unedited rows per content citation that G9 measured.
+
+## Step 2 result
+
+Eighteen batches ran through the issue fan-out, one issue each
+([#8744](https://github.com/DanielH2018/server/issues/8744) to
+[#8761](https://github.com/DanielH2018/server/issues/8761)), and all eighteen PRs landed.
+The plan guessed 25 batches. Each batch costs a CI run and a landing, so the docs were
+grouped by role family instead.
+
+| Measure | At `9460c6413`, before | At `9d6c21f21`, after |
+|---|---|---|
+| Sections with prose that cite nothing | 245 of 571 | 43 of 571 |
+| `CLAUDE.md` sections that cite nothing | 168 of 421 | 13 of 421 |
+| Citations | 960 | 1,672 |
+| Citations that pin content | 178, or 19% | 648, or 39% |
+
+- **The sweep corrected more than 50 false sentences.** Each batch checked a sentence
+  against the code before binding it. The corrections range from a retired Ansible unit
+  name to docs that named an Intel GPU on a host with an AMD one. Each PR body lists its
+  own under *What was false*.
+- **The 43 sections left fall into three groups.** Twelve were kept out of the batches:
+  two directive rules, `.claude/rules/docker.md`, the issue-fanout skill and the
+  freshness reviewer that step 3 rewrites. Three hold only a generated block
+  ([#8787](https://github.com/DanielH2018/server/issues/8787)). The other 28 hold only
+  directives, or describe something this tree does not hold: an upstream app, the Claude
+  Code harness or GitHub.
+- **No batch added a `VALUES` row.** Eighteen batches appending to one list would have
+  conflicted at merge. Each PR body lists the rows it owes, and [the handoff](handoff.md)
+  collects them.
+- **The citation grammar cannot reach three shapes**: a list entry in YAML, a root-level
+  file, and an absence. The handoff describes each.
+- **The measure is the plain count.** The instruction log rotated during the sweep, so
+  the read counts before and after do not compare.
 
 ## Verification
 
