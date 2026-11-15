@@ -30,10 +30,6 @@ The rulings in force, all in [CI throughput](ci-throughput.md):
 Each needs traffic no session controls, so watch for it and record the first run in
 [CI throughput](ci-throughput.md).
 
-- **A batch formed with no `LAND_BATCH` set.** Two drafts whose heads have had no CI run
-  must land at once. The holder's log then reads `testing PR #a, PR #b in one run`. The
-  logs are `/tmp/homelab-landings-<user>/land<pr>-*.log` on the host that started the
-  landing, and a fan-out batch's is in its worktree's `.fanout/` directory.
 - **A daniel-box review batch landing its draft.** Its unit's log shows no
   `cc-wait gh-ci` call, and its record under `~/.local/state/fanout-review/` carries a
   `verdict` and an empty `ci_gate`. A landing that ends `pr-ci-red` must show one `ci-fix`
@@ -63,6 +59,11 @@ credential.
 
 ## Traps the plan's text does not carry
 
+- **A landing's log lives in the `$TMPDIR` of whatever started it.** A session's
+  `land.sh --detach` writes `land<pr>-*.log` under its job's `~/.claude/jobs/<id>/tmp/`, other
+  callers under `/tmp/homelab-landings-<user>/`, and a fan-out batch in its worktree's
+  `.fanout/` directory. Each is on the host that started the landing, and a job's directory
+  goes when the job is deleted, so copy a log before counting from it.
 - **A batch stacks only a draft whose head has had no CI run that ran jobs.** A green PR
   converted to draft by hand does not qualify. The landing qualifies a green ready PR that
   master moved past by itself (`stale_base.rejoin_line`).
@@ -76,8 +77,8 @@ credential.
   every landing for 56 and 92 seconds when a landing they waited for never arrived. A
   burst of landings forms its batches behind its first landing without help.
 - **A landing started on daniel-server needs `--fresh`** when that host's primary
-  checkout lags master, and it holds one of three slots on that host until its verdict.
-  `land.sh` exiting 75 with `landings are already live` means wait and re-run.
+  checkout lags master. It takes one of the 6 slots on daniel-box over ssh, and one of 3
+  on its own host only when daniel-box does not answer.
 - **A docs-only landing takes no landing slot.** A landing takes its slot from step 2
   (`land_lib/pipeline.py:_SLOT_FROM_STEP`), and a docs-only PR ends at step 1 with
   `nothing-to-deploy`. Such a landing exercises the turn and the serial check, never the

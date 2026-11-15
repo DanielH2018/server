@@ -265,8 +265,16 @@ def _wait(ln: Landing, draft: str) -> tuple[Callable[[], None] | None, int]:
                 )
                 return None, waited
             if release:
-                # The holder may have answered after this landing's last poll of its place.
-                if place.answer() == line.ALONE:
+                # The holder may have answered after this landing's last poll of its place,
+                # and it frees the turn just after it writes `merged`.
+                answer = place.answer()
+                if answer == line.MERGED:
+                    release()
+                    say(
+                        f"the landing that holds the turn merged PR #{o.pr} with its own"
+                    )
+                    return None, waited
+                if answer == line.ALONE:
                     _lands_alone(ln)
                 say(f"took the landing turn after {waited}s")
                 return release, waited

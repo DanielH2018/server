@@ -504,6 +504,28 @@ ruling on anything from it.
   and end, and only when it ended in success or failure: a cancelled job carries a start
   time it never ran from, and counting those reads a peak of 34.
 
+#### B4's paths, run live
+
+**A landing from daniel-server reaches the turn, the line and the serial lock over ssh.** The
+landing of #8841 on 2026-11-15 started on daniel-server with `--fresh`. It stood in the line
+on daniel-box, took the turn after 240 s and merged on one run. The serial check runs inside
+the turn and prints nothing when it passes. Had its ssh session failed, the log would read
+`did not answer for the landing slots`, and the log carries no such line. #8841 was docs-only
+and so took no slot, because a landing takes its slot from step 2. A direct call of
+`slots._locker("daniel-server")` from that landing's checkout took slot 0 over ssh, and
+`lslocks` on daniel-box listed the holder.
+
+**A batch formed with no `LAND_BATCH` set.** The landing of #8836 took the turn at about
+14:03 UTC and stacked #8835, a green ready PR that its own landing had sent back into the
+line (`stale_base.rejoin_line`). One run of 420 s tested both, and they merged at 14:11:07
+and 14:11:50.
+
+**A merged member then took the turn.** The holder writes `merged` into a member's place and
+frees the turn. The member's landing tried the lock before it read its place, so it took the
+freed turn and began to form a batch for a PR that had already merged. A check on stale
+landing code stopped it there. A member that takes the turn with its place reading `merged`
+now gives the turn back at once (`turn._wait`).
+
 ### Phase C: runner pods for `hooks` and `pytest`
 
 **Phase C stopped at C1 on 2026-11-14.** The queue of Phase B removes more runs than runner
