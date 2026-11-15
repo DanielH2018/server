@@ -129,9 +129,15 @@ def test_session_bytes_split_start_from_total_and_skip_unsized_and_subagent_rows
     ]
 
 
+# `commit` stamps the live clock, so a replay over its history needs an end past today.
+_LATER = datetime(2099, 1, 1, tzinfo=timezone.utc)
+
+
 def _replay(repo, notice=None):
     since = _NOW - timedelta(days=30)
-    return notice_replay(repo, since, notice) if notice else notice_replay(repo, since)
+    if notice:
+        return notice_replay(repo, since, _LATER, notice)
+    return notice_replay(repo, since, _LATER)
 
 
 def _gate_history(repo):
@@ -207,7 +213,9 @@ def test_a_notice_that_raises_on_one_commit_is_recorded_and_the_replay_goes_on(
 
 
 @pytest.mark.parametrize("with_lock_commit", [True, False], ids=["lock", "no-lock"])
-def test_the_replay_window_is_the_plain_days_boundary(tmp_path, with_lock_commit):
+def test_the_replay_window_is_the_days_before_now_and_nothing_after(
+    tmp_path, with_lock_commit
+):
     repo = init_repo(tmp_path)
     _dated_commit(repo, "seed", 50, README="x\n")
     # A commit writing the lock 40 days back: the last lock commit before the 30-day boundary.
@@ -218,6 +226,7 @@ def test_the_replay_window_is_the_plain_days_boundary(tmp_path, with_lock_commit
         _dated_commit(repo, "inside 1", 5, **{"t/m.py": "LIMIT = 3\n"}),
         _dated_commit(repo, "inside 2", 1, **{"t/m.py": "LIMIT = 4\n"}),
     ]
+    _dated_commit(repo, "after the window", -1, **{"t/m.py": "LIMIT = 5\n"})
     heads = []
 
     def stub(repo, base, head):

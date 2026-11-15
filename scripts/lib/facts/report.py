@@ -1,6 +1,6 @@
 """``fact_status.py report``: the notice's yield and the docs' load, read from git and the log.
 
-Four measurements, none kept in a store of its own.
+Five measurements, none kept in a store of its own.
 
 - **The sections citing nothing, ranked by reads.** Every section with no in-tree citation,
   a CONVENTION section, ranked by how often its doc loaded into a session according to
@@ -16,6 +16,10 @@ Four measurements, none kept in a store of its own.
 - **The notice replay.** ``notice.moved_sections`` runs once per first-parent commit in the
   ``--days`` window, with the parent as the base (``replay.notice_replay``).
   ``docs/adr/0023-fact-support-is-a-diff-notice.md`` records why the notice replaced the lock.
+- **The comment-class replay.** ``removed.stale_comment_uses`` runs over the same commits
+  (``replay.comment_replay``), and the JSON form lists every row for a session to grade.
+
+The window ends at ``now``, which ``--until`` sets, and starts ``--days`` before it.
 """
 
 import re
@@ -33,7 +37,12 @@ from lib.repo_paths import primary_checkout_of
 
 from .citations import Citations
 from .notice import Notice, moved_sections
-from .replay import notice_replay, render_replay
+from .replay import (
+    comment_replay,
+    notice_replay,
+    render_comment_replay,
+    render_replay,
+)
 
 LOG_REL = ".claude/logs/instructions.log"
 _ROW = re.compile(r"^(\S+) \[[^\]]*\]\s+\S+\s+\S+\s+(\S+)")
@@ -221,7 +230,8 @@ def build(
             }
             for r in sessions
         ],
-        "notice_replay": notice_replay(repo, since, notice),
+        "notice_replay": notice_replay(repo, since, now, notice),
+        "comment_replay": comment_replay(repo, since, now),
     }
 
 
@@ -230,7 +240,7 @@ def render(report: dict, top: int) -> str:
 
     The ``top`` most-read sections citing nothing come first, then the ``top`` most-read docs
     delivered as a head, then the instruction bytes of the ``top`` most recent sessions, then
-    the notice replay, which names every crash whatever ``top`` says.
+    the two replays, which name every crash whatever ``top`` says.
     """
     log = report["log"]
     span = f"{log['first']} to {log['last']}" if log["rows"] else "no rows"
@@ -263,4 +273,8 @@ def render(report: dict, top: int) -> str:
     rest = len(sessions) - top
     if rest > 0:
         lines.append(f"  ... {rest} older; --top or --json lists them")
-    return "\n".join(lines + render_replay(report["notice_replay"]))
+    return "\n".join(
+        lines
+        + render_replay(report["notice_replay"])
+        + render_comment_replay(report["comment_replay"])
+    )

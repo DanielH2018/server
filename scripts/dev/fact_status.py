@@ -3,8 +3,8 @@
 
 ``lint`` reports citations that cannot be support. ``report`` reads git and the instructions
 log: the sections citing nothing ranked by how often their doc loads, the docs read as a head
-ranked by reads, the instruction bytes each session loaded, and the notice replayed over the
-window (``--json`` for a cron or an agent). ``notice`` lists every section citing an atom that the diff from the merge base of
+ranked by reads, the instruction bytes each session loaded, and the notice and the comment
+class of the removed-name rule replayed over the window (``--json`` for a cron or an agent). ``notice`` lists every section citing an atom that the diff from the merge base of
 ``--since`` to ``--head``, or to the working tree, moved.
 It exits 0 with rows or without, and 2 only when git cannot resolve the merge base.
 ``mv`` rewrites the references a rename left in docs and comments.
@@ -17,6 +17,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 import argparse
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 
 from lib.cli_help import ArgumentParser
@@ -54,10 +55,14 @@ def cmd_lint(args: argparse.Namespace) -> int:
     return 1 if errors else 0
 
 
+def _utc_date(value: str) -> datetime:
+    return datetime.strptime(value, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+
+
 def cmd_report(args: argparse.Namespace) -> int:
     repo = Path(args.repo)
     log = Path(args.log) if args.log else default_log(repo)
-    report = build(repo, repo_citations(repo), args.days, log)
+    report = build(repo, repo_citations(repo), args.days, log, now=args.until)
     print(json.dumps(report) if args.json else render(report, args.top))
     return 0
 
@@ -128,6 +133,12 @@ def main(argv: list[str] | None = None) -> int:
     rp = sub.add_parser("report")
     _add_common(rp)
     rp.add_argument("--days", type=int, default=30, help="the window, in days")
+    rp.add_argument(
+        "--until",
+        type=_utc_date,
+        default=None,
+        help="end the window at 00:00 UTC on this YYYY-MM-DD date (default: now)",
+    )
     rp.add_argument(
         "--log",
         default=None,
