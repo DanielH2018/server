@@ -109,3 +109,13 @@ def test_the_tree_s_indirect_k8s_render_readers_are_charged_the_render():
         "k8s/roles/monitor-bridge/tests/test_b2_storage.py",
     ):
         assert "k8s" in pytest_shard.prebuild_kinds(indirect), indirect
+
+
+def test_the_census_files_share_one_leg_so_the_census_pass_runs_once():
+    """Placed one at a time, the second census file costs less on an empty shard than beside
+    the first, which ran the 16s pass on two legs."""
+    weights = pytest_shard.packing_table(pytest_shard.load_weights())
+    placed = pytest_shard.assign(pytest_shard.census(), CI_SHARDS, weights)
+    assert len({placed[f] for f in CENSUS_FILES}) == 1, {
+        f: placed[f] for f in CENSUS_FILES
+    }

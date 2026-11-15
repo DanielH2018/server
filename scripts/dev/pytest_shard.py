@@ -230,9 +230,10 @@ def assign(
     """Map each file to a shard index in `range(shards)`, greedy longest-processing-time.
 
     A file's cost on a shard is its weight, `_PER_FILE_SECONDS`, and the prebuild seconds it
-    adds to what that shard already pays. Files go in order of their cost on an empty shard,
-    each to the shard it leaves least loaded, so a file that triggers a prebuild can land on
-    a shard that already pays for it only when that shard is still the lighter choice.
+    adds to what that shard already pays. The census files go as one unit, since they share
+    one census pass, and greedy placement would split them: the second file costs less on an
+    empty shard than beside the first. Units go in order of their cost on an empty shard,
+    each to the shard it leaves least loaded.
 
     Deterministic: ties in that order break by path, and a tie between two shards goes to the
     lower index. The same census and the same weights give the same assignment on every
@@ -242,24 +243,29 @@ def assign(
         raise ValueError(f"shards must be >= 1, got {shards}")
     known = [weights[f] for f in files if f in weights]
     default = statistics.median(known) if known else 1.0
-    cost = {f: weights.get(f, default) + _PER_FILE_SECONDS for f in files}
-    kinds = {f: prebuild_kinds(f, repo) for f in files}
-    alone = {f: cost[f] + _prebuild_wall(kinds[f]) * CI_WORKERS for f in files}
+    census_files = tuple(sorted(f for f in files if f.startswith(CENSUS_FILE_PREFIX)))
+    units = [(f,) for f in files if f not in census_files]
+    units += [census_files] if census_files else []
+    cost = {
+        u: sum(weights.get(f, default) + _PER_FILE_SECONDS for f in u) for u in units
+    }
+    kinds = {u: frozenset().union(*(prebuild_kinds(f, repo) for f in u)) for u in units}
+    alone = {u: cost[u] + _prebuild_wall(kinds[u]) * CI_WORKERS for u in units}
     load = [0.0] * shards
     paid: list[frozenset[str]] = [frozenset()] * shards
     placed: dict[str, int] = {}
-    for path in sorted(files, key=lambda f: (-alone[f], f)):
+    for unit in sorted(units, key=lambda u: (-alone[u], u)):
         after = [
             load[i]
-            + cost[path]
-            + (_prebuild_wall(paid[i] | kinds[path]) - _prebuild_wall(paid[i]))
+            + cost[unit]
+            + (_prebuild_wall(paid[i] | kinds[unit]) - _prebuild_wall(paid[i]))
             * CI_WORKERS
             for i in range(shards)
         ]
         target = min(range(shards), key=lambda i: (after[i], i))
         load[target] = after[target]
-        paid[target] |= kinds[path]
-        placed[path] = target
+        paid[target] |= kinds[unit]
+        placed |= dict.fromkeys(unit, target)
     return placed
 
 
