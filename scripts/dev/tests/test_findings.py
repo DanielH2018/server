@@ -232,6 +232,15 @@ def test_touch_second_sighting_does_not_escalate(issue):
     assert "sighting 2" in plans[0][-1]
 
 
+def test_touch_names_the_sighting_this_run_makes(issue):
+    # fact: .claude/skills/homelab-review/SKILL.md#2. Prime from memory FIRST (the signal-booster — do this before dispatching)
+    seen_three_times = issue(
+        1, comments=("Re-observed by a", "Re-observed by b", "Re-observed by c")
+    )
+    plans = plan_touch(seen_three_times, "d")
+    assert "sighting 5" in plans[0][-1]
+
+
 def test_touch_third_sighting_escalates(issue):
     plans = plan_touch(issue(1, comments=("Re-observed by a",)), "b")
     assert [p[:2] for p in plans] == [["issue", "comment"], ["issue", "edit"]]
