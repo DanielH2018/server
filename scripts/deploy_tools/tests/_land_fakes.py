@@ -141,13 +141,6 @@ class Fakes:
     compare: list[list[str] | Exception] = field(default_factory=lambda: [[]])
     # What `closing_refs`' GraphQL read answers, one entry per call.
     closing_refs: list[dict | Exception] = field(default_factory=lambda: [{}])
-    # What the master `ci.yml` runs listing answers, one entry per call, as `live_limit.py`
-    # reads it:
-    # `{status, created_at}` per run. Empty is a master with no CI backlog, and an exception is
-    # raised in place of an answer.
-    master_runs: list[list[dict[str, str]] | Exception] = field(
-        default_factory=lambda: [[]]
-    )
     # What each `tools.try_turn` call answers: True takes the landing turn, False finds another
     # landing holding it, and an exception is raised in place of an answer.
     turn: list[bool | Exception] = field(default_factory=lambda: [True])
@@ -253,7 +246,6 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
         asked: seq for k, seq in view_seq.items() if (asked := pr_json.rest_filter(k))
     }
     compare_seq = _seq(f.compare, calls, "gh:compare")
-    runs_seq = _seq(f.master_runs, calls, "gh:master-runs")
     closing_refs_seq = _seq(f.closing_refs, calls, "gh:closing-refs")
 
     def gh_json(*args, **kwargs):
@@ -296,11 +288,6 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
                 if isinstance(answer, Exception):
                     raise answer
                 return answer
-        if args[0] == "api" and "/workflows/ci.yml/runs?branch=" in args[1]:
-            answer = runs_seq(*args, **kwargs)
-            if isinstance(answer, Exception):
-                raise answer
-            return answer
         if args[0] == "api" and args[1].rpartition("/")[0].endswith("/pulls"):
             return rest_seq[args[args.index("--jq") + 1]]()
         return view_seq[args[args.index("--json") + 1]]()

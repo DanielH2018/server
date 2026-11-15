@@ -58,9 +58,8 @@ Two other sessions measured these on 2026-11-14. This page's session did not rep
 - **The hourly spend is bursty.** After the 15:21 UTC reset the login spent about 40 points
   per minute for 20 minutes. In the hour that ran dry it spent about 180 per minute. A
   15-minute watch after the reset caught no burst.
-- **The landing limits read one bucket.** `land_lib/live_limit.py` lowers the number of live
-  `--detach` landings on a host, and `land_lib/slots.py` the landing slots across both hosts,
-  when the REST quota runs low. Neither reads the GraphQL quota.
+- **The landing slots read one bucket.** `land_lib/slots.py` lowers the count of landing
+  slots across both hosts when the REST quota runs low. It does not read the GraphQL quota.
 
 ## GitHub's rules the design rests on
 
