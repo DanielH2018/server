@@ -71,7 +71,8 @@ observability's `bridge-exporter.yaml`** for it to page
 
 ## The two exporters
 
-`files/verdict_export.py` serves the check verdicts and the domain registration's days left
+`files/verdict_export.py` serves the check verdicts, each down row's failing members and the
+domain registration's days left
 (`k8s/roles/monitor-bridge/files/verdict_export.py:CheckExposition`), and
 `files/deploy_pipeline.py` serves five `homelab_deploy_*` gauges from the `promote` workflow's
 state
