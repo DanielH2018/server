@@ -130,7 +130,13 @@ from fanout_lib.review.base_check import BaseCheck, unproven_tests
 from fanout_lib.review.git_state import GitState, changed, snapshot
 from fanout_lib.review.hunk_check import HunkCheck, red_detection
 from fanout_lib.review.processes import otel_attributes, reaping, run_process
-from fanout_lib.review.review_ci import awaits_ci, ci_gate, land_draft, ready_gate
+from fanout_lib.review.review_ci import (
+    awaits_ci,
+    ci_gate,
+    land_draft,
+    ready_gate,
+    server_lands,
+)
 from fanout_lib.review.review_land import (
     LAND_MARGIN_S,
     RESUME_VERDICTS,
@@ -606,15 +612,17 @@ class Pipeline:
         )
         # A PR this pipeline lands stays a draft for `land_draft`. Any other is marked ready,
         # a held one included, since a PR left a draft gets no CI.
-        lands_it = held is None and lands(self.host, self.target.repo)
+        lands_it = held is None and (
+            lands(self.host, self.target.repo) or server_lands(self, self.record.head)
+        )
         ready = None if lands_it else ready_gate(self)
         final = held or ready
-        if final is None and awaits_ci(self.host, self.target):
+        if final is None and not lands_it and awaits_ci(self.host, self.target):
             # Before the comment, so the comment carries the CI gate beside the others.
             last, final = ci_gate(self, last)
         comment = ["gh", "pr", "comment", self.record.pr, "--body-file", "-"]
         self.run(comment, comment_body(self.record))
-        final = final or self._finish(last)
+        final = final or self._finish(last, lands_it)
         self.record.settle(final, has_pr=True)
         self._save()
         held = sum(1 for f in self.record.remaining if is_held(f))
@@ -629,8 +637,8 @@ class Pipeline:
     def time_left(self) -> float:
         return self.deadline - self.clock()
 
-    def _finish(self, last: Phase) -> dict:
-        if lands(self.host, self.target.repo):
+    def _finish(self, last: Phase, lands_it: bool) -> dict:
+        if lands_it:
             if self.time_left() < LAND_MARGIN_S:
                 return out_of_time(self.record.pr)
             # Filed before the merge, so the PR body names each leftover's issue.

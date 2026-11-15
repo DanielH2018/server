@@ -8,11 +8,12 @@ repaired the branch by hand. The daniel-box pipeline had the same gap one step l
 `RESUME_VERDICTS` does not resume for it. This module gives both hosts one resume for a red
 run, after the review and its fix round.
 
-WHERE THE RUN COMES FROM differs by host. A daniel-server batch waits for its PR's own run
-here (`ready_gate`, then `ci_gate`), because the landing happens later and elsewhere. A
-daniel-box batch lands its PR as a draft (`land_draft`): `land.sh` marks it ready, or a landing
-batch tests it with other drafts, so no run is spent before the landing
-(`docs/ci-throughput.md`, D9). A landing that ends `pr-ci-red` is that batch's red run.
+WHERE THE RUN COMES FROM. A batch that lands its PR lands it as a draft (`land_draft`):
+`land.sh` marks it ready, or a landing batch tests it with other drafts, so no run is spent
+before the landing (`docs/ci-throughput.md`, D9). A landing that ends `pr-ci-red` is that
+batch's red run. Every daniel-box batch lands, and a daniel-server batch lands when
+`server_lands` passes it. A daniel-server batch it holds waits for its PR's own run here
+(`ready_gate`, then `ci_gate`), and the server lander leaves the PR for a person.
 
 THE DRAFT (#5563). This repo's review batch opens its PR as a draft, and `ci.yml` runs no job on
 a draft. On daniel-server, `ready_gate` marks the PR ready once the review and its fix round are
@@ -86,6 +87,7 @@ from fanout_lib.review.review_land import (
     login,
     out_of_time,
 )
+from fanout_lib import own_surface
 from fanout_lib.review.review_prompts import ci_fix_prompt
 from fanout_lib.review.review_record import Phase, Record
 from fanout_lib.brief import drafts_pr, lands
@@ -426,6 +428,38 @@ def ready_gate(pipe: "Pipeline") -> dict | None:
     return {"type": "result", "is_error": False, "result": f"needs input: {why}.\n{pr}"}
 
 
+def server_lands(pipe: "Pipeline", head: str) -> bool:
+    """Whether a daniel-server batch lands its own draft at `head`, recording why when not.
+
+    A batch on a host that does not land, this repo's own, lands its draft as a daniel-box
+    batch does, but only a PR the server lander would land unattended
+    (`own_surface.pr_problems`), still at `head`. The operator ruled both on 2026-11-15
+    (option B in `docs/ci-throughput.md`). A PR that check holds after the review is marked
+    ready and waits for its run, and the server lander leaves it for a person, as before.
+    """
+    if not awaits_ci(pipe.host, pipe.target):
+        return False
+    record = pipe.record
+    out = pipe.run(
+        ["gh", "pr", "view", record.pr, "-R", pipe.target.repo, "--json",
+         own_surface.PR_FIELDS],
+        None,
+    )  # fmt: skip
+    try:
+        pr = json.loads(out.stdout)
+    except ValueError:
+        pr = None
+    if not isinstance(pr, dict):
+        record.land_hold = "the PR could not be read"
+    elif str(pr.get("headRefOid") or "") != head:
+        record.land_hold = f"the head moved from {head[:8]}"
+    else:
+        record.land_hold = own_surface.pr_problems(
+            pr, pipe.batch, own_surface.live_testpaths_only
+        )
+    return not record.land_hold
+
+
 def awaits_ci(host: str, target: Target) -> bool:
     """Whether a batch waits for its PR's CI here: this repo's batch on a host that does not land.
 
@@ -487,6 +521,10 @@ def land_draft(pipe: "Pipeline") -> tuple[Landing, dict | None]:
     _ci_fix(pipe, landing.line, failing_checks(pipe.run, pr, repo))
     if pipe.time_left() < LAND_MARGIN_S:
         return landing, out_of_time(record.pr)
+    fixed = pr_head(pipe.run, record.pr, repo)
+    if awaits_ci(pipe.host, pipe.target) and not server_lands(pipe, fixed):
+        why = f"the CI fix left the PR for a person: {record.land_hold}"
+        return landing, _needs_input(record, why)
     landing = landed()
     again = _again(record)
     if landing.verdict == PR_CI_RED:
