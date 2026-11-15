@@ -97,12 +97,12 @@ same failure, and `claim` leaves a stale claim standing rather than reaping on a
 `claim` takes every issue it can and refuses the rest, so one `manual` issue does not cost
 the good claims in the same batch.
 
-SESSION MILESTONES. A claim also adds the issue to a GitHub milestone titled with the claiming
-`worktree-*` branch, creating or reopening it first. `release`, `reap` and `manual` take the
-issue back out. `close` leaves it in, as the session's finished work. The `pr-milestone`
-workflow adds the session's PR, and a fan-out batch's issues and PR join the orchestrator's
-milestone. `reap` closes a milestone once no worktree holds its branch and nothing open is
-left in it. `findings_lib/milestone.py` has the rest.
+SESSION MILESTONES. `milestone start "<title>" --worktree <branch>` opens a GitHub milestone
+for one piece of focused work, and nothing else makes one. While it is open, `claim` files
+the branch's issues under it and `release`, `reap` and `manual` take them back out. `close`
+leaves a fixed issue in. The `session-milestone` workflow files the branch's PR and closes
+the milestone once nothing in it is open. A later claim or PR reopens it. `milestone status`
+shows it, and `milestone close` abandons it. `findings_lib/milestone.py` has the rest.
 
 PICKING UP WORK. `next` prints EVERY issue a session may claim, best severity first,
 withholding `manual` issues, issues deferred to a later date, issues an open issue blocks, issues a LIVE claim already
@@ -166,6 +166,7 @@ from lib.cli_help import refuse_help_under_describe
 from lib.exit_codes import FINDINGS_BAD_ARGS
 from lib.progress import count_line
 from dev.findings_lib.claim_cli import cmd_claim, cmd_claims, cmd_reap, cmd_release
+from dev.findings_lib.milestone_cli import cmd_milestone
 from dev.findings_lib.cli import _parser
 from dev.findings_lib.export_cli import cmd_export
 from dev.findings_lib.history_cli import cmd_history, cmd_show
@@ -748,6 +749,7 @@ def main(argv: list[str] | None, tools: FindingsTools) -> int:
         "release": cmd_release,
         "claims": cmd_claims,
         "reap": cmd_reap,
+        "milestone": cmd_milestone,
         "close": cmd_close,
         "verify": cmd_verify,
         "next": cmd_next,
