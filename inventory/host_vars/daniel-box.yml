@@ -62,6 +62,9 @@ claude_code_fanout_server_lander_enabled: true
 # Snapshots the per-PR pipeline timeline daily, before its journal inputs rotate (issue #5661).
 # False removes the timer and its units; the snapshots stay.
 claude_code_pipeline_timeline_enabled: true
+# Posts the previous week's triage runs and Renovate ticks every Monday (dotfiles#967 C7).
+# False removes the timer and its units; the posted-week record stays.
+claude_code_weekly_summary_enabled: true
 # The D5 flip pre-merge checks as one sudoers-granted wrapper (issue #5494); daniel-box holds the
 # cluster-admin kubeconfig. False removes the grant, the wrapper, the flux copy and the state dir.
 claude_code_takeover_check_enabled: true

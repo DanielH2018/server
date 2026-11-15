@@ -317,6 +317,40 @@ groups:
             `systemctl status homelab-claude-dotfiles-mirror.timer` and `journalctl -t
             claude-dotfiles-mirror`, then
             /var/lib/node-exporter-textfile/claude-dotfiles-mirror.prom on the host.
+      # The weekly summary of the unattended Claude runs (dotfiles#967 C7), on daniel-box only.
+      # Its timer runs every Monday and 10 minutes after each activation, so the 608400s
+      # deadline is a week plus an hour.
+      - alert: ClaudeWeeklySummaryFailed
+        expr: homelab_check_success{check="claude-weekly-summary",origin="daniel-box"} == 0
+        labels:
+          severity: warning
+          service: daniel-box
+        annotations:
+          summary: The weekly Claude runs summary on daniel-box did not post, or read a source.
+          description: >-
+            claude-weekly-summary on daniel-box ended with status=down: the Discord post
+            failed, or a source of run records could not be read. A failed post is retried by
+            the next run. Run `journalctl -t claude-weekly-summary` on daniel-box.
+      - alert: ClaudeWeeklySummaryNotReporting
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="claude-weekly-summary",origin="daniel-box"} > 608400
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="claude-weekly-summary",origin="daniel-box"}[608400s])
+          )
+          unless on (origin) (up{job="node"} == 0)
+        labels:
+          severity: warning
+          service: daniel-box
+        annotations:
+          summary: The weekly Claude runs summary on daniel-box has stopped reporting.
+          description: >-
+            No claude-weekly-summary verdict newer than 169 hours reached Prometheus from
+            daniel-box's textfile collector, so last week's unattended runs were not
+            summarised. Read `systemctl status homelab-claude-weekly-summary.timer` and
+            `journalctl -t claude-weekly-summary`, then
+            /var/lib/node-exporter-textfile/claude-weekly-summary.prom on the host. If
+            `claude_code_weekly_summary_enabled` was set false on purpose, delete this rule.
       # M6 BATCH B1, LIVE SINCE ITS CUTOVER-1B. The two k3s crons write the textfile beside
       # their Kuma push, and Cutover-1a deleted Kuma's tiles for the same verdicts, so these
       # rules are their pager. Each check has the DiskHealth pair: `Failed` reads the verdict, and

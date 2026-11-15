@@ -1,0 +1,14 @@
+# Shipped by daniel-box's package with its enable link while claude_code_weekly_summary_enabled.
+# Each Monday's run covers the ISO week before it. OnActiveSec= adds a run 10 minutes after each
+# activation, at boot and at install, so the check file exists before the first Monday; a run for
+# a week already posted posts nothing.
+[Unit]
+Description=Post the weekly summary of the unattended Claude runs every Monday
+
+[Timer]
+OnCalendar=Mon *-*-* 09:00:00 UTC
+OnActiveSec=10min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
