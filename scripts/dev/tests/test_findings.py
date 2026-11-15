@@ -552,3 +552,12 @@ def test_the_list_cap_does_not_sit_above_the_ceiling_gh_enforces_itself():
     were missing from the rendered settled register.
     """
     assert ISSUE_LIST_CAP <= 1000
+
+
+def test_close_fixed_on_another_register_with_its_own_pr_stays_bare(make_tools, issue):
+    tools, calls = make_tools(Fakes(view=issue(1395)))
+    register = "DanielH2018/dotfiles"
+    argv = ["close", "1395", "--fixed", "--pr", "1400", "--repo", register]
+    assert findings.main([*argv, "--pr-repo", register], tools) == 0
+    (close,) = [c for c in calls.gh if c[:2] == ["issue", "close"]]
+    assert close[close.index("--comment") + 1] == "Fixed by PR #1400."

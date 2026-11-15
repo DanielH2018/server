@@ -237,3 +237,9 @@ def test_a_settle_reason_from_outside_the_repo_is_not_printed(capsys):
     )
     rows, _ = _rows(capsys, ["history", "x"], [issue])
     assert rows[0]["reason"] == "the operator's ruling"
+
+
+def test_a_bare_fixed_by_line_on_another_register_names_its_own_pr(capsys):
+    issue = _closed(1395, reason="COMPLETED", comments=["Fixed by PR #1400."])
+    rows, _ = _rows(capsys, ["history", "x", "--repo", "DanielH2018/dotfiles"], [issue])
+    assert rows[0]["prs"] == [1400]

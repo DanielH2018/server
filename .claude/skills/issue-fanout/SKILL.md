@@ -660,7 +660,7 @@ c. **Land each PR serially** from its batch's tree with `bin/land <branch>`, whi
    syncs the primary checkout's `main`. Landing is not deploying there. Read `chezmoi diff` and
    then run `chezmoi apply`, as the `chezmoi-repo-ops` skill describes. The report's verdict
    column is what `chezmoi diff` showed before the apply. Once a PR has landed, close its issues
-   with `findings.py close <n> --fixed --pr <n> --repo DanielH2018/dotfiles`. Run it even when the
+   with `findings.py close <n> --fixed --pr <n> --repo DanielH2018/dotfiles --pr-repo DanielH2018/dotfiles`. Run it even when the
    PR's `Closes #<n>` already closed the issue: GitHub's close leaves the claim standing, and
    `close` releases it. Then `clean <run-id>` removes the landed trees, as in section 3.
 d. **Abandon an unfinished batch as in section 5.** `abandon <run-id> <batch>` acts on the

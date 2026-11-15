@@ -470,7 +470,8 @@ def plan_close(
     pr: int | None = None,
     reason: str | None = None,
     comment: str | None = None,
-    repo: str | None = None,
+    register: str | None = None,
+    pr_repo: str | None = None,
 ) -> list[list[str]]:
     """Plans the gh argv to close an issue as fixed, refuted or accepted.
 
@@ -484,15 +485,21 @@ def plan_close(
             the trade-off was accepted.
         comment: overrides the default close comment, for a caller that has something to
             record other than the PR that fixed the finding.
-        repo: the register's `OWNER/NAME`, or None for this repo's own. On another register
-            a bare `#N` links that repo's PR N, so the comment qualifies the PR with `PR_REPO`.
+        register: the issue's `OWNER/NAME`, or None for `PR_REPO`.
+        pr_repo: the repo `pr` belongs to, or None for `PR_REPO`. The comment qualifies the PR
+            when it differs from the register, because a bare `#N` links the register's own PR N.
 
     Raises:
         KeyError: if ``outcome`` is not one of the three names.
     """
     n = str(number)
     if outcome == "fixed":
-        ref = f"#{pr}" if repo in (None, PR_REPO) else f"{PR_REPO}#{pr}"
+        where = pr_repo or PR_REPO
+        ref = (
+            f"#{pr}"
+            if where.lower() == (register or PR_REPO).lower()
+            else f"{where}#{pr}"
+        )
         by = f" by PR {ref}" if pr else ""
         text = comment or f"Fixed{by}."
         return [["issue", "close", n, "--reason", "completed", "--comment", text]]
