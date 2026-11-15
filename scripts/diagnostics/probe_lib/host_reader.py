@@ -1,19 +1,27 @@
 """One read of a host's journal, files and unit state, made in a single process on that host.
 
-`probe.py builder` and `lander` each read state that lives on one host: a system unit's journal,
-a textfile, a landing log.
+`probe.py builder`, `lander` and `unit` each read state that lives on one host: a system unit's
+journal, a textfile, a landing log, a timer's next trigger.
 Every such read goes through `read_host`, which runs `READER` there with `python3 -I -` and
 parses the one JSON document it prints. On the host itself that is a local process; anywhere
-else it is ONE ssh call, because `ufw limit ssh` refuses a sixth connection in 30 seconds.
+else it is ONE ssh call, because `ufw limit ssh` refuses a sixth connection in 30 seconds. A
+read of daniel-pi from a host other than daniel-box makes that call through daniel-box.
 
 `READER` is stdlib-only. `read_host` writes the plan into it as a string literal, because
-`python3 -` reads the whole of stdin as the program. A plan is a JSON object with any of four
+`python3 -` reads the whole of stdin as the program. A plan is a JSON object with any of five
 keys:
 
-- `journal`: `{key: [unit, since, until]}`. Each read is `journalctl -u <unit> -o json`, and its
-  entries come back as `[epoch_s, priority, invocation_id, identifier, message]`.
+- `journal`: `{key: [unit, since, until]}`, or `[unit, since, until, by, lines]`. Each read is
+  `journalctl -u <unit> -o json`. A `by` of `-t` reads a syslog identifier instead, and
+  `match` passes the first element as a `FIELD=value` match (`UNIT=<unit>` is systemd's own
+  lines about the unit). `lines`
+  keeps only the newest that many, and a null `since` reads without a window. Its entries
+  come back as `[epoch_s, priority, invocation_id, identifier, message]`.
 - `files`: paths whose text to return.
 - `show`: `{unit: [property, ...]}` read with `systemctl show`.
+- `timers`: timer units whose `systemctl list-timers -o json` row to return, null for one
+  systemd does not list. Its `next` is wall-clock microseconds even for a monotonic timer,
+  whose `NextElapseUSecRealtime` property is empty.
 - `logs`: `[directory, glob, since_epoch]`. Each match newer than the cutoff returns its
   `VERDICT:` line, its `.rc` text and whether the pid in its `.pid` is alive.
 
@@ -33,11 +41,13 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 import json
 import re
+import shlex
 import socket
 import subprocess
 from dataclasses import dataclass
 
 from diagnostics.probe_lib import core
+from lib.inventory_lists import LANDING_HOST, PI_HOST
 from lib.systemd_timer import span_s
 
 BOX = "daniel-box"
@@ -48,11 +58,15 @@ import fnmatch, json, os, pwd, subprocess
 plan = json.loads(__PLAN__)
 out = {"host": os.uname().nodename, "user": pwd.getpwuid(os.getuid()).pw_name}
 
-def journal(unit, since, until):
-    argv = ["journalctl", "-u", unit, "--since", since, "-o", "json", "--no-pager",
+def journal(unit, since, until, by="-u", lines=None):
+    argv = ["journalctl", *([] if by == "match" else [by]), unit, "-o", "json", "--no-pager",
             "--output-fields=MESSAGE,PRIORITY,_SYSTEMD_INVOCATION_ID,SYSLOG_IDENTIFIER"]
+    if since:
+        argv += ["--since", since]
     if until:
         argv += ["--until", until]
+    if lines:
+        argv += ["-n", str(lines)]
     try:
         p = subprocess.run(argv, capture_output=True, text=True, timeout=60)
     except (OSError, subprocess.TimeoutExpired) as exc:
@@ -126,7 +140,17 @@ def show(unit, props):
         return {}
     return dict(line.split("=", 1) for line in p.stdout.splitlines() if "=" in line)
 
+def timer(unit):
+    argv = ["systemctl", "list-timers", unit, "--all", "-o", "json"]
+    try:
+        p = subprocess.run(argv, capture_output=True, text=True, timeout=20)
+        rows = json.loads(p.stdout or "[]")
+    except (OSError, subprocess.TimeoutExpired, ValueError):
+        return None
+    return next((r for r in rows if r.get("unit") == unit), None)
+
 out["journal"] = {k: journal(*v) for k, v in plan.get("journal", {}).items()}
+out["timers"] = {u: timer(u) for u in plan.get("timers", [])}
 out["files"] = {p: text(p) for p in plan.get("files", [])}
 out["show"] = {u: show(u, ps) for u, ps in plan.get("show", {}).items()}
 out["logs"] = logs(*plan["logs"]) if plan.get("logs") else None
@@ -165,12 +189,18 @@ def unit_span_s(text: str, key: str) -> int:
 
 
 def reader_argv(host: str, here: str) -> list[str]:
-    """The command that runs `READER` on `host`, seen from the host named `here`."""
-    if here.split(".")[0] == host:
+    """The command that runs `READER` on `host`, seen from the host named `here`.
+
+    Only `LANDING_HOST` holds a key daniel-pi accepts, so a read of the Pi from anywhere else
+    hops through it, as `core.pi_ssh_argv` does (#8773).
+    """
+    here = here.split(".")[0]
+    if here == host:
         return ["python3", "-I", "-"]
-    return [
-        "ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", host, "python3 -I -",
-    ]  # fmt: skip
+    ssh = ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10"]
+    if host == PI_HOST and here != LANDING_HOST:
+        return [*ssh, LANDING_HOST, shlex.join([*ssh, host, "python3 -I -"])]
+    return [*ssh, host, "python3 -I -"]
 
 
 def read_host(

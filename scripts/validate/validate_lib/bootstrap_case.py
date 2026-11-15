@@ -16,7 +16,9 @@ systemd loads that unit:
     fail the run.
   * `--local-build --offline <kit>` on daniel-box, in a container with no network at all, which
     is stricter than the spec's unresolvable GitHub and GHCR hostnames. The kit is stocked on the
-    runner from the script's own pins. Its output says the clone is unchecked.
+    runner from the script's own pins. Its output says the clone is unchecked. Its apt makes no
+    retries, so step 5's update of Ubuntu's sources fails in seconds rather than backing off for
+    181 s (#7982).
   * The kit's two red fixtures, each the green kit with one file changed and each in a fresh
     container: with no k3s binary the script refuses and names `k3s`, and with an nfpm archive
     that differs from its pin it refuses and names the archive.
@@ -122,6 +124,8 @@ SWAPON_SHIM = "/usr/local/sbin/swapon"
 DIG_SHIM = "/usr/local/sbin/dig"
 COPY = "/root/bootstrap"
 TOOLS_SEED = "/srv/tools-seed"
+# The image's Acquire::Retries 10 backs off 181 s on every fetch an offline container cannot make.
+NO_RETRIES = "/etc/apt/apt.conf.d/90bootstrap-case-no-retries"
 # A join address and token for the agent, which the installer writes and nothing contacts.
 AGENT_ENV = "K3S_URL=https://192.0.2.10:6443 K3S_TOKEN=bootstrap-case-token"
 UNITS = {"daniel-box": "k3s.service", "daniel-server": "k3s-agent.service"}
@@ -360,6 +364,8 @@ class Bootstrap:
         c.boot(self.cases.python)
         c.ok("rm -f /etc/apt/sources.list.d/homelab.sources")
         install_apt_shim(c)
+        if self.kit is not None:
+            c.ok(f"echo 'Acquire::Retries \"0\";' > {NO_RETRIES}")
         c.ok(
             f"install -d {COPY} && cp /srv/clone/hosts/bootstrap-host.sh"
             f" /srv/clone/hosts/keys/homelab-archive-keyring.gpg {COPY}/"

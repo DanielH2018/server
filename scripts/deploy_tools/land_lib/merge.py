@@ -436,8 +436,10 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
     guessed.
 
     A PR arm_merge left for a direct merge is merged here, on the first poll where await_ci
-    reads its head green. A stale head merges as it stands unless the operator approved it
-    (`stale_base.refuse_stale_approved`).
+    reads its head green. A green ready head master moved past rejoins the line as a draft,
+    before it asks for the turn or, when master moved while it waited, by giving the turn
+    back (`stale_base.rejoin_line`). A stale head that reaches the merge anyway merges as it
+    stands unless the operator approved it (`stale_base.refuse_stale_approved`).
 
     `take_turn` takes the landing turn (`turn.held`): it waits in line and returns whether
     this landing holds the turn and the seconds that call waited. A head with no CI run takes
@@ -623,6 +625,20 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
                     queued += in_line
                     waited += in_line
                     wait_ends_at = min(waited + o.merge_timeout, wait_cap)
+                    # DECIDED: a ready head master moved past while it waited gives the turn
+                    # back and rejoins the line as a draft (the operator, 2026-11-15, amending
+                    # D10 in docs/ci-throughput.md): merged as it stands, master sweeps in full.
+                    if (
+                        in_turn
+                        and ln.give_back_turn
+                        and stale_base.rejoin_line(
+                            ln, head, view.get("mergeable") == "CONFLICTING"
+                        )
+                    ):
+                        ln.give_back_turn()
+                        say("gave the landing turn back to wait in the line as a draft")
+                        in_turn = False
+                        updated_from, rejoined, drafted = head, True, True
                     continue
             if rc == CI_GREEN and ln.direct_merge_subject:
                 slots.refuse_before_merge(ln)

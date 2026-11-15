@@ -45,8 +45,9 @@ CI_BRANCH = "master"
 PYTEST_PREFIX = "pytest (shard"
 SUITE_STEP = "Run the test suite"
 # How many green master runs `--recent` lists to find N that ran pytest. A push whose tree a
-# landing already proved skips every leg.
-RUN_WINDOW = 60
+# landing already proved skips every leg: 14 of the newest 60 ran pytest on 2026-11-15, and
+# the shard counts are read on 20.
+RUN_WINDOW = 200
 
 _ACTION_SHA = re.compile(r"@[0-9a-f]{40}\b")
 

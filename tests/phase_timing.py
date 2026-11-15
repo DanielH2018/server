@@ -22,6 +22,10 @@ process on one host shares.
 - `prebuilt`: the `pytest_collection_finish` hooks returned, so the prebuilds are done.
 - `tests`: the seconds of setup, call and teardown the process ran, which `--durations` sums.
 - `finished`: the process's last test ended.
+- `rewrote`: the test modules whose assertions the process rewrote, and the seconds that took.
+  pytest rewrites a module only when `__pycache__` holds no rewritten copy whose source hash
+  matches, so on a CI leg this counts the modules the restored rewrite cache missed (#8693).
+  It reads `-` on a pytest that has no `_rewrite_test` to time.
 
 `down` is when the controller saw the worker shut down. After the workers, the slowest module
 collections: import time plus parametrize time, the larger of what any worker measured, since
@@ -31,8 +35,11 @@ Run: uv run pytest tests/repo/test_phase_timing.py
 """
 
 import time
+import types
+from pathlib import Path
 
 import pytest
+from _pytest.assertion import rewrite as _rewrite
 
 KEY = "phase_timing"
 # Module collections slower than this are listed, at most `TOP_COLLECTIONS` of them.
@@ -46,6 +53,8 @@ class _Timing:
         self.prebuilt = 0.0
         self.finished = 0.0
         self.tests = 0.0
+        self.rewritten: int | None = None
+        self.rewrite_seconds = 0.0
         self.collections: dict[str, float] = {}
         self._starts: dict[str, float] = {}
 
@@ -55,6 +64,8 @@ class _Timing:
             "prebuilt": self.prebuilt,
             "finished": self.finished,
             "tests": self.tests,
+            "rewritten": self.rewritten,
+            "rewrite_seconds": self.rewrite_seconds,
             "collections": self.collections,
         }
 
@@ -68,9 +79,29 @@ def _reporting(config: pytest.Config) -> bool:
     return config.getoption("durations", None) is not None
 
 
+def _time_rewrites() -> None:
+    """Wrap pytest's assertion rewrite so each call adds to `_timing`, once per process."""
+    original = getattr(_rewrite, "_rewrite_test", None)
+    if original is None or getattr(original, KEY, False):
+        return
+
+    def timed(fn: Path, config: pytest.Config) -> tuple[bytes, types.CodeType]:
+        started = time.perf_counter()
+        try:
+            return original(fn, config)
+        finally:
+            _timing.rewritten = (_timing.rewritten or 0) + 1
+            _timing.rewrite_seconds += time.perf_counter() - started
+
+    setattr(timed, KEY, True)
+    _timing.rewritten = 0
+    vars(_rewrite)["_rewrite_test"] = timed
+
+
 def pytest_sessionstart(session: pytest.Session) -> None:
     global _session_start
     _session_start = time.monotonic()
+    _time_rewrites()
 
 
 def pytest_collectstart(collector: pytest.Collector) -> None:
@@ -126,10 +157,16 @@ def summary_lines(start: float, workers: dict[str, dict]) -> list[str]:
     collections: dict[str, float] = {}
     for name, t in sorted(workers.items()):
         down = f"  down {_since(start, t['down'])}" if "down" in t else ""
+        rewrote = (
+            "-"
+            if t.get("rewritten") is None
+            else f"{t['rewritten']} in {t['rewrite_seconds']:.1f}s"
+        )
         lines.append(
             f"{name:>5}  collected {_since(start, t['collected'])}"
             f"  prebuilt {_since(start, t['prebuilt'])}"
-            f"  tests {t['tests']:7.1f}s  finished {_since(start, t['finished'])}{down}"
+            f"  tests {t['tests']:7.1f}s  finished {_since(start, t['finished'])}"
+            f"  rewrote {rewrote}{down}"
         )
         for module, seconds in t["collections"].items():
             collections[module] = max(seconds, collections.get(module, 0.0))

@@ -23,9 +23,9 @@
 #   * observability's UPS* rules (UPSOnBattery, UPSBatteryLow and the rest, in hosts.yaml) read
 #     nut-exporter's scrape of upsd, i.e. the UPS as seen THROUGH the cluster. They say the UPS is
 #     fine, not that this host can hear it.
-#   * the "k3s nut (upsd)" Kuma tile is a TCP probe from the Kuma POD over Service DNS. It
-#     crosses the pod network, not the host-netns path this host's upsmon takes, so it can stay
-#     green while that path is broken.
+#   * the "k3s nut (upsd)" Kuma tile, retired with Kuma, was a TCP probe from the Kuma POD over
+#     Service DNS. A probe from a pod crosses the pod network, not the host-netns path this
+#     host's upsmon takes, so it stays green while that path is broken.
 #   * node-exporter runs without --collector.systemd, so no node_systemd_unit_state series
 #     exists for anything to alert on nut-monitor being dead.
 #

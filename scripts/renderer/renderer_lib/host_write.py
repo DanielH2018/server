@@ -67,7 +67,11 @@ def _write_tree(package: Package, base: Path, arch: str) -> list[Path]:
     (base / "nfpm.yaml").write_text(package.nfpm_spec(arch))
     written.append(base / "nfpm.yaml")
     if package.tools:
-        pins = {tool: arches[arch].as_json() for tool, arches in package.tools.items()}
+        pins = {
+            tool: arches[arch].as_json()
+            for tool, arches in package.tools.items()
+            if arch in arches
+        }
         (base / PINS_FILE).write_text(json.dumps(pins, indent=2, sort_keys=True) + "\n")
         written.append(base / PINS_FILE)
     return written

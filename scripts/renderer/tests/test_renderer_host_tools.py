@@ -37,6 +37,9 @@ NAMED_MEMBERS = frozenset(
 # nfpm and uv name the amd64 build x86_64, Vale names it 64-bit, and uv names the arm64 build
 # aarch64.
 UPSTREAM_ARCH = {"amd64": ("x86_64", "64-bit"), "arm64": ("aarch64",)}
+# daniel-pi is the one arm64 host, so the arm64 package ships what its packages name.
+ARM64_TOOLS = frozenset({"node-exporter", "sops"})
+TOOL_PATH = re.compile(rf"{re.escape(BIN_DIR)}/([a-z0-9][a-z0-9-]*)")
 DIGEST = "a" * 64
 PACKAGE_SPEC = REPO / "hosts/packages/homelab-tools/package.yml"
 
@@ -102,18 +105,15 @@ def test_a_render_writes_one_tree_per_architecture_with_its_own_pins(tmp_path):
         tree = out / "packages" / "homelab-tools" / arch
         nfpm = yaml_fast.safe_load((tree / "nfpm.yaml").read_text())
         assert nfpm["arch"] == arch
-        assert {c["dst"] for c in nfpm["contents"]} == NAMED_MEMBERS
-        pins = json.loads((tree / PINS_FILE).read_text())
-        assert set(pins) == {
-            "sops",
-            "chezmoi",
-            "nfpm",
-            "node-exporter",
-            "uv",
-            "flux",
-            "vale",
-            "coredns",
+        shipped = {
+            "amd64": {member.rsplit("/", 1)[-1] for member in NAMED_MEMBERS},
+            "arm64": ARM64_TOOLS,
+        }[arch]
+        assert {c["dst"] for c in nfpm["contents"]} == {
+            f"{BIN_DIR}/{tool}" for tool in shipped
         }
+        pins = json.loads((tree / PINS_FILE).read_text())
+        assert set(pins) == shipped
         assert all(
             arch in p["url"] or any(a in p["url"] for a in UPSTREAM_ARCH[arch])
             for p in pins.values()
@@ -132,6 +132,100 @@ def test_a_package_without_tools_keeps_one_tree_and_arch_all(tmp_path):
 
 def test_the_pi_package_depends_on_homelab_tools():
     assert "homelab-tools" in host_mode.render_host("daniel-pi").depends
+
+
+def arm64_scope_problems(
+    packages: list, shipped: set[str], pinned: set[str]
+) -> list[str]:
+    """Each way the arm64 tool list differs from the pinned tools `packages` name by path."""
+    named = {
+        tool
+        for package in packages
+        for content, _ in package.files.values()
+        for tool in TOOL_PATH.findall(content.decode(errors="replace"))
+    } & pinned
+    return [
+        *(
+            f"{tool} is named by a Pi package and not shipped"
+            for tool in sorted(named - shipped)
+        ),
+        *(
+            f"{tool} is shipped and no Pi package names it"
+            for tool in sorted(shipped - named)
+        ),
+    ]
+
+
+def pi_packages() -> list:
+    return [
+        host_mode.render_host("daniel-pi"),
+        host_mode.render_package("homelab-updater"),
+    ]
+
+
+def test_the_arm64_package_ships_exactly_the_tools_the_pi_names_is_clean():
+    tools = host_mode.render_package("homelab-tools").tools
+    shipped = {tool for tool, arches in tools.items() if "arm64" in arches}
+    assert shipped == ARM64_TOOLS
+    assert arm64_scope_problems(pi_packages(), shipped, set(tools)) == []
+
+
+def test_ci_runs_each_arm64_tool_on_the_arm64_runner():
+    loop = re.search(
+        r"for tool in ([^;]+); do", (REPO / ".github/workflows/ci.yml").read_text()
+    )
+    assert loop and set(loop.group(1).split()) == ARM64_TOOLS
+
+
+def test_an_arm64_list_that_adds_or_drops_a_tool_is_flagged():
+    pinned = set(host_mode.render_package("homelab-tools").tools)
+    assert arm64_scope_problems(pi_packages(), {"sops", "coredns"}, pinned) == [
+        "node-exporter is named by a Pi package and not shipped",
+        "coredns is shipped and no Pi package names it",
+    ]
+
+
+def test_tools_on_narrows_one_architecture_and_leaves_the_other_whole(hosts, tmp_path):
+    package = render(hosts, {**spec(sops={}, uv={}), "tools_on": {"arm64": ["sops"]}})
+    assert {tool: sorted(arches) for tool, arches in package.tools.items()} == {
+        "sops": ["amd64", "arm64"],
+        "uv": ["amd64"],
+    }
+    host_mode.write_packages([package], tmp_path / "out")
+    tree = tmp_path / "out/packages/homelab-tools/arm64"
+    nfpm = yaml_fast.safe_load((tree / "nfpm.yaml").read_text())
+    assert [c["dst"] for c in nfpm["contents"]] == [f"{BIN_DIR}/sops"]
+    assert set(json.loads((tree / PINS_FILE).read_text())) == {"sops"}
+
+
+@pytest.mark.parametrize(
+    ("tools_on", "message"),
+    [
+        pytest.param(["sops"], "not a mapping", id="a-list"),
+        pytest.param({"riscv64": ["sops"]}, "not a mapping", id="architecture-unknown"),
+        pytest.param({"arm64": []}, "non-empty list", id="nothing-shipped"),
+        pytest.param({"arm64": "sops"}, "non-empty list", id="a-bare-name"),
+        pytest.param({"arm64": ["sops", "sops"]}, "distinct", id="a-repeat"),
+        pytest.param({"arm64": ["flux"]}, "does not pin", id="tool-not-pinned"),
+        pytest.param(
+            {"amd64": ["sops"], "arm64": ["sops"]},
+            "uv on no architecture",
+            id="tool-shipped-nowhere",
+        ),
+    ],
+)
+def test_a_tools_on_that_is_malformed_or_strands_a_tool_is_refused(
+    hosts, tools_on, message
+):
+    with pytest.raises(RenderRefused, match=message):
+        render(hosts, {**spec(sops={}, uv={}), "tools_on": tools_on})
+
+
+def test_tools_on_without_tools_is_refused(hosts):
+    with pytest.raises(RenderRefused, match="tools is not a non-empty mapping"):
+        render(
+            hosts, {"tools_on": {"arm64": ["sops"]}}, where="packages/homelab-updater"
+        )
 
 
 def test_a_valid_fixture_renders_and_expands_both_placeholders(hosts):

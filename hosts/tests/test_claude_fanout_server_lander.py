@@ -20,7 +20,7 @@ import re
 from _agent_package import render_daniel_server_with
 from _helpers import load_yaml, REPO
 from _setup_render import CLAUDE_CODE, render_component_text
-from fanout_lib import autoland, own_surface
+from fanout_lib import own_surface
 from lib.repo_paths import HOST_VARS
 
 ROLE = CLAUDE_CODE
@@ -75,7 +75,6 @@ def test_land_sh_is_pinned_to_the_batches_branch_and_author():
 def test_the_timer_runs_every_ten_minutes_by_default():
     timer = _render(TIMER)
     assert "OnUnitActiveSec=10min" in timer
-    assert autoland.MAX_STARTS == 2
 
 
 def test_armed_only_on_daniel_box_and_disarming_drops_the_units(tmp_path):

@@ -601,7 +601,8 @@ C-4b waits on D6, but nothing from C-1 to C-7 waits on C-4b.
   - Served by a plain systemd unit on daniel-box, outside k3s. H3 picks the port and the URL.
 - **Architecture-specific tools.** `homelab-tools` is the one architecture-specific package,
   built for `amd64` and `arm64` by nfpm from pinned upstream binaries, `sops` and `chezmoi`
-  among them. Every other package is `Architecture: all`. H3 builds it, and the Pi is its
+  among them. The `arm64` build ships only the tools the Pi's packages name, which `tools_on`
+  in `hosts/packages/homelab-tools/package.yml` lists. Every other package is `Architecture: all`. H3 builds it, and the Pi is its
   `arm64` pilot (H3, H4, H7).
 - **Ubuntu releases.** No package depends on one Ubuntu release. H3's container suite runs on
   every release the fleet runs or is moving to, and H7 owns the release-upgrade procedure.

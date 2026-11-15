@@ -16,7 +16,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from fanout_lib.review.red_gate import review_flags
 from fanout_lib.review.review import STATE_DIR, Pipeline
-from fanout_lib.review.review_land import LAND_SH, login
+from fanout_lib.review.review_land import LAND_SH, VERDICT_LINE, login
 from fanout_lib.review.review_record import (
     CONFIDENCE_FLOOR,
     RECORD_NAME,
@@ -29,6 +29,7 @@ __all__ = [
     "RECORD_NAME",
     "SAVED_FORMAT",
     "STATE_DIR",
+    "VERDICT_LINE",
     "Pipeline",
     "login",
     "review_flags",

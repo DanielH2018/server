@@ -667,6 +667,32 @@ At 03:52 on 2026-11-14, `needrestart` held the `dpkg` lock from 03:55:15 to abou
 outlasted `homelab-reconcile-wait.service`'s 5-minute limit, so the wait failed with a timeout.
 `50-motd-news`' `cloud-id` ran 321 s beside it and was not seen in any other episode.
 
+## The tools package and the apt archive cache (#8883)
+
+Until #8883 the `arm64` build of `homelab-tools` carried every host's pinned binaries. Read on
+daniel-pi on 2026-11-15:
+
+| Reading | Value |
+|---|---|
+| The `arm64` build `0.7669+g4412d38f9da0`, as the homelab `Packages` index lists it | a 119 MB download, 349 MB installed |
+| `homelab-tools_*_arm64.deb` files under `/var/cache/apt/archives/` | 4, about 475 MB |
+| The updater run of 20:09 that upgraded `homelab-tools` | 11.6 CPU s in the `http` method of apt, 10.9 s in `dpkg-deb`, 13 s in one `dpkg` |
+| A run that installs the host package alone | about 1 s |
+
+Two changes follow. The `arm64` build ships only `sops` and `node-exporter`, the two tools the
+Pi's packages name by path: `tools_on` in `hosts/packages/homelab-tools/package.yml` lists them.
+The file `/etc/apt/apt.conf.d/60homelab-pi-archives` sets two apt options:
+
+- `APT::Keep-Downloaded-Packages "false"` makes `apt-get` delete each deb once it is installed.
+  `apt-get` keeps them by default, and only the `apt` command deletes them.
+- `APT::Periodic::CleanInterval "1"` makes `apt-daily-upgrade.service` run `apt-get clean` once
+  a day, after the unattended upgrade. It removes the debs the cache held before this change
+  and whatever a failed install leaves.
+
+The weekly autoclean (`APT::Periodic::AutocleanInterval "7"`) never removed a homelab deb. It
+deletes only a deb whose version no index lists, and the homelab index lists every version the
+pool holds.
+
 ## See also
 
 - `hosts/components/pi-heartbeats/component.yml` — the container-recovery contract.

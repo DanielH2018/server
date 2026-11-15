@@ -63,7 +63,9 @@ operator's time).
 ## Method
 1. For each candidate gap, CHECK monitor-bridge `check_table.py`, the observability rules, the
    role's CLAUDE.md, and role crons **before** reporting — a "no monitor for X" that a check or
-   a rule already covers is a false positive. `probe.py monitors` lists what fires now.
+   a rule already covers is a false positive. `probe.py monitors` lists what fires now, and
+   `probe.py monitors --checks` lists each check's verdict, including a red one that fires
+   nothing because a streak holds it, a gate skips it or no rule pages it.
 2. Localize: backup COVERAGE (which Longhorn volumes carry a backup tier and which are
    deliberately no-backup per `docs/longhorn-backup-tiering.md`; is restore drilled?),
    retention/maintenance, B2 headroom, monitor coverage (a service with no probe or rule), alert

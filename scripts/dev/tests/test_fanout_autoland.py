@@ -294,12 +294,51 @@ def test_the_run_reads_daniel_server_over_exactly_one_ssh_call(tmp_path):
     assert run.ssh.host_calls[0][2] == autoland.READER
 
 
-def test_at_most_two_landings_start_per_run(tmp_path):
+def test_every_eligible_pr_starts_in_one_run(tmp_path):
     numbers = (5001, 5002, 5003)
     run = _Landings([_record(n) for n in numbers], [_pr(n) for n in numbers])
     _, text = run.run(tmp_path)
-    assert [n for n, _ in run.started] == [5001, 5002]
-    assert "#5003 batch 5003: eligible, deferred to the next run" in text
+    assert [n for n, _ in run.started] == [5001, 5002, 5003]
+    assert "deferred" not in text
+
+
+UV_CHATTER = (
+    "warning: `VIRTUAL_ENV=/x/.venv` does not match the project environment path `.venv` "
+    "and will be ignored; use `--active` to target the active environment instead\n"
+    "Using CPython 3.15.2\nCreating virtual environment at: .venv\n"
+    "Installed 50 packages in 231ms\n"
+)
+
+
+@pytest.mark.parametrize(
+    ("stderr", "reason"),
+    [
+        (
+            UV_CHATTER + "land: the landing turn is unreadable; re-run this command\n",
+            "(exit 75): land: the landing turn is unreadable; re-run this command",
+        ),
+        (
+            UV_CHATTER
+            + "land: a warning carried past\nVERDICT: refused nothing merged\n",
+            "(exit 75): VERDICT: refused nothing merged",
+        ),
+    ],
+)
+def test_a_failed_handoff_logs_land_shs_deciding_line_not_uvs_chatter(
+    tmp_path, stderr, reason
+):
+    run = _Landings([_record()], [_pr()])
+    run.boundaries.start = lambda *a: subprocess.CompletedProcess([], 75, "", stderr)
+    _, text = run.run(tmp_path)
+    assert f"#5001 batch 5001: eligible, handoff failed {reason}" in text
+
+
+def test_a_failed_handoff_with_no_land_line_logs_the_output_tail(tmp_path):
+    run = _Landings([_record()], [_pr()])
+    crash = UV_CHATTER + "Traceback (most recent call last):\nKeyError: 'pr'\n"
+    run.boundaries.start = lambda *a: subprocess.CompletedProcess([], 1, "", crash)
+    _, text = run.run(tmp_path)
+    assert text.endswith("handoff failed (exit 1): " + autoland.tail(crash))
 
 
 def test_a_pr_this_command_already_handed_off_is_not_started_again(tmp_path):
@@ -324,19 +363,6 @@ def test_only_a_pr_a_rule_refused_before_its_merge_is_started_again(
     run = _Landings([_record()], [_pr()])
     run.run(tmp_path)
     assert [n for n, _ in run.started] == started
-
-
-def test_a_pr_never_started_goes_before_prs_a_rule_refused(tmp_path):
-    logs = tmp_path / "state" / "logs"
-    logs.mkdir(parents=True)
-    for n in (5001, 5002):
-        (logs / f"land{n}-20261018-010000.log").write_text(
-            f"LAND-RESULT: verdict=refused cause=- exit=75 pr={n} sha=- tags=0\n"
-        )
-    numbers = (5001, 5002, 5003)
-    run = _Landings([_record(n) for n in numbers], [_pr(n) for n in numbers])
-    run.run(tmp_path)
-    assert [n for n, _ in run.started] == [5003, 5001]
 
 
 def test_a_landing_already_running_elsewhere_is_not_started_again(tmp_path):
