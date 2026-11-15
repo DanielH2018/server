@@ -2543,3 +2543,53 @@ tests:
                 `systemctl status homelab-claude-dotfiles-mirror.timer` and `journalctl -t
                 claude-dotfiles-mirror`, then
                 /var/lib/node-exporter-textfile/claude-dotfiles-mirror.prom on the host.
+
+  # The weekly summary pair: Failed fires on the 0 verdict, NotReporting holds at 169h, the
+  # 608400s deadline, and fires an hour later. The 1h interval keeps every eval on a sample.
+  - interval: 1h
+    input_series:
+      - series: 'homelab_check_success{check="claude-weekly-summary", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0x200'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="claude-weekly-summary", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0x200'
+      - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x200'
+    alert_rule_test:
+      - eval_time: 1h
+        alertname: ClaudeWeeklySummaryFailed
+        exp_alerts:
+          - exp_labels:
+              check: claude-weekly-summary
+              instance: daniel-box
+              job: node
+              origin: daniel-box
+              severity: warning
+              service: daniel-box
+            exp_annotations:
+              summary: The weekly Claude runs summary on daniel-box did not post, or read a source.
+              description: >-
+                claude-weekly-summary on daniel-box ended with status=down: the Discord post
+                failed, or a source of run records could not be read. A failed post is retried by
+                the next run. Run `journalctl -t claude-weekly-summary` on daniel-box.
+      - eval_time: 169h
+        alertname: ClaudeWeeklySummaryNotReporting
+        exp_alerts: []
+      - eval_time: 170h
+        alertname: ClaudeWeeklySummaryNotReporting
+        exp_alerts:
+          - exp_labels:
+              check: claude-weekly-summary
+              instance: daniel-box
+              job: node
+              origin: daniel-box
+              severity: warning
+              service: daniel-box
+            exp_annotations:
+              summary: The weekly Claude runs summary on daniel-box has stopped reporting.
+              description: >-
+                No claude-weekly-summary verdict newer than 169 hours reached Prometheus from
+                daniel-box's textfile collector, so last week's unattended runs were not
+                summarised. Read `systemctl status homelab-claude-weekly-summary.timer` and
+                `journalctl -t claude-weekly-summary`, then
+                /var/lib/node-exporter-textfile/claude-weekly-summary.prom on the host. If
+                `claude_code_weekly_summary_enabled` was set false on purpose, delete this rule.

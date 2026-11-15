@@ -695,3 +695,12 @@ claude_code_dotfiles_mirror_enabled: true
 # A `*/N` minute, read as the timer's period.
 claude_code_dotfiles_mirror_minute: "*/15"
 claude_code_dotfiles_mirror_repo: https://github.com/DanielH2018/dotfiles.git
+
+# ── The weekly summary of the unattended runs (dotfiles#967 C7) ──────────────────────────
+# homelab-claude-weekly-summary.timer runs files/claude_weekly_summary.py as root every Monday
+# at 09:00 UTC. Each run posts to the alerts webhook one summary of the previous ISO week's
+# triage runs and Renovate ticks: counts, cost, denials, and each run that acted or needs a
+# look. It only reads the run records. True only in daniel-box's host_vars, where triage and the
+# Renovate agent ship. False drops the timer, its units and the config from the next package
+# version, and keeps the posted-week record.
+claude_code_weekly_summary_enabled: false

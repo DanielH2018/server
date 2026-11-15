@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/crons.py
-generated_at: 2026-11-14 06:17 UTC
-generated_sha: ddd758e77
+generated_at: 2026-11-15 13:40 UTC
+generated_sha: 73230a8a1
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: ddd758e77
 
 # Scheduled jobs
 
-58 job(s) scheduled by the host packages' timers.
+60 job(s) scheduled by the host packages' timers.
 
 !!! warning "The state column is a heuristic"
     It is judged from the command text, and nothing in a unit declares its own blast radius. A job that runs a wrapper script reads as "read the script" rather than being guessed at. Treat it as a pointer, not an authority.
@@ -23,6 +23,7 @@ generated_sha: ddd758e77
 | homelab-apt-autoremove.timer | `OnCalendar=Sun *-*-* 02:00:00` | daniel-box, daniel-pi, daniel-server | `root` | read the script | `hosts/components/host-maintenance/units/homelab-apt-autoremove.timer` |
 | homelab-b2-budget-listing.timer | `OnCalendar=*-*-* 7:20:00` | daniel-box | `ubuntu` | read the script | `hosts/components/k3s-host-checks/units/homelab-b2-budget-listing.timer.j2` |
 | homelab-b2-deletion-accounting.timer | `OnCalendar=*-*-* 7:10:00` | daniel-box | `ubuntu` | read the script | `hosts/components/k3s-host-checks/units/homelab-b2-deletion-accounting.timer.j2` |
+| homelab-board-sync.timer | `OnCalendar=*-*-* *:47:00` | daniel-box | `ubuntu` | read the script | `hosts/components/board-sync/units/homelab-board-sync.timer` |
 | homelab-builder.timer | `OnBootSec=2min, OnUnitActiveSec=2min` | daniel-box | `homelab-builder` | read the script | `hosts/components/builder/units/homelab-builder.timer` |
 | homelab-checkout-sync.timer | `OnBootSec=10min, OnUnitActiveSec=10min` | daniel-box | `ubuntu` | read the script | `hosts/components/checkout-sync/units/homelab-checkout-sync.timer` |
 | homelab-claude-agent-browser.timer | `OnBootSec=10min, OnUnitInactiveSec=6h` | daniel-box, daniel-server | `claude` | read the script | `hosts/components/claude-code/units/homelab-claude-agent-browser.timer` |
@@ -37,7 +38,8 @@ generated_sha: ddd758e77
 | homelab-claude-otel-health.timer | `OnCalendar=*-*-* *:00/10:00` | daniel-box | `ubuntu` | read the script | `hosts/components/claude-code/units/homelab-claude-otel-health.timer.j2` |
 | homelab-claude-pipeline-timeline.timer | `OnBootSec=15min, OnUnitActiveSec=1440min` | daniel-box | `ubuntu` | read the script | `hosts/components/claude-code/templates/claude-pipeline-timeline.timer.j2` |
 | homelab-claude-rc-restart.timer | `OnCalendar=weekly` | daniel-box, daniel-server (no enable link) | `root` | yes (restart) | `hosts/components/claude-code/templates/claude-rc-restart.timer.j2` |
-| homelab-claude-triage-poll.timer | `OnBootSec=5min, OnUnitActiveSec=2min` | daniel-box | `claude` | read the script | `hosts/components/claude-code/templates/claude-triage-poll.timer.j2` |
+| homelab-claude-triage-poll.timer | `OnBootSec=5min, OnUnitActiveSec=2min` | daniel-box | `claude-triage-ctl` | read the script | `hosts/components/claude-code/templates/claude-triage-poll.timer.j2` |
+| homelab-claude-weekly-summary.timer | `OnCalendar=Mon *-*-* 09:00:00 UTC, OnActiveSec=10min` | daniel-box | `root` | read the script | `hosts/components/claude-code/units/homelab-claude-weekly-summary.timer.j2` |
 | homelab-crowdsec-probe.timer | `OnBootSec=1min, OnUnitActiveSec=1min` | daniel-pi | `ubuntu` | read the script | `hosts/components/crowdsec-probe/units/homelab-crowdsec-probe.timer` |
 | homelab-disk-health.timer | `OnCalendar=*:00/10` | daniel-box | `ubuntu` | read the script | `hosts/components/k3s-host-checks/units/homelab-disk-health.timer.j2` |
 | homelab-docker-engine.timer | `OnCalendar=*-*-* 00:30:00` | daniel-pi | `root` | yes (apply) | `hosts/components/pi-docker/units/homelab-docker-engine.timer` |
@@ -66,7 +68,7 @@ generated_sha: ddd758e77
 | homelab-pi-watchdog-health.timer | `OnCalendar=*:0/5` | daniel-pi | `ubuntu` | read the script | `hosts/components/pi-heartbeats/units/homelab-pi-watchdog-health.timer` |
 | homelab-reboot.timer | `OnCalendar=Sun *-*-* 07:30:00 UTC` | daniel-box, daniel-pi, daniel-server | `root` | yes (reboot) | `hosts/components/host-maintenance/units/homelab-reboot.timer.j2` |
 | homelab-registry-gc.timer | `OnCalendar=Sun *-*-* 04:20:00` | daniel-box | `root` | read the script | `hosts/components/registry-gc/units/homelab-registry-gc.timer` |
-| homelab-renovate-agent.timer | `OnCalendar=*-*-* 06:00:00 America/Chicago` | daniel-box (no enable link) | `renovate-agent` | read the script | `hosts/components/renovate-agent/templates/homelab-renovate-agent.timer.j2` |
+| homelab-renovate-agent.timer | `OnCalendar=*-*-* 06:00:00 America/Chicago` | daniel-box (no enable link) | `renovate-agent-ctl` | read the script | `hosts/components/renovate-agent/templates/homelab-renovate-agent.timer.j2` |
 | homelab-renovate-notify.timer | `OnCalendar=*-*-* 13:00:00` | daniel-box | `ubuntu` | read the script | `hosts/components/renovate-notify/units/homelab-renovate-notify.timer` |
 | homelab-rkhunter-check.timer | `OnCalendar=Wed *-*-* 02:00:00` | daniel-box, daniel-pi, daniel-server | `root` | read the script | `hosts/components/integrity-scans/units/homelab-rkhunter-check.timer` |
 | homelab-secret-rotation-audit.timer | `OnCalendar=*-*-* 08:30:00` | daniel-box | `ubuntu` | read the script | `hosts/components/secret-rotation/units/homelab-secret-rotation-audit.timer` |
