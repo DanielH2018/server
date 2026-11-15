@@ -67,6 +67,7 @@ def test_package_entry_points_finds_run_and_main_modules():
         "flux",
         "ha",
         "health",
+        "host_unit",
         "lander",
         "landing_blockers",
         "landing_verdicts",
