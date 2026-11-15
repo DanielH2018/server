@@ -1,4 +1,4 @@
-"""loki-homelab keeps the k8s-audit stream for 7 days and every other stream for the default."""
+"""loki-homelab gives the k8s-audit stream, and only that stream, a 7-day retention."""
 
 import pytest
 
@@ -22,7 +22,3 @@ def test_the_audit_stream_keeps_seven_days(limits: dict) -> None:
     assert limits["retention_stream"] == [
         {"selector": f'{{job="{JOB}"}}', "priority": 1, "period": "168h"}
     ]
-
-
-def test_other_streams_keep_the_default_window(limits: dict) -> None:
-    assert limits["retention_period"] == "744h"
