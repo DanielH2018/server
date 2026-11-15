@@ -352,3 +352,4 @@ nav:
               - G9 The blocking gate: target-architecture/docs-guard/g9-blocking-gate.md
               - G10 Value rows: target-architecture/docs-guard/g10-value-rows.md
               - G11 The binding sweep: target-architecture/docs-guard/g11-binding-sweep.md
+              - Handoff of the open work: target-architecture/docs-guard/handoff.md
