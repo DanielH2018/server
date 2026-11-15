@@ -8,7 +8,7 @@ repo-root `CLAUDE.md` for shared conventions.
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in k8s/roles/longhorn-reconcile/defaults/main.yml. -->
 - **Applied by:** Flux, through `promote`; `land.sh --tags=speedtest` gates the rollout
 - **Image:** `lscr.io/linuxserver/speedtest-tracker` (`speedtest_k8s_image`)
-- **Route:** `speedtest.<domain>` · `speedtest.local.<domain>`, Authelia one_factor
+- **Route:** `speedtest.local.<domain>` (LAN only), Authelia one_factor
 - **Claim:** `speedtest-config` (no backup (StorageClass longhorn-nobackup))
 <!-- /generated_from -->
 
@@ -40,7 +40,7 @@ repo-root `CLAUDE.md` for shared conventions.
   value rolls the pod.
 - **Its snapshot and rollout.** The `speedtest-snapshot` Job takes the pre-apply snapshot,
   and the Kustomization's `wait` holds the rollout.
-- **REQUIRED one-time post-deploy step (#996):** log in at `speedtest.<domain>`, open
+- **REQUIRED one-time post-deploy step (#996):** log in at `speedtest.local.<domain>`, open
   **Settings -> Data Integration**, and turn on **Prometheus**. Without this the
   `speedtest` scrape job in observability's `prometheus.yaml.j2` returns 404 forever — see
   below for why this cannot be set any other way.

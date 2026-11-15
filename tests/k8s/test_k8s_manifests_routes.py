@@ -233,6 +233,27 @@ def test_the_lapi_route_never_gains_a_public_host_rule():
         )
 
 
+@pytest.mark.parametrize("name", ["bazarr", "slskd", "speedtest", "prowlarr"])
+def test_a_route_ruled_lan_only_renders_no_public_host_with_public_routes_on(name):
+    """The operator ruled these four LAN-only on 2026-11-15 (#8514): WireGuard covers remote use."""
+    domain = "example.com"
+    entry = next(c for c in _k8s_entries() if c["name"] == name)
+    hosts = []
+    for route_tpl in _route_templates(name):
+        rendered = _render(
+            route_tpl,
+            **_role_context(
+                name, container_item=entry, domain=domain, k8s_public_route=True
+            ),
+        )
+        for doc in (d for d in yaml_fast.safe_load_all(rendered) if d):
+            for route in doc["spec"]["routes"]:
+                hosts += re.findall(r"Host\(`([^`]+)`\)", route["match"])
+    assert f"{name}.local.{domain}" in hosts, hosts
+    public = [h for h in hosts if not h.endswith(f".local.{domain}")]
+    assert not public, f"{name} answers {public} on the public domain"
+
+
 def test_every_public_host_rule_is_reachable_only_from_the_docker_edge():
     """The companion to the test above, for the hole the strangler bridge opens in it.
 

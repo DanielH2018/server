@@ -11,7 +11,7 @@ into `media/music`.
 - **Applied by:** Flux, through `promote`; `land.sh --tags=slskd` gates the rollout
 - **Images:** `slskd/slskd` (`slskd_k8s_image`), `ghcr.io/mrusse/soularr`
   (`slskd_k8s_soularr_image`), `lscr.io/linuxserver/wireguard` (`slskd_k8s_wireguard_image`)
-- **Route:** `slskd.<domain>` · `slskd.local.<domain>`, Authelia one_factor
+- **Route:** `slskd.local.<domain>` (LAN only), Authelia one_factor
 - **Claims:** `slskd-config` (no backup (StorageClass longhorn-nobackup)), `media-data` (not
   Longhorn (media-local))
 <!-- /generated_from -->
@@ -46,4 +46,8 @@ into `media/music`.
   Soularr mounts it through a subPath, which never sees an update; the restart
   `scripts/renderer/renderer_lib/restart.py:restart_values` stamps for a mounted Secret is what
   picks a change up.
+- **The route is LAN-only.** The entry in `cluster/services.yml` sets `public_route: false`,
+  and the shared `k8s/templates/ingressroute-default.yaml.j2` renders no public name from it
+  whatever `k8s_public_route` says. The operator ruled it on 2026-11-15 (#8514): WireGuard
+  covers remote use.
 - Pins, the share switch, Soularr's interval and file types: `k8s/roles/slskd/defaults/main.yml`.
