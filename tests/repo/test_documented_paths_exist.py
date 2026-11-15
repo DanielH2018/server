@@ -390,7 +390,7 @@ def test_a_doc_citing_a_real_test_is_clean(tmp_path):
 
 
 def test_every_cited_test_exists():
-    # fact: .claude/rules/facts.md#Fact support — how an instruction file cites what holds it up
+    # fact: .claude/rules/facts.md#Sections and the citation grammar
     # fact: .claude/rules/python-layout.md#A check retires when its subject does
     # fact: .claude/skills/homelab-review/SKILL.md#7. Synthesize and close the loop (your job once the verdicts are in)
     missing = [
