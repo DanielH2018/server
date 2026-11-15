@@ -179,7 +179,10 @@ continuation lines and nested bullets with it; a history paragraph ends at the n
   not a path atom, with its commit, section, atom and kind, and whether the commit edited the
   section's prose: that list is what a grading of the notice's yield reads. Its
   `comment_replay.rows` list holds each comment row as its commit, the removed name and
-  `path:line` at that commit, which is what G7 step 5's grading reads.
+  `path:line` at that commit, which is what G7 step 5's grading reads. The two replays walk
+  every commit in the window and take minutes, where the rest takes about a second, so
+  `--no-replay` leaves both out for a caller that reads only the log's lists, such as the
+  freshness reviewer.
   `scripts/lib/facts/report.py` says where each count comes from.
 - `fact_status.py notice --since <ref> [--head <rev>]` lists every section that cites an
   atom the diff moved. The diff runs from the merge base of `<ref>` and the head to the head,

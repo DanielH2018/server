@@ -197,8 +197,13 @@ def build(
     log: Path,
     now: datetime | None = None,
     notice: Callable[[Path, str, str], list[Notice]] = moved_sections,
+    replays: bool = True,
 ) -> dict:
-    """Every measurement as one JSON-ready mapping; ``render`` prints the same thing as text."""
+    """Every measurement as one JSON-ready mapping; ``render`` prints the same thing as text.
+
+    Without ``replays`` the mapping leaves out both replays, which walk every commit in the
+    window and take minutes, where the rest reads the log in seconds.
+    """
     now = now or datetime.now(timezone.utc)
     since = now - timedelta(days=days)
     docs = {u.partition("#")[0] for u in by_unit}
@@ -207,7 +212,7 @@ def build(
     )
     reads = doc_reads(log, docs, since, roots)
     sessions = session_bytes(log, since)
-    return {
+    report = {
         "window_days": days,
         "since": since.strftime("%Y-%m-%dT%H:%M:%SZ"),
         "log": {
@@ -230,9 +235,11 @@ def build(
             }
             for r in sessions
         ],
-        "notice_replay": notice_replay(repo, since, now, notice),
-        "comment_replay": comment_replay(repo, since, now),
     }
+    if replays:
+        report["notice_replay"] = notice_replay(repo, since, now, notice)
+        report["comment_replay"] = comment_replay(repo, since, now)
+    return report
 
 
 def render(report: dict, top: int) -> str:
@@ -240,7 +247,7 @@ def render(report: dict, top: int) -> str:
 
     The ``top`` most-read sections citing nothing come first, then the ``top`` most-read docs
     delivered as a head, then the instruction bytes of the ``top`` most recent sessions, then
-    the two replays, which name every crash whatever ``top`` says.
+    the two replays when the mapping holds them, which name every crash whatever ``top`` says.
     """
     log = report["log"]
     span = f"{log['first']} to {log['last']}" if log["rows"] else "no rows"
@@ -273,8 +280,7 @@ def render(report: dict, top: int) -> str:
     rest = len(sessions) - top
     if rest > 0:
         lines.append(f"  ... {rest} older; --top or --json lists them")
-    return "\n".join(
-        lines
-        + render_replay(report["notice_replay"])
-        + render_comment_replay(report["comment_replay"])
-    )
+    if "notice_replay" in report:
+        lines += render_replay(report["notice_replay"])
+        lines += render_comment_replay(report["comment_replay"])
+    return "\n".join(lines)
