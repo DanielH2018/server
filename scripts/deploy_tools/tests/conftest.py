@@ -16,7 +16,7 @@ import pytest
 from _helpers import stub_logger_on_path
 from _land_batch_fakes import GREEN, OWN, GitHub, head_of
 from _land_fakes import PRIMARY, Fakes, build_classifier, build_tools, make_landing
-from deploy_tools.land_lib import detach, line, live_limit, options, tools, turn
+from deploy_tools.land_lib import line, options, tools, turn
 from lib.proc_testing import fake_bin, path_with
 
 # Read off the modules that consume them rather than retyped, so a knob added there is cleared
@@ -24,9 +24,6 @@ from lib.proc_testing import fake_bin, path_with
 LAND_ENV_KNOBS = (
     *options.ENV_KNOBS,
     tools.GATE_TMP_ROOT_ENV,
-    live_limit.MAX_LIVE_ENV,
-    detach.ORCHESTRATOR_ENV,
-    detach.SLOT_HELD_ENV,
 )
 
 
@@ -47,16 +44,6 @@ def _no_inherited_land_env(monkeypatch):
     """
     for name in LAND_ENV_KNOBS:
         monkeypatch.delenv(name, raising=False)
-
-
-@pytest.fixture(autouse=True)
-def _private_live_registry(tmp_path_factory, monkeypatch):
-    """Keep every landing a test starts out of the real registry of live landings.
-
-    A foreground landing holds a slot in it, so an in-process `land.main` run would otherwise
-    count against the user's real `--detach` landings while it ran.
-    """
-    monkeypatch.setenv(detach.LIVE_DIR_ENV, str(tmp_path_factory.mktemp("live")))
 
 
 @pytest.fixture(autouse=True)

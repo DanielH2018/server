@@ -147,14 +147,6 @@ def held(ln: Landing) -> Generator[None]:
             release()
 
 
-def _read[T](read: Callable[[], T]) -> T | None:
-    # DECIDED: a read that fails bars nothing, as `live_limit`'s reads lower nothing.
-    try:
-        return read()
-    except Exception:
-        return None
-
-
 def _held_by_another(lock: Locker, names: Sequence[str]) -> bool:
     """Whether another landing holds one of `names`; False when the files cannot be locked."""
     try:
@@ -180,7 +172,9 @@ def _keep_serial(ln: Landing, lock: Locker) -> bool:
 def _bar(ln: Landing, kind: str, lock: Locker) -> str:
     """Why `ln`'s PR, of `kind`, may not merge now; "" when nothing bars it."""
     if kind:
-        hold = _read(lambda: pin_gate.hold_problem(ln.tools.flux.pins.hold()))
+        hold = live_limit.fail_open(
+            lambda: pin_gate.hold_problem(ln.tools.flux.pins.hold())
+        )
         if hold:
             return f"{hold}, and this PR changes a k8s role"
     if kind == live_limit.SERIAL:
@@ -193,7 +187,11 @@ def _bar(ln: Landing, kind: str, lock: Locker) -> str:
             )
     elif _held_by_another(lock, [SERIAL_NAME]):
         return "a landing of a forward-only pin, flux or cluster-vars change is live"
-    if kind and _read(ln.tools.in_reboot_window) and _held_by_another(lock, SLOT_NAMES):
+    if (
+        kind
+        and live_limit.fail_open(ln.tools.in_reboot_window)
+        and _held_by_another(lock, SLOT_NAMES)
+    ):
         return (
             "inside the weekly reboot's no-promotion window, another landing is past its "
             "merge, and this PR changes a k8s role"
@@ -216,7 +214,7 @@ def bar_member(member: Landing) -> str:
     reboot's no-promotion window a k8s PR joins no batch: it waits out the window alone.
     """
     kind = _kind(member)
-    if kind and _read(member.tools.in_reboot_window):
+    if kind and live_limit.fail_open(member.tools.in_reboot_window):
         return "it changes a k8s role inside the weekly reboot's no-promotion window"
     return _bar(member, kind, _lock_of(member))
 
