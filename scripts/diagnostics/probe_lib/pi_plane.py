@@ -26,7 +26,12 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 # `core.<name>` for anything the tests monkeypatch — binding those into this module's
 # globals with a `from core import ...` would take a snapshot the patch never reaches.
 from diagnostics.probe_lib import core
-from diagnostics.probe_lib.core import PI_HOST, prom_endpoint, prom_targets_url
+from diagnostics.probe_lib.core import (
+    PI_HOST,
+    pi_ssh_argv,
+    prom_endpoint,
+    prom_targets_url,
+)
 
 from lib.exit_codes import PROBE_UNREADABLE
 from lib.kubectl import DEFAULT_CLUSTER, MissingKubectl, WrongCluster, kubectl_json
@@ -209,8 +214,8 @@ def run_pi_targets(ns):
 PI_CONTAINERS_TIMEOUT = 45
 
 
-def pi_containers_argv():
-    return ["ssh", PI_HOST, "docker inspect $(docker ps -aq)"]
+def pi_containers_argv(hostname=None):
+    return pi_ssh_argv("docker inspect $(docker ps -aq)", hostname)
 
 
 def format_pi_containers(containers):

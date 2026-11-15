@@ -22,10 +22,12 @@ The rulings in force, all in [CI throughput](ci-throughput.md):
 - **Option A, under D9.** daniel-server fan-out batches keep a run of their own.
 - **D10.** B4's shape: a stale ready PR rejoins the line, pacing goes, and one count of 6
   is taken after the merge.
+- **Option B's preconditions, 2026-11-15.** A daniel-server fan-out pipeline may land, and
+  the health gate on daniel-server reads a Pi container through daniel-box.
 
 ## The work left, in order
 
-### 1. Three paths that have not run live
+### 1. Two paths that have not run live
 
 Each needs traffic no session controls, so watch for it and record the first run in
 [CI throughput](ci-throughput.md).
@@ -41,14 +43,14 @@ Each needs traffic no session controls, so watch for it and record the first run
   reads `a batch that tested PR #N was not green; it lands alone`. A member that is
   stacked a second time by a later landing is a defect in `land_lib/line.py`'s answers.
 
-### 2. Option B, if the operator asks for it
+### 2. Option B, after the measurement
 
 A daniel-server fan-out pipeline lands its own draft from daniel-server. From 2026-11-08
 to 2026-11-14, 57% of review batches ran there. The code change is small
-(`scripts/dev/fanout_lib/brief.py:lands` and `review_ci.py`). Two rulings come first and
-both are the operator's: it reverses the rule that only daniel-box lands, and a landing from
-daniel-server ends `deferred` when its health gate grades a container on daniel-pi
-(#8773).
+(`scripts/dev/fanout_lib/brief.py:lands` and `review_ci.py`). The operator ruled on both
+preconditions on 2026-11-15: such a pipeline may land, and the health gate reads a Pi
+container through daniel-box (#8773). The build waits for the measurement after B4 and a
+recommendation to the operator.
 
 ### 3. Phase C, only if D8 is reopened
 
