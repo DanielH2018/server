@@ -3,8 +3,8 @@
 The target-architecture migration ran from 2026-10-11 to 2026-11-12. It replaced the GitOps
 deployer, Uptime Kuma and Ansible with three planes that each have one write path from git.
 This page says what runs at the end of it and where each part is documented. The plans that
-sequenced the work are kept under *History* as a record. They describe how the lab got here,
-not how it runs.
+sequenced the work sit under it in the *Architecture* section, as *Migration plans*. They
+describe how the lab got here, not how it runs.
 
 ## The cluster: Flux applies a promoted artifact
 
@@ -67,3 +67,8 @@ the `CLAUDE.md` sections that cite code a PR changed.
 [The contracts](target-architecture/contracts.md) state the interfaces the slices built
 against. Each slice plan's `Status:` line records the PRs that carried it. The plans keep
 their paths under `target-architecture/` because hundreds of files link into them.
+
+The docs-guard slices G6 to G11 continue past the migration's end.
+[ADR-0031](adr/0031-each-kind-of-fact-has-one-stateless-detector.md) opened them on
+2026-11-13. G11 is in progress, and
+[the docs-guard handoff](target-architecture/docs-guard/handoff.md) lists the open items.
