@@ -181,6 +181,20 @@ def test_needrestart_skips_its_kernel_check_and_keeps_its_service_restarts(packa
     assert settings == {"kernelhints": "0"}
 
 
+def test_apt_keeps_no_installed_deb_and_empties_its_archive_cache_daily(package):
+    settings = dict(
+        re.findall(
+            r'^([\w:-]+)\s+"([^"]*)";',
+            _text(package, "/etc/apt/apt.conf.d/60homelab-pi-archives"),
+            re.M,
+        )
+    )
+    assert settings == {
+        "APT::Keep-Downloaded-Packages": "false",
+        "APT::Periodic::CleanInterval": "1",
+    }
+
+
 def test_the_size_anchor_leaves_log_disk_size_alone(package):
     edits = _edits(package, LOG2RAM_CONF)
     size = edits["SIZE=128M"]["regexp"]

@@ -61,8 +61,8 @@ description: daniel-pi's homelab host package
 components: [reconcile, secrets-unit, pi-heartbeats, pi-updater-poll, crowdsec-probe, pi-compose, unattended-upgrades, sshd, host-tuning, apt-docker, apt-azlux, pi-tuning, pi-node-exporter, pi-resolver, pi-peer-backup-target, pi-docker, sops, fail2ban, integrity-scans, postfix, accounting, host-maintenance, ssh-firewall, host-hardening]
 credentials:
   - healthchecks_ping_key
-# H3.11: the Pi is the arm64 pilot of homelab-tools, which ships sops and chezmoi under
-# /usr/lib/homelab/bin. An unversioned Depends already satisfied never upgrades the dependency,
+# H3.11: the Pi is the arm64 pilot of homelab-tools, whose arm64 build ships sops and
+# node-exporter under /usr/lib/homelab/bin (`tools_on` in its spec). An unversioned Depends already satisfied never upgrades the dependency,
 # so homelab-updater's steps 4 and 5 cover every installed homelab-* package.
 depends:
   - homelab-tools
