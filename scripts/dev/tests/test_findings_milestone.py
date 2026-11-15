@@ -1,48 +1,61 @@
-"""`milestone.ensure` and `milestone.close_idle` against a fake `gh api`."""
-
-import subprocess
+"""`findings_lib/milestone.py` against a fake `gh api`."""
 
 import pytest
 
-from dev.findings_lib.milestone import DESCRIPTION, close_idle, ensure, pr_title
+from dev.findings_lib.milestone import (
+    attach_target,
+    close_idle,
+    close_if_done,
+    description_for,
+    pr_branch,
+    start,
+)
 
 REPO = "o/r"
 WT = "worktree-a"
 
 
-def _fake(open_=(), closed=(), create_error=None):
-    writes = []
-
-    def gh_json(*argv, **_kw):
-        state = argv[1].split("state=")[1].split("&")[0]
-        return [list(open_ if state == "open" else closed)]
-
-    def gh(*argv, **_kw):
-        writes.append(list(argv))
-        if create_error and "POST" in argv:
-            raise create_error
-
-    return gh_json, gh, writes
-
-
-def _m(title, number=1, description=DESCRIPTION, open_issues=0):
+def _m(title, branch=WT, number=1, state="open", open_issues=0, description=None):
     return {
         "title": title,
         "number": number,
-        "description": description,
+        "state": state,
+        "description": description or description_for(branch),
         "open_issues": open_issues,
     }
 
 
-def test_ensure_writes_nothing_when_the_milestone_is_open():
-    gh_json, gh, writes = _fake(open_=[_m(WT)])
-    ensure(WT, REPO, dry_run=False, gh_json=gh_json, gh=gh)
-    assert writes == []
+def _fake(milestones=()):
+    writes = []
+
+    def gh_json(*argv, **_kw):
+        path = argv[1]
+        if "?state=" in path:
+            state = path.split("state=")[1].split("&")[0]
+            return [[m for m in milestones if m["state"] == state]]
+        number = int(path.rsplit("/", 1)[1])
+        return next(m for m in milestones if m["number"] == number)
+
+    def gh(*argv, **_kw):
+        writes.append(list(argv))
+
+    return gh_json, gh, writes
 
 
-def test_ensure_creates_a_missing_milestone():
+def _patch(number, state):
+    return [
+        "api",
+        "-X",
+        "PATCH",
+        f"repos/o/r/milestones/{number}",
+        "-f",
+        f"state={state}",
+    ]
+
+
+def test_start_creates_the_milestone_under_its_title_with_the_branch_in_the_description():
     gh_json, gh, writes = _fake()
-    ensure(WT, REPO, dry_run=False, gh_json=gh_json, gh=gh)
+    start("Opt-in milestones", WT, REPO, dry_run=False, gh_json=gh_json, gh=gh)
     assert writes == [
         [
             "api",
@@ -50,41 +63,76 @@ def test_ensure_creates_a_missing_milestone():
             "POST",
             "repos/o/r/milestones",
             "-f",
-            f"title={WT}",
+            "title=Opt-in milestones",
             "-f",
-            f"description={DESCRIPTION}",
+            f"description={description_for(WT)}",
         ]
     ]
 
 
-def test_ensure_reopens_a_closed_session_milestone():
-    refused = subprocess.CalledProcessError(1, "gh")
-    gh_json, gh, writes = _fake(closed=[_m(WT, number=7)], create_error=refused)
-    ensure(WT, REPO, dry_run=False, gh_json=gh_json, gh=gh)
-    assert writes[-1] == [
-        "api",
-        "-X",
-        "PATCH",
-        "repos/o/r/milestones/7",
-        "-f",
-        "state=open",
-    ]
+def test_start_twice_with_the_same_title_writes_nothing():
+    gh_json, gh, writes = _fake([_m("Opt-in milestones")])
+    start("Opt-in milestones", WT, REPO, dry_run=False, gh_json=gh_json, gh=gh)
+    assert writes == []
 
 
-def test_ensure_refuses_an_operator_milestone_of_the_same_title():
-    gh_json, gh, writes = _fake(open_=[_m(WT, description="release 1.0")])
-    with pytest.raises(ValueError, match="not a session milestone"):
-        ensure(WT, REPO, dry_run=False, gh_json=gh_json, gh=gh)
+def test_start_reopens_the_branch_closed_milestone_of_that_title():
+    gh_json, gh, writes = _fake([_m("Opt-in milestones", number=4, state="closed")])
+    start("Opt-in milestones", WT, REPO, dry_run=False, gh_json=gh_json, gh=gh)
+    assert writes == [_patch(4, "open")]
+
+
+def test_start_refuses_a_second_open_milestone_on_the_branch():
+    gh_json, gh, writes = _fake([_m("First focus")])
+    with pytest.raises(
+        ValueError, match="already has the open milestone `First focus`"
+    ):
+        start("Second focus", WT, REPO, dry_run=False, gh_json=gh_json, gh=gh)
+    assert writes == []
+
+
+def test_start_refuses_a_title_another_branch_owns():
+    gh_json, gh, writes = _fake([_m("Opt-in milestones", branch="worktree-b")])
+    with pytest.raises(ValueError, match="for `worktree-b`"):
+        start("Opt-in milestones", WT, REPO, dry_run=False, gh_json=gh_json, gh=gh)
+    assert writes == []
+
+
+def test_attach_finds_nothing_for_a_branch_that_never_started_one():
+    gh_json, gh, writes = _fake([_m("Other work", branch="worktree-b")])
+    assert attach_target(WT, REPO, dry_run=False, gh_json=gh_json, gh=gh) is None
+    assert writes == []
+
+
+def test_attach_reopens_the_branch_closed_milestone():
+    gh_json, gh, writes = _fake([_m("Opt-in milestones", number=4, state="closed")])
+    title = attach_target(WT, REPO, dry_run=False, gh_json=gh_json, gh=gh)
+    assert title == "Opt-in milestones"
+    assert writes == [_patch(4, "open")]
+
+
+def test_close_if_done_closes_an_empty_session_milestone_and_keeps_a_busy_one():
+    gh_json, gh, writes = _fake(
+        [_m("Done", number=1), _m("Busy", branch="worktree-b", number=2, open_issues=1)]
+    )
+    assert close_if_done(1, REPO, dry_run=False, gh_json=gh_json, gh=gh)
+    assert not close_if_done(2, REPO, dry_run=False, gh_json=gh_json, gh=gh)
+    assert writes == [_patch(1, "closed")]
+
+
+def test_close_if_done_leaves_an_operator_milestone_alone():
+    gh_json, gh, writes = _fake([_m("Release 1.0", description="operator's")])
+    assert not close_if_done(1, REPO, dry_run=False, gh_json=gh_json, gh=gh)
     assert writes == []
 
 
 def test_close_idle_closes_only_an_owned_empty_unheld_milestone():
     gh_json, gh, writes = _fake(
-        open_=[
-            _m("worktree-gone", number=1),
-            _m("worktree-live", number=2),
-            _m("worktree-busy", number=3, open_issues=1),
-            _m("worktree-theirs", number=4, description="operator"),
+        [
+            _m("Gone", branch="worktree-gone", number=1),
+            _m("Live", branch="worktree-live", number=2),
+            _m("Busy", branch="worktree-busy", number=3, open_issues=1),
+            _m("Theirs", number=4, description="operator"),
         ]
     )
     closed = close_idle(
@@ -94,26 +142,19 @@ def test_close_idle_closes_only_an_owned_empty_unheld_milestone():
         gh_json=gh_json,
         gh=gh,
     )
-    assert closed == ["worktree-gone"]
-    assert writes == [
-        ["api", "-X", "PATCH", "repos/o/r/milestones/1", "-f", "state=closed"]
-    ]
+    assert closed == ["Gone"]
+    assert writes == [_patch(1, "closed")]
 
 
-def test_a_batch_pr_joins_the_milestone_of_the_issue_it_closes():
+def test_a_batch_pr_follows_the_issue_it_closes_to_the_orchestrator_branch():
     pr = {
         "headRefName": "worktree-fanout-batch-3",
         "closingIssuesReferences": [{"number": 5}],
     }
-    orchestrator = {"title": "worktree-fanout-8741", "description": DESCRIPTION}
-    assert pr_title(pr, lambda n: orchestrator) == "worktree-fanout-8741"
+    orchestrator = _m("Fan-out", branch="worktree-fanout-8741")
+    assert pr_branch(pr, lambda n: orchestrator) == "worktree-fanout-8741"
 
 
-def test_a_pr_closing_no_session_issue_joins_its_head_branch_milestone():
+def test_a_pr_closing_no_session_issue_uses_its_head_branch():
     pr = {"headRefName": WT, "closingIssuesReferences": [{"number": 5}]}
-    assert pr_title(pr, lambda n: None) == WT
-
-
-def test_a_pr_from_a_non_session_branch_gets_no_milestone():
-    pr = {"headRefName": "renovate/uv-0.9.x", "closingIssuesReferences": []}
-    assert pr_title(pr, lambda n: None) is None
+    assert pr_branch(pr, lambda n: None) == WT
