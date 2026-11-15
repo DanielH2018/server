@@ -1,0 +1,80 @@
+name: session-milestone
+
+# Keeps a Claude session's milestone in step with its work. `findings.py milestone start` opens
+# the milestone and `findings.py claim` files issues under it. This workflow files the
+# branch's PR when the PR opens, and closes the milestone when a PR or issue in it closes and
+# nothing in it is left open. scripts/dev/findings_lib/milestone.py documents the scheme.
+# Running on the PR event covers every way a PR opens: an agent's `gh pr create`, a fan-out
+# batch, and the web UI.
+#
+# Only a same-repo PR runs a job. A fork PR gets a read-only token, and this repo is public, so
+# no job uses `pull_request_target`.
+
+on:
+  pull_request:
+    types: [opened, reopened, edited, closed]
+  issues:
+    types: [closed]
+
+permissions: {}
+
+jobs:
+  attach:
+    if: >-
+      github.event_name == 'pull_request' && github.event.action != 'closed' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    concurrency:
+      group: session-milestone-attach-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: $/.github/actions/setup
+        with:
+          uv: "false"
+
+      - name: File the PR under its session milestone
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: python scripts/dev/session_milestone.py attach-pr "$PR_NUMBER" --repo "$GITHUB_REPOSITORY"
+
+  close:
+    # A job-level guard, so an issue or PR in no milestone starts no runner.
+    if: >-
+      (github.event_name == 'issues' && github.event.issue.milestone) ||
+      (github.event_name == 'pull_request' && github.event.action == 'closed' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.milestone)
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    # Keyed on the milestone and never cancelled: two milestones finishing together must
+    # both close, and a cancelled close would leave one open until `reap`.
+    concurrency:
+      group: session-milestone-close-${{ github.event.pull_request.milestone.number || github.event.issue.milestone.number }}
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: $/.github/actions/setup
+        with:
+          uv: "false"
+
+      - name: Close the milestone if nothing in it is open
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MILESTONE: ${{ github.event.pull_request.milestone.number || github.event.issue.milestone.number }}
+        run: python scripts/dev/session_milestone.py close-if-done "$MILESTONE" --repo "$GITHUB_REPOSITORY"
