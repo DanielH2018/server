@@ -141,7 +141,8 @@ class Fakes:
     compare: list[list[str] | Exception] = field(default_factory=lambda: [[]])
     # What `closing_refs`' GraphQL read answers, one entry per call.
     closing_refs: list[dict | Exception] = field(default_factory=lambda: [{}])
-    # What the master `ci.yml` runs listing answers, one entry per call, as `pace.py` reads it:
+    # What the master `ci.yml` runs listing answers, one entry per call, as `live_limit.py`
+    # reads it:
     # `{status, created_at}` per run. Empty is a master with no CI backlog, and an exception is
     # raised in place of an answer.
     master_runs: list[list[dict[str, str]] | Exception] = field(
@@ -437,7 +438,6 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
         logger=lambda line: calls.append(("logger", (line,), {})),
         sleep=lambda s: calls.append(("sleep", (s,), {})),
         clock=clock,
-        wall_clock=lambda: 1_000_000.0,
     )
     return tools, calls
 

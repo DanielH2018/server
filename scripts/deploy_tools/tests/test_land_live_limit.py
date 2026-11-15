@@ -72,6 +72,15 @@ def test_young_master_runs_lower_nothing():
     assert _limit(_reads(master_runs=lambda: runs))[0] == 3
 
 
+def test_completed_and_wedged_master_runs_lower_nothing():
+    """A run unfinished past `STUCK_AFTER_S` is wedged, and GitHub expires it after 24 hours."""
+    runs = [
+        {"status": "completed", "created_at": _iso(timedelta(minutes=20))},
+        {"status": "queued", "created_at": _iso(timedelta(hours=3))},
+    ] * 2
+    assert _limit(_reads(master_runs=lambda: runs))[0] == 3
+
+
 def test_deploy_hold_lowers_a_k8s_pr_to_zero():
     reads = _reads(pr_paths=lambda pr: [K8S_PATH], hold=lambda: "abc123")
     cap, why = _limit(reads)

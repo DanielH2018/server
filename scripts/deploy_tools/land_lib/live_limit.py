@@ -15,8 +15,8 @@ lower what the override sets:
 - to 1 while a landing of a serial PR is live, or when this PR is one. A serial PR changes the
   role that holds a forward-only cluster pin, the `flux` role, or the cluster-vars file.
 
-THE READS FAIL OPEN. The limit is a throughput control, as merge pacing is: a read that fails
-lowers nothing. The landing still meets `DEPLOY_HOLD` at the pin gate and at the promotion.
+THE READS FAIL OPEN. The limit is a throughput control: a read that fails lowers nothing.
+The landing still meets `DEPLOY_HOLD` at the pin gate and at the promotion.
 `gh api rate_limit` costs no core quota, and the PR's own file list is one GraphQL read.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_land_live_limit.py
@@ -38,7 +38,8 @@ from lib.repo_paths import REPO
 from lib.role_paths import is_test_path, role_for
 from validate.cluster_pins import PINS
 
-from deploy_tools.land_lib import pace, pin_gate, pin_reads
+from deploy_tools.land_lib.landing import BRANCH
+from deploy_tools.land_lib import pin_gate, pin_reads
 from deploy_tools.promote_lib import reboot_window
 
 MAX_LIVE_ENV = "LAND_MAX_LIVE"
@@ -49,9 +50,22 @@ QUOTA_FLOOR = 1500
 QUOTA_RESET_FAR_S = 15 * 60
 SLOW_RUNS = 2
 SLOW_RUN_AGE_S = 15 * 60
-# DECIDED: 2, the top of the report's 1-2. Pacing already holds each merge while master CI
-# has a backlog, so a slow master costs waiting time, not quota.
+# DECIDED: 2, the top of the report's 1-2. Merge pacing once held each merge while master CI
+# had a backlog; it went with B4 (D10 in docs/ci-throughput.md), which decides this drop with
+# the count that replaces the per-host limit.
 SLOW_RUNS_LIMIT = 2
+# DECIDED: an unfinished run created more than 2 hours ago is not counted. On 2026-10-24 the
+# slowest master run took 61 minutes from creation to finish, so a run still unfinished at
+# twice that is wedged rather than queued, and counting it would hold every landing until
+# GitHub expires its jobs after 24 hours.
+STUCK_AFTER_S = 2 * 60 * 60
+# Enough to see every run inside the 2-hour window at today's merge rate.
+RUNS_URL = (
+    "repos/{owner}/{repo}/actions/workflows/ci.yml/runs"
+    f"?branch={BRANCH}&event=push&per_page=50"
+)
+RUNS_JQ = "[.workflow_runs[] | {status, created_at}]"
+
 
 K8S = "k8s"
 SERIAL = "serial"
@@ -77,7 +91,7 @@ class Reads:
     Attributes:
         pr_paths: the paths a PR changes.
         core_quota: the core quota's `(remaining, reset epoch)`.
-        master_runs: `pace.RUNS_JQ`'s answer for master's `ci.yml` push runs.
+        master_runs: `RUNS_JQ`'s answer for master's `ci.yml` push runs.
         hold: DEPLOY_HOLD's value, or None when the variable does not exist.
         in_window: whether a time is inside the weekly reboot's no-promotion window.
         now: the time every condition reads.
@@ -114,7 +128,7 @@ def github_reads(gh_json: Callable[..., JsonValue]) -> Reads:
     return Reads(
         pr_paths=pr_paths,
         core_quota=core_quota,
-        master_runs=lambda: gh_json("api", pace.RUNS_URL, "--jq", pace.RUNS_JQ),
+        master_runs=lambda: gh_json("api", RUNS_URL, "--jq", RUNS_JQ),
     )
 
 
@@ -166,6 +180,30 @@ class Admission:
         return cap, why
 
 
+def slow_runs(runs: JsonValue, now: float) -> int:
+    """How many of `runs`, `RUNS_JQ`'s answer, are slow: unfinished, yet not wedged.
+
+    Slow means older than `SLOW_RUN_AGE_S`; wedged means older than `STUCK_AFTER_S`.
+
+    Raises:
+        ValueError: `runs` is not a list of run objects with a parseable `created_at`.
+    """
+    # Every status but `completed` counts. The API's `status=` filter takes one value, and a run
+    # whose last job is waiting reads `queued` even after most of its jobs finished.
+    count = 0
+    for item in as_list(runs, "gh api ci.yml runs"):
+        run = as_object(item, "a ci.yml run")
+        if run.get("status") == "completed":
+            continue
+        created = datetime.fromisoformat(
+            str(run.get("created_at")).replace("Z", "+00:00")
+        )
+        age = now - created.timestamp()
+        if SLOW_RUN_AGE_S < age <= STUCK_AFTER_S:
+            count += 1
+    return count
+
+
 def pr_kind(pr: str, reads: Reads) -> str:
     """`kind` of `pr`'s file list; "" when the list cannot be read."""
     paths = _read(lambda: reads.pr_paths(pr))
@@ -194,7 +232,7 @@ def admission(pr: str, reads: Reads) -> Admission:
                 )
             )
     runs = _read(reads.master_runs)
-    slow = _read(lambda: pace.count_unfinished(runs, now.timestamp(), SLOW_RUN_AGE_S))
+    slow = _read(lambda: slow_runs(runs, now.timestamp()))
     if slow is not None and slow >= SLOW_RUNS:
         drops.append(
             (

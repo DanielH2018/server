@@ -15,7 +15,6 @@ MODULES = frozenset(
         "ledger",
         "landing",
         "merge",
-        "pace",
         "turn",
         "line",
         "batch",
@@ -88,7 +87,6 @@ ALLOWED = {
         "closing_refs",
         "landing",
         "outcome",
-        "pace",
         "pin_gate",
         "policy",
         "pr_json",
@@ -115,7 +113,6 @@ ALLOWED = {
         "turn",
     },
     # The master CI backlog read that holds --await-merge's direct merge (#5526).
-    "pace": {"landing", "outcome"},
     # The read that ends --await-merge on a check GitHub never finishes (#7996).
     "stuck_checks": {"landing", "gh_read"},
     # The pin gate runs inside --await-merge's direct merge, and `land.py --regate` alone.
@@ -148,9 +145,9 @@ ALLOWED = {
     # The fork, the logfile and the verdict wait. It imports no phase: `land.py` hands it a
     # callable and it never knows what a landing is.
     "detach": set(),
-    # The number a new landing is admitted under. It reads the pace count, DEPLOY_HOLD as the pin
+    # The number a new landing is admitted under. It reads master's run count, DEPLOY_HOLD as the pin
     # gate judges it, and nothing that drives a landing.
-    "live_limit": {"pace", "pin_gate", "pin_reads"},
+    "live_limit": {"landing", "pin_gate", "pin_reads"},
     # The handoff to a lander unit reads the Options it refuses flags from, and prints its own
     # stops through Outcome so they carry the verdict a landing's would.
     "handoff": {"options", "outcome"},

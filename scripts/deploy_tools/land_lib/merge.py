@@ -72,7 +72,6 @@ from deploy_tools import await_ci
 from deploy_tools.land_lib import (
     closing_refs,
     gh_read,
-    pace,
     pin_gate,
     policy,
     stale_base,
@@ -87,9 +86,6 @@ from deploy_tools.land_lib.pr_json import CommitMessage
 # read for its draft state (#6077). GitHub registered PR #6069's ready run 3s after the flip
 # at 02:09:58 on 2026-10-24, and the push-delivery grace await_ci already allows is far wider.
 DRAFT_SKIPPED_GRACE_S = await_ci.DROPPED_PUSH_GRACE_S
-# A poll that pacing holds sleeps this many merge polls. On 2026-11-11 thirteen landers polling
-# every 30s spent the hourly quota, and a held lander cannot merge sooner for polling sooner.
-HELD_POLL_FACTOR = 4
 # Takes the landing turn (`turn.held`), given the head of a draft that has had no CI run or
 # "": whether the landing holds it, and the seconds the call waited in line.
 type TakeTurn = Callable[[str], tuple[bool, int]]
@@ -436,17 +432,13 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
 
     A PR arm_merge left for a direct merge is merged here, on the first poll where await_ci
     reads its head green. A stale head merges as it stands unless the operator approved it
-    (`stale_base.refuse_stale_approved`). A green head also waits while master CI has a
-    backlog (`pace.hold`). A held poll never
-    ends the wait at `merge_timeout`: once held and unheld time reach it, the merge goes ahead
-    without pacing.
+    (`stale_base.refuse_stale_approved`).
 
     `take_turn` takes the landing turn (`turn.held`): it waits in line and returns whether
     this landing holds the turn and the seconds that call waited. A head with no CI run takes
     it before its one run (`_start_run`), and any other head on the first poll that reads it
-    green, so a landing never holds the turn while a run that started before it finishes. A
-    landing that holds the turn is not paced: no other landing with a turn merges ahead of
-    it, and a paced holder would stop every landing behind it. The seconds in line count as
+    green, so a landing never holds the turn while a run that started before it finishes.
+    The seconds in line count as
     waited, and the merge wait gets one `merge_timeout` after them. No update moves the end
     of the wait past twice `merge_timeout`, so the turn wait, the merge wait and an update
     together stay inside the two merge budgets LAND_DEADLINE counts.
@@ -478,7 +470,7 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
     """
     o, t = ln.opts, ln.tools
     waited = 0
-    # The `waited + held` no update moves the end of the wait past.
+    # The `waited` no update moves the end of the wait past.
     wait_cap = 2 * o.merge_timeout
     # Whether this landing holds the landing turn, and the seconds it stood in line for it.
     in_turn, queued = False, 0
@@ -487,10 +479,6 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
     rate_limited = OnChange(say)
     # await_ci's last answer when it was `pending`, for the merge-timeout message; else empty.
     ci_pending = ""
-    # The pacing hold the last green poll printed (`pace.py`), for the merge-timeout message.
-    paced = ""
-    # Seconds of polls `pace.hold` held, kept out of `waited` because they raise the pacing cap.
-    held = 0
     # The head this landing updated the branch from; empty until it does. `_start_run` can
     # do so before the first poll.
     updated_from = ""
@@ -507,7 +495,7 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
     if o.queue and ln.direct_merge_subject:
         updated_from, in_turn, queued = _start_run(ln, ask)
         waited = queued
-    # The `waited + held` at which the wait ends; a wait in line or an update moves it.
+    # The `waited` at which the wait ends; a wait in line or an update moves it.
     wait_ends_at = waited + o.merge_timeout
     if ln.batched_s:
         wait_ends_at = min(wait_ends_at, wait_cap)
@@ -522,12 +510,10 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
     # The head this landing converted to draft and back, once (#6546); a second draft-skip on
     # it ends the wait, because another conversion would loop.
     retriggered_head = ""
-    # The head whose checks `stuck_checks` reads, and the `waited + held` of its next read.
+    # The head whose checks `stuck_checks` reads, and the `waited` of its next read.
     stuck_head = ""
     stuck_read_at = 0
     while True:
-        # This poll's pacing hold; a held poll never ends the wait at merge-timeout.
-        hold = ""
         view = ln.view("state,mergeable,headRefOid")
         state = view.get("state", "")
         if state == "MERGED":
@@ -564,7 +550,7 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
             updated_from = again or updated_from
             queued += in_line
             waited += in_line
-            wait_ends_at = min(waited + held + o.merge_timeout, wait_cap)
+            wait_ends_at = min(waited + o.merge_timeout, wait_cap)
             continue
         # Seconds until GitHub's quota frees, when it refused this poll's CI read; else 0.
         pause = 0
@@ -621,24 +607,16 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
                     )
                 ):
                     updated_from, rejoined = head, True
-                    wait_ends_at = min(waited + held + o.merge_timeout, wait_cap)
+                    wait_ends_at = min(waited + o.merge_timeout, wait_cap)
                     continue
                 in_turn, in_line = ask("")
                 if in_line:
                     # The PR may have moved while this landing stood in line, so read it again.
                     queued += in_line
                     waited += in_line
-                    wait_ends_at = min(waited + held + o.merge_timeout, wait_cap)
+                    wait_ends_at = min(waited + o.merge_timeout, wait_cap)
                     continue
-            hold = (
-                pace.hold(ln, held, waited)
-                if rc == CI_GREEN and ln.direct_merge_subject and not in_turn
-                else ""
-            )
-            if hold and hold != paced:
-                say(hold)
-            paced = hold
-            if rc == CI_GREEN and ln.direct_merge_subject and not hold:
+            if rc == CI_GREEN and ln.direct_merge_subject:
                 if not (updated_from or stale_base.batch_tested(ln, head)):
                     stale_base.refuse_stale_approved(
                         ln, head, view.get("mergeable") == "CONFLICTING"
@@ -653,9 +631,9 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
                     continue
                 refused(f"merge refused at {head[:8]}: {refusal}; waiting")
             if head != stuck_head:
-                stuck_head, stuck_read_at = head, waited + held + stuck_checks.AFTER_S
-            elif rc == CI_GREEN and waited + held >= stuck_read_at:
-                stuck_read_at = waited + held + stuck_checks.AFTER_S
+                stuck_head, stuck_read_at = head, waited + stuck_checks.AFTER_S
+            elif rc == CI_GREEN and waited >= stuck_read_at:
+                stuck_read_at = waited + stuck_checks.AFTER_S
                 stuck = stuck_checks.find(ln, head)
                 if stuck:
                     ln.die(
@@ -663,7 +641,7 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
                         75,
                         Verdict.MERGE_TIMEOUT,
                     )
-        if not hold and waited + held >= wait_ends_at:
+        if waited >= wait_ends_at:
             # A run cancelled on the head never supplies a verdict on its own (#5931). A run
             # skipped as a draft names its own remedy in await_ci's line, because a re-run of
             # it skips again (#6077).
@@ -677,26 +655,21 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
                     "none arrives on its own: re-run it with `gh run rerun <run-id>`, or push"
                 )
             else:
-                why = paced or "look at its checks or the queue"
+                why = "look at its checks"
             ln.die(
-                f"PR #{o.pr} still {state} after {waited + held}s — not being merged; {why}",
+                f"PR #{o.pr} still {state} after {waited}s — not being merged; {why}",
                 75,
                 Verdict.MERGE_TIMEOUT,
             )
-        # A held lander adds no throughput, so it polls slower and spends less quota (#7993).
-        step = o.merge_poll * HELD_POLL_FACTOR if hold else o.merge_poll
+        step = o.merge_poll
         if pause:
-            step = max(step, min(pause, wait_ends_at - waited - held))
+            step = max(step, min(pause, wait_ends_at - waited))
         t.sleep(step)
-        if hold:
-            held += step
-        else:
-            waited += step
-    ln.merge_wait_s = waited + held
+        waited += step
+    ln.merge_wait_s = waited
     in_line = queued - ln.batched_s
     notes = [
         f"{in_line}s of it waiting for the landing turn" if in_line else "",
         f"{ln.batched_s}s of it on its batch's run" if ln.batched_s else "",
-        f"{held}s of it held by pacing" if held else "",
     ]
-    say(", ".join([f"merged after {waited + held}s", *filter(None, notes)]))
+    say(", ".join([f"merged after {waited}s", *filter(None, notes)]))

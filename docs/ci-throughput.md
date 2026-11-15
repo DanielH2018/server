@@ -160,8 +160,9 @@ The slices:
    the next:
     1. A green ready PR that master moved past goes back in the line as a draft
        (`stale_base.rejoin_line`). Landed in #8818, after #8816 moved code to make room.
-    1. The branch update that follows a green run on a stale base is deleted.
-    1. The merge pacing is deleted.
+    1. The branch update that follows a green run on a stale base is deleted. Landed in
+       #8820.
+    1. The merge pacing is deleted. Master's run count moves to the limit on live landings.
     1. The limit on live landings becomes one count of 6 across both hosts, taken after the
        merge. The turn is the slot before the merge.
     1. `LAND_QUEUE` is deleted.
@@ -544,6 +545,6 @@ The decisions, all the operator's:
 
 - [CI throughput: what remains](ci-throughput-remaining.md) is the brief for the session
   that takes this plan up: the work left, in order, and the traps this page does not carry.
-- [Landing a merged PR](landing.md) holds the merge pacing this plan replaces.
+- [Landing a merged PR](landing.md) holds the turn, the line and the batch as built.
 - [Self-hosted runner spike](archive/self-hosted-runner-spike.md) holds the 2026-09-22
   measurements behind ADR-0018.

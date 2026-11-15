@@ -301,8 +301,6 @@ class Tools:
     record_verdict: Callable[[str, int, str], None] = verdict_log.record
     sleep: Callable[[float], None] = time.sleep
     clock: Callable[[], float] = time.monotonic
-    # Wall-clock seconds, for the pace check.
-    wall_clock: Callable[[], float] = time.time
     # None means `host_wait`'s own, which imports this module and so cannot be named here.
     host_targets: Callable[[Path, str], list[Any]] | None = None
     # Takes the landing turn without waiting: the call that gives it up, or None while another
