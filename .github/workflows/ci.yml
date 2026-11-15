@@ -622,6 +622,22 @@ jobs:
       # signer does on daniel-box (hosts/lib/tests/test_repo_signer.py). Both share one
       # apt-get, and NEEDRESTART_SUSPEND skips needrestart's post-install scan, which adds
       # about 1.5s per apt-get and which no runner needs.
+      #
+      # The apt-get runs once per runner image version. It took a median 4.1s of a leg's 28s
+      # outside `Run the test suite` on 18 master legs of 2026-11-15: 1.1s to start, 1.0s to
+      # fetch, 1.6s for dpkg to read its database (#8684). The step copies the binaries the two
+      # packages put in /usr/bin into a cache keyed on the image version, and a later leg on
+      # the same image installs those copies. A copy that does not run falls back to apt-get,
+      # as does a runner that sets no `ImageVersion`.
+      - name: Read the runner image version
+        id: image
+        run: echo "version=${ImageVersion:-}" >> "$GITHUB_OUTPUT"
+      - name: Cache the age and apt-utils binaries
+        if: steps.image.outputs.version != ''
+        uses: actions/cache@v6.1.0
+        with:
+          path: ${{ runner.temp }}/pinned/apt-tools
+          key: apt-tools-${{ runner.os }}-${{ steps.image.outputs.version }}
       - name: Read the sops pin
         id: sops
         run: |
@@ -658,8 +674,20 @@ jobs:
           mkdir -p "$RUNNER_TEMP/bin"
           install -m 0755 "$sops" "$RUNNER_TEMP/bin/sops"
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
-          apt_install=(sudo env NEEDRESTART_SUSPEND=1 apt-get install -y --no-install-recommends age apt-utils)
-          "${apt_install[@]}" || { sudo apt-get update -q && "${apt_install[@]}"; }
+          apt_tools="$RUNNER_TEMP/pinned/apt-tools"
+          cached_apt_tools_run() {
+            [[ -x "$apt_tools/age-keygen" && -x "$apt_tools/apt-ftparchive" ]] \
+              && sudo install -m 0755 "$apt_tools"/* /usr/bin/ \
+              && age-keygen --version > /dev/null && apt-ftparchive --version > /dev/null
+          }
+          if cached_apt_tools_run; then
+            echo "age and apt-utils: cached"
+          else
+            apt_install=(sudo env NEEDRESTART_SUSPEND=1 apt-get install -y --no-install-recommends age apt-utils)
+            "${apt_install[@]}" || { sudo apt-get update -q && "${apt_install[@]}"; }
+            mkdir -p "$apt_tools"
+            dpkg -L age apt-utils | grep '^/usr/bin/' | xargs cp -t "$apt_tools"
+          fi
           "$RUNNER_TEMP/bin/sops" --version --disable-version-check
           age-keygen --version
           command -v apt-ftparchive
