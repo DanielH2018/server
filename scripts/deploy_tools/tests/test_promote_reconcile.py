@@ -109,6 +109,14 @@ def _moved(tmp_path) -> bool:
     return output.exists() and "moved=true" in output.read_text().splitlines()
 
 
+def test_the_dispatch_runs_only_after_the_apply_step_moved_last_good(jobs):
+    apply = _step(jobs["reconcile"], "Apply the lost run's verdict")
+    dispatch = _step(jobs["reconcile"], "Dispatch a run for a newer green commit")
+    assert apply.get("id") == "apply"
+    assert 'echo "moved=true" >> "$GITHUB_OUTPUT"' in apply["run"]
+    assert dispatch.get("if") == "steps.apply.outputs.moved == 'true'"
+
+
 # -- reconcile -------------------------------------------------------------------------------
 
 
