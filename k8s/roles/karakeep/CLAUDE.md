@@ -78,7 +78,7 @@ loop to auto-tag bookmarks
 - `manifests_extra_rollouts` rolls `karakeep-meilisearch` and `karakeep-time-tagger` on every
   manifest change, not just a Secret change — `MEILI_MASTER_KEY` and
   `KARAKEEP_PYTHON_API_KEY` are env vars, injected once at container start, so a key rotation
-  that doesn't also roll these two sidecars leaves them on the old value while `karakeep`
+  that doesn't also roll these two Deployments leaves them on the old value while `karakeep`
   itself gets the new one. Under Flux the renderer reads the same list and stamps its restart
   checksum annotation on `karakeep`, `karakeep-meilisearch` and `karakeep-time-tagger`, so a
   change to the role's render rolls all three.

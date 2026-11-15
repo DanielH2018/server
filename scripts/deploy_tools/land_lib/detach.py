@@ -153,7 +153,12 @@ def error_in(log: Path) -> str | None:
     return (message[: end.start()] if end else message).rstrip()
 
 
-def fork(log: Path, landing: Callable[[], int], scope_prefix: str = "land") -> int:
+def fork(
+    log: Path,
+    landing: Callable[[], int],
+    scope_prefix: str = "land",
+    spawn: Callable[[Callable[[], None]], int] = fork_detached,
+) -> int:
     """Run `landing` in a detached, logged grandchild; its pid, in the parent.
 
     The grandchild is in its own session, outside the caller's process tree, and out of any
@@ -168,6 +173,7 @@ def fork(log: Path, landing: Callable[[], int], scope_prefix: str = "land") -> i
         process, which is what guarantees the blocking handle Ansible needs.
       landing: what the grandchild runs; its return value is the recorded exit code.
       scope_prefix: the name of the transient scope the landing moves into, before its pid.
+      spawn: starts the detached body and returns its pid; a test passes one that delays it.
 
     Returns:
       The landing's pid. Only the parent ever returns from this function.
@@ -175,7 +181,7 @@ def fork(log: Path, landing: Callable[[], int], scope_prefix: str = "land") -> i
     log.touch()
     sys.stdout.flush()
     sys.stderr.flush()
-    pid = fork_detached(lambda: _run_landing(log, landing, scope_prefix))
+    pid = spawn(lambda: _run_landing(log, landing, scope_prefix))
     pid_path(log).write_text(f"{pid}\n")
     return pid
 
