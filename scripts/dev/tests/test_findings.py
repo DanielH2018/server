@@ -359,6 +359,18 @@ def test_close_fixed_with_a_pr_is_accepted(make_tools, issue):
     assert calls.gh[0][:3] == ["issue", "close", "5"]
 
 
+def test_close_fixed_on_another_register_names_the_pr_with_its_repo(make_tools, issue):
+    """GitHub resolves a bare `#N` against the issue's own repo, so on the dotfiles
+    register a bare `#8879` links dotfiles PR 8879 rather than the server PR (#8886)."""
+    tools, calls = make_tools(Fakes(view=issue(1395)))
+    argv = ["close", "1395", "--fixed", "--pr", "8879"]
+    assert findings.main([*argv, "--repo", "DanielH2018/dotfiles"], tools) == 0
+    (close,) = [c for c in calls.gh if c[:2] == ["issue", "close"]]
+    text = close[close.index("--comment") + 1]
+    assert re.search(r"DanielH2018/server(#|/pull/)8879", text)
+    assert not re.search(r"(?<![\w/])#8879", text)
+
+
 def test_close_accepted_without_a_reason_is_rejected_before_any_write(make_tools):
     tools, calls = make_tools()
     assert findings.main(["close", "5", "--accepted"], tools) == 64
@@ -540,3 +552,12 @@ def test_the_list_cap_does_not_sit_above_the_ceiling_gh_enforces_itself():
     were missing from the rendered settled register.
     """
     assert ISSUE_LIST_CAP <= 1000
+
+
+def test_close_fixed_on_another_register_with_its_own_pr_stays_bare(make_tools, issue):
+    tools, calls = make_tools(Fakes(view=issue(1395)))
+    register = "DanielH2018/dotfiles"
+    argv = ["close", "1395", "--fixed", "--pr", "1400", "--repo", register]
+    assert findings.main([*argv, "--pr-repo", register], tools) == 0
+    (close,) = [c for c in calls.gh if c[:2] == ["issue", "close"]]
+    assert close[close.index("--comment") + 1] == "Fixed by PR #1400."

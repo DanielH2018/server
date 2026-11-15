@@ -59,7 +59,7 @@ class _Landings:
     def __init__(self, records, prs, start_rc=0, ssh=None):
         answer = ssh or subprocess.CompletedProcess([], 0, json.dumps(records), "")
         self.tools, self.ssh = fake_tools(answers={autoland.SERVER_HOST: answer})
-        self.started, self.released, self.prepared = [], [], []
+        self.started, self.released, self.prepared, self.swept = [], [], [], []
 
         def prepare(primary, state, number):
             self.prepared.append(number)
@@ -76,6 +76,7 @@ class _Landings:
             start=start,
             release=lambda primary, path: self.released.append(path),
             running=lambda number: False,
+            clean=lambda tools, open_branches, out: self.swept.append(open_branches),
         )
         self.lines = []
 
@@ -408,8 +409,28 @@ def test_an_unreadable_github_exits_one_and_starts_nothing(tmp_path):
 def test_a_dry_run_judges_and_starts_nothing(tmp_path):
     run = _Landings([_record()], [_pr()])
     _, text = run.run(tmp_path, dry_run=True)
-    assert run.started == [] and run.prepared == []
+    assert run.started == [] and run.prepared == [] and run.swept == []
     assert "eligible, would hand off to land.sh (dry run)" in text
+
+
+def test_a_pass_sweeps_landed_worktrees_passing_over_open_pr_branches(tmp_path):
+    """#8575: the lander's timer is what runs `clean` with no operator behind it."""
+    run = _Landings([_record()], [_pr(5001), _pr(5002)])
+    run.run(tmp_path)
+    assert run.swept == [frozenset({"worktree-fanout-5001", "worktree-fanout-5002"})]
+
+
+def test_the_sweep_runs_once_per_interval(tmp_path):
+    run = _Landings([], [_pr()])
+    now = [1_000_000.0]
+    run.boundaries.clock = lambda: now[0]
+    run.run(tmp_path)
+    now[0] += autoland.CLEAN_INTERVAL_S - 1
+    run.run(tmp_path)
+    assert len(run.swept) == 1
+    now[0] += 1
+    run.run(tmp_path)
+    assert len(run.swept) == 2
 
 
 def test_the_newest_record_of_a_pr_decides(tmp_path):
