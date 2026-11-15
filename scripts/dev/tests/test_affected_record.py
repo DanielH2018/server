@@ -1,0 +1,143 @@
+"""`affected_lib/record.py`: one traced module run reduced to a row, and the budgeted refresh.
+
+The last test runs a real module under `strace`, because the parser and the launcher are only
+worth anything against what the kernel reports. It needs `strace` on the host.
+
+Run: uv run pytest scripts/dev/tests/test_affected_record.py
+"""
+
+import shutil
+
+import pytest
+from affected_lib import record, table, trace, traced_pytest
+
+from _helpers import REPO
+
+TRACE_TEST = "scripts/dev/tests/test_affected_trace.py"
+TABLE_TEST = "scripts/dev/tests/test_affected_table.py"
+RECORD_TEST = "scripts/dev/tests/test_affected_record.py"
+EMPTY = table.Row(frozenset(), frozenset(), frozenset(), False)
+
+
+def test_a_row_keeps_what_the_run_touched_in_the_tracked_tree(tmp_path):
+    for directory in ("docs", "lib", "scripts", ".venv"):
+        (tmp_path / directory).mkdir()
+    root = str(tmp_path)
+    touched = trace.Touched(
+        reads={
+            f"{root}/docs/a.md",
+            f"{root}/docs",
+            f"{root}/.venv/site.py",
+            "/etc/hosts",
+        },
+        missing={
+            f"{root}/docs/new.md",
+            f"{root}/lib/sub/deeper/y.py",
+            f"{root}/.venv/absent.py",
+            f"{root}/lib/__pycache__/x.cpython-315.pyc",
+            f"{root}/lib/x.abi3.so",
+        },
+        listed={
+            1: {f"{root}/docs", f"{root}/lib", f"{root}/scripts"},
+            2: {f"{root}/lib"},
+        },
+        root_pid=1,
+    )
+
+    row = record.reduce(
+        touched,
+        harness_listed={f"{root}/lib", f"{root}/scripts"},
+        repo=tmp_path,
+        tracked=frozenset({"docs/a.md", "docs/b.md", "lib/x.py", "scripts/s.py"}),
+        git_index="/git/index",
+    )
+
+    assert row == table.Row(
+        files=frozenset({"docs/a.md"}),
+        # The child's own listing of `lib` stays; the launcher's import-system one does not.
+        dirs=frozenset({"docs", "lib"}),
+        missing=frozenset({"docs/new.md", "lib/sub/deeper/y.py"}),
+        tree=False,
+    )
+
+
+def test_a_run_that_read_gits_index_depends_on_the_whole_tree(tmp_path):
+    touched = trace.Touched(reads={"/git/index"}, root_pid=1)
+
+    assert record.reduce(touched, set(), tmp_path, frozenset(), "/git/index").tree
+
+
+@pytest.mark.parametrize(
+    ("filename", "harness"),
+    [
+        ("<frozen importlib._bootstrap_external>", True),
+        ("/venv/lib/python3.15/site-packages/_pytest/pathlib.py", True),
+        ("/usr/lib/python3.15/importlib/metadata/__init__.py", True),
+        ("/usr/lib/python3.15/pathlib/_local.py", False),
+        ("/repo/tests/repo/test_walks_the_tree.py", False),
+    ],
+)
+def test_only_the_import_system_and_the_collector_list_as_the_harness(
+    filename, harness
+):
+    assert traced_pytest.is_harness_frame(filename) is harness
+
+
+def test_a_directory_a_test_also_listed_is_not_the_harnesss_alone():
+    log = "H\t/repo/tests\nH\t/repo/scripts/lib\nT\t/repo/tests\n"
+
+    assert traced_pytest.harness_only(log) == {"/repo/scripts/lib"}
+
+
+def test_a_refresh_starts_no_module_after_its_budget():
+    rows, elapsed = table.Table(), [0.0]
+
+    def record_one(module, repo, tracked, git_index):
+        elapsed[0] += 10
+        return EMPTY
+
+    recorded, refused = record.refresh(
+        rows,
+        [TRACE_TEST, TABLE_TEST, RECORD_TEST],
+        REPO,
+        budget_seconds=15,
+        jobs=1,
+        record=record_one,
+        clock=lambda: elapsed[0],
+    )
+
+    assert recorded == [TRACE_TEST, TABLE_TEST] and not refused
+    assert set(rows.rows) == {TRACE_TEST, TABLE_TEST}
+    assert rows.current(TRACE_TEST, table.tracked_blobs(REPO))
+
+
+def test_a_refused_module_loses_the_row_it_had():
+    rows = table.Table()
+    rows.put(TRACE_TEST, EMPTY, "0" * 40)
+
+    recorded, refused = record.refresh(
+        rows, [TRACE_TEST], REPO, record=lambda *_: "pytest exit 1"
+    )
+
+    assert not recorded and refused == {TRACE_TEST: "pytest exit 1"}
+    assert TRACE_TEST not in rows.rows and TRACE_TEST not in rows.stamps
+
+
+@pytest.mark.skipif(shutil.which("strace") is None, reason="needs strace on the host")
+def test_a_traced_run_records_what_the_module_read():
+    blobs = table.tracked_blobs(REPO)
+    git_dir = record.git("rev-parse", "--absolute-git-dir", cwd=REPO).stdout.strip()
+
+    row = record.record_module(TRACE_TEST, REPO, frozenset(blobs), f"{git_dir}/index")
+
+    assert isinstance(row, table.Row), row
+    assert {
+        TRACE_TEST,
+        "scripts/dev/affected_lib/trace.py",
+        "pyproject.toml",
+    } <= row.files
+    assert TABLE_TEST not in row.files
+    # pytest's collector and the import system listed these two, and the module did not.
+    assert not {"scripts/dev/tests", "scripts/dev"} & row.dirs
+    assert "scripts/dev/tests/__init__.py" in row.missing
+    assert not row.tree

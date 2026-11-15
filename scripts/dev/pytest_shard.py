@@ -51,6 +51,12 @@ finishes, outside every test's timed phases, with the fleet render beside it, an
 `# DECIDED:` has the numbers. `scripts/tests/conftest.py` runs the two census files' shared
 pass the same way. `--summary` charges all three per shard, as `prebuild_seconds`.
 
+A PULL REQUEST RUNS ONLY THE MODULES ITS DIFF CAN AFFECT (#8458). `--changed-since REF` asks
+`affected_lib/table.py` which modules the diff from REF selects and packs those alone, into as
+few legs as keep each no heavier than a full sweep's leg. The legs past that count get an
+empty list and CI skips their remaining steps. A push to master and a dispatch pass no REF and
+run the whole census. `affected_lib/table.py` has the rule and what it can miss.
+
 The docs-refresh cron runs `--record-missing` itself, so gaps in the table fill without a human.
 
 A WEIGHT THAT DRIFTS MODERATELY LOW IS INVISIBLE TO THE CHECK, so the cron re-measures it too.
@@ -83,6 +89,7 @@ the same code (#3604). Five narrowings of a failing version (#3604, #4010, #5480
 Usage:
     uv run python scripts/dev/pytest_shard.py --of 4 --shard 1        # this shard's files
     uv run python scripts/dev/pytest_shard.py --of 4 --shard 1 --out list.txt
+    uv run python scripts/dev/pytest_shard.py --of 4 --shard 1 --changed-since HEAD^1
     uv run python scripts/dev/pytest_shard.py --of 4 --summary        # projected balance
     uv run python scripts/dev/pytest_shard.py --record                # re-measure the weights
     uv run python scripts/dev/pytest_shard.py --record-missing        # only the unweighted files
@@ -93,8 +100,11 @@ Usage:
     uv run python scripts/dev/pytest_shard.py --check-durations ci.log  # annotate, always exit 0
 """
 
+import dataclasses
 import hashlib
 import json
+import math
+import os
 import statistics
 import subprocess
 import sys
@@ -108,6 +118,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 # Reach `render_share`, which decides which test modules read the fleet render.
 sys.path.insert(1, str(Path(__file__).resolve().parents[2] / "tests"))
 
+from affected_lib import table as affected_table
 from lib.cli_help import ArgumentParser
 
 from lib.git import git
@@ -220,6 +231,13 @@ def load_weights(path: Path = WEIGHTS_PATH) -> dict[str, float]:
     return {k: float(v) for k, v in json.loads(path.read_text()).items()}
 
 
+def _costs(files, weights: dict[str, float]) -> dict[str, float]:
+    """What each of `files` costs a leg; an unweighted file gets the median of the weighted."""
+    known = [weights[f] for f in files if f in weights]
+    default = statistics.median(known) if known else 1.0
+    return {f: weights.get(f, default) + _PER_FILE_SECONDS for f in files}
+
+
 def assign(files, shards: int, weights: dict[str, float]) -> dict[str, int]:
     """Map each file to a shard index in `range(shards)`, greedy longest-processing-time.
 
@@ -229,9 +247,7 @@ def assign(files, shards: int, weights: dict[str, float]) -> dict[str, int]:
     """
     if shards < 1:
         raise ValueError(f"shards must be >= 1, got {shards}")
-    known = [weights[f] for f in files if f in weights]
-    default = statistics.median(known) if known else 1.0
-    cost = {f: weights.get(f, default) + _PER_FILE_SECONDS for f in files}
+    cost = _costs(files, weights)
     load = [0.0] * shards
     placed: dict[str, int] = {}
     for path in sorted(files, key=lambda f: (-cost[f], f)):
@@ -249,6 +265,58 @@ def shard_files(shard: int, shards: int, files=None, weights=None) -> list[str]:
     weights = packing_table(load_weights()) if weights is None else weights
     placed = assign(files, shards, weights)
     return sorted(f for f, i in placed.items() if i == shard - 1)
+
+
+def affected(
+    base: str, repo: Path = REPO, rows: affected_table.Table | None = None
+) -> affected_table.Selection:
+    """The modules the diff from `base` to HEAD can affect, as `rows` reads it.
+
+    `rows` is the committed table when None. A module in `CI_ONLY_WEIGHTS` joins every
+    selection: its expensive legs run only on a CI runner, so no row recorded on a host holds
+    what they read.
+    """
+    fields = git(
+        "diff", "--name-status", "--no-renames", "-z", base, "HEAD", cwd=repo
+    ).stdout.split("\0")
+    files = census(repo)
+    selection = affected_table.select(
+        affected_table.load() if rows is None else rows,
+        list(zip(fields[0::2], fields[1::2], strict=False)),
+        files,
+        affected_table.tracked_blobs(repo),
+    )
+    if selection.full:
+        return selection
+    pinned = set(CI_ONLY_WEIGHTS).intersection(files)
+    return dataclasses.replace(
+        selection, modules=sorted(pinned.union(selection.modules))
+    )
+
+
+def legs_for(selected, files, shards: int, weights: dict[str, float]) -> int:
+    """How many of `shards` legs carry `selected`, so none outweighs a leg of all of `files`."""
+    if not selected:
+        return 0
+    cost = _costs(files, weights)
+    per_leg = sum(cost.values()) / shards
+    return min(shards, max(1, math.ceil(sum(cost[f] for f in selected) / per_leg)))
+
+
+def leg_files(
+    shard: int, shards: int, selection: affected_table.Selection | None = None
+) -> list[str]:
+    """What 1-based leg `shard` of `shards` runs.
+
+    With no `selection`, or one that is the whole census, the leg takes its share of the
+    census. Otherwise it takes its share of the selected modules, which is empty for a leg the
+    selection does not need.
+    """
+    if selection is None or selection.full:
+        return shard_files(shard, shards)
+    weights = packing_table(load_weights())
+    legs = legs_for(selection.modules, census(), shards, weights)
+    return shard_files(shard, legs, selection.modules, weights) if shard <= legs else []
 
 
 def measure_weights(files: list[str] | None = None) -> dict[str, float]:
@@ -489,12 +557,20 @@ def _summary(shards: int) -> str:
     return "\n".join(lines)
 
 
-def main(argv=None) -> int:
+def main(argv=None, select=affected) -> int:
     parser = ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--of", type=int, default=4, help="how many shards in total")
     parser.add_argument("--shard", type=int, help="which 1-based shard to print")
     parser.add_argument(
         "--out", type=Path, help="write the file list here instead of stdout"
+    )
+    parser.add_argument(
+        "--changed-since",
+        metavar="REF",
+        help=(
+            "with --shard, pack only the modules the diff from REF to HEAD can affect; a leg "
+            "the selection does not need gets an empty list"
+        ),
     )
     parser.add_argument(
         "--summary", action="store_true", help="print the projected balance"
@@ -629,16 +705,29 @@ def main(argv=None) -> int:
             "--check-durations is required"
         )
 
-    files = shard_files(args.shard, args.of)
-    # An empty list is not a fast green: pytest exits 5 ("no tests collected") on one, and a
-    # shard that collects nothing has silently stopped covering whatever it used to hold.
-    if not files:
+    selection = select(args.changed_since) if args.changed_since else None
+    whole = selection is None or selection.full
+    files = leg_files(args.shard, args.of, selection)
+    # An empty share of the census is not a fast green: pytest exits 5 ("no tests collected")
+    # on one, and a shard that collects nothing has silently stopped covering whatever it used
+    # to hold. A selection's spare leg is empty on purpose.
+    if whole and not files:
         raise SystemExit(f"shard {args.shard} of {args.of} selects no test files")
-    text = "\n".join(files) + "\n"
+    text = "".join(f"{f}\n" for f in files)
     if args.out:
         args.out.write_text(text)
+        why = selection.reason if selection else "no base to diff against"
+        print(
+            f"shard {args.shard} of {args.of}: {len(files)} test file(s) of "
+            f"{'the whole census' if whole else 'a selection'}: {why}"
+        )
     else:
         sys.stdout.write(text)
+    if output := os.environ.get("GITHUB_OUTPUT"):
+        with open(output, "a") as handle:
+            handle.write(
+                f"count={len(files)}\nscope={'full' if whole else 'selected'}\n"
+            )
     return 0
 
 

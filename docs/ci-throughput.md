@@ -36,6 +36,42 @@ succeeded, and the build's output said `false` for it: `run-cases` for the cases
 `arm64-tools` for the arm64 job. Any other skipped need fails the gate, because GitHub reads a
 skipped required job as a pass.
 
+## A pull request runs the test modules its diff can affect
+
+A pull-request run's `pytest` legs run a selection, and a push to master and a dispatch run
+every module (#8458, ruled by the operator on 2026-11-15).
+
+- **The table.** `scripts/dev/affected_tests.json` holds, for each test module, the tracked
+  files its own run resolved, the directories it listed, the paths it asked for and did not
+  find, and whether it read git's index. `scripts/dev/affected_tests.py record` measures a
+  row by running the module alone under `strace`. The docs-refresh cron records one twelfth
+  of the rows on each run, after every module that has no current row.
+- **The selection.** `scripts/dev/pytest_shard.py --changed-since HEAD^1` diffs the merge
+  commit against its base and asks `scripts/dev/affected_lib/table.py:select` which modules
+  the diff reaches. A module with no row always runs, and so does a module edited since its
+  row was recorded. The whole census runs when the diff touches a path that decides what a
+  run is, such as `pyproject.toml`, `uv.lock`, a `conftest.py` or `ci.yml`, and when a
+  changed file is in no row.
+- **The legs.** The matrix stays at six legs, because GitHub fixes the leg count before any
+  step runs. The selection is packed into as few legs as keep each no heavier than a full
+  sweep's leg. A leg past that count gets an empty list and skips every later step, so it
+  still takes a runner for its checkout and setup.
+- **What a selection gives up.** A module can gain a dependency after its row was recorded.
+  A pull request that changes the dependency then leaves the module out, and the module
+  fails on master, where a red run parks every landing. The operator accepted that cost.
+- **No proof from a selected run.** A run that left modules out did not test its tree, so
+  the `prek` gate records a tested tree only when `needs.pytest.outputs.scope` is `full`.
+  Master's run after a selected pull-request run therefore sweeps in full, and a landing
+  batch whose run was selected records nothing on its members.
+
+**The saving is on the pull-request run, and the push run gives part of it back.** On
+2026-11-14 a run with no host change used a median 1,414 slot-seconds, about 1,020 of them
+in the six `pytest` legs. A pull request whose selection fits one leg saves most of those
+1,020. Its push run no longer skips as proven, which costs about 1,414. A landing that takes
+one pull-request run therefore uses more slot-seconds than before, and a pull request that
+runs CI several times before it merges uses fewer. `scripts/dev/ci_slot_cost.py --recent 20`
+prints the measured figure.
+
 **`host_packages_build` owns the answer to whether a case has anything to run.** Its
 `run-cases` output is true on a `workflow_dispatch` run, and when the render reports `changed`
 or `cases`. The eight cases legs and `k3s_download` skip at job level on it.

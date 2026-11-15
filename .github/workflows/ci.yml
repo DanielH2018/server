@@ -45,7 +45,8 @@ on:
   #
   # Every job treats a dispatch like a push that no PR run proved, with nothing to configure.
   # The `prove` job runs on `push` only, so on a dispatch its output is empty and every other job
-  # runs. A PR run is a full sweep as well, so no step keys on `pull_request` to scope a hook;
+  # runs. A PR run sweeps every hook as well, so no step keys on `pull_request` to scope a hook;
+  # the `pytest` job's select step is the one exception, and a dispatch takes its full arm;
   # the PR-only steps (the facts notice, the cross-plane gate, the type-proof scope) are skipped
   # on a dispatch. `renovate-config` runs on `!= 'push'`. ENFORCED by
   # tests/repo/test_ci_dispatch_sweeps_everything.py, because a job condition rewritten to
@@ -101,8 +102,10 @@ permissions:
 jobs:
   # Proves, on a push to master, that the pushed tree is one a green PR run already tested
   # (#5489). Of 235 squash commits from 2026-10-15 to 2026-10-17, 186 had the tree of their PR's
-  # head run, and master runs were 21% of all runner time. A PR run is a full sweep (see the
-  # `hooks` job), so a master run on a tree it already swept repeats work and checks nothing new.
+  # head run, and master runs were 21% of all runner time. A PR run whose `pytest` legs ran the
+  # whole census is a full sweep (see the `hooks` job), so a master run on a tree it already
+  # swept repeats work and checks nothing new. A PR run whose legs ran a selection records no
+  # tree (#8458), so the push run after it finds nothing here and sweeps in full.
   #
   # `scripts/dev/tested_tree.py` reads the `ci/tested-tree` commit status that the `prek` gate
   # writes on the PR head, and answers `proven=true` only when that status carries the pushed
@@ -326,7 +329,7 @@ jobs:
           ALERT_TOOLS_ARCHIVES: ${{ runner.temp }}/pinned/alloy
         run: uv run python scripts/validate/alert_rules.py --prove-red
 
-      # A PR run is a full sweep. Every hook runs over the whole tree. This is what lets the push run skip when it merges a tree that a PR run
+      # A PR run sweeps every hook over the whole tree. This is what lets the push run skip when it merges a tree that a PR run
       # already tested (the `prove` job below, #5489): the PR run is the sweep, so the green it
       # records covers everything the push run would check. A changed-file scope on the PR run
       # would leave the scoped-out files unchecked, and the skipped push run would be the only
@@ -525,9 +528,10 @@ jobs:
         timeout-minutes: 2
         run: uv run python scripts/validate/k3s_binary_sum.py --base HEAD^1
 
-  # The whole pytest suite, unscoped on PRs and pushes alike — the same suite the prek `pytest`
-  # hook runs, invoked the same way (`uv run python -m pytest`, addopts from pyproject.toml), so
-  # a local `prek run --all-files` and this job cannot disagree about what a test run is.
+  # The pytest suite, invoked as the prek `pytest` hook invokes it (`uv run python -m pytest`,
+  # addopts from pyproject.toml), so a local `prek run --all-files` and this job cannot disagree
+  # about what a test run is. A push to master and a dispatch run every module. A pull request
+  # runs the modules its diff can affect (#8458); the `Select` step below has the rule.
   #
   # Sharded across a matrix, because this job is the pole of every run and a landing
   # waits on it twice — once on the PR, once on the master merge commit that `land.sh` and
@@ -546,12 +550,17 @@ jobs:
   # `fail-fast: false` for the reason the `hooks` job states above: one shard's failure must not
   # hide another's.
   #
-  # UNSCOPED by design: every PR runs the whole suite, never only the tests near its changed
-  # files. Several tests discover their inputs by walking the tree (test_validate_shell_templates'
-  # pinned roster, test_healthchecks_pings' rglob), so a PR adding a new *.sh.j2 that a
-  # changed-files filter did not map to them would skip exactly the tests that should fail on it.
-  # A path list is the wrong fix: one that grows an entry each time something escapes is not a
-  # list needing one more entry. What this cannot reach is a test outside `testpaths`, which
+  # DECIDED: a pull request's selection comes from a recorded table, never from a path list
+  # (#8458, the operator's ruling of 2026-11-15). Several tests discover their inputs by walking
+  # the tree (test_validate_shell_templates' pinned roster, test_healthchecks_pings' rglob), so
+  # a hand-kept map from changed paths to tests would skip the tests that should fail on a new
+  # *.sh.j2. `scripts/dev/affected_tests.json` holds what each module's own run read and listed
+  # under `strace`, so a module that walks a directory is selected when a file appears in it.
+  # The accepted cost: a module can gain a dependency after its row was recorded, pass on the
+  # pull request for not being selected, and fail on master, where a red run parks every
+  # landing (`docs/landing.md`). The push run is the safety net, so a selected pull-request run
+  # records no tested tree and its push run sweeps in full (the `prek` gate's record steps).
+  # What neither run can reach is a test outside `testpaths`, which
   # test_testpaths_covers_every_test_file guards.
   #
   # This job is the suite's only automated run before a merge. The prek `pytest` hook that
@@ -565,6 +574,11 @@ jobs:
     name: pytest (shard ${{ matrix.shard }} of ${{ strategy.job-total }})
     runs-on: ubuntu-26.04
     timeout-minutes: 20
+    # `full` when the legs ran the whole census, `selected` when they ran a pull request's
+    # selection. Every leg computes it from the same diff and the same table, so whichever
+    # leg writes last writes the same word. The `prek` gate reads it before it records a tree.
+    outputs:
+      scope: ${{ steps.select.outputs.scope }}
     strategy:
       fail-fast: false
       # Six shards. Changing this list is the whole edit: the
@@ -613,6 +627,33 @@ jobs:
           fetch-depth: 0  # several tests read git history and worktree state
           persist-credentials: false
       - uses: $/.github/actions/setup
+      # `--of "$SHARDS"` reads `strategy.job-total`, so the split follows the matrix above and
+      # cannot drift from it: changing the `shard:` list is the whole edit. The helper assigns
+      # whole test modules by greedy bin packing over recorded per-file durations — never part of
+      # a module, or `--dist loadscope`'s module-scoped fixtures would rebuild per shard.
+      #
+      # On a pull request the checkout is the merge commit, so `HEAD^1` is the base and the
+      # diff from it is the pull request's own change. `--changed-since` packs only the modules
+      # that diff can affect, into as few legs as keep each no heavier than a full sweep's leg
+      # (`scripts/dev/affected_lib/table.py` has the rule). The matrix cannot shrink to match,
+      # because `strategy.job-total` is fixed before any step runs. So a leg the selection does
+      # not need gets an empty list, writes `count=0`, and every later step skips on it: the
+      # leg ends green after the checkout and the setup. A push and a dispatch pass no base and
+      # run the whole census, where an empty list is still an error, because a shard that has
+      # silently stopped covering anything must not read as green.
+      #
+      # The step sits ahead of the tool installs so an empty leg pays for none of them.
+      - name: Select this shard's test files
+        id: select
+        env:
+          SHARD: ${{ matrix.shard }}
+          SHARDS: ${{ strategy.job-total }}
+        run: |
+          set -euo pipefail
+          since=()
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then since=(--changed-since "HEAD^1"); fi
+          uv run python scripts/dev/pytest_shard.py --of "$SHARDS" --shard "$SHARD" \
+            "${since[@]}" --out "$RUNNER_TEMP/shard.txt"
       # `cluster_vars.py write`'s tests (target slice D3) run the real sops against a throwaway
       # age key, and they fail rather than skip without it. The step reads the hosts' pin, the
       # amd64 `version` and `sha256` of `sops` in homelab-tools' package.yml, as the
@@ -630,15 +671,17 @@ jobs:
       # the same image installs those copies. A copy that does not run falls back to apt-get,
       # as does a runner that sets no `ImageVersion`.
       - name: Read the runner image version
+        if: steps.select.outputs.count != '0'
         id: image
         run: echo "version=${ImageVersion:-}" >> "$GITHUB_OUTPUT"
       - name: Cache the age and apt-utils binaries
-        if: steps.image.outputs.version != ''
+        if: steps.select.outputs.count != '0' && steps.image.outputs.version != ''
         uses: actions/cache@v6.1.0
         with:
           path: ${{ runner.temp }}/pinned/apt-tools
           key: apt-tools-${{ runner.os }}-${{ steps.image.outputs.version }}
       - name: Read the sops pin
+        if: steps.select.outputs.count != '0'
         id: sops
         run: |
           set -euo pipefail
@@ -649,11 +692,13 @@ jobs:
           echo "version=$sops_version" >> "$GITHUB_OUTPUT"
           echo "sha256=$sops_sha256" >> "$GITHUB_OUTPUT"
       - name: Cache the sops release
+        if: steps.select.outputs.count != '0'
         uses: actions/cache@v6.1.0
         with:
           path: ${{ runner.temp }}/pinned/sops
           key: sops-${{ runner.os }}-${{ steps.sops.outputs.version }}-${{ steps.sops.outputs.sha256 }}
       - name: Install sops, age and apt-utils for the tests
+        if: steps.select.outputs.count != '0'
         env:
           SOPS_VERSION: ${{ steps.sops.outputs.version }}
           SOPS_SHA256: ${{ steps.sops.outputs.sha256 }}
@@ -700,6 +745,7 @@ jobs:
       # workspace, where an untracked tree would show up in the git-status tests. The repo is
       # public, so the fetch needs no token.
       - name: Deploy the dotfiles packages the hooks and the pruner import
+        if: steps.select.outputs.count != '0'
         run: |
           set -euo pipefail
           src="$RUNNER_TEMP/dotfiles"
@@ -709,21 +755,6 @@ jobs:
           mkdir -p "$HOME/.local/share"
           ln -s "$src/home/dot_local/share/claude-guard" "$HOME/.local/share/claude-guard"
           ln -s "$src/home/dot_local/share/claude-worktree" "$HOME/.local/share/claude-worktree"
-      # `--of "$SHARDS"` reads `strategy.job-total`, so the split follows the matrix above and
-      # cannot drift from it: changing the `shard:` list is the whole edit. The helper assigns
-      # whole test modules by greedy bin packing over recorded per-file durations — never part of
-      # a module, or `--dist loadscope`'s module-scoped fixtures would rebuild per shard. It
-      # exits non-zero rather than emit an empty list, because `pytest` with no collected tests
-      # exits 5 and a shard that has silently stopped covering anything must not read as green.
-      - name: Select this shard's test files
-        env:
-          SHARD: ${{ matrix.shard }}
-          SHARDS: ${{ strategy.job-total }}
-        run: |
-          set -euo pipefail
-          uv run python scripts/dev/pytest_shard.py --of "$SHARDS" --shard "$SHARD" --out "$RUNNER_TEMP/shard.txt"
-          echo "$(wc -l < "$RUNNER_TEMP/shard.txt") test file(s) in this shard"
-
       # Every xdist worker collects the whole shard, and on a cold checkout each one rewrites
       # every module's assertions itself: 2.3-2.5s of a 6.7s collection on daniel-server (#8693).
       # pytest names a rewritten module `<name>.<cache tag>-pytest-<version>.pyc` and validates it
@@ -734,9 +765,11 @@ jobs:
       # already over 10 GB, and evict the pinned-tool caches first. A PR branch's entry is
       # visible to that branch alone, so a PR save would help no other run.
       - name: Name today's rewrite cache key
+        if: steps.select.outputs.count != '0'
         id: rewrite-day
         run: echo "day=$(date -u +%F)" >> "$GITHUB_OUTPUT"
       - name: Restore pytest's rewritten test modules
+        if: steps.select.outputs.count != '0'
         uses: actions/cache/restore@v6.1.0
         id: rewrite-cache
         with:
@@ -762,6 +795,7 @@ jobs:
       # pipefail is what makes the tee safe: without it the pipeline reports tee's exit status
       # and a failing suite would read green.
       - name: Run the test suite
+        if: steps.select.outputs.count != '0'
         run: |
           set -euo pipefail
           mapfile -t files < "$RUNNER_TEMP/shard.txt"
@@ -769,7 +803,7 @@ jobs:
             | tee "$RUNNER_TEMP/durations.log"
 
       - name: Save pytest's rewritten test modules
-        if: github.ref == 'refs/heads/master' && steps.rewrite-cache.outputs.cache-hit != 'true'
+        if: steps.select.outputs.count != '0' && github.ref == 'refs/heads/master' && steps.rewrite-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v6.1.0
         with:
           path: "**/__pycache__/*-pytest-*.pyc"
@@ -786,6 +820,7 @@ jobs:
       # 20-job runner pool. A failing version was narrowed five times (#3604, #4010, #5480,
       # #5616, #5989), each after it failed a PR on a weight the PR could not have known about.
       - name: Check every heavy module's recorded weight
+        if: steps.select.outputs.count != '0'
         run: uv run python scripts/dev/pytest_shard.py --check-durations "$RUNNER_TEMP/durations.log"
 
   # The deck mod (`.claude/plugins/deck/`, #3676) is a Claude Code plugin of function hooks,
@@ -2147,8 +2182,13 @@ jobs:
       # merge GitHub built at the PR's last push, which no run tested. Proven is the gate's
       # own reading: `prove` succeeded and said `true`. A `prove` that set `true` and was then
       # cancelled ran the sweep, and that run records.
+      #
+      # A run whose pytest legs ran a selection records nothing either (#8458). It did not run
+      # every test module on this tree, so it cannot prove the tree, and the push run after
+      # its merge sweeps in full. `needs.pytest.outputs.scope` is `full` only when the legs
+      # ran the whole census; a leg that never reached its select step leaves it empty.
       - name: Record the tested tree on the PR head
-        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && !(needs.prove.result == 'success' && needs.prove.outputs.proven == 'true')
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && !(needs.prove.result == 'success' && needs.prove.outputs.proven == 'true') && needs.pytest.outputs.scope == 'full'
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
@@ -2175,7 +2215,7 @@ jobs:
       # here would fail a batch that passed. Each has its own timeout for the same reason: a
       # fetch that hangs would otherwise run into the job's timeout and cancel the gate.
       - name: Check out the batch's history
-        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.head_ref, 'queue/') && !(needs.prove.result == 'success' && needs.prove.outputs.proven == 'true')
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.head_ref, 'queue/') && !(needs.prove.result == 'success' && needs.prove.outputs.proven == 'true') && needs.pytest.outputs.scope == 'full'
         continue-on-error: true
         timeout-minutes: 2
         uses: actions/checkout@v7.0.1
@@ -2184,7 +2224,7 @@ jobs:
           filter: blob:none
           persist-credentials: false
       - name: Record the tested tree on each batch member's head
-        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.head_ref, 'queue/') && !(needs.prove.result == 'success' && needs.prove.outputs.proven == 'true')
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.head_ref, 'queue/') && !(needs.prove.result == 'success' && needs.prove.outputs.proven == 'true') && needs.pytest.outputs.scope == 'full'
         continue-on-error: true
         timeout-minutes: 2
         env:

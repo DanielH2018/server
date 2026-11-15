@@ -11,11 +11,13 @@
 # Autonomous-role contract — Generated docs refresh. Twice daily (06:17 and 18:17, daniel-box
 # only): docs-refresh regenerates the reference pages and the infra map, weights any unweighted
 # test module, re-measures one eighth of the recorded weights and rewrites those that drifted,
-# rebuilds the site, and publishes the diff through a PR that a detached landing merges (#3609).
+# records what each test module depends on for one twelfth of the suite (#8458), rebuilds the
+# site, and publishes the diff through a PR that a detached landing merges (#3609).
 #
-# - Scope: three derived paths and nothing else — `docs/reference/`, `docs/assets/generated/`
-#   and `scripts/dev/pytest_shard_weights.json`; a write outside them parks every deploy on the
-#   box.
+# - Scope: five derived paths and nothing else — `docs/reference/`, `docs/assets/generated/`,
+#   the two shard-weights tables `scripts/dev/pytest_shard_weights.json` and
+#   `scripts/dev/pytest_shard_runner_weights.json`, and `scripts/dev/affected_tests.json`; a
+#   write outside them parks every deploy on the box.
 # - Mode: degrade, never abort. A failing generator sets `GENERATORS_OK=0`, publishes what
 #   succeeded and reports DOWN. A red test suite still exits 1. The timer's enable link arms it,
 #   and dropping the link from a package version, or reverting this component, stops the timer
@@ -32,6 +34,9 @@
 #
 # ENFORCED: hosts/lib/tests/test_docs_refresh_component.py, and the failure-path tests in
 # hosts/tests/test_docs_refresh_*.py, which read the rendered script.
+depends:
+  # `affected_tests.py record` traces each test module's reads with it (#8458).
+  - strace
 files:
   - {src: templates/docs-refresh.sh.j2, dst: /usr/lib/homelab/docs-refresh, mode: "0755"}
   - {src: tmpfiles.d/homelab-docs-site.conf.j2, dst: /usr/lib/tmpfiles.d/homelab-docs-site.conf}
