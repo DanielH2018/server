@@ -156,12 +156,19 @@ The slices:
    one full run. Its gate rebuilds each stacked tree from master and the heads and records
    it on each head. Each member then merges in turn, and its own run and master's prove the
    recorded tree and skip. Every member of a red batch lands alone.
-1. **B4, planned.** The merge pacing is deleted, and so is the branch update that follows a
-   green run on a stale base. A landing then takes its slot under the limit on live landings
-   when it gets the turn, and the limit counts the landings of both hosts. That limit exists
-   because every live landing polls GitHub on one token. A landing that waits for the turn
-   polls only a lock file, so any number can wait, and the limit bounds the landings that
-   spend quota.
+1. **B4, in progress.** D10 below rules its shape, in five pull requests, each landed before
+   the next:
+    1. A green ready PR that master moved past goes back in the line as a draft
+       (`stale_base.rejoin_line`).
+    1. The branch update that follows a green run on a stale base is deleted.
+    1. The merge pacing is deleted.
+    1. The limit on live landings becomes one count of 6 across both hosts, taken after the
+       merge. The turn is the slot before the merge.
+    1. `LAND_QUEUE` is deleted.
+
+   That limit exists because every live landing polls GitHub on one token. A landing that
+   waits for the turn as a draft polls only a lock file, so any number can wait, and the
+   limit bounds the landings that spend quota.
 
 Three things were settled before B2. The tree of a squash merge equals what `git merge-tree`
 builds for the same base and head: for #8474 both read `dfa8d4331c36`, with master 11 paths
@@ -300,11 +307,10 @@ B3 lands in four steps, each one exercised before the next:
 
    Only a draft whose head has had no CI run that ran jobs stands in the line. A ready flip
    is the one event that starts a member's short labelled run, and a PR that is already
-   ready has no flip left to make. A green PR converted to draft does not qualify: its
-   landing marks it ready again and lands it alone, and that flip costs a full run. To put
-   such a PR in a batch, convert it to draft and then merge master into it
-   (`gh pr ready --undo <n>`, `gh pr update-branch <n>`), which gives it a head whose only
-   run skipped.
+   ready has no flip left to make. A green PR converted to draft does not qualify by itself:
+   it needs a head whose only run skipped. B4's first step does that in the landing: a green
+   ready PR that master moved past is converted to draft and its branch updated
+   (`stale_base.rejoin_line`).
 
    The first batch ran on 2026-11-14. The landing of PR 8546 stacked PRs 8547 and 8552
    behind it. One run of 7 min 54 s tested the three, they merged within 90 seconds of
@@ -428,6 +434,46 @@ The memory column is anonymous plus shared memory, sampled once a second, which 
 check cannot give back under pressure. The cgroup's `memory.peak` read 8,454 MiB for the
 16-worker run, because it also counts page cache. On daniel-server, with 8 cores and sessions
 running, the same suite took 841 s.
+
+#### What B4 measured, and D10
+
+B4's text predated D9, so three questions came first. The measurement is the 26 master push
+runs of `ci.yml` from 22:50 UTC on 2026-11-14 to 00:34 on 2026-11-15, each set beside its
+PR's timeline and landing log:
+
+- 10 runs skipped because the tree was tested. Five followed the stale-base update of a
+  ready PR inside the turn, three the turn's update of a draft, one a draft whose master had
+  not moved, and one a merge of master a session pushed.
+- 16 swept in full. Each followed a ready PR merged without an update, because master's
+  changes missed its paths: 15 landing logs read `merging without a branch update`, and the
+  sixteenth log was gone with its worktree. None followed `LAND_QUEUE=0` or a hand merge.
+  Every landing in the window took the turn, and none was paced.
+- No batch formed: a ready holder never stacks drafts, so each draft took a run of its own.
+- From merge to verdict, a landing held its slot a median of 222 s and a p90 of 468 s.
+  The fan-out lander was refused a slot four times from 23:41 to 00:11.
+
+**D10, ruled by the operator on 2026-11-15.**
+
+- **What tests a ready PR on the master of its turn.** The landing converts a green ready
+  PR that master moved past to draft and updates its branch, so it stands in the line
+  (`stale_base.rejoin_line`). The overlap rule of 2026-10-29 had saved a PR run; under the turn
+  the untested merge costs a full master sweep instead, so it saves none. Updating every
+  stale ready PR inside the turn was refused: each update holds the turn for a whole run.
+- **Pacing is deleted.** A landing that holds the turn skips it, so it held nothing after
+  18:20 UTC on 2026-11-14, and 39 holds before that were all of landings without the turn.
+  The slow-runs drop in `live_limit.py` stays until the count is decided.
+- **The count.** Six lock files on daniel-box, beside the turn. The turn is the slot before
+  the merge, because only its holder polls PR CI then, and the holder never waits for a slot
+  while it holds the turn. Every landing, the holder and each batch member, takes a counted
+  slot after its merge and holds it to its verdict. A landing that cannot reach daniel-box
+  counts on its own host, as before. The number is 6, the old total of 3 a host: the
+  operator measured about 1,700 of 5,000 core calls and 2,250 of 5,000 GraphQL calls an hour
+  with 6 to 7 landings live on 2026-11-14.
+- **A landing-code PR may be a batch member.** 72 of 310 master commits touch landing code.
+  The holder compares its code with master once, when the batch forms (#8768), so its own
+  merge no longer strands its members. Such a PR lands as a draft through the turn with
+  `LAND_BATCH=0`, never with `LAND_QUEUE=0`: a merge without the turn during a batch's run
+  breaks that batch.
 
 ### Phase C: runner pods for `hooks` and `pytest`
 

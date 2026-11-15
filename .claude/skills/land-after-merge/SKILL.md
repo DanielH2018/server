@@ -115,7 +115,8 @@ gh pr create --draft --fill --body-file <path>   # title from the commit, body f
 
 `--draft` is what lets the landing share a CI run. `ci.yml` runs no job on a draft, and
 `land.sh` marks the draft ready or tests it with the other drafts in line. A PR opened ready
-spends a full run at every push and never joins a batch. Do not mark the draft ready
+spends a full run at every push. Once it is green, its landing converts it back to draft and
+updates its branch when master has moved, so it then joins the line. Do not mark the draft ready
 yourself. When a PR has to show a CI result before anyone lands it, such as one waiting on
 the operator's review, `gh pr ready <n>` starts its run.
 

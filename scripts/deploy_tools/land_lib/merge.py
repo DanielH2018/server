@@ -453,6 +453,11 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
     together stay inside the two merge budgets LAND_DEADLINE counts.
     Without --arm-merge this only polls, for a PR merged some other way.
 
+    A green head that has not asked for the turn, and whose run tested a master that has
+    moved since, goes back in the line instead of asking (`stale_base.rejoin_line`). Once
+    GitHub has moved the head, `_start_run` stands it in the line as a draft, and that update
+    is the one this landing makes.
+
     A head a landing batch tested (`batch.py`) merges with no stale-base check while it is
     the head the batch stacked and master is still the commit the batch stacked it on
     (`stale_base.batch_tested`). The seconds of the batch's run reach this wait with the
@@ -491,8 +496,18 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
     # The head this landing updated the branch from; empty until it does. `_start_run` can
     # do so before the first poll.
     updated_from = ""
+    # Whether this landing has asked for the turn, which `turn.held` answers only once.
+    asked = False
+    # Whether `stale_base.rejoin_line` made the PR a draft at a head GitHub has yet to move to.
+    rejoined = False
+
+    def ask(draft: str) -> tuple[bool, int]:
+        nonlocal asked
+        asked = True
+        return take_turn(draft)
+
     if o.queue and ln.direct_merge_subject:
-        updated_from, in_turn, queued = _start_run(ln, take_turn)
+        updated_from, in_turn, queued = _start_run(ln, ask)
         waited = queued
     # The `waited + held` at which the wait ends; the update after a green head moves it, once.
     wait_ends_at = waited + o.merge_timeout
@@ -545,6 +560,14 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
             say(f"checking the landing policy again on the updated head {head[:8]}")
             ln.pinned_head = policy.check(ln)
             continue
+        if rejoined and head:
+            rejoined = False
+            again, in_turn, in_line = _start_run(ln, ask)
+            updated_from = again or updated_from
+            queued += in_line
+            waited += in_line
+            wait_ends_at = min(waited + held + o.merge_timeout, wait_cap)
+            continue
         # Seconds until GitHub's quota frees, when it refused this poll's CI read; else 0.
         pause = 0
         if head:
@@ -592,7 +615,17 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
             if rc == CI_DISARMED and ln.direct_merge_subject:
                 ln.die(disarmed(f" at {head[:8]}", f"PR #{o.pr} not merged"), 1)
             if rc == CI_GREEN and ln.direct_merge_subject and not in_turn:
-                in_turn, in_line = take_turn("")
+                if (
+                    not asked
+                    and o.queue
+                    and stale_base.rejoin_line(
+                        ln, head, view.get("mergeable") == "CONFLICTING"
+                    )
+                ):
+                    updated_from, rejoined = head, True
+                    wait_ends_at = min(waited + held + o.merge_timeout, wait_cap)
+                    continue
+                in_turn, in_line = ask("")
                 if in_line:
                     # The PR may have moved while this landing stood in line, so read it again.
                     queued += in_line
