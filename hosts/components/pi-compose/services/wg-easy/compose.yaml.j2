@@ -39,14 +39,14 @@
       publish binds dual-stack, on purpose, until the external path is confirmed over IPv4. A
       WireGuard port with no valid peer key is safe to expose.
     - **The peer keys are pulled nightly by `k8s/roles/pi-peer-backup/`,** which owns the
-      rsync of `./config`, the file-count floor, the **WG Pi Peer Backup** Kuma monitor and the
+      rsync of `./config`, the file-count floor, the verdict that pages when a pull fails, and the
       Longhorn volume that a weekly shard carries to B2. Read its `CLAUDE.md` rather than
       re-deriving the pull. The data directory is `./config` under the project directory
       (root-owned, mode 755, holding `wg0.conf` and `wg0.json`). compose-adopt removes and
       recreates only the container, so the keys stay in place.
     - **Compose-supplied healthcheck timing, no `test:`.** The image ships its own HEALTHCHECK
       (`wg show | grep -q interface`), which verifies the WireGuard interface and not only the
-      UI. autoheal and Uptime Kuma rely on that status. The block below carries `interval`,
+      UI. autoheal relies on that status. The block below carries `interval`,
       `timeout` and `retries` from the Pi's `container_healthcheck_*` variables, and dockerd
       fills `Test` from the image. ENFORCED by hosts/lib/tests/test_pi_compose_wg_easy.py.
       `docs/wireguard-private-homelab-access.md` has the derivation (#1921) and the runc-exec
