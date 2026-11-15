@@ -69,15 +69,17 @@ there, because a reader who has only seen the Docker role's doc will not expect 
 The server MASQUERADEs peer traffic out of its own pod, so a peer would arrive at any ClusterIP
 or pod IP as the wg-easy pod and bypass the Authelia gate on that service's route. The
 `peer-cluster-drop` init container stops that: it inserts `FORWARD -i wg0 -d <cidr> -j DROP` at
-position 1 for `k3s_pod_cidr` and `k3s_service_cidr`, and logs `iptables -S FORWARD` —
+position 1 for `k3s_pod_cidr` and `k3s_service_cidr`
+(`tests/services/test_wg_easy_peer_cluster_drop.py::test_drop_rules_follow_the_cluster_cidr_vars_is_clean`),
+and logs `iptables -S FORWARD` —
 `kubectl -n homelab logs deploy/wg-easy -c peer-cluster-drop` is the live proof.
 
 - Peers keep the LAN: SSH to the nodes and the Pi, and the Traefik and DNS VIPs. Those are LAN
   addresses, and kube-proxy DNATs them in the host netns, after this pod's FORWARD chain.
 - Do not narrow peers to "the Traefik VIP and DNS only". That cuts SSH, the way back in.
 - The rules are rendered from the repo, never set as a PostUp in the admin UI: the app's DB is
-  lost on a PVC rebuild. Why an init container is enough is the `DECIDED:` marker in
-  `templates/deployment.yaml.j2`.
+  lost on a PVC rebuild. Why an init container is enough is
+  `k8s/roles/wg-easy/templates/deployment.yaml.j2:DECIDED: a one-shot init container`.
 - Enabling per-client filtering in the UI inserts wg-easy's `WG_CLIENTS` jump above these DROPs,
   so a per-client allow rule naming a cluster CIDR would take effect.
 

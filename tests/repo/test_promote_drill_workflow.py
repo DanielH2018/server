@@ -93,6 +93,7 @@ def workflow() -> dict:
 
 
 def test_the_drill_path_holds_every_property(workflow):
+    # fact: k8s/roles/flux/CLAUDE.md#The verify drill
     assert drill_problems(workflow) == []
 
 
@@ -237,6 +238,7 @@ REGISTRY_CASES = {
 def test_the_refusal_step_passes_only_on_a_registry_that_holds_no_signature(
     workflow, tmp_path, case
 ):
+    # fact: k8s/roles/flux/CLAUDE.md#The verify drill
     assert shutil.which("jq"), "the step parses the registry's answers with jq"
     answers, expected = REGISTRY_CASES[case]
     env = {

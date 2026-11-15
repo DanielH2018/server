@@ -117,6 +117,7 @@ def _names(docs: list[dict], kind: str) -> set[str]:
 
 
 def test_verify_drill_renders_only_while_its_lever_is_on():
+    # fact: k8s/roles/flux/CLAUDE.md#The verify drill
     assert _names(_sync_docs(flux_verify_drill=False), "OCIRepository") == {
         "homelab",
         "last-good",
@@ -129,6 +130,7 @@ def test_verify_drill_renders_only_while_its_lever_is_on():
 
 
 def test_deploy_errors_names_no_drill_source():
+    # fact: k8s/roles/flux/CLAUDE.md#The verify drill
     docs = _sync_docs(flux_verify_drill=True)
     alert = next(
         d
@@ -283,6 +285,7 @@ def test_the_github_status_provider_authenticates_as_a_github_app():
 
     A PAT in `token` would draw on the operator's own 5,000 requests per hour (#8023).
     """
+    # fact: k8s/roles/flux/CLAUDE.md#Tokens
     pem = "-----BEGIN RSA PRIVATE KEY-----\nAAAA\nBBBB\n-----END RSA PRIVATE KEY-----\n"
     text = render_role_template(
         "flux",

@@ -1,8 +1,10 @@
 # metallb — the LoadBalancer announcer and its address pools
 
-MetalLB's controller, its speaker DaemonSet and its CRDs, plus the two address pools and the
-L2Advertisement that announce every LoadBalancer VIP (Traefik's edge, Pi-hole's DNS, Mosquitto,
-Jellyfin's LAN address). A bad apply here takes the edge and DNS offline together while host
+MetalLB's controller, its speaker DaemonSet and its CRDs
+(`k8s/roles/metallb/files/upstream/metallb-native.yaml`), plus the two address pools and the
+L2Advertisement (`k8s/roles/metallb/templates/metallb-pool.yaml.j2`) that announce every
+LoadBalancer VIP (Traefik's edge, Pi-hole's DNS, Mosquitto, Jellyfin's LAN address, wg-easy,
+Terraria and Valheim). A bad apply here takes the edge and DNS offline together while host
 probes stay green.
 
 ## At a glance

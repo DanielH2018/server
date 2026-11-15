@@ -1,8 +1,11 @@
 # netpol-baseline — default-deny NetworkPolicies for the cluster
 
-Renders the baseline NetworkPolicy for both `homelab` and `observability`, plus a
+Renders the baseline NetworkPolicy for both `homelab`
+(`k8s/roles/netpol-baseline/templates/networkpolicy.yaml.j2`) and `observability`
+(`k8s/roles/netpol-baseline/templates/networkpolicy-observability.yaml.j2`), plus a
 per-workload override under `templates/networkpolicy-*.yaml.j2` for a service that needs a
-tighter or looser allow-list than the baseline. Deploys no workload of its own.
+tighter or looser allow-list than the baseline
+(`tests/k8s/test_netpol_baseline_labels.py::test_every_exempt_workload_is_selected_by_its_own_policy`). Deploys no workload of its own.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in k8s/roles/longhorn-reconcile/defaults/main.yml. -->

@@ -89,9 +89,12 @@ an entry.
 
 Upstream's `allow-egress` stays: it selects every pod in `flux-system` and admits ingress only
 from pods there, so it is the namespace's default-deny, and its same-namespace rule carries
-artifact fetches and controller events. `templates/networkpolicy.yaml.j2` adds
+artifact fetches and controller events. `k8s/roles/flux/templates/networkpolicy.yaml.j2` adds
 `flux-allow-prometheus`, which admits only the `app: prometheus` pods in `observability` to
-the metrics port 8080. Egress is not enforced on this cluster (ADR-0009), so `allow-egress`'s
+the metrics port 8080
+(`tests/k8s/test_flux_role.py::test_all_namespace_peers_is_clean_on_the_rendered_fence`).
+Egress is not enforced on this cluster
+(`docs/adr/0009-networkpolicy-default-deny-ingress.md`), so `allow-egress`'s
 egress rule changes nothing. A change that adds a Receiver adds its fence with it.
 
 ## Rollouts
@@ -182,17 +185,21 @@ with its resume beside it: `docs/flux-deploy-plane.md`, *Recovering Flux by hand
 `flux_verify_drill: true` renders a second OCIRepository, `verify-drill`, which follows the
 unsigned tag that a `verify_drill` dispatch of `promote` pushes. It must read Ready=False with
 a verification error. The `deploy-errors` Alert does not name it, so it posts nothing to
-Discord. The way out is the lever set back to `false`: the render drops the document, and
+Discord (`tests/k8s/test_flux_sync.py::test_deploy_errors_names_no_drill_source`). The way out
+is the lever set back to `false`: the render drops the document
+(`tests/k8s/test_flux_sync.py::test_verify_drill_renders_only_while_its_lever_is_on`), and
 `flux-deferred`'s prune deletes `ocirepository/verify-drill` at its next reconcile after the
 promotion.
 
 **What the dispatch checks.** `publish` pushes with `--reproducible`, so a drill at the commit
 `prod` already carries would reuse `prod`'s signed digest. The drill push therefore carries the
 annotation `io.homelab.verify-drill=true`, so no signed push carries its digest, and the
-dispatch fails unless `cosign verify` refuses that digest (#4826). The refusal alone proves
+dispatch fails unless `cosign verify` refuses that digest (#4826,
+`tests/repo/test_promote_drill_workflow.py::test_the_drill_path_holds_every_property`). The refusal alone proves
 nothing, because cosign v3.1.3 reads a registry error on its bundle probe as "no bundle"
 (#4829). The dispatch therefore also reads the registry itself, and fails unless it answers
-that the digest has no referrer and no legacy `.sig` tag. GHCR serves no referrers API, so
+that the digest has no referrer and no legacy `.sig` tag
+(`tests/repo/test_promote_drill_workflow.py::test_the_refusal_step_passes_only_on_a_registry_that_holds_no_signature`). GHCR serves no referrers API, so
 cosign keeps a digest's bundle in the referrers tag `sha256-<hex>`.
 
 **HISTORY — The drill ran on 2026-10-13.** The first dispatch was a false green: `verify-drill`
@@ -208,7 +215,7 @@ OCIRepository `homelab`. `FluxNotReady` stayed quiet for the same reason, and
 
 - **No agent token ever carries `write:packages`.** Pushing an artifact, signing it and moving
   the `prod` tag happen only in the promote workflow's code-free jobs, under that job's
-  `GITHUB_TOKEN`. An agent session's token never holds the scope.
+  `GITHUB_TOKEN` (`tests/repo/test_promote_workflow.py:PERMISSIONS`). An agent session's token never holds the scope.
 - **`PROMOTE_TOKEN` rotation (operator-only).** The promote workflow reads `DEPLOY_HOLD` and
   writes `PROD_DIGEST` with the repository secret `PROMOTE_TOKEN`, a fine-grained token with
   Variables read and write on two repositories, `DanielH2018/server` and
@@ -216,8 +223,9 @@ OCIRepository `homelab`. `FluxNotReady` stayed quiet for the same reason, and
   replacement, set it with `gh secret set PROMOTE_TOKEN -R DanielH2018/server`, store the copy
   with `sops set` as `promote_token`, run `uv run python
   scripts/secrets_mgmt/secret_rotation.py sync`, and commit `secrets/secret_rotation.yml`.
-  The copy's registry row is on the `external-90d` tier with `source: record`, so the audit
-  flags it before the token expires.
+  The copy's registry row (`secrets/secret_rotation.yml:entries.promote_token.tier`) is on the
+  `external-90d` tier with `source: record`, so the audit flags it before the token expires
+  (`scripts/secrets_mgmt/tests/test_secret_registry.py::test_the_live_registry_marks_exactly_the_three_record_keys`).
 - **GitHub App credentials rotation (operator-only).** notification-controller posts commit
   statuses as a GitHub App, which has a rate limit of its own, so a drained operator quota
   cannot stop a `flux/*` status post (#8023). The App has Commit statuses read and write, no
@@ -227,11 +235,13 @@ OCIRepository `homelab`. `FluxNotReady` stayed quiet for the same reason, and
   They live only in SOPS, with no GitHub secret beside them.
 - **The App credentials reach the cluster as a SOPS manifest.** Flux deletes the newlines of a
   substituted PEM and types an all-digit ID as a number, so all three keys are
-  `SOPS_MANIFEST_KEYS` keys. `render_sops_manifests` ships
+  `scripts/renderer/renderer_lib/sops_entries.py:SOPS_MANIFEST_KEYS` keys.
+  `k8s/roles/flux/defaults/main.yml:render_sops_manifests` ships
   `templates/github-status-secret.yaml.j2` as its SOPS-encrypted copy, and the `flux`
   Kustomization renders `decryption` with `sops-age`. The Secret `flux-github-status` holds the
   keys `githubAppID`, `githubAppInstallationID` and `githubAppPrivateKey`, and the
-  `github-status` Provider sets `address` to the repository URL and reads that Secret. To
+  `github-status` Provider sets `address` to the repository URL and reads that Secret
+  (`tests/k8s/test_flux_sync.py::test_the_github_status_provider_authenticates_as_a_github_app`). To
   rotate the private key, generate a new one in the App's settings, store it with `sops set`
   as `flux_github_app_private_key`, run `uv run python
   scripts/secrets_mgmt/secret_rotation.py sync`, and write the cluster file and the SOPS

@@ -55,6 +55,7 @@ def _problems(deployment: dict, cidrs: list[str]) -> list[str]:
 
 
 def test_drop_rules_follow_the_cluster_cidr_vars_is_clean():
+    # fact: k8s/roles/wg-easy/CLAUDE.md#Peer reach: the LAN, not the cluster networks
     deployment = _deployment({"k3s_pod_cidr": _POD, "k3s_service_cidr": _SVC})
     assert _problems(deployment, [_POD, _SVC]) == []
 

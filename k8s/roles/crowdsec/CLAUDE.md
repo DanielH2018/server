@@ -127,26 +127,40 @@ The sidecar shares the pod's IPv4-only network, so it cannot see the home IPv6 /
 operator split the job in two on 2026-10-18 (#5701):
 
 - **The `crowdsec-home-ips` CronJob looks the addresses up.** It runs
-  `files/home_ips_discover.py` every 5 minutes on daniel-box with `hostNetwork: true`. It takes
+  `k8s/roles/crowdsec/files/home_ips_discover.py` every 5 minutes
+  (`k8s/roles/crowdsec/defaults/main.yml:crowdsec_k8s_home_ips_period_minutes`) on daniel-box
+  with `hostNetwork: true` (`k8s/roles/crowdsec/templates/home-ips-cronjob.yaml.j2`). It takes
   the IPv4 address from ipify and the /64 from the host's global addresses in
   `/proc/net/if_inet6`. It writes both, with `looked_up_at`, into the `crowdsec-home-ips`
-  ConfigMap. Its ServiceAccount may `patch` that one ConfigMap and nothing else, and it runs no
-  `cscli`. Flux runs it once per role revision as a gate Job in `crowdsec-verify`.
+  ConfigMap
+  (`k8s/roles/crowdsec/tests/test_home_ips_discover.py::test_a_good_run_writes_both_values_and_clears_both_errors`).
+  Its ServiceAccount may `patch` that one ConfigMap and nothing else
+  (`k8s/roles/crowdsec/templates/home-ips-rbac.yaml.j2`), and it runs no
+  `cscli`. Flux runs it once per role revision as a gate Job in `crowdsec-verify`
+  (`k8s/roles/crowdsec/defaults/main.yml:flux_cronjob_gates`).
 - **The ConfigMap's `data` has one writer.** The role renders the object with no `data` keys
-  (the `DECIDED:` marker in `templates/home-ips-configmap.yaml.j2`), so no apply owns a field
+  (`k8s/roles/crowdsec/templates/home-ips-configmap.yaml.j2:DECIDED: rendered with no`), so no apply owns a field
   the CronJob writes. Read it with `kubectl -n homelab get configmap crowdsec-home-ips -o yaml`.
-- **The sidecar's `crowdsec-home-allowlist` job syncs the list.** `files/home_allowlist.py`
+- **The sidecar's `crowdsec-home-allowlist` job syncs the list.**
+  `k8s/roles/crowdsec/files/home_allowlist.py`
   reads the ConfigMap and the stored entries (`cscli allowlists inspect home-ips`). For each
-  family it adds the wanted value, then removes any other entry of that family.
+  family it adds the wanted value, then removes any other entry of that family
+  (`k8s/roles/crowdsec/tests/test_home_allowlist.py::test_a_new_prefix_replaces_the_stored_one`).
 - **An empty or failed lookup never removes a stored entry.** The CronJob then writes the
-  family's `*_error` field and leaves its value alone, so the sidecar keeps the stored /64.
-  The IPv4 half still syncs when IPv6 fails (#1248).
+  family's `*_error` field and leaves its value alone, so the sidecar keeps the stored /64
+  (`k8s/roles/crowdsec/tests/test_home_allowlist.py::test_a_failed_ipv6_lookup_keeps_the_stored_prefix_and_is_down`).
+  The IPv4 half still syncs when IPv6 fails (#1248,
+  `k8s/roles/crowdsec/tests/test_home_ips_discover.py::test_a_failed_ipv6_lookup_writes_its_error_and_leaves_the_stored_prefix`).
 - **What the "CrowdSec Home Allowlist" tile means.** DOWN when `looked_up_at` is older than
-  three CronJob periods (`crowdsec_k8s_home_ips_stale_after_seconds`), so a dead discovery
-  pages. DOWN when a lookup or a cscli call failed. UP with `skipped: WAN unreachable` when
-  ipify failed and no WAN probe answered, because the WAN Reachable tile owns that fault
-  (#2793).
-- **Two distinct global /64s fail the IPv6 lookup** rather than pick one. daniel-server held
+  three CronJob periods (`k8s/roles/crowdsec/defaults/main.yml:crowdsec_k8s_home_ips_stale_after_seconds`,
+  `k8s/roles/crowdsec/tests/test_home_allowlist.py::test_a_lookup_older_than_three_periods_is_down_and_writes_nothing`),
+  so a dead discovery pages. DOWN when a lookup or a cscli call failed. UP with
+  `skipped: WAN unreachable` when ipify failed and no WAN probe answered, because the WAN
+  Reachable tile owns that fault
+  (#2793, `k8s/roles/crowdsec/tests/test_home_allowlist.py::test_an_unreachable_wan_is_a_skip_not_a_fault`).
+- **Two distinct global /64s fail the IPv6 lookup** rather than pick one
+  (`k8s/roles/crowdsec/tests/test_home_ips_discover.py::test_two_distinct_prefixes_fail_the_lookup_rather_than_pick_one`).
+  daniel-server held
   one /64 on 2026-10-18, mixing /64 SLAAC and /128 DHCPv6 addresses inside it. A second /64
   appearing on daniel-box reads as a DOWN naming the count.
 - **Read it:** `probe.py loki-query '{container="crowdsec-jobs"} |= "crowdsec-home-allowlist"'`

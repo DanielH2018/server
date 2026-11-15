@@ -1,22 +1,28 @@
 # k8s/image-builder — builds one image in-cluster and pushes it to the in-cluster registry
 
-Generic, callers set `image_builder_name`/`_dockerfile`/`_context`/`_tag` rather than each
+Generic, callers set `image_builder_name`/`_dockerfile`/`_context`/`_tag`
+(`scripts/renderer/renderer_lib/task_inputs.py:image_contexts`) rather than each
 service carrying its own build block — that would copy the securityContext reasoning into
 every caller, where it would drift. See repo-root `CLAUDE.md` for shared conventions.
 
 **No standalone deploy tag.** `--tags image-builder` selects nothing: it is not a
-`containers_list` entry, and no render applies its Job.
+`containers_list` entry (`cluster/services.yml`), and no render applies its Job.
 
 ## At a glance
-- **Builder image:** `moby/buildkit` (`image_builder_k8s_image`) — rootless
+- **Builder image:** `moby/buildkit` (`image_builder_k8s_image` in
+  `k8s/roles/image-builder/defaults/main.yml`) — rootless
   BuildKit, not kaniko (archived upstream) or the daemonful BuildKit variant (wants a
-  privileged pod). Runs as uid 1000 with no added capabilities.
+  privileged pod). Runs as uid 1000 with no added capabilities
+  (`k8s/roles/image-builder/templates/build-job.yaml.j2`).
 - **Callers:** `ical-proxy`, `terraria`, `pi-peer-backup`, `n8n`, `code-server`,
-  `nut`, `homelab-mcp`, `valheim`, `karakeep` — each lists its builds'
+  `nut`, `homelab-mcp`, `valheim`, `karakeep`
+  (`scripts/renderer/renderer_lib/images.py:builder_roles`) — each lists its builds'
   `image_builder_*` vars in its own `image_builder_builds` default.
-- **Renovate does not automerge its bumps** (`k8s_autodeploy: false`). It renders a Job and a
-  ConfigMap, no Deployment, and it builds the images every other role above consumes, so a bad
-  build here is upstream of all of them.
+- **Renovate does not automerge its bumps**
+  (`k8s/roles/image-builder/defaults/main.yml:k8s_autodeploy`). It renders a Job and a
+  ConfigMap, no Deployment, and its context template defines the images every other role above
+  consumes (`scripts/renderer/renderer_lib/images.py:render_images`), so a bad edit here is
+  upstream of all of them.
 
 ## Notable
 - **Every build has TWO names for one manifest:** the mutable `image_builder_tag` (`latest`) and
@@ -50,7 +56,8 @@ every caller, where it would drift. See repo-root `CLAUDE.md` for shared convent
   The plan is `docs/target-architecture/deploy/d5-bulk-move.md`, *Images built by CI (D5.4)*.
 
 ## Editing
-- Job shape: `templates/build-job.yaml.j2`. The renderer reads
-  `templates/context-configmap.yaml.j2` for each content tag.
+- Job shape: `k8s/roles/image-builder/templates/build-job.yaml.j2`. The renderer reads
+  `k8s/roles/image-builder/templates/context-configmap.yaml.j2` for each content tag
+  (`scripts/renderer/renderer_lib/images.py:render_images`).
 - Not deployed standalone, and no caller reaches it: every caller is a k8s entry. promote's
-  `images` job builds their images.
+  `images` job builds their images (`scripts/deploy_tools/ci_images.py`).

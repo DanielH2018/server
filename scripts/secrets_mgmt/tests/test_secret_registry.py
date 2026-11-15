@@ -248,6 +248,7 @@ def test_the_live_registry_marks_exactly_the_three_record_keys():
     Secret and prefers it, the only bazarr_api_key reference in the tree is a
     monitor-bridge reader, and nothing in the tree reads promote_token (the
     GitHub repository secret holds the credential)."""
+    # fact: k8s/roles/flux/CLAUDE.md#Tokens
     reg = yaml_fast.safe_load(REGISTRY.read_text())
     assert record_names(reg) == [
         "authelia_password",

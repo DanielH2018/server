@@ -149,6 +149,8 @@ def test_the_derived_traefik_edge_agrees_with_the_render(host):
     only sound if it agrees with the render -- except for OVER_DERIVED_TRAEFIK_EDGE, where an
     extra edge is the safe direction and a missing one is still a failure.
     """
+    # fact: k8s/roles/traefik-crds/CLAUDE.md#traefik-crds — the Traefik CRDs, in a tag of their own
+    # fact: k8s/roles/traefik/CLAUDE.md#traefik — the cluster ingress edge
     _path, entries, _idx = host
     derived = _derived_traefik_edge(entries)
     for c in entries:
