@@ -238,6 +238,10 @@ def main(tools: AgentTools = TOOLS, config_path: str = CONFIG) -> int:
     # Every tick, before anything can fail or take the quiet skip: a crash report queued during
     # an outage would otherwise wait for a day that has PRs to digest (#3905).
     tools.flush_discord_spool(spool, webhook, USER_AGENT, log=log)
+    # Before the skip too: a run killed after its session leaves the session's files here, and
+    # a tick with no PRs would otherwise keep them until the next session (dotfiles#967's I2).
+    requests_dir = fresh_dir(exchange, REQUESTS_DIR)
+    out = fresh_dir(exchange, OUT_DIR)
 
     before = open_prs(cfg["REPO"], tools)
     gate = decide(before)
@@ -251,8 +255,6 @@ def main(tools: AgentTools = TOOLS, config_path: str = CONFIG) -> int:
         return 0
 
     log(f"{gate.reason}; starting {SESSION_UNIT}")
-    requests_dir = fresh_dir(exchange, REQUESTS_DIR)
-    out = fresh_dir(exchange, OUT_DIR)
     wait = min(
         int(cfg.get("SESSION_TIMEOUT_S", "2700")) + 300, int(deadline - time.time())
     )
