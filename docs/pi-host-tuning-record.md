@@ -689,6 +689,13 @@ The file `/etc/apt/apt.conf.d/60homelab-pi-archives` sets two apt options:
   a day, after the unattended upgrade. It removes the debs the cache held before this change
   and whatever a failed install leaves.
 
+apt reads `/etc/apt/apt.conf.d` once, when it starts. The `apt-get` run that installs the file
+keeps every deb it downloaded, its own `homelab-daniel-pi` included. Read on daniel-pi at 23:07
+UTC on 2026-11-15, the cache held 88 homelab debs, 596 MB (#8933). `homelab-tools` 0.7708
+installed at 23:03:00, and the `homelab-daniel-pi` 0.7708 that ships the file installed at
+23:03:09, in the same updater run. The option takes effect from the next `apt-get` run. Every deb
+cached before it clears at the first `apt-daily-upgrade.service` run after the file lands.
+
 The weekly autoclean (`APT::Periodic::AutocleanInterval "7"`) never removed a homelab deb. It
 deletes only a deb whose version no index lists, and the homelab index lists every version the
 pool holds.
