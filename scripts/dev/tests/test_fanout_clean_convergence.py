@@ -10,7 +10,12 @@ Run: uv run pytest scripts/dev/tests/test_fanout_clean_convergence.py
 import json
 import subprocess
 
-from fanout_lib.clean import read_clean_result, remote_clean_command
+from fanout_lib.clean import (
+    SWEEP_BUDGET_S,
+    read_clean_result,
+    remote_clean_command,
+    sweep_runs,
+)
 from fanout_lib.manifest import (
     Batch,
     Manifest,
@@ -178,3 +183,41 @@ def test_a_kept_verdict_stays_exit_zero(tmp_path):
     tools, _calls = fake_tools(answers={"daniel-server": spoke})
     assert _clean(tools, tmp_path, manifest.run_id) == 0
     assert manifest_path(manifest.run_id, tmp_path).exists()
+
+
+def test_the_sweep_retires_a_landed_run_and_keeps_an_unmerged_one(tmp_path):
+    """#8575: the unattended sweep records a removal the way `place clean` does."""
+    landed = save(Manifest("20260101T000010Z", "o", [B1]), root=tmp_path)
+    unmerged = save(Manifest("20260101T000020Z", "o", [B2]), root=tmp_path)
+    tools, _calls = fake_tools(
+        answers={"daniel-box": ok("removed: /w1"), "daniel-server": ok(UNMERGED)}
+    )
+    lines = []
+    sweep_runs(tools, frozenset(), lines.append, root=tmp_path)
+    assert not landed.exists()
+    assert json.loads(retired_path("20260101T000010Z", tmp_path).read_text())[
+        "batches"
+    ][0]["removed_at"]
+    assert unmerged.exists()
+    assert f"clean 20260101T000020Z: 2 on daniel-server: {UNMERGED}" in lines
+
+
+def test_the_sweep_runs_no_leg_for_an_open_pr_branch_and_keeps_its_run(tmp_path):
+    manifest = _manifest(tmp_path, [B1, B2])
+    tools, calls = fake_tools(answers={"daniel-box": ok("removed: /w1")})
+    sweep_runs(tools, frozenset({B2.branch}), lambda line: None, root=tmp_path)
+    assert [host for host, _cmd, _stdin in calls.calls] == ["daniel-box"]
+    assert manifest_path(manifest.run_id, tmp_path).exists()
+
+
+def test_the_sweep_stops_at_its_budget_newest_run_first(tmp_path):
+    save(Manifest("20260101T000010Z", "o", [B1]), root=tmp_path)
+    save(Manifest("20260101T000020Z", "o", [B2]), root=tmp_path)
+    tools, calls = fake_tools(answers={"daniel-server": ok("removed: /w2")})
+    ticks = iter([0.0, 0.0, 0.0, SWEEP_BUDGET_S])
+    lines = []
+    sweep_runs(
+        tools, frozenset(), lines.append, root=tmp_path, clock=lambda: next(ticks)
+    )
+    assert [host for host, _cmd, _stdin in calls.calls] == ["daniel-server"]
+    assert lines[-1].startswith("clean sweep: out of time at run 20260101T000010Z")

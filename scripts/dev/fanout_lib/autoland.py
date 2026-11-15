@@ -39,6 +39,10 @@ NO START CAP. A run starts every eligible PR. Before its merge a landing waits f
 turn, and only the holder runs its PR's CI; after the merge it waits for a landing slot. Those
 two order and bound the landings, so a cap here would only delay a PR by a run (#8823).
 
+THE WORKTREE SWEEP (#8575). Nothing else cleans a landed batch's worktree unless an operator
+runs `place clean`, so a pass also runs `clean.sweep_runs` over this user's open run manifests,
+at most every `CLEAN_INTERVAL_S`. Its legs log lines and never change the exit status.
+
 DECIDED: a daniel-server that cannot be read is a logged line and exit 0, not a failure. The
 host is off for the weekly reboot and for maintenance, and a page every ten minutes for that
 would teach the operator to ignore the page. A failed GitHub read exits 1, because that one
@@ -61,6 +65,7 @@ _sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 _sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from fanout_lib import operator_waits, own_surface
+from fanout_lib.clean import sweep_runs
 from fanout_lib.launch_gates import LOCAL_HOST, live_batch_cap
 from fanout_lib.review.api import LAND_SH, VERDICT_LINE, login
 from fanout_lib.target import SERVER, SERVER_CHECKOUT
@@ -77,6 +82,10 @@ READ_TIMEOUT_S = 30.0
 START_TIMEOUT_S = 600.0
 GH_TIMEOUT_S = 60.0
 STATE_DIR = Path.home() / ".local" / "state" / "fanout-server-lander"
+# The worktree sweep's stamp in STATE_DIR, and how often it runs: a landed batch's tree is gone
+# within a day, and the legs of the batches that stay kept are not re-run every ten minutes.
+CLEAN_STAMP = "clean-sweep.stamp"
+CLEAN_INTERVAL_S = 6 * 3600
 PR_FIELDS = (
     "number,isDraft,headRefName,headRefOid,baseRefName,body,author,files,"
     "isCrossRepository"
@@ -127,6 +136,7 @@ class Boundaries:
         local_records: daniel-box's own recent review records, for the waiting gauge.
         clock: the epoch second now.
         testpaths_only: whether the PR at this head changes `pyproject.toml` only in `testpaths`.
+        clean: clean every landed batch's worktree, given the branches of the open PRs.
     """
 
     tools: Tools = field(default_factory=Tools)
@@ -148,6 +158,9 @@ class Boundaries:
     clock: Callable[[], float] = time.time
     testpaths_only: Callable[[str], bool] = lambda head: (
         own_surface.live_testpaths_only(head)
+    )
+    clean: Callable[[Tools, frozenset[str], Callable[[str], None]], None] = (
+        lambda tools, open_branches, out: sweep_runs(tools, open_branches, out)
     )
 
     def judge(self, rec: dict, pr: dict) -> str:
@@ -421,7 +434,35 @@ def run(
             hand_off(b, primary, state, log_dir, number, label, out)
     if gauge is not None and not dry_run:
         write_waits(b, candidates, prs, gauge, out, state / operator_waits.STAMPS_FILE)
+    if not dry_run:
+        clean_landed(b, state, prs, out)
     return 0
+
+
+def clean_landed(
+    b: Boundaries, state: Path, prs: dict[int, dict], out: Callable[[str], None]
+) -> None:
+    """Run the worktree sweep (`clean.sweep_runs`) when the last one is `CLEAN_INTERVAL_S` old.
+
+    The stamp is written before the sweep, so a sweep that dies is not retried every pass.
+    A stamp that cannot be read reads as no stamp, and one that cannot be written skips the
+    sweep with a line: a sweep with no stamp behind it would run every ten minutes.
+    """
+    stamp = state / CLEAN_STAMP
+    now = b.clock()
+    try:
+        last = float(stamp.read_text())
+    except OSError, ValueError:
+        last = 0.0
+    if now - last < CLEAN_INTERVAL_S:
+        return
+    try:
+        state.mkdir(parents=True, exist_ok=True)
+        stamp.write_text(f"{now}\n")
+    except OSError as exc:
+        out(f"clean sweep skipped, stamp not written: {tail(str(exc))}")
+        return
+    b.clean(b.tools, frozenset(p.get("headRefName", "") for p in prs.values()), out)
 
 
 def write_waits(
