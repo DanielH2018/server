@@ -1,7 +1,9 @@
 # autofix-bridge — generic auto-remediation (the writer twin of monitor-bridge)
 
 The homelab's **auto-remediation home** — where a read-only monitor-bridge signal earns a
-sanctioned automatic *fix*. Renamed from `arr-autoblock` (2026-07-06) to stop proliferating a
+sanctioned automatic *fix* (`k8s/roles/autofix-bridge/files/autofix.py`).
+
+**HISTORY —** Renamed from `arr-autoblock` (2026-07-06) to stop proliferating a
 sidecar per fix, and moved in-cluster at the Docker uninstall (2026-08-14) with its behaviour
 and contract unchanged.
 
@@ -38,20 +40,30 @@ and contract unchanged.
 This is a **change-producing autonomous role**, so its authority is written down and a change
 here must satisfy this summary.
 - **Scope / exclusions:** *arr queue remediation and fake-remux replacement, and nothing else.
-  **Never** a delete before the replacement is ffprobe-verified genuine, **never** a legit
-  in-progress download — the sidecar acts on a bare `trackedDownloadStatus=error`, which at
+  **Never** a delete before the replacement is ffprobe-verified genuine
+  (`hosts/components/fake-remux/tests/test_fake_remux_replace_logic.py::test_advance_fake_replacement_blocklists_and_retries_original_untouched`),
+  **never** a legit
+  in-progress download — the sidecar acts on a bare `trackedDownloadStatus=error`
+  (`k8s/roles/autofix-bridge/tests/test_autofix.py::test_candidate_hard_bad_status_error`), which at
   the pinned *arr versions only `RejectedImportService` writes, and a client or VPN outage
-  empties the queue rather than filling it with errors.
-- **Mode (per actuator, explicit + reversible):** sidecar `DRY_RUN` (live) and fake-remux
-  `FAKE_REMUX_REPLACE_MODE` (off/shadow/live, run `live` by host_vars). Returning either
+  empties the queue rather than filling it with errors (`k8s/roles/autofix-bridge/files/autofix.py:is_candidate`).
+- **Mode (per actuator, explicit + reversible):** sidecar `DRY_RUN` (live, in
+  `k8s/roles/autofix-bridge/templates/deployment.yaml.j2`) and fake-remux
+  `FAKE_REMUX_REPLACE_MODE` (off/shadow/live, run `live` by host_vars:
+  `inventory/host_vars/daniel-box.yml:autofix_fake_remux_replace_mode`). Returning either
   plane to report-only is one env flip, merged (the sidecar's reaches the pod through
   `promote`) or deployed (fake-remux's through daniel-box's package) — preserve that.
-- **Authoritative sources:** the *arr `/api/v3/queue` and ffprobe truth, never a cached
-  guess.
+- **Authoritative sources:** the *arr `/api/v3/queue` (`k8s/roles/autofix-bridge/files/autofix.py:run_once`)
+  and ffprobe truth, never a cached guess.
 - **Abort valves:** `GRACE_CYCLES`, plus `MAX_ACTIONS_PER_CYCLE` / `MAX_PER_SCAN` — a mass
-  match reads as a systemic cause, so it acts on **none** and alerts.
-- **Required evidence:** every cycle writes a `{ts,ok,msg}` state file or heartbeat that
-  monitor-bridge reads, and a live action is Discord-alerted. No silent mutation.
+  match reads as a systemic cause, so it acts on **none** and alerts
+  (`k8s/roles/autofix-bridge/tests/test_autofix.py::test_run_once_held_branch_makes_zero_mutating_calls`,
+  `hosts/components/fake-remux/tests/test_fake_remux_logic.py::test_seed_ledger_adds_new_and_blasts_over_cap`).
+- **Required evidence:** every cycle records a verdict a monitor reads. The sidecar exports
+  it to Prometheus (`k8s/roles/autofix-bridge/files/autofix.py:report_cycle`), and each
+  fake-remux cron writes a `{ts,ok,msg}` state file that `fake-remux-health` reads
+  (`hosts/components/fake-remux/files/fake_remux_lib/fake_remux_scan.py:write_state`). A
+  live action is Discord-alerted. No silent mutation.
 - **Next-run review:** before widening scope or flipping a plane to `live`, read the last
   run's outcomes (`outcomes.jsonl`, the Discord log).
 

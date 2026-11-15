@@ -1,9 +1,9 @@
 # game-stats — playtime exporters for the hand-run Terraria and Valheim servers
 
-Two pure-stdlib Python exporters, `terraria-stats` (`files/stats.py`) and `valheim-stats`
-(`files/valheim_stats.py`), each mounted from a ConfigMap rather than built into an image. Each
+Two pure-stdlib Python exporters, `terraria-stats` (`k8s/roles/game-stats/files/stats.py`) and `valheim-stats`
+(`k8s/roles/game-stats/files/valheim_stats.py`), each mounted from a ConfigMap rather than built into an image. Each
 tails its game pod's console out of loki-homelab, folds it into SQLite (the source of truth),
-and exposes Prometheus metrics on :9420. Both import `files/stats_lib.py`, the skeleton they
+and exposes Prometheus metrics on :9420. Both import `k8s/roles/game-stats/files/stats_lib.py`, the skeleton they
 share. See repo-root `CLAUDE.md`.
 
 **HISTORY — until #2813 this was three roles:** `terraria-stats`, `valheim-stats` and `game-stats-lib`. Every
@@ -93,11 +93,11 @@ Added 2026-08-13 with the Valheim reactivation, the same shape as terraria-stats
 (~250 non-comment lines; its own docstring lists the functions). It holds no per-game state
 and takes every game-specific bit as an argument, so it needs no test doubles patched onto it.
 
-`SqliteStore` is the one class a game extends rather than calls: it owns the connection
+`k8s/roles/game-stats/files/stats_lib.py:SqliteStore` is the one class a game extends rather than calls: it owns the connection
 lifecycle and the `cursor`/`events` tables both games persist identically, and a game's
 `Store` subclasses it to declare its own `players` schema in `_init_game_schema` and to write
-`load_state`/`save`. `run` is the entry point both games' `main()` reduces to, reading its
-tunables from a `RunConfig` the game builds from its own env constants.
+`load_state`/`save`. `run` (`k8s/roles/game-stats/files/stats_lib.py:run`) is the entry point both games' `main()` reduces to, reading its
+tunables from a `RunConfig` (`k8s/roles/game-stats/files/stats_lib.py:RunConfig`) the game builds from its own env constants.
 
 ### How it ships
 
@@ -109,6 +109,8 @@ directory on `sys.path`. Each game's ConfigMap template carries the copy as a se
 
 ## Editing
 
-- Logic: `files/stats.py`, `files/valheim_stats.py`, `files/stats_lib.py`. Tests: `tests/`
+- Logic: `k8s/roles/game-stats/files/stats.py`, `k8s/roles/game-stats/files/valheim_stats.py`,
+  `k8s/roles/game-stats/files/stats_lib.py`. Tests: `k8s/roles/game-stats/tests/`
   (`uv run pytest k8s/roles/game-stats/tests`). A change in `stats_lib.py` affects
-  both games.
+  both games
+  (`scripts/renderer/tests/test_renderer_game_stats_restart.py::test_a_stats_lib_edit_moves_both_pods_checksums`).

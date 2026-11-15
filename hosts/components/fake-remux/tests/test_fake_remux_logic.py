@@ -148,6 +148,7 @@ def test_episode_file_map_only_monitored():
 
 
 def test_seed_ledger_adds_new_and_blasts_over_cap():
+    # fact: k8s/roles/autofix-bridge/CLAUDE.md#Autonomous-role contract (it changes state with no human in the loop)
     fakes = [
         {
             "fileId": i,

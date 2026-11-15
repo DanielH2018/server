@@ -1,10 +1,11 @@
 # n8n — Workflow automation
 
-n8n with an external task-runner sidecar. See repo-root `CLAUDE.md`.
+n8n with an external task runner in its own Deployment
+(`k8s/roles/n8n/templates/deployment-runners.yaml.j2`). See repo-root `CLAUDE.md`.
 
 Flux applies it through `promote`, and nothing applies it by hand. Its two images are built
-from `templates/Dockerfile.j2`, `templates/Dockerfile-runners.j2` and
-`templates/config/n8n-task-runners.json.j2`.
+from `k8s/roles/n8n/templates/Dockerfile.j2`, `k8s/roles/n8n/templates/Dockerfile-runners.j2` and
+`k8s/roles/n8n/templates/config/n8n-task-runners.json.j2`.
 
 **HISTORY —** n8n moved to k3s on 2026-08-06 (#5546). The Docker role's compose template is
 gone, and only git history has it; `containers/n8n/data` is on disk.
@@ -114,4 +115,5 @@ carries the registry commands for resolving one.
 if a version decreases with no `DOWNGRADE-ACK:` note; what it forbids is a SILENT decrease.
 
 ## Editing
-- Images: `templates/Dockerfile*.j2` + `templates/config/n8n-task-runners.json.j2`
+- Images: `k8s/roles/n8n/templates/Dockerfile.j2`, `k8s/roles/n8n/templates/Dockerfile-runners.j2`
+  + `k8s/roles/n8n/templates/config/n8n-task-runners.json.j2`
