@@ -45,16 +45,14 @@ no log, or an earlier landing's log for the same PR, and report that landing's v
 """
 
 import contextlib
-import fcntl
 import os
 import pwd
 import re
 import sys
 import traceback
-from collections.abc import Callable, Generator
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Protocol
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
 from lib.detach_fork import (  # noqa: F401 -- the record readers are this module's API too
@@ -78,102 +76,6 @@ from lib.detach_fork import (  # noqa: F401 -- the record readers are this modul
 # made a shared one 0770, which shut the `claude` agent user out.
 LOG_DIR_ENV = "CLAUDE_JOB_DIR"
 FALLBACK_LOG_DIR = Path("/tmp/homelab-landings")
-
-# THE REGISTRY OF LIVE LANDINGS (issue #8018). Every landing polls GitHub on one token, so the
-# count lives in one registry: a file per live landing under `<live dir>/<orchestrator>/`,
-# holding the kind `live_limit.kind` gave its PR. `LAND_ORCHESTRATOR` names the group; unset,
-# all of one user's landings share one group, which is the stricter reading. `LAND_LIVE_DIR`
-# moves the registry (tests). `live_limit.py` owns the number a new landing is admitted under.
-ORCHESTRATOR_ENV = "LAND_ORCHESTRATOR"
-LIVE_DIR_ENV = "LAND_LIVE_DIR"
-# Set in a landing that holds a slot, so a `--fresh` child landing of it takes none of its own.
-SLOT_HELD_ENV = "LAND_SLOT_HELD"
-
-
-class Admits(Protocol):
-    """A new landing's admission: its PR's kind, and the limit beside the live kinds."""
-
-    @property
-    def kind(self) -> str: ...
-
-    def limit(self, live_kinds: list[str]) -> tuple[int, str]: ...
-
-
-class TooManyLandings(Exception):
-    """The orchestrator already has its limit of landings live; the message names the retry."""
-
-
-def _slot_dir() -> Path:
-    base = os.environ.get(LIVE_DIR_ENV)
-    user = pwd.getpwuid(os.geteuid()).pw_name
-    root = Path(base) if base else Path(f"/tmp/homelab-landings-live-{user}")
-    group = os.environ.get(ORCHESTRATOR_ENV) or "default"
-    return root / re.sub(r"[^A-Za-z0-9_.-]", "_", group)
-
-
-def _live_kinds(slots: Path) -> list[str]:
-    """The kind of each slot whose landing still runs. A slot of a dead pid is deleted on the way."""
-    live = []
-    for slot in slots.glob("*.slot"):
-        if slot.stem.isdigit() and alive(int(slot.stem)):
-            with contextlib.suppress(OSError):
-                live.append(slot.read_text().strip())
-        else:
-            slot.unlink(missing_ok=True)
-    return live
-
-
-def _parent_of(pid: int) -> int | None:
-    try:
-        stat = Path(f"/proc/{pid}/stat").read_text()
-    except OSError:
-        return None
-    # The parent pid is the second field after the parenthesised command name.
-    return int(stat.rpartition(")")[2].split()[1])
-
-
-def _ancestor_holds_slot(slots: Path) -> bool:
-    """Whether a process above this one holds a slot in `slots` (issue #8280).
-
-    A parent landing from a checkout cut before `SLOT_HELD_ENV` existed holds a slot but never
-    sets the variable, so its `--fresh` child finds the slot by walking up its own parents.
-    """
-    pid = _parent_of(os.getpid())
-    while pid and pid > 1:
-        if (slots / f"{pid}.slot").exists():
-            return True
-        pid = _parent_of(pid)
-    return False
-
-
-def _release_slot(pid: int) -> None:
-    with contextlib.suppress(Exception):
-        (_slot_dir() / f"{pid}.slot").unlink(missing_ok=True)
-
-
-@contextlib.contextmanager
-def holding_slot(kind: str) -> Generator[None]:
-    """Count this foreground landing in the registry while it runs, without ever refusing it.
-
-    A lander unit runs `land.sh` in the foreground and has no retry, so a refusal would page
-    rather than wait. The slot still lowers the room every `--detach` beside it sees. A
-    landing below one that holds a slot, such as a `--fresh` child, takes none of its own.
-    """
-    slots = _slot_dir()
-    if os.environ.get(SLOT_HELD_ENV) or _ancestor_holds_slot(slots):
-        yield
-        return
-    os.environ[SLOT_HELD_ENV] = "1"
-    pid = os.getpid()
-    with contextlib.suppress(OSError):
-        slots.mkdir(parents=True, exist_ok=True)
-        (slots / f"{pid}.slot").write_text(kind)
-    try:
-        yield
-    finally:
-        _release_slot(pid)
-        os.environ.pop(SLOT_HELD_ENV, None)
-
 
 _VERDICT_LINE = re.compile(r"^VERDICT:.*$", re.MULTILINE)
 _RESULT_LINE = re.compile(r"^LAND-RESULT: (.*)$", re.MULTILINE)
@@ -251,12 +153,7 @@ def error_in(log: Path) -> str | None:
     return (message[: end.start()] if end else message).rstrip()
 
 
-def fork(
-    log: Path,
-    landing: Callable[[], int],
-    admission: Admits | None,
-    scope_prefix: str = "land",
-) -> int:
+def fork(log: Path, landing: Callable[[], int], scope_prefix: str = "land") -> int:
     """Run `landing` in a detached, logged grandchild; its pid, in the parent.
 
     The grandchild is in its own session, outside the caller's process tree, and out of any
@@ -270,39 +167,15 @@ def fork(
       log: the file the landing's stdout and stderr are rebound to. Opened here, by this
         process, which is what guarantees the blocking handle Ansible needs.
       landing: what the grandchild runs; its return value is the recorded exit code.
-      admission: the limit the landing is admitted under, and the kind its slot records.
-        None for a landing that holds its slot elsewhere: it is neither refused nor counted.
       scope_prefix: the name of the transient scope the landing moves into, before its pid.
 
     Returns:
       The landing's pid. Only the parent ever returns from this function.
-
-    Raises:
-      TooManyLandings: the group already has `admission`'s limit of landings live.
     """
-    slots = _slot_dir()
-    slots.mkdir(parents=True, exist_ok=True)
-    # The lock spans the count and the fork, so two simultaneous detaches cannot both see room.
-    with open(slots / ".lock", "w") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)
-        live = _live_kinds(slots)
-        cap, why = admission.limit(live) if admission else (len(live) + 1, "")
-        if len(live) >= cap:
-            retry = (
-                "Re-run this command once that clears"
-                if cap == 0
-                else "Wait for one to end, then re-run this command"
-            )
-            raise TooManyLandings(
-                f"{len(live)} landings are already live for orchestrator {slots.name!r}, "
-                f"and the limit is {cap}: {why}. {retry}."
-            )
-        log.touch()
-        sys.stdout.flush()
-        sys.stderr.flush()
-        pid = fork_detached(lambda: _run_landing(log, landing, scope_prefix))
-        if admission:
-            (slots / f"{pid}.slot").write_text(admission.kind)
+    log.touch()
+    sys.stdout.flush()
+    sys.stderr.flush()
+    pid = fork_detached(lambda: _run_landing(log, landing, scope_prefix))
     pid_path(log).write_text(f"{pid}\n")
     return pid
 
@@ -317,7 +190,6 @@ def _run_landing(log: Path, landing: Callable[[], int], scope_prefix: str) -> No
         os.dup2(out, 1)
         os.dup2(out, 2)
         close_inherited()
-        os.environ[SLOT_HELD_ENV] = "1"
         # Before `landing` starts anything: a child started while the move is pending stays
         # in the unit's cgroup.
         moved = leave_unit_cgroup(scope_prefix)
@@ -335,7 +207,6 @@ def _run_landing(log: Path, landing: Callable[[], int], scope_prefix: str) -> No
             sys.stderr.flush()
         # After the flush, so a reader that sees the code also sees the last log line.
         record_code(log, code)
-        _release_slot(os.getpid())
         os._exit(code)
 
 
