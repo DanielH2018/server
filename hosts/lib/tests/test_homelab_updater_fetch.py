@@ -272,3 +272,38 @@ def test_a_held_frontend_lock_exits_75_and_writes_nothing(host, output, code):
     assert result.returncode == code
     assert not host.prom.exists()
     assert host.calls("apt-get") == []
+
+
+# The candidate pick forks no dpkg per published version (#8884).
+
+# The highest builder version sits in the middle, so neither the first nor the last row wins.
+MANY = [f"0.{n}+g{n:012x}" for n in (*range(1, 75), 150, *range(75, 150))]
+
+
+def _compares(host: Host) -> int:
+    return sum(call[1] == "--compare-versions" for call in host.calls("dpkg"))
+
+
+def test_the_highest_of_many_published_versions_costs_a_handful_of_dpkg_compares(
+    host,
+):
+    host.state["installed"]["homelab-daniel-pi"] = ["ii ", "0.149+g000000000095"]
+    host.state["repo"] = {"homelab-updater": MANY, "homelab-daniel-pi": MANY}
+
+    result = host.run()
+
+    assert result.returncode == 0, result.stderr
+    assert len(host.installs()) == 1
+    assert _compares(host) <= 4
+
+
+def test_a_version_the_builder_count_cannot_rank_is_still_compared(host):
+    host.state["repo"] = {
+        "homelab-updater": [V1, "1.0"],
+        "homelab-daniel-pi": [V1, "1.0"],
+    }
+
+    result = host.run()
+
+    assert result.returncode == 0, result.stderr
+    assert len(host.installs()) == 1
