@@ -13,6 +13,7 @@ import time
 import claude_triage_run as run
 import claude_triage_session as session
 import pytest
+import host_lib
 from host_lib import UnitEnd
 
 # 2026-10-15 18:30 UTC: the cap tests date their records against this, never the live clock.
@@ -334,7 +335,7 @@ def test_the_transcript_is_kept_beside_the_record_and_nothing_stays_in_out(
 ) -> None:
     # fact: hosts/components/claude-code/CLAUDE.md#Autonomous-role contract (`claude-triage@`, a session started by a monitor episode)
     def plant(out: str) -> None:
-        with open(os.path.join(out, session.TRANSCRIPT_NAME), "w") as f:
+        with open(os.path.join(out, host_lib.TRANSCRIPT_NAME), "w") as f:
             f.write('{"type":"user"}\n')
 
     record, state = _run_with_out(tmp_path, plant)
@@ -354,7 +355,7 @@ def test_a_transcript_the_session_planted_as_a_symlink_is_not_kept(tmp_path) -> 
 
     record, state = _run_with_out(
         tmp_path,
-        lambda out: os.symlink(secret, os.path.join(out, session.TRANSCRIPT_NAME)),
+        lambda out: os.symlink(secret, os.path.join(out, host_lib.TRANSCRIPT_NAME)),
     )
 
     assert record["transcript_bytes"] is None

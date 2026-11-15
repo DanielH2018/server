@@ -133,6 +133,8 @@ the caps or the schedule cannot quietly widen it.
   to act on.
   A digest the host could not deliver waits in `<STATE_DIR>/discord-spool/` and goes out,
   marked as delayed, at the start of the next daily tick, a quiet skip included (#3905).
+  The session's transcript is kept as `<STATE_DIR>/transcripts/<run time>.jsonl`, the newest 30
+  of them, and the digest names it.
 - **Next-run review:** before raising a cap or widening the prompt, read the last week's
   digests for what the sessions actually resolved and what they timed out on. The session's
   own 2700-second wall clock in `templates/renovate-agent-pins.j2` is an estimate from runs
