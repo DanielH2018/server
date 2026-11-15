@@ -32,7 +32,7 @@ Every figure is a measurement from 2026-11-14 on daniel-box, with 39 live sessio
 - **The lander spends the operator's quota too.** `claude-land@.service` runs as the
   operator's user and uses the operator's `gh` token, because it merges and deploys.
 - **Every handler acts after GitHub refuses.** `scripts/lib/gh_rate_limit.py` computes the
-  wait from a 403, and `land_lib/gh_read.py`, `land_lib/pace.py` and `await_ci.py` call it.
+  wait from a 403, and `land_lib/gh_read.py` and `await_ci.py` call it.
   GitHub sends the first 403 when the quota is already empty for every caller.
 - **Nothing attributes a call to a session.** No log or ledger records which session made
   which GitHub call, so "which session spiked" has no answer.
@@ -260,7 +260,7 @@ wait lets the session run `cc-wait` or do other work.
 
 `scripts/lib/gh_rate_limit.py` owns what a rate-limit refusal means. It learns the
 `GH-QUOTA:` line in slice 2, so `is_rate_limited` and `wait_s` answer for the ledger's refusal
-as they do for GitHub's. `gh_read.py`, `pace.py` and `await_ci.py` then wait on it with no
+as they do for GitHub's. `gh_read.py` and `await_ci.py` then wait on it with no
 change of their own.
 
 ### REST readers that do not run `gh`

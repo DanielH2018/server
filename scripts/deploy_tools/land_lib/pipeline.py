@@ -19,7 +19,7 @@ and frozen; `plane` is a read-only property over it:
 |---|---|---|
 | `merge.arm_merge` | `opts.subject`, `opts.require_author` | `direct_merge_subject` |
 | `classify.refuse_stale_code_before_merge` (when `direct_merge_subject` is set) | `opts.pr`, `opts.primary`, `tools.stale_code` | -- |
-| `merge.await_merge` | `opts.merge_timeout`, `opts.merge_poll`, `opts.pace_master_runs`, the head's pins (the pin gate) | -- |
+| `merge.await_merge` | `opts.merge_timeout`, `opts.merge_poll`, the head's pins (the pin gate) | -- |
 | `classify.resolve` | `opts.pr` | `merge_sha`, `ledger.t_merged`, `ledger.merge_sha` |
 | `classify.refuse_stale_code` | `merge_sha`, `opts.since`, `opts.primary`, `tools.stale_code` | -- |
 | `closing_refs.close_stranded` | `opts.pr` | `warnings` |

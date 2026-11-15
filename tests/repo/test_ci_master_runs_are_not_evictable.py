@@ -16,6 +16,9 @@ because every push to master carries the same ref.
 Run: uv run pytest tests/repo/test_ci_master_runs_are_not_evictable.py
 """
 
+import re
+from math import prod
+
 from _helpers import REPO
 from lib import yaml_fast
 
@@ -78,3 +81,40 @@ def test_the_ref_arm_is_conditional_rather_than_unconditional():
         f"concurrency.group is {group!r} — the ref is used unconditionally, so a push to "
         "master is grouped by ref again and is evictable once more."
     )
+
+
+def _matrix_jobs(job: dict) -> int:
+    """How many jobs one workflow job expands to: its matrix's include list or axis product."""
+    matrix = job.get("strategy", {}).get("matrix")
+    if matrix is None:
+        return 1
+    assert isinstance(matrix, dict) and "exclude" not in matrix, (
+        f"unhandled matrix: {matrix}"
+    )
+    axes = [v for k, v in matrix.items() if k != "include"]
+    assert not (axes and "include" in matrix), f"axes beside include: {matrix}"
+    return len(matrix["include"]) if "include" in matrix else prod(len(v) for v in axes)
+
+
+def _full_sweep_jobs(event: str) -> int:
+    """The jobs a full `ci.yml` sweep runs on `event`, less the event-gated ones that skip."""
+    skipped_by = {
+        "push": "github.event_name != 'push'",
+        "pull_request": "github.event_name == 'push'",
+    }
+    jobs = yaml_fast.safe_load(CI_WORKFLOW.read_text())["jobs"]
+    return sum(
+        _matrix_jobs(j)
+        for j in jobs.values()
+        if skipped_by[event] not in str(j.get("if", ""))
+    )
+
+
+def test_every_cited_sweep_size_is_the_workflows_job_count():
+    """The comment above `concurrency` quotes a sweep size, which drifted to 17-18 against 25 (#8143)."""
+    sweep = _full_sweep_jobs("push")
+    assert sweep == _full_sweep_jobs("pull_request")
+    found = re.findall(
+        r"full[\s#]+sweep[\s#]+runs[\s#]+(\d+)[\s#]+jobs", CI_WORKFLOW.read_text()
+    )
+    assert [int(n) for n in found] == [sweep] * 2

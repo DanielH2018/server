@@ -40,14 +40,6 @@ The exception is a stale head the operator approved: the update would void the a
 to rebase onto origin/master, push and get the new head approved.
 `land_lib/merge.py`'s module docstring owns the rule.
 
-**A master CI backlog holds the merge.** While two master `ci.yml` runs are unfinished,
-a green PR waits to merge and `land.sh` prints `pacing the merge: …`. Merging faster than
-master CI clears only deepens the runner queue every landing waits on (#5526). A held landing
-never ends at `merge-timeout`: the cap rises by one per 15 minutes held, and once the merge
-budget is spent the landing merges without pacing (#6466).
-`LAND_PACE_MASTER_RUNS` sets the cap and `0` turns pacing off; `land_lib/pace.py` owns
-the rule.
-
 **A landing waits for the landing turn before it merges.** One landing at a time, across
 daniel-box and daniel-server, holds the turn. A green PR asks for it and merges; the others
 print `waiting for the landing turn` once and stand in line. The wait is not a fault and

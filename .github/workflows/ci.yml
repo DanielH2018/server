@@ -83,7 +83,7 @@ concurrency:
   # The grouping stays anyway. A run that waits for a slot still delivers its SHA's verdict,
   # while an evicted run delivers none, so slot contention costs latency and eviction costs
   # correctness. The levers on the cost side are the share each master run takes and the size
-  # of the pool, not the group key: #6309 measures whether paced merges let push runs take
+  # of the pool, not the group key: #6309 measured whether paced merges let push runs take
   # the 2-job proven skip, where a full sweep runs 25 jobs, and #6307 is the operator's call on more
   # runner capacity.
   #
