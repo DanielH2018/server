@@ -189,11 +189,6 @@ def test_the_unit_hides_what_another_local_user_could_still_read(
     assert directive(render(template), key) == [value]
 
 
-def test_the_runner_keeps_a_private_tmp() -> None:
-    """The session unit mounts a capped tmpfs on /tmp instead (test_unattended_session_bounds)."""
-    assert directive(render(UNIT), "PrivateTmp") == ["yes"]
-
-
 def test_the_session_holds_only_the_read_token_and_the_controller_the_write_one() -> (
     None
 ):
