@@ -20,14 +20,17 @@ tunable it reads. A commit that skipped prek fails
 `uv run python scripts/docs/gen_doc_fragments.py` and a commit of what it writes.
 
 **A value stated inside a sentence is rewritten at commit time too.** A fragment is a whole
-table. For one number in hand-written prose, `scripts/docs/doc_values.py` holds a row: the
-doc, a regex that captures the stated value, and a reader of the file the value comes from.
-The `regen-doc-values` prek hook runs that script on a commit that touches a row's doc or
-source. It rewrites the value and fails once, so read the sentence around it, stage the doc
-and commit again. The hook corrects a count, never the list written beside it. A row whose
-sentence was reworded fails until the row or the sentence changes. To add a row, extend
-`VALUES` and the hook's `files` pattern; `tests/repo/test_doc_values_hook.py` holds the
-pattern against the rows. A value Renovate bumps gets no row, and neither does a path the
+table. For one number in hand-written prose, a row under `scripts/docs/doc_values_lib/` names
+the doc, a regex that captures the stated value, and a reader of the file the value comes from.
+A reader that finds its value more than once in that file fails the row unless every copy
+agrees. The `regen-doc-values` prek hook runs `scripts/docs/doc_values.py` on a commit that
+touches a row's doc or source. It rewrites the value and fails once, so read the sentence
+around it, stage the doc and commit again. The hook corrects a count, never the list written
+beside it. A row whose sentence was reworded fails until the row or the sentence changes. To
+add a row, add it to `scripts/docs/doc_values_lib/rows_hosts.py` or
+`scripts/docs/doc_values_lib/rows_roles.py`, and add its doc and source to the hook's `files`
+pattern, one path per line; `tests/repo/test_doc_values_hook.py` holds the pattern against the
+rows. A value Renovate bumps gets no row, and neither does a path the
 docs-refresh cron stages.
 
 **A role `CLAUDE.md`'s `## At a glance` block is generated the same way, in place.**

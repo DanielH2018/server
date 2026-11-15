@@ -32,6 +32,8 @@ the fixer would rewrite a number the row's author never read.
 STATIC PARSING ONLY, as in `fragment_readers.py`: a reader parses its source and never
 imports it.
 
+`doc_values_lib/` holds the rows and the readers they are built from.
+
 Usage::
 
     uv run python scripts/docs/doc_values.py   # rewrite, exit 1 if a doc changed
@@ -39,102 +41,18 @@ Usage::
 
 import re
 import sys as _sys
-from collections.abc import Callable, Sequence
-from dataclasses import dataclass
 from pathlib import Path as _Path
 
 # Reach the sibling package directories: a directly-invoked script gets only its own
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
-from fragment_readers import module_constant
+from doc_values_lib import rows_hosts, rows_roles
+from doc_values_lib.readers import Value
 from lib.cli_help import ArgumentParser
 from lib.repo_paths import REPO
 
-
-@dataclass(frozen=True)
-class Value:
-    """One sentence that states a value, and where the tree holds that value.
-
-    Attributes:
-        doc: repo path of the doc that states the value.
-        pattern: a regex with exactly one capture group, the stated value.
-        source: repo path of the file the value comes from, named in a failure.
-        read: returns the text the doc should state, given the path of `source`.
-    """
-
-    doc: str
-    pattern: str
-    source: str
-    read: Callable[[_Path], str]
-
-
-def _constant(name: str) -> Callable[[_Path], str]:
-    return lambda module: str(module_constant(module, name))
-
-
-_CARDINALS = "zero one two three four five six seven eight nine ten".split()
-_ORDINALS = (
-    "zeroth first second third fourth fifth sixth seventh eighth ninth tenth".split()
-)
-
-
-def staged_paths(script: str) -> list[str]:
-    """The paths the docs-refresh cron's one `git add` command names.
-
-    The command may run over several lines that end in a backslash. A comment that
-    mentions `git add` is no command.
-    """
-    lines = [line.strip() for line in script.splitlines()]
-    starts = [i for i, line in enumerate(lines) if line.startswith("git add ")]
-    assert len(starts) == 1, f"expected one `git add` command, found {len(starts)}"
-    words: list[str] = []
-    for line in lines[starts[0] :]:
-        words += line.removesuffix("\\").split()
-        if not line.endswith("\\"):
-            break
-    return words[2:]
-
-
-def _staged_count(words: Sequence[str], offset: int = 0) -> Callable[[_Path], str]:
-    return lambda script: words[len(staged_paths(script.read_text())) + offset]
-
-
-_GENERATED_DOCS = ".claude/rules/generated-docs.md"
-
-# source -> (doc, pattern, read) for each sentence that states a value from that source.
-_BY_SOURCE: dict[str, list[tuple[str, str, Callable[[_Path], str]]]] = {
-    "scripts/diagnostics/probe_lib/health_rollout.py": [
-        (
-            "docs/deploying.md",
-            r"a (\d+)-second restart window",
-            _constant("RECENT_RESTART_SECONDS"),
-        ),
-        (
-            "docs/claude-tooling.md",
-            r"restarted in the last (\d+)s\.",
-            _constant("RECENT_RESTART_SECONDS"),
-        ),
-    ],
-    "hosts/components/docs-refresh/templates/docs-refresh.sh.j2": [
-        (
-            _GENERATED_DOCS,
-            r"^(\w+) paths: `docs/reference/`",
-            _staged_count([word.capitalize() for word in _CARDINALS]),
-        ),
-        (
-            _GENERATED_DOCS,
-            r"^Adding a (\w+) means editing the cron's `git add`",
-            _staged_count(_ORDINALS, offset=1),
-        ),
-    ],
-}
-
-VALUES: tuple[Value, ...] = tuple(
-    Value(doc, pattern, source, read)
-    for source, rows in _BY_SOURCE.items()
-    for doc, pattern, read in rows
-)
+VALUES: tuple[Value, ...] = rows_hosts.VALUES + rows_roles.VALUES
 
 
 def _matches(row: Value, text: str) -> list[re.Match[str]]:
@@ -145,17 +63,38 @@ def _matches(row: Value, text: str) -> list[re.Match[str]]:
     return list(regex.finditer(text))
 
 
+def _stated(match: re.Match[str]) -> str:
+    """The captured value with its line wraps read as spaces, as the doc's reader sees it."""
+    return " ".join(match.group(1).split())
+
+
+def _expected(row: Value, repo: _Path) -> str:
+    """The text the row's reader returns, or a `ReaderError` naming why it returned none."""
+    try:
+        return row.read(repo / row.source)
+    except (KeyError, ValueError, AttributeError, TypeError) as error:
+        raise ReaderError(f"the reader failed: {error}") from error
+
+
+class ReaderError(Exception):
+    """A row's reader could not find its value in the source."""
+
+
 def stale(values: tuple[Value, ...] = VALUES, repo: _Path = REPO) -> list[str]:
     """One line per row whose doc fails to state the tree's value once, naming both files."""
     problems = []
     for row in values:
         found = _matches(row, (repo / row.doc).read_text())
-        expected = row.read(repo / row.source)
+        try:
+            expected = _expected(row, repo)
+        except ReaderError as error:
+            problems.append(f"{row.doc} vs {row.source}: {error}")
+            continue
         if not found:
             problem = f"nothing matches /{row.pattern}/; update the row or the sentence"
         elif len(found) > 1:
             problem = f"/{row.pattern}/ matches {len(found)} times; narrow it to one"
-        elif found[0].group(1) != expected:
+        elif _stated(found[0]) != expected:
             problem = f"states {found[0].group(1)}, the tree holds {expected}"
         else:
             continue
@@ -166,15 +105,19 @@ def stale(values: tuple[Value, ...] = VALUES, repo: _Path = REPO) -> list[str]:
 def fix(values: tuple[Value, ...] = VALUES, repo: _Path = REPO) -> list[str]:
     """Rewrite each stated value that trails the tree, and return the docs rewritten.
 
-    A row whose pattern does not match exactly once is left for `stale` to report.
+    A row whose pattern does not match exactly once, or whose reader fails, is left for
+    `stale` to report.
     """
     rewritten = []
     for row in values:
         path = repo / row.doc
         text = path.read_text()
         found = _matches(row, text)
-        expected = row.read(repo / row.source)
-        if len(found) != 1 or found[0].group(1) == expected:
+        try:
+            expected = _expected(row, repo)
+        except ReaderError:
+            continue
+        if len(found) != 1 or _stated(found[0]) == expected:
             continue
         start, end = found[0].span(1)
         path.write_text(text[:start] + expected + text[end:])

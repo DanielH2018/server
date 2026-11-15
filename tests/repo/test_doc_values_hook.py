@@ -12,6 +12,7 @@ import tomllib
 
 from _helpers import REPO
 
+from doc_values_lib.readers import staged_paths
 import doc_values
 
 HOOK_ID = "regen-doc-values"
@@ -50,7 +51,7 @@ def test_a_row_the_gate_misses_is_flagged():
 
 def test_the_gate_skips_every_path_the_docs_refresh_cron_stages():
     """A doc the hook rewrote in the cron's commit would be left unstaged."""
-    staged = doc_values.staged_paths((REPO / CRON).read_text())
+    staged = staged_paths((REPO / CRON).read_text())
     assert "docs/reference" in staged
     # A staged directory stands for the files under it.
     fired = [
