@@ -13,6 +13,7 @@ from _findings_fakes import (
 
 from dev.findings import main
 from dev.findings_lib.issue_model import claim_comment
+from dev.findings_lib.milestone import DESCRIPTION
 from lib.worktrees import Worktree
 
 WT = "worktree-issue-1132"
@@ -24,12 +25,37 @@ STALE = facts()
 LIVE = live_worktree(WT)
 
 
+def test_claim_makes_sure_the_session_milestone_exists():
+    issue = make_issue(1132)
+    tools, calls = build_tools(Fakes(issues=[issue], view=issue, worktree_facts=LIVE))
+    assert main(["claim", "1132", "--worktree", WT], tools) == 0
+    assert calls.milestones == [(WT, "DanielH2018/server")]
+
+
+def test_reap_closes_the_milestone_of_a_gone_worktree_and_keeps_a_live_ones():
+    tools, calls = build_tools(
+        Fakes(worktree_facts=LIVE, open_milestones=[WT, "worktree-gone"])
+    )
+    assert main(["reap"], tools) == 0
+    assert calls.milestone_closes == [
+        ("DanielH2018/server", {WT: True, "worktree-gone": False})
+    ]
+
+
 def test_claim_writes_a_comment_and_a_label():
     issue = make_issue(1132)
     tools, calls = build_tools(Fakes(issues=[issue], view=issue, worktree_facts=LIVE))
     assert main(["claim", "1132", "--worktree", WT], tools) == 0
     assert calls.gh[-2][:3] == ["issue", "comment", "1132"]
-    assert calls.gh[-1] == ["issue", "edit", "1132", "--add-label", "claimed"]
+    assert calls.gh[-1] == [
+        "issue",
+        "edit",
+        "1132",
+        "--add-label",
+        "claimed",
+        "--milestone",
+        WT,
+    ]
 
 
 def test_claim_creates_the_claimed_label_before_it_adds_it():
@@ -45,7 +71,9 @@ def test_claim_creates_the_claimed_label_before_it_adds_it():
     assert any(c[2] == "claimed" for c in created)
     assert calls.gh.index(
         next(c for c in created if c[2] == "claimed")
-    ) < calls.gh.index(["issue", "edit", "1132", "--add-label", "claimed"])
+    ) < calls.gh.index(
+        ["issue", "edit", "1132", "--add-label", "claimed", "--milestone", WT]
+    )
 
 
 def test_claim_refuses_a_manual_issue_and_exits_3(capsys):
@@ -376,6 +404,19 @@ def test_close_releases_the_claim_it_closes():
     assert main(["close", "1132", "--fixed"], tools) == 0
     assert any(f"Released: `{WT}`" in a for c in calls.gh for a in c)
     assert ["issue", "edit", "1132", "--remove-label", "claimed"] in calls.gh
+
+
+def test_close_keeps_the_issue_in_its_session_milestone():
+    issue = make_issue(
+        1132,
+        labels=["claimed"],
+        comments=[claim_comment(WT, None, "t")],
+    )
+    issue["milestone"] = {"title": WT, "description": DESCRIPTION}
+    tools, calls = build_tools(Fakes(issues=[issue], view=issue))
+    assert main(["close", "1132", "--fixed"], tools) == 0
+    assert ["issue", "edit", "1132", "--remove-label", "claimed"] in calls.gh
+    assert not any("--remove-milestone" in c for c in calls.gh)
 
 
 def test_close_writes_no_release_for_an_unclaimed_issue():
