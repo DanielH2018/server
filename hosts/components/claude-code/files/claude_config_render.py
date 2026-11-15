@@ -284,7 +284,10 @@ def publish(
         version = (
             publish_dir / "versions" / f"{time.strftime('%Y%m%dT%H%M%S')}-{commit[:12]}"
         )
-        version.mkdir(mode=0o755, parents=True)
+        # The unit's UMask=0077 reaches this root step too, so every mode is set, not requested.
+        version.mkdir(parents=True)
+        version.parent.chmod(0o755)
+        version.chmod(0o755)
         for name, data in files.items():
             (version / name).write_bytes(data)
             (version / name).chmod(0o644)

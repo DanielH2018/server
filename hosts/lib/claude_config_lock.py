@@ -48,11 +48,14 @@ def hold_settings(path: str) -> str:
 def exclusive(publish_dir: Path) -> Generator[bool]:
     """Take the lock exclusive without waiting; yield whether it was taken.
 
-    Creates `publish_dir` and its lock, root-owned and world-readable, when they are missing.
+    Creates `publish_dir` and its lock when they are missing, and sets them 0755 and 0644
+    whatever the caller's umask, so every session user can traverse the dir and open the lock.
     """
-    publish_dir.mkdir(mode=0o755, exist_ok=True)
+    publish_dir.mkdir(exist_ok=True)
+    publish_dir.chmod(0o755)
     lock_path = publish_dir / LOCK
-    lock_path.touch(mode=0o644)
+    lock_path.touch()
+    lock_path.chmod(0o644)
     with open(lock_path, "rb") as lock:
         try:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)

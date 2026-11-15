@@ -184,6 +184,23 @@ def test_a_refused_publish_keeps_the_last_version(host, tmp_path):
     assert _published(paths, "source.json") == {"commit": COMMIT}
 
 
+def test_a_session_user_can_read_what_a_umask_0077_publish_writes(host):
+    """The unit's UMask=0077 reaches the root publish; other session users must still read."""
+    stage, paths = host
+    previous = os.umask(0o077)
+    try:
+        cr.publish(stage, **paths)
+    finally:
+        os.umask(previous)
+
+    root = paths["publish_dir"]
+    version = (root / "current").resolve()
+    for d in (root, root / "versions", version):
+        assert d.stat().st_mode & 0o777 == 0o755, d
+    for f in (root / "lock", *version.iterdir()):
+        assert f.stat().st_mode & 0o777 == 0o644, f
+
+
 def test_an_unchanged_render_publishes_no_new_version(host):
     stage, paths = host
     cr.publish(stage, **paths)
