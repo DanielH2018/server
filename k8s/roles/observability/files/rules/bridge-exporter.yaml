@@ -39,6 +39,7 @@ groups:
             drift, Healthchecks.io console drift and the domain registration read) are held by
             the inhibit rule. Read the probe's failure messages in the monitor-bridge log in the
             homelab namespace.
+            Its DOWN line: `kubectl -n homelab logs deploy/monitor-bridge | grep 'DOWN wan_reachable '`.
       - alert: DiscordDeliveryFailing
         expr: homelab_check_success{job="monitor-bridge", check="discord"} == 0
         labels:
@@ -51,6 +52,7 @@ groups:
             One of the five Discord webhooks (Kuma, CrowdSec, gitops-deploy, *arr, healthchecks)
             no longer resolves, or the Gmail SMTP backstop login failed. Rotate the named webhook
             in SOPS and redeploy its consumer. The monitor-bridge log names the failing webhook.
+            Its DOWN line: `kubectl -n homelab logs deploy/monitor-bridge | grep 'DOWN discord '`.
       - alert: R2FreeTierHeadroomLow
         expr: homelab_check_success{job="monitor-bridge", check="r2_usage"} == 0
         labels:
@@ -88,6 +90,7 @@ groups:
             The monitor-bridge log names each slug and field that differs, or a check missing from
             the console. Fix the console, or change docs/healthchecks-io-deadman.md and
             monitor_bridge_healthchecks_expected together and redeploy monitor-bridge.
+            Its DOWN line: `kubectl -n homelab logs deploy/monitor-bridge | grep 'DOWN healthchecks_drift '`.
           runbook_url: https://docs.local.daniel-hunter.com/healthchecks-io-deadman/
       - alert: DomainRegistrationUnreadable
         expr: homelab_check_success{job="monitor-bridge", check="domain_registration"} == 0
@@ -101,6 +104,7 @@ groups:
             The registry's RDAP record did not answer or carries no expiration event, so the
             days-left gauge holds its last read, or is absent after a restart. The
             monitor-bridge log names the error. A failed read is retried every cycle.
+            Its DOWN line: `kubectl -n homelab logs deploy/monitor-bridge | grep 'DOWN domain_registration '`.
       # The registration's days left, which the domain_registration row exports as a gauge
       # (#8519). A lapsed domain stops ACME renewal, every public route and the WireGuard
       # endpoint name at once. The gauge keeps its last value through an RDAP failure, so no
@@ -112,7 +116,8 @@ groups:
           severity: warning
           service: domain
         annotations:
-          summary: The domain registration expires in 45 days or fewer.
+          summary: >-
+            The domain registration expires in {{ $value | printf "%.0f" }} days.
           description: >-
             The registry's RDAP record dates the domain's expiry {{ $value | printf "%.0f" }}
             days out. Renew it at the registrar, and turn on auto-renew if it is off.
@@ -122,7 +127,8 @@ groups:
           severity: critical
           service: domain
         annotations:
-          summary: The domain registration expires in 14 days or fewer.
+          summary: >-
+            The domain registration expires in {{ $value | printf "%.0f" }} days.
           description: >-
             The registry's RDAP record dates the domain's expiry {{ $value | printf "%.0f" }}
             days out. A lapse takes down ACME renewal, every public route, the WireGuard
@@ -166,7 +172,8 @@ groups:
           severity: critical
           service: monitor-bridge
         annotations:
-          summary: monitor-bridge's run loop has stopped recording some check verdicts.
+          summary: >-
+            {{ with query "time() - homelab_check_last_run_timestamp_seconds{job='monitor-bridge'} > homelab_check_deadline_seconds{job='monitor-bridge'}" }}monitor-bridge's verdicts have gone stale for {{ range $i, $s := . | sortByLabel "check" }}{{ if $i }}, {{ end }}{{ $s.Labels.check }}{{ end }}.{{ else }}monitor-bridge exports fewer check rows than homelab_check_rows counts.{{ end }}
           description: >-
             For 10 minutes either a row's homelab_check_last_run_timestamp_seconds has aged past
             its homelab_check_deadline_seconds, or fewer rows export homelab_check_success than
@@ -193,6 +200,7 @@ groups:
           description: >-
             monitor-bridge authenticates against B2 at most every 30 minutes. A cap denial looks the
             same as data loss, so read the monitor-bridge log message before assuming either.
+            Its DOWN line: `kubectl -n homelab logs deploy/monitor-bridge | grep 'DOWN b2_reachable '`.
           runbook_url: https://docs.local.daniel-hunter.com/longhorn-backup-tiering/
       - alert: B2FreeTierHeadroomLow
         expr: homelab_check_success{job="monitor-bridge", check="b2_storage"} == 0
@@ -278,6 +286,7 @@ groups:
             absent, or a commit of master has waited more than 7200 seconds to be built. The
             monitor-bridge log names the builder's reason and sha, and the builder's pages in
             docs/host-packages.md have the fix for each reason.
+            Its DOWN line: `kubectl -n homelab logs deploy/monitor-bridge | grep 'DOWN host_packages '`.
           runbook_url: https://docs.local.daniel-hunter.com/host-packages/
       # THE STARTUP-GRACE FAMILY (A6-5): the six rows whose `gate` column reads `startup_grace`
       # and whose rule lives here. Each rule is `for: 10m`, two bridge cycles (operator ruling
@@ -301,6 +310,7 @@ groups:
           description: >-
             An active workflow failed 3 times in a row, or 2 or more workflows are each failing
             repeatedly. The monitor-bridge log names the workflow; open its last execution in n8n.
+            Its DOWN line: `kubectl -n homelab logs deploy/monitor-bridge | grep 'DOWN n8n '`.
       - alert: BazarrHealthDegraded
         expr: homelab_check_success{job="monitor-bridge", check="bazarr"} == 0
         for: 10m
@@ -313,6 +323,7 @@ groups:
             Bazarr's own copy of the sonarr or radarr API key is rejected (an empty peer version
             field), or Bazarr reports a health issue. Bazarr holds those keys in its UI, so a key
             rotation misses it. The monitor-bridge log names which.
+            Its DOWN line: `kubectl -n homelab logs deploy/monitor-bridge | grep 'DOWN bazarr '`.
       - alert: ProwlarrIndexersFailing
         expr: homelab_check_success{job="monitor-bridge", check="prowlarr_indexers"} == 0
         for: 10m
@@ -325,6 +336,7 @@ groups:
             Prowlarr's own initialFailure puts an indexer at a week or more of failures. The Pirate
             Bay and 1337x are ignored as chronic flappers, and short outages never page. The
             monitor-bridge log names the indexer.
+            Its DOWN line: `kubectl -n homelab logs deploy/monitor-bridge | grep 'DOWN prowlarr_indexers '`.
       - alert: SmartHealthFailing
         expr: homelab_check_success{job="monitor-bridge", check="scrutiny"} == 0
         for: 10m
@@ -337,6 +349,7 @@ groups:
             A drive's collector data is older than 26h, its SMART self-assessment or an attribute
             threshold failed, or NVMe wear passed 80%. Scrutiny's own notifier is unconfigured,
             so this is the only drive-failure page. The monitor-bridge log names the drive.
+            Its DOWN line: `kubectl -n homelab logs deploy/monitor-bridge | grep 'DOWN scrutiny '`.
       - alert: SpeedtestDegraded
         expr: homelab_check_success{job="monitor-bridge", check="speedtest"} == 0
         for: 10m

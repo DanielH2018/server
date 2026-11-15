@@ -43,7 +43,8 @@ groups:
           severity: warning
           service: loki-homelab
         annotations:
-          summary: The log shippers dropped over 3000 entries in the last hour.
+          summary: >-
+            The log shippers dropped {{ $value | printf "%.0f" }} entries in the last hour.
           description: >-
             Alloy gave up on more than 3000 log entries in an hour, so those lines never reached
             Loki. Read loki_write_dropped_entries_total by reason and instance, then the Alloy
@@ -65,7 +66,8 @@ groups:
           severity: warning
           service: loki-homelab
         annotations:
-          summary: The homelab Loki discarded over 3000 entries in the last hour.
+          summary: >-
+            The homelab Loki discarded {{ $value | printf "%.0f" }} entries as {{ $labels.reason }} in the last hour.
           description: >-
             Loki discarded more than 3000 entries in an hour for the reason {{ $labels.reason }}.
             too_far_behind means entries arrived outside Loki's accept window, a clock or
@@ -106,7 +108,8 @@ groups:
           severity: warning
           service: observability
         annotations:
-          summary: The OTel collector failed to export telemetry.
+          summary: >-
+            The OTel collector failed to export through {{ range $i, $s := query "sum by (exporter) (increase({__name__=~'otelcol_exporter_send_failed_.*'}[15m])) > 0" | sortByLabel "exporter" }}{{ if $i }}, {{ end }}{{ $s.Labels.exporter }}{{ else }}an unnamed exporter{{ end }}.
           description: >-
             The collector gave up on exporting telemetry in the last 15 minutes, so the data
             reaches neither Loki, Prometheus nor Tempo and no other counter records the loss.

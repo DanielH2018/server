@@ -4,7 +4,8 @@
 # Usage: systemd-units-check.sh
 # homelab-systemd-units.timer runs it every 5 minutes on every host. It writes check
 # `systemd-units` with success 1 when no system unit is in the failed state, and 0 otherwise,
-# plus homelab_systemd_failed_units with the count. It exits non-zero only when systemctl cannot
+# plus homelab_systemd_failed_units with the count and one homelab_systemd_unit_failed series
+# per failed unit, labelled with the unit's name. It exits non-zero only when systemctl cannot
 # list the units or the textfile write fails. Running it by hand is safe and does what the timer
 # does.
 #
@@ -50,12 +51,27 @@ SUCCESS=$((COUNT == 0))
 
 ((SUCCESS == 1)) || echo "failed system units (${COUNT}): $(tr '\n' ' ' <<<"$UNITS")"
 
+# One series per failed unit, so SystemdUnitsFailed can name each unit in its summary. Unit
+# names carry systemd's \x2d escapes, and node_exporter rejects the whole file on a label value
+# with a backslash or quote the text format does not escape.
+PER_UNIT=()
+if ((COUNT > 0)); then
+  PER_UNIT+=(
+    "# HELP homelab_systemd_unit_failed 1 for each system unit in the failed state at the check's last run."
+    "# TYPE homelab_systemd_unit_failed gauge"
+  )
+  while IFS= read -r line; do
+    PER_UNIT+=("$line")
+  done < <(awk '{ gsub(/\\/, "\\\\"); gsub(/"/, "\\\""); printf "homelab_systemd_unit_failed{check=\"systemd-units\",unit=\"%s\"} 1\n", $0 }' <<<"$UNITS")
+fi
+
 # A failed unit is the verdict, not this unit's failure: exiting 1 for it would list the checker
 # under `systemctl --failed` beside the unit it found.
 write_check_textfile systemd-units "$SUCCESS" "$(date +%s)" "$DEADLINE_S" \
   "# HELP homelab_systemd_failed_units System units in the failed state at the check's last run." \
   "# TYPE homelab_systemd_failed_units gauge" \
-  "homelab_systemd_failed_units{check=\"systemd-units\"} $COUNT" || {
+  "homelab_systemd_failed_units{check=\"systemd-units\"} $COUNT" \
+  "${PER_UNIT[@]}" || {
   logger -t systemd-units "textfile write failed"
   exit 1
 }

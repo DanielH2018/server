@@ -772,7 +772,8 @@ groups:
           severity: critical
           service: nut-exporter
         annotations:
-          summary: The UPS is on battery.
+          summary: >-
+            The UPS is on battery{{ with query "max(network_ups_tools_battery_charge)" }}, {{ . | first | value | printf "%.0f" }}% charged{{ end }}{{ with query "max(network_ups_tools_battery_runtime)" }}, about {{ . | first | value | humanizeDuration }} of runtime left{{ end }}.
           description: >-
             NUT reports ups.status OB for 10 minutes: mains power is gone and the UPS is carrying
             the load. Read the UPS on the NUT host.

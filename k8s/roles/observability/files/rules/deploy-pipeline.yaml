@@ -49,7 +49,8 @@ groups:
           severity: warning
           service: deploy-pipeline
         annotations:
-          summary: A green master commit has waited more than 2 hours for promotion.
+          summary: >-
+            A green master commit has waited {{ $value | humanizeDuration }} for promotion.
           description: >-
             The oldest green master commit that prod lacks went green
             {{ $value | humanizeDuration }} ago, and no hold stands. Read the promote

@@ -91,6 +91,34 @@ def test_a_failed_unit_writes_success_0_with_the_count(tmp_path):
     assert "homelab-claude-pipeline-timeline.service nut-monitor.service" in out
 
 
+def _unit_series(tmp_path) -> list[str]:
+    prom = (tmp_path / "textfile" / "systemd-units.prom").read_text()
+    return re.findall(r"^homelab_systemd_unit_failed\{.*\} 1$", prom, re.M)
+
+
+def test_each_failed_unit_writes_a_series_naming_it(tmp_path):
+    _run(tmp_path, TWO_FAILED)
+    assert _unit_series(tmp_path) == [
+        'homelab_systemd_unit_failed{check="systemd-units",unit="homelab-claude-pipeline-timeline.service"} 1',
+        'homelab_systemd_unit_failed{check="systemd-units",unit="nut-monitor.service"} 1',
+    ]
+
+
+def test_a_unit_name_with_a_systemd_escape_is_escaped_for_the_text_format(tmp_path):
+    _run(
+        tmp_path,
+        "systemd-fsck@dev-disk-by\\x2duuid-1.service loaded failed failed fsck\n",
+    )
+    assert _unit_series(tmp_path) == [
+        'homelab_systemd_unit_failed{check="systemd-units",unit="systemd-fsck@dev-disk-by\\\\x2duuid-1.service"} 1'
+    ]
+
+
+def test_no_failed_unit_writes_no_unit_series(tmp_path):
+    _run(tmp_path, "")
+    assert _unit_series(tmp_path) == []
+
+
 def test_a_systemctl_that_cannot_list_writes_success_0(tmp_path):
     code, _, series = _run(tmp_path, "Failed to connect to bus", rc=1)
     assert (code, series["homelab_check_success"]) == (1, "0")
