@@ -50,7 +50,7 @@ from diagnostics.probe_lib.push_rules import run_push_rules
 from diagnostics.probe_lib.readonly_rbac import run_readonly_rbac
 from diagnostics.probe_lib.shed_set import run_shed_set
 from diagnostics.probe_lib.takeover import run_takeover
-from diagnostics.probe_lib.unit_state import run_unit
+from diagnostics.probe_lib.host_unit import run_unit
 from diagnostics.probe_lib.uptime_robot import run_uptime_robot
 from diagnostics.probe_lib.usage import run_usage
 from diagnostics.probe_lib.vip_placement import run_vip_placement
@@ -208,7 +208,7 @@ SUBCOMMANDS = [
         "unit",
         "a host unit's result, last start and end, next timer trigger and newest "
         "non-routine journal lines (exit 1 when it failed or will not run again)",
-        "unit_state",
+        "host_unit",
         run_unit,
     ),
     (

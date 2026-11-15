@@ -11,7 +11,7 @@ from types import SimpleNamespace
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import pytest
-from diagnostics.probe_lib import core, unit_state
+from diagnostics.probe_lib import core, host_unit
 from lib.exit_codes import PROBE_FAILED, PROBE_OK, PROBE_UNREADABLE
 
 NOW = 1794777200.0
@@ -54,7 +54,7 @@ def _doc(
 
 
 def _report(doc, last=10):
-    return unit_state.report(doc, BASE, now=NOW, last=last)
+    return host_unit.report(doc, BASE, now=NOW, last=last)
 
 
 def test_a_unit_whose_last_run_succeeded_and_whose_timer_will_fire_is_ok():
@@ -107,7 +107,7 @@ def test_a_journal_this_user_cannot_read_prints_the_state_and_exits_unreadable()
 
 
 def test_the_read_covers_the_unit_and_both_forms_of_its_tag():
-    plan = unit_state.plan("homelab-aide-check", unit_state.tags("homelab-aide-check"))
+    plan = host_unit.plan("homelab-aide-check", host_unit.tags("homelab-aide-check"))
     assert plan["journal"]["unit"][:1] == ["homelab-aide-check.service"]
     assert {v[0] for k, v in plan["journal"].items() if k.startswith("tag:")} == {
         "aide-check",
@@ -117,9 +117,9 @@ def test_the_read_covers_the_unit_and_both_forms_of_its_tag():
 
 
 def test_a_unit_name_is_trimmed_of_its_suffix_and_an_option_is_refused():
-    assert unit_state.base_name("homelab-updater.timer") == "homelab-updater"
+    assert host_unit.base_name("homelab-updater.timer") == "homelab-updater"
     with pytest.raises(core.UsageError):
-        unit_state.base_name("--all")
+        host_unit.base_name("--all")
 
 
 def test_the_dry_run_names_the_read_and_makes_none(capsys):
@@ -127,5 +127,13 @@ def test_the_dry_run_names_the_read_and_makes_none(capsys):
         raise AssertionError("a dry run must not read")
 
     ns = SimpleNamespace(unit=BASE, host="daniel-pi", last=10, dry_run=True)
-    assert unit_state.run_unit(ns, read=no_read) == PROBE_OK
+    assert host_unit.run_unit(ns, read=no_read) == PROBE_OK
     assert "homelab-builder.timer" in capsys.readouterr().out
+
+
+def test_a_running_service_explains_a_monotonic_timer_with_no_next_trigger():
+    doc = _doc(next_us=0)
+    doc["show"][f"{BASE}.service"] |= {"ActiveState": "activating", "SubState": "start"}
+    text, code = _report(doc)
+    assert code == PROBE_OK
+    assert "next after the running service ends" in text

@@ -20,7 +20,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from diagnostics.probe_lib.arr import ARR_PORTS
 from diagnostics.probe_lib.core import LOKI_STORE_HELP, LOKI_STORES
-from diagnostics.probe_lib import builder, lander, monitors, unit_state
+from diagnostics.probe_lib import builder, lander, monitors, host_unit
 from diagnostics.probe_lib.flux import FLUX_HELP, FLUX_TAGS_HELP
 from diagnostics.probe_lib.landing_verdicts import VERDICTS_HELP, add_verdicts_args
 from lib.cli_help import ArgumentParser
@@ -485,7 +485,7 @@ def _build_parser():
         default="origin",
         help="the GitHub remote pushed to (default origin)",
     )
-    for module in (monitors, lander, builder, unit_state):
+    for module in (monitors, lander, builder, host_unit):
         module.add_parser(sub, _verdict_help)
     usage = sub.add_parser(
         "usage",

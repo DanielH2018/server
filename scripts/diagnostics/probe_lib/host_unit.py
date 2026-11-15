@@ -12,7 +12,8 @@ the named host and prints:
   both reads is printed once.
 
 Exit 1 when the service is not loaded, its last run did not end `success`, or its timer is
-loaded but has no next trigger. 75 when the host could not be read; a journal this user may
+loaded but has no next trigger while the service is idle. A monotonic timer schedules its
+next trigger only once a run ends, so a running service explains a missing one. 75 when the host could not be read; a journal this user may
 not read prints the unit state and exits 75 too. `unitq` stays the path for a unit's file.
 """
 
@@ -47,6 +48,7 @@ SHOW = [
     "ExecMainStatus",
 ]
 TIMER_SHOW = ["LoadState", "ActiveState"]
+RUNNING = frozenset({"activating", "deactivating", "reloading"})
 # Lines read per source before the routine ones are dropped.
 READ_LINES = 200
 # A leading `-` would reach systemctl and journalctl as an option.
@@ -143,18 +145,22 @@ def report(doc: dict, base: str, *, now: float, last: int) -> tuple[str, int]:
     if timer.get("LoadState") == "loaded":
         row = (doc.get("timers") or {}).get(f"{base}.timer") or {}
         nxt, prev = row.get("next") or 0, row.get("last") or 0
-        if not nxt:
+        # A monotonic timer schedules its next trigger only once its service run ends.
+        running = (
+            service.get("ActiveState") in RUNNING
+            or service.get("SubState") == "running"
+        )
+        if not nxt and not running:
             problems.append(
                 f"{base}.timer ({timer.get('ActiveState')}) has no next trigger"
             )
+        if nxt:
+            upcoming = f"{_stamp(nxt / 1e6)} (in {core.age_phrase(max(0, int(nxt / 1e6 - now)))})"
+        else:
+            upcoming = "after the running service ends" if running else "none"
         lines.append(
             f"{base}.timer: {timer.get('ActiveState')}, last trigger "
-            f"{_stamp(prev / 1e6) if prev else 'never'}, next "
-            + (
-                f"{_stamp(nxt / 1e6)} (in {core.age_phrase(max(0, int(nxt / 1e6 - now)))})"
-                if nxt
-                else "none"
-            )
+            f"{_stamp(prev / 1e6) if prev else 'never'}, next {upcoming}"
         )
     else:
         lines.append(f"{base}.timer: none")
