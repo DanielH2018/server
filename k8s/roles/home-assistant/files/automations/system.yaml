@@ -178,7 +178,7 @@
 
 # HA automation-engine heartbeat: stamp input_datetime.ha_heartbeat with now() every minute so its
 # last_changed stays fresh ONLY while the automation scheduler is executing. monitor-bridge polls it
-# (check_ha_heartbeat) over the apps net and pushes the "Home Assistant Automations" Kuma monitor down
+# (check_ha_heartbeat) over the apps net and exports a failing verdict
 # when it goes stale — detecting a wedged-but-running HA the container healthcheck (HTTP :8123) can't
 # see. No conditions (must tick unconditionally); homelab-wide (no bedroom_ prefix); does NOT route
 # through bedroom_notify. Excluded from the recorder (see configuration.yaml).
