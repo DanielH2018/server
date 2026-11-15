@@ -8,9 +8,8 @@ The unit's ExecStartPost writes the textfile verdict that RenovateAgentNotReport
 The tick is gated before it costs anything: no open Renovate PRs means no session. The decision
 lives in agent_logic, which is pure.
 
-The session runs in its own unit, as its own user, in a dedicated worktree that
-`renovate_session.py` prepares; this runner only starts it and reads what it left in the
-exchange directory. `agent_toolbox` holds the process boundaries both inject.
+The session runs in its own unit, as its own user, in the controller's clone, which it reads and
+cannot write; this runner only starts it and reads what it left in the exchange directory. `agent_toolbox` holds the process boundaries both inject.
 
 Config from /etc/renovate-agent/config.env (KEY=VALUE) — see templates/config.env.j2.
 Stdlib only.
@@ -38,7 +37,6 @@ from agent_logic import (
     parse_run,
     render_digest,
     render_skip,
-    resume_command,
     run_record,
 )
 from agent_toolbox import TOOLS, AgentTools, log
@@ -50,7 +48,7 @@ from host_lib import (
     read_untrusted,
     start_unit,
 )
-from renovate_session import BLOCKED_FILE, OUT_DIR, OUTPUT_FILE, SESSION_ENV_FILE
+from renovate_session import OUT_DIR, OUTPUT_FILE
 from run_requests import REQUESTS_DIR, Outcome, carry_out
 
 # The env override exists so the I/O shell can be exercised end-to-end against a throwaway
@@ -58,8 +56,6 @@ from run_requests import REQUESTS_DIR, Outcome, carry_out
 # it, and the first armed tick would be its first execution.
 CONFIG = os.environ.get("RENOVATE_AGENT_CONFIG", "/etc/renovate-agent/config.env")
 USER_AGENT = "renovate-agent"
-# Distinct from the 1 a failed session returns, so the OnFailure page reads which it was.
-EXIT_WORKTREE_BLOCKED = 2
 # The login gh reports for Renovate's PRs. The unit's LAND_REQUIRE_AUTHOR must match it, and
 # test_renovate_agent_unit.py reads it from here.
 RENOVATE_AUTHOR = "app/renovate"
@@ -72,15 +68,6 @@ OPEN_PR_LIMIT = 200
 RUNS_FILE = "runs.jsonl"
 # The unit the session runs in; polkit lets this process's user start it.
 SESSION_UNIT = "homelab-renovate-agent-session.service"
-# Every variable the session unit sets. A resume has to set each again, because sudo resets the
-# environment (#4603). test_session_resume.py holds this to the session unit's template.
-SESSION_ENV_KEYS = (
-    "PATH",
-    "HOME",
-    "PYTHONDONTWRITEBYTECODE",
-    "RUN_HOOK_PROJECT_DIR",
-    "RUN_HOOK_UV",
-)
 
 
 def discord_spool(state_dir: str) -> str:
@@ -167,32 +154,17 @@ def pr_states(
     return states
 
 
-def session_files(out: str) -> tuple[str, str]:
-    """(blocked reason, session output) from the session's `out/` directory, read as untrusted.
+def session_output(out: str) -> str:
+    """What the session printed, from the exchange's `out/` directory, read as untrusted.
 
-    The session wrote both, so a symlink there (to this controller's token file, say) is refused
-    rather than followed into the digest. A refused file reads as "".
+    The session wrote the file, so a symlink there (to this controller's token file, say) is
+    refused rather than followed into the digest. A refused file reads as "".
     """
-    found = []
-    for name in (BLOCKED_FILE, OUTPUT_FILE):
-        try:
-            found.append(read_untrusted(out, name, SESSION_OUTPUT_MAX))
-        except (OSError, ValueError) as exc:
-            log(f"refused the session's {name}: {type(exc).__name__}")
-            found.append("")
-    return found[0].strip(), found[1]
-
-
-def session_unit_env(tools: AgentTools) -> dict[str, str]:
-    """The session unit's own Environment= values, for the resume command to set again.
-
-    The runner runs as the controller, so its own environment is not the session's.
-    """
-    _, out = tools.run(
-        ["systemctl", "show", "-p", "Environment", "--value", SESSION_UNIT]
-    )
-    pairs = dict(item.split("=", 1) for item in out.split() if "=" in item)
-    return {k: pairs[k] for k in SESSION_ENV_KEYS if k in pairs}
+    try:
+        return read_untrusted(out, OUTPUT_FILE, SESSION_OUTPUT_MAX)
+    except (OSError, ValueError) as exc:
+        log(f"refused the session's {OUTPUT_FILE}: {type(exc).__name__}")
+        return ""
 
 
 def request_line(request: Outcome) -> str:
@@ -237,9 +209,6 @@ def main(tools: AgentTools = TOOLS, config_path: str = CONFIG) -> int:
     webhook = cfg.get("DISCORD_WEBHOOK", "")
     state_dir = cfg.get("STATE_DIR", "/var/lib/renovate-agent-ctl")
     exchange = cfg["EXCHANGE_DIR"]
-    path = os.path.join(
-        cfg["REPO_DIR"], ".claude", "worktrees", cfg.get("WORKTREE", "renovate-auto")
-    )
     log_path = os.path.join(state_dir, "last_session.json")
     spool = discord_spool(state_dir)
     # Every tick, before anything can fail or take the quiet skip: a crash report queued during
@@ -264,18 +233,7 @@ def main(tools: AgentTools = TOOLS, config_path: str = CONFIG) -> int:
         int(cfg.get("SESSION_TIMEOUT_S", "2700")) + 300, int(deadline - time.time())
     )
     end = start_unit(SESSION_UNIT, tools.run, max(wait, 1))
-    why, stdout = session_files(out)
-    if why:
-        # The previous tick left work in flight, so the session left the tree alone — removing
-        # it is how unlanded work is lost. But it IS a unit failure: the tree stays blocked until
-        # a person clears it, and this skip repeated for five days behind a green Alive tile
-        # before #2014, because exit 0 let ExecStartPost beat. A `down` pushed here would be
-        # laundered by that same beat, so the exit code carries it: no beat, and OnFailure pages.
-        msg = f"renovate-agent: skipped on {host} — {why}. Clear it, then the next tick runs."
-        log(msg)
-        tools.discord_post(webhook, msg, USER_AGENT, log=log, spool_dir=spool)
-        record_run(state_dir, run_record(int(time.time()), "blocked", why))
-        return EXIT_WORKTREE_BLOCKED
+    stdout = session_output(out)
     atomic_write(log_path, stdout)
     timed_out = end.result in ("timeout", "deadline")
     rc = 0 if end.result == "success" else max(end.status, 1)
@@ -301,19 +259,9 @@ def main(tools: AgentTools = TOOLS, config_path: str = CONFIG) -> int:
         f"{moved.touched} remaining={moved.remaining} "
         f"ok={outcome.ok}"
     )
-    resume = ""
-    if outcome.session_id:
-        resume = resume_command(
-            outcome.session_id,
-            path,
-            cfg["SESSION_USER"],
-            cfg.get("CLAUDE_BIN", "claude"),
-            SESSION_ENV_FILE,
-            session_unit_env(tools),
-        )
     tools.discord_post(
         webhook,
-        render_digest(outcome, moved, host, log_path, resume, landings(requests)),
+        render_digest(outcome, moved, host, log_path, landings(requests)),
         USER_AGENT,
         log=log,
         spool_dir=spool,

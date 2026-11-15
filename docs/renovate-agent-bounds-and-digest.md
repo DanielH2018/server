@@ -3,15 +3,16 @@
 Working-out moved off `hosts/components/renovate-agent/CLAUDE.md` (#2995), which a session
 reads on every touch of the unattended agent. The role doc keeps the arming procedure and the
 autonomous-role contract; this page keeps the modules `files/` ships, the lander, the session's
-own identity and the arming checklist, the four bounds and why each is the var it is, the
-worktree rules, what the Discord digest measures, and the exit codes behind the alive verdict. `docs/renovate-notify-internals.md` is the sibling page for the reporting half.
+own identity and the arming checklist, the four bounds and why each is the var it is, where the
+session works, what the Discord digest measures, and the exit codes behind the alive verdict. `docs/renovate-notify-internals.md` is the sibling page for the reporting half.
 
 ## The modules `files/` ships
 
 - `agent_logic.py` — the pure half: the run gate, the before/after delta, the digest text.
 - `agent_toolbox.py` — `AgentTools`, the four process boundaries a test replaces. It names
   the other two modules nowhere, which is what makes it the leaf they both import.
-- `run_worktree.py` — the run worktree's lifecycle, and the only code here that talks to git.
+- `renovate_session.py` — the session unit's script: it runs the headless session and writes
+  what it printed into the exchange.
 - `renovate_agent.py` — the entry module: config, the `gh` census, the session, the digest,
   the crash report.
 - `land_renovate_pr.py` — the lander, run by `renovate-agent-land@<n>.service` rather than by
@@ -88,11 +89,11 @@ digest names each nomination the runner did not land, with why.
 `homelab-renovate-agent-session.service`, which polkit lets only the controller start
 (`templates/50-renovate-agent-session.rules.j2`), and waits for it through
 `hosts/lib/host_lib.py:start_unit`, the helper the landings use too. The unit runs
-`files/renovate_session.py`: the worktree gate and its recreation, then the headless session.
+`files/renovate_session.py`, which runs the headless session in the controller's clone.
 Its `TimeoutStartSec` is `renovate_agent_session_timeout_s`, so systemd stops a session at its
 wall clock and the runner reads `Result=timeout`. The script captures the session's output and
-writes it to `session.out` under the exchange directory's `out/`, and a blocked worktree's
-reason to `session.blocked`, so session text never reaches the journal. The runner's journal
+writes it to `session.out` under the exchange directory's `out/`, so session text never reaches
+the journal. The runner's journal
 line for each request carries fixed words only, for the same reason (#8676).
 
 **Two users** (dotfiles#967's I1, guardrails plan B2r-2b). `templates/renovate-agent-pins.j2`
@@ -131,22 +132,32 @@ anything else is no verdict (#5205).
 The session reads third-party text: release notes, changelogs and PR bodies. It runs as
 `renovate-agent` so that text steering it reaches nothing able to change `master`.
 
-- **Home and clone.** `renovate_agent_home` (`/var/lib/renovate-agent`) holds the session's
-  `~/.claude` and its own clone at `renovate_agent_clone_dir`. The run record is in the
-  controller's home, which carries the set-group-ID bit and group `sys_user`, so the docs cron
-  reads it.
-- **Toolchain.** The agent runs its own uv rather than `/usr/bin/uv`, the host's
-  package wrapper. `renovate-agent-setup` copies the operator's uv into the agent's `~/.local/bin` and runs
-  `uv python install` as the agent. Every project hook runs through `uv run`, and in an
-  unattended session a hook that cannot start makes each Bash call an `ask`, which is a denial.
+- **Home, toolchain and clone.** `renovate_agent_home` (`/var/lib/renovate-agent`) is the
+  session's home: its caches and its transcripts. Everything the session runs or reads comes
+  from the controller instead, pinned in `templates/renovate-agent-pins.j2`:
+  `/var/lib/renovate-agent-tools` holds the operator's `uv`, `uvx`, `prek`, `claude_guard`,
+  `claude_worktree` and hooks, the pinned Python and Claude Code, and
+  `/var/lib/renovate-agent-clone` is the clone at `origin/master` the session works in. The
+  controller owns both, and the session reads them through its group and cannot write them, so
+  a session cannot change its own guard or leave a file for the next run. `renovate-agent-setup`
+  refreshes both as the controller before each run, only while no run holds the lock, then
+  regroups them as root with `chgrp -R -h`, which follows no link. The session unit names the
+  clone safe through `GIT_CONFIG_*`, because git refuses a repository another user owns. The
+  run record is in the controller's home, which carries the set-group-ID bit and group
+  `sys_user`, so the docs cron reads it.
+- **Settings.** The session passes the packaged, root-owned
+  `/usr/lib/homelab/renovate-agent/claude-settings.json` with `--settings`. Its three hook
+  commands run the controller's copies under `/var/lib/renovate-agent-tools/.claude/hooks`. The
+  setup removes any settings or hooks copy from the session's home, and `claude-guardrail-ack` posts
+  one that comes back.
 - **Project hooks.** `.claude/hooks/run-hook.sh` defaults to the operator's checkout and uv. The
-  unit sets `RUN_HOOK_PROJECT_DIR` to the run worktree and `RUN_HOOK_UV` to the agent's uv, and
-  `prepare_worktree` runs `uv sync --frozen` in that tree before the session starts. A guard
-  that cannot import its dependencies raises, and the dispatcher drops its verdict without a
-  word. `block-footguns` also needs the `claude_guard` package, which the dotfiles repo deploys
-  only under the operator's home; without it the guard asks on every command naming `gh`. The
-  `renovate-agent-setup` copies the operator's package into the agent's `~/.local/share/claude-guard` on each
-  apply.
+  unit sets `RUN_HOOK_PROJECT_DIR` to the clone, `RUN_HOOK_UV` to the controller's uv and
+  `UV_NO_SYNC=1`, and the setup runs `uv sync --frozen` in the clone before each run, so a hook
+  never writes the venv. A guard that cannot import its dependencies raises, and the dispatcher
+  drops its verdict without a word. `block-footguns` also needs the `claude_guard` package,
+  which the dotfiles repo deploys only under the operator's home; without it the guard asks on
+  every command naming `gh`. The unit's `CLAUDE_GUARD_HOME` points both the dotfiles hooks and
+  the repo's at the controller's copy.
 - **GitHub tokens.** Two fine-grained tokens for this repo alone (guardrails plan B1).
   `renovate_agent_gh_token` is the runner's: pull requests and actions read-write, contents,
   checks and metadata read, in `ctl.env`. `renovate_agent_gh_read_token` is the session's,
@@ -232,31 +243,10 @@ budget only catches a loop. A landing in flight runs in the lander unit, so a se
 killed at either limit leaves that landing to finish, but the digest then cannot report it.
 
 **The session never runs in the primary checkout.** One untracked file in `/home/<user>/server`
-parks `homelab-checkout-sync` silently, and a session that edits, renders and tests is guaranteed to
-leave some. Each tick recreates `.claude/worktrees/renovate-auto` at `origin/master` inside the
-agent's own clone and runs there. The lander runs `land.sh` in the primary checkout as the
-operator.
-
-Every rule in the rest of this section lives in `files/run_worktree.py`.
-
-**A worktree holding work is not thrown away.** If the previous run left uncommitted changes or
-commits whose content is not on `origin/master`, the run skips, posts the path and exits
-`EXIT_WORKTREE_BLOCKED` (2). Removing the tree is how unlanded work is lost.
-
-Content, not ancestry. The run branch is fixed (`worktree-renovate-auto`) and nothing resets it
-after a landing, and a squash merge keeps a branch's content while discarding the commits that
-carried it — so `rev-list origin/master..<branch>` counts a landed branch's commits forever. That
-refused the tree every day from 2026-09-14 while its two commits sat on master as PR #1812
-(#2014). `branch_content_is_on_master` settles it the way `scripts/dev/prune_worktrees.py` does:
-`git merge-tree --write-tree origin/master <branch>` producing master's own tree means the branch
-has nothing master lacks. A revert-only branch is still refused (merging it changes master's
-tree), and no verdict — a conflict with master's drift, empty output — reads as not contained by
-`merge-tree`. That conflict case is the pruner's fourth layer and is ported too
-(`branch_tip_was_merged`): `gh pr list --state merged --head <branch> --json headRefOid` must name
-the branch's exact tip. Ported rather than left to the page because the very tree #2014 found was
-already past `merge-tree` — master had drifted into a conflict on `n8n/base-pin-history.tsv` — so
-without it the fix would have paged daily and still needed the operator's `reset --hard`. The
-match is on the head SHA, never the branch name: the name is reused every tick.
+parks `homelab-checkout-sync` silently. The session works in the controller's clone, which it
+cannot write, so it leaves nothing behind in any checkout. Its token has no contents write, so
+it has nothing to commit anyway: a `manual —` work order ends as a hand-off in the digest. The
+lander runs `land.sh` in the primary checkout as the operator.
 
 ## The digest measures effect, not completion
 
@@ -271,25 +261,8 @@ headline is that delta:
 - `ran and no Renovate PR changed state` — the failure that would otherwise read green.
 - `FAILED — <reason>` — timeout, non-zero exit, or `is_error`.
 
-When the result JSON carries a `session_id`, the digest prints a `resume this session:` line
-above its cost line (#4603). The line holds a command that reopens the session that wrote a
-`manual —` hand-off with its context intact. The harness stores a session under its owner's
-home and keys it by the working directory it ran in, so a resume as another user or from
-another path does not find it. The line sits outside the 900-character summary cut, so a long
-summary cannot truncate it.
-
-The command is `sudo sh -c 'cd <run worktree> && set -a && . <EnvironmentFile> && exec runuser
--u renovate-agent -- env <unit variables> claude --resume <id>'`. The session's GitHub
-token and Claude credential exist only in the unit's root-only `EnvironmentFile`, so the
-command reads that file as root before it switches user. `sudo` resets the environment, so the
-command also sets again each variable the session unit sets: `PATH`, `HOME` and the hook
-shim's `RUN_HOOK_*` paths among them. The runner reads their values with `systemctl show -p
-Environment` on the session unit. `SESSION_ENV_KEYS` in `files/renovate_agent.py` lists them,
-and `test_session_resume.py` fails when the unit sets a variable that list lacks.
-
-The transcript lives under the owner's home rather than in the worktree, so it survives the
-next tick's `prepare_worktree`. A resumed session works in the tree a tick reuses, though. Any
-commit it leaves there unlanded blocks the next tick, so finish the work before 06:00.
+The operator ruled on 2026-11-14 that an unattended session keeps its transcript and loses
+in-place resume, so the digest prints no resume command.
 
 Leaving the open set is not landing. A session can close a Renovate PR without merging it,
 for one it judges superseded or dropped (#2746). So the wrapper runs `gh pr view <n> --json
@@ -322,7 +295,6 @@ whether the agent is worth its cost is a count over one file rather than a read 
 
 - `skipped` — the gate spent no session. `reason` says why, including the quiet empty-backlog
   skip that posts nothing to Discord.
-- `blocked` — the run worktree still holds unlanded work.
 - `ran` or `failed` — a session ran. The line carries `merged`, `closed`, `unread`,
   `left_open`, `touched` and `opened` from the measured delta, plus `cost_usd`, `turns` and the
   denial count, and `session_id` when the result JSON carried one (#4603). Lines written
@@ -361,14 +333,8 @@ exited 0, so the rule reports silence and the `OnFailure` alert reports failure.
 Cutover-1a deleted the `Renovate Agent — Alive` Kuma tile and the unit's beat to it, and B4's
 token PR retired its push token a week later.
 
-**A worktree-blocked skip exits non-zero, so it writes no verdict.** The verdict is
-`ExecStartPost`, which runs after ANY exit 0, so a `down` written from inside the wrapper on a
-`return 0` path would be overwritten by the `up` that follows it. That skip returns
-`EXIT_WORKTREE_BLOCKED` instead: no verdict, `OnFailure` pages, and `RenovateAgentNotReporting`
-fires by deadman if nobody clears the tree. Until 2026-09-18 that path returned 0, and the
-monitor stayed green through five daily skips (#2014). The other skip, with no open PRs,
-still exits 0, because it is the healthy steady state.
-`test_agent_logic.py::TestSkipExitCodes` pins the blocked and the quiet case.
+**The quiet skip exits 0**, because no open PRs is the healthy steady state.
+`test_agent_logic.py::TestSkipExitCodes` pins it.
 
 **A crash records its own reason** (`report_crash`, called from the `__main__` guard). Silence
 plus an `OnFailure` page was not enough: the rule fired 28 hours later by deadman expiry with no
@@ -388,15 +354,6 @@ at the end of the run: a fast run followed by one that draws the full jitter and
 100-minute unit timeout spaces two verdicts 25h50m apart. `test_renovate_agent_unit.py` pins the
 deadline between that gap and two periods, and `test_b4_rule_literals.py` pins the rule's literal
 to it.
-
-**An unregistered directory at the run worktree's path is reclaimed, not a crash.** That is what a
-killed session leaves behind. It matters twice over, because **git searches UPWARD for a
-repository**: `git -C <orphan dir> status` resolves to the PRIMARY CHECKOUT and answers about that
-tree, so `worktree_is_reusable` was reading the wrong repo — a dirty primary would have read as
-this run tree holding uncommitted changes. `is_registered_worktree` decides which case it is, and it
-fails CLOSED — an unreadable `worktree list` reads as a directory git owns — so nothing removes a
-tree that might be registered. Every case that holds real work is still refused by `worktree_is_reusable` before
-this runs.
 
 ## The denylist marker's own history
 

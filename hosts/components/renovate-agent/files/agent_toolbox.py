@@ -5,7 +5,7 @@ A test replaces one field of `AgentTools` and never a module attribute, which is
 `tests/repo/test_module_length_ratchet.py` requires of a module under test — a
 `monkeypatch.setattr` on the entry module would pin its name into the test.
 
-**This module names `renovate_agent` and `run_worktree` nowhere**, at import time or later,
+**This module names `renovate_agent` and `renovate_session` nowhere**, at import time or later,
 which is what makes it the leaf both of them import.
 
 Stdlib only, like the rest of the agent.
@@ -17,7 +17,6 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 import os
-import shutil
 import subprocess
 import sys
 
@@ -70,7 +69,7 @@ def run(
 
 @dataclass(frozen=True)
 class AgentTools:
-    """The boundaries the worktree, census, crash-report and spool-flush paths cross.
+    """The boundaries the census, request, crash-report and spool-flush paths cross.
 
     The defaults are production, so `main()` passes nothing.
 
@@ -82,7 +81,6 @@ class AgentTools:
     run: Callable[..., tuple[int, str]] = run
     discord_post: Callable[..., bool] = discord_post
     flush_discord_spool: Callable[..., bool] = flush_discord_spool
-    rmtree: Callable[..., None] = shutil.rmtree
     read_file: Callable[[str], str] = read_file
 
 

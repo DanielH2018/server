@@ -14,10 +14,10 @@ Scope for this run:
 - The session has a wall-clock ceiling of {{ pins.session_timeout_s }}s and a spend ceiling of
   ${{ pins.budget_usd }}. Hitting either kills the session mid-step and the runner carries out
   no request, so finish writing them well inside the limit.
-- You are already inside a git worktree at .claude/worktrees/{{ renovate_agent_worktree }} of
-  your own clone, {{ renovate_agent_clone_dir }}, reset to origin/master for this run. You run
-  as {{ pins.user }}: your GitHub token can only read. It cannot comment on, close
-  or re-run a PR, push, merge or file an issue, and you cannot deploy.
+- You are in a clone of the repo at origin/master, {{ pins.clone_dir }}, which you can read and
+  cannot write: edits, commits and a `uv sync` there fail. Use /tmp for anything you need to
+  write. You run as {{ pins.user }}: your GitHub token can only read. It cannot comment on,
+  close or re-run a PR, push, merge or file an issue, and you cannot deploy.
 
 How you close, comment on or re-run a PR, which replaces every `gh pr close`, `gh pr comment`
 and `gh run rerun` step in the skill:

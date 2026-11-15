@@ -182,18 +182,15 @@ def test_reconcile_never_restarts_a_session() -> None:
 SETUP_UNIT = "homelab-renovate-agent-setup.service"
 
 
-def test_a_disarmed_agent_still_gets_its_claude_settings() -> None:
-    """The guardrail audit watches the settings file whether or not the timer is armed."""
+def test_a_disarmed_agent_still_gets_its_toolchain() -> None:
+    """The setup runs at boot and on its own change whether or not the timer is armed."""
     assert SPEC["enable"][SETUP_UNIT] == "multi-user.target"
     activated = {
         f["src"]
         for f in SPEC["files"]
         if f.get("activate") == f"try-restart:{SETUP_UNIT}"
     }
-    assert activated == {
-        "files/claude-settings.json",
-        "templates/renovate-agent-setup.sh.j2",
-    }
+    assert activated == {"templates/renovate-agent-setup.sh.j2"}
     unit = render(f"{SETUP_UNIT}.j2")
     assert directive(unit, "RemainAfterExit") == ["yes"], (
         "try-restart reruns only an active unit"

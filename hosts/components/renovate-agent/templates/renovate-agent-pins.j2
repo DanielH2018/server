@@ -17,6 +17,14 @@ could write here would hand the session code the controller runs with the write 
 {#- Where the session's requests and output pass to the controller. The controller owns it and
 the session may write only its requests/ and out/ children. -#}
 {%- set exchange_dir = "/var/lib/renovate-agent-exchange" -%}
+{#- What the controller owns and the session reads through its group, read-only: the session's
+toolchain (uv, Python, claude, the guard package and hooks) and the clone at origin/master it
+works in. Outside the session's home, so the session cannot replace either between runs. -#}
+{%- set tools_dir = "/var/lib/renovate-agent-tools" -%}
+{%- set clone_dir = "/var/lib/renovate-agent-clone" -%}
+{#- The root-owned Claude Code settings the session passes with --settings: the guard hooks and
+the deny floor. -#}
+{%- set settings_file = "/usr/lib/homelab/renovate-agent/claude-settings.json" -%}
 {%- set max_prs = 3 -%}
 {%- set model = "opus" -%}
 {%- set permission_mode = "auto" -%}

@@ -8,7 +8,7 @@ work, this one does it.
 
 `homelab-daniel-box` ships it.
 
-The four bounds on a run and the worktree rules, what the Discord digest measures, the alive
+The four bounds on a run and where the session works, what the Discord digest measures, the alive
 tile's exit-code and token plumbing, how to exercise the wrapper without arming anything, the
 modules `files/` ships, the lander, and the denylist marker's own history are in
 `docs/renovate-agent-bounds-and-digest.md`.
@@ -41,14 +41,17 @@ runner starts `renovate-agent-land@<n>.service` for each nomination, which runs 
 `sys_user` on a PR the lander re-checks itself.
 
 **The session's tooling converges before each run.** `homelab-renovate-agent.service` runs
-`/usr/lib/homelab/renovate-agent-setup` as root through `ExecStartPre=+`. It gives the agent its
-home, the operator's uv, uvx, prek, claude_guard and claude_worktree, the pinned Python, Claude
-Code and the clone. The agent runs every command that writes into its home.
+`/usr/lib/homelab/renovate-agent-setup` as root through `ExecStartPre=+`. It gives the controller
+the session's toolchain under `/var/lib/renovate-agent-tools` (the operator's uv, uvx, prek,
+claude_guard, claude_worktree and hooks, the pinned Python and Claude Code) and the clone at
+`/var/lib/renovate-agent-clone`. The session reads both through its group and cannot write
+them. The controller runs every command that writes into them, and only while no run holds the
+lock.
 
 **The session carries the shared guard hooks and a deny floor.** The package ships
 `hosts/components/renovate-agent/files/claude-settings.json` to `/usr/lib/homelab/renovate-agent/`.
-The setup script copies it to the agent's `~/.claude/settings.json` on every run, and copies the
-operator's `~/.claude/hooks` beside it. The file registers three hooks: claude-guard on Bash,
+The session passes that root-owned file with `--settings`, and its hook commands run the
+controller's copy of the operator's hooks. The file registers three hooks: claude-guard on Bash,
 the permission-request guard, and `protect-secrets` on the file tools. It also carries the
 operator's deny list plus `sudo` and edits to the session's own settings, hooks and claude_guard,
 and it disables bypass mode. The wrapper runs the session in auto mode, so the file also carries
@@ -56,11 +59,10 @@ the operator's `autoMode` deny rules, environment and `classifyAllShell`. It hol
 and no `env`, because the operator's carry `/home` paths that `ProtectHome=` hides. Both lists are
 a snapshot of the operator's: a dotfiles change reaches the session only through a PR that edits
 this file. `homelab-renovate-agent-setup.service` runs the setup at
-boot and when the script or the settings change, so the file exists while the agent is disarmed and
-`claude-guardrail-audit` watches it and the hooks copy. The agent owns both copies, so a session can
-edit them until the next run replaces them; the auditd watch records that write, and
-`claude-guardrail-ack` posts any copy that matches neither the packaged file nor the operator's
-rendered hooks. The settings, the setup script and its
+boot and when the script changes, so the toolchain exists while the agent is disarmed. The setup
+removes any settings or hooks copy left in the session's home, where Claude Code would still load
+it; `claude-guardrail-audit` watches both paths, and `claude-guardrail-ack` posts a copy that comes
+back. The settings, the setup script and its
 unit are on both landers' approval lists
 (`hosts/components/claude-code/templates/claude-land-approval-paths.j2`, and `hosts/` in
 `hosts/components/renovate-agent/files/t2-approval-floor`).
@@ -95,8 +97,7 @@ the caps or the schedule cannot quietly widen it.
   contents write, so a `manual —` work order ends as a hand-off in the digest
   (`hosts/tests/test_renovate_agent_identity.py` pins the user and the token's route).
   **Never** a session in the primary
-  checkout, **never** a worktree that still holds unlanded work (the tick skips, posts the path
-  and exits non-zero), and **never a PR whose title OR BRANCH carries `k8s_autodeploy: false`**
+  checkout or in a tree it can write: it works in the controller's clone, read-only, and **never a PR whose title OR BRANCH carries `k8s_autodeploy: false`**
   (#1939). That phrase is renovate.json's denylist marker, not a work order: the roles behind it
   (authelia, traefik, crowdsec, …) are denied because a failed deploy is one `probe.py health`
   cannot see, so the "look" the denial asks for is a person and not this session's gated land.

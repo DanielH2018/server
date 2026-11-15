@@ -348,7 +348,7 @@ def test_the_sessions_settings_are_renovates_with_the_hooks_moved_to_the_control
     assert triage.get("autoMode") == renovate.get("autoMode")
     moved = json.loads(
         json.dumps(renovate["hooks"]).replace(
-            '"~/.claude/hooks/', '"/var/lib/claude-triage-tools/.claude/hooks/'
+            '"/var/lib/renovate-agent-tools/', '"/var/lib/claude-triage-tools/'
         )
     )
     assert triage["hooks"] == moved

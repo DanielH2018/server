@@ -326,11 +326,11 @@ after each audit run (`hosts/components/claude-code/units/homelab-claude-guardra
   settings.json change touches only `claude_code_guardrail_ack_quiet_settings_keys`
   (`hosts/components/claude-code/tests/test_claude_guardrail_ack.py::test_claude_codes_own_model_write_is_quiet_and_a_permissions_change_is_posted`). A file
   under a `copies` destination in `hosts/components/claude-code/templates/claude-guardrail-ack.json.j2` is explained when
-  its content would be explained at its source: renovate-agent's settings copy against the
-  packaged file
+  its content would be explained at its source: a package file's copy against the package
   (`hosts/components/claude-code/tests/test_claude_guardrail_ack.py::test_a_copy_of_a_published_package_file_is_not_posted_and_a_hand_edit_is`),
-  and its hooks copy against the operator's hooks
-  (`hosts/components/claude-code/tests/test_claude_guardrail_ack.py::test_a_copy_of_a_hook_matching_the_render_at_its_source_is_not_posted`). The operator ruled on 2026-11-13 to post only the rest. The run fetches that `.deb` with
+  and a hooks copy against the operator's hooks
+  (`hosts/components/claude-code/tests/test_claude_guardrail_ack.py::test_a_copy_of_a_hook_matching_the_render_at_its_source_is_not_posted`).
+  The template lists no copy: neither unattended session keeps one in a home it writes. The operator ruled on 2026-11-13 to post only the rest. The run fetches that `.deb` with
   `apt-get download`, which checks it against the signed index. A package installed with
   `dpkg -i` matches its own md5sums but not a published `.deb`, so its change posts with the
   installed version (#8415,

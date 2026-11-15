@@ -231,7 +231,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.claude/hooks/guard-permission-request.sh",
+            "command": "/var/lib/renovate-agent-tools/.claude/hooks/guard-permission-request.sh",
             "timeout": 10
           }
         ]
@@ -243,7 +243,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.claude/hooks/guard-pre-tool-use.sh",
+            "command": "/var/lib/renovate-agent-tools/.claude/hooks/guard-pre-tool-use.sh",
             "timeout": 10
           }
         ]
@@ -253,7 +253,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.claude/hooks/protect-secrets.sh",
+            "command": "/var/lib/renovate-agent-tools/.claude/hooks/protect-secrets.sh",
             "timeout": 10
           }
         ]

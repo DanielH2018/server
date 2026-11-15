@@ -81,7 +81,6 @@ ROWS = (
             {
                 "tests/_ci_scoping.py",
                 ".claude/hooks/tests/test_rules_globs_match_a_tracked_file.py",
-                "hosts/components/renovate-agent/tests/test_prepare_worktree.py",
                 "scripts/deploy_tools/tests/test_land_tools.py",
                 "scripts/dev/tests/test_prune_worktrees.py",
                 "scripts/lib/tests/test_render_guard.py",
