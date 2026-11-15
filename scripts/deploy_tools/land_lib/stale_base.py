@@ -207,6 +207,19 @@ def _why(exc: subprocess.CalledProcessError | subprocess.TimeoutExpired) -> str:
     return (getattr(exc, "stderr", None) or str(exc)).strip()
 
 
+def ready_again(ln: Landing) -> None:
+    """Mark ready the PR `rejoin_line` converted to draft; die when GitHub refuses."""
+    pr = str(ln.opts.pr)
+    try:
+        ln.tools.gh("pr", "ready", pr)
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as again:
+        ln.die(
+            f"PR #{pr} is a draft and could not be marked ready ({_why(again)}); run "
+            f"`gh pr ready {pr}`, then re-run this",
+            1,
+        )
+
+
 def rejoin_line(ln: Landing, head: str, conflicting: bool) -> bool:
     """Put a green ready head that master moved past back in the line for the turn.
 
@@ -253,14 +266,7 @@ def rejoin_line(ln: Landing, head: str, conflicting: bool) -> bool:
         )
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
         say(f"could not update PR #{pr}'s branch ({_why(exc)}); marking it ready again")
-        try:
-            ln.tools.gh("pr", "ready", pr)
-        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as again:
-            ln.die(
-                f"PR #{pr} is a draft and could not be marked ready ({_why(again)}); run "
-                f"`gh pr ready {pr}`, then re-run this",
-                1,
-            )
+        ready_again(ln)
         return False
     say(
         f"{BRANCH} changed {len(moved)} path(s) since the master PR #{pr}'s run tested; "

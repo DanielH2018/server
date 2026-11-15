@@ -326,6 +326,19 @@ def test_only_a_pr_a_rule_refused_before_its_merge_is_started_again(
     assert [n for n, _ in run.started] == started
 
 
+def test_a_pr_never_started_goes_before_prs_a_rule_refused(tmp_path):
+    logs = tmp_path / "state" / "logs"
+    logs.mkdir(parents=True)
+    for n in (5001, 5002):
+        (logs / f"land{n}-20261018-010000.log").write_text(
+            f"LAND-RESULT: verdict=refused cause=- exit=75 pr={n} sha=- tags=0\n"
+        )
+    numbers = (5001, 5002, 5003)
+    run = _Landings([_record(n) for n in numbers], [_pr(n) for n in numbers])
+    run.run(tmp_path)
+    assert [n for n, _ in run.started] == [5003, 5001]
+
+
 def test_a_landing_already_running_elsewhere_is_not_started_again(tmp_path):
     run = _Landings([_record()], [_pr()])
     run.boundaries.running = lambda number: True

@@ -88,6 +88,26 @@ def test_a_landing_with_nobody_in_the_line_lands_its_draft_alone(batch_of):
 
 
 @pytest.mark.parametrize(
+    ("fakes", "why"),
+    [
+        (Fakes(deploy_hold="abc123"), "holds 'abc123', and this PR changes a k8s role"),
+        (
+            Fakes(in_window=True),
+            "k8s role inside the weekly reboot's no-promotion window",
+        ),
+    ],
+    ids=["under-a-hold", "inside-the-window"],
+)
+def test_a_draft_a_rule_bars_is_left_out_of_the_batch(batch_of, capsys, fakes, why):
+    k8s = {"files": [{"path": "k8s/roles/sonarr/defaults/main.yml"}]}
+    ln, hub, _ = batch_of(drafts=("7", "9"), over={"7": k8s}, fakes=fakes)
+    land(ln)
+    assert hub.merged == [OWN, "9"]
+    out = capsys.readouterr().out
+    assert "leaving PR #7 out of the batch: " in out and why in out
+
+
+@pytest.mark.parametrize(
     ("over", "github", "why"),
     [
         pytest.param(

@@ -108,10 +108,13 @@ takes the turn, before its CI run, and again just before the merge. A refused la
 - A PR that changes a k8s role is refused inside the no-promotion window around the weekly
   reboot while another landing holds a slot, so one landing at a time waits out the window.
 
-A serial PR can still pass while another landing is between its merge and its step 1: only
-slots and the serial lock are counted. When daniel-box does not answer, the serial lock is
+A batch leaves out a draft these rules bar, and inside the window it leaves out every k8s
+draft, because the holder merges its members before any of them holds a slot. A serial PR
+can still pass while another landing is between its merge and its step 1: only slots and
+the serial lock are counted. When daniel-box does not answer, the serial lock is
 on the landing's own host, as the slots are. The fan-out server lander starts a PR again on
-its next run when its last landing ended this way.
+its next run when its last landing ended this way, after every PR it has not started. A
+lander unit has no retry, so the refusal pages through its unit.
 
 The limit on live landings below still applies to `--detach`, beside the slots.
 

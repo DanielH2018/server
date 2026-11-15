@@ -141,7 +141,7 @@ def _admit(ln: Landing, pr: str, head: str, reads: live_limit.Reads) -> Member |
     member = Landing(opts, ln.tools, ln.classifier)
     say(f"checking PR #{pr} from the line, as this landing checked its own PR")
     try:
-        why = _alone(ln, pr, reads) or _unfit(member, head)
+        why = _alone(ln, pr, reads) or _unfit(member, head) or slots.bar_member(member)
         if not why:
             merge.arm_merge(member)
         if not why and member.pinned_head not in ("", head):

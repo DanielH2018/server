@@ -201,6 +201,26 @@ def _bar(ln: Landing, kind: str, lock: Locker) -> str:
     return ""
 
 
+def _kind(ln: Landing) -> str:
+    return live_limit.pr_kind(ln.opts.pr, live_limit.github_reads(ln.tools.gh_json))
+
+
+def _lock_of(ln: Landing) -> Locker:
+    return ln.tools.try_slot or _locker(ln.tools.hostname())
+
+
+def bar_member(member: Landing) -> str:
+    """Why the PR `member` lands may not join a batch now; "" when nothing bars it.
+
+    The holder merges its members before any of them holds a slot, so inside the weekly
+    reboot's no-promotion window a k8s PR joins no batch: it waits out the window alone.
+    """
+    kind = _kind(member)
+    if kind and _read(member.tools.in_reboot_window):
+        return "it changes a k8s role inside the weekly reboot's no-promotion window"
+    return _bar(member, kind, _lock_of(member))
+
+
 def refuse_before_merge(ln: Landing) -> None:
     """End the landing with exit 75, merging nothing, while a rule bars its PR from merging.
 
@@ -216,9 +236,7 @@ def refuse_before_merge(ln: Landing) -> None:
 
     Every read fails open: a rule whose read fails bars nothing.
     """
-    lock = ln.tools.try_slot or _locker(ln.tools.hostname())
-    kind = live_limit.pr_kind(ln.opts.pr, live_limit.github_reads(ln.tools.gh_json))
-    why = _bar(ln, kind, lock)
+    why = _bar(ln, _kind(ln), _lock_of(ln))
     if why:
         ln.die(
             f"{why}; nothing is merged. Re-run the same command once that clears",

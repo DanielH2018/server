@@ -487,11 +487,18 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
     asked = False
     # Whether `stale_base.rejoin_line` made the PR a draft at a head GitHub has yet to move to.
     rejoined = False
+    # Whether this landing made the PR a draft, so a refusal inside the turn marks it ready.
+    drafted = False
 
     def ask(draft: str) -> tuple[bool, int]:
         nonlocal asked
         asked = True
-        return take_turn(draft)
+        try:
+            return take_turn(draft)
+        except Outcome:
+            if drafted:
+                stale_base.ready_again(ln)
+            raise
 
     if ln.direct_merge_subject:
         updated_from, in_turn, queued = _start_run(ln, ask)
@@ -603,7 +610,7 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
                 if not asked and stale_base.rejoin_line(
                     ln, head, view.get("mergeable") == "CONFLICTING"
                 ):
-                    updated_from, rejoined = head, True
+                    updated_from, rejoined, drafted = head, True, True
                     wait_ends_at = min(waited + o.merge_timeout, wait_cap)
                     continue
                 in_turn, in_line = ask("")

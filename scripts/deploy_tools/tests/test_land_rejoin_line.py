@@ -5,6 +5,8 @@ Run: uv run pytest scripts/deploy_tools/tests/test_land_rejoin_line.py
 
 import pytest
 
+from deploy_tools.land_lib import batch, turn
+from deploy_tools.land_lib.outcome import Outcome
 from _land_turn_fakes import (
     A_RUN,
     HEAD,
@@ -135,3 +137,25 @@ def test_a_refused_update_after_the_draft_conversion_marks_the_pr_ready_again(
     assert call_order(calls)[:3] == ["pr ready", "update", "pr ready"]
     assert merged_sha(calls) == HEAD
     assert "(boom); marking it ready again" in capsys.readouterr().out
+
+
+def test_a_rejoined_pr_a_rule_refuses_in_the_turn_is_marked_ready_again(landing):
+    ln, calls = turn_landing(
+        landing,
+        polls=(OPEN, {**OPEN, "headRefOid": UPDATED}),
+        start=(READY, REJOINED),
+        head_runs=_ran_then_skipped,
+        compare=[["docs/other.md"]],
+        serial=[False],
+    )
+    with pytest.raises(Outcome) as stop, turn.held(ln) as take_turn:
+        batch.land(ln, take_turn)
+    assert stop.value.rc == 75
+    assert _undo_calls(calls) == 1
+    assert call_order(calls) == [
+        "pr ready",
+        "update",
+        "try_turn",
+        "pr ready",
+        "release_turn",
+    ]

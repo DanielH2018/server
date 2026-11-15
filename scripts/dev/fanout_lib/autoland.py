@@ -280,21 +280,28 @@ _REFUSED_FOR_NOW = re.compile(
 )
 
 
+def _logs(log_dir: Path, pr: int) -> list[Path]:
+    return sorted(log_dir.glob(f"land{pr}-*.log")) if log_dir.is_dir() else []
+
+
+def refused_for_now(log_dir: Path, pr: int) -> bool:
+    """Whether a rule refused this PR's newest landing before its merge."""
+    logs = _logs(log_dir, pr)
+    try:
+        return bool(logs) and bool(
+            _REFUSED_FOR_NOW.search(logs[-1].read_text(errors="replace"))
+        )
+    except OSError:
+        return False
+
+
 def handed_off(log_dir: Path, pr: int) -> str:
     """The log of an earlier landing of this PR that this command started, or "".
 
-    A newest log that a rule refused before the merge reads as none, so the next run starts
-    the PR again once the rule clears.
+    A PR `refused_for_now` reads as none, so a run starts it again once the rule clears.
     """
-    logs = sorted(log_dir.glob(f"land{pr}-*.log")) if log_dir.is_dir() else []
-    if not logs:
-        return ""
-    try:
-        if _REFUSED_FOR_NOW.search(logs[-1].read_text(errors="replace")):
-            return ""
-    except OSError:
-        pass
-    return logs[-1].name
+    logs = _logs(log_dir, pr)
+    return logs[-1].name if logs and not refused_for_now(log_dir, pr) else ""
 
 
 def landing_running(pr: int, proc: Path = Path("/proc")) -> bool:
@@ -427,7 +434,8 @@ def run(
     candidates = {n: r for n, r in newest.items() if n in prs}
     out(f"{len(newest)} PRs in the last records, {len(candidates)} still open")
     started = 0
-    for number in sorted(candidates):
+    # A PR a rule refused comes last, so a long DEPLOY_HOLD cannot spend every start.
+    for number in sorted(candidates, key=lambda n: (refused_for_now(log_dir, n), n)):
         rec, label = (
             candidates[number],
             f"#{number} batch {candidates[number].get('batch')}",
