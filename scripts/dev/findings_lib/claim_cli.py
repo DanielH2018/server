@@ -369,9 +369,11 @@ def cmd_reap(args: argparse.Namespace, tools: FindingsTools) -> int:
         )
     verb = "would be released" if args.dry_run else "released"
     print(f"reap: {reaped} stale claim(s) {verb}")
+    # One ssh read for every milestone: `ufw limit ssh` rejects the sixth inside 30 seconds.
+    peer_trees = functools.cache(tools.peer_trees)
     closed = tools.close_idle_milestones(
         tools.owner_name,
-        lambda branch: branch_is_held(branch, trees, dirty, merged, tools.peer_trees),
+        lambda branch: branch_is_held(branch, trees, dirty, merged, peer_trees),
         dry_run=args.dry_run,
     )
     verb = "would be closed" if args.dry_run else "closed"

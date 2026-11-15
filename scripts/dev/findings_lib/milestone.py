@@ -96,13 +96,15 @@ def ensure(
     """Makes sure an open session milestone titled ``title`` exists in ``repo``.
 
     Reads only the open milestones, then creates. The closed list grows by one per session,
-    so it is read only when the create answers that the title exists, and the closed
-    session milestone found there is reopened.
+    so it is read only when the create fails. A failed create first re-reads the open
+    list, since a claim and the PR workflow can race to create the same title. A closed
+    session milestone of that title is then reopened.
 
     Raises:
         ValueError: a milestone of that title exists that these tools do not own, so
             `gh issue edit --milestone` would file the session's work under it.
-        subprocess.CalledProcessError: a gh call failed.
+        subprocess.CalledProcessError: a gh call failed, or the create failed and no
+            milestone of that title exists.
     """
     found = _titled(title, _milestones(repo, "open", gh_json))
     if found:
@@ -123,14 +125,12 @@ def ensure(
     try:
         gh(*create)
         return
-    except subprocess.CalledProcessError as exc:
-        if "already_exists" not in (exc.stderr or ""):
+    except subprocess.CalledProcessError:
+        if _titled(title, _milestones(repo, "open", gh_json)):
+            return
+        found = _titled(title, _milestones(repo, "closed", gh_json))
+        if not found:
             raise
-    found = _titled(title, _milestones(repo, "closed", gh_json))
-    if not found:
-        raise ValueError(
-            f"milestone `{title}` was refused as existing but was not listed"
-        )
     gh(
         "api",
         "-X",

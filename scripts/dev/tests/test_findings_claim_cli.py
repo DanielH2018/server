@@ -13,6 +13,7 @@ from _findings_fakes import (
 
 from dev.findings import main
 from dev.findings_lib.issue_model import claim_comment
+from dev.findings_lib.milestone import DESCRIPTION
 from lib.worktrees import Worktree
 
 WT = "worktree-issue-1132"
@@ -403,6 +404,19 @@ def test_close_releases_the_claim_it_closes():
     assert main(["close", "1132", "--fixed"], tools) == 0
     assert any(f"Released: `{WT}`" in a for c in calls.gh for a in c)
     assert ["issue", "edit", "1132", "--remove-label", "claimed"] in calls.gh
+
+
+def test_close_keeps_the_issue_in_its_session_milestone():
+    issue = make_issue(
+        1132,
+        labels=["claimed"],
+        comments=[claim_comment(WT, None, "t")],
+    )
+    issue["milestone"] = {"title": WT, "description": DESCRIPTION}
+    tools, calls = build_tools(Fakes(issues=[issue], view=issue))
+    assert main(["close", "1132", "--fixed"], tools) == 0
+    assert ["issue", "edit", "1132", "--remove-label", "claimed"] in calls.gh
+    assert not any("--remove-milestone" in c for c in calls.gh)
 
 
 def test_close_writes_no_release_for_an_unclaimed_issue():

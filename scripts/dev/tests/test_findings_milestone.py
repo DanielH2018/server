@@ -58,8 +58,8 @@ def test_ensure_creates_a_missing_milestone():
 
 
 def test_ensure_reopens_a_closed_session_milestone():
-    exists = subprocess.CalledProcessError(1, "gh", stderr='{"code":"already_exists"}')
-    gh_json, gh, writes = _fake(closed=[_m(WT, number=7)], create_error=exists)
+    refused = subprocess.CalledProcessError(1, "gh")
+    gh_json, gh, writes = _fake(closed=[_m(WT, number=7)], create_error=refused)
     ensure(WT, REPO, dry_run=False, gh_json=gh_json, gh=gh)
     assert writes[-1] == [
         "api",
