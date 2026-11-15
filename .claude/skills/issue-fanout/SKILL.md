@@ -226,16 +226,17 @@ a severity and a confidence. A finding of severity medium or worse, or a test th
 marks vacuous at any severity, resumes the agent for one fix round when its
 confidence is 0.5 or more, and a second reviewer reads only the fix. A finding of
 severity medium or worse at confidence 0.8 or more that survives the fix round holds the PR:
-the batch ends `needs input:`, naming the finding, and nothing lands it. Otherwise, on
-daniel-server, the pipeline waits for the PR's CI with `cc-wait gh-ci --pr` after the fix round
-(`scripts/dev/fanout_lib/review/review_ci.py`, #4737).
-On daniel-box it lands the draft with `land.sh` itself
+the batch ends `needs input:`, naming the finding, and nothing lands it. Otherwise the
+pipeline lands the draft with `land.sh` itself
 (`scripts/dev/fanout_lib/review/review_ci.py:land_draft`), from a fresh detached checkout of `origin/master` rather than the batch worktree, whose landing code a master change since launch would make stale.
+On daniel-server it does so only when the PR passes the server lander's PR rule
+(`scripts/dev/fanout_lib/review/review_ci.py:server_lands`); a PR that rule holds is marked
+ready, and the pipeline waits for its CI with `cc-wait gh-ci --pr` (#4737).
 The landing marks the draft ready, or a landing batch tests it with other drafts, so the PR's
 first CI run is the one it merges on (`docs/ci-throughput.md`, D9). A landing that ends
 `pr-ci-red` resumes the agent once, and the pipeline lands the PR again. It also resumes the agent for an `unhealthy`,
 `deploy-failed`, `needs-manual-apply` or `blocked` verdict, with the verdict and the end of the
-landing's log. Any other verdict ends the batch. On daniel-server, `homelab-claude-fanout-server-lander.timer` on daniel-box lands the PR within about
+landing's log. Any other verdict ends the batch. A daniel-server PR the pipeline did not land is left to `homelab-claude-fanout-server-lander.timer` on daniel-box, which applies the same PR rule and so leaves a held PR for a person. It lands a PR within about
 ten minutes when the review record and the PR both pass `scripts/dev/fanout_lib/autoland.py:problems`:
 a reviewed batch with a passed CI gate and no leftover finding, whose PR is open, still at the reviewed
 head, with no operator step in its body. Run `probe.py lander` before
