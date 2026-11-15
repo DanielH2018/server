@@ -89,6 +89,7 @@ def _order(calls) -> list[str]:
 
 
 def test_a_landing_waits_while_another_holds_the_turn(landing, capsys):
+    # fact: .claude/skills/renovate-prs/SKILL.md#6. Land them one at a time
     ln, _ = _landing(landing, turn=[False, False, True], merge_poll=7)
     _land(ln)
     out = capsys.readouterr().out

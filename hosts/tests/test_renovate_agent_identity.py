@@ -179,6 +179,7 @@ def test_the_session_holds_only_the_read_token_and_the_controller_the_write_one(
     None
 ):
     """dotfiles#967's I1: the write token never reaches the session's environment."""
+    # fact: .claude/skills/renovate-prs/SKILL.md#4. Finish the incomplete ones in a worktree
     session = render("session.env.j2", MOVED)
     assert f"\nGH_TOKEN={GH_READ_SENTINEL}\n" in session
     assert f"\nCLAUDE_CODE_OAUTH_TOKEN={CLAUDE_SENTINEL}\n" in session
@@ -246,6 +247,7 @@ def prompt_commands() -> list[str]:
 def test_the_runner_lands_through_the_lander_the_polkit_rule_admits() -> None:
     """The runner starts the unit the rule admits and reads the file the lander writes."""
     # fact: hosts/components/renovate-agent/CLAUDE.md#Autonomous-role contract (it merges and deploys with no human in the loop)
+    # fact: .claude/skills/renovate-prs/SKILL.md#6. Land them one at a time
     gh = _Starts()
     run_requests._land(int(PR), run_requests.AgentTools(run=gh), 60)
     unit = f"renovate-agent-land@{PR}.service"

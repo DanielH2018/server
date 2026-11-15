@@ -14,7 +14,7 @@ verify** → report. Deduplicating before verification is what keeps the skeptic
 twice for one defect.
 
 ## 1. Resolve scope
-Default: all six areas. If the user named a subset (e.g. `homelab-review security,network`), run only
+Default: all six areas (`scripts/dev/review_metrics.py:REVIEW_DOMAINS`). If the user named a subset (e.g. `homelab-review security,network`), run only
 those. Home Assistant is NOT one of them — its review lives in the separate `/ha-review` skill; if the
 user asks for HA, point them there (or invoke it) rather than folding it in here. Map each area to its
 agent:
@@ -248,8 +248,8 @@ don't-re-flag memories, `git log`/`git blame`, `gh pr list`, `probe.py`/`kubectl
 the rule that a comment or a reassuring name is not evidence, and the three verdicts. Do not restate
 it in the brief; give the skeptic the finding, its `file:line`, and which reviewer raised it.
 
-**Size the skeptic to the finder.** `skeptic` deliberately pins no `model`, so you set it per
-dispatch. It must be at least the tier of the agent that raised the finding: a High from an opus
+**Size the skeptic to the finder.** `skeptic` deliberately pins no `model`
+(`.claude/agents/skeptic.md`), so you set it per dispatch. It must be at least the tier of the agent that raised the finding: a High from an opus
 reviewer (security, backup/observability, CI/CD) gets `model: opus`; everything else runs
 `model: sonnet`. A weaker refuter plus an explicit refute-bias is a path for real findings to die in
 the appendix, and the appendix is never re-read.
@@ -440,8 +440,9 @@ control is the "fires on nothing" case the repo warns about, and it reads exactl
 
 ## Notes
 - All six reviewer agents are read-only investigators. `security-review` is the one without `Bash`
-  (`Read, Grep, Glob` only), so it cannot run `git log`, `kubectl`, or `probe.py` — its findings reach
+  (`Read, Grep, Glob` only, `.claude/agents/security-review.md`), so it cannot run `git log`, `kubectl`, or `probe.py` — its findings reach
   live/history evidence only through the step-6 skeptic pass, which is where that verification belongs.
-- Home Assistant review is handled by the separate `/ha-review` skill.
+- Home Assistant review is handled by the separate `/ha-review` skill
+  (`.claude/skills/ha-review/SKILL.md`).
 - This skill is the **review** half of the flow only. Implementation (implement → deploy via `/deploy`
   → commit) stays an explicit, operator-gated sequence — keep it out of this skill.

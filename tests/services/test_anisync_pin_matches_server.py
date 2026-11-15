@@ -53,6 +53,7 @@ def test_the_release_url_carries_the_pinned_version():
 
 def test_the_plugin_target_abi_does_not_exceed_the_server():
     """The constraint the pin exists to satisfy, checked rather than remembered."""
+    # fact: .claude/skills/renovate-prs/SKILL.md#4. Finish the incomplete ones in a worktree
     defaults = load_defaults(JELLYFIN)
     url = defaults["jellyfin_k8s_anisync_url"]
     image = defaults["jellyfin_k8s_image"]

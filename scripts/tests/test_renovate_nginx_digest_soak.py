@@ -77,6 +77,7 @@ def test_each_nginx_alpine_pin_still_sits_where_the_rule_looks(
 def test_a_nginx_alpine_digest_soaks_one_day(
     package: str, rel_path: str, update_type: str
 ) -> None:
+    # fact: .claude/skills/renovate-prs/SKILL.md#0. An update with no PR is still an update
     assert _soak(package, rel_path, update_type) == NGINX_SOAK
 
 

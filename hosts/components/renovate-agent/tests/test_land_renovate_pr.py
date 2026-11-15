@@ -79,6 +79,7 @@ def test_a_renovate_pr_touching_no_denied_role_passes_every_check():
     ],
 )
 def test_each_check_refuses_the_pr_that_breaks_it(change, names):
+    # fact: .claude/skills/renovate-prs/SKILL.md#When to stop and say so
     reasons = lander.refusals({**GOOD, **change}, DENIED)
     assert len(reasons) == 1 and names in reasons[0], reasons
 

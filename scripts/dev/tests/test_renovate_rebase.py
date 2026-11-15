@@ -84,12 +84,14 @@ def test_main_writes_the_ticked_body_back_through_body_file():
 
 
 def test_main_is_idempotent_on_a_ticked_box():
+    # fact: .claude/skills/renovate-prs/SKILL.md#5. A stale merge base needs a rebase before landing
     gh, calls = _gh(BODY.replace(UNTICKED, TICKED))
     assert main(["123"], gh=gh, out=io.StringIO()) == 0
     assert calls == []
 
 
 def test_main_refuses_a_body_with_no_box_without_editing():
+    # fact: .claude/skills/renovate-prs/SKILL.md#5. A stale merge base needs a rebase before landing
     gh, calls = _gh("hand-written PR body")
     err = io.StringIO()
     assert main(["123"], gh=gh, stderr=err) == 1
@@ -147,6 +149,7 @@ def test_another_pending_status_is_not_the_soak():
 
 
 def test_main_refuses_to_tick_a_soaking_pr():
+    # fact: .claude/skills/renovate-prs/SKILL.md#5. A stale merge base needs a rebase before landing
     gh, calls = _gh(BODY, rollup=[SOAK_PENDING])
     out = io.StringIO()
     assert main(["123"], gh=gh, out=out) == 3
@@ -158,6 +161,7 @@ def test_main_refuses_to_tick_a_soaking_pr():
 def test_main_names_the_soak_on_a_pr_whose_box_is_already_ticked():
     """A soaking PR's state: the box was ticked, Renovate answered 'Rebase not applied', and exit 0
     would read as 'the rebase is coming'."""
+    # fact: .claude/skills/renovate-prs/SKILL.md#5. A stale merge base needs a rebase before landing
     gh, calls = _gh(BODY.replace(UNTICKED, TICKED), rollup=[SOAK_PENDING])
     out = io.StringIO()
     assert main(["123"], gh=gh, out=out) == 3
@@ -191,6 +195,7 @@ def test_a_pending_or_absent_soak_status_is_not_cleared():
 
 def test_retick_unticks_then_reticks_a_spent_box_after_the_soak():
     """Two separate edits, because one write of an unchanged body changes nothing."""
+    # fact: .claude/skills/renovate-prs/SKILL.md#5. A stale merge base needs a rebase before landing
     ticked = BODY.replace(UNTICKED, TICKED)
     gh, calls = _gh(ticked, rollup=[SOAK_DONE])
     out = io.StringIO()
@@ -200,6 +205,7 @@ def test_retick_unticks_then_reticks_a_spent_box_after_the_soak():
 
 
 def test_retick_refuses_a_pr_still_soaking():
+    # fact: .claude/skills/renovate-prs/SKILL.md#5. A stale merge base needs a rebase before landing
     gh, calls = _gh(BODY.replace(UNTICKED, TICKED), rollup=[SOAK_PENDING])
     assert main(["123", "--retick"], gh=gh, out=io.StringIO()) == 3
     assert calls == []
@@ -220,6 +226,7 @@ def test_retick_on_an_unticked_box_ticks_it_once():
 
 
 def test_retick_names_the_unticked_box_when_the_second_edit_fails():
+    # fact: .claude/skills/renovate-prs/SKILL.md#5. A stale merge base needs a rebase before landing
     ticked = BODY.replace(UNTICKED, TICKED)
     edits: list[str] = []
 

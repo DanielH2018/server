@@ -8,7 +8,7 @@ The procedure `CLAUDE.md` → *After a PR Merges — Pull, Deploy, Verify* point
 owns the two things that must stay resident — the standing directive that a merge is followed
 through without asking, and the *When to wait* list. This skill owns the invocation. The
 reasoning behind every rule below, and the incident that put it there, is
-[docs/landing.md](../../../docs/landing.md).
+[`docs/landing.md`](../../../docs/landing.md).
 
 ## The invocation
 
@@ -178,7 +178,7 @@ reaped, not failed.** Re-run the same command.
 Every measurement and incident behind the rules above, because they are read once and then
 acted on rather than needed in every session: the merge and CI wait mechanics, the stale-tree
 retry arithmetic, the Pi's own deploy, the four shapes that need a hand, the annotation's
-fields and the Landings board. All of it is in [docs/landing.md](../../../docs/landing.md).
+fields and the Landings board. All of it is in [`docs/landing.md`](../../../docs/landing.md).
 
 ## Before you start, and when to stop
 
