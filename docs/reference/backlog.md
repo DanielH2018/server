@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/backlog.py
-generated_at: 2026-11-15 14:48 UTC
-generated_sha: 8ddb8b045
+generated_at: 2026-11-15 20:19 UTC
+generated_sha: e20234d40
 ---
 
 !!! warning "Generated file — do not edit"
@@ -24,16 +24,14 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | [#8259](https://github.com/DanielH2018/server/issues/8259) | medium | gap | security | The triage restart allowlist must exclude routed alerts' workloads, not just critical probes | 2026-11-12 | 0 | - | ✓ |
 | [#8310](https://github.com/DanielH2018/server/issues/8310) | medium | gap | backup-observability | daniel-box's kubelet has no graceful node shutdown, so its reboots may drop Longhorn iSCSI sessions under mounted filesystems | 2026-11-13 | 0 | - | ✓ |
 | [#8328](https://github.com/DanielH2018/server/issues/8328) | medium | gap | cicd | 40 more issue numbers the hidden bot account authored return 404, and their state is unknown | 2026-11-13 | 0 | - | ✓ |
-| [#8359](https://github.com/DanielH2018/server/issues/8359) | medium | gap | container | daniel-box's kubelet still starts image GC at 85 percent, above Longhorn's 75 percent floor, pending daniel-server's canary restart | 2026-11-13 | 0 | - | ✓ |
 | [#8511](https://github.com/DanielH2018/server/issues/8511) | medium | gap | backup-observability | No backup or etcd snapshot has an immutability window, so one bucket credential can delete every copy — *no vetted remediation* | 2026-11-14 | 0 | - | ✓ |
 | [#8575](https://github.com/DanielH2018/server/issues/8575) | medium | gap | cicd | Nothing runs fanout.py place clean after the pipeline lands a batch | 2026-11-14 | 0 | - | ✓ |
 | [#8593](https://github.com/DanielH2018/server/issues/8593) | medium | gap | backup-observability | probe.py uptime-robot needs its read-only API key in SOPS and a daily schedule | 2026-11-14 | 0 | - | ✓ |
 | [#8684](https://github.com/DanielH2018/server/issues/8684) | medium | improvement | cicd | Cut the largest pytest-leg setup steps (checkout, setup action) and report before/after | 2026-11-14 | 0 | - | ✓ |
-| [#8773](https://github.com/DanielH2018/server/issues/8773) | medium | gap | cicd | A landing from daniel-server ends deferred when its health gate grades a daniel-pi container — *no vetted remediation* | 2026-11-14 | 0 | - | ✓ |
 | [#8797](https://github.com/DanielH2018/server/issues/8797) | medium | gap | cicd | A daniel-box batch ends needs-input when the three landing slots are full, where the server lander retries | 2026-11-14 | 0 | - | ✓ |
+| [#8857](https://github.com/DanielH2018/server/issues/8857) | medium | addition | backup-observability | No tool reads a host unit's last run, result and next trigger | 2026-11-15 | 0 | - | ✓ |
 | [#4435](https://github.com/DanielH2018/server/issues/4435) | low | improvement | cicd | Decide whether to move scripts/ into an installable homelab package | 2026-10-11 | 0 | - | ✓ |
 | [#6292](https://github.com/DanielH2018/server/issues/6292) | low | improvement | container | Retire sonarr-air-date-guard once Sonarr v5 stable ships its air-date Release Profile rule | 2026-10-25 | 0 | - | ✓ |
-| [#7194](https://github.com/DanielH2018/server/issues/7194) | low | improvement | docs | Reword the Kuma history that M6's census row holds on its allowlist | 2026-11-05 | 0 | - | ✓ |
 | [#7220](https://github.com/DanielH2018/server/issues/7220) | low | improvement | docs | Delete the lock-retired lint rule once no branch predates the G2 flip | 2026-11-05 | 0 | - | ✓ |
 | [#7320](https://github.com/DanielH2018/server/issues/7320) | low | improvement | docs | Test comments and role tests still describe Kuma as live | 2026-11-05 | 0 | - | ✓ |
 | [#7620](https://github.com/DanielH2018/server/issues/7620) | low | gap | cicd | Snapshot and prepull objects orphaned by tags retired before #7485 are still live | 2026-11-08 | 0 | - | ✓ |
@@ -60,14 +58,13 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | [#8526](https://github.com/DanielH2018/server/issues/8526) | low | gap | network | No doc says which LAN functions survive a WAN outage, and no game day has tested it | 2026-11-14 | 0 | - | ✓ |
 | [#8535](https://github.com/DanielH2018/server/issues/8535) | low | gap | cicd | The 2026-11-10 eval run ended INCONCLUSIVE with no healthy sample | 2026-11-14 | 0 | - | ✓ |
 | [#8539](https://github.com/DanielH2018/server/issues/8539) | low | addition | container | Add Explo: ListenBrainz discovery playlists in Navidrome | 2026-11-14 | 0 | - | ✓ |
-| [#8567](https://github.com/DanielH2018/server/issues/8567) | low | gap | backup-observability | The restore drill's 300-second probe bound may not fit a large SQLite integrity check | 2026-11-14 | 0 | - | ✓ |
+| [#8567](https://github.com/DanielH2018/server/issues/8567) | low | gap | backup-observability | The restore drill's 300-second probe bound may not fit a large SQLite integrity check | 2026-11-14 | 0 | worktree-fanout-orch-2026-11-15 | ✓ |
 | [#8580](https://github.com/DanielH2018/server/issues/8580) | low | gap | home-assistant | No one has run the Zigbee coordinator-replacement procedure onto a spare adapter | 2026-11-14 | 0 | - | ✓ |
 | [#8582](https://github.com/DanielH2018/server/issues/8582) | low | gap | backup-observability | Drop the ExtraProbeFailed:wg-easy triage pin once its 30s probe timeout holds for a week | 2026-11-14 | 0 | - | ✓ |
 | [#8585](https://github.com/DanielH2018/server/issues/8585) | low | gap | container | The SLZB-06M coordinator loses power or reboots, crash-looping zigbee2mqtt for 11-42 minutes | 2026-11-14 | 0 | - | ✓ |
 | [#8589](https://github.com/DanielH2018/server/issues/8589) | low | improvement | backup-observability | The off-site recovery kit's bundle and register export are still made by hand — *no vetted remediation* | 2026-11-14 | 0 | - | ✓ |
 | [#8591](https://github.com/DanielH2018/server/issues/8591) | low | improvement | backup-observability | Decide a shorter per-stream Loki retention for the k8s-audit stream | 2026-11-14 | 0 | - | ✓ |
 | [#8603](https://github.com/DanielH2018/server/issues/8603) | low | gap | security | MCP clients' homelab_mcp_token and n8n's credential store may hold SOPS key copies no deploy reaches | 2026-11-14 | 0 | - | ✓ |
-| [#8608](https://github.com/DanielH2018/server/issues/8608) | low | gap | container | Delete the four Longhorn _LONGHORN_UNSIZED exemptions once #8550 and #8605 have both merged | 2026-11-14 | 1 | - | ✓ |
 | [#8610](https://github.com/DanielH2018/server/issues/8610) | low | improvement | backup-observability | daniel-pi's remaining load spikes follow each homelab-daniel-pi publish, through the updater poll — *no vetted remediation* | 2026-11-14 | 0 | - | ✓ |
 | [#8633](https://github.com/DanielH2018/server/issues/8633) | low | improvement | cicd | new-container eval case's sha256 must_match is satisfied by the image pin quoted in the prompt | 2026-11-14 | 0 | - | ✓ |
 | [#8693](https://github.com/DanielH2018/server/issues/8693) | low | improvement | cicd | Every xdist worker of a CI pytest leg rewrites every module's assertions from a cold cache | 2026-11-14 | 0 | - | ✓ |
@@ -75,20 +72,22 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | [#8711](https://github.com/DanielH2018/server/issues/8711) | low | improvement | docs | 44 comments, messages and fixtures still name ansible/ paths outside #8640's reach, two as failing commands | 2026-11-14 | 0 | - | ✓ |
 | [#8712](https://github.com/DanielH2018/server/issues/8712) | low | improvement | cicd | Retire the pre-rename ansible/ fallback readers once no landing base predates the rename | 2026-11-14 | 0 | - | ✓ |
 | [#8731](https://github.com/DanielH2018/server/issues/8731) | low | gap | cicd | Worktree removal tests outside the orphan module fail while a foreign-uid process runs in the login slice | 2026-11-14 | 0 | - | ✓ |
-| [#8741](https://github.com/DanielH2018/server/issues/8741) | low | gap | cicd | A second GitHub quota pool is spent from daniel-box by a caller the quota design does not name — *no vetted remediation* | 2026-11-14 | 0 | - | ✓ |
-| [#8774](https://github.com/DanielH2018/server/issues/8774) | low | gap | cicd | 44 workflow runs from 2026-11-11 read as queued forever and inflate every count of the run queue — *no vetted remediation* | 2026-11-14 | 0 | - | ✓ |
+| [#8741](https://github.com/DanielH2018/server/issues/8741) | low | gap | cicd | A second GitHub quota pool is spent from daniel-box by a caller the quota design does not name — *no vetted remediation* | 2026-11-14 | 0 | worktree-gh-quota-sampler2 | ✓ |
 | [#8776](https://github.com/DanielH2018/server/issues/8776) | low | improvement | docs | Correct the cloudflare-ddns role doc's heading, which counts two A records where the role keeps three | 2026-11-14 | 0 | - | ✓ |
-| [#8777](https://github.com/DanielH2018/server/issues/8777) | low | improvement | docs | arr-notification defaults and prowlarr's At a glance prose still describe a two-app, flaresolverr-sidecar stack | 2026-11-14 | 0 | - | ✓ |
-| [#8788](https://github.com/DanielH2018/server/issues/8788) | low | gap | docs | rules-configmap.yaml.j2 header says a rules edit restarts Alloy; only Loki rolls | 2026-11-14 | 0 | - | ✓ |
+| [#8777](https://github.com/DanielH2018/server/issues/8777) | low | improvement | docs | arr-notification defaults and prowlarr's At a glance prose still describe a two-app, flaresolverr-sidecar stack | 2026-11-14 | 0 | worktree-fanout-orch-2026-11-15 | ✓ |
 | [#8795](https://github.com/DanielH2018/server/issues/8795) | low | improvement | docs | Correct two agent sections that describe probe health and role tasks/ wrongly | 2026-11-14 | 0 | - | ✓ |
-| [#8798](https://github.com/DanielH2018/server/issues/8798) | low | improvement | docs | karakeep CLAUDE.md#Notable calls two separate Deployments sidecars | 2026-11-14 | 0 | - | ✓ |
+| [#8798](https://github.com/DanielH2018/server/issues/8798) | low | improvement | docs | karakeep CLAUDE.md#Notable calls two separate Deployments sidecars | 2026-11-14 | 0 | worktree-fanout-orch-2026-11-15 | ✓ |
 | [#8803](https://github.com/DanielH2018/server/issues/8803) | low | improvement | docs | Reword prune_worktrees.py's DECIDED marker to name the weekly timer, not a cron | 2026-11-14 | 0 | - | ✓ |
 | [#8810](https://github.com/DanielH2018/server/issues/8810) | low | improvement | cicd | The fan-out server lander logs uv's chatter instead of land.sh's refusal reason | 2026-11-15 | 0 | - | ✓ |
 | [#8811](https://github.com/DanielH2018/server/issues/8811) | low | improvement | security | Retire claude-guardrail-ack's copies mechanism, which no config entry uses | 2026-11-15 | 0 | - | ✓ |
 | [#8823](https://github.com/DanielH2018/server/issues/8823) | low | improvement | cicd | The fan-out server lander's 2-starts-per-run cap throttles for a reason B4 removed | 2026-11-15 | 0 | - | ✓ |
-| [#8833](https://github.com/DanielH2018/server/issues/8833) | low | gap | cicd | No test pins that land.sh --detach creates the landing's log before it returns | 2026-11-15 | 0 | - | - |
 | [#8842](https://github.com/DanielH2018/server/issues/8842) | low | improvement | security | become_password is a SOPS key no code reads since the Ansible tree was deleted | 2026-11-15 | 0 | - | ✓ |
-| [#8843](https://github.com/DanielH2018/server/issues/8843) | low | gap | cicd | The homelab-review 008 eval case fails 0/3 because every trial counts #812's recurrence as the third run where the rubric expects the fourth | 2026-11-15 | 0 | - | ✓ |
+| [#8859](https://github.com/DanielH2018/server/issues/8859) | low | improvement | cicd | probe builder does not show the host package each host has installed | 2026-11-15 | 0 | - | ✓ |
+| [#8860](https://github.com/DanielH2018/server/issues/8860) | low | improvement | backup-observability | probe monitors does not show each monitor-bridge check's live verdict | 2026-11-15 | 0 | - | ✓ |
+| [#8871](https://github.com/DanielH2018/server/issues/8871) | low | improvement | docs | fact_status report spends about 5 minutes on replays the freshness reviewer never reads | 2026-11-15 | 0 | - | ✓ |
+| [#8874](https://github.com/DanielH2018/server/issues/8874) | low | improvement | backup-observability | monitor-bridge row alerts cannot name the failing member | 2026-11-15 | 0 | - | - |
+| [#8875](https://github.com/DanielH2018/server/issues/8875) | low | improvement | backup-observability | TextfileCollectorError cannot name the rejected textfile | 2026-11-15 | 0 | - | - |
+| [#8878](https://github.com/DanielH2018/server/issues/8878) | low | gap | cicd | A dotfiles batch's server snapshot omits hosts/lib, so probe.py fails at import there | 2026-11-15 | 0 | - | ✓ |
 
 ## Deferred, by date
 
@@ -203,6 +202,7 @@ Findings closed with `findings.py close --accepted` (true, and the operator chos
 | [#7273](https://github.com/DanielH2018/server/issues/7273) | accepted | mapping_at lets a timestamp-shaped YAML value's ValueError escape as a traceback | Operator ruling 2026-11-13 on #8339: accepted. The finding was closed as not planned without a ruling; the operator accepts the closure as it stands. |
 | [#7623](https://github.com/DanielH2018/server/issues/7623) | accepted | The test that ran the real k3s binary was never identified, and three launch routes stay outside the leak guard | Operator accepted on 2026-11-12: PR #7622's shim makes any later test that reaches k3s, crictl or ctr fail and name itself, and an strace of the suspect directories recorded no real k3s exec. The three routes outside the shim (absolute-path grandchild execs in untracked scripts, scripts that reset PATH, and the live-API/ui/image-exempt tests) are a residual risk the operator chose to live with rather than chase the one-off 18fd43 launch. |
 | [#7834](https://github.com/DanielH2018/server/issues/7834) | accepted | Start the host_packages legs before the build job packs the homelab-tools debs they never read | - |
+| [#8774](https://github.com/DanielH2018/server/issues/8774) | accepted | 44 workflow runs from 2026-11-11 read as queued forever and inflate every count of the run queue | GitHub refuses cancel, force-cancel and delete on all 45 runs (comment 6899964353), and no repo tool counts the queued listing; an ad-hoc queued read subtracts runs created before 2026-11-12. The operator accepted this on 2026-11-15. |
 
 ### container
 
