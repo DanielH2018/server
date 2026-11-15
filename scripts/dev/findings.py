@@ -97,6 +97,13 @@ same failure, and `claim` leaves a stale claim standing rather than reaping on a
 `claim` takes every issue it can and refuses the rest, so one `manual` issue does not cost
 the good claims in the same batch.
 
+SESSION MILESTONES. A claim also adds the issue to a GitHub milestone titled with the claiming
+`worktree-*` branch, creating or reopening it first. `release`, `reap` and `manual` take the
+issue back out. `close` leaves it in, as the session's finished work. The `pr-milestone`
+workflow adds the session's PR, and a fan-out batch's issues and PR join the orchestrator's
+milestone. `reap` closes a milestone once no worktree holds its branch and nothing open is
+left in it. `findings_lib/milestone.py` has the rest.
+
 PICKING UP WORK. `next` prints EVERY issue a session may claim, best severity first,
 withholding `manual` issues, issues deferred to a later date, issues an open issue blocks, issues a LIVE claim already
 holds, and issues an open PR already says it closes. An issue whose claim is stale IS
@@ -478,7 +485,9 @@ def cmd_close(args: argparse.Namespace, tools: FindingsTools) -> int:
     # own worktree. `claims`, `reap` and `next` all read open issues, so a claim left on a
     # closed issue disappears from every view at once rather than showing up wrong.
     issue = _load_issue(args.number, tools)
-    plans = plan_release_held(issue, when=now_iso(), reason=f"closed as {outcome}")
+    plans = plan_release_held(
+        issue, when=now_iso(), reason=f"closed as {outcome}", detach=False
+    )
     plans += plan_close(args.number, outcome=outcome, pr=args.pr, reason=args.reason)
     run(plans, args.dry_run, tools)
     print(f"#{args.number} closed as {outcome}")

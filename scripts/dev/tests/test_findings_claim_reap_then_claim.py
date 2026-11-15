@@ -66,7 +66,15 @@ def test_claim_reaps_a_stale_claim_and_then_takes_the_issue(capsys):
         i for i, c in enumerate(calls.gh) if f"Claim: `{MINE}`" in " ".join(c)
     )
     assert released < claimed
-    assert ["issue", "edit", "1132", "--add-label", "claimed"] in calls.gh
+    assert [
+        "issue",
+        "edit",
+        "1132",
+        "--add-label",
+        "claimed",
+        "--milestone",
+        MINE,
+    ] in calls.gh
 
 
 def test_claim_still_refuses_a_live_claim(capsys):

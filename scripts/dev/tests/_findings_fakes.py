@@ -117,6 +117,11 @@ class Calls:
     batch_holds: list[tuple[str, list[int]]] = field(default_factory=list)
     # The (issue numbers, repo) each board sync was asked for.
     board: list[tuple[list[int], str | None]] = field(default_factory=list)
+    # The (title, OWNER/NAME) each milestone ensure was asked for.
+    milestones: list[tuple[str, str]] = field(default_factory=list)
+    # The OWNER/NAME each idle-milestone close was asked for, with the branches the fake
+    # asked `held` about.
+    milestone_closes: list[tuple[str, dict[str, bool]]] = field(default_factory=list)
 
     def none(self) -> bool:
         """Whether neither boundary was reached at all."""
@@ -163,6 +168,9 @@ class Fakes:
     # What a `gh api` read answers, keyed by its path without the query string, such as
     # `repos/o/r/issues`. A failure goes in `json_errors` under `api <that path>`.
     api: dict[str, list[dict]] = field(default_factory=dict)
+    # The open session milestones' titles the idle-milestone close considers; it closes each
+    # one `held` calls free.
+    open_milestones: list[str] = field(default_factory=list)
 
 
 def facts(trees=(), *, dirty=False, merged=False, ok=True):
@@ -300,6 +308,14 @@ def build_tools(f: Fakes | None = None) -> tuple[FindingsTools, Calls]:
         calls.board.append((list(numbers), repo))
         return {n: board.get(n, ("unchanged", "")) for n in numbers}
 
+    def ensure_milestone(title, repo, *, dry_run=False):
+        calls.milestones.append((title, repo))
+
+    def close_idle_milestones(repo, held, *, dry_run=False):
+        verdicts = {t: held(t) for t in f.open_milestones}
+        calls.milestone_closes.append((repo, verdicts))
+        return [t for t, h in verdicts.items() if not h]
+
     return (
         FindingsTools(
             gh_json,
@@ -308,6 +324,8 @@ def build_tools(f: Fakes | None = None) -> tuple[FindingsTools, Calls]:
             launched_branches=launched_branches,
             running_batch_holds=running_batch_holds,
             sync_board=sync_board,
+            ensure_milestone=ensure_milestone,
+            close_idle_milestones=close_idle_milestones,
         ),
         calls,
     )
