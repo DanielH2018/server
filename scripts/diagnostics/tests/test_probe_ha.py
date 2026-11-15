@@ -114,6 +114,8 @@ def test_match_automation_by_entity_slug():
 
 def test_match_automation_by_id_when_alias_differs():
     # Querying the id finds the entity even though its slug differs — the whole point.
+    # fact: .claude/skills/ha-edit-automation/SKILL.md#The live API
+    # fact: .claude/skills/ha-edit-automation/SKILL.md#The verification traps
     m = ha.match_automation(_HA_STATES, "bedroom_fan_temperature")
     assert m["entity_id"] == "automation.bedroom_fan_temperature_control"
 
@@ -261,6 +263,8 @@ def test_expected_automation_ids_matches_top_level_only():
 
 
 def test_automation_load_errors_flags_missing_and_unavailable():
+    # fact: .claude/skills/ha-edit-automation/SKILL.md#5. Deploy + confirm it loaded
+    # fact: .claude/agents/home-assistant-engineer.md#Method
     from diagnostics.probe_lib.ha import automation_load_errors
 
     expected = {"a_loaded", "b_missing", "c_unavailable", "d_disabled"}
@@ -338,6 +342,7 @@ def test_snapshot_entity_ids_parses_list_items():
 
 
 def test_vanished_snapshot_entities_reports_only_absent_ids():
+    # fact: .claude/skills/ha-edit-automation/SKILL.md#5. Deploy + confirm it loaded
     from diagnostics.probe_lib.ha import vanished_snapshot_entities
 
     snapshot = {"sensor.a", "sensor.gone", "sensor.b"}

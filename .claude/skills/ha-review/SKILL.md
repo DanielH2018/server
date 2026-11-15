@@ -5,7 +5,7 @@ allowed-tools: Read, Grep, Glob, Bash, Agent
 ---
 
 Run a read-only review of the Home Assistant domain: dispatch the `home-assistant-engineer` agent
-REVIEW-ONLY, adversarially verify its High/Medium findings, and present a prioritized report.
+(`.claude/agents/home-assistant-engineer.md`) REVIEW-ONLY, adversarially verify its High/Medium findings, and present a prioritized report.
 **READ-ONLY: this skill reviews and recommends — it does NOT implement, deploy, or commit.**
 Stop after the report; let the operator drive any changes.
 
@@ -15,9 +15,10 @@ read the most recent `review-*-state` ledgers the store holds (`ls -1
 "$HOME"/.claude/projects/-*-server/memory/review-*-state.md`; zero is a valid state — the
 homelab-review fold deletes a ledger two runs back) and the HA-relevant accepted-decision
 ("don't re-flag") memories from the auto-memory index, `review-standing-decisions` above all. Extract the don't-re-flag items **plus** the discipline: *verify a
-candidate finding against the home-assistant role's CLAUDE.md **and its `docs/` split** (platform,
-lighting-and-presence, alerts-and-notifications, climate-and-air — most settled decisions live there,
-not in CLAUDE.md), `sanctioned_writers.yml`, and existing
+candidate finding against the home-assistant role's CLAUDE.md **and its `docs/` split**
+(`k8s/roles/home-assistant/docs/`: platform, lighting-and-presence, alerts-and-notifications,
+climate-and-air, testing-and-tooling — most settled decisions live there, not in CLAUDE.md),
+`sanctioned_writers.yml` (`k8s/roles/home-assistant/state/sanctioned_writers.yml`), and existing
 automations BEFORE reporting it.* Pull this at runtime — never rely on a hardcoded list (it goes stale,
 the exact failure mode these reviews keep finding).
 
@@ -45,8 +46,8 @@ one line. End with a **3-bullet top-priorities** summary. Be specific and skepti
 
 ## 4. Adversarially verify High/Medium findings (before they reach the report)
 Reviews here have a misfire history — a wrong finding costs the operator more than a missed one. For
-each High/Medium finding dispatch one **`skeptic`** agent, all in one parallel message. That agent
-carries the refutation contract — where to look, the rule that a comment or a reassuring name is not
+each High/Medium finding dispatch one **`skeptic`** agent (`.claude/agents/skeptic.md`), all in one
+parallel message. That agent carries the refutation contract — where to look, the rule that a comment or a reassuring name is not
 evidence, and the three verdicts — so don't restate it; give it the finding, its `file:line`, and
 the HA-specific evidence it would not otherwise know to consult: the home-assistant role's CLAUDE.md
 (accepted trade-offs + verification traps), the role's tasks/templates and `sanctioned_writers.yml`,
@@ -60,8 +61,8 @@ to a one-line "refuted in verification" appendix; UNCERTAIN ones stay but are ma
 Lows skip verification.
 
 ## 5. Report
-Present the findings grouped by severity with a top-priorities shortlist, citing each finding's ansible
-`file:line`. **STOP.** Recommend next steps; do not implement, deploy, or commit. Offer to record a
+Present the findings grouped by severity with a top-priorities shortlist, citing each finding's
+role-source `file:line`. **STOP.** Recommend next steps; do not implement, deploy, or commit. Offer to record a
 review-state memory capturing the run's verified-correct + deferred (don't-re-flag) outcomes — the
 established pattern that keeps the next review high-signal.
 

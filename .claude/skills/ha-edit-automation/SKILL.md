@@ -46,34 +46,45 @@ Tunable formulas (fan curve, lux gate, wake ramp, hysteresis, caps) live in
 and time reads (`states()`, `now()`) stay in the YAML caller and are passed in as arguments.
 
 1. Add/extend the macro in `custom_templates/fan.jinja` / `lighting.jinja` (or a new `*.jinja` —
-   a new file also goes in `home_assistant_template_files` in `defaults/main.yml`; the validator fails until it does).
+   a new file also goes in `home_assistant_template_files` in `defaults/main.yml`; the validator fails until it does,
+   `scripts/home_assistant/tests/test_validate_ha_config.py::test_template_file_list_flags_unlisted_macro`).
 2. Add a test in `tests/` (e.g. `test_fan_macros.py`, `test_lighting_macros.py`) via the
-   `jinja_harness.py` env. **HA's `round` is banker's rounding** (`forgiving_round`, half-to-even)
-   — the harness mirrors it and the fan curve hits `.5` midpoints by design, so test the midpoints.
+   `jinja_harness.py` env
+   (`k8s/roles/home-assistant/tests/test_macro_coverage.py::test_every_macro_has_a_test`). **HA's `round` is banker's rounding** (`forgiving_round`, half-to-even)
+   — the harness mirrors it
+   (`k8s/roles/home-assistant/tests/test_ha_round_semantics.py::test_half_rounds_to_even_not_away_from_zero`) and the fan curve hits `.5` midpoints by design, so test the midpoints.
 3. Import the macro from the YAML caller; don't duplicate the formula anywhere.
 
 Keep cross-cutting logic single-sourced: the lux gate lives **only** in
-`binary_sensor.bedroom_auto_light_allowed`; alerts route **only** through `script.bedroom_notify`.
+`binary_sensor.bedroom_auto_light_allowed`; alerts route through `script.bedroom_notify`, except
+the held-notes digest in `files/automations/alerts.yaml`, which pushes directly on purpose.
 
 ## 3. Carry a NEW config file into the ConfigMap
 
 Files that already exist redeploy automatically — the ConfigMap embeds them, so an edit changes
-the rendered manifest and the renderer's restart stamp rolls the pod. But a **new** `files/*.yaml` or
-`custom_templates/*.jinja` needs its own `lookup('file', …)` line in
-`templates/configmap.yaml.j2` (and its install line in `deployment.yaml.j2`, plus an `!include`
-if HA must load it). Miss that and the deploy is green while the pod never sees the file.
+the rendered manifest and the renderer's restart stamp rolls the pod
+(`k8s/roles/home-assistant/defaults/main.yml:manifests_rollout`). But a **new** `files/*.yaml` or
+`custom_templates/*.jinja` needs its name in its `home_assistant_*_files` list in
+`defaults/main.yml`: `templates/configmap.yaml.j2` loops over those lists, and the init container
+installs whatever each ConfigMap holds. `validate_ha_config.py` fails while a list and its
+directory disagree (`scripts/home_assistant/validate_ha_config.py:shipped_dir_list_errors`). Add an
+`!include` too if HA must load it. Miss the `!include` and the deploy is green while HA never
+loads the file.
 
 ## 3b. Regenerate the state model if you changed who writes what
 
 Adding/moving a service call that writes an entity makes `state/derived_state.yml` + `STATE.md`
-stale, and `validate_ha_config.py` fails on it:
+stale, and `validate_ha_config.py` fails on it
+(`scripts/home_assistant/tests/test_ha_state_checks.py::test_freshness_errors_flag_stale_committed_file`):
 
 ```
 uv run python scripts/home_assistant/ha_state_model.py generate
 ```
 
-Review the diff. If the single-writer invariant (`state/sanctioned_writers.yml`) or the
-override-boolean tripwire (`state/expected_override_writers.yml`) fires, declare the new writer
+Review the diff. If the single-writer invariant (`state/sanctioned_writers.yml`,
+`scripts/home_assistant/tests/test_ha_state_checks.py::test_single_writer_errors_flags_unsanctioned_writer`) or the
+override-boolean tripwire (`state/expected_override_writers.yml`,
+`scripts/home_assistant/tests/test_ha_state_checks.py::test_override_writer_errors_flags_undeclared_writer`) fires, declare the new writer
 there deliberately — those two are hand-maintained on purpose; don't widen them on reflex.
 
 ## 4. Validate
@@ -82,13 +93,14 @@ there deliberately — those two are hand-maintained on purpose; don't widen the
 uv run python scripts/home_assistant/validate_ha_config.py          # YAML, dup keys, !include, template syntax, state-model guardrails
 uv run pytest k8s/roles/home-assistant/tests   # if you touched a macro
 ```
-(The `validate-ha-config` + `pytest` prek hooks run these on commit too.) Fix before deploying —
-validation catches Jinja-syntax and structural errors, but NOT HA schema or entity-existence
-(the deploy surfaces those live).
+(The `validate-ha-config` prek hook runs the first on commit; CI's `pytest` job runs the macro
+tests.) Fix before deploying — validation catches Jinja-syntax and structural errors and resolves
+entity references against the snapshot, but NOT HA schema or an entity that vanished live
+(`scripts/home_assistant/validate_ha_config.py:validate`; the deploy surfaces those).
 
 ## 5. Deploy + confirm it loaded
 
-"Ansible ok" is not done — the live evidence is. Deploying without verifying is not a supported
+A green deploy is not done — the live evidence is. Deploying without verifying is not a supported
 path here. **Prefer the live REST API over the recorder DB.** This section is also the entry
 point when an automation didn't fire, or when you need ground-truth live HA state.
 
@@ -99,7 +111,8 @@ The change reaches the cluster when its PR merges and `promote` publishes it (Co
 1. **A new config file must be added to its `home_assistant_*_files` list in the role's
    `defaults/main.yml`** — the ConfigMap loops over those lists and the init container installs
    whatever the ConfigMap holds. A file no list names never reaches `/config`, and
-   `validate_ha_config.py` fails on the disagreement.
+   `validate_ha_config.py` fails on the disagreement
+   (`scripts/home_assistant/tests/test_validate_ha_config.py::test_automation_file_list_flags_unlisted_file`).
 
 2. **Commit (step 6), push, open the PR, then land it.** Merging is what deploys, and
    `land.sh` follows the promotion:
@@ -117,17 +130,22 @@ The change reaches the cluster when its PR merges and `promote` publishes it (Co
    - **Assert ALL automations loaded** (not just one): `uv run python scripts/diagnostics/probe.py ha
      verify-automations` — exit 0 = every automation in `files/automations/*.yaml` is present in
      the live instance and not `unavailable`. A non-zero exit lists the dropped/errored ids
-     (a schema error HA silently skipped at load).
+     (a schema error HA silently skipped at load;
+     `scripts/diagnostics/tests/test_probe_ha.py::test_automation_load_errors_flags_missing_and_unavailable`).
    - **Assert every referenced entity still EXISTS**: `uv run python scripts/diagnostics/probe.py ha
      verify-entities` — it diffs `state/external_entities.yml` against live HA and exits non-zero
-     on anything that vanished. Run it every deploy, not only when you touched entities. Nothing
+     on anything that vanished
+     (`scripts/diagnostics/tests/test_probe_ha.py::test_vanished_snapshot_entities_reports_only_absent_ids`).
+     Run it every deploy, not only when you touched entities. Nothing
      else in this repo can see a disappearance: `validate_ha_config.py` resolves references against
-     that snapshot, so a name that *stopped* existing reads exactly like one that resolves. On
-     2026-08-16 two Pixel sensors disappeared and three bedroom features sat inert behind a clean
-     validation — `states()` on a missing entity renders `unknown`, which the automation's own
-     exclusion list swallowed. When something does turn up dead, **fix the config first and
-     refresh the snapshot second**: `refresh` alone drops the ids and makes the validator start
-     failing on the still-present config refs, which is the desired signal, not a fix.
+     that snapshot (`scripts/home_assistant/ha_state_checks.py:resolution_errors`), so a name that
+     *stopped* existing reads exactly like one that resolves. When something does turn up dead,
+     **fix the config first and refresh the snapshot second**: `refresh` alone drops the ids and
+     makes the validator start failing on the still-present config refs, which is the desired
+     signal, not a fix.
+     - **HISTORY —** On 2026-08-16 two Pixel sensors disappeared and three bedroom features sat
+       inert behind a clean validation — `states()` on a missing entity renders `unknown`, which
+       the automation's own exclusion list swallowed.
    - Edited an automation → `probe.py ha automation <id-or-alias>` must find it, and
      `last_triggered` must advance once you trigger it.
    - Edited an entity/template → `probe.py ha state <entity_id>` — value present and
@@ -141,32 +159,36 @@ The change reaches the cluster when its PR merges and `promote` publishes it (Co
 ### The live API
 
 `scripts/diagnostics/probe.py ha …` is read-only and allow-listed (no prompt); it queries HA's
-REST API with the `claude_ha_token`:
+REST API with the `claude_ha_token` (`scripts/diagnostics/probe_lib/ha.py:ha_token`):
 
 - **Entity state:** `probe.py ha state <entity_id>` → current `state` + attributes +
   `last_changed`/`last_updated`. `--json` for raw.
 - **Did an automation load / fire?** `probe.py ha automation <id-or-alias>` → on/off +
   `last_triggered`. It accepts the automation's `id`, its alias-slug or the full
-  `automation.<slug>`. A non-zero exit + "not found" means it did NOT load.
+  `automation.<slug>`
+  (`scripts/diagnostics/tests/test_probe_ha.py::test_match_automation_by_id_when_alias_differs`).
+  A non-zero exit + "not found" means it did NOT load (`scripts/diagnostics/probe_lib/ha.py:run_ha`).
 - **Why did it run but no-op?** `probe.py ha why <id-or-alias>` pulls the live per-condition
   trace. Traces are in-memory and wiped on every HA restart, and an automation whose trigger
   NEVER matched leaves no trace — for that case use `ha get logbook/<entity>` + `last_triggered`.
-  The logbook is empty for the high-churn automations `configuration.yaml`'s `recorder:` excludes.
+  The logbook is empty for the high-churn automations `configuration.yaml`'s `recorder:` excludes
+  (`k8s/roles/home-assistant/tests/test_recorder_keeps_automation_attribution.py::test_no_automation_or_script_domain_exclude`).
 - **Live error log:** `probe.py ha get error_log` — catches a template that parsed structurally
   but throws at render time, or an integration that failed to set up.
 
 To confirm an automation *fired*: note `last_triggered`, cause the trigger, re-query, and check
 it advanced.
 
-`probe.py ha` needs a host age key to decrypt the token, so run it on daniel-server or
-daniel-box. If HA is down, check first with `probe.py health home-assistant`, then drill down
+`probe.py ha` needs a host age key to decrypt the token (`scripts/diagnostics/probe_lib/ha.py:ha_token`),
+so run it on daniel-server or daniel-box. If HA is down, check first with `probe.py health home-assistant`, then drill down
 with `kubectl -n homelab get pods -l app=home-assistant` and the pod logs.
 
 ### The verification traps
 
 1. **alias-slug ≠ id.** An automation's `entity_id` is derived from its **alias** (slugified) at
    first creation, NOT its `id`. So `id: bedroom_fan_temperature` lives at
-   `automation.bedroom_fan_temperature_control`. `probe.py ha automation` handles this; if you
+   `automation.bedroom_fan_temperature_control`. `probe.py ha automation` handles this
+   (`scripts/diagnostics/tests/test_probe_ha.py::test_match_automation_by_id_when_alias_differs`); if you
    ever read `/api/states` or the recorder directly, match by the alias-slug or `attributes.id`.
 2. **The recorder DB goes stale after a restart.** Rows can predate the restart. Discriminate
    live vs stale by comparing a row's `last_updated_ts` against the pod's start time
@@ -180,9 +202,9 @@ with `kubectl -n homelab get pods -l app=home-assistant` and the pod logs.
 ## 6. Commit
 
 Commit the changed file(s) under the role. Only a merged commit deploys: `promote` publishes
-master, never a working tree.
+master, never a working tree (`scripts/deploy_tools/promote.py:decide`).
 Note any non-templated side-effects (e.g. a Z2M device setting via `z2m-device-setting`) in the
-role `CLAUDE.md` so they survive a re-pair.
+role `CLAUDE.md` (`k8s/roles/home-assistant/CLAUDE.md`) so they survive a re-pair.
 
 ## Watch-outs
 - A renamed automation gets a **new** `entity_id` from its new alias — update any reference and

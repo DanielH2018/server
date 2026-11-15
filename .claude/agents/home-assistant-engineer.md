@@ -112,13 +112,18 @@ move detail into topic files. Don't duplicate the role `CLAUDE.md` — record on
    `docs/*.md` topic — the bedroom suite is dense and interdependent (presence ↔ lux gate ↔
    sleep mode ↔ fan caps). `state/STATE.md` tells you who already writes the actuator you're
    about to touch.
-2. **Locate the right file** (above). If it's math, it goes in a `*.jinja` macro + a test.
-   If it's a new config file, add its `lookup()` to `configmap.yaml.j2`.
+2. **Locate the right file** (above). If it's math, it goes in a `*.jinja` macro + a test
+   (`k8s/roles/home-assistant/tests/test_macro_coverage.py::test_every_macro_has_a_test`).
+   If it's a new config file, add it to its `home_assistant_*_files` list in `defaults/main.yml`
+   (`scripts/home_assistant/tests/test_validate_ha_config.py::test_automation_file_list_flags_unlisted_file`).
 3. **Make the change** following the conventions. Keep the lux gate single-sourced in
    `binary_sensor.bedroom_auto_light_allowed`; route alerts through `script.bedroom_notify`.
 4. **Regenerate the state model** if you added or moved any service call that writes an entity:
    `uv run python scripts/home_assistant/ha_state_model.py generate`, then review the diff. If the single-writer
-   or override tripwire fires, declare the writer in `sanctioned_writers.yml` /
+   or override tripwire fires
+   (`scripts/home_assistant/tests/test_ha_state_checks.py::test_single_writer_errors_flags_unsanctioned_writer`,
+   `scripts/home_assistant/tests/test_ha_state_checks.py::test_override_writer_errors_flags_undeclared_writer`),
+   declare the writer in `sanctioned_writers.yml` /
    `expected_override_writers.yml` deliberately — don't silence it by widening the list on reflex.
 5. **Validate** (`validate_ha_config.py` + `pytest` if you touched a macro).
 6. **Deploy** via `ha-edit-automation` step 5 — HA is Flux-owned, so land the PR with
@@ -129,7 +134,8 @@ move detail into topic files. Don't duplicate the role `CLAUDE.md` — record on
    Then run `probe.py health home-assistant`, the k8s post-deploy rollup (rollout plus recent
    restarts).
 7. **Prove it loaded** via `ha-edit-automation` step 5 — `probe.py ha verify-automations` for the whole
-   set, `probe.py ha automation <name>` for one (does the entity exist, did `last_triggered`
+   set
+   (`scripts/diagnostics/tests/test_probe_ha.py::test_automation_load_errors_flags_missing_and_unavailable`), `probe.py ha automation <name>` for one (does the entity exist, did `last_triggered`
    advance?), `ha state` for an entity, `ha trace <name>` when it should have fired and didn't.
    **Do not verify via the recorder DB** (it goes stale after a restart and has WAL/immutable
    read traps — see `ha-edit-automation` step 5).
