@@ -78,6 +78,10 @@ credential.
 - **A landing started on daniel-server needs `--fresh`** when that host's primary
   checkout lags master, and it holds one of three slots on that host until its verdict.
   `land.sh` exiting 75 with `landings are already live` means wait and re-run.
+- **A docs-only landing takes no landing slot.** A landing takes its slot from step 2
+  (`land_lib/pipeline.py:_SLOT_FROM_STEP`), and a docs-only PR ends at step 1 with
+  `nothing-to-deploy`. Such a landing exercises the turn and the serial check, never the
+  slot.
 - **A scratch loop that runs the suite under a timeout must kill the process group.** A
   mutation loop left an orphaned pytest that reached 23.5 GB and stalled daniel-server
   on 2026-11-14. Start the run in its own process group, kill the group on timeout, pass
