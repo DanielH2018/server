@@ -1,7 +1,8 @@
 # G7 — A PR that removes a name fails while a doc or comment still uses it
 
 Status: IN PROGRESS. Steps 1 to 4 are done: the shared predicate, the heading pointer
-guard, the two new target classes as advice, and the rename fixer.
+guard, the two new target classes as advice, and the rename fixer. Step 5 waits for its
+second window, which ends on 2026-12-14; *Operator ruling* below sets its terms.
 
 Depends on: the tree rename of
 [#8186](https://github.com/DanielH2018/server/issues/8186), which landed on 2026-11-13.
@@ -118,7 +119,7 @@ hook, and the hook names both lines.
    tracked path. On the memory store the same mapping finds 7 it can rewrite and leaves 5,
    all under `ansible/tests/setup/`, whose tests moved somewhere else.
 5. One PR per target class that the graded replay clears, turning its warnings into
-   errors.
+   errors. *Operator ruling* narrows this to the comment class.
 
 ## Step 3 result
 
@@ -154,6 +155,25 @@ behind.
 The replay is a scratch program: it holds each commit's tree in memory and updates it per
 commit, in 98 seconds. It joins `fact_status.py report` in step 5, which is the first step
 that needs a second measurement.
+
+## Operator ruling, 2026-11-15
+
+The operator approved step 5 for the comment class only, on these terms:
+
+- **The live-doc class stays advice.** It graded 32% false alarms, and most were correct
+  sentences about the past without the `**HISTORY —` marker. Blocking them would teach
+  sessions to add the marker by reflex.
+- **The comment class is the candidate.** It graded 16% to 26%, and the advice it gives
+  is not acted on: 43 of the 53 names on master are `ansible/` paths in comments. A false
+  alarm costs a minute's edit, and `fact_status.py mv` fixes most real ones.
+- **The second window is 2026-11-15 to 2026-12-14**, a month with no migration in it.
+- **At least 50 comment rows are graded**, by a session other than the one that moved the
+  replay into `fact_status.py report`.
+- **The bar stays at 20%.** Under it, the comment class becomes an error in
+  `facts-lint-changed`. Over it, step 5 closes and both classes stay advice, as the
+  notice did in G9.
+- **No bypass flag.** A blocked commit clears by fixing the comment or running
+  `fact_status.py mv`.
 
 ## Verification
 
