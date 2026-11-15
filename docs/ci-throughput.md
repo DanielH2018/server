@@ -496,6 +496,8 @@ The decisions, all the operator's:
 
 ## See also
 
+- [CI throughput: what remains](ci-throughput-remaining.md) is the brief for the session
+  that takes this plan up: the work left, in order, and the traps this page does not carry.
 - [Landing a merged PR](landing.md) holds the merge pacing this plan replaces.
 - [Self-hosted runner spike](archive/self-hosted-runner-spike.md) holds the 2026-09-22
   measurements behind ADR-0018.
