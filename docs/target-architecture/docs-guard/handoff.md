@@ -2,8 +2,8 @@
 
 This page hands the rest of the facts-and-memory plan to another session. It states what
 is done as of 2026-11-15, what is open, the order to take it in, and what the sweep
-and the sessions after it taught. Items 1 to 4 landed on 2026-11-15. Item 5 and item 6 wait
-for 2026-12-15, and item 7 can run any time. Delete this page in the PR that closes the last open item.
+and the sessions after it taught. Items 1 to 4 and item 7 landed by 2026-11-15. Item 5 and
+item 6 wait for 2026-12-15. Delete this page in the PR that closes the last open item.
 
 [ADR-0031](../../adr/0031-each-kind-of-fact-has-one-stateless-detector.md) holds the
 decision, and each slice plan beside this page holds its own record. Read the ADR and
@@ -48,10 +48,12 @@ Take the items in this order. Each names the effort it needs from an Opus sessio
    than the one that built the replay grade at least 50 comment rows. Promote the class
    only if fewer than one row in five is a false alarm; otherwise close the step with both
    classes as advice. Take it in the same session as item 5, from 2026-12-15.
-7. **The `ansible/` leftovers in comments.** Low effort, any time, independent of item 6.
-   The advice on master listed 53 removed names in 74 places, and 43 of the names are
-   `ansible/` paths the tree rename left in comments. Run `fact_status.py mv` once per
-   moved path, with `--dry-run` first.
+7. **The `ansible/` leftovers in comments.** Done. `11f09573f` repointed the 74 places
+   the advice listed, and `tests/repo/test_pre_rename_paths_census.py` holds `k8s/` and
+   the renderer's job files. A later PR fixed the comments outside those trees that still
+   named a gone path. It also deleted the jsonpath quoting test, which scanned for Ansible
+   command tasks after the last one was gone. The `ansible/` mentions left outside
+   `docs/` name a path inside a pre-rename commit, a test fixture, or a quoted record.
 
 Two things are deliberately not on this list. ADR-0031 defers an outbox for memories
 written on a replica host until refused writes are counted. Two directive sections cite
@@ -121,15 +123,3 @@ The batches named three shapes they could not cite. Each is a candidate change t
   `renovate.json` cannot be cited.
 - **An absence.** "Neither Deployment pushes a heartbeat" is true and no atom holds it.
   Only a test can.
-
-## Small leftovers the batches named
-
-- The heading of `k8s/roles/cloudflare-ddns/CLAUDE.md` says the role "keeps two
-  Cloudflare A records". It keeps three. The batch left the heading alone, because a
-  section's key is its heading text. Change it together with every `# fact:` comment
-  and doc that names the key.
-- A `DECIDED:` marker in `scripts/dev/prune_worktrees.py` says "the weekly cron
-  PRUNES". The sweep is a systemd timer on both k3s hosts. The worktree-cleanup skill
-  cites the marker by its text, so the two change together.
-- `k8s/roles/game-stats/CLAUDE.md` says `stats_lib.py` is "~250 non-comment lines". The
-  batch counted 212.

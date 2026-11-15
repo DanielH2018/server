@@ -19,7 +19,7 @@ fixture.
                          it, for one --claim. Needs the claim's replacement volume to hold a
                          Completed backup of its own, and the live-volume list to contain that
                          volume.
-  --mode seeds           the seeds `ansible/seed_volume_backup.yml` made, once the rotation
+  --mode seeds           the seeds `scripts/backup/seed_volume_backup.py` makes, once the rotation
                          covers their volume: at least --seed-floor Completed backups carrying a
                          RecurringJob label. Narrow with --claim to pace the spend.
 

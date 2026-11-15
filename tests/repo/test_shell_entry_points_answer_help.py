@@ -1,7 +1,7 @@
 """Every shell entry point outside `scripts/` answers `--help` with exit 0.
 
 The shell half of `test_entry_points_outside_scripts_answer_help.py`. It covers two kinds of
-script: the tracked `.sh` files under `.claude/` and `ansible/`, and every `*.sh.j2` template a
+script: the tracked `.sh` files outside `scripts/` and every `tests/`, and every `*.sh.j2` template a
 role renders into a cron or timer script. A template runs as rendered, so the test renders it
 through `_shell_render`, the render `validate/shell_templates.py` lints, and runs that.
 

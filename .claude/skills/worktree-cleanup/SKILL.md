@@ -59,7 +59,7 @@ both drop unreachable objects older than a day and remove a stale `gc.log`
 session's git commands are refused against the primary checkout: the sessions that see the
 warning are the ones that cannot clear it. That timer is the only automatic remover — the
 SessionStart banner reports and removes nothing, for the reason in
-`scripts/dev/prune_worktrees.py:DECIDED: the banner REPORTS, the weekly cron PRUNES`.
+`scripts/dev/prune_worktrees.py:DECIDED: the banner REPORTS, the weekly timer PRUNES`.
 
 **Locks.** A lock held by a *running* session is never overridden
 (`scripts/lib/tests/test_worktrees.py::test_a_live_lock_wins_over_a_merged_branch`). A lock

@@ -14,7 +14,7 @@ subjects are the two ways a Backup CR ends up with no owning job at all:
   migrated-chain  the chain a volume left behind when the block-size migration rebuilt it. Its
                   volume no longer exists, so no job selects it and `retain` -- which is per
                   job, over that job's own backups -- can never reach it.
-  seeds           a backup `ansible/seed_volume_backup.yml` made. It carries no RecurringJob
+  seeds           a backup `scripts/backup/seed_volume_backup.py` made. It carries no RecurringJob
                   label by construction, so no job's `retain` ever counts it.
 
 A stranded chain's members may be labelled or unlabelled (a seed on a deleted volume is the

@@ -1,4 +1,4 @@
-# cloudflare-ddns — keeps two Cloudflare A records pointed at the router's WAN IP
+# cloudflare-ddns — keeps the apex and game-server Cloudflare A records pointed at the router's WAN IP
 
 Runs `favonia/cloudflare-ddns` twice: one Deployment updates the **direct** (unproxied)
 records, the other a **proxied** one behind Cloudflare's edge
