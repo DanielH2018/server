@@ -302,9 +302,10 @@ def has_prose(section: Section) -> bool:
 
     A heading with nothing under it holds none: a title, or a parent whose text all sits
     under its subheadings. Neither does a preamble that is only the file's YAML
-    frontmatter, which every rule under ``.claude/rules/`` opens with.
+    frontmatter, which every rule under ``.claude/rules/`` opens with, nor a section that is
+    only a ``GENERATED_BLOCK``: its generator keeps it true, and nobody edits it to cite.
     """
-    body = section.body
+    body = GENERATED_BLOCK.sub("", section.body)
     if not section.heading:
         body = _FRONTMATTER.sub("", body, count=1)
     return bool(body.strip())
