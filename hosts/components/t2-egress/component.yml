@@ -1,0 +1,18 @@
+# The T2 session users' egress table on daniel-box (dotfiles#967 B3, I4 to I6). daniel-box's
+# package.yml lists it, because the triage and Renovate sessions run only there.
+#
+# B3-0 is the shadow trace: `table inet t2_egress` records each new connection the session users
+# open, in two dynamic sets, and drops nothing. The trace sets squid's tuples in B3-1, and B3-2
+# turns the same table into the fence. Read it with `rootq nft`, or as root
+# `nft list set inet t2_egress seen4` and `seen6`. A reboot empties the sets.
+#
+# A ruleset change reloads the unit, so the sets keep their entries. `t2_egress_enabled: false`
+# drops the unit and its enable link from the next package version, and reconcile's stop deletes
+# the table.
+files:
+  - {src: files/t2-egress.nft, dst: /usr/lib/homelab/t2-egress/t2-egress.nft, activate: "reload:homelab-t2-egress.service", when: t2_egress_enabled}
+  - {src: units/homelab-t2-egress.service, dst: /usr/lib/systemd/system/homelab-t2-egress.service, when: t2_egress_enabled}
+enable:
+  homelab-t2-egress.service: {target: multi-user.target, when: t2_egress_enabled}
+defaults:
+  t2_egress_enabled: false

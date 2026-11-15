@@ -15,7 +15,8 @@ decision, and each slice plan beside this page holds its own record. Read the AD
   [G10](g10-value-rows.md) are done. The operator declined G10's step 3 on 2026-11-14.
 - [G9](g9-blocking-gate.md) stopped at its measurement on 2026-11-13. The diff notice
   stays advisory.
-- [G7](g7-removed-names.md) has steps 1 to 4 done. Step 5 is open.
+- [G7](g7-removed-names.md) has steps 1 to 4 done. Step 5's replay is built; its
+  measurement and grading are open.
 - [G11](g11-binding-sweep.md) has steps 1 to 3 done. The pilot's comparison, item 5, is open.
 
 ## Open work, in order
@@ -43,11 +44,13 @@ Take the items in this order. Each names the effort it needs from an Opus sessio
    way from 2026-12-15.
 6. **G7 step 5.** High effort. The operator ruled on 2026-11-15, and
    [G7's *Operator ruling*](g7-removed-names.md) holds the conditions. Only the comment
-   class is a candidate to block; the live-doc class stays advice. Move the replay into
-   `fact_status.py report`, measure 2026-11-15 to 2026-12-14, and have a session other
-   than the one that built the replay grade at least 50 comment rows. Promote the class
-   only if fewer than one row in five is a false alarm; otherwise close the step with both
-   classes as advice. Take it in the same session as item 5, from 2026-12-15.
+   class is a candidate to block; the live-doc class stays advice. The replay is in
+   `fact_status.py report`, and [G7's *The replay in `report`*](g7-removed-names.md) has
+   the command that measures 2026-11-15 to 2026-12-14. The session that built the replay
+   may not grade it, so any later session qualifies: grade at least 50 comment rows.
+   Promote the class only if fewer than one row in five is a false alarm; otherwise close
+   the step with both classes as advice. Take it in the same session as item 5, from
+   2026-12-15.
 7. **The `ansible/` leftovers in comments.** Done. `11f09573f` repointed the 74 places
    the advice listed, and `tests/repo/test_pre_rename_paths_census.py` holds `k8s/` and
    the renderer's job files. A later PR fixed the comments outside those trees that still

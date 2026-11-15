@@ -1,0 +1,25 @@
+# Shipped by daniel-box's package (the t2-egress component), enabled at boot. Loads
+# `table inet t2_egress`, the T2 session users' egress table (dotfiles#967 B3). In B3-0 the table
+# only records, so a session's traffic is unchanged.
+[Unit]
+Description=Load the T2 session users' egress table (table inet t2_egress)
+After=network-pre.target
+Before=network.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# This host's journald stores notice and above, so an nft error logged at info would be lost.
+SyslogLevel=notice
+# Checked before it is applied, so a ruleset nft rejects changes nothing.
+ExecStartPre=/usr/sbin/nft -c -f /usr/lib/homelab/t2-egress/t2-egress.nft
+ExecStart=/usr/sbin/nft -f /usr/lib/homelab/t2-egress/t2-egress.nft
+# A changed ruleset is reloaded, not restarted: the file is idempotent, so the sets keep what they
+# recorded, and once B3-2 enforces, no session runs unfenced between a stop and a start.
+ExecReload=/usr/sbin/nft -c -f /usr/lib/homelab/t2-egress/t2-egress.nft
+ExecReload=/usr/sbin/nft -f /usr/lib/homelab/t2-egress/t2-egress.nft
+# The way out: stopping or disabling the unit removes the table and every rule in it.
+ExecStop=/usr/sbin/nft delete table inet t2_egress
+
+[Install]
+WantedBy=multi-user.target

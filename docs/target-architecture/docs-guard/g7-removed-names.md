@@ -1,8 +1,9 @@
 # G7 — A PR that removes a name fails while a doc or comment still uses it
 
 Status: IN PROGRESS. Steps 1 to 4 are done: the shared predicate, the heading pointer
-guard, the two new target classes as advice, and the rename fixer. Step 5 waits for its
-second window, which ends on 2026-12-14; *Operator ruling* below sets its terms.
+guard, the two new target classes as advice, and the rename fixer. Step 5's replay is in
+`fact_status.py report`. The measurement waits for its second window, which ends on
+2026-12-14; *Operator ruling* below sets its terms.
 
 Depends on: the tree rename of
 [#8186](https://github.com/DanielH2018/server/issues/8186), which landed on 2026-11-13.
@@ -152,9 +153,31 @@ On master at `8140e8cf9` the advice over the last 150 commits lists 53 removed n
 places. 43 of the names are paths under `ansible/` in comments that the tree rename left
 behind.
 
-The replay is a scratch program: it holds each commit's tree in memory and updates it per
-commit, in 98 seconds. It joins `fact_status.py report` in step 5, which is the first step
-that needs a second measurement.
+The step 3 replay was a scratch program: it held each commit's tree in memory and updated it
+per commit, in 98 seconds. Step 5 needs a second measurement, so the comment class's replay
+joined `fact_status.py report` (`scripts/lib/facts/replay.py:comment_replay`).
+
+## The replay in `report`
+
+The replay calls `scripts/lib/facts/removed.py:stale_comment_uses`, the function the advice
+calls, so the class a grading measures is the class that would block. It reads the tree once
+at the window's first base and then moves it commit by commit.
+
+Run over this page's step 3 window with `--until 2026-11-14`, it took 121 seconds. It listed
+387 rows over 91 commits, out of 1,890 commits, against the scratch program's 444 rows over 94
+commits, out of 1,896. The scratch program was not kept, so the gap has no line-by-line
+explanation. The two windows differ by six commits, and 13 sampled commits gave the same rows
+from a fresh read of each commit's whole tree, so the replay's moving tree does not drift.
+
+To run the measurement that step 5 grades, on or after 2026-12-15:
+
+```sh
+uv run python scripts/dev/fact_status.py report --until 2026-12-15 --days 30 --json
+```
+
+The `comment_replay.rows` list in its output holds each row as its commit, the removed name,
+and `path:line` at that commit. The session that grades it is not the session that built the
+replay.
 
 ## Operator ruling, 2026-11-15
 
