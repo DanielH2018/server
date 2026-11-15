@@ -96,7 +96,8 @@ def test_the_head_line_carries_slot_seconds_and_both_quantiles():
 def _fake_gh(runs: dict[int, list[dict]]):
     def gh_json(*args):
         if args[:2] == ("run", "list"):
-            return [{"databaseId": run_id} for run_id in runs]
+            limit = int(args[args.index("--limit") + 1])
+            return [{"databaseId": run_id} for run_id in runs][:limit]
         run_id = int(args[1].split("/runs/")[1].split("/")[0])
         return {"jobs": runs[run_id]}
 
@@ -113,3 +114,11 @@ def test_recent_runs_skip_a_run_whose_pytest_legs_were_all_skipped():
         RuntimeError, match="2 of the newest 3 green master runs ran pytest"
     ):
         recent_runs(3, gh_json=gh_json)
+
+
+def test_recent_runs_find_twenty_when_one_listed_run_in_four_ran_pytest():
+    leg = _leg(1, 0, 5, (20, 140))
+    skipped = _job("pytest (shard 1 of 2)", 0, 0, 0, conclusion="skipped")
+    runs = {n: [skipped] if n % 4 else [leg] for n in range(400, 0, -1)}
+
+    assert len(recent_runs(20, gh_json=_fake_gh(runs))) == 20

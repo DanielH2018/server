@@ -55,7 +55,7 @@ def _doc(reason="ok", fetched=NOW - 60, entries=ENTRIES, builder_prom=None):
 
 
 def _report(doc):
-    return builder.report(doc, now=NOW, last=5, deadline_s=DEADLINE)
+    return builder.report(doc, now=NOW, last=5, deadline_s=DEADLINE, hosts=[])
 
 
 def test_a_caught_up_builder_is_publishing():
@@ -114,3 +114,52 @@ def test_the_dry_run_names_the_read_and_makes_none(capsys):
     assert builder.run_builder(ns, read=no_read) == PROBE_OK
     out = capsys.readouterr().out
     assert "homelab-builder.service" in out and builder.BUILDER_PROM in out
+
+
+def _series(host, version=None, ok="1"):
+    out = [
+        {
+            "metric": {"__name__": "homelab_host_reconcile_ok", "host": host},
+            "value": [0, ok],
+        }
+    ]
+    if version:
+        out.append(
+            {
+                "metric": {
+                    "__name__": "homelab_host_applied_info",
+                    "host": host,
+                    "version": version,
+                },
+                "value": [0, "1"],
+            }
+        )
+    return out
+
+
+def test_each_host_reads_current_or_behind_against_its_published_package():
+    hosts = _series("daniel-box", "0.6267+g341de76568f3") + _series(
+        "daniel-pi", "0.6200+g000000000000", ok="0"
+    )
+    text, code = builder.report(
+        _doc(), now=NOW, last=5, deadline_s=DEADLINE, hosts=hosts
+    )
+    assert code == PROBE_OK
+    lines = text.splitlines()
+    box = next(line for line in lines if line.startswith("  daniel-box "))
+    pi = next(line for line in lines if line.startswith("  daniel-pi "))
+    assert "reconcile_ok 1" in box and box.endswith("current")
+    assert "reconcile_ok 0" in pi and pi.endswith("behind 0.6283+g382df818e145")
+
+
+def test_a_host_prometheus_holds_nothing_for_is_listed_not_dropped():
+    text, _ = _report(_doc())
+    assert "  daniel-server  no series" in text
+
+
+def test_an_unread_prometheus_is_said_and_leaves_the_verdict_alone():
+    text, code = builder.report(
+        _doc(), now=NOW, last=5, deadline_s=DEADLINE, hosts="curl: connection refused"
+    )
+    assert code == PROBE_OK
+    assert "hosts: unread: curl: connection refused" in text
