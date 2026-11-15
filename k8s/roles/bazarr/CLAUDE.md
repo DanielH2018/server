@@ -7,7 +7,7 @@ shared conventions.
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in k8s/roles/longhorn-reconcile/defaults/main.yml. -->
 - **Applied by:** Flux, through `promote`; `land.sh --tags=bazarr` gates the rollout
 - **Image:** `lscr.io/linuxserver/bazarr` (`bazarr_k8s_image`)
-- **Route:** `bazarr.<domain>` · `bazarr.local.<domain>`, Authelia one_factor
+- **Route:** `bazarr.local.<domain>` (LAN only), Authelia one_factor
 - **Claims:** `bazarr-config` (weekly -> B2 (default target)), `media-data` (not Longhorn
   (media-local))
 <!-- /generated_from -->
@@ -95,8 +95,9 @@ non-zero** — that is the measurement that would change the answer, not a judge
 library.
 
 ## Editing
-- Manifests: `templates/deployment.yaml.j2`, `templates/networkpolicy-bazarr.yaml.j2`. The
-  Service and the IngressRoute come from the shared
-  `k8s/templates/service-default.yaml.j2` and
-  `k8s/templates/ingressroute-default.yaml.j2`, which this role ships no template for —
-  the route's hostname, port and Authelia gate are the `containers_list` entry's.
+- Manifests: `templates/deployment.yaml.j2`, `templates/networkpolicy-bazarr.yaml.j2`,
+  `templates/ingressroute.yaml.j2`. The Service comes from the shared
+  `k8s/templates/service-default.yaml.j2`, which this role ships no template for.
+- **The route is LAN-only.** `templates/ingressroute.yaml.j2` passes `public=false`, so no
+  public name renders whatever `k8s_public_route` says. The operator ruled it on 2026-11-15
+  (#8514): WireGuard covers remote use.
