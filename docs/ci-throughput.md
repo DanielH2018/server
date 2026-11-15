@@ -543,6 +543,40 @@ freed turn and began to form a batch for a PR that had already merged. A check o
 landing code stopped it there. A member that takes the turn with its place reading `merged`
 now gives the turn back at once (`turn._wait`).
 
+#### B4 under load, measured
+
+The window is 13:50 to 21:07:07 UTC on 2026-11-15, from the last B4 merge to option B's
+merge (#8887), which changed how daniel-server batches land. It held 37 merges and 34
+landings, against 9 merges in the window B4 first measured. The counts come from GitHub's run
+and job listings and from the landing logs of both hosts, as before.
+
+- **Full CI runs per merge: 1.78.** 57 pull-request runs ran more than two jobs, and 9
+  master runs swept in full. Four of the 57 were batch runs, and three belong to PRs merged
+  after the window.
+- **Master runs that skipped as tested: 28 of 37.** The 9 sweeps came from two docs-refresh
+  PRs (#8848, #8880), three daniel-server fan-out PRs the server lander merged (#8858, #8862,
+  #8865), one Renovate PR (#8828), two ready session PRs that master moved past while they
+  waited in the turn (#8838, #8839), and #8861, below.
+- **Batches form under load.** Four formed, of 2, 3, 2 and 2 PRs: #8836 with #8835, #8866
+  with #8856 and #8868, #8872 with #8870, and #8882 with #8887. Of the drafts that landed
+  alone, 13 took the turn with no other draft in the line, and two formed no batch because
+  their landing code was older than master's. Nine landings were ready PRs, which no batch
+  stacks: three daniel-server fan-out PRs, which option B moves to drafts, three cron PRs,
+  and three sessions' PRs opened ready.
+- **The waits.** 11 of 29 landings took the turn after 0 s, and the longest wait was 1020 s.
+  Every one of 28 landings took a slot after 0 s.
+- **The 20-job cap: 24.1 minutes at it**, with a peak of 20, against 0.9 in B4's first
+  window and 25.4 in D10's. Per merge that is 0.65 minutes, against 0.1 and 1.0.
+
+**A rejoined PR got its run outside the turn.** `stale_base.rejoin_line` converts a stale
+ready PR to draft and updates its branch. The draft's own run on the new head is still running
+for its first seconds, and `merge._ready_run_on` read that run as a ready one. The landing then
+skipped the line, marked the PR ready and got a full run outside the turn. Master moved again
+during that run, so the PR rejoined and repeated: #8879 rejoined three times and #8867 twice.
+#8861 then merged 24 s after another PR, on a tree no run tested, and master swept in full.
+About five full runs and one sweep in the window came from this. A rejoined head now counts as
+untested (`merge._start_run`), because its update made it while the PR was a draft.
+
 ### Phase C: runner pods for `hooks` and `pytest`
 
 **Phase C stopped at C1 on 2026-11-14.** The queue of Phase B removes more runs than runner

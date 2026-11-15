@@ -56,8 +56,6 @@ stub instead, which the filter `homelab_secret_stub` builds:
 - A key `K` becomes `stub-` plus `K` with underscores turned to hyphens, such as
   `stub-email`. That shape is a valid DNS label, so a stubbed host name still passes
   `kubectl apply --dry-run=server`.
-- `become_password` never takes a stub. It is the one name in `NEVER_STUB`, because no
-  template reads it.
 - `domain` takes no stub and no placeholder, because it is not in `secrets/secrets.yml`.
   The operator ruled on 2026-10-14 that it is a variable, not a secret, and deleted it from
   the store on 2026-10-15. Every render reads its value from

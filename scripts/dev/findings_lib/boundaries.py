@@ -110,9 +110,11 @@ class FindingsTools:
     # `(issue numbers, repo, dry_run=) -> {issue: (outcome, detail)}`, `board.sync_board`'s
     # contract. None is this repo, as above.
     sync_board: Callable[..., dict[int, tuple[str, str]]] = sync_board
-    # `(title, OWNER/NAME, dry_run=)` and `(OWNER/NAME, held, dry_run=) -> closed titles`,
-    # `milestone.ensure`'s and `milestone.close_idle`'s contracts.
-    ensure_milestone: Callable[..., None] = milestone.ensure
+    # `(branch, OWNER/NAME, dry_run=) -> title or None` and
+    # `(OWNER/NAME, held, dry_run=) -> closed titles`, `milestone.attach_target`'s and
+    # `milestone.close_idle`'s contracts. Fields because `claim` and `reap` call them on every
+    # run, so a test drives either without restating the milestone REST reads.
+    attach_milestone: Callable[..., str | None] = milestone.attach_target
     close_idle_milestones: Callable[..., list[str]] = milestone.close_idle
 
     @property
