@@ -49,7 +49,10 @@ builds `_k8s_render`'s render once and charges it to whichever module asks first
 would vary from run to run. `tests/render_share.py` builds it when collection
 finishes, outside every test's timed phases, with the fleet render beside it, and its
 `# DECIDED:` has the numbers. `scripts/tests/conftest.py` runs the two census files' shared
-pass the same way. `--summary` charges all three per shard, as `prebuild_seconds`.
+pass the same way. A leg builds each of the three only when it holds a module that reads it,
+so its cost depends on the shard's membership: the legs holding the census files ran 14-17s
+longer than a split on test seconds alone projected (#8900). `assign` therefore packs each
+shard's `prebuild_seconds` beside its test seconds, and `--summary` prints both.
 
 The docs-refresh cron runs `--record-missing` itself, so gaps in the table fill without a human.
 
@@ -93,6 +96,7 @@ Usage:
     uv run python scripts/dev/pytest_shard.py --check-durations ci.log  # annotate, always exit 0
 """
 
+import functools
 import hashlib
 import json
 import statistics
@@ -146,17 +150,16 @@ _TEST_FILE_GLOBS = ("test_*.py", "*_test.py")
 _PER_FILE_SECONDS = 0.028
 
 # The wall seconds each render prebuild holds a CI leg before its first test, read off the
-# `phase timing` sections of master run 42681237857 (#7732). The leg holding no render_share
-# consumer took 11s for the k8s render alone. Legs that rendered k8s at a module's import took
-# 5-7s for the fleet render alone, and the rest about 17s for both. `--summary` adds them per
-# shard and `assign` does not: the fleet render is the only part a shard's membership changes,
-# and at 24 of about 660 runner seconds per shard it is below what the packing can resolve.
-# `render_share.build_each` runs the two on different workers, so a leg waits the longer one.
+# `phase timing` sections of master run 42681237857 (#7732). The k8s render alone took 11s and
+# the fleet render alone 5-7s. `render_share.build_each` runs the two on different workers, so
+# a leg reading both waits the longer one.
 K8S_RENDER_WALL_SECONDS = 11.0
 FLEET_RENDER_WALL_SECONDS = 6.0
 # The census rows' pass `scripts/tests/conftest.py` runs: CI's 16.0s on #7950's shard 6.
 CENSUS_PASS_WALL_SECONDS = 16.0
 CENSUS_FILE_PREFIX = "scripts/tests/test_census_rows_test_"
+# The text that marks a test module as a reader of the shared k8s render.
+K8S_RENDER_MODULE = "_k8s_render"
 # The xdist workers on each leg's runner, every one of which waits out the prebuilds.
 CI_WORKERS = 4
 
@@ -220,24 +223,42 @@ def load_weights(path: Path = WEIGHTS_PATH) -> dict[str, float]:
     return {k: float(v) for k, v in json.loads(path.read_text()).items()}
 
 
-def assign(files, shards: int, weights: dict[str, float]) -> dict[str, int]:
+def assign(
+    files, shards: int, weights: dict[str, float], repo: Path = REPO
+) -> dict[str, int]:
     """Map each file to a shard index in `range(shards)`, greedy longest-processing-time.
 
-    Deterministic: files are ordered by descending weight then by path, and a tie between two
-    equally loaded shards goes to the lower index. The same census and the same weights give
-    the same assignment on every machine.
+    A file's cost on a shard is its weight, `_PER_FILE_SECONDS`, and the prebuild seconds it
+    adds to what that shard already pays, so the second census file costs the census pass
+    only on a shard that lacks the first. Files go in order of their cost on an empty shard,
+    each to the shard it leaves least loaded.
+
+    Deterministic: ties in that order break by path, and a tie between two shards goes to the
+    lower index. The same census and the same weights give the same assignment on every
+    machine.
     """
     if shards < 1:
         raise ValueError(f"shards must be >= 1, got {shards}")
     known = [weights[f] for f in files if f in weights]
     default = statistics.median(known) if known else 1.0
     cost = {f: weights.get(f, default) + _PER_FILE_SECONDS for f in files}
+    kinds = {f: prebuild_kinds(f, repo) for f in files}
+    alone = {f: cost[f] + _prebuild_wall(kinds[f]) * CI_WORKERS for f in files}
     load = [0.0] * shards
+    paid: list[frozenset[str]] = [frozenset()] * shards
     placed: dict[str, int] = {}
-    for path in sorted(files, key=lambda f: (-cost[f], f)):
-        target = min(range(shards), key=lambda i: (load[i], i))
+    for path in sorted(files, key=lambda f: (-alone[f], f)):
+        after = [
+            load[i]
+            + cost[path]
+            + (_prebuild_wall(paid[i] | kinds[path]) - _prebuild_wall(paid[i]))
+            * CI_WORKERS
+            for i in range(shards)
+        ]
+        target = min(range(shards), key=lambda i: (after[i], i))
+        load[target] = after[target]
+        paid[target] |= kinds[path]
         placed[path] = target
-        load[target] += cost[path]
     return placed
 
 
@@ -453,24 +474,47 @@ def refresh_drifted_weights(
     return sorted(moved)
 
 
-def prebuild_seconds(members: list[str], repo: Path = REPO) -> float:
-    """The runner seconds a shard of `members` spends in render prebuilds before its first test.
+@functools.cache
+def prebuild_kinds(rel: str, repo: Path = REPO) -> frozenset[str]:
+    """The prebuilds a leg runs because it holds the test module at `rel`.
 
-    Every worker of a leg waits until the prebuilds finish, so they cost their wall time once
-    per worker. Every shard pays the k8s render, since each holds a few dozen of its readers. A
-    shard holding a `render_share` consumer renders the fleet on another worker meanwhile, so
-    it waits the longer of the two. A census file adds the census pass.
+    `k8s` when the module names `_k8s_render`, `fleet` when it is a `render_share` consumer,
+    and `census` for a census rows file. A module that cannot be read triggers none.
     """
-    if not members:
-        return 0.0
     import render_share
 
-    wall = K8S_RENDER_WALL_SECONDS
-    if any(render_share.is_consumer(repo / f) for f in members):
-        wall = max(wall, FLEET_RENDER_WALL_SECONDS)
-    if any(f.startswith(CENSUS_FILE_PREFIX) for f in members):
-        wall += CENSUS_PASS_WALL_SECONDS
-    return wall * CI_WORKERS
+    try:
+        text = (repo / rel).read_text()
+    except OSError, UnicodeDecodeError:
+        return frozenset()
+    kinds = set()
+    if K8S_RENDER_MODULE in text:
+        kinds.add("k8s")
+    if render_share.CONSUMER_IMPORT in text:
+        kinds.add("fleet")
+    if rel.startswith(CENSUS_FILE_PREFIX):
+        kinds.add("census")
+    return frozenset(kinds)
+
+
+def _prebuild_wall(kinds: frozenset[str]) -> float:
+    wall = max(
+        K8S_RENDER_WALL_SECONDS if "k8s" in kinds else 0.0,
+        FLEET_RENDER_WALL_SECONDS if "fleet" in kinds else 0.0,
+    )
+    return wall + (CENSUS_PASS_WALL_SECONDS if "census" in kinds else 0.0)
+
+
+def prebuild_seconds(members: list[str], repo: Path = REPO) -> float:
+    """The runner seconds a shard of `members` spends in prebuilds before its first test.
+
+    Every worker of a leg waits until the prebuilds finish, so they cost their wall time once
+    per worker. A shard pays the k8s render when it holds a reader of `_k8s_render`. A shard
+    holding a `render_share` consumer renders the fleet on another worker meanwhile, so one
+    holding both waits the longer of the two. A census file adds the census pass.
+    """
+    kinds = frozenset().union(*(prebuild_kinds(f, repo) for f in members))
+    return _prebuild_wall(kinds) * CI_WORKERS
 
 
 def _summary(shards: int) -> str:
