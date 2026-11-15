@@ -414,3 +414,14 @@ def test_file_mtime_separates_a_missing_file_from_one_it_cannot_stat(tmp_path):
     not_a_dir = tmp_path / "file"
     not_a_dir.write_text("")
     assert host_lib.file_mtime(str(not_a_dir / "child")) == (None, True)
+
+
+def test_an_exported_transcript_is_cut_at_the_cap(tmp_path):
+    """A session cannot fill the controller's disk through the transcript it leaves."""
+    transcript = tmp_path / ".claude" / "projects" / "-clone" / "s1.jsonl"
+    transcript.parent.mkdir(parents=True)
+    transcript.write_text("0123456789abcdef")
+
+    host_lib.export_transcript(str(tmp_path), str(tmp_path), limit=8)
+
+    assert (tmp_path / host_lib.TRANSCRIPT_NAME).read_bytes() == b"01234567"

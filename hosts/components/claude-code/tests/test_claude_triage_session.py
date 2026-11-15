@@ -9,6 +9,7 @@ import signal
 import stat
 
 import claude_triage_session as session
+import host_lib
 import pytest
 
 
@@ -95,7 +96,7 @@ def _transcript_run(tmp_path, claude_body: str) -> tuple:
         f"EXCHANGE_DIR={exchange}\nCLAUDE_BIN={fake}\nWORKDIR={tmp_path}\n"
         f"SESSION_HOME={home}\n"
     )
-    return config, exchange / session.OUT_DIR / session.TRANSCRIPT_NAME
+    return config, exchange / session.OUT_DIR / host_lib.TRANSCRIPT_NAME
 
 
 @pytest.fixture
@@ -116,13 +117,3 @@ def test_the_transcript_survives_the_wall_clocks_sigint(
     assert session.main(["claude_triage_session.py"], str(config)) == 0
 
     assert copied.read_text() == "stopped\n"
-
-
-def test_an_oversized_transcript_is_cut_at_the_cap(tmp_path) -> None:
-    transcript = tmp_path / ".claude" / "projects" / "-clone" / "s1.jsonl"
-    transcript.parent.mkdir(parents=True)
-    transcript.write_text("0123456789abcdef")
-
-    session.export_transcript(str(tmp_path), str(tmp_path), limit=8)
-
-    assert (tmp_path / session.TRANSCRIPT_NAME).read_bytes() == b"01234567"

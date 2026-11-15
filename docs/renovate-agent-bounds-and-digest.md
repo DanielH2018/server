@@ -133,7 +133,9 @@ The session reads third-party text: release notes, changelogs and PR bodies. It 
 `renovate-agent` so that text steering it reaches nothing able to change `master`.
 
 - **Home, toolchain and clone.** `renovate_agent_home` (`/var/lib/renovate-agent`) is the
-  session's home: its caches and its transcripts. Everything the session runs or reads comes
+  session's home, a tmpfs the session unit mounts for each run (guardrails plan B2-3b). The
+  directory on disk is a root-owned, empty mountpoint, which the setup clears. Everything the
+  session runs or reads comes
   from the controller instead, pinned in `templates/renovate-agent-pins.j2`:
   `/var/lib/renovate-agent-tools` holds the operator's `uv`, `uvx`, `prek`, `claude_guard`,
   `claude_worktree` and hooks, the pinned Python and Claude Code, and
@@ -262,7 +264,20 @@ headline is that delta:
 - `FAILED — <reason>` — timeout, non-zero exit, or `is_error`.
 
 The operator ruled on 2026-11-14 that an unattended session keeps its transcript and loses
-in-place resume, so the digest prints no resume command.
+in-place resume, so the digest prints no resume command. Its cost line names the transcript
+instead: once `claude` exits, on its own or at the wall clock, the session script copies the
+transcript from the tmpfs home into the exchange's `out/`, cut at 32 MiB, and the runner keeps
+it as `<STATE_DIR>/transcripts/<run time>.jsonl`. The newest 30 stay. Then the runner deletes
+`out/` and `requests/`, so nothing the session wrote reaches the next run.
+
+**What the session may write** (dotfiles#967's I2 and I8). `ProtectSystem=strict` makes every
+path read-only but four tmpfs mounts and the exchange's `requests/` and `out/`. The home and
+`/tmp` are 512 MiB each, `/var/tmp` and `/dev/shm` 64 MiB, and the unit's `MemoryMax` of 4 GiB
+holds them with room to spare, so a full mount fails with ENOSPC rather than an OOM kill. The
+unit also sets `TasksMax`, `MemorySwapMax=0` and `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1`.
+`templates/renovate-agent-pins.j2` pins every size and cap.
+`hosts/tests/test_unattended_session_bounds.py` holds both unattended session units to these
+bounds.
 
 Leaving the open set is not landing. A session can close a Renovate PR without merging it,
 for one it judges superseded or dropped (#2746). So the wrapper runs `gh pr view <n> --json

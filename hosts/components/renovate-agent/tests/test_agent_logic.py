@@ -7,9 +7,11 @@ Run: uv run pytest hosts/components/renovate-agent/tests/test_agent_logic.py
 """
 
 import json
+from pathlib import Path
 
 import agent_logic as al
 import pytest
+import host_lib
 import renovate_agent
 
 
@@ -212,18 +214,24 @@ class TestConfigGuard:
 class _FakeHost:
     """Answers every process `main()` reaches up to the session unit's end.
 
-    `prs` is what `gh pr list` returns.
+    `prs` is what `gh pr list` returns. `transcript`, when set, is what the session unit leaves
+    as its transcript in `out`.
     """
 
-    def __init__(self, prs: list[int]) -> None:
+    def __init__(
+        self, prs: list[int], transcript: str = "", out: Path | None = None
+    ) -> None:
         self.prs = prs
+        self.transcript, self.out = transcript, out
         self.posts: list[str] = []
         self.spools: set[str | None] = set()
         self.flushed: list[str] = []
 
     def run(self, argv, cwd=None, timeout=120):
         if argv[:2] == ["systemctl", "start"]:
-            # The session unit, which here writes no output.
+            # The session unit, which here leaves at most a transcript.
+            if self.transcript and self.out:
+                (self.out / host_lib.TRANSCRIPT_NAME).write_text(self.transcript)
             return 0, ""
         if argv[:2] == ["systemctl", "show"]:
             return 0, "Result=success\nExecMainStatus=0\n"
@@ -383,3 +391,46 @@ class TestSkipExitCodes:
         assert host.flushed == [f"{tmp_path}/state/discord-spool"]
         (rec,) = _records(tmp_path)
         assert rec["result"] == "skipped" and rec["reason"]
+
+
+class TestTranscript:
+    """The session's home is a tmpfs, so the transcript the runner keeps is the only copy."""
+
+    def _cfg(self, tmp_path) -> str:
+        cfg = tmp_path / "config.env"
+        cfg.write_text(
+            f"REPO=o/r\nREPO_DIR={tmp_path}\nEXCHANGE_DIR={tmp_path}/exchange\n"
+            f"SESSION_USER=agent\nSTATE_DIR={tmp_path}/state\n"
+        )
+        return str(cfg)
+
+    def test_a_run_keeps_the_transcript_and_deletes_what_the_session_wrote(
+        self, tmp_path
+    ) -> None:
+        exchange = tmp_path / "exchange"
+        host = _FakeHost(prs=[1], transcript='{"type":"user"}\n', out=exchange / "out")
+
+        renovate_agent.main(_tools(host), self._cfg(tmp_path))
+
+        (kept,) = (tmp_path / "state" / renovate_agent.TRANSCRIPTS_DIR).iterdir()
+        assert kept.read_text() == '{"type":"user"}\n'
+        assert str(kept) in host.posts[-1]
+        # Nothing the session owned survives into the next run.
+        assert not (exchange / "out").exists()
+        assert not (exchange / "requests").exists()
+
+    def test_only_the_newest_transcripts_are_kept(self, tmp_path) -> None:
+        state = tmp_path / "state"
+        kept = state / renovate_agent.TRANSCRIPTS_DIR
+        kept.mkdir(parents=True)
+        for ts in range(1, renovate_agent.TRANSCRIPTS_KEPT + 1):
+            (kept / f"{ts}.jsonl").write_text("old\n")
+        out = tmp_path / "out"
+        out.mkdir()
+        (out / host_lib.TRANSCRIPT_NAME).write_text("new\n")
+
+        path, size = renovate_agent.keep_run_transcript(str(out), str(state), 1000)
+
+        names = sorted(int(p.stem) for p in kept.iterdir())
+        assert names == [*range(2, renovate_agent.TRANSCRIPTS_KEPT + 1), 1000]
+        assert (path, size) == (str(kept / "1000.jsonl"), 4)
