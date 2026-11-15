@@ -191,13 +191,22 @@ key, the resolved path of its `gh`, and the names of its `GH_*` and `GITHUB_*` v
 It never stores their values. Each line of a `failures.<uid>` file carries the failing
 caller's session key after its timestamp. On 2026-11-15 one token file on daniel-box held two
 pools' windows at once, and nothing in the ledger said which caller sampled the second pool
-([#8741](https://github.com/DanielH2018/server/issues/8741)). To name it, read the table
-beside `truth`:
+([#8741](https://github.com/DanielH2018/server/issues/8741)).
+
+The session key did not name it. Both of the second pool's samples that evening, at 21:06
+and 21:34 UTC, read `operator`, `/usr/bin/gh` and no `GH_*` or `GITHUB_*` names. A sample of
+the first pool at 21:09 also read `operator`. `operator` covers every process outside a
+Claude session and outside a `.service` unit, such as an ssh login or a tmux scope.
+
+**Each sample also names its process.** The `sampler_process` table, keyed the same way,
+stores the sampling process's full `/proc/self/cgroup` line and the `comm` names of the
+process and its ancestors, joined by `<`, such as `python3<bash<tmux: server`. It stores
+`comm` only, never a command line, because an argv can carry a token. To name a window's
+caller, read both tables beside `truth`. daniel-box has no `sqlite3` binary, so read them
+with Python:
 
 ```bash
-sqlite3 /var/lib/gh-quota/tok-<fingerprint>@1000.sqlite \
-  'SELECT t.window, t.bucket, t.used, s.session, s.gh, s.env_names
-   FROM truth t JOIN sampler s USING (window, bucket) ORDER BY t.window'
+uv run python3 -c "import sqlite3; db = sqlite3.connect('file:/var/lib/gh-quota/tok-<fingerprint>@1000.sqlite?mode=ro', uri=True); [print(r) for r in db.execute('SELECT t.window, t.bucket, t.used, s.session, s.gh, s.env_names, p.cgroup, p.ancestry FROM truth t JOIN sampler s USING (window, bucket) LEFT JOIN sampler_process p USING (window, bucket) ORDER BY t.window')]"
 ```
 
 **The session key** is the first of these that exists:

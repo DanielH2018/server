@@ -241,6 +241,54 @@ def test_each_sample_names_its_caller_by_session_gh_path_and_variable_names(
     assert token not in path.read_bytes().decode(errors="replace")
 
 
+def _sampler_process_rows(ledger: Ledger) -> list[tuple]:
+    (path,) = ledger.root.glob("*.sqlite")
+    with closing(sqlite3.connect(path)) as db:
+        return db.execute(
+            "SELECT window, bucket, cgroup, ancestry FROM sampler_process ORDER BY bucket"
+        ).fetchall()
+
+
+def test_each_sample_names_its_process_by_cgroup_and_ancestor_comm_names(
+    tmp_path: Path,
+):
+    proc = tmp_path / "proc"
+    stats = {
+        "self": "4242 (python3) S 4100 4242 0",
+        "4100": "4100 (bash) S 3000 4100 0",
+        "3000": "3000 (tmux: server) S 1 3000 0",
+        "1": "1 (systemd) S 0 1 0",
+    }
+    for pid, stat in stats.items():
+        (proc / pid).mkdir(parents=True)
+        (proc / pid / "stat").write_text(stat + "\n")
+    cgroup = "0::/user.slice/user-1000.slice/user@1000.service/tmux-spawn-1.scope"
+    (proc / "self" / "cgroup").write_text(cgroup + "\n")
+    ledger, _clock, gh = _ledger(tmp_path, "record", {})
+    ledger = dataclasses.replace(ledger, proc=proc)
+    gh.core_used = 7
+
+    ledger.record(["pr", "list"])
+
+    ancestry = "python3<bash<tmux: server"
+    assert _sampler_process_rows(ledger) == [
+        (RESET + 60, "core", cgroup, ancestry),
+        (RESET, "graphql", cgroup, ancestry),
+    ]
+
+
+def test_a_sample_whose_procfs_cannot_be_read_stores_empty_process_facts(
+    recording, tmp_path: Path
+):
+    ledger, _clock, _gh = recording
+    ledger = dataclasses.replace(ledger, proc=tmp_path / "no-proc")
+
+    ledger.record(["pr", "list"])
+
+    assert _sampler_process_rows(ledger) == [(RESET, "graphql", "", "")]
+    assert ledger.failures() == 0
+
+
 def test_a_caller_whose_gh_has_no_token_gets_a_ledger_named_by_uid(tmp_path: Path):
     ledger, _clock, gh = _ledger(tmp_path, "record", {})
     gh.logins.clear()
