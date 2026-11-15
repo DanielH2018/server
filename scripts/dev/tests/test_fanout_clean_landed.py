@@ -20,6 +20,7 @@ from fanout_lib.place import main
 from fanout_lib.target import PROJECT_DIR_ENV, SERVER_CHECKOUT
 from lib.git_testing import commit, git, init_repo, scrubbed_env
 from lib.proc_testing import fake_bin, path_with, run
+from lib.worktree_testing import ignore_foreign_slice_holds_env
 from _fanout_fakes import fake_tools
 
 BRANCH = "worktree-fanout-x"
@@ -73,8 +74,14 @@ def _stubs(tmp_path, merged_head):
 
 
 def _tools_running_for_real(primary, stub_bin):
-    """Tools whose `run` executes the command it is given under bash, aimed at `primary`."""
-    env = scrubbed_env(**{PROJECT_DIR_ENV: str(primary)})
+    """Tools whose `run` executes the command it is given under bash, aimed at `primary`.
+
+    The slice rule is off in that bash's `clean-one`; see `lib.worktree_testing`.
+    """
+    env = scrubbed_env(
+        **{PROJECT_DIR_ENV: str(primary)},
+        **ignore_foreign_slice_holds_env(stub_bin.parent),
+    )
     env["PATH"] = path_with(stub_bin, env=env)
 
     def run_here(_host, command, timeout, stdin=None):

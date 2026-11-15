@@ -190,7 +190,7 @@ def test_prune_all_counts_no_failure_when_every_removal_succeeds(tmp_path):
 
 
 def test_prune_exits_1_when_a_removal_failed(monkeypatch, tmp_path):
-    # The weekly cron's invocation: a refused removal must not exit 0 (#4445).
+    # The weekly timer's invocation: a refused removal must not exit 0 (#4445).
     for argv in (["--prune", "--brief"], ["--prune"]):
         rc, _, _ = _main_recording_removals(monkeypatch, tmp_path, argv, removes=False)
         assert rc == 1, argv
@@ -479,7 +479,7 @@ def test_report_still_names_the_live_worktrees_beside_a_vanished_one(
 def test_the_weekly_prune_removes_merged_worktrees_beside_a_vanished_one(
     tmp_path, monkeypatch, capsys
 ):
-    # `--prune --brief` is the weekly cron's invocation; the stale registration blocked it.
+    # `--prune --brief` is the weekly timer's invocation; the stale registration blocked it.
     scrub_process_git_env(monkeypatch)
     repo = _repo_with_a_vanished_worktree(tmp_path)
 

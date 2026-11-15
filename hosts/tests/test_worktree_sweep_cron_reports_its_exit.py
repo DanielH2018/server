@@ -18,6 +18,7 @@ from _shell_render import render_shell_script
 from lib.git_testing import commit, git, init_repo, scrubbed_env
 from lib.proc_testing import fake_bin, run, write_exec
 from lib.repo_paths import REPO
+from lib.worktree_testing import ignore_foreign_slice_holds_env
 
 SYS_USER = "sweepuser"
 
@@ -117,7 +118,12 @@ def test_a_sweep_that_skips_a_worktree_a_live_process_holds_pings_0(tmp_path):
     uv = f'shift 4\nexec {sys.executable} {pruner} "$@"\n'
     holder = subprocess.Popen(["sleep", "120"], cwd=held)
     try:
-        result, url = _run(tmp_path, 0, uv=uv, env=scrubbed_env())
+        result, url = _run(
+            tmp_path,
+            0,
+            uv=uv,
+            env=scrubbed_env(**ignore_foreign_slice_holds_env(tmp_path)),
+        )
     finally:
         holder.kill()
         holder.wait()
