@@ -102,7 +102,8 @@ registry of live landings it is compared with.
 - To 1 while the core quota has fewer than 1500 calls left and resets more than 15 minutes
   away. `gh api rate_limit` costs no core quota.
 - To 2 while 2 or more master `ci.yml` push runs have been unfinished for more than 15
-  minutes. The count is the one merge pacing reads, so a wedged run does not count.
+  minutes. A run unfinished more than 2 hours after its creation is wedged and does not
+  count.
 - To 0 for a PR that changes a k8s role while `DEPLOY_HOLD` holds. "Holds" means what the pin
   gate means by it: any value but `none`.
 - To 1 for a PR that changes a k8s role inside the no-promotion window around the weekly
@@ -111,7 +112,7 @@ registry of live landings it is compared with.
   the `longhorn` or `metallb` role, which hold the forward-only pins, the `flux` role, or the
   cluster-vars file.
 
-**A read that fails lowers nothing.** The limit is a throughput control, as merge pacing is.
+**A read that fails lowers nothing.** The limit is a throughput control.
 A landing still meets `DEPLOY_HOLD` at the pin gate and at the promotion. The PR's file
 list comes from `gh pr view --json files`, which returns at most 100 files, so a serial path
 past the hundredth goes unseen.
@@ -167,47 +168,14 @@ the call until its checks pass. A refused merge is printed once and the wait con
 merge GitHub keeps refusing ends at `merge-timeout`. The direct merge needs both flags in one
 run: without `--await-merge` the arm dies, and `--await-merge` alone only polls.
 
-**A master CI backlog holds a green PR's merge.** Before the direct merge, `land_lib/pace.py`
-counts the master push runs of `ci.yml` that are not completed. At 2 or more it prints
-`pacing the merge: …` and waits for the next poll. A full sweep runs 25 jobs, and 20 measured
-sweeps peaked at 18 of them in progress at once. Against the account's 20-job runner cap, a
-second unfinished sweep already queues
-([#8143](https://github.com/DanielH2018/server/issues/8143) measured 82 runs on 2026-11-12). On 2026-10-24, eight
-concurrent landings left six master runs unfinished, their jobs waited 8-17 minutes for a
-runner, and each landing waited 29-61 minutes for its merge commit's verdict (#5526).
-
-A cap of 1 ran from 2026-10-25 to 2026-10-29 (#6308). It aimed to merge a re-tested PR into
-the tree it tested, so that `prove` skips the push sweep. The share of push runs that skipped
-the sweep did not rise, because the untested tree comes from master moving during the PR's
-re-test rather than at merge time (#6309). The `DECIDED:` marker on `PACE_MASTER_RUNS` in
-`land_lib/options.py` has the measurement. Batching the merges was proposed as the next route
-and closed as not planned on 2026-11-02 (#6521).
-
-- The count is a read, not a lock. Two landings that read at the same poll can both merge.
-  Pacing lowers the average queue depth; it does not close the race that makes the `prove`
-  job's tested-tree skip miss.
-- A run unfinished more than 2 hours after its creation is wedged and not counted.
-- A held poll never ends the wait at `merge-timeout`. On 2026-10-28 eight landings raced
-  for the one slot, and five ended `merge-timeout` while the queue was still draining
-  (#6466).
-- The cap rises by one for each 15 minutes a landing has been held, so the longest-held
-  landings pass first, one at a time.
-- Once the whole wait, held time included, reaches `merge_timeout`, the landing merges without
-  pacing. The pre-merge wait therefore stays inside `merge_timeout`, or twice it when the
-  landing updates the branch, which the `LAND_DEADLINE` sizing below counts on.
-- A failed read merges without pacing. Pacing controls throughput; it is not a safety gate.
-- A rate-limit refusal is the exception: it holds the poll. The quota runs out only when many
-  landings are live, so merging on the refusal would release every held landing at once
-  (#8139). The held poll counts toward `merge_timeout` like any other.
-- A rate-limit refusal of the head's own CI read backs the merge wait off until the quota
-  frees, not one merge poll. The pause counts toward `merge_timeout`, and the wait never
-  sleeps past it (#8147).
-- `LAND_PACE_MASTER_RUNS` sets the cap, and `0` turns pacing off.
+**A rate-limit refusal of the head's own CI read backs the merge wait off** until the
+quota frees, not one merge poll. The pause counts toward `merge_timeout`, and the wait
+never sleeps past it (#8147).
 
 **A landing takes the landing turn before it merges.** One landing at a time holds the turn,
 across both hosts. A PR that has had no CI run gets its one run inside the turn, so the run
 tests the master the merge lands on, and master's own run proves the tree and skips its
-jobs. `LAND_QUEUE=0` turns the turn off for one landing.
+jobs. Every landing that merges its PR directly takes the turn.
 [CI throughput](ci-throughput.md) has the measurements and the plan this is slice B2 of.
 
 - A landing asks for the turn when it can use it, and prints `waiting for the landing turn`
@@ -237,16 +205,22 @@ jobs. `LAND_QUEUE=0` turns the turn off for one landing.
   alone`, leaves the line and gets a run of its own.
 - A PR lands on the fewest runs when it is opened as a draft. A draft's pushes start no
   job, so its one full run is its batch's, shared with up to three other PRs, and master's
-  run after its merge skips. A PR opened ready has a run of its own at every push, never
-  stands in the line, and its merge starts a full master run whenever master moved since
-  that run. The operator ruled on 2026-11-14 that sessions and the fan-out open their PRs
-  as drafts (D9 in [CI throughput](ci-throughput.md)).
-- A head with a run that ran jobs keeps it, finished or not, and the stale-base rules above
-  judge it once it is green. An update those rules make then runs inside the turn. A head the landing policy admitted on an approval is never
-  updated, because the update voids the approval. An update that GitHub refuses does not
-  stop the landing: the PR keeps the run the ready flip started.
-- A landing that holds the turn is not paced. No other landing with a turn merges ahead of
-  it, and a paced holder would stop every landing behind it.
+  run after its merge skips. A PR opened ready has a run of its own at every push. The
+  operator ruled on 2026-11-14 that sessions and the fan-out open their PRs as drafts (D9 in
+  [CI throughput](ci-throughput.md)).
+- A head with a run that ran jobs keeps it, finished or not. Once it is green, a landing
+  that has not yet asked for the turn compares the master that run tested with master's tip
+  (`stale_base.rejoin_line`). When master has moved, the landing converts the PR to draft and
+  updates its branch, prints `converted it to draft and updated its branch`, and stands the
+  new head in the line as a draft. A holder can then stack it, and its own turn gives it one
+  run on the master its merge lands on. Merged as it stood, it made a tree no run tested,
+  and master's run swept in full: 16 of 26 master runs on 2026-11-14 did.
+- A head the update would void or cannot make is left as it stands: a head GitHub reads as
+  conflicting, one the landing policy admitted on an approval, and one `LAND_REQUIRE_HEAD`
+  names. It merges as it stands, except an approved head that master moved past on a path
+  the PR changes, which is refused with a rebase remedy (`stale_base.refuse_stale_approved`). A refused update marks the PR ready again.
+  An update in the turn that GitHub refuses does not stop the landing: the PR keeps the run
+  the ready flip started.
 - The turn is a lock on one file on daniel-box. A landing there locks the file itself, and a
   landing on daniel-server holds the same lock through an ssh session that lasts as long as
   the landing.
@@ -254,16 +228,13 @@ jobs. `LAND_QUEUE=0` turns the turn off for one landing.
   ends with the landing's process, so a landing that dies gives it up: a holder killed with
   SIGKILL on daniel-server freed the lock on daniel-box within a second.
 - The turn is not a safety gate. A landing that waits `merge_timeout` for it, or that cannot
-  reach daniel-box, goes on without it, marks its draft ready and merges as a landing with
-  `LAND_QUEUE=0` does.
+  reach daniel-box, goes on without it, marks its draft ready and merges.
 - The wait for the turn counts as waited. The merge wait gets one `merge_timeout` after it,
   and no branch update moves the end of the wait past twice `merge_timeout`. The pre-merge
   wait therefore stays inside the two merge budgets the `LAND_DEADLINE` sizing below counts.
-  A landing that spent `merge_timeout` waiting for the turn merges a green head without
-  pacing, as a landing that pacing held that long does.
-- A landing with `LAND_QUEUE=0` takes no turn and can move master under the holder. The
-  holder's merge then falls back to the stale-base rules above, and master's run sweeps in
-  full. A merge made outside `land.sh` does the same.
+- A merge made outside `land.sh`, or by a landing that went on without the turn, can move
+  master under the holder. The holder then merges a tree no run tested, and master's run
+  sweeps in full.
 
 **A head whose only CI skipped as a draft is re-triggered once, then ends the wait if it skips again.** `ci.yml` runs
 no job on a draft, so the push's run skips every job, the `prek` gate included, and `await_ci`

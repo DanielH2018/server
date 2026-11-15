@@ -82,7 +82,7 @@ def _run(tmp_path: Path, state: str) -> subprocess.CompletedProcess[str]:
         "PATH": path_with(bin_dir),
         "LAND_PRIMARY": str(tmp_path),
         # The landing turn is a real lock on daniel-box, and this run uses the real tools.
-        "LAND_QUEUE": "0",
+        "LAND_TURN_DIR": str(tmp_path / "turn"),
     }
     return subprocess.run(
         [

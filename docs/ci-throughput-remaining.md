@@ -20,6 +20,8 @@ The rulings in force, all in [CI throughput](ci-throughput.md):
   at the test set-up before reopening C2.
 - **D9.** Every landing forms a batch, and PRs are opened as drafts.
 - **Option A, under D9.** daniel-server fan-out batches keep a run of their own.
+- **D10.** B4's shape: a stale ready PR rejoins the line, pacing goes, and one count of 6
+  is taken after the merge.
 
 ## The work left, in order
 
@@ -36,33 +38,21 @@ Each needs traffic no session controls, so watch for it and record the first run
   `cc-wait gh-ci` call, and its record under `~/.local/state/fanout-review/` carries a
   `verdict` and an empty `ci_gate`. A landing that ends `pr-ci-red` must show one `ci-fix`
   phase and a second landing (`scripts/dev/fanout_lib/review/review_ci.py:land_draft`).
+  Two ran by 2026-11-15 01:00 UTC: #8805's record has a verdict and an empty `ci_gate`,
+  and #8800's ended `merge-conflict`. Their unit logs were gone, so the missing
+  `cc-wait gh-ci` call is unverified, and the `pr-ci-red` branch has not run.
 - **A red batch.** The holder's log reads `the batch is not green`, and each member's log
   reads `a batch that tested PR #N was not green; it lands alone`. A member that is
   stacked a second time by a later landing is a defect in `land_lib/line.py`'s answers.
 
 ### 2. B4: every landing through the queue
 
-The plan's text: the merge pacing is deleted, the branch update that follows a green run
-on a stale base is deleted, `LAND_QUEUE` goes with them, and the limit on live landings
-becomes one count across both hosts that a landing takes when it gets the turn.
-
-That text predates D9. Settle these three questions before writing code, and write the
-answers into [CI throughput](ci-throughput.md):
-
-- **What tests a PR that was opened ready?** `land_lib/stale_base.py` re-tests a green
-  head whose base master moved past (#4013: red master runs followed green PRs). A draft
-  gets that test at its turn. A Renovate PR and a PR a person opened are ready and green
-  before any landing starts. Deleting the update for them is safe only if something else
-  tests them on the master of the turn.
-- **Is the pacing redundant?** `land_lib/pace.py` holds a merge while master runs are
-  unfinished. With one merge at a time and master's run proven by the tested tree, a
-  master run takes 13 to 17 seconds. Measure how many master runs still sweep in full
-  before deleting the hold: a landing that skips the turn (`LAND_QUEUE=0`) and a merge
-  made by hand both cause one.
-- **Where does the one count live?** `land_lib/live_limit.py` keeps a slot registry under
-  `/tmp` on each host. The turn's lock is on daniel-box and daniel-server reaches it over
-  ssh (`land_lib/turn.py`). A count taken at the turn has to say what a landing does when
-  daniel-box does not answer.
+D10 in [CI throughput](ci-throughput.md) answers the three questions that came first and
+names the five pull requests, in order. Four have landed: a stale ready PR rejoins the line
+(`stale_base.rejoin_line`, #8818), and the update after a green run (#8820), the pacing
+(#8821) and the switch that turned the turn off are deleted. The fourth, one count of 6 taken
+after the merge, waits for the operator to rule which of the five conditions that lower the
+limit still apply once the count is taken after the merge.
 
 B4 edits the merge wait in `land_lib/merge.py`, which also holds the draft-skip grace,
 the re-trigger and the rate-limit backoff. Cut it into PRs that each delete one thing.
@@ -88,13 +78,14 @@ credential.
 ## Traps the plan's text does not carry
 
 - **A batch stacks only a draft whose head has had no CI run that ran jobs.** A green PR
-  converted to draft does not qualify, and its landing spends a full run marking it ready.
-  To qualify one, run `gh pr ready --undo <n>` and then `gh pr update-branch <n>`.
-- **A PR that changes landing code lands alone.** Landing code is every module the
-  landing process loads (`land_lib/own_checkout.py`), which reaches `renderer_lib` and
-  `promote_lib`, 205 files on 2026-11-14. Land such a PR with `LAND_BATCH=0`. A landing
-  already in flight from older code refuses once the PR merges, and the remedy is the
-  same command with `--fresh`.
+  converted to draft by hand does not qualify. The landing qualifies a green ready PR that
+  master moved past by itself (`stale_base.rejoin_line`).
+- **A PR that changes landing code forms no batch of its own.** Landing code is every
+  module the landing process loads (`land_lib/own_checkout.py`), which reaches
+  `renderer_lib` and `promote_lib`, 205 files on 2026-11-14. Land such a PR as a draft
+  through the turn with `LAND_BATCH=0`; another landing may still stack it, which D10
+  allows. A landing already in flight from older code refuses once the PR merges, and the
+  remedy is the same command with `--fresh`.
 - **Never hold the landing turn by hand.** Two hand-held turns on 2026-11-14 stopped
   every landing for 56 and 92 seconds when a landing they waited for never arrived. A
   burst of landings forms its batches behind its first landing without help.

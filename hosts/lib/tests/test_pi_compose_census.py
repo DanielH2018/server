@@ -73,6 +73,7 @@ def test_a_container_name_that_differs_from_its_key_is_flagged(tree):
 
 
 def test_an_image_without_a_digest_is_flagged(tree):
+    # fact: .claude/rules/docker.md#Conventions
     tree.edit("autoheal", "compose.yaml.j2", AUTOHEAL.replace(DIGEST, ""))
     (problem,) = project_problems(project_of(tree.render()))
     assert "autoheal image" in problem
@@ -128,6 +129,7 @@ def test_the_bind_census_is_clean_and_finds_alloys_data_directory(tree):
 
 
 def test_a_relative_bind_source_with_no_tmpfiles_line_is_flagged(tree):
+    # fact: .claude/rules/docker.md#The rendered project is not tracked
     _, binds, _ = problems(tree, tmpfiles=TMPFILES.replace(TMPFILES_LINES, "\n"))
     assert binds == [
         "alloy: bind source /home/ubuntu/server/containers/alloy/data is not allowed"

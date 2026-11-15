@@ -44,7 +44,7 @@ def turn_landing(landing, polls=(OPEN, MERGED), start=OPEN, **fakes_or_opts):
             },
             **fakes,
         ),
-        **{"queue": True, **fakes_or_opts},
+        **fakes_or_opts,
     )
     ln.direct_merge_subject = "Take turns"
     return ln, calls
@@ -68,7 +68,7 @@ def call_order(calls) -> list[str]:
             names.append("update" if args[3].endswith("/update-branch") else "merge")
         elif name == "gh":
             names.append(" ".join(args[:2]))
-        elif name in ("try_turn", "release_turn", "gh:master-runs"):
+        elif name in ("try_turn", "release_turn"):
             names.append(name)
     return names
 

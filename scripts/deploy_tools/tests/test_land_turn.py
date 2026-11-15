@@ -28,9 +28,6 @@ from deploy_tools.land_lib.outcome import Outcome
 from lib.exit_codes import CI_RED
 from lib.proc_testing import fake_bin, path_with
 
-# One unfinished master run above a cap of 1: pacing holds a landing that reads it.
-BACKLOG = [{"status": "queued", "created_at": "1970-01-12T13:40:00Z"}]
-
 
 def test_a_landing_waits_while_another_holds_the_turn(landing, capsys):
     # fact: .claude/skills/renovate-prs/SKILL.md#6. Land them one at a time
@@ -46,8 +43,7 @@ def test_a_turn_that_never_comes_leaves_a_merge_of_a_ready_pr(landing, capsys):
     ln, calls = turn_landing(landing, turn=[False], merge_timeout=2, merge_poll=1)
     land_in_turn(ln)
     order = call_order(calls)
-    # The draft is still marked ready and no turn is given up. The merge is not paced,
-    # because the wait for the turn already spent `merge_timeout`.
+    # The draft is still marked ready and no turn is given up.
     assert order[-2:] == ["pr ready", "merge"]
     assert "release_turn" not in order
     assert (
@@ -192,11 +188,9 @@ def test_a_whole_landing_takes_the_turn_with_nothing_set(land_run):
             "state,mergeable,headRefOid": [OPEN, MERGED],
             START_VIEW: {"isDraft": True, **OPEN},
         },
-        master_runs=[BACKLOG * 2],
     )
     rc, out, _, calls, _ = land_run(["--arm-merge", "--await-merge"], fakes)
     assert rc == 0, out
-    # No read of the master backlog: a landing that holds the turn is not paced.
     assert call_order(calls)[:4] == ["try_turn", "pr ready", "merge", "release_turn"]
 
 
@@ -221,7 +215,6 @@ def test_in_turn_a_head_with_no_ci_run_is_updated_from_master_before_its_run(lan
 @pytest.mark.parametrize(
     "case",
     [
-        pytest.param({"head_runs": A_RUN}, id="a-run"),
         pytest.param({"start": {**OPEN, "mergeable": "CONFLICTING"}}, id="a-conflict"),
         pytest.param({"approved_head": HEAD}, id="an-approved-head"),
         pytest.param(
@@ -318,22 +311,11 @@ def test_a_pr_merged_while_the_landing_waited_for_its_turn_is_not_touched(landin
     assert call_order(calls) == ["try_turn", "try_turn", "release_turn"]
 
 
-@pytest.mark.parametrize(
-    ("queue", "subject", "expected"),
-    [
-        pytest.param(False, "No turn", ["gh:master-runs", "merge"], id="turn-off"),
-        pytest.param(True, "", [], id="a-merge-made-elsewhere"),
-    ],
-)
-def test_a_landing_takes_no_turn_with_the_turn_off_or_without_a_merge_of_its_own(
-    landing, queue, subject, expected
-):
-    ln, calls = landing(
-        Fakes(gh_views={"state,mergeable,headRefOid": [OPEN, MERGED]}), queue=queue
-    )
-    ln.direct_merge_subject = subject
+def test_a_landing_that_merges_nothing_itself_takes_no_turn(landing):
+    ln, calls = landing(Fakes(gh_views={"state,mergeable,headRefOid": [OPEN, MERGED]}))
+    ln.direct_merge_subject = ""
     land_in_turn(ln)
-    assert call_order(calls) == expected
+    assert call_order(calls) == []
 
 
 def test_a_landing_off_the_turn_host_takes_the_turn_over_ssh(

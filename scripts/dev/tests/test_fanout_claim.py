@@ -32,6 +32,7 @@ def _findings(run):
 
 
 def test_launch_claims_each_issue_under_head_before_its_batch_starts(tmp_path):
+    # fact: .claude/skills/issue-fanout/SKILL.md#2. Claim before spawning, under the orchestrator's own worktree name
     tools, run = fake_tools(answers={"daniel-box": ok(HEADROOM)}, issues=ISSUES)
     assert _launch(tools, tmp_path, "1,2") == 0
     hosts = [host for host, _, _ in run.calls]
@@ -56,6 +57,7 @@ def test_launch_claims_each_issue_under_head_before_its_batch_starts(tmp_path):
 def test_a_detached_head_or_the_base_branch_is_refused_before_any_call(
     tmp_path, capsys, monkeypatch, head
 ):
+    # fact: .claude/skills/issue-fanout/SKILL.md#2. Claim before spawning, under the orchestrator's own worktree name
     monkeypatch.setattr("sys.argv", ["fanout.py"])
     tools, run = fake_tools(
         answers={"daniel-box": ok(HEADROOM)}, issues=ISSUES, head=head
@@ -68,6 +70,7 @@ def test_a_detached_head_or_the_base_branch_is_refused_before_any_call(
 def test_a_refused_issue_is_dropped_and_the_batch_renamed_from_what_it_kept(
     tmp_path, capsys
 ):
+    # fact: .claude/skills/issue-fanout/SKILL.md#2. Claim before spawning, under the orchestrator's own worktree name
     tools, run = fake_tools(
         answers={"daniel-box": ok(HEADROOM)}, issues=ISSUES, refused_claims={2}
     )
@@ -84,6 +87,7 @@ def test_a_refused_issue_is_dropped_and_the_batch_renamed_from_what_it_kept(
 def test_a_batch_with_no_claimed_issue_launches_nothing_and_writes_no_manifest(
     tmp_path,
 ):
+    # fact: .claude/skills/issue-fanout/SKILL.md#2. Claim before spawning, under the orchestrator's own worktree name
     tools, run = fake_tools(
         answers={"daniel-box": ok(HEADROOM)}, issues=ISSUES, refused_claims={1}
     )
@@ -93,6 +97,7 @@ def test_a_batch_with_no_claimed_issue_launches_nothing_and_writes_no_manifest(
 
 
 def test_a_failed_launch_releases_the_claims_it_took(tmp_path, capsys):
+    # fact: .claude/skills/issue-fanout/SKILL.md#2. Claim before spawning, under the orchestrator's own worktree name
     tools, run = fake_tools(answers={"daniel-box": ok(HEADROOM)}, issues=ISSUES)
     run.answers_by_call = [
         ok(HEADROOM),

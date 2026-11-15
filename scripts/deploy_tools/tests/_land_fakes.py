@@ -141,7 +141,8 @@ class Fakes:
     compare: list[list[str] | Exception] = field(default_factory=lambda: [[]])
     # What `closing_refs`' GraphQL read answers, one entry per call.
     closing_refs: list[dict | Exception] = field(default_factory=lambda: [{}])
-    # What the master `ci.yml` runs listing answers, one entry per call, as `pace.py` reads it:
+    # What the master `ci.yml` runs listing answers, one entry per call, as `live_limit.py`
+    # reads it:
     # `{status, created_at}` per run. Empty is a master with no CI backlog, and an exception is
     # raised in place of an answer.
     master_runs: list[list[dict[str, str]] | Exception] = field(
@@ -155,7 +156,7 @@ class Fakes:
     line: list[str | Exception] = field(default_factory=lambda: [""])
     # What the PR head's `ci.yml` runs listing answers on every call, as `merge._ready_run_on`
     # reads it: `{id, status, conclusion}` per run. The default is one draft run that skipped,
-    # and an exception is raised in place of an answer.
+    # and an exception is raised in place of an answer. A callable answers for the head SHA.
     head_runs: Any = field(
         default_factory=lambda: [
             {"id": 1, "status": "completed", "conclusion": "skipped"}
@@ -268,9 +269,12 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
             return answer
         if args[0] == "api" and "/workflows/ci.yml/runs?head_sha=" in args[1]:
             calls.append(("gh:head-runs", args, kwargs))
-            if isinstance(f.head_runs, Exception):
-                raise f.head_runs
-            return f.head_runs
+            runs = f.head_runs
+            if callable(runs):
+                runs = runs(args[1].split("head_sha=")[1].split("&")[0])
+            if isinstance(runs, Exception):
+                raise runs
+            return runs
         for route, answer in (
             ("/check-runs?", f.pending_checks),
             ("/check-suites?", f.completed_suites),
@@ -434,7 +438,6 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
         logger=lambda line: calls.append(("logger", (line,), {})),
         sleep=lambda s: calls.append(("sleep", (s,), {})),
         clock=clock,
-        wall_clock=lambda: 1_000_000.0,
     )
     return tools, calls
 

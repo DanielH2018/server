@@ -73,6 +73,7 @@ def _claims():
 
 
 def test_claims_counts_the_live_ones_and_lists_the_stale_ones(capsys):
+    # fact: .claude/skills/issue-fanout/SKILL.md#5. Report
     tools, _ = build_tools(Fakes(issues=_claims(), worktree_facts=live_worktree(LIVE)))
     assert main(["claims"], tools) == 0
     out = capsys.readouterr().out.splitlines()

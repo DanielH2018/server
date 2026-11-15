@@ -29,32 +29,23 @@ checked, which auto-merge cannot do (`docs/landing.md` has the detail).
 master, and GitHub's auto-merge applies no bypass, so `gh pr merge --auto` leaves the PR
 `BLOCKED` from either account. `land.sh` merges as the operator, which the bypass covers.
 
-**A stale base costs one branch update first.** Before the merge, `land.sh` asks which paths
-master changed since the base the head's green CI run tested it against (the PR's merge base
-when that run's log cannot be read). When one of them is a path the PR changes, or GitHub reads
-the PR as conflicting, it merges master into the PR branch once, prints `updating its branch so
-CI re-tests it against master before the merge`, and merges only after CI is green on the
-updated head. That adds a CI run's worth of time, not a fault. When master changed only paths
-the PR does not, it prints `none of them one the PR changes` and merges as it stands. The
-exception is a stale head the operator approved: the update would void the approval, so
-`land.sh` refuses it and names the remedy, which is to rebase onto origin/master, push and get
-the new head approved.
+**A stale base is tested inside the landing turn.** A head with no CI run gets its branch
+updated from master when its landing takes the turn, and prints `updating its branch so CI
+tests it against master before the merge`. A green head of a ready PR that master moved past
+is converted to draft and updated before the landing asks for the turn, and prints `converted
+it to draft and updated its branch`. Either adds a CI run's worth of time, not a fault. A stale
+green head that reaches the merge anyway merges as it stands, and master's own run tests it.
+The exception is a stale head the operator approved: the update would void the approval, so
+`land.sh` refuses it when master changed a path the PR changes, and names the remedy, which is
+to rebase onto origin/master, push and get the new head approved.
 `land_lib/merge.py`'s module docstring owns the rule.
-
-**A master CI backlog holds the merge.** While two master `ci.yml` runs are unfinished,
-a green PR waits to merge and `land.sh` prints `pacing the merge: …`. Merging faster than
-master CI clears only deepens the runner queue every landing waits on (#5526). A held landing
-never ends at `merge-timeout`: the cap rises by one per 15 minutes held, and once the merge
-budget is spent the landing merges without pacing (#6466).
-`LAND_PACE_MASTER_RUNS` sets the cap and `0` turns pacing off; `land_lib/pace.py` owns
-the rule.
 
 **A landing waits for the landing turn before it merges.** One landing at a time, across
 daniel-box and daniel-server, holds the turn. A green PR asks for it and merges; the others
 print `waiting for the landing turn` once and stand in line. The wait is not a fault and
 spends no GitHub calls. A PR opened as a draft gets its one CI run inside its turn, on the
-master of that moment, so master's run for the merge skips its jobs. `LAND_QUEUE=0` turns the turn off for one
-landing; `land_lib/turn.py` owns the rule.
+master of that moment, so master's run for the merge skips its jobs. `land_lib/turn.py` owns
+the rule.
 
 **A draft that waits in line may be merged by the landing ahead of it.** The landing that
 holds the turn tests the drafts standing in line with its own in one CI run and merges them
@@ -115,7 +106,8 @@ gh pr create --draft --fill --body-file <path>   # title from the commit, body f
 
 `--draft` is what lets the landing share a CI run. `ci.yml` runs no job on a draft, and
 `land.sh` marks the draft ready or tests it with the other drafts in line. A PR opened ready
-spends a full run at every push and never joins a batch. Do not mark the draft ready
+spends a full run at every push. Once it is green, its landing converts it back to draft and
+updates its branch when master has moved, so it then joins the line. Do not mark the draft ready
 yourself. When a PR has to show a CI result before anyone lands it, such as one waiting on
 the operator's review, `gh pr ready <n>` starts its run.
 

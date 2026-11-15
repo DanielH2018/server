@@ -43,29 +43,6 @@ DEADLINE_ENV = "LAND_DEADLINE"
 # so a landing that merges into the window waits out the deferral (#5457). A lander sets it
 # only when its caller's kill leaves that much room past LAND_DEADLINE.
 WINDOW_GRACE_ENV = "LAND_WINDOW_GRACE"
-# The unfinished master CI runs at which `pace.hold` holds a green merge; 0 turns pacing off.
-PACE_ENV = "LAND_PACE_MASTER_RUNS"
-# DECIDED: hold the merge while two master runs are unfinished. A full sweep runs 25 jobs, and
-# 20 measured sweeps peaked at 18 in progress at once, against a 20-job runner cap, so a second
-# unfinished sweep already queues (#5526, #8143). Those peaks came from a busy pool. On
-# 2026-11-14, three uncontended sweeps, where no job waited more than 4 s for a runner and at
-# most 3 other jobs ran, each peaked at 17 jobs in progress, `host_tools_arm64` included
-# (#8257). The arm job's `ubuntu-24.04-arm` runners share the 20-job pool: in a busy window
-# that day, jobs in progress across the repo never exceeded 20 while 36 x64 jobs queued, and
-# the 20 included up to 2 arm jobs. One sweep alone therefore fits the pool, and two do not.
-# A cap of 1
-# was tried from 2026-10-25 (#6308), on the theory that a re-tested PR merged into an idle
-# master more often merges the tree it tested, so `prove` skips the push sweep. It did not
-# raise that share (#6309). Before the change, 74 of 155 master push runs ran only `prove` and
-# `prek`; from 2026-10-26 to 2026-10-29, 46 of 89 did. With three or more merges in the hour
-# before, the share was 61 of 140 before and 27 of 64 after. The cap of 1 did move merges onto
-# an idle master: 11 of 89 merged while a master run was unfinished, against 67 of 155 before.
-# Yet only 46 of 78 idle-master merges skipped the sweep, against 65 of 88 before, so the
-# untested tree comes from master moving during the PR's re-test, which no merge-time read
-# prevents. Batching the merges is the remaining route (#6521).
-PACE_MASTER_RUNS = 2
-# A landing takes the landing turn before it merges (`turn.py`); `0` turns the turn off.
-QUEUE_ENV = "LAND_QUEUE"
 # A landing that takes the turn with a draft tests the drafts in the line with its own
 # (`batch.py`); `0` turns that off.
 BATCH_ENV = "LAND_BATCH"
@@ -84,8 +61,6 @@ ENV_KNOBS = (
     HANDOFF_ENV,
     DEADLINE_ENV,
     WINDOW_GRACE_ENV,
-    PACE_ENV,
-    QUEUE_ENV,
     BATCH_ENV,
 )
 
@@ -148,9 +123,6 @@ class Options:
     # should look at why.
     merge_timeout: int = CI_TIMEOUT_S
     merge_poll: int = MERGE_POLL_S
-    pace_master_runs: int = PACE_MASTER_RUNS
-    # `LAND_QUEUE`: take the landing turn for the merge wait.
-    queue: bool = True
     # `LAND_BATCH`: form a landing batch from the drafts in the line for the turn.
     batch: bool = True
     primary: Path = PRIMARY_CHECKOUT
@@ -276,8 +248,6 @@ def parse_args(argv: list[str] | None, description: str) -> Options:
         window_grace=int(os.environ.get(WINDOW_GRACE_ENV) or 0),
         verdict_file=ns.verdict_file,
         merge_poll=_merge_poll_from_env(),
-        pace_master_runs=int(os.environ.get(PACE_ENV) or PACE_MASTER_RUNS),
-        queue=os.environ.get(QUEUE_ENV) != "0",
         batch=os.environ.get(BATCH_ENV) != "0",
         primary=_primary_from_env(),
         detach=ns.detach,
