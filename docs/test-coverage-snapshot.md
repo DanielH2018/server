@@ -3,7 +3,8 @@
 One coverage run of the whole pytest suite, with per-test contexts, measured on 2026-11-14 at
 commit `ec7b15021` (#8516). It ran outside CI and gates nothing. Coverage is not part of CI and
 has no threshold. The counts and lists leave out `test_terraria_stats_follows_the_server.py`, which
-master deleted after that commit (f5c1c8636b).
+master deleted after that commit (f5c1c8636b). They also leave out `test_jsonpath_quoting.py`,
+deleted later because no Ansible command task remained for it to scan.
 
 This page lists deletion candidates for later issues. An entry is not a verdict: a later issue
 reads each test file before it deletes anything.
@@ -12,9 +13,9 @@ reads each test file before it deletes anything.
 
 | Measure | Count |
 |---|---:|
-| Test files run | 1,423 |
-| Test files that cover at least one measured line inside a test | 1,305 |
-| Test files with no covered line that another test file does not also cover (list 1) | 703 |
+| Test files run | 1,422 |
+| Test files that cover at least one measured line inside a test | 1,304 |
+| Test files with no covered line that another test file does not also cover (list 1) | 702 |
 | Test files that cover no measured line inside a test | 118 |
 | Modules in scope for list 2 | 562 |
 | Modules with no covered line (list 2) | 1 |
@@ -723,7 +724,6 @@ the other test files that cover at least one of those lines.
 | `tests/k8s/test_alloy_ships_k3s_log.py` | 1 | 624 |
 | `tests/k8s/test_cluster_base_mirrors_the_k3s_identity.py` | 1 | 624 |
 | `tests/k8s/test_forwardauth_rebuilds_request_target.py` | 1 | 624 |
-| `tests/k8s/test_jsonpath_quoting.py` | 1 | 185 |
 | `tests/k8s/test_metallb_vendored_manifest.py` | 1 | 185 |
 | `tests/k8s/test_pod_template_hygiene.py` | 1 | 185 |
 | `tests/k8s/test_priorityclass_omits_defaulted_fields.py` | 1 | 185 |
@@ -814,7 +814,7 @@ Each group's files cover exactly the same measured lines.
 - 4 files: `hosts/tests/test_claude_code_on_daniel_server.py`, `hosts/tests/test_claude_fanout_server_lander.py`, `hosts/tests/test_claude_memory_sync.py`, `hosts/tests/test_claude_pipeline_timeline.py`
 - 4 files: `scripts/deploy_tools/tests/test_promote_reconcile.py`, `scripts/deploy_tools/tests/test_promote_settle.py`, `scripts/deploy_tools/tests/test_promote_settle_owner.py`, `scripts/deploy_tools/tests/test_promote_settle_retry.py`
 - 4 files: `scripts/renderer/tests/test_renderer_determinism_0.py`, `scripts/renderer/tests/test_renderer_determinism_1.py`, `scripts/renderer/tests/test_renderer_determinism_2.py`, `scripts/renderer/tests/test_renderer_determinism_3.py`
-- 4 files: `tests/k8s/test_jsonpath_quoting.py`, `tests/k8s/test_metallb_vendored_manifest.py`, `tests/k8s/test_pod_template_hygiene.py`, `tests/k8s/test_priorityclass_omits_defaulted_fields.py`
+- 3 files: `tests/k8s/test_metallb_vendored_manifest.py`, `tests/k8s/test_pod_template_hygiene.py`, `tests/k8s/test_priorityclass_omits_defaulted_fields.py`
 - 4 files: `tests/k8s/test_traefik_crds.py`, `tests/longhorn/test_longhorn_control_plane_resources.py`, `tests/longhorn/test_longhorn_csi_secret_grant.py`, `tests/services/test_pihole_lan_reverse_forwarding.py`
 - 4 files: `tests/longhorn/test_longhorn_restore_drill_nopvc.py`, `tests/longhorn/test_longhorn_restore_drill_operator_pin.py`, `tests/longhorn/test_longhorn_restore_drill_oversize.py`, `tests/longhorn/test_longhorn_restore_drill_retry.py`
 - 4 files: `tests/services/test_anisync_pin_matches_server.py`, `tests/services/test_introskipper_install.py`, `tests/services/test_mediacleaner_install.py`, `tests/services/test_webhook_plugin_install.py`

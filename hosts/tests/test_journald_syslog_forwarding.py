@@ -87,7 +87,6 @@ def test_raising_the_forwarding_level_requires_the_syslog_filter(host: str):
     A host with no rsyslog skips: forwarding reaches nothing there, and the filter has nothing
     to pair with.
     """
-    # fact: ansible/roles/setup/initial_setup/CLAUDE.md#Rules the task files do not state
     if setting(shipped_text(host, JOURNALD_DEST), "MaxLevelSyslog") != "info":
         pytest.skip("forwarding is not raised, so the filter is not required")
     if not has_rsyslog(host):
@@ -120,7 +119,6 @@ def filter_listing_errors(hosts, lists, rsyslog) -> list[str]:
 
 def test_the_filter_component_lists_exactly_on_hosts_with_rsyslog():
     """A masked rsyslog has no use for the filter, and `rsyslogd -N1` would hold the host."""
-    # fact: ansible/roles/setup/initial_setup/CLAUDE.md#Rules the task files do not state
     assert lists_the_filter("daniel-server")
     assert lists_the_filter("daniel-box")
     assert not lists_the_filter("daniel-pi")

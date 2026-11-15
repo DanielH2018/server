@@ -20,7 +20,7 @@ def is_test_only_path(path: str) -> bool:
     a `test_*.py` or `conftest.py` wherever it sits, covers `scripts/conftest.py` and a test a
     session adds beside code before that guard catches it.
 
-    The invariant this rests on: nothing under `ansible/` copies a test file to a host. The
+    The invariant this rests on: no role copies a test file to a host. The
     `no-role-ships-a-pytest-file` row of `tests/repo/test_census_rows_roles.py` guards
     it, so a role that starts shipping one fails there rather than widening this predicate.
     """
