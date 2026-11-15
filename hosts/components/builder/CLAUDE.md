@@ -129,7 +129,8 @@ A failed fetch exits 0 and writes nothing: the fetch timestamp then ages, which 
 ## The `homelab-tools` step (H3.11)
 
 The render of `hosts/packages/homelab-tools/` holds pins and no binaries: one tree per
-architecture, each with an `nfpm.yaml` and a `tools.json`. For each such tree the builder
+architecture, each with an `nfpm.yaml` and a `tools.json`. The `arm64` tree pins only the tools
+the spec's `tools_on` lists, which are the ones daniel-pi's packages name. For each such tree the builder
 copies it into `work/`, downloads every pinned file into `tools-cache/<sha256>`, checks the
 digest, places each binary under the copy's `root/usr/lib/homelab/bin/`, and runs nfpm there.
 A tool that ships as a `.tar.gz` names the file to install, and only that member is read.

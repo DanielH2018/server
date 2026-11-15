@@ -14,6 +14,14 @@
 # DECIDED: chezmoi is pinned as its .tar.gz. Upstream publishes a bare binary for amd64 only,
 # and `member` names the file the builder installs from inside the archive.
 description: Pinned upstream binaries the homelab packages call by absolute path
+# DECIDED: the arm64 package ships only the tools daniel-pi's packages name (#8883). daniel-pi is
+# the one arm64 host, and it takes no work the other two hosts could do: the full set was a
+# 119 MB download and a 349 MB unpack onto its SD card at every publish. Every tool still pins
+# arm64 below, because hosts/bootstrap-host.sh embeds the nfpm and uv blocks.
+# scripts/renderer/tests/test_renderer_host_tools.py holds this list equal to the tools the Pi's
+# packages name.
+tools_on:
+  arm64: [node-exporter, sops]
 tools:
   sops:
     amd64:
@@ -91,8 +99,7 @@ tools:
       sha256: 3154179f4611140c9af54a8b3bc6a90bc02b73fe6c1f635369604dde0490406d
       url: https://github.com/vale-cli/vale/releases/download/{version}/vale_{bare}_Linux_arm64.tar.gz
       member: vale
-  # The host DNS forwarder on daniel-box (k3s-host-dns). The arm64 block exists because the renderer
-  # holds every tool to both architectures. Each digest is the release's coredns_<ver>_linux_<arch>.tgz
+  # The host DNS forwarder on daniel-box (k3s-host-dns). Each digest is the release's coredns_<ver>_linux_<arch>.tgz
   # digest. renovate.json's packageRules hold the version to three components: coredns/coredns
   # carries stray tags `v002` ... `v011`, which Renovate once ranked above 1.14.7 (#3087).
   coredns:

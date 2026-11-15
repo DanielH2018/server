@@ -61,7 +61,7 @@ services:
       - AUTOHEAL_INTERVAL=30
       # A restart used to leave no trace outside the Pi's own docker logs, so a container
       # flapping was invisible until someone went looking. Reuses the general-purpose
-      # `monitor_discord_webhook_url` — the same channel Uptime Kuma and monitor-bridge post
+      # `monitor_discord_webhook_url` — the same channel Alertmanager and monitor-bridge post
       # to — rather than minting a webhook nobody would remember to rotate.
       - WEBHOOK_URL={{ monitor_discord_webhook_url }}
       # The image POSTs `{"<WEBHOOK_JSON_KEY>": "<message>"}` and defaults the key to `text`
