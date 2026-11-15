@@ -18,7 +18,7 @@ verbatim-prompts store this role's LAN route
 
 - **A separate `ingressroute-push` router**
   (`k8s/roles/loki-homelab/templates/ingressroute-push.yaml.j2`) is daniel-pi's push-only door.
-- **Persists:** `loki-homelab-data` (`longhorn-nobackup`, 5Gi) — logs, `744h` retention; treated
+- **Persists:** `loki-homelab-data` (`longhorn-nobackup`, 5Gi) — logs, `744h` retention (`168h` for `{job="k8s-audit"}`, #8591); treated
   as bulky and reconstructible in spirit, so the retention window is the real bound, not backup
   (`k8s/roles/loki-homelab/defaults/main.yml:loki_homelab_storage_class`,
   `k8s/roles/loki-homelab/defaults/main.yml:loki_homelab_size`,

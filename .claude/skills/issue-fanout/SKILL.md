@@ -418,7 +418,9 @@ the list itself could not be read. The second case is a `gh` failure rather than
 problem, and it is what `read` shows as `signing=unknown`, so run `read` first — its
 `signing=` field gives the gate's verdict per host before a launch spends an agent on it.
 
-When every PR has merged: `uv run python scripts/dev/fanout.py place clean <run-id>`. A batch
+When every PR has merged: `uv run python scripts/dev/fanout.py place clean <run-id>`. Without
+that, the server-batch lander on daniel-box runs the same clean over every live run of
+`ubuntu`'s at most every 6 hours (`scripts/dev/fanout_lib/clean.py:sweep_runs`). A batch
 `clean` never reaches falls to the weekly worktree sweep, which reads its `fanout-<batch>` lock
 as dead once the unit is inactive and the lock is a day old (`scripts/lib/fanout_lock.py`). It
 removes each worktree once its branch is merged into `origin/master` (or its tip is an ancestor of

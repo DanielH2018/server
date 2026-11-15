@@ -46,6 +46,7 @@ def _gauge(tmp_path, server, prs, box=(), ssh=None, issues=_no_issues):
         local_records=lambda: list(box),
         open_issues=issues,
         clock=lambda: NOW,
+        clean=lambda *a: None,
     )
     gauge = tmp_path / "textfile" / "fanout_operator_waits.prom"
     gauge.parent.mkdir(exist_ok=True)

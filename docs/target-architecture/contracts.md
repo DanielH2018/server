@@ -225,6 +225,8 @@ C-4b waits on D6, but nothing from C-1 to C-7 waits on C-4b.
     - Only `verdict-status` holds `statuses: write`. It checks out nothing and posts
       `verify`'s verdict on T as the commit status `homelab/promote-verdict`.
     - The operator ruled the `reconcile` and `verdict-status` grants on 2026-11-09 (#7865).
+    - Only `settle` and `reconcile` hold `actions: write`, for the dispatch of a run for a
+      newer green commit. The operator ruled `reconcile`'s grant on 2026-11-15 (#7877).
     - Only `publish` holds `id-token: write`.
 
   Code that runs during a render or a decision therefore cannot sign or move a tag (D1,
@@ -367,8 +369,11 @@ C-4b waits on D6, but nothing from C-1 to C-7 waits on C-4b.
       `last-good`, as `stateful` and `no_reset`. Either one non-empty writes that hold and
       tags the digest `held`; both empty writes `<commit> unverified` (#7876).
 
-  `reconcile` resets nothing and dispatches nothing. A failed read writes nothing, and the
-  next run's `decide` names the state again.
+  `reconcile` resets nothing. After it moves `last-good`, it dispatches a run for master's
+  newest green commit when that commit is newer than the lost run's, as `settle` does (#7877).
+  The run's own `decide` ended `current`, so without the dispatch the commit that started it
+  would wait for the next merge. After a hold it dispatches nothing. A failed read writes
+  nothing, and the next run's `decide` names the state again.
 - **A superseding promotion** (D7). With `promote.SUPERSEDE` on, `decide` may promote T over
   P, `prod`'s commit, while P's verification is in flight, instead of waiting.
   `promote_lib/supersede.py` holds the conditions: `DEPLOY_HOLD` reads `none`, `prod` is

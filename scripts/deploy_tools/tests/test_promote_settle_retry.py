@@ -7,16 +7,13 @@ Run: uv run pytest scripts/deploy_tools/tests/test_promote_settle_retry.py
 """
 
 import pytest
+from test_promote_dispatch import DISPATCH, NEWER, OLDER, _dispatch
 from test_promote_settle import (
     DIGEST,
-    DISPATCH,
     HOLD,
-    NEWER,
-    OLDER,
     RECORD,
     RESET_PROD,
     T,
-    _dispatch,
     _run,
     _settle,
     _step,
@@ -51,6 +48,7 @@ def test_the_dispatch_recovers_on_its_third_try(tmp_path, jobs):
     result, calls = _dispatch(
         tmp_path,
         jobs,
+        "settle",
         [NEWER, T, OLDER],
         FAKE_GH_FAIL="workflow run",
         FAKE_GH_FAIL_TIMES="2",
@@ -64,7 +62,12 @@ def test_the_run_list_read_recovers_without_keeping_the_failed_try_s_body(
 ):
     """The red half is a capture that holds the error body, which fails the 40-hex check."""
     result, calls = _dispatch(
-        tmp_path, jobs, [NEWER, T, OLDER], FAKE_GH_FAIL="api", FAKE_GH_FAIL_TIMES="1"
+        tmp_path,
+        jobs,
+        "settle",
+        [NEWER, T, OLDER],
+        FAKE_GH_FAIL="api",
+        FAKE_GH_FAIL_TIMES="1",
     )
     assert result.returncode == 0, result.stdout + result.stderr
     assert calls == [DISPATCH]

@@ -66,6 +66,7 @@ def _run(tmp_path, script: str, **env: str):
     )
     base = {
         "CALLS": str(calls),
+        "GITHUB_OUTPUT": str(tmp_path / "github_output"),
         "GITHUB_REPOSITORY": "DanielH2018/server",
         "GH_ACTOR": "actor",
         "GITHUB_TOKEN": "job-token",
@@ -102,6 +103,20 @@ def _reconcile(tmp_path, jobs, **env: str):
     return result, [c for c in calls if not c.startswith("gh api")]
 
 
+def _moved(tmp_path) -> bool:
+    """Whether the step set `moved=true`, which gates the dispatch step after it."""
+    output = tmp_path / "github_output"
+    return output.exists() and "moved=true" in output.read_text().splitlines()
+
+
+def test_the_dispatch_runs_only_after_the_apply_step_moved_last_good(jobs):
+    apply = _step(jobs["reconcile"], "Apply the lost run's verdict")
+    dispatch = _step(jobs["reconcile"], "Dispatch a run for a newer green commit")
+    assert apply.get("id") == "apply"
+    assert 'echo "moved=true" >> "$GITHUB_OUTPUT"' in apply["run"]
+    assert dispatch.get("if") == "steps.apply.outputs.moved == 'true'"
+
+
 # -- reconcile -------------------------------------------------------------------------------
 
 
@@ -112,6 +127,18 @@ def test_a_good_status_for_prods_digest_moves_last_good_is_clean(tmp_path, jobs)
     )
     assert result.returncode == 0, result.stdout + result.stderr
     assert calls == [MOVE]
+    assert _moved(tmp_path), "the move must start the dispatch step"
+
+
+def test_a_failed_move_sets_no_moved_output(tmp_path, jobs):
+    result, _ = _reconcile(
+        tmp_path,
+        jobs,
+        FAKE_STATUSES=_statuses(("success", f"good {DIGEST} reset")),
+        FAKE_FLUX_FAIL="last-good",
+    )
+    assert result.returncode != 0
+    assert not _moved(tmp_path)
 
 
 @pytest.mark.parametrize(
@@ -141,6 +168,7 @@ def test_anything_but_a_good_status_for_prods_digest_writes_the_hold_is_flagged(
     result, calls = _reconcile(tmp_path, jobs, FAKE_STATUSES=statuses)
     assert result.returncode == 0, result.stdout + result.stderr
     assert calls == [HOLD], "last-good stays where it is"
+    assert not _moved(tmp_path), "a hold dispatches nothing"
 
 
 @pytest.mark.parametrize(
@@ -178,6 +206,7 @@ def test_a_prod_a_later_run_moved_writes_nothing(tmp_path, jobs, verdict):
     )
     assert (result.returncode, calls) == (0, [])
     assert "a later run moved it" in result.stdout
+    assert not _moved(tmp_path)
 
 
 def test_an_unread_status_writes_nothing_and_fails(tmp_path, jobs):
