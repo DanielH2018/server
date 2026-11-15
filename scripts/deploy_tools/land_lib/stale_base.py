@@ -1,26 +1,24 @@
-"""A green head whose base master has moved past: what makes it stale, and the one update.
+"""A head whose base master has moved past: how far it moved, and the one branch update.
 
---await-merge re-tests a PR whose base is stale before it merges it (issue #4013). Merge
-queues are not offered on a user-owned repo and no ruleset requires an up-to-date branch, so
-nothing else re-tests a PR against the master it merges into. 4 of 5 sampled red master runs
-followed a PR whose every job was green, and two of them came from a master commit merged
-after the PR's base. Once the head reads green, `master_paths_since` asks GitHub which paths
-master changed since the master commit the head's green CI run tested it against (the PR's
-merge base when that cannot be read). When one of them is a path the PR changes, or GitHub
-reads the PR as conflicting with master, `update_branch` merges master into the PR branch,
-and the merge waits for CI on the updated head instead. A PR whose files master did not touch
-merges as it stands (#6565). A landing updates the branch at most once. It never updates the branch of a head the landing policy admitted on
-an approval, which the update would void: a stale approved head is refused with a rebase
-remedy instead.
+A PR's CI run tests the PR merged into the master of its last push, and a merge onto a newer
+master makes a tree no run tested (issue #4013: 4 of 5 sampled red master runs followed a PR
+whose every job was green). `master_paths_since` asks GitHub which paths master changed since
+the master commit the head's green CI run tested it against (the PR's merge base when that
+cannot be read).
 
-A landing that holds the landing turn makes the same update earlier, for a head that has had
-no CI run, so that its one run tests the master of the turn (`merge._start_run`). A landing
-that takes turns puts a green head of a ready PR that master moved past back in the line as a
-draft instead (`rejoin_line`), so `stale_paths` judges only a head that could not rejoin.
+A landing gives a head one run on the master its merge lands on in two places, both in the
+landing turn. A head that has had no CI run gets its branch updated when the landing takes the
+turn (`merge._start_run`, `update_branch`). A green head of a ready PR that master moved past
+is converted to draft and updated before the landing asks for the turn, so it waits in the
+line like any draft (`rejoin_line`).
+
+A green head that reaches the merge with a stale base anyway merges as it stands, and master's
+own run tests it. The one exception is a head the landing policy admitted on an approval,
+which an update would void: `refuse_stale_approved` refuses it with a rebase remedy when master
+changed a path the PR changes.
 """
 
 import subprocess
-from collections.abc import Callable
 
 import sys as _sys
 from pathlib import Path as _Path
@@ -84,7 +82,7 @@ def master_paths_since(ln: Landing, head: str) -> list[str]:
     (`tools.tested_base`), and the merge base of `head` and master when it cannot be read.
 
     A renamed path counts under its old name as well as its new one. GitHub's compare endpoint
-    lists at most `COMPARE_CAP` files, so `stale_paths` reads a capped list as stale.
+    lists at most `COMPARE_CAP` files, so a caller reads a capped list as overlap.
 
     Dies when the read fails: an unknown base is an unknown test result, and the cost is one
     landing to re-run.
@@ -136,47 +134,35 @@ def _pr_paths(ln: Landing) -> set[str] | None:
     return {p for pair in names for p in pair if p}
 
 
-def stale_paths(
-    ln: Landing, head: str, conflicting: bool, note: Callable[[str], None]
-) -> list[str]:
-    """The paths that make `head` stale enough to update; [] to merge it as it stands.
+def refuse_stale_approved(ln: Landing, head: str, conflicting: bool) -> None:
+    """Die when `head` is the one the operator approved and master changed a path it changes.
 
-    `note` takes the line that says master moved only on paths the PR leaves alone; the wait
-    passes an `OnChange`, so a merge attempt repeated on the same master does not repeat it.
-
-    `head` is stale when master changed a path the PR changes since its tested base, or when
-    `conflicting` says GitHub reads the PR as conflicting with master. Dies instead when `head`
-    is one the operator approved and is stale.
+    Reads nothing for any other head. Overlap the reads cannot rule out counts as overlap:
+    `conflicting`, a compare list at GitHub's cap, and a file listing at its cap.
     """
+    if head != ln.approved_head:
+        return
     moved = master_paths_since(ln, head)
-    # DECIDED: only a path both master and the PR changed makes a green head stale (operator
-    # ruling 2026-10-29, #6565). The update never cancelled an in-flight run; its cost was a
-    # second full CI run, about 22% of ci.yml runner-minutes. The accepted risk is the shape of
-    # #2922 and #2266, which went red on master from a path the PR never touched. A conflict,
-    # a capped compare list and a capped file listing still update, since overlap is unknown.
+    # DECIDED: only a path both master and the PR changed makes an approved head stale
+    # (operator ruling 2026-10-29, #6565). Refusing on any master move would make every
+    # approved PR be rebased and approved again, since master moves between nearly every
+    # approval and its landing. The accepted risk is the shape of #2922 and #2266, which went
+    # red on master from a path the PR never touched.
     if moved and not conflicting and len(moved) < COMPARE_CAP:
         pr_paths = _pr_paths(ln)
         if pr_paths is not None:
-            overlap = sorted(set(moved) & pr_paths)
-            if not overlap:
-                note(
-                    f"{BRANCH} changed {len(moved)} path(s) since PR #{ln.opts.pr}'s base, "
-                    "none of them one the PR changes; merging without a branch update"
-                )
-            moved = overlap
-    if moved and head == ln.approved_head:
+            moved = sorted(set(moved) & pr_paths)
+    if moved:
         # DECIDED: a stale approved head is refused, not updated and not merged. The update
         # would make a head the operator's approval does not name, so the policy would refuse
-        # it anyway, and merging it untested is what this check exists to stop. The rebase
-        # moves the merge base to master, so the re-approved head goes stale only if master
-        # moves again between the approval and the landing.
+        # it anyway. The rebase moves the merge base to master, so the re-approved head goes
+        # stale only if master moves again between the approval and the landing.
         ln.die(
             f"PR #{ln.opts.pr}'s base is behind {BRANCH} by {len(moved)} changed path(s), "
             "and its approved head cannot be updated without voiding the approval — rebase "
             f"it onto origin/{BRANCH}, push, get the new head approved, and re-run this",
             1,
         )
-    return moved
 
 
 def update_branch(ln: Landing, head: str, moved: list[str]) -> None:

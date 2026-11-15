@@ -52,8 +52,8 @@ head moves before the merge, so a push after the checks needs a re-run, which ch
 The one head move it does not die on is its own branch update, below: it runs the checks
 again on the updated head and pins that.
 
---await-merge re-tests a PR whose base is stale before it merges it, with one branch update
-at most (`stale_base.py`).
+--await-merge gives a PR one run on the master its merge lands on, inside the landing turn,
+with one branch update at most (`stale_base.py`).
 """
 
 import re
@@ -435,10 +435,9 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
     guessed.
 
     A PR arm_merge left for a direct merge is merged here, on the first poll where await_ci
-    reads its head green, unless master moved past the PR's base: then the branch is updated
-    once and the merge waits for the updated head to go green. That update starts a whole new
-    CI chain, so it gives the wait one more `merge_timeout` from there, and LAND_DEADLINE counts
-    two. A green head also waits while master CI has a backlog (`pace.hold`). A held poll never
+    reads its head green. A stale head merges as it stands unless the operator approved it
+    (`stale_base.refuse_stale_approved`). A green head also waits while master CI has a
+    backlog (`pace.hold`). A held poll never
     ends the wait at `merge_timeout`: once held and unheld time reach it, the merge goes ahead
     without pacing.
 
@@ -485,7 +484,6 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
     in_turn, queued = False, 0
     conflicting = 0
     refused = OnChange(say)
-    no_overlap = OnChange(say)
     rate_limited = OnChange(say)
     # await_ci's last answer when it was `pending`, for the merge-timeout message; else empty.
     ci_pending = ""
@@ -509,7 +507,7 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
     if o.queue and ln.direct_merge_subject:
         updated_from, in_turn, queued = _start_run(ln, ask)
         waited = queued
-    # The `waited + held` at which the wait ends; the update after a green head moves it, once.
+    # The `waited + held` at which the wait ends; a wait in line or an update moves it.
     wait_ends_at = waited + o.merge_timeout
     if ln.batched_s:
         wait_ends_at = min(wait_ends_at, wait_cap)
@@ -641,26 +639,19 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
                 say(hold)
             paced = hold
             if rc == CI_GREEN and ln.direct_merge_subject and not hold:
-                conflicts = view.get("mergeable") == "CONFLICTING"
-                moved = (
-                    []
-                    if updated_from or stale_base.batch_tested(ln, head)
-                    else stale_base.stale_paths(ln, head, conflicts, no_overlap)
-                )
-                if moved:
-                    stale_base.update_branch(ln, head, moved)
-                    updated_from = head
-                    wait_ends_at = min(waited + held + o.merge_timeout, wait_cap)
+                if not (updated_from or stale_base.batch_tested(ln, head)):
+                    stale_base.refuse_stale_approved(
+                        ln, head, view.get("mergeable") == "CONFLICTING"
+                    )
+                if head != gated_head:
+                    gated_pins = pin_gate.gate_before_merge(ln, head)
+                    gated_head = head
                 else:
-                    if head != gated_head:
-                        gated_pins = pin_gate.gate_before_merge(ln, head)
-                        gated_head = head
-                    else:
-                        pin_gate.recheck_before_merge(ln, gated_pins)
-                    refusal = _merge_directly(ln, head)
-                    if not refusal:
-                        continue
-                    refused(f"merge refused at {head[:8]}: {refusal}; waiting")
+                    pin_gate.recheck_before_merge(ln, gated_pins)
+                refusal = _merge_directly(ln, head)
+                if not refusal:
+                    continue
+                refused(f"merge refused at {head[:8]}: {refusal}; waiting")
             if head != stuck_head:
                 stuck_head, stuck_read_at = head, waited + held + stuck_checks.AFTER_S
             elif rc == CI_GREEN and waited + held >= stuck_read_at:

@@ -29,16 +29,15 @@ checked, which auto-merge cannot do (`docs/landing.md` has the detail).
 master, and GitHub's auto-merge applies no bypass, so `gh pr merge --auto` leaves the PR
 `BLOCKED` from either account. `land.sh` merges as the operator, which the bypass covers.
 
-**A stale base costs one branch update first.** Before the merge, `land.sh` asks which paths
-master changed since the base the head's green CI run tested it against (the PR's merge base
-when that run's log cannot be read). When one of them is a path the PR changes, or GitHub reads
-the PR as conflicting, it merges master into the PR branch once, prints `updating its branch so
-CI re-tests it against master before the merge`, and merges only after CI is green on the
-updated head. That adds a CI run's worth of time, not a fault. When master changed only paths
-the PR does not, it prints `none of them one the PR changes` and merges as it stands. The
-exception is a stale head the operator approved: the update would void the approval, so
-`land.sh` refuses it and names the remedy, which is to rebase onto origin/master, push and get
-the new head approved.
+**A stale base is tested inside the landing turn.** A head with no CI run gets its branch
+updated from master when its landing takes the turn, and prints `updating its branch so CI
+tests it against master before the merge`. A green head of a ready PR that master moved past
+is converted to draft and updated before the landing asks for the turn, and prints `converted
+it to draft and updated its branch`. Either adds a CI run's worth of time, not a fault. A stale
+green head that reaches the merge anyway merges as it stands, and master's own run tests it.
+The exception is a stale head the operator approved: the update would void the approval, so
+`land.sh` refuses it when master changed a path the PR changes, and names the remedy, which is
+to rebase onto origin/master, push and get the new head approved.
 `land_lib/merge.py`'s module docstring owns the rule.
 
 **A master CI backlog holds the merge.** While two master `ci.yml` runs are unfinished,

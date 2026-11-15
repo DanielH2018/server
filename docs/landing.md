@@ -247,9 +247,10 @@ jobs. `LAND_QUEUE=0` turns the turn off for one landing.
   new head in the line as a draft. A holder can then stack it, and its own turn gives it one
   run on the master its merge lands on. Merged as it stood, it made a tree no run tested,
   and master's run swept in full: 16 of 26 master runs on 2026-11-14 did.
-- A head the update would void or cannot make is left as it stands, and the stale-base rules
-  above judge it: a head GitHub reads as conflicting, one the landing policy admitted on an
-  approval, and one `LAND_REQUIRE_HEAD` names. A refused update marks the PR ready again.
+- A head the update would void or cannot make is left as it stands: a head GitHub reads as
+  conflicting, one the landing policy admitted on an approval, and one `LAND_REQUIRE_HEAD`
+  names. It merges as it stands, except an approved head that master moved past on a path
+  the PR changes, which is refused with a rebase remedy (`stale_base.refuse_stale_approved`). A refused update marks the PR ready again.
   An update in the turn that GitHub refuses does not stop the landing: the PR keeps the run
   the ready flip started.
 - A landing that holds the turn is not paced. No other landing with a turn merges ahead of
@@ -269,8 +270,7 @@ jobs. `LAND_QUEUE=0` turns the turn off for one landing.
   A landing that spent `merge_timeout` waiting for the turn merges a green head without
   pacing, as a landing that pacing held that long does.
 - A landing with `LAND_QUEUE=0` takes no turn and can move master under the holder. The
-  holder's merge then falls back to the stale-base rules above, and master's run sweeps in
-  full. A merge made outside `land.sh` does the same.
+  holder then merges a tree no run tested, and master's run sweeps in full. A merge made outside `land.sh` does the same.
 
 **A head whose only CI skipped as a draft is re-triggered once, then ends the wait if it skips again.** `ci.yml` runs
 no job on a draft, so the push's run skips every job, the `prek` gate included, and `await_ci`
