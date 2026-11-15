@@ -147,7 +147,8 @@ tests:
               severity: warning
               service: deploy-pipeline
             exp_annotations:
-              summary: A green master commit has waited more than 2 hours for promotion.
+              summary: >-
+                A green master commit has waited 3h 0m 0s for promotion.
               description: >-
                 The oldest green master commit that prod lacks went green 3h 0m 0s ago, and
                 no hold stands. Read the promote workflow's recent runs with gh run list
@@ -203,7 +204,8 @@ tests:
               severity: warning
               service: deploy-pipeline
             exp_annotations:
-              summary: A green master commit has waited more than 2 hours for promotion.
+              summary: >-
+                A green master commit has waited 5h 50m 0s for promotion.
               description: >-
                 The oldest green master commit that prod lacks went green 5h 50m 0s ago, and
                 no hold stands. Read the promote workflow's recent runs with gh run list

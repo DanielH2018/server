@@ -121,12 +121,12 @@ groups:
           service: cloudflare-ddns
           verify: "true"
         annotations:
-          summary: A cloudflare-ddns Deployment has no available replica.
+          summary: >-
+            {{ $labels.deployment }} has no available replica.
           description: >-
-            A cloudflare-ddns Deployment (direct or proxied) has had no available replica for 10
-            minutes, or kube-state-metrics reports none, so its Cloudflare A records are not
-            being kept current. The `deployment` label says which. Read that Deployment's pod
-            events and log in the homelab namespace.
+            {{ $labels.deployment }} has had no available replica for 10 minutes, or
+            kube-state-metrics reports none, so its Cloudflare A records are not being kept
+            current. Read its pod events and log in the homelab namespace.
       # PI-PEER-BACKUP. The script patches `homelab/check-verdict` to `up` or `down` after each
       # scheduled run and skips the patch on a deploy-gate run. The series is absent until the
       # first run and keeps its last value after, which is why the NotReporting rule measures the
