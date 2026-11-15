@@ -233,7 +233,10 @@ procedure, and the reason gate 1 exists. Kubelet's graceful node shutdown does n
 (#8296). It runs when the host shuts down, through the systemd-logind delay lock, and a restart of
 k3s-agent is not a host shutdown. A reboot of daniel-server is graceful: kubelet stops the
 workloads, then Longhorn, then the system pods, by the groups in `k3s_agent_graceful_shutdown`
-in `hosts/components/k3s-agent/component.yml`.
+in `hosts/components/k3s-agent/component.yml`. That holds only while kubelet holds the delay
+lock. To check it, run `systemd-inhibit --list` on daniel-server: it lists a kubelet `shutdown`
+lock in `delay` mode. kubelet takes the lock at start, so a restart of k3s-agent is also what
+re-arms it.
 
 ## Verify the change, not just the workload
 

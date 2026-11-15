@@ -91,12 +91,19 @@ defaults:
   # instead stops the workloads first, so their volumes unmount while Longhorn still serves them,
   # then Longhorn, then the system-critical pods.
   #
+  # kubelet takes that lock only when logind's delay covers the groups' sum, which the logind
+  # drop-in under `files:` sets. Before it shipped, the shutdown manager failed at every agent
+  # start, and the 2026-11-15 weekly reboot aborted every journal again. To see that it holds,
+  # run `systemd-inhibit --list`, which names a kubelet `shutdown` lock in `delay` mode.
+  #
   # The boot side needs no iSCSI setting. iscsid.conf already sets `node.startup = manual`, and on
   # 2026-11-11 open-iscsi's `--loginall=automatic` ran at 13:49:18 without starting iscsid. The
   # logins at 13:49:33 followed instance-manager's tgtd (13:49:27) and a fresh sendtargets
   # discovery, which is Longhorn's attach path, not a stale restore. The read-only remounts at
   # 13:50-13:54 followed an ungraceful shutdown at 13:45:59. If a boot after a graceful shutdown
-  # still logs them, the cause is in Longhorn's engine or replica state, not here.
+  # still logs them, the cause is in Longhorn's engine or replica state, not here. The 2026-11-15
+  # boot logged no remount, and its sessions went to a new instance-manager address after the
+  # agent started.
   #
   # Each group opens at its priority and runs to the next one. 1000000000 is the value of
   # Longhorn's `longhorn-critical` PriorityClass, and 2000000000 is Kubernetes'
@@ -120,6 +127,12 @@ files:
   # kubelet reads its config only at start, so the first shutdown it governs is the one after the
   # agent's next start.
   - {src: templates/kubelet-graceful-shutdown.conf.j2, dst: /var/lib/rancher/k3s/agent/etc/kubelet.conf.d/50-homelab-graceful-shutdown.conf, mode: "0644", activate: "manual:k3s-agent.service"}
+  # Without this file kubelet's shutdown manager never starts (#8296): logind keeps the 30 s that
+  # unattended-upgrades sets, and kubelet logs `Failed to start node shutdown manager` once at
+  # start. The reload makes the delay live at install; the manager starts at the agent's next start.
+  # DECIDED: a name that sorts last, not a same-name /etc file that masks unattended-upgrades' own.
+  # A mask stops working silently if the package renames its file.
+  - {src: templates/logind-kubelet-shutdown.conf.j2, dst: /usr/lib/systemd/logind.conf.d/zz-homelab-kubelet-shutdown.conf, activate: "reload:systemd-logind.service"}
   - {src: templates/logrotate-k3s-agent.j2, dst: /etc/logrotate.d/k3s-agent}
   - {src: templates/tmpfiles-k3s-agent.conf.j2, dst: /usr/lib/tmpfiles.d/homelab-k3s-agent.conf}
   # Longhorn's devices must stay out of multipathd's reach, or mounts fail. The block Ansible wrote
