@@ -47,7 +47,8 @@ groups:
           service: discord
           requires: wan
         annotations:
-          summary: A Discord webhook no longer resolves, or the SMTP backstop login failed.
+          summary: >-
+            {{ with query "homelab_check_detail{job='monitor-bridge',check='discord'}" }}Alert delivery is failing on {{ range $i, $s := . | sortByLabel "detail" }}{{ if $i }}, {{ end }}{{ $s.Labels.detail }}{{ end }}.{{ else }}A Discord webhook no longer resolves, or the SMTP backstop login failed.{{ end }}
           description: >-
             One of the five Discord webhooks (Kuma, CrowdSec, gitops-deploy, *arr, healthchecks)
             no longer resolves, or the Gmail SMTP backstop login failed. Rotate the named webhook
@@ -60,7 +61,8 @@ groups:
           service: r2
           requires: wan
         annotations:
-          summary: R2 usage is past 80% of the free tier on at least one arm.
+          summary: >-
+            {{ with query "homelab_check_detail{job='monitor-bridge',check='r2_usage'}" }}R2 usage is past 80% of the free tier on {{ range $i, $s := . | sortByLabel "detail" }}{{ if $i }}, {{ end }}{{ $s.Labels.detail }}{{ end }}.{{ else }}R2 usage is past 80% of the free tier on at least one arm.{{ end }}
           description: >-
             Month-to-date R2 storage, Class A operations, Class B operations or incomplete multipart
             uploads passed 80% of the free tier. Cloudflare offers no cap on R2, so this is the only
@@ -73,7 +75,8 @@ groups:
           service: cloudflare
           requires: wan
         annotations:
-          summary: Cloudflare's published IP ranges differ from the repo's cloudflare_ips list, or fetching them failed.
+          summary: >-
+            {{ with query "homelab_check_detail{job='monitor-bridge',check='cloudflare_ips_drift'}" }}Cloudflare's IP ranges differ from cloudflare_ips: {{ range $i, $s := . | sortByLabel "detail" }}{{ if $i }}, {{ end }}{{ $s.Labels.detail }}{{ end }}.{{ else }}Cloudflare's published IP ranges differ from the repo's cloudflare_ips list, or fetching them failed.{{ end }}
           description: >-
             cloudflare_ips in group_vars/all.yml sets Traefik's trustedIPs and the netpol
             allow-list. Update it and redeploy traefik, netpol-baseline and monitor-bridge. A
@@ -85,7 +88,8 @@ groups:
           service: healthchecks
           requires: wan
         annotations:
-          summary: A Healthchecks.io dead-man check differs from the documented schedule.
+          summary: >-
+            {{ with query "homelab_check_detail{job='monitor-bridge',check='healthchecks_drift'}" }}Healthchecks.io checks differ from the documented schedule: {{ range $i, $s := . | sortByLabel "detail" }}{{ if $i }}, {{ end }}{{ $s.Labels.detail }}{{ end }}.{{ else }}A Healthchecks.io dead-man check differs from the documented schedule.{{ end }}
           description: >-
             The monitor-bridge log names each slug and field that differs, or a check missing from
             the console. Fix the console, or change docs/healthchecks-io-deadman.md and
@@ -210,7 +214,8 @@ groups:
           service: b2
           requires: b2
         annotations:
-          summary: B2 bucket usage is past the free-tier threshold.
+          summary: >-
+            {{ with query "homelab_check_detail{job='monitor-bridge',check='b2_storage'}" }}The B2 storage check failed: {{ range $i, $s := . | sortByLabel "detail" }}{{ if $i }}, {{ end }}{{ $s.Labels.detail }}{{ end }}.{{ else }}B2 bucket usage is past the free-tier threshold.{{ end }}
           description: >-
             A drain is nearly free, but a prune pays per deleted backup, so read
             longhorn-backup-tiering before deleting anything.
@@ -228,7 +233,8 @@ groups:
           severity: warning
           service: arr
         annotations:
-          summary: A Sonarr or Radarr queue item needs review, or an arr API stayed unreachable.
+          summary: >-
+            {{ with query "homelab_check_detail{job='monitor-bridge',check='arr_queue'}" }}Queue items need review: {{ range $i, $s := . | sortByLabel "detail" }}{{ if $i }}, {{ end }}{{ $s.Labels.detail }}{{ end }}.{{ else }}A Sonarr or Radarr queue item needs review, or an arr API stayed unreachable.{{ end }}
           description: >-
             A queue item is in warning, importBlocked, or importPending with a status message,
             which is the shape of the 2026-07-01 fake-episode .exe. An arr API that stays
@@ -252,7 +258,8 @@ groups:
           severity: warning
           service: home-assistant
         annotations:
-          summary: Home Assistant's scheduler heartbeat is stale, or HA banned an IP.
+          summary: >-
+            {{ with query "homelab_check_detail{job='monitor-bridge',check='ha_heartbeat'}" }}Home Assistant's check is failing on {{ range $i, $s := . | sortByLabel "detail" }}{{ if $i }}, {{ end }}{{ $s.Labels.detail }}{{ end }}.{{ else }}Home Assistant's scheduler heartbeat is stale, or HA banned an IP.{{ end }}
           description: >-
             Either HA is up with its automations not running, or HA banned an IP in the last
             hour. A ban of a cluster gateway locks out everything behind it, so read
@@ -280,7 +287,8 @@ groups:
           severity: warning
           service: host-packages
         annotations:
-          summary: The host-package builder has stopped fetching master or has left a commit unbuilt.
+          summary: >-
+            {{ with query "homelab_check_detail{job='monitor-bridge',check='host_packages'}" }}The host-package builder is stalled: {{ range $i, $s := . | sortByLabel "detail" }}{{ if $i }}, {{ end }}{{ $s.Labels.detail }}{{ end }}.{{ else }}The host-package builder has stopped fetching master or has left a commit unbuilt.{{ end }}
           description: >-
             The builder's last good fetch of master is older than 30 minutes or its series is
             absent, or a commit of master has waited more than 7200 seconds to be built. The
@@ -306,7 +314,8 @@ groups:
           severity: warning
           service: n8n
         annotations:
-          summary: An active n8n workflow failed repeatedly, or several workflows are failing.
+          summary: >-
+            {{ with query "homelab_check_detail{job='monitor-bridge',check='n8n'}" }}n8n workflows failing repeatedly: {{ range $i, $s := . | sortByLabel "detail" }}{{ if $i }}, {{ end }}{{ $s.Labels.detail }}{{ end }}.{{ else }}An active n8n workflow failed repeatedly, or several workflows are failing.{{ end }}
           description: >-
             An active workflow failed 3 times in a row, or 2 or more workflows are each failing
             repeatedly. The monitor-bridge log names the workflow; open its last execution in n8n.
@@ -318,7 +327,8 @@ groups:
           severity: warning
           service: bazarr
         annotations:
-          summary: Bazarr rejects its sonarr or radarr API key, or reports a health issue.
+          summary: >-
+            {{ with query "homelab_check_detail{job='monitor-bridge',check='bazarr'}" }}Bazarr reports a problem with {{ range $i, $s := . | sortByLabel "detail" }}{{ if $i }}, {{ end }}{{ $s.Labels.detail }}{{ end }}.{{ else }}Bazarr rejects its sonarr or radarr API key, or reports a health issue.{{ end }}
           description: >-
             Bazarr's own copy of the sonarr or radarr API key is rejected (an empty peer version
             field), or Bazarr reports a health issue. Bazarr holds those keys in its UI, so a key
@@ -331,7 +341,8 @@ groups:
           severity: warning
           service: prowlarr
         annotations:
-          summary: A Prowlarr indexer has been failing for a week or more.
+          summary: >-
+            {{ with query "homelab_check_detail{job='monitor-bridge',check='prowlarr_indexers'}" }}Prowlarr indexers failing for a week or more: {{ range $i, $s := . | sortByLabel "detail" }}{{ if $i }}, {{ end }}{{ $s.Labels.detail }}{{ end }}.{{ else }}A Prowlarr indexer has been failing for a week or more.{{ end }}
           description: >-
             Prowlarr's own initialFailure puts an indexer at a week or more of failures. The Pirate
             Bay and 1337x are ignored as chronic flappers, and short outages never page. The
@@ -344,7 +355,8 @@ groups:
           severity: critical
           service: scrutiny
         annotations:
-          summary: Scrutiny reports a failing drive, stale collector data or high NVMe wear.
+          summary: >-
+            {{ with query "homelab_check_detail{job='monitor-bridge',check='scrutiny'}" }}Scrutiny reports {{ range $i, $s := . | sortByLabel "detail" }}{{ if $i }}, {{ end }}{{ $s.Labels.detail }}{{ end }}.{{ else }}Scrutiny reports a failing drive, stale collector data or high NVMe wear.{{ end }}
           description: >-
             A drive's collector data is older than 26h, its SMART self-assessment or an attribute
             threshold failed, or NVMe wear passed 80%. Scrutiny's own notifier is unconfigured,
@@ -357,7 +369,8 @@ groups:
           severity: warning
           service: speedtest
         annotations:
-          summary: The newest speedtest result is stale, incomplete or under 100 Mbps.
+          summary: >-
+            {{ with query "homelab_check_detail{job='monitor-bridge',check='speedtest'}" }}The newest speedtest result failed on {{ range $i, $s := . | sortByLabel "detail" }}{{ if $i }}, {{ end }}{{ $s.Labels.detail }}{{ end }}.{{ else }}The newest speedtest result is stale, incomplete or under 100 Mbps.{{ end }}
           description: >-
             The last speedtest-tracker run is older than 8 h, did not complete, or downloaded
             under 100 Mbps. Open the speedtest UI and check its scheduler and last result.

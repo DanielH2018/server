@@ -794,6 +794,125 @@ tests:
               summary: "The newest speedtest result is stale, incomplete or under 100 Mbps."
               description: "The last speedtest-tracker run is older than 8 h, did not complete, or downloaded under 100 Mbps. Open the speedtest UI and check its scheduler and last result."
 
+  # The members a down row names (#8874). Each row exports one homelab_check_detail series per
+  # failing member, and the summary lists them sorted, scoped to its own `check`: the bazarr
+  # detail reaches no other summary. Every other case here has no detail series, so it pins
+  # each summary's fallback text.
+  - interval: 1m
+    input_series:
+      - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="discord"}
+        values: "0x12"
+      - series: homelab_check_detail{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="discord",detail="Kuma"}
+        values: "1x12"
+      - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="r2_usage"}
+        values: "0x12"
+      - series: homelab_check_detail{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="r2_usage",detail="Class B"}
+        values: "1x12"
+      - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="n8n"}
+        values: "0x12"
+      - series: homelab_check_detail{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="n8n",detail="Backup Digest"}
+        values: "1x12"
+      - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="prowlarr_indexers"}
+        values: "0x12"
+      - series: homelab_check_detail{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="prowlarr_indexers",detail="YTS"}
+        values: "1x12"
+      - series: homelab_check_detail{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="prowlarr_indexers",detail="EZTV"}
+        values: "1x12"
+      - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="scrutiny"}
+        values: "0x12"
+      - series: homelab_check_detail{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="scrutiny",detail="nvme0 (SHPP41-500GM) worn"}
+        values: "1x12"
+      - series: homelab_check_detail{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="bazarr",detail="radarr API key"}
+        values: "1x12"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: DiscordDeliveryFailing
+        exp_alerts:
+          - exp_labels:
+              job: monitor-bridge
+              instance: monitor-bridge.homelab.svc:9181
+              check: discord
+              severity: critical
+              service: discord
+              requires: wan
+            exp_annotations:
+              summary: Alert delivery is failing on Kuma.
+              description: >-
+                One of the five Discord webhooks (Kuma, CrowdSec, gitops-deploy,
+                *arr, healthchecks) no longer resolves, or the Gmail SMTP backstop
+                login failed. Rotate the named webhook in SOPS and redeploy its
+                consumer. The monitor-bridge log names the failing webhook. Its DOWN
+                line: `kubectl -n homelab logs deploy/monitor-bridge | grep 'DOWN
+                discord '`.
+      - eval_time: 10m
+        alertname: R2FreeTierHeadroomLow
+        exp_alerts:
+          - exp_labels:
+              job: monitor-bridge
+              instance: monitor-bridge.homelab.svc:9181
+              check: r2_usage
+              severity: critical
+              service: r2
+              requires: wan
+            exp_annotations:
+              summary: R2 usage is past 80% of the free tier on Class B.
+              description: >-
+                Month-to-date R2 storage, Class A operations, Class B operations or incomplete
+                multipart uploads passed 80% of the free tier. Cloudflare offers no cap on R2, so
+                this is the only boundary.
+              runbook_url: https://docs.local.daniel-hunter.com/longhorn-backup-tiering/
+      - eval_time: 10m
+        alertname: N8nWorkflowsFailing
+        exp_alerts:
+          - exp_labels:
+              job: monitor-bridge
+              instance: monitor-bridge.homelab.svc:9181
+              check: n8n
+              severity: warning
+              service: n8n
+            exp_annotations:
+              summary: "n8n workflows failing repeatedly: Backup Digest."
+              description: >-
+                An active workflow failed 3 times in a row, or 2 or more workflows
+                are each failing repeatedly. The monitor-bridge log names the
+                workflow; open its last execution in n8n. Its DOWN line: `kubectl -n
+                homelab logs deploy/monitor-bridge | grep 'DOWN n8n '`.
+      - eval_time: 10m
+        alertname: ProwlarrIndexersFailing
+        exp_alerts:
+          - exp_labels:
+              job: monitor-bridge
+              instance: monitor-bridge.homelab.svc:9181
+              check: prowlarr_indexers
+              severity: warning
+              service: prowlarr
+            exp_annotations:
+              summary: "Prowlarr indexers failing for a week or more: EZTV, YTS."
+              description: >-
+                Prowlarr's own initialFailure puts an indexer at a week or more of
+                failures. The Pirate Bay and 1337x are ignored as chronic flappers,
+                and short outages never page. The monitor-bridge log names the
+                indexer. Its DOWN line: `kubectl -n homelab logs
+                deploy/monitor-bridge | grep 'DOWN prowlarr_indexers '`.
+      - eval_time: 10m
+        alertname: SmartHealthFailing
+        exp_alerts:
+          - exp_labels:
+              job: monitor-bridge
+              instance: monitor-bridge.homelab.svc:9181
+              check: scrutiny
+              severity: critical
+              service: scrutiny
+            exp_annotations:
+              summary: Scrutiny reports nvme0 (SHPP41-500GM) worn.
+              description: >-
+                A drive's collector data is older than 26h, its SMART
+                self-assessment or an attribute threshold failed, or NVMe wear
+                passed 80%. Scrutiny's own notifier is unconfigured, so this is the
+                only drive-failure page. The monitor-bridge log names the drive. Its
+                DOWN line: `kubectl -n homelab logs deploy/monitor-bridge | grep
+                'DOWN scrutiny '`.
+
   # A one-cycle blip never fires. A gauge that reads 0 for one 300s cycle spans five to seven
   # 1-minute samples (the A6 soak saw both five and six), so the 0 samples at minutes 0 to 6
   # start the pending state and the 1 at minute 7 ends it before the 10m hold.
