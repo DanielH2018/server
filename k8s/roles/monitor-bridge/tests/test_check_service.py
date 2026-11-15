@@ -549,8 +549,8 @@ def test_bazarr_empty_peer_version_is_the_stale_key_signal(peer):
     problems = checks.service.bazarr_problems(status, {"data": []})
 
     assert len(problems) == 1, problems
-    assert peer in problems[0]
-    assert "stale API key" in problems[0]
+    assert problems[0][0] == "%s API key" % peer
+    assert "stale API key" in problems[0][1]
 
 
 def test_bazarr_absent_peer_version_is_not_a_problem():
@@ -571,7 +571,7 @@ def test_bazarr_self_reported_health_issues_are_surfaced():
     health = {"data": [{"object": "/tv/Show", "issue": "path does not exist"}]}
 
     assert checks.service.bazarr_problems(_HEALTHY_BAZARR, health) == [
-        "/tv/Show: path does not exist"
+        ("/tv/Show", "/tv/Show: path does not exist")
     ]
 
 

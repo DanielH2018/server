@@ -10,6 +10,7 @@ from dataclasses import replace
 from datetime import datetime, timezone
 
 
+from bridge.types import CheckResult
 import checks.host_thermal
 from _fake_sources import FakeSources
 
@@ -44,11 +45,15 @@ def test_scrutiny_stale_device_is_named():
         _dev("w1", "nvme0", "2026-06-04T06:00:00Z"),
         _dev("w2", "sda", "2026-06-06T06:00:00Z"),
     )
-    ok, msg = checks.host_thermal.scrutiny_freshness(
-        s, 26, now=datetime(2026, 6, 6, 12, 0, tzinfo=timezone.utc)
+    result = CheckResult.of(
+        checks.host_thermal.scrutiny_freshness(
+            s, 26, now=datetime(2026, 6, 6, 12, 0, tzinfo=timezone.utc)
+        )
     )
+    ok, msg = result
     assert not ok
     assert "nvme0" in msg and "sda" not in msg
+    assert result.details == ("nvme0 stale",)
 
 
 def test_scrutiny_no_smart_data_is_down():
@@ -92,8 +97,10 @@ def test_scrutiny_failed_smart_is_named():
         _dev("w1", "nvme0", device_status=1),
         _dev("w2", "sda", device_status=0),
     )
-    ok, msg = checks.host_thermal.scrutiny_health(s)
+    result = CheckResult.of(checks.host_thermal.scrutiny_health(s))
+    ok, msg = result
     assert not ok
+    assert result.details == ("nvme0 failing",)
     assert "nvme0" in msg and "SMART self-assessment FAILED" in msg
     assert "sda" not in msg
 
@@ -172,10 +179,14 @@ def test_scrutiny_wear_under_ceiling_is_ok():
 
 
 def test_scrutiny_wear_over_ceiling_is_down():
-    ok, msg = checks.host_thermal.scrutiny_wear_verdict(
-        [("nvme0 (SHPP41-500GM)", 85), ("nvme0 (CT1000E100SSD8)", 0)], 80
+    result = CheckResult.of(
+        checks.host_thermal.scrutiny_wear_verdict(
+            [("nvme0 (SHPP41-500GM)", 85), ("nvme0 (CT1000E100SSD8)", 0)], 80
+        )
     )
+    ok, msg = result
     assert not ok
+    assert result.details == ("nvme0 (SHPP41-500GM) worn",)
     assert "SHPP41-500GM" in msg and "85% used > 80%" in msg
     assert "CT1000E100SSD8" not in msg
 

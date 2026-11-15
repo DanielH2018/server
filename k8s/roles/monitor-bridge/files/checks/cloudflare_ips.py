@@ -29,6 +29,7 @@ from bridge.common import HTTP_TIMEOUT
 from bridge.config import Config
 from bridge.streaks import ProbeCache
 from bridge.sources import Sources
+from bridge.types import CheckResult
 from bridge.parsing import describe_fetch_failure
 
 IPS_URLS = ("https://www.cloudflare.com/ips-v4", "https://www.cloudflare.com/ips-v6")
@@ -63,18 +64,22 @@ def cloudflare_ips_verdict(
     """(ok, msg) for a fetched range list against the declared allowlist. Pure."""
     live_set = frozenset(live)
     if len(live_set) < MIN_PLAUSIBLE_RANGES:
-        return False, (
+        return CheckResult(
+            False,
             "Cloudflare published only %d ranges — implausible, treating as a bad fetch"
-            % len(live_set)
+            % len(live_set),
+            ["implausible range list"],
         )
     if live_set == expected:
         return True, "cloudflare_ips matches upstream (%d CIDRs)" % len(live_set)
     added = sorted(live_set - expected)
     stale = sorted(expected - live_set)
-    return False, (
+    return CheckResult(
+        False,
         "cloudflare_ips DRIFTED from upstream — added:[%s] stale:[%s] — update "
         "cloudflare_ips in group_vars/all.yml and redeploy traefik and netpol-baseline"
-        % (" ".join(added), " ".join(stale))
+        % (" ".join(added), " ".join(stale)),
+        ["added %s" % cidr for cidr in added] + ["stale %s" % cidr for cidr in stale],
     )
 
 
@@ -111,16 +116,18 @@ def cloudflare_ips_drift(
     try:
         live = fetch()
     except RuntimeError as e:
-        ok, msg = (
+        result = CheckResult(
             False,
             "failed to fetch Cloudflare ranges — allowlist unverified: %s" % e,
+            ["fetch failed"],
         )
     else:
-        ok, msg = cloudflare_ips_verdict(live, cfg.CLOUDFLARE_IPS_EXPECTED)
+        result = CheckResult.of(
+            cloudflare_ips_verdict(live, cfg.CLOUDFLARE_IPS_EXPECTED)
+        )
     probe["ts"] = now
-    probe["ok"] = ok
-    probe["msg"] = msg
-    return ok, msg
+    probe["ok"], probe["msg"] = result
+    return result
 
 
 def check_cloudflare_ips_drift(cfg: Config, src: Sources) -> tuple[bool, str]:

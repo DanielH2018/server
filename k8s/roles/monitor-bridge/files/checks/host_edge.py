@@ -14,7 +14,7 @@ The Pi's resource pressure and published-port arm are rules, not checks: the `ho
 from bridge.config import Config
 from bridge.sources import Sources
 import bridge.streaks
-from bridge.types import as_object, as_object_list
+from bridge.types import CheckResult, as_object, as_object_list
 from verdicts.host import speedtest_verdict
 
 
@@ -73,7 +73,7 @@ def check_speedtest(cfg: Config, src: Sources) -> tuple[bool, str]:
             "speedtest API unreachable: %s" % e,
             "deploy/restart grace",
         )
-        return ok, msg
+        return CheckResult(ok, msg, ["API unreachable"])
     src.state.down_streaks["speedtest"] = 0
     # Narrowed after the streak reset, outside the `try`: a body of the wrong shape is a bug in
     # the reply, not an unreachable API, and must page now rather than ride the deploy grace.

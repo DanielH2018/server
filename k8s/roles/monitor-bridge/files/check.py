@@ -87,7 +87,7 @@ def _evaluate(cfg: Config, src: Sources, name: str, fn: CheckFn) -> CheckResult:
     kill it.
     """
     try:
-        return CheckResult(*fn(cfg, src))
+        return CheckResult.of(fn(cfg, src))
     except Exception as e:  # an unreachable source/metric must not kill the loop
         return CheckResult(False, "%s check error: %s" % (name, e))
 
@@ -161,7 +161,7 @@ def run_once(
         not honour.
       export: Where each enabled row's verdict is recorded for Prometheus. A row skipped by a
         gate or an exporter records 0 and its body is not called. Any other row records
-        `_evaluate`'s verdict. None records nothing, which is every caller but the looping pod.
+        `_evaluate`'s verdict, and a down row its result's `details` as well. None records nothing, which is every caller but the looping pod.
     """
     only = cfg.CHECKS_ONLY if only is None else only
     skip = cfg.CHECKS_SKIP
@@ -196,6 +196,7 @@ def run_once(
         # The verdict the exporter records: 0 for a row a gate or an exporter skips, else the
         # body's own.
         exported = False
+        details: tuple[str, ...] = ()
         # DECIDED: the gate skip stays in the bridge, ahead of the body, though Alertmanager
         # owns the paging suppression. A skipped body is never called, and that is the
         # point: a B2 cap answer is billed (`checks/b2.py:check_b2_reachable`), so calling
@@ -210,14 +211,17 @@ def run_once(
             ok, msg = True, "skipped — exporter down (see ScrapeTargetDown)"
             log_skip(name, msg)
         else:
-            ok, msg = _evaluate(cfg, src, name, entry.fn)
+            result = _evaluate(cfg, src, name, entry.fn)
+            ok, msg = result
             exported = ok
+            if not ok:
+                details = result.details
             if name in GATE_SKIP and not ok:
                 down_gates.add(name)
             if log_all or not ok or "streak" in msg or name in LOGGED_WHEN_UP:
                 bridge.common.log("OK  " if ok else "DOWN", name, "-", msg)
         if export is not None:
-            export.record(name, exported, time.time())
+            export.record(name, exported, time.time(), details)
         if msg.startswith("skipped"):
             counts["skipped"] += 1
         else:

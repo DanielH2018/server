@@ -149,7 +149,7 @@ def r2_usage(cfg: Config, src: Sources, now: float | None = None) -> tuple[bool,
             (now - src.state.r2_probe["ts"]) / 60,
         )
     storage_bytes, uploads, class_a, class_b, unknown = r2_query_usage(cfg, src, now)
-    ok, msg = r2_usage_verdict(
+    result = r2_usage_verdict(
         storage_bytes,
         uploads,
         class_a,
@@ -162,9 +162,8 @@ def r2_usage(cfg: Config, src: Sources, now: float | None = None) -> tuple[bool,
         cfg.R2_USAGE_MAX_PCT,
     )
     src.state.r2_probe["ts"] = now
-    src.state.r2_probe["ok"] = ok
-    src.state.r2_probe["msg"] = msg
-    return ok, msg
+    src.state.r2_probe["ok"], src.state.r2_probe["msg"] = result
+    return result
 
 
 def check_r2_usage(cfg: Config, src: Sources) -> tuple[bool, str]:

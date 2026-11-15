@@ -10,6 +10,7 @@ from dataclasses import replace
 from datetime import datetime, timezone
 
 
+from bridge.types import CheckResult
 import checks.host_edge
 import verdicts.host
 from _fake_sources import FakeSources
@@ -43,17 +44,21 @@ def test_speedtest_fast_completed_run_is_ok():
 
 def test_speedtest_below_floor_pages_and_names_the_server():
     # TWO sub-floor results, because one is a slow run rather than a slow link.
-    ok, msg = verdicts.host.speedtest_verdict(
-        _st_row(
-            download_bits=13_800_312,
-            data={"server": {"id": 70277, "name": "SUMOFIBER"}},
-        ),
-        100.0,
-        8.0,
-        now=ST_NOW,
-        prev_rows=[_st_row(id=779, download_bits=20_000_000)],
+    result = CheckResult.of(
+        verdicts.host.speedtest_verdict(
+            _st_row(
+                download_bits=13_800_312,
+                data={"server": {"id": 70277, "name": "SUMOFIBER"}},
+            ),
+            100.0,
+            8.0,
+            now=ST_NOW,
+            prev_rows=[_st_row(id=779, download_bits=20_000_000)],
+        )
     )
+    ok, msg = result
     assert not ok
+    assert result.details == ("under 100 Mbps",)
     assert "13.8 Mbps" in msg
     assert "SUMOFIBER" in msg
 

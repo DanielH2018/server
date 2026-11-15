@@ -8,6 +8,7 @@ parameters of the check, so nothing here patches the module.
 
 from dataclasses import replace
 
+from bridge.types import CheckResult
 import checks.cloudflare_ips as cf
 from bridge.streaks import ProbeCache
 
@@ -39,10 +40,12 @@ def test_a_matching_list_is_up():
 
 
 def test_a_range_cloudflare_added_is_drift_naming_it():
-    ok, msg = cf.cloudflare_ips_verdict(
-        PUBLISHED + ["203.0.113.0/24"], frozenset(PUBLISHED)
+    result = CheckResult.of(
+        cf.cloudflare_ips_verdict(PUBLISHED + ["203.0.113.0/24"], frozenset(PUBLISHED))
     )
+    ok, msg = result
     assert not ok
+    assert result.details == ("added 203.0.113.0/24",)
     assert "added:[203.0.113.0/24]" in msg
     assert "stale:[]" in msg
 

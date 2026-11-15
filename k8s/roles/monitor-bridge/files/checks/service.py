@@ -19,7 +19,7 @@ from bridge.sources import Sources
 import bridge.streaks
 from bridge.common import sanitize
 from bridge.parsing import parse_duration
-from bridge.types import as_object, as_object_list, optional_object
+from bridge.types import CheckResult, as_object, as_object_list, optional_object
 from verdicts.service import (
     ha_ban_verdict,
     ha_heartbeat_fresh,
@@ -131,7 +131,7 @@ def check_arr_queue(cfg: Config, src: Sources, now=None) -> tuple[bool, str]:
                 "rollout",
             )
             src.state.down_streaks["arr_queue_fetch"] = count
-            return held, note
+            return CheckResult(held, note, ["%s unreachable" % app_name])
         offenders.extend(
             queue_warnings(
                 as_object(data, "%s queue" % app_name),
@@ -146,14 +146,19 @@ def check_arr_queue(cfg: Config, src: Sources, now=None) -> tuple[bool, str]:
             "[%s] %s — %s" % (app, sanitize(title), sanitize(reason))
             for app, title, reason in offenders[:5]
         )
-        return False, "%d queue item(s) need review: %s" % (len(offenders), desc)
+        return CheckResult(
+            False,
+            "%d queue item(s) need review: %s" % (len(offenders), desc),
+            ["%s: %s" % (app, sanitize(title)) for app, title, _ in offenders],
+        )
     return True, "queue clean (%s)" % ", ".join(a[0] for a in configured)
 
 
-def bazarr_problems(status: dict | None, health: dict | None) -> list[str]:
+def bazarr_problems(status: dict | None, health: dict | None) -> list[tuple[str, str]]:
     """Problems from Bazarr's /api/system/status and /api/system/health payloads.
 
-    Pure, so the reject case is testable without a live Bazarr.
+    Pure, so the reject case is testable without a live Bazarr. Each problem is a
+    `(member, message)` pair: the member is `<peer> API key` or the health item's object.
 
     The peer-version fields are the interesting half. Bazarr fills `sonarr_version` /
     `radarr_version` by calling each app with ITS OWN stored copy of that app's API key, so a
@@ -173,13 +178,15 @@ def bazarr_problems(status: dict | None, health: dict | None) -> list[str]:
             continue
         if not str(data.get(field) or "").strip():
             problems.append(
-                "bazarr cannot reach %s (empty %s — stale API key in bazarr's own config?)"
-                % (peer, field)
+                (
+                    "%s API key" % peer,
+                    "bazarr cannot reach %s (empty %s — stale API key in bazarr's own "
+                    "config?)" % (peer, field),
+                )
             )
     for item in (health or {}).get("data") or []:
-        problems.append(
-            "%s: %s" % (sanitize(item.get("object")), sanitize(item.get("issue")))
-        )
+        member = sanitize(item.get("object"))
+        problems.append((member, "%s: %s" % (member, sanitize(item.get("issue")))))
     return problems
 
 
@@ -217,7 +224,11 @@ def check_bazarr(cfg: Config, src: Sources) -> tuple[bool, str]:
     )
     problems = bazarr_problems(status, health)
     if problems:
-        return False, "; ".join(problems[:5])
+        return CheckResult(
+            False,
+            "; ".join(message for _, message in problems[:5]),
+            [member for member, _ in problems],
+        )
     versions = as_object((status or {}).get("data") or {}, "bazarr status data")
     return True, "bazarr ok (sonarr %s, radarr %s)" % (
         versions.get("sonarr_version") or "n/a",
@@ -265,10 +276,11 @@ def check_prowlarr_indexers(cfg: Config, src: Sources) -> tuple[bool, str]:
     )
     if offenders:
         desc = "; ".join("%s down %.0fm" % (sanitize(n), m) for n, m in offenders[:5])
-        return False, "%d indexer(s) failing >=%gm: %s" % (
-            len(offenders),
-            cfg.PROWLARR_INDEXER_MIN_DOWN_MIN,
-            desc,
+        return CheckResult(
+            False,
+            "%d indexer(s) failing >=%gm: %s"
+            % (len(offenders), cfg.PROWLARR_INDEXER_MIN_DOWN_MIN, desc),
+            [sanitize(n) for n, _ in offenders],
         )
     return True, "all %d indexer(s) ok (none failing >=%gm)" % (
         len(name_by_id),
@@ -356,14 +368,15 @@ def with_ha_ban(cfg: Config, src: Sources, ok: bool, msg: str) -> tuple[bool, st
     # HA_BAN_WINDOW after the ban is issued even though the entry survives in
     # /config/ip_bans.yaml. See the HA_BAN_WINDOW comment for why that is the only signal available.
     """
+    arms = [] if ok else ["heartbeat"]
     try:
         banned = src.loki_count(cfg.HA_BAN_SELECTOR, cfg.HA_BAN_WINDOW)
     except Exception as e:
-        return ok, "%s, ip_ban arm unavailable (%s)" % (msg, e)
+        return CheckResult(ok, "%s, ip_ban arm unavailable (%s)" % (msg, e), arms)
     ban_ok, ban_msg = ha_ban_verdict(banned, cfg.HA_BAN_WINDOW)
     if ban_ok:
-        return ok, "%s, %s" % (msg, ban_msg)
-    return False, "%s | %s" % (ban_msg, msg)
+        return CheckResult(ok, "%s, %s" % (msg, ban_msg), arms)
+    return CheckResult(False, "%s | %s" % (ban_msg, msg), arms + ["ip_ban"])
 
 
 def check_ha_heartbeat(

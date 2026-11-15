@@ -114,7 +114,9 @@ class FakeExport:
     def __init__(self) -> None:
         self.records: list[tuple[str, bool]] = []
 
-    def record(self, name: str, ok: bool, now: float) -> None:
+    def record(
+        self, name: str, ok: bool, now: float, details: tuple[str, ...] = ()
+    ) -> None:
         self.records.append((name, ok))
 
     @property

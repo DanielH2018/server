@@ -10,6 +10,8 @@ import (issue #1708).
 
 from datetime import datetime, timezone
 
+from bridge.types import CheckResult
+
 
 def _sub_floor(row: dict | None, min_mbps: float) -> bool:
     """Pure: is `row` a completed result whose download figure is under the floor?
@@ -60,9 +62,10 @@ def speedtest_verdict(
     """
     now = now or datetime.now(timezone.utc)
     if not row:
-        return (
+        return CheckResult(
             False,
             "speedtest has no results at all — the scheduler has never completed a run",
+            ["no results"],
         )
 
     status = row.get("status")
@@ -70,14 +73,23 @@ def speedtest_verdict(
 
     if status != "completed":
         detail = ((row.get("data") or {}).get("message") or "").strip()
-        return False, "last run (%s) %s%s" % (
-            created or "unknown time",
-            status or "has no status",
-            " — " + detail if detail else "",
+        return CheckResult(
+            False,
+            "last run (%s) %s%s"
+            % (
+                created or "unknown time",
+                status or "has no status",
+                " — " + detail if detail else "",
+            ),
+            ["last run %s" % (status or "has no status")],
         )
 
     if not created:
-        return False, "last run has no created_at — cannot judge freshness"
+        return CheckResult(
+            False,
+            "last run has no created_at — cannot judge freshness",
+            ["no timestamp"],
+        )
     stamp = datetime.fromisoformat(created.strip().replace(" ", "T"))
     if stamp.tzinfo is None:
         stamp = stamp.replace(tzinfo=timezone.utc)
@@ -86,16 +98,22 @@ def speedtest_verdict(
         # DECIDED: name both hypotheses, assert neither (#1483). A failed Ookla run writes no
         # row and a stopped scheduler writes no row, so this arm cannot tell them apart —
         # evidence in test_speedtest_stale_message_names_both_causes_and_asserts_neither.
-        return False, (
+        return CheckResult(
+            False,
             "last run was %.1fh ago (> %gh) — no row written since. Either the scheduler "
             "stopped or the run failed: speedtest-tracker writes no row for a failed run, so "
             "the API cannot tell them apart. The pod log's per-tick line is the discriminator."
-            % (age_h, max_age_h)
+            % (age_h, max_age_h),
+            ["stale"],
         )
 
     bits = row.get("download_bits")
     if bits is None:
-        return False, "last run completed but recorded no download figure"
+        return CheckResult(
+            False,
+            "last run completed but recorded no download figure",
+            ["no download figure"],
+        )
     mbps = float(bits) / 1e6
     server = ((row.get("data") or {}).get("server") or {}).get(
         "name"
@@ -114,8 +132,10 @@ def speedtest_verdict(
                 "holding for the next test"
                 % (mbps, min_mbps, server, age_h, run, floor_consecutive)
             )
-        return False, (
+        return CheckResult(
+            False,
             "download %.1f Mbps (< %g) via %s — %.1fh ago; %d/%d consecutive results under "
-            "the floor" % (mbps, min_mbps, server, age_h, run, floor_consecutive)
+            "the floor" % (mbps, min_mbps, server, age_h, run, floor_consecutive),
+            ["under %g Mbps" % min_mbps],
         )
     return True, "download %.1f Mbps via %s, %.1fh ago" % (mbps, server, age_h)

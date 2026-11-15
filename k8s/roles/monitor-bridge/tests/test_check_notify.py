@@ -78,9 +78,11 @@ def test_discord_single_failure_is_suppressed(cfg, state):
 def test_discord_two_consecutive_failures_alert(cfg, state):
     # The 2nd straight failure is a genuinely dead webhook -> down.
     assert _discord_cycle(cfg, state, status=404)[0]
-    ok, msg = _discord_cycle(cfg, state, status=404)
+    result = _discord_cycle(cfg, state, status=404)
+    ok, msg = result
     assert not ok
     assert "404" in msg
+    assert result.details == ("Kuma",)
 
 
 def test_discord_valid_read_resets_streak(cfg, state):

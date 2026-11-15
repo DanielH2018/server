@@ -15,6 +15,17 @@ Decides; does not fetch. Takes its inputs as arguments and reads no module-level
 from datetime import datetime, timezone
 
 from bridge.parsing import parse_rfc3339
+from bridge.types import CheckResult
+
+
+def device_label(wwn: str, dev: dict) -> str:
+    """A device's `device_name (model_name)`, falling back to its WWN for a missing name.
+
+    The model is what tells the two hosts' drives apart: both report `device_name` "nvme0".
+    """
+    name = str(dev.get("device_name") or wwn)
+    model = dev.get("model_name")
+    return "%s (%s)" % (name, model) if model else name
 
 
 def scrutiny_freshness(
@@ -22,7 +33,7 @@ def scrutiny_freshness(
 ) -> tuple[bool, str]:
     """`summary` is the data.summary dict of scrutiny's /api/summary."""
     now = now or datetime.now(timezone.utc)
-    stale, n = [], 0
+    stale, members, n = [], [], 0
     for wwn, entry in (summary or {}).items():
         dev = entry.get("device") or {}
         if dev.get("archived"):
@@ -32,14 +43,18 @@ def scrutiny_freshness(
         cdate = (entry.get("smart") or {}).get("collector_date")
         if not cdate:
             stale.append("%s (no SMART data)" % name)
+            members.append("%s stale" % device_label(wwn, dev))
             continue
         age_h = (now - parse_rfc3339(cdate)).total_seconds() / 3600
         if age_h > max_age_h:
             stale.append("%s (last report %.1fh ago)" % (name, age_h))
+            members.append("%s stale" % device_label(wwn, dev))
     if not n:
-        return False, "scrutiny reports no devices (collector never ran?)"
+        return CheckResult(
+            False, "scrutiny reports no devices (collector never ran?)", ["no devices"]
+        )
     if stale:
-        return False, "stale SMART data: " + ", ".join(stale)
+        return CheckResult(False, "stale SMART data: " + ", ".join(stale), members)
     return True, "%d device(s) reported within %gh" % (n, max_age_h)
 
 
@@ -64,7 +79,7 @@ def scrutiny_health(summary: dict | None, temp_max: float = 0) -> tuple[bool, st
     still reports) can't see. A missing device_status is treated as unknown -> ok (don't false-page
     on an API that omits the field). temp_max > 0 adds a temperature ceiling (°C); 0 disables it.
     """
-    failing, hot = [], []
+    failing, hot, members = [], [], []
     for wwn, entry in (summary or {}).items():
         dev = entry.get("device") or {}
         if dev.get("archived"):
@@ -73,13 +88,15 @@ def scrutiny_health(summary: dict | None, temp_max: float = 0) -> tuple[bool, st
         status = dev.get("device_status")
         if status not in (0, None):
             failing.append("%s (%s)" % (name, _scrutiny_status_desc(status)))
+            members.append("%s failing" % device_label(wwn, dev))
         if temp_max:
             temp = (entry.get("smart") or {}).get("temp")
             if temp is not None and temp > temp_max:
                 hot.append("%s (%g°C > %g°C)" % (name, temp, temp_max))
+                members.append("%s hot" % device_label(wwn, dev))
     problems = failing + hot
     if problems:
-        return False, "SMART health: " + ", ".join(problems)
+        return CheckResult(False, "SMART health: " + ", ".join(problems), members)
     return True, "SMART health ok"
 
 
@@ -122,13 +139,17 @@ def scrutiny_wear_verdict(
             "NVMe wear check INERT: no device reports percentage_used; %s unwatched"
             % (", ".join(unwatched) or "no devices")
         )
-    worn = [
-        "%s (%g%% used > %g%%)" % (label, used, wear_max)
-        for label, used in watched
-        if used > wear_max
-    ]
+    worn = [(label, used) for label, used in watched if used > wear_max]
     if worn:
-        return False, "NVMe wear: " + ", ".join(worn)
+        return CheckResult(
+            False,
+            "NVMe wear: "
+            + ", ".join(
+                "%s (%g%% used > %g%%)" % (label, used, wear_max)
+                for label, used in worn
+            ),
+            ["%s worn" % label for label, _ in worn],
+        )
     msg = "NVMe wear ok (max %g%% used of %g%%)" % (
         max(used for _, used in watched),
         wear_max,
