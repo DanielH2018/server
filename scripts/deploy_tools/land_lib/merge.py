@@ -362,7 +362,9 @@ def _no_turn(draft: str) -> tuple[bool, int]:
     return False, 0
 
 
-def _start_run(ln: Landing, take_turn: TakeTurn) -> tuple[str, bool, int]:
+def _start_run(
+    ln: Landing, take_turn: TakeTurn, rejoined: bool = False
+) -> tuple[str, bool, int]:
     """Give a PR that has had no CI run its one run, on the master of the landing turn.
 
     A head with no CI run that ran jobs takes the landing turn first (`turn.py`), so that the
@@ -394,7 +396,9 @@ def _start_run(ln: Landing, take_turn: TakeTurn) -> tuple[str, bool, int]:
         head = view.get("headRefOid") or ""
         if view.get("state") != "OPEN" or not head:
             return "", in_turn, queued
-        untested = not _ready_run_on(ln, head)
+        # A rejoined head was made by its update while the PR was a draft, so every run on it
+        # skips, though the first may still be running.
+        untested = rejoined or not _ready_run_on(ln, head)
         if not untested or in_turn or queued:
             break
         in_turn, queued = take_turn(head if view.get("isDraft") is True else "")
@@ -554,7 +558,7 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
             continue
         if rejoined and head:
             rejoined = False
-            again, in_turn, in_line = _start_run(ln, ask)
+            again, in_turn, in_line = _start_run(ln, ask, rejoined=True)
             updated_from = again or updated_from
             queued += in_line
             waited += in_line

@@ -61,6 +61,23 @@ def test_a_green_ready_head_master_moved_past_waits_in_the_line_as_a_draft(landi
     assert merged_sha(calls) == UPDATED
 
 
+def test_a_rejoined_head_whose_draft_run_is_still_running_waits_in_the_line(landing):
+    updated = {**OPEN, "headRefOid": UPDATED}
+    running = [{"id": 3, "status": "in_progress", "conclusion": None}]
+    ln, calls = turn_landing(
+        landing,
+        polls=(OPEN, updated, updated, {**MERGED, "headRefOid": UPDATED}),
+        start=(READY, REJOINED, REJOINED),
+        head_runs=lambda head: A_RUN if head == HEAD else running,
+        compare=[["docs/other.md"], []],
+        turn=[False, True],
+    )
+    land_in_turn(ln)
+    assert line_calls(calls)[0] == ("join", "999", UPDATED)
+    order = call_order(calls)
+    assert order.index("try_turn") < order.index("pr ready", 1)
+
+
 def test_a_rejoined_head_master_moved_past_again_merges_only_its_turns_update(landing):
     final = "c" * 40
     ln, calls = turn_landing(
