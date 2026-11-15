@@ -496,8 +496,7 @@ def write_waits(
         capacity = {h: live_batch_cap(h) for h in (LOCAL_HOST, SERVER_HOST)}
         body += operator_waits.render_queue(states, capacity)
     except (OSError, ValueError, subprocess.SubprocessError) as exc:
-        # The waits still stand; the queue families stay absent, so the idle rule reads
-        # nothing rather than a free count of zero.
+        # The waits still stand; the queue families stay absent rather than reading zero.
         out(f"issue queue not read: {tail(str(exc))}")
     try:
         wrote = operator_waits.write(gauge, body)

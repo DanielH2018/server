@@ -266,7 +266,6 @@ the other test files that cover at least one of those lines.
 | `tests/services/test_alertmanager_reboot_mute.py` | 299 | 686 |
 | `tests/services/test_alertmanager_routing_b3_gitops.py` | 299 | 686 |
 | `tests/services/test_alertmanager_routing_b5_pi.py` | 299 | 686 |
-| `tests/services/test_alertmanager_routing_fanout_idle.py` | 299 | 686 |
 | `scripts/secrets_mgmt/tests/test_cluster_vars_tree.py` | 298 | 1050 |
 | `tests/k8s/test_staging_opt_out_flags_render.py` | 295 | 697 |
 | `tests/services/test_flux_rule_literals.py` | 294 | 697 |
@@ -808,7 +807,7 @@ Each group's files cover exactly the same measured lines.
 - 6 files: `scripts/lib/tests/test_tree_lock.py`, `scripts/tests/test_renovate_flux_cli.py`, `scripts/tests/test_renovate_homelab_tools_pins.py`, `scripts/tests/test_renovate_host_file_copies.py`, `scripts/tests/test_renovate_kind_pins.py`, `scripts/tests/test_renovate_nfpm_pin.py`
 - 5 files: `hosts/lib/tests/test_box_dev_tooling.py`, `hosts/lib/tests/test_server_dev_tooling.py`, `hosts/tests/test_aide_check_names_its_config.py`, `hosts/tests/test_k3s_registries_mirror_ghcr.py`, `hosts/tests/test_netplan_wifi_fallback.py`
 - 5 files: `hosts/tests/test_aide_check_classify.py`, `hosts/tests/test_aide_check_package_activity.py`, `hosts/tests/test_aide_check_snapd_udev.py`, `hosts/tests/test_eval_sweep_cron.py`, `hosts/tests/test_rkhunter_check.py`
-- 5 files: `k8s/roles/monitor-bridge/tests/test_bridge_b2_rules.py`, `tests/services/test_alertmanager_reboot_mute.py`, `tests/services/test_alertmanager_routing_b3_gitops.py`, `tests/services/test_alertmanager_routing_b5_pi.py`, `tests/services/test_alertmanager_routing_fanout_idle.py`
+- 4 files: `k8s/roles/monitor-bridge/tests/test_bridge_b2_rules.py`, `tests/services/test_alertmanager_reboot_mute.py`, `tests/services/test_alertmanager_routing_b3_gitops.py`, `tests/services/test_alertmanager_routing_b5_pi.py`
 - 4 files: `hosts/components/fake-remux/tests/test_fake_remux_entrypoint.py`, `hosts/tests/test_etcd_restore_drill_cron.py`, `hosts/tests/test_k3s_oidc_trusts_authelia.py`, `hosts/tests/test_k3s_server_flags_migration.py`
 - 4 files: `hosts/lib/tests/test_host_package_tmpfiles_users.py`, `hosts/lib/tests/test_pi_heartbeats_component.py`, `hosts/tests/test_k3s_unit_logging.py`, `hosts/tests/test_worktree_holders_install.py`
 - 4 files: `hosts/tests/test_claude_code_on_daniel_server.py`, `hosts/tests/test_claude_fanout_server_lander.py`, `hosts/tests/test_claude_memory_sync.py`, `hosts/tests/test_claude_pipeline_timeline.py`

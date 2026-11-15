@@ -24,7 +24,7 @@ from test_alertmanager_routing import reached, route_tree
 
 RULES = K8S_ROLES / "observability" / "files" / "rules"
 ESCALATION = "WarningUnresolved"
-HOLDS_BY_DESIGN = {"DeployHoldActive", "FanoutSlotsIdleWithFreeWork", "FluxSuspended"}
+HOLDS_BY_DESIGN = {"DeployHoldActive", "FluxSuspended"}
 SELECTOR = re.compile(r"ALERTS\{([^}]*)\}")
 
 
