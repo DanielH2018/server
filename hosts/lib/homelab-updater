@@ -40,9 +40,10 @@ export PATH DEBIAN_FRONTEND
 HOST=$(hostname)
 UPDATER=homelab-updater
 HOST_PKG=homelab-$HOST
-# Step 3's restriction to the homelab source. The Ubuntu lists stay as apt-daily left them.
-# The empty cache paths keep step 4's `apt-get indextargets`, which builds apt's package cache,
-# from writing one read from the homelab source alone over pkgcache.bin.
+# The restriction to the homelab source, for step 3's fetch and step 5's first install. The
+# Ubuntu lists stay as apt-daily left them. The empty cache paths keep step 4's `apt-get
+# indextargets` and step 5's install, which build apt's package cache, from writing one read
+# from the homelab source alone over pkgcache.bin.
 HOMELAB_APT="-o Dir::Etc::sourcelist=sources.list.d/homelab.sources -o Dir::Etc::sourceparts=- -o APT::Get::List-Cleanup=0 -o Dir::Cache::pkgcache= -o Dir::Cache::srcpkgcache="
 INSTALL="apt-get install -y --no-install-recommends -o DPkg::Lock::Timeout=600"
 RETRY="apt-get install -y --no-install-recommends -o DPkg::Lock::Timeout=0"
@@ -236,30 +237,32 @@ read_extras() {
     done
 }
 
-# Steps 5 and 6. A Depends on an Ubuntu package can need fresher Ubuntu lists than step 3
-# fetched, so an install that fails to resolve or fetch a dependency earns one full apt-get
-# update and one retry. Any other failure, such as a lock wait that timed out or a failed
-# maintainer script, ends the run: fresher lists cannot fix it. The retry runs at most once a
-# day and never in the 04:00 to 05:59 hour that holds the apt timers.
+# Steps 5 and 6. The first install reads the homelab source alone, with apt's cache built in
+# memory, because a cache built over the Ubuntu lists cost the Pi 25 CPU seconds and 88 MB of
+# its 160 free on every publish (#8610). It satisfies a Depends only from what is installed,
+# and --no-remove refuses a resolution that would remove a package to get there. A failure to
+# resolve or fetch a dependency retries over every source on the lists apt-daily left, which
+# is how a new Ubuntu Depends installs. A Depends that needs fresher Ubuntu lists than those
+# earns one full apt-get update and one more retry. Any other failure, such as a lock wait
+# that timed out or a failed maintainer script, ends the run: other lists cannot fix it. The
+# full update runs at most once a day and never in the 04:00 to 05:59 hour that holds the apt
+# timers.
 #
-# DECIDED: the retry waits for no lock. TimeoutStartSec=50min budgets one 600s lock wait
+# DECIDED: both retries wait for no lock. TimeoutStartSec=50min budgets one 600s lock wait
 # beside reconcile's 30 minutes and its wait unit's 5 (test_updater_package.py sums every wait
-# in this file), and
-# the apt timers that take the lock run only in the hour this retry skips.
+# in this file). The first install held the lock moments before, and the apt timers that take
+# it run only in the hour the full update skips.
 install_newest() {
-    # shellcheck disable=SC2086 # STALE is a list of package names.
-    if out=$($INSTALL "$UPDATER" "$HOST_PKG" $STALE 2>&1); then
+    # shellcheck disable=SC2086 # HOMELAB_APT and STALE are lists.
+    if out=$($INSTALL --no-remove $HOMELAB_APT "$UPDATER" "$HOST_PKG" $STALE 2>&1); then
         return 0
     fi
-    printf '%s\n' "$out" >&2
-    case $out in
-        *"is not installable"* | *"Unable to correct problems"* | *"has no installation candidate"* | \
-            *"Unable to locate package"* | *"Failed to fetch"* | *"Unable to fetch some archives"*) ;;
-        *)
-            say "install failed, not on a dependency; no full apt-get update"
-            return 1
-            ;;
-    esac
+    on_dependency "$out" || return 1
+    # shellcheck disable=SC2086 # STALE is a list of package names.
+    if out=$($RETRY "$UPDATER" "$HOST_PKG" $STALE 2>&1); then
+        return 0
+    fi
+    on_dependency "$out" || return 1
     case $(date +%H) in
         04 | 05)
             say "install failed; no full apt-get update between 04:00 and 05:59"
@@ -275,6 +278,20 @@ install_newest() {
     apt-get update || return 1
     # shellcheck disable=SC2086 # STALE is a list of package names.
     $RETRY "$UPDATER" "$HOST_PKG" $STALE
+}
+
+# Print a failed install's output, and succeed when it failed to resolve or fetch a dependency.
+on_dependency() {
+    printf '%s\n' "$1" >&2
+    case $1 in
+        *"is not installable"* | *"Unable to correct problems"* | *"has no installation candidate"* | \
+            *"Unable to locate package"* | *"Failed to fetch"* | *"Unable to fetch some archives"* | \
+            *"remove is disabled"*)
+            return 0
+            ;;
+    esac
+    say "install failed, not on a dependency; no full apt-get update"
+    return 1
 }
 
 # Steps 3 to 8. Exits.
