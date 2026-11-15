@@ -55,6 +55,7 @@ from deploy_tools.land_lib import (
     line,
     live_limit,
     merge,
+    slots,
     stale_base,
     turn,
 )
@@ -458,6 +459,9 @@ def land(ln: Landing, take_turn: merge.TakeTurn) -> None:
 
     def take(draft: str) -> tuple[bool, int]:
         in_turn, waited = take_turn(draft)
+        if in_turn and draft:
+            # Before the draft's run, so a PR its merge would be refused spends no run.
+            slots.refuse_before_merge(ln)
         if in_turn and draft and ln.opts.batch and not ln.lands_alone:
             try:
                 ln.batched_s = form(ln, draft)

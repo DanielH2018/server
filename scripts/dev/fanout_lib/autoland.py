@@ -23,7 +23,7 @@ count, `land_lib/verdict_log.py` flocks only its own log, and `homelab-claude-la
 `/var/lock/claude-land.lock` for every PR it lands. So two landings of one PR would both arm
 the merge. This command therefore starts a PR once: it skips a PR whose log directory already holds a `land<pr>-*.log`
 (a landing that ended `refused` or `ci-red` is the operator's to read, not to retry every ten
-minutes), and a PR that any live `land.py` process names with `--pr <n>`, which finds the
+minutes, unless a rule refused it before its merge with exit 75), and a PR that any live `land.py` process names with `--pr <n>`, which finds the
 landings an orchestrator started from another log directory.
 
 THE CHECKOUT. Each landing runs from its own worktree at `origin/master` under the state
@@ -273,10 +273,28 @@ def problems(
     return operator_step_in(str(pr.get("body") or ""))
 
 
+# A landing that a rule refused before its merge, which merged nothing and ends exit 75
+# (`land_lib/slots.py:refuse_before_merge`).
+_REFUSED_FOR_NOW = re.compile(
+    r"^LAND-RESULT: verdict=refused .*\bexit=75\b", re.MULTILINE
+)
+
+
 def handed_off(log_dir: Path, pr: int) -> str:
-    """The log of an earlier landing of this PR that this command started, or ""."""
+    """The log of an earlier landing of this PR that this command started, or "".
+
+    A newest log that a rule refused before the merge reads as none, so the next run starts
+    the PR again once the rule clears.
+    """
     logs = sorted(log_dir.glob(f"land{pr}-*.log")) if log_dir.is_dir() else []
-    return logs[-1].name if logs else ""
+    if not logs:
+        return ""
+    try:
+        if _REFUSED_FOR_NOW.search(logs[-1].read_text(errors="replace")):
+            return ""
+    except OSError:
+        pass
+    return logs[-1].name
 
 
 def landing_running(pr: int, proc: Path = Path("/proc")) -> bool:

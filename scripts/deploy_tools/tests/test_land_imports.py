@@ -92,6 +92,7 @@ ALLOWED = {
         "policy",
         "pr_json",
         "gh_read",
+        "slots",
         "stale_base",
         "stuck_checks",
     },
@@ -100,7 +101,7 @@ ALLOWED = {
     # The one-landing-at-a-time lock the pipeline holds from the PR's CI run to its merge.
     "turn": {"landing", "outcome", "line"},
     # The lock files that bound the landings polling GitHub after their merge, beside the turn.
-    "slots": {"landing", "outcome", "live_limit", "turn"},
+    "slots": {"landing", "outcome", "live_limit", "pin_gate", "turn"},
     # The drafts whose landings wait for the turn, which its holder reads; boundaries only.
     "line": set(),
     # The drafts in the line, tested with the turn holder's own in one run, then merged.
@@ -112,6 +113,7 @@ ALLOWED = {
         "line",
         "live_limit",
         "merge",
+        "slots",
         "stale_base",
         "turn",
     },

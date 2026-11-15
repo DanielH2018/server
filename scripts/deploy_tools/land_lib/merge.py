@@ -74,6 +74,7 @@ from deploy_tools.land_lib import (
     gh_read,
     pin_gate,
     policy,
+    slots,
     stale_base,
     stuck_checks,
 )
@@ -613,6 +614,7 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
                     wait_ends_at = min(waited + o.merge_timeout, wait_cap)
                     continue
             if rc == CI_GREEN and ln.direct_merge_subject:
+                slots.refuse_before_merge(ln)
                 if not (updated_from or stale_base.batch_tested(ln, head)):
                     stale_base.refuse_stale_approved(
                         ln, head, view.get("mergeable") == "CONFLICTING"

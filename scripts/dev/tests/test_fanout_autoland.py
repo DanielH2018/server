@@ -312,6 +312,20 @@ def test_a_pr_this_command_already_handed_off_is_not_started_again(tmp_path):
     assert "already handed off (land5001-20261018-010000.log)" in text
 
 
+@pytest.mark.parametrize(("code", "started"), [(75, [5001]), (1, [])])
+def test_only_a_pr_a_rule_refused_before_its_merge_is_started_again(
+    tmp_path, code, started
+):
+    logs = tmp_path / "state" / "logs"
+    logs.mkdir(parents=True)
+    (logs / "land5001-20261018-010000.log").write_text(
+        f"LAND-RESULT: verdict=refused cause=- exit={code} pr=5001 sha=- tags=0\n"
+    )
+    run = _Landings([_record()], [_pr()])
+    run.run(tmp_path)
+    assert [n for n, _ in run.started] == started
+
+
 def test_a_landing_already_running_elsewhere_is_not_started_again(tmp_path):
     run = _Landings([_record()], [_pr()])
     run.boundaries.running = lambda number: True
