@@ -22,14 +22,15 @@ RETRY_CALLERS = re.compile(r"(?<![\w-])(?:retry|ghcr_login)\b")
 LOAD_RETRY = 'eval "$RETRY_FUNCTIONS"'
 RECORD = "Record prod's digest"
 APPLY = "Apply the verdict"
-DISPATCH = "Dispatch a run for a newer green commit"
+# The env's shell function that `settle` and `reconcile` share, censused like a step.
+DISPATCH = "DISPATCH_FUNCTIONS"
 LOGIN = "Log in to GHCR read-only"
 # The census must find each of these, so a renamed step cannot empty it.
 RETRIED = {
     ("tag", RECORD): "retry gh variable set PROD_DIGEST",
     ("settle", APPLY): "retry gh variable set PROD_DIGEST",
     ("reset-move", RECORD): "retry gh variable set PROD_DIGEST",
-    ("settle", DISPATCH): "retry gh workflow run",
+    ("env", DISPATCH): "retry gh workflow run",
     ("promote", LOGIN): "ghcr_login",
 }
 
@@ -46,6 +47,8 @@ def retry_problems(wf: dict) -> list[str]:
         for job_name, job in (wf.get("jobs") or {}).items()
         for step in _steps(job)
     ]
+    # A function loaded after RETRY_FUNCTIONS, so it calls retry without loading it.
+    runs.append(("env", DISPATCH, str((wf.get("env") or {}).get(DISPATCH, ""))))
     for job_name, step_name, script in runs:
         code = [
             line for line in script.splitlines() if not line.lstrip().startswith("#")
@@ -53,7 +56,11 @@ def retry_problems(wf: dict) -> list[str]:
         for line in code:
             if match := UNRETRIED.search(line):
                 found.append(f"{job_name}: {step_name}: runs {match[0]} outside retry")
-        if LOAD_RETRY not in script and RETRY_CALLERS.search("\n".join(code)):
+        if (
+            job_name != "env"
+            and LOAD_RETRY not in script
+            and RETRY_CALLERS.search("\n".join(code))
+        ):
             found.append(f"{job_name}: {step_name}: calls retry without {LOAD_RETRY}")
     for (job_name, step_name), call in RETRIED.items():
         if not any(
@@ -90,13 +97,13 @@ RED = {
         "runs gh variable",
     ),
     "the dispatch": (
-        "settle",
+        "env",
         DISPATCH,
         "retry gh workflow run",
         "gh workflow run",
         "runs gh workflow",
     ),
-    "the run list read": ("settle", DISPATCH, "retry gh api", "gh api", "runs gh api"),
+    "the run list read": ("env", DISPATCH, "retry gh api", "gh api", "runs gh api"),
     "the GHCR login": (
         "promote",
         LOGIN,
@@ -112,14 +119,16 @@ RED = {
 def test_a_call_outside_retry_is_flagged(workflow, case):
     job, step_name, old, new, expected = RED[case]
     broken = copy.deepcopy(workflow)
-    step = next(s for s in broken["jobs"][job]["steps"] if s.get("name") == step_name)
-    step["run"] = step["run"].replace(old, new)
-    assert (
-        step["run"]
-        != next(
-            s for s in workflow["jobs"][job]["steps"] if s.get("name") == step_name
-        )["run"]
-    ), f"{case}: the mutation left the step unchanged"
+    if job == "env":
+        before = workflow["env"][step_name]
+        broken["env"][step_name] = after = before.replace(old, new)
+    else:
+        step = next(
+            s for s in broken["jobs"][job]["steps"] if s.get("name") == step_name
+        )
+        before = step["run"]
+        step["run"] = after = before.replace(old, new)
+    assert after != before, f"{case}: the mutation left the step unchanged"
     assert any(
         line.startswith(f"{job}: {step_name}: ") and expected in line
         for line in retry_problems(broken)
