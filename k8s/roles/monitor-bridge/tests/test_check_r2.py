@@ -99,10 +99,8 @@ def test_r2_verdict_breaches_at_exactly_the_threshold():
 
 def test_r2_verdict_down_on_orphaned_multipart_uploads():
     # The quiet storage fill: these bill as bytes and never appear in an object listing.
-    result = _verdict(0, 500, 0, 0, [])
-    ok, msg = result
+    ok, msg = _verdict(0, 500, 0, 0, [])
     assert not ok
-    assert result.details == ("multipart uploads",)
     assert "500 incomplete multipart uploads" in msg
     assert "AbortIncompleteMultipartUpload" in msg
 

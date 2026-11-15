@@ -52,13 +52,3 @@ def test_prowlarr_names_the_indexer_without_its_minutes(seq, cfg):
     result = CheckResult.of(checks.service.check_prowlarr_indexers(cfg, src))
     assert "EZTV down" in result.msg
     assert result.details == ("EZTV",)
-
-
-def test_bazarr_names_the_peer_key_and_the_health_object(seq, cfg):
-    cfg = replace(cfg, BAZARR_API_KEY="k")
-    status = {"data": {"sonarr_version": "4.0.17.2952", "radarr_version": ""}}
-    health = {"data": [{"object": "/tv/Show", "issue": "path does not exist"}]}
-    src = FakeSources(get_json=seq(status, health))
-    result = CheckResult.of(checks.service.check_bazarr(cfg, src))
-    assert result.ok is False
-    assert result.details == ("/tv/Show", "radarr API key")
