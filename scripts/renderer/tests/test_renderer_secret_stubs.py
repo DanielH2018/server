@@ -10,7 +10,6 @@ import pytest
 from lib import yaml_fast
 from lib.repo_paths import SECRETS as SECRETS_DIR
 from renderer.template_filters.secret_stubs import (
-    NEVER_STUB,
     homelab_secret_stub,
     homelab_stub_keys,
     homelab_unstubbed_keys,
@@ -31,12 +30,11 @@ def _stub_map() -> dict[str, str]:
     return {key: homelab_secret_stub(key) for key in keys}
 
 
-def test_stub_keys_are_every_secret_key_but_sops_and_never_stub():
+def test_stub_keys_are_every_secret_key_but_sops():
     file_keys = _file_keys()
-    assert {"sops", "become_password", GA, "email"} <= file_keys
+    assert {"sops", GA, "email"} <= file_keys
     keys = homelab_stub_keys(yaml_fast.safe_load(SECRETS.read_text()))
-    assert keys == sorted(file_keys - {"sops"} - NEVER_STUB.keys())
-    assert "become_password" not in keys
+    assert keys == sorted(file_keys - {"sops"})
 
 
 def test_every_stub_is_a_dns_label():

@@ -12,14 +12,6 @@ from collections.abc import Mapping
 
 STUB_PREFIX = "stub-"
 
-# Variables that never take a stub, each with its reason. They stay out of the stub key list,
-# so neither the stub file nor the stub content check names them.
-NEVER_STUB = {
-    "become_password": (
-        "Ansible's privilege escalation read it, and no template reads it"
-    ),
-}
-
 
 def homelab_secret_stub(key) -> str:
     """The stub value of the secret variable `key`: `stub-<key with hyphens>`."""
@@ -30,11 +22,9 @@ def homelab_stub_keys(secrets) -> list[str]:
     """The sorted secret key names that take a stub, from the parsed `secrets.yml` mapping.
 
     The mapping may be the ciphertext file: only its keys are read. `sops`, SOPS's own
-    metadata block, and the names in `NEVER_STUB` are left out.
+    metadata block, is left out.
     """
-    return sorted(
-        str(key) for key in secrets if key != "sops" and str(key) not in NEVER_STUB
-    )
+    return sorted(str(key) for key in secrets if key != "sops")
 
 
 def homelab_unstubbed_keys(keys, values) -> list[str]:
