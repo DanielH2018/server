@@ -16,9 +16,6 @@ from deploy_tools.land_lib import merge
 from deploy_tools.land_lib.outcome import Outcome
 
 OLD = "a" * 40
-# What master changed since the PR's tested base, none of it a path the PR changes.
-MASTER_MOVED = [".claude/hooks/session-health.py", "tests/_ratchet.py"]
-DOCS_ONLY = [{"status": "modified", "filename": "docs/landing.md"}]
 # What `gh api -X PUT …/merge` writes to stderr when a required check has not finished.
 RULE_VIOLATION = (
     "gh: Repository rule violations found\n\n"
@@ -28,15 +25,13 @@ RULE_VIOLATION = (
 
 
 def _landing_refused_once(landing, stderr: str):
-    """A green head on a moved master, whose first direct merge GitHub refuses with `stderr`."""
+    """A green head whose first direct merge GitHub refuses with `stderr`."""
     polls = [{"state": "OPEN", "mergeable": "MERGEABLE", "headRefOid": OLD}] * 2 + [
         {"state": "MERGED", "mergeable": "MERGEABLE", "headRefOid": OLD}
     ]
     ln, _ = landing(
         Fakes(
             gh_views={"state,mergeable,headRefOid": polls},
-            compare=[MASTER_MOVED],
-            pr_files=DOCS_ONLY,
             await_ci=[(0, "CI green")],
         )
     )
@@ -54,15 +49,6 @@ def _landing_refused_once(landing, stderr: str):
     ln_gh = ln.tools.gh
     ln.tools = replace(ln.tools, gh=gh)
     return ln, merges
-
-
-def test_the_no_overlap_note_prints_once_across_merge_attempts(landing, capsys):
-    ln, merges = _landing_refused_once(landing, "merge refused")
-    merge.await_merge(ln)
-    assert len(merges) == 2
-    out = capsys.readouterr().out
-    notes = [line for line in out.splitlines() if "since PR #999's base" in line]
-    assert len(notes) == 1, out
 
 
 def test_a_rule_violation_refusal_prints_as_one_line_naming_the_check(landing, capsys):

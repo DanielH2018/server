@@ -159,7 +159,7 @@ The slices:
 1. **B4, in progress.** D10 below rules its shape, in five pull requests, each landed before
    the next:
     1. A green ready PR that master moved past goes back in the line as a draft
-       (`stale_base.rejoin_line`).
+       (`stale_base.rejoin_line`). Landed in #8818, after #8816 moved code to make room.
     1. The branch update that follows a green run on a stale base is deleted.
     1. The merge pacing is deleted.
     1. The limit on live landings becomes one count of 6 across both hosts, taken after the
