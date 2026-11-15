@@ -38,7 +38,8 @@ tests:
               severity: critical
               service: longhorn
             exp_annotations:
-              summary: The kubelet reports fewer than 32 claims.
+              summary: >-
+                Claims reporting kubelet volume stats: 0, below the floor of 32.
               description: >-
                 Only 0 claims report kubelet_volume_stats, below the floor
                 of 32. PVC fullness is UNKNOWN, not OK. Read the kubernetes-kubelet targets, one
@@ -208,7 +209,8 @@ tests:
               severity: critical
               service: longhorn
             exp_annotations:
-              summary: The kubelet reports fewer than 32 claims.
+              summary: >-
+                Claims reporting kubelet volume stats: 4, below the floor of 32.
               description: >-
                 Only 4 claims report kubelet_volume_stats, below the floor
                 of 32. PVC fullness is UNKNOWN, not OK. Read the kubernetes-kubelet targets, one
@@ -267,7 +269,8 @@ tests:
               severity: critical
               service: longhorn
             exp_annotations:
-              summary: The kubelet reports fewer than 32 claims.
+              summary: >-
+                Claims reporting kubelet volume stats: 1, below the floor of 32.
               description: >-
                 Only 1 claims report kubelet_volume_stats, below the floor
                 of 32. PVC fullness is UNKNOWN, not OK. Read the kubernetes-kubelet targets, one
@@ -422,7 +425,8 @@ tests:
               severity: critical
               service: etcd
             exp_annotations:
-              summary: The etcd database is over 80% of its backend quota.
+              summary: >-
+                The etcd database is at 90% of its 2 GiB quota.
               description: >-
                 The etcd database is 90% of its 2 GiB quota. At the quota
                 etcd rejects every write and the control plane stops. Compact and defragment, or raise

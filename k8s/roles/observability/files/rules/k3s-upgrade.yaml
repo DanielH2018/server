@@ -46,7 +46,8 @@ groups:
           severity: warning
           service: system-upgrade
         annotations:
-          summary: The nodes report more than one kubelet version, or none at all.
+          summary: >-
+            {{ with query "kube_node_info" }}The nodes run mixed kubelet versions: {{ range $i, $s := . | sortByLabel "node" }}{{ if $i }}, {{ end }}{{ $s.Labels.node }} {{ $s.Labels.kubelet_version }}{{ end }}.{{ else }}kube_node_info is absent, so no kubelet version skew can be judged.{{ end }}
           description: >-
             For 2 hours either kube_node_info has carried more than one kubelet_version, so an
             upgrade left one node behind, or the series has been absent, so the skew cannot be

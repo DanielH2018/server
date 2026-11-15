@@ -201,7 +201,8 @@ def test_the_snapshot_holds_origin_master_while_the_primary_checkout_lags(
     files = {script: "old\n", ".claude/hooks/fanout-stop.py": "hook\n", "README": "x"}
     files |= {"pyproject.toml": "p\n", "uv.lock": "l\n", ".python-version": "3.14\n"}
     ledger = "hosts/components/gh-quota/files/gh_quota.py"
-    files |= {ledger: "ledger\n"}
+    host_lib = "hosts/lib/host_lib.py"
+    files |= {ledger: "ledger\n", host_lib: "host_lib\n"}
     commit(server, "old", **files)
     git(server, "push", "-q", "origin", "master")
     upstream = tmp_path / "upstream"
@@ -223,6 +224,7 @@ def test_the_snapshot_holds_origin_master_while_the_primary_checkout_lags(
     assert (snap / ".python-version").read_text() == "3.14\n"
     # scripts/lib/gh.py counts each gh call into the ledger module, so the snapshot carries it.
     assert (snap / ledger).read_text() == "ledger\n"
+    assert (snap / host_lib).read_text() == "host_lib\n"
     assert not (snap / "README").exists()
     assert sorted(p.name for p in (wt / ".fanout").iterdir()) == ["server"]
 

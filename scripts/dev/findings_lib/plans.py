@@ -14,6 +14,7 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from dev.findings_lib.red_green import RED_GREEN_LABEL, RED_GREEN_STYLE
+from dev.findings_lib.milestone import is_session_milestone, session_title
 from dev.findings_lib.issue_model import (
     LABELS,
     NO_REOPEN,
@@ -135,7 +136,9 @@ def _blocker_ref(node: dict) -> str:
     return url or str(node["number"])
 
 
-def plan_release_held(issue: dict, *, when: str, reason: str) -> list[list[str]]:
+def plan_release_held(
+    issue: dict, *, when: str, reason: str, detach: bool = True
+) -> list[list[str]]:
     """The gh argv releasing whatever claim ``issue`` carries, or ``[]`` when it carries none.
 
     Releases whoever holds it, not just the caller's own worktree. `claims`, `reap` and
@@ -146,11 +149,14 @@ def plan_release_held(issue: dict, *, when: str, reason: str) -> list[list[str]]
     a claim too, and `plan_open` reopening that issue for a later re-observation brought the
     stale claim back LIVE, blocking `claim` and withholding the issue from `next` for as long
     as the claiming worktree existed.
+
+    ``detach=False`` keeps the issue in its session milestone. `close` passes it, because
+    a closed issue is that session's finished work.
     """
     held = current_claim(issue)
     if not held:
         return []
-    return plan_release(issue, worktree=held, when=when, reason=reason)
+    return plan_release(issue, worktree=held, when=when, reason=reason, detach=detach)
 
 
 def plan_manual(issue: dict, *, clear: bool) -> list[list[str]]:
@@ -304,12 +310,17 @@ def plan_claim(
         )
     n = str(issue["number"])
     add_label = ["issue", "edit", n, "--add-label", "claimed"]
+    title = session_title(worktree)
+    if title:
+        add_label += ["--milestone", title]
     held = current_claim(issue)
     if held == worktree:
         # The repair. A fresh claim below re-adds the label unconditionally, because
         # `--add-label` on a label already present is a no-op; here the plan IS the repair,
-        # so an already-correct label has to plan nothing or the reclaim stops being a no-op.
-        return [] if "claimed" in names else [add_label]
+        # so an already-correct label and milestone have to plan nothing or the reclaim
+        # stops being a no-op.
+        in_milestone = (issue.get("milestone") or {}).get("title") == title
+        return [] if "claimed" in names and (in_milestone or not title) else [add_label]
     if held:
         raise ClaimRefused(f"already claimed by `{held}`")
     return [
@@ -319,9 +330,17 @@ def plan_claim(
 
 
 def plan_release(
-    issue: dict, *, worktree: str, when: str, reason: str | None
+    issue: dict,
+    *,
+    worktree: str,
+    when: str,
+    reason: str | None,
+    detach: bool = True,
 ) -> list[list[str]]:
     """Plans the gh argv to release ``worktree``'s claim on ``issue``.
+
+    Takes the issue out of ``worktree``'s session milestone unless ``detach`` is False. A
+    milestone the operator set, or another session's, is left alone.
 
     LABEL-AWARE, the mirror of `plan_claim`. A release whose `--remove-label` failed
     left the comment posted and the label on, and the retry then raised `ClaimRefused("not
@@ -335,6 +354,13 @@ def plan_release(
     """
     n = str(issue["number"])
     remove_label = ["issue", "edit", n, "--remove-label", "claimed"]
+    milestone = issue.get("milestone")
+    if (
+        detach
+        and is_session_milestone(milestone)
+        and milestone["title"] == session_title(worktree)
+    ):
+        remove_label.append("--remove-milestone")
     held = current_claim(issue)
     if held is None:
         # The repair: nobody holds it, but the label says somebody does. Removing the label

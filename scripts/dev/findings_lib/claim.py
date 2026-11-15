@@ -218,13 +218,30 @@ def stale_holder(
     if not held:
         return None
     live, why = claim_is_live(held, trees, dirty, merged)
-    if live:
-        return None
-    if _unregistered(held, trees) and _peer_reason(peer_trees(), held) is not None:
+    if live or branch_is_held(held, trees, dirty, merged, peer_trees):
         return None
     if issue["number"] in batch_holds([issue["number"]]):
         return None
     return held, why
+
+
+def branch_is_held(
+    branch: str,
+    trees: list[Worktree],
+    dirty: Callable[[str], bool],
+    merged: Callable[[Worktree], bool],
+    peer_trees: PeerTrees = _no_peer_trees,
+) -> bool:
+    """Whether a worktree on either host still holds ``branch``, or the peer cannot say.
+
+    The worktree half of `stale_holder`, without the batch holds an issue adds. `reap`
+    asks it of each session milestone's branch before closing the milestone.
+    """
+    if claim_is_live(branch, trees, dirty, merged)[0]:
+        return True
+    return (
+        _unregistered(branch, trees) and _peer_reason(peer_trees(), branch) is not None
+    )
 
 
 def claim_states(
