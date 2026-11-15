@@ -123,7 +123,8 @@ tests:
               severity: warning
               service: observability
             exp_annotations:
-              summary: The telemetry Loki discarded over 3000 entries in the last hour.
+              summary: >-
+                The telemetry Loki discarded 12000 entries as line_too_long in the last hour.
               description: >-
                 The telemetry Loki discarded more than 3000 entries in an hour for the reason
                 line_too_long, so Claude Code's logs are being lost. Read

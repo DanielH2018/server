@@ -89,7 +89,8 @@ groups:
           severity: warning
           service: observability
         annotations:
-          summary: The telemetry Loki discarded over 3000 entries in the last hour.
+          summary: >-
+            The telemetry Loki discarded {{ $value | printf "%.0f" }} entries as {{ $labels.reason }} in the last hour.
           description: >-
             The telemetry Loki discarded more than 3000 entries in an hour for the reason
             {{ $labels.reason }}, so Claude Code's logs are being lost. Read
