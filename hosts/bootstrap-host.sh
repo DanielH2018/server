@@ -110,14 +110,14 @@ PINS=$(
   uv:
     amd64:
       # renovate: datasource=github-release-attachments depName=astral-sh/uv
-      version: 0.13.7
-      sha256: c5221ff41b7892bfc223543883600125f6a47fe845093e0f5bdff4f359196d83
+      version: 0.13.8
+      sha256: 5acfd9177cfecf0bf87578f059728215ccc884388988f55f7a65041b57387d91
       url: https://github.com/astral-sh/uv/releases/download/{version}/uv-x86_64-unknown-linux-gnu.tar.gz
       member: uv-x86_64-unknown-linux-gnu/uv
     arm64:
       # renovate: datasource=github-release-attachments depName=astral-sh/uv
-      version: 0.13.7
-      sha256: 71279f8d3c67241e807b9d8db872d1bf541579fb9f08b7d1eb1682196d1e57dc
+      version: 0.13.8
+      sha256: 74f2f5c6024d397481db228db8fc25eed420db192243f88438c118e7e013e585
       url: https://github.com/astral-sh/uv/releases/download/{version}/uv-aarch64-unknown-linux-gnu.tar.gz
       member: uv-aarch64-unknown-linux-gnu/uv
 EOF
