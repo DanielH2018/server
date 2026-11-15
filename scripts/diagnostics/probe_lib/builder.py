@@ -9,7 +9,13 @@ learn whether the builder was publishing (#6324). This makes one read of daniel-
 - the newest `-n` builds, the builder's `staged <packages> at <version>` journal lines;
 - the failures in the window: the builder's own lines at priority err or worse, and the
   systemd line that says a run failed. A repeated reason and tip exits 0, so systemd's
-  count alone misses a builder that keeps failing quietly.
+  count alone misses a builder that keeps failing quietly;
+- one row per inventory host: the version its updater last applied, its reconcile state, and
+  whether that is behind its package's published version. These come from Prometheus's
+  `homelab_host_applied_info` and `homelab_host_reconcile_ok`, the series the rollout gate
+  reads. A host Prometheus holds nothing for reads `no series`, and an unread Prometheus
+  prints `unread` without changing the exit code: a host behind is a rollout state, not a
+  builder failure.
 
 Exit 1 when the reason is anything but `ok` or `canary`, or when the last fetch is older than
 two timer periods plus `TimeoutStartSec`, both read from `hosts/components/builder/units/`.
@@ -36,6 +42,7 @@ from diagnostics.probe_lib.host_reader import (
     unit_span_s,
 )
 from lib.exit_codes import PROBE_FAILED, PROBE_OK
+from lib.inventory_lists import host_names
 from lib.repo_paths import REPO
 
 UNIT = "homelab-builder.service"
@@ -45,11 +52,13 @@ BUILDER_PROM = f"{TEXTFILE_DIR}/homelab_builder.prom"
 REPO_PROM = f"{TEXTFILE_DIR}/homelab_repo.prom"
 # The two reasons that publish: `canary` waits on the canary host's applied version, by design.
 HEALTHY = frozenset({"ok", "canary"})
+HOSTS_QUERY = '{__name__=~"homelab_host_applied_info|homelab_host_reconcile_ok"}'
 
 # `probe.py builder`'s help as `cli_parser._verdict_help` takes it (summary, exit 0, exit 1).
 BUILDER_HELP = (
     "the host-package builder on daniel-box: its reason and commit, the last fetch, the "
-    "versions the repository serves, the newest builds and the failures in the window",
+    "versions the repository serves, the newest builds and the failures in the window, and "
+    "each host's applied version, reconcile state and whether it is behind",
     "the builder is ok or waiting on the canary, and fetched recently",
     "another reason, or the last fetch is stale",
 )
@@ -114,8 +123,46 @@ def is_failure(entry) -> bool:
     return entry.priority <= 3
 
 
-def report(doc: dict, *, now: float, last: int, deadline_s: int) -> tuple[str, int]:
-    """The text view and the exit code for one read of daniel-box."""
+def host_lines(series: list[dict] | str, published: dict[str, str]) -> list[str]:
+    """One row per inventory host: applied version, reconcile state, and behind or current.
+
+    `series` is the result of `HOSTS_QUERY`, or why it went unread. `published` maps each
+    package to the version the repository serves.
+    """
+    if isinstance(series, str):
+        return ["hosts: unread: " + series]
+    applied: dict[str, set[str]] = {}
+    reconcile: dict[str, str] = {}
+    for s in series:
+        labels = s.get("metric") or {}
+        host = labels.get("host", "?")
+        if labels.get("__name__") == "homelab_host_applied_info":
+            applied.setdefault(host, set()).add(labels.get("version", "?"))
+        elif labels.get("__name__") == "homelab_host_reconcile_ok":
+            reconcile[host] = s["value"][1]
+    lines = ["hosts (applied, reconcile_ok, against published):"]
+    for host in host_names():
+        if host not in applied and host not in reconcile:
+            lines.append(f"  {host:<15}no series")
+            continue
+        versions = applied.get(host, set())
+        want = published.get(f"homelab-{host}")
+        state = (
+            "unpublished" if want is None
+            else "current" if want in versions
+            else f"behind {want}"
+        )  # fmt: skip
+        lines.append(
+            f"  {host:<15}{','.join(sorted(versions)) or 'none':<24}"
+            f"reconcile_ok {reconcile.get(host, '?')}  {state}"
+        )
+    return lines
+
+
+def report(
+    doc: dict, *, now: float, last: int, deadline_s: int, hosts: list[dict] | str
+) -> tuple[str, int]:
+    """The text view and the exit code for one read of daniel-box and Prometheus's host series."""
     gauges = samples(_prom_text(doc, BUILDER_PROM))
     published = [
         lab for name, lab, _ in samples(_prom_text(doc, REPO_PROM))
@@ -159,22 +206,39 @@ def report(doc: dict, *, now: float, last: int, deadline_s: int) -> tuple[str, i
     failures = [e for e in entries if is_failure(e)]
     lines.append(f"failures in the window: {len(failures)}")
     lines += [f"  {_stamp(e.at)}  {e.message}" for e in failures[-last:]]
+    lines += host_lines(
+        hosts, {lab.get("package", ""): lab.get("version", "") for lab in published}
+    )
     lines.append(f"verdict: {'; '.join(problems) or 'publishing'}")
     return "\n".join(lines), PROBE_FAILED if problems else PROBE_OK
 
 
+def read_host_series(url: str, pin) -> list[dict] | str:
+    """The result of `HOSTS_QUERY`, or a line saying why it went unread."""
+    try:
+        data = core.fetch_parsed(url, resolve=pin)
+    except core.Unreadable as exc:
+        return exc.message
+    if data.get("status") != "success":
+        return f"Prometheus answered {data.get('error') or data.get('status')!r}"
+    return data["data"]["result"]
+
+
 def run_builder(ns, read=read_host, now: float | None = None) -> int:
-    """Read daniel-box once, print the report, return its exit code."""
+    """Read daniel-box and Prometheus once each, print the report, return its exit code."""
     since = f"-{core.parse_duration_seconds(ns.since)}s"
+    base, pin = core.prom_endpoint()
+    url = core.prom_query_url(base, HOSTS_QUERY)
     if ns.dry_run:
         print(dry_run_text(plan(since), BOX))
-        return PROBE_OK
+        return core.print_dry_run(url, resolve=pin)
     doc = read(plan(since), BOX)
     text, code = report(
         doc,
         now=time.time() if now is None else now,
         last=ns.last,
         deadline_s=fetch_deadline_s(),
+        hosts=read_host_series(url, pin),
     )
     print(text)
     return code

@@ -115,6 +115,9 @@ class Landing:
         # Frees the serial lock a landing of a serial PR keeps (`slots.py`). Held here, so the
         # lock and its ssh session last until the landing's process ends.
         self.serial_lock: Callable[[], None] | None = None
+        # Gives the landing turn up so the next ask waits for it again (`turn.held`); None
+        # outside the merge wait, and for a batch member, which the holder merges.
+        self.give_back_turn: Callable[[], None] | None = None
 
     @property
     def plane(self) -> str:

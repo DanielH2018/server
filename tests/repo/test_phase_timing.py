@@ -40,6 +40,7 @@ _WORKER_LINE = re.compile(
     r"  tests\s+([0-9.]+)s  finished\s+([0-9.]+)s",
     re.M,
 )
+_REWROTE = re.compile(r"^\s*main  collected.*  rewrote (\d+) in [0-9.]+s", re.M)
 
 
 def _run(tmp_path: Path, *args: str) -> str:
@@ -84,3 +85,10 @@ def test_a_serial_run_reports_itself_as_main(tmp_path):
 def test_a_run_without_durations_prints_no_report(tmp_path):
     out = _run(tmp_path, "-p", "no:xdist")
     assert "phase timing" not in out, out
+
+
+def test_a_run_counts_the_modules_it_rewrote_and_a_cached_rerun_rewrites_none(tmp_path):
+    cold = _run(tmp_path, "-p", "no:xdist", "--durations=0")
+    warm = _run(tmp_path, "-p", "no:xdist", "--durations=0")
+    assert _REWROTE.findall(cold) == ["2"], cold
+    assert _REWROTE.findall(warm) == ["0"], warm
