@@ -353,7 +353,7 @@ def test_a_session_file_planted_as_a_symlink_is_refused_not_followed(tmp_path, p
     else:
         os.symlink(secret, exchange / "out")
         out = str(exchange / "out")
-    assert renovate_agent.session_files(out) == ("", "")
+    assert renovate_agent.session_output(out) == ""
 
 
 def test_a_session_result_larger_than_a_request_is_read_whole(tmp_path):
@@ -361,4 +361,4 @@ def test_a_session_result_larger_than_a_request_is_read_whole(tmp_path):
     out = host_lib.fresh_dir(str(tmp_path), "out")
     result = json.dumps({"type": "result", "result": "x" * (64 * 1024)})
     (tmp_path / "out" / renovate_session.OUTPUT_FILE).write_text(result)
-    assert renovate_agent.session_files(out) == ("", result)
+    assert renovate_agent.session_output(out) == result

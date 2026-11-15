@@ -26,9 +26,7 @@ class _Recorder:
         self.spools: list[str | None] = []
 
     def tools(self) -> renovate_agent.AgentTools:
-        return renovate_agent.AgentTools(
-            run=self._run, discord_post=self._post, rmtree=lambda *a, **k: None
-        )
+        return renovate_agent.AgentTools(run=self._run, discord_post=self._post)
 
     def _run(self, argv, cwd=None, timeout=120, stdin_text=None):
         self.curls.append((argv, stdin_text))

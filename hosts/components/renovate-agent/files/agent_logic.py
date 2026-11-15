@@ -14,7 +14,6 @@ failures.
 from __future__ import annotations
 
 import json
-import shlex
 from collections.abc import Mapping
 from dataclasses import dataclass
 
@@ -27,8 +26,7 @@ _RESULT_TYPE = "result"
 # the whole message at 1900 characters; this leaves room for the delta lines above it.
 _SUMMARY_CHARS = 900
 # host_lib.discord_post's cap, less a margin. The summary shrinks further whenever the lines
-# around it are long enough to push the digest past this, because the resume command carries
-# the unit's PATH and so has no fixed length (#4603).
+# around it are long enough to push the digest past this.
 _DIGEST_CHARS = 1850
 
 
@@ -67,8 +65,8 @@ class Outcome:
     turns: int
     denials: tuple[str, ...]
     error: str = ""
-    # The harness keeps the transcript under this id, so a `manual —` hand-off can be resumed
-    # in the session that wrote it (#4603). "" when the result JSON carried none.
+    # The harness's id for the session, recorded in runs.jsonl. "" when the result JSON
+    # carried none.
     session_id: str = ""
 
 
@@ -242,57 +240,17 @@ def render_skip(gate: Gate, host: str) -> str:
     return f"renovate-agent: skipped on {host} — {gate.reason}."
 
 
-def resume_command(
-    session_id: str,
-    cwd: str,
-    user: str,
-    claude_bin: str,
-    env_file: str,
-    env: Mapping[str, str],
-) -> str:
-    """The shell command that reopens session `session_id` for a person (#4603).
-
-    The harness stores a session under its owner's home and keys it by the working directory
-    it ran in, so the command changes into `cwd` and switches to `user` before resuming. A
-    resume as any other user, or from any other path, does not find the session.
-
-    The session's credentials reach it only through `env_file`, which is root 0600, so the
-    command sources that file as root before it drops to `user`. `sudo` resets the
-    environment, so the command also passes on again everything else the unit set (`env`:
-    PATH, HOME, the hook shim's paths). Without them claude starts with no login, and the
-    hook shim falls back to a checkout `user` cannot read.
-
-    Args:
-        session_id: The `session_id` from the session's result JSON.
-        cwd: The run worktree the session ran in.
-        user: The user that owns the session.
-        claude_bin: The claude binary the session ran.
-        env_file: The unit's EnvironmentFile, which holds the session's credentials.
-        env: The unit's other environment variables.
-    """
-    pairs = " ".join(shlex.quote(f"{k}={v}") for k, v in env.items())
-    script = (
-        f"cd {shlex.quote(cwd)} && set -a && . {shlex.quote(env_file)} && "
-        f"exec runuser -u {shlex.quote(user)} -- env {pairs} "
-        f"{shlex.quote(claude_bin)} --resume {shlex.quote(session_id)}"
-    )
-    return f"sudo sh -c {shlex.quote(script)}"
-
-
 def render_digest(
     outcome: Outcome,
     moved: Delta,
     host: str,
     log_path: str,
-    resume: str = "",
     unlanded: list[str] | None = None,
 ) -> str:
     """The Discord digest, headlined by the measured delta.
 
     The first line answers "did anything move", because that is the question a reader of a
-    daily automation post is actually asking. `resume` is the `resume_command` for the
-    session; it goes after the summary, outside the summary's cut, so a long summary cannot
-    truncate it.
+    daily automation post is actually asking.
     """
     if not outcome.ok:
         head = f"🚨 renovate-agent FAILED on {host} — {outcome.error}"
@@ -328,12 +286,7 @@ def render_digest(
         # A denial is the failure this whole design rests on not happening: auto mode refusing
         # the session's writes leaves it reading green while doing nothing.
         lines.append("permission denials: " + ", ".join(sorted(set(outcome.denials))))
-    tail = []
-    if resume:
-        tail.append(f"resume this session: `{resume}`")
-    tail.append(
-        f"{outcome.turns} turns, ${outcome.cost_usd:.2f} — transcript: {log_path}"
-    )
+    tail = [f"{outcome.turns} turns, ${outcome.cost_usd:.2f} — transcript: {log_path}"]
     if outcome.summary:
         # Every line around the summary keeps its full text; only the summary gives way.
         room = _DIGEST_CHARS - len("\n".join(lines + tail)) - len("\n> ")

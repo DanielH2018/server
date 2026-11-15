@@ -1,20 +1,18 @@
 #!/bin/bash
 {% import 'templates/renovate-agent-pins.j2' as pins with context -%}
 # Shipped by the renovate-agent component. homelab-renovate-agent.service runs it as root through
-# `ExecStartPre=+` before each session, so a pin bump or a rebuilt host converges on the next tick.
-# homelab-renovate-agent-setup.service runs it at boot and when it or the packaged Claude Code
-# settings change, so the agent has its settings while it is disarmed.
+# `ExecStartPre=+` before each run, so a pin bump or a rebuilt host converges on the next tick.
+# homelab-renovate-agent-setup.service runs it at boot and when it changes, so the toolchain
+# exists while the agent is disarmed.
 #
 # Usage: renovate-agent-setup [-h|--help]
 # Takes no arguments. Running it by hand as root applies every step below.
 #
-# Gives {{ pins.user }} its home, the operator's pinned uv, uvx and prek, the operator's
-# claude_guard package, claude_worktree module and Claude Code hook scripts, the packaged Claude
-# Code settings, the pinned Python, Claude Code and its own clone. Each run copies the settings
-# over the agent's, so an edit a session makes to them lasts until the next run.
-# Every step is idempotent. The agent runs every command that writes into its home, because the
-# session could have replaced any path there with a link. Root only reads the operator's copies,
-# which the agent cannot read, into a staging directory the agent then copies from.
+# Gives the controller, {{ pins.ctl_user }}, its home, the exchange, the session's toolchain and
+# the clone the session works in, and gives the session user, {{ pins.user }}, its home. The
+# controller runs every command that writes into what it owns. Root only reads the operator's
+# copies, which the controller cannot read, into a staging directory the controller then copies
+# from. Every step is idempotent.
 set -euo pipefail
 
 case "${1-}" in
@@ -23,68 +21,99 @@ esac
 
 agent={{ pins.user }}
 home={{ renovate_agent_home }}
-clone={{ renovate_agent_clone_dir }}
+ctl={{ pins.ctl_user }}
+ctl_home={{ pins.ctl_home }}
+tools={{ pins.tools_dir }}
+clone={{ pins.clone_dir }}
 operator=/home/{{ sys_user }}
-settings=/usr/lib/homelab/renovate-agent/claude-settings.json
 
 as_agent() {
   runuser -u "$agent" -- env HOME="$home" TMPDIR=/tmp PATH=/usr/bin:/bin "$@"
+}
+as_ctl() {
+  runuser -u "$ctl" -- env HOME="$ctl_home" TMPDIR=/tmp PATH=/usr/bin:/bin "$@"
 }
 
 # Group sys_user and setgid, so the operator reads what the agent writes. /var/lib is root's, so the
 # agent cannot have replaced the home itself.
 install -d -o "$agent" -g {{ sys_user }} -m 2750 "$home"
-
 # The controller's home holds the run's state. Group sys_user and setgid, so the docs-refresh
-# reader, which runs as sys_user, reads runs.jsonl as it read it in the agent's home.
-ctl={{ pins.ctl_user }}
-ctl_home={{ pins.ctl_home }}
+# reader, which runs as sys_user, reads runs.jsonl.
 install -d -o "$ctl" -g {{ sys_user }} -m 2750 "$ctl_home"
 # The exchange: the controller owns it, and the session's group may only traverse it. The runner
 # recreates its requests/ and out/ children each run, setgid and group-writable, so the session
 # writes there and the controller reads what it wrote; the session cannot replace either child.
 install -d -o "$ctl" -g "$agent" -m 2750 {{ pins.exchange_dir }}
-# The records a run wrote in the agent's home before the controller owned them, copied once.
-for name in runs.jsonl requests.jsonl last_run; do
-  if [ -f "$home/$name" ] && [ ! -L "$home/$name" ] && [ ! -e "$ctl_home/$name" ]; then
-    install -o "$ctl" -g {{ sys_user }} -m 0640 "$home/$name" "$ctl_home/$name"
-  fi
-done
-as_agent mkdir -p "$home/.local/bin" "$home/.local/share/claude-guard" "$home/.local/share/claude-worktree" "$home/.claude"
+# What the session reads through its group and cannot write.
+install -d -o "$ctl" -g "$agent" -m 2750 "$tools" "$clone"
+# The settings, hooks, toolchain and clone the session used to keep in its home. The session reads
+# the packaged settings and the controller's copies now, so a copy left here would only be a file
+# the session could edit and Claude Code would still load.
+as_agent rm -rf "$home/.claude/settings.json" "$home/.claude/hooks" "$home/.local/bin" \
+  "$home/.local/share/claude-guard" "$home/.local/share/claude-worktree" "$home/server"
+
+# The toolchain and the clone change only while no run holds the lock: a refresh under a live
+# session would reset the tree it reads. The unit runs this script before its ExecStart takes it.
+exec 9>>"$ctl_home/run.lock"
+chown "$ctl:$ctl" "$ctl_home/run.lock"
+if ! flock -n 9; then
+  echo "renovate-agent-setup: a run holds the lock; leaving the toolchain and the clone as they are"
+  exit 0
+fi
 
 stage=$(mktemp -d)
 trap 'rm -rf "$stage"' EXIT
 chmod 0755 "$stage"
 
-# Copies one operator file or tree to its destination in the agent's home, when it exists.
+# Copies one operator file or tree to its destination under the controller's tools, when it exists.
 copy_from_operator() {
   local source="$1" destination="$2" name
   [[ -e "$source" ]] || return 0
   name=$(basename "$source")
   cp -RL --no-preserve=ownership "$source" "$stage/$name"
   chmod -R a+rX "$stage/$name"
-  as_agent cp -RT --remove-destination "$stage/$name" "$destination"
+  as_ctl cp -RT --remove-destination "$stage/$name" "$destination"
   rm -rf "${stage:?}/$name"
 }
 
-copy_from_operator "$operator/.local/bin/uv" "$home/.local/bin/uv"
-copy_from_operator "$operator/.local/bin/uvx" "$home/.local/bin/uvx"
-copy_from_operator "$operator/.local/share/uv/tools/prek/bin/prek" "$home/.local/bin/prek"
-copy_from_operator "$operator/.local/share/claude-guard/claude_guard" "$home/.local/share/claude-guard/claude_guard"
-copy_from_operator "$operator/.local/share/claude-worktree/claude_worktree.py" "$home/.local/share/claude-worktree/claude_worktree.py"
-copy_from_operator "$operator/.claude/hooks" "$home/.claude/hooks"
-as_agent cp --remove-destination "$settings" "$home/.claude/settings.json"
+as_ctl mkdir -p "$tools/.local/bin" "$tools/.local/share/claude-guard" \
+  "$tools/.local/share/claude-worktree" "$tools/.claude"
+copy_from_operator "$operator/.local/bin/uv" "$tools/.local/bin/uv"
+copy_from_operator "$operator/.local/bin/uvx" "$tools/.local/bin/uvx"
+copy_from_operator "$operator/.local/share/uv/tools/prek/bin/prek" "$tools/.local/bin/prek"
+copy_from_operator "$operator/.local/share/claude-guard/claude_guard" "$tools/.local/share/claude-guard/claude_guard"
+copy_from_operator "$operator/.local/share/claude-worktree/claude_worktree.py" "$tools/.local/share/claude-worktree/claude_worktree.py"
+copy_from_operator "$operator/.claude/hooks" "$tools/.claude/hooks"
 
-(cd "$home" && as_agent "$home/.local/bin/uv" python install {{ host_python_version }})
+as_ctl env UV_PYTHON_INSTALL_DIR="$tools/python" "$tools/.local/bin/uv" python install {{ host_python_version }}
 
-# DECIDED: the install script is fetched unpinned, as the operator's install is. Claude Code updates
-# itself afterwards, so a pinned checksum would only hold back the first install.
-if [[ ! -x "$home/.local/bin/claude" ]]; then
+# DECIDED: the install script is fetched unpinned, as the operator's install is. The controller
+# owns the binary and updates it here; the session runs it with DISABLE_AUTOUPDATER=1.
+if [[ ! -x "$tools/.local/bin/claude" ]]; then
   curl -fsSL --retry 3 -o "$stage/claude-install.sh" https://claude.ai/install.sh
   chmod 0644 "$stage/claude-install.sh"
-  (cd "$home" && as_agent env CLAUDE_INSTALL_ALLOW_SUDO=1 bash "$stage/claude-install.sh")
+  (cd "$tools" && as_ctl env HOME="$tools" CLAUDE_INSTALL_ALLOW_SUDO=1 bash "$stage/claude-install.sh")
+elif ! as_ctl env HOME="$tools" "$tools/.local/bin/claude" update >/dev/null 2>&1; then
+  echo "renovate-agent-setup: claude update failed; the session keeps the installed version"
 fi
 
+# The clone the session works in. Only the controller writes it, so a hard reset loses nothing.
 if [[ ! -d "$clone/.git" ]]; then
-  as_agent git clone --quiet "https://github.com/{{ renovate_agent_repo }}.git" "$clone"
+  as_ctl git clone --quiet "https://github.com/{{ renovate_agent_repo }}.git" "$clone"
+else
+  as_ctl git -C "$clone" fetch --quiet origin master
+  as_ctl git -C "$clone" reset --quiet --hard origin/master
 fi
+# The venv the project hooks run in; the session sets UV_NO_SYNC and never writes it.
+(cd "$clone" && as_ctl env UV_PYTHON_INSTALL_DIR="$tools/python" \
+  UV_CACHE_DIR="$ctl_home/uv-cache" "$tools/.local/bin/uv" sync --frozen --quiet)
+
+# The session reads all of it through its group. A file uv hardlinked from the controller's cache,
+# or an installer moved into place, keeps the group and mode it was made with, which the setgid
+# directory cannot change, so both trees are regrouped and opened to the group on every run.
+# Root regroups, because the controller is not in the session's group and chgrp refuses a group
+# its caller lacks. -h and -R without -L change each link itself and follow none, so a link in
+# the controller's tree regroups nothing outside it. The controller owns every file, so it sets
+# the modes.
+chgrp -R -h "$agent" "$tools" "$clone"
+as_ctl chmod -R g+rX,g-w "$tools" "$clone"
