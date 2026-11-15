@@ -107,10 +107,16 @@ is not a settled finding** — a row that prohibits a fix while calling the unde
 belongs in an issue, and step 7 files it.
 
 **Also extract the still-OPEN confirmed findings**, not just the settled ones. A finding carried
-across runs must be reported as a **recurrence** — "open since 2026-08-15, third run" — never as a
-discovery. A third appearance is an escalation signal (it belongs in a durable owner: a test, a
-lint, a CLAUDE.md rule), and re-presenting it as new is how it stays unowned. Verify each is still
-live before reporting: the register is only as fresh as the last ledger.
+across runs must be reported as a **recurrence**, with its first-seen date and the run number
+this review makes it, never as a discovery. Count the run number, never copy a counter: the
+first sighting is run 1, each re-observation adds one, and this review adds one more. So an
+issue that `findings.py list` prints as `x3` is on its fifth run now, which is the sighting
+number `findings.py touch` writes
+(`scripts/dev/tests/test_findings.py::test_touch_names_the_sighting_this_run_makes`). A legacy
+register row that carried a finding across N runs makes this review run N+1. A third or later
+appearance is an escalation signal (it belongs in a durable owner: a test, a lint, a CLAUDE.md
+rule), and re-presenting it as new is how it stays unowned. Verify each is still live before
+reporting: the register is only as fresh as the last ledger.
 
 **Run `uv run python scripts/dev/findings.py list` before you read the register.** The open
 findings live as GitHub Issues labelled `claude`; that command opens on a count by severity,
