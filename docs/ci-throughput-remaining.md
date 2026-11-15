@@ -77,8 +77,8 @@ credential.
   every landing for 56 and 92 seconds when a landing they waited for never arrived. A
   burst of landings forms its batches behind its first landing without help.
 - **A landing started on daniel-server needs `--fresh`** when that host's primary
-  checkout lags master, and it holds one of three slots on that host until its verdict.
-  `land.sh` exiting 75 with `landings are already live` means wait and re-run.
+  checkout lags master. It takes one of the 6 slots on daniel-box over ssh, and one of 3
+  on its own host only when daniel-box does not answer.
 - **A docs-only landing takes no landing slot.** A landing takes its slot from step 2
   (`land_lib/pipeline.py:_SLOT_FROM_STEP`), and a docs-only PR ends at step 1 with
   `nothing-to-deploy`. Such a landing exercises the turn and the serial check, never the
