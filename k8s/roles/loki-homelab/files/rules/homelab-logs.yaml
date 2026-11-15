@@ -164,6 +164,32 @@ groups:
             and its workload cannot write until the volume detaches and reattaches. Read
             {job="syslog", program="kernel"} in loki-homelab for the device and the errors before
             it, then scale the workload to 0, wait for the volume to detach, and scale back.
+      # kubelet's graceful node shutdown failed to arm (#8910). kubelet logs this E-level line
+      # once per start when logind's InhibitDelayMaxSec stays below the sum of the shutdown
+      # groups (hosts/components/k3s-agent/component.yml's k3s_agent_graceful_shutdown), and
+      # the next host shutdown is then ungraceful for Longhorn's iSCSI volumes. The state lasts
+      # until the next kubelet start, so the 8d range holds the alert across one weekly-reboot
+      # cycle: a shorter range would send a RESOLVED while kubelet is still unarmed. kubelet
+      # logs nothing on success, so after a fix by hand restart the alert stays up until the
+      # line ages out, and the operator silences it once `systemd-inhibit --list` shows
+      # kubelet's delay lock. Measured 2026-11-15: the 8d query ran in 0.08s, and daniel-server
+      # logged the line once in 8 days, at that day's 07:39 reboot.
+      - alert: KubeletNodeShutdownManagerFailed
+        expr: >-
+          sum by (machine) (count_over_time({job="k3s"} |= "Failed to start node shutdown manager" [8d])) > 0
+        labels:
+          severity: warning
+          service: k3s
+        annotations:
+          summary: kubelet on {{ $labels.machine }} started without graceful node shutdown.
+          description: >-
+            kubelet on {{ $labels.machine }} logged "Failed to start node shutdown manager" in
+            the last 8 days, so its next shutdown stops pods without draining them and can
+            abort Longhorn's ext4 journals. Read {job="k3s"} in loki-homelab for the logind
+            value it waited on, check the host's logind drop-ins with `systemd-analyze
+            cat-config systemd/logind.conf`, then restart k3s-agent. Once `systemd-inhibit
+            --list` shows kubelet's delay lock, silence this alert: kubelet logs nothing on
+            success, so it stays up until the line is 8 days old.
       # Home Assistant's Cast connect-back loop (#8206). pychromecast logs "Heartbeat timeout,
       # resetting connection" at INFO each time it drops the Nest Hub's socket, and nothing else
       # signals the loop. Measured 2026-11-13: the 2026-11-11/12 storms logged 57-119 per hour,

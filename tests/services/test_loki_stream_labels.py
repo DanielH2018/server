@@ -219,6 +219,7 @@ def test_the_consumer_census_finds_its_named_members():
         "homelab-logs.yaml HostLogErrors",
         "homelab-logs.yaml HostOutOfMemoryKill",
         "homelab-logs.yaml HostFilesystemRemountedReadOnly",
+        "homelab-logs.yaml KubeletNodeShutdownManagerFailed",
         "homelab-logs.yaml CloudflareDdnsDirectUpdateSilent",
         "homelab-logs.yaml CloudflareDdnsProxiedUpdateSilent",
         "homelab-logs.yaml HomeAssistantCastHeartbeatStorm",
