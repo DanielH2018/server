@@ -296,8 +296,8 @@ data:
       #
       # No `timeout` on either module: the exporter probes within this job's scrape timeout,
       # less its offset, so a slow backend reads probe_success 0 instead of failing the
-      # scrape. A failed scrape would set that target's `up` to 0 and Kuma's Cluster Scrape
-      # Targets tile would page the same failure a second time.
+      # scrape. A failed scrape would set that target's `up` to 0 and the scrape-target rule
+      # would page the same failure a second time.
       - job_name: blackbox-ingress
         scrape_interval: 1m
         metrics_path: /probe

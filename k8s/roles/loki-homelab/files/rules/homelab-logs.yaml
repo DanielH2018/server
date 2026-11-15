@@ -107,8 +107,8 @@ groups:
       # `pi_health` stream also carries job="syslog" but never passes the stage, so it has no
       # `program` and the `machine` matcher keeps it out.
       #
-      # Not shadow: the label exists for a rule that runs beside a Kuma tile, and no Kuma tile
-      # covers host syslog. `service` is a literal, as on every rule here, because
+      # Not shadow: the label exists for a rule that runs beside another pager, and no other
+      # pager covers host syslog. `service` is a literal, as on every rule here, because
       # test_alertmanager_routing.py routes each rule by its own labels; the alert's `machine`
       # label names the host.
       - alert: HostLogErrors
@@ -213,7 +213,7 @@ groups:
       # or, on a real change, "Updated an outdated" or "Added a new". A failed cycle logs "Could
       # not confirm update" or "No valid IPv4 addresses were detected" and none of the three, so
       # 15m (three cycles) without one is a dead or failing updater. The filter deliberately
-      # leaves out the "Successfully sent a ping to Uptime Kuma" line, which stops with the Kuma
+      # leaves out the "Successfully sent a ping to Uptime Kuma" line, which stopped with the Kuma
       # push at Cutover-2, and the "Checking the IP addresses in about" line, which prints
       # whether or not the update worked. The Kuma tiles waited 6 minutes and paged on one missed
       # beat, so these rules are slower by design: a single failed cycle is a retry, not a page.
