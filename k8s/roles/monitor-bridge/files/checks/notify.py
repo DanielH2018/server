@@ -19,7 +19,7 @@ from bridge.sources import Sources
 import bridge.streaks
 from bridge.streaks import StampedCache
 from bridge.common import HTTP_TIMEOUT
-from bridge.types import as_object
+from bridge.types import CheckResult, as_object
 from verdicts.notify import discord_webhook_ok
 
 
@@ -143,7 +143,7 @@ def check_discord(
     webhooks = _discord_webhooks(cfg)
     if not webhooks:
         return True, "Discord webhook check disabled (no URL)"
-    ok, msg, valid = True, "", []
+    ok, msg, valid, failed = True, "", [], ""
     for label, url in webhooks:
         try:
             data = src.get_json(url)
@@ -165,7 +165,7 @@ def check_discord(
                 "unreachable: %s" % _redact(str(e), [u for _, u in webhooks]),
             )
         if not w_ok:
-            ok, msg = False, "%s webhook: %s" % (label, w_msg)
+            ok, msg, failed = False, "%s webhook: %s" % (label, w_msg), label
             break
         valid.append(label)
     if ok:
@@ -173,7 +173,7 @@ def check_discord(
         if e_ok:
             valid.append("email")
         else:
-            ok, msg = False, e_msg
+            ok, msg, failed = False, e_msg, "email backstop"
     if ok:
         src.state.down_streaks["discord"] = 0
         return True, "delivery channels valid (%s)" % ", ".join(valid)
@@ -183,4 +183,4 @@ def check_discord(
         msg,
         "transient grace",
     )
-    return ok, msg
+    return CheckResult(ok, msg, [failed])

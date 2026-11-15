@@ -20,7 +20,7 @@ import registry
 from _bridge_env import bridge_env
 from _fake_sources import mk
 from _fake_sources import FakeSources
-from bridge.types import Check
+from bridge.types import Check, CheckResult
 
 SERIES = re.compile(r'^(\w+)\{check="([^"]+)"\} (\S+)$', re.MULTILINE)
 
@@ -137,3 +137,53 @@ def test_the_row_count_is_the_table_gate_rows_included():
     assert "prometheus" not in names
     # Red on an exporter that counts anything but the table: the registry is the table's length.
     assert len(built) == rows
+
+
+DETAIL = re.compile(r'^homelab_check_detail\{check="([^"]+)",detail="(.*)"\} 1$', re.M)
+
+
+def _details(exposition):
+    """`(check, detail)` for every `homelab_check_detail` series in the served body."""
+    return DETAIL.findall(exposition.body().decode())
+
+
+def test_a_down_row_serves_its_members_and_an_up_row_serves_none(cfg):
+    export = verdict_export.CheckExposition(cfg.INTERVAL)
+    check.run_once(
+        cfg,
+        FakeSources(prom_vector=lambda q: []),
+        [
+            Check(
+                "down", lambda _c, _s: CheckResult(False, "2 bad", ["zeta", "alpha"])
+            ),
+            Check("held", lambda _c, _s: CheckResult(True, "streak 1/2", ["alpha"])),
+        ],
+        export=export,
+    )
+    assert _details(export) == [("down", "alpha"), ("down", "zeta")]
+
+
+def test_a_recovered_row_drops_its_detail_series(cfg):
+    export = verdict_export.CheckExposition(cfg.INTERVAL)
+    export.record("row", False, 0.0, ("EZTV",))
+    assert _details(export) == [("row", "EZTV")]
+    export.record("row", True, 300.0, ("EZTV",))
+    assert _details(export) == []
+    assert "homelab_check_detail" not in export.body().decode()
+
+
+def test_a_detail_label_value_is_escaped():
+    export = verdict_export.CheckExposition(300)
+    export.record("row", False, 0.0, ('say "hi" \\ there',))
+    assert _details(export) == [("row", 'say \\"hi\\" \\\\ there')]
+
+
+def test_a_check_result_unpacks_as_a_pair_and_bounds_its_details():
+    many = ["m%d" % i for i in range(9, -1, -1)] + ["m3", "  ", "x" * 100]
+    result = CheckResult(False, "msg", many)
+    ok, msg = result
+    assert (ok, msg) == (False, "msg") == result
+    assert len(result.details) == CheckResult.DETAILS_MAX
+    assert result.details == tuple(sorted(set(result.details)))
+    assert all(len(d) <= CheckResult.DETAIL_MAXLEN for d in result.details)
+    assert CheckResult.of((True, "plain")).details == ()

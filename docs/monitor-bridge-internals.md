@@ -82,6 +82,10 @@ The role `CLAUDE.md` keeps the rules; this is the wiring.
   `check="<row>"`. `homelab_check_rows` counts the enabled rows of `CHECKS`, gate rows
   included, so it is not `registry.build_checks`' length, which drops every gate row.
   `BridgeCheckStale` compares the exported row count against it.
+  `homelab_check_detail{check="<row>", detail="<member>"}` is 1 for each member a down row
+  names in its `CheckResult.details` (`files/bridge/types.py:CheckResult`): an indexer, a
+  drive, an R2 arm. A row's alert summary reads it with a template `query`. A detail is a
+  member's name, never a count or an age, so the series stay the same across cycles.
   `homelab_domain_registration_expiry_days` carries no label: `cli.main()` sets it after each
   cycle from the `domain_registration` row's cached RDAP expiry, and it is absent until a
   read succeeds.

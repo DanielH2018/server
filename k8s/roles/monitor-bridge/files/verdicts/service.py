@@ -18,6 +18,7 @@ from datetime import datetime, timedelta, timezone
 
 from bridge.common import sanitize
 from bridge.parsing import parse_rfc3339
+from bridge.types import CheckResult
 
 
 def n8n_update_streaks(
@@ -101,17 +102,20 @@ def n8n_verdict(
     systemic = [(n, c) for n, c in ranked if c >= systemic_streak]
     if len(systemic) >= systemic_max:
         names = ", ".join("%s (%d)" % (sanitize(n), c) for n, c in systemic[:5])
-        return False, "n8n systemic: %d workflows failing repeatedly (%s)" % (
-            len(systemic),
-            names,
+        return CheckResult(
+            False,
+            "n8n systemic: %d workflows failing repeatedly (%s)"
+            % (len(systemic), names),
+            [sanitize(n) for n, _ in systemic],
         )
     broken = [(n, c) for n, c in ranked if c >= consecutive_max]
     if broken:
         desc = ", ".join("%s (%d)" % (sanitize(n), c) for n, c in broken)
-        return False, "n8n: %d active workflow(s) failed %d+ consecutive: %s" % (
-            len(broken),
-            consecutive_max,
-            desc,
+        return CheckResult(
+            False,
+            "n8n: %d active workflow(s) failed %d+ consecutive: %s"
+            % (len(broken), consecutive_max, desc),
+            [sanitize(n) for n, _ in broken],
         )
     return True, "%d active workflow(s) failing (< %d consecutive)" % (
         len(ranked),
@@ -165,23 +169,27 @@ def host_packages(
         if shown is not None
         else ""
     )
-    problems = []
+    problems, arms = [], []
     if not fetch_ts:
         problems.append("builder fetch series absent or 0 (timer dead, token missing?)")
+        arms.append("fetch series absent")
     elif now - fetch_ts > max_fetch_age_s:
         problems.append(
             "builder last fetched %.0fm ago (> %.0fm)"
             % ((now - fetch_ts) / 60, max_fetch_age_s / 60)
         )
+        arms.append("fetch stale")
     if not unbuilt:
         problems.append("builder unbuilt-since series absent")
+        arms.append("unbuilt-since series absent")
     elif oldest and now - oldest[1] > max_lag_s:
         problems.append(
             "master unbuilt for %.0fm (> %.0fm)"
             % ((now - oldest[1]) / 60, max_lag_s / 60)
         )
+        arms.append("master unbuilt, reason=%s" % oldest[0].get("reason", "?"))
     if problems:
-        return False, "%s%s%s" % ("; ".join(problems), which, note)
+        return CheckResult(False, "%s%s%s" % ("; ".join(problems), which, note), arms)
     if oldest:
         return True, "unbuilt for %.0fm%s%s" % ((now - oldest[1]) / 60, which, note)
     return True, "builder caught up%s%s" % (which, note)

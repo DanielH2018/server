@@ -23,7 +23,7 @@ import time
 from bridge.config import Config
 from bridge.sources import Sources
 from bridge.streaks import ProbeCache
-from bridge.types import JsonObject, as_object_list
+from bridge.types import CheckResult, JsonObject, as_object_list
 
 
 def fetch_checks(cfg: Config, src: Sources) -> list[JsonObject]:
@@ -89,12 +89,17 @@ def healthchecks_verdict(
     """(ok, msg) for the console's checks against the documented expectations. Pure."""
     by_slug = {c.get("slug"): c for c in live}
     problems: list[str] = []
+    drifted: list[str] = []
     for want in expected:
         got = by_slug.get(want["slug"])
-        if got is None:
-            problems.append("%s: missing from the console" % want["slug"])
-        else:
-            problems.extend(_slug_problems(want, got))
+        found = (
+            ["%s: missing from the console" % want["slug"]]
+            if got is None
+            else _slug_problems(want, got)
+        )
+        if found:
+            problems.extend(found)
+            drifted.append(want["slug"])
     # DECIDED: an undocumented console check is named but does not page. Adding a check cannot
     # silence a documented dead-man, and this tile answers whether those are configured as the
     # doc says; a console experiment would otherwise page until the doc caught up.
@@ -102,10 +107,12 @@ def healthchecks_verdict(
     extra = sorted(str(s) for s in by_slug if s not in known)
     extra_note = " (undocumented: %s)" % ", ".join(extra) if extra else ""
     if problems:
-        return False, (
+        return CheckResult(
+            False,
             "Healthchecks.io console DRIFTED from docs/healthchecks-io-deadman.md — %s — fix "
             "the console, or the doc and monitor_bridge_healthchecks_expected together%s"
-            % ("; ".join(problems), extra_note)
+            % ("; ".join(problems), extra_note),
+            drifted,
         )
     return True, "Healthchecks.io console matches the doc (%d checks)%s" % (
         len(expected),
@@ -144,16 +151,16 @@ def healthchecks_drift(
     try:
         live = fetch_checks(cfg, src)
     except Exception as e:
-        ok, msg = (
+        result = CheckResult(
             False,
             "failed to read the Healthchecks.io console — unverified: %s" % e,
+            ["console unreadable"],
         )
     else:
-        ok, msg = healthchecks_verdict(live, cfg.HEALTHCHECKS_EXPECTED)
+        result = CheckResult.of(healthchecks_verdict(live, cfg.HEALTHCHECKS_EXPECTED))
     probe["ts"] = now
-    probe["ok"] = ok
-    probe["msg"] = msg
-    return ok, msg
+    probe["ok"], probe["msg"] = result
+    return result
 
 
 def check_healthchecks_drift(cfg: Config, src: Sources) -> tuple[bool, str]:

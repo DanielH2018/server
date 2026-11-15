@@ -12,6 +12,7 @@ import json
 
 from bridge.config import load_config
 from _bridge_env import bridge_env
+from bridge.types import CheckResult
 from _fake_sources import FakeSources
 import checks.healthchecks as hc
 from bridge.streaks import ProbeCache
@@ -81,10 +82,14 @@ def test_pi_peer_backup_on_the_old_cron_is_flagged():
 
 def test_a_changed_grace_is_flagged_naming_the_slug():
     # The issue's Verify-by: change a console grace, and the check pages naming that slug.
-    ok, msg = hc.healthchecks_verdict(
-        _with("daniel-box-disk-health", grace=1800), list(EXPECTED)
+    result = CheckResult.of(
+        hc.healthchecks_verdict(
+            _with("daniel-box-disk-health", grace=1800), list(EXPECTED)
+        )
     )
+    ok, msg = result
     assert not ok
+    assert result.details == ("daniel-box-disk-health",)
     assert "daniel-box-disk-health: grace 1800s, expected 1500s" in msg
 
 

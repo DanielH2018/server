@@ -10,6 +10,10 @@ job as three gauges per row, labelled `check="<row>"`, and one gauge for the who
   three cycles. `INTERVAL` is 300s, so 900s.
 - `homelab_check_rows` is the count of enabled rows in `CHECKS`, gate rows included. It is not
   `registry.build_checks`' length, because that drops every gate row.
+- `homelab_check_detail{check="<row>", detail="<member>"}` is 1 for each member a down row names
+  in its result's `details`: an indexer, a drive, an R2 arm. An up row has none, so a summary
+  that reads it falls back to its category text. Each detail is a member's name and never a
+  count, so the series stay the same from one cycle to the next.
 - `homelab_domain_registration_expiry_days` is the days left before the domain's registration
   expires, from the `domain_registration` row's RDAP read. It is absent until a read succeeds.
 
@@ -49,6 +53,15 @@ DEADLINE_GAUGE = (
     "homelab_check_deadline_seconds",
     "Seconds the row's timestamp may age before it is stale.",
 )
+DETAIL_GAUGE = (
+    "homelab_check_detail",
+    "1 for each member a down row names as failing.",
+)
+
+
+def _label(value: str) -> str:
+    """`value` escaped for a label in the text exposition format."""
+    return value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
 
 
 class CheckExposition(Exposition):
@@ -63,6 +76,7 @@ class CheckExposition(Exposition):
         self._rows = 0
         self._deadline = float(DEADLINE_CYCLES * interval_s)
         self._verdicts: dict[str, tuple[float, float]] = {}
+        self._details: dict[str, tuple[str, ...]] = {}
         self._registration_days: float | None = None
         self._verdict_lock = threading.Lock()
         self._render()
@@ -77,15 +91,31 @@ class CheckExposition(Exposition):
         self._registration_days = days
         self._render()
 
-    def record(self, name: str, ok: bool, now: float) -> None:
-        """Record `name`'s verdict for this cycle and republish the body."""
+    def record(
+        self, name: str, ok: bool, now: float, details: tuple[str, ...] = ()
+    ) -> None:
+        """Record `name`'s verdict for this cycle and republish the body.
+
+        Args:
+          name: The row's check name.
+          ok: The row's verdict.
+          now: When the cycle recorded it.
+          details: The failing members `CheckResult.details` names. Served only while `ok` is
+            false, and replaced on every record, so a recovered row drops its series.
+        """
         with self._verdict_lock:
             self._verdicts[name] = (1.0 if ok else 0.0, now)
+            self._details[name] = () if ok else details
         self._render()
 
     def _render(self) -> None:
         with self._verdict_lock:
             verdicts = sorted(self._verdicts.items())
+            details = sorted(
+                (name, detail)
+                for name, members in self._details.items()
+                for detail in members
+            )
         lines = [
             "# HELP %s %s" % ROWS_GAUGE,
             "# TYPE %s gauge" % ROWS_GAUGE[0],
@@ -111,6 +141,15 @@ class CheckExposition(Exposition):
                     '%s{check="%s"} %r' % (metric, name, float(pick(v)))
                     for name, v in verdicts
                 ]
+        if details:
+            lines += [
+                "# HELP %s %s" % DETAIL_GAUGE,
+                "# TYPE %s gauge" % DETAIL_GAUGE[0],
+            ]
+            lines += [
+                '%s{check="%s",detail="%s"} 1' % (DETAIL_GAUGE[0], name, _label(d))
+                for name, d in details
+            ]
         body = ("\n".join(lines) + "\n").encode()
         with self._lock:
             self._body = body

@@ -15,6 +15,8 @@ tunable.
 
 from datetime import datetime, timezone
 
+from bridge.types import CheckResult
+
 # Cloudflare's published Class A operations — the expensive, 1M/month arm. From the R2 pricing
 # page; an actionType in NEITHER list is counted here too, deliberately (see
 # r2_classify_operations).
@@ -95,7 +97,7 @@ def b2_storage_verdict(
       max_pages: The page cap the walk stopped at, named in the truncation message.
     """
     if not cap:
-        return False, "B2 storage cap not configured"
+        return CheckResult(False, "B2 storage cap not configured", ["cap unset"])
     pct = 100.0 * used_bytes / cap
     detail = "%.2f GB of %.0f GB (%.0f%%), %d versions" % (
         used_bytes / 1000**3,
@@ -106,13 +108,18 @@ def b2_storage_verdict(
     if truncated:
         # Under-reporting is the dangerous direction, so a truncated walk is a failure, not a
         # smaller number reported confidently.
-        return (
+        return CheckResult(
             False,
             "B2 storage listing truncated at %d pages — %s is a FLOOR, not the total"
             % (max_pages, detail),
+            ["listing truncated"],
         )
     if pct > max_pct:
-        return False, "B2 storage over %.0f%%: %s" % (max_pct, detail)
+        return CheckResult(
+            False,
+            "B2 storage over %.0f%%: %s" % (max_pct, detail),
+            ["storage over %.0f%%" % max_pct],
+        )
     return True, "B2 storage %s" % detail
 
 
@@ -200,7 +207,7 @@ def r2_usage_verdict(
         ("Class B", class_b, class_b_max, "%.0f/%.0f"),
     )
     parts = []
-    breaching = []
+    breaching, members = [], []
     for label, used, limit, fmt in arms:
         pct = _pct(used, limit)
         if pct is None:
@@ -209,6 +216,7 @@ def r2_usage_verdict(
         parts.append("%s %s (%.0f%%)" % (label, fmt % (used, limit), pct))
         if pct >= max_pct:
             breaching.append("%s at %.0f%%" % (label, pct))
+            members.append(label)
 
     if uploads_max > 0 and uploads > uploads_max:
         breaching.append(
@@ -216,14 +224,15 @@ def r2_usage_verdict(
             "listing — check the bucket's AbortIncompleteMultipartUpload lifecycle rule)"
             % uploads
         )
+        members.append("multipart uploads")
 
     msg = "R2 month-to-date: " + ", ".join(parts)
     if unknown_actions:
         msg += " [unclassified ops counted as Class A: %s]" % ", ".join(unknown_actions)
     if breaching:
-        return False, "over %.0f%% of free tier — %s. %s" % (
-            max_pct,
-            "; ".join(breaching),
-            msg,
+        return CheckResult(
+            False,
+            "over %.0f%% of free tier — %s. %s" % (max_pct, "; ".join(breaching), msg),
+            members,
         )
     return True, msg

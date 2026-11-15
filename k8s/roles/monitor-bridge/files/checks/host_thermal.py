@@ -9,8 +9,9 @@ where they are bound. Rule and enforcement: bridge/config.py's header.
 
 from bridge.config import Config
 from bridge.sources import Sources
-from bridge.types import as_object, optional_object
+from bridge.types import CheckResult, as_object, optional_object
 from verdicts.host_smart import (
+    device_label,
     scrutiny_device_wear,
     scrutiny_freshness,
     scrutiny_health,
@@ -36,9 +37,7 @@ def scrutiny_wear_devices(
         )
         if dev.get("archived"):
             continue
-        name = str(dev.get("device_name") or wwn)
-        model = dev.get("model_name")
-        label = "%s (%s)" % (name, model) if model else name
+        label = device_label(wwn, dev)
         details = optional_object(
             src.get_json("%s/api/device/%s/details" % (cfg.SCRUTINY_URL, wwn)),
             "scrutiny device details",
@@ -60,21 +59,24 @@ def check_scrutiny(cfg: Config, src: Sources) -> tuple[bool, str]:
         as_object(data.get("data") or {}, "scrutiny data").get("summary"),
         "scrutiny summary",
     )
-    fresh_ok, fresh_msg = scrutiny_freshness(summary, cfg.SCRUTINY_MAX_AGE_H)
-    if not fresh_ok:
-        return False, fresh_msg
-    health_ok, health_msg = scrutiny_health(summary, cfg.SCRUTINY_TEMP_MAX)
-    if not health_ok:
-        return False, health_msg
+    fresh = CheckResult.of(scrutiny_freshness(summary, cfg.SCRUTINY_MAX_AGE_H))
+    if not fresh.ok:
+        return fresh
+    health = CheckResult.of(scrutiny_health(summary, cfg.SCRUTINY_TEMP_MAX))
+    if not health.ok:
+        return health
+    fresh_msg, health_msg = fresh.msg, health.msg
     # Folded into this check rather than given its own, because wear answers the same
     # question device_status does — is the drive still
     # fit to hold the data on it — just months earlier. Fetched only once freshness passes, so a
     # dead collector costs no per-device calls.
     if not cfg.SCRUTINY_WEAR_MAX:
         return True, "%s; %s" % (fresh_msg, health_msg)
-    wear_ok, wear_msg = scrutiny_wear_verdict(
-        scrutiny_wear_devices(cfg, src, summary), cfg.SCRUTINY_WEAR_MAX
+    wear = CheckResult.of(
+        scrutiny_wear_verdict(
+            scrutiny_wear_devices(cfg, src, summary), cfg.SCRUTINY_WEAR_MAX
+        )
     )
-    if not wear_ok:
-        return False, wear_msg
-    return True, "%s; %s; %s" % (fresh_msg, health_msg, wear_msg)
+    if not wear.ok:
+        return wear
+    return True, "%s; %s; %s" % (fresh_msg, health_msg, wear.msg)

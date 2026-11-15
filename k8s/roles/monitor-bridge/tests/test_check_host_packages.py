@@ -34,8 +34,10 @@ def _canary(since, **host):
 
 def test_a_daniel_server_canary_pages_past_the_floor(cfg):
     stuck = _canary(NOW - 7200 - 60, host="daniel-server")
-    ok, msg = _run(cfg, 60, [stuck])
+    result = _run(cfg, 60, [stuck])
+    ok, msg = result
     assert not ok and "master unbuilt" in msg, msg
+    assert result.details == ("master unbuilt, reason=canary",)
 
 
 @pytest.mark.parametrize(

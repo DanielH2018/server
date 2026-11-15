@@ -94,9 +94,11 @@ def test_ha_heartbeat_two_consecutive_stale_cycles_alert(cfg, state):
     # Default HA_CONSECUTIVE=2: the 2nd straight stale cycle is a genuinely wedged HA -> down.
     ok, _ = _ha_cycle(cfg, state, age_s=600)
     assert ok
-    ok, msg = _ha_cycle(cfg, state, age_s=600)
+    result = _ha_cycle(cfg, state, age_s=600)
+    ok, msg = result
     assert not ok
     assert "stale" in msg
+    assert result.details == ("heartbeat",)
 
 
 def test_ha_heartbeat_fresh_read_resets_streak(cfg, state):
@@ -142,8 +144,10 @@ def test_ha_ban_event_is_down():
 def test_ha_ban_wins_the_message_over_a_healthy_heartbeat(cfg, state):
     # A ban pages even while the heartbeat itself is fresh — the two arms are independent, and
     # the ban text leads because it names the actionable fault.
-    ok, msg = _ha_cycle(cfg, state, age_s=60, banned=3)
+    result = _ha_cycle(cfg, state, age_s=60, banned=3)
+    ok, msg = result
     assert not ok
+    assert result.details == ("ip_ban",)
     assert msg.startswith("HA ip_ban fired 3 time(s)")
     assert "fresh" in msg  # the heartbeat's own verdict is preserved, not dropped
 

@@ -7,6 +7,7 @@ operator smoke-test that proves B2 accepts the query.
 
 from dataclasses import replace
 
+from bridge.types import CheckResult
 import checks.b2
 import registry
 from _fake_sources import FakeSources
@@ -39,11 +40,13 @@ def test_verdict_ok_under_threshold():
 
 
 def test_verdict_down_over_threshold():
-    ok, msg = checks.b2.b2_storage_verdict(
-        9e9, 10, False, cap=10e9, max_pct=80, max_pages=50
+    result = CheckResult.of(
+        checks.b2.b2_storage_verdict(9e9, 10, False, cap=10e9, max_pct=80, max_pages=50)
     )
+    ok, msg = result
     assert not ok
     assert "90%" in msg
+    assert result.details == ("storage over 80%",)
 
 
 def test_verdict_treats_a_truncated_walk_as_failure():

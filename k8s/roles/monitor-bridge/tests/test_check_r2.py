@@ -84,8 +84,10 @@ def test_r2_verdict_down_on_storage_breach():
 
 
 def test_r2_verdict_down_on_class_b_breach_names_only_that_arm():
-    ok, msg = _verdict(0, 0, 0, 9_000_000, [])
+    result = _verdict(0, 0, 0, 9_000_000, [])
+    ok, msg = result
     assert not ok
+    assert result.details == ("Class B",)
     assert "Class B at 90%" in msg
     assert "storage at" not in msg
 

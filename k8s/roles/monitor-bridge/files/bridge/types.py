@@ -14,9 +14,9 @@ copy of `scripts/lib/json_types.py`: this role ships only its own files/ into th
 Stdlib only, like every module under files/.
 """
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, NamedTuple, Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from bridge.config import Config
 
@@ -36,20 +36,52 @@ CheckFn = Callable[[Config, "Sources"], tuple[bool, str]]
 class VerdictRecorder(Protocol):
     """Where `check.run_once` records each enabled row's verdict: `CheckExposition` in the pod."""
 
-    def record(self, name: str, ok: bool, now: float) -> None: ...
+    def record(
+        self, name: str, ok: bool, now: float, details: tuple[str, ...] = ()
+    ) -> None: ...
 
 
-class CheckResult(NamedTuple):
-    """What a check or a gate decided: `ok` and the message the run loop logs.
+class CheckResult(tuple[bool, str]):
+    """What a check or a gate decided: `ok`, the message the run loop logs, and its members.
 
-    A NamedTuple rather than a dataclass so every existing `ok, msg = fn()` unpacking — in
-    the run loop, in the checks modules and across the test suite — keeps working unchanged.
-    The check bodies themselves still return a plain `(bool, str)` tuple, which this type
-    accepts; the name exists so the registry's consumption boundary says what the pair means.
+    A 2-tuple, so every `ok, msg = fn()` unpacking and every `== (False, "...")` comparison
+    across the suite keeps working. `details` rides as an attribute, outside the tuple: the
+    short names of the members that made the row fail (an indexer, a drive, an R2 arm), which
+    the exporter serves as `homelab_check_detail` series for the alert summary to name.
+
+    A detail must be stable across cycles: a member's name, never a count, age or percentage,
+    because each distinct value is a new Prometheus series. The constructor sorts, dedupes and
+    caps them, so a caller passes every member it has. A body that returns a plain
+    `(bool, str)` has no details, and its summary falls back to its category text.
+
+    Attributes:
+      details: The failing members' short names, sorted, at most `DETAILS_MAX`, each at most
+        `DETAIL_MAXLEN` characters.
     """
 
-    ok: bool
-    msg: str
+    DETAILS_MAX = 5
+    DETAIL_MAXLEN = 64
+
+    details: tuple[str, ...]
+
+    def __new__(cls, ok: bool, msg: str, details: Iterable[str] = ()) -> "CheckResult":
+        result = super().__new__(cls, (ok, msg))
+        names = {" ".join(d.split())[: cls.DETAIL_MAXLEN] for d in details}
+        result.details = tuple(sorted(n for n in names if n))[: cls.DETAILS_MAX]
+        return result
+
+    @classmethod
+    def of(cls, result: tuple[bool, str]) -> "CheckResult":
+        """`result` itself when it is a CheckResult, else a CheckResult with no details."""
+        return result if isinstance(result, CheckResult) else cls(*result)
+
+    @property
+    def ok(self) -> bool:
+        return self[0]
+
+    @property
+    def msg(self) -> str:
+        return self[1]
 
 
 @dataclass(frozen=True)

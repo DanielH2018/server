@@ -14,7 +14,13 @@ import urllib.parse
 
 from bridge.config import Config
 from bridge.sources import Sources
-from bridge.types import JsonObject, JsonValue, as_object, optional_object
+from bridge.types import (
+    CheckResult,
+    JsonObject,
+    JsonValue,
+    as_object,
+    optional_object,
+)
 from verdicts.storage import b2_storage_verdict, b2_sum_versions
 
 # ASSUMPTION, untestable without a live breach: B2 checks the Class B cap before it looks the
@@ -93,20 +99,21 @@ def b2_storage_usage(
             )
         pages, truncated = b2_list_versions(cfg, src, api_url, token, bucket_id)
         used, versions = b2_sum_versions(pages)
-        ok, msg = b2_storage_verdict(
-            used,
-            versions,
-            truncated,
-            cfg.B2_STORAGE_CAP_BYTES,
-            cfg.B2_STORAGE_MAX_PCT,
-            cfg.B2_STORAGE_MAX_PAGES,
+        result = CheckResult.of(
+            b2_storage_verdict(
+                used,
+                versions,
+                truncated,
+                cfg.B2_STORAGE_CAP_BYTES,
+                cfg.B2_STORAGE_MAX_PCT,
+                cfg.B2_STORAGE_MAX_PAGES,
+            )
         )
     except Exception as e:
-        ok, msg = False, "B2 storage probe failed: %s" % e
+        result = CheckResult(False, "B2 storage probe failed: %s" % e, ["probe failed"])
     src.state.b2_storage["ts"] = now
-    src.state.b2_storage["ok"] = ok
-    src.state.b2_storage["msg"] = msg
-    return ok, msg
+    src.state.b2_storage["ok"], src.state.b2_storage["msg"] = result
+    return result
 
 
 def b2_list_versions(
