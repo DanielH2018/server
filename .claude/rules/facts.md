@@ -89,7 +89,9 @@ otherwise.
 - `unresolved-atom`: a symbol, key, marker or test the tree does not hold.
 - `ambiguous-marker`: a marker prefix that matches more than one line. Cite more of its text.
 - `one-way-test` (warning): a cited test node whose body carries no `# fact: <doc>#<heading>`
-  for the citing section, so the support points one way.
+  for the citing section, so the support points one way. The other direction is a test, not
+  a lint rule: a `# fact:` comment whose doc or heading is gone fails
+  `tests/repo/test_fact_comments_resolve.py::test_every_fact_comment_names_a_section_that_exists`.
 - `renovate-pin`: a YAML key whose value Renovate bumps. Every bump would move the atom, which
   puts a notice on every bump PR for a section whose prose the bump cannot change. Cite the
   file as a path atom and name the key in prose. The rule derives the managed keys from
