@@ -1116,6 +1116,7 @@
  "tests/k8s/test_k8s_manifests_rbac.py": 0.06,
  "tests/k8s/test_k8s_manifests_routes.py": 1.45,
  "tests/k8s/test_k8s_render_context_whole_dict_pass.py": 5.17,
+ "tests/k8s/test_loki_homelab_audit_retention.py": 0.0,
  "tests/k8s/test_loki_read_route_admits_probe_py.py": 0.03,
  "tests/k8s/test_metallb_vendored_manifest.py": 0.02,
  "tests/k8s/test_namespace_resource_defaults.py": 0.03,
