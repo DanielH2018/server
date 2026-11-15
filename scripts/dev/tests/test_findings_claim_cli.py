@@ -13,7 +13,7 @@ from _findings_fakes import (
 
 from dev.findings import main
 from dev.findings_lib.issue_model import claim_comment
-from dev.findings_lib.milestone import DESCRIPTION
+from dev.findings_lib.milestone import description_for
 from lib.worktrees import Worktree
 
 WT = "worktree-issue-1132"
@@ -25,11 +25,19 @@ STALE = facts()
 LIVE = live_worktree(WT)
 
 
-def test_claim_makes_sure_the_session_milestone_exists():
+def test_claim_files_the_issue_under_the_branch_milestone():
     issue = make_issue(1132)
-    tools, calls = build_tools(Fakes(issues=[issue], view=issue, worktree_facts=LIVE))
+    tools, calls = build_tools(
+        Fakes(
+            issues=[issue],
+            view=issue,
+            worktree_facts=LIVE,
+            milestone_titles={WT: "Opt-in milestones"},
+        )
+    )
     assert main(["claim", "1132", "--worktree", WT], tools) == 0
     assert calls.milestones == [(WT, "DanielH2018/server")]
+    assert calls.gh[-1][-2:] == ["--milestone", "Opt-in milestones"]
 
 
 def test_reap_closes_the_milestone_of_a_gone_worktree_and_keeps_a_live_ones():
@@ -47,15 +55,7 @@ def test_claim_writes_a_comment_and_a_label():
     tools, calls = build_tools(Fakes(issues=[issue], view=issue, worktree_facts=LIVE))
     assert main(["claim", "1132", "--worktree", WT], tools) == 0
     assert calls.gh[-2][:3] == ["issue", "comment", "1132"]
-    assert calls.gh[-1] == [
-        "issue",
-        "edit",
-        "1132",
-        "--add-label",
-        "claimed",
-        "--milestone",
-        WT,
-    ]
+    assert calls.gh[-1] == ["issue", "edit", "1132", "--add-label", "claimed"]
 
 
 def test_claim_creates_the_claimed_label_before_it_adds_it():
@@ -71,9 +71,7 @@ def test_claim_creates_the_claimed_label_before_it_adds_it():
     assert any(c[2] == "claimed" for c in created)
     assert calls.gh.index(
         next(c for c in created if c[2] == "claimed")
-    ) < calls.gh.index(
-        ["issue", "edit", "1132", "--add-label", "claimed", "--milestone", WT]
-    )
+    ) < calls.gh.index(["issue", "edit", "1132", "--add-label", "claimed"])
 
 
 def test_claim_refuses_a_manual_issue_and_exits_3(capsys):
@@ -412,7 +410,7 @@ def test_close_keeps_the_issue_in_its_session_milestone():
         labels=["claimed"],
         comments=[claim_comment(WT, None, "t")],
     )
-    issue["milestone"] = {"title": WT, "description": DESCRIPTION}
+    issue["milestone"] = {"title": "Focus", "description": description_for(WT)}
     tools, calls = build_tools(Fakes(issues=[issue], view=issue))
     assert main(["close", "1132", "--fixed"], tools) == 0
     assert ["issue", "edit", "1132", "--remove-label", "claimed"] in calls.gh
