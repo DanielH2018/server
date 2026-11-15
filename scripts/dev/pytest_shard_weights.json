@@ -671,7 +671,7 @@
  "scripts/dev/tests/test_prune_worktrees_orphan_dirs.py": 0.82,
  "scripts/dev/tests/test_prune_worktrees_report.py": 0.0,
  "scripts/dev/tests/test_pytest_shard_durations.py": 0.27,
- "scripts/dev/tests/test_pytest_shard_prebuild.py": 0.59,
+ "scripts/dev/tests/test_pytest_shard_prebuild.py": 0.64,
  "scripts/dev/tests/test_pytest_shard_refresh.py": 0.04,
  "scripts/dev/tests/test_pytest_shard_runner_table.py": 0.0,
  "scripts/dev/tests/test_reject_robot_emoji.py": 0.0,
