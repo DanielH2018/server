@@ -38,6 +38,7 @@ let `land.sh` print `VERDICT: settled` for a deploy whose health gate never ran.
 
 import functools
 import json
+import shlex
 import subprocess
 from datetime import datetime, timezone
 from typing import cast
@@ -53,7 +54,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 # `core.<name>` for anything the tests monkeypatch — binding those into this module's
 # globals with a `from core import ...` would take a snapshot the patch never reaches.
 from diagnostics.probe_lib import core
-from diagnostics.probe_lib.core import PI_HOST
+from diagnostics.probe_lib.core import PI_HOST, pi_ssh_argv
 from diagnostics.probe_lib import health_alerts, health_checkout, health_plumbing
 from diagnostics.probe_lib import health_backup_targets, health_cronjob
 from diagnostics.probe_lib.health_render import render_context as _render_context
@@ -383,13 +384,13 @@ def run_health(
     Pi's `--docker` path and a guessed workload name stay on the rollout verdict alone.
     """
     if docker:
-        # daniel-pi is the only Docker host left, and probe.py runs on daniel-box, so this is
-        # necessarily remote. The ssh is internal to the script, so it is covered by probe.py's
-        # own allow-list entry and never reaches the Bash classifier.
+        # daniel-pi is the only Docker host left, so this is necessarily remote. The ssh is
+        # internal to the script, so it is covered by probe.py's own allow-list entry and never
+        # reaches the Bash classifier.
         # A failed ssh or an unparseable inspect is a read that did not happen, not an absent
         # container: reporting it as `[]` printed "MISSING — the deploy did not create it"
         # for a Pi that was only unreachable (#4444).
-        argv = ["ssh", PI_HOST] + inspect_argv(container)
+        argv = pi_ssh_argv(shlex.join(inspect_argv(container)))
         out = subprocess.run(argv, capture_output=True, text=True)
         if out.returncode != 0:
             print(

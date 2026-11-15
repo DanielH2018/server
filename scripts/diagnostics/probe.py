@@ -105,6 +105,7 @@ Let's Encrypt cert, point at the origin IP with the host as SNI:
 observability's `CertExpiringSoon` rule).
 """
 
+import shlex
 import sys
 from pathlib import Path as _Path
 
@@ -118,7 +119,6 @@ sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 # still reads. Binding it into this module's globals with a `from core import ...` would take
 # a snapshot the patch never reaches.
 from diagnostics.probe_lib import core
-from diagnostics.probe_lib.core import PI_HOST
 from diagnostics.probe_lib.cli_parser import ENTRY_POINT, _build_parser
 from diagnostics.probe_lib.curl_pipeline import output_redaction, plan, stream_pipeline
 from diagnostics.probe_lib.health import (
@@ -223,7 +223,9 @@ def _dispatch(ns, argv, plan):
     if ns.cmd == "health":
         if ns.dry_run:
             if ns.docker:
-                print(" ".join(["ssh", PI_HOST] + inspect_argv(ns.container)))
+                print(
+                    shlex.join(core.pi_ssh_argv(shlex.join(inspect_argv(ns.container))))
+                )
             else:
                 ns_name = core.k8s_namespace()
                 # First, because it is what decides whether the rest runs at all.
