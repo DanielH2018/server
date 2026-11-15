@@ -25,10 +25,9 @@ Take the items in this order. Each names the effort it needs from an Opus sessio
    `scripts/docs/doc_values_lib/`. One owed value got no row: worktree-cleanup's
    "four-layer ladder". `scripts/lib/worktrees.py:LOCAL_LAYERS` names three layers, and the
    fourth is the forge read, which no constant names.
-2. **Mask the generated block in `has_prose`.**
-   [#8787](https://github.com/DanielH2018/server/issues/8787), medium effort. Three
-   sections hold only a `generated_from` block and can never leave the backlog: `At a
-   glance` in the flux, blackbox-exporter and karma role docs.
+2. **Mask the generated block in `has_prose`.** Done on 2026-11-15
+   ([#8787](https://github.com/DanielH2018/server/issues/8787)). A section that holds only a
+   `generated_from` block no longer ranks in the backlog.
 3. **The sections the sweep kept back.** Medium effort, in a solo session and not a
    fan-out batch. `.claude/rules/docker.md` has two uncited sections, and
    `.claude/skills/issue-fanout/SKILL.md` has four. The skill describes the batch
