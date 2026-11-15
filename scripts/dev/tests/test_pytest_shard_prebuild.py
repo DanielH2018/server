@@ -8,6 +8,7 @@ Run: uv run pytest scripts/dev/tests/test_pytest_shard_prebuild.py
 
 import pytest_shard
 import render_share
+from lib.git import git
 from lib.repo_paths import REPO
 
 # CI's matrix in `.github/workflows/ci.yml`.
@@ -72,3 +73,39 @@ def test_a_shard_holding_a_render_module_is_charged_more_prebuild_than_one_holdi
     assert pytest_shard.prebuild_seconds(
         [FLEET_CONSUMER]
     ) > pytest_shard.prebuild_seconds([PLAIN])
+
+
+def test_a_module_reaching_the_k8s_render_through_a_helper_or_a_conftest_is_charged_it(
+    tmp_path,
+):
+    """`render_share` builds the k8s render when `_k8s_render` is in `sys.modules`, however
+    it got there, so a helper's import and an ancestor conftest's import both count."""
+    (tmp_path / "_k8s_render.py").write_text("SHARE_KEY = 'k8s'\n")
+    (tmp_path / "_helper.py").write_text("from _k8s_render import SHARE_KEY\n")
+    (tmp_path / "test_via_helper.py").write_text("from _helper import SHARE_KEY\n")
+    (tmp_path / "role" / "tests").mkdir(parents=True)
+    (tmp_path / "role" / "conftest.py").write_text("import _helper\n")
+    (tmp_path / "role" / "tests" / "test_under_conftest.py").write_text(
+        "def test_x(): pass\n"
+    )
+    (tmp_path / "test_plain.py").write_text("import json\n")
+    git("init", "-q", cwd=tmp_path)
+    git("add", ".", cwd=tmp_path)
+    k8s = pytest_shard.K8S_RENDER_WALL_SECONDS * pytest_shard.CI_WORKERS
+    assert pytest_shard.prebuild_seconds(["test_via_helper.py"], tmp_path) == k8s
+    assert (
+        pytest_shard.prebuild_seconds(["role/tests/test_under_conftest.py"], tmp_path)
+        == k8s
+    )
+    assert pytest_shard.prebuild_seconds(["test_plain.py"], tmp_path) == 0.0
+
+
+def test_the_tree_s_indirect_k8s_render_readers_are_charged_the_render():
+    """Non-vacuity over the real tree: one module per path that loads `_k8s_render` without
+    naming it, as a collection with an import trace on `_k8s_render` showed."""
+    for indirect in (
+        "tests/k8s/test_container_port_name_property.py",
+        "tests/deploy/test_k8s_autodeploy_guard.py",
+        "k8s/roles/monitor-bridge/tests/test_b2_storage.py",
+    ):
+        assert "k8s" in pytest_shard.prebuild_kinds(indirect), indirect

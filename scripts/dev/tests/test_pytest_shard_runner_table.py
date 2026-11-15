@@ -13,6 +13,7 @@ import subprocess
 import pytest
 import pytest_shard
 import shard_weight_gate
+from lib.git import git
 
 FILES = [f"scripts/x/tests/test_{name}.py" for name in "abcdefgh"]
 
@@ -75,6 +76,7 @@ def test_a_shard_reading_no_render_is_charged_nothing_and_a_k8s_reader_the_k8s_r
 ):
     (tmp_path / "test_plain.py").write_text("def test_x(): pass\n")
     (tmp_path / "test_reader.py").write_text("from _k8s_render import rendered_docs\n")
+    git("init", "-q", cwd=tmp_path)
     assert pytest_shard.prebuild_seconds(["test_plain.py"], tmp_path) == 0.0
     assert pytest_shard.prebuild_seconds(
         ["test_plain.py", "test_reader.py"], tmp_path
@@ -242,6 +244,7 @@ def test_a_shard_holding_a_census_file_is_charged_the_census_pass(tmp_path):
     census = "scripts/tests/test_census_rows_test_renders.py"
     (tmp_path / census).parent.mkdir(parents=True)
     (tmp_path / census).write_text("def test_x(): pass\n")
+    git("init", "-q", cwd=tmp_path)
     assert pytest_shard.prebuild_seconds(["test_plain.py", census], tmp_path) == (
         pytest_shard.CENSUS_PASS_WALL_SECONDS * pytest_shard.CI_WORKERS
     )

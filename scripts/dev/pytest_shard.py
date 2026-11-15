@@ -99,6 +99,7 @@ Usage:
 import functools
 import hashlib
 import json
+import re
 import statistics
 import subprocess
 import sys
@@ -158,7 +159,7 @@ FLEET_RENDER_WALL_SECONDS = 6.0
 # The census rows' pass `scripts/tests/conftest.py` runs: CI's 16.0s on #7950's shard 6.
 CENSUS_PASS_WALL_SECONDS = 16.0
 CENSUS_FILE_PREFIX = "scripts/tests/test_census_rows_test_"
-# The text that marks a test module as a reader of the shared k8s render.
+# The module whose import makes a leg build the shared k8s render.
 K8S_RENDER_MODULE = "_k8s_render"
 # The xdist workers on each leg's runner, every one of which waits out the prebuilds.
 CI_WORKERS = 4
@@ -229,9 +230,9 @@ def assign(
     """Map each file to a shard index in `range(shards)`, greedy longest-processing-time.
 
     A file's cost on a shard is its weight, `_PER_FILE_SECONDS`, and the prebuild seconds it
-    adds to what that shard already pays, so the second census file costs the census pass
-    only on a shard that lacks the first. Files go in order of their cost on an empty shard,
-    each to the shard it leaves least loaded.
+    adds to what that shard already pays. Files go in order of their cost on an empty shard,
+    each to the shard it leaves least loaded, so a file that triggers a prebuild can land on
+    a shard that already pays for it only when that shard is still the lighter choice.
 
     Deterministic: ties in that order break by path, and a tie between two shards goes to the
     lower index. The same census and the same weights give the same assignment on every
@@ -474,12 +475,72 @@ def refresh_drifted_weights(
     return sorted(moved)
 
 
+_IMPORT_LINE = re.compile(
+    r"^\s*(?:from\s+([\w.]+)\s+import\b|import\s+([\w., ]+))", re.M
+)
+
+
+def _imported_names(text: str) -> set[str]:
+    """The first and last dotted component of every module an import line in `text` names."""
+    names = set()
+    for source, listed in _IMPORT_LINE.findall(text):
+        for module in [source] if source else listed.split(","):
+            parts = module.split()[0].split(".") if module.split() else []
+            names.update(parts[:1] + parts[-1:])
+    return names
+
+
+def _python_files(repo: Path) -> list[Path]:
+    listed = git("ls-files", "-z", "*.py", cwd=repo).stdout.split("\0")
+    return [repo / rel for rel in listed if rel]
+
+
+@functools.cache
+def k8s_render_readers(repo: Path = REPO) -> frozenset[str]:
+    """The module names whose import loads `_k8s_render`, directly or through other modules.
+
+    Modules are matched by basename, as pytest's `pythonpath` imports them, and a basename
+    two files share counts when either file reads the render. An import inside a function
+    counts too: overcharging a leg one render costs less than a leg the split missed.
+    """
+    imports: dict[str, set[str]] = {}
+    for path in _python_files(repo):
+        try:
+            text = path.read_text()
+        except OSError, UnicodeDecodeError:
+            continue
+        if path.stem != "conftest":
+            imports.setdefault(path.stem, set()).update(_imported_names(text))
+    readers = {K8S_RENDER_MODULE}
+    while grown := {
+        m for m, names in imports.items() if m not in readers and names & readers
+    }:
+        readers |= grown
+    return frozenset(readers)
+
+
+def _ancestor_conftests(rel: str, repo: Path) -> list[Path]:
+    """The `conftest.py` files pytest loads to collect `rel`: its own directory's and each parent's."""
+    parents = PurePosixPath(rel).parents
+    return [
+        repo / d / "conftest.py"
+        for d in parents
+        if (repo / d / "conftest.py").is_file()
+    ]
+
+
+@functools.cache
+def _conftest_imports(path: Path) -> frozenset[str]:
+    return frozenset(_imported_names(path.read_text()))
+
+
 @functools.cache
 def prebuild_kinds(rel: str, repo: Path = REPO) -> frozenset[str]:
     """The prebuilds a leg runs because it holds the test module at `rel`.
 
-    `k8s` when the module names `_k8s_render`, `fleet` when it is a `render_share` consumer,
-    and `census` for a census rows file. A module that cannot be read triggers none.
+    `k8s` when the module or a `conftest.py` above it imports `_k8s_render`, directly or
+    through `k8s_render_readers`, `fleet` when it is a `render_share` consumer, and `census` for a census rows file. A
+    module that cannot be read triggers none.
     """
     import render_share
 
@@ -488,7 +549,11 @@ def prebuild_kinds(rel: str, repo: Path = REPO) -> frozenset[str]:
     except OSError, UnicodeDecodeError:
         return frozenset()
     kinds = set()
-    if K8S_RENDER_MODULE in text:
+    readers = k8s_render_readers(repo)
+    if _imported_names(text) & readers or any(
+        _conftest_imports(conftest) & readers
+        for conftest in _ancestor_conftests(rel, repo)
+    ):
         kinds.add("k8s")
     if render_share.CONSUMER_IMPORT in text:
         kinds.add("fleet")
@@ -509,7 +574,7 @@ def prebuild_seconds(members: list[str], repo: Path = REPO) -> float:
     """The runner seconds a shard of `members` spends in prebuilds before its first test.
 
     Every worker of a leg waits until the prebuilds finish, so they cost their wall time once
-    per worker. A shard pays the k8s render when it holds a reader of `_k8s_render`. A shard
+    per worker. A shard pays the k8s render when it holds a module that imports `_k8s_render`. A shard
     holding a `render_share` consumer renders the fleet on another worker meanwhile, so one
     holding both waits the longer of the two. A census file adds the census pass.
     """
