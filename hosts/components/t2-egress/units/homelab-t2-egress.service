@@ -9,6 +9,8 @@ Before=network.target
 [Service]
 Type=oneshot
 RemainAfterExit=yes
+# This host's journald stores notice and above, so an nft error logged at info would be lost.
+SyslogLevel=notice
 # Checked before it is applied, so a ruleset nft rejects changes nothing.
 ExecStartPre=/usr/sbin/nft -c -f /usr/lib/homelab/t2-egress/t2-egress.nft
 ExecStart=/usr/sbin/nft -f /usr/lib/homelab/t2-egress/t2-egress.nft
