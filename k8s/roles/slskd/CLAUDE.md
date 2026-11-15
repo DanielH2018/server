@@ -1,8 +1,10 @@
 # slskd — Soulseek downloads for Lidarr, behind its own Mullvad tunnel
 
 slskd is the Soulseek client. Soularr, a second container in its pod, reads Lidarr's wanted
-albums every 5 minutes, searches and downloads them through slskd into `torrents/slskd`, and
-asks Lidarr to import them into `media/music`.
+albums every 5 minutes (`k8s/roles/slskd/defaults/main.yml:slskd_k8s_soularr_interval`),
+searches and downloads them through slskd into `torrents/slskd`
+(`k8s/roles/slskd/defaults/main.yml:slskd_k8s_downloads_dir`), and asks Lidarr to import them
+into `media/music`.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in k8s/roles/longhorn-reconcile/defaults/main.yml. -->
@@ -38,8 +40,10 @@ asks Lidarr to import them into `media/music`.
   first revision and sets `DEPLOY_HOLD` for the fleet.
 
 ## Editing
-- Manifests: `templates/`. Soularr's `config.ini` is `templates/config/soularr.ini.j2`, shipped
-  in the `slskd-soularr` Secret because it carries Lidarr's API key. Soularr mounts it through
-  a subPath, which never sees an update; the restart `restart.py` stamps for a mounted Secret
-  is what picks a change up.
-- Pins, the share switch, Soularr's interval and file types: `defaults/main.yml`.
+- Manifests: `k8s/roles/slskd/templates/`. Soularr's `config.ini` is
+  `k8s/roles/slskd/templates/config/soularr.ini.j2`, shipped in the `slskd-soularr` Secret
+  (`k8s/roles/slskd/templates/secret-soularr.yaml.j2`) because it carries Lidarr's API key.
+  Soularr mounts it through a subPath, which never sees an update; the restart
+  `scripts/renderer/renderer_lib/restart.py:restart_values` stamps for a mounted Secret is what
+  picks a change up.
+- Pins, the share switch, Soularr's interval and file types: `k8s/roles/slskd/defaults/main.yml`.

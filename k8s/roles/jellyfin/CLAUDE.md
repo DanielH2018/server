@@ -1,6 +1,6 @@
 # jellyfin — the media server, and the fleet's only GPU workload
 
-Jellyfin, transcoding on the Intel GPU the `dri-device-plugin` role advertises. It reads the
+Jellyfin, transcoding on the AMD GPU the `dri-device-plugin` role advertises. It reads the
 shared `media-data` library and owns its own config volume.
 
 This file holds the rules. `docs/jellyfin-plugins.md` holds the per-plugin record — what each of the
@@ -96,27 +96,32 @@ the Trakt and SSO-Auth decisions, and why the snapshot cap is the number it is.
 
 ## The snapshot-space cap on `jellyfin-config`
 The `jellyfin-snapshot-cap` Job patches `spec.snapshotMaxSize` on the volume backing `jellyfin-config`, to
-`jellyfin_k8s_snapshot_max_size` — 2 × `jellyfin_k8s_size`, 16 GiB today. Longhorn's default is
+`k8s/roles/jellyfin/defaults/main.yml:jellyfin_k8s_snapshot_max_size` — 2 ×
+`k8s/roles/jellyfin/defaults/main.yml:jellyfin_k8s_size`, 16 GiB today. Longhorn's default is
 `"0"`, uncapped, and this role snapshots before every deploy — so without the patch the backend grows
 behind a PVC that is itself capped.
 
 - **The patch runs after the claim applies, so a rebuilt volume stays uncapped until the next
-  revision that rolls jellyfin.** The `DECIDED:` marker in `templates/verify/cap.yaml.j2` has why
+  revision that rolls jellyfin.** The `DECIDED:` marker in
+  `k8s/roles/jellyfin/templates/verify/cap.yaml.j2:DECIDED: under Flux the cap runs in` has why
   (#3387).
 - **The cap is a mutation Job, `templates/verify/cap.yaml.j2`.** It runs
   `files/jellyfin_snapshot_cap.py` in `jellyfin-verify`, after the claim applies. It resolves
-  the volume from the claim's `spec.volumeName` and patches only a differing cap, so a re-run
-  writes nothing. Its Role in `longhorn-system` grants `get` and `patch` on every Longhorn
+  the volume from the claim's `spec.volumeName`
+  (`k8s/roles/jellyfin/files/jellyfin_snapshot_cap.py:volume_name`) and patches only a differing
+  cap, so a re-run writes nothing
+  (`k8s/roles/jellyfin/tests/test_jellyfin_snapshot_cap.py::test_a_second_run_changes_nothing`). Its Role in `longhorn-system` grants `get` and `patch` on every Longhorn
   volume, because the renderer cannot know the volume's generated name; that is the stated
   trade.
 
 - **Longhorn picks the number, not you.** It accepts `"0"` or a value no smaller than
   `Volume.Spec.Size` × 2, so the var stays derived: a hardcoded one goes illegal the moment the PVC
-  is raised past half of it, and the admission webhook then refuses the patch on every deploy.
+  is raised past half of it, and the admission webhook then refuses the patch on every deploy
+  (`tests/longhorn/test_jellyfin_snapshot_max_size.py::test_the_cap_stays_legal_when_the_pvc_is_raised`).
 - **A reached cap refuses, it does not prune**, and `k8s/volume-snapshot` snapshots before it
   prunes — so a cap tight enough to be hit would latch the deploy and the weekly Longhorn backup
   together (#1560). That is why the cap is deliberately loose rather than tuned to usage; the docs
-  page has the headroom measurement.
+  page has the headroom measurement (`docs/jellyfin-plugins.md`).
 - **The pre-apply snapshot stays armed.** `k8s_autodeploy: true` is justified *by* that snapshot in
-  `k8s_autodeploy_reason`, so disarming it means turning Renovate's automerge off for the fleet's
+  `k8s/roles/jellyfin/defaults/main.yml:k8s_autodeploy_reason`, so disarming it means turning Renovate's automerge off for the fleet's
   only GPU workload — a much larger trade than bounding backend growth.

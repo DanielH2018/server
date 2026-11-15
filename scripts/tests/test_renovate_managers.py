@@ -247,6 +247,7 @@ def test_every_k8s_role_image_is_renovate_tracked() -> None:
     assert nothing DISABLES the match: walk packageRules the same way Renovate would and fail
     if an `enabled: false` rule applies to this file's currentValue.
     """
+    # fact: k8s/roles/texbrain/CLAUDE.md#The image comes from a fork, and why
     match_res = [
         re.compile(_to_python_regex(ms)) for ms in _k8s_image_manager()["matchStrings"]
     ]

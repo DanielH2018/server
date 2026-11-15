@@ -30,6 +30,7 @@ def test_every_snapshot_role_restores_its_own_replicas() -> None:
     rollback was meant to end. This is the executable version of a sentence that otherwise lives
     only in a comment.
     """
+    # fact: k8s/roles/navidrome/CLAUDE.md#Parking it again
     roles = _snapshot_roles()
     # A floor, and only as a sanity check on the reader itself: the guard below is the loop,
     # which covers however many roles opt in.
