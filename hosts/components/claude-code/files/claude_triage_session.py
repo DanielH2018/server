@@ -11,12 +11,18 @@ text is on no command line, and writes the session's JSON result to
 the journal, and a line the session shaped there could raise the next episode (dotfiles#967's
 I6). The unit's `TimeoutStartSec` bounds the session, and its `KillSignal=SIGINT` ends the turn
 cleanly.
+
+The session's home is a tmpfs that ends with the unit, so once claude exits, on its own or at the
+wall clock, this script copies the transcript from `<SESSION_HOME>` to
+`<EXCHANGE_DIR>/out/transcript.jsonl`, where the runner keeps it beside the run record.
 """
 
 from __future__ import annotations
 
+import glob
 import json
 import os
+import signal
 import subprocess
 import sys
 
@@ -29,6 +35,9 @@ IN_DIR = "in"
 OUT_DIR = "out"
 PROMPT_NAME = "prompt.txt"
 RESULT_NAME = "result.json"
+TRANSCRIPT_NAME = "transcript.jsonl"
+# The copy is cut here, so a session cannot fill the controller's disk through its transcript.
+TRANSCRIPT_MAX = 32 << 20
 
 # The structure the session must return. Kept small: every field becomes a report section.
 SCHEMA = {
@@ -99,8 +108,7 @@ def build_argv(cfg: dict[str, str]) -> list[str]:
         cfg.get("MAX_TURNS", "60"),
         "--disallowedTools",
         *DENIED_TOOLS,
-        # Session persistence stays on until the session's home is a tmpfs (guardrails plan B2-3),
-        # which exports the transcript instead; the operator ruled out resuming in place.
+        # Session persistence stays on: it writes the transcript export_transcript copies out.
     ]
 
 
@@ -125,6 +133,21 @@ def session_env(environ: dict[str, str]) -> dict[str, str]:
     return env
 
 
+def export_transcript(home: str, out: str, limit: int = TRANSCRIPT_MAX) -> None:
+    """Copy the session's transcript from its home into `out`, cut at `limit` bytes.
+
+    The run's home starts empty, so it holds one transcript; the newest wins if claude wrote more.
+    No transcript, as when claude never started, writes nothing.
+    """
+    found = glob.glob(os.path.join(home, ".claude", "projects", "*", "*.jsonl"))
+    if not found:
+        return
+    with open(max(found, key=os.path.getmtime), "rb") as src:
+        data = src.read(limit)
+    with open(os.path.join(out, TRANSCRIPT_NAME), "wb") as dst:
+        dst.write(data)
+
+
 def main(argv: list[str], config_path: str = CONFIG) -> int:
     """Run the session over the prompt the controller left; 0 once the result is written."""
     if argv[1:] in (["-h"], ["--help"]):
@@ -134,6 +157,9 @@ def main(argv: list[str], config_path: str = CONFIG) -> int:
     exchange = cfg["EXCHANGE_DIR"]
     with open(os.path.join(exchange, IN_DIR, PROMPT_NAME), encoding="utf-8") as f:
         prompt = f.read()
+    # systemd sends the wall clock's SIGINT to the whole unit. A handler, not SIG_IGN, which
+    # claude would inherit: claude still stops, and this script lives on to copy the transcript.
+    signal.signal(signal.SIGINT, lambda signum, frame: None)
     p = subprocess.run(
         build_argv(cfg),
         cwd=cfg.get("WORKDIR", os.path.expanduser("~/server")),
@@ -143,7 +169,10 @@ def main(argv: list[str], config_path: str = CONFIG) -> int:
         text=True,
         check=False,
     )
-    atomic_write(os.path.join(exchange, OUT_DIR, RESULT_NAME), p.stdout or "")
+    out = os.path.join(exchange, OUT_DIR)
+    atomic_write(os.path.join(out, RESULT_NAME), p.stdout or "")
+    if home := cfg.get("SESSION_HOME"):
+        export_transcript(home, out)
     return 0
 
 

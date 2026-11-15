@@ -17,6 +17,8 @@ from host_lib import UnitEnd
 
 # 2026-10-15 18:30 UTC: the cap tests date their records against this, never the live clock.
 T0 = 1792089000.0
+# 2026-11-14 12:00 UTC, the day the cap tests count runs on.
+CAP_DAY = 1794657600
 HOSTILE = '<script>alert(1)</script>"><img src=x onerror=alert(2)>'
 
 
@@ -310,3 +312,62 @@ def test_a_result_the_session_planted_as_a_symlink_is_not_followed(tmp_path) -> 
     record = json.loads((tmp_path / "state" / "runs" / "drill.json").read_text())
     assert record["state"] == "failed"
     assert "write-sentinel" not in json.dumps(record)
+
+
+def _run_with_out(tmp_path, plant) -> tuple[dict, str]:
+    """One run whose session only calls `plant(out)`; the record and the state directory."""
+    config, state, _ = _setup(tmp_path, "{}")
+    out = os.path.join(state, "session", session.OUT_DIR)
+
+    def start(unit: str, timeout: int) -> UnitEnd:
+        with open(os.path.join(out, session.RESULT_NAME), "w") as f:
+            f.write("{}")
+        plant(out)
+        return UnitEnd("success", 0)
+
+    run.main(["claude_triage_run.py", "drill"], config, lambda e, s: None, start=start)
+    return json.loads((tmp_path / "state" / "runs" / "drill.json").read_text()), state
+
+
+def test_the_transcript_is_kept_beside_the_record_and_nothing_stays_in_out(
+    tmp_path,
+) -> None:
+    # fact: hosts/components/claude-code/CLAUDE.md#Autonomous-role contract (`claude-triage@`, a session started by a monitor episode)
+    def plant(out: str) -> None:
+        with open(os.path.join(out, session.TRANSCRIPT_NAME), "w") as f:
+            f.write('{"type":"user"}\n')
+
+    record, state = _run_with_out(tmp_path, plant)
+
+    kept = os.path.join(state, "runs", "drill.transcript.jsonl")
+    with open(kept) as f:
+        assert f.read() == '{"type":"user"}\n'
+    assert stat.S_IMODE(os.stat(kept).st_mode) == 0o640
+    assert (record["transcript_bytes"], record["transcript_cut"]) == (16, False)
+    # The session owned what it wrote there; none of it may reach the next run.
+    assert not os.path.exists(os.path.join(state, "session", session.OUT_DIR))
+
+
+def test_a_transcript_the_session_planted_as_a_symlink_is_not_kept(tmp_path) -> None:
+    secret = tmp_path / "secret"
+    secret.write_text("read-sentinel")
+
+    record, state = _run_with_out(
+        tmp_path,
+        lambda out: os.symlink(secret, os.path.join(out, session.TRANSCRIPT_NAME)),
+    )
+
+    assert record["transcript_bytes"] is None
+    assert not os.path.exists(os.path.join(state, "runs", "drill.transcript.jsonl"))
+
+
+def test_a_kept_transcript_does_not_count_toward_the_daily_cap(tmp_path) -> None:
+    runs = tmp_path / "runs"
+    runs.mkdir()
+    started = time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime(CAP_DAY))
+    (runs / "a.json").write_text(json.dumps({"started": started, "state": "diagnosed"}))
+    (runs / "a.transcript.jsonl").write_text(
+        json.dumps({"started": started, "state": "diagnosed"})
+    )
+
+    assert run.runs_today(str(runs), CAP_DAY) == 1

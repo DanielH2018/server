@@ -456,8 +456,10 @@ runs `hosts/components/claude-code/files/claude_dotfiles_mirror.py` as root on b
   (`hosts/components/claude-code/tests/test_claude_triage_poll.py::test_queued_episodes_start_one_at_a_time_as_the_lock_frees`),
   and never restarts one whose run crashed
   (`hosts/components/claude-code/tests/test_claude_triage_poll.py::test_a_queued_episode_whose_run_crashed_is_not_started_again`).
-- **Evidence:** `/var/lib/claude-triage-ctl/state/runs/<episode>.json`, the report under
-  `/a/<host>-claude-triage/`, and a Discord page for every run
+- **Evidence:** `/var/lib/claude-triage-ctl/state/runs/<episode>.json` and the session's
+  transcript beside it, `<episode>.transcript.jsonl`
+  (`hosts/components/claude-code/tests/test_claude_triage_run.py::test_the_transcript_is_kept_beside_the_record_and_nothing_stays_in_out`),
+  the report under `/a/<host>-claude-triage/`, and a Discord page for every run
   (`hosts/components/claude-code/tests/test_claude_triage_run.py::test_a_run_with_no_diagnosis_still_leaves_a_record_a_report_and_a_page`);
   a crash pages separately, and a poller failure pages at most once an hour
   (`hosts/components/claude-code/units/homelab-claude-triage-poll-alert.service`). In shadow
