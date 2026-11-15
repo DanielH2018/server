@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/crons.py
-generated_at: 2026-11-15 13:40 UTC
-generated_sha: 73230a8a1
+generated_at: 2026-11-15 20:19 UTC
+generated_sha: e20234d40
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: 73230a8a1
 
 # Scheduled jobs
 
-60 job(s) scheduled by the host packages' timers.
+61 job(s) scheduled by the host packages' timers.
 
 !!! warning "The state column is a heuristic"
     It is judged from the command text, and nothing in a unit declares its own blast radius. A job that runs a wrapper script reads as "read the script" rather than being guessed at. Treat it as a pointer, not an authority.
@@ -29,6 +29,7 @@ generated_sha: 73230a8a1
 | homelab-claude-agent-browser.timer | `OnBootSec=10min, OnUnitInactiveSec=6h` | daniel-box, daniel-server | `claude` | read the script | `hosts/components/claude-code/units/homelab-claude-agent-browser.timer` |
 | homelab-claude-cgroup-metrics.timer | `OnBootSec=30s, OnUnitActiveSec=30s` | daniel-box, daniel-server | `root` | read the script | `hosts/components/claude-code/templates/claude-cgroup-metrics.timer.j2` |
 | homelab-claude-clone-sync.timer | `OnBootSec=10min, OnUnitActiveSec=15min` | daniel-box, daniel-server | `claude` | read the script | `hosts/components/claude-code/templates/claude-clone-sync.timer.j2` |
+| homelab-claude-config-render.timer | `OnCalendar=*-*-* *:11/15:00` | daniel-box | `claude-triage-render` | read the script | `hosts/components/claude-code/units/homelab-claude-config-render.timer.j2` |
 | homelab-claude-dotfiles-mirror.timer | `OnCalendar=*-*-* *:07/15:00` | daniel-box, daniel-server | `root` | read the script | `hosts/components/claude-code/units/homelab-claude-dotfiles-mirror.timer.j2` |
 | homelab-claude-dotfiles-sync.timer | `OnBootSec=10min, OnUnitActiveSec=15min` | daniel-box, daniel-server | `claude` | read the script | `hosts/components/claude-code/templates/claude-dotfiles-sync.timer.j2` |
 | homelab-claude-fanout-server-lander.timer | `OnBootSec=5min, OnUnitActiveSec=10min` | daniel-box | `ubuntu` | read the script | `hosts/components/claude-code/templates/claude-fanout-server-lander.timer.j2` |
