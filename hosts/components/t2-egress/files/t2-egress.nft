@@ -1,0 +1,23 @@
+#!/usr/sbin/nft -f
+# Shipped by daniel-box's package (the t2-egress component). dotfiles#967 B3-0, the shadow trace:
+# it records each new connection a T2 session user opens, and drops nothing.
+#
+# It touches only `table inet t2_egress`, so loading it changes no ufw, kube-proxy, flannel or
+# portmap rule (I4). The statements are idempotent, in this order, so a reload keeps what the sets
+# have recorded: a chain must exist before `flush chain`. `add set` refuses a set whose type
+# changed, so a change to a set's key must `delete set` it first.
+#
+# No statement logs. A kernel log line reaches syslog and loki-homelab, the path I6 closes.
+# The sets hold addresses and ports, not names: they show which tuples a session uses, and squid's
+# allowlist still comes from the spec's names.
+#
+# The uids are the T2 session users the users arm declares: renovate-agent (901) and
+# claude-triage (907). hosts/lib/tests/test_t2_egress_component.py holds the two equal.
+
+add table inet t2_egress
+add chain inet t2_egress output { type filter hook output priority filter; policy accept; }
+flush chain inet t2_egress output
+add set inet t2_egress seen4 { type uid . ipv4_addr . inet_proto . inet_service; flags dynamic, timeout; timeout 30d; size 4096; }
+add set inet t2_egress seen6 { type uid . ipv6_addr . inet_proto . inet_service; flags dynamic, timeout; timeout 30d; size 4096; }
+add rule inet t2_egress output meta skuid { 901, 907 } ct state new meta l4proto { tcp, udp } meta nfproto ipv4 update @seen4 { meta skuid . ip daddr . meta l4proto . th dport } counter
+add rule inet t2_egress output meta skuid { 901, 907 } ct state new meta l4proto { tcp, udp } meta nfproto ipv6 update @seen6 { meta skuid . ip6 daddr . meta l4proto . th dport } counter
