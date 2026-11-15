@@ -166,7 +166,7 @@ The slices:
        merge. The turn is the slot before the merge. The 6 landing slots landed first
        (`land_lib/slots.py`, #8826). Then the three rules that refuse a merge moved inside
        the turn (`slots.refuse_before_merge`, #8830), and last the per-host limit's count,
-       its registry and the slow-runs drop were deleted.
+       its registry and the slow-runs drop were deleted (#8834).
     1. The switch that turned the turn off for one landing is deleted, so every landing that
        merges directly takes the turn.
        `LAND_TURN_DIR` moves the turn's lock and line for a test that runs a whole landing.
