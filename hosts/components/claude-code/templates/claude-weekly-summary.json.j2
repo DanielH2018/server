@@ -1,0 +1,12 @@
+{% import 'templates/claude-triage-pins.j2' as pins with context -%}
+{#- The Renovate controller's home is `ctl_home` in renovate-agent's renovate-agent-pins.j2. The
+renderer confines an import to this component, so the path is a literal here, and
+hosts/components/claude-code/tests/test_claude_weekly_summary.py holds the two equal. -#}
+{{ {
+  'sources': [
+    {'name': 'triage', 'kind': 'triage', 'path': pins.state_dir ~ '/runs'},
+    {'name': 'renovate-agent', 'kind': 'renovate', 'path': '/var/lib/renovate-agent-ctl/runs.jsonl'},
+  ],
+  'state_dir': '/var/lib/homelab-claude-weekly-summary',
+  'deadline_s': 7 * 86400 + 3600,
+} | to_json }}

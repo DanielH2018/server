@@ -13,7 +13,7 @@ for what they render.
 `hosts/components/claude-code/` ships Claude Code's host half in `homelab-daniel-server` (H7.39)
 and `homelab-daniel-box` (H7.40): the Remote Control host, the background resume, the cgroup
 metrics, the caps, the two alerts, rootq, the agent user and its home, the agent's lander, the
-server-batch lander, the pipeline timeline, the memory store copy, the takeover check, triage,
+server-batch lander, the pipeline timeline, the weekly runs summary, the memory store copy, the takeover check, triage,
 the homelab-ui browser toolchain, and the artifacts node's peer sync and OTLP-door heartbeat.
 The operator's own Claude Code install is the dotfiles repo's (H7.38).
 
@@ -386,6 +386,52 @@ runs `hosts/components/claude-code/files/claude_dotfiles_mirror.py` as root on b
   `ClaudeDotfilesMirrorNotReporting` read.
 - **Next-run review:** before B2 renders T2's config from the record, read a week of `status=`
   lines and check that each tag the operator pushed was verified.
+
+## Autonomous-role contract (`claude-weekly-summary`, one post a week about the unattended runs)
+
+dotfiles#967 C7. `homelab-claude-weekly-summary.timer` runs
+`hosts/components/claude-code/files/claude_weekly_summary.py` as root on daniel-box every Monday
+at 09:00 UTC, and 10 minutes after each activation of the timer.
+
+- **Scope:** it reads the run records the config lists and posts one message to the alerts
+  webhook. It writes nothing but its own posted-week record and its check file. A run covers
+  the ISO week before its own, Monday 00:00 to Sunday 23:59 UTC
+  (`hosts/components/claude-code/tests/test_claude_weekly_summary.py::test_the_window_holds_sunday_2359_and_drops_the_next_monday_0000`),
+  so a catch-up run on a later day covers the same week
+  (`hosts/components/claude-code/tests/test_claude_weekly_summary.py::test_a_catch_up_run_later_in_the_week_covers_the_same_week`).
+  The sources are triage's `runs/<episode>.json` and the Renovate agent's `runs.jsonl`, at
+  the paths each controller's pins file names
+  (`hosts/components/claude-code/tests/test_claude_weekly_summary.py::test_the_config_reads_the_record_paths_the_controllers_pin`).
+  A new kind of record needs a reader in `READERS` and a row in
+  `hosts/components/claude-code/templates/claude-weekly-summary.json.j2`.
+- **What it posts:** one count line per source, then each triage run, each Renovate tick that
+  merged, closed or left PRs open or did not finish, and every run with a denial
+  (`hosts/components/claude-code/tests/test_claude_weekly_summary.py::test_a_drill_weeks_records_render_the_summary`).
+  A quiet week still posts its count lines
+  (`hosts/components/claude-code/tests/test_claude_weekly_summary.py::test_a_quiet_week_still_posts_its_count_lines`).
+  Text a session or an alert wrote is put on one line, clamped, and stripped of Discord
+  mentions
+  (`hosts/components/claude-code/tests/test_claude_weekly_summary.py::test_a_mention_in_a_diagnosis_or_an_episode_is_defused`).
+- **Mode:** `claude_code_weekly_summary_enabled`, true only in daniel-box's host_vars. False
+  drops the timer, its units and the config from the next package version, and the toggle-gated
+  `legacy:` entry removes the check file. `ClaudeWeeklySummaryNotReporting` then fires on the
+  absent series until its rule is deleted.
+- **Abort valves:** a week already posted posts nothing, so the activation run and a hand
+  start repeat no post
+  (`hosts/components/claude-code/tests/test_claude_weekly_summary.py::test_a_rerun_of_a_posted_week_posts_nothing`).
+  A failed post records nothing and reports down, and the next run posts the week
+  (`hosts/components/claude-code/tests/test_claude_weekly_summary.py::test_a_failed_post_reports_down_and_the_next_run_posts_again`).
+  A missing source reads as zero runs, and a record that does not parse is counted as
+  unreadable
+  (`hosts/components/claude-code/tests/test_claude_weekly_summary.py::test_an_unparseable_record_is_counted_and_the_run_stays_up`).
+- **Evidence:** the post itself, a `status=` line under `journalctl -t claude-weekly-summary`,
+  and `claude-weekly-summary.prom`, which `ClaudeWeeklySummaryFailed` and
+  `ClaudeWeeklySummaryNotReporting` read. The deadline is a week plus an hour, 608400 seconds
+  (`tests/services/test_b6a_rule_literals.py::test_the_weekly_summary_rules_carry_the_deadline_its_config_renders_is_clean`).
+- **Next-run review:** when C2's autopr-repair profile starts writing records, add its source
+  and check the first post that carries it.
+
+Applying it: a new version of daniel-box's host package, which its updater installs.
 
 ## Autonomous-role contract (`sync-artifacts`, a mirror of another host's tree)
 

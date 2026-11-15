@@ -478,6 +478,7 @@ ROWS = (
                 "hosts/lib/checkout_sync.py",
                 "hosts/components/claude-code/files/claude_guardrail_ack.py",
                 "hosts/components/claude-code/files/claude_dotfiles_mirror.py",
+                "hosts/components/claude-code/files/claude_weekly_summary.py",
             }
         ),
     ),

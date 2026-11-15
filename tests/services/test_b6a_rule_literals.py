@@ -175,3 +175,24 @@ def test_the_mirror_rules_are_flagged_when_its_timer_moves_without_them():
             "the `>` threshold reads 2100s, and the producer renders 3900",
             "the absent_over_time window reads 2100s, and the producer renders 3900",
         ]
+
+
+def summary_deadline() -> int:
+    """The deadline claude-weekly-summary's rendered config carries."""
+    text = render_component_text("claude-code", "claude-weekly-summary.json.j2")
+    return json.loads(text)["deadline_s"]
+
+
+def test_the_weekly_summary_rules_carry_the_deadline_its_config_renders_is_clean():
+    # fact: hosts/components/claude-code/CLAUDE.md#Autonomous-role contract (`claude-weekly-summary`, one post a week about the unattended runs)
+    assert summary_deadline() == 608400
+    for expr in rule_exprs("ClaudeWeeklySummaryNotReporting"):
+        assert literal_problems("ClaudeWeeklySummaryNotReporting", expr, 608400) == []
+
+
+def test_the_weekly_summary_rules_against_a_longer_deadline_are_flagged():
+    for expr in rule_exprs("ClaudeWeeklySummaryNotReporting"):
+        assert literal_problems("ClaudeWeeklySummaryNotReporting", expr, 1213200) == [
+            "the `>` threshold reads 608400s, and the producer renders 1213200",
+            "the absent_over_time window reads 608400s, and the producer renders 1213200",
+        ]
