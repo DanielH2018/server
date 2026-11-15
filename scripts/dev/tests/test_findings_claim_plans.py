@@ -8,19 +8,27 @@ import pytest
 from _findings_fakes import operator_comment
 
 from dev.findings_lib.issue_model import claim_comment
-from dev.findings_lib.plans import ClaimRefused, plan_claim, plan_release
+from dev.findings_lib.milestone import DESCRIPTION
+from dev.findings_lib.plans import (
+    ClaimRefused,
+    plan_claim,
+    plan_release,
+    plan_release_held,
+)
 
 WT = "worktree-issue-1132"
 TODAY = date(2026, 9, 11)
+SESSION_MILESTONE = {"title": WT, "description": DESCRIPTION}
 
 
-def _issue(number=1132, labels=(), comments=()):
+def _issue(number=1132, labels=(), comments=(), milestone=None):
     """One issue, always carrying `claude` — `plan_claim` refuses one without it."""
     return {
         "number": number,
         "state": "OPEN",
         "labels": [{"name": n} for n in ("claude", *labels)],
         "comments": [operator_comment(b) for b in comments],
+        "milestone": milestone,
     }
 
 
@@ -28,7 +36,15 @@ def test_claiming_an_unclaimed_issue_comments_and_labels():
     plans = plan_claim(_issue(), worktree=WT, session=None, when="t", today=TODAY)
     assert plans[0][:3] == ["issue", "comment", "1132"]
     assert f"Claim: `{WT}`" in plans[0][4]
-    assert plans[1] == ["issue", "edit", "1132", "--add-label", "claimed"]
+    assert plans[1] == [
+        "issue",
+        "edit",
+        "1132",
+        "--add-label",
+        "claimed",
+        "--milestone",
+        WT,
+    ]
 
 
 def test_claiming_a_closed_issue_is_refused():
@@ -90,9 +106,57 @@ def test_claiming_an_issue_outside_the_register_is_refused():
 
 
 def test_reclaiming_an_issue_you_already_hold_is_a_no_op():
-    """The accepting half of the label-repair pair: comment and label already agree."""
-    issue = _issue(labels=["claimed"], comments=[claim_comment(WT, None, "t")])
+    """The accepting half of the label-repair pair: comment, label and milestone agree."""
+    issue = _issue(
+        labels=["claimed"],
+        comments=[claim_comment(WT, None, "t")],
+        milestone=SESSION_MILESTONE,
+    )
     assert plan_claim(issue, worktree=WT, session=None, when="t", today=TODAY) == []
+
+
+def test_reclaiming_an_issue_missing_from_its_session_milestone_repairs_it():
+    issue = _issue(labels=["claimed"], comments=[claim_comment(WT, None, "t")])
+    assert plan_claim(issue, worktree=WT, session=None, when="t", today=TODAY) == [
+        ["issue", "edit", "1132", "--add-label", "claimed", "--milestone", WT]
+    ]
+
+
+def test_releasing_takes_the_issue_out_of_its_session_milestone():
+    issue = _issue(
+        labels=["claimed"],
+        comments=[claim_comment(WT, None, "t")],
+        milestone=SESSION_MILESTONE,
+    )
+    plans = plan_release(issue, worktree=WT, when="t", reason=None)
+    assert plans[1] == [
+        "issue",
+        "edit",
+        "1132",
+        "--remove-label",
+        "claimed",
+        "--remove-milestone",
+    ]
+
+
+def test_releasing_leaves_an_operator_milestone_alone():
+    issue = _issue(
+        labels=["claimed"],
+        comments=[claim_comment(WT, None, "t")],
+        milestone={"title": WT, "description": "the operator's own"},
+    )
+    plans = plan_release(issue, worktree=WT, when="t", reason=None)
+    assert "--remove-milestone" not in plans[1]
+
+
+def test_closing_keeps_the_issue_in_its_session_milestone():
+    issue = _issue(
+        labels=["claimed"],
+        comments=[claim_comment(WT, None, "t")],
+        milestone=SESSION_MILESTONE,
+    )
+    plans = plan_release_held(issue, when="t", reason="closed", detach=False)
+    assert plans[1] == ["issue", "edit", "1132", "--remove-label", "claimed"]
 
 
 def test_reclaiming_an_issue_whose_label_edit_failed_plans_the_label_alone():
@@ -102,7 +166,7 @@ def test_reclaiming_an_issue_whose_label_edit_failed_plans_the_label_alone():
     """
     issue = _issue(comments=[claim_comment(WT, None, "t")])
     assert plan_claim(issue, worktree=WT, session=None, when="t", today=TODAY) == [
-        ["issue", "edit", "1132", "--add-label", "claimed"]
+        ["issue", "edit", "1132", "--add-label", "claimed", "--milestone", WT]
     ]
 
 

@@ -185,6 +185,21 @@ on 2026-11-14 one uid's ledger held two live windows per bucket, which one token
 counted in whichever window ended later. A caller whose `gh` has no token gets the uid as
 its identity. Two tokens of one GitHub user spend one quota and get two ledger files.
 
+**Each sample names its caller.** The ledger's `sampler` table, keyed by window and bucket
+like `truth`, stores three facts about the last caller that sampled that window: its session
+key, the resolved path of its `gh`, and the names of its `GH_*` and `GITHUB_*` variables.
+It never stores their values. Each line of a `failures.<uid>` file carries the failing
+caller's session key after its timestamp. On 2026-11-15 one token file on daniel-box held two
+pools' windows at once, and nothing in the ledger said which caller sampled the second pool
+([#8741](https://github.com/DanielH2018/server/issues/8741)). To name it, read the table
+beside `truth`:
+
+```bash
+sqlite3 /var/lib/gh-quota/tok-<fingerprint>@1000.sqlite \
+  'SELECT t.window, t.bucket, t.used, s.session, s.gh, s.env_names
+   FROM truth t JOIN sampler s USING (window, bucket) ORDER BY t.window'
+```
+
 **The session key** is the first of these that exists:
 
 1. `CLAUDE_CODE_SESSION_ID`, which Claude Code exports to every Bash call. `ghread` passes it
