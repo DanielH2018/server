@@ -93,16 +93,43 @@ def _lock(path: str) -> int | None:
     return fd
 
 
-# What a landing on another host runs on `TURN_HOST`: take the first of its lock files that is
-# free, say which way it went, and hold it until stdin closes, which is when the landing's ssh
-# session ends.
+def lock_below(paths: list[str], cap: int) -> int | None:
+    """Lock one free file of `paths` while other landings hold fewer than `cap` of them.
+
+    It locks every free file before it counts, so no landing can take one in between, then
+    keeps the first and closes the rest. It names nothing but `os` and `_lock`, because
+    `_HOLD` runs this source on `TURN_HOST`.
+
+    Returns:
+        The locked descriptor, or None while other landings hold `cap` or more of the files.
+
+    Raises:
+        OSError: A file can be neither opened nor created.
+    """
+    fds = []
+    try:
+        for path in paths:
+            fd = _lock(path)
+            if fd is not None:
+                fds.append(fd)
+    except OSError:
+        for fd in fds:
+            os.close(fd)
+        raise
+    keep = fds[0] if fds and len(paths) - len(fds) < cap else None
+    for fd in fds:
+        if fd != keep:
+            os.close(fd)
+    return keep
+
+
+# What a landing on another host runs on `TURN_HOST`: lock one of its files while fewer than
+# its cap are held, say which way it went, and hold it until stdin closes, which is when the
+# landing's ssh session ends. The arguments are the cap, then the files.
 _HOLD = f"""import fcntl, os, sys
 {inspect.getsource(_lock)}
-fd = None
-for path in sys.argv[1:]:
-    fd = _lock(path)
-    if fd is not None:
-        break
+{inspect.getsource(lock_below)}
+fd = lock_below(sys.argv[2:], int(sys.argv[1]))
 print("busy" if fd is None else "held", flush=True)
 if fd is not None:
     sys.stdin.read()
@@ -123,20 +150,20 @@ def try_take(path: _Path = LOCK) -> Callable[[], None] | None:
 
 
 def try_take_over_ssh(
-    paths: Sequence[_Path] = (LOCK,), host: str = TURN_HOST
+    paths: Sequence[_Path] = (LOCK,), cap: int = 1, host: str = TURN_HOST
 ) -> Callable[[], None] | None:
-    """Lock the first free file of `paths` on `host` without waiting, through an ssh session.
+    """`lock_below(paths, cap)` on `host` without waiting, through an ssh session.
 
-    The session holds the lock until the call it returns closes it. The turn is one file; the
-    landing slots (`slots.py`) are several.
+    The session holds the lock until the call it returns closes it. The turn is one file
+    under a cap of 1; the landing slots (`slots.py`) are several.
 
     Returns:
-        The call that gives the lock up, or None while other landings hold every file.
+        The call that gives the lock up, or None while other landings hold `cap` of the files.
 
     Raises:
         OSError: `host` did not answer, or could not open a lock file.
     """
-    remote = shlex.join(["python3", "-c", _HOLD, *map(str, paths)])
+    remote = shlex.join(["python3", "-c", _HOLD, str(cap), *map(str, paths)])
     session = subprocess.Popen(
         [
             "ssh",

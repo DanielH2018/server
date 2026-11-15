@@ -9,7 +9,8 @@ moves to a fresh checkout, takes none.
 
 A slot is one of `COUNT` lock files on `turn.TURN_HOST`, locked the way the turn is: a landing
 there locks a file itself, and a landing on another host locks one through an ssh session that
-lasts as long as it holds the slot. The lock ends with the landing's process, so a landing that
+lasts as long as it holds the slot. A landing takes a free file only while other landings hold
+fewer than the cap of them (`turn.lock_below`), so a cap below `COUNT` counts every holder. The lock ends with the landing's process, so a landing that
 dies frees its slot.
 
 The count drops to 1 while the core quota runs low (`live_limit.low_quota`). When the turn host
@@ -50,47 +51,44 @@ _LOCK_DIR = turn.LOCK.parent
 Release = Callable[[], None]
 
 
-def _paths(directory: Path, cap: int) -> list[Path]:
-    return [directory / f"homelab-land-slot-{n}.lock" for n in range(cap)]
+def _paths(directory: Path, count: int = COUNT) -> list[Path]:
+    return [directory / f"homelab-land-slot-{n}.lock" for n in range(count)]
 
 
-def try_take(paths: list[Path]) -> Release | None:
-    """Lock the first free file of `paths` on this host without waiting.
+def try_take(paths: list[Path], cap: int) -> Release | None:
+    """Take a slot among `paths` on this host without waiting, while fewer than `cap` are held.
 
     Returns:
-        The call that frees the slot, or None while other landings hold every file.
+        The call that frees the slot, or None while other landings hold `cap` of them.
 
     Raises:
         OSError: A lock file can be neither opened nor created.
     """
-    for path in paths:
-        release = turn.try_take(path)
-        if release:
-            return release
-    return None
+    fd = turn.lock_below([str(p) for p in paths], cap)
+    return None if fd is None else lambda: os.close(fd)
 
 
 def _taker(
     hostname: str, directory: Path = _LOCK_DIR
 ) -> Callable[[int], Release | None]:
-    """The call that takes one of the first `cap` slots in `directory`, from `hostname`."""
+    """The call that takes a slot in `directory` under a cap, from the host named `hostname`."""
     moved = os.environ.get(turn.TURN_DIR_ENV)
     if moved:
-        return lambda cap: try_take(_paths(Path(moved), cap))
+        return lambda cap: try_take(_paths(Path(moved)), cap)
     if turn.is_turn_host(hostname):
-        return lambda cap: try_take(_paths(directory, cap))
+        return lambda cap: try_take(_paths(directory), cap)
     unreachable = OnChange(say)
 
     def take(cap: int) -> Release | None:
         try:
-            return turn.try_take_over_ssh(_paths(directory, cap))
+            return turn.try_take_over_ssh(_paths(directory), cap)
         except OSError as exc:
             local = min(cap, FALLBACK_COUNT)
             unreachable(
                 f"{turn.TURN_HOST} did not answer for the landing slots ({exc}); taking one "
                 f"of {local} on this host"
             )
-            return try_take(_paths(directory, local))
+            return try_take(_paths(directory, FALLBACK_COUNT), local)
 
     return take
 
@@ -127,8 +125,8 @@ def _wait(ln: Landing) -> Release | None:
             )
             return None
         waiting(
-            f"waiting for a landing slot: {cap} landings are between their merge and their "
-            f"verdict, the limit under {why} (`probe.py landing` lists them)"
+            f"waiting for a landing slot: {cap} or more landings are between their merge and "
+            f"their verdict, the limit under {why}"
         )
         ln.tools.sleep(o.merge_poll)
         waited += o.merge_poll

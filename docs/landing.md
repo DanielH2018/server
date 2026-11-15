@@ -84,6 +84,7 @@ the slots.
 
 - A slot is a lock file in `/run/lock` on daniel-box, locked the way the turn is. A landing
   on daniel-server holds one over ssh. A landing that dies frees its slot.
+  `lslocks | grep homelab-land-slot` on daniel-box lists the holders by pid.
 - The count drops to 1 while the core quota has fewer than 1500 calls left and resets more
   than 15 minutes away.
 - When daniel-box does not answer, a landing takes one of 3 slots on its own host instead.

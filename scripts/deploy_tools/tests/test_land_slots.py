@@ -3,6 +3,8 @@
 Run: uv run pytest scripts/deploy_tools/tests/test_land_slots.py
 """
 
+import pytest
+
 from _land_fakes import Fakes
 from deploy_tools.land_lib import slots, turn
 from deploy_tools.promote_lib.wait import WaitResult
@@ -54,16 +56,21 @@ def test_a_landing_that_cannot_open_the_slots_goes_on_without_one(landing, capsy
     assert "(read-only file system); going on without one" in capsys.readouterr().out
 
 
-def test_a_landing_on_another_host_holds_a_slot_over_ssh(
-    tmp_path, ssh_here, monkeypatch
+@pytest.mark.parametrize("hostname", [turn.TURN_HOST, "daniel-server"])
+def test_a_cap_counts_every_held_slot_whichever_files_are_free(
+    hostname, tmp_path, ssh_here, monkeypatch
 ):
     monkeypatch.delenv(turn.TURN_DIR_ENV)
-    here = slots.try_take(slots._paths(tmp_path, 1))
-    remote = slots._taker("daniel-server", tmp_path)(2)
-    assert here and remote
-    assert slots.try_take(slots._paths(tmp_path, 2)) is None
-    remote()
-    here()
+    paths = slots._paths(tmp_path)
+    others = [slots.try_take([path], 1) for path in paths[1:3]]
+    take = slots._taker(hostname, tmp_path)
+    assert take(2) is None
+    release = take(3)
+    assert release
+    assert slots.try_take(paths, 3) is None
+    for held in (release, *others):
+        if held:
+            held()
 
 
 def test_a_moved_turn_dir_keeps_the_slots_on_this_host(tmp_path, monkeypatch):
@@ -72,7 +79,7 @@ def test_a_moved_turn_dir_keeps_the_slots_on_this_host(tmp_path, monkeypatch):
     monkeypatch.setenv(turn.TURN_DIR_ENV, str(tmp_path))
     release = slots._taker("daniel-server", tmp_path / "unmoved")(1)
     assert release
-    assert slots.try_take(slots._paths(tmp_path, 1)) is None
+    assert slots.try_take(slots._paths(tmp_path), 1) is None
     release()
 
 
@@ -92,3 +99,12 @@ def test_a_turn_host_that_does_not_answer_leaves_this_host_its_own_slots(
     for release in held:
         if release:
             release()
+
+
+def test_a_slot_file_that_cannot_be_opened_leaves_the_others_free(tmp_path):
+    free = tmp_path / "free.lock"
+    with pytest.raises(FileNotFoundError):
+        slots.try_take([free, tmp_path / "missing" / "slot.lock"], slots.COUNT)
+    release = slots.try_take([free], 1)
+    assert release
+    release()
