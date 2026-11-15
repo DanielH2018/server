@@ -404,6 +404,33 @@ def test_an_online_run_mounts_its_seed_and_names_it_to_the_script(
     )
 
 
+def test_only_an_offline_run_turns_off_apt_s_retries(monkeypatch, tmp_path):
+    written = {}
+
+    def fake_ok(self, command):
+        written.setdefault(self.name, []).append(command)
+        return ""
+
+    monkeypatch.setattr(Container, "boot", lambda self, python: None)
+    monkeypatch.setattr(Container, "ok", fake_ok)
+    monkeypatch.setattr(
+        Container,
+        "sh",
+        lambda self, command, timeout=None: subprocess.CompletedProcess(
+            command, 0, "", ""
+        ),
+    )
+    cases = SimpleNamespace(image="img", work=tmp_path, python="3.12")
+    kit = tmp_path / "kits" / "kit"
+
+    case.Bootstrap(cases, "daniel-box", tmp_path, kit, "offline").run()
+    case.Bootstrap(cases, "daniel-box", tmp_path, None, "box").run()
+
+    no_retries = f"echo 'Acquire::Retries \"0\";' > {case.NO_RETRIES}"
+    assert no_retries in written["homelab-host-test-bootstrap-offline"]
+    assert no_retries not in written["homelab-host-test-bootstrap-box"]
+
+
 def test_the_default_groups_hold_two_bootstrap_groups_and_leave_bootstrap_case_out():
     runs = [run for _, run in case_groups.groups(host_package_cases.Cases)]
     assert {
