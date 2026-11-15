@@ -48,21 +48,24 @@ claude_guard, claude_worktree and hooks, the pinned Python and Claude Code) and 
 them. The controller runs every command that writes into them, and only while no run holds the
 lock.
 
-**The session carries the shared guard hooks and a deny floor.** The package ships
-`hosts/components/renovate-agent/files/claude-settings.json` to `/usr/lib/homelab/renovate-agent/`.
-The session passes that root-owned file with `--settings`, and its hook commands run the
-controller's copy of the operator's hooks. The file registers three hooks: claude-guard on Bash,
-the permission-request guard, and `protect-secrets` on the file tools. It also carries the
-operator's deny list plus `sudo` and edits to the session's own settings, hooks and claude_guard,
-and it disables bypass mode. The wrapper runs the session in auto mode, so the file also carries
-the operator's `autoMode` deny rules, environment and `classifyAllShell`. It holds no allow rules
-and no `env`, because the operator's carry `/home` paths that `ProtectHome=` hides. Both lists are
-a snapshot of the operator's: a dotfiles change reaches the session only through a PR that edits
-this file. `homelab-renovate-agent-setup.service` runs the setup at
+**The session carries the shared guard hooks and a deny floor.** The session passes
+`/var/lib/homelab-claude-config/current/renovate.json` with `--settings`, and refuses to start
+without it. claude-code's `claude-config-render` publishes that root-owned file from the
+verified dotfiles tag, merged with this component's overlay,
+`hosts/components/renovate-agent/files/claude-settings-overlay.json`. The overlay registers three
+hooks, which run the controller's copy of the operator's hooks: claude-guard on Bash, the
+permission-request guard, and `protect-secrets` on the file tools. It also denies `sudo` and
+edits to the session's own settings, hooks and claude_guard, and it disables bypass mode. The
+render adds the operator's deny list and, because the wrapper runs the session in auto mode, the
+operator's `autoMode` deny rules, environment and `classifyAllShell`. The file holds no allow
+rules and no `env`, because the operator's carry `/home` paths that `ProtectHome=` hides. A
+dotfiles change reaches the session at the next tag the operator signs, never from `main`. The
+claude-code component's `CLAUDE.md` has the render's contract.
+`homelab-renovate-agent-setup.service` runs the setup at
 boot and when the script changes, so the toolchain exists while the agent is disarmed. The setup
 removes any settings or hooks copy left in the session's home, where Claude Code would still load
 it; `claude-guardrail-audit` watches both paths, and `claude-guardrail-ack` posts a copy that comes
-back. The settings, the setup script and its
+back. The overlay, the render, the setup script and its
 unit are on both landers' approval lists
 (`hosts/components/claude-code/templates/claude-land-approval-paths.j2`, and `hosts/` in
 `hosts/components/renovate-agent/files/t2-approval-floor`).

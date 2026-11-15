@@ -384,8 +384,50 @@ runs `hosts/components/claude-code/files/claude_dotfiles_mirror.py` as root on b
 - **Evidence:** a `status=` line under `journalctl -t claude-dotfiles-mirror`, and
   `claude-dotfiles-mirror.prom`, which `ClaudeDotfilesMirrorFailed` and
   `ClaudeDotfilesMirrorNotReporting` read.
-- **Next-run review:** before B2 renders T2's config from the record, read a week of `status=`
-  lines and check that each tag the operator pushed was verified.
+- **Next-run review:** after 2026-11-21, read the first week of `status=` lines and check that
+  each tag the operator pushed was verified. `claude-config-render` renders T2's config from
+  this record.
+
+## Autonomous-role contract (`claude-config-render`, T2's Claude Code config from the verified tag)
+
+dotfiles#967 D13 and I7. `homelab-claude-config-render.timer` runs
+`hosts/components/claude-code/files/claude_config_render.py` on daniel-box every 15 minutes, in
+two steps of one unit.
+
+- **Scope:** `render` runs as `claude-triage-render`, which no session runs as, with no network
+  and only its runtime directory writable. It clones the commit `verified.json` names from the
+  mirror and renders the dotfiles repo's `settings.base.json` there with chezmoi and the
+  root-owned answers in `hosts/components/claude-code/files/claude-config-render-chezmoi.toml`.
+  A commit past the verified tag never reaches the stage
+  (`hosts/components/claude-code/tests/test_claude_config_render.py::test_only_the_verified_commit_is_rendered`).
+  `publish` runs as root. It keeps only `permissions.deny` and `autoMode`'s deny lists,
+  environment and `classifyAllShell` (`hosts/components/claude-code/files/claude_config_render.py:floor`), and merges each overlay under
+  `/usr/lib/homelab/claude-config-render/overlays/` over them. The triage overlay is
+  `hosts/components/claude-code/files/claude-triage-settings-overlay.json`, and the Renovate
+  overlay is `hosts/components/renovate-agent/files/claude-settings-overlay.json`. Each overlay
+  carries its hooks, the `sudo` and self-edit denies, and bypass mode off. The result goes to
+  `/var/lib/homelab-claude-config/current/<overlay>.json`, which each session passes with
+  `--settings`. The `t2-1` render publishes exactly the settings the sessions ran with before
+  (`hosts/components/claude-code/tests/test_claude_config_render.py::test_the_t2_1_render_publishes_the_settings_each_session_ran_before`).
+- **Fail closed:** a session refuses to start without its published file
+  (`hosts/components/claude-code/tests/test_claude_triage_session.py::test_no_session_starts_without_the_published_settings`,
+  `hosts/lib/claude_config_lock.py:hold_settings`).
+- **Mode:** `claude_code_config_render_enabled`, true only in daniel-box's host_vars. False
+  drops the timer, the unit, the code and the chezmoi answers from the next package version,
+  and keeps the last published version, which the sessions go on reading.
+- **Abort valves:** `publish` refuses a stage that holds anything but its two files, a link,
+  a commit other than the verified one, or a render without the keys above
+  (`hosts/components/claude-code/tests/test_claude_config_render.py::test_a_tampered_or_incomplete_stage_publishes_nothing`).
+  A refused publish keeps the last version
+  (`hosts/components/claude-code/tests/test_claude_config_render.py::test_a_refused_publish_keeps_the_last_version`).
+  A session holds `/var/lib/homelab-claude-config/lock` shared until it exits, and a publish
+  that cannot take it exclusive defers to the next run
+  (`hosts/components/claude-code/tests/test_claude_config_render.py::test_a_session_holding_the_config_defers_the_publish_and_keeps_its_file`).
+- **Evidence:** a `status=` line for each step under `journalctl -t claude-config-render`.
+  `/var/lib/homelab-claude-config/current/source.json` names the published commit. A failed
+  run pages through `homelab-alert@`.
+- **Next-run review:** after the first tag bump past `t2-1`, diff the published files against
+  the previous version under `versions/`.
 
 ## Autonomous-role contract (`claude-weekly-summary`, one post a week about the unattended runs)
 

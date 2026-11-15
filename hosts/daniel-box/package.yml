@@ -71,6 +71,9 @@ users:
   # Triage's session user: runs the headless session the controller starts, with no GitHub token
   # and no start right.
   - {name: claude-triage, uid: 907, home: /var/lib/claude-triage, shell: /usr/sbin/nologin, comment: Triage session}
+  # Renders the triage and Renovate sessions' Claude Code config from the verified dotfiles tag
+  # (dotfiles#967 I1 and D13). It is no session's user, so no session reaches its stage.
+  - {name: claude-triage-render, uid: 908, home: /run/homelab-claude-config-render, shell: /usr/sbin/nologin, comment: T2 config render}
 components:
   - reconcile
   - secrets-unit

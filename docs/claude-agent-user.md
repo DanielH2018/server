@@ -289,9 +289,9 @@ truth, with a reason beside each entry. It holds:
   read-only token, the token and config templates, `templates/renovate-agent-pins.j2`, which
   sets the caps and the permission mode as literals, the prompt, the unit and timer, and
   `component.yml`. The operator added them on 2026-11-13 with the guardrails plan's B1. The
-  session's Claude Code settings `files/claude-settings.json`, the setup script that installs
-  them and its boot unit joined on 2026-11-14 (#8392), so no unapproved PR weakens the
-  session's deny floor. The component's defaults, tests and `CLAUDE.md` stay off.
+  setup script and its boot unit joined on 2026-11-14 (#8392). The server-owned half of the
+  session's Claude Code settings, `files/claude-settings-overlay.json`, replaced the full
+  settings file on 2026-11-15, so no unapproved PR weakens the session's deny floor. The component's defaults, tests and `CLAUDE.md` stay off.
 - `k8s/roles/cluster-base/` and its path after the rename, `k8s/roles/cluster-base/`,
   the agent's read-only cluster RBAC. The operator added it
   on 2026-10-16 (H1 Open question 7). Before H1, that RBAC applies only through
@@ -640,9 +640,10 @@ switches it on, and it installs only while `claude_code_agent_user_enabled` is a
   `--permission-prompts none` denies anything that would wait on an answer. The session has a
   $10 budget, 60 turns and a 30-minute wall clock, the session unit's `TimeoutStartSec`, and it
   returns a diagnosis in a fixed JSON schema. The runner reads `Result=timeout` as a timed-out
-  run. `--settings` loads `/opt/claude-triage/claude-settings.json`, root-owned: the shared guard
-  hooks and the deny floor the Renovate session carries, with the hooks run from the
-  controller's toolchain.
+  run. `--settings` loads `/var/lib/homelab-claude-config/current/triage.json`, root-owned:
+  the shared guard hooks and the deny floor the Renovate session carries, with the hooks run
+  from the controller's toolchain. `homelab-claude-config-render` publishes it from the
+  verified dotfiles tag, and the session refuses to start without it.
 - **The credential** is the run's own `claude setup-token` token. It is the SOPS key
   `claude_code_triage_claude_oauth_token`, which the session unit loads as a `LoadCredential=`
   file, and the role refuses to install without it. The runner never holds it. The

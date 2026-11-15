@@ -153,6 +153,13 @@ files:
   - {src: templates/claude-weekly-summary.json.j2, dst: /etc/homelab/claude-weekly-summary.json, when: "claude_code_weekly_summary_enabled"}
   - {src: units/homelab-claude-weekly-summary.service.j2, dst: /usr/lib/systemd/system/homelab-claude-weekly-summary.service, when: "claude_code_weekly_summary_enabled"}
   - {src: units/homelab-claude-weekly-summary.timer.j2, dst: /usr/lib/systemd/system/homelab-claude-weekly-summary.timer, when: "claude_code_weekly_summary_enabled"}
+  # The render of the unattended sessions' Claude Code config from the mirror's verified tag
+  # (dotfiles#967 D13 and I7). Each session component ships its overlay into overlays/.
+  - {src: files/claude_config_render.py, dst: /usr/lib/homelab/claude-config-render/claude_config_render.py, when: "claude_code_config_render_enabled"}
+  - {lib: claude_config_lock.py, dst: /usr/lib/homelab/claude-config-render/claude_config_lock.py, when: "claude_code_config_render_enabled"}
+  - {src: files/claude-config-render-chezmoi.toml, dst: /usr/lib/homelab/claude-config-render/chezmoi.toml, when: "claude_code_config_render_enabled"}
+  - {src: units/homelab-claude-config-render.service.j2, dst: /usr/lib/systemd/system/homelab-claude-config-render.service, when: "claude_code_config_render_enabled"}
+  - {src: units/homelab-claude-config-render.timer.j2, dst: /usr/lib/systemd/system/homelab-claude-config-render.timer, when: "claude_code_config_render_enabled"}
   # The agent's clone and dotfiles syncs. Their textfiles keep the names `claude-clone-sync` and
   # `claude-dotfiles-sync`, which observability's host-checks rules read.
   - {src: files/claude-clone-sync.sh, dst: /usr/local/bin/claude-clone-sync.sh, mode: "0755", when: "claude_code_agent_user_enabled"}
@@ -220,12 +227,13 @@ files:
   - {src: files/claude_triage_run.py, dst: /opt/claude-triage/claude_triage_run.py, when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}
   - {src: files/claude_triage_poll.py, dst: /opt/claude-triage/claude_triage_poll.py, when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}
   - {src: files/claude_triage_session.py, dst: /opt/claude-triage/claude_triage_session.py, when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}
-  - {src: files/claude-triage-settings.json, dst: /opt/claude-triage/claude-settings.json, when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}
+  - {src: files/claude-triage-settings-overlay.json, dst: /usr/lib/homelab/claude-config-render/overlays/triage.json, when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}
   # No unit of its own: reconcile starts an enabled unit and waits for it, and a cold first run
   # (Claude Code, a full clone, a full uv sync) could outlast that wait and hold the host. The
   # runner runs it before each episode instead.
   - {src: templates/claude-triage-setup.sh.j2, dst: /usr/lib/homelab/claude-triage-setup, mode: "0755", when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}
   - {lib: host_lib.py, dst: /opt/claude-triage/host_lib.py, when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}
+  - {lib: claude_config_lock.py, dst: /opt/claude-triage/claude_config_lock.py, when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}
   - {src: templates/claude-triage-prompt.txt.j2, dst: /opt/claude-triage/prompt.txt, when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}
   - {src: templates/claude-triage-config.env.j2, dst: /etc/claude-triage/config.env, when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}
   - {src: templates/claude-triage-tmpfiles.conf.j2, dst: /usr/lib/tmpfiles.d/homelab-claude-triage.conf, when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}
@@ -256,6 +264,7 @@ enable:
   homelab-claude-guardrail-ack.timer: {target: timers.target, when: claude_code_guardrail_ack_enabled}
   homelab-claude-dotfiles-mirror.timer: {target: timers.target, when: claude_code_dotfiles_mirror_enabled}
   homelab-claude-weekly-summary.timer: {target: timers.target, when: claude_code_weekly_summary_enabled}
+  homelab-claude-config-render.timer: {target: timers.target, when: claude_code_config_render_enabled}
   homelab-claude-clone-sync.timer: {target: timers.target, when: claude_code_agent_user_enabled}
   homelab-claude-dotfiles-sync.timer:
     target: timers.target

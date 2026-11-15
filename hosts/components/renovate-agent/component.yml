@@ -58,11 +58,14 @@ files:
   - {src: files/renovate_floor.py, dst: /usr/lib/homelab/renovate-agent/renovate_floor.py}
   - {src: files/t2-approval-floor, dst: /usr/lib/homelab/t2-approval-floor}
   - {lib: host_lib.py, dst: /usr/lib/homelab/renovate-agent/host_lib.py}
+  - {lib: claude_config_lock.py, dst: /usr/lib/homelab/renovate-agent/claude_config_lock.py}
   - {src: templates/prompt.txt.j2, dst: /usr/lib/homelab/renovate-agent/prompt.txt}
   - {src: templates/session.conf.j2, dst: /usr/lib/homelab/renovate-agent/session.conf}
-  # The session's Claude Code settings: the shared guard hooks and the deny floor. The session
-  # passes this root-owned file with --settings.
-  - {src: files/claude-settings.json, dst: /usr/lib/homelab/renovate-agent/claude-settings.json}
+  # The server-owned half of the session's Claude Code settings: the guard hooks, the sudo and
+  # self-edit denies, and bypass mode off. claude-code's homelab-claude-config-render merges it
+  # over the verified dotfiles tag's deny floor and publishes the file the session passes with
+  # --settings.
+  - {src: files/claude-settings-overlay.json, dst: /usr/lib/homelab/claude-config-render/overlays/renovate.json}
   - {src: templates/renovate-agent-setup.sh.j2, dst: /usr/lib/homelab/renovate-agent-setup, mode: "0755", activate: "try-restart:homelab-renovate-agent-setup.service"}
   - {src: templates/homelab-renovate-agent-setup.service.j2, dst: /usr/lib/systemd/system/homelab-renovate-agent-setup.service}
   - {src: templates/homelab-renovate-agent.service.j2, dst: /usr/lib/systemd/system/homelab-renovate-agent.service}

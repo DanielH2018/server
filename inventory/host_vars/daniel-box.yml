@@ -99,6 +99,7 @@ claude_code_lander_enabled: true
 # triage"). Needs claude_code_triage_claude_oauth_token in secrets.yml. False removes the units,
 # the rule, the code and the config, and keeps the records.
 claude_code_triage_enabled: true
+claude_code_config_render_enabled: true
 # The agent user's own Node, @playwright/mcp, Chromium and homelab-ui MCP registration, so a
 # phone session can check that a UI renders (#4058). False removes all four.
 claude_code_agent_homelab_ui_enabled: true

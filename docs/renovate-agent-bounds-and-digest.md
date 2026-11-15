@@ -147,8 +147,9 @@ The session reads third-party text: release notes, changelogs and PR bodies. It 
   clone safe through `GIT_CONFIG_*`, because git refuses a repository another user owns. The
   run record is in the controller's home, which carries the set-group-ID bit and group
   `sys_user`, so the docs cron reads it.
-- **Settings.** The session passes the packaged, root-owned
-  `/usr/lib/homelab/renovate-agent/claude-settings.json` with `--settings`. Its three hook
+- **Settings.** The session passes the root-owned
+  `/var/lib/homelab-claude-config/current/renovate.json` with `--settings`, which
+  `homelab-claude-config-render` publishes from the verified dotfiles tag. Its three hook
   commands run the controller's copies under `/var/lib/renovate-agent-tools/.claude/hooks`. The
   setup removes any settings or hooks copy from the session's home, and `claude-guardrail-ack` posts
   one that comes back.

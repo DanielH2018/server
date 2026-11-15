@@ -23,8 +23,9 @@ works in. Outside the session's home, so the session cannot replace either betwe
 {%- set tools_dir = "/var/lib/renovate-agent-tools" -%}
 {%- set clone_dir = "/var/lib/renovate-agent-clone" -%}
 {#- The root-owned Claude Code settings the session passes with --settings: the guard hooks and
-the deny floor. -#}
-{%- set settings_file = "/usr/lib/homelab/renovate-agent/claude-settings.json" -%}
+the deny floor, which claude-code's homelab-claude-config-render publishes from the verified
+dotfiles tag and this component's overlay. -#}
+{%- set settings_file = "/var/lib/homelab-claude-config/current/renovate.json" -%}
 {%- set max_prs = 3 -%}
 {%- set model = "opus" -%}
 {%- set permission_mode = "auto" -%}
