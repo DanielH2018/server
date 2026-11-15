@@ -82,6 +82,7 @@ challenges for the indexers by rendering attacker-supplied pages in a headless b
 ## Editing
 - Manifest: `k8s/roles/prowlarr/templates/deployment.yaml.j2`,
   `k8s/roles/prowlarr/templates/deployment-flaresolverr.yaml.j2`
-- **The route is LAN-only.** `k8s/roles/prowlarr/templates/ingressroute.yaml.j2` passes
-  `public=false`, so no public name renders whatever `k8s_public_route` says. The operator
-  ruled it on 2026-11-15 (#8514): WireGuard covers remote use.
+- **The route is LAN-only.** The entry in `cluster/services.yml` sets `public_route: false`,
+  and the shared `k8s/templates/ingressroute-default.yaml.j2` renders no public name from it
+  whatever `k8s_public_route` says. The operator ruled it on 2026-11-15 (#8514): WireGuard
+  covers remote use.

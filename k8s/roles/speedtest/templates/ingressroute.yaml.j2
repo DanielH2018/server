@@ -1,12 +1,11 @@
 {% from 'ingressroute.yml.j2' import ingressroute, monitoring_route with context %}
 ---
-{# DECIDED: LAN-only by operator ruling 2026-11-15 (#8514); WireGuard covers remote use. #}
 {{ ingressroute(
     container_item.name,
     container_item.hostname | default(container_item.name),
     container_item.port,
     container_item.use_authelia,
-    public=false
+    public=container_item.public_route | default(true),
   )
 }}
 ---

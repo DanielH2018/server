@@ -225,6 +225,8 @@ The renderer writes a tag's files by these rules:
   in `k8s/templates/`, so a role whose Service or route fits the shared shape writes no
   template (#2872, #3043). Such a route leaves no string in the role, so
   `scripts/renderer/template_filters/toposort.py` derives the traefik edge from the entry's `hostname`.
+  An entry's `public_route: false` makes the shared route LAN-only: it renders the `.local.`
+  name and no public one, whatever `k8s_public_route` says.
   A listed name with no template stops the render.
 - **The claims.** Each `k8s_claims` entry renders `claim-default.yaml.j2` to
   `claim-<name>.yaml`, with the entry as `manifests_claim`.

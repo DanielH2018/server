@@ -323,6 +323,8 @@ containers_list:
     # `prowlarr-verify` (#5594).
     weekly_backup_claims: {prowlarr-config: 4}  # Thu
     hostname: "prowlarr"
+    # DECIDED: LAN-only by operator ruling 2026-11-15 (#8514); WireGuard covers remote use.
+    public_route: false
     port: 9696
     use_authelia: true
     auth_tier: one_factor
@@ -348,6 +350,8 @@ containers_list:
     weekly_backup_claims: {bazarr-config: 5}  # Fri
     depends_on: [media-volume]
     hostname: "bazarr"
+    # DECIDED: LAN-only by operator ruling 2026-11-15 (#8514); WireGuard covers remote use.
+    public_route: false
     port: 6767
     use_authelia: true
     auth_tier: one_factor
@@ -431,6 +435,8 @@ containers_list:
     # Flux applies speedtest through `promote`, and substitutes its APP_KEY Secret from
     # homelab-cluster-vars (D5.9).
     hostname: "speedtest"
+    # DECIDED: LAN-only by operator ruling 2026-11-15 (#8514); WireGuard covers remote use.
+    public_route: false
     port: 80
     use_authelia: true
     auth_tier: one_factor
@@ -991,6 +997,8 @@ containers_list:
   - name: slskd
     depends_on: [media-volume]
     hostname: "slskd"
+    # DECIDED: LAN-only by operator ruling 2026-11-15 (#8514); WireGuard covers remote use.
+    public_route: false
     port: 5030
     use_authelia: true
     auth_tier: one_factor

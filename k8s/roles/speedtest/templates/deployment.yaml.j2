@@ -38,7 +38,7 @@ spec:
           env:
 {{ lsio_env() }}
             # Laravel builds redirects and asset URLs from APP_URL, so it names the route's
-            # only host: the ingressroute passes public=false.
+            # only host: the entry sets public_route: false.
             - name: APP_URL
               value: "https://{{ container_item.hostname | default(container_item.name) }}.local.{{ domain }}"
             # Results are stored in UTC by design (APP_TIMEZONE stays default); this is

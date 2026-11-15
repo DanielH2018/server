@@ -214,7 +214,7 @@
                 fields: [passed, failed]
         - Speedtest:
             icon: speedtest-tracker.png
-            href: {{ services | homepage_href('speedtest', domain, lan=True) }}
+            href: {{ services | homepage_href('speedtest', domain) }}
             description: Internet tracking
             # No server/container: speedtest runs in k3s now, so there is no Docker container
             # for the status dot. The -k8s name is the ClientIP-gated monitoring route (no
@@ -294,7 +294,7 @@
                 fields: [leech, download]
         - slskd:
             icon: slskd.png
-            href: {{ services | homepage_href('slskd', domain, lan=True) }}
+            href: {{ services | homepage_href('slskd', domain) }}
             description: Soulseek
             widget:
                 type: slskd

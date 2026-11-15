@@ -94,11 +94,13 @@ def homepage_href(containers_list, name, domain, path="/", lan=False):
     """`https://<hostname>[.local].<domain><path>` for entry `name`'s route.
 
     `lan=True` names the `.local.` host, for a route that matches no public name (longhorn,
-    the deploy queue). Raises ValueError when no entry is named `name` or it has no
+    the deploy queue). An entry with `public_route: false` gets the `.local.` host without
+    it. Raises ValueError when no entry is named `name` or it has no
     `hostname`, so a tile cannot link to a route that is not declared.
     """
     entry = _entry(containers_list, name)
     if not entry.get("hostname"):
         raise ValueError(f"containers_list entry {name!r} has no `hostname`")
+    lan = lan or entry.get("public_route") is False
     host = f"{entry['hostname']}.local" if lan else entry["hostname"]
     return f"https://{host}.{domain}{path}"

@@ -46,7 +46,8 @@ into `media/music`.
   Soularr mounts it through a subPath, which never sees an update; the restart
   `scripts/renderer/renderer_lib/restart.py:restart_values` stamps for a mounted Secret is what
   picks a change up.
-- **The route is LAN-only.** `k8s/roles/slskd/templates/ingressroute.yaml.j2` passes
-  `public=false`, so no public name renders whatever `k8s_public_route` says. The operator
-  ruled it on 2026-11-15 (#8514): WireGuard covers remote use.
+- **The route is LAN-only.** The entry in `cluster/services.yml` sets `public_route: false`,
+  and the shared `k8s/templates/ingressroute-default.yaml.j2` renders no public name from it
+  whatever `k8s_public_route` says. The operator ruled it on 2026-11-15 (#8514): WireGuard
+  covers remote use.
 - Pins, the share switch, Soularr's interval and file types: `k8s/roles/slskd/defaults/main.yml`.
