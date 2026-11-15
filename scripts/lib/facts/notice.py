@@ -145,7 +145,7 @@ class Tree:
         """
         if self._blobs is not None:
             oid = self._blobs.get(rel)
-            return None if oid is None else self._read(oid)
+            return None if oid is None else self.read_blob(oid)
         if rel not in self.tracked:
             return None
         try:
@@ -160,10 +160,15 @@ class Tree:
             text = self.text(rel)
             return None if text is None else sections(rel, text)
         if (rel, oid) not in _SECTIONS:
-            _SECTIONS[rel, oid] = sections(rel, self._read(oid))
+            _SECTIONS[rel, oid] = sections(rel, self.read_blob(oid))
         return _SECTIONS[rel, oid]
 
-    def _read(self, oid: str) -> str:
+    def read_blob(self, oid: str) -> str:
+        """The text of the blob ``oid``, read through this tree's ``cat-file`` process.
+
+        Raises:
+          MissingObject: the object store does not hold ``oid``.
+        """
         if self._batch is None:
             self._batch = git_process("cat-file", "--batch", cwd=self.repo)
         stdin, stdout = self._batch.stdin, self._batch.stdout
