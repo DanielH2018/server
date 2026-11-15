@@ -7,12 +7,14 @@ import dataclasses
 import hashlib
 import json
 import os
+import sqlite3
 import subprocess
 from collections import Counter
 from pathlib import Path
 
 import pytest
 from gh_quota import KEEP_S, Ledger, Window, classify, main, render, session_key
+from lib.proc_testing import write_exec
 
 NOW = 1_794_668_400.0  # 15:00:00 UTC
 RESET = int(NOW) + 1200
@@ -205,6 +207,39 @@ def test_two_logins_of_one_uid_are_counted_in_separate_ledgers(recording):
     }
 
 
+def test_each_sample_names_its_caller_by_session_gh_path_and_variable_names(
+    tmp_path: Path,
+):
+    bin_dir = tmp_path / "bin"
+    real = write_exec(tmp_path / "real-gh", "#!/bin/sh\n")
+    bin_dir.mkdir()
+    (bin_dir / "gh").symlink_to(real)
+    token = "ghp_notarealtoken"
+    env = {
+        "CLAUDE_CODE_SESSION_ID": SESSION,
+        "PATH": str(bin_dir),
+        "GH_TOKEN": token,
+        "GITHUB_REPOSITORY": "o/r",
+        "HOME": "/home/x",
+    }
+    ledger, _clock, gh = _ledger(tmp_path, "record", env)
+    gh.core_used = 7
+
+    ledger.record(["pr", "list"])
+
+    (path,) = ledger.root.glob("*.sqlite")
+    with sqlite3.connect(path) as db:
+        rows = db.execute(
+            "SELECT window, bucket, session, gh, env_names FROM sampler ORDER BY bucket"
+        ).fetchall()
+    names = "GH_TOKEN,GITHUB_REPOSITORY"
+    assert rows == [
+        (RESET + 60, "core", SESSION, str(real), names),
+        (RESET, "graphql", SESSION, str(real), names),
+    ]
+    assert token not in path.read_bytes().decode(errors="replace")
+
+
 def test_a_caller_whose_gh_has_no_token_gets_a_ledger_named_by_uid(tmp_path: Path):
     ledger, _clock, gh = _ledger(tmp_path, "record", {})
     gh.logins.clear()
@@ -305,7 +340,7 @@ def test_a_failure_log_at_its_size_limit_drops_its_old_lines_and_takes_the_new_o
 
     assert log.read_text().splitlines() == [
         recent,
-        f"{int(NOW)} OSError: gh is not installed",
+        f"{int(NOW)} {SESSION} OSError: gh is not installed",
     ]
 
 
