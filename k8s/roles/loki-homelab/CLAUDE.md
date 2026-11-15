@@ -101,7 +101,10 @@ verbatim-prompts store this role's LAN route
   directly. The `loki.process "k3s"` stage drops every line without a warn, error or fatal
   level, and it drops kube-router's per-sync IPv6 ipBlock warning by name. That warning was
   95% of the remaining volume. An empty stream on a quiet day is the filter working, so nothing
-  watches this stream for freshness. `tests/k8s/test_alloy_ships_k3s_log.py` runs the
+  watches this stream for freshness. One rule reads it: `KubeletNodeShutdownManagerFailed`
+  pages when kubelet starts without its graceful node shutdown, over a 2h range that outlasts
+  the weekly reboot's mute. kubelet logs that failure once per start and logs nothing on
+  success, so the rule pages once per failed start rather than holding until a fix. `tests/k8s/test_alloy_ships_k3s_log.py` runs the
   filter over real line shapes and holds the path to the `k3s_log_file` both k3s host components
   carry.
   **A selector is a double-quoted LogQL string, never a backtick one.** Alloy's match-stage
