@@ -74,9 +74,9 @@ _DROP = re.compile(r"^\s*drop:\s*$")
 # grows.
 FALLBACK_TEMPLATES = frozenset(
     {
-        "k8s/image-builder/templates/build-job.yaml.j2",
-        "k8s/image-builder/templates/context-configmap.yaml.j2",
-        "k8s/pihole/templates/pihole-deployment.yaml.j2",
+        "k8s/roles/image-builder/templates/build-job.yaml.j2",
+        "k8s/roles/image-builder/templates/context-configmap.yaml.j2",
+        "k8s/roles/pihole/templates/pihole-deployment.yaml.j2",
     }
 )
 
@@ -107,7 +107,7 @@ def _rendered_index() -> dict[tuple[str, str, str], str]:
 
 
 def template_texts() -> dict[str, str]:
-    """Every role template keyed `<plane>/<role>/templates/<name>`, rendered where a render reaches it.
+    """Every role template keyed by its repo path, rendered where a render reaches it.
 
     A template in `FALLBACK_TEMPLATES` contributes its source text, which is the only read left
     here — the reason this module stays in `TEMPLATE_SOURCE_READERS`.
@@ -116,7 +116,7 @@ def template_texts() -> dict[str, str]:
     texts = {}
     for path in _manifest_files():
         rendered = index.get(("k8s", path.parent.parent.name, path.name))
-        key = f"k8s/{path.relative_to(K8S_ROLES)}"
+        key = f"k8s/roles/{path.relative_to(K8S_ROLES)}"
         texts[key] = rendered if rendered is not None else path.read_text()
     return texts
 
@@ -177,7 +177,7 @@ def test_no_manifest_runs_root_with_all_capabilities_dropped() -> None:
     offenders = []
     for key, text in sorted(template_texts().items()):
         for line_no in root_without_dac(text):
-            offenders.append(f"ansible/roles/{key} (rendered line {line_no})")
+            offenders.append(f"{key} (rendered line {line_no})")
 
     assert not offenders, (
         "these containers run as root with `drop: [ALL]` and add no DAC capability, which "
@@ -195,7 +195,7 @@ def test_the_render_reaches_every_role_template() -> None:
     """
     index = _rendered_index()
     fell_back = {
-        f"k8s/{path.relative_to(K8S_ROLES)}"
+        f"k8s/roles/{path.relative_to(K8S_ROLES)}"
         for path in _manifest_files()
         if (
             "k8s",
@@ -219,10 +219,10 @@ def test_every_documented_root_site_still_renders_a_clean_root_block() -> None:
     rather than as a guard quietly covering nothing.
     """
     expected = {
-        "k8s/loki-homelab/templates/alloy-daemonset.yaml.j2": 1,
-        "k8s/code-server/templates/deployment.yaml.j2": 1,
-        "k8s/authelia/templates/deployment.yaml.j2": 2,
-        "k8s/traefik/templates/deployment.yaml.j2": 2,
+        "k8s/roles/loki-homelab/templates/alloy-daemonset.yaml.j2": 1,
+        "k8s/roles/code-server/templates/deployment.yaml.j2": 1,
+        "k8s/roles/authelia/templates/deployment.yaml.j2": 2,
+        "k8s/roles/traefik/templates/deployment.yaml.j2": 2,
     }
     texts = template_texts()
     found = {key: _dac_root_blocks(texts.get(key, "")) for key in expected}

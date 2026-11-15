@@ -1786,7 +1786,10 @@ jobs:
   # with a runner to itself (runs 43146660058 and 43148777838), so a build is slow on its own, and
   # these legs still end 28-80 s after the `host_packages` legs. A local run copies the kit's uv
   # cache in under a second and builds the venv from it in less, so each item prints each phase of
-  # the script's local build under its `[DONE]` line to find the rest (#7982). Keep the shard
+  # the script's local build under its `[DONE]` line to find the rest (#7982). Those lines put
+  # 181-182 s of a 243 s offline build in its `apt-get update`, against 2 s online (run
+  # 43750408193): the image's `Acquire::Retries "10"` backs off 1+2+4+8+16+5x30 s on fetches a
+  # container with no network cannot make, so the offline item sets no retries. Keep the shard
   # count equal to the number of offline builds `bootstrap_plan.plan` lists;
   # `test_bootstrap_case.py` holds it.
   #

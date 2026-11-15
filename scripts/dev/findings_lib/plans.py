@@ -14,7 +14,7 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from dev.findings_lib.red_green import RED_GREEN_LABEL, RED_GREEN_STYLE
-from dev.findings_lib.milestone import is_session_milestone, session_title
+from dev.findings_lib.milestone import branch_of
 from dev.findings_lib.issue_model import (
     LABELS,
     NO_REOPEN,
@@ -259,9 +259,19 @@ class ClaimRefused(Exception):
 
 
 def plan_claim(
-    issue: dict, *, worktree: str, session: str | None, when: str, today: date
+    issue: dict,
+    *,
+    worktree: str,
+    session: str | None,
+    when: str,
+    today: date,
+    milestone: str | None = None,
 ) -> list[list[str]]:
     """Plans the gh argv to claim ``issue`` for ``worktree``.
+
+    ``milestone`` is the title of the worktree's session milestone, which the label edit
+    files the issue under. None, for a branch that never ran `milestone start`, files it
+    under nothing.
 
     Returns an EMPTY list when ``worktree`` already holds the claim AND the `claimed` label
     is on, so re-running a claim is idempotent rather than a second comment on the same
@@ -310,17 +320,16 @@ def plan_claim(
         )
     n = str(issue["number"])
     add_label = ["issue", "edit", n, "--add-label", "claimed"]
-    title = session_title(worktree)
-    if title:
-        add_label += ["--milestone", title]
+    if milestone:
+        add_label += ["--milestone", milestone]
     held = current_claim(issue)
     if held == worktree:
         # The repair. A fresh claim below re-adds the label unconditionally, because
         # `--add-label` on a label already present is a no-op; here the plan IS the repair,
         # so an already-correct label and milestone have to plan nothing or the reclaim
         # stops being a no-op.
-        in_milestone = (issue.get("milestone") or {}).get("title") == title
-        return [] if "claimed" in names and (in_milestone or not title) else [add_label]
+        filed = (issue.get("milestone") or {}).get("title") == milestone
+        return [] if "claimed" in names and (filed or not milestone) else [add_label]
     if held:
         raise ClaimRefused(f"already claimed by `{held}`")
     return [
@@ -354,12 +363,7 @@ def plan_release(
     """
     n = str(issue["number"])
     remove_label = ["issue", "edit", n, "--remove-label", "claimed"]
-    milestone = issue.get("milestone")
-    if (
-        detach
-        and is_session_milestone(milestone)
-        and milestone["title"] == session_title(worktree)
-    ):
+    if detach and branch_of(issue.get("milestone")) == worktree:
         remove_label.append("--remove-milestone")
     held = current_claim(issue)
     if held is None:

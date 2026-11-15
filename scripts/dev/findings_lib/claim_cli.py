@@ -52,7 +52,6 @@ from dev.findings_lib.plans import (
     plan_sync_labels,
 )
 from dev.findings_lib.boundaries import FindingsTools
-from dev.findings_lib.milestone import session_title
 from dev.fanout_lib.target import SERVER
 
 
@@ -121,10 +120,10 @@ def cmd_claim(args: argparse.Namespace, tools: FindingsTools) -> int:
     # syncs first. Without this the FIRST claim posts its comment, fails the label edit and
     # exits 1; the retry then reads "already claimed" and the label is never added at all.
     run(plan_sync_labels(_existing_labels(tools)), args.dry_run, tools)
-    # `gh issue edit --milestone` fails on a title the repo lacks, as `--add-label` does.
-    title = session_title(args.worktree)
-    if title:
-        tools.ensure_milestone(title, tools.owner_name, dry_run=args.dry_run)
+    # Read once for the batch. None for a branch that never ran `milestone start`.
+    milestone = tools.attach_milestone(
+        args.worktree, tools.owner_name, dry_run=args.dry_run
+    )
     # One running-batch read for the whole batch, taken on the first stale claim. Asked per
     # issue, a resumed orchestrator re-claiming its old batches would open one ssh connection
     # each, and `ufw limit ssh` rejects the sixth inside 30 seconds.
@@ -171,6 +170,7 @@ def cmd_claim(args: argparse.Namespace, tools: FindingsTools) -> int:
                 session=args.session,
                 when=now_iso(),
                 today=today_utc(),
+                milestone=milestone,
             )
         except ClaimRefused as exc:
             print(f"#{number} refused: {exc.reason}", file=sys.stderr)

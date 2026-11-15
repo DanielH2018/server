@@ -582,7 +582,8 @@ installed versions are *reconciled* when the record's `result` names exactly the
 3. Run `apt-get update --error-on=any` restricted to the homelab source, with
    `-o Dir::Etc::sourcelist=sources.list.d/homelab.sources -o Dir::Etc::sourceparts=- -o
    APT::Get::List-Cleanup=0`. The Ubuntu lists stay as `apt-daily` last left them.
-    - The restricted calls, this fetch and step 4's `apt-get indextargets`, also carry
+    - The restricted calls, this fetch, step 4's `apt-get indextargets` and step 5's
+      install, also carry
       `-o Dir::Cache::pkgcache= -o Dir::Cache::srcpkgcache=`, and the fetch carries
       `-o pkgCacheFile::Generate=false`. Without them, `apt-get update` ends by rebuilding
       `pkgcache.bin` and `indextargets` builds one too, each from the homelab source
@@ -612,14 +613,20 @@ installed versions are *reconciled* when the record's `result` names exactly the
     - Otherwise this is the common path. If step 2 configured anything, or the installed
       versions are not reconciled, the run continues at step 7. If they are, it continues at
       step 8. The common path costs one small HTTP fetch and one text scan.
-5. `apt-get install -y --no-install-recommends -o DPkg::Lock::Timeout=600 homelab-updater
-   homelab-$(hostname)`.
-6. If that install fails to resolve or fetch a dependency, run one full `apt-get update` and
-   retry once. A `Depends` on an Ubuntu package can need fresher Ubuntu lists than step 3
-   fetched. The full update runs at most once a day, recorded in a stamp file under
+5. `apt-get install -y --no-install-recommends --no-remove -o DPkg::Lock::Timeout=600
+   homelab-updater homelab-$(hostname)`, with step 3's options. It reads the homelab
+   source alone and builds apt's cache in memory. Built over the Ubuntu lists, that cache
+   cost the Pi 25 CPU seconds and 88 MB on every publish (#8610). A `Depends` is
+   satisfied only from what is installed, and `--no-remove` refuses a resolution that
+   would remove a package.
+6. If that install fails to resolve or fetch a dependency, retry once over every source on
+   the lists apt-daily left. A new `Depends` on an Ubuntu package installs here. If the
+   retry fails on a dependency too, run one full `apt-get update` and retry once more,
+   because the `Depends` can need fresher Ubuntu lists than apt-daily fetched. The full
+   update runs at most once a day, recorded in a stamp file under
    `/var/lib/homelab-updater/`, and never between 04:00 and 05:59. Otherwise the run exits
    non-zero and the next run tries again. Any other install failure, such as a lock wait
-   that timed out, ends the run with no full update. The retry runs with
+   that timed out, ends the run with no full update. Both retries run with
    `DPkg::Lock::Timeout=0`, so one run waits on the lock at most once, and
    `TimeoutStartSec` budgets that one wait.
 7. Run `systemctl start homelab-reconcile.service` synchronously. Its exit status is not the
