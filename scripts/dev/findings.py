@@ -489,7 +489,9 @@ def cmd_close(args: argparse.Namespace, tools: FindingsTools) -> int:
     plans = plan_release_held(
         issue, when=now_iso(), reason=f"closed as {outcome}", detach=False
     )
-    plans += plan_close(args.number, outcome=outcome, pr=args.pr, reason=args.reason)
+    plans += plan_close(
+        args.number, outcome=outcome, pr=args.pr, reason=args.reason, repo=tools.repo
+    )
     run(plans, args.dry_run, tools)
     print(f"#{args.number} closed as {outcome}")
     return 0
