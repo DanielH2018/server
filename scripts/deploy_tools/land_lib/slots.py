@@ -83,12 +83,11 @@ def _taker(
         try:
             return turn.try_take_over_ssh(_paths(directory), cap)
         except OSError as exc:
-            local = min(cap, FALLBACK_COUNT)
             unreachable(
                 f"{turn.TURN_HOST} did not answer for the landing slots ({exc}); taking one "
-                f"of {local} on this host"
+                f"of {FALLBACK_COUNT} on this host"
             )
-            return try_take(_paths(directory, FALLBACK_COUNT), local)
+            return try_take(_paths(directory, FALLBACK_COUNT), cap)
 
     return take
 
