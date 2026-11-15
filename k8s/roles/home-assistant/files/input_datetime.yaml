@@ -1,7 +1,7 @@
 # `input_datetime:` for configuration.yaml, pulled in by `input_datetime: !include input_datetime.yaml`.
 # Heartbeat helper — the `ha_heartbeat` automation (files/automations/system.yaml) stamps this with now()
 # every minute, so its last_changed is fresh ONLY while the automation scheduler is executing.
-# monitor-bridge polls it over the apps net (check_ha_heartbeat) and pushes a Kuma monitor down when
+# monitor-bridge polls it over the apps net (check_ha_heartbeat) and exports a failing verdict when
 # it goes stale — catching a wedged-but-running HA the container healthcheck (HTTP :8123) can't see.
 # Excluded from the recorder below (it changes every minute, zero history value).
 ha_heartbeat:

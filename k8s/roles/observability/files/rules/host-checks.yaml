@@ -1043,8 +1043,10 @@ groups:
           description: >-
             node_exporter's textfile collector on daniel-box has failed for 10 minutes, so a
             file in /var/lib/node-exporter-textfile is malformed or unreadable, and every
-            series in it is gone. Read node_textfile_mtime_seconds for the files it still sees,
-            and the node-exporter pod's log.
+            series in it is gone.
+            Textfiles seen in the last day and missing now (a rejected file drops out of
+            node_textfile_mtime_seconds, so these are the candidates): {{ $files := query `count by (file) (last_over_time(node_textfile_mtime_seconds{origin="daniel-box"}[1d])) unless count by (file) (node_textfile_mtime_seconds{origin="daniel-box"})` }}{{ if $files }}{{ range $i, $s := $files }}{{ if $i }}, {{ end }}{{ $s.Labels.file }}{{ end }}{{ else }}none{{ end }}.
+            Confirm in the node-exporter pod's log.
       - alert: TextfileCollectorError
         expr: node_textfile_scrape_error{origin="daniel-server"} == 1
         for: 10m
@@ -1057,8 +1059,10 @@ groups:
           description: >-
             node_exporter's textfile collector on daniel-server has failed for 10 minutes, so
             a file in /var/lib/node-exporter-textfile is malformed or unreadable, and every
-            series in it is gone. Read node_textfile_mtime_seconds for the files it still sees,
-            and the node-exporter pod's log.
+            series in it is gone.
+            Textfiles seen in the last day and missing now (a rejected file drops out of
+            node_textfile_mtime_seconds, so these are the candidates): {{ $files := query `count by (file) (last_over_time(node_textfile_mtime_seconds{origin="daniel-server"}[1d])) unless count by (file) (node_textfile_mtime_seconds{origin="daniel-server"})` }}{{ if $files }}{{ range $i, $s := $files }}{{ if $i }}, {{ end }}{{ $s.Labels.file }}{{ end }}{{ else }}none{{ end }}.
+            Confirm in the node-exporter pod's log.
       - alert: TextfileCollectorError
         expr: node_textfile_scrape_error{origin="daniel-pi"} == 1
         for: 10m
@@ -1071,8 +1075,10 @@ groups:
           description: >-
             node_exporter's textfile collector on daniel-pi has failed for 10 minutes, so a
             file in /var/lib/node-exporter-textfile is malformed or unreadable, and every
-            series in it is gone. Read node_textfile_mtime_seconds for the files it still sees,
-            and `journalctl -u node_exporter` on daniel-pi.
+            series in it is gone.
+            Textfiles seen in the last day and missing now (a rejected file drops out of
+            node_textfile_mtime_seconds, so these are the candidates): {{ $files := query `count by (file) (last_over_time(node_textfile_mtime_seconds{origin="daniel-pi"}[1d])) unless count by (file) (node_textfile_mtime_seconds{origin="daniel-pi"})` }}{{ if $files }}{{ range $i, $s := $files }}{{ if $i }}, {{ end }}{{ $s.Labels.file }}{{ end }}{{ else }}none{{ end }}.
+            Confirm in `journalctl -u node_exporter` on daniel-pi.
       # A replaced Longhorn instance-manager leaves the iSCSI sessions it served in the kernel,
       # FREE with a failed connection, and the next attach of such a volume on that node loops
       # (#5826). The node-exporter DaemonSet's `iscsi-sessions` sidecar writes one
