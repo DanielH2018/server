@@ -155,7 +155,6 @@ def test_the_policy_checks_and_pins_the_head_the_turns_own_update_made(landing):
             compare=[INCIDENT_2922],
         ),
         require_branch_prefix=PREFIX,
-        queue=True,
     )
     ln.pinned_head = OLD
     ln.direct_merge_subject = "Document the lander"

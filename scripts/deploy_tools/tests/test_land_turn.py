@@ -311,22 +311,11 @@ def test_a_pr_merged_while_the_landing_waited_for_its_turn_is_not_touched(landin
     assert call_order(calls) == ["try_turn", "try_turn", "release_turn"]
 
 
-@pytest.mark.parametrize(
-    ("queue", "subject", "expected"),
-    [
-        pytest.param(False, "No turn", ["merge"], id="turn-off"),
-        pytest.param(True, "", [], id="a-merge-made-elsewhere"),
-    ],
-)
-def test_a_landing_takes_no_turn_with_the_turn_off_or_without_a_merge_of_its_own(
-    landing, queue, subject, expected
-):
-    ln, calls = landing(
-        Fakes(gh_views={"state,mergeable,headRefOid": [OPEN, MERGED]}), queue=queue
-    )
-    ln.direct_merge_subject = subject
+def test_a_landing_that_merges_nothing_itself_takes_no_turn(landing):
+    ln, calls = landing(Fakes(gh_views={"state,mergeable,headRefOid": [OPEN, MERGED]}))
+    ln.direct_merge_subject = ""
     land_in_turn(ln)
-    assert call_order(calls) == expected
+    assert call_order(calls) == []
 
 
 def test_a_landing_off_the_turn_host_takes_the_turn_over_ssh(

@@ -362,7 +362,7 @@ def _no_turn(draft: str) -> tuple[bool, int]:
 
 
 def _start_run(ln: Landing, take_turn: TakeTurn) -> tuple[str, bool, int]:
-    """Give a PR that has had no CI run its one run, unless `LAND_QUEUE=0`.
+    """Give a PR that has had no CI run its one run, on the master of the landing turn.
 
     A head with no CI run that ran jobs takes the landing turn first (`turn.py`), so that the
     run it is about to get tests the master its merge lands on. A draft stands in the line
@@ -492,7 +492,7 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
         asked = True
         return take_turn(draft)
 
-    if o.queue and ln.direct_merge_subject:
+    if ln.direct_merge_subject:
         updated_from, in_turn, queued = _start_run(ln, ask)
         waited = queued
     # The `waited` at which the wait ends; a wait in line or an update moves it.
@@ -599,12 +599,8 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
             if rc == CI_DISARMED and ln.direct_merge_subject:
                 ln.die(disarmed(f" at {head[:8]}", f"PR #{o.pr} not merged"), 1)
             if rc == CI_GREEN and ln.direct_merge_subject and not in_turn:
-                if (
-                    not asked
-                    and o.queue
-                    and stale_base.rejoin_line(
-                        ln, head, view.get("mergeable") == "CONFLICTING"
-                    )
+                if not asked and stale_base.rejoin_line(
+                    ln, head, view.get("mergeable") == "CONFLICTING"
                 ):
                     updated_from, rejoined = head, True
                     wait_ends_at = min(waited + o.merge_timeout, wait_cap)

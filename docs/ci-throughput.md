@@ -119,8 +119,7 @@ measurements stand behind the ruling:
 
 The cost is the one this phase accepted when it gave each PR one run: the author of a draft
 gets no hosted verdict until the landing. With `LAND_BATCH=0` a landing forms no batch.
-Its draft still stands in the line, so another landing can stack it; `LAND_QUEUE=0` keeps a
-landing out of the turn and the line both.
+Its draft still stands in the line, so another landing can stack it.
 
 Who opens a draft, and what lands it:
 
@@ -148,8 +147,7 @@ The slices:
 1. **R1, landed.** The shadow sweep's timer, its tool and its probe are deleted.
 1. **B2, landed.** A queue of one. Every landing that merges its PR takes the landing
    turn, marks a draft PR ready, updates its branch and merges after that one run
-   ([Landing a merged PR](landing.md)). The turn spans both hosts, and `LAND_QUEUE=0` turns
-   it off for one landing. D9 ruled on the two steps that followed: sessions open their PRs
+   ([Landing a merged PR](landing.md)). The turn spans both hosts. D9 ruled on the two steps that followed: sessions open their PRs
    as drafts, and a daniel-box fan-out batch lands its PR as a draft.
 1. **B3, landed.** Batches of up to four. The landing that holds the turn opens one pull
    request that holds the batch's heads stacked on master, and that PR's run is the batch's
@@ -163,9 +161,12 @@ The slices:
     1. The branch update that follows a green run on a stale base is deleted. Landed in
        #8820.
     1. The merge pacing is deleted. Master's run count moves to the limit on live landings.
+       Landed in #8821.
     1. The limit on live landings becomes one count of 6 across both hosts, taken after the
        merge. The turn is the slot before the merge.
-    1. `LAND_QUEUE` is deleted.
+    1. The switch that turned the turn off for one landing is deleted, so every landing that
+       merges directly takes the turn.
+       `LAND_TURN_DIR` moves the turn's lock and line for a test that runs a whole landing.
 
    That limit exists because every live landing polls GitHub on one token. A landing that
    waits for the turn as a draft polls only a lock file, so any number can wait, and the
@@ -447,7 +448,7 @@ PR's timeline and landing log:
   not moved, and one a merge of master a session pushed.
 - 16 swept in full. Each followed a ready PR merged without an update, because master's
   changes missed its paths: 15 landing logs read `merging without a branch update`, and the
-  sixteenth log was gone with its worktree. None followed `LAND_QUEUE=0` or a hand merge.
+  sixteenth log was gone with its worktree. None followed a landing that skipped the turn, or a hand merge.
   Every landing in the window took the turn, and none was paced.
 - No batch formed: a ready holder never stacks drafts, so each draft took a run of its own.
 - From merge to verdict, a landing held its slot a median of 222 s and a p90 of 468 s.
@@ -473,8 +474,8 @@ PR's timeline and landing log:
 - **A landing-code PR may be a batch member.** 72 of 310 master commits touch landing code.
   The holder compares its code with master once, when the batch forms (#8768), so its own
   merge no longer strands its members. Such a PR lands as a draft through the turn with
-  `LAND_BATCH=0`, never with `LAND_QUEUE=0`: a merge without the turn during a batch's run
-  breaks that batch.
+  `LAND_BATCH=0`, not with the turn switched off: a merge without the turn during a batch's
+  run breaks that batch, which is why B4's last step removed that switch.
 
 ### Phase C: runner pods for `hooks` and `pytest`
 

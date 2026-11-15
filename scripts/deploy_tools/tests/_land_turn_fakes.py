@@ -44,7 +44,7 @@ def turn_landing(landing, polls=(OPEN, MERGED), start=OPEN, **fakes_or_opts):
             },
             **fakes,
         ),
-        **{"queue": True, **fakes_or_opts},
+        **fakes_or_opts,
     )
     ln.direct_merge_subject = "Take turns"
     return ln, calls

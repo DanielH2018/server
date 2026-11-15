@@ -193,7 +193,7 @@ def batch_of(landing, tmp_path):
     """
 
     def build(drafts=(), over=None, run=(GREEN,), opts=None, fakes=None, **github):
-        flags = {"queue": True, "arm_merge": True, "await_merge": True}
+        flags = {"arm_merge": True, "await_merge": True}
         ln, calls = landing(fakes or Fakes(), **{**flags, **(opts or {})})
         the_line = line.here(tmp_path / "line")
         prs = {pr: {} for pr in (OWN, *drafts)}
