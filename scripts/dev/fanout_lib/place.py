@@ -468,56 +468,19 @@ def cmd_clean_one(
 
 
 def cmd_clean(args, tools: Tools) -> int:
-    """Remove each batch's worktree, recording every removal in the manifest as it lands.
+    """Remove each batch's worktree through `clean.clean_run`, and say what is left.
 
-    A removal is recorded rather than re-derived because the evidence is destroyed by the
-    act: the remote leg reads the worktree, and the worktree is what it deletes. So the
-    manifest is saved after each `removed:` verdict, a batch already carrying `removed_at`
-    is skipped without an ssh call, and the file is retired only once no batch is left.
-
-    A leg that reached no verdict at all — ssh refused, the fetch failed, a timeout — is
-    reported as failed and exits 1, rather than joining the trees deliberately kept back.
-    Those two need opposite things from the operator.
+    Exits 1 when a leg reached no verdict, because a kept tree and an unreachable host need
+    opposite things from the operator.
     """
-    from fanout_lib.clean import read_clean_result, remote_clean_command
+    from fanout_lib.clean import clean_run
 
     run = manifest_mod.load(args.run_id, root=args.manifest_root)
-    kept, failed = [], []
-    for i, b in enumerate(run.batches):
-        if b.removed_at:
-            print(f"{b.batch} on {b.host}: removed earlier ({b.removed_at})")
-            continue
-        try:
-            target = resolve(b.repo, tools.default_ref)
-        except ValueError as exc:
-            print(f"{b.batch} on {b.host}: clean failed: {exc}")
-            failed.append(b.batch)
-            continue
-        try:
-            proc = tools.run(
-                b.host, remote_clean_command(b, target=target), 120.0, None
-            )
-        except subprocess.TimeoutExpired:
-            print(f"{b.batch} on {b.host}: clean timed out")
-            failed.append(b.batch)
-            continue
-        verdict, line = read_clean_result(proc)
-        print(f"{b.batch} on {b.host}: {line}")
-        if verdict == "removed":
-            run.batches[i] = dataclasses.replace(
-                b, removed_at=datetime.now(UTC).isoformat()
-            )
-            manifest_mod.save(run, root=args.manifest_root)
-        elif verdict == "failed":
-            failed.append(b.batch)
-        else:
-            kept.append(b.batch)
+    kept, failed = clean_run(run, tools, args.manifest_root)
     if failed:
         print(f"clean failed for {', '.join(failed)} — see above")
     if kept:
         print(f"run {run.run_id}: kept {', '.join(kept)} — re-run clean once merged")
-    if not kept and not failed:
-        manifest_mod.retire(run.run_id, args.manifest_root)
     return 1 if failed else 0
 
 

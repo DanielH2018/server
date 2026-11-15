@@ -21,9 +21,14 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 # the one way it judges a worktree.
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
-from fanout_lib.manifest import Batch
-from fanout_lib.target import SERVER_TARGET, Target
-from fanout_lib.transport import REPO
+import time
+from collections.abc import Callable
+from datetime import UTC, datetime
+
+from fanout_lib import manifest as manifest_mod
+from fanout_lib.manifest import Batch, Manifest
+from fanout_lib.target import SERVER_TARGET, Target, resolve
+from fanout_lib.transport import REPO, Tools
 from lib.git import git
 from lib.worktrees import (
     REMOVABLE,
@@ -474,3 +479,112 @@ def remote_clean_command(
         f"fi; "
         f"fi"
     )
+
+
+def clean_run(
+    run: Manifest,
+    tools: Tools,
+    root: _Path,
+    out: Callable[[str], None] = print,
+    wanted: Callable[[Batch], bool] = lambda b: True,
+) -> tuple[list[str], list[str]]:
+    """Clean every standing batch of `run` that `wanted` admits, recording each removal.
+
+    A removal is recorded rather than re-derived because the evidence is destroyed by the
+    act: the remote leg reads the worktree, and the worktree is what it deletes. So the
+    manifest is saved after each `removed:` verdict, a batch already carrying `removed_at`
+    is skipped without an ssh call, and the run is retired only once every batch carries one.
+    A batch `wanted` refuses is passed over silently and keeps the run live.
+
+    A leg that reached no verdict at all — ssh refused, the fetch failed, a timeout — is
+    failed, never kept: kept tells the operator to wait for a merge, failed to look at the
+    host.
+
+    Args:
+        run: the loaded manifest.
+        tools: the transport each leg runs over.
+        root: the manifest directory `run` was loaded from and is saved back to.
+        out: where each batch's line goes.
+        wanted: asked right before each leg whether to run it.
+
+    Returns:
+        `(kept, failed)`, the batch ids of each.
+    """
+    kept, failed = [], []
+    for i, b in enumerate(run.batches):
+        if b.removed_at:
+            out(f"{b.batch} on {b.host}: removed earlier ({b.removed_at})")
+            continue
+        if not wanted(b):
+            continue
+        try:
+            target = resolve(b.repo, tools.default_ref)
+        except ValueError as exc:
+            out(f"{b.batch} on {b.host}: clean failed: {exc}")
+            failed.append(b.batch)
+            continue
+        try:
+            proc = tools.run(
+                b.host, remote_clean_command(b, target=target), 120.0, None
+            )
+        except subprocess.TimeoutExpired:
+            out(f"{b.batch} on {b.host}: clean timed out")
+            failed.append(b.batch)
+            continue
+        verdict, line = read_clean_result(proc)
+        out(f"{b.batch} on {b.host}: {line}")
+        if verdict == "removed":
+            run.batches[i] = dataclasses.replace(
+                b, removed_at=datetime.now(UTC).isoformat()
+            )
+            manifest_mod.save(run, root=root)
+        elif verdict == "failed":
+            failed.append(b.batch)
+        else:
+            kept.append(b.batch)
+    if all(b.removed_at for b in run.batches):
+        manifest_mod.retire(run.run_id, root)
+    return kept, failed
+
+
+# How long one `sweep_runs` pass may spend on legs. The lander that calls it has
+# `TimeoutStartSec=30min` for its landings' starts as well, and one leg can take 120s.
+SWEEP_BUDGET_S = 15 * 60
+
+
+def sweep_runs(
+    tools: Tools,
+    open_branches: frozenset[str],
+    out: Callable[[str], None],
+    root: _Path = manifest_mod.MANIFEST_DIR,
+    clock: Callable[[], float] = time.monotonic,
+) -> None:
+    """`clean_run` over every live run under `root`, newest first, within `SWEEP_BUDGET_S`.
+
+    The unattended reverse of `launch` (#8575): nothing else cleans a landed batch unless an
+    operator runs `place clean`. Each leg keeps every safety `clean` has, so a batch whose unit
+    is active, whose tree is dirty or whose branch is unmerged reads `kept`. A batch whose
+    branch still heads an open PR is passed over without a leg, since it cannot be merged
+    yet. Newest first, so a batch that just landed is reached before the budget runs out on
+    old runs that keep their trees.
+
+    Nothing here raises for one run's failure: a run whose manifest cannot be written logs a
+    line and the sweep moves on, because the caller's exit status pages the operator.
+    """
+    deadline = clock() + SWEEP_BUDGET_S
+
+    def wanted(b: Batch) -> bool:
+        return b.branch not in open_branches and clock() < deadline
+
+    for run in reversed(manifest_mod.all_runs(root)):
+        if clock() >= deadline:
+            out(f"clean sweep: out of time at run {run.run_id}; the next pass resumes")
+            return
+
+        def say(line: str, run_id: str = run.run_id) -> None:
+            out(f"clean {run_id}: {line}")
+
+        try:
+            clean_run(run, tools, root, out=say, wanted=wanted)
+        except OSError as exc:
+            say(f"manifest not written: {exc}")
