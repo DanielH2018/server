@@ -67,7 +67,7 @@ def test_a_failed_homelab_fetch_exits_non_zero_with_no_metric_and_no_hold(
 
 def test_only_the_restricted_fetch_carries_error_on_any(host):
     host.publish(V2)
-    host.state["install_failures"] = 1
+    host.state["install_failures"] = 2
 
     result = host.run()
 
@@ -84,7 +84,7 @@ def test_only_the_restricted_fetch_carries_error_on_any(host):
     assert "Dir::Cache::pkgcache=" in indextargets
     assert "Dir::Etc::sourcelist=sources.list.d/homelab.sources" in restricted
     assert full == ["apt-get", "update"]
-    assert len(host.installs()) == 2
+    assert len(host.installs()) == 3
 
 
 # The full apt-get update runs at most once a day, never between 04:00 and 05:59.
@@ -96,17 +96,17 @@ def _full_updates(host: Host) -> int:
 
 def test_a_second_dependency_failure_in_one_day_runs_no_second_full_update(host):
     host.publish(V2)
-    host.state["install_failures"] = 2
+    host.state["install_failures"] = 3
 
     assert host.run().returncode == 1
     assert _full_updates(host) == 1
 
-    host.state["install_failures"] = 1
+    host.state["install_failures"] = 2
     assert host.run().returncode == 1
     assert _full_updates(host) == 0
 
     host.state["today"] = "2026-10-14"
-    host.state["install_failures"] = 1
+    host.state["install_failures"] = 2
     assert host.run().returncode == 0
     assert _full_updates(host) == 1
 
@@ -114,13 +114,13 @@ def test_a_second_dependency_failure_in_one_day_runs_no_second_full_update(host)
 @pytest.mark.parametrize(("hour", "full_updates"), [("04", 0), ("05", 0), ("06", 1)])
 def test_no_full_update_runs_in_the_apt_timers_hours(host, hour, full_updates):
     host.publish(V2)
-    host.state["install_failures"] = 1
+    host.state["install_failures"] = 2
     host.state["hour"] = hour
 
     result = host.run()
 
     assert _full_updates(host) == full_updates
-    assert len(host.installs()) == 1 + full_updates
+    assert len(host.installs()) == 2 + full_updates
     assert result.returncode == (1 if full_updates == 0 else 0), result.stderr
     assert ("between 04:00 and 05:59" in result.stderr) is (full_updates == 0)
 
@@ -138,31 +138,73 @@ def test_no_full_update_runs_in_the_apt_timers_hours(host, hour, full_updates):
             "E: Failed to fetch http://ports.ubuntu.com/pool/main/t/tree/tree.deb  404",
             1,
         ),
+        ("E: Packages need to be removed but remove is disabled.", 1),
     ],
-    ids=["lock-timeout", "dpkg-error", "unresolved-depends", "fetch-failure"],
+    ids=[
+        "lock-timeout",
+        "dpkg-error",
+        "unresolved-depends",
+        "fetch-failure",
+        "removal-refused",
+    ],
 )
 def test_only_a_dependency_failure_earns_the_full_update(host, output, full_updates):
     host.publish(V2)
-    host.state["install_failures"] = 1
+    host.state["install_failures"] = 2
     host.state["install_output"] = output
 
     result = host.run()
 
     assert _full_updates(host) == full_updates
-    assert len(host.installs()) == 1 + full_updates
+    assert len(host.installs()) == (3 if full_updates else 1)
     assert ("not on a dependency" in result.stderr) is (full_updates == 0)
     # A run that spent nothing keeps the day's full update for a dependency failure.
     assert host.state_dir.joinpath("full-update").exists() is bool(full_updates)
 
 
-def test_the_step_6_retry_waits_for_no_lock(host):
+def test_the_step_6_retries_wait_for_no_lock(host):
     host.publish(V2)
-    host.state["install_failures"] = 1
+    host.state["install_failures"] = 2
 
     assert host.run().returncode == 0
-    first, retry = host.installs()
+    first, *retries = host.installs()
     assert "DPkg::Lock::Timeout=600" in first
-    assert "DPkg::Lock::Timeout=0" in retry
+    assert len(retries) == 2
+    assert all("DPkg::Lock::Timeout=0" in retry for retry in retries)
+
+
+# Step 5 resolves against the homelab source alone; the Ubuntu lists are a fallback.
+
+RESTRICTED = (
+    "Dir::Etc::sourcelist=sources.list.d/homelab.sources",
+    "Dir::Etc::sourceparts=-",
+    "Dir::Cache::pkgcache=",
+    "Dir::Cache::srcpkgcache=",
+    "--no-remove",
+)
+
+
+def test_the_first_install_reads_the_homelab_source_alone_and_removes_nothing(host):
+    host.publish(V2)
+
+    assert host.run().returncode == 0
+    (install,) = host.installs()
+    assert all(option in install for option in RESTRICTED)
+
+
+def test_a_dependency_failure_retries_over_every_source_before_a_full_update(host):
+    host.publish(V2)
+    host.state["install_failures"] = 1
+    host.state["install_output"] = (
+        "homelab-daniel-pi : Depends: tree but it is not installable"
+    )
+
+    assert host.run().returncode == 0
+    restricted, everywhere = host.installs()
+    assert all(option in restricted for option in RESTRICTED)
+    assert not any(option in everywhere for option in RESTRICTED)
+    assert _full_updates(host) == 0
+    assert not host.state_dir.joinpath("full-update").exists()
 
 
 # The textfile directory.
