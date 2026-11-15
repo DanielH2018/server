@@ -154,7 +154,7 @@ The slices:
    one full run. Its gate rebuilds each stacked tree from master and the heads and records
    it on each head. Each member then merges in turn, and its own run and master's prove the
    recorded tree and skip. Every member of a red batch lands alone.
-1. **B4, in progress.** D10 below rules its shape, in five pull requests, each landed before
+1. **B4, landed.** D10 below rules its shape, in five pull requests, each landed before
    the next:
     1. A green ready PR that master moved past goes back in the line as a draft
        (`stale_base.rejoin_line`). Landed in #8818, after #8816 moved code to make room.
@@ -165,7 +165,8 @@ The slices:
     1. The limit on live landings becomes one count of 6 across both hosts, taken after the
        merge. The turn is the slot before the merge. The 6 landing slots landed first
        (`land_lib/slots.py`, #8826). Then the three rules that refuse a merge moved inside
-       the turn (`slots.refuse_before_merge`); the per-host limit's count is deleted last.
+       the turn (`slots.refuse_before_merge`, #8830), and last the per-host limit's count,
+       its registry and the slow-runs drop were deleted (#8834).
     1. The switch that turned the turn off for one landing is deleted, so every landing that
        merges directly takes the turn.
        `LAND_TURN_DIR` moves the turn's lock and line for a test that runs a whole landing.
@@ -465,7 +466,8 @@ PR's timeline and landing log:
   stale ready PR inside the turn was refused: each update holds the turn for a whole run.
 - **Pacing is deleted.** A landing that holds the turn skips it, so it held nothing after
   18:20 UTC on 2026-11-14, and 39 holds before that were all of landings without the turn.
-  The slow-runs drop in `live_limit.py` stays until the count is decided.
+  The slow-runs drop in `live_limit.py` stayed until the count was decided, and went with
+  the per-host count.
 - **The count.** Six lock files on daniel-box, beside the turn. The turn is the slot before
   the merge, because only its holder polls PR CI then, and the holder never waits for a slot
   while it holds the turn. Every landing, the holder and each batch member, takes a counted
@@ -478,6 +480,29 @@ PR's timeline and landing log:
   merge no longer strands its members. Such a PR lands as a draft through the turn with
   `LAND_BATCH=0`, not with the turn switched off: a merge without the turn during a batch's
   run breaks that batch, which is why B4's last step removed that switch.
+
+#### What B4 changed, measured
+
+The window is 02:40 to 13:50 UTC on 2026-11-15, from the deletion of pacing (#8821) to the
+last B4 merge but one. The baseline is the window D10 measured, 22:50 UTC on 2026-11-14 to
+00:34 on 2026-11-15. Both counts come from GitHub's run and job listings. The window under
+B4 is thin: 9 merges in 11 hours, mostly overnight. Re-measure over a busy day before
+ruling on anything from it.
+
+- **Full CI runs per merge: 2.0, against 1.76.** Under B4, 18 pull-request runs ran jobs and
+  no master run swept, for 9 merges. The baseline had 29 and 15 for 25 merges. Every full
+  run moved to the pull-request side. One session's branch, which two of the 9 PRs shared,
+  ran 8 of the 18; the other 7 merges took 10, or 1.43 each.
+- **Master runs that skipped as tested: 10 of 10, against 10 of 25.** A run counts as
+  skipped when it ran 2 or fewer jobs.
+- **The waits.** In the landing logs on both hosts, 9 landings took the turn: 8 after 0 s
+  and one on daniel-server after 210 s. 5 landings took a landing slot, all after 0 s and
+  all on daniel-box; the slots have existed since 13:00. No log reads that a landing waited
+  for a slot or went on without one.
+- **The 20-job cap: 0.9 minutes at it, against 25.4.** That is about 0.1 minutes per merge
+  against 1.0. The peak was 20 in both windows. A job counts while it runs between its start
+  and end, and only when it ended in success or failure: a cancelled job carries a start
+  time it never ran from, and counting those reads a peak of 34.
 
 ### Phase C: runner pods for `hooks` and `pytest`
 

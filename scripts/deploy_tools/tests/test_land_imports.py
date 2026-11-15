@@ -149,9 +149,8 @@ ALLOWED = {
     # The fork, the logfile and the verdict wait. It imports no phase: `land.py` hands it a
     # callable and it never knows what a landing is.
     "detach": set(),
-    # The number a new landing is admitted under. It reads master's run count, DEPLOY_HOLD as the pin
-    # gate judges it, and nothing that drives a landing.
-    "live_limit": {"landing", "pin_gate", "pin_reads"},
+    # A PR's kind and the quota floor: GitHub reads only, nothing that drives a landing.
+    "live_limit": set(),
     # The handoff to a lander unit reads the Options it refuses flags from, and prints its own
     # stops through Outcome so they carry the verdict a landing's would.
     "handoff": {"options", "outcome"},

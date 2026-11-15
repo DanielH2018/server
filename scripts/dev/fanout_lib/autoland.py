@@ -18,8 +18,8 @@ never qualifies: flips are `--no-review` and need operator checks before the mer
 read from GitHub must then still be the one the record reviewed: open, not a draft, on
 `worktree-fanout-<batch>`, at the head the record names, with no operator step in its body.
 
-NO PER-PR LOCK. `land.sh` takes none: `land_lib/detach.py` flocks only a per-orchestrator slot
-count, `land_lib/verdict_log.py` flocks only its own log, and `homelab-claude-land@` flocks one
+NO PER-PR LOCK. `land.sh` takes none: `land_lib/slots.py` locks only a count of landing slots,
+`land_lib/verdict_log.py` flocks only its own log, and `homelab-claude-land@` flocks one
 `/var/lock/claude-land.lock` for every PR it lands. So two landings of one PR would both arm
 the merge. This command therefore starts a PR once: it skips a PR whose log directory already holds a `land<pr>-*.log`
 (a landing that ended `refused` or `ci-red` is the operator's to read, not to retry every ten
