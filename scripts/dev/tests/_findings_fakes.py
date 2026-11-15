@@ -160,6 +160,9 @@ class Fakes:
     # What the board sync answers per issue, `(outcome, detail)`; an issue absent here reads
     # `unchanged`, so no test reaches the real board.
     board: dict[int, tuple[str, str]] = field(default_factory=dict)
+    # What a `gh api` read answers, keyed by its path without the query string, such as
+    # `repos/o/r/issues`. A failure goes in `json_errors` under `api <that path>`.
+    api: dict[str, list[dict]] = field(default_factory=dict)
 
 
 def facts(trees=(), *, dirty=False, merged=False, ok=True):
@@ -216,6 +219,14 @@ def build_tools(f: Fakes | None = None) -> tuple[FindingsTools, Calls]:
 
     def gh_json(*argv, **kwargs):
         calls.gh_json.append(list(argv))
+        if argv[0] == "api":
+            assert "--repo" not in argv, f"gh api rejects --repo: {argv}"
+            path = argv[1].split("?")[0]
+            if f"api {path}" in f.json_errors:
+                raise f.json_errors[f"api {path}"]
+            if path not in f.api:
+                raise AssertionError(argv)
+            return list(f.api[path])
         key = " ".join(argv[:2])
         if key in f.json_errors:
             raise f.json_errors[key]

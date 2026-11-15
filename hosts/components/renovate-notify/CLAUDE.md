@@ -49,11 +49,18 @@ days late, and why a reset posts twice.
 
 ## Notification is fingerprint-gated, not state-gated
 
-`fingerprint()` is the whole dedupe: the digest posts when the fingerprint changes and stays
-silent when it does not, so **a standing problem goes quiet after one page** and a new problem
-beside it re-pages. Two qualifications: `stuck` PRs carry an age dimension, so one broken for
-weeks re-pages at 1/3/7/14 days, and the fingerprint persists only on confirmed delivery, so a
-failed Discord post retries next run.
+`fingerprint()` (`hosts/components/renovate-notify/files/notify_logic.py:fingerprint`) is the
+whole dedupe: the digest posts when the fingerprint changes and stays
+silent when it does not
+(`hosts/components/renovate-notify/tests/test_notify_logic.py::test_should_notify_unchanged_is_silent`),
+so **a standing problem goes quiet after one page** and a new problem
+beside it re-pages
+(`hosts/components/renovate-notify/tests/test_notify_logic.py::test_should_notify_changed_backlog_is_digest`).
+Two qualifications: `stuck` PRs carry an age dimension, so one broken for
+weeks re-pages at 1/3/7/14 days
+(`hosts/components/renovate-notify/tests/test_notify_logic.py::test_should_notify_repages_when_stuck_pr_crosses_age_threshold`),
+and the fingerprint persists only on confirmed delivery, so a
+failed Discord post retries next run (`hosts/components/renovate-notify/files/renovate_notify.py:main`).
 
 ## Liveness, and the sandbox
 
@@ -93,8 +100,9 @@ captured-fixture rule a new parsing arm meets, is in `docs/renovate-notify-inter
 ## Verifying a deploy took effect
 
 The package installs to `/usr/lib/homelab/renovate-notify/`, its state to `/var/lib/renovate-notify/`.
-`last_run` is written **only on clean completion**, so its mtime is the honest signal the
-deployed code ran end-to-end:
+`last_run` is written **only on clean completion**
+(`hosts/components/renovate-notify/files/renovate_notify.py:main`), so its mtime is the
+honest signal the deployed code ran end-to-end:
 
 ```bash
 systemctl show homelab-renovate-notify.service -p ExecMainStatus -p ExecMainStartTimestamp

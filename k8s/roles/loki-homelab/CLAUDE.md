@@ -1,8 +1,11 @@
 # loki-homelab — the cluster log store (separate from observability's Loki)
 
-Grafana Loki plus a Grafana Alloy DaemonSet that ships every pod's logs to it. Deliberately
-separate from the `observability` Loki (decision KL1, `docs/archive/.../slice-7-phase-d-loki.md`)
-— merging would give the verbatim-prompts store this role's LAN route, which it must not have.
+Grafana Loki plus a Grafana Alloy DaemonSet
+(`k8s/roles/loki-homelab/templates/alloy-daemonset.yaml.j2`) that ships every pod's logs to it.
+Deliberately separate from the `observability` Loki (decision KL1,
+`docs/archive/k3s-migration/slice-7-phase-d-loki.md`) — merging would give the
+verbatim-prompts store this role's LAN route
+(`k8s/roles/loki-homelab/templates/ingressroute.yaml.j2`), which it must not have.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in k8s/roles/longhorn-reconcile/defaults/main.yml. -->
@@ -13,26 +16,38 @@ separate from the `observability` Loki (decision KL1, `docs/archive/.../slice-7-
 - **Claim:** `loki-homelab-data` (no backup (StorageClass longhorn-nobackup))
 <!-- /generated_from -->
 
-- **A separate `ingressroute-push` router** is daniel-pi's push-only door.
+- **A separate `ingressroute-push` router**
+  (`k8s/roles/loki-homelab/templates/ingressroute-push.yaml.j2`) is daniel-pi's push-only door.
 - **Persists:** `loki-homelab-data` (`longhorn-nobackup`, 5Gi) — logs, `744h` retention; treated
-  as bulky and reconstructible in spirit, so the retention window is the real bound, not backup.
+  as bulky and reconstructible in spirit, so the retention window is the real bound, not backup
+  (`k8s/roles/loki-homelab/defaults/main.yml:loki_homelab_storage_class`,
+  `k8s/roles/loki-homelab/defaults/main.yml:loki_homelab_size`,
+  `k8s/roles/loki-homelab/defaults/main.yml:loki_homelab_retention`).
 - **The monitors that read from here:** the ruler's own rules and monitor-bridge's remaining
-  LogQL checks. A broken apply blinds the LogQL checks without paging. The host crons'
+  LogQL check, the HA ban arm
+  (`k8s/roles/monitor-bridge/files/checks/service.py:with_ha_ban`). A broken apply blinds
+  the LogQL check without paging. The host crons'
   `status=` lines land here too, as the local record of each verdict.
-- **Flux applies it.** Its `containers_list` entry is `platform:
-  k8s`, so nothing applies it by hand, and a merged change reaches the cluster when `promote`
+- **Flux applies it.** Its `containers_list` entry is in `cluster/services.yml`, so nothing
+  applies it by hand, and a merged change reaches the cluster when `promote`
   publishes and verifies the next bundle. Its image-bump PRs therefore draw no `land-wait` and no
-  `probe.py health` run. traefik is flux-owned too, so the Kustomization lists it in `dependsOn`,
+  `probe.py health` run. traefik is flux-owned too, so the Kustomization lists it in `dependsOn`
+  (`scripts/renderer/template_filters/toposort.py:_role_renders_traefik_crd`),
   and Flux applies this tag only after its Kustomization is Ready. The Loki Deployment is
-  `Recreate`, so a change that rolls it takes log queries, pushes and the ruler down briefly.
+  `Recreate` (`k8s/roles/loki-homelab/templates/deployment.yaml.j2`), so a change that rolls
+  it takes log queries, pushes and the ruler down briefly.
 - **Its rollout.** Its default `manifests_rollout: loki-homelab` and the `alloy` entry in
   `manifests_extra_rollouts` name the two workloads the renderer stamps with the restart
-  checksum. The Kustomization's `wait` holds both rollouts. `k8s_autodeploy: false` gates no
+  checksum (`k8s/roles/loki-homelab/defaults/main.yml:manifests_rollout`,
+  `k8s/roles/loki-homelab/defaults/main.yml:manifests_extra_rollouts`). The Kustomization's
+  `wait` holds both rollouts (`scripts/renderer/renderer_lib/bundle.py:tag_kustomization`).
+  `k8s_autodeploy: false` (`k8s/roles/loki-homelab/defaults/main.yml:k8s_autodeploy`) gates no
   apply: Flux applies every merged change. It still stops Renovate automerging the image bump.
 - **Flux prunes the cluster-scoped RBAC.** Flux prunes by its own inventory, which holds the Alloy ClusterRole and
   ClusterRoleBinding, so dropping one
-  from `alloy-daemonset.yaml.j2` deletes it live at the next promotion.
-  Deleting the Kustomization deletes them too, because the tag takes the default deletion policy.
+  from `k8s/roles/loki-homelab/templates/alloy-daemonset.yaml.j2` deletes it live at the next
+  promotion. Deleting the Kustomization deletes them too, because the tag takes the default
+  deletion policy (`scripts/renderer/renderer_lib/bundle.py:DELETING_SUFFIXES`).
 
 ## Notable
 - **The renderer's restart checksum rolls each workload when a ConfigMap it mounts changes.**
@@ -106,21 +121,27 @@ separate from the `observability` Loki (decision KL1, `docs/archive/.../slice-7-
 
 ## Ruler
 
-Loki's ruler evaluates the LogQL rules in `files/rules/` and sends each firing alert to
-Alertmanager in the observability namespace, on its Service at port 9093.
+Loki's ruler evaluates the LogQL rules in `k8s/roles/loki-homelab/files/rules/` and sends each
+firing alert to Alertmanager in the observability namespace, on its Service at port 9093
+(`k8s/roles/loki-homelab/templates/configmap.yaml.j2`).
 
 - **The tenant directory is a ConfigMap mount.** `templates/rules-configmap.yaml.j2` renders
-  the `loki-homelab-rules` ConfigMap, one key per group in `loki_homelab_rule_groups`. The
+  the `loki-homelab-rules` ConfigMap, one key per group in `loki_homelab_rule_groups`
+  (`k8s/roles/loki-homelab/defaults/main.yml:loki_homelab_rule_groups`). The
   Deployment mounts it at `/etc/loki-rules/fake`, because `fake` is the tenant Loki uses when
   `auth_enabled` is false. The ruler's scratch copy, `rule_path`, sits on the claim.
 - **A new rule file joins the list in the same commit.** The template names each file rather
   than globbing, so a file the list omits never reaches the ruler. The `validate-alert-rules`
-  hook fails when the files, the list and the rendered keys disagree, and it parses every
-  expression with `lokitool`.
-- **The group interval sets the query load.** `homelab-logs` evaluates every 5m, the
+  hook fails when the files, the list and the rendered keys disagree
+  (`scripts/validate/tests/test_validate_alert_rules.py::test_a_loki_rule_file_the_list_does_not_name_is_flagged`),
+  and it parses every expression with `lokitool`
+  (`scripts/validate/tests/test_validate_alert_rules.py::test_a_lokitool_rejection_of_a_loki_rule_file_is_flagged`).
+- **The group interval sets the query load.** `homelab-logs` evaluates every 5m
+  (`k8s/roles/loki-homelab/files/rules/homelab-logs.yaml`), the
   monitor-bridge `INTERVAL`, rather than Loki's 1m default. Each evaluation is a range query
   on this Loki.
-- **Every rules edit restarts Loki.** The Loki Deployment mounts the rules ConfigMap, so the
+- **Every rules edit restarts Loki.** The Loki Deployment mounts the rules ConfigMap
+  (`k8s/roles/loki-homelab/templates/deployment.yaml.j2`), so the
   renderer's restart checksum moves and the `Recreate` pod rolls, which restarts the ruler.
   Alloy does not mount it and does not roll. When a config edit rolls Alloy, it resumes from
   its positions file, so a restart costs an ingestion pause, not lost lines.
@@ -132,7 +153,8 @@ Alertmanager in the observability namespace, on its Service at port 9093.
 ## A departed pod's logs survive it — an empty result is usually the query
 
 Loki keeps what a pod wrote after the pod is deleted, rescheduled or lost to a node reboot.
-Measured 2026-09-10 over a 2-day window on `{namespace="homelab"}`: dozens of ReplicaSet
+
+**HISTORY —** Measured 2026-09-10 over a 2-day window on `{namespace="homelab"}`: dozens of ReplicaSet
 generations that no longer exist still answer — `artifacts-7989779d8b-29kwl`,
 `authelia-558c86567-fv9cr`, eight `homepage-*` pods — several with lines continuing past their
 successor's first line. `speedtest-685455d6d9-fb847`, the pod #1604 reported as holding
@@ -140,7 +162,8 @@ nothing, answers with its `Pinged hostname` line stamped `2026-09-09 11:00:04`.
 
 So an empty result for a pod that went away is a claim about the query, not about the pod,
 until you have ruled out the query's window and its line budget. `probe.py loki-query --help`
-gives each default under `--since` and `--limit`, and says how each one returns nothing for a
+(`scripts/diagnostics/probe_lib/cli_parser.py:_build_parser`) gives each default under
+`--since` and `--limit`, and says how each one returns nothing for a
 pod that did log.
 
 What is genuinely not durable is narrower than "the pod's logs": a line the container writes

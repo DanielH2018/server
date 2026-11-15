@@ -43,8 +43,10 @@ because the daemon's `homelab-games` token can change the replica count of the D
 ## In flight
 
 The panel reads the git-tree lock only. The unit passes its path in as
-`DEPLOY_UI_TREE_LOCK`, and the panel lists no other lock file. A missing file leaves
-`locks_watched` empty, which the page renders as its own state rather than `free`.
+`DEPLOY_UI_TREE_LOCK`, and the panel lists no other lock file
+(`hosts/components/deploy-ui/tests/test_deploy_ui_app.py::test_inflight_ignores_other_lock_files_in_the_tree_locks_directory_is_flagged`).
+A missing file leaves `locks_watched` empty, which the page renders as its own state rather
+than `free` (`hosts/components/deploy-ui/tests/test_deploy_ui_app.py::test_inflight_with_no_lock_files_says_so_is_flagged`).
 
 Two sources, because neither alone says who holds what. One merged-stream `fuser` call over
 the tree lock names the processes with the file OPEN. A process blocked on the lock has the
@@ -52,32 +54,44 @@ file open too, so fuser lists the waiter exactly like the holder (measured: a `f
 holder and a `flock -w` waiter both appear). `/proc/locks` is the kernel's own table: a
 granted flock per file, and a `->` line with a live pid for each process blocked on it.
 The pid on a granted line can be dead when a `flock` child took the lock on an inherited
-descriptor, so the holder comes from fuser and only the waiter from `/proc/locks`.
+descriptor, so the holder comes from fuser and only the waiter from `/proc/locks`
+(`hosts/components/deploy-ui/tests/test_deploy_ui_app.py::test_inflight_lists_the_tree_lock_holder_and_waiter_is_clean`).
 
 `ps` with `ppid` folds each process family to one row carrying `locks` (held) and
 `waiting_on`. A landing (`land.py`, its `uv run` wrapper and its children) is one `land`
-row. A holder that is not a landing, such as `homelab-checkout-sync` on the tree lock, is a `lock`
-row rather than nothing. A `grep` for a run is not a run. fuser lists only processes whose `/proc/<pid>/fd` this
+row (`hosts/components/deploy-ui/tests/test_deploy_ui_reads.py::test_runs_fold_each_family_to_its_root_is_clean`).
+A holder that is not a landing, such as `homelab-checkout-sync` on the tree lock, is a `lock`
+row rather than nothing (`hosts/components/deploy-ui/tests/test_deploy_ui_reads.py::test_runs_bare_lock_holder_is_a_row_is_clean`).
+A `grep` for a run is not a run (`hosts/components/deploy-ui/tests/test_deploy_ui_reads.py::test_runs_ignore_grep_shells_is_flagged`). fuser lists only processes whose `/proc/<pid>/fd` this
 user can read; every landing here runs as `{{ sys_user }}`, the daemon's own user.
 
 A landing row carries its PR's title. A landing merges its PR mid-run, which drops it from
 `gh pr list`, so `_pr_title` reads the title with `gh pr view <n>` and caches it for the
-daemon's life. A failed lookup leaves the title blank and is retried on the next poll; it
-never makes the lock panel unavailable. The page links each PR number to its GitHub page.
+daemon's life (`hosts/components/deploy-ui/tests/test_deploy_ui_app.py::test_inflight_landing_carries_its_pr_title_once_fetched_is_clean`).
+A failed lookup leaves the title blank and is retried on the next poll; it
+never makes the lock panel unavailable (`hosts/components/deploy-ui/tests/test_deploy_ui_app.py::test_inflight_title_lookup_failure_leaves_panel_up_is_flagged`).
+The page links each PR number to its GitHub page (`hosts/components/deploy-ui/tests/test_deploy_ui_app.py::test_page_links_pr_numbers_to_github_is_clean`).
 
-Only a `land` row is cancellable.
+Only a `land` row is cancellable (`hosts/components/deploy-ui/tests/test_deploy_ui_app.py::test_cancel_lock_row_is_flagged`).
 
 The daemon runs outside the venv. The unit renders `DEPLOY_UI_TREE_LOCK` from
-`server_git_tree_lock`.
+`inventory/group_vars/all.yml:server_git_tree_lock`.
 
 ## Writes
 
-Land spawns `land.sh` detached and logs to `~/.local/state/deploy-ui/`. Land and cancel each
-emit one logfmt line via `logger -t deploy-ui`. The page reads no hold itself: `land.sh`
-refuses a landing under `DEPLOY_HOLD` itself, and the hold is cleared with `gh variable set
-DEPLOY_HOLD --body none`, never from this page.
+Land spawns `land.sh` detached and logs to `~/.local/state/deploy-ui/`
+(`hosts/components/deploy-ui/tests/test_deploy_ui_app.py::test_land_spawns_land_sh_is_clean`).
+Land and cancel each emit one logfmt line via `logger -t deploy-ui`
+(`hosts/components/deploy-ui/files/deploy_ui_lib/deploy_ui_writes.py:audit`). The page reads
+no hold itself: `land.sh` meets `DEPLOY_HOLD` on its own. A PR that bumps a forward-only pin
+is refused before it merges
+(`scripts/deploy_tools/tests/test_land_pin_gate.py::test_a_bump_is_refused_unless_deploy_hold_reads_none`).
+Any other landing under the hold merges and ends `deploy-failed` with cause `promote-held`
+(`scripts/deploy_tools/tests/test_promote_land_wait.py::test_a_hold_set_before_the_merge_ends_the_wait_at_the_first_poll`).
+The hold is cleared with `gh variable set DEPLOY_HOLD --body none`, never from this page.
 
-Log names carry a `mkstemp` suffix as well as the second-granular timestamp. Two landings in
+Log names carry a `mkstemp` suffix as well as the second-granular timestamp
+(`hosts/components/deploy-ui/tests/test_deploy_ui_writes.py::test_spawn_logged_never_takes_a_name_already_on_disk`). Two landings in
 one second used to name the same file, and the second open truncated a log the first process
 still held.
 
@@ -133,7 +147,9 @@ some down) or `missing`.
 ### Starting and stopping a game
 
 `POST /api/game {game, action}` with `action` one of `start`, `stop` or `restart` scales every
-Deployment the game lists, together. `GameControl` in `files/deploy_ui_lib/deploy_ui_game_control.py`
+Deployment the game lists, together
+(`hosts/components/deploy-ui/tests/test_deploy_ui_game_control.py::test_start_and_stop_scale_every_deployment_of_the_game_is_clean`).
+`hosts/components/deploy-ui/files/deploy_ui_lib/deploy_ui_game_control.py:GameControl`
 owns the games' reads and writes, and `App` routes to it as `App.games`. No template renders those counts (ADR-0033), so Flux leaves
 them where the panel sets them.
 
@@ -141,34 +157,45 @@ them where the panel sets them.
   `games_panel_token` credential, which the unit imports with `ImportCredential=` and
   `/run/credstore` supplies; it travels on curl's stdin as a header file, never in argv, which
   `ps` shows to every user. The API server's URL and CA come from the read-only kubeconfig. Each
-  write carries `fieldManager=deploy-ui-games`, which Flux's takeover leaves alone.
+  write carries `fieldManager=deploy-ui-games`
+  (`hosts/components/deploy-ui/files/deploy_ui_lib/deploy_ui_game_control.py:GAMES_FIELD_MANAGER`),
+  which Flux's takeover leaves alone.
 - **A missing credential refuses writes, not the page.** `ImportCredential=` starts the unit
-  without it, and each write answers 503 naming the operator's `host_secrets.py sync daniel-box`.
+  without it, and each write answers 503 naming the operator's `host_secrets.py sync daniel-box`
+  (`hosts/components/deploy-ui/tests/test_deploy_ui_game_control.py::test_a_write_without_the_token_is_unavailable_is_flagged`).
 - **A restart is a stop, then a start.** The Deployments are `Recreate` over RWO claims, so
   `finish_restart` waits on its own thread for the game's pods to go, up to `restart_wait_s`,
-  then scales back to 1. A wait that runs out leaves the game stopped and says so in an audit
-  line.
+  then scales back to 1
+  (`hosts/components/deploy-ui/tests/test_deploy_ui_game_control.py::test_a_restart_stops_the_game_then_starts_it_again_is_clean`).
+  A wait that runs out leaves the game stopped and says so in an audit
+  line (`hosts/components/deploy-ui/tests/test_deploy_ui_game_control.py::test_a_restart_whose_pods_never_go_leaves_the_game_stopped_is_flagged`).
 - **`start_refused` on a game's entry refuses start and restart**, with its text as the 409
-  reason; stop stays allowed. terraria carries one until issue #822's restore checklist is done.
+  reason (`hosts/components/deploy-ui/tests/test_deploy_ui_game_control.py::test_a_refused_start_scales_nothing_is_flagged`);
+  stop stays allowed (`hosts/components/deploy-ui/tests/test_deploy_ui_game_control.py::test_a_refused_game_can_still_be_stopped_is_clean`).
+  terraria carries one until issue #822's restore checklist is done
+  (`inventory/group_vars/all.yml:game_servers`).
 - Every action writes one audit line through `logger -t deploy-ui`:
   `action=game-<action> game=<name>`, and the restart's outcome as
-  `action=game-restart game=<name> result=started|left-stopped`.
+  `action=game-restart game=<name> result=started|left-stopped`
+  (`hosts/components/deploy-ui/tests/test_deploy_ui_game_control.py::test_a_restart_stops_the_game_then_starts_it_again_is_clean`).
 
 ## Usage count
 
 The daemon writes one logfmt line per request to its unit journal (#2864):
 `request method=GET path=/ status=200 user=<Remote-User>`. `user` is the Authelia login
 Traefik forwards, and `-` for a caller that reached the port around Authelia. The query
-string is dropped, so a log path never reaches the journal.
+string is dropped, so a log path never reaches the journal
+(`hosts/components/deploy-ui/tests/test_deploy_ui_app.py::test_request_line_drops_the_query_and_neuters_a_hostile_user_is_flagged`).
 
 A client that closes the connection mid-response adds a second line,
 `client-disconnected method=GET path=/ status=200 user=<Remote-User>`, in place of a
 `BrokenPipeError` traceback that HostLogErrors would count (#7921). It opens with a word
-other than `request`, so the count below does not see the request twice.
+other than `request`, so the count below does not see the request twice
+(`hosts/components/deploy-ui/tests/test_deploy_ui_app.py::test_client_closing_mid_response_logs_one_line_no_traceback_is_flagged`).
 
-The page polls five panels every 10 seconds, so an open tab writes about 30 lines a minute,
-and 24 while the finished list is hidden, because the page skips its fetch. An open game
-console adds 6 more.
+The page polls four panels every 10 seconds, so an open tab writes about 24 lines a minute,
+and 18 while the finished list is hidden, because the page skips its fetch. An open game
+console adds 6 more (`hosts/components/deploy-ui/files/deploy_ui.html`).
 An open landing viewer polls `/api/log` every 2 seconds and adds 30 more. Those polls show a tab was open, not that anyone used it. Count page
 loads and writes instead:
 
@@ -176,10 +203,12 @@ loads and writes instead:
 journalctl -u deploy-ui --since -30d | grep -cE 'request method=GET path=/ |request method=POST'
 ```
 
-journald on daniel-box is capped at 1G (`SystemMaxUse`), which held entries back to
-2026-07-31 on 2026-09-30, so a 30-day window fits. `request_line` in `files/deploy_ui.py`
+journald on daniel-box is capped at 1G (`SystemMaxUse`,
+`hosts/lib/tests/test_pi_sshd_apt_and_tuning.py::test_journald_and_limits_ship_as_drop_ins`), which held entries back to
+2026-07-31 on 2026-09-30, so a 30-day window fits. `hosts/components/deploy-ui/files/deploy_ui.py:request_line`
 formats the line with host_lib's `logfmt`, so a path holding a space or a quote is quoted
-rather than split (#6202). The component installs `host_lib.py` beside the daemon for it. The `user`
+rather than split (#6202,
+`hosts/components/deploy-ui/tests/test_deploy_ui_app.py::test_request_line_quotes_a_path_logfmt_would_split_is_flagged`). The component installs `host_lib.py` beside the daemon for it. The `user`
 value is narrowed to `[\w.@-]` first, because `logfmt` quotes a newline without escaping it.
 The line is unit-tested.
 

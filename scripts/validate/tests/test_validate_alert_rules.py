@@ -133,6 +133,7 @@ def test_a_tool_rejecting_the_rendered_config_is_flagged():
 
 
 def test_a_lokitool_rejection_of_a_loki_rule_file_is_flagged():
+    # fact: k8s/roles/loki-homelab/CLAUDE.md#Ruler
     problems = alert_rules.check_tree(
         run=lambda argv: (
             (1, "could not parse expression")
@@ -406,6 +407,7 @@ def test_the_loki_rule_files_their_list_and_their_configmap_agree_is_clean():
 
 
 def test_a_loki_rule_file_the_list_does_not_name_is_flagged(tmp_path):
+    # fact: k8s/roles/loki-homelab/CLAUDE.md#Ruler
     for stem in ("homelab-logs", "stray"):
         (tmp_path / f"{stem}.yaml").write_text("groups: []\n")
 

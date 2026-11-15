@@ -85,6 +85,7 @@ def _write_root_files(role, configuration="{}\n"):
 
 
 def test_assemble_rejects_ansible_markers(tmp_path):
+    # fact: k8s/roles/home-assistant/CLAUDE.md#The one convention that breaks edits
     role = tmp_path / "role"
     _write_root_files(role, "homeassistant:\n  name: {{ ha_name }}\n")
     for d in ("automations", "scripts", "custom_templates"):
@@ -263,6 +264,7 @@ def test_automation_file_list_is_clean_when_it_matches_the_directory(tmp_path):
 
 
 def test_automation_file_list_flags_unlisted_file(tmp_path):
+    # fact: k8s/roles/home-assistant/CLAUDE.md#The one convention that breaks edits
     # The file HA would merge but the ConfigMap would never carry.
     errors = _role_with_shipped_list(tmp_path, ["a.yaml"], ["a.yaml", "new.yaml"])
     assert errors and "new.yaml is not in home_assistant_automation_files" in errors[0]

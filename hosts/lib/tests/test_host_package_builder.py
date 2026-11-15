@@ -244,6 +244,7 @@ def test_a_green_tip_is_built_and_reads_ok_at_zero(lab):
 
 
 def test_a_pending_or_red_tip_over_a_green_parent_builds_the_parent(lab):
+    # fact: hosts/components/builder/CLAUDE.md#Autonomous-role contract (the builder and the signer publish host packages with no human in the loop)
     origin, state, _, github = lab
     parent = origin.commit("a")
     tip = origin.commit("b")
@@ -262,6 +263,7 @@ def test_a_pending_or_red_tip_over_a_green_parent_builds_the_parent(lab):
 
 
 def test_a_green_second_parent_is_never_chosen(lab):
+    # fact: hosts/components/builder/CLAUDE.md#Autonomous-role contract (the builder and the signer publish host packages with no human in the loop)
     origin, state, _, github = lab
     origin.commit("a")
     side, merge = origin.merge_side_branch()
@@ -335,6 +337,7 @@ def test_a_no_green_walk_logs_the_bound_beside_the_unbuilt_count(lab, capsys):
 def test_a_disarmed_ci_config_asks_nothing_builds_nothing_and_pages_once(
     lab, overrides
 ):
+    # fact: hosts/components/builder/CLAUDE.md#Autonomous-role contract (the builder and the signer publish host packages with no human in the loop)
     origin, state, _, github = lab
     tip = origin.commit("a")
     github.runs[tip] = GREEN
@@ -348,6 +351,7 @@ def test_a_disarmed_ci_config_asks_nothing_builds_nothing_and_pages_once(
 
 
 def test_a_tip_that_does_not_descend_from_the_last_built_is_refused(lab):
+    # fact: hosts/components/builder/CLAUDE.md#Autonomous-role contract (the builder and the signer publish host packages with no human in the loop)
     origin, state, _, github = lab
     origin.commit("a")
     built = origin.commit("b")
@@ -366,6 +370,7 @@ def test_a_tip_that_does_not_descend_from_the_last_built_is_refused(lab):
 
 
 def test_a_held_builder_fetches_and_builds_nothing(lab):
+    # fact: hosts/components/builder/CLAUDE.md#Autonomous-role contract (the builder and the signer publish host packages with no human in the loop)
     origin, state, etc, github = lab
     tip = origin.commit("a")
     github.runs[tip] = GREEN
@@ -379,6 +384,7 @@ def test_a_held_builder_fetches_and_builds_nothing(lab):
 
 @pytest.mark.parametrize("case", ["absent", "other-fingerprint"])
 def test_a_keyring_refusal_stages_nothing_and_pages_once(lab, case):
+    # fact: hosts/components/builder/CLAUDE.md#Autonomous-role contract (the builder and the signer publish host packages with no human in the loop)
     origin, state, etc, github = lab
     tip = origin.commit("a")
     github.runs[tip] = GREEN
@@ -418,6 +424,7 @@ class FixedRender(FixtureBuilder):
 
 
 def test_an_unconsumed_staged_set_is_replaced_at_the_new_commit(lab):
+    # fact: hosts/components/builder/CLAUDE.md#Autonomous-role contract (the builder and the signer publish host packages with no human in the loop)
     # The second commit leaves the render unchanged, so only the unconsumed set rule
     # rebuilds the package; without it the old set would sit under a moved `chosen`.
     origin, state, _, github = lab

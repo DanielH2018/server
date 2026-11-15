@@ -137,6 +137,7 @@ def opened(lab):
 
 
 def test_two_changed_host_packages_stage_the_canary_and_the_shared_one(opened):
+    # fact: hosts/components/builder/CLAUDE.md#Autonomous-role contract (the builder and the signer publish host packages with no human in the loop)
     _, _, v, state, _ = opened
     # The first run also built the shared updater, which the gate never holds back.
     assert json.loads((state / "state.json").read_text())["staged"] == [

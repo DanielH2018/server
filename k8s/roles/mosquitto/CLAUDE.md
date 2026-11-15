@@ -1,7 +1,7 @@
 # mosquitto — the MQTT broker for zigbee2mqtt and Home Assistant
 
-Eclipse Mosquitto, the broker every Zigbee device event and HA automation trigger crosses. No
-web UI, no route — infra role.
+Eclipse Mosquitto (the image key in `k8s/roles/mosquitto/defaults/main.yml`), the broker every
+Zigbee device event crosses on its way to Home Assistant. No web UI, no route — infra role.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in k8s/roles/longhorn-reconcile/defaults/main.yml. -->
@@ -42,4 +42,4 @@ web UI, no route — infra role.
   broker state before the gate observes a fault.
 
 ## Editing
-- Broker/password config: `templates/config-secret.yaml.j2`.
+- Broker/password config: `k8s/roles/mosquitto/templates/config-secret.yaml.j2`.

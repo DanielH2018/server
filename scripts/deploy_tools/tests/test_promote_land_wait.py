@@ -42,6 +42,7 @@ def test_an_evicted_run_whose_descendant_settles_settles():
 
 
 def test_a_hold_set_before_the_merge_ends_the_wait_at_the_first_poll():
+    # fact: hosts/components/deploy-ui/CLAUDE.md#Writes
     sim = Sim(polls=[at(P)], holds=[f"{P} failed=bento-pdf"])
     result = sim.wait()
     assert (result.verdict, result.cause) == ("deploy-failed", "promote-held")

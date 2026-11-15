@@ -1,7 +1,9 @@
 # peanut — UPS web dashboard (PeaNUT)
 
-Web UI for the NUT UPS daemon. Reads `upsd` over the in-cluster `nut` Service — it owns no
-UPS state of its own; the physical UPS is USB-attached to daniel-server via the `nut` role.
+Web UI for the NUT UPS daemon. Reads `upsd` over the in-cluster `nut` Service
+(`k8s/roles/peanut/templates/secret.yaml.j2`) — it owns no
+UPS state of its own; the physical UPS is USB-attached to daniel-server via the `nut` role
+(`k8s/roles/nut/templates/deployment.yaml.j2`).
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in k8s/roles/longhorn-reconcile/defaults/main.yml. -->
@@ -37,13 +39,16 @@ UPS state of its own; the physical UPS is USB-attached to daniel-server via the 
 
 ## Notable
 - **`alpine` init container, not the app image**, seeds `/config/settings.yml` from the
-  Secret — PeaNUT's own image has no `cp` binary (`StartError` at first deploy, 2026-08-12).
+  Secret (`k8s/roles/peanut/templates/deployment.yaml.j2`) — PeaNUT's own image has no `cp`
+  binary (`StartError` at first deploy, 2026-08-12).
 - **`fsGroup: 1000`, no `runAsUser` pin.** The image's own non-root `node` user serves the
   page, so pinning a UID here would be an unrelated behavior change. `fsGroup` makes the
   `/app/config` `emptyDir` writable as a supplementary group regardless of which UID the image
   runs as.
 - **`auth.yaml` is regenerated every boot** from `WEB_USERNAME`/`WEB_PASSWORD` into the
-  `peanut-app-config` `emptyDir` — it's absent from the image, not part of the seeded mount.
+  `peanut-app-config` `emptyDir` (`k8s/roles/peanut/templates/deployment.yaml.j2`) — it's absent
+  from the image, not part of the seeded mount.
 
 ## Editing
-- Manifest: `templates/deployment.yaml.j2` · Secret: `templates/secret.yaml.j2`
+- Manifest: `k8s/roles/peanut/templates/deployment.yaml.j2` · Secret:
+  `k8s/roles/peanut/templates/secret.yaml.j2`

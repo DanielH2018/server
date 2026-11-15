@@ -215,6 +215,7 @@ def test_an_existing_snapshot_of_the_same_name_fails_and_is_not_adopted(world):
 
 
 def test_a_mark_removed_snapshot_does_not_count_toward_retention(world):
+    # fact: k8s/roles/volume-snapshot/CLAUDE.md#Pruning is asynchronous, and a lingering CR is normal
     world.claim("sonarr-config")
     # Retain 3: this run's plus two older live ones. The markRemoved CR sits between them, so
     # counting it would push one more live snapshot out of the window.
@@ -239,6 +240,7 @@ def test_a_retain_below_two_still_keeps_two(world):
 
 
 def test_a_reached_cap_fails_naming_the_cap_before_any_claim_is_snapshotted(world):
+    # fact: k8s/roles/volume-snapshot/CLAUDE.md#What fails the Job
     world.claim("sonarr-config")
     world.claim("sonarr-logs")
     world.caps["pvc-sonarr-logs"] = "100"
@@ -275,6 +277,7 @@ def test_a_listing_that_lacks_the_new_snapshot_fails_before_any_delete(world):
 
 
 def test_a_new_claim_absent_live_and_from_the_inventory_is_skipped_and_logged(world):
+    # fact: k8s/roles/volume-snapshot/CLAUDE.md#What fails the Job
     world.claim("sonarr-config")
     logged = _run(world, "sonarr-config", "sonarr-new")
     assert any(line.startswith("skip media/sonarr-new:") for line in logged)
@@ -283,6 +286,7 @@ def test_a_new_claim_absent_live_and_from_the_inventory_is_skipped_and_logged(wo
 
 
 def test_a_claim_the_inventory_lists_and_the_cluster_lacks_fails_naming_the_pvc(world):
+    # fact: k8s/roles/volume-snapshot/CLAUDE.md#What fails the Job
     world.claim("sonarr-config")
     world.inventory("sonarr-new")
     with pytest.raises(Failed, match="PVC media/sonarr-new is gone"):

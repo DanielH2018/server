@@ -84,6 +84,7 @@ def _act(control, game, action):
 def test_start_and_stop_scale_every_deployment_of_the_game_is_clean(
     tmp_path, action, replicas
 ):
+    # fact: hosts/components/deploy-ui/CLAUDE.md#Starting and stopping a game
     control, audited = _control(tmp_path, APISERVER)
     assert _act(control, "valheim", action)[0] == 200
     calls = _scale_calls(control)
@@ -103,6 +104,7 @@ def test_start_and_stop_scale_every_deployment_of_the_game_is_clean(
 
 @pytest.mark.parametrize("action", ["start", "restart"])
 def test_a_refused_start_scales_nothing_is_flagged(tmp_path, action):
+    # fact: hosts/components/deploy-ui/CLAUDE.md#Starting and stopping a game
     control, audited = _control(tmp_path, APISERVER)
     status, text = _act(control, "terraria", action)
     assert (status, "issue #822" in text) == (409, True)
@@ -110,6 +112,7 @@ def test_a_refused_start_scales_nothing_is_flagged(tmp_path, action):
 
 
 def test_a_refused_game_can_still_be_stopped_is_clean(tmp_path):
+    # fact: hosts/components/deploy-ui/CLAUDE.md#Starting and stopping a game
     control, _ = _control(tmp_path, APISERVER)
     assert _act(control, "terraria", "stop")[0] == 200
     assert len(_scale_calls(control)) == 1
@@ -122,6 +125,7 @@ def test_an_unknown_action_scales_nothing_is_flagged(tmp_path):
 
 
 def test_a_write_without_the_token_is_unavailable_is_flagged(tmp_path):
+    # fact: hosts/components/deploy-ui/CLAUDE.md#Starting and stopping a game
     control, _ = _control(tmp_path, APISERVER, token=False)
     with pytest.raises(Unavailable, match="games token is not loaded"):
         _act(control, "valheim", "start")
@@ -138,6 +142,7 @@ def test_a_restart_starts_the_game_once_its_pods_are_gone_is_clean(tmp_path):
 
 
 def test_a_restart_whose_pods_never_go_leaves_the_game_stopped_is_flagged(tmp_path):
+    # fact: hosts/components/deploy-ui/CLAUDE.md#Starting and stopping a game
     control, audited = _control(
         tmp_path, {**APISERVER, PODS: ("pod/valheim-abc\n", 0)}, restart_wait_s=0
     )
@@ -147,6 +152,7 @@ def test_a_restart_whose_pods_never_go_leaves_the_game_stopped_is_flagged(tmp_pa
 
 
 def test_a_restart_stops_the_game_then_starts_it_again_is_clean(tmp_path):
+    # fact: hosts/components/deploy-ui/CLAUDE.md#Starting and stopping a game
     control, audited = _control(tmp_path, {**APISERVER, PODS: ("", 0)})
     restarted = threading.Event()
 

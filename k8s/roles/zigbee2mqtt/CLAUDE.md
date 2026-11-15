@@ -1,6 +1,7 @@
 # zigbee2mqtt — Zigbee coordinator bridge (SLZB-06M → MQTT)
 
-Zigbee2MQTT 2.x bridging the network-attached SLZB-06M coordinator into MQTT/Home Assistant.
+Zigbee2MQTT 2.x (the image key in `k8s/roles/zigbee2mqtt/defaults/main.yml`) bridging the
+network-attached SLZB-06M coordinator into MQTT/Home Assistant.
 See repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
@@ -174,8 +175,9 @@ from config and logs `Config does not match backup`:
   config, which the adapter then leaves.
 - The backup's PAN ID, extended PAN ID and network key match config. They do here because
   config pins all three (`network_key`, `pan_id` and `ext_pan_id` in
-  `templates/config/configuration.yaml.j2`).
-- The backup's channel is in config's channel list. Config sets none, so Zigbee2MQTT's default
+  `k8s/roles/zigbee2mqtt/templates/config/configuration.yaml.j2`).
+- The backup's channel is in config's channel list. Config sets none
+  (`k8s/roles/zigbee2mqtt/templates/config/configuration.yaml.j2`), so Zigbee2MQTT's default
   list applies.
 - The backup file records EZSP version 12 or later (`BACKUP_OLDEST_SUPPORTED_EZSP_VERSION`).
   The adapter renames an older file to `.old` and forms fresh. This floor applies to the

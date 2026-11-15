@@ -128,6 +128,7 @@ def test_the_service_list_is_json_and_holds_the_platform_names() -> None:
     workload names it contributes are absent from this render and present on a real deploy —
     asserting them here would pin the stub rather than the manifest.
     """
+    # fact: k8s/roles/artifacts/CLAUDE.md#Retiring a service does not remove it from the index
     names = json.loads(_configmap()["data"]["known_services.json"])
     assert "k3s" in names
     assert "kopia" in names, (

@@ -1,7 +1,8 @@
 # headlamp — read-only Kubernetes dashboard
 
 Headlamp, browsing the cluster with the built-in `view` ClusterRole plus a handful of CRD
-groups it doesn't cover. See repo-root `CLAUDE.md`.
+groups it doesn't cover (`k8s/roles/headlamp/defaults/main.yml:headlamp_k8s_crd_api_groups`).
+See repo-root `CLAUDE.md`.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in k8s/roles/longhorn-reconcile/defaults/main.yml. -->
@@ -108,6 +109,7 @@ trust in Authelia (`hosts/components/k3s-server/`), the Authelia client, and the
   re-reads the ServiceAccount token.
 
 ## Editing
-- Manifests: everything under `templates/`. Three carry a rule of their own.
-  `rbac.yaml.j2` holds the cluster identity, `rbac-observability.yaml.j2` holds the Prometheus
-  proxy Role, and `oidc-secret.yaml.j2` holds the OIDC client secret.
+- Manifests: everything under `k8s/roles/headlamp/templates/`. Three carry a rule of their own.
+  `k8s/roles/headlamp/templates/rbac.yaml.j2` holds the cluster identity,
+  `k8s/roles/headlamp/templates/rbac-observability.yaml.j2` holds the Prometheus proxy Role, and
+  `k8s/roles/headlamp/templates/oidc-secret.yaml.j2` holds the OIDC client secret.

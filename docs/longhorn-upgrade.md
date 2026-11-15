@@ -117,9 +117,12 @@ merges it outside `land.sh`, runs `land.sh --regate <pr>` for it, then clears th
    concurrent-automatic-engine-upgrade-per-node-limit -o jsonpath='{.value}'` printed `3` on
    2026-10-22, and `tests/longhorn/test_engine_upgrade_limit_is_positive.py` fails a
    render that sets it to `0`. Wait until the previous engine image holds zero references
-   before starting the next hop, because otherwise engine lag compounds across hops:
+   before starting the next hop, because otherwise engine lag compounds across hops. To find
+   the previous image's name, list the images; then wait on its reference count:
    ```bash
    kubectl -n longhorn-system get engineimages.longhorn.io
+   cc-wait k8s-field -n longhorn-system engineimages.longhorn.io/<ei-previous> \
+     '{.status.refCount}' --equals 0
    ```
    Longhorn skips a degraded volume, so a volume that stays on the old image needs its own
    look before the next hop.

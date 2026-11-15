@@ -1,12 +1,18 @@
 # longhorn-reconcile — the hourly job that holds each volume in its backup tier
 
 A CronJob in `longhorn-system` that labels Longhorn Volume CRs with the recurring-job group
-their tier names and sets each Volume's backup target. It is the only writer of those labels.
+their tier names and sets each Volume's backup target
+(`k8s/roles/longhorn-reconcile/files/longhorn_reconcile.py:plan`). It is the only writer of
+those labels.
 
-It does not touch the CSI sidecar Deployments. Their memory request is the `longhorn` role's
-`system-managed-csi-components-resource-limits` Setting, which longhorn-manager enforces. The
-manager clears any other value on its hourly tick, so a patch from this job rolls each of the
-four Deployments about twice an hour (#5958). Do not add a Deployment write here.
+It does not touch the CSI sidecar Deployments
+(`k8s/roles/longhorn-reconcile/tests/test_longhorn_reconcile.py::test_a_run_reads_and_writes_no_deployment`,
+`k8s/roles/longhorn-reconcile/tests/test_longhorn_reconcile_render.py::test_the_role_grants_nothing_on_deployments`).
+Their memory request is the `longhorn` role's `system-managed-csi-components-resource-limits`
+Setting (`k8s/roles/longhorn/defaults/main.yml:k3s_longhorn_csi_sidecar_memory_request`), which
+longhorn-manager enforces. The manager clears any other value on its hourly tick, so a patch
+from this job rolls each of the four Deployments about twice an hour (#5958). Do not add a
+Deployment write here.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in k8s/roles/longhorn-reconcile/defaults/main.yml. -->
