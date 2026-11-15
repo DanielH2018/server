@@ -80,6 +80,7 @@ def test_claim_reaps_the_issue_once_its_batch_has_finished_is_stale(capsys):
 
 
 def test_reap_leaves_a_claim_a_running_batch_holds_is_held(capsys):
+    # fact: .claude/skills/issue-fanout/SKILL.md#2. Claim before spawning, under the orchestrator's own worktree name
     tools, calls = _tools(RUNNING)
     assert main(["reap"], tools) == 0
     assert "0 stale claim(s) released" in capsys.readouterr().out

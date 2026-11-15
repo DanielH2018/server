@@ -28,10 +28,9 @@ Take the items in this order. Each names the effort it needs from an Opus sessio
 2. **Mask the generated block in `has_prose`.** Done on 2026-11-15
    ([#8787](https://github.com/DanielH2018/server/issues/8787)). A section that holds only a
    `generated_from` block no longer ranks in the backlog.
-3. **The sections the sweep kept back.** Medium effort, in a solo session and not a
-   fan-out batch. `.claude/rules/docker.md` has two uncited sections, and
-   `.claude/skills/issue-fanout/SKILL.md` has four. The skill describes the batch
-   pipeline, so an issue that cites it reads as solo-only.
+3. **The sections the sweep kept back.** Done on 2026-11-15. The two sections of
+   `.claude/rules/docker.md` and the four of `.claude/skills/issue-fanout/SKILL.md` cite
+   what holds them up, and none ranks in the backlog.
 4. **G11 step 3.** High effort, solo. Rewrite `.claude/rules/facts.md` to the end-state
    model in the G11 plan's design, and replace tiers 2 and 3 of
    `.claude/agents/homelab-docs-freshness-reviewer.md` with a read of the sections that

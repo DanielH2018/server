@@ -65,6 +65,7 @@ def test_the_real_project_passes_every_census_with_docker_proxy_in_it(package):
 
 def test_the_proxies_join_the_networks_the_ansible_era_containers_use(package):
     """homelab-compose.service creates both external networks, and alloy and autoheal join them."""
+    # fact: .claude/rules/docker.md#Conventions
     body = project_of(package)["files"][f"{COMPOSE}/docker-proxy/compose.yaml"]
     assert body["services"]["docker-proxy"]["networks"] == ["proxy"]
     assert body["services"]["docker-proxy-lifecycle"]["networks"] == ["lifecycle"]
