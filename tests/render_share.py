@@ -59,7 +59,7 @@ landed on whichever module asked first, which varied by shard and by run, while 
 CI on every module that did not pay: eleven modules recorded near 0s measured 5-7.7s in CI
 (#4873), and one recorded 11.58s against a measured 0.03s (#5734). Charging every reader
 instead would add the render to each of the 70-odd modules that read it. No module's weight
-carries a render; `pytest_shard.py --summary` charges them per shard.
+carries a render; `pytest_shard.py` packs them per shard.
 
 Run: uv run pytest tests/repo/test_render_share.py
 """

@@ -418,7 +418,9 @@ the list itself could not be read. The second case is a `gh` failure rather than
 problem, and it is what `read` shows as `signing=unknown`, so run `read` first — its
 `signing=` field gives the gate's verdict per host before a launch spends an agent on it.
 
-When every PR has merged: `uv run python scripts/dev/fanout.py place clean <run-id>`. A batch
+When every PR has merged: `uv run python scripts/dev/fanout.py place clean <run-id>`. Without
+that, the server-batch lander on daniel-box runs the same clean over every live run of
+`ubuntu`'s at most every 6 hours (`scripts/dev/fanout_lib/clean.py:sweep_runs`). A batch
 `clean` never reaches falls to the weekly worktree sweep, which reads its `fanout-<batch>` lock
 as dead once the unit is inactive and the lock is a day old (`scripts/lib/fanout_lock.py`). It
 removes each worktree once its branch is merged into `origin/master` (or its tip is an ancestor of
@@ -660,7 +662,7 @@ c. **Land each PR serially** from its batch's tree with `bin/land <branch>`, whi
    syncs the primary checkout's `main`. Landing is not deploying there. Read `chezmoi diff` and
    then run `chezmoi apply`, as the `chezmoi-repo-ops` skill describes. The report's verdict
    column is what `chezmoi diff` showed before the apply. Once a PR has landed, close its issues
-   with `findings.py close <n> --fixed --pr <n> --repo DanielH2018/dotfiles`. Run it even when the
+   with `findings.py close <n> --fixed --pr <n> --repo DanielH2018/dotfiles --pr-repo DanielH2018/dotfiles`. Run it even when the
    PR's `Closes #<n>` already closed the issue: GitHub's close leaves the claim standing, and
    `close` releases it. Then `clean <run-id>` removes the landed trees, as in section 3.
 d. **Abandon an unfinished batch as in section 5.** `abandon <run-id> <batch>` acts on the
