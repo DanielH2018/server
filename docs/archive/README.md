@@ -83,12 +83,13 @@ files.
 arm. `staging-cluster.md` followed it a day later — #2941 retired the cluster the arm gated,
 on the operator's decision that no manual staging sessions continue. Both pages describe a
 system that no longer runs; what survives out of them is the libvirt substrate in
-`ansible/roles/setup/hypervisor`, which the monthly etcd restore drill uses.
+`hosts/components/hypervisor`, which the monthly etcd restore drill uses.
 
 The target-architecture plans are archived in place, under `docs/target-architecture/`, and
 are not listed in the table above. Hundreds of files link into those paths, so a `git mv`
-would break more links than it tidies. Each plan's `Status:` line says it is done or
-archived, and the site's nav lists the plans under *History*. The live documentation is
+would break more links than it tidies. Each plan's `Status:` line says whether it is done,
+and the site's nav lists the plans under *Architecture*, as *Migration plans*. The live
+documentation is
 [What the migration built](../what-the-migration-built.md), which links the decisions:
 [ADR-0020](../adr/0020-flux-applies-the-cluster-from-a-promoted-artifact.md),
 [ADR-0026](../adr/0026-one-alert-plane-on-prometheus-and-alertmanager.md) and

@@ -6,18 +6,23 @@ agent), and `daniel-pi` (the one remaining Docker host). The
 
 ## Where to start
 
+- **Architecture** says how the lab is built. Its first page,
+  [What the migration built](what-the-migration-built.md), describes the three planes that
+  each have one write path from git, and links the page that documents each. The plans that
+  sequenced the migration sit under it as its record.
 - **Reference** pages are generated from this repository by the scripts under `scripts/docs/`. They carry the timestamp and commit
   their content was last built from, and a cron regenerates them. Do not edit them by hand — a
   hook rejects it.
 - **Decisions** are the architecture-decision records: what was chosen, why, and what it cost.
   A decision still in force lives there; the state it produced lives in the reference pages.
   Its *Background* pages are the long-form working-out behind three of those records.
-- **Operations** are the hand-written procedures, ordered day-to-day first and recovery last:
-  deploying, rotating a secret, then upgrading or restoring a subsystem after something broke.
+- **Operations** are the hand-written procedures and records, ordered day-to-day first and
+  recovery last: deploying, CI, monitoring, access, Claude tooling and each role's record,
+  then upgrading or restoring a subsystem after something broke.
   [Break glass](break-glass.md) is the last one — the single entry point for rebuilding or
   recovering the lab when the author is unavailable or daniel-box is gone.
-- **History** is the record of work that shipped, spikes that concluded and incidents that
-  closed. None of it is instructions. The [archive index](archive/README.md) lists each
+- **History** is the record of work that shipped, spikes that concluded and workloads that
+  retired. None of it is instructions. The [archive index](archive/README.md) lists each
   archived plan and names the page that documents its result.
 - **Artifacts** is not a page. It is a link off this site to the artifact browser.
 

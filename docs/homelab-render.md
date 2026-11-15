@@ -12,8 +12,8 @@ steps, and this page describes each piece once its PR has merged.
 
 ## What is in place
 
-- `scripts/renderer/template_filters/secret_stubs.py` holds the stub form. It is the one definition
-  that R1's renderer and its playbook checks are built to share, so neither restates it.
+- `scripts/renderer/template_filters/secret_stubs.py` holds the stub form. It is the one
+  definition that `homelab_render.py` and `shadow_diff.py` share, so neither restates it.
 - `scripts/renderer/shadow_diff.py stubs` writes the stub file a stub-mode render takes.
 - The renderer pins no live fact, because no value a template reads comes from live state
   (*The renderer pins nothing*).
@@ -63,10 +63,11 @@ stub instead, which the filter `homelab_secret_stub` builds:
   the store on 2026-10-15. Every render reads its value from
   `inventory/group_vars/all.yml`.
 
-Two more filters serve the stub-file refusals in the playbook preamble (*A stub file stops
-outside a k8s dry run*). `homelab_stub_keys` lists the key names that take a stub, from the parsed `secrets.yml`. It
-reads keys only, so the ciphertext file is enough. `homelab_unstubbed_keys` returns the keys
-whose value is not exactly its stub. It returns names only, never a value.
+Two more filters serve the stale-stub-file refusal. `homelab_stub_keys` lists the key names
+that take a stub, from the parsed `secrets.yml`. It reads keys only, so the ciphertext file is
+enough. `homelab_unstubbed_keys` returns the keys whose value is not exactly its stub. It
+returns names only, never a value. `homelab_render.py cluster --secret-stubs` refuses a stub
+file that leaves any key without its stub, and writes nothing (*Write the stub file*).
 
 ## Render the cluster tree
 
