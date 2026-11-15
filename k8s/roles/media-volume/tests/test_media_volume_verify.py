@@ -65,6 +65,7 @@ def test_two_filesystems_fail_the_job(tmp_path, capsys):
 
 
 def test_a_wrong_link_count_fails_the_job(tmp_path, capsys):
+    # fact: k8s/roles/media-volume/CLAUDE.md#Notable
     """A copy instead of a link leaves each file with one link."""
     assert media_volume_verify.main([], _env(_volume(tmp_path)), shutil.copyfile) == 1
     assert "link count is 1, expected 2" in capsys.readouterr().err

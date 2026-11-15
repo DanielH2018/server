@@ -1,8 +1,11 @@
 # longhorn-restore-drill — the restore drill's own Flux tag and its stamp ConfigMap
 
 The tag that holds the nightly restore drill's cluster objects: the empty ConfigMap
-`longhorn-restore-drill-stamps`, the script ConfigMap, the CronJob, the ServiceAccount and the
-RBAC. The CronJob's `suspend` is `false`, and the *Mode* bullet below says why.
+`longhorn-restore-drill-stamps` (`k8s/roles/longhorn-restore-drill/templates/stamps-configmap.yaml.j2`),
+the script ConfigMap, the CronJob, the ServiceAccount and the RBAC. The CronJob's `suspend` is
+`false`
+(`tests/longhorn/test_longhorn_restore_drill_deadline.py::test_the_cronjob_is_unsuspended_and_never_overlaps`),
+and the *Mode* bullet below says why.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in k8s/roles/longhorn-reconcile/defaults/main.yml. -->

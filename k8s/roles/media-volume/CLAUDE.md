@@ -1,9 +1,13 @@
 # media-volume — the shared media library, one filesystem for ten workloads
 
-Declares `media-data`, the volume ten media-stack roles mount. The arr apps mount it whole
-at `/data`, qbittorrent and slskd mount only `torrents/`, and they must all see **one** filesystem or *arr imports silently become
-copies instead of hardlinks. navidrome mounts only `media/music`, read-only. No route — infra
-role, no Deployment of its own.
+Declares `media-data`, the volume ten media-stack roles mount. sonarr, radarr, lidarr and
+janitorr mount it whole at `/data` (`k8s/templates/arr-deployment.yml.j2`), qbittorrent and
+slskd mount `torrents/` (`k8s/roles/qbittorrent/defaults/main.yml:qbittorrent_k8s_torrents_subpath`),
+and they must all see **one** filesystem or *arr imports silently become copies instead of
+hardlinks. bazarr, jellyfin and tdarr mount only `media/`
+(`k8s/roles/tdarr/defaults/main.yml:tdarr_k8s_media_subpath`). navidrome mounts only
+`media/music`, read-only (`k8s/roles/navidrome/defaults/main.yml:navidrome_k8s_media_subpath`),
+and slskd mounts it read-only too. No route — infra role, no Deployment of its own.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in k8s/roles/longhorn-reconcile/defaults/main.yml. -->
@@ -37,16 +41,21 @@ role, no Deployment of its own.
 
 ## Notable
 - **The hardlink check is the Job in `media-volume-verify`.** The renderer emits
-  `templates/verify/` into that Kustomization, which Flux applies once `media-volume` reads
-  Ready. The Job runs `files/media_volume_verify.py`, which links a file in `torrents/` into
-  `media/` with `os.link` and fails unless the link count reads 2. It also proves the claim
-  binds: with `WaitForFirstConsumer`, a pod that stays `Pending` until its 300s deadline means
-  the PV's node pin is wrong, not the hardlinks. Its name embeds a digest of the rendered PV
-  and StorageClass, so Flux re-runs it only when those change; `job.yaml.j2`'s `DECIDED:` note has why.
-  `tests/test_media_volume_verify.py` renders the role and runs the Job census over it.
+  `k8s/roles/media-volume/templates/verify/` into that Kustomization, which Flux applies once
+  `media-volume` reads Ready. The Job runs `k8s/roles/media-volume/files/media_volume_verify.py`,
+  which links a file in `torrents/` into `media/` with `os.link` and fails unless the link count
+  reads 2
+  (`k8s/roles/media-volume/tests/test_media_volume_verify.py::test_a_wrong_link_count_fails_the_job`).
+  It also proves the claim binds: with `WaitForFirstConsumer`, a pod that stays
+  `Pending` until its 300s deadline means the PV's node pin is wrong, not the hardlinks. Its name
+  embeds a digest of the rendered PV and StorageClass, so Flux re-runs it only when those change;
+  `k8s/roles/media-volume/templates/verify/job.yaml.j2:DECIDED: the spec embeds a digest` has why.
+  `k8s/roles/media-volume/tests/test_media_volume_verify.py` renders the role and runs the Job
+  census over it.
 - **HISTORY —** until the flip, a hardlink probe Job rendered into
   `/etc/rancher/k3s/manifests/media-volume-probe` on daniel-box and ran on every deploy. The
   flip deleted its tasks and template. The staged file stays on the node with no reader; k3s
   auto-applies only its own server manifests directory, so it changes nothing.
-- Directory `mode:` is deliberately unset on the host paths: the library keeps the modes it
+- Directory `mode:` is deliberately unset on the host paths
+  (`hosts/daniel-box/tmpfiles.d/homelab-media-volume.conf.j2`): the library keeps the modes it
   came with from daniel-server, and pinning one would flip them on every apply.

@@ -72,6 +72,7 @@ def test_the_grace_period_covers_one_poll_and_the_four_cleanup_deletes() -> None
 
 def test_the_cronjob_is_unsuspended_and_never_overlaps() -> None:
     # fact: k8s/roles/longhorn-restore-drill/CLAUDE.md#What the drill is and what it writes (the autonomous-role contract)
+    # fact: k8s/roles/longhorn-restore-drill/CLAUDE.md#longhorn-restore-drill — the restore drill's own Flux tag and its stamp ConfigMap
     spec = _cronjob()["spec"]
     assert spec["suspend"] is False, (
         "H2.3e unsuspended it, after the host cron file was gone"

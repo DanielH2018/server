@@ -1,9 +1,11 @@
 # longhorn — the storage control plane and the `longhorn` StorageClass
 
-Longhorn's manager DaemonSet, its CRDs, its admission webhook and driver deployer, and the
-ConfigMap that tells the manager which `longhorn` StorageClass to create. Every PVC in the
-cluster binds through it. A bad apply here detaches volumes under every stateful service while
-host probes stay green.
+Longhorn's manager DaemonSet, its CRDs, its admission webhook and driver deployer
+(`k8s/roles/longhorn/files/upstream/longhorn.yaml`), and the ConfigMap that tells the manager
+which `longhorn` StorageClass to create (`k8s/roles/longhorn/files/patches/longhorn-storageclass.yaml`).
+Every PVC in the cluster but `media-data` binds through it; that one claim binds a static PV of
+the `media-local` class (`k8s/roles/media-volume/defaults/main.yml:media_volume_storage_class`).
+A bad apply here detaches volumes under every stateful service while host probes stay green.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in k8s/roles/longhorn-reconcile/defaults/main.yml. -->
