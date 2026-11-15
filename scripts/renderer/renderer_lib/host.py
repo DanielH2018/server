@@ -126,6 +126,7 @@ PACKAGE_KEYS = frozenset(
         "maintainer_scripts",
         "outputs",
         "tools",
+        "tools_on",
         "units",
         *ARM_KEYS,
     }
@@ -234,12 +235,12 @@ def _render(
     spec = _load(spec_path, PACKAGE_KEYS)
     package.description = str(spec.get("description", ""))
     package.depends.extend(str(entry) for entry in spec.get("depends") or [])
-    if "tools" in spec:
+    if "tools" in spec or "tools_on" in spec:
         if host is not None:
             raise RenderRefused(
                 f"{spec_path}: a host package lists no tools; a shared package does"
             )
-        package.tools = parse_tools(spec["tools"], str(spec_path))
+        package.tools = parse_tools(spec, str(spec_path))
     package.secrets = SECRETS_COMPONENT in (spec.get("components") or [])
     lib = hosts_root / "lib"
     _render_unit(package, spec_path.parent, spec, host, inventory, withheld, lib)

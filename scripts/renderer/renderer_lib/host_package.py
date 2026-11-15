@@ -48,8 +48,8 @@ class Package:
         policies: Each unit given a restart policy, mapped to `manual` or `windowed`.
         legacy: The legacy entries reconcile retires, each with its values rendered.
         handoffs: Each spec's legacy entries paired with the units that spec ships.
-        tools: Each pinned upstream binary, by name and then architecture (`host_tools.py`).
-            A package with tools renders one tree per architecture.
+        tools: Each pinned upstream binary, by name and then by each architecture whose package
+            ships it (`host_tools.py`). A package with tools renders one tree per architecture.
         secrets: Whether the package lists the `secrets-unit` component (`host_outputs.py`).
         credentials: The secret keys `homelab-secrets` writes to `/run/credstore`.
         outputs: Each secret-bearing output, in the shape `secrets.json` carries.
@@ -160,7 +160,8 @@ class Package:
                 "dst": tool_path(tool),
                 "file_info": {"mode": 0o755},
             }
-            for tool in self.tools
+            for tool, arches in self.tools.items()
+            if arch in arches
         }
         # nfpm reads a symlink entry's `src` as the link's target.
         contents |= {

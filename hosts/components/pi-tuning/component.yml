@@ -86,6 +86,9 @@ files:
   # needrestart without its kernel check, which held apt's lock for up to two minutes after every
   # install (#8610). needrestart reads conf.d on every run, so no activation is needed.
   - {src: templates/needrestart-homelab.conf, dst: /etc/needrestart/conf.d/50-homelab.conf}
+  # apt deletes each deb once it is installed, and the daily apt run empties the archive cache
+  # (#8883). apt rereads its config on every run, so no activation is needed.
+  - {src: templates/apt-archives.conf, dst: /etc/apt/apt.conf.d/60homelab-pi-archives}
 lines:
   # The GPU split and the watchdog dtparam. Bookworm moved the file to /boot/firmware; the Pi runs
   # Ubuntu 24.04, which has no /boot/config.txt.

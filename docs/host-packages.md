@@ -41,7 +41,10 @@ set lands in `/var/lib/homelab-signer/refused/<UTC time>/`. Both services log to
 Each host installs `homelab-updater` and its own package, which `hosts/<host>/package.yml`
 lists.
 
-- `homelab-daniel-pi` ships reconcile, the secrets unit and the Pi's heartbeats.
+- `homelab-daniel-pi` ships reconcile, the secrets unit and the Pi's heartbeats. It depends on
+  `homelab-tools`, whose `arm64` build ships only `sops` and `node-exporter`: `tools_on` in
+  `hosts/packages/homelab-tools/package.yml` holds that build to the tools the Pi's packages
+  name (#8883).
 - `homelab-daniel-server` ships reconcile, the secrets unit, the
   UPS shutdown chain and the `k3s-gates` component, whose `/usr/lib/homelab/k3s_gates.py` the
   k3s-agent Plan's `prepare` runs (#6413). Since H7.34 it also ships the k3s agent's whole host
@@ -933,7 +936,9 @@ the guest clones GitHub at that checkout's `HEAD`. The run's directory under
 Steps 1 and 3 to 5 go in the host's first PR, and step 7 is a second PR. The design is
 [H7](target-architecture/host/h7-delete-ansible.md), *Adding a host*. A host on another
 architecture first needs `homelab-tools` built for it, and `bootstrap-host.sh` pins amd64 and
-arm64 only.
+arm64 only. The `arm64` build ships only the tools daniel-pi's packages name. To give a second
+`arm64` host another tool, add the tool to `tools_on` in
+`hosts/packages/homelab-tools/package.yml`.
 
 1. Add `hosts/<host>/package.yml`. The renderer writes the host's `nfpm.yaml` from this file, so
    no spec is written by hand. Add a `units:` entry only for a unit that a process other than
