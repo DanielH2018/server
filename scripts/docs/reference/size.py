@@ -44,6 +44,7 @@ CRON_STAGED = (
     "docs/assets/generated/",
     "scripts/dev/pytest_shard_weights.json",
     "scripts/dev/pytest_shard_runner_weights.json",
+    "scripts/dev/affected_tests.json",
 )
 
 _TEST_FILE = re.compile(r"(.*/)?test_[^/]*\.py")

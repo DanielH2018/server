@@ -7,6 +7,7 @@ Run: uv run pytest scripts/dev/tests/test_pytest_shard_prebuild.py
 """
 
 import pytest_shard
+import shard_prebuild
 import render_share
 from lib.git import git
 from lib.repo_paths import REPO
@@ -26,7 +27,7 @@ PLAIN = "scripts/dev/tests/test_pytest_shard_durations.py"
 
 def _reads_no_render(rel: str) -> bool:
     return (
-        not rel.startswith(pytest_shard.CENSUS_FILE_PREFIX)
+        not rel.startswith(shard_prebuild.CENSUS_FILE_PREFIX)
         and not render_share.is_consumer(REPO / rel)
         and "_k8s_render" not in (REPO / rel).read_text()
     )
@@ -34,7 +35,7 @@ def _reads_no_render(rel: str) -> bool:
 
 def _projected(members: list[str], weights: dict[str, float]) -> float:
     tests = sum(weights[f] + pytest_shard._PER_FILE_SECONDS for f in members)
-    return tests + pytest_shard.prebuild_seconds(members)
+    return tests + shard_prebuild.prebuild_seconds(members)
 
 
 def test_the_packing_balances_the_census_pass_a_shard_triggers():
@@ -70,9 +71,9 @@ def test_a_shard_holding_a_render_module_is_charged_more_prebuild_than_one_holdi
     """A leg collecting no render reader builds no render; a fleet consumer's leg builds one."""
     assert _reads_no_render(PLAIN)
     assert render_share.is_consumer(REPO / FLEET_CONSUMER)
-    assert pytest_shard.prebuild_seconds(
+    assert shard_prebuild.prebuild_seconds(
         [FLEET_CONSUMER]
-    ) > pytest_shard.prebuild_seconds([PLAIN])
+    ) > shard_prebuild.prebuild_seconds([PLAIN])
 
 
 def test_a_module_reaching_the_k8s_render_through_a_helper_or_a_conftest_is_charged_it(
@@ -91,13 +92,13 @@ def test_a_module_reaching_the_k8s_render_through_a_helper_or_a_conftest_is_char
     (tmp_path / "test_plain.py").write_text("import json\n")
     git("init", "-q", cwd=tmp_path)
     git("add", ".", cwd=tmp_path)
-    k8s = pytest_shard.K8S_RENDER_WALL_SECONDS * pytest_shard.CI_WORKERS
-    assert pytest_shard.prebuild_seconds(["test_via_helper.py"], tmp_path) == k8s
+    k8s = shard_prebuild.K8S_RENDER_WALL_SECONDS * shard_prebuild.CI_WORKERS
+    assert shard_prebuild.prebuild_seconds(["test_via_helper.py"], tmp_path) == k8s
     assert (
-        pytest_shard.prebuild_seconds(["role/tests/test_under_conftest.py"], tmp_path)
+        shard_prebuild.prebuild_seconds(["role/tests/test_under_conftest.py"], tmp_path)
         == k8s
     )
-    assert pytest_shard.prebuild_seconds(["test_plain.py"], tmp_path) == 0.0
+    assert shard_prebuild.prebuild_seconds(["test_plain.py"], tmp_path) == 0.0
 
 
 def test_the_tree_s_indirect_k8s_render_readers_are_charged_the_render():
@@ -108,7 +109,7 @@ def test_the_tree_s_indirect_k8s_render_readers_are_charged_the_render():
         "tests/deploy/test_k8s_autodeploy_guard.py",
         "k8s/roles/monitor-bridge/tests/test_b2_storage.py",
     ):
-        assert "k8s" in pytest_shard.prebuild_kinds(indirect), indirect
+        assert "k8s" in shard_prebuild.prebuild_kinds(indirect), indirect
 
 
 def test_the_census_files_share_one_leg_so_the_census_pass_runs_once():

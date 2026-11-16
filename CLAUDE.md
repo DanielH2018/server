@@ -143,7 +143,8 @@ the `add-secret` skill; `.claude/rules/secrets.md` and `docs/secret-rotation.md`
 `prek run --all-files` checks lint, templates and secrets before a commit. **It does not run
 the suite**, except that at commit time it runs twenty-five static ratchet, lint and census test
 files through the `static-ratchet-tests` hooks (`scripts/dev/repo_guards.py:hook_files` lists
-them). CI's `pytest` job runs the whole suite on every PR. To see a red test first, run
+them). CI's `pytest` job runs the whole suite on every push to master, and on a PR the test
+modules its diff can affect (`scripts/dev/affected_lib/table.py:select`). To see a red test first, run
 `uv run pytest`, and run `uv run python scripts/dev/repo_guards.py` once before `gh pr create`.
 Its last lines are advice (`scripts/dev/repo_guards.py:ADVICE`): each instruction section that
 cites code the branch changed and left unedited, and each name the branch removed that a doc

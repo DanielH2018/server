@@ -19,6 +19,10 @@ Three things have to hold together, and each has a way of failing that reads gre
 
 The runner refresh runs before the gate for the same reason the record does.
 
+The cron also records what each test module depends on (`affected_tests.py record`, #8458),
+into a third table that a pull request's CI run selects its test modules from. The same
+three things hold for it, and it needs `strace`, which the component has to install.
+
 Every path here is derived from `pytest_shard` rather than spelled, so renaming the table or
 the script breaks this test instead of silently leaving the cron pointing at nothing.
 
@@ -29,8 +33,11 @@ import re
 
 import pytest
 import pytest_shard
+from affected_lib import record as affected_record
+from affected_lib import table as affected_table
 
 from _helpers import REPO
+from lib import yaml_fast
 from _shell_render import rendered_shell_text, shell_template_path
 from lib.proc_testing import fake_bin, run
 
@@ -38,7 +45,9 @@ TEMPLATE = shell_template_path("components", "docs-refresh", "docs-refresh.sh.j2
 SCRIPT = rendered_shell_text("components", "docs-refresh", "docs-refresh.sh.j2")
 WEIGHTS = pytest_shard.WEIGHTS_PATH.relative_to(REPO).as_posix()
 RUNNER_WEIGHTS = pytest_shard.RUNNER_WEIGHTS_PATH.relative_to(REPO).as_posix()
+AFFECTED = affected_table.TABLE_PATH.relative_to(REPO).as_posix()
 SHARD_SCRIPT = (REPO / "scripts/dev/pytest_shard.py").relative_to(REPO).as_posix()
+AFFECTED_SCRIPT = "scripts/dev/affected_tests.py"
 PUBLISH_GATE = "if git diff --cached --quiet; then"
 
 
@@ -90,7 +99,7 @@ def test_the_cron_records_the_weights_it_is_missing():
     )
 
 
-@pytest.mark.parametrize("flag", ["--record-missing", "--refresh-runner"])
+@pytest.mark.parametrize("flag", ["--record-missing", "--refresh-runner", "--slices"])
 def test_the_record_runs_before_the_publish_gate(flag):
     """CLEAN half: the real template orders each write the only way that publishes."""
     assert _record_before_gate(SCRIPT, flag) is None
@@ -112,7 +121,11 @@ def test_a_record_after_the_publish_gate_is_flagged():
 
 @pytest.mark.parametrize(
     "table",
-    [pytest.param(WEIGHTS, id="recorded"), pytest.param(RUNNER_WEIGHTS, id="runner")],
+    [
+        pytest.param(WEIGHTS, id="recorded"),
+        pytest.param(RUNNER_WEIGHTS, id="runner"),
+        pytest.param(AFFECTED, id="affected"),
+    ],
 )
 @pytest.mark.parametrize(
     "marker",
@@ -131,9 +144,9 @@ def test_the_weights_table_is_named_wherever_the_doc_trees_are(marker, table):
     lines = _code_lines(SCRIPT)
     hits = [i for i, line in enumerate(lines) if marker in line]
     assert hits, f"{TEMPLATE.name} no longer contains a {marker!r} line"
-    # A continued line carries its remaining paths onto the next one.
+    # A continued line carries its remaining paths onto the next two.
     for start in hits:
-        span = " ".join(lines[start : start + 2])
+        span = " ".join(lines[start : start + 3])
         assert "docs/reference" in span, f"{marker!r} at line {start} names no doc tree"
         assert table in span, (
             f"{TEMPLATE.name}: the {marker!r} covering docs/reference does not name "
@@ -194,6 +207,7 @@ def _flags(text: str, arguments: str) -> set[str]:
         pytest.param("WEIGHTS_MSG", id="record-missing"),
         pytest.param("REFRESH_MSG", id="refresh-drifted"),
         pytest.param("RUNNER_MSG", id="refresh-runner"),
+        pytest.param("AFFECTED_MSG", id="record-dependencies"),
     ],
 )
 def test_a_successful_weight_step_reaches_the_crons_output(tmp_path, message):
@@ -241,3 +255,25 @@ def test_the_cron_also_refreshes_weights_that_are_present():
         "re-measures an entry the table already holds. The mode must appear after the "
         "script on its command line, or in an assignment to a variable that line expands"
     )
+
+
+def test_the_cron_records_test_dependencies_inside_a_budget_its_timeout_outlasts():
+    """The step holds the git-tree lock, so it must end by itself before `timeout` kills it.
+
+    A killed run writes no table. The budget stops new modules, and one module already
+    running may take `MODULE_TIMEOUT_SECONDS` more.
+    """
+    step = re.search(r"^AFFECTED_MSG=.*?^AFFECTED_RC=", SCRIPT, re.M | re.S)
+    assert step, f"{TEMPLATE.name} lost the AFFECTED_MSG step"
+    command = " ".join(step.group(0).replace("\\\n", " ").split())
+    assert f"{AFFECTED_SCRIPT} record" in command and "--slices" in command, command
+    limits = re.search(r"timeout (\d+) .* --budget (\d+)", command)
+    assert limits, command
+    timeout, budget = map(int, limits.groups())
+    assert timeout >= budget + affected_record.MODULE_TIMEOUT_SECONDS
+
+
+def test_the_component_installs_the_tracer_the_recorder_runs():
+    component = yaml_fast.safe_load((TEMPLATE.parents[1] / "component.yml").read_text())
+
+    assert "strace" in component["depends"]

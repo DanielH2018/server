@@ -47,12 +47,14 @@ skipped the hook. The docs-refresh cron does not run the generator: a write unde
 dirty.
 
 **What the cron DOES stage is a closed list, and a generator outside it dirties the tree.**
-Four paths: `docs/reference/`, `docs/assets/generated/`, `scripts/dev/pytest_shard_weights.json`
+Five paths: `docs/reference/`, `docs/assets/generated/`, `scripts/dev/pytest_shard_weights.json`
 (the test shard-weights table, which `pytest_shard.py --record-missing` records and
-`--refresh-drifted` re-measures where it drifted), and
+`--refresh-drifted` re-measures where it drifted),
 `scripts/dev/pytest_shard_runner_weights.json` (the runner-seconds table the CI split packs on,
-which `--refresh-runner` refreshes from CI's own logs).
-Adding a fifth means editing the cron's `git add`, the porcelain check in its
+which `--refresh-runner` refreshes from CI's own logs), and `scripts/dev/affected_tests.json`
+(what each test module depends on, which `affected_tests.py record` traces and a pull
+request's CI run selects its test modules from).
+Adding a sixth means editing the cron's `git add`, the porcelain check in its
 `restore_generated_tree`, and `hosts/tests/test_docs_refresh_records_shard_weights.py`,
 which holds the first two against each other. A path written but not staged parks
 `homelab-checkout-sync`, which reads any porcelain output on the primary checkout as dirty.
