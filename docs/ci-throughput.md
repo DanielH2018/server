@@ -57,7 +57,10 @@ every module (#8458, ruled by the operator on 2026-11-15).
 - **The legs.** The matrix stays at six legs, because GitHub fixes the leg count before any
   step runs. The selection is packed into as few legs as keep each no heavier than a full
   sweep's leg. A leg past that count gets an empty list and skips every later step, so it
-  still takes a runner for its checkout and setup.
+  still takes a runner for its checkout and setup. `scripts/dev/ci_slot_cost.py --recent 20
+  --pull-requests` prints the empty legs' slot-seconds beside what one planning job on every
+  run would cost instead (#8944). A planning job pays off only once enough pull requests run
+  a selection, and on 2026-11-16 none of the 20 newest green pull-request runs had.
 - **A selection has to save legs.** `scripts/dev/pytest_shard.py:worthwhile` runs the whole
   census when the selection needs more than half the legs. Such a run records its tested
   tree as a full run does, so its push run still skips as proven. Every run takes this path
