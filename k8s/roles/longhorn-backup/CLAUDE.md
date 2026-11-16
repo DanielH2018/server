@@ -28,11 +28,14 @@ reads for its native etcd snapshot uploads to R2.
   `flux_prune: false` keeps a render that drops a target or a job from deleting it. Each has a
   `DECIDED:` marker in `defaults/main.yml`. `NEVER_SHED` names the tag, which is untiered.
 - **The credentials substitute from `homelab-cluster-vars`.** The three Secret templates are
-  `stringData:` with bare `{{ key }}` placeholders, and each BackupTarget URL holds one
-  (`${longhorn_b2_bucket}`, `${r2_bucket}`). A rotation reaches the cluster only through
-  `cluster_vars.py write` (operator-only). The regions are plain variables, so no filter runs
-  over a secret. `scripts/renderer/renderer_lib/secret_checks.py:PLACEHOLDER_KIND_EXEMPT`
-  admits the two bucket placeholders in a BackupTarget and nowhere else.
+  `stringData:` with bare `{{ key }}` placeholders, and the `r2` BackupTarget URL holds one
+  (`${r2_bucket}`). A rotation reaches the cluster only through `cluster_vars.py write`
+  (operator-only). The regions are plain variables, so no filter runs over a secret.
+  `scripts/renderer/renderer_lib/secret_checks.py:PLACEHOLDER_KIND_EXEMPT` admits the bucket
+  placeholder in a BackupTarget and nowhere else.
+- **B2's bucket is plaintext inventory, not SOPS.** The `default` URL renders
+  `inventory/group_vars/all.yml:k3s_longhorn_b2_bucket` as a literal, and `probe.py b2-longhorn`
+  reads the same key, so a rename is one edit.
 - **A wrong region makes a target unreachable.** Nothing ties `k3s_longhorn_b2_region` to the
   SOPS key `longhorn_b2_endpoint`. `probe.py health longhorn-backup` reports a target
   with `status.available` false within one probe run.

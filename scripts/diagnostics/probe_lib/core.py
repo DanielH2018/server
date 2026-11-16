@@ -90,7 +90,7 @@ def longhorn_b2_bucket():
 
     The bucket name grants nothing without the B2 key pair, so reading it needs no age key.
     """
-    return group_var("longhorn_b2_bucket")
+    return group_var("k3s_longhorn_b2_bucket")
 
 
 def group_var(key, group_vars_path=None):

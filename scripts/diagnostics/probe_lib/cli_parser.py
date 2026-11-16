@@ -245,7 +245,7 @@ def _build_parser():
         ),
     )
     b2l.add_argument(
-        "--bucket", help="override the bucket inventory's longhorn_b2_bucket names"
+        "--bucket", help="override the bucket inventory's k3s_longhorn_b2_bucket names"
     )
     b2l.add_argument(
         "--prefix", default=LONGHORN_PREFIX, help="B2 prefix Longhorn writes under"
@@ -259,7 +259,7 @@ def _build_parser():
         ),
     )
     b2b.add_argument(
-        "--bucket", help="override the bucket inventory's longhorn_b2_bucket names"
+        "--bucket", help="override the bucket inventory's k3s_longhorn_b2_bucket names"
     )
     b2b.add_argument(
         "--prefix", default=LONGHORN_PREFIX, help="B2 prefix Longhorn writes under"
