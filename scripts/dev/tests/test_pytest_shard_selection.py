@@ -107,6 +107,54 @@ def test_a_leg_the_selection_does_not_need_writes_an_empty_list_and_says_so(
     ]
 
 
+@pytest.mark.parametrize(
+    ("selected", "full"),
+    [
+        pytest.param(list("ab"), False, id="half-the-legs-is-worth-selecting"),
+        pytest.param(list("abcde"), True, id="more-than-half-runs-the-whole-census"),
+        pytest.param(list("abcdefgh"), True, id="a-selection-that-saves-no-leg"),
+    ],
+)
+def test_a_selection_that_saves_too_few_legs_runs_as_the_whole_census(selected, full):
+    """A selected run records no tested tree, so it has to save legs to be worth that."""
+    weights = dict.fromkeys("abcdefgh", 10.0)
+    selection = table.Selection(selected, False, "1 changed path(s)")
+
+    settled = pytest_shard.worthwhile(selection, 4, list(weights), weights)
+
+    assert settled.full is full
+    assert settled.modules == (sorted(weights) if full else selected)
+
+
+def test_a_run_whose_selection_is_too_wide_tells_the_gate_it_swept_in_full(
+    tmp_path, monkeypatch
+):
+    """Through `main`: the leg takes its census share and writes `scope=full`, so the gate records."""
+    outputs = tmp_path / "outputs"
+    monkeypatch.setenv("GITHUB_OUTPUT", str(outputs))
+    census = pytest_shard.census()
+
+    def select(base):
+        return table.Selection(
+            census[: len(census) * 9 // 10], False, "1 changed path(s)"
+        )
+
+    argv = [
+        "--of",
+        "6",
+        "--shard",
+        "6",
+        "--changed-since",
+        "HEAD^1",
+        "--out",
+        str(tmp_path / "s"),
+    ]
+    assert pytest_shard.main(argv, select=select) == 0
+
+    assert _outputs(outputs)["scope"] == "full"
+    assert (tmp_path / "s").read_text().split() == pytest_shard.shard_files(6, 6)
+
+
 def test_a_selection_that_is_the_whole_census_runs_as_a_full_sweep_does(
     tmp_path, monkeypatch
 ):

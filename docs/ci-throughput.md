@@ -56,6 +56,12 @@ every module (#8458, ruled by the operator on 2026-11-15).
   step runs. The selection is packed into as few legs as keep each no heavier than a full
   sweep's leg. A leg past that count gets an empty list and skips every later step, so it
   still takes a runner for its checkout and setup.
+- **A selection has to save legs.** `scripts/dev/pytest_shard.py:worthwhile` runs the whole
+  census when the selection needs more than half the legs. Such a run records its tested
+  tree as a full run does, so its push run still skips as proven. Every run takes this path
+  while the table holds few rows, because a module with no row always runs: with 121 of
+  1,466 rows recorded, a one-file change selected 1,347 to 1,403 modules and needed all six
+  legs.
 - **What a selection gives up.** A module can gain a dependency after its row was recorded.
   A pull request that changes the dependency then leaves the module out, and the module
   fails on master, where a red run parks every landing. The operator accepted that cost.

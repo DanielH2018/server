@@ -635,7 +635,9 @@ jobs:
       # On a pull request the checkout is the merge commit, so `HEAD^1` is the base and the
       # diff from it is the pull request's own change. `--changed-since` packs only the modules
       # that diff can affect, into as few legs as keep each no heavier than a full sweep's leg
-      # (`scripts/dev/affected_lib/table.py` has the rule). The matrix cannot shrink to match,
+      # (`scripts/dev/affected_lib/table.py` has the rule). A selection that needs more than half
+      # the legs runs as the whole census and writes `scope=full`, so the run still records its
+      # tested tree (`pytest_shard.py:worthwhile`). The matrix cannot shrink to match,
       # because `strategy.job-total` is fixed before any step runs. So a leg the selection does
       # not need gets an empty list, writes `count=0`, and every later step skips on it: the
       # leg ends green after the checkout and the setup. A push and a dispatch pass no base and

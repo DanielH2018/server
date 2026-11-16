@@ -54,7 +54,9 @@ pass the same way. `--summary` charges all three per shard, as `prebuild_seconds
 A PULL REQUEST RUNS ONLY THE MODULES ITS DIFF CAN AFFECT (#8458). `--changed-since REF` asks
 `affected_lib/table.py` which modules the diff from REF selects and packs those alone, into as
 few legs as keep each no heavier than a full sweep's leg. The legs past that count get an
-empty list and CI skips their remaining steps. A push to master and a dispatch pass no REF and
+empty list and CI skips their remaining steps. A selection that needs more than half the legs
+runs as the whole census instead (`worthwhile`), because a selected run gives up the
+tested-tree record that lets the push run skip. A push to master and a dispatch pass no REF and
 run the whole census. `affected_lib/table.py` has the rule and what it can miss.
 
 The docs-refresh cron runs `--record-missing` itself, so gaps in the table fill without a human.
@@ -301,6 +303,43 @@ def legs_for(selected, files, shards: int, weights: dict[str, float]) -> int:
     cost = _costs(files, weights)
     per_leg = sum(cost.values()) / shards
     return min(shards, max(1, math.ceil(sum(cost[f] for f in selected) / per_leg)))
+
+
+def worthwhile(
+    selection: affected_table.Selection,
+    shards: int,
+    files: list[str] | None = None,
+    weights: dict[str, float] | None = None,
+) -> affected_table.Selection:
+    """`selection`, or the whole census when the selection saves too few of `shards` legs.
+
+    DECIDED: a selection runs only when it fits in half the legs or fewer (#8458 review,
+    2026-11-16). A selected run records no tested tree, so the push run after its merge
+    sweeps in full, about 1,414 slot-seconds on 2026-11-14, where a full pull-request run lets
+    it skip as proven. A selection that needs every leg saves nothing and still pays that,
+    which is every selection while the table holds few rows: a module with no row always
+    runs. Each leg saved is about 170 slot-seconds, so under half the legs the saving is
+    small against the lost proof.
+
+    Args:
+        selection: What the diff selected.
+        shards: How many legs the run has.
+        files: The census; `census()` when None.
+        weights: The packing weights; the committed tables' when None.
+    """
+    if selection.full:
+        return selection
+    files = census() if files is None else files
+    weights = packing_table(load_weights()) if weights is None else weights
+    legs = legs_for(selection.modules, files, shards, weights)
+    if legs <= shards // 2:
+        return selection
+    return affected_table.Selection(
+        sorted(files),
+        True,
+        f"{selection.reason}, which needs {legs} of {shards} legs and so saves too few to "
+        "give up the tested-tree record",
+    )
 
 
 def leg_files(
@@ -705,7 +744,9 @@ def main(argv=None, select=affected) -> int:
             "--check-durations is required"
         )
 
-    selection = select(args.changed_since) if args.changed_since else None
+    selection = (
+        worthwhile(select(args.changed_since), args.of) if args.changed_since else None
+    )
     whole = selection is None or selection.full
     files = leg_files(args.shard, args.of, selection)
     # An empty share of the census is not a fast green: pytest exits 5 ("no tests collected")
