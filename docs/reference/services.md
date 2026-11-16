@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/service_catalog.py
-generated_at: 2026-11-13 18:17 UTC
-generated_sha: c9de2bd37
+generated_at: 2026-11-16 18:17 UTC
+generated_sha: 17f361985
 ---
 
 !!! warning "Generated file — do not edit"
@@ -24,7 +24,7 @@ generated_sha: c9de2bd37
 | artifacts | <span class="fqdn" data-host="artifacts">artifacts.&lt;domain&gt;</span> · <span class="fqdn" data-host="artifacts.local">artifacts.local.&lt;domain&gt;</span> | Authelia one_factor | no PVC (stateless) | n/a: applied by Flux, through `promote`; `land.sh` gates the rollout |
 | authelia | <span class="fqdn" data-host="auth">auth.&lt;domain&gt;</span> · <span class="fqdn" data-host="auth.local">auth.local.&lt;domain&gt;</span> | none (public/no-auth) | daily -> R2 | n/a: applied by Flux, through `promote`; `land.sh` gates the rollout |
 | autofix-bridge | no route (infra role) | unknown (use_authelia not declared on this entry) | no PVC (stateless) | n/a: applied by Flux, through `promote`; `land.sh` gates the rollout |
-| bazarr | <span class="fqdn" data-host="bazarr">bazarr.&lt;domain&gt;</span> · <span class="fqdn" data-host="bazarr.local">bazarr.local.&lt;domain&gt;</span> | Authelia one_factor | weekly -> B2 (default target); not Longhorn (media-local) | n/a: applied by Flux, through `promote`; `land.sh` gates the rollout |
+| bazarr | <span class="fqdn" data-host="bazarr.local">bazarr.local.&lt;domain&gt;</span> (LAN only) | Authelia one_factor | weekly -> B2 (default target); not Longhorn (media-local) | n/a: applied by Flux, through `promote`; `land.sh` gates the rollout |
 | bento-pdf | <span class="fqdn" data-host="bento-pdf">bento-pdf.&lt;domain&gt;</span> · <span class="fqdn" data-host="bento-pdf.local">bento-pdf.local.&lt;domain&gt;</span> | Authelia one_factor | no PVC (stateless) | n/a: applied by Flux, through `promote`; `land.sh` gates the rollout |
 | blackbox-exporter | no route (infra role) | unknown (use_authelia not declared on this entry) | no PVC (stateless) | n/a: applied by Flux, through `promote`; `land.sh` gates the rollout |
 | cloudflare-ddns | no route (infra role) | unknown (use_authelia not declared on this entry) | no PVC (stateless) | n/a: applied by Flux, through `promote`; `land.sh` gates the rollout |
@@ -73,14 +73,14 @@ generated_sha: c9de2bd37
 | pi-peer-backup | no route (infra role) | unknown (use_authelia not declared on this entry) | weekly -> B2 (default target) | n/a: applied by Flux, through `promote`; `land.sh` gates the rollout |
 | pihole | <span class="fqdn" data-host="pihole">pihole.&lt;domain&gt;</span> · <span class="fqdn" data-host="pihole.local">pihole.local.&lt;domain&gt;</span> | Authelia one_factor | unknown (PVC present, claim name not statically resolvable: {{ claim }}); no backup (StorageClass longhorn-nobackup) | n/a: applied by Flux, through `promote`; `land.sh` gates the rollout |
 | pihole-exporter | no route (infra role) | unknown (use_authelia not declared on this entry) | no PVC (stateless) | n/a: applied by Flux, through `promote`; `land.sh` gates the rollout |
-| prowlarr | <span class="fqdn" data-host="prowlarr">prowlarr.&lt;domain&gt;</span> · <span class="fqdn" data-host="prowlarr.local">prowlarr.local.&lt;domain&gt;</span> | Authelia one_factor | weekly -> B2 (default target) | n/a: applied by Flux, through `promote`; `land.sh` gates the rollout |
+| prowlarr | <span class="fqdn" data-host="prowlarr.local">prowlarr.local.&lt;domain&gt;</span> (LAN only) | Authelia one_factor | weekly -> B2 (default target) | n/a: applied by Flux, through `promote`; `land.sh` gates the rollout |
 | qbittorrent | <span class="fqdn" data-host="qbittorrent">qbittorrent.&lt;domain&gt;</span> · <span class="fqdn" data-host="qbittorrent.local">qbittorrent.local.&lt;domain&gt;</span> | Authelia one_factor | weekly -> B2 (default target); not Longhorn (media-local) | n/a: applied by Flux, through `promote`; `land.sh` gates the rollout |
 | radarr | <span class="fqdn" data-host="radarr">radarr.&lt;domain&gt;</span> · <span class="fqdn" data-host="radarr.local">radarr.local.&lt;domain&gt;</span> | Authelia one_factor | weekly -> B2 (default target); not Longhorn (media-local) | n/a: applied by Flux, through `promote`; `land.sh` gates the rollout |
 | registry | no route (infra role) | unknown (use_authelia not declared on this entry) | no backup (StorageClass longhorn-nobackup) | n/a: applied by Flux, through `promote`; `land.sh` gates the rollout |
 | scrutiny | <span class="fqdn" data-host="scrutiny">scrutiny.&lt;domain&gt;</span> · <span class="fqdn" data-host="scrutiny.local">scrutiny.local.&lt;domain&gt;</span> | Authelia one_factor | no backup (listed in k3s_longhorn_nobackup_volumes); weekly -> B2 (default target) | n/a: applied by Flux, through `promote`; `land.sh` gates the rollout |
-| slskd | <span class="fqdn" data-host="slskd">slskd.&lt;domain&gt;</span> · <span class="fqdn" data-host="slskd.local">slskd.local.&lt;domain&gt;</span> | Authelia one_factor | no backup (StorageClass longhorn-nobackup); not Longhorn (media-local) | n/a: applied by Flux, through `promote`; `land.sh` gates the rollout |
+| slskd | <span class="fqdn" data-host="slskd.local">slskd.local.&lt;domain&gt;</span> (LAN only) | Authelia one_factor | no backup (StorageClass longhorn-nobackup); not Longhorn (media-local) | n/a: applied by Flux, through `promote`; `land.sh` gates the rollout |
 | sonarr | <span class="fqdn" data-host="sonarr">sonarr.&lt;domain&gt;</span> · <span class="fqdn" data-host="sonarr.local">sonarr.local.&lt;domain&gt;</span> | Authelia one_factor | weekly -> B2 (default target); not Longhorn (media-local) | n/a: applied by Flux, through `promote`; `land.sh` gates the rollout |
-| speedtest | <span class="fqdn" data-host="speedtest">speedtest.&lt;domain&gt;</span> · <span class="fqdn" data-host="speedtest.local">speedtest.local.&lt;domain&gt;</span> | Authelia one_factor | no backup (StorageClass longhorn-nobackup) | n/a: applied by Flux, through `promote`; `land.sh` gates the rollout |
+| speedtest | <span class="fqdn" data-host="speedtest.local">speedtest.local.&lt;domain&gt;</span> (LAN only) | Authelia one_factor | no backup (StorageClass longhorn-nobackup) | n/a: applied by Flux, through `promote`; `land.sh` gates the rollout |
 | system-upgrade | no route (infra role) | unknown (use_authelia not declared on this entry) | no PVC (stateless) | n/a: applied by Flux, through `promote`; `land.sh` gates the rollout |
 | tdarr | <span class="fqdn" data-host="tdarr">tdarr.&lt;domain&gt;</span> · <span class="fqdn" data-host="tdarr.local">tdarr.local.&lt;domain&gt;</span> | Authelia one_factor | weekly -> B2 (default target); not Longhorn (media-local) | n/a: applied by Flux, through `promote`; `land.sh` gates the rollout |
 | terraria | no route (infra role) | unknown (use_authelia not declared on this entry) | weekly -> B2 (default target) | n/a: applied by Flux, through `promote`; `land.sh` gates the rollout |
