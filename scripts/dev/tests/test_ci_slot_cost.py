@@ -83,12 +83,15 @@ def test_a_legs_setup_is_its_span_outside_the_suite_step_with_action_shas_folded
     assert cost["families"]["pytest"]["jobs"] == 2
 
 
-def _empty_leg(shard: int, created: int, started: int, completed: int) -> dict:
+def _empty_leg(
+    shard: int, created: int, started: int, completed: int, conclusion="success"
+) -> dict:
     return _job(
         f"pytest (shard {shard} of 6)",
         created,
         started,
         completed,
+        conclusion,
         steps=[
             _step("Run actions/checkout@v7.0.1", started, started + 6),
             _step("Select this shard's test files", started + 6, completed - 1),
@@ -104,6 +107,7 @@ def test_an_empty_leg_is_counted_apart_and_kept_out_of_the_setup_median():
             _leg(1, 0, 5, (20, 140)),
             _empty_leg(2, 0, 10, 40),
             _empty_leg(3, 0, 20, 50),
+            _empty_leg(4, 0, 20, 50, conclusion="failure"),
         ]
     )
     full = run_cost([_leg(1, 0, 5, (20, 140))])

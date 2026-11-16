@@ -77,7 +77,7 @@ def job_spans(jobs: list[dict]) -> list[dict]:
 
     Returns:
         One dict per job that started and finished, with `name`, `family`, `queued`,
-        `started` and `finished` (epoch seconds) and its raw `steps`. A skipped job is left
+        `started` and `finished` (epoch seconds), its `conclusion` and its raw `steps`. A skipped job is left
         out: the API stamps it as finishing before it started.
     """
     spans = []
@@ -96,6 +96,7 @@ def job_spans(jobs: list[dict]) -> list[dict]:
                 "queued": queued,
                 "started": started,
                 "finished": finished,
+                "conclusion": job.get("conclusion"),
                 "steps": job.get("steps") or [],
             }
         )
@@ -110,8 +111,11 @@ def p90(values: list[float]) -> float:
 
 
 def leg_is_empty(span: dict) -> bool:
-    """Whether a pytest leg skipped its suite step because its selection held no module."""
-    return any(
+    """Whether a pytest leg skipped its suite step because its selection held no module.
+
+    A failed leg whose earlier step failed also skips its suite step, so it is not empty.
+    """
+    return span.get("conclusion") == "success" and any(
         str(step.get("name", "")) == SUITE_STEP and step.get("conclusion") == "skipped"
         for step in span["steps"]
     )
