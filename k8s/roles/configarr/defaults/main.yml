@@ -68,7 +68,7 @@ configarr_k8s_health_verdict_configmap: configarr-health-verdict
 # and the layer listing of this digest's linux/amd64 manifest, 2026-10-18). Its kubectl minor
 # matches the server's v1.37.
 configarr_k8s_health_image: python:3.15-alpine@sha256:0f9552bb28711333da16915ec146f5e6bb44a7fdac9ced15dc17c2e0206346dd
-configarr_k8s_health_kubectl_image: alpine/k8s:1.37.2@sha256:dcb7185e112a453aa72f426754849a97357727ef8f40168fb208c8cf59952042
+configarr_k8s_health_kubectl_image: alpine/k8s:1.37.2@sha256:7a82aeefea3d554a43a8676b137f2b88bae6c1fe11c13862b191b3a086cc28c0
 
 # Above the reader's worst case; the gate Job copies it, and `bundle.flux_files` raises the
 # `configarr-verify` timeout above it. The worst case is two 30 s
