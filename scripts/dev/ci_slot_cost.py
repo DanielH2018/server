@@ -35,8 +35,9 @@ AN EMPTY LEG is one whose `Run the test suite` step concluded `skipped`: the sel
 nothing into it, so it ran the checkout, the setup and the select step, then ended green. The
 API stamps a skipped step with equal start and end times, so its span counts in no leg's setup.
 A job that ran one select step and published the leg list would do the same work as one empty
-leg, so the estimate takes the median empty leg's span as its slot cost and the median empty
-leg's queue wait as the wait it would add ahead of every pytest leg, on every run.
+leg, so the estimate takes the median empty leg's span as its slot cost. Every pytest leg
+would be created only once that job finished, so each leg would start later by the median
+empty leg's queue wait plus that span, on every run.
 """
 
 import re
@@ -210,8 +211,8 @@ def empty_leg_line(costs: list[dict]) -> str:
     return (
         f"empty pytest legs: {len(empty)} in {selected} of {len(costs)} run(s), "
         f"{sum(leg['slot_s'] for leg in empty):.0f} slot-seconds; a planning job on each "
-        f"run: about {job_s * len(costs):.0f} slot-seconds, and {wait_s:.0f}s more wait "
-        "ahead of every pytest leg"
+        f"run: about {job_s * len(costs):.0f} slot-seconds, and every pytest leg starting "
+        f"{wait_s + job_s:.0f}s later ({wait_s:.0f}s queue wait, {job_s:.0f}s run)"
     )
 
 

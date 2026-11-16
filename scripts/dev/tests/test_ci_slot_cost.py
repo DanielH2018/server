@@ -119,7 +119,8 @@ def test_an_empty_leg_is_counted_apart_and_kept_out_of_the_setup_median():
     ]
     assert empty_leg_line([selected, full]) == (
         "empty pytest legs: 2 in 1 of 2 run(s), 60 slot-seconds; a planning job on each "
-        "run: about 60 slot-seconds, and 15s more wait ahead of every pytest leg"
+        "run: about 60 slot-seconds, and every pytest leg starting 45s later "
+        "(15s queue wait, 30s run)"
     )
     assert empty_leg_line([full]) == "empty pytest legs: none in 1 run(s)"
 
