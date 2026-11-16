@@ -12,7 +12,7 @@
 # chart (`metallb-chart-0.16.1`) into one releases feed, and the chart runs a minor ahead of
 # the app. Anchoring on a leading `v` reads app releases only.
 # renovate: datasource=github-releases depName=metallb/metallb extractVersion=^v(?<version>.+)$
-k3s_metallb_version: v0.16.0
+k3s_metallb_version: 0.16.2
 metallb_vendored_manifests:
   - name: metallb-native.yaml
     url: "https://raw.githubusercontent.com/metallb/metallb/{{ k3s_metallb_version }}/config/manifests/metallb-native.yaml"
