@@ -632,6 +632,40 @@ during that run, so the PR rejoined and repeated: #8879 rejoined three times and
 About five full runs and one sweep in the window came from this. A rejoined head now counts as
 untested (`merge._start_run`), because its update made it while the PR was a draft.
 
+#### After option B and the turn fixes, measured
+
+The window is 22:01 UTC on 2026-11-15 to 01:55 on 2026-11-16, from the merge of the give-back
+(#8908) until 30 landings after it had ended. It held 28 merges. The counts come from GitHub's run and
+job listings. Batches are counted from their `queue/` pull requests, because the copy of
+daniel-server's landing logs collected none. The per-landing counts in the section above read
+daniel-box's logs only, and its batch count matches GitHub's.
+
+- **Full CI runs per merge: 1.75**, against 1.78 under load. 47 pull-request runs ran more than
+  two jobs, and 2 master runs swept.
+- **Master runs that skipped as tested: 25 of 27**, against 28 of 37. The sweeps left are
+  Renovate's digest bumps, whose PRs open ready.
+- **Batches: three**, of two PRs each: #8911 with #8903, #8909 with #8913, and #8923 with
+  #8922. #8911's batch is the first a daniel-server pipeline formed under option B.
+- **The 20-job cap: 18.4 minutes at it**, 0.66 per merge, against 0.65 under load. It came in
+  bursts: 11 of those minutes fell in the hour from 01:00 UTC. Pull-request runs of sessions
+  and fan-out batches, image-smoke and promote held the slots, and cancelled runs held almost
+  none.
+- **The waits.** Every one of 21 landings took a slot after 0 s, and the longest wait for the
+  turn was 570 s.
+
+Option B ran live. Six daniel-server pipelines landed their own drafts with an empty
+`land_hold`: #8911, #8913, #8921, #8923, #8936 and #8940. The pipeline for #8949 left it for a
+person, because it changes `.github/workflows/ci.yml` and `.claude/rules/generated-docs.md`.
+#8936's landing ended `pr-ci-red`, `land_draft` resumed its agent once, and its record reads
+`failed after one resume: pytest (shard 2 of 6)`. That is the `pr-ci-red` branch the
+remaining-work brief listed for daniel-box, and the code is the same on both hosts.
+
+**A draft was marked ready before its branch update.** `merge._start_run` marked a draft ready
+and then updated its branch, so the flip started a run on the stale head. The update's push
+cancelled it, minutes later: #8921's run on `051b6a86` went from 23:05:05 to 23:07:11 before
+the run it merged on started. The landing now updates the branch first, waits up to
+60 s for GitHub to show the new head, and then marks the draft ready.
+
 ### Phase C: runner pods for `hooks` and `pytest`
 
 **D8 stays closed, ruled by the operator on 2026-11-15** after the measurement under load.

@@ -30,36 +30,19 @@ The rulings in force, all in [CI throughput](ci-throughput.md):
 
 ## The work left, in order
 
-### 1. Two paths that have not run live
+### 1. A red batch, which has not run live
 
-Each needs traffic no session controls, so watch for it and record the first run in
-[CI throughput](ci-throughput.md).
+It needs traffic no session controls, so watch for it and record the first run in
+[CI throughput](ci-throughput.md). The holder's log reads `the batch is not green`, and each
+member's log reads `a batch that tested PR #N was not green; it lands alone`. A member that
+is stacked a second time by a later landing is a defect in `land_lib/line.py`'s answers.
 
-- **A daniel-box review batch landing its draft.** Its unit's log shows no
-  `cc-wait gh-ci` call, and its record under `~/.local/state/fanout-review/` carries a
-  `verdict` and an empty `ci_gate`. A landing that ends `pr-ci-red` must show one `ci-fix`
-  phase and a second landing (`scripts/dev/fanout_lib/review/review_ci.py:land_draft`).
-  Two ran by 2026-11-15 01:00 UTC: #8805's record has a verdict and an empty `ci_gate`,
-  and #8800's ended `merge-conflict`. Their unit logs were gone, so the missing
-  `cc-wait gh-ci` call is unverified, and the `pr-ci-red` branch has not run.
-- **A red batch.** The holder's log reads `the batch is not green`, and each member's log
-  reads `a batch that tested PR #N was not green; it lands alone`. A member that is
-  stacked a second time by a later landing is a defect in `land_lib/line.py`'s answers.
+### 2. Phase C, only if D8 is reopened
 
-### 2. Option B's first live landing
-
-A daniel-server review pipeline lands its own draft (`review_ci.server_lands`). Watch for
-the first one: its record under daniel-server's `~/.local/state/fanout-review/` carries a
-`verdict` and an empty `land_hold`, and its PR got no run before its landing. A held PR's
-record names the reason in `land_hold`. Record the first of each in
-[CI throughput](ci-throughput.md).
-
-### 3. Measure once more, then Phase C only if D8 is reopened
-
-Take the four numbers again over the next busy stretch with option B, the rejoin fix and the
-rejoin at the turn live, and set the minutes at the cap beside the 24.1 measured under load.
-Bring the operator the evidence if the cap still binds. C2 and C3 are in
-[CI throughput](ci-throughput.md) as planned. ADR-0032 holds the five
+The measurement after option B and the turn fixes found 18.4 minutes at the cap in four
+hours, in bursts (*After option B and the turn fixes, measured* in
+[CI throughput](ci-throughput.md)). Reopening D8 on it is the operator's decision. C2 and C3
+are in [CI throughput](ci-throughput.md) as planned. ADR-0032 holds the five
 conditions a runner exists under. A runner configuration must never reach a session's
 screen, and the operator mints or approves anything that touches the registration
 credential.
