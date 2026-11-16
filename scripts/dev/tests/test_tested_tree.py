@@ -61,23 +61,23 @@ def _prove(pulls, statuses, tree=TREE, sha=SQUASH):
 
 
 def test_equal_trees_are_proven():
-    assert _prove(_pr(), _status()) is True
+    assert _prove(_pr(), _status()) == tested_tree.ALL
 
 
 def test_unequal_trees_are_not_proven():
-    assert _prove(_pr(), _status(tree=OTHER_TREE)) is False
+    assert _prove(_pr(), _status(tree=OTHER_TREE)) == tested_tree.NONE
 
 
 def test_a_failed_or_foreign_status_is_not_proven():
-    assert _prove(_pr(), _status(state="failure")) is False
-    assert _prove(_pr(), _status(context="ci/other")) is False
+    assert _prove(_pr(), _status(state="failure")) == tested_tree.NONE
+    assert _prove(_pr(), _status(context="ci/other")) == tested_tree.NONE
 
 
 def test_a_status_from_another_creator_is_not_proven():
-    assert _prove(_pr(), _status(login="fake-operator")) is False
+    assert _prove(_pr(), _status(login="fake-operator")) == tested_tree.NONE
     status = _status()
     del status[0]["creator"]
-    assert _prove(_pr(), status) is False
+    assert _prove(_pr(), status) == tested_tree.NONE
 
 
 def test_a_status_not_pointing_at_this_repositorys_runs_is_not_proven():
@@ -90,28 +90,46 @@ def test_a_status_not_pointing_at_this_repositorys_runs_is_not_proven():
         f"https://github.com/{REPO_NAME}/actions/runs/1/attempts/2",
         f"https://github.com/{REPO_NAME}x/actions/runs/1",
     ):
-        assert _prove(_pr(), _status(target_url=url)) is False, url
+        assert _prove(_pr(), _status(target_url=url)) == tested_tree.NONE, url
 
 
 def test_a_pr_that_merely_contains_the_commit_is_not_proven():
-    assert _prove(_pr(merge_commit_sha="e" * 40), _status()) is False
+    assert _prove(_pr(merge_commit_sha="e" * 40), _status()) == tested_tree.NONE
 
 
 def test_a_commit_with_no_pr_is_not_proven():
-    assert _prove([], _status()) is False
+    assert _prove([], _status()) == tested_tree.NONE
 
 
 def test_an_unreadable_api_is_not_proven():
-    assert _prove(OSError("boom"), _status()) is False
-    assert _prove(_pr(), ValueError("not json")) is False
-    assert _prove({"message": "Not Found"}, _status()) is False
+    assert _prove(OSError("boom"), _status()) == tested_tree.NONE
+    assert _prove(_pr(), ValueError("not json")) == tested_tree.NONE
+    assert _prove({"message": "Not Found"}, _status()) == tested_tree.NONE
 
 
 def test_an_unreadable_tree_is_not_proven():
     """An empty or malformed id must not equal an empty status description."""
-    assert _prove(_pr(), _status(tree=""), tree="") is False
-    assert _prove(_pr(), _status(tree="nope"), tree="nope") is False
-    assert _prove(_pr(), _status(), sha="") is False
+    assert _prove(_pr(), _status(tree=""), tree="") == tested_tree.NONE
+    assert _prove(_pr(), _status(tree="nope"), tree="nope") == tested_tree.NONE
+    assert _prove(_pr(), _status(), sha="") == tested_tree.NONE
+
+
+PARTIAL = tested_tree.CONTEXT_BUT_PYTEST
+
+
+def test_a_record_from_a_selected_run_proves_every_job_but_pytest():
+    assert _prove(_pr(), _status(context=PARTIAL)) == tested_tree.ALL_BUT_PYTEST
+
+
+def test_a_full_record_beats_a_partial_one_for_the_same_tree_in_either_order():
+    full, partial = _status(), _status(context=PARTIAL)
+    assert _prove(_pr(), partial + full) == tested_tree.ALL
+    assert _prove(_pr(), full + partial) == tested_tree.ALL
+
+
+def test_a_partial_record_is_held_to_the_same_tree_and_creator_checks():
+    assert _prove(_pr(), _status(context=PARTIAL, tree=OTHER_TREE)) == tested_tree.NONE
+    assert _prove(_pr(), _status(context=PARTIAL, login="x")) == tested_tree.NONE
 
 
 def _prove_head(statuses, head=HEAD):
@@ -131,9 +149,11 @@ def test_a_head_with_a_green_record_for_any_tree_is_proven():
         _status(login="fake-operator"),
         _status(target_url="https://github.com/fake-owner/r/actions/runs/1"),
         _status(tree="a batch"),
+        # A batch records only from a full run, so only a full record proves a head.
+        _status(context=PARTIAL),
         OSError("down"),
     ],
-    ids=["none", "creator", "run-url", "no-tree", "unreadable"],
+    ids=["none", "creator", "run-url", "no-tree", "partial", "unreadable"],
 )
 def test_a_head_without_a_green_record_from_this_repositorys_ci_is_not_proven(statuses):
     assert _prove_head(statuses) is False
@@ -147,7 +167,18 @@ def test_main_answers_the_pull_request_question_from_the_head_alone(
     argv = ["prove-head", "--repo", REPO_NAME, "--head", HEAD]
 
     assert tested_tree.main(argv, _api(OSError("no pulls read"), _status())) == 0
-    assert output.read_text() == "proven=true\n"
+    assert output.read_text() == "proven=true\npytest-proven=true\n"
+
+
+def test_main_answers_a_partial_record_with_proven_and_not_pytest_proven(
+    tmp_path, monkeypatch
+):
+    output = tmp_path / "out"
+    monkeypatch.setenv("GITHUB_OUTPUT", str(output))
+    argv = ["prove", "--repo", REPO_NAME, "--sha", SQUASH, "--tree", TREE]
+
+    assert tested_tree.main(argv, _api(_pr(), _status(context=PARTIAL))) == 0
+    assert output.read_text() == "proven=true\npytest-proven=false\n"
 
 
 def test_main_writes_the_answer_and_exits_zero_when_the_lookup_fails(
@@ -158,7 +189,7 @@ def test_main_writes_the_answer_and_exits_zero_when_the_lookup_fails(
     argv = ["prove", "--repo", REPO_NAME, "--sha", SQUASH, "--tree", TREE]
 
     assert tested_tree.main(argv, _api(OSError("down"), [])) == 0
-    assert output.read_text() == "proven=false\n"
+    assert output.read_text() == "proven=false\npytest-proven=false\n"
     assert "proven=false" in capsys.readouterr().out
 
 
