@@ -327,9 +327,9 @@ def worthwhile(
     """`selection`, or the whole census when the selection saves too few of `shards` legs.
 
     DECIDED: a selection runs only when it fits in half the legs or fewer (#8458 review,
-    2026-11-16). A selected run records no tested tree, so the push run after its merge
-    sweeps in full, about 1,414 slot-seconds on 2026-11-14, where a full pull-request run lets
-    it skip as proven. A selection that needs every leg saves nothing and still pays that,
+    2026-11-16). A selected run proves every job but `pytest`, so the push run after its
+    merge repeats the `pytest` legs (#8943), about 1,050 slot-seconds on 2026-11-14, where a
+    full pull-request run lets it skip as proven for about 394. A selection that needs every leg saves nothing and still pays that,
     which is every selection while the table holds few rows: a module with no row always
     runs. Each leg saved is about 170 slot-seconds, so under half the legs the saving is
     small against the lost proof.

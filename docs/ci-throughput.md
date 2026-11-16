@@ -30,7 +30,9 @@ A job with a false job-level `if:` reads `skipped` and takes no runner. A job th
 steps one by one still waits for a slot.
 
 **The `prek` gate passes a skipped need on two paths only.** The first is the proven path:
-`prove` said the pushed tree was tested, and every dependent skipped. The second is a job that
+`prove` said the pushed tree was tested, and every dependent skipped. On that path a
+skipped `pytest` passes only when `prove` also said `pytest-proven=true`, because a record
+from a selected run proves every job but `pytest`. The second is a job that
 reads the build's artifacts and had nothing to run. That job skipped, `host_packages_build`
 succeeded, and the build's output said `false` for it: `run-cases` for the cases legs and
 `arm64-tools` for the arm64 job. Any other skipped need fails the gate, because GitHub reads a
@@ -65,17 +67,21 @@ every module (#8458, ruled by the operator on 2026-11-15).
 - **What a selection gives up.** A module can gain a dependency after its row was recorded.
   A pull request that changes the dependency then leaves the module out, and the module
   fails on master, where a red run parks every landing. The operator accepted that cost.
-- **No proof from a selected run.** A run that left modules out did not test its tree, so
-  the `prek` gate records a tested tree only when `needs.pytest.outputs.scope` is `full`.
-  Master's run after a selected pull-request run therefore sweeps in full, and a landing
-  batch whose run was selected records nothing on its members.
+- **A selected run proves every job but `pytest`.** A run that left modules out did not
+  test its tree with `pytest`, but every other job ran in full on it. The `prek` gate
+  records `ci/tested-tree` when `needs.pytest.outputs.scope` is `full`, and
+  `ci/tested-tree-but-pytest` when it is `selected` (#8943). `scripts/dev/tested_tree.py
+  prove` answers `proven=true` and `pytest-proven=false` for the second record, so master's
+  run after a selected pull-request run repeats only the `pytest` legs. A landing batch
+  whose run was selected still records nothing on its members.
 
 **The saving is on the pull-request run, and the push run gives part of it back.** On
 2026-11-14 a run with no host change used a median 1,414 slot-seconds, about 1,020 of them
 in the six `pytest` legs. A pull request whose selection fits one leg saves most of those
-1,020. Its push run no longer skips as proven, which costs about 1,414. A landing that takes
-one pull-request run therefore uses more slot-seconds than before, and a pull request that
-runs CI several times before it merges uses fewer. `scripts/dev/ci_slot_cost.py --recent 20`
+1,020. Its push run repeats the `pytest` legs, which costs about 1,050, where a proven push
+costs about 394. A landing that takes one pull-request run therefore uses about the same
+slot-seconds as one that runs in full, and a pull request that runs CI several times before
+it merges uses fewer. `scripts/dev/ci_slot_cost.py --recent 20`
 prints the measured figure.
 
 **`host_packages_build` owns the answer to whether a case has anything to run.** Its
