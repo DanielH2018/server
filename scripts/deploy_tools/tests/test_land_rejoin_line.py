@@ -124,6 +124,7 @@ def test_a_rejoined_head_master_moved_past_again_merges_only_its_turns_update(la
             {**OPEN, "headRefOid": UPDATED},
             {**OPEN, "headRefOid": UPDATED},
             {**OPEN, "headRefOid": final},
+            {**OPEN, "headRefOid": final},
             {**MERGED, "headRefOid": final},
         ),
         start=(READY, REJOINED),

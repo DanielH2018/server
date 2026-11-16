@@ -369,12 +369,14 @@ def _start_run(
 
     A head with no CI run that ran jobs takes the landing turn first (`turn.py`), so that the
     run it is about to get tests the master its merge lands on. A draft stands in the line
-    for the turn while it waits (`line.py`). A draft is then marked ready,
-    because a draft's run runs no job and a draft cannot merge. With the turn, the PR's branch
-    is updated from master when master is ahead of it. GitHub builds the tree a pull-request
+    for the turn while it waits (`line.py`). With the turn, the PR's branch is updated from
+    master when master is ahead of it, and only then is a draft marked ready, because a
+    draft's run runs no job and a draft cannot merge. GitHub builds the tree a pull-request
     run tests when the PR's branch is pushed. A ready flip does not build it again: PR #8551
     was marked ready 16 minutes after its only push, and its run tested the master of the
-    push. The update is a push, so the run it starts tests the master of the turn.
+    push. The update is a push, so the run the flip after it starts tests the master of the
+    turn. A flip before the update started a run on the stale head, which the update's push
+    cancelled after it had held runners for minutes (PR #8921 on 2026-11-15).
 
     A head with a CI run that ran jobs keeps it and takes no turn here: `await_merge` takes
     the turn once that head is green, so no landing holds the turn while a run that started
@@ -404,8 +406,7 @@ def _start_run(
         in_turn, queued = take_turn(head if view.get("isDraft") is True else "")
         if not queued:
             break
-    if view.get("isDraft") is True:
-        _mark_ready(ln)
+    draft = view.get("isDraft") is True
     if (
         not (in_turn and untested)
         or stale_base.batch_tested(ln, head)
@@ -413,15 +414,39 @@ def _start_run(
         or head == ln.approved_head
         or (ln.pinned_head and head != ln.pinned_head)
     ):
+        if draft:
+            _mark_ready(ln)
         return "", in_turn, queued
     try:
         moved = stale_base.master_paths_since(ln, head)
         if moved:
             stale_base.update_branch(ln, head, moved)
+            if draft:
+                _await_new_head(ln, head)
     except Outcome as exc:
         say(f"{exc.error}; going on with the run the PR has")
-        return "", in_turn, queued
+        moved = []
+    # Marked ready only after the update, so its one run starts on the updated head: a flip
+    # before it started a run on the stale head that the update's push cancelled.
+    if draft:
+        _mark_ready(ln)
     return (head if moved else ""), in_turn, queued
+
+
+# How long a draft's landing waits for GitHub to apply its branch update before it marks the
+# PR ready anyway; GitHub applies an update asynchronously, usually within seconds.
+NEW_HEAD_WAIT_S = 60
+NEW_HEAD_POLL_S = 3
+
+
+def _await_new_head(ln: Landing, head: str) -> None:
+    """Wait, up to `NEW_HEAD_WAIT_S`, for the PR's head to move off `head`."""
+    waited = 0
+    while waited < NEW_HEAD_WAIT_S:
+        if (ln.view("state,mergeable,headRefOid").get("headRefOid") or head) != head:
+            return
+        ln.tools.sleep(NEW_HEAD_POLL_S)
+        waited += NEW_HEAD_POLL_S
 
 
 def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:

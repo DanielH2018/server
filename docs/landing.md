@@ -183,11 +183,12 @@ jobs. Every landing that merges its PR directly takes the turn.
   that run. Any other head asks on the first poll that reads it green. No landing holds the
   turn while a run that started before it finishes, because every landing behind it would
   wait for that run too.
-- It marks a draft PR ready. With the turn, it then updates the PR's branch from master when
-  the head has had no CI run that ran jobs and master is ahead of it. GitHub builds the tree
-  a pull-request run tests when the PR's branch is pushed, and a ready flip does not build it
-  again, so a run that a ready flip starts tests the master of the last push. The update is
-  a push, and the run it starts tests the master of the turn.
+- With the turn, it updates the PR's branch from master when the head has had no CI run that
+  ran jobs and master is ahead of it, waits for GitHub to show the new head, and only then
+  marks a draft ready. GitHub builds the tree a pull-request run tests when the PR's branch
+  is pushed, and a ready flip does not build it again, so the run the flip starts tests the
+  master of the turn. Marked ready before the update, a draft got a run on its stale head,
+  which the update's push cancelled after minutes on the runners.
 - A landing that stood in line reads its PR again before it acts, because the PR may have
   moved or merged in the meantime.
 - A landing that waits with a draft that has had no CI run stands in the line for the turn:
