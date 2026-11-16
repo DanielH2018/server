@@ -272,7 +272,7 @@ EOF
   # in docs/reference) inside the run window. That window is small -- the top-of-script gate exits
   # on any dirty tree, so everything tracked and modified here arrived during this run -- and
   # fail-closed is the direction this script's own header demands.
-  # SCOPE (see lib.git.git_dirty, #1223): path-scoped to the four paths this script writes,
+  # SCOPE (see lib.git.git_dirty, #1223): path-scoped to the five paths this script writes,
   # untracked counted within them — the one of the three scopes limited by paths rather than by
   # tracked-ness.
   #
@@ -282,7 +282,8 @@ EOF
   # "tree restored" over a weights table left modified under scripts/dev/ — which parks the
   # `homelab-checkout-sync` exactly as a leftover page does (#2274).
   [ -z "$(git status --porcelain -- docs/reference docs/assets/generated \
-    scripts/dev/pytest_shard_weights.json scripts/dev/pytest_shard_runner_weights.json)" ] || rc=1
+    scripts/dev/pytest_shard_weights.json scripts/dev/pytest_shard_runner_weights.json \
+    scripts/dev/affected_tests.json)" ] || rc=1
   return "$rc"
 }
 
@@ -500,16 +501,46 @@ else
   printf '%s\n' "$RUNNER_MSG"
 fi
 
-# The two generated trees, plus the shard-weights tables the steps above write. Nothing else: a
+# REFRESH WHAT EACH TEST MODULE DEPENDS ON (#8458). A pull request's CI run executes only the
+# test modules its diff can affect, and scripts/dev/affected_tests.json is the table that
+# decides it. A module with no current row runs on every pull request, so this step is what
+# makes the selection narrow, and nothing else writes the table.
+#
+# `record --slices 12` traces each module that has no current row, then one twelfth of the
+# rest, so every row is recorded again within six days. It runs each module alone under
+# strace, which the component's `depends` installs. 122 modules took 265s at six jobs on
+# daniel-server, so a slice fits the budget, and a backlog of new modules spreads over several
+# runs: `--budget 540` starts no module after nine minutes and leaves the rest their rows.
+# The `timeout` is that budget plus the longest one module may run
+# (scripts/dev/affected_lib/record.py:MODULE_TIMEOUT_SECONDS). It is no longer because this
+# script holds the git-tree lock, and hosts/tests/test_tree_lock_wait_covers_holders.py sums
+# every `timeout` here against the wait the other holders give the lock.
+#
+# The table holds nothing that moves with the clock, so a run that records unchanged rows
+# writes the same bytes and publishes nothing. Same degrade-not-abort handling as the steps
+# above. A refused module is named on stdout, which reaches the journal.
+AFFECTED_MSG="$(timeout 900 "$UV" run --frozen python scripts/dev/affected_tests.py \
+  record --slices 12 --budget 540 --jobs 6 2>&1)"
+AFFECTED_RC=$?
+if [ "$AFFECTED_RC" -ne 0 ]; then
+  alert "docs-refresh: recording test dependencies failed (exit ${AFFECTED_RC}); $(printf '%s' \
+    "$AFFECTED_MSG" | tr '\n' ' ' | tail -c 300)"
+  DEGRADED_MSG="recording test dependencies failed (exit ${AFFECTED_RC})"
+  GENERATORS_OK=0
+else
+  printf '%s\n' "$AFFECTED_MSG"
+fi
+
+# The two generated trees, plus the tables the steps above write. Nothing else: a
 # generator that wrote outside this list would otherwise be committed silently by a cron, which
 # is exactly the class of change that must go through a PR.
 #
-# THE WEIGHTS TABLES ARE SANCTIONED EXTRA PATHS, not generated trees. They are derived output like
-# the pages are — the `pytest_shard.py` steps above reproduce them — and staging them is what keeps
-# them out of the primary checkout as dirt. restore_generated_tree's per-tree check names the same
+# THE TABLES ARE SANCTIONED EXTRA PATHS, not generated trees. They are derived output like
+# the pages are — the `pytest_shard.py` and `affected_tests.py` steps above reproduce them — and
+# staging them is what keeps them out of the primary checkout as dirt. restore_generated_tree's per-tree check names the same
 # paths for that reason.
 git add docs/reference docs/assets/generated scripts/dev/pytest_shard_weights.json \
-  scripts/dev/pytest_shard_runner_weights.json
+  scripts/dev/pytest_shard_runner_weights.json scripts/dev/affected_tests.json
 
 if git diff --cached --quiet; then
   # The common outcome: the inputs are repo files and they only move when a PR merges, so most
@@ -606,7 +637,7 @@ fi
 # still local on master, 2 once the branch is on origin without a PR.
 PUB_MSG="$("$UV" run --frozen python scripts/deploy_tools/publish_pr.py publish \
   --prefix "$PR_BRANCH_PREFIX" --title "docs: refresh generated reference pages and test shard weights" \
-  --body "Derived output only, from the twice-daily docs-refresh cron: the pages under docs/reference/, the infra map, and the two pytest shard-weights tables. The first two are reproducible by scripts/docs/build_docs.py and the tables by scripts/dev/pytest_shard.py. Opened as a PR because a repository ruleset rejects direct writes to master." \
+  --body "Derived output only, from the twice-daily docs-refresh cron: the pages under docs/reference/, the infra map, the two pytest shard-weights tables and the test-dependency table. The first two are reproducible by scripts/docs/build_docs.py and the tables by scripts/dev/pytest_shard.py and scripts/dev/affected_tests.py. Opened as a PR because a repository ruleset rejects direct writes to master." \
   2>&1)"
 PUB_RC=$?
 # The publisher prints one line, but 2>&1 also captures uv's own resolver chatter after a lock

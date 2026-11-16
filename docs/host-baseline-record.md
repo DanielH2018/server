@@ -254,6 +254,13 @@ push to Kuma, which M6 batch B2's Cutover-2 removed. B2's token PR retired both 
   one hash slice of the table serially on this host, and every entry once in four days. It
   rewrites only an entry more than `DRIFT_RATIO` (1.5x) from what it measured, so noise inside
   that band leaves no diff.
+- **Why it records what each test module depends on (#8458).** A pull request's CI run
+  executes only the test modules its diff can affect, and `scripts/dev/affected_tests.json`
+  is the table that decides it. `affected_tests.py record --slices 12 --budget 540` traces
+  each module with no current row, then one twelfth of the rest, each alone under `strace`.
+  All 1,461 modules would take about 54 minutes at six jobs, so the budget spreads a backlog
+  over several runs. The table holds nothing that moves with the clock, so recording an
+  unchanged row writes the same bytes.
 - **Why a refresh can keep a drifted weight (#7132).** Two agreeing runs defend against one-off
   load, not against a cost that is real on this host alone. The cron wrote 85.09s for a module
   CI measured at 2.08s. `--refresh-drifted` compares the reading with

@@ -49,10 +49,19 @@ builds `_k8s_render`'s render once and charges it to whichever module asks first
 would vary from run to run. `tests/render_share.py` builds it when collection
 finishes, outside every test's timed phases, with the fleet render beside it, and its
 `# DECIDED:` has the numbers. `scripts/tests/conftest.py` runs the two census files' shared
-pass the same way. A leg builds each of the three only when it holds a module that reads it,
+pass the same way. `shard_prebuild.py` says which modules trigger which of the three. A
+leg builds each of the three only when it holds a module that reads it,
 so its cost depends on the shard's membership: the legs holding the census files ran 14-17s
 longer than a split on test seconds alone projected (#8900). `assign` therefore packs each
 shard's `prebuild_seconds` beside its test seconds, and `--summary` prints both.
+
+A PULL REQUEST RUNS ONLY THE MODULES ITS DIFF CAN AFFECT (#8458). `--changed-since REF` asks
+`affected_lib/table.py` which modules the diff from REF selects and packs those alone, into as
+few legs as keep each no heavier than a full sweep's leg. The legs past that count get an
+empty list and CI skips their remaining steps. A selection that needs more than half the legs
+runs as the whole census instead (`worthwhile`), because a selected run gives up the
+tested-tree record that lets the push run skip. A push to master and a dispatch pass no REF and
+run the whole census. `affected_lib/table.py` has the rule and what it can miss.
 
 The docs-refresh cron runs `--record-missing` itself, so gaps in the table fill without a human.
 
@@ -86,6 +95,7 @@ the same code (#3604). Five narrowings of a failing version (#3604, #4010, #5480
 Usage:
     uv run python scripts/dev/pytest_shard.py --of 4 --shard 1        # this shard's files
     uv run python scripts/dev/pytest_shard.py --of 4 --shard 1 --out list.txt
+    uv run python scripts/dev/pytest_shard.py --of 4 --shard 1 --changed-since HEAD^1
     uv run python scripts/dev/pytest_shard.py --of 4 --summary        # projected balance
     uv run python scripts/dev/pytest_shard.py --record                # re-measure the weights
     uv run python scripts/dev/pytest_shard.py --record-missing        # only the unweighted files
@@ -96,10 +106,11 @@ Usage:
     uv run python scripts/dev/pytest_shard.py --check-durations ci.log  # annotate, always exit 0
 """
 
-import functools
+import dataclasses
 import hashlib
 import json
-import re
+import math
+import os
 import statistics
 import subprocess
 import sys
@@ -113,10 +124,18 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 # Reach `render_share`, which decides which test modules read the fleet render.
 sys.path.insert(1, str(Path(__file__).resolve().parents[2] / "tests"))
 
+from affected_lib import table as affected_table
 from lib.cli_help import ArgumentParser
 
 from lib.git import git
 from lib.repo_paths import REPO
+from shard_prebuild import (
+    CENSUS_FILE_PREFIX,
+    CI_WORKERS,
+    prebuild_kinds,
+    prebuild_seconds,
+    prebuild_wall,
+)
 from shard_weight_gate import (
     LOCAL_READING_MAX_RATIO,
     RUNNER_HEAVY_SECONDS,
@@ -149,20 +168,6 @@ _TEST_FILE_GLOBS = ("test_*.py", "*_test.py")
 # Without this term the split balances recorded seconds and leaves the file COUNT wildly uneven,
 # which is how the 357-file shard became the pole while the model called every shard equal.
 _PER_FILE_SECONDS = 0.028
-
-# The wall seconds each render prebuild holds a CI leg before its first test, read off the
-# `phase timing` sections of master run 42681237857 (#7732). The k8s render alone took 11s and
-# the fleet render alone 5-7s. `render_share.build_each` runs the two on different workers, so
-# a leg reading both waits the longer one.
-K8S_RENDER_WALL_SECONDS = 11.0
-FLEET_RENDER_WALL_SECONDS = 6.0
-# The census rows' pass `scripts/tests/conftest.py` runs: CI's 16.0s on #7950's shard 6.
-CENSUS_PASS_WALL_SECONDS = 16.0
-CENSUS_FILE_PREFIX = "scripts/tests/test_census_rows_test_"
-# The module whose import makes a leg build the shared k8s render.
-K8S_RENDER_MODULE = "_k8s_render"
-# The xdist workers on each leg's runner, every one of which waits out the prebuilds.
-CI_WORKERS = 4
 
 # The docs-refresh cron runs at 06:17 and 18:17. Two runs 12 hours apart always fall in
 # consecutive periods of this length, so successive runs visit successive slices.
@@ -224,6 +229,13 @@ def load_weights(path: Path = WEIGHTS_PATH) -> dict[str, float]:
     return {k: float(v) for k, v in json.loads(path.read_text()).items()}
 
 
+def _costs(files, weights: dict[str, float]) -> dict[str, float]:
+    """What each of `files` costs a leg; an unweighted file gets the median of the weighted."""
+    known = [weights[f] for f in files if f in weights]
+    default = statistics.median(known) if known else 1.0
+    return {f: weights.get(f, default) + _PER_FILE_SECONDS for f in files}
+
+
 def assign(
     files, shards: int, weights: dict[str, float], repo: Path = REPO
 ) -> dict[str, int]:
@@ -241,16 +253,13 @@ def assign(
     """
     if shards < 1:
         raise ValueError(f"shards must be >= 1, got {shards}")
-    known = [weights[f] for f in files if f in weights]
-    default = statistics.median(known) if known else 1.0
+    file_cost = _costs(files, weights)
     census_files = tuple(sorted(f for f in files if f.startswith(CENSUS_FILE_PREFIX)))
     units = [(f,) for f in files if f not in census_files]
     units += [census_files] if census_files else []
-    cost = {
-        u: sum(weights.get(f, default) + _PER_FILE_SECONDS for f in u) for u in units
-    }
+    cost = {u: sum(file_cost[f] for f in u) for u in units}
     kinds = {u: frozenset().union(*(prebuild_kinds(f, repo) for f in u)) for u in units}
-    alone = {u: cost[u] + _prebuild_wall(kinds[u]) * CI_WORKERS for u in units}
+    alone = {u: cost[u] + prebuild_wall(kinds[u]) * CI_WORKERS for u in units}
     load = [0.0] * shards
     paid: list[frozenset[str]] = [frozenset()] * shards
     placed: dict[str, int] = {}
@@ -258,7 +267,7 @@ def assign(
         after = [
             load[i]
             + cost[unit]
-            + (_prebuild_wall(paid[i] | kinds[unit]) - _prebuild_wall(paid[i]))
+            + (prebuild_wall(paid[i] | kinds[unit]) - prebuild_wall(paid[i]))
             * CI_WORKERS
             for i in range(shards)
         ]
@@ -277,6 +286,89 @@ def shard_files(shard: int, shards: int, files=None, weights=None) -> list[str]:
     weights = packing_table(load_weights()) if weights is None else weights
     placed = assign(files, shards, weights)
     return sorted(f for f, i in placed.items() if i == shard - 1)
+
+
+def affected(
+    base: str, repo: Path = REPO, rows: affected_table.Table | None = None
+) -> affected_table.Selection:
+    """The modules the diff from `base` to HEAD can affect, as `rows` reads it.
+
+    `rows` is the committed table when None. A module in `CI_ONLY_WEIGHTS` joins every
+    selection: its expensive legs run only on a CI runner, so no row recorded on a host holds
+    what they read.
+    """
+    files = census(repo)
+    selection = affected_table.select_since(
+        affected_table.load() if rows is None else rows, base, files, repo
+    )
+    if selection.full:
+        return selection
+    pinned = set(CI_ONLY_WEIGHTS).intersection(files)
+    return dataclasses.replace(
+        selection, modules=sorted(pinned.union(selection.modules))
+    )
+
+
+def legs_for(selected, files, shards: int, weights: dict[str, float]) -> int:
+    """How many of `shards` legs carry `selected`, so none outweighs a leg of all of `files`."""
+    if not selected:
+        return 0
+    cost = _costs(files, weights)
+    per_leg = sum(cost.values()) / shards
+    return min(shards, max(1, math.ceil(sum(cost[f] for f in selected) / per_leg)))
+
+
+def worthwhile(
+    selection: affected_table.Selection,
+    shards: int,
+    files: list[str] | None = None,
+    weights: dict[str, float] | None = None,
+) -> affected_table.Selection:
+    """`selection`, or the whole census when the selection saves too few of `shards` legs.
+
+    DECIDED: a selection runs only when it fits in half the legs or fewer (#8458 review,
+    2026-11-16). A selected run records no tested tree, so the push run after its merge
+    sweeps in full, about 1,414 slot-seconds on 2026-11-14, where a full pull-request run lets
+    it skip as proven. A selection that needs every leg saves nothing and still pays that,
+    which is every selection while the table holds few rows: a module with no row always
+    runs. Each leg saved is about 170 slot-seconds, so under half the legs the saving is
+    small against the lost proof.
+
+    Args:
+        selection: What the diff selected.
+        shards: How many legs the run has.
+        files: The census; `census()` when None.
+        weights: The packing weights; the committed tables' when None.
+    """
+    if selection.full:
+        return selection
+    files = census() if files is None else files
+    weights = packing_table(load_weights()) if weights is None else weights
+    legs = legs_for(selection.modules, files, shards, weights)
+    if legs <= shards // 2:
+        return selection
+    return affected_table.Selection(
+        sorted(files),
+        True,
+        f"{selection.reason}, which needs {legs} of {shards} legs and so saves too few to "
+        "give up the tested-tree record",
+    )
+
+
+def leg_files(
+    shard: int, shards: int, selection: affected_table.Selection | None = None
+) -> list[str]:
+    """What 1-based leg `shard` of `shards` runs.
+
+    With no `selection`, or one that is the whole census, the leg takes its share of the
+    census. Otherwise it takes its share of the selected modules, which is empty for a leg the
+    selection does not need.
+    """
+    if selection is None or selection.full:
+        return shard_files(shard, shards)
+    weights = packing_table(load_weights())
+    legs = legs_for(selection.modules, census(), shards, weights)
+    return shard_files(shard, legs, selection.modules, weights) if shard <= legs else []
 
 
 def measure_weights(files: list[str] | None = None) -> dict[str, float]:
@@ -481,113 +573,6 @@ def refresh_drifted_weights(
     return sorted(moved)
 
 
-_IMPORT_LINE = re.compile(
-    r"^\s*(?:from\s+([\w.]+)\s+import\b|import\s+([\w., ]+))", re.M
-)
-
-
-def _imported_names(text: str) -> set[str]:
-    """The first and last dotted component of every module an import line in `text` names."""
-    names = set()
-    for source, listed in _IMPORT_LINE.findall(text):
-        for module in [source] if source else listed.split(","):
-            parts = module.split()[0].split(".") if module.split() else []
-            names.update(parts[:1] + parts[-1:])
-    return names
-
-
-def _python_files(repo: Path) -> list[Path]:
-    listed = git("ls-files", "-z", "*.py", cwd=repo).stdout.split("\0")
-    return [repo / rel for rel in listed if rel]
-
-
-@functools.cache
-def k8s_render_readers(repo: Path = REPO) -> frozenset[str]:
-    """The module names whose import loads `_k8s_render`, directly or through other modules.
-
-    Modules are matched by basename, as pytest's `pythonpath` imports them, and a basename
-    two files share counts when either file reads the render. An import inside a function
-    counts too: overcharging a leg one render costs less than a leg the split missed.
-    """
-    imports: dict[str, set[str]] = {}
-    for path in _python_files(repo):
-        try:
-            text = path.read_text()
-        except OSError, UnicodeDecodeError:
-            continue
-        if path.stem != "conftest":
-            imports.setdefault(path.stem, set()).update(_imported_names(text))
-    readers = {K8S_RENDER_MODULE}
-    while grown := {
-        m for m, names in imports.items() if m not in readers and names & readers
-    }:
-        readers |= grown
-    return frozenset(readers)
-
-
-def _ancestor_conftests(rel: str, repo: Path) -> list[Path]:
-    """The `conftest.py` files pytest loads to collect `rel`: its own directory's and each parent's."""
-    parents = PurePosixPath(rel).parents
-    return [
-        repo / d / "conftest.py"
-        for d in parents
-        if (repo / d / "conftest.py").is_file()
-    ]
-
-
-@functools.cache
-def _conftest_imports(path: Path) -> frozenset[str]:
-    return frozenset(_imported_names(path.read_text()))
-
-
-@functools.cache
-def prebuild_kinds(rel: str, repo: Path = REPO) -> frozenset[str]:
-    """The prebuilds a leg runs because it holds the test module at `rel`.
-
-    `k8s` when the module or a `conftest.py` above it imports `_k8s_render`, directly or
-    through `k8s_render_readers`, `fleet` when it is a `render_share` consumer, and `census` for a census rows file. A
-    module that cannot be read triggers none.
-    """
-    import render_share
-
-    try:
-        text = (repo / rel).read_text()
-    except OSError, UnicodeDecodeError:
-        return frozenset()
-    kinds = set()
-    readers = k8s_render_readers(repo)
-    if _imported_names(text) & readers or any(
-        _conftest_imports(conftest) & readers
-        for conftest in _ancestor_conftests(rel, repo)
-    ):
-        kinds.add("k8s")
-    if render_share.CONSUMER_IMPORT in text:
-        kinds.add("fleet")
-    if rel.startswith(CENSUS_FILE_PREFIX):
-        kinds.add("census")
-    return frozenset(kinds)
-
-
-def _prebuild_wall(kinds: frozenset[str]) -> float:
-    wall = max(
-        K8S_RENDER_WALL_SECONDS if "k8s" in kinds else 0.0,
-        FLEET_RENDER_WALL_SECONDS if "fleet" in kinds else 0.0,
-    )
-    return wall + (CENSUS_PASS_WALL_SECONDS if "census" in kinds else 0.0)
-
-
-def prebuild_seconds(members: list[str], repo: Path = REPO) -> float:
-    """The runner seconds a shard of `members` spends in prebuilds before its first test.
-
-    Every worker of a leg waits until the prebuilds finish, so they cost their wall time once
-    per worker. A shard pays the k8s render when it holds a module that imports `_k8s_render`. A shard
-    holding a `render_share` consumer renders the fleet on another worker meanwhile, so one
-    holding both waits the longer of the two. A census file adds the census pass.
-    """
-    kinds = frozenset().union(*(prebuild_kinds(f, repo) for f in members))
-    return _prebuild_wall(kinds) * CI_WORKERS
-
-
 def _summary(shards: int) -> str:
     files, weights = census(), packing_table(load_weights())
     placed = assign(files, shards, weights)
@@ -604,12 +589,20 @@ def _summary(shards: int) -> str:
     return "\n".join(lines)
 
 
-def main(argv=None) -> int:
+def main(argv=None, select=affected) -> int:
     parser = ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--of", type=int, default=4, help="how many shards in total")
     parser.add_argument("--shard", type=int, help="which 1-based shard to print")
     parser.add_argument(
         "--out", type=Path, help="write the file list here instead of stdout"
+    )
+    parser.add_argument(
+        "--changed-since",
+        metavar="REF",
+        help=(
+            "with --shard, pack only the modules the diff from REF to HEAD can affect; a leg "
+            "the selection does not need gets an empty list"
+        ),
     )
     parser.add_argument(
         "--summary", action="store_true", help="print the projected balance"
@@ -744,16 +737,31 @@ def main(argv=None) -> int:
             "--check-durations is required"
         )
 
-    files = shard_files(args.shard, args.of)
-    # An empty list is not a fast green: pytest exits 5 ("no tests collected") on one, and a
-    # shard that collects nothing has silently stopped covering whatever it used to hold.
-    if not files:
+    selection = (
+        worthwhile(select(args.changed_since), args.of) if args.changed_since else None
+    )
+    whole = selection is None or selection.full
+    files = leg_files(args.shard, args.of, selection)
+    # An empty share of the census is not a fast green: pytest exits 5 ("no tests collected")
+    # on one, and a shard that collects nothing has silently stopped covering whatever it used
+    # to hold. A selection's spare leg is empty on purpose.
+    if whole and not files:
         raise SystemExit(f"shard {args.shard} of {args.of} selects no test files")
-    text = "\n".join(files) + "\n"
+    text = "".join(f"{f}\n" for f in files)
     if args.out:
         args.out.write_text(text)
+        why = selection.reason if selection else "no base to diff against"
+        print(
+            f"shard {args.shard} of {args.of}: {len(files)} test file(s) of "
+            f"{'the whole census' if whole else 'a selection'}: {why}"
+        )
     else:
         sys.stdout.write(text)
+    if output := os.environ.get("GITHUB_OUTPUT"):
+        with open(output, "a") as handle:
+            handle.write(
+                f"count={len(files)}\nscope={'full' if whole else 'selected'}\n"
+            )
     return 0
 
 

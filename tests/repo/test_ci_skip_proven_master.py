@@ -115,6 +115,7 @@ def _evaluate(condition: str, event: str, **facts: object) -> bool:
         .replace(QUEUE_BRANCH, str(facts.get("queue", False)))
         .replace("needs.prove.result", repr(facts.get("prove", "skipped")))
         .replace("needs.prove.outputs.proven", repr(facts.get("proven", "")))
+        .replace("needs.pytest.outputs.scope", repr(facts.get("scope", "full")))
         .replace("github.event_name", repr(event))
         .replace("!(", "not (")
         .replace("&&", " and ")
@@ -322,8 +323,21 @@ def test_only_a_same_repo_pr_run_records_the_tested_tree():
         ("pull_request", {"prove": "cancelled", "proven": "true"}, True),
         ("pull_request", {"same_repo": False}, False),
         ("push", {"prove": "success", "proven": "false"}, False),
+        # A run that left test modules out did not test the whole tree (#8458).
+        ("pull_request", {"scope": "selected"}, False),
+        # No leg reached its select step, so nothing says the census ran.
+        ("pull_request", {"scope": ""}, False),
     ],
-    ids=["unlabelled", "unproven", "proven", "cancelled", "fork", "push"],
+    ids=[
+        "unlabelled",
+        "unproven",
+        "proven",
+        "cancelled",
+        "fork",
+        "push",
+        "selected",
+        "no-scope",
+    ],
 )
 def test_a_run_records_the_tree_it_tested_unless_it_was_proven(event, facts, records):
     steps = {s["name"]: s for s in _jobs()["prek"]["steps"] if "name" in s}
@@ -346,8 +360,9 @@ BATCH_STEPS = (
         ("pull_request", {"queue": True, "same_repo": False}, False),
         ("pull_request", {"queue": True, "prove": "success", "proven": "true"}, False),
         ("push", {"queue": True}, False),
+        ("pull_request", {"queue": True, "scope": "selected"}, False),
     ],
-    ids=["batch", "ordinary", "fork", "proven", "push"],
+    ids=["batch", "ordinary", "fork", "proven", "push", "selected"],
 )
 def test_only_a_batch_run_of_this_repository_records_its_members(event, facts, records):
     steps = {s["name"]: s for s in _jobs()["prek"]["steps"] if "name" in s}
