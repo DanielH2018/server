@@ -99,6 +99,40 @@ def test_a_fixed_by_line_from_outside_the_repo_names_no_pr(capsys):
     assert rows[0]["prs"] == []
 
 
+def test_a_close_fixed_line_naming_another_repos_pr_reads_back_as_no_pr(capsys):
+    """The round trip of #8886: what `close --fixed --pr --repo` writes on the dotfiles
+    register names a server PR, so dotfiles history must not report it as dotfiles PR N."""
+    tools, calls = build_tools(Fakes(view=make_issue(1395)))
+    argv = [
+        "close",
+        "1395",
+        "--fixed",
+        "--pr",
+        "8879",
+        "--repo",
+        "DanielH2018/dotfiles",
+    ]
+    assert main(argv, tools) == 0
+    (close,) = [c for c in calls.gh if c[:2] == ["issue", "close"]]
+    written = close[close.index("--comment") + 1]
+    capsys.readouterr()
+    closed = _closed(1395, reason="COMPLETED", comments=[written])
+    rows, _ = _rows(
+        capsys, ["history", "x", "--repo", "DanielH2018/dotfiles"], [closed]
+    )
+    assert rows[0]["prs"] == []
+
+
+def test_a_fixed_by_line_qualified_with_the_register_names_its_pr(capsys):
+    """#8886 names `owner/name#N` as the form a cross-repo close writes; the parser must
+    accept it, or a server PR that closed a server issue that way would vanish."""
+    issue = _closed(
+        2, reason="COMPLETED", comments=["Fixed by PR DanielH2018/server#8879."]
+    )
+    rows, _ = _rows(capsys, ["history", "x"], [issue])
+    assert rows[0]["prs"] == [8879]
+
+
 def test_history_file_keeps_only_findings_whose_body_cites_the_path(capsys):
     cites = make_issue(1)
     cites["body"] = "See `scripts/dev/findings_lib/gh_calls.py:88` for the cap."
@@ -203,3 +237,9 @@ def test_a_settle_reason_from_outside_the_repo_is_not_printed(capsys):
     )
     rows, _ = _rows(capsys, ["history", "x"], [issue])
     assert rows[0]["reason"] == "the operator's ruling"
+
+
+def test_a_bare_fixed_by_line_on_another_register_names_its_own_pr(capsys):
+    issue = _closed(1395, reason="COMPLETED", comments=["Fixed by PR #1400."])
+    rows, _ = _rows(capsys, ["history", "x", "--repo", "DanielH2018/dotfiles"], [issue])
+    assert rows[0]["prs"] == [1400]

@@ -49,7 +49,11 @@ builds `_k8s_render`'s render once and charges it to whichever module asks first
 would vary from run to run. `tests/render_share.py` builds it when collection
 finishes, outside every test's timed phases, with the fleet render beside it, and its
 `# DECIDED:` has the numbers. `scripts/tests/conftest.py` runs the two census files' shared
-pass the same way. `--summary` charges all three per shard, as `prebuild_seconds`.
+pass the same way. `shard_prebuild.py` says which modules trigger which of the three. A
+leg builds each of the three only when it holds a module that reads it,
+so its cost depends on the shard's membership: the legs holding the census files ran 14-17s
+longer than a split on test seconds alone projected (#8900). `assign` therefore packs each
+shard's `prebuild_seconds` beside its test seconds, and `--summary` prints both.
 
 A PULL REQUEST RUNS ONLY THE MODULES ITS DIFF CAN AFFECT (#8458). `--changed-since REF` asks
 `affected_lib/table.py` which modules the diff from REF selects and packs those alone, into as
@@ -125,6 +129,13 @@ from lib.cli_help import ArgumentParser
 
 from lib.git import git
 from lib.repo_paths import REPO
+from shard_prebuild import (
+    CENSUS_FILE_PREFIX,
+    CI_WORKERS,
+    prebuild_kinds,
+    prebuild_seconds,
+    prebuild_wall,
+)
 from shard_weight_gate import (
     LOCAL_READING_MAX_RATIO,
     RUNNER_HEAVY_SECONDS,
@@ -157,21 +168,6 @@ _TEST_FILE_GLOBS = ("test_*.py", "*_test.py")
 # Without this term the split balances recorded seconds and leaves the file COUNT wildly uneven,
 # which is how the 357-file shard became the pole while the model called every shard equal.
 _PER_FILE_SECONDS = 0.028
-
-# The wall seconds each render prebuild holds a CI leg before its first test, read off the
-# `phase timing` sections of master run 42681237857 (#7732). The leg holding no render_share
-# consumer took 11s for the k8s render alone. Legs that rendered k8s at a module's import took
-# 5-7s for the fleet render alone, and the rest about 17s for both. `--summary` adds them per
-# shard and `assign` does not: the fleet render is the only part a shard's membership changes,
-# and at 24 of about 660 runner seconds per shard it is below what the packing can resolve.
-# `render_share.build_each` runs the two on different workers, so a leg waits the longer one.
-K8S_RENDER_WALL_SECONDS = 11.0
-FLEET_RENDER_WALL_SECONDS = 6.0
-# The census rows' pass `scripts/tests/conftest.py` runs: CI's 16.0s on #7950's shard 6.
-CENSUS_PASS_WALL_SECONDS = 16.0
-CENSUS_FILE_PREFIX = "scripts/tests/test_census_rows_test_"
-# The xdist workers on each leg's runner, every one of which waits out the prebuilds.
-CI_WORKERS = 4
 
 # The docs-refresh cron runs at 06:17 and 18:17. Two runs 12 hours apart always fall in
 # consecutive periods of this length, so successive runs visit successive slices.
@@ -240,22 +236,45 @@ def _costs(files, weights: dict[str, float]) -> dict[str, float]:
     return {f: weights.get(f, default) + _PER_FILE_SECONDS for f in files}
 
 
-def assign(files, shards: int, weights: dict[str, float]) -> dict[str, int]:
+def assign(
+    files, shards: int, weights: dict[str, float], repo: Path = REPO
+) -> dict[str, int]:
     """Map each file to a shard index in `range(shards)`, greedy longest-processing-time.
 
-    Deterministic: files are ordered by descending weight then by path, and a tie between two
-    equally loaded shards goes to the lower index. The same census and the same weights give
-    the same assignment on every machine.
+    A file's cost on a shard is its weight, `_PER_FILE_SECONDS`, and the prebuild seconds it
+    adds to what that shard already pays. The census files go as one unit, since they share
+    one census pass, and greedy placement would split them: the second file costs less on an
+    empty shard than beside the first. Units go in order of their cost on an empty shard,
+    each to the shard it leaves least loaded.
+
+    Deterministic: ties in that order break by path, and a tie between two shards goes to the
+    lower index. The same census and the same weights give the same assignment on every
+    machine.
     """
     if shards < 1:
         raise ValueError(f"shards must be >= 1, got {shards}")
-    cost = _costs(files, weights)
+    file_cost = _costs(files, weights)
+    census_files = tuple(sorted(f for f in files if f.startswith(CENSUS_FILE_PREFIX)))
+    units = [(f,) for f in files if f not in census_files]
+    units += [census_files] if census_files else []
+    cost = {u: sum(file_cost[f] for f in u) for u in units}
+    kinds = {u: frozenset().union(*(prebuild_kinds(f, repo) for f in u)) for u in units}
+    alone = {u: cost[u] + prebuild_wall(kinds[u]) * CI_WORKERS for u in units}
     load = [0.0] * shards
+    paid: list[frozenset[str]] = [frozenset()] * shards
     placed: dict[str, int] = {}
-    for path in sorted(files, key=lambda f: (-cost[f], f)):
-        target = min(range(shards), key=lambda i: (load[i], i))
-        placed[path] = target
-        load[target] += cost[path]
+    for unit in sorted(units, key=lambda u: (-alone[u], u)):
+        after = [
+            load[i]
+            + cost[unit]
+            + (prebuild_wall(paid[i] | kinds[unit]) - prebuild_wall(paid[i]))
+            * CI_WORKERS
+            for i in range(shards)
+        ]
+        target = min(range(shards), key=lambda i: (after[i], i))
+        load[target] = after[target]
+        paid[target] |= kinds[unit]
+        placed |= dict.fromkeys(unit, target)
     return placed
 
 
@@ -278,15 +297,9 @@ def affected(
     selection: its expensive legs run only on a CI runner, so no row recorded on a host holds
     what they read.
     """
-    fields = git(
-        "diff", "--name-status", "--no-renames", "-z", base, "HEAD", cwd=repo
-    ).stdout.split("\0")
     files = census(repo)
-    selection = affected_table.select(
-        affected_table.load() if rows is None else rows,
-        list(zip(fields[0::2], fields[1::2], strict=False)),
-        files,
-        affected_table.tracked_blobs(repo),
+    selection = affected_table.select_since(
+        affected_table.load() if rows is None else rows, base, files, repo
     )
     if selection.full:
         return selection
@@ -558,26 +571,6 @@ def refresh_drifted_weights(
     moved = runner_backed_readings(agreed)
     _write_weights(kept | moved, path, pins)
     return sorted(moved)
-
-
-def prebuild_seconds(members: list[str], repo: Path = REPO) -> float:
-    """The runner seconds a shard of `members` spends in render prebuilds before its first test.
-
-    Every worker of a leg waits until the prebuilds finish, so they cost their wall time once
-    per worker. Every shard pays the k8s render, since each holds a few dozen of its readers. A
-    shard holding a `render_share` consumer renders the fleet on another worker meanwhile, so
-    it waits the longer of the two. A census file adds the census pass.
-    """
-    if not members:
-        return 0.0
-    import render_share
-
-    wall = K8S_RENDER_WALL_SECONDS
-    if any(render_share.is_consumer(repo / f) for f in members):
-        wall = max(wall, FLEET_RENDER_WALL_SECONDS)
-    if any(f.startswith(CENSUS_FILE_PREFIX) for f in members):
-        wall += CENSUS_PASS_WALL_SECONDS
-    return wall * CI_WORKERS
 
 
 def _summary(shards: int) -> str:

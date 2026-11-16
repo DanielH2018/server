@@ -100,24 +100,16 @@ PASSTHROUGH_FILTERS: frozenset[str] = frozenset()
 # `(key, kind)` pair, never a member here.
 PLACEHOLDER_ANYWHERE = frozenset({"email"})
 
-# The `(key, kind)` pairs rule 3 lets leave a Secret for one kind only. Each is the bucket
-# placeholder in a Longhorn BackupTarget's `backupTargetURL`, `s3://<bucket>@<region>/<prefix>`.
+# The `(key, kind)` pairs rule 3 lets leave a Secret for one kind only. The member is the bucket
+# placeholder in the `r2` BackupTarget's `backupTargetURL`, `s3://<bucket>@<region>/<prefix>`.
 # The URL is a field of the BackupTarget, and Longhorn reads no Secret for it, so the bucket name
-# has no Secret to sit in. It is the only secret-keyed part of the URL, and both keys are in
-# `secrets/secrets.yml`. The kind in the pair keeps the placeholder out of every other
-# document: `${r2_bucket}` in a ConfigMap still fails.
+# has no Secret to sit in. It is the only secret-keyed part of the URL. The kind in the pair
+# keeps the placeholder out of every other document: `${r2_bucket}` in a ConfigMap still fails.
+# B2's bucket is plaintext inventory (`k3s_longhorn_b2_bucket`), so it needs no member.
 # DECIDED: a pair and not a member of `PLACEHOLDER_ANYWHERE`, so the exemption cannot widen to
 # another kind. H1.7b adds it (the H1 plan's *The backup plane and its levers*, R2's Open
 # question 10).
-PLACEHOLDER_KIND_EXEMPT = frozenset(
-    {
-        ("longhorn_b2_bucket", "BackupTarget"),
-        ("r2_bucket", "BackupTarget"),
-    }
-)
-
-# A BackupTarget whose URL is blank, which is how a disarmed target renders.
-BLANK_TARGET_URL = re.compile(r"""^\s*backupTargetURL:\s*(""|'')\s*$""", re.MULTILINE)
+PLACEHOLDER_KIND_EXEMPT = frozenset({("r2_bucket", "BackupTarget")})
 
 # A case-insensitive fragment of the sentinel `HOMELAB_SECRET__K__END`. A transform that only
 # partly alters a sentinel, such as `lower`, leaves it in the output.
@@ -267,20 +259,6 @@ def output_members(render: PlaceholderRender, known_keys: Iterable[str]) -> list
         "ConfigMap/traefik-static",
         lambda doc: "email" in references(doc),
         "${email}",
-    )
-    # DECIDED: a blank `backupTargetURL` satisfies the member. A disarm PR (`k3s_longhorn_backup_armed:
-    # false`) renders the URL blank, so no placeholder is left to find, and requiring one would
-    # fail the render of the very PR that applies the incident lever. A non-blank URL must still
-    # hold the placeholder, so a template that hard-coded the bucket fails here.
-    require(
-        CONFINED_TO_SECRET,
-        "longhorn-backup",
-        "BackupTarget/default",
-        lambda doc: (
-            BLANK_TARGET_URL.search(doc) is not None
-            or "longhorn_b2_bucket" in references(doc)
-        ),
-        "${longhorn_b2_bucket} (or a blank backupTargetURL)",
     )
     require(
         KNOWN_KEY,

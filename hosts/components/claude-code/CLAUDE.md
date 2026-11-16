@@ -597,6 +597,12 @@ server batch runs as `ubuntu` on `worktree-fanout-<batch>`.
   `[tool.pytest.ini_options].testpaths`, judged by parsing the file at the merge base and at the
   head, and a read or parse failure holds it. Each landing runs from its own `origin/master` worktree under
   `~/.local/state/fanout-server-lander/checkouts/`, never from the primary checkout.
+- **Worktree sweep (#8575):** at most every 6 hours
+  (`scripts/dev/fanout_lib/autoland.py:clean_landed`), a pass also runs `place clean`'s legs
+  over every live run manifest in `ubuntu`'s `~/.claude/fanout/`, newest first, for up to 15
+  minutes (`scripts/dev/fanout_lib/clean.py:sweep_runs`). It runs no leg for a batch whose
+  branch heads an open PR. Each leg keeps `clean`'s refusals: an active unit, a dirty tree or
+  an unmerged branch keeps the tree. A failed leg logs a line and never changes the exit status.
 - **Primary:** the unit's working directory and `--primary` are `claude_code_operator_checkout`,
   which `ubuntu` owns. They are never `claude_code_rc_workdir`, the agent's clone on daniel-box:
   git refuses that clone as dubious ownership, and `ubuntu` cannot write to it (#5861).
@@ -604,8 +610,8 @@ server batch runs as `ubuntu` on `worktree-fanout-<batch>`.
   Setting it to false drops the timer and its units from the next package version, and every
   server batch stops at its PR again. `fanout.py land-server --dry-run` judges and logs
   without starting anything.
-- **Abort valves:** at most 2 landings start per run (#5526: CI demand already exceeds the
-  runner cap). A PR is started once: a log in `~/.local/state/fanout-server-lander/logs/`, or
+- **Abort valves:** a run starts every eligible PR, and the landing turn and the landing slots
+  order and bound the landings (#8823). A PR is started once: a log in `~/.local/state/fanout-server-lander/logs/`, or
   a live `land.py --pr <n>` process anywhere, skips it. `land.sh` holds no per-PR lock, so
   this check is the only guard against a second landing. The unit sets
   `LAND_REQUIRE_BRANCH_PREFIX`, which makes `land.sh`

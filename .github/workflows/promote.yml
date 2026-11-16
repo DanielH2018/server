@@ -48,12 +48,13 @@ name: promote
 #            workflow's own commit and runs `promote.py hold`, which posts the hold, with a
 #            command block per changed snapshot role, to the deploy Discord channel through
 #            the DEPLOY_DISCORD_WEBHOOK secret. A failed post fails the run.
-#   reconcile  packages: write, statuses: read. Checks out nothing. Runs only when `decide`
-#            names a run that ended without its `settle` (`lost_settle`, #7863). While `prod`
-#            still names that run's digest, a good `homelab/promote-verdict` for it moves
-#            `last-good`. Anything else writes the hold `settle` would have written, and tags
-#            the digest `held` when that hold leaves `prod`. With no usable status it writes
-#            `<commit> unverified`.
+#   reconcile  packages: write, statuses: read, actions: write. Checks out nothing. Runs only
+#            when `decide` names a run that ended without its `settle` (`lost_settle`, #7863).
+#            While `prod` still names that run's digest, a good `homelab/promote-verdict` for it
+#            moves `last-good`, then dispatches this workflow for master's newest green commit
+#            when that commit is newer. Anything else writes the hold `settle` would have
+#            written, and tags the digest `held` when that hold leaves `prod`. With no usable
+#            status it writes `<commit> unverified`.
 #   reset-check  contents: read, packages: read, actions: read. Runs only for a
 #            `reset_to_last_good` dispatch, which skips every job above. Runs
 #            `promote.py reset-check`, which refuses without a hold or while a verification is in
@@ -146,6 +147,47 @@ env:
     }
     ghcr_login_once() { printf '%s' "$GITHUB_TOKEN" | docker login ghcr.io -u "$GH_ACTOR" --password-stdin; }
     ghcr_login() { retry ghcr_login_once; }
+  # `dispatch_newer_green <commit>`, which `settle` and `reconcile` run after they settle
+  # <commit>, so a green commit newer than it does not wait for the next merge (#5022, #7877).
+  # It dispatches one more run when CI's newest green push run on master is for a commit newer
+  # than <commit>. The list is newest first, so "newer" means <commit>'s own run sits further
+  # down it. With <commit> outside the list it cannot tell, and dispatches nothing. The bound: a
+  # dispatched run that promotes that commit finds it equal to its own commit here, and one that
+  # decides anything else never reaches `settle` or a `last-good` move in `reconcile`.
+  #
+  # GitHub starts no run for an event GITHUB_TOKEN causes, except workflow_dispatch, so the
+  # caller sets GH_TOKEN to the job token, which `actions: write` reaches, and PROMOTE_TOKEN
+  # gains no scope. `gh` prefers GH_TOKEN to GITHUB_TOKEN. The `sha` input sends the run through
+  # render's ancestry and CI re-check, which a bare dispatch of master's tip would skip. A step
+  # loads it after RETRY_FUNCTIONS.
+  DISPATCH_FUNCTIONS: |
+    dispatch_newer_green() {
+      local commit=$1 green newest
+      printf '%s' "$commit" | grep -Eqx '[0-9a-f]{40}' \
+        || { echo "::error::the settled commit '$commit' is not 40 lowercase hex"; return 1; }
+      green="$(retry gh api \
+        "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?branch=master&event=push&status=success&per_page=100" \
+        --jq '.workflow_runs[].head_sha')" || return 1
+      newest="${green%%$'\n'*}"
+      if ! printf '%s' "$newest" | grep -Eqx '[0-9a-f]{40}'; then
+        echo "::error::CI's newest green push run on master names '$newest', not a 40-hex commit"
+        return 1
+      fi
+      if [ "$newest" = "$commit" ]; then
+        echo "$commit is master's newest green commit, so no run follows"
+        return 0
+      fi
+      # A here-string, not a pipe: `grep -q` exiting early would SIGPIPE a writer, and
+      # pipefail would read the match as a miss.
+      if ! grep -qx "$commit" <<< "$green"; then
+        echo "::warning::$commit has no green CI run among master's newest 100, so this run cannot tell whether $newest is newer, and dispatches nothing"
+        return 0
+      fi
+      # A retry after a 5xx that did create the dispatch starts a second run for the same
+      # commit, which finds `prod` already moved and moves nothing.
+      retry gh workflow run promote.yml -R "$GITHUB_REPOSITORY" --ref master -f sha="$newest" || return 1
+      echo "dispatched promote for $newest, master's newest green commit, which is newer than $commit"
+    }
 
 jobs:
   render:
@@ -1277,18 +1319,8 @@ jobs:
           [ "${#problems[@]}" -eq 0 ]
 
       # A run whose `tag` found `prod` already moved verifies nothing, so its commit would wait
-      # for the next merge (#5022). Once the verdict is applied, this step dispatches one more
-      # run when CI's newest green push run on master is for a commit newer than T. The list is
-      # newest first, so "newer" means T's own run sits further down it. With T outside the list
-      # the step cannot tell, and dispatches nothing. The bound: a dispatched run that promotes
-      # that commit finds it equal to its own T here, and one that decides anything else never
-      # reaches `settle`. After a hold the step still dispatches, as the operator ruled: the run
-      # decides `held` unless the revert rule lets it promote a descendant.
-      #
-      # GitHub starts no run for an event GITHUB_TOKEN causes, except workflow_dispatch, so the
-      # job token dispatches and PROMOTE_TOKEN gains no scope. GH_TOKEN is set here because `gh`
-      # prefers it to GITHUB_TOKEN. The `sha` input sends the run through render's ancestry and
-      # CI re-check, which a bare dispatch of master's tip would skip.
+      # for the next merge (#5022). After a hold the step still dispatches, as the operator
+      # ruled: the run decides `held` unless the revert rule lets it promote a descendant.
       - name: Dispatch a run for a newer green commit
         # A run that a later run superseded dispatches nothing; the later run owns the dispatch.
         if: steps.apply.outputs.owned == 'true'
@@ -1298,31 +1330,8 @@ jobs:
         run: |
           set -euo pipefail
           eval "$RETRY_FUNCTIONS"
-          printf '%s' "$TARGET" | grep -Eqx '[0-9a-f]{40}' \
-            || { echo "::error::decide's target '$TARGET' is not 40 lowercase hex"; exit 1; }
-          # A command substitution, so set -e stops the step when the read fails.
-          green="$(retry gh api \
-            "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?branch=master&event=push&status=success&per_page=100" \
-            --jq '.workflow_runs[].head_sha')"
-          newest="${green%%$'\n'*}"
-          if ! printf '%s' "$newest" | grep -Eqx '[0-9a-f]{40}'; then
-            echo "::error::CI's newest green push run on master names '$newest', not a 40-hex commit"
-            exit 1
-          fi
-          if [ "$newest" = "$TARGET" ]; then
-            echo "$TARGET is master's newest green commit, so no run follows"
-            exit 0
-          fi
-          # A here-string, not a pipe: `grep -q` exiting early would SIGPIPE a writer, and
-          # pipefail would read the match as a miss.
-          if ! grep -qx "$TARGET" <<< "$green"; then
-            echo "::warning::$TARGET has no green CI run among master's newest 100, so this run cannot tell whether $newest is newer, and dispatches nothing"
-            exit 0
-          fi
-          # A retry after a 5xx that did create the dispatch starts a second run for the same
-          # commit, which finds `prod` already moved and moves nothing.
-          retry gh workflow run promote.yml -R "$GITHUB_REPOSITORY" --ref master -f sha="$newest"
-          echo "dispatched promote for $newest, master's newest green commit, which is newer than $TARGET"
+          eval "$DISPATCH_FUNCTIONS"
+          dispatch_newer_green "$TARGET"
 
   post:
     needs: [promote, tag, verify, settle]
@@ -1382,9 +1391,9 @@ jobs:
   # moves `last-good`, and anything else writes the hold the status's form names. A missing
   # status, or one for another digest, takes the form from what `decide` read `prod` changes
   # against `last-good` (its `stateful` and `no_reset`), and else writes the unverified hold.
-  # It resets nothing and
-  # dispatches nothing: the operator decides on `reset_to_last_good` after a hold, and the next
-  # merge or the scheduled run promotes after the move. No concurrency group, because a newer pending job in `promote` would evict it.
+  # It resets nothing: the operator decides on `reset_to_last_good` after a hold. After a move
+  # it dispatches a run for a newer green commit, as `settle` does; after a hold it dispatches
+  # nothing. No concurrency group, because a newer pending job in `promote` would evict it.
   reconcile:
     needs: promote
     if: >-
@@ -1404,10 +1413,12 @@ jobs:
     timeout-minutes: 10
     # DECIDED: a job that checks out nothing holds packages: write to move `last-good` for a
     # run that lost its `settle`. The operator ruled the grant on 2026-11-09 (#7865, contract
-    # C2). statuses: read is the verdict-status read.
+    # C2). statuses: read is the verdict-status read. actions: write is the dispatch step's,
+    # ruled on 2026-11-15 (#7877).
     permissions:
       packages: write
       statuses: read
+      actions: write
     steps:
       - name: Cache the flux CLI release
         uses: actions/cache@v6.1.0
@@ -1436,6 +1447,7 @@ jobs:
       # `prod`, the hold or the status writes nothing and fails, and the next run's `decide`
       # names the state again. The job token reads the status; PROMOTE_TOKEN writes the hold.
       - name: Apply the lost run's verdict
+        id: apply
         env:
           COMMIT: ${{ needs.promote.outputs.lost_settle }}
           DIGEST: ${{ needs.promote.outputs.lost_settle_digest }}
@@ -1499,6 +1511,7 @@ jobs:
               exit 1
             fi
             echo "last-good moved to $COMMIT's $DIGEST: its run verified good and lost its settle"
+            echo "moved=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -1540,10 +1553,24 @@ jobs:
               echo "::warning::DEPLOY_HOLD set to '$new_hold': $COMMIT's verdict reads '${verdict:-absent}', not good for $DIGEST. To reset prod (operator-only), dispatch promote.yml with reset_to_last_good=true" ;;
           esac
 
+      # This run's `decide` ended `current` on the lost run's commit, so without this step the
+      # commit that started this run waits for the next merge.
+      - name: Dispatch a run for a newer green commit
+        if: steps.apply.outputs.moved == 'true'
+        env:
+          COMMIT: ${{ needs.promote.outputs.lost_settle }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          eval "$RETRY_FUNCTIONS"
+          eval "$DISPATCH_FUNCTIONS"
+          dispatch_newer_green "$COMMIT"
+
   # A dispatch or a re-run is started by whoever `triggering_actor` names, and every job above
   # runs it only for an account on the list: the operator, and this workflow's own GITHUB_TOKEN
-  # dispatch from `settle`. Anyone else's start skips every job, and this one fails the run so
-  # the refusal shows as red rather than as a run that did nothing (dotfiles#967 slice 1).
+  # dispatch from `settle` or `reconcile`. Anyone else's start skips every job, and this one
+  # fails the run so the refusal shows as red rather than as a run that did nothing
+  # (dotfiles#967 slice 1).
   refuse-starter:
     if: >-
       !(github.event_name != 'workflow_dispatch' && github.run_attempt == '1' || contains(fromJSON('["DanielH2018", "github-actions[bot]"]'), github.triggering_actor))

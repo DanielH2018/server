@@ -97,8 +97,11 @@ def reachability(
     """PUBLIC or LAN for a role that has a route. Callers check for a route first.
 
     `entry` is the role's containers_list entry, which decides whether it takes the shared
-    route; `manifest_template` has the default.
+    route; `manifest_template` has the default. Its `public_route: false` is the opt-out the
+    shared default and speedtest's own route pass to the macro as `public=`.
     """
+    if entry is not None and entry.get("public_route") is False:
+        return LAN
     text = "\n".join(
         strip_jinja_comments(p.read_text())
         for p in ingressroute_templates(role_dir, entry)

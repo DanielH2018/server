@@ -12,7 +12,9 @@ import subprocess
 
 import pytest
 import pytest_shard
+import shard_prebuild
 import shard_weight_gate
+from lib.git import git
 
 FILES = [f"scripts/x/tests/test_{name}.py" for name in "abcdefgh"]
 
@@ -70,14 +72,17 @@ def test_the_committed_runner_table_is_populated():
     assert len(shard_weight_gate.load_runner_weights()) >= 100
 
 
-def test_a_shard_with_no_fleet_render_consumer_is_charged_the_k8s_render_alone(
+def test_a_shard_reading_no_render_is_charged_nothing_and_a_k8s_reader_the_k8s_render(
     tmp_path,
 ):
     (tmp_path / "test_plain.py").write_text("def test_x(): pass\n")
-    assert pytest_shard.prebuild_seconds(["test_plain.py"], tmp_path) == (
-        pytest_shard.K8S_RENDER_WALL_SECONDS * pytest_shard.CI_WORKERS
-    )
-    assert pytest_shard.prebuild_seconds([], tmp_path) == 0.0
+    (tmp_path / "test_reader.py").write_text("from _k8s_render import rendered_docs\n")
+    git("init", "-q", cwd=tmp_path)
+    assert shard_prebuild.prebuild_seconds(["test_plain.py"], tmp_path) == 0.0
+    assert shard_prebuild.prebuild_seconds(
+        ["test_plain.py", "test_reader.py"], tmp_path
+    ) == (shard_prebuild.K8S_RENDER_WALL_SECONDS * shard_prebuild.CI_WORKERS)
+    assert shard_prebuild.prebuild_seconds([], tmp_path) == 0.0
 
 
 def test_a_runner_refresh_adds_rewrites_drifted_keeps_unmeasured_and_drops_deleted(
@@ -240,7 +245,7 @@ def test_a_shard_holding_a_census_file_is_charged_the_census_pass(tmp_path):
     census = "scripts/tests/test_census_rows_test_renders.py"
     (tmp_path / census).parent.mkdir(parents=True)
     (tmp_path / census).write_text("def test_x(): pass\n")
-    k8s = pytest_shard.K8S_RENDER_WALL_SECONDS
-    assert pytest_shard.prebuild_seconds(["test_plain.py", census], tmp_path) == (
-        (k8s + pytest_shard.CENSUS_PASS_WALL_SECONDS) * pytest_shard.CI_WORKERS
+    git("init", "-q", cwd=tmp_path)
+    assert shard_prebuild.prebuild_seconds(["test_plain.py", census], tmp_path) == (
+        shard_prebuild.CENSUS_PASS_WALL_SECONDS * shard_prebuild.CI_WORKERS
     )

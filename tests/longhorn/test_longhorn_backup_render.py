@@ -22,6 +22,7 @@ import pytest
 from _k8s_render import render_role_template
 
 from lib import yaml_fast
+from lib.repo_paths import ALL_VARS
 from renderer import homelab_render
 
 ROLE = "longhorn-backup"
@@ -50,12 +51,19 @@ def test_each_arm_flag_blanks_only_its_own_target(b2_armed, r2_armed):
 
 
 def test_an_armed_render_names_the_bucket_region_and_prefix():
-    # The bucket renders as the stub the test context substitutes for a secret; the region and the
-    # prefix are plain variables.
     assert _url(DEFAULT_TARGET, k3s_longhorn_b2_region="us-west-004").endswith(
         "@us-west-004/longhorn"
     )
     assert _url(R2_TARGET).endswith("@auto/longhorn")
+
+
+def test_the_b2_target_renders_the_inventory_bucket_as_a_literal():
+    """Inventory's `k3s_longhorn_b2_bucket` is the one copy, and the probe reads it too (#8507)."""
+    bucket = yaml_fast.safe_load(ALL_VARS.read_text())["k3s_longhorn_b2_bucket"]
+    assert bucket
+    assert _url(DEFAULT_TARGET, k3s_longhorn_b2_region="us-west-004") == (
+        f"s3://{bucket}@us-west-004/longhorn"
+    )
 
 
 def test_the_credential_secrets_render_string_data_with_the_three_s3_keys():

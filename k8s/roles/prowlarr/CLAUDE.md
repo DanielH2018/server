@@ -10,7 +10,7 @@ challenges for the indexers by rendering attacker-supplied pages in a headless b
 - **Images:** `lscr.io/linuxserver/prowlarr` (`prowlarr_k8s_image`),
   `ghcr.io/flaresolverr/flaresolverr` (`prowlarr_k8s_flaresolverr_image`),
   `ghcr.io/onedr0p/exportarr` (`prowlarr_k8s_exportarr_image`)
-- **Route:** `prowlarr.<domain>` · `prowlarr.local.<domain>`, Authelia one_factor
+- **Route:** `prowlarr.local.<domain>` (LAN only), Authelia one_factor
 - **Claim:** `prowlarr-config` (weekly -> B2 (default target))
 <!-- /generated_from -->
 
@@ -82,3 +82,7 @@ challenges for the indexers by rendering attacker-supplied pages in a headless b
 ## Editing
 - Manifest: `k8s/roles/prowlarr/templates/deployment.yaml.j2`,
   `k8s/roles/prowlarr/templates/deployment-flaresolverr.yaml.j2`
+- **The route is LAN-only.** The entry in `cluster/services.yml` sets `public_route: false`,
+  and the shared `k8s/templates/ingressroute-default.yaml.j2` renders no public name from it
+  whatever `k8s_public_route` says. The operator ruled it on 2026-11-15 (#8514): WireGuard
+  covers remote use.

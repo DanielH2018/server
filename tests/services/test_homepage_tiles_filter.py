@@ -75,6 +75,14 @@ def test_href_reads_the_hostname_and_takes_the_lan_name_and_a_path():
     )
 
 
+def test_href_takes_the_lan_name_for_an_entry_ruled_off_the_public_name():
+    entry = {"name": "slskd", "hostname": "slskd", "public_route": False}
+    assert (
+        homepage_href([entry], "slskd", "example.com")
+        == "https://slskd.local.example.com/"
+    )
+
+
 def test_href_refuses_an_entry_with_no_route():
     with pytest.raises(ValueError, match="hostname"):
         homepage_href(ENTRIES, "loki-homelab", "example.com")

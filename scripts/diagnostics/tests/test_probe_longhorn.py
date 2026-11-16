@@ -427,7 +427,7 @@ def test_the_b2_budget_timer_passes_no_retain():
 
 
 def _inventory_bucket():
-    """The `longhorn_b2_bucket:` value a tracked inventory file holds, or None if none does."""
+    """The `k3s_longhorn_b2_bucket:` value a tracked inventory file holds, or None if none does."""
     from lib import proc_testing
     from lib.repo_paths import REPO
 
@@ -438,7 +438,7 @@ def _inventory_bucket():
         if not name.endswith((".yml", ".yaml")):
             continue
         for line in (REPO / name).read_text().splitlines():
-            if line.startswith("longhorn_b2_bucket:"):
+            if line.startswith("k3s_longhorn_b2_bucket:"):
                 return line.split(":", 1)[1].strip().strip("'\"")
     return None
 
@@ -521,5 +521,5 @@ def test_b2_longhorn_dry_run_names_the_real_bucket_without_an_age_key(
     out = capsys.readouterr().out
     assert "<longhorn_b2_bucket>" not in out
     bucket = _inventory_bucket()
-    assert bucket, "no tracked inventory file defines longhorn_b2_bucket"
+    assert bucket, "no tracked inventory file defines k3s_longhorn_b2_bucket"
     assert f"bucket={bucket} " in out

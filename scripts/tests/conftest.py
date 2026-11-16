@@ -15,7 +15,7 @@ def tracked() -> list[str]:
 # `tests/conftest.py`. Both `test_census_rows_test_*.py` files share one per-process pass
 # over about 1600 modules, and the first to run paid 8-11s of it while its sibling paid 0.05s.
 # The serial `pytest_shard.py --record` charged it to one file and CI measured it on the other,
-# which failed the shard-weight gate (#7976). `pytest_shard.py --summary` charges it per shard.
+# which failed the shard-weight gate (#7976). `pytest_shard.py` packs it per shard.
 def pytest_collection_finish(session: pytest.Session) -> None:
     """Run the shared census rows' pass once per process, before any test's timed phases.
 

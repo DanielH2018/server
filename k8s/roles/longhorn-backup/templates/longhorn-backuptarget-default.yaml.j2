@@ -12,16 +12,15 @@
 # incident lever that stops all backupstore S3 traffic, so it survives every apply until the flag
 # returns to true. The flag's comment in defaults/main.yml has the spiral's mechanism.
 #
-# The URL holds one placeholder, `${longhorn_b2_bucket}`, and R2's rule 3 admits it in a
-# BackupTarget through `PLACEHOLDER_KIND_EXEMPT`
-# (scripts/renderer/renderer_lib/secret_checks.py). The region is a plain variable.
+# The bucket and the region are plain variables. The bucket is `k3s_longhorn_b2_bucket` in
+# inventory/group_vars/all.yml, which `probe.py b2-longhorn` and `b2-budget` read too.
 apiVersion: longhorn.io/v1beta2
 kind: BackupTarget
 metadata:
   name: {{ 'b2_target' | longhorn_backup_name }}
   namespace: longhorn-system
 spec:
-  backupTargetURL: "{% if k3s_longhorn_backup_armed | bool %}s3://{{ longhorn_b2_bucket }}@{{ k3s_longhorn_b2_region }}/{{ k3s_longhorn_backup_prefix }}{% endif %}"
+  backupTargetURL: "{% if k3s_longhorn_backup_armed | bool %}s3://{{ k3s_longhorn_b2_bucket }}@{{ k3s_longhorn_b2_region }}/{{ k3s_longhorn_backup_prefix }}{% endif %}"
   credentialSecret: longhorn-b2
   # Seconds, rendered as the duration string the CR wants. Rate-limits the only recurring B2
   # caller in the cluster. See k3s_longhorn_backupstore_poll_interval in defaults/main.yml.

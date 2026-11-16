@@ -290,3 +290,12 @@ def select(
         f"{len(changes)} changed path(s) select {len(selected)} of {len(modules)} modules, "
         f"{unrecorded} of them for having no current row",
     )
+
+
+def select_since(table: Table, base: str, census: list[str], repo: Path) -> Selection:
+    """`select` over the diff from `base` to HEAD in the checkout at `repo`."""
+    fields = git(
+        "diff", "--name-status", "--no-renames", "-z", base, "HEAD", cwd=repo
+    ).stdout.split("\0")
+    changes = list(zip(fields[0::2], fields[1::2], strict=False))
+    return select(table, changes, census, tracked_blobs(repo))

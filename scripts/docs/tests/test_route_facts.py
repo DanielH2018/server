@@ -70,6 +70,15 @@ def test_the_roles_own_opt_out_beats_the_cluster_flag(tmp_path):
     assert rf.reachability(role, gv) == rf.LAN
 
 
+def test_the_entrys_opt_out_beats_the_cluster_flag(tmp_path):
+    """The shared default route passes the entry's `public_route` as an expression, so no
+    `public=false` appears in any template the role renders from."""
+    role = _role(tmp_path, "bazarr", "{{ ingressroute(a, b, c, d) }}\n")
+    gv = _group_vars(tmp_path, "k8s_public_route: true\n")
+    entry = {"name": "bazarr", "hostname": "bazarr", "public_route": False}
+    assert rf.reachability(role, gv, entry) == rf.LAN
+
+
 def test_whitespace_around_the_opt_out_is_tolerated(tmp_path):
     """The macro call is hand-written in each role, so spacing varies."""
     role = _role(tmp_path, "crowdsec", "{{ ingressroute(a, public = false) }}\n")

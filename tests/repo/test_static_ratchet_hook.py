@@ -16,7 +16,7 @@ import shlex
 import tomllib
 
 import pytest
-import pytest_shard
+import shard_prebuild
 import xdist_width
 from _helpers import REPO
 
@@ -456,7 +456,7 @@ def test_the_module_that_bounded_the_main_hook_no_longer_runs_in_it():
     moved = xdist_width.module_seconds(
         [REPO / m for m in sorted(_census_modules())], REPO, weights
     )
-    census = max(moved) + pytest_shard.CENSUS_PASS_WALL_SECONDS
+    census = max(moved) + shard_prebuild.CENSUS_PASS_WALL_SECONDS
     slowest = max(zip(seconds, main, strict=True))
     assert slowest[0] < census, (
         f"{slowest[1]} records {slowest[0]}s, at least the moved census's {census}s"

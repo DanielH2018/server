@@ -47,7 +47,7 @@ from lib.exit_codes import FINDINGS_BAD_ARGS
 
 # `plan_close` writes this comment on `close --fixed --pr N`. A close that way leaves
 # `closedByPullRequestsReferences` empty, because no closing keyword in a PR closed the issue.
-_FIXED_BY_RE = re.compile(r"^Fixed by PR #(\d+)\.", re.M)
+_FIXED_BY_RE = re.compile(r"^Fixed by PR (?:([\w.-]+/[\w.-]+))?#(\d+)\.", re.M)
 
 
 def closing_prs(issue: dict, repo: str) -> list[int]:
@@ -67,7 +67,12 @@ def closing_prs(issue: dict, repo: str) -> list[int]:
     for comment in issue.get("comments", []):
         # This repo is public; a `Fixed by PR` line from any other account records nothing.
         if is_operator_comment(comment):
-            prs.update(int(n) for n in _FIXED_BY_RE.findall(comment.get("body") or ""))
+            # A qualified line names a PR in that repo; a bare one names this register's own.
+            prs.update(
+                int(n)
+                for where, n in _FIXED_BY_RE.findall(comment.get("body") or "")
+                if not where or where.lower() == repo.lower()
+            )
     return sorted(prs)
 
 

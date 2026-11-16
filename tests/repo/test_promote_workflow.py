@@ -95,7 +95,7 @@ PERMISSIONS = {
     "verdict-status": {"statuses": "write"},
     "settle": {"packages": "write", "actions": "write"},
     "post": {"contents": "read"},
-    "reconcile": {"packages": "write", "statuses": "read"},
+    "reconcile": {"packages": "write", "statuses": "read", "actions": "write"},
     "reset-check": {"contents": "read", "packages": "read", "actions": "read"},
     "reset-move": {"packages": "write"},
     REFUSE_JOB: {},
