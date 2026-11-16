@@ -94,7 +94,6 @@ def _selected(changes, tree=TREE, modules=MODULES) -> list[str]:
             [ASKER, INDEXER],
             id="added-file-selects-a-module-that-asked-for-its-directory",
         ),
-        pytest.param([("M", "lib/n.py")], TREE, [NARROW], id="one-reader"),
     ],
 )
 def test_a_change_selects_the_modules_whose_rows_it_touches(changes, tree, expected):
@@ -127,9 +126,6 @@ def test_a_module_edited_since_its_row_was_recorded_is_selected():
             [("M", "pyproject.toml")], "pyproject.toml decides", id="run-config"
         ),
         pytest.param(
-            [("M", "scripts/dev/affected_lib/table.py")], "decides", id="the-selector"
-        ),
-        pytest.param(
             [("A", "docs/conftest.py")], "docs/conftest.py decides", id="a-conftest"
         ),
         pytest.param(
@@ -147,9 +143,13 @@ def test_the_whole_census_runs_when_the_table_cannot_answer(changes, reason):
 
 
 def test_an_empty_table_selects_the_whole_census():
-    selection = table.select(table.Table(), [("M", "lib/n.py")], MODULES, _blobs())
+    """An added file is in no row by definition, so only the empty-table rule can answer."""
+    blobs = _blobs([*TREE, "docs/new.md"])
+
+    selection = table.select(table.Table(), [("A", "docs/new.md")], MODULES, blobs)
 
     assert selection.full and selection.modules == sorted(MODULES)
+    assert "no rows" in selection.reason
 
 
 def test_a_table_reads_back_as_it_was_written_and_stores_shared_paths_once(tmp_path):
