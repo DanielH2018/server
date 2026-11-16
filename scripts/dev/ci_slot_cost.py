@@ -3,6 +3,7 @@
 
 Run: uv run python scripts/dev/ci_slot_cost.py RUN_ID [RUN_ID ...]
      uv run python scripts/dev/ci_slot_cost.py --recent 20   # newest green master runs
+     uv run python scripts/dev/ci_slot_cost.py --recent 20 --pull-requests
 
 WHY. The account runs at most 20 hosted jobs at once, and a full sweep of ci.yml asks for 25.
 One run's wall in isolation therefore misses what an extra job costs: every job holds a runner
@@ -15,7 +16,9 @@ For each run it prints:
 - the slot-seconds, summed over every job that ran, then per job family (the name before
   ` (`, so the six `pytest (shard N of 6)` legs are one `pytest` row);
 - the queue wait at p50 and p90 over the run's jobs, and each family's median wait;
-- the median time a pytest leg spent outside `Run the test suite`, and that time per step.
+- the median time a pytest leg spent outside `Run the test suite`, and that time per step;
+- the pytest legs a pull request's selection left empty, against what a planning job would
+  cost instead (#8944).
 
 A job's queue wait is `started_at - created_at`. GitHub creates a job's record when the jobs
 it `needs` have finished, not when the run starts, so `created_at` already marks the moment
@@ -25,7 +28,15 @@ out.
 
 `--recent N` reads the newest N green `push` runs on master that ran at least one pytest leg,
 then prints one line per run and a pooled block over all of them; `--all` prints each run's
-full block instead of its line.
+full block instead of its line. `--pull-requests` reads green `pull_request` runs instead,
+the only runs whose legs can be empty.
+
+AN EMPTY LEG is one whose `Run the test suite` step concluded `skipped`: the selection packed
+nothing into it, so it ran the checkout, the setup and the select step, then ended green. The
+API stamps a skipped step with equal start and end times, so its span counts in no leg's setup.
+A job that ran one select step and published the leg list would do the same work as one empty
+leg, so the estimate takes the median empty leg's span as its slot cost and the median empty
+leg's queue wait as the wait it would add ahead of every pytest leg, on every run.
 """
 
 import re
@@ -98,10 +109,19 @@ def p90(values: list[float]) -> float:
     return statistics.quantiles(values, n=10, method="inclusive")[-1]
 
 
+def leg_is_empty(span: dict) -> bool:
+    """Whether a pytest leg skipped its suite step because its selection held no module."""
+    return any(
+        str(step.get("name", "")) == SUITE_STEP and step.get("conclusion") == "skipped"
+        for step in span["steps"]
+    )
+
+
 def leg_setup(span: dict) -> tuple[float, dict[str, float]] | None:
     """A pytest leg's seconds outside `Run the test suite`, and each other step's seconds.
 
-    Returns None for a leg whose suite step never ran, since it measured no setup.
+    Returns None for a leg whose suite step never ran or was skipped, since it measured no
+    setup.
     """
     suite, steps = None, {}
     for step in span["steps"]:
@@ -110,6 +130,8 @@ def leg_setup(span: dict) -> tuple[float, dict[str, float]] | None:
             continue
         name = _ACTION_SHA.sub("", str(step.get("name", "")))
         if name == SUITE_STEP:
+            if step.get("conclusion") == "skipped":
+                return None
             suite = ended - began
         else:
             steps[name] = steps.get(name, 0.0) + ended - began
@@ -124,12 +146,8 @@ def run_cost(jobs: list[dict]) -> dict:
     by_family: dict[str, list[dict]] = {}
     for span in spans:
         by_family.setdefault(span["family"], []).append(span)
-    legs = [
-        setup
-        for span in spans
-        if span["name"].startswith(PYTEST_PREFIX)
-        if (setup := leg_setup(span)) is not None
-    ]
+    pytest_spans = [s for s in spans if s["name"].startswith(PYTEST_PREFIX)]
+    legs = [setup for s in pytest_spans if (setup := leg_setup(s)) is not None]
     return {
         "jobs": len(spans),
         "slot_s": sum(s["finished"] - s["started"] for s in spans),
@@ -146,6 +164,14 @@ def run_cost(jobs: list[dict]) -> dict:
         },
         "leg_outside_s": [outside for outside, _ in legs],
         "leg_steps": [steps for _, steps in legs],
+        "empty_legs": [
+            {
+                "slot_s": s["finished"] - s["started"],
+                "wait_s": s["started"] - s["queued"],
+            }
+            for s in pytest_spans
+            if leg_is_empty(s)
+        ],
     }
 
 
@@ -167,6 +193,22 @@ def _setup_lines(outside: list[float], steps: list[dict[str, float]]) -> list[st
         f"pytest legs: {len(outside)}, median {statistics.median(outside):.1f}s outside "
         f"'{SUITE_STEP}'"
     ] + [f"  {seconds:6.1f}s  {name}" for seconds, name in medians if seconds >= 0.5]
+
+
+def empty_leg_line(costs: list[dict]) -> str:
+    """The empty pytest legs' slot-seconds over `costs`, against a planning job on each run."""
+    empty = [leg for c in costs for leg in c["empty_legs"]]
+    selected = sum(1 for c in costs if c["empty_legs"])
+    if not empty:
+        return f"empty pytest legs: none in {len(costs)} run(s)"
+    job_s = statistics.median(leg["slot_s"] for leg in empty)
+    wait_s = statistics.median(leg["wait_s"] for leg in empty)
+    return (
+        f"empty pytest legs: {len(empty)} in {selected} of {len(costs)} run(s), "
+        f"{sum(leg['slot_s'] for leg in empty):.0f} slot-seconds; a planning job on each "
+        f"run: about {job_s * len(costs):.0f} slot-seconds, and {wait_s:.0f}s more wait "
+        "ahead of every pytest leg"
+    )
 
 
 def head_line(run_id: int, cost: dict) -> str:
@@ -192,6 +234,7 @@ def render(run_id: int, cost: dict) -> str:
             head_line(run_id, cost),
             *_family_lines(cost["families"]),
             *_setup_lines(cost["leg_outside_s"], cost["leg_steps"]),
+            empty_leg_line([cost]),
         ]
     )
 
@@ -216,7 +259,14 @@ def render_pooled(costs: list[dict]) -> str:
     }
     outside = [o for c in costs for o in c["leg_outside_s"]]
     steps = [s for c in costs for s in c["leg_steps"]]
-    return "\n".join([head, *_family_lines(families), *_setup_lines(outside, steps)])
+    return "\n".join(
+        [
+            head,
+            *_family_lines(families),
+            *_setup_lines(outside, steps),
+            empty_leg_line(costs),
+        ]
+    )
 
 
 def read_jobs(run_id: int, gh_json=gh_json) -> list[dict]:
@@ -231,14 +281,26 @@ def read_jobs(run_id: int, gh_json=gh_json) -> list[dict]:
     return as_object_list(as_object(listed, "the jobs response").get("jobs"), "jobs")
 
 
-def recent_runs(count: int, gh_json=gh_json) -> dict[int, list[dict]]:
-    """The jobs of the newest `count` green master push runs that ran a pytest leg.
+def recent_runs(
+    count: int, pull_requests: bool = False, gh_json=gh_json
+) -> dict[int, list[dict]]:
+    """The jobs of the newest `count` green runs that ran a pytest leg.
+
+    Args:
+        count: How many runs to return.
+        pull_requests: Read `pull_request` runs on any branch, not master's `push` runs.
 
     Raises:
         RuntimeError: fewer than `count` of the newest `RUN_WINDOW` green runs ran pytest.
     """
+    source = (
+        "--event pull_request"
+        if pull_requests
+        else f"--branch {CI_BRANCH} --event push"
+    )
+    which = "pull-request" if pull_requests else CI_BRANCH
     args = (
-        f"run list --workflow {CI_WORKFLOW} --branch {CI_BRANCH} --event push"
+        f"run list --workflow {CI_WORKFLOW} {source}"
         f" --status success --limit {RUN_WINDOW} --json databaseId"
     ).split()
     listed = as_object_list(gh_json(*args) or [], "the run list")
@@ -252,7 +314,7 @@ def recent_runs(count: int, gh_json=gh_json) -> dict[int, list[dict]]:
             found[run_id] = jobs
     if len(found) < count:
         raise RuntimeError(
-            f"{len(found)} of the newest {len(listed)} green {CI_BRANCH} runs ran pytest, "
+            f"{len(found)} of the newest {len(listed)} green {which} runs ran pytest, "
             f"not the {count} asked for"
         )
     return found
@@ -273,11 +335,18 @@ def main(argv: list[str] | None = None) -> int:
         metavar="N",
         help="read the newest N green master runs that ran pytest, and pool them",
     )
+    parser.add_argument(
+        "--pull-requests",
+        action="store_true",
+        help="with --recent, read pull-request runs, whose selections can leave legs empty",
+    )
     args = parser.parse_args(argv)
     if bool(args.run_ids) == bool(args.recent):
         parser.error("name RUN_IDs or pass --recent N, not both or neither")
+    if args.pull_requests and not args.recent:
+        parser.error("--pull-requests reads runs for --recent N")
     runs = (
-        recent_runs(args.recent)
+        recent_runs(args.recent, args.pull_requests)
         if args.recent
         else {run_id: read_jobs(run_id) for run_id in args.run_ids}
     )

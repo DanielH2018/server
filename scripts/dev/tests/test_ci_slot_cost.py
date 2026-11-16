@@ -2,7 +2,7 @@
 
 import pytest
 
-from ci_slot_cost import head_line, p90, recent_runs, run_cost
+from ci_slot_cost import empty_leg_line, head_line, p90, recent_runs, run_cost
 
 SHA = "0123456789abcdef0123456789abcdef01234567"
 
@@ -11,8 +11,13 @@ def _at(seconds: int) -> str:
     return f"2026-11-14T12:{seconds // 60:02d}:{seconds % 60:02d}Z"
 
 
-def _step(name: str, began: int, ended: int) -> dict:
-    return {"name": name, "started_at": _at(began), "completed_at": _at(ended)}
+def _step(name: str, began: int, ended: int, conclusion: str = "success") -> dict:
+    return {
+        "name": name,
+        "conclusion": conclusion,
+        "started_at": _at(began),
+        "completed_at": _at(ended),
+    }
 
 
 def _job(name, created, started, completed, conclusion="success", steps=()):
@@ -78,6 +83,43 @@ def test_a_legs_setup_is_its_span_outside_the_suite_step_with_action_shas_folded
     assert cost["families"]["pytest"]["jobs"] == 2
 
 
+def _empty_leg(shard: int, created: int, started: int, completed: int) -> dict:
+    return _job(
+        f"pytest (shard {shard} of 6)",
+        created,
+        started,
+        completed,
+        steps=[
+            _step("Run actions/checkout@v7.0.1", started, started + 6),
+            _step("Select this shard's test files", started + 6, completed - 1),
+            # The API stamps a skipped step with equal start and end times.
+            _step("Run the test suite", completed, completed, conclusion="skipped"),
+        ],
+    )
+
+
+def test_an_empty_leg_is_counted_apart_and_kept_out_of_the_setup_median():
+    selected = run_cost(
+        [
+            _leg(1, 0, 5, (20, 140)),
+            _empty_leg(2, 0, 10, 40),
+            _empty_leg(3, 0, 20, 50),
+        ]
+    )
+    full = run_cost([_leg(1, 0, 5, (20, 140))])
+
+    assert selected["leg_outside_s"] == [17]
+    assert selected["empty_legs"] == [
+        {"slot_s": 30, "wait_s": 10},
+        {"slot_s": 30, "wait_s": 20},
+    ]
+    assert empty_leg_line([selected, full]) == (
+        "empty pytest legs: 2 in 1 of 2 run(s), 60 slot-seconds; a planning job on each "
+        "run: about 60 slot-seconds, and 15s more wait ahead of every pytest leg"
+    )
+    assert empty_leg_line([full]) == "empty pytest legs: none in 1 run(s)"
+
+
 def test_the_p90_interpolates_between_ranks_and_takes_a_single_value_as_is():
     assert p90([float(n) for n in range(1, 11)]) == pytest.approx(9.1)
     assert p90([42.0]) == 42.0
@@ -93,9 +135,11 @@ def test_the_head_line_carries_slot_seconds_and_both_quantiles():
     )
 
 
-def _fake_gh(runs: dict[int, list[dict]]):
+def _fake_gh(runs: dict[int, list[dict]], listed: list | None = None):
     def gh_json(*args):
         if args[:2] == ("run", "list"):
+            if listed is not None:
+                listed.append(args)
             limit = int(args[args.index("--limit") + 1])
             return [{"databaseId": run_id} for run_id in runs][:limit]
         run_id = int(args[1].split("/runs/")[1].split("/")[0])
@@ -122,3 +166,13 @@ def test_recent_runs_find_twenty_when_one_listed_run_in_four_ran_pytest():
     runs = {n: [skipped] if n % 4 else [leg] for n in range(400, 0, -1)}
 
     assert len(recent_runs(20, gh_json=_fake_gh(runs))) == 20
+
+
+def test_recent_pull_request_runs_are_listed_on_any_branch():
+    listed: list = []
+    gh_json = _fake_gh({1: [_leg(1, 0, 5, (20, 140))]}, listed)
+
+    assert list(recent_runs(1, pull_requests=True, gh_json=gh_json)) == [1]
+    command = " ".join(listed[0])
+    assert "--event pull_request" in command
+    assert "--branch" not in command
