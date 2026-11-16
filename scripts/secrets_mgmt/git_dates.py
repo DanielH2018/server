@@ -264,6 +264,8 @@ RETIRED: frozenset[str] = frozenset(
         # Flux's github-status Provider moved to the GitHub App (#8023, #8087), and the
         # operator revoked this fine-grained token and unset the key (#8093).
         "flux_github_status_token",
+        # The B2 bucket name, which the BackupTarget renders from inventory since #8942.
+        "longhorn_b2_bucket",
     }
 )
 
