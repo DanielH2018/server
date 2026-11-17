@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/backlog.py
-generated_at: 2026-11-16 18:17 UTC
-generated_sha: 17f361985
+generated_at: 2026-11-17 06:17 UTC
+generated_sha: 2d6216df5
 ---
 
 !!! warning "Generated file — do not edit"
@@ -75,10 +75,10 @@ Open findings carrying a `not-before:` label, soonest first. `findings.py next` 
 | Not before | State | # | Finding |
 |---|---|---|---|
 | 2026-11-16 | date passed | [#7688](https://github.com/DanielH2018/server/issues/7688) | Fix the pytest shard 5 and host_tools_arm64 CI flakes |
-| 2026-11-17 | withheld | [#8694](https://github.com/DanielH2018/server/issues/8694) | Re-decide the CI pytest shard count from master runs that include the named_files plugin |
-| 2026-11-17 | withheld | [#8741](https://github.com/DanielH2018/server/issues/8741) | A second GitHub quota pool is spent from daniel-box by a caller the quota design does not name |
-| 2026-11-17 | withheld | [#8901](https://github.com/DanielH2018/server/issues/8901) | Read the pytest-leg setup median and the per-worker rewrite count on master after the apt-tools cache lands |
-| 2026-11-17 | withheld | [#8933](https://github.com/DanielH2018/server/issues/8933) | daniel-pi's apt cache still keeps every homelab deb after #8904's Keep-Downloaded-Packages setting, 596 MB on the SD card |
+| 2026-11-17 | date passed | [#8694](https://github.com/DanielH2018/server/issues/8694) | Re-decide the CI pytest shard count from master runs that include the named_files plugin |
+| 2026-11-17 | date passed | [#8741](https://github.com/DanielH2018/server/issues/8741) | A second GitHub quota pool is spent from daniel-box by a caller the quota design does not name |
+| 2026-11-17 | date passed | [#8901](https://github.com/DanielH2018/server/issues/8901) | Read the pytest-leg setup median and the per-worker rewrite count on master after the apt-tools cache lands |
+| 2026-11-17 | date passed | [#8933](https://github.com/DanielH2018/server/issues/8933) | daniel-pi's apt cache still keeps every homelab deb after #8904's Keep-Downloaded-Packages setting, 596 MB on the SD card |
 | 2026-11-21 | withheld | [#8931](https://github.com/DanielH2018/server/issues/8931) | Read the dotfiles mirror's first week of status lines after 2026-11-21 |
 | 2026-11-22 | withheld | [#7490](https://github.com/DanielH2018/server/issues/7490) | The Pi's reconcile reaches its 30-minute timeout and holds its updates |
 | 2026-11-22 | withheld | [#8234](https://github.com/DanielH2018/server/issues/8234) | daniel-pi runs saturated: load at 4.7 times its cores, memory down to 12 percent, and a critical SD-health page on 2026-11-12 |

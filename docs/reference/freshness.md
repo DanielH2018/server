@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/freshness.py
-generated_at: 2026-11-16 18:17 UTC
-generated_sha: 17f361985
+generated_at: 2026-11-17 06:17 UTC
+generated_sha: 2d6216df5
 ---
 
 !!! warning "Generated file — do not edit"
@@ -21,16 +21,16 @@ generated_sha: 17f361985
 | [target-architecture/monitoring/m5-loki-ruler.md](../target-architecture/monitoring/m5-loki-ruler.md) | 2026-11-13 | 64 | 42 | `secrets/secrets.yml` (2026-11-16) |
 | [target-architecture/render/r4-delete-k8s-ansible-path.md](../target-architecture/render/r4-delete-k8s-ansible-path.md) | 2026-11-13 | 75 | 40 | `CLAUDE.md` (2026-11-16) |
 | [target-architecture/render/r2-secret-placeholders.md](../target-architecture/render/r2-secret-placeholders.md) | 2026-11-13 | 73 | 38 | `scripts/renderer/renderer_lib/secret_checks.py` (2026-11-16) |
-| [target-architecture/deploy/d2-first-leaf.md](../target-architecture/deploy/d2-first-leaf.md) | 2026-11-13 | 54 | 34 | `secrets/secrets.yml` (2026-11-16) |
-| [target-architecture/docs-guard/g5-shrink-root-claude-md.md](../target-architecture/docs-guard/g5-shrink-root-claude-md.md) | 2026-11-13 | 56 | 31 | `CLAUDE.md` (2026-11-16) |
+| [target-architecture/deploy/d2-first-leaf.md](../target-architecture/deploy/d2-first-leaf.md) | 2026-11-13 | 54 | 35 | `docs/reference/services.md` (2026-11-16) |
+| [target-architecture/docs-guard/g5-shrink-root-claude-md.md](../target-architecture/docs-guard/g5-shrink-root-claude-md.md) | 2026-11-13 | 56 | 32 | `CLAUDE.md` (2026-11-16) |
 | [target-architecture/monitoring/m2-first-bridge-family.md](../target-architecture/monitoring/m2-first-bridge-family.md) | 2026-11-13 | 51 | 31 | `CLAUDE.md` (2026-11-16) |
 | [target-architecture/host/h6-k3s-suc.md](../target-architecture/host/h6-k3s-suc.md) | 2026-11-13 | 69 | 29 | `CLAUDE.md` (2026-11-16) |
 | [target-architecture/docs-guard/g2-retire-lock.md](../target-architecture/docs-guard/g2-retire-lock.md) | 2026-11-13 | 39 | 28 | `CLAUDE.md` (2026-11-16) |
+| [target-architecture/deploy/d6-delete-old-path.md](../target-architecture/deploy/d6-delete-old-path.md) | 2026-11-14 | 88 | 27 | `secrets/secrets.yml` (2026-11-16) |
 | [target-architecture/deploy/d1-flux-installed.md](../target-architecture/deploy/d1-flux-installed.md) | 2026-11-13 | 47 | 26 | `CLAUDE.md` (2026-11-16) |
 | [target-architecture/deploy/d4-ordering.md](../target-architecture/deploy/d4-ordering.md) | 2026-11-13 | 40 | 26 | `CLAUDE.md` (2026-11-16) |
 | [target-architecture/render/r1-shadow-render.md](../target-architecture/render/r1-shadow-render.md) | 2026-11-13 | 46 | 26 | `secrets/secrets.yml` (2026-11-16) |
 | [target-architecture/render/r3-remove-live-reads.md](../target-architecture/render/r3-remove-live-reads.md) | 2026-11-13 | 47 | 26 | `secrets/secret_rotation.yml` (2026-11-16) |
-| [target-architecture/deploy/d6-delete-old-path.md](../target-architecture/deploy/d6-delete-old-path.md) | 2026-11-14 | 88 | 26 | `secrets/secrets.yml` (2026-11-16) |
 | [target-architecture/host/h4-secrets-unit.md](../target-architecture/host/h4-secrets-unit.md) | 2026-11-13 | 40 | 22 | `.github/workflows/ci.yml` (2026-11-16) |
 | [claude-tooling.md](../claude-tooling.md) | 2026-11-14 | 78 | 22 | `CLAUDE.md` (2026-11-16) |
 | [target-architecture/docs-guard/g1-diff-notice.md](../target-architecture/docs-guard/g1-diff-notice.md) | 2026-11-13 | 28 | 21 | `CLAUDE.md` (2026-11-16) |
@@ -40,19 +40,19 @@ generated_sha: 17f361985
 | [target-architecture/deploy/d5-bulk-move.md](../target-architecture/deploy/d5-bulk-move.md) | 2026-11-14 | 80 | 18 | `CLAUDE.md` (2026-11-16) |
 | [target-architecture/host/h1-cluster-config-to-flux.md](../target-architecture/host/h1-cluster-config-to-flux.md) | 2026-11-14 | 93 | 18 | `CLAUDE.md` (2026-11-16) |
 | [target-architecture/host/h2-shrink-host-plane.md](../target-architecture/host/h2-shrink-host-plane.md) | 2026-11-14 | 74 | 18 | `CLAUDE.md` (2026-11-16) |
-| [target-architecture/monitoring/alertmanager-ui-and-readers.md](../target-architecture/monitoring/alertmanager-ui-and-readers.md) | 2026-11-13 | 24 | 16 | `CLAUDE.md` (2026-11-16) |
-| [break-glass.md](../break-glass.md) | 2026-11-14 | 49 | 15 | `secrets/secrets.yml` (2026-11-16) |
+| [target-architecture/monitoring/alertmanager-ui-and-readers.md](../target-architecture/monitoring/alertmanager-ui-and-readers.md) | 2026-11-13 | 24 | 17 | `docs/reference/services.md` (2026-11-16) |
+| [break-glass.md](../break-glass.md) | 2026-11-14 | 49 | 16 | `secrets/secrets.yml` (2026-11-16) |
 | [target-architecture/design.md](../target-architecture/design.md) | 2026-11-13 | 19 | 14 | `CLAUDE.md` (2026-11-16) |
+| [target-architecture/monitoring/m4-blackbox-ingress.md](../target-architecture/monitoring/m4-blackbox-ingress.md) | 2026-11-13 | 30 | 14 | `CLAUDE.md` (2026-11-16) |
 | [target-architecture/deploy/d3-secrets.md](../target-architecture/deploy/d3-secrets.md) | 2026-11-14 | 45 | 14 | `secrets/cluster-vars.source` (2026-11-16) |
 | [target-architecture/docs-guard/g3-freshness-reviewer.md](../target-architecture/docs-guard/g3-freshness-reviewer.md) | 2026-11-13 | 25 | 13 | `CLAUDE.md` (2026-11-16) |
 | [target-architecture/docs-guard/g4-drop-size-test.md](../target-architecture/docs-guard/g4-drop-size-test.md) | 2026-11-13 | 29 | 13 | `CLAUDE.md` (2026-11-16) |
-| [target-architecture/monitoring/m4-blackbox-ingress.md](../target-architecture/monitoring/m4-blackbox-ingress.md) | 2026-11-13 | 30 | 13 | `CLAUDE.md` (2026-11-16) |
 | [python-code-organization.md](../python-code-organization.md) | 2026-11-14 | 40 | 13 | `.github/workflows/ci.yml` (2026-11-16) |
 | [secret-rotation.md](../secret-rotation.md) | 2026-11-14 | 37 | 13 | `secrets/secrets.yml` (2026-11-16) |
 | [target-architecture/monitoring/m3-textfile-timer.md](../target-architecture/monitoring/m3-textfile-timer.md) | 2026-11-13 | 31 | 12 | `CLAUDE.md` (2026-11-16) |
 | [longhorn-disaster-recovery.md](../longhorn-disaster-recovery.md) | 2026-11-14 | 21 | 10 | `secrets/secrets.yml` (2026-11-16) |
 | [k3s-etcd-restore.md](../k3s-etcd-restore.md) | 2026-11-13 | 15 | 9 | `inventory/group_vars/all.yml` (2026-11-16) |
-| [issue-claiming-and-fanout.md](../issue-claiming-and-fanout.md) | 2026-11-14 | 23 | 9 | `scripts/dev/findings.py` (2026-11-15) |
+| [issue-claiming-and-fanout.md](../issue-claiming-and-fanout.md) | 2026-11-14 | 23 | 9 | `docs/reference/scripts.md` (2026-11-16) |
 | [autofix-bridge-actuators.md](../autofix-bridge-actuators.md) | 2026-11-13 | 13 | 8 | `CLAUDE.md` (2026-11-16) |
 | [k3s-node-plane-crons-and-incidents.md](../k3s-node-plane-crons-and-incidents.md) | 2026-11-13 | 16 | 8 | `CLAUDE.md` (2026-11-16) |
 | [networkpolicy-default-deny.md](../networkpolicy-default-deny.md) | 2026-11-13 | 9 | 8 | `tests/k8s/test_netpol_baseline_labels.py` (2026-11-15) |
@@ -71,7 +71,7 @@ generated_sha: 17f361985
 | [target-architecture/host/h3-pi-pilot.md](../target-architecture/host/h3-pi-pilot.md) | 2026-11-15 | 90 | 6 | `CLAUDE.md` (2026-11-16) |
 | [adr/0027-fanout-batches-stay-on-host-cgroups.md](../adr/0027-fanout-batches-stay-on-host-cgroups.md) | 2026-11-08 | 7 | 5 | `scripts/diagnostics/probe.py` (2026-11-15) |
 | [authelia-sessions-and-crowdsec-init.md](../authelia-sessions-and-crowdsec-init.md) | 2026-11-13 | 13 | 5 | `secrets/secret_rotation.yml` (2026-11-16) |
-| [failure-classes.md](../failure-classes.md) | 2026-11-13 | 18 | 5 | `docs/reference/backlog.md` (2026-11-15) |
+| [failure-classes.md](../failure-classes.md) | 2026-11-13 | 18 | 5 | `docs/reference/backlog.md` (2026-11-16) |
 | [healthchecks-io-deadman.md](../healthchecks-io-deadman.md) | 2026-11-13 | 19 | 5 | `k8s/roles/observability/templates/alertmanager-secret.yaml.j2` (2026-11-15) |
 | [networkpolicy-slice-answers.md](../networkpolicy-slice-answers.md) | 2026-11-13 | 10 | 5 | `cluster/services.yml` (2026-11-15) |
 | [wireguard-private-homelab-access.md](../wireguard-private-homelab-access.md) | 2026-11-13 | 9 | 5 | `secrets/secrets.yml` (2026-11-16) |
