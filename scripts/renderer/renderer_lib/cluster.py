@@ -11,6 +11,7 @@ The file rules:
 - A basename the role ships no template for renders from the shared default in
   `k8s/templates/`, `service.yaml` and `ingressroute.yaml`.
 - Each `k8s_claims` entry renders `claim-default.yaml.j2` to `claim-<name>.yaml`.
+- Each `render_secrets` entry renders `secret-default.yaml.j2` to `secret-<name>.yaml`.
 - A prune-armed role renders every one of those through `role-labelled.yaml.j2`, which stamps
   `homelab/role` on each document.
 - `manifests_deferred_files` render from the role's own templates, unlabelled, into
@@ -52,6 +53,7 @@ from lib.estate import REPO_INVENTORY, Inventory
 from lib.k8s_roles import (
     CLAIM_TEMPLATE,
     MANIFESTS_PRUNE_DEFAULT,
+    SECRET_TEMPLATE,
     SHARED_MANIFEST_DEFAULTS,
     resolved_manifest_files,
     role_fields,
@@ -404,6 +406,15 @@ def render_tag(
         name = f"claim-{claim['name']}.yaml"
         rendered[name] = render(CLAIM_TEMPLATE, name, prune, manifests_claim=claim)
         sources[name] = CLAIM_TEMPLATE.name
+    for entry in secret_entries(tag, ctx.get("render_secrets"), stubs):
+        name = f"secret-{entry['name']}.yaml"
+        if name in rendered:
+            raise RenderError(
+                f"{tag}: render_secrets entry `{entry['name']}` writes {name}, "
+                "which the role's templates already render"
+            )
+        rendered[name] = render(SECRET_TEMPLATE, name, prune, manifests_secret=entry)
+        sources[name] = SECRET_TEMPLATE.name
     rendered[KUSTOMIZATION] = kustomization_text(list(rendered))
 
     later = {}
@@ -452,6 +463,56 @@ def render_tag(
         precheck=jobs[PRECHECK_TEMPLATES_DIR],
         sources=sources,
     )
+
+
+_SECRET_ENTRY_KEYS = frozenset({"name", "namespace", "string_data"})
+
+
+def secret_entries(tag: str, value: object, secrets: Mapping) -> list[dict]:
+    """The `render_secrets` entries of `tag`'s role, each checked against its shape.
+
+    An entry is `{name, string_data}` with an optional `namespace`. `string_data` maps each
+    Secret field to the SOPS key its value comes from, so a value must be a key of
+    `secrets`, the mode's secret values. A literal or a computed value belongs in a
+    template of the role's own.
+
+    Args:
+        tag: The deploy tag, for the error.
+        value: The role's resolved `render_secrets`. None or empty declares nothing.
+        secrets: The mode's secret values, keyed by SOPS key.
+
+    Raises:
+        RenderError: An entry is not that shape, or names a value that is no SOPS key.
+    """
+    if not value:
+        return []
+    if not isinstance(value, list):
+        raise RenderError(
+            f"{tag}: render_secrets must be a list, not {type(value).__name__}"
+        )
+    entries = []
+    for i, entry in enumerate(value):
+        where = f"{tag}: render_secrets[{i}]"
+        if not isinstance(entry, dict):
+            raise RenderError(f"{where} must be a mapping")
+        unknown = sorted(set(entry) - _SECRET_ENTRY_KEYS)
+        if unknown:
+            raise RenderError(f"{where} has unknown keys {unknown}")
+        if not isinstance(entry.get("name"), str) or not entry["name"]:
+            raise RenderError(f"{where} needs a `name`")
+        fields = entry.get("string_data")
+        if not isinstance(fields, dict) or not fields:
+            raise RenderError(
+                f"{where} (`{entry['name']}`) needs a non-empty `string_data`"
+            )
+        unknown_keys = sorted(str(k) for k in fields.values() if k not in secrets)
+        if unknown_keys:
+            raise RenderError(
+                f"{where} (`{entry['name']}`) maps fields to {unknown_keys}, "
+                "which are not SOPS keys"
+            )
+        entries.append(entry)
+    return entries
 
 
 def _flux_job_image() -> str:

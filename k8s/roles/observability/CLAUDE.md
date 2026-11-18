@@ -77,8 +77,9 @@ names without putting their bytes in the annotation. The role's defaults list it
 `manifests_self_rollouts`, from
 `k8s/roles/observability/defaults/main.yml:observability_stabilise_workloads`. Each
 Secret reader names the rendered files its pod reads in `restart_secrets`:
-`scrape-credentials-secret.yaml` for prometheus, `grafana-secret.yaml` for grafana and
-`alertmanager-secret.yaml` for alertmanager.
+`secret-prometheus-scrape-credentials.yaml` for prometheus, `secret-grafana-admin.yaml` for
+grafana and `alertmanager-secret.yaml` for alertmanager. The first two render from the
+role's `render_secrets` entries.
 `tests/services/test_observability_config_rolls_one_workload.py` holds that
 declaration equal to the Secrets each pod reads. One Secret edit then rolls its readers alone.
 An Alertmanager config edit rolls Alertmanager alone.
@@ -86,7 +87,7 @@ An Alertmanager config edit rolls Alertmanager alone.
 **An initContainer writes Grafana's admin password.** `GF_SECURITY_ADMIN_PASSWORD` seeds only a
 new database, so the `admin-password` initContainer in `grafana.yaml.j2` runs `grafana cli
 admin reset-admin-password` from the `grafana-admin` Secret before every Grafana start. A
-rotated `grafana_admin_password` changes `grafana-secret.yaml`, the annotation rolls grafana,
+rotated `grafana_admin_password` changes `secret-grafana-admin.yaml`, the annotation rolls grafana,
 and the initContainer writes the new password. grafana is `Recreate`, so no server holds the
 SQLite file while the CLI runs. The renderer's restart annotation rolls grafana when the
 Secret changes.

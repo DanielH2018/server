@@ -23,3 +23,12 @@ manifests_rollout: ""
 manifests_extra_rollouts:
   - name: cloudflare-ddns-direct
   - name: cloudflare-ddns-proxied
+
+# Each entry renders k8s/templates/secret-default.yaml.j2 as secret-<name>.yaml:
+# its `string_data` maps a Secret field to the SOPS key its value comes from.
+render_secrets:
+  - name: cloudflare-ddns
+    string_data:
+      # The zone-edit token traefik also uses. Mounted as a file for
+      # CLOUDFLARE_API_TOKEN_FILE, so the value stays out of `kubectl describe pod`.
+      cf_dns_token: cloudflare_dns_token

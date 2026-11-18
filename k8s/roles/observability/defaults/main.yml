@@ -371,14 +371,14 @@ observability_stabilise_workloads:
   - kind: deploy
     name: prometheus
     restart_on: []
-    restart_secrets: [scrape-credentials-secret.yaml]
+    restart_secrets: [secret-prometheus-scrape-credentials.yaml]
   - { kind: deploy, name: kube-state-metrics, restart_on: [] }
   - { kind: deploy, name: tempo, restart_on: [] }
   - { kind: daemonset, name: otel-collector, restart_on: [] }
   - kind: deploy
     name: grafana
     restart_on: []
-    restart_secrets: [grafana-secret.yaml]
+    restart_secrets: [secret-grafana-admin.yaml]
   - kind: deploy
     name: alertmanager
     restart_on: []
@@ -397,3 +397,21 @@ manifests_rollout: ''
 manifests_self_rollouts: >-
   {{ observability_stabilise_workloads
      | map('combine', {'namespace': k8s_observability_namespace}) | list }}
+
+# Each entry renders k8s/templates/secret-default.yaml.j2 as secret-<name>.yaml:
+# its `string_data` maps a Secret field to the SOPS key its value comes from.
+render_secrets:
+  - name: grafana-admin
+    namespace: "{{ k8s_observability_namespace }}"
+    string_data:
+      password: grafana_admin_password
+      # The plaintext half of the Authelia OIDC client credential.
+      # Authelia holds only the pbkdf2 digest `grafana_oidc_client_secret_hash`, so rotate the
+      # two keys together.
+      oidc_client_secret: grafana_oidc_client_secret
+  # Scrape credentials, file-mounted and read through password_file or credentials_file, so
+  # the values stay out of the prometheus-config ConfigMap.
+  - name: prometheus-scrape-credentials
+    namespace: "{{ k8s_observability_namespace }}"
+    string_data:
+      ha_token: prometheus_ha_token

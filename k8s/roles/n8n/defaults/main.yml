@@ -101,3 +101,15 @@ image_builder_builds:
 manifests_extra_rollouts:
   - name: n8n-runners
     image: n8n-runners
+
+# Each entry renders k8s/templates/secret-default.yaml.j2 as secret-<name>.yaml:
+# its `string_data` maps a Secret field to the SOPS key its value comes from.
+render_secrets:
+  # The credential-encryption key is not here: it lives in the data volume at `config`, and
+  # an N8N_ENCRYPTION_KEY other than the on-disk value crashes n8n.
+  - name: n8n
+    string_data:
+      # Shared by the broker and the runner. A mismatch does not fail
+      # at startup: every workflow that runs code hangs until
+      # N8N_RUNNERS_TASK_REQUEST_TIMEOUT.
+      N8N_RUNNERS_AUTH_TOKEN: n8n_runner_auth_token

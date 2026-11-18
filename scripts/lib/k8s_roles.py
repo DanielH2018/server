@@ -52,6 +52,7 @@ __all__ = [
     "resolved_manifest_files",
     "role_dirs",
     "RENDER_KEYS",
+    "SECRET_TEMPLATE",
 ]
 
 
@@ -501,6 +502,9 @@ def shared_default_templates(role, k8s_roles=None, entry=None) -> list[Path]:
 # `claim-<name>.yaml`. One template, many renders, so a harness cannot find these claims by
 # walking templates: it renders this once per context `claim_contexts` returns.
 CLAIM_TEMPLATE = SHARED_TPL / "claim-default.yaml.j2"
+# The shared template the renderer renders once per entry of a role's `render_secrets`, as
+# `secret-<name>.yaml`, the same way.
+SECRET_TEMPLATE = SHARED_TPL / "secret-default.yaml.j2"
 
 
 def claim_contexts(ctx: dict) -> list[dict]:

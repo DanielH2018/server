@@ -204,3 +204,16 @@ manifests_extra_rollouts:
   - name: karakeep-time-tagger
   - name: karakeep-chrome
     restart_on: []
+
+# Each entry renders k8s/templates/secret-default.yaml.j2 as secret-<name>.yaml:
+# its `string_data` maps a Secret field to the SOPS key its value comes from.
+render_secrets:
+  # NEXTAUTH_SECRET signs the session cookies logged-in browsers hold, and MEILI_MASTER_KEY is
+  # shared by karakeep and Meilisearch. A fresh value on either reads as "everyone logged out"
+  # or "search is broken", not as a configuration error.
+  - name: karakeep
+    string_data:
+      MEILI_MASTER_KEY: karakeep_meili_master_key
+      NEXTAUTH_SECRET: karakeep_nextauth_secret
+      OPENAI_API_KEY: karakeep_gemini_api_key
+      KARAKEEP_PYTHON_API_KEY: karakeep_python_api_key
