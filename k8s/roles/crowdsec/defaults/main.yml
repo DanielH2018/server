@@ -71,7 +71,7 @@ crowdsec_k8s_node_agent_collections: "crowdsecurity/linux crowdsecurity/whitelis
 # out of alpine/k8s, which keeps the binary at /usr/bin/kubectl. The same two digests as
 # configarr's health reader (configarr_k8s_health_image), whose defaults record the evidence.
 crowdsec_k8s_jobs_image: python:3.15-alpine@sha256:0f9552bb28711333da16915ec146f5e6bb44a7fdac9ced15dc17c2e0206346dd
-crowdsec_k8s_jobs_kubectl_image: alpine/k8s:1.37.2@sha256:dcb7185e112a453aa72f426754849a97357727ef8f40168fb208c8cf59952042
+crowdsec_k8s_jobs_kubectl_image: alpine/k8s:1.37.2@sha256:7a82aeefea3d554a43a8676b137f2b88bae6c1fe11c13862b191b3a086cc28c0
 
 # The budget of the crowdsec-prepull Kustomization, whose Job pulls the engine pod's three images
 # onto k8s_primary_node before the crowdsec Kustomization applies
