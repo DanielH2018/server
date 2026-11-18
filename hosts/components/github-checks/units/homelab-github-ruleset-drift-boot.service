@@ -1,5 +1,5 @@
 # Shipped by the github-checks component with its enable link. Reruns
-# homelab-github-ruleset-drift.service once at boot, only when its last verdict was not up (#4495).
+# homelab-github-ruleset-drift.service once at boot, only when its last verdict was not up.
 # The start is an ExecStart= rather than a Wants=, because systemd pulls in a Wants= dependency even
 # when this unit's own condition fails.
 [Unit]

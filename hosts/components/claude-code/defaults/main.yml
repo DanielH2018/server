@@ -8,19 +8,13 @@
 # The service hands anything holding the claude.ai account a session on the k3s
 # control-plane node, and it depends on a prerequisite Ansible cannot check: whether a
 # phone-spawned worktree clears the workspace-trust dialog, which nobody can answer remotely.
-# Confirmed on daniel-box — a session created from the phone produced
-# `.claude/worktrees/test-scratch` on branch `worktree-test-scratch` and reached a prompt,
-# with no dialog. Setting this to false stops AND disables the host and its restart timer;
-# that is the rollback.
+# Setting this to false stops AND disables the host and its restart timer; that is the rollback.
 claude_code_rc_enabled: true
 
-# The account claude-rc.service runs as. Slice 4 of docs/claude-agent-user.md moves it to
-# `claude_code_agent_user`; the default keeps the operator, so a host that does not set this
-# renders the unit it always did. Only a non-operator user gets the unit's hardening lines.
-# A host that sets this to a non-operator account also sets `claude_code_user_uid`, that
-# account's uid, which the hardening lines read to expose the account's user bus. It has
-# deliberately no default here, because a guessed uid would bind another account's runtime
-# directory. Without it, the render fails.
+# The account claude-rc.service runs as. Only a non-operator user gets the unit's hardening
+# lines, which read claude_code_user_uid (that account's uid) to expose the account's user bus.
+# It has deliberately no default, because a guessed uid would bind another account's runtime
+# directory; without it, the render fails.
 claude_code_user: "{{ sys_user }}"
 
 # That account's home. The agent user's lives outside /home (claude_code_agent_user_home), so
@@ -46,44 +40,35 @@ claude_code_rc_permission_mode: auto
 
 # DECIDED: 10, not the CLI's default of 32. Measured on daniel-box, a `claude` process sits
 # at 200-400 MB RSS, so 10 sessions ask for up to ~4 GB against ~15 GB available with k3s
-# already running. Raised from 3 to 10 on 2026-09-04 at user request.
+# already running.
 #
-# This is NOT the memory bound, though it read as one here until 2026-09-05. The per-process
-# figure above is accurate — the two live sessions during that day's stall measured 404 MB
-# and 376 MB. What it does not count is the subprocess tree: those two sessions held 203
-# processes and 6.96 GB anon, because the memory belongs to what a session SPAWNS. Capacity
-# multiplies that tree, it does not bound it. claude_code_rc_pytest_workers below is the
-# bound on the fan-out; MemoryHigh in the unit is the throttle when it is exceeded anyway.
+# This is NOT the memory bound: the per-process figure omits the subprocess tree (two live
+# sessions held 203 processes and 6.96 GB anon), so capacity multiplies that tree rather than
+# bounding it. claude_code_rc_pytest_workers below bounds the fan-out; MemoryHigh in the unit
+# throttles when it is exceeded anyway.
 claude_code_rc_capacity: 10
 
 # Workers a single `-n auto` pytest run may use on this host, via PYTEST_XDIST_AUTO_NUM_WORKERS
-# in the unit. daniel-box has 16 cores, so `auto` means 16 per run and nothing bounds how many
-# runs the sessions launch at once.
+# in the unit. daniel-box has 16 cores, so uncapped `auto` means 16 per run and nothing bounds
+# how many runs the sessions launch at once.
 #
-# Derivation, and the thing to re-derive if you change it: the worst case is workers ×
-# capacity, not workers. At 4 × 10 that is 40 workers, and xdist workers measured 20-150 MB
-# RSS during a stall, so call it ~4 GB of workers against the 8 GB MemoryHigh,
-# with the 10 `claude` processes taking most of the rest. That sits the extreme case at the
-# throttle point, which is where a throttle belongs.
+# The worst case is workers x capacity: 4 x 10 is 40 workers at 20-150 MB RSS, about 4 GB
+# against the 8 GB MemoryHigh, with the 10 `claude` processes taking most of the rest. Raise it
+# on measurement, and re-check the product, not the factor.
 #
-# Nine concurrent runs at this cap are 36 workers, roughly 3.6 GB, where uncapped `auto` was
-# 144 workers and ~15 GB. Raise it on measurement, and re-check the product, not the factor.
-#
-# A sibling entry in ~/.claude/settings.json's `env` block carries the same value for Claude
-# sessions this unit does not spawn (chezmoi repo, home/.chezmoitemplates/settings.base.json).
-# Raise both together, or the cap depends on how the session started.
+# A sibling entry in the operator's ~/.claude/settings.json `env` block carries the same value
+# for Claude sessions this unit does not spawn. Raise both together, or the cap depends on how
+# the session started.
 claude_code_rc_pytest_workers: 4
 
 # DECIDED: one crash page per 6 hours, not one per exit. claude-rc.service runs Restart=always
 # with RestartSec=10, and systemd 255 fires OnFailure= on every exit of that loop, so a host
-# that cannot start paged about every 10 seconds: 1,540-1,686 alert runs a day from
-# 2026-10-05 to 2026-10-08 (#4676). After a delivered page the alert skips for this many
-# minutes, so a loop that lasts days pages four times a day as a reminder. The cost is that a
-# second, separate crash inside the window is not paged; the page text says so. 0 restores a
-# page per exit.
+# that cannot start would page about every 10 seconds. After a delivered page the alert skips
+# for this many minutes, so a loop that lasts days pages four times a day as a reminder. The
+# cost is that a second, separate crash inside the window is not paged; the page text says so.
+# 0 restores a page per exit.
 claude_code_rc_alert_quiet_minutes: 360
 
-# ── The fleet bound ─────────────────────────────────────────────────────────────────────
 # The Claude fleet occupies TWO cgroups on this box: claude-rc.service's own, and
 # the user-<uid>.slice of each login uid for a session started from an interactive shell. They are
 # siblings under different parents, so a cap on each reads as one bound and is two: neither
@@ -99,16 +84,12 @@ claude_code_rc_alert_quiet_minutes: 360
 # whole box for a deliberate heavy run.
 claude_code_fleet_caps_enabled: true
 
-# The slice both planes live under. user.slice is not a choice among several — it is the
-# only slice that can hold both, and the reason is worth knowing before changing this.
-# systemd.slice(5): "The name of the slice encodes the location in the tree", and for a
-# slice unit Slice= takes "the only accepted value ... the parent slice", so
-# user-<uid>.slice cannot be moved anywhere: its name fixes it under user.slice, and
-# systemd-logind creates it under that name. user.slice is therefore the tightest legal
-# common ancestor, and measured on daniel-box it is safe to place a unit in:
-# StopWhenUnneeded=no, where user-<uid>.slice has StopWhenUnneeded=yes with Linger=no — a
-# service placed THERE would be stopped along with the slice at the last logout. This
-# role's CLAUDE.md carries the full answer to "can user-<uid>.slice be reparented".
+# The slice both planes live under. user.slice is the only slice that can hold both:
+# user-<uid>.slice cannot be reparented (systemd.slice(5): its name fixes it under user.slice),
+# so user.slice is the tightest legal common ancestor. It is safe to place a unit in
+# (StopWhenUnneeded=no), where user-<uid>.slice has StopWhenUnneeded=yes with Linger=no, so a
+# service placed THERE would stop with the slice at the last logout. This role's CLAUDE.md
+# answers "can user-<uid>.slice be reparented".
 claude_code_fleet_slice: user.slice
 
 # DECIDED: 20G on the shared parent, with the per-plane caps below at 14G as sub-bounds.
@@ -117,22 +98,15 @@ claude_code_fleet_slice: user.slice
 # ceiling shares elastically — either plane may take up to its own 14G, and the two together
 # are held to 20G by the parent.
 #
-# The operator set the target on 2026-11-13: leave about 8 GiB of host RAM available on every
-# node, so the fan-out can run more batches at once. The cap is that floor, worked backward.
-# MemAvailable already nets out the homelab plane's anon and the kernel, so neither is a term
-# below. Re-derive all of it if you change this:
-#   Measured on daniel-box 2026-11-13 23:25 UTC: MemTotal 28.2 GiB, MemAvailable 14.95 GiB
-#     with the fleet slice at 10.9 GiB of its old 14G cap.
-#   Valheim (2.5 GiB) is parked by a separate change, so 14.95 + 2.5 = 17.4 GiB is available
-#     without it.
+# The cap is derived from a floor of about 8 GiB of host RAM available on every node, worked
+# backward. MemAvailable already nets out the homelab plane's anon and the kernel, so neither is
+# a term below. Re-derive all of it if you change this:
+#   Available without Valheim (2.5 GiB, parked separately): about 17.4 GiB.
 #   Spendable above the floor: 17.4 - 8 = 9.4 GiB.
-#   Cap: the fleet's current 10.9 GiB + 9.4 GiB spendable = 20.3 GiB, rounded down to 20G.
+#   Cap: the fleet's own use (10.9 GiB) + 9.4 GiB spendable = 20.3 GiB, rounded down to 20G.
 #   Worst case: if every byte the fleet adds up to the cap stays unreclaimable, available
 #     falls to 17.4 - (20 - 10.9) = 8.3 GiB. Page cache the fleet adds is reclaimable, so
 #     8.3 GiB is a lower bound.
-# Until 2026-11-13 the cap was derived the other way round: 28.2 GiB - a 10 GiB budget for the
-# homelab plane's anon - 0.55 GiB SUnreclaim - 3 GiB page cache = 14.6 GiB, so 14G. That left
-# 14.95 GiB available, nearly twice the floor.
 # The floor moves one for one with the homelab plane. If k3s grows, re-check kubepods.slice
 # and system.slice anon first: growth of 0.3 GiB takes the worst case under 8 GiB. The
 # throttle stalls whichever cgroup loses the race for reclaim, which must not be the homelab
@@ -147,18 +121,16 @@ claude_code_fleet_memory_high: 20G
 # plane keeps three quarters. Same not-zero reasoning as the per-plane cap below.
 claude_code_fleet_swap_max: 2G
 
-# ── The per-plane sub-bounds ────────────────────────────────────────────────────────────
 # One plane's share of the fleet bound above, applied to claude-rc.service's own cgroup AND
 # to user-<uid>.slice's drop-in. Each must be <= the fleet bound: a sub-bound above its
 # parent's is a number that can never be reached. ENFORCED by
 # hosts/tests/test_claude_fleet_slice_cap.py.
 #
-# Every fan-out agent on this host
-# runs in the login plane, so this is the cap the fan-out dispatcher runs out of first, and
-# raising the fleet cap alone adds no fan-out width. Deliberately more than half of 20G: a
-# plane doing real work while the other is idle should be able to use most of the fleet's
-# budget, and the parent is what stops the two of them together. See the unit template on
-# why this is MemoryHigh and not MemoryMax.
+# Every fan-out agent on this host runs in the login plane, so this is the cap the fan-out
+# dispatcher runs out of first, and raising the fleet cap alone adds no fan-out width.
+# Deliberately more than half of 20G: a plane doing real work while the other is idle should be
+# able to use most of the fleet's budget, and the parent is what stops the two together. See
+# the unit template on why this is MemoryHigh and not MemoryMax.
 claude_code_rc_memory_high: 14G
 
 # One plane's swap ceiling, written to memory.swap.max. Without it a plane swaps without
@@ -188,7 +160,6 @@ claude_code_rc_disable_bg_shell_pressure_reap: true
 # started with. systemd OnCalendar syntax.
 claude_code_rc_restart_schedule: weekly
 
-# ── Background-session resume at boot ──────────────────────────────────────────────────
 # claude-bg-resume.service respawns, once at boot, the background sessions (`claude agents`,
 # `claude --bg`) the shutdown killed, so their Remote Control links come back without anyone
 # opening agent view first. True enables the unit for the next boot; false disables it and
@@ -201,7 +172,6 @@ claude_code_bg_resume_user: "{{ sys_user }}"
 claude_code_bg_resume_home: "/home/{{ claude_code_bg_resume_user }}"
 claude_code_bg_resume_dir: /usr/local/lib/claude-bg-resume
 
-# ── Login-session caps ──────────────────────────────────────────────────────────────────
 # claude-rc.service's MemoryHigh, MemorySwapMax and PYTEST_XDIST_AUTO_NUM_WORKERS bound only
 # that unit's own cgroup. A session started with `claude agents` (or a bare `claude`) from
 # an interactive SSH shell lands in user.slice/user-<uid>.slice/session-<n>.scope instead,
@@ -217,35 +187,32 @@ claude_code_bg_resume_dir: /usr/local/lib/claude-bg-resume
 claude_code_login_caps_enabled: true
 
 # The numeric uid of the account this role manages, whose login-session slice (user-<uid>.slice)
-# gets the same caps as claude-rc.service's own cgroup. Confirmed to be 1000 for {{ sys_user }}
-# on daniel-box. Override per-host if a different uid ever owns the account. It stays in place
-# while Claude sessions still run as that account (see claude_code_login_uids below).
-# claude-rc.service running as {{ sys_user }} reads it too, for the XDG_RUNTIME_DIR and
-# DBUS_SESSION_BUS_ADDRESS its sessions get (#6868). It never reads claude_code_user_uid there,
-# which names the agent's uid on a host whose rollback sets claude_code_user back to sys_user.
+# gets the same caps as claude-rc.service's own cgroup. Override per-host if a different uid
+# owns the account. claude-rc.service running as {{ sys_user }} reads it too, for the
+# XDG_RUNTIME_DIR and DBUS_SESSION_BUS_ADDRESS its sessions get. It never reads
+# claude_code_user_uid there, which names the agent's uid on a host whose rollback sets
+# claude_code_user back to sys_user.
 claude_code_login_uid: 1000
 
-# Every uid whose login-session slice gets the caps. The default is the one uid above. The
-# agent's uid is not in it: each host's package.yml ships the agent's user-<uid>.slice.d cap with
-# the uid it declares, because since 2026-10-09 new interactive sessions start as the agent
-# through `claude-agents` and land in the agent's own user-<uid>.slice. Dropping 1000 from this
-# list drops the operator's drop-in from the next package version. Drop claude_code_login_uid from it only once the operator says no session still
-# runs as {{ sys_user }}; docs/claude-agent-user.md, slice 6.
+# Every uid whose login-session slice gets the caps. The agent's uid is not in it: each host's
+# package.yml ships the agent's user-<uid>.slice.d cap with the uid it declares, because
+# interactive sessions start as the agent through `claude-agents` and land in the agent's own
+# user-<uid>.slice. Dropping 1000 from this list drops the operator's drop-in from the next
+# package version; drop it only once no session still runs as {{ sys_user }}
+# (docs/claude-agent-user.md, slice 6).
 claude_code_login_uids: "{{ [claude_code_login_uid] }}"
 
 # Every uid that must run no Claude Code at all. claude-cgroup-metrics.sh writes
 # claude_uid_processes{uid} for each, an explicit 0 included. No alert rule reads the series, so
-# a count above 0 never pages (#5125). Empty here, so daniel-server, where sessions still run as
-# {{ sys_user }}, writes no series. daniel-box lists the operator's uid once its sessions moved
+# a count above 0 never pages. Empty here, so daniel-server, where sessions still run as
+# {{ sys_user }}, writes no series. daniel-box lists the operator's uid once its sessions move
 # to the agent (slice 6).
 claude_code_watch_uids: []
 
-# ── Memory store copy (issue #3123) ─────────────────────────────────────────────────────
-# Sessions on each host read that host's own ~/.claude memory store, and nothing kept the two
-# in step: on 2026-10-01 daniel-server's and daniel-box's stores shared 2 of 85 and 66 file
-# names, and daniel-server's index told sessions to stay on master. The operator chose
-# daniel-box as the source and a one-way, overwriting copy, so this is true only in
-# daniel-box's host_vars. False stops and disables the timer and removes its units.
+# Whether the one-way, overwriting copy of this host's memory store to
+# claude_code_memory_sync_target runs: sessions on each host read that host's own ~/.claude
+# store, and nothing else keeps the two in step. True only in daniel-box's host_vars. False
+# stops and disables the timer and removes its units.
 claude_code_memory_sync_enabled: false
 
 # The ssh destination the store is copied to, as this host's user resolves it.
@@ -267,15 +234,12 @@ claude_code_operator_memory_dir: >-
 # DECIDED: the target path is its own variable, not "the same path" as the source. Once
 # claude_code_user is the agent, the source is under claude_code_agent_user_home, a path that
 # does not exist on claude_code_memory_sync_target, where sessions read the operator's store.
-# For the default claude_code_user the two paths are the same string, so the unit renders
-# byte for byte as it did before this variable existed.
 claude_code_memory_sync_target_dir: "{{ claude_code_operator_memory_dir }}"
 
 # How often the copy runs, as a systemd time span. A memory written here reaches the other
 # host's next session within this interval.
 claude_code_memory_sync_interval: 15min
 
-# ── The agent user ──────────────────────────────────────────────────────────────────────
 # A dedicated Unix user for the operator's Claude sessions. Each host's package.yml declares it
 # to the users arm, as renovate-agent's component.yml declares that agent's user, and
 # claude-agent-setup builds its home. A session running as
@@ -302,14 +266,13 @@ claude_code_agent_user_clone_dir: "{{ claude_code_agent_user_home }}/server"
 claude_code_agent_user_repo: DanielH2018/server
 # How often claude-clone-sync.timer fast-forwards that clone when it is a clean master. A merge
 # that touches only the hook shim's or the homelab-ui launcher's code applies no role, so this
-# interval bounds how long the agent runs the old copy (#4162). Each apply of this role also
+# interval bounds how long the agent runs the old copy. Each apply of this role also
 # runs the sync. Installed while claude_code_agent_user_enabled is true; false removes the units.
 claude_code_agent_clone_sync_interval: 15min
 
 # Whether the agent user reads the system journal, through the systemd-journal group. Without
-# it, `journalctl` shows the agent only its own units. The operator granted it on 2026-10-09,
-# after a gitleaks scan of 14 days of journal found only the kernel's public module-signing
-# key fingerprint (docs/claude-agent-user.md, slice 4). False removes the group again.
+# it, `journalctl` shows the agent only its own units. docs/claude-agent-user.md, slice 4, has
+# the ruling. False removes the group again.
 claude_code_agent_journal_access: true
 # Whether the operator reads the agent's artifacts and memory store. claude-memory-sync runs as
 # sys_user, and the artifact browser and the operator's own sessions read both once the phone
@@ -322,7 +285,7 @@ claude_code_agent_memory_dir: >-
   claude_code_agent_user_clone_dir | replace('/', '-') }}/memory
 # Whether claude-agent-home copies the operator's memory store into the agent's. With
 # claude_code_user set to the agent, the copy runs while the agent's MEMORY.md does not exist, and
-# on the first run after the host ran as the operator if the stores differ (#8074). Once the host
+# on the first run after the host ran as the operator if the stores differ. Once the host
 # runs as the agent, a later run never overwrites what the agent wrote. False skips it and removes
 # nothing already copied.
 claude_code_agent_memory_seed: true
@@ -335,19 +298,19 @@ claude_code_agent_memory_seed_strip: "{{ claude_code_operator_checkout }}/"
 
 # Whether the agent user gets a subset of the operator's user-level Claude config: the user
 # CLAUDE.md, rules/, output-styles/ and skills/, and the operator's `outputStyle`. It gets no
-# hooks. The operator decided on 2026-10-09 to copy the subset from the deployed
-# /home/{{ sys_user }}/.claude rather than from chezmoi's source (docs/claude-agent-user.md,
-# slice 4). The component ships no copy of the subset (component.yml's header): this flag gates
-# only the operator import line in templates/agent-user-claude-md.j2.
+# hooks. The subset is copied from the deployed /home/{{ sys_user }}/.claude rather than from
+# chezmoi's source (docs/claude-agent-user.md, slice 4). The component ships no copy of the
+# subset (component.yml's header): this flag gates only the operator import line in
+# templates/agent-user-claude-md.j2.
 claude_code_agent_operator_config: true
 claude_code_agent_operator_config_src: /home/{{ sys_user }}/.claude
 
 # Whether the agent user takes the operator's dotfiles through chezmoi, with the dotfiles
 # repo's `agent` flag on, in place of the subset above. claude-agent-setup clones the source,
-# and claude-dotfiles-sync.sh applies it. The operator chose it on 2026-10-10 (#4193-#4195):
-# the agent then runs the operator's guard hooks, agents, commands and CLIs. True in
-# daniel-box's and daniel-server's host_vars. It needs homelab-tools' chezmoi and a dotfiles
-# source with the flag; a source without it is refused, and the agent keeps what it had. False drops the sync from the next package version.
+# and claude-dotfiles-sync.sh applies it: the agent then runs the operator's guard hooks,
+# agents, commands and CLIs. True in daniel-box's and daniel-server's host_vars. It needs
+# homelab-tools' chezmoi and a dotfiles source with the flag; a source without it is refused,
+# and the agent keeps what it had. False drops the sync from the next package version.
 claude_code_agent_dotfiles: false
 claude_code_agent_dotfiles_repo: https://github.com/DanielH2018/dotfiles.git
 # The dotfiles' `profile` answer: `server`, as the operator's own config on these hosts holds.
@@ -356,11 +319,11 @@ claude_code_agent_dotfiles_profile: server
 # ships no host package version here, so this bounds how long the agent runs the old hooks.
 claude_code_agent_dotfiles_sync_interval: 15min
 
-# The agent user's GitHub machine account, created 2026-11-13. homelab-secrets renders its gh
+# The agent user's GitHub machine account. homelab-secrets renders its gh
 # login under /run, and claude-agent-setup links ~/.config/gh/hosts.yml to it. It is a
 # write collaborator and a bypass actor on no ruleset. "agent branch fence" lets it create,
 # update and delete only refs/heads/worktree-claude+**, the branch EnterWorktree gives a
-# `claude/<slug>` worktree. Since 2026-11-13 it cannot update master at all: its PRs merge
+# `claude/<slug>` worktree. It cannot update master at all: its PRs merge
 # through homelab-claude-land@, as the operator.
 # Its token is claude_code_agent_gh_token in SOPS: a classic token with only public_repo,
 # because GitHub offers no fine-grained token to a collaborator on another personal account's
@@ -369,9 +332,9 @@ claude_code_agent_github_login: claudemachineacct1
 # The worktree-name prefix the agent's own CLAUDE.md (templates/agent-user-claude-md.j2) tells
 # its sessions to use. EnterWorktree turns `claude/<slug>` into the branch
 # `worktree-claude+<slug>`, the one shape the fence above lets this account push. The repo
-# CLAUDE.md cannot carry it, because the operator's sessions read that file too (#3612). The
+# CLAUDE.md cannot carry it, because the operator's sessions read that file too. The
 # agent's login profile also exports it as CLAUDE_WORKTREE_PREFIX, which
-# scripts/dev/fanout_lib/target.py:branch_name reads to name fan-out batch branches (#3618).
+# scripts/dev/fanout_lib/target.py:branch_name reads to name fan-out batch branches.
 claude_code_agent_worktree_prefix: claude
 claude_code_agent_github_id: 356237609
 # The account's noreply address. GitHub attributes a commit to the account by it, and marks the
@@ -396,9 +359,9 @@ claude_code_homelab_ui_credentials: "{{ claude_code_agent_user_home }}/.config/h
 
 # Whether the agent user can launch the homelab-ui MCP server itself (the claude-code component):
 # its own Node, @playwright/mcp and Chromium, plus a user-scope `homelab-ui` registration in its
-# ~/.claude.json pointing at its clone's scripts/diagnostics/ui_mcp.sh (#4058). claude-clone-sync
+# ~/.claude.json pointing at its clone's scripts/diagnostics/ui_mcp.sh. claude-clone-sync
 # fast-forwards that clone on each apply and every claude_code_agent_clone_sync_interval, so the
-# launcher follows master (#4099, #4162). The operator's
+# launcher follows master. The operator's
 # toolchain sits under the 0750 /home/{{ sys_user }}, which this user cannot read, and the
 # operator's registration is user-scope in the operator's own ~/.claude.json. Not the repo's
 # .mcp.json: a project-scope server waits for a per-user approval a phone session cannot give,
@@ -410,7 +373,7 @@ claude_code_homelab_ui_credentials: "{{ claude_code_agent_user_home }}/.config/h
 # runs there, so this installs no apt packages.
 claude_code_agent_homelab_ui_enabled: false
 # The pinned Node, its sha256 and @playwright/mcp sit in hosts/components/claude-code/component.yml,
-# whose homelab-claude-agent-browser.service installs them as the agent (H7.40).
+# whose homelab-claude-agent-browser.service installs them as the agent.
 # Node unpacks to node-v<version>-linux-x64 under this directory, and `current` links to it, so
 # the registration's NODE_BIN survives a Node bump. npm's global prefix is that Node tree, so
 # playwright-mcp lands in the same bin directory.
@@ -420,12 +383,11 @@ claude_code_agent_node_bin: "{{ claude_code_agent_node_dir }}/current/bin"
 # Whether the agent being rendered is the primary one, which alone gets the lander.
 claude_code_agent_is_primary: true
 
-# ── The agent's lander ──────────────────────────────────────────────────────────────────
 # homelab-claude-land@<n>.service lands PR <n> as {{ sys_user }} by running land.sh with the
 # landing policy switched on (scripts/deploy_tools/land_lib/policy.py). The agent user may start
 # that unit and do nothing else with it (templates/50-claude-land.rules.j2). It reads the
 # outcome back from /var/lib/homelab-claude-land/<n>.verdict. The claude-code host component
-# ships it (H7.40's second slice).
+# ships it.
 #
 # True only in daniel-box's host_vars, and installed only while claude_code_agent_user_enabled
 # is also true. False on either removes the rule, the unit and the approval list; a landing
@@ -439,11 +401,10 @@ claude_code_lander_enabled: false
 # in templates/claude-land-approval-paths.j2, not a variable here, so the inventory cannot
 # override it. That template has the floor and the reason for each entry.
 
-# ── Alert-triggered triage ──────────────────────────────────────────────────────────────
 # claude-triage@<episode>.service runs one capped, diagnose-only headless session as the agent
 # user over <state_dir>/inbox/<episode>.json, then writes a record, an HTML report in the
 # agent's artifacts tree, and a Discord page. docs/claude-agent-user.md, "Alert-triggered
-# triage", has the design and the operator's rulings of 2026-10-15.
+# triage", has the design and the operator's rulings.
 #
 # Installed only while claude_code_agent_user_enabled is also true, and only with
 # claude_code_triage_claude_oauth_token in secrets.yml. False on either removes the rule, the
@@ -453,12 +414,12 @@ claude_code_triage_enabled: false
 # values here are what the validator renders with. Literals, for the reason the lander's are.
 claude_code_triage_state_dir: /var/lib/claude-triage-ctl/state
 claude_code_triage_model: opus
-# The operator's budget (2026-10-15): $10 to diagnose. The fix phase gets its own cap later.
+# The budget to diagnose, in USD.
 claude_code_triage_budget_usd: 10
 claude_code_triage_max_turns: 60
 # The script's wall clock. The unit's TimeoutStartSec sits 10 minutes above it.
 claude_code_triage_run_timeout_s: 1800
-# The operator's budget (2026-10-15): at most six runs a day. The runner enforces it, because
+# At most six runs a day. The runner enforces it, because
 # polkit lets the agent start a run directly, not only through the poller.
 claude_code_triage_daily_cap: 6
 # claude-triage-poll.timer: `off` reads nothing, `shadow` logs each run it would start to
@@ -468,7 +429,7 @@ claude_code_triage_poll_mode: shadow
 # The alerts whose fall opens an episode, each mapped to its profile; templates/claude-triage-pins.j2
 # says how a key is read. A fall the table does not route is logged as skipped and opens no run.
 # The seed is the down class, all `warning` but the two `*Critical` probe twins: a severity floor
-# at `critical` opened nothing for a down service from 2026-10-31 to 2026-11-12 (#8242).
+# at `critical` opens nothing for a down service.
 # wg-easy's probe stays out until its flap is fixed.
 claude_code_triage_poll_routes:
   ExtraProbeFailed: triage
@@ -490,9 +451,7 @@ claude_code_triage_poll_streak: 2
 # More keys than this falling in one poll make one storm episode instead of one per key.
 claude_code_triage_poll_storm_size: 3
 
-# ── The server-batch lander (issue #5496) ───────────────────────────────────────────────
-# A daniel-server fan-out batch stops at its PR. The median wait for a landing was 5.5 minutes
-# and the 90th percentile 350 (2026-10-15 to 10-17, 58 batches). This timer runs
+# A daniel-server fan-out batch stops at its PR. This timer runs
 # `fanout.py land-server` on daniel-box, which lands the PRs whose review record and PR both
 # pass scripts/dev/fanout_lib/autoland.py:problems. True only in daniel-box's host_vars. False
 # stops the timer and removes its units, and every server batch stops at its PR again.
@@ -503,7 +462,6 @@ claude_code_fanout_server_lander_interval: 10min
 claude_code_fanout_server_lander_branch_prefix: worktree-fanout-
 claude_code_fanout_server_lander_author: DanielH2018
 
-# ── The pipeline timeline snapshot (issue #5661) ────────────────────────────────────────
 # `scripts/dev/pipeline_timeline.py` joins each merged PR's stamps, and two of its inputs are in
 # daniel-box's journal, which rotates after about ten days. This timer runs it daily so the
 # journal halves are copied into ~/.local/state/pipeline-timeline/ first. True only in
@@ -517,38 +475,36 @@ claude_code_pipeline_timeline_days: 3
 # The host whose review records the run copies with a read-only rsync.
 claude_code_pipeline_timeline_server_host: daniel-server
 
-# ── The fan-out alert ───────────────────────────────────────────────────────────────────
 # fanout-alert@<unit>:<state>.service pages Discord when a fan-out batch's unit stops on any
-# state but `done` (#4602). The batch's ExecStopPost= starts it
+# state but `done`. The batch's ExecStopPost= starts it
 # (scripts/dev/fanout_lib/notify.py), and templates/50-claude-fanout-alert.rules.j2 lets the
 # operator and each agent user start it for the states that page and nothing else. False
 # removes the unit, the rule and the webhook file, and a stopped batch then pages nothing.
 claude_code_fanout_alert_enabled: true
 
-# ── The session stop alert ──────────────────────────────────────────────────────────────
 # claude-stop-alert@<cause>.service pages Discord when a Claude Code session ends on an API
-# error (#6021). The session's StopFailure hook starts it, and
+# error. The session's StopFailure hook starts it, and
 # templates/50-claude-stop-alert.rules.j2 lets the operator and each agent user start it for a
 # cause in [a-z0-9_]+ and nothing else. False removes the unit, the rule and the webhook file,
 # and a session that ends on an error then pages nothing.
 claude_code_stop_alert_enabled: true
 
-# ── The artifacts node's two timers (H2.7, packaged in H7.40's fourth slice) ─────────────
 # The peer sync (hosts/components/claude-code/templates/sync-artifacts.sh.j2) and the OTLP-door
 # heartbeat (claude-otel-health.sh.j2) ship only on this node, in its host package.
 #
 # DECIDED: a key pair held equal by a test, not one shared key in group_vars/all.yml. A shared
-# key routes as a deploy-plane change only (docs/target-architecture/host/h2-shrink-host-plane.md,
-# H2.7). Each name below that has a twin in a k8s role is held equal to it by
+# key routes as a deploy-plane change only (docs/target-architecture/host/h2-shrink-host-plane.md).
+# Each name below that has a twin in a k8s role is held equal to it by
 # hosts/lib/tests/test_claude_artifacts_node_timers.py, so a change edits both.
 #
 # The node the artifacts pod pins, which holds the tree the sync fills and the loopback OTLP
 # door the heartbeat probes. Twin of artifacts_k8s_node. No other host's package ships either.
 claude_code_artifacts_node: "{{ k8s_primary_node }}"
 
-# A `*/N` minute, read as the timer's period. Every 5 minutes: an artifact written on daniel-server is browsable within one interval. It
-# cannot be instant — daniel-server holds no key to daniel-box, so the sync only runs in the
-# pull direction, on a timer. A session on daniel-box mounts its own tree and never waits.
+# A `*/N` minute, read as the timer's period. Every 5 minutes: an artifact written on
+# daniel-server is browsable within one interval. It cannot be instant: daniel-server holds no
+# key to daniel-box, so the sync only runs in the pull direction, on a timer. A session on
+# daniel-box mounts its own tree and never waits.
 claude_code_artifacts_sync_minute: "*/5"
 
 # Consecutive failed runs before sync-artifacts.sh writes its once-per-outage line to stderr,
@@ -584,7 +540,6 @@ claude_code_telemetry_health_minute: "*/10"
 claude_code_otlp_host_ip: 127.0.0.1
 claude_code_otlp_port: 4317
 
-# ── The D5 takeover check (issue #5494) ────────────────────────────────────────────────────
 # A root-owned wrapper that runs the flip PRs' pre-merge dry runs, granted to the users below
 # through one NOPASSWD sudoers line. True only in daniel-box.yml, the node that holds the
 # cluster-admin kubeconfig. False removes the grant and the wrapper, and leaves the state
@@ -597,7 +552,6 @@ claude_code_takeover_check_users:
 claude_code_takeover_check_wrapper: /usr/local/sbin/homelab-takeover-check
 claude_code_takeover_check_state_dir: /var/lib/homelab-takeover-check
 
-# ── The root inspector, `rootq` (issue #6323) ──────────────────────────────────────────────
 # A root-owned, read-only script that reads root-only host state (nft, ufw, sshd -T, root's
 # crontab, and ls, stat and cat of an allowlisted path set), granted to the users below through
 # one NOPASSWD sudoers line, with an unprivileged shim on PATH. True in daniel-box.yml and
@@ -605,14 +559,13 @@ claude_code_takeover_check_state_dir: /var/lib/homelab-takeover-check
 # "The root inspector", has the grant and its limits.
 claude_code_rootq_enabled: false
 # The operator's account, which is where fan-out batches and the operator's sessions run. Not
-# the agent user: the operator replaced its one sudo grant with a socket on 2026-10-10 (#4297),
-# and NoNewPrivileges in claude-rc.service stops sudo there anyway (docs/claude-agent-user.md).
+# the agent user: NoNewPrivileges in claude-rc.service stops sudo there (docs/claude-agent-user.md).
 claude_code_rootq_users:
   - "{{ sys_user }}"
 claude_code_rootq_script: /usr/local/sbin/homelab-rootq
 claude_code_rootq_shim: /usr/local/bin/rootq
 
-# The same inspector for the agent user through a socket (issue #6350). `sudo` is no route for
+# The same inspector for the agent user through a socket. `sudo` is no route for
 # the agent: claude-rc.service runs with NoNewPrivileges=yes. homelab-rootq.socket (0660, the
 # group below) starts a root helper per connection, and the helper runs the script above, so
 # the allowlist and the redaction are the same. True in daniel-box.yml and daniel-server.yml.
@@ -626,7 +579,6 @@ claude_code_rootq_socket_path: /run/homelab-rootq.sock
 claude_code_rootq_socket_helper: /usr/local/libexec/homelab-rootq-socket
 claude_code_rootq_socket_client: /usr/local/bin/rootq-socket
 
-# ── The guardrail audit (server#8250, #967 slice 2's host half) ──────────────────────────
 # homelab-claude-guardrail-audit.timer runs claude-guardrail-audit.sh.j2 as root. Each run loads
 # an auditd watch on every path below that exists, removes a watch it loaded on a path the list
 # no longer names, and records whether auditd is running with every watch in place. A run, not a
@@ -663,13 +615,12 @@ claude_code_guardrail_audit_memory_dirs:
   - "{{ claude_code_operator_memory_dir }}"
   - "{{ claude_code_agent_memory_dir }}"
 
-# ── The guardrail acknowledgement (server#8250 slice 2) ──────────────────────────────────
 # homelab-claude-guardrail-ack.timer runs files/claude_guardrail_ack.py as root. Each run posts
 # to Discord every change to a file under claude_code_guardrail_audit_paths that nothing merged
 # explains: a package file that does not match the md5 inside the .deb an apt source serves
 # for its installed version (so a `dpkg -i` of a branch build posts), or a file under a
-# user's home that does not match what chezmoi renders from the dotfiles repo's main. Memory stores are
-# audited, never posted. The operator ruled on 2026-11-13 to post unexplained changes only.
+# user's home that does not match what chezmoi renders from the dotfiles repo's main. Memory
+# stores are audited, never posted.
 # False drops the timer and its units from the next package version, and keeps the state.
 claude_code_guardrail_ack_enabled: true
 # A `*/N` minute, read as the timer's period.
@@ -684,7 +635,6 @@ claude_code_guardrail_ack_quiet_settings_keys:
   - theme
 claude_code_guardrail_ack_dotfiles_repo: https://github.com/DanielH2018/dotfiles.git
 
-# ── The dotfiles root mirror (dotfiles#967 D13) ──────────────────────────────────────────
 # homelab-claude-dotfiles-mirror.timer runs files/claude_dotfiles_mirror.py as root. Each run
 # fetches the dotfiles repo into a root-owned bare mirror and records the newest tag whose
 # signature verifies against templates/claude-dotfiles-allowed-signers.j2 and whose commit
@@ -702,7 +652,6 @@ claude_code_dotfiles_mirror_repo: https://github.com/DanielH2018/dotfiles.git
 # the next package version, and keeps what was last published.
 claude_code_config_render_enabled: false
 
-# ── The weekly summary of the unattended runs (dotfiles#967 C7) ──────────────────────────
 # homelab-claude-weekly-summary.timer runs files/claude_weekly_summary.py as root every Monday
 # at 09:00 UTC. Each run posts to the alerts webhook one summary of the previous ISO week's
 # triage runs and Renovate ticks: counts, cost, denials, and each run that acted or needs a

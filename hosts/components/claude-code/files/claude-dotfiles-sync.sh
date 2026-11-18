@@ -12,7 +12,7 @@
 # `private_dot_claude`, so an apply chmods it to 0700 and cuts the operator off from the agent's
 # memory store and artifacts, which claude-agent-setup opens with mode 0710. It names ~/.config/gh
 # `dot_config/gh`, so an apply opens the directory holding the agent's GitHub token to 0755,
-# where claude-agent-setup sets 0710 (#6453). The first pass applies every managed directory
+# where claude-agent-setup sets 0710. The first pass applies every managed directory
 # but those two, creating any new one. It passes --recursive=false: chezmoi applies a
 # directory target's whole subtree, so applying ~/.config would reach ~/.config/gh anyway. The second pass applies
 # everything else and no directory, which leaves an existing directory's mode alone.

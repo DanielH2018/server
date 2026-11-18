@@ -1,6 +1,5 @@
-# System and process accounting (H7.7a, docs/target-architecture/host/h7-delete-ansible.md).
-# initial_setup installed sysstat and acct, set `ENABLED="true"` in /etc/default/sysstat and
-# started both services.
+# System and process accounting: sysstat and acct, with `ENABLED="true"` set in
+# /etc/default/sysstat.
 #
 # /etc/default/sysstat belongs to no package (sysstat's postinst writes it), so it takes the line
 # arm with the lineinfile task's regexp. sysstat.service reads it on start, so a changed line

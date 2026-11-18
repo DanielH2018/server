@@ -6,21 +6,21 @@
 # gate_hits), so this list holds only what no import walk can see.
 #
 # DECIDED: a floor, not every path that widens the agent's authority (operator decision,
-# 2026-10-10). It keeps the explicit grant points and the gate itself. The agent's roles and the
+# docs/claude-agent-user.md). It keeps the explicit grant points and the gate itself. The agent's roles and the
 # inventory land without approval. This is not a barrier to root: a host
 # package installs any host component change as root, so a change in an unlisted component
-# reaches root. That was already true under the wider list. docs/claude-agent-user.md, "The
-# approval floor", has the reasoning. The list is literal here, not a variable, so the inventory cannot override it.
+# reaches root. docs/claude-agent-user.md, "The approval floor", has the reasoning. The list is
+# literal here, not a variable, so the inventory cannot override it.
 #
 # The lander: this list, the unit that reads it, the rule that lets the agent start it, the
 # template that pins the lander's name and settings, and the host component that ships them and
-# decides when (H7.40's second slice).
+# decides when.
 hosts/components/claude-code/templates/claude-land-approval-paths.j2
 hosts/components/claude-code/templates/claude-land@.service.j2
 hosts/components/claude-code/templates/50-claude-land.rules.j2
 hosts/components/claude-code/templates/claude-land-pins.j2
 hosts/components/claude-code/component.yml
-# Alert-triggered triage (operator decision, 2026-10-15): every claude-triage template (a
+# Alert-triggered triage: every claude-triage template (a
 # prefix: the pins file that sets the run's caps and identity, the unit, its config, its prompt
 # and its credential file, the session's unit, the poller's unit and timer), the polkit rule
 # that lets the controller start a run, the runner, the session script, the session's settings
@@ -32,20 +32,20 @@ hosts/components/claude-code/files/claude_triage_run.py
 hosts/components/claude-code/files/claude_triage_session.py
 hosts/components/claude-code/files/claude-triage-settings-overlay.json
 hosts/components/claude-code/files/claude_triage_poll.py
-# The read-only root inspector (issue #6323): the root script that decides what root reads and
+# The read-only root inspector: the root script that decides what root reads and
 # prints, the shim and the sudoers grant. The agent holds the grant, so it must not widen what
 # the grant reaches.
 hosts/components/claude-code/files/homelab_rootq.py
 hosts/components/claude-code/files/rootq.sh
 hosts/components/claude-code/templates/claude-rootq.sudoers.j2
-# The same inspector through the agent's socket (#6350). The issue expected the entries above
-# to cover it, and they cover only the script: the socket helper that gates a request, the
-# client, and the two units that decide who may connect are grant points of their own.
+# The same inspector through the agent's socket. The entries above cover only the script: the
+# socket helper that gates a request, the client, and the two units that decide who may connect
+# are grant points of their own.
 hosts/components/claude-code/files/homelab_rootq_socket.py
 hosts/components/claude-code/files/rootq_socket.py
 hosts/components/claude-code/templates/homelab-rootq.socket.j2
 hosts/components/claude-code/templates/homelab-rootq@.service.j2
-# The dotfiles root mirror (dotfiles#967 D13): the signer key that decides which dotfiles tag
+# The dotfiles root mirror: the signer key that decides which dotfiles tag
 # reaches T2's config, and the code that verifies it. Then the render that turns that tag into
 # T2's config: its code, the chezmoi answers it renders with, its unit and timer, and the lock
 # that keeps a session from starting without the published file.
@@ -55,7 +55,7 @@ hosts/components/claude-code/files/claude_config_render.py
 hosts/components/claude-code/files/claude-config-render-chezmoi.toml
 hosts/components/claude-code/units/homelab-claude-config-render.
 hosts/lib/claude_config_lock.py
-# The unattended Renovate agent's grant points (dotfiles#967 slice 1 and B1): the T2 floor, the
+# The unattended Renovate agent's grant points: the T2 floor, the
 # code that checks a PR against it and the lander unit and rule that land one; the runner, the
 # modules it imports and the session script; the token files, the configs,
 # the pins that set the caps and permission mode, the prompt, the unit and timer, the session's
@@ -102,9 +102,7 @@ hosts/components/sshd/
 # The secrets and who can decrypt them.
 secrets/.sops.yaml
 secrets/secrets.yml
-# The agent's cluster grant (operator decision, 2026-10-16, H1 Open question 7): the read-only
-# ServiceAccount, its ClusterRole and its binding. Before H1 they apply only through
-# k3s-bringup.yml, by hand; once Flux applies cluster-base on merge, this entry is the human
-# gate. A plain prefix, so it holds before H1 creates the role. The trailing slash keeps a
+# The agent's cluster grant: the read-only ServiceAccount, its ClusterRole and its binding. Flux
+# applies cluster-base on merge, so this entry is the human gate. The trailing slash keeps a
 # sibling such as cluster-baseline off the floor.
 k8s/roles/cluster-base/

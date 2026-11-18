@@ -9,7 +9,7 @@
 # list the units or the textfile write fails. Running it by hand is safe and does what the timer
 # does.
 #
-# WHY (#8219). node-exporter runs without --collector.systemd, so no rule reads a unit's state.
+# WHY. node-exporter runs without --collector.systemd, so no rule reads a unit's state.
 # A unit's failure was covered only by its own OnFailure=homelab-alert@ hook or its own textfile
 # verdict. A unit with neither failed silently, and one whose hook posted once to Discord stayed
 # failed with no alert series behind it. The SystemdUnits* rules in

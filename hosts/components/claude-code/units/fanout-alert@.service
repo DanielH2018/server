@@ -1,6 +1,6 @@
 # Shipped by the claude-code component. A fan-out batch that stops without finishing starts an
-# instance named by its unit, through polkit (50-claude-fanout-alert.rules). The name keeps its
-# Ansible-era form because the fan-out tooling names it.
+# instance named by its unit, through polkit (50-claude-fanout-alert.rules). The fan-out tooling
+# names the unit, so its name is fixed.
 [Unit]
 Description=Page Discord that fan-out batch %i stopped without finishing
 After=homelab-secrets.service

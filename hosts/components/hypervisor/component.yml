@@ -1,7 +1,5 @@
-# The KVM/libvirt host, its fenced `staging` network and the monthly etcd restore drill (H7.34,
-# docs/target-architecture/host/h7-delete-ansible.md, old step H7.13). The `hypervisor` setup role
-# wrote all of it; the role is an unconditional `end_role` until H7.20a. CLAUDE.md beside this file
-# holds the rules and the autonomous-role contract.
+# The KVM/libvirt host, its fenced `staging` network and the monthly etcd restore drill. CLAUDE.md
+# beside this file holds the rules and the autonomous-role contract.
 #
 # What a package cannot ship, `etcd-drill-prepare` makes before each run: the checksum-pinned base
 # image, the guest's pinned host key, and the seed ISO that embeds the private half.

@@ -2,7 +2,7 @@
 # Daily drift check: does the LIVE GitHub ruleset still require the contexts this repo declares,
 # each pinned to the GitHub Actions app, does the branch-protection ruleset still exclude Renovate's branches, and does the fence still
 # keep the agent's account to its own branches? Three arms, one verdict. Ahead of all three, the repo
-# must be public: on the free plan GitHub enforces no ruleset on a private repo (#3610).
+# must be public: on the free plan GitHub enforces no ruleset on a private repo.
 # After them it reads the fork approval policy, which the runner pods depend on (ADR-0032).
 #
 # Usage: github-ruleset-drift [-h|--help]
@@ -17,20 +17,17 @@
 # Prometheus's GitHubRulesetDrift and GitHubRulesetDriftNotReporting rules page from that file.
 #
 # The ruleset is what stops an un-CI'd commit reaching master, and `promote` and checkout-sync
-# trust that: each reads the check runs for a master SHA and acts on a green verdict. Nothing in the
-# repo watched the ruleset itself, so an edit in the GitHub UI — dropping a required context,
-# adding a bypass actor, flipping enforcement to `evaluate` — changed the gate with no commit,
-# no PR and no signal. That is not hypothetical: by 2026-08-31 TWO in-repo records had gone stale
-# unnoticed. The standing review memory recorded one required context and
-# the gitops_deploy role's CLAUDE.md recorded none at all ("no branch protection on master",
-# from a genuine `branches/master/protection` 404 — legacy protection is a SEPARATE API from
-# rulesets), while the live ruleset required three with no bypass actors.
+# trust that: each reads the check runs for a master SHA and acts on a green verdict. An edit in
+# the GitHub UI — dropping a required context, adding a bypass actor, flipping enforcement to
+# `evaluate` — changes the gate with no commit, no PR and no signal, so this watches the ruleset
+# itself. Legacy `branches/master/protection` is a SEPARATE API from rulesets and says nothing
+# about them.
 #
 # WHY THIS IS A CRON AND NOT A TEST. A pytest asserting the same list would be a third hand-copy
-# of the same remote state, going stale by the identical mechanism and reading green while it did
-# — the reason exactly that fix was rejected in the 2026-08-31 review. The declaration below is
-# still a copy; the difference is that this compares it against the LIVE endpoint every day, so
-# the copy going stale is the thing being detected rather than the thing being trusted.
+# of the same remote state, going stale by the identical mechanism and reading green while it
+# did. The declaration below is still a copy; the difference is that this compares it against
+# the LIVE endpoint every day, so the copy going stale is the thing being detected rather than
+# the thing being trusted.
 #
 # It ALERTS on drift, it never reconciles. Changing a ruleset is a deliberate act; this only makes
 # it a visible one.
@@ -80,8 +77,8 @@ source /usr/lib/homelab/homelab-check-lib.sh || {
 DEADLINE_S=90000
 
 # Records the verdict: the journal line comes first, on every run, so `journalctl -t
-# github-ruleset-drift` reads the outcome of every run, a passing one included (#1781). The textfile write follows. A failed write logs and the run goes on
-# to its exit.
+# github-ruleset-drift` reads the outcome of every run, a passing one included. The textfile
+# write follows. A failed write logs and the run goes on to its exit.
 push() { # up|down msg
   logger -t github-ruleset-drift "status=$1 $2"
   write_check_textfile github-ruleset-drift "$([[ "$1" == up ]] && echo 1 || echo 0)" "$(date +%s)" "$DEADLINE_S" \
@@ -90,21 +87,19 @@ push() { # up|down msg
 
 # push_reachout MSG — report a failure whose cause was reaching api.github.com.
 #
-# Only the fetch arms use it. One WAN outage lit this tile beside the WAN tile on 2026-09-18
-# (#2793), and a link that is gone is the WAN tile's page, not this one's. A 200 carrying the wrong
-# shape keeps `push down`: GitHub answered, so the link is fine and the body is the fault.
+# Only the fetch arms use it. A link that is gone is the WAN tile's page, not this one's. A 200
+# carrying the wrong shape keeps `push down`: GitHub answered, so the link is fine and the body
+# is the fault.
 #
-# The exit 1 at each call site is unchanged. `homelab-github-ruleset-drift.timer` restarts
+# The exit 1 at each call site stays: `homelab-github-ruleset-drift.timer` restarts
 # on-failure, so a skipped run retries rather than waiting out the day — which is what should
 # happen while the link is down.
 push_reachout() { # msg
   REACHOUT_STATUS=down
   REACHOUT_NOTE=""
-  # The library is deployed by initial_setup, while this cron is rendered by its own role, so a
-  # narrowed apply can put the new script on a host whose /usr/local/lib copy predates
-  # reachout_verdict. Without this the read below aborts on an unbound variable under `set -u` and
-  # NO verdict is recorded at all — NotReporting pages only after its 25h deadline, which is worse
-  # than the page this change exists to stop. Same guard docs-refresh.sh.j2 carries.
+  # The guard keeps a host whose library copy predates reachout_verdict from aborting on an
+  # unbound variable under `set -u` with NO verdict recorded, which NotReporting pages only after
+  # its 25h deadline.
   if command -v reachout_verdict >/dev/null 2>&1; then
     reachout_verdict github-ruleset-drift {{ wan_probe_urls | join(' ') }}
   fi
@@ -167,22 +162,18 @@ ACTORS
 
 # This cron runs as root; the gh login belongs to the deploy user, so the lookup drops to that
 # user. `-H` matters: gh finds its login under $HOME, and a plain runuser/sudo keeps root's.
-# Every failure — no sudo, no gh, logged out — leaves TOKEN empty and the fetch anonymous,
-# which is what this script did for its whole life before 2026-09-01.
+# Every failure — no sudo, no gh, logged out — leaves TOKEN empty and the fetch anonymous.
 TOKEN=$(sudo -n -u "{{ sys_user }}" -H gh auth token 2>/dev/null || true)
 AUTH_CONFIG=""
 if [ -n "$TOKEN" ]; then
   AUTH_CONFIG=$(printf 'header = "Authorization: Bearer %s"\n' "$TOKEN")
 fi
 
-# --- First, before any ruleset: is the repo public? ---
-#
 # On the free plan GitHub does not enforce rulesets on a private repo. Each ruleset still reads
-# `enforcement: active`, so every arm below would pass while no merge is gated. From 13:07 to
-# 22:17 UTC on 2026-09-21 the repo was private, and 29 PRs merged before their required check
-# reported success (#3610). An anonymous read of a private repo answers 404, which until then
-# surfaced here only as a failed ruleset fetch and hid the cause. So this read comes first and
-# names visibility in both shapes: `.visibility` to a token, a 404 `Not Found` to no token.
+# `enforcement: active`, so every arm below would pass while no merge is gated. An anonymous
+# read of a private repo answers 404, which would surface as a failed ruleset fetch and hide the
+# cause. So this read comes first and names visibility in both shapes: `.visibility` to a
+# token, a 404 `Not Found` to no token.
 #
 # No `-f` on this one fetch: the 404 body is the evidence, and `-f` would discard it. curl still
 # exits non-zero on a transport failure, which is the reachout case.
@@ -210,7 +201,7 @@ fi
 # Process substitution, not a pipe. Under `set -o pipefail` a `printf | curl -K -` pipeline
 # reports printf's EPIPE when curl exits before reading stdin — which the test harness's curl
 # stub does, so the drift tests failed intermittently with "failed to fetch" under xdist load
-# (2026-09-01). `<(...)` keeps the token off argv and out of the pipeline's exit status.
+# `<(...)` keeps the token off argv and out of the pipeline's exit status.
 if ! BODY=$(curl -sf --max-time 20 -K <(printf '%s\n' "$AUTH_CONFIG") \
   -H "Accept: application/vnd.github+json" "$RULESET_URL"); then
   # Unreachable is NOT "no drift". A check whose source is down must say it could not look,
@@ -257,7 +248,7 @@ fi
 
 # Each required context must be pinned to the GitHub Actions app. GitHub matches an unpinned
 # context by name alone, so any token with write access satisfies it with a commit status of that
-# name (#8398). GitHub omits `integration_id` for an unpinned context, and `// "none"` names that.
+# name. GitHub omits `integration_id` for an unpinned context, and `// "none"` names that.
 # An anonymous read returns the pins, so this arm runs ahead of the admin-only bypass checks.
 UNPINNED=$(printf '%s' "$BODY" \
   | jq -r --argjson app {{ github_actions_app_id }} \
@@ -285,16 +276,12 @@ if [ "$APPROVALS" != "{{ github_ruleset_required_approvals }}" ]; then
   exit 1
 fi
 
-# --- Second ruleset: the branch-protection one must leave Renovate's branches alone ---
-#
 # "Default" applies `deletion` and `non_fast_forward` to every ref with an admin-only bypass.
 # Renovate is not an admin, so with no exclusion GitHub refuses the app's post-merge branch
-# delete and its rebase force-push — 26 `Default/deletion` and `Default/non_fast_forward`
-# refusals for renovate[bot] in the month to 2026-09-11 (rule-suites API). A merged branch then
-# survives at its green SHA, Renovate opens the next version's PR onto it, and the stale verdict
-# automerges an empty squash before CI can run (#1741, #1743; issues #1755, #1759, #1565).
-# The exclusion below is what lets the app delete and rebase under `renovate/`; this arm alerts
-# when it is missing. Same rule as above: reconcile the ruleset, never this default.
+# delete and its rebase force-push. A merged branch then survives at its green SHA, Renovate
+# opens the next version's PR onto it, and the stale verdict automerges an empty squash before
+# CI can run. The exclusion below is what lets the app delete and rebase under `renovate/`; this
+# arm alerts when it is missing. Same rule as above: reconcile the ruleset, never this default.
 BRANCH_RULESET_URL="https://api.github.com/repos/{{ github_repo }}/rulesets/{{ github_branch_ruleset_id }}"
 if ! BRANCH_BODY=$(curl -sf --max-time 20 -K <(printf '%s\n' "$AUTH_CONFIG") \
   -H "Accept: application/vnd.github+json" "$BRANCH_RULESET_URL"); then
@@ -314,8 +301,6 @@ if ! printf '%s' "$BRANCH_BODY" | jq -r '.conditions.ref_name.exclude[]? // empt
   exit 1
 fi
 
-# --- Third ruleset: the agent's account pushes only under its own prefix ---
-#
 # "agent branch fence" restricts creating, updating and deleting every branch outside the
 # declared exclusions, and the agent's account is no bypass actor. Without it, the agent could
 # push onto a branch an operator session opened, and the next landing of that branch, pinned to
@@ -369,9 +354,8 @@ if [ -n "$UNRESTRICTED" ]; then
   exit 1
 fi
 
-# --- Fourth: the update restrictions (dotfiles#967 D12 and D13) ---
-#
-# Each one lets only its bypass actors update its refs: master here, `main` and every tag in the
+# Each update restriction lets only its bypass actors update its refs: master here, `main` and
+# every tag in the
 # dotfiles repo. Each is compared exactly, because an added rule changes what it refuses as much
 # as a dropped one, and a narrowed target protects nothing while reading active.
 declare -A RESTRICTION_BODY

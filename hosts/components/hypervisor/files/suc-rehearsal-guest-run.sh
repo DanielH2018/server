@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # suc-rehearsal-guest-run.sh — the in-guest half of the drill orchestrator's SUC rehearsal mode
-# (H6.1b2; docs/target-architecture/host/h6-k3s-suc.md, "Rehearsal in a drill guest"). Copied into
+# (docs/target-architecture/host/h6-k3s-suc.md, "Rehearsal in a drill guest"). Copied into
 # the throwaway guest by etcd-restore-drill-vm --rehearse-suc, which calls one subcommand per ssh
 # session so that no session stays open for the whole run.
 #
@@ -128,7 +128,7 @@ spec:
 EOF
   "${KUBECTL[@]}" -n kube-system wait --for=condition=Ready pod/registry --timeout=240s \
     || die "the registry never read Ready"
-  # The Flux pods name this class (H1's steps 1 to 3 install it on a real cluster).
+  # The Flux pods name this class.
   printf '%s\n' 'apiVersion: scheduling.k8s.io/v1' 'kind: PriorityClass' 'metadata:' \
     '  name: homelab-critical' 'value: 100000' | apply_stdin || die "no PriorityClass"
   retry_race "${KUBECTL[@]}" apply --server-side -f "$STAGE/hand/components.yaml" \

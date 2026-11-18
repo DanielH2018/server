@@ -6,7 +6,7 @@ Description=Unattended triage session for the episode claude-triage@ prepared, a
 
 [Service]
 Type=oneshot
-# The session user (dotfiles#967's I1): the episode text is untrusted, and this user holds no
+# The session user: the episode text is untrusted, and this user holds no
 # GitHub token, no start right, no sudo and no read on /home. It reads the controller's clone and
 # toolchain through its group and writes only its tmpfs mounts and the exchange's out/.
 # docs/claude-agent-user.md, "Alert-triggered triage", has the design.
@@ -58,7 +58,7 @@ NoNewPrivileges=yes
 UMask=0027
 ProtectHome=yes
 ProtectProc=invisible
-# Nothing the session writes reaches a later run (dotfiles#967's I2): every other path is
+# Nothing the session writes reaches a later run: every other path is
 # read-only, and each writable one but out/ is a tmpfs that ends with the unit. The runner keeps
 # the transcript out of out/ and then deletes it.
 ProtectSystem=strict

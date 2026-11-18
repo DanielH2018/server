@@ -1,5 +1,4 @@
-# Kernel and login hardening that initial_setup applied with in-place edits (H7.6g,
-# docs/target-architecture/host/h7-delete-ansible.md, *In-place edits*).
+# Kernel and login hardening, applied with in-place edits.
 #
 # - Every `ansible.posix.sysctl` key of initial_setup stays in /etc/sysctl.conf, one line-arm edit
 #   per key, with `activate: sysctl`. The regexp is `^\s*<key>\s*=`, which matches the
@@ -8,14 +7,14 @@
 #   override it. The Pi's vm.swappiness and vm.page-cluster are pi-tuning's.
 # - /etc/ufw/sysctl.conf is ufw's conffile. Ubuntu ships `log_martians=0` uncommented there, and
 #   ufw re-applies the file on every enable and reload, so both log_martians lines must read 1 in
-#   both files (#2977). Reconcile runs the line arm before the ufw arm for the same reason.
+#   both files. Reconcile runs the line arm before the ufw arm for the same reason.
 # - /etc/login.defs is the `login` package's conffile. The six edits keep the regexps of the
 #   lineinfile tasks they replace.
 # - journald's cap lands in a drop-in. The Pi's pi-tuning adds 60-homelab-pi.conf beside it, and
 #   that file wins where the two disagree. The `rsyslog-filter` component ships the info filter
 #   that pairs with MaxLevelSyslog on each host that has rsyslog.
-# - `* hard core 0` moves to limits.d. The line the Ansible task wrote stays in limits.conf as a
-#   harmless duplicate, and the PR body names it for removal by hand.
+# - `* hard core 0` moves to limits.d. An existing line in limits.conf stays as a harmless
+#   duplicate, to remove by hand.
 files:
   - {src: templates/50-homelab-journald.conf, dst: /etc/systemd/journald.conf.d/50-homelab.conf, activate: "try-restart:systemd-journald.service"}
   - {src: templates/50-homelab-limits.conf, dst: /etc/security/limits.d/50-homelab.conf}
