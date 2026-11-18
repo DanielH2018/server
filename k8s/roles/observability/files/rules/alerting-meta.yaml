@@ -128,12 +128,12 @@ groups:
           service: alert-escalation
         annotations:
           summary: >-
-            {{ $labels.escalated_from }} ({{ $labels.escalated_service }}) has fired as a
-            warning for 48 hours.
+            {{ $labels.escalated_from }} ({{ $labels.escalated_service }}{{ with $labels.unit }}, {{ . }}{{ end }})
+            has fired as a warning for 48 hours.
           description: >-
             The warning {{ $labels.escalated_from }} for {{ $labels.escalated_service }} has
             fired for 48 hours, and its Discord repeats have not cleared it. Karma lists it
             with its own description and runbook:
-            https://karma.local.daniel-hunter.com/?q=alertname%3D{{ $labels.escalated_from }}&q=service%3D{{ $labels.escalated_service }}
+            https://karma.local.daniel-hunter.com/?q=alertname%3D{{ $labels.escalated_from }}&q=service%3D{{ $labels.escalated_service }}{{ with $labels.unit }}&q=unit%3D{{ urlquery . }}{{ end }}
             This page resolves when the warning does. If the warning holds by design, give
             its rule the label escalate: "false".
