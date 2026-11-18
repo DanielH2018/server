@@ -1,9 +1,9 @@
 {% from 'container-resources.yml.j2' import container_resources with context %}
 {% from 'workload-shell.yml.j2' import pod_shell with context %}
 ---
-# KL3: the cluster pod-log shipper, Grafana Alloy since 2026-09-02 (Promtail reached end of
-# life on 2026-03-02). A DaemonSet (not a Deployment) so a joining node adds its own pod and
-# host logs automatically. The config it runs is templates/config/config.alloy.j2.
+# The cluster pod-log shipper, Grafana Alloy. A DaemonSet (not a Deployment) so a joining node
+# adds its own pod and host logs automatically. The config it runs is
+# templates/config/config.alloy.j2.
 #
 # This is NOT the only shipper: daniel-pi runs its own Docker copy
 # (roles/containers/alloy/) and pushes over the LAN through ingressroute-push.yaml.j2.
@@ -124,13 +124,11 @@ spec:
               mountPath: {{ k3s_audit_log_dir }}
               readOnly: true
 {% endif %}
-          # 1 core, not 250m: a shipper's work arrives in bursts as log lines do, and a quota
-          # clipped them for no benefit on a node running ~1.5 of 24 cores. Throttled seconds
-          # measured 0.0076/s on 2026-08-29 — small, but the ceiling bought nothing against
-          # it. The request (50m) is what reserves capacity under contention and is unchanged.
-          # Memory, 7 days to 2026-11-14: RSS peaked at 122Mi, and page cache grew to about
-          # 180Mi on both nodes until the 256Mi limit reclaimed it, which kept the working set
-          # at 96% of the limit. 384Mi puts that p95 (247Mi) at 64%; the request covers RSS.
+          # 1 core: a shipper's work arrives in bursts as log lines do, and a lower quota only
+          # throttles them. The request (50m) is what reserves capacity under contention.
+          # Memory: RSS peaks near 122Mi, and page cache grows to about 180Mi until the limit
+          # reclaims it, so 384Mi keeps the working set well below the limit; the request covers
+          # RSS.
 {{ container_resources(cpu_limit='1', mem_limit='384Mi', cpu_request='50m', mem_request='128Mi') }}
       volumes:
         - name: alloy-config
@@ -144,8 +142,8 @@ spec:
             path: /var/log
         - name: alloy-positions
           hostPath:
-            # A new path, not the Promtail one: Alloy cannot read positions.yaml, and sharing
-            # the directory would leave a stale file beside the live cursor forever.
+            # A directory of its own: Alloy cannot read Promtail's positions.yaml, and sharing
+            # one would leave a stale file beside the live cursor forever.
             path: /var/lib/alloy-positions
             type: DirectoryOrCreate
 {% if k3s_audit_log_enabled | default(false) %}

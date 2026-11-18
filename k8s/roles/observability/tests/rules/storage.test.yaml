@@ -379,8 +379,8 @@ tests:
                 volume that still reads healthy. Scale the workload to 0, wait for the volume to
                 detach, and scale back.
 
-  # A remount that clears after 3 minutes still pages while it lasts: the 2026-11-11 remounts on
-  # daniel-server lasted 2 to 6 minutes (#8212). It resolves once the mount is writable again.
+  # A remount that clears after 3 minutes still pages while it lasts. It resolves once the
+  # mount is writable again.
   - interval: 1m
     input_series:
       - series: 'node_filesystem_readonly{job="node", instance="server:9100", mountpoint="/var/lib/kubelet/plugins/kubernetes.io/csi/driver.longhorn.io/ghi/globalmount"}'

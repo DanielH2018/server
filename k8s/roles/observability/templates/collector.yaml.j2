@@ -83,11 +83,9 @@ metadata:
   name: otel-collector
   namespace: {{ k8s_observability_namespace }}
 spec:
-  # A DaemonSet since the Phase F drain (2026-08-13): every node carries its own
-  # loopback OTLP listener, so a host's Claude Code always exports to 127.0.0.1:4317
-  # locally — the property the Docker forwarder + ingest route existed to fake for
-  # daniel-server. DaemonSet updates are delete-then-create per node, so the hostPort
-  # deadlock that forced the old Deployment's Recreate strategy cannot occur.
+  # A DaemonSet: every node carries its own loopback OTLP listener, so a host's Claude Code
+  # always exports to 127.0.0.1:4317 locally. DaemonSet updates are delete-then-create per
+  # node, so the hostPort cannot deadlock a rollout.
   selector:
     matchLabels:
       app: otel-collector
@@ -96,8 +94,7 @@ spec:
       annotations:
         # Rolls THIS workload alone when its own ConfigMap changes. The role skips the
         # shared rollout-restart, so without this the edit reaches the ConfigMap and never
-        # the pod. Why per-workload and not the old restart-all loop: this role's CLAUDE.md,
-        # under `## One config change, one restart`.
+        # the pod. See this role's CLAUDE.md, `## One config change, one restart`.
         {{ checksum_annotation('config', observability_collector_config | hash('sha1')) }}
       labels:
         app: otel-collector
@@ -113,8 +110,7 @@ spec:
           args: ["--config=/conf/config.yaml"]
           # uid pinned with the assertion: `runAsNonRoot` alone does not pin one, and the
           # kubelet refuses a container whose image names its user instead of numbering it.
-          # PID 1 measured at uid 10001 on both nodes (cgroup-traced, not a `ps` name grep),
-          # with `NSpid: <pid> 1` confirming no earlier root phase behind the capability drop.
+          # PID 1 runs as uid 10001, with no earlier root phase behind the capability drop.
 {{ hardened_security_context(read_only=true, non_root=true, run_as_user=10001) }}
           ports:
             # hostPort + hostIP is what puts this on the NODE's loopback, which is where
@@ -134,8 +130,7 @@ spec:
               containerPort: 8888
             - name: health
               containerPort: 13133
-          # The only pod in the stack without probes until 2026-08-13: a wedged collector
-          # kept its hostPort bound and telemetry silently blackholed until a human noticed.
+          # A wedged collector keeps its hostPort bound and blackholes telemetry silently.
           readinessProbe:
             httpGet:
               path: /
@@ -158,6 +153,3 @@ spec:
             name: otel-collector-config
 ---
 {{ service('otel-collector', 8889, port_name='prom-export', extra_ports=[{'name': 'self-metrics', 'port': 8888}], namespace=k8s_observability_namespace) -}}
-# (The D7 forwarder seam — an otlp-grpc Service port for the ingest IngressRoute —
-# dissolved 2026-08-13 with the DaemonSet conversion: every node has its own
-# loopback hostPort now, so nothing enters over the LAN.)
