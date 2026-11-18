@@ -193,7 +193,7 @@ def test_a_malformed_block_is_flagged(label, text, message):
         g.parse_hook_file("bad.sh", text)
 
 
-# --- the grammar fixture shared with dotfiles' bin/gen-hooks-lib.js (#2818) ------------------
+# --- the grammar fixture shared with dotfiles' bin/gen-hooks-lib.js ------------------
 
 
 def _dotfiles_root() -> Path | None:
@@ -360,7 +360,7 @@ def test_live_census_names_the_known_members():
     assert KNOWN_LIBRARIES <= set(libraries), sorted(KNOWN_LIBRARIES - set(libraries))
     assert registered.isdisjoint(libraries)
     # Every live hook goes through the one runner, so the interpreter pin and the failure
-    # posture are written once (#3278).
+    # posture are written once.
     commands = {r.command.split()[0] for r in registrations}
     assert commands == {f"{g.COMMAND_PREFIX}{g.RUNNER}"}, commands
 

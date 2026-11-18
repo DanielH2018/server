@@ -1,4 +1,4 @@
-"""`fanout.py land-server` (#5496): which finished daniel-server batches land unattended.
+"""`fanout.py land-server`: which finished daniel-server batches land unattended.
 
 The review record comes over the transport fake (`FakeRun`), the open PRs from a table, and the
 landing's start from a recorder, so a test reads what the command decided and what it started.
@@ -414,7 +414,7 @@ def test_a_dry_run_judges_and_starts_nothing(tmp_path):
 
 
 def test_a_pass_sweeps_landed_worktrees_passing_over_open_pr_branches(tmp_path):
-    """#8575: the lander's timer is what runs `clean` with no operator behind it."""
+    """The lander's timer is what runs `clean` with no operator behind it."""
     run = _Landings([_record()], [_pr(5001), _pr(5002)])
     run.run(tmp_path)
     assert run.swept == [frozenset({"worktree-fanout-5001", "worktree-fanout-5002"})]
@@ -448,7 +448,7 @@ def test_the_timer_command_is_a_fanout_subcommand():
 
 
 def test_the_record_names_the_head_the_last_reviewer_read(tmp_path):
-    """`fanout_lib.autoland` lands a PR only at this head (#5496)."""
+    """`fanout_lib.autoland` lands a PR only at this head."""
     clean = [
         _report(f"Opened {PR}"),
         _report(structured={"summary": "", "findings": []}),

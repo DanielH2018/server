@@ -1,6 +1,6 @@
 """Censuses of the role tree's tasks, templates and defaults, one `_row_table.Census` row each.
 
-Each row was a test file of its own until #3430. A row's `reason` keeps what that file's
+Each row replaces a test file of its own. A row's `reason` keeps what that file's
 docstring said a reader needs before changing the rule. The ship rows read a role's
 `templates/` as literal text on purpose: their subject is the basename a task or template
 names, which a render does not change.
@@ -57,13 +57,10 @@ def _shipped_py(subject: Subject) -> list[tuple[int, str]]:
 # list's `src: "{{ role_file('files/x') }}"`), plus a bare YAML list entry: `home-assistant`'s
 # four `*_files` lists in `defaults/main.yml` name what its ConfigMap ships that way.
 #
-# WHAT THIS SCAN DOES NOT SEE: a ship that names no basename. `with_fileglob`/`fileglob` over a
-# directory, a directory-shaped `src:` in a copy task, and `unarchive`/`synchronize` of a tree all
-# put files on a host without a literal name to match. None of them ships a `.md` today — the two
-# globs in the tree take `*.json` and `*.pub`, the three `unarchive` tasks take remote tarballs,
-# and no task carries a directory `src:` — so the hole is latent rather than live. A `.md` added
-# under one of those globs would pass this row and map to no deploy tag in `role_paths.role_for`,
-# which is the one failure mode to check when a role starts globbing a directory that holds prose.
+# WHAT THIS SCAN DOES NOT SEE: a ship that names no basename (`with_fileglob`/`fileglob`, a
+# directory-shaped `src:`, `unarchive`/`synchronize` of a tree). None ships a `.md` today, so the
+# hole is latent; a `.md` added under one would pass this row and map to no deploy tag in
+# `role_paths.role_for`.
 SHIPPED_MD = re.compile(
     r"""(?:src|dest)\s*:\s*['"]?\S*?(?P<a>[\w.-]+\.md)"""
     r"""|lookup\(\s*['"]file['"]\s*,\s*['"]?\S*?(?P<b>[\w.-]+\.md)"""

@@ -139,21 +139,19 @@ def rule_expr(stem: str, alert: str, service: str | None = None) -> str:
     return str(expr)
 
 
-# What the bridge's two checks carried when Cutover-a2 deleted them with their env keys
+# What the bridge's two deleted checks carried in their env keys
 # (TARGETS_MIN, CLUSTER_TARGETS_MIN, SHIPPER_DROPPED_*, OTELCOL_SEND_FAILED_*,
 # TEMPO_POLL_ERRORS_*, BOOT_SETTLE_S and SHIPPER_BACKLOG_GRACE_S in the bridge's
 # config/env.yaml.j2). The rules hold them as literals, so these literals are the only record.
 # DECIDED: the 3000-entry threshold of LogShipperDroppingEntries and LokiDiscardingEntries came
-# from the gap between churn and bursts, not from a streak. Measured 2026-09-11 over the 14 days
+# from the gap between churn and bursts, not from a streak. Measured over the 14 days
 # Prometheus retains, at 1h resolution: the client-side counter is non-zero in 26 of ~336 hours,
 # 13 of those clear 1000, and the ONLY samples between 1000 and 6261 are the two that held the
-# old monitor red for 51 minutes on 2026-09-03 at 1020. Every other real loss starts at 6261 and
+# old monitor red for 51 minutes at 1020. Every other real loss starts at 6261 and
 # runs to 90,724 client-side and 216,545 server-side. Churn tops out at ~1020 and the smallest
 # genuine burst is 6261, so 3000 sits 2.9x above the first and 2.1x below the second: a derived
 # midpoint, not a number fitted to the episode. A 2-3 cycle streak was rejected on its own
-# evidence: that episode ran 11 cycles, so a streak would have removed 3 of them. The marker
-# moved here from the bridge's `bridge/config_io.py` (SHIPPER_DROPPED_MAX) when Cutover-a2
-# deleted that check.
+# evidence: that episode ran 11 cycles, so a streak would have removed 3 of them.
 BRIDGE_TARGET_FLOORS = ("3", "1")  # CLUSTER_TARGETS_MIN, TARGETS_MIN
 BRIDGE_SETTLE_HOLD_S = 1200 + 3600  # BOOT_SETTLE_S plus the 1h range
 BRIDGE_BACKLOG_GRACE_S = 21600  # SHIPPER_BACKLOG_GRACE_S

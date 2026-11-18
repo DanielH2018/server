@@ -22,11 +22,9 @@ the file that carries it differs.
 
 The rendered file is checked in both cases, not just the variable, so a template that stops
 interpolating the list cannot pass on the strength of correct defaults. The render comes from
-`_setup_render`, the harness `validate/setup_templates.py` renders these with. It used to come
-from a hand-stitched substitution here — the loop body found by substring and replaced with
-the caller's values — and that is a worse version of the same idea: it asserts the template
-still spells the loop exactly as this module writes it, and the moment that stops matching the
-guard checks a file with `{{ ... }}` still in it (#3202).
+`_setup_render`, the harness `validate/setup_templates.py` renders these with. A hand-stitched
+substitution would assert the template still spells the loop exactly as this module writes it,
+and the moment that stops matching the guard checks a file with `{{ ... }}` still in it.
 """
 
 import re
@@ -40,14 +38,13 @@ _TEMPLATE = "resolv.conf.j2"
 
 # Every host that resolves DIRECTLY from the shared template, read from the file its host
 # package ships. daniel-pi's `pi-resolver` component owns the template, which `k3s-host-dns` borrows through `component: pi-resolver`
-# (H7.25). All are checked: the template is shared, so a correct file plus one bad caller is
+# All are checked: the template is shared, so a correct file plus one bad caller is
 # still a host resolving through Cloudflare.
 #
-# daniel-box IS NOT HERE, and that is deliberate. Its resolv.conf names one
-# entry, 127.0.0.1, and the ordered preference lives in its host forwarder's Corefile — it
-# is checked at the bottom of this file instead. Adding it back here would fail on the
-# sole-entry rule; LOOSENING THAT RULE TO ACCOMMODATE IT would delete the check that catches a
-# missing fallback on the host that still needs one.
+# daniel-box is not here by design: its resolv.conf names one entry, 127.0.0.1, and the ordered
+# preference lives in its host forwarder's Corefile, checked at the bottom of this file.
+# LOOSENING THE SOLE-ENTRY RULE TO ADMIT IT would delete the check that catches a missing
+# fallback on the host that still needs one.
 _PACKAGED_HOSTS = ("daniel-pi",)
 
 
@@ -55,7 +52,7 @@ def _vip() -> str:
     """The Pi-hole VIP as the render resolves it, from group_vars rather than a literal.
 
     Pinning 10.0.0.243 here would pass while group_vars moved the VIP, and asserting the Jinja
-    reference `{{ dns_k8s_vip }}` only holds while nobody renders the file (#3202).
+    reference `{{ dns_k8s_vip }}` only holds while nobody renders the file.
     """
     return role_context(COMPONENTS / "pi-resolver")["dns_k8s_vip"]
 
@@ -144,12 +141,10 @@ def test_rotate_is_flagged() -> None:
 
 
 # ── daniel-box: the first hop is the Corefile ───────────────────────────────────────────
-# Same invariant, different file. CoreDNS's forward plugin defaults to `random`, so the list
-# alone proves nothing — without `policy sequential` an ordered-looking list is a coin flip,
-# which is the exact defect this arrangement avoids. Each way to break it is silent: invert
-# the list and Cloudflare answers everything while the config still names Pi-hole; drop the
-# public entries and a Pi-hole outage takes the node's DNS with it; set `max_fails 0` and
-# CoreDNS stops health checking entirely while still reading as configured.
+# Same invariant, different file. CoreDNS's forward plugin defaults to `random`, so without
+# `policy sequential` an ordered-looking list is a coin flip. Each way to break it is silent:
+# invert the list and Cloudflare answers everything; drop the public entries and a Pi-hole
+# outage takes the node's DNS with it; set `max_fails 0` and CoreDNS stops health checking.
 
 _COREFILE = "host-corefile.j2"
 _FORWARD = re.compile(r"^\s*forward\s+\.\s+(.+?)\s*\{\s*$", re.M)

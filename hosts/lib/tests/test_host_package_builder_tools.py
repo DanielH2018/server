@@ -1,6 +1,6 @@
 """The builder's `homelab-tools` step: fetch, verify, cache, place, and build once per architecture.
 
-H3.11. The render carries pins and no bytes; `Builder.package` copies each architecture's tree,
+The render carries pins and no bytes; `Builder.package` copies each architecture's tree,
 downloads and verifies the binaries into that copy, and runs nfpm there. A digest that differs
 from its pin builds nothing and reads `reason="tools"`. Downloads come from a fake `urlopen`
 keyed by URL, and nfpm is a shell stub that records what sat under `root/` when it ran.

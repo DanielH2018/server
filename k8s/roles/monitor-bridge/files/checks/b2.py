@@ -35,12 +35,11 @@ def b2_authorize_data(cfg: Config, src: Sources) -> JsonObject:
     `b2_storage_usage` both reach B2 through it.
 
     DECIDED: the bridge keeps this client rather than using scripts/lib/b2.py's `B2Session`
-    (#3766). `b2_reachable` picks its cache TTL from the exception type: `Sources.get_json`
+    `b2_reachable` picks its cache TTL from the exception type: `Sources.get_json`
     (over `bridge.net._get_json`) re-raises an HTTPError untouched (B2 answered, so the call
     was billed) and wraps a transport failure as RuntimeError (nothing billed).
     `lib.b2.http_json` folds both into one
-    `B2Error`, which would bring back the 2026-08-30 gate that held a recovery DOWN for 25
-    minutes. `B2Session` also authorizes against a fixed `AUTHORIZE_URL`, where
+    `B2Error`, which would bring back a gate that holds a recovery DOWN for 25 minutes. `B2Session` also authorizes against a fixed `AUTHORIZE_URL`, where
     `cfg.B2_PROBE_URL` is kept swappable to a Class C call (bridge/config_io.py). The pod
     cannot import scripts/lib either, since `files/` ships as a ConfigMap; shipping the module
     in would roll the bridge, the alert pipeline itself, on every edit to it.
@@ -229,10 +228,10 @@ def b2_reachable(
         _get_json wraps exactly this class as RuntimeError while re-raising HTTPError untouched,
         which is what makes the two separable here. Cached for B2_TRANSPORT_RETRY_S (one cycle).
 
-    Without that split, one transient failure pinned the gate DOWN for the full 30 minutes: on the
-    2026-08-30 restart the bridge's first cycle probed B2 before cluster egress was serving, and
-    `B2 Reachable` then read DOWN for 25 minutes against an 8m35s outage — the cache was holding
-    back the RECOVERY, not just the retry. Re-probing a connection that never landed is free, so
+    Without that split, one transient failure pins the gate DOWN for the full 30 minutes: when
+    the bridge's first cycle after a restart probes B2 before cluster egress is serving,
+    `B2 Reachable` reads DOWN long after the outage ends — the cache holds back the RECOVERY,
+    not just the retry. Re-probing a connection that never landed is free, so
     there is nothing to protect there.
 
     The cache is `src.state.b2_probe`, reset on container restart like the streak counters.

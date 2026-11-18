@@ -10,7 +10,7 @@ export RUN_HOOK_PROJECT_DIR={{ claude_code_agent_user_clone_dir }}
 export RUN_HOOK_UV={{ claude_code_agent_user_home }}/.local/bin/uv
 # scripts/dev/fanout_lib/target.py:branch_name names a fan-out batch's branch
 # `worktree-<prefix>+fanout-<batch>` from this, the one shape the agent branch fence lets this
-# user push (#3618). A script that names branches itself never reads the agent's CLAUDE.md.
+# user push. A script that names branches itself never reads the agent's CLAUDE.md.
 export CLAUDE_WORKTREE_PREFIX={{ claude_code_agent_worktree_prefix }}
 {% if claude_code_lander_enabled and claude_code_agent_is_primary %}
 {% import 'templates/claude-land-pins.j2' as pins with context %}

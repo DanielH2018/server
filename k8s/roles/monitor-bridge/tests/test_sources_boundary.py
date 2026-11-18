@@ -1,6 +1,6 @@
 """No check body reaches Prometheus, Loki or an HTTP API except through its `src` argument.
 
-`bridge.sources.Sources` is the one seam a test answers (#3742). A check that called
+`bridge.sources.Sources` is the one seam a test answers. A check that called
 `bridge.net.prom_vector(cfg, ...)` again would query the live transport behind a test that
 believed it had stated the answer, and the suite would need its `bridge.net` patches back.
 """

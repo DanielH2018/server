@@ -2,16 +2,14 @@
 # Cgroup resource metrics for claude-rc.service, user-1000.slice and each live fan-out batch
 # unit. Shipped by the homelab host package (hosts/components/claude-code); edits are overwritten.
 #
-# Issue #1238: claude-rc.service is bounded (MemoryHigh/MemorySwapMax) and user-1000.slice
-# (sessions started with `claude agents` from an SSH shell, #1213) is not — but neither
-# cgroup's counters reached Prometheus. This host sets DefaultMemoryAccounting/
-# CPUAccounting=yes, so the counters are already populated on cgroupfs and free to read; only
-# the scrape was missing. Written as a node-exporter textfile gauge set so no exporter change
-# or scrape-config change is needed. k8s/roles/node-exporter/CLAUDE.md, *The textfile
-# collector directory*, names this file's readers and the contract it follows.
+# claude-rc.service is bounded (MemoryHigh/MemorySwapMax) and user-1000.slice (sessions started
+# with `claude agents` from an SSH shell) is not, so this exports the counters of both cgroups.
+# This host sets DefaultMemoryAccounting/CPUAccounting=yes, so the counters are already
+# populated on cgroupfs and free to read. Written as a node-exporter textfile gauge set so no
+# exporter change or scrape-config change is needed. k8s/roles/node-exporter/CLAUDE.md, *The
+# textfile collector directory*, names this file's readers and the contract it follows.
 #
-# Read-only observation, deliberately: this does not add or change any cgroup bound (#1213
-# owns the SSH-session cap fix; that is a separate decision).
+# Read-only observation, deliberately: this does not add or change any cgroup bound.
 #
 # Usage: claude-cgroup-metrics.sh (no arguments)
 # Runs as claude-cgroup-metrics.service, fired by claude-cgroup-metrics.timer every 30 seconds,
@@ -33,24 +31,23 @@ CGROOT=${CGROOT:-/sys/fs/cgroup}
 PROCROOT=${PROCROOT:-/proc}
 OUT="$TEXTFILE_DIR/claude_cgroup.prom"
 
-# Skip silently on a host without the textfile hook (e.g. before node-exporter is deployed
-# there) — matches the guard the kopia-era b2-usage.sh used for the same directory.
+# Skip silently on a host without the textfile hook (e.g. before node-exporter is deployed there).
 [ -d "$TEXTFILE_DIR" ] || exit 0
 
 # label -> cgroup path relative to CGROOT
 declare -A CGROUPS=(
-  # The fleet's shared parent (#1264). user.slice carries the ONE MemoryHigh/MemorySwapMax
+  # The fleet's shared parent. user.slice carries the ONE MemoryHigh/MemorySwapMax
   # for the whole Claude fleet, so this is the cgroup whose memory.events{event="high"}
   # counts the fleet hitting its bound; its counters include both planes below.
   [fleet]=user.slice
   [user-1000-slice]=user.slice/user-1000.slice
 )
 
-# claude-rc.service moved out of system.slice and under the fleet's shared parent (#1264),
-# and claude_code_fleet_caps_enabled: false moves it back — so resolve the path instead of
-# hardcoding either one, or this label goes silently absent on whichever side of that toggle
-# the host is not, leaving a green scrape with one plane missing.
-# homelab-claude-rc.service is the same host under its packaged name (H7.39); the label stays
+# claude-rc.service sits under the fleet's shared parent, and claude_code_fleet_caps_enabled:
+# false moves it back to system.slice — so resolve the path instead of hardcoding either one, or
+# this label goes silently absent on whichever side of that toggle the host is not, leaving a
+# green scrape with one plane missing.
+# homelab-claude-rc.service is the same host under its packaged name; the label stays
 # claude-rc so the dashboards read one series across hosts.
 for candidate in user.slice/claude-rc.service system.slice/claude-rc.service \
   user.slice/homelab-claude-rc.service system.slice/homelab-claude-rc.service; do
@@ -78,9 +75,8 @@ trap 'rm -f "$TMP"' EXIT
     [ -r "$f" ] && printf 'claude_cgroup_memory_swap_current_bytes{cgroup="%s"} %s\n' "$label" "$(cat "$f")"
   done
 
-  # high/max/oom/oom_kill are cumulative counters: `high` is the one #1238 asks for by name —
-  # it counts every time MemoryHigh throttled the cgroup, which is the number that would have
-  # narrated the 2026-09-05 stall as it happened.
+  # high/max/oom/oom_kill are cumulative counters: `high` counts every time MemoryHigh throttled
+  # the cgroup.
   printf '# HELP claude_cgroup_memory_events_total memory.events counters (low/high/max/oom/oom_kill) for the cgroup.\n'
   printf '# TYPE claude_cgroup_memory_events_total counter\n'
   for label in "${!CGROUPS[@]}"; do
@@ -138,11 +134,10 @@ trap 'rm -f "$TMP"' EXIT
 
   # One series set per live fan-out batch unit (fanout-<batch>.service), wherever a user
   # manager put it, so each batch's use can be set against placement.py's RESERVATION_BYTES.
-  # memory.current and systemd's "memory peak" both count page cache: a live batch read 46 MiB
-  # anon beside 1.2 GiB file and a 7.8 GiB peak (2026-10-18). So anon and file are split here,
-  # because anon is what the reservation has to cover. A unit's cgroup goes when it stops, so
-  # its last sample is the one before; systemd's "Consumed" journal line keeps the total.
-  # The batch label adds about 50 short-lived series a day per family (#4808).
+  # memory.current and systemd's "memory peak" both count page cache, so anon and file are split
+  # here, because anon is what the reservation has to cover. A unit's cgroup goes when it stops,
+  # so its last sample is the one before; systemd's "Consumed" journal line keeps the total.
+  # The batch label adds about 50 short-lived series a day per family.
   batch_dirs=("$CGROOT"/user.slice/user-*.slice/user@*.service/*/fanout-*.service)
   batch_label() { local unit=${1##*/}; unit=${unit#fanout-}; printf '%s' "${unit%.service}"; }
 
@@ -184,7 +179,7 @@ trap 'rm -f "$TMP"' EXIT
   #
   # cat reads the files, not awk: a process that exits between the glob and the read leaves a
   # path that cannot be opened, and gawk treats that as fatal, so the whole count came back
-  # empty and the series read a false 0 on some runs (2026-10-09). cat skips the file and goes
+  # empty and the series read a false 0 on some runs. cat skips the file and goes
   # on. Name: is the first line of every status file, so it resets the record without FNR.
   if [[ -n "${CLAUDE_WATCH_UIDS:-}" ]]; then
     printf '# HELP claude_uid_processes Processes named claude whose real uid is this watched uid.\n'
@@ -201,7 +196,6 @@ trap 'rm -f "$TMP"' EXIT
   fi
 } > "$TMP"
 
-# 0644: node-exporter's container reads this as its own (non-root) user, same as the
-# kopia-era b2-usage.sh gauge — mktemp creates 0600 and the collector would otherwise get
-# "permission denied" (node_textfile_scrape_error 1).
+# 0644: node-exporter's container reads this as its own (non-root) user — mktemp creates 0600
+# and the collector would otherwise get "permission denied" (node_textfile_scrape_error 1).
 chmod 0644 "$TMP" && mv "$TMP" "$OUT"

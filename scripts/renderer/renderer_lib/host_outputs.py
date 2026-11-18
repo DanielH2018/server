@@ -22,7 +22,7 @@ A spec lists each secret-bearing file under `outputs:`::
 The renderer reads each declared secret as a placeholder, and C1's escape applies: a literal `$`
 followed by `$`, by `{` or by a placeholder renders as `$$` (`placeholders.Sentinels.resolve`).
 The result installs at `/usr/lib/homelab/secret-templates/<path>`, and `homelab-secrets` renders
-it. A `link` output also gets a symlink at `path` that points at the rendered file.
+it. A `link` output also gets a symlink at `path`, and its `secrets.json` row names it as `link`.
 
 A `format: dotenv` output is a Compose env file. Its row in `secrets.json` carries the format,
 which `homelab-secrets` checks (H5.2a2), and its `path` may sit under `/usr/lib/homelab/compose/`.
@@ -220,6 +220,8 @@ def add_output(
         "dependents": sorted(set(dependents)),
         "keys": sorted(keys),
     }
+    if link:
+        row["link"] = str(path)
     # Absent unless declared, so a package without a dotenv output keeps its `secrets.json` bytes.
     package.outputs.append({**row, "format": fmt} if fmt else row)
 

@@ -1,7 +1,7 @@
 """`--repo` on the register subcommands: every gh call and the worktree read aim at that repo.
 
 `open --repo` is covered beside the rest of `open`, in test_findings_open.py. This module
-covers the subcommands that gained the flag for #3345, and the prune_worktrees read they
+covers the subcommands that take the flag, and the prune_worktrees read they
 reach through it: a checkout whose default branch is not origin/master.
 """
 
@@ -54,13 +54,15 @@ def test_release_and_close_with_repo_aim_every_call_there():
         ["close", "750", "--fixed", "--pr", "760", "--repo", DOTFILES],
     ):
         # Fresh per command: the fake reflects a posted release onto the issue it was given.
-        issue = make_issue(
-            750, labels=["claimed"], comments=[claim_comment(WT, None, "t")]
-        )
+        issue = make_issue(750, comments=[claim_comment(WT, None, "t")])
         tools, calls = build_tools(Fakes(issues=[issue], view=issue))
         assert main(argv, tools) == 0, argv
-        unlabel = ["issue", "edit", "750", "--remove-label", "claimed"]
-        assert [*unlabel, "--repo", DOTFILES] in calls.gh
+        assert any(
+            c[:3] == ["issue", "comment", "750"]
+            and "Released: `" in c[4]
+            and c[-2:] == ["--repo", DOTFILES]
+            for c in calls.gh
+        )
         assert _all_aimed(calls)
 
 

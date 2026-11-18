@@ -1,4 +1,4 @@
-"""A broad landing's log names each changed-set tag at most once (#7894).
+"""A broad landing's log names each changed-set tag at most once.
 
 A landing whose changed set names some seventy tags printed the list three times: the
 changed-set line, the health lines and the `VERDICT:` line. The landing runs in agent

@@ -16,7 +16,7 @@ Type=oneshot
 User={{ sys_user }}
 # DECIDED: the operator's checkout, not `claude_code_rc_workdir`. On daniel-box that variable is
 # the agent's clone, which `claude` owns with mode 0750 and no group write. As `ubuntu`, git
-# refuses it ("dubious ownership", #5861), and a scoped `safe.directory` would only move the
+# refuses it ("dubious ownership"), and a scoped `safe.directory` would only move the
 # failure to the `git fetch` and `git worktree add` this command runs in its primary, which
 # need write access `ubuntu` lacks there. Widening that clone would also let the agent's tree
 # feed code to a process that runs as `ubuntu`. The operator's checkout is `ubuntu`'s own.
@@ -41,7 +41,7 @@ KillMode=process
 # Room for two checkouts, each a `git worktree add` and a first `uv run` sync, and two starts.
 TimeoutStartSec=30min
 ExecStart=/usr/bin/uv run --no-python-downloads python scripts/dev/fanout.py land-server --primary {{ claude_code_operator_checkout }}
-# The textfile that tells a timer which stopped firing from one that runs clean (#6165).
+# The textfile that tells a timer which stopped firing from one that runs clean.
 # timer-textfile.j2 has the shape and the deadline rule.
 # 1800 is TimeoutStartSec above, the longest a healthy run may take.
 {% from 'templates/timer-textfile.j2' import timer_textfile with context %}

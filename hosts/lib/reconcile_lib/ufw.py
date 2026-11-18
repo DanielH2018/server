@@ -23,7 +23,7 @@ and the run succeeds, so that a revert still updates the host.
  1. Set the default policies, when the manifest declares a rule, and only a policy that
     `ufw status verbose` shows differing. On an active firewall `ufw default` stops and starts
     the whole ruleset even when the value is unchanged, and a kube-router sync that lands inside
-    that window wipes the before chains (the 2026-10-25 outage on daniel-box). An inactive ufw
+    that window wipes the before chains. An inactive ufw
     prints no policies, so every policy is set, which loads nothing. The routed default stays
     alone.
  2. Add or adopt each declared rule, then read `ufw show added` again; a rule that is not there

@@ -1,4 +1,4 @@
-# The artifacts node's directories (H7.40's fourth slice), on claude_code_artifacts_node only.
+# The artifacts node's directories, on claude_code_artifacts_node only.
 # homelab-sync-artifacts.service runs `systemd-tmpfiles --create` on this file in ExecStartPre=
 # with the `+` prefix, because the service runs as {{ sys_user }}. systemd-tmpfiles-setup.service
 # also creates them at boot. dpkg never owns a path under /home.

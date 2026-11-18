@@ -110,7 +110,7 @@ def test_a_package_module_names_the_test_beside_its_entrypoint(tmp_path):
 
 
 def test_a_package_module_names_a_test_named_after_its_family(tmp_path):
-    """`land_lib/ci.py` is tested by `test_land_ci.py`: the family is the package's prefix (#4515).
+    """`land_lib/ci.py` is tested by `test_land_ci.py`: the family is the package's prefix.
 
     The decoy is named after the entrypoint's directory and sorts first, so a lookup that
     globs `test_*_ci.py` or takes the family from the wrong directory picks it instead.
@@ -424,7 +424,7 @@ def test_the_basename_guard_flags_a_real_clash():
 
 
 def test_a_subpackage_module_names_a_test_named_after_its_family(tmp_path):
-    """`fanout_lib/review/red_gate.py` is tested by `test_fanout_red_gate.py` (#4529).
+    """`fanout_lib/review/red_gate.py` is tested by `test_fanout_red_gate.py`.
 
     The family and the `tests/` both come from the nearest `*_lib` ancestor. The decoy is
     named after the module's direct parent, which a lookup that stops there would pick.

@@ -1,5 +1,5 @@
-# The T2 session users' egress table and proxy on daniel-box (dotfiles#967 B3, I4 to I6).
-# daniel-box's package.yml lists it, because the triage and Renovate sessions run only there.
+# The T2 session users' egress table and proxy on daniel-box. daniel-box's package.yml lists it,
+# because the triage and Renovate sessions run only there.
 #
 # B3-0 is the shadow trace: `table inet t2_egress` records each new connection the session users
 # open, in two dynamic sets, and drops nothing. Read it with `rootq nft`, or as root

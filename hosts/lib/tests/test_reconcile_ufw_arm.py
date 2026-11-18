@@ -1,4 +1,4 @@
-"""Reconcile's ufw arm, against a stub `ufw` that replays what ufw 0.36.2-6 did when measured (H7.2b).
+"""Reconcile's ufw arm, against a stub `ufw` that replays what ufw 0.36.2-6 does.
 
 The stub is `_reconcile_stub.py:ufw`. The clauses below are H7's *Red proofs for the checks this
 slice adds*, ufw arm. Each red fixture is a copy of reconcile with one rule removed
@@ -151,7 +151,7 @@ def test_a_rule_that_predates_the_arm_is_adopted_in_place_by_appending_it_again(
 
 def second_run_writes_nothing(node: Node) -> None:
     # `ufw default` on an active firewall stops and starts every chain even when the policy is
-    # unchanged, which is the window a kube-router sync wiped the before chains in on 2026-10-25.
+    # unchanged, which is the window in which a kube-router sync wipes the before chains.
     have(node)
     declare(node, *RULES)
     node.run()
@@ -542,7 +542,7 @@ def test_the_metrics_file_names_the_ufw_arm_even_at_zero(node):
 
 
 def before_chain_wiped(node: Node) -> None:
-    # The 2026-10-25 shape: a restore of a snapshot taken mid-reload left only the user jump.
+    # A restore of a snapshot taken mid-reload leaves only the user jump.
     have(node, *LABELS.items())
     declare(node, *RULES)
     node.state["ufw"]["before_input"] = [

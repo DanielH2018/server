@@ -12,8 +12,7 @@
   The renderer passes `flux_job_image` to every `templates/verify/` file (`render_tag`).
 
   The spec embeds a digest of jellyfin's rendered Deployment, as tdarr's verify Job does and
-  for its reason: every revision that rolls jellyfin renames the Job, so Flux runs it again,
-  as Ansible runs `verify.yml` on every deploy.
+  for its reason: every revision that rolls jellyfin renames the Job, so Flux runs it again.
   k8s/roles/jellyfin/tests/test_jellyfin_verify.py runs the census over this render.
 #}
 {% set script_name = 'jellyfin_verify.py' %}
@@ -38,8 +37,8 @@ template:
     restartPolicy: Never
     enableServiceLinks: false
     # jellyfin's PUID and PGID, the uid jellyfin's own process reads the library as, and the
-    # render-node group jellyfin's Deployment adds. The Ansible task this replaces probed as
-    # root, which would pass a render node or a library jellyfin itself cannot open.
+    # render-node group jellyfin's Deployment adds. Probing as root would pass a render node
+    # or a library jellyfin itself cannot open.
     securityContext:
       runAsNonRoot: true
       runAsUser: {{ puid }}

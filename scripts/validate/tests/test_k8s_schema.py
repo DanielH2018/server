@@ -274,7 +274,7 @@ def _cap_for(schema_version: str) -> str:
 
 def test_renovate_k3s_cap_follows_the_schema():
     # Renovate may only offer k3s releases inside the minor whose schemas are vendored
-    # (#2367). A cap left behind after an upgrade blocks every later k3s PR, and one raised
+    # A cap left behind after an upgrade blocks every later k3s PR, and one raised
     # ahead of the schemas brings back a PR that cannot pass CI until they are refreshed.
     assert _renovate_k3s_cap() == _cap_for(K8S_SCHEMA_VERSION), (
         f"renovate.json caps k3s-io/k3s at {_renovate_k3s_cap()!r}; with K8S_SCHEMA_VERSION "

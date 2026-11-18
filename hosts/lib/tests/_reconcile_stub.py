@@ -175,7 +175,7 @@ def systemctl(state: dict, args: list[str]) -> int:
 
 
 def _reset_failed(units: dict, names: list[str]) -> int:
-    """Clear each name's start limit, as systemd 255 did when measured on 2026-11-14 (#8670).
+    """Clear each name's start limit, as systemd 255 does.
 
     It carries on past a name that is not loaded and exits 1 at the end. With no name it would
     clear every failed unit on the host, which reconcile must never ask for.

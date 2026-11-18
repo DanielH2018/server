@@ -45,7 +45,7 @@ def metrics_bind_problem(corefile: str, port: int) -> str | None:
     Takes a RENDERED Corefile and the port it should carry. Reading the template's source
     instead would check that the operand spells `{{ k3s_host_dns_metrics_port }}`, which says
     nothing about what the host ends up listening on and matches nothing once the expression
-    is spelled any other way (#3202).
+    is spelled any other way.
     """
     directives = _PROMETHEUS.findall(corefile)
     if not directives:

@@ -53,8 +53,8 @@ def _run_chain(tmp_path, repo, worktree, unit_active=False, proc_root=None):
     """Run the chain under bash with a `systemctl` stub, so no real user manager is reached.
 
     `proc_root` is the directory the chain's in-use scan walks. It defaults to an empty one,
-    because the scan forks per pid and the host's process count then sets the test's cost
-    (#4876). Only a test that needs the scan to find a live process passes `/proc`.
+    because the scan forks per pid and the host's process count then sets the test's cost.
+    Only a test that needs the scan to find a live process passes `/proc`.
     """
     if proc_root is None:
         proc_root = tmp_path / "proc"

@@ -169,7 +169,7 @@ def test_the_systemd_run_command_is_a_transient_user_service_reading_the_brief()
 
 
 def test_the_unit_finds_claude_and_uv_under_the_launching_users_home():
-    """The agent user's home is /var/lib/claude, and it cannot read /home/ubuntu (#3627)."""
+    """The agent user's home is /var/lib/claude, and it cannot read /home/ubuntu."""
     cmd = systemd_run_command("b", home="/var/lib/claude")
     assert "-p Environment=PATH=/var/lib/claude/.local/bin:" in cmd
     assert "-p Environment=HOME=/var/lib/claude " in cmd
@@ -178,7 +178,7 @@ def test_the_unit_finds_claude_and_uv_under_the_launching_users_home():
 
 def test_systemd_run_itself_finds_the_executable_under_the_launching_users_home():
     """systemd-run resolves `claude`/`uv` in its caller's PATH, not the unit's; a non-interactive
-    ssh as the agent user has no ~/.local/bin, so every launch there failed (#4192)."""
+    ssh as the agent user has no ~/.local/bin, so every launch there failed."""
     for review in (False, True):
         cmd = systemd_run_command("b", home="/var/lib/claude", review=review)
         assert f"; then env PATH={unit_path('/var/lib/claude')} systemd-run " in cmd
@@ -204,7 +204,7 @@ def test_a_review_unit_runs_the_pipeline_under_the_longer_cap_and_a_plain_one_do
 
 def test_a_server_review_unit_runs_the_worktrees_script_not_the_primary_checkouts():
     """The primary checkout can predate the script while the worktree is at origin/master;
-    every review unit on such a host failed to spawn (#3684)."""
+    every review unit on such a host failed to spawn."""
     cmd = systemd_run_command("b", review=True)
     assert f"{REPO}/scripts/dev/fanout.py" not in cmd
     assert " scripts/dev/fanout.py review --batch b " in cmd
@@ -256,7 +256,7 @@ def _run_sync_then_cat(home):
 
 
 def test_the_venv_sync_builds_the_batch_worktrees_venv_from_the_lock(tmp_path):
-    """#6978: a fresh batch tree had no venv for run-hook.sh to fall back to."""
+    """A fresh batch tree had no venv for run-hook.sh to fall back to."""
     _fake_uv(tmp_path, 0)
     proc = _run_sync_then_cat(tmp_path)
     assert proc.returncode == 0 and proc.stdout == "BRIEF"
@@ -410,7 +410,7 @@ def test_a_failed_systemd_run_raises_with_its_stderr():
     with pytest.raises(LaunchError, match="systemd-run") as excinfo:
         launch(tools, "daniel-server", "b", "BRIEF", issues=[1])
     assert "Unit fanout-b.service already exists." in str(excinfo.value)
-    # No unit started and no manifest will name the batch, so the tree goes (#4192).
+    # No unit started and no manifest will name the batch, so the tree goes.
     assert len(run.calls) == 2
     assert run.calls[1][1] == remove_worktree_command("b")
 

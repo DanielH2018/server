@@ -187,8 +187,8 @@ def _metallb_prefix_offence(role: str, subject: dict) -> str | None:
 
 @cache
 def _pi_ip() -> str:
-    # The Pi's own literal, not k8s_pi_client_ip: that is derived from this through hostvars
-    # (#3719), and a derivation that lost the Pi's entry resolves to None without raising.
+    # The Pi's own literal, not k8s_pi_client_ip: that is derived from this through hostvars,
+    # and a derivation that lost the Pi's entry resolves to None without raising.
     return load_yaml(HOST_VARS / "daniel-pi.yml")["server_ip"]
 
 
@@ -208,7 +208,7 @@ def _pi_push_offence(role: str, route: dict) -> str | None:
 @cache
 def _host_ip(host: str) -> str:
     # The host's own literal, not the k8s_*_client_ip group_vars derives from it through
-    # hostvars (#4063): a derivation that lost the host's entry resolves to None without
+    # hostvars: a derivation that lost the host's entry resolves to None without
     # raising, and a guard reading the derived value would compare the render with itself.
     return load_yaml(HOST_VARS / f"{host}.yml")["server_ip"]
 

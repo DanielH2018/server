@@ -269,7 +269,7 @@ def test_land_waits_live_window_is_the_widest_any_t_has():
     ids=["room-for-the-window", "room-for-part-of-it", "no-room"],
 )
 def test_the_window_moves_the_landers_cap_by_its_remaining_length(grace, waited):
-    """A capped wait that meets the window waits it out, up to the grace its unit leaves (#5457).
+    """A capped wait that meets the window waits it out, up to the grace its unit leaves.
 
     With no grace the cap ends the wait at 1800s, inside the window, which is the `gave-up`
     the issue reported for a Sunday merge whose promotion was only deferred.

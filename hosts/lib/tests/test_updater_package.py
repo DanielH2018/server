@@ -67,7 +67,7 @@ def test_the_source_names_daniel_box_and_the_keyring_path(package):
 
 
 def test_the_package_ships_the_committed_keyring_unchanged(package):
-    # The path `Signed-By:` names must hold the operator's export byte for byte (H3.4c).
+    # The path `Signed-By:` names must hold the operator's export byte for byte.
     assert package.files[KEYRING] == (KEYRING_FILE.read_bytes(), 0o644)
 
 

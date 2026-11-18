@@ -6,9 +6,9 @@
 # `fallback` at 09:00 guarantees the overnight overrides clear even on a no-alarm day. Both clear the
 # overrides (manual-off, fan-manual, sleep mode, AL sleep) and re-apply the fan if home; only the
 # `alarm` trigger runs the wake ramp. The `fallback` touches the lights in one case only — a night
-# that was still running at 09:00, where it re-applies natural lighting (#2509) — so it still cannot
-# clobber a scene you set after waking. The alarm encodes the day, so the old weekday/weekend split
-# is gone.
+# that was still running at 09:00, where it re-applies natural lighting — so it still cannot
+# clobber a scene you set after waking. The alarm encodes the day, so there is no weekday/weekend
+# split.
 - id: bedroom_morning_reset
   alias: Bedroom morning reset and wake
   description: At the alarm (wake ramp) + a 09:00 fallback (hygiene) — clear overnight overrides; gently wake if home.
@@ -38,8 +38,8 @@
       then:
         - service: script.bedroom_apply_fan
     # Wake ramp: ONLY on the alarm trigger and only if HOME — gated on the GEOFENCE (person.daniel),
-    # NOT the FP300 room sensor. At motion_sensitivity:high (reverted because no setting separates the
-    # fan from a person — see the role CLAUDE.md / [[ha-fp300-fan-false-hold]]) the radar drops a
+    # NOT the FP300 room sensor. At motion_sensitivity:high (no setting separates the
+    # fan from a person — see the role CLAUDE.md) the radar drops a
     # motionless sleeper, so `presence` can read `off` at the exact moment you need waking. person.daniel
     # == home is the reliable "you're here to be woken" signal and still won't ramp an empty bedroom while
     # away (an FP300 dog/false-positive can't trigger the wake either). apply_natural's wake exception
@@ -58,18 +58,13 @@
           data:
             reason: "natural"
 
-        # The "you slept N h" morning note was removed 2026-08-16 along with the short-night wake
-        # curve: its only source, sensor.pixel_9_pro_sleep_duration, no longer exists and has no
-        # replacement on either device, so the `slept_h > 0` gate could never open. See the
-        # wake_brightness comment in custom_templates/lighting.jinja.
-
     # Fallback trigger only: hand the room back to automatic lighting when the night ran all the
     # way to 09:00. bedroom_bedtime fades to scene.bedroom_nightlight (rgb_color [255, 140, 40] at
-    # 3%, files/scenes.yaml) and marks AL manually controlled, and NOTHING here used to undo that on
+    # 3%, files/scenes.yaml) and marks AL manually controlled, and NOTHING else undoes that on
     # a no-alarm morning: bedroom_color_track needs color_mode == 'color_temp' and the RGB scene
     # left the bulb in xy mode, light_decision's `presence` branch returns noop while the light is
     # already on, and only the wake-ramp release branches clear AL's manual_control. The room
-    # therefore sat at amber 3% for the rest of the day (#2509).
+    # therefore sits at amber 3% for the rest of the day.
     #
     # `was_sleeping` is the discriminator, not the light's colour: the alarm trigger's own
     # clear_overrides turns sleep mode off hours earlier, so sleep mode still on at 09:00 means no
@@ -134,13 +129,12 @@
         # Past the ramp (catch-up window [45,90) min) AND AL still paused -> hand the room back to
         # Adaptive Lighting for the day: release manual control + apply so AL drives the natural
         # daylight brightness/color curve. The ramp has reached 100% by now, so AL takes over at full
-        # brightness (its 45s transition then settles to the daytime target) — the seamless hand-off
-        # this curve was designed for. NOT reason:"natural" (ambient-fill): at window-end the lights
-        # are on at ~100%, so natural_brightness would read the lights-DOMINATED FP300 illuminance
-        # (violating its "read while OFF" precondition) and floor the room to ~11%. turn_on_lights:false
-        # so a mid-ramp manual-off is never re-lit. release_due is a BOUNDED + idempotent gate (see
-        # in_wake_release_window): the old single-tick [45,46) release was lost for the day if an HA
-        # restart/deploy or a gated-off minute spanned it; this self-heals on a later tick, and the
+        # brightness (its 45s transition then settles to the daytime target). NOT reason:"natural"
+        # (ambient-fill): at window-end the lights are on at ~100%, so natural_brightness would read
+        # the lights-DOMINATED FP300 illuminance (violating its "read while OFF" precondition) and
+        # floor the room to ~11%. turn_on_lights:false so a mid-ramp manual-off is never re-lit.
+        # release_due is a BOUNDED + idempotent gate (see in_wake_release_window): it self-heals on a
+        # later tick if an HA restart/deploy or a gated-off minute spans the window end, and the
         # al_still_manual guard makes a repeat run a no-op so it can't stomp a later daytime manual pick.
         # DECIDED: the release does NOT arm input_number.bedroom_light_expected_color_temp.
         # Handing the room back leaves the tracker holding the ramp's warm 2200K while AL applies its
@@ -153,7 +147,7 @@
         # and nothing re-arms the tracker as it drifts. Every writer that takes AL over again arms on
         # the way in (bedroom_set_natural_brightness, bedroom_apply_wake, and bedroom_lights_set's
         # wake_fallback branch), so the tracker is never both stale and needed. The Tap Dial writes
-        # the lights directly and is meant to read as manual. Filed and decided as #2496.
+        # the lights directly and is meant to read as manual.
         - conditions: "{{ release_due }}"
           sequence:
             - service: adaptive_lighting.set_manual_control
@@ -165,18 +159,18 @@
                 entity_id: switch.bedroom_adaptive_lighting_bedroom
                 turn_on_lights: false
 
-# Fallback wake — safety net for when the WATCH alarm sensor lagged/absent (a Wear OS next_alarm can
-# hold an already-fired alarm for hours; seen 2026-07-01) so sensor.bedroom_wake_start never held a
-# valid future time and the real wake ramp never armed. Weekday 06:00: a gentle warm ramp over the
+# Fallback wake — safety net for when the WATCH alarm sensor lags or is absent (a Wear OS next_alarm
+# can hold an already-fired alarm for hours), so sensor.bedroom_wake_start holds no valid future time
+# and the real wake ramp never arms. Weekday 06:00: a gentle warm ramp over the
 # 45-min window using the SAME tested wake_brightness curve. STATELESS per-minute ticks (time_pattern
-# /1) mirroring bedroom_wake_ramp — the earlier repeat.while loop stayed in-process for ~45 min, so an
-# HA restart/deploy mid-window killed it and the ramp did NOT resume. Each independent tick now
+# /1) mirroring bedroom_wake_ramp: an in-process repeat.while loop would die on an HA restart/deploy
+# mid-window and not resume. Each independent tick
 # recomputes the frame from the persisted anchor (input_datetime.bedroom_last_wake), so a restart just
 # picks up on the next minute. The anchor is stamped at the START of the window (this automation's own
 # equivalent of bedroom_morning_reset, which the real ramp relies on and the fallback has none of).
 # Defers to a real wake whenever sensor.bedroom_wake_start is available AND dated today (no_real_wake),
 # so it can never double-drive the lights alongside bedroom_wake_ramp. (Accepted: a no-alarm weekday
-# still wakes at 06:00 — see the /homelab wake-debug decision.)
+# still wakes at 06:00.)
 - id: bedroom_fallback_wake
   alias: Bedroom fallback wake (no watch alarm)
   description: Weekday 06:00 safety-net wake ramp (stateless per-minute) when the watch alarm didn't arm the real wake.
@@ -257,7 +251,7 @@
         # elapsed is derived from the persisted anchor, not an in-process loop.
         # DECIDED: the fallback overrides manual_off like the alarm reset does, so START runs with it
         # on and clears it; only RAMP and RELEASE honour it, so a mid-ramp "off" still stops the
-        # ramp. Decided as #8381.
+        # ramp.
         - conditions:
             - "{{ no_real_wake }}"
             - "{{ in_window }}"
@@ -274,7 +268,7 @@
         # leaving mid-ramp stops the automation (no re-light of an empty room, no stale good-morning).
         # DECIDED: no tracker arm on release — same reasoning as bedroom_wake_ramp's
         # `DECIDED: the release does NOT arm input_number.bedroom_light_expected_color_temp`
-        # in this file. Filed and decided as #2496.
+        # in this file.
         - conditions:
             - "{{ no_real_wake }}"
             - "{{ release_due }}"
@@ -309,7 +303,7 @@
       to: "off"
   condition:
     # A person's toggle only (same discriminator as bedroom_manual_light_detect). Not parent_id: the
-    # MQTT- and time-triggered callers run in a root context, so their writes have none either (#8384).
+    # MQTT- and time-triggered callers run in a root context, so their writes have none either.
     - condition: template
       value_template: "{{ trigger.to_state.context.user_id is not none }}"
     # Respect a manual fan override, and don't spin the fan in an empty house (same gates as

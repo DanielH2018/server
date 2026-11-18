@@ -55,7 +55,7 @@ stale="{{ claude_code_agent_memory_seed_stale }}"
 
 # The operator's memory store becomes the agent's when the agent has no MEMORY.md, or when the host
 # last ran as the operator and the stores differ, so a flip back never makes a stale store the
-# claude-memory-sync source (#8074). The copy replaces the store: an entry only the agent holds is
+# claude-memory-sync source. The copy replaces the store: an entry only the agent holds is
 # removed. Once the host runs as the agent, a later run leaves what the agent wrote alone. Each
 # note loses the operator's checkout prefix, matched as a literal, so a repo link resolves from any
 # clone. A failed copy removes the index again and keeps the flag, so the next run retries.

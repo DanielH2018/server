@@ -317,7 +317,7 @@ def test_the_walk_stops_at_the_last_built_commit_and_at_the_bound(lab):
 
 def test_a_no_green_walk_logs_the_bound_beside_the_unbuilt_count(lab, capsys):
     # One pending commit over the last build once logged "in the 1 newest", which read as a
-    # walk bound of 1 (#6511).
+    # walk bound of 1.
     origin, _, _, github = lab
     first = origin.commit("a")
     github.runs[first] = GREEN
@@ -435,7 +435,7 @@ def test_an_unconsumed_staged_set_is_replaced_at_the_new_commit(lab):
     github.runs[second] = GREEN
     builder(lab, cls=FixedRender).main()
     assert (state / "staged" / "chosen").read_text() == second[:12] + "\n"
-    # One commit per staged set, as H3.5b's signer requires.
+    # One commit per staged set, as the signer requires.
     debs = [n for n in staged(state) if n.endswith(".deb")]
     assert len(debs) == 1 and debs[0].endswith(f"+g{second[:12]}_all.deb")
 
@@ -445,7 +445,7 @@ def test_a_commit_that_changes_no_package_stages_nothing_and_advances(lab):
     first = origin.commit("a")
     github.runs[first] = GREEN
     builder(lab, cls=FixedRender).main()
-    # The signer took the set, as H3.5b's does after every run.
+    # The signer takes the set after every run.
     for entry in (state / "staged").iterdir():
         entry.unlink()
     second = origin.commit("b")

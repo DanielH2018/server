@@ -1,4 +1,4 @@
-"""daniel-box ships the same last three `initial_setup` subjects as the Pi and daniel-server (H7.32).
+"""daniel-box ships the same last three `initial_setup` subjects as the Pi and daniel-server.
 
 The components are host-neutral and `test_pi_firewall_and_maintenance.py` holds their content. These
 tests hold what is specific to this host, the last one to move: the
@@ -126,7 +126,7 @@ def test_reconcile_adopts_the_ssh_rules_and_leaves_the_rules_it_already_holds(
         "homelab-daniel-pi"
     )
     node.state["users"] = {u["name"]: u["uid"] for u in manifest["users"]["users"]}
-    # H7.60's filter restarts rsyslog, which the Pi fixture masks.
+    # The package's filter restarts rsyslog, which the Pi fixture masks.
     live_unit(node, "rsyslog.service")
     # t2-egress restarts squid, a dependency the Pi fixture never installed.
     live_unit(node, "squid.service")
@@ -167,6 +167,6 @@ def test_reconcile_adopts_the_ssh_rules_and_leaves_the_rules_it_already_holds(
         for r in k3s
     ] + [tuple(r) for r in others]
     # A `ufw default` or an enable on an active k3s node reloads the ruleset under kube-router,
-    # which wiped the before chains here on 2026-10-25.
+    # which wipes the before chains.
     ufw = [c["argv"][1:] for c in node.calls("ufw")]
     assert not [a for a in ufw if a[:1] in (["--force"], ["default"], ["delete"])]

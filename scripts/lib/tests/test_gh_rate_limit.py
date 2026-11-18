@@ -1,4 +1,4 @@
-"""`gh_rate_limit.wait_s` turns a rate-limit refusal into a pause until the quota resets (#7993).
+"""`gh_rate_limit.wait_s` turns a rate-limit refusal into a pause until the quota resets.
 
 Run: uv run pytest scripts/lib/tests/test_gh_rate_limit.py
 """
@@ -15,7 +15,7 @@ from lib import gh_rate_limit
 
 PRIMARY = "gh: API rate limit exceeded for user ID 41801780. (HTTP 403)"
 SECONDARY = "gh: You have exceeded a secondary rate limit. (HTTP 403)"
-# The GraphQL quota's spelling carries "already" inside the phrase (#8708).
+# The GraphQL quota's spelling carries "already" inside the phrase.
 GRAPHQL = "GraphQL: API rate limit already exceeded for user ID 41801780."
 NOW = 1_000_000.0
 
@@ -65,7 +65,7 @@ def test_a_secondary_limit_waits_without_reading_the_reset():
 
 
 def test_a_graphql_refusal_waits_for_the_graphql_reset():
-    """GraphQL's quota resets apart from core's, so its 403 waits on its own reset (#8139)."""
+    """GraphQL's quota resets apart from core's, so its 403 waits on its own reset."""
     resets = {"core": int(NOW) + 3000, "graphql": int(NOW) + 100}
 
     def run(argv, **_kwargs):

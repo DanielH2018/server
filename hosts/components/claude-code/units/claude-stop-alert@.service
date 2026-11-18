@@ -1,6 +1,6 @@
 # Shipped by the claude-code component. The dotfiles' StopFailure hook starts an instance named by
-# the error cause, through polkit (50-claude-stop-alert.rules). The name keeps its Ansible-era
-# form because that hook, in another repository, names it.
+# the error cause, through polkit (50-claude-stop-alert.rules). The hook, in another repository,
+# names the unit, so its name is fixed.
 [Unit]
 Description=Page Discord that a Claude Code session ended on an API error (%i)
 After=homelab-secrets.service

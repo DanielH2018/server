@@ -1,4 +1,4 @@
-"""bootstrap_case's planned items run concurrently and keep their verdicts (#7785).
+"""bootstrap_case's planned items run concurrently and keep their verdicts.
 
 Each test drives `bootstrap_case.run` with the scratch clones, the kit and the seed stubbed and
 `Container` replaced by a fake that answers as the script's real run would, so no Docker is

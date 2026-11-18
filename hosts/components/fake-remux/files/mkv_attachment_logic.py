@@ -4,8 +4,7 @@
 jellyfin-ffmpeg 7.1 hardened attachment dumping with a `safe_filename()` check that accepts only
 [A-Za-z0-9_.-] (fftools/ffmpeg_demux.c). A font attachment named `Nexa Bold.otf` fails it, and
 ffmpeg aborts the WHOLE input rather than skipping that one attachment — so every burned-in-subtitle
-transcode of that file returns a "source error" while direct play stays fine. 21 of 61 mkv files in
-the library carried such a name on 2026-08-29.
+transcode of that file returns a "source error" while direct play stays fine.
 
 The split exists so this half is testable: an mkv is a binary no test can commit, so the entry
 script owns the probe and the rewrite and this module owns every decision they make.

@@ -365,7 +365,7 @@ def test_a_verify_kind_waits_on_the_last_kustomization_of_each_tag_it_names():
 
 
 def test_crowdsec_verify_waits_on_the_rolled_traefik():
-    """The ban proof reads the edge, so it must probe the Traefik pod a roll brought (#5999)."""
+    """The ban proof reads the edge, so it must probe the Traefik pod a roll brought."""
     ordering = cluster_mod.bundle_ordering({"crowdsec", "traefik"})
     assert ordering.verify_after["crowdsec"] == ["traefik"]
     directories = {name: {} for name in ("crowdsec", "crowdsec-verify", "traefik")}

@@ -5,7 +5,7 @@ server then deletes every custom object of its kind. For traefik's CRDs that is 
 IngressRoute and Middleware, so the edge goes down. A tag that renders a CRD therefore sets
 H1.1a's `flux_prune: false` in its defaults, which `role_fields` reads and the bundle writes as
 `prune: false`. The lever reaches `<tag>` alone, so a CRD in a `<tag>-deferred` directory is
-always under prune (`bundle.flux_files`, operator ruling of 2026-10-22). The census reads the
+always under prune (`bundle.flux_files`). The census reads the
 same lever for every render target, Ansible-owned ones included, because a flip carries the
 render as it stands. `traefik-crds` and `flux` are the named members the live render must
 find. This is the CRD guard ADR-0020 records, with no exception for `flux`.

@@ -1,10 +1,9 @@
-"""A plain exporter's scrape job renders from the `metrics` item on its containers_list entry (#3743).
+"""A plain exporter's scrape job renders from the `metrics` item on its containers_list entry.
 
-observability's `prometheus.yaml.j2` used to hand-copy each exporter's Service DNS and port, and
-the owning role defined the same port again. The port is now declared once, as a `metrics` item,
-and both the scrape job (`scrape_jobs`) and the owning role's Service (`metrics_port`) read it.
-A job that stays hand-written for its auth reads its entry's own `port` through `entry_port`
-(#3816). `template_filters/scrape_jobs.py` documents the item's keys.
+An exporter's port is declared once, as a `metrics` item, and both the scrape job
+(`scrape_jobs`) and the owning role's Service (`metrics_port`) read it.
+A job that stays hand-written for its auth reads its entry's own `port` through `entry_port`.
+`template_filters/scrape_jobs.py` documents the item's keys.
 
 Run: uv run pytest tests/k8s/test_scrape_jobs_derive_from_containers_list.py
 """
@@ -18,8 +17,7 @@ from _k8s_render import host_context, render_pod_env, render_role_template
 from lib import yaml_fast
 from renderer.template_filters.scrape_jobs import entry_port, metrics_port, scrape_jobs
 
-# Every job derived from a `metrics` item: the seven from #3743, `nut` from #3816 and
-# `monitor-bridge`, the check exporter's, and `navidrome`. Each must
+# Every job derived from a `metrics` item. Each must
 # still render from an entry, so a `metrics` item dropped from the inventory fails here rather
 # than reading as a smaller loop.
 _DERIVED = {
@@ -154,7 +152,7 @@ def test_the_alloy_pi_job_reads_its_port_from_the_pis_entry():
 
 
 def test_the_gpu_jobs_pod_filter_and_the_exporters_listener_read_one_port():
-    """The gpu job discovers pods, so its port lives in a relabel regex, not in a target (#3868)."""
+    """The gpu job discovers pods, so its port lives in a relabel regex, not in a target."""
     entries = copy.deepcopy(host_context()["services"])
     entry = next(e for e in entries if e["name"] == "gpu-exporter")
     assert entry["port"] != 9999
@@ -243,7 +241,7 @@ def test_entry_port_is_flagged_on_an_unknown_entry_or_one_with_no_port():
     ids=["entry-missing", "job-missing", "metrics-malformed"],
 )
 def test_a_refusal_is_a_filter_error_named_for_its_filter(name, args):
-    """A render failure names the filter that refused, through the filter Ansible calls (#4480)."""
+    """A render failure names the filter that refused, through the filter Ansible calls."""
     with pytest.raises(FilterError) as caught:
         repo_filters()[name](*args)
     assert str(caught.value).startswith(f"{name}: "), str(caught.value)

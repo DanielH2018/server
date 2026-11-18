@@ -1,4 +1,4 @@
-"""Which diff the takeover check runs for a suffixed directory, found by its Kustomization (#5575).
+"""Which diff the takeover check runs for a suffixed directory, found by its Kustomization.
 
 A `<tag>-verify`, `-snapshot` or `-deferred` directory has no flux file of its own: its
 Kustomization is a later document of `flux/<base>.yaml`. The wrapper finds the tag's document
@@ -48,7 +48,7 @@ SONARR_NOTIFICATION = (
 
 
 def test_a_verify_directory_whose_document_substitutes_takes_flux_diff(rig) -> None:
-    # #5575: sonarr-verify's Kustomization is the third document of flux/sonarr.yaml.
+    # sonarr-verify's Kustomization is the third document of flux/sonarr.yaml.
     rig.tag("sonarr", flux="---\n".join([
         kustomization("sonarr", substitutes=True),
         kustomization("sonarr-snapshot", substitutes=False),

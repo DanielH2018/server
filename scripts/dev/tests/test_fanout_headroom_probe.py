@@ -69,7 +69,7 @@ def test_no_memory_headroom_on_either_host_is_full(tmp_path):
 
 
 def test_the_roomiest_host_at_its_batch_cap_falls_back_to_the_next_host(tmp_path):
-    """#6421: the wait ends `room` on the host launch will use, not on one launch then refuses."""
+    """The wait ends `room` on the host launch will use, not on one launch then refuses."""
     _box_at_its_cap(tmp_path)
     reading = headroom_probe.read(_tools(ROOMY, SMALLER), 1, None, tmp_path)
     assert reading == {
@@ -133,7 +133,7 @@ def test_the_wait_agrees_with_what_launch_does(
 
 
 def test_a_wait_right_after_a_launch_fills_the_last_slot_reads_full(tmp_path):
-    """#6758: the launch that takes daniel-box's last slot leaves the next wait `full`."""
+    """The launch that takes daniel-box's last slot leaves the next wait `full`."""
     earlier = [
         Batch(f"{n}", "daniel-box", "/w", "b", "u", [n], "t")
         for n in (91, 92, 93, 94, 95)
@@ -163,7 +163,7 @@ def test_a_wait_right_after_a_launch_fills_the_last_slot_reads_full(tmp_path):
 
 
 def test_cc_wait_reads_afresh_for_every_wait(capsys):
-    """#6758: a `remote` source's reading is replayed to the next wait with the same arguments.
+    """A `remote` source's reading is replayed to the next wait with the same arguments.
 
     That next wait is the orchestrator's own, started just after it launched into the `room`
     the replayed reading reports, so it must take its own reading.

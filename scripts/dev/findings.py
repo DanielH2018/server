@@ -51,13 +51,13 @@ Usage (every subcommand also takes `--repo OWNER/NAME`; see below)::
     uv run python scripts/dev/findings.py new-issues [--after N] [--describe]
     uv run python scripts/dev/findings.py sync-board [688 701] [--dry-run]
 
-THE PROJECT BOARD FOLLOWS THE ISSUE. After any subcommand that writes an issue, `main` makes
-that issue's item on the "Server Issue Tracking" Project agree with it: Status (Todo, In
-Progress while `claimed` or while an open PR will close it, Done once closed), Severity and
-Not before. `findings_lib/board.py` owns the mapping. A board write that fails prints one
-warning and leaves the exit code alone, because nothing reads the board back; `sync-board`
-repairs it, and with no numbers it checks every open issue. Another repo's register has no
-board, so `--repo` other than this one skips it.
+THE PROJECT BOARD FOLLOWS THE ISSUE. After any subcommand that writes or comments on an
+issue, `main` makes that issue's item on the "Server Issue Tracking" Project agree with it:
+Status (Todo, In Progress while a worktree holds its claim or an open PR will close it, Done
+once closed), Severity and Not before. `findings_lib/board.py` owns the mapping. A board
+write that fails prints one warning and leaves the exit code alone, because nothing reads the
+board back; `sync-board` repairs it, and with no numbers it checks every open issue. Another
+repo's register has no board, so `--repo` other than this one skips it.
 
 WORKING ANOTHER REPO'S REGISTER. Every subcommand takes `--repo OWNER/NAME` and then works
 that repo's own `claude` register, with the same labels, trailer, fingerprint dedup and claim
@@ -82,9 +82,9 @@ whoever holds it — `close` and `open`'s reopen path alike, both through `plan_
 `next` read OPEN issues, so a claim left on a closed one is invisible to every view at once rather than merely
 wrong, and a reopen brings it back LIVE.
 
-CLAIMING AN ISSUE. `claim` posts a `Claim:` comment and adds the `claimed` label, so a
-worktree fanning out several issues at once knows which are its own; `release` reverses
-that. A claim only counts from the operator's own comment — this repo is public, so any
+CLAIMING AN ISSUE. `claim` posts a `Claim:` comment, which moves the issue's board Status to
+In Progress, so a worktree fanning out several issues at once knows which are its own;
+`release` reverses that. A claim only counts from the operator's own comment — this repo is public, so any
 account can post a `Claim:` or `Released:` trailer and none of them decide anything. `claim`
 refuses an issue another worktree LIVE-holds, refuses `manual` issues, closed issues and
 issues outside the `claude` register, RELEASES a claim it finds stale and takes the issue,
@@ -564,7 +564,7 @@ def cmd_sync_board(args: argparse.Namespace, tools: FindingsTools) -> int:
     return 1 if counts[FAILED] else 0
 
 
-_ISSUE_WRITES = frozenset({"edit", "close", "reopen", "create"})
+_ISSUE_WRITES = frozenset({"edit", "close", "reopen", "create", "comment"})
 
 
 def _recording_writes(tools: FindingsTools) -> tuple[FindingsTools, set[int]]:

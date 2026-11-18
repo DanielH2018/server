@@ -1,7 +1,7 @@
 """CASE_INPUTS, the host_packages_build job's list of the container cases' inputs, against the files.
 
 The render step in ci.yml sets `cases=true` when a PR changes a path CASE_INPUTS names, and the
-container steps run on it as they run on a differing render (#5004). The list is the one
+container steps run on it as they run on a differing render. The list is the one
 place those inputs are named, so an input missing from it is an input whose PR skips the cases.
 `test_host_package_cases_run_on_their_inputs.py` proves the trigger fires for each input; this
 module proves the list holds every input there is: the cases script, every `validate` module it
@@ -20,7 +20,7 @@ from lib import yaml_fast
 from lib.git_testing import git_out
 
 CI_WORKFLOW = REPO / ".github" / "workflows" / "ci.yml"
-# The render step sits in the build job and the image step in the cases legs (#6151).
+# The render step sits in the build job and the image step in the cases legs.
 JOBS = ("host_packages_build", "host_packages")
 CASES_SCRIPT = "scripts/validate/host_package_cases.py"
 DOCKERFILE = "hosts/lib/tests/container/Dockerfile"

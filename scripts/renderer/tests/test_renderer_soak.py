@@ -226,7 +226,7 @@ def test_bundle_files_sizes_the_wait_from_a_roles_rollout_timeout(
     """`bundle_files` must hand its Kustomizations to the soak, or a 50m tag outlasts it.
 
     The 1m half is the red one: the same render under 3000s shows that the wait follows the
-    role's timeout, rather than clearing 3000s whatever `soak_pair` was handed (#5389).
+    role's timeout, rather than clearing 3000s whatever `soak_pair` was handed.
     """
     defaults = tmp_path / "sonarr" / "defaults"
     defaults.mkdir(parents=True)
@@ -299,7 +299,7 @@ def _namespaced_outside_flux_system(files: dict[str, str]) -> list[str]:
 
 
 def test_no_rbac_object_needs_a_namespace_a_tag_creates(tmp_path):
-    """#5380: `soak` has no `dependsOn` edges, so Flux may apply it before the tag that
+    """`soak` has no `dependsOn` edges, so Flux may apply it before the tag that
     creates `media` on the tag's first revision, and a Role in `media` would fail the apply.
 
     `sonarr-deferred` creates `media` with its own Namespace document, and the map still

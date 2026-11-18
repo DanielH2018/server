@@ -1,10 +1,9 @@
-{# The one door that lets `probe.py` read Alertmanager's silences and inhibitions (#6691).
+{# The one door that lets `probe.py` read Alertmanager's silences and inhibitions.
 
-   Prometheus' `ALERTS` series shows neither, and M6 moves monitor-bridge's gates into
-   Alertmanager `inhibit_rules`, so without this door an inhibited alert is invisible to every
-   host tool. The design is answer 2 of
-   docs/target-architecture/monitoring/alertmanager-ui-and-readers.md, and the operator ruled
-   the unauthenticated LAN read acceptable on 2026-10-31 (#6689, open question 2 of that note).
+   Prometheus' `ALERTS` series shows neither, and monitor-bridge's gates live in Alertmanager
+   `inhibit_rules`, so without this door an inhibited alert is invisible to every host tool.
+   The design is answer 2 of docs/target-architecture/monitoring/alertmanager-ui-and-readers.md,
+   which accepts the unauthenticated LAN read.
 
    NARROW ON PURPOSE, in the shape of prometheus-ingressroute.yaml.j2:
      1. `Method(GET)`. Every write in Alertmanager's /api/v2 is a POST or a DELETE, so a write
@@ -15,8 +14,8 @@
         admits /api/v2/alerts/groups, which is a read too.
      3. LAN-only, no Authelia, and it ignores k8s_public_route. The client set is the LAN plus
         the four node addresses a host process arrives as: its node's cni0 gateway when the
-        traefik pod is local, its flannel.1 address when the pod is on the other node (#1693,
-        the loki-homelab read route's comment has the measurement). Pods and WireGuard peers
+        traefik pod is local, its flannel.1 address when the pod is on the other node (see the
+        loki-homelab read route). Pods and WireGuard peers
         are excluded, as on the Prometheus door.
 
    This is the host's only router; the silence-capable UI is Karma (k8s/roles/karma), which

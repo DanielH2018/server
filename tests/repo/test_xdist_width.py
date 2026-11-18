@@ -106,7 +106,7 @@ def test_a_one_file_run_gets_one_worker_through_the_hook(tmp_path, monkeypatch):
 def test_a_few_heavy_modules_get_more_than_one_worker_through_the_hook(
     tmp_path, monkeypatch
 ):
-    """#5967: five modules recorded at 3s each ran on one worker under the count rule."""
+    """Five modules recorded at 3s each ran on one worker under the count rule."""
     monkeypatch.setenv("PYTEST_XDIST_AUTO_NUM_WORKERS", "4")
     _tree(tmp_path, 5, {f"suite/tests/test_m{n}.py": 3.0 for n in range(5)})
     config = _config(["suite/tests"], pytest.Config.ArgsSource.ARGS, tmp_path, tmp_path)

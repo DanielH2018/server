@@ -123,7 +123,7 @@ def test_fanout_tooling_paths_finds_bare_and_pathed_citations_only():
 
 
 def test_fanout_vocabulary_5400_green_gate_title_is_flagged():
-    """#5400 named the green gate and the red lock in prose and no path (#5880)."""
+    """A body that names the green gate and the red lock in prose and no path."""
     title = (
         "The green gate still strands a correct fix on a false-premise red test, "
         "a red-file helper under test, or a derived constant"
@@ -241,7 +241,7 @@ def test_next_text_render_marks_a_stale_claim_and_names_reap(capsys):
 
 
 def test_next_json_names_the_stale_claim_holder_and_null_for_a_free_issue(capsys):
-    # The JSON consumer gets what the text render's `[stale claim by ...]` marker says (#3927).
+    # The JSON consumer gets what the text render's `[stale claim by ...]` marker says.
     free = make_issue(1140)
     held = make_issue(1132, comments=[claim_comment("worktree-gone", None, "t")])
     tools, _ = build_tools(Fakes(issues=[free, held], worktree_facts=facts()))
@@ -275,7 +275,7 @@ def test_next_json_marks_an_issue_whose_title_names_the_green_gate_solo_only(cap
 
 
 def test_next_json_does_not_mark_another_repos_issue_solo_only(capsys):
-    """A dotfiles batch cannot edit this repo's pipeline, so the gate's reason is absent (#4624)."""
+    """A dotfiles batch cannot edit this repo's pipeline, so the gate's reason is absent."""
     tooling = make_issue(829)
     tooling["body"] = "The hint must name `scripts/dev/fanout.py place launch`."
     tools, _ = build_tools(Fakes(issues=[tooling], worktree_facts=facts()))

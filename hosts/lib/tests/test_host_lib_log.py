@@ -1,8 +1,7 @@
 """host_lib's shared log helpers: `logfmt`, `log`, the crash hook, `deploy_event`, the textfile writes.
 
-#6161 moved the deployer's journald-aware `log` here so every host-shipped script prints one
-way, and gave the hand-written logfmt emitters one quoting rule. #6164 put the deploy
-annotation's line here, so a failure and a success are written by the same function.
+Every host-shipped script prints through the one journald-aware `log`, and the logfmt emitters share
+one quoting rule. The deploy annotation line comes from one function, so a failure and a success match.
 """
 
 import os

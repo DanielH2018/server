@@ -1,4 +1,4 @@
-"""repo_guards --drop-candidates proposes a guard only when the CI failure survey counted no failure in it (#7445).
+"""repo_guards --drop-candidates proposes a guard only when the CI failure survey counted no failure in it.
 
 The tests run the entry point as a subprocess against the fake GitHub `test_ci_failures.py`
 uses, so they hold whether `repo_guards` imports `ci_failures` or runs it.
@@ -116,7 +116,7 @@ def _drop_candidates(tmp_path: Path, *runs: dict) -> set[str]:
 def test_drop_candidates_names_every_guard_but_those_the_survey_counted_failing(
     tmp_path,
 ):
-    """The issue's Verify-by: a failure the survey counted in the window keeps its guard (#7445)."""
+    """The issue's Verify-by: a failure the survey counted in the window keeps its guard."""
     droppable = _droppable()
     failing = set(droppable[:2])
     assert len(failing) == 2 and set(droppable) - failing, droppable
@@ -133,7 +133,7 @@ def test_a_failure_before_the_window_does_not_keep_its_guard(tmp_path):
 
 
 def test_the_guard_list_keeps_no_hand_kept_date():
-    """The survey's tally replaces each guard's date of its last counted failure (#7445)."""
+    """The survey's tally replaces each guard's date of its last counted failure."""
     guards = repo_guards.GUARDS
     values = guards.values() if isinstance(guards, Mapping) else []
     dated = []

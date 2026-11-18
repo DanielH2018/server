@@ -1,12 +1,12 @@
 #!/usr/bin/python3 -I
-"""homelab-rootq-socket: answer one `rootq` request on a unix socket, as root (#6350).
+"""homelab-rootq-socket: answer one `rootq` request on a unix socket, as root.
 
 Shipped root-owned at /usr/local/libexec/homelab-rootq-socket by the homelab host package
 (hosts/components/claude-code) and run by
 `homelab-rootq@.service`, one instance per connection to `homelab-rootq.socket`
 (`Accept=yes`), with the connection on stdin. The socket's group decides who may connect. A
 socket needs no setuid, so the agent user, whose `claude-rc.service` runs with
-`NoNewPrivileges=yes`, can ask it where `sudo` would fail (#4297). The operator's sudo path
+`NoNewPrivileges=yes`, can ask it where `sudo` would fail. The operator's sudo path
 to the same script (`/usr/local/bin/rootq`) is unchanged.
 
 The helper adds no policy of its own to what rootq reads. It runs the installed
@@ -64,7 +64,7 @@ STREAM_MAX = 512 * 1024
 PATH_SHAPE = re.compile(r"/[A-Za-z0-9._@+:,=/-]{0,4095}")
 HEX64 = re.compile(r"[0-9a-f]{64}")
 ENV = {"PATH": "/usr/sbin:/usr/bin:/sbin:/bin", "LC_ALL": "C"}
-# `lib/exit_codes.py:USAGE_ERROR`, which this host-shipped script cannot import (#4487).
+# `lib/exit_codes.py:USAGE_ERROR`, which this host-shipped script cannot import.
 USAGE_ERROR = 64
 REFUSED = 2
 

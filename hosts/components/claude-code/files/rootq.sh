@@ -1,6 +1,6 @@
 #!/bin/sh
-# /usr/local/bin/rootq: read root-only host state through homelab-rootq's one sudoers line
-# (issue #6323). Shipped by the homelab host package (hosts/components/claude-code).
+# /usr/local/bin/rootq: read root-only host state through homelab-rootq's one sudoers line.
+# Shipped by the homelab host package (hosts/components/claude-code).
 #
 # Usage: rootq stat PATH | sha256 PATH | matches PATH REPO_FILE   (tier 1, no content)
 #        rootq nft | ufw | sshd | crontab | cat PATH              (tier 2, redacted)

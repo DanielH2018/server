@@ -46,8 +46,8 @@ data:
         - selector: '{job="k8s-audit"}'
           priority: 1
           period: 168h
-      # The Docker copy's guards, carried over verbatim: promtail re-reading from scratch
-      # after a lost positions file once blew the default ingest limit.
+      # A shipper re-reading from scratch after a lost positions file blows the default ingest
+      # limit.
       max_global_streams_per_user: 5000
       ingestion_rate_mb: 50
       per_stream_rate_limit: 50MB

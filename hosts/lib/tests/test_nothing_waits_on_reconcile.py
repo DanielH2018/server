@@ -1,4 +1,4 @@
-"""No shipped unit waits on reconcile (H4, *The restart contract*, H4.1c).
+"""No shipped unit waits on reconcile.
 
 Reconcile restarts each unit in a restart set and waits for the job to finish. A unit ordered
 `After=homelab-reconcile.service` would wait for the run that is waiting for it, until a timeout
@@ -7,7 +7,7 @@ names reconcile in no ordering or requirement directive at all.
 
 The census renders every package under `hosts/` and reads each unit and drop-in it ships. Its
 named members grow with the packages: `homelab-reconcile.service` in every host package,
-`homelab-secrets.service` from H4.2, and `nut-monitor`'s drop-in from H4.3c.
+`homelab-secrets.service` and `nut-monitor`'s drop-in.
 
 Run: uv run pytest hosts/lib/tests/test_nothing_waits_on_reconcile.py
 """

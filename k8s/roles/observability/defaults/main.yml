@@ -27,13 +27,11 @@ observability_k8s_grafana_image: grafana/grafana:13.2.4@sha256:dbbc38ea21103cefb
 # The budget of the observability-prepull Kustomization, whose Job pulls Grafana's image onto
 # its node before the observability Kustomization applies
 # (scripts/renderer/renderer_lib/prepull.py). Grafana is `Recreate`, so without it the
-# dashboards are down for the whole pull. MEASURED 2026-10-22 (#5867): the pinned amd64 image is
-# 482.3 MB from Docker Hub, which served a 420 MB layer at 23.5-25.2 MB/s on daniel-box, about
-# 20s for the image. 600s covers it down to 0.8 MB/s. The Job has no deadline, so a pull slower
-# still costs that revision its verdict, the Job keeps pulling, and Flux applies observability
-# on a later retry.
+# dashboards are down for the whole pull. The pinned amd64 image is 482 MB, and 600s covers it
+# down to 0.8 MB/s. The Job has no deadline, so a pull slower still costs that revision its
+# verdict, the Job keeps pulling, and Flux applies observability on a later retry.
 flux_prepull_timeout: 600s
-# The Job pulls for Grafana alone (#5875). The role's other images are under 115 MB, their
+# The Job pulls for Grafana alone. The role's other images are under 115 MB, their
 # Deployments pin no node, and grafana/loki, grafana/tempo and kube-state-metrics carry no `sh`
 # for the Job's no-op script, so a pre-pull of the whole role could neither place nor run.
 flux_prepull_workloads: [grafana]
@@ -58,7 +56,7 @@ observability_k8s_kube_state_metrics_image: registry.k8s.io/kube-state-metrics/k
 # which names no commit. A second addition, `content_digest`, reads the annotation the renderer
 # stamps on Kustomization `<tag>` (bundle.py:CONTENT_DIGEST). It is the digest of the tag's own
 # rendered directory, so it holds across a master commit that moves `revision` without touching
-# the tag, and C7's flux reference time matches on it (#5338). A change to the tag adds one
+# the tag, and C7's flux reference time matches on it. A change to the tag adds one
 # short-lived series: the root Kustomization `homelab` stamps the new annotation and the tag's
 # own Kustomization reports the new revision, in either order.
 #
@@ -133,7 +131,7 @@ observability_grafana_storage: 1Gi
 # costs only those two, and the cost is one re-sent notification per open alert.
 observability_alertmanager_storage: 1Gi
 
-# The role's claims, which the renderer renders (#3387). Each names `namespace` because the claims
+# The role's claims, which the renderer renders. Each names `namespace` because the claims
 # live beside their workloads in k8s_observability_namespace, not in the shared k8s_namespace.
 # No `k8s_autodeploy_snapshot_pvcs` here, so the claims are applied by the directory apply,
 # after 00-namespace.yaml creates the namespace on a fresh cluster.
@@ -207,9 +205,8 @@ observability_loki_retention: 744h
 # blocks) but leaves the live grafana-dashboards-<folder> ConfigMap behind. That orphan is INERT:
 # the mount is by explicit per-folder volume name, so an unlisted ConfigMap is never mounted and
 # never reaches Grafana. Adding a prune would trade an inert orphan for deletion behaviour that
-# can remove a live ConfigMap — a worse failure than the one it closes, and the reason the
-# 2026-08-28 review's fix-skeptic pass rejected it. Reopen only with a case where the orphan is
-# reachable, not merely present.
+# can remove a live ConfigMap — a worse failure than the one it closes. Reopen only with a
+# case where the orphan is reachable, not merely present.
 observability_dashboard_folders:
   AI:
     - claude-code-host-cgroups.json
@@ -241,15 +238,14 @@ observability_dashboard_folders:
     - crowdsec-overview.json
     - lapi-metrics.json
 
-# ── deploy annotations ────────────────────────────────────────────────────────────────────────
 # Two sources mark a deploy. `promote.py land-wait` (promote_lib/wait.py:annotate_promotion,
-# through flux_host.py) calls `logger` on the host, and this query reads its syslog lines,
-# plus the lines deploy.sh wrote before H7.53c deleted it. The soak Job prints a line for every
+# through flux_host.py) calls `logger` on the host, and this query reads its syslog lines.
+# The soak Job prints a line for every
 # promotion that passes its soak, which `observability_flux_deploy_annotation_expr` reads. Alloy
 # ships both to loki-homelab, and every dashboard gets one annotation query per source injected
 # at render time by the grafana_deploy_annotated filter (scripts/renderer/template_filters/grafana_dashboards.py).
 # No Grafana API call, so no pinned ClusterIP and no standing write credential. Every line carries
-# `result=ok|fail|rollback` (hosts/lib/host_lib.py:deploy_event, #6164), and the marker's title
+# `result=ok|fail|rollback` (hosts/lib/host_lib.py:deploy_event), and the marker's title
 # shows it, so a failed deploy draws a marker that says so.
 #
 # The uid MUST equal the `loki-homelab` datasource uid in templates/grafana.yaml.j2. A wrong one
@@ -279,8 +275,6 @@ observability_prometheus_retention: 30d
 #
 # Raising it does not defer a cardinality problem. With the four control-plane jobs at a 1m
 # scrape interval, 30 days costs ~6.6GB (1957.7 samples/s x 1.297 bytes/sample = 219 MB/day).
-# The model matches measured history: an earlier 5,734 samples/s predicts 642 MB/day, and the
-# blocks grew at 695 MB/day — 8% agreement.
 observability_prometheus_retention_size: 7GB
 
 # Traces. Claude Code emits spans only with both CLAUDE_CODE_ENHANCED_TELEMETRY_BETA
@@ -344,11 +338,10 @@ observability_rule_groups:
 # longest gap between two of the host's updater fires plus the updater's TimeoutStartSec, read
 # from the rendered timer and its drop-in. A host that ships homelab-docker-engine.timer also
 # needs the gap that the engine run's mask opens: the run can hold the updater masked for its
-# whole TimeoutStartSec (#6613). daniel-pi runs H3.13's daily drop-in, which fires at 03:05 after
-# the 00:30 engine run ends, so its limit covers one day plus one updater run. daniel-pi joined in
-# H3.9c (docs/target-architecture/host/h3-pi-pilot.md, *Steps*, H3.9c). daniel-box and
+# whole TimeoutStartSec. daniel-pi runs H3.13's daily drop-in, which fires at 03:05 after
+# the 00:30 engine run ends, so its limit covers one day plus one updater run. daniel-box and
 # daniel-server ship no drop-in, so the shared 5-minute schedule needs 3360s: 5 minutes, 60s of
-# randomized delay and the 50-minute timeout. Their 3600s adds 4 minutes over that (#8213).
+# randomized delay and the 50-minute timeout. Their 3600s adds 4 minutes over that.
 observability_expected_hosts:
   daniel-box: {job: node, limit_seconds: 3600}
   daniel-pi: {job: node-pi, limit_seconds: 90000}

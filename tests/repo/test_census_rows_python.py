@@ -1,6 +1,6 @@
 """Textual censuses of the tracked Python, one `_row_table.Census` row each.
 
-Each row was a test file of its own until #3407. A row's `reason` keeps what that file's
+Each row replaces a test file of its own. A row's `reason` keeps what that file's
 docstring said a reader needs before changing the rule. The harness supplies the
 `subject gone` failure, the floor, the named members, the stale-allow check and the red/green
 proof (`tests/_row_table.py`).
@@ -110,7 +110,7 @@ YAML_FAST_USERS = frozenset(
 
 def _pyyaml_offence(subject: Subject) -> list[str]:
     """A CALL to `yaml.safe_load[_all]`; a docstring mentioning one is not a call."""
-    # The attribute is an identifier, so a file that never spells it calls neither (#5501).
+    # The attribute is an identifier, so a file that never spells it calls neither.
     if "safe_load" not in subject.text:
         return []
     tree = _parse(subject)
@@ -190,7 +190,7 @@ def _import_roots() -> frozenset[str]:
     A role test reaches its own `files/` through a `sys.path.insert` at collection time, and a
     test under a `scripts/<dir>` off `pythonpath` may insert `<dir>` itself
     (`.claude/rules/python-layout.md`). Every such insert lands in the one session a run
-    shares, so each is an import root as much as a `pythonpath` entry is (#5956).
+    shares, so each is an import root as much as a `pythonpath` entry is.
     """
     roles = {
         rel.rsplit("/", 1)[0]

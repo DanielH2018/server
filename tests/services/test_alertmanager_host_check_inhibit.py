@@ -3,7 +3,7 @@
 `HostCheckOverdue` (`host-checks.yaml`, one rule per host) compares each check's timestamp with
 the deadline the check declares, so it fires beside every per-check NotReporting rule's stale
 arm. An Alertmanager inhibit keyed on `check` and `origin` suppresses that duplicate, which
-lets the catch-all page alone for a producer with no pair (#6186). This module evaluates the
+lets the catch-all page alone for a producer with no pair. This module evaluates the
 rendered `inhibit_rules` the way Alertmanager does: a target alert is muted while a source
 alert fires whose `equal` labels match it, a label both lack counting as equal.
 

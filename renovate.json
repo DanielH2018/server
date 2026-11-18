@@ -235,9 +235,9 @@
     },
     {
       "customType": "regex",
-      "description": "The dotfiles commit the CI pytest job checks out (`DOTFILES_SHA` in ci.yml, #2812). The hook tests and the worktree pruner import the claude_guard and claude_worktree packages that repo deploys, so CI runs them against a real copy at this pin. A pin rather than `main`, so an unrelated dotfiles commit cannot turn server CI red; this manager is what keeps the pin from aging. git-refs offers a digest update whenever `main` moves, and the digest update type matches neither automerge rule, so a person reads each bump's CI run before merging it.",
+      "description": "The dotfiles commit the CI pytest job checks out (`DOTFILES_SHA` in .github/actions/pytest-tools/action.yml, which ci.yml's pytest legs and pytest-sweep.yml call, #2812). The hook tests and the worktree pruner import the claude_guard and claude_worktree packages that repo deploys, so CI runs them against a real copy at this pin. A pin rather than `main`, so an unrelated dotfiles commit cannot turn server CI red; this manager is what keeps the pin from aging. git-refs offers a digest update whenever `main` moves, and the digest update type matches neither automerge rule, so a person reads each bump's CI run before merging it.",
       "managerFilePatterns": [
-        "/(^|/)\\.github/workflows/ci\\.yml$/"
+        "/(^|/)\\.github/actions/pytest-tools/action\\.yml$/"
       ],
       "matchStrings": [
         "DOTFILES_SHA:\\s*(?<currentDigest>[a-f0-9]{40})"
@@ -679,6 +679,7 @@
         "k8s/roles/traefik/defaults/main.yml",
         "k8s/roles/traefik-crds/defaults/main.yml",
         "k8s/roles/valheim/defaults/main.yml",
+        "k8s/roles/vaultwarden/defaults/main.yml",
         "k8s/roles/volume-snapshot/defaults/main.yml",
         "k8s/roles/wg-easy/defaults/main.yml",
         "k8s/roles/zigbee2mqtt/defaults/main.yml",

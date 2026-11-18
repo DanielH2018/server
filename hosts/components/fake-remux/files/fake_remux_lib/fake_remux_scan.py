@@ -50,8 +50,8 @@ from host_lib import (
 
 CONFIG_PATH = os.environ.get("FAKE_REMUX_CONFIG", "/etc/autofix-fake-remux/config.env")
 USER_AGENT = "autofix-fake-remux"
-# Where a post the host could not deliver waits for the next run of any of the three crons
-# (#3905). They hold fake_remux_lock while they run, so they never flush it at the same time.
+# Where a post the host could not deliver waits for the next run of any of the three crons.
+# They hold fake_remux_lock while they run, so they never flush it at the same time.
 DISCORD_SPOOL_DIR = "/var/lib/autofix-fake-remux/discord-spool"
 DISCORD_MARKER = (
     "📼 fake-remux:"  # self-identifying prefix on posts (the UA is header-only)
@@ -62,7 +62,7 @@ def flush_queued_posts(cfg: dict) -> None:
     """Post what an outage queued in DISCORD_SPOOL_DIR, whether or not this run had news.
 
     Each cron posts only when it acts, so without this a queued post waited for the next
-    replacement or repair, which can be weeks away (#3905).
+    replacement or repair, which can be weeks away.
     """
     flush_discord_spool(
         DISCORD_SPOOL_DIR, cfg.get("ARR_DISCORD_WEBHOOK_URL", ""), USER_AGENT, log=log

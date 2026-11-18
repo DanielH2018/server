@@ -248,7 +248,7 @@ def test_a_staged_set_the_rule_refuses_publishes_nothing(lab, stage):
 
 
 def test_one_package_staged_for_two_architectures_is_published_for_each(lab):
-    # homelab-tools (H3.11): the same package and version, one build per architecture.
+    # homelab-tools: the same package and version, one build per architecture.
     (lab.staged / "chosen").write_text(CHOSEN + "\n")
     for arch in ("amd64", "arm64"):
         lab.deb("homelab-tools", version(5, CHOSEN), arch=arch)
@@ -366,7 +366,7 @@ def test_a_missing_fingerprint_pages_once_then_stays_quiet(lab):
 
 
 def test_a_failure_reaches_the_journal_at_err_priority(lab, tmp_path, monkeypatch):
-    # The signer logs through host_lib (#6202), so `journalctl -p err` finds its failures.
+    # The signer logs through host_lib, so `journalctl -p err` finds its failures.
     # Its info lines keep the unit's default priority.
     journal = tmp_path / "journal"
     journal.touch()

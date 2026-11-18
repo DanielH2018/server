@@ -2,9 +2,9 @@
 
 docs/healthchecks-io-deadman.md is the record of what each off-site dead-man check should carry,
 but the values themselves live only in the Healthchecks.io console, which nothing in the repo can
-set. The console drifted twice before anything noticed (#2563): `pi-peer-backup` kept `30 23`
-after its CronJob moved to `0 23` and went DOWN every morning, and `longhorn-backup-health` sat as
-a daily Cron check, so its dead-man arm needed a day to notice silence instead of 30 minutes.
+set. The console can drift unnoticed: a check keeping `30 23` after its CronJob moves to `0 23`
+goes DOWN every morning, and a daily Cron check needs a day to notice silence instead of 30
+minutes.
 
 This reads `GET /api/v3/checks/` with the project's READ-ONLY key and compares every documented
 slug's schedule type, period or cron expression, timezone and grace against

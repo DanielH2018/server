@@ -1,56 +1,53 @@
 """A guard under a SCANNED test directory asserts on a RENDER, never on a template's text.
 
-#2809 settled this as prose — "no `tests/services` test asserts a literal copied from
+The rule reads as prose — "no `tests/services` test asserts a literal copied from
 a template" — which every session re-derives by scanning the directory, and which a new guard
 written against a template's bytes passes. This module is that sentence as a check: no module
 in a directory `SCANNED` names reads a path under a `templates/` directory, except an entry in
 `TEMPLATE_SOURCE_READERS` carrying the reason the source text is the right thing to read.
 
 `SCANNED` grows one directory at a time, and a directory joins it only once its own readers
-are converted (#3107). `services/` joined with six permanent entries; `longhorn/` joined with
+are converted. `services/` joined with six permanent entries; `longhorn/` joined with
 none, its one reader — the daily RecurringJob's group — now read out of `_setup_render`, and
 `repo/` — the directory this module itself sits in, so a new guard written here is held to the
-rule — joined with one, which keys on a variable NAME. `deploy/` joined with two (#3204):
+rule — joined with one, which keys on a variable NAME. `deploy/` joined with two:
 the raw-byte hash the render stamp compares, and the autodeploy derivation's source fallback
-for synthetic role trees no render reaches. `k8s/` joined with two (#3203): whether a
+for synthetic role trees no render reaches. `k8s/` joined with two: whether a
 template CALLS the shared *arr macro or copies its body, and whether two roles ship
-byte-identical templates — both render differently from what they test — and a third
-(#3452): whether a tiered role passes `pod_shell` a literal class. `staging/` joined
-with none (#3205). `hosts/tests/` joined, as `tests/setup/`, with two, each keyed on
+byte-identical templates — both render differently from what they test — and a third: whether a tiered role passes `pod_shell` a literal class. `staging/` joined
+with none. `hosts/tests/` joined, as `tests/setup/`, with two, each keyed on
 something no render carries: a Jinja FILTER, and the behaviour of a variable no render leaves
-undefined (#3202). Every test directory is scanned. Entries are keyed `<label>/<module>.py`,
+undefined. Every test directory is scanned. Entries are keyed `<label>/<module>.py`,
 where the label is the directory's key in `SCANNED`, because a basename alone would let a
 module in one directory inherit another's exemption.
 
 The exposure is the same one the `tests-read-shell-templates-rendered` row of
 `scripts/tests/test_census_rows_test_renders.py` covers for `*.sh.j2` repo-wide: a value that
 moves into a role default leaves the assertion matching `{{ ... }}`, and a pattern that
-matches nothing passes (#3178). The sanctioned readers are `_k8s_render` (k8s manifests and
+matches nothing passes. The sanctioned readers are `_k8s_render` (k8s manifests and
 `Dockerfile*.j2`), `_setup_render` (setup-plane templates) and `_shell_render` (`*.sh.j2`).
 
 Two things the rule deliberately does not reach:
 
 * **A role's `files/` copy.** It ships verbatim, so there is no render to read and the text
   IS the artifact.
-#3196 named one blind spot, `test_healthchecks_pings.py`, whose `rglob("*")` census
-put no template path at its read site. #3190 converted that census to a render in the same
-wave, and the control read it kept IS visible here — so the module is a listed reader rather
+One blind spot, `test_healthchecks_pings.py`, whose `rglob("*")` census
+put no template path at its read site. That census is a render now, and the control read it
+kept IS visible here — so the module is a listed reader rather
 than a declared gap, and no blind-spot map is needed.
 
-Three more spellings hid a read until #3209, #3210 and #3211, and `_render_gate.py` resolves
+Three more spellings hide a read, and `_render_gate.py` resolves
 all three: a glob wrapped in `sorted()`, a path handed to a helper whose parameter does the
 reading, and a path imported from a sibling module. Eight modules were reading a template's
 source behind them — three are converted, and five joined the list below. That is the one way
 the list GROWS: a detector that learns to see a read adds the entries it was blind to, where a
 conversion never adds one.
 
-Four more hid one until #3219, all of them ways the glob and the read sit at different sites: a
+Four more hide one, all of them ways the glob and the read sit at different sites: a
 glob returned by a function, a glob inside a comprehension the function returns, a `+` of two
 globs, and a `@pytest.mark.parametrize` whose values are the glob. Seven modules were reading
 source behind them, every one of them listed below — two because a render erases the macro call
-they are about, four because the file set they read is wider than any one render covers (#3223,
-#3224). The fifth, the checksum-annotation census, read its template half out of
-`_k8s_render` (#3225) until it retired with its last subject (#5644).
+they are about, four because the file set they read is wider than any one render covers.
 
 `tests/repo/_render_gate.py` holds the detector itself — which spellings of a read it
 resolves, and the one it deliberately does not treat as a read (a glob that only yields
@@ -343,7 +340,7 @@ def test_every_exempt_module_is_still_flagged():
 
 
 def test_a_new_module_reading_a_role_template_is_named_as_an_offender():
-    """The verify-by of #3196, run against a module that is not on disk."""
+    """The blind-spot census, run against a module that is not on disk."""
     found = offenders(
         {
             "services/test_new_guard.py": 'T = K8S_ROLES / "n8n" / "templates" / "Dockerfile.j2"\n'
@@ -356,7 +353,7 @@ def test_a_new_module_reading_a_role_template_is_named_as_an_offender():
 
 
 def test_a_new_host_guard_reading_a_role_template_is_named_as_an_offender():
-    """The directory added in #3202, and the reason the keys carry one.
+    """The `hosts/tests` directory, and the reason the keys carry one.
 
     `hosts/tests/test_nut_host_secondary.py` is exempt, so a basename-keyed exemption would
     wave through a `services/` module of the same name. Both halves are modules that are not on
@@ -381,7 +378,7 @@ def test_a_new_host_guard_reading_a_role_template_is_named_as_an_offender():
 
 
 def test_a_new_longhorn_guard_reading_a_role_template_is_named_as_an_offender():
-    """The directory added in #3107, and the reason the keys carry one.
+    """The `longhorn/` directory, and the reason the keys carry one.
 
     `services/test_smtp_wiring.py` is exempt; a `longhorn/` module of the same basename is
     not, so a basename-keyed exemption would have waved this read through.
@@ -403,10 +400,9 @@ def test_a_new_longhorn_guard_reading_a_role_template_is_named_as_an_offender():
 
 
 def test_a_reverted_deploy_guard_is_named_as_an_offender():
-    """The directory added in #3204, against the spelling its manual-trigger guard used to take.
+    """The `deploy/` directory, against a manual-trigger guard that reads the polkit rule's source.
 
-    `test_gitops_manual_trigger.py` read the polkit rule's source until #3204; putting that
-    read back must fail the census rather than pass under a directory it does not scan.
+    Putting that read back must fail the census rather than pass under a directory it does not scan.
     """
     found = offenders(
         {
@@ -424,7 +420,7 @@ def test_a_reverted_deploy_guard_is_named_as_an_offender():
 
 
 def test_a_reverted_k8s_guard_is_named_as_an_offender():
-    """The directory added in #3203, against the read its flaresolverr guard took until then.
+    """The `k8s/` directory, against the read a flaresolverr guard once took.
 
     `test_flaresolverr_disable_media.py` checked that the template SPELLS the default's name;
     it renders at a flipped default instead. Putting the read back must fail the census.

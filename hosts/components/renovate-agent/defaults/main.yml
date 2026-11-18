@@ -37,7 +37,7 @@ renovate_agent_permission_mode: auto
 renovate_agent_budget_usd: 25
 
 # Wall clock for the session itself. It must outlast one landing of a tag Flux applies, which
-# waits on the soak and can take the lander's whole TimeoutStartSec (1071min, #5427, #5466, #5512, #5457). A landing
+# waits on the soak and can take the lander's whole TimeoutStartSec (1071min). A landing
 # Ansible deploys is a ~15min CI wait plus a ~20min deploy, so several of those still fit, and
 # the unit's TimeoutStartSec sits above this as the backstop. The wrapper kills the
 # session at this figure and still posts a digest saying so; systemd's ceiling posts nothing but

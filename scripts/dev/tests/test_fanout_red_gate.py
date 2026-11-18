@@ -67,7 +67,7 @@ def test_new_tests_that_fail_on_the_base_pass_the_gate_and_old_nodes_are_left_ou
 
 
 def test_the_gate_names_a_red_test_that_failed_only_on_a_missing_name(tmp_path):
-    # A node id long enough that a `-q` summary cuts the failure text to "ImportE..." (#4023).
+    # A node id long enough that a `-q` summary cuts the failure text to "ImportE...".
     long_name = "test_triple_of_one_is_three_with_a_name_long_enough_to_be_cut_short"
     absent = f"\n\ndef {long_name}():\n    from mod import triple\n\n    assert triple(1) == 3\n"
     repo, base, red = _repo(
@@ -88,7 +88,7 @@ def test_a_module_level_import_of_a_missing_module_is_refused(tmp_path):
 
 
 def test_a_red_commit_adding_an_ignore_the_fix_leaves_unused_is_refused(tmp_path):
-    """#4403: once the fix existed, ty failed the fix's commit on the red file's ignores."""
+    """Once the fix existed, ty failed the fix's commit on the red file's ignores."""
     ignored = NEW_TEST.replace(
         "from mod import double",
         "from mod import triple  # ty: ignore[unresolved-import]",
@@ -159,7 +159,7 @@ def test_the_green_gate_passes_a_fix_and_refuses_an_edited_red_test(tmp_path):
 
 
 def test_the_green_gate_passes_a_fix_that_appends_a_test_to_a_red_file(tmp_path):
-    """#4213: the fix round added the test a reviewer asked for to the red file (#4214)."""
+    """The fix round added the test a reviewer asked for to the red file."""
     repo, base, red = _repo(tmp_path, **{"tests/test_mod.py": OLD_TEST + NEW_TEST})
     gate = red_gate(run, repo, base, red)
     extra = "\n\ndef test_three():\n    from mod import double\n\n    assert double(3) == 6\n"
@@ -172,7 +172,7 @@ def test_the_green_gate_passes_a_fix_that_appends_a_test_to_a_red_file(tmp_path)
 
 
 def test_the_green_gate_refuses_an_edit_to_a_test_a_red_test_calls(tmp_path):
-    """#4183: the fix edited a pre-existing test the red node calls, instead of the code."""
+    """The fix edited a pre-existing test the red node calls, instead of the code."""
     calls_old = NEW_TEST.replace("    assert", "    test_zero()\n    assert")
     repo, base, red = _repo(tmp_path, **{"tests/test_mod.py": OLD_TEST + calls_old})
     gate = red_gate(run, repo, base, red)
@@ -186,7 +186,7 @@ def test_the_green_gate_refuses_an_edit_to_a_test_a_red_test_calls(tmp_path):
 def test_the_green_gate_passes_a_red_file_edit_that_follows_a_dropped_parameter(
     tmp_path,
 ):
-    """#4338: the fix dropped a parameter, so a test already in the red file stopped passing it."""
+    """The fix dropped a parameter, so a test already in the red file stopped passing it."""
     old = OLD_TEST.replace("double(0)", "double(0, None)")
     repo = init_repo(tmp_path / "repo")
     code = CODE.replace("(x)", "(x, factor=None)")
@@ -210,7 +210,7 @@ FLAKY = (
 
 
 def test_a_red_test_that_fails_only_sometimes_on_the_base_is_refused(tmp_path):
-    """#4178 was itself a minute-boundary flake: one failing run proves nothing."""
+    """A minute-boundary flake: one failing run proves nothing."""
     flaky = FLAKY.format(counter=tmp_path / "runs", op="or")
     repo, base, red = _repo(tmp_path, **{"tests/test_new.py": flaky})
     gate = red_gate(run, repo, base, red, runs=3)
@@ -261,7 +261,7 @@ def test_the_green_gate_runs_head_not_an_edit_hidden_from_git_status(tmp_path):
 
 
 def test_the_green_gate_passes_a_fixed_red_test_that_calls_git(tmp_path):
-    """A red test that lists tracked files needs a repository to run in (#3837)."""
+    """A red test that lists tracked files needs a repository to run in."""
     calls_git = (
         "\n\ndef test_tracked():\n    import subprocess\n\n    from mod import double\n\n"
         "    listed = subprocess.run(\n        ['git', 'ls-files', 'mod.py'],\n"
@@ -297,7 +297,7 @@ def test_the_green_gate_reads_the_same_origin_master_as_the_red_gate(tmp_path):
 def test_moving_origin_master_after_the_red_gate_does_not_move_the_green_gates(
     tmp_path,
 ):
-    """Every worktree shares `origin/master`, and a fetch or the implementer can move it (#3845).
+    """Every worktree shares `origin/master`, and a fetch or the implementer can move it.
 
     Moved to the fix itself, the live ref would leave `mod.py` out of the diff.
     """
@@ -311,7 +311,7 @@ def test_moving_origin_master_after_the_red_gate_does_not_move_the_green_gates(
 
 
 def test_a_smudge_filter_cannot_rewrite_what_the_green_gate_runs(tmp_path):
-    """The implementer owns the repo's config and `info/attributes` (#3837)."""
+    """The implementer owns the repo's config and `info/attributes`."""
     repo, base, red = _repo(tmp_path, **{"tests/test_new.py": NEW_TEST})
     gate = red_gate(run, repo, base, red)
     commit(repo, "not a fix", **{"mod.py": CODE + "\n"})
@@ -354,7 +354,7 @@ def _planted(tmp_path):
 
 
 def test_reset_worktree_leaves_the_commits_tree_and_fanout_only(tmp_path):
-    """Every change the red phase could hide from the gates is gone, `.fanout/` stays (#3852)."""
+    """Every change the red phase could hide from the gates is gone, `.fanout/` stays."""
     repo = _planted(tmp_path)
     git_out(repo, "update-index", "--assume-unchanged", "mod.py")
     (repo / "mod.py").write_text(FIXED)
@@ -379,7 +379,7 @@ def test_reset_worktree_leaves_the_commits_tree_and_fanout_only(tmp_path):
 def test_reset_worktree_runs_no_hook_filter_or_replace_ref_the_red_author_planted(
     tmp_path,
 ):
-    """Each would otherwise change what the reset does, or run a command (#3871)."""
+    """Each would otherwise change what the reset does, or run a command."""
     repo, _, _ = _repo(tmp_path, **{"tests/test_new.py": NEW_TEST})
     script = write_exec(repo / "run.sh", "true\n")
     # A tracked line names the driver, so only blanking it in config keeps it from running.
@@ -410,7 +410,7 @@ def test_reset_worktree_runs_no_hook_filter_or_replace_ref_the_red_author_plante
     assert plain[0] == FIXED and "process" in plain[1] and "hook" in plain[1]
     # And `fileMode=false` reads a cleared exec bit as no change, which `fileMode=true` does
     # not. The control reads that diff rather than the bit plain git's reset leaves: whether the
-    # reset rewrites run.sh anyway turns on its stat cache, and on CI it once did (#3992).
+    # reset rewrites run.sh anyway turns on its stat cache.
     script.chmod(0o644)
     assert git_out(repo, "diff", "--name-only", "--", "run.sh") == ""
     assert (
@@ -420,7 +420,7 @@ def test_reset_worktree_runs_no_hook_filter_or_replace_ref_the_red_author_plante
 
 
 def test_reset_worktree_refuses_a_repo_with_info_attributes(tmp_path):
-    """A `working-tree-encoding` line there rewrites what the reset checks out (#3871)."""
+    """A `working-tree-encoding` line there rewrites what the reset checks out."""
     repo, _, red = _repo(tmp_path, **{"tests/test_new.py": NEW_TEST})
     (repo / ".git" / "info" / "attributes").write_text(
         "mod.py working-tree-encoding=UTF-16\n"

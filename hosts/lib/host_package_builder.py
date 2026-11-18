@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Build the host packages from the newest green first-parent commit of master, and stage them.
 
-The builder half of target-architecture slice H3, PR H3.5a. The design, step by step, is
+The builder half of the host-package pipeline. The design, step by step, is
 docs/target-architecture/host/h3-pi-pilot.md, *The builder and the repository (daniel-box)*;
 the numbered comments below are its builder steps. `homelab-builder.service` runs this as
 `homelab-builder` every 2 minutes. It stages packages under `staged/` and publishes nothing:
-H3.5b's signer publishes them.
+the signer publishes them.
 
 State, all under `STATE_DIR` (`/var/lib/homelab-builder`):
 
@@ -14,7 +14,7 @@ State, all under `STATE_DIR` (`/var/lib/homelab-builder`):
     failure (its reason and the tip it met), the package directories last staged, and the
     rollout gate with the host packages it defers (builder_rollout_gate.py);
   * `ci-cache.json`: each `pass` verdict per SHA. A `fail` or a pending one is never cached,
-    so it is asked again next run: a CI re-run can turn a red SHA green (#5786);
+    so it is asked again next run: a CI re-run can turn a red SHA green;
   * `published/<package dir>/`: the render of each package as it was last staged;
   * `staged/`: `chosen` plus the `.deb` files for the signer;
   * `homelab_builder.prom`, which the unit's `ExecStopPost=-+` line copies into the
@@ -65,11 +65,10 @@ PROM = "homelab_builder.prom"
 # Where the keyring sits in homelab-updater's render, relative to the render's --out.
 KEYRING = "packages/homelab-updater/root/usr/share/keyrings/homelab-archive-keyring.gpg"
 
-# The `reason` label of the unbuilt-since series (*Shared names*, Metrics). `canary` is an open
-# rollout gate (H3.12).
+# The `reason` label of the unbuilt-since series. `canary` is an open rollout gate.
 # `build` is a render or an nfpm run that failed at the chosen commit, `token` a missing token or
-# one the check-runs read refused (#5089), and `tools` a `homelab-tools` pin that failed to
-# download or whose digest differs from the pin (H3.11). ADR-0021 removed `trust`.
+# one the check-runs read refused, and `tools` a `homelab-tools` pin that failed to
+# download or whose digest differs from the pin. ADR-0021 removed `trust`.
 REASONS = frozenset(
     {
         "ok",
@@ -95,7 +94,7 @@ def log(message: str, err: bool = False) -> None:
 
 
 def describe(exc: BaseException, token: str | None = None) -> str:
-    """An exception's type, message, cause and raising call chain (#6074); the token is masked."""
+    """An exception's type, message, cause and raising call chain; the token is masked."""
     chain = ">".join(f.name for f in traceback.extract_tb(exc.__traceback__)) or "-"
     text = f"{type(exc).__name__}: {exc} [step {chain}]"
     cause = exc.__cause__
@@ -220,8 +219,8 @@ class Builder(RolloutGate):
     def main(self) -> int:
         self.config = parse_env_file(str(self.config_path))
         self.state = self._load("state.json")
-        # A `fail` written before #5786 would block a SHA a re-run turned green, so only a
-        # `pass` survives the load.
+        # A cached `fail` would block a SHA a re-run turned green, so only a `pass` survives the
+        # load.
         self.cache = {
             sha: v for sha, v in self._load("ci-cache.json").items() if v == "pass"
         }
@@ -238,7 +237,7 @@ class Builder(RolloutGate):
         try:
             tip = self.fetch()
         except RuntimeError as exc:
-            # The fetch-age series is the signal for a fetch that keeps failing (H3.5c), so a
+            # The fetch-age series is the signal for a fetch that keeps failing, so a
             # failed fetch writes no metric and pages nothing on its own.
             log(f"fetch failed, nothing built: {exc}")
             return 0
@@ -301,7 +300,7 @@ class Builder(RolloutGate):
                 "ci", f"CI_ANCESTOR_WALK_MAX={walk!r} is not a positive integer"
             )
         # A gate that just closed leaves deferred packages to build at the last commit, which
-        # is green, so they need no newer green commit (#6540).
+        # is green, so they need no newer green commit.
         owed = (
             last if self.state.get("deferred") and not self.state.get("gate") else None
         )
@@ -326,8 +325,8 @@ class Builder(RolloutGate):
                         f"building {sha[:12]}, the newest green commit below {tip[:12]}"
                     )
                 return sha
-        # The line names the bound beside the count graded: "the 1 newest" alone read as a walk
-        # bound of 1 when one commit was unbuilt, and #6511 asked to widen a bound that was 10.
+        # The line names the bound beside the count graded: "the 1 newest" alone reads as a walk
+        # bound of 1 when one commit is unbuilt.
         since = f"since the last build {last[:12]}" if last else "on master"
         log(
             f"no green commit: graded {min(len(candidates), int(walk))} of the "
@@ -352,13 +351,13 @@ class Builder(RolloutGate):
 
         try:
             # A ValueError here includes a read short of total_count, so a partial listing
-            # reads as pending below rather than grading page 1 alone (#5991).
+            # reads as pending below rather than grading page 1 alone.
             runs = read_check_pages(fetch_page, "check_runs")
         except urllib.error.HTTPError as exc:
             if token_refused(exc):
                 # The fetch is anonymous and keeps succeeding, so this read is the only one
-                # that sees a revoked or expired token. Read as pending, it ended every run
-                # `no-green` with exit 0, a reason that blames master's CI (#5089).
+                # that sees a revoked or expired token. Read as pending, it would end every run
+                # `no-green` with exit 0, a reason that blames master's CI.
                 raise Failure(
                     "token", f"the check-runs read for {sha[:12]} was refused: {exc}"
                 ) from exc
@@ -379,7 +378,7 @@ class Builder(RolloutGate):
         # DECIDED: only `pass` is cached. GitHub's check-runs API returns the latest run per
         # name, so `gh run rerun --failed` turns a red SHA green, and a cached `fail` would
         # never see it while checkout-sync's gate, which caches nothing, takes the SHA
-        # (#5786). Re-reading a fail costs one request per page of a red commit's runs, in a
+        # Re-reading a fail costs one request per page of a red commit's runs, in a
         # walk that CI_ANCESTOR_WALK_MAX bounds.
         if result == "pass":
             self.cache[sha] = result
@@ -398,7 +397,7 @@ class Builder(RolloutGate):
             self.stage(chosen, out, debs, version(count, chosen))
         except BaseException:
             # A cleanup that fails must not replace the error in flight, or a keyring refusal
-            # reads as reason=build (#5090). The next run's prune clears what it left.
+            # reads as reason=build. The next run's prune clears what it left.
             try:
                 self._remove_tree(tree)
             except (RuntimeError, OSError) as exc:
@@ -414,7 +413,7 @@ class Builder(RolloutGate):
 
     def render(self, tree: Path, out: Path) -> None:
         # The tree's own pin, never the unit's: the unit carrying a new pin ships in a
-        # package only this render builds (#7023).
+        # package only this render builds.
         python = render_python(tree, self.python, self.uv, self.run)
         proc = self.run(
             [
@@ -483,9 +482,9 @@ class Builder(RolloutGate):
         # DECIDED: `state["staged"]` is saved before staged/ or published/ changes. The signer
         # takes a set only after a run that exits 0, so a run that fails after the published/
         # copy leaves a deb in staged/ that nothing has signed. The next run finds that deb
-        # through `staged`. When `staged` was assigned after the copy, it still named the
-        # previous set, the next run deleted the deb, and homelab-daniel-pi never reached the
-        # repository (2026-10-23: copytree raised on a dangling symlink). Saved first, a run
+        # through `staged`. When `staged` is assigned after the copy, it still names the
+        # previous set, the next run deletes the deb, and the package never reaches the
+        # repository if copytree raised on a dangling symlink. Saved first, a run
         # that raises or gets SIGTERM leaves `staged` naming every package whose deb may be
         # unsigned. The role's CLAUDE.md, *The builder's run*, has the full reasoning.
         for package in unconsumed & set(deferred):
@@ -565,7 +564,7 @@ class Builder(RolloutGate):
     def _write_prom(self, reason: str, tip: str, last: str | None) -> None:
         """Write the metric file; a git or filesystem error is logged, never raised.
 
-        A stale or missing metric is what H3.5c's arms page on, so a write that fails here is
+        A stale or missing metric is what the alert arms page on, so a write that fails here is
         still seen, without turning one broken clone into a page every run.
         """
         assert reason in REASONS, reason
@@ -579,7 +578,7 @@ class Builder(RolloutGate):
         if reason == "canary":
             sha = self.state["gate"]["sha"]
             since = float(self.git("show", "-s", "--format=%ct", sha))
-            # monitor-bridge sizes the lag arm's grace by the gate's host (#6919).
+            # monitor-bridge sizes the lag arm's grace by the gate's host.
             host = f',host="{self.state["gate"]["host"]}"'
         elif last != tip:
             chain = self.git("rev-list", "--first-parent", tip).split()

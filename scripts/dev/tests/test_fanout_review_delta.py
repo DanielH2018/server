@@ -1,4 +1,4 @@
-"""What the delta review's findings count as once the fix head's file is checked (#6547).
+"""What the delta review's findings count as once the fix head's file is checked.
 
 A finding the delta reviewer repeats counts as left only if it quotes a line the file has at
 the fix head; the rest are carried unverified. `FakeRunner.tree` is that head.
@@ -24,7 +24,7 @@ def _fix_round(left):
         _report(structured={"summary": "", "findings": [first]}),
         _report(f"Fixed. {PR}"),
         _report(structured={"summary": "", "findings": left}),
-        # A medium-or-worse leftover earns a second fix round (#7687); it commits nothing here.
+        # A medium-or-worse leftover earns a second fix round; it commits nothing here.
         *[_report(f"Fixed again. {PR}") for f in left[:1] if f["severity"] != "low"],
         _report(f"Filed #9. {PR}"),
     ]
@@ -33,7 +33,7 @@ def _fix_round(left):
 def test_a_leftover_the_fix_head_no_longer_holds_is_carried_unverified_not_left(
     tmp_path,
 ):
-    """#6547: the delta review repeated a finding whose line the fix commit had rewritten."""
+    """The delta review repeated a finding whose line the fix commit had rewritten."""
     stale = _finding("still off by one", severity="medium", confidence=0.8)
     stale["evidence"] = "the line the fix rewrote"
     pipeline, run = _pipeline(tmp_path, _fix_round([stale]))

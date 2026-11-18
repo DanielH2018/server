@@ -1,4 +1,4 @@
-# The worktree holder scan's socket (#4297). A worktree removal connects here to ask root which
+# The worktree holder scan's socket. A worktree removal connects here to ask root which
 # processes hold a tree (lib.worktrees.privileged_holders, fanout_lib.clean.live_process_scan).
 # A socket needs no setuid, so a claude-rc.service session, which runs with
 # NoNewPrivileges=yes, can ask it too. The group decides who may connect; the service then maps

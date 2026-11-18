@@ -802,27 +802,29 @@ cannot grow, because the remote-control wire path truncates at 8,000 chars / 200
 budgets are the payload's, not one doc's, so a head that fills the payload defers the next doc
 to the next command.
 
-Each session or subagent has a byte budget, `SESSION_BUDGET_BYTES` (8,000), for role
-`CLAUDE.md` files and `facts.md` (#7899). The hook inlines those docs, whole or as a head, while
-their blocks fit what is left of the budget. After that, a doc arrives as its outline: its
-headings and a read pointer, logged `form=outline`. The hook records an outlined doc as
-injected, so it does not return when budget frees. The rules in `ALWAYS_WHOLE`, `secrets.md`
-and `generated-docs.md`, are always inlined in full and never charged to the budget, because a
-read-only grep is where the secrets rule matters. Only a session's first injection carries the
-full preamble; later ones carry a one-line tag. The payload arithmetic still charges the full
-preamble, so the `--report` budgets do not depend on it. A replay of the 851 `bash_path_match`
-rows logged to 2026-11-09 projects the mean per session from 16.0 KB to 8.0 KB and the worst
-from 121 KB to 19.7 KB. That excludes the `generated-docs.md` reads the change adds: 3.6 KB
-once in each session that reads under `docs/**`, `scripts/docs/**` or a role `CLAUDE.md`, at
-least 51 of the 279 sessions, or about 0.7 KB on the mean.
+Each session or subagent has a byte budget, `SESSION_BUDGET_BYTES` (8,000) (#7899). The hook
+charges every byte it injects to that budget: the preamble, the newlines between blocks and
+every block, whatever its form (#8998). It inlines role `CLAUDE.md` files and editing rules,
+whole or as a head, while their blocks fit what is left. After that, a doc arrives as its
+outline: its headings and a read pointer, logged `form=outline`. The hook records an outlined
+doc as injected, so it does not return when budget frees. The rules in `ALWAYS_WHOLE`,
+`secrets.md` and `generated-docs.md`, are charged but never outlined, because a read-only grep
+is where the secrets rule matters. Only a session's first injection carries the full preamble;
+later ones carry a one-line tag. The payload arithmetic still charges the full preamble, so
+the `--report` budgets do not depend on it.
 
-An editing rule arrives with a write, not a read (#2811). Every rule outside `READ_RULES`
-(`secrets.md`, `generated-docs.md` and `facts.md`, which a read needs) is injected only for a path the command
-writes, as `block-protected-bash`'s `written_paths` finds it, or for every named path when the
-command runs an inline interpreter such as `python3 -`. Rules are not dropped from Bash
-entirely, because writes to rule-scoped paths also go through Bash and nothing else would
+An editing rule arrives with a write, not a read (#2811). `secrets.md` is the one rule in
+`READ_RULES`, the rules a read needs whole. Every other rule is injected only for a path the
+command writes, as `block-protected-bash`'s `written_paths` finds it, or for every named path
+when the command runs an inline interpreter such as `python3 -`. Rules are not dropped from
+Bash entirely, because writes to rule-scoped paths also go through Bash and nothing else would
 deliver the rule there. A rule skipped on a read is not recorded as injected, so the first
-write still gets it.
+write still gets it. `facts.md` waits for a write, because a reader follows a citation the
+same way without its grammar. A rule in `POINTER_RULES`, `generated-docs.md`, gets one pointer
+line on a read, logged `form=pointer`. The hook records the pointer under its own state key,
+and `loaded_by_harness` skips a `form=pointer` row, so the first write still inlines the rule
+whole. The 2026-11-18 audit measured why: `facts.md` fired 27 times and `generated-docs.md` 39
+times in a week of reads, about 180 KB for the second alone.
 
 A subagent gets each doc once more (#2192). Its payload carries the parent's `session_id`, so
 the hook keys its once-only state on the `agent_id` as well. It also tags that subagent's log

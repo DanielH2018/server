@@ -27,11 +27,10 @@
 # THE COMMIT SEQUENCE FOLLOWS docs-refresh.sh EXACTLY: dirty-tree guard, one-open-PR guard,
 # commit, then scripts/deploy_tools/publish_pr.py (throwaway branch, push, reset master,
 # `gh pr create`, then a detached `land.py --arm-merge --await-merge` that merges the PR once
-# its CI is green). The landing merges directly at the head CI checked
-# rather than arming GitHub's auto-merge. A repository ruleset rejects every direct push to master (see
-# docs-refresh.sh's header for the rejected-push evidence), so a PR is the only path that
-# publishes; committing straight to evals/history.json here would silently stop working the
-# same way docs-refresh's direct commit once did.
+# its CI is green). The landing merges directly at the head CI checked rather than arming
+# GitHub's auto-merge. A repository ruleset rejects every direct push to master (see
+# docs-refresh.sh's header), so a PR is the only path that publishes; committing straight to
+# evals/history.json here would be rejected the same way.
 #
 # THE DIRTY-TREE AND UNLANDED-BRANCH GUARDS APPEAR TWICE ON PURPOSE. A cheap, read-only, no-lock copy
 # runs before the sweep as a pre-filter -- unlike docs-refresh's generator this sweep costs
@@ -42,8 +41,8 @@
 #
 # NODE VIA fnm's `default` ALIAS, NOT $PATH. A Claude Code session's node lives on an
 # ephemeral /run/user/1000/fnm_multishells/<pid>_<ts> path that dies with the shell that made
-# it, and cron inherits neither that nor a login PATH -- same trap scripts/diagnostics/
-# ui_mcp.sh and the archived happy-daemon unit both work around the same way.
+# it, and cron inherits neither that nor a login PATH -- scripts/diagnostics/ui_mcp.sh works
+# around the same trap the same way.
 set -uo pipefail
 
 for arg in "$@"; do
@@ -63,8 +62,8 @@ PR_BRANCH_PREFIX="evals-history/"
 # exactly as a modified one does, so a file whose job is to record a failure must never be a
 # failure itself. The component's tmpfiles.d line creates this subdirectory owned by the cron user.
 STAMP_DIR="/var/lib/homelab/eval-run.d"
-# One log per failing run, pruned to the newest FAILURE_LOGS_KEPT: docs-refresh.sh lost a traceback
-# to the next failure's overwrite (#4764). The `failure-` prefix keeps the prune off the files and
+# One log per failing run, pruned to the newest FAILURE_LOGS_KEPT, so a later failure cannot
+# overwrite a traceback. The `failure-` prefix keeps the prune off the files and
 # the sweeps/ directory beside it.
 FAILURE_LOG="$STAMP_DIR/failure-$(date -u '+%Y%m%dT%H%M%SZ').log"
 FAILURE_LOGS_KEPT=5
@@ -75,7 +74,7 @@ SWEEP_ARCHIVE="$STAMP_DIR/sweeps"
 SWEEPS_KEPT=8
 
 # The API key arrives as a systemd credential, never from this script's own text: a grep or diff
-# over an installed script prints whatever secret was rendered into it (#4607), and the renderer
+# over an installed script prints whatever secret was rendered into it, and the renderer
 # withholds every secret from a host package. `LoadCredential=` in homelab-eval-sweep.service
 # puts it under $CREDENTIALS_DIRECTORY. Empty FIRST, so an absent or empty credential leaves
 # the empty-key gate below to fire rather than `set -u` to abort, and a key inherited from the
@@ -92,7 +91,7 @@ TREND_OUT=""
 
 # DEFAULTS TO down, matching docs-refresh.sh: every exit path that is genuinely fine sets
 # PUSH_STATUS explicitly, so a crash or an unhandled path reports down rather than going
-# silent. The PUSH_ prefix is historical: nothing is pushed.
+# silent. The PUSH_ prefix is vestigial: nothing is pushed.
 PUSH_STATUS=down
 PUSH_MSG="eval-run exited without setting a status"
 # The longest legitimate gap between two textfile writes: the cron is weekly (Sunday 02:00,
@@ -128,16 +127,14 @@ alert() { logger -t eval-run "$1"; PUSH_MSG="$1"; }
 #
 # FILTER BEFORE THE TAIL, for the commit call site. prek runs every hook and keeps going past a
 # failure, printing Passed and Skipped lines after it, and mkdocs-strict is the last hook -- so a
-# plain tail of the whole run always ends `...Passed` and names no hook at all. The sibling
-# docs-refresh alert did exactly that on 2026-09-04 and again on 2026-09-05; two readers could not
-# identify the failing hook from it, and #1155 was filed with the cause undiagnosed as a result.
+# plain tail of the whole run always ends `...Passed` and names no hook at all.
 #
 # THE FALLBACK IS LOAD-BEARING, and carries MORE weight here than in docs-refresh. There it covers
 # the edge cases of one call site (a signing failure, "nothing to commit"). Here only the commit
 # call site can ever carry a prek token at all: the other two pass $LOG from the report merge and
 # $TREND_OUT from the history-unchanged arm, neither of which has been near a hook. This script
 # runs without `set -e`, so a non-matching grep would leave those two alerts EMPTY -- strictly
-# worse than the uninformative tail they have today.
+# worse than the uninformative tail.
 say_failure() {
   local detail
   detail="$(grep -E -A2 'Failed|^- hook id:|files were modified by this hook' "$2" 2>/dev/null \
@@ -147,7 +144,7 @@ say_failure() {
 }
 
 # The suite-failure alert, a copy of docs-refresh.sh's: its header has why say_failure's `Failed`
-# token and plain tail name no test for pytest output (#4764). The two copies are held identical by
+# token and plain tail name no test for pytest output. The two copies are held identical by
 # test_eval_run_failure_path.py, so the behavioural tests in docs-refresh's module cover both.
 suite_summary() {
   awk '
@@ -177,10 +174,10 @@ keep_failure_log() {
     | head -n "-$FAILURE_LOGS_KEPT" | xargs -r -d '\n' rm -f --
 }
 
-# Keeps this sweep's per-run output, which nothing else does (#4019). $REPORT_DIR holds each
+# Keeps this sweep's per-run output, which nothing else does. $REPORT_DIR holds each
 # agent's --json report, the only place the engine writes a run's agent text, assertion failures
 # and judge reason; $LOG holds the console lines naming each failing run. on_exit deletes both,
-# so before this a below-threshold sweep could not be diagnosed once the run ended.
+# so without this a below-threshold sweep could not be diagnosed once the run ended.
 #
 # CALLED RIGHT AFTER THE SWEEP, NOT FROM on_exit: the suite and the commit below overwrite $LOG
 # with their own output, so by exit time the console lines are gone. Bounded twice -- the console
@@ -205,13 +202,9 @@ keep_sweep_output() {
 
 # Puts the checkout back the way it was before `git add`, and keeps the sweep.
 #
-# `git reset` alone -- all this path used to do -- unstages and nothing else, leaving
-# evals/history.json MODIFIED in the primary checkout. homelab-checkout-sync reads any porcelain
-# output as dirty and stops fast-forwarding the checkout, so ONE failed commit here parks it.
-# HISTORY -- the retired GitOps deployer skipped the same way while reading healthy, and
-# docs-refresh.sh carried the identical body and did exactly that on 2026-09-04 and 2026-09-05,
-# 25 consecutive skipped ticks the second time (#1155, fixed there by #1162). This cron commits
-# weekly rather than twice daily, which changes how often it can happen and nothing else.
+# `git reset` alone unstages and nothing else, leaving evals/history.json MODIFIED in the
+# primary checkout. homelab-checkout-sync reads any porcelain output as dirty and stops
+# fast-forwarding the checkout, so ONE failed commit here parks it.
 #
 # THE COPY IS NOT OPTIONAL, and it is where this differs from docs-refresh. There the staged file
 # is generator output the next run reproduces, so discarding it costs nothing. Here it is a week
@@ -219,10 +212,9 @@ keep_sweep_output() {
 # the tree is put back. Trading a parked checkout for a lost eval sweep is not a fix.
 #
 # KEPT_NOTE says what actually happened, and is not decoration. A silenced `cp` that failed --
-# $STAMP_DIR absent because initial_setup has not run since this landed, a full disk, wrong
-# ownership -- would otherwise leave the alert asserting "sweep kept at <path>" with nothing at
-# that path. An alert that reports an outcome it did not confirm is the failure mode the rest of
-# this script exists to keep out.
+# $STAMP_DIR absent, a full disk, wrong ownership -- would otherwise leave the alert asserting
+# "sweep kept at <path>" with nothing at that path. An alert that reports an outcome it did not
+# confirm is the failure mode the rest of this script exists to keep out.
 restore_history() {
   local rc=0
   if mkdir -p "$STAMP_DIR" 2>/dev/null && cp evals/history.json "$UNPUBLISHED_HISTORY" 2>/dev/null
@@ -244,7 +236,7 @@ restore_history() {
   # construction -- a check scoped to evals/history.json would report "tree restored" over
   # exactly the leftover that parks homelab-checkout-sync. Everything dirty here arrived during this run:
   # the pre-sweep gate and the post-lock gate both exit on a tree that was already dirty.
-  # SCOPE (see lib.git.git_dirty, #1223): whole tree, untracked counted — the same
+  # SCOPE (see lib.git.git_dirty): whole tree, untracked counted — the same
   # scope git_dirty(cwd) defaults to, expressed here in shell since these templates can't import it.
   [ -z "$(git status --porcelain)" ] || rc=1
   return "$rc"
@@ -377,26 +369,25 @@ git add evals/history.json
 # GENERATORS_OK's exact failure mode one file over: the trend output IS the reason a real
 # problem happened, so it goes to say_failure and a non-zero exit, not laundered into "no
 # change" (test_every_up_after_a_generator_failure_is_gated_on_generators_ok in the sibling
-# docs-refresh test file exists because this shape already cost a day once).
+# docs-refresh test file pins the shape).
 if git diff --cached --quiet; then
   say_failure "eval-run: sweep ran but history.json unchanged (trend.py did not record it)" "$TREND_OUT"
   exit 1
 fi
 
 # Past the check above, trend.py definitely wrote — its only exit codes after a write are 0
-# (clean) and 1 (a case regressed), so TREND_RC now means exactly that, not "did it crash".
+# (clean) and 1 (a case regressed), so TREND_RC means exactly that, not "did it crash".
 if [ "$TREND_RC" -ne 0 ]; then
   REGRESSED=1
 else
   REGRESSED=0
 fi
 
-# The suite, run explicitly and BEFORE the commit, because no prek hook runs it (#2827 took it
-# off the commit line, and it left prek entirely on 2026-10-02), and this cron must not publish
-# a sweep the suite rejects. Run here rather than left to the push because a rejected
-# commit is a state this script can undo -- restore_history -- where a rejected push would
-# leave a commit on the local master for homelab-checkout-sync to trip over. `timeout` because this
-# script holds {{ server_git_tree_lock }} for its whole life.
+# The suite, run explicitly and BEFORE the commit, because no prek hook runs it, and this cron
+# must not publish a sweep the suite rejects. Run here rather than left to the push because a
+# rejected commit is a state this script can undo -- restore_history -- where a rejected push
+# would leave a commit on the local master for homelab-checkout-sync to trip over. `timeout`
+# because this script holds {{ server_git_tree_lock }} for its whole life.
 timeout 900 "$UV" run --frozen python -m pytest >"$LOG" 2>&1
 SUITE_RC=$?
 if [ "$SUITE_RC" -ne 0 ]; then
@@ -412,10 +403,8 @@ if [ "$SUITE_RC" -ne 0 ]; then
 fi
 
 # NOT `if ! git commit`: inside that branch `$?` is the status of the negation, which is always
-# 0, so the exit code has to be captured from the plain command first. It is reported because the
-# alert's "hook rejection?" was only ever a guess -- git's own code separates a rejected hook
-# (1) from a signing or ref failure, and two readers could not tell which from the 2026-09-05
-# alert on the sibling script.
+# 0, so the exit code has to be captured from the plain command first. It is reported because
+# git's own code separates a rejected hook (1) from a signing or ref failure.
 git commit -m "evals: record weekly hermetic eval sweep" >"$LOG" 2>&1
 COMMIT_RC=$?
 if [ "$COMMIT_RC" -ne 0 ]; then

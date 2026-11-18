@@ -104,7 +104,7 @@ def _quiet_cycle(cfg, checks, capsys, **kwargs):
 
 
 def test_a_cycle_logs_down_verdicts_and_one_summary_not_each_up(cfg, capsys):
-    """The pod's ~50 OK lines per cycle buried the DOWN ones (#4448)."""
+    """The pod's ~50 OK lines per cycle would bury the DOWN ones."""
     first, second = [
         e
         for e in registry.build_checks()

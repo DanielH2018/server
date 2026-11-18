@@ -6,8 +6,7 @@ Two questions:
 * `service_tags_at` -- which tags exist AT A REF. Asked of a checkout, a role the
   PR itself registers reads as UNREGISTERED, which is what a role nobody registered reads as
   too, so the landing prints the expensive remedy for work one `--tags` run does.
-* `plane_note` on a rotation -- where every k8s reader of a changed key gets the new value
-  (#5610).
+* `plane_note` on a rotation -- where every k8s reader of a changed key gets the new value.
 
 Its own module rather than test_land_tags.py: that file pins the DERIVATION against a fixture
 and patches `declared_tags` away, while these read real git and the real remediation text.
@@ -25,16 +24,14 @@ from lib.git_testing import git_out, init_repo
 from lib.repo_paths import REPO
 from deploy_tools.land_lib import tools
 
-# THE RETIREMENT CONVENTION: a retired role is DELETED, and the same PR names its tag here. A
-# deleted role is indistinguishable from the reader dropping an entry, so an explicit list is
-# the only honest signal. An entry earns its place for one PR: once the retiring commit is
-# HEAD, the tag is gone from both sides and the line can go. A RENAME loses the old tag the
-# same way a retirement does, so it is named here too, for the same one PR.
+# THE RETIREMENT CONVENTION: a retired role is DELETED, and the same PR names its tag here, as
+# a RENAME does for its old tag. A deleted role is indistinguishable from the reader dropping
+# an entry, so an explicit list is the only honest signal. An entry lasts one PR: once the
+# retiring commit is HEAD, the tag is gone from both sides and the line can go.
 #
-# Empty is the resting state, and it stays hand-written for two reasons. Deriving it as
-# `at_head - in_tree` would make the census assert `lost <= lost`, which no dropped entry can
-# fail. And a test that every entry is still declared at HEAD would fail the retiring PR on its
-# own push, because there HEAD is already the retiring commit.
+# Empty is the resting state, and it stays hand-written. Deriving it as `at_head - in_tree`
+# would make the census assert `lost <= lost`, which no dropped entry can fail. A test that
+# every entry is still declared at HEAD would fail the retiring PR on its own push.
 RETIRED_TAGS: frozenset[str] = frozenset()
 
 
@@ -146,7 +143,7 @@ def test_a_secrets_rotation_sends_every_k8s_reader_through_cluster_vars(files):
     assert "this landing waits on that apply" not in note
 
 
-# ── plane_note with the PR's range: only the keys the landing leaves stale (#8369) ──
+# ── plane_note with the PR's range: only the keys the landing leaves stale ──
 
 
 def test_a_rotation_that_refreshed_every_copy_owes_no_hand():
