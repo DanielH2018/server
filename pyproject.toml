@@ -116,6 +116,10 @@ testpaths = [                        # single source of truth for WHAT runs
 # each of their siblings: pytest re-collects a named file's directory once per named file in it,
 # 20,542 module builds to keep 237 on one leg (#8681).
 #
+# -p failure_report prints FAILURES and ERRORS after every other plugin's summary, just above the
+# short summary, so a failed run's output ends on its failure. `--github-report` adds CI's
+# per-test `::error` annotations and the job summary's count line.
+#
 # No `-q` here, deliberately. `-q` is what a reader adds on the command line to shorten a scoped
 # run, and pytest COUNTS the flag: with `-q` already in addopts, a hand-typed `-q` becomes `-qq`,
 # which suppresses the summary line entirely. Measured on `scripts/lib/tests`: with
@@ -124,7 +128,7 @@ testpaths = [                        # single source of truth for WHAT runs
 # run that collected nothing read exactly like one that passed. Reviewers had to override
 # addopts to get a count back. The default verbosity
 # costs ~2 header lines per xdist worker and prints the count every time.
-addopts = "-n auto --dist loadscope -m 'not ui and not image' --strict-markers --strict-config -p leakguard -p xdist_width -p render_share -p phase_timing -p named_files"
+addopts = "-n auto --dist loadscope -m 'not ui and not image' --strict-markers --strict-config -p leakguard -p xdist_width -p render_share -p phase_timing -p named_files -p failure_report"
 # Every warning is a failure. Measured before enabling: the only classes that
 # fired were ResourceWarnings, each a real leak — HTTPError test doubles built on a tempfile
 # nothing closed, an sqlite connection the Valheim store never closed, and the since-retired
