@@ -4,16 +4,20 @@ Each run is a real pytest subprocess under `-n 2` over a scratch tree, with a ba
 so the repo's own `addopts` stay out, and `phase_timing` loaded beside the plugin so a second
 summary-printing plugin is in the run. `GITHUB_STEP_SUMMARY` points into the scratch tree, so
 a CI run of these tests leaves the real job summary alone.
+The last two tests read the repo's own `pyproject.toml` and `ci.yml`, which wire both halves in.
 
 Run: uv run pytest tests/repo/test_failure_report.py
 """
 
 import os
+import shlex
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
 
 from _helpers import REPO
+from lib import yaml_fast
 
 _MODULE = """
 def test_passes():
@@ -100,3 +104,22 @@ def test_without_github_report_nothing_is_annotated_or_summarised(tmp_path):
     out, summary = _run(tmp_path)
     assert "::error" not in out, out
     assert summary.read_text() == "### written by a test\n"
+
+
+def test_the_repos_addopts_load_the_plugin():
+    config = tomllib.loads((REPO / "pyproject.toml").read_text())
+    args = shlex.split(config["tool"]["pytest"]["ini_options"]["addopts"])
+    assert any(args[i : i + 2] == ["-p", "failure_report"] for i in range(len(args))), (
+        args
+    )
+
+
+def test_ci_runs_the_suite_with_github_report_and_no_colour():
+    workflow = yaml_fast.safe_load((REPO / ".github/workflows/ci.yml").read_text())
+    [run] = [
+        step["run"]
+        for step in workflow["jobs"]["pytest"]["steps"]
+        if step.get("name") == "Run the test suite"
+    ]
+    assert "--github-report" in run, run
+    assert "--color" not in run, run

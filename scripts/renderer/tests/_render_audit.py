@@ -12,7 +12,8 @@ In CI, `check_part` writes one digest line per rendered directory, as `shadow_di
 prints it, to two places. When `GITHUB_STEP_SUMMARY` is set, it appends them to the job
 summary, which only a signed-in viewer can read. When `GITHUB_SHA` is set, it also records
 them on the test's report, and the `pytest_terminal_summary` hook in this directory's
-`conftest.py` prints them to the job log, which `gh run view --log` reads. A line depends on
+`conftest.py` saves them to `RENDER_DIGEST_FILE`, which CI uploads as the shard's
+`render-digests-shard<n>` artifact for `gh run download`. A line depends on
 its directory's files alone, so the modules' lines together hold the full set, whichever
 shards they ran on. None writes the `total` line, which only a full render can compute.
 
@@ -103,23 +104,32 @@ def write_summary(module: str, lines: list[str]) -> None:
 
 
 def log_digest_lines(terminalreporter) -> None:
-    """Print each digest line the session's tests recorded, prefixed `render digest at <sha>`.
+    """Save the session's digest lines to `RENDER_DIGEST_FILE` and print one count line.
+
+    Each saved line is prefixed `render digest at <sha> (<module>):`. CI sets the variable and
+    uploads the file as an artifact, so the job log carries one line instead of one per role.
 
     A `pytest_terminal_summary` hook calls this in the process that prints the report. Under
     xdist that is the controller, which runs no test. The lines reach it as the call reports'
-    `user_properties`, which xdist carries back from the workers. A worker's own stdout never
-    reaches the job log.
+    `user_properties`, which xdist carries back from the workers.
     """
-    for reports in terminalreporter.stats.values():
-        for report in reports:
-            if getattr(report, "when", None) != "call":
-                continue
-            for name, value in report.user_properties:
-                if name != DIGEST_PROPERTY:
-                    continue
-                prefix = f"render digest at {value['sha']} ({value['module']}):"
-                for line in value["lines"]:
-                    terminalreporter.write_line(f"{prefix} {line}")
+    lines = [
+        f"render digest at {value['sha']} ({value['module']}): {line}"
+        for reports in terminalreporter.stats.values()
+        for report in reports
+        if getattr(report, "when", None) == "call"
+        for name, value in report.user_properties
+        if name == DIGEST_PROPERTY
+        for line in value["lines"]
+    ]
+    if not lines:
+        return
+    if target := os.environ.get("RENDER_DIGEST_FILE"):
+        Path(target).write_text("".join(f"{line}\n" for line in lines))
+        where = f"saved to {target}"
+    else:
+        where = "not saved: RENDER_DIGEST_FILE is unset"
+    terminalreporter.write_line(f"render digests: {len(lines)} {where}")
 
 
 def check_part(module_file: str, tmp_path: Path, record_property) -> None:
@@ -161,10 +171,10 @@ def check_part(module_file: str, tmp_path: Path, record_property) -> None:
 
 
 def report_digests(root: Path, module: str, record_property) -> None:
-    """Write one digest line per directory under `root/cluster/` to CI's summary and log.
+    """Write one digest line per directory under `root/cluster/` to CI's summary and artifact.
 
     The job summary gets them when `GITHUB_STEP_SUMMARY` is set. When `GITHUB_SHA` is set,
-    `record_property` carries them to `log_digest_lines`, which prints them to the job log.
+    `record_property` carries them to `log_digest_lines`, which saves them to a file.
     """
     lines = [digest_line(n, h) for n, h in directory_digests(root).items()]
     write_summary(module, lines)

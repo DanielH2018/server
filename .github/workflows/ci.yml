@@ -808,11 +808,23 @@ jobs:
       # and a failing suite would read green.
       - name: Run the test suite
         if: steps.select.outputs.count != '0'
+        env:
+          RENDER_DIGEST_FILE: ${{ runner.temp }}/render-digests.txt
         run: |
           set -euo pipefail
           mapfile -t files < "$RUNNER_TEMP/shard.txt"
           uv run python -m pytest --github-report --durations=0 "${files[@]}" \
             | tee "$RUNNER_TEMP/durations.log"
+
+      # The determinism modules' digest lines, one per rendered role, for `gh run download`.
+      # The log carries only their count; docs/homelab-render.md has the recipe that reads them.
+      - name: Upload the render digest lines
+        if: always() && steps.select.outputs.count != '0'
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: render-digests-shard${{ matrix.shard }}
+          path: ${{ runner.temp }}/render-digests.txt
+          if-no-files-found: ignore
 
       - name: Save pytest's rewritten test modules
         if: steps.select.outputs.count != '0' && github.ref == 'refs/heads/master' && steps.rewrite-cache.outputs.cache-hit != 'true'
