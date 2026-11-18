@@ -1,14 +1,12 @@
 ---
-# Built from DanielH2018/texbrain, a fork of swimmingbrain/texbrain that adds only a
-# Dockerfile, an nginx config and a GHCR workflow — nothing under src/ — so merging
-# upstream stays conflict-free. Upstream publishes no image, no tags and no releases
-# while committing daily, so pinning it directly would mean a bare commit SHA with no
-# update signal at all.
+# Built from DanielH2018/texbrain, a fork of swimmingbrain/texbrain that adds only a Dockerfile, an
+# nginx config and a GHCR workflow, so merging upstream stays conflict-free. Upstream publishes
+# no image, tags or releases, so pinning it directly would be a bare commit SHA with no update
+# signal.
 #
-# Tag KEPT alongside the digest (repo:latest@sha256), the same shape and for the same
-# reason as bento_pdf_k8s_image: a bare repo@sha256 is invisible to Renovate's k8s
-# image manager and would freeze with zero update signal. The fork's CI pushes :latest
-# on every merge to main, and Renovate opens the digest bump.
+# The tag stays alongside the digest (repo:latest@sha256), as in bento_pdf_k8s_image: a bare
+# repo@sha256 is invisible to Renovate's k8s image manager. The fork's CI pushes :latest on every
+# merge to main, and Renovate opens the digest bump.
 texbrain_k8s_image: ghcr.io/danielh2018/texbrain:latest@sha256:c97188d8b271fab5ab611c91bcfa18ba7b4e91f4fac5a484b1821d3f21f75f76
 
 # Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
@@ -21,9 +19,8 @@ k8s_autodeploy_reason: "stateless RollingUpdate Deployment, no PVC, readinessPro
 # root-owned, so without one the container EPERMs on its cache and tmp directories.
 texbrain_k8s_uid: 101
 
-# Serving static files, with one CPU cost that bento-pdf does not have: nginx gzips the
-# 1.8 MB WebAssembly engine on a cold request. The limit covers that comfortably; the
-# request stays small because it is idle the rest of the time.
+# nginx gzips the 1.8 MB WebAssembly engine on a cold request, which bento-pdf does not do. The
+# limit covers that; the request stays small because the pod is idle the rest of the time.
 texbrain_k8s_cpu_limit: "500m"
 texbrain_k8s_mem_limit: 256Mi
 texbrain_k8s_cpu_request: "50m"

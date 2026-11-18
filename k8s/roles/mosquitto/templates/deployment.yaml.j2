@@ -32,8 +32,8 @@ spec:
       # mosquitto 2.1's password-file plugin refuses the pwfile straight off a Secret mount
       # ("Unable to open pwfile") even though a plain open() of the same path succeeds — the
       # root-owned ..data symlink farm fails whatever ownership/symlink check the plugin does.
-      # Reproduced 2026-08-08 with a probe pod: secret-mounted copy fails, a cp'd uid-1000 copy
-      # starts clean. So an init container copies both files into an emptyDir the pod owns.
+      # A cp'd uid-1000 copy starts clean, so an init container copies both files into an emptyDir
+      # the pod owns.
       initContainers:
         - name: config-copy
           image: {{ mosquitto_k8s_image }}

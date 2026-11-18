@@ -11,7 +11,7 @@
 # rebuilds this image — the same posture terraria's build has.
 FROM alpine:3.24@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf AS fetch
 # DECIDED: apk packages resolve at build time — an `=version` pin 404s once the branch
-# supersedes it and nothing bumps it; the base digest is the pin. See #2211.
+# supersedes it and nothing bumps it; the base digest is the pin.
 RUN apk add --no-cache curl unzip
 WORKDIR /dl
 RUN mkdir -p /out

@@ -1,6 +1,6 @@
 {% from 'networkpolicy.yml.j2' import networkpolicy with context %}
 ---
-# Slice 2 of the ingress default-deny. NOTE: this role's OTHER policy file,
+# NOTE: this role's OTHER policy file,
 # networkpolicy-flaresolverr.yaml.j2, fences flaresolverr and is unrelated to this one. Both are
 # applied.
 #
@@ -11,13 +11,11 @@
 # TRAEFIK IS IN THE CALLER LIST DELIBERATELY — do not remove it as redundant — but be accurate about why.
 # The baseline admits traefik to every baseline-labelled pod on ANY port, and policies are
 # additive, so while prowlarr carries that label the union is the same with or without this entry.
-# It was load-bearing for the deploy that INTRODUCED the label: the old pod carried `app: prowlarr`
-# without `netpol-baseline: enforced`, so this policy was the only one selecting it and the UI
-# would have 502'd for the length of that rollout (the "rollout hazard" section of the slice-2
-# plan). That window is closed — every pod created from here on carries both labels. It stays
-# because this policy then states its own complete caller set rather than depending on the baseline
-# continuing to admit traefik on all ports: if that baseline rule is ever port-scoped, or this pod
-# template loses the label, this line is what keeps the UI up.
+# The entry matters for a pod that lacks `netpol-baseline: enforced`, which this policy alone
+# selects: without it the UI would 502 for that pod's lifetime. It also makes this policy state
+# its own complete caller set rather than depending on the baseline continuing to admit traefik
+# on all ports: if that baseline rule is ever port-scoped, or this pod template loses the label,
+# this line is what keeps the UI up.
 #
 # sonarr and radarr reach prowlarr by bare name from their own application databases — the indexer
 # definitions live on their PVCs, not in this repo.
@@ -29,8 +27,7 @@
 # so the Job fails on every revision — a negative test with no working control proves nothing.
 # Same shape as k8s/roles/registry/templates/networkpolicy.yaml.j2 admitting its own
 # registry-selftest-push/registry-selftest-pull Jobs: a test pod that must reach the workload it
-# is fencing. Do not "clean this up" as an unused caller. It replaced the Ansible-applied
-# flaresolverr-netpol-probe in prowlarr's flip (#5594). It must never join flaresolverr's fence,
+# is fencing. Do not "clean this up" as an unused caller. It must never join flaresolverr's fence,
 # which the same Job proves refuses it.
 #
 # The caller list is `netpol_from:` on this role's containers_list entry

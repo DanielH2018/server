@@ -22,12 +22,10 @@ spec:
     spec:
       # Pinned to the VIP-announcing node while the MetalLB L2Advertisement is pinned to
       # daniel-box: with externalTrafficPolicy Local, a VIP-backed pod on the other node
-      # makes the announcer DROP all forwarded LAN traffic (2026-08-14 post-boot DNS
-      # blackout). This pin only ever moves together with the L2Advertisement nodeSelector.
+      # makes the announcer DROP all forwarded LAN traffic. This pin only ever moves together
+      # with the L2Advertisement nodeSelector.
       #
-      # Added 2026-08-14 alongside valheim's, for the same reason and with more at stake:
-      # wg-easy-udp has carried ETP Local and VIP 10.0.0.244 since it went live with no
-      # placement guarantee, so it sat here only by scheduler accident. A reschedule onto
+      # wg-easy-udp carries ETP Local and VIP 10.0.0.244, so a reschedule onto
       # daniel-server would black-hole UDP 51820 while the pod reported healthy — and
       # because this IS the remote-access path, it would also remove the way back in to
       # diagnose it.
@@ -41,8 +39,7 @@ spec:
         # Both namespaced; kubelet only admits them because setup/k3s allow-lists them.
         # ip_forward: the SERVER routes between wg0 and eth0 inside the pod netns, and
         # /proc/sys is ro in a pod even with NET_ADMIN, so the spec is the only way in.
-        # src_valid_mark: same wg-quick requirement the qbittorrent sidecar documented
-        # (slice 4, D11) — pre-setting it makes wg-quick skip its own doomed write.
+        # src_valid_mark: wg-quick requires it; pre-setting it makes wg-quick skip its own doomed write.
         sysctls:
           - name: net.ipv4.ip_forward
             value: "1"
@@ -50,11 +47,9 @@ spec:
             value: "1"
       # The image runs as root (wg-quick + iptables leave no choice), but the seeded files
       # arrive uid-1000 from the unprivileged ssh|tar pipeline — and root with ALL caps
-      # dropped has no DAC_OVERRIDE, so it cannot even READ them (fourth live occurrence of
-      # that lesson; the near-miss here was wg-easy silently GENERATING a fresh keypair when
-      # the seeded one was unreadable — the save failing on the same wall is what stopped
-      # every client config from being invalidated). CAP_CHOWN alone lets the init hand the
-      # tree to uid 0; no DAC_OVERRIDE anywhere.
+      # dropped has no DAC_OVERRIDE, so it cannot even READ them, and wg-easy would then silently
+      # GENERATE a fresh keypair, invalidating every client config. CAP_CHOWN alone lets the init
+      # hand the tree to uid 0; no DAC_OVERRIDE anywhere.
       initContainers:
         - name: config-chown
           image: {{ wg_easy_k8s_image }}
@@ -110,12 +105,10 @@ spec:
               protocol: UDP
             - containerPort: {{ container_item.port }}
               protocol: TCP
-          # v15 reads almost no environment. LANG, WG_HOST, WG_PORT,
-          # WG_PERSISTENT_KEEPALIVE, WG_DEFAULT_DNS and PASSWORD_HASH were all v14 keys and
-          # were removed at the v15 upgrade — the endpoint hostname, the UDP port, the
-          # keepalive and the client DNS now live in the app's own SQLite DB, set through the
-          # Admin Panel. `container_item.default_dns` in host_vars is what seeded that value
-          # and stays as the record of what it should be; nothing renders it any more.
+          # v15 reads almost no environment: the endpoint hostname, the UDP port, the keepalive and
+          # the client DNS live in the app's own SQLite DB, set through the Admin Panel.
+          # `container_item.default_dns` in host_vars records what the client DNS should be;
+          # nothing renders it.
           env:
             # Traefik terminates TLS at the edge and proxies PLAIN HTTP to this port, so
             # without INSECURE v15 refuses the request — including the first-boot setup

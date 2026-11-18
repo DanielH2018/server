@@ -31,14 +31,13 @@ spec:
       nodeSelector:
         kubernetes.io/hostname: {{ k8s_primary_node }}
       # Runs as 1000, which is what lets the capability set below be empty. The volume is
-      # uid-1000-owned from the cutover seed and measured 1000:1000 on 2026-08-31, so the server
-      # now writes its own data as its owner rather than overriding the permission check to reach
+      # uid-1000-owned from the cutover seed, so the server
+      # writes its own data as its owner rather than overriding the permission check to reach
       # it. The image cannot do this unmodified — see templates/Dockerfile.j2.
       #
       # fsGroup is separately load-bearing and must not be dropped as redundant. Each world-save
-      # rewrites .wld.bak, and the ones on the volume today were created by the OLD root process,
-      # so they sit 0:0 644 and a uid-1000 truncate would EACCES on the backup step — the exact
-      # failure the removed DAC_OVERRIDE comment warned about. fsGroup has the kubelet chown the
+      # rewrites .wld.bak, and any left by an earlier root process sit 0:0 644, so a uid-1000
+      # truncate would EACCES on the backup step. fsGroup has the kubelet chown the
       # volume's group and OR in group-write at every mount, which fixes them declaratively where
       # a one-shot chown would drift back. That needs `Always`: under `OnRootMismatch` the
       # kubelet skips the walk once the root is right, and a stray 0:0 file stays unwritable.
@@ -48,25 +47,21 @@ spec:
           image: {{ terraria_k8s_image }}
           # Rolling tier: the registry tag is rebuilt in place by image-builder, so pod
           # creation must re-pull. Explicit rather than left to the `:latest` default, because
-          # the API server defaults this field only when it is ABSENT at create time — this
-          # Deployment was created with an upstream `@sha256:` pin, which defaulted it to
-          # IfNotPresent, and a later apply that changed only `image` left that value in
-          # place. The 2026-09-02 digest bump rebuilt the image, rolled the pod, and the node
-          # reused its cached `:latest`; the drift gate in post_tasks/ caught it.
+          # the API server defaults this field only when it is ABSENT at create time: a
+          # Deployment created with an upstream `@sha256:` pin gets IfNotPresent, and a later apply
+          # that changed only `image` leaves that value in place, so the node reuses its cached
+          # `:latest` after a rebuild.
           imagePullPolicy: Always
           # The image's console needs a TTY and an open stdin.
           stdin: true
           tty: true
           ports:
             - containerPort: 7777
-          # Empty, and the pod-level uid above plus the chowned image is what earns that.
-          # This carried DAC_OVERRIDE until 2026-08-31, because PID 1 ran as root in a
-          # uid-1000-owned /config where root cannot create or unlink without it. Running as
-          # the owner removed the need rather than the symptom.
+          # Empty, and the pod-level uid above plus the chowned image is what earns that: PID 1
+          # runs as the owner of the uid-1000-owned /config, so no DAC_OVERRIDE is needed.
           #
           # WHAT TO WATCH IF THIS REGRESSES: the failure lands on the world-save backup step,
-          # not at startup, so a Running pod proves nothing — that is how the Docker-era
-          # version of this bug survived 39 restarts over 11 days. The signal is a complete
+          # not at startup, so a Running pod proves nothing. The signal is a complete
           # `Saving world data … Validating world save … Backing up world file` cycle in the
           # log, which fires every 1-2 min, plus new .wld.bak files owned by 1000.
 {{ hardened_security_context() }}

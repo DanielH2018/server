@@ -1,6 +1,6 @@
 {% from 'networkpolicy.yml.j2' import networkpolicy with context %}
 ---
-# Slice 2 of the ingress default-deny. The baseline (k8s/roles/netpol-baseline) admits traefik,
+# The baseline (k8s/roles/netpol-baseline) admits traefik,
 # prometheus and the node bridges to every pod carrying `netpol-baseline: enforced`. This file adds
 # sonarr's own callers, which are all direct pod → ClusterIP and therefore invisible to the
 # baseline.
@@ -12,12 +12,11 @@
 # TRAEFIK IS IN THE CALLER LIST DELIBERATELY — do not remove it as redundant — but be accurate about why.
 # The baseline admits traefik to every baseline-labelled pod on ANY port, and policies are
 # additive, so while sonarr carries that label the union is the same with or without this entry.
-# It was load-bearing for the deploy that INTRODUCED the label: the old pod carried `app: sonarr`
-# without `netpol-baseline: enforced`, so this policy was the only one selecting it and the UI
-# would have 502'd for the length of that rollout. That window is closed — every pod created from
-# here on carries both labels. It stays because this policy then states its own complete caller set
-# rather than depending on the baseline continuing to admit traefik on all ports: if that baseline
-# rule is ever port-scoped, or this pod template loses the label, this line is what keeps the UI up.
+# The entry matters for a pod that lacks `netpol-baseline: enforced`, which this policy alone
+# selects: without it the UI would 502 for that pod's lifetime. It also makes this policy state
+# its own complete caller set rather than depending on the baseline continuing to admit traefik
+# on all ports: if that baseline rule is ever port-scoped, or this pod template loses the label,
+# this line is what keeps the UI up.
 #
 # bazarr addresses sonarr by BARE NAME from its own application database, not from any manifest
 # (k8s/roles/bazarr/defaults/main.yml). It is in this list because of that comment, not because a
@@ -39,8 +38,7 @@
 #
 # sonarr-verify is the pod label of the Jobs in templates/verify/ (its verify Job and arr-notification's seed Job).
 # The renderer emits them into the `sonarr-verify` Kustomization, and they dial sonarr's API over
-# the ClusterIP, so without this entry the fence would refuse them. The entry landed ahead of the
-# Flux flip (#5535), so the Jobs were admitted on their first run. The `sonarr-air-date-guard`
+# the ClusterIP, so without this entry the fence would refuse them. The `sonarr-air-date-guard`
 # CronJob's pod carries the same label, so this entry admits it too; its template says why.
 #
 # janitorr-verify is the pod label of janitorr's verify Job in k8s/roles/janitorr/templates/verify/.
@@ -48,7 +46,7 @@
 # the entry admits nothing today. It is here ahead of janitorr's Flux flip, which moves the
 # directory to templates/verify/: from then the Job dials sonarr:8989/ping from the
 # `janitorr-verify` Kustomization, and without this entry the fence would refuse it.
-# tests/k8s/test_netpol_from.py holds it in STAGED_CALLERS until the flip (#5709).
+# tests/k8s/test_netpol_from.py holds it in STAGED_CALLERS until the flip.
 #
 # The caller list is `netpol_from:` on this role's containers_list entry
 # (cluster/services.yml), each caller's reason beside it. The entry's

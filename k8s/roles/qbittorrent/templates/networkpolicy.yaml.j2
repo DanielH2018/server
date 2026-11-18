@@ -1,7 +1,5 @@
 {% from 'networkpolicy.yml.j2' import networkpolicy with context %}
 ---
-# Slice 2 of the ingress default-deny.
-#
 # sonarr and radarr reach this pod as the download client at `wireguard:8080` — a compat Service
 # (service-wireguard.yaml.j2) that selects `app: qbittorrent`, carrying the hostname their SQLite
 # databases were seeded with under Docker. The Service name differs; the pod is the same, so a
@@ -16,25 +14,22 @@
 # TRAEFIK IS LISTED HERE DELIBERATELY — do not remove it as redundant — but be accurate about why.
 # The baseline admits traefik to every baseline-labelled pod on ANY port, and policies are
 # additive, so while qbittorrent carries that label the union is the same with or without this
-# entry. It was load-bearing for the deploy that INTRODUCED the label: the old pod carried
-# `app: qbittorrent` without `netpol-baseline: enforced`, so this policy was the only one selecting
-# it and the UI would have 502'd for the length of that rollout (the "rollout hazard" section of
-# the slice-2 plan). That window is closed — every pod created from here on carries both labels.
-# It stays because this policy then states its own complete caller set rather than depending on the
-# baseline continuing to admit traefik on all ports: if that baseline rule is ever port-scoped, or
-# this pod template loses the label, this line is what keeps the UI up.
+# entry. It matters for a pod that lacks `netpol-baseline: enforced`, which this policy alone
+# selects: without it the UI would 502 for that pod's lifetime. It also makes this policy state
+# its own complete caller set rather than depending on the baseline continuing to admit traefik
+# on all ports: if that baseline rule is ever port-scoped, or this pod template loses the label,
+# this line is what keeps the UI up.
 #
 # qbittorrent-reach-probe (the `qbittorrent-verify` Job, templates/verify/job.yaml.j2) is
 # load-bearing here, not incidental: it exists to prove qbittorrent is reachable from the POD
 # CIDR specifically, despite the Mullvad kill-switch's iptables rules on the wireguard sidecar —
-# the one source address that can detect the kill-switch having eaten the cluster's return path
-# (D11 trap). Fence that probe out and the check would still pass-or-fail on this policy alone,
+# the one source address that can detect the kill-switch having eaten the cluster's return path.
+# Fence that probe out and the check would still pass-or-fail on this policy alone,
 # silently inverting what it asserts: a REACHED would mean nothing, and the one real regression
 # this test exists to catch (the kill-switch swallowing pod-CIDR traffic) would read as green.
 # Same shape as k8s/roles/registry/templates/networkpolicy.yaml.j2 admitting its own
-# registry-selftest-push/registry-selftest-pull Jobs. The Job's pod carries this app label, the
-# label of the `kubectl run` probe it replaced at qbittorrent's flip; the template's DECIDED
-# note says why it kept it.
+# registry-selftest-push/registry-selftest-pull Jobs. The Job's pod carries this app label; the
+# template's DECIDED note says why.
 #
 # homepage's dashboard widget authenticates to the WebUI over the ClusterIP
 # (k8s/roles/homepage/templates/config/services.yaml.j2). It goes direct rather than through Traefik

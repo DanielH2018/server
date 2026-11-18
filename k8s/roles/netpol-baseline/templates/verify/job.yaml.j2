@@ -2,15 +2,13 @@
   netpol-baseline's verify Job and the ConfigMap that carries its script.
 
   The renderer emits this directory (`verify_files` takes `templates/verify/*.yaml.j2`) into
-  `netpol-baseline-verify`, which depends on `netpol-baseline-deferred` (D5 Open question 11).
-  The Job replaces the probe tasks and `netpol-probe-job.yaml.j2` the role ran under Ansible.
+  `netpol-baseline-verify`, which depends on `netpol-baseline-deferred`.
 
-  Both names end in a digest, as the Job census requires (D5, *Rules for every Job Flux
-  applies*): the ConfigMap's in `configmap_digest8` of its data, the Job's in
-  `job_spec_digest8` of its spec. Each is computed here from the same JSON those functions
-  hash, so the spec is written once as YAML text, parsed for the hash and emitted verbatim.
-  The renderer passes `flux_job_image` and `flux_job_connect`, the helper's text, to every
-  `templates/verify/` file (`render_tag`).
+  Both names end in a digest, as the Job census requires: the ConfigMap's in `configmap_digest8`
+  of its data, the Job's in `job_spec_digest8` of its spec. Each is computed here from the same
+  JSON those functions hash, so the spec is written once as YAML text, parsed for the hash and
+  emitted verbatim. The renderer passes `flux_job_image` and `flux_job_connect`, the helper's
+  text, to every `templates/verify/` file (`render_tag`).
 
   DECIDED: the spec embeds a digest of this role's rendered NetworkPolicies, every
   `networkpolicy*.yaml.j2` that `policies` below looks up, the deferred observability four
@@ -29,20 +27,17 @@
   certificate, could not run in the same container. The census admits no `ssl` import that
   would give each request its own context.
 
-  The exempt-set check is the successor of the two "Fail if the live exempt set is not exactly
-  ..." tasks the role's `tasks/main.yml` ran before its flip (#5685). `exempt_sets` holds one row per namespace whose scope
-  lever is `namespace`, because those tasks run only under namespace scope. Under Flux the
-  check runs after the apply, so drift fails this Job and the revision's soak acts on it,
-  where the task refused the apply. The levers have no form here, because a post-apply Job
-  sees only the render they already coerced. tests/test_netpol_baseline_flux_gates.py checks
-  them at render time instead.
+  The exempt-set check: `exempt_sets` holds one row per namespace whose scope lever is
+  `namespace`. The check runs after the apply, so drift fails this Job and the revision's soak
+  acts on it. The levers have no form here, because a post-apply Job sees only the render they
+  already coerced. tests/test_netpol_baseline_flux_gates.py checks them at render time instead.
 
-  The caller census (D5, *A fence admits every Job that dials through it*). The pod is
+  The caller census. The pod is
   `app: netpol-baseline-verify` and `netpol-probe: control` in `k8s_namespace`. It execs into
   nothing, and it dials:
     - kubernetes.default.svc:443, from the gate, for EndpointSlices and the exempt pods'
-      metadata. The API server runs on the host network,
-      where no NetworkPolicy selects it, so no peer is added;
+      metadata. The API server runs on the host network, where no NetworkPolicy selects it, so
+      no peer is added;
     - traefik:80, the control, which `networkpolicy-traefik.yaml.j2` admits from every source;
     - speedtest:80, the sentinel, which `networkpolicy-netpol-sentinel.yaml.j2` admits by the
       `netpol-probe: control` label this pod carries;

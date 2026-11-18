@@ -8,14 +8,14 @@
 #     ln -sT /config /root/.local/share/Terraria/Worlds
 #
 # Debian's /root is 0700 root:root, so a non-root uid cannot traverse it. Deployed with
-# `runAsUser: 1000` against the stock image on 2026-08-31 the pod CrashLoopBackOff'd on
+# `runAsUser: 1000` against the stock image the pod CrashLoopBackOffs on
 #
 #     mkdir: cannot create directory '/root': Permission denied
 #
 # — at the entrypoint's first filesystem write, nowhere near the world data, which is why an
 # analysis of the volume's ownership did not predict it.
 #
-# Neither manifest-side workaround rescues it, and both were considered. `fsGroup` acts on the
+# Neither manifest-side workaround rescues it. `fsGroup` acts on the
 # mounted volume and /root is image rootfs. Shadowing /root with an emptyDir hides
 # `/root/My Games/Terraria/favorites.json`, which the upstream Dockerfile seeds there
 # specifically to fix an error ("fix for favorites.json error", its words), so it trades this
@@ -28,11 +28,9 @@
 # see defaults/main.yml.
 #
 # beardedio ALSO publishes an immutable versioned tag per release — `vanilla-1.4.5.7`,
-# `vanilla-1.4.5.6`, back to `vanilla-1.4.1.2` (read off the Docker Hub tag list, 2026-09-02).
-# This comment said the opposite until then, and the correction is operational rather than
-# cosmetic: pinning back to a known-good game version is a clean tag pin, not a bare digest.
-# That is remediation option 2 on issue #822, where a connect-and-drop TCP probe against
-# 1.4.5.7 crashes the server loop and 1.4.5.6 takes the same probe without incident. It stays
+# `vanilla-1.4.5.6`, back to `vanilla-1.4.1.2`. Pinning back to a known-good game version is a
+# clean tag pin, not a bare digest. That is a remedy for a connect-and-drop TCP probe, which
+# crashes the server loop on 1.4.5.7 and which 1.4.5.6 takes without incident. It stays
 # an option rather than the fix because 1.4.5.7 has already saved this world, and a 1.4.5.6
 # server may refuse or damage a world it wrote.
 FROM beardedio/terraria:vanilla-latest@sha256:a9ac6cc8e5869bb98677ffcaa0bd8f8dfce5dbf13184ccc73a9c2b164875dd9c

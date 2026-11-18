@@ -1,6 +1,6 @@
 ---
 # Built from templates/Dockerfile.j2 and Dockerfile-runners.j2 (an extra JS package, the runners
-# config file); no upstream tag carries either. Since n8n's flip (#5546) Flux applies this role:
+# config file); no upstream tag carries either. Flux applies this role:
 # the promote workflow's `images` job builds both and pushes them to GHCR under their content
 # tags, and the renderer points these refs there with `imagePullPolicy: IfNotPresent`.
 #
@@ -25,7 +25,7 @@ k8s_autodeploy: false
 k8s_autodeploy_reason: "two reasons: (1) probe-less n8n-runners sub-deployment; (2) migrating state — Recreate + RWO PVC (n8n-data) holding the encryption key + credentials DB. COUPLING NOTE for a future promotion: n8n declares TWO claims, n8n-data and n8n-files — a revert of one without the other desyncs which workflow-referenced /files paths actually exist against the credentials/workflow state in n8n-data"
 
 # One set of blast-radius caps for both workloads. Memory requests are per workload: the
-# 7-day p95 working set on 2026-11-14 was 439Mi for n8n and 97Mi for the runners.
+# 7-day p95 working set was 439Mi for n8n and 97Mi for the runners.
 n8n_k8s_cpu_limit: "2"
 n8n_k8s_mem_limit: 2048Mi
 n8n_k8s_cpu_request: "100m"
@@ -53,7 +53,7 @@ n8n_k8s_files_claim: n8n-files
 n8n_k8s_files_storage_class: longhorn
 n8n_k8s_files_size: 1Gi
 
-# The claims the renderer emits for this role, which the n8n Kustomization applies (#3387).
+# The claims the renderer emits for this role, which the n8n Kustomization applies.
 k8s_claims:
   - name: "{{ n8n_k8s_claim }}"
     storage_class: "{{ n8n_k8s_storage_class }}"
@@ -71,9 +71,9 @@ n8n_k8s_broker_port: 5679
 # their node before the n8n Kustomization applies (scripts/renderer/renderer_lib/prepull.py).
 # `n8n` is `Recreate`, so without it the old pod stops before the new pod's pull starts and n8n
 # is down for the whole pull. With it, the old pod keeps serving while the images arrive.
-# MEASURED 2026-10-18 (#5546): a Renovate base bump re-pulls nearly both images from GHCR,
+# A Renovate base bump re-pulls nearly both images from GHCR,
 # n8n's 273.4 MB and n8n-runners' 191.4 MB, 464.8 MB in all; the kubelet pulls them one after
-# the other. Eight 20-30s samples of one blob ran 0.145-0.359 MB/s across both nodes, so the
+# the other. GHCR served 0.145-0.359 MB/s across both nodes, so the
 # full re-pull takes about 1300s at the fastest and 3205s at the slowest. 3600s covers it
 # down to 0.129 MB/s. The Job has no deadline, so a pull slower still costs that revision its
 # verdict, the Job keeps pulling, and Flux applies n8n on a later retry. Only Flux reads it:

@@ -12,8 +12,8 @@ valheim_k8s_image: ghcr.io/community-valheim-tools/valheim-server:1.4.1@sha256:f
 # Two readers take it. The renderer sets it as the valheim Kustomization's `timeout`, Flux's
 # health-check wait (C3's per-role fields, `role_fields` in scripts/lib/k8s_roles.py). The
 # renderer reads only a literal role default, so the value cannot be an include var or a Jinja
-# expression: before D5.15 it was an include var, and the flip would have rendered the 600s
-# default, below the startupProbe's own 60 x 15s. `progressDeadlineSeconds` in
+# expression: that would render the 600s default, below the startupProbe's own 60 x 15s.
+# `progressDeadlineSeconds` in
 # templates/deployment.yaml.j2 reads it through `valheim_k8s_rollout_timeout`. Flux's
 # wait and the deadline have to move together: at a deadline below the budget, the wait fails
 # on ProgressDeadlineExceeded whatever its timeout says, and at a budget below the deadline the
@@ -35,7 +35,7 @@ valheim_k8s_rollout_timeout: "{{ manifests_rollout_timeout }}"
 # The budget of the valheim-prepull Kustomization, whose Job pulls the server image and the mods
 # image onto daniel-box before the valheim Kustomization applies
 # (scripts/renderer/renderer_lib/prepull.py). The Deployment is `Recreate`, so without it the
-# server is down for the whole pull. MEASURED 2026-10-22 (#5855): the pinned amd64 server image
+# server is down for the whole pull. The pinned amd64 server image
 # is 369.78 MB compressed from GHCR, which has served this homelab at 0.145-0.53 MB/s; the mods
 # image is alpine plus two plugin DLLs. 2700s covers the full re-pull down to 0.137 MB/s. The Job
 # has no deadline, so a pull slower still costs that revision its verdict, the Job keeps pulling,
@@ -62,7 +62,6 @@ valheim_k8s_bepinex: "{{ 'true' if valheim_k8s_mods | length > 0 else 'false' }}
 # image's name, so this lookup and the build must agree on it.
 valheim_k8s_mods_image: "{{ k8s_registry_pull_host }}/valheim:{{ k8s_built_image_tags.get('valheim', 'latest') }}"
 
-# ── The mod set ─────────────────────────────────────────────────────────────────────────
 # Every entry is a Thunderstore release, pinned by version AND sha256 — the build verifies the
 # checksum before it unpacks, so a re-uploaded archive fails the build instead of reaching the
 # server. To bump one, read the new version and URL from
@@ -82,11 +81,10 @@ valheim_k8s_mods_image: "{{ k8s_registry_pull_host }}/valheim:{{ k8s_built_image
 # parser rejects a long comment run inside a collection ("too many consecutive comments before
 # resolving collection entry"), while `yaml.safe_load` accepts it.
 #
-# TEN MODS THAT FAILED ON VALHEIM 1.0 WERE REMOVED ON 2026-10-19. They had sat commented out
-# below this list. Seven threw on load, one was never deployed because its assembly carried
-# the same broken reference, and two loaded cleanly but nothing needed them. Each
-# one's pinned version, sha256 and recorded boot-log error are in #5776, the PR that removed
-# them. Check that history before re-adding any of them.
+# MODS THAT FAILED ON VALHEIM 1.0 ARE NOT LISTED. Seven threw on load, one carried the same
+# broken reference, and two loaded cleanly but nothing needed them. The git history of this file
+# holds each one's pinned version, sha256 and recorded boot-log error; check it before
+# re-adding any of them.
 #
 # A SERVERSYNC VERSION LINE IS NOT PROOF A MOD WORKS. The log prints
 # `Sending <mod> version <x> ... to the client` on every join because ServerSync registers
@@ -138,11 +136,11 @@ valheim_k8s_storage_class: longhorn
 # DECIDED: 20Gi, not the 10Gi it was until 2026-09-17, because the volume holds THREE copies
 # of the install at rest and a FOURTH during every game update. The image keeps steamcmd's
 # own tree (dl/server), the rsync'd vanilla copy (server) and the BepInEx merge (bepinex),
-# which with the three-day zip rotation measured 7.7 G steady on 2026-09-17. A Steam update
+# which with the three-day zip rotation measured 7.7 G steady. A Steam update
 # then rsyncs server + the BepInEx pack into bepinex.tmp before swapping it in, so the merge
-# needs one more install's worth free. At 10Gi that was 2.1 G free against a 2.2 G copy: the
-# l-1.0.14 update on 2026-09-17 hit ENOSPC four times in an hour, the hourly world zip failed
-# alongside it, and the PVC Fullness tile went DOWN (#1866). Longhorn thin-provisions, so
+# needs one more install's worth free. At 10Gi that left 2.1 G free against a 2.2 G copy, so an
+# update hit ENOSPC, the hourly world zip failed alongside it, and the PVC Fullness tile went
+# DOWN. Longhorn thin-provisions, so
 # the unused half costs nothing on disk; it exists so the peak sits near 55% rather than
 # 100%. longhorn-nobackup allows expansion, so this line grows the live claim in place.
 valheim_k8s_server_claim: valheim-server
@@ -165,7 +163,7 @@ valheim_k8s_server_update_transient_bytes: 3221225472
 valheim_k8s_server_name: "DBoy's Server"
 # Created on first boot because no worlds_local entry of this name exists.
 #
-# The old `Dedicated` world is NOT deleted, and nothing in the image touches it once this name
+# The `Dedicated` world is NOT deleted, and nothing in the image touches it once this name
 # changes: the server is launched with `-world "$WORLD_NAME"` (valheim-server), and the hourly
 # backup archives `$WORLDS_DIR/$WORLD_NAME` rather than the worlds_local directory
 # (valheim-backup). Both read at v1.2.0. So reverting is this one line back to `Dedicated` —
@@ -192,7 +190,7 @@ valheim_k8s_admin_ids: "76561198091839404"
 valheim_k8s_server_args: "-modifier portals casual"
 
 # The dedicated server simulates the whole world in RAM and wants headroom, not a tight cap.
-# The request is the 7-day p95 working set before the park (3675Mi, 2026-11-14) rounded up.
+# The request is the 7-day p95 working set before the park (3675Mi) rounded up.
 valheim_k8s_cpu_limit: "6"
 valheim_k8s_mem_limit: 9216Mi
 valheim_k8s_cpu_request: "750m"

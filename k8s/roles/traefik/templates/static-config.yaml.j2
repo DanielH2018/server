@@ -10,11 +10,10 @@ data:
       dashboard: true
       insecure: false
       debug: false
-    # entryPoint is explicit, not inherited. It defaults to `traefik` — the internal
-    # entrypoint — so merely declaring an entrypoint NAMED ping does not bind the handler to
-    # it, and both probes below would poll a port serving nothing. The Docker instance sidesteps
-    # this by shelling `traefik healthcheck`, which reads the config itself; a k8s httpGet
-    # probe names the port, so the binding has to be real.
+    # entryPoint is explicit, not inherited. It defaults to the internal `traefik` entrypoint, so
+    # merely declaring an entrypoint NAMED ping does not bind the handler to it, and both probes
+    # below would poll a port serving nothing. A k8s httpGet probe names the port, so the
+    # binding has to be real.
     ping:
       entryPoint: ping
 
@@ -31,9 +30,7 @@ data:
             # and uses the connection address. Only a proxy in front of Traefik belongs here.
             #
             # DECIDED: Cloudflare only, and not `lan_subnet` ({{ lan_subnet }}). The LAN /24
-            # was trusted for the Docker-era edge (33bdbdb32, narrowed from 10.0.0.0/8 by
-            # f0429fb4b), where the Docker bridges and co-hosted proxies sat on it. On k3s
-            # nothing on the LAN proxies to Traefik: neither node runs Docker, and the Pi runs
+            # does not hold a proxy for Traefik on k3s: neither node runs Docker, and the Pi runs
             # only docker-proxy, wg-easy, alloy and autoheal. Trusting the /24 let any LAN
             # device forge XFF, and that included every WireGuard peer. wg-easy masquerades
             # its `wg_client_subnet` ({{ wg_client_subnet }}) peers to the Pi's LAN address,
@@ -56,12 +53,10 @@ data:
               scheme: https
 {% if traefik_k8s_manage_crowdsec %}
           middlewares:
-            # Entrypoint-wide, matching the Docker edge (slice-6 B1). Once Traefik has a
-            # settled configuration, everything entering this entrypoint passes the CrowdSec
-            # ban-list + AppSec check before it is redirected. The only router here is
-            # `http-to-443@internal`, the redirection above, so what the chain buys is
-            # rejecting a banned IP on its FIRST request rather than on the https one it is
-            # redirected to.
+            # Entrypoint-wide: everything entering this entrypoint passes the CrowdSec ban-list +
+            # AppSec check before it is redirected. The only router here is
+            # `http-to-443@internal`, the redirection above, so what the chain buys is rejecting a
+            # banned IP on its FIRST request rather than on the https one it is redirected to.
             #
             # DECIDED: keep it, and expect one or two error lines per container start. Traefik
             # logs
@@ -72,20 +67,13 @@ data:
             # once or twice, within a second of startup, because the internal and file
             # providers publish their configuration before the kubernetesCRD watch delivers its
             # first one. The count is however many generations those two providers publish in
-            # that window, so both shapes are normal — #1356 measured a start that logged the
-            # line once and starts that logged it twice. It is the same window in which the
-            # livesync `@file` routers log "unknown TLS
-            # options: <ns>-modern@kubernetescrd" and then resolve fine. Traefik skips the
-            # offending router and rebuilds the whole entrypoint on the next configuration
-            # event, so http 404s instead of 301ing for that second and is correct
-            # afterwards. #1343 read those lines as proof that an internal router cannot
-            # resolve a `@kubernetescrd` middleware at all, and proposed dropping crowdsec
-            # from this chain. The log says otherwise: over the 7 days to 2026-09-06 every
-            # occurrence outside the #1322 outage landed 0-1s after a "Traefik version"
-            # startup line, and during #1322 — when the middleware really was unresolvable —
-            # the same line repeated on every configuration event for 11 minutes. A line that
-            # recurs while the reference is broken and stops once it resolves is evidence the
-            # reference resolves. The line is also proof Traefik attaches this chain to the
+            # that window. The livesync `@file` routers log "unknown TLS options:
+            # <ns>-modern@kubernetescrd" in the same window and then resolve fine. Traefik skips
+            # the offending router and rebuilds the whole entrypoint on the next configuration
+            # event, so http 404s instead of 301ing for that second and is correct afterwards.
+            # The line does not show that an internal router cannot resolve a `@kubernetescrd`
+            # middleware: it repeats on every configuration event while the reference is broken
+            # and stops once it resolves. The line is also proof Traefik attaches this chain to the
             # internal router: `applyModel` prepends an entrypoint's middlewares to every root
             # router and only then does the lookup fail, so an excluded router would log
             # nothing at all. Dropping crowdsec here would remove real enforcement to silence
@@ -105,31 +93,27 @@ data:
             - "127.0.0.1/32"
         http:
           middlewares:
-            # Entrypoint-wide, matching the Docker side. rate-limit stays per-router (the
-            # ingressroute() macro attaches it) so a future chatty service can opt into a
-            # higher ceiling, which an entrypoint-level limiter cannot express.
+            # rate-limit stays per-router (the ingressroute() macro attaches it) so a service can
+            # opt into a higher ceiling, which an entrypoint-level limiter cannot express.
 {% if traefik_k8s_manage_crowdsec %}
             # cloudflare-realip FIRST, ahead of crowdsec and of every router's forwardAuth.
             # Cloudflare appends the client address to any XFF the client sent, so the
             # trustedIPs above keep a client-chosen LEFTMOST entry, and Authelia logs the
             # leftmost entry as remote_ip. This middleware replaces XFF with CF-Connecting-IP
             # for a Cloudflare source, so everything after it sees `client` and every backend
-            # sees `client, edge`. It is the in-repo plugin under files/cloudflare-realip/,
-            # loaded from a ConfigMap (experimental.localPlugins below), and gated with the
-            # bouncer because the startupProbe that catches a failed plugin load is too.
+            # sees `client, edge`. Gated with the bouncer because the startupProbe that catches
+            # a failed plugin load is too.
             # ENFORCED by tests/k8s/test_traefik_cloudflare_realip.py.
             - {{ k8s_namespace }}-cloudflare-realip@kubernetescrd
             # crowdsec next: a banned IP is rejected before any headers work is done.
             - {{ k8s_namespace }}-crowdsec@kubernetescrd
 {% endif %}
             - {{ k8s_namespace }}-default-headers@kubernetescrd
-            # compress LAST, and the order is load-bearing. An entrypoint chain wraps in
-            # list order on the way in, so the last entry is the INNERMOST — it sees the
-            # backend's response first and compresses it, and the two above then add their
-            # headers on top of an already-encoded body. Listed first it would instead try
-            # to compress after default-headers had run, which is harmless but pointless,
-            # and it would sit outside crowdsec — doing compression work for requests that
-            # are about to be rejected with a 403.
+            # compress LAST, and the order is load-bearing. An entrypoint chain wraps in list order
+            # on the way in, so the last entry is the INNERMOST: it compresses the backend's
+            # response first, and the entries above add their headers on top of an already-encoded
+            # body. Listed first it would sit outside crowdsec and compress for requests about to
+            # be rejected with a 403.
             - {{ k8s_namespace }}-compress@kubernetescrd
       ping:
         address: ":{{ traefik_k8s_ping_port }}"
@@ -140,12 +124,11 @@ data:
         addRoutersLabels: true
         addServicesLabels: true
 
-    # Slice-6 B1 (D2): a real file, not stdout — the crowdsec agent sidecar tails it from
-    # the shared emptyDir. Same json format + dropped StartUTC as the Docker edge, so the
-    # crowdsecurity/traefik parser behaves identically across the cutover. A second sidecar
-    # (access-log-rotate, deployment.yaml.j2) tails the same file to stdout for Loki and
-    # copytruncates it to keep the shared emptyDir bounded — see that sidecar's comment for why
-    # copytruncate is safe for both readers.
+    # A real file, not stdout: the crowdsec agent sidecar tails it from the shared emptyDir. The
+    # json format with StartUTC dropped is the shape the crowdsecurity/traefik parser reads. The
+    # access-log-rotate sidecar (deployment.yaml.j2) tails the same file to stdout for Loki and
+    # copytruncates it to keep the emptyDir bounded; its comment says why copytruncate is safe
+    # for both readers.
     accessLog:
       filePath: /var/log/traefik/access.log
       format: json
@@ -182,7 +165,7 @@ data:
       file:
         # filename, NOT directory: a Secret volume projects through `..data` symlink dirs
         # and a directory watch parses the same file twice ("HTTP router already
-        # configured, skipping" — seen live at first deploy, 2026-08-12).
+        # configured, skipping").
         filename: /etc/traefik-file/livesync-gate.yml
         watch: true
 {% endif %}
@@ -202,12 +185,11 @@ data:
         # window records the options name `default` (pkg/server/router/tcp/router.go,
         # SetHTTPSForwarder), and once the router returns naming `modern` or
         # `cloudflare-origin-pull`, SNICheck answers every request on that connection 421
-        # for the connection's life. On the 2026-09-27 reboot that wedged the Pi's Alloy and
-        # both of the apiserver's OIDC discovery fetches for hours. With it on, the router
+        # for the connection's life. With it on, the router
         # stays, the handshake records the router's own option, and the client gets a 503
         # it retries through. The cost is a 503 instead of a 404 while a backend is down or
-        # scaled to 0, which the per-service traefik5xx check sees and the 404 flood check
-        # did not. Full reasoning in this role's CLAUDE.md, the SNICheck bullet.
+        # scaled to 0, which the per-service traefik5xx check sees. Full reasoning in this
+        # role's CLAUDE.md, the SNICheck bullet.
         allowEmptyServices: true
 
 {% if traefik_k8s_manage_acme %}
@@ -226,9 +208,7 @@ data:
               - "149.112.112.112:53"
 {% endif %}
 
-    # Process log stays on stdout for kubectl logs. The ACCESS log moved to a file at
-    # slice-6 B1 (see the accessLog block above) — the sidecar agent tails it from the
-    # shared emptyDir, which superseded this comment's /var/log/pods idea (D2).
+    # Process log stays on stdout for kubectl logs.
     log:
       format: json
       level: INFO

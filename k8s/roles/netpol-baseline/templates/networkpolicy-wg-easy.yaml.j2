@@ -1,7 +1,7 @@
 {# DECIDED: wg-easy's 51820/UDP listener is open to the internet, so this fence stays bespoke.
    The callers model (`netpol_from` / `netpol_fences`, macro in
    k8s/templates/networkpolicy.yml.j2) renders one TCP port admitting same-namespace `app:`
-   peers, and its header rules out growing it to absorb another shape. Census: #3701.
+   peers, and its header rules out growing it to absorb another shape.
    Do not reach for `from_apps: []`: it renders `from:` as null, which admits every source by
    accident rather than by statement.
 #}
@@ -23,8 +23,8 @@
 # `peer-cluster-drop` init container in k8s/roles/wg-easy). Peers reach services by hostname
 # through the Traefik VIP, a LAN address, so no policy should ever need `app: wg-easy` as a peer.
 #
-# Both ports come from this service's `containers_list` entry (udp_port / port) — verified live
-# 2026-08-20 as 51820 and 51821, and equal to the containerPorts.
+# Both ports come from this service's `containers_list` entry (udp_port / port) and equal the
+# containerPorts.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:

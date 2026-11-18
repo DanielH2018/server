@@ -35,7 +35,7 @@ manifests_rollout: pihole-exporter
 # The pod reads PIHOLE_PASSWORD from the pihole role's `pihole-env` Secret. The renderer
 # hashes each listed key's `.source` digest into `checksum/restart`, so a rotation of
 # pihole_password rolls this pod under Flux, and `secret_rotation.py consumers` lists
-# this role for that key (#5416).
+# this role for that key.
 manifests_outside_secrets:
   - name: pihole-env
     keys: [pihole_password]

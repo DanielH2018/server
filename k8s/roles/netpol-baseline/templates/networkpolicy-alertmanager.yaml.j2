@@ -2,15 +2,12 @@
    and karma from the homelab namespace, so it stays bespoke.
    The callers model (`netpol_from` / `netpol_fences`, macro in
    k8s/templates/networkpolicy.yml.j2) renders one TCP port admitting same-namespace `app:`
-   peers, and its header rules out growing it to absorb another shape. Census: #3701.
+   peers, and its header rules out growing it to absorb another shape.
 #}
 ---
 # Alertmanager has two cross-namespace, in-cluster callers. loki-homelab's ruler sends each
 # firing LogQL alert to `alertmanager_url` (loki-homelab/templates/configmap.yaml.j2). Karma,
-# the alert UI, reads alerts and silences and proxies the silence writes its UI makes. The M5
-# plan (docs/target-architecture/monitoring/m5-loki-ruler.md, "The cross-namespace grant")
-# lands the loki-homelab grant after the ruler, so the ruler's refused sends were recorded
-# first.
+# the alert UI, reads alerts and silences and proxies the silence writes its UI makes.
 #
 # The loki-homelab pod runs one container and no sidecar, so `app: loki-homelab` admits the
 # ruler and nothing else. Alloy, the other workload in that role, is `app: alloy` and is not
@@ -18,8 +15,8 @@
 #
 # Every other caller is already admitted by networkpolicy-observability.yaml.j2, which still
 # selects alertmanager; NetworkPolicies add up, so this file only widens it:
-#   - prometheus, its only alert source before the ruler, and its own scrape of the
-#     `alertmanager` job: the intra-namespace `podSelector: {}`.
+#   - prometheus, and its own scrape of the `alertmanager` job: the intra-namespace
+#     `podSelector: {}`.
 #   - traefik, for the GET-only read door on alertmanager.local
 #     (observability/templates/alertmanager-read-ingressroute.yaml.j2). The baseline's
 #     homelab-namespace traefik peer admits it.
@@ -27,8 +24,8 @@
 # 9093 is the containerPort AND the Service targetPort (observability/templates/alertmanager.yaml.j2).
 #
 # INGRESS ONLY, same as the rest of this role: an Egress policy selects pods correctly on this
-# cluster and blocks nothing (measured 2026-08-07). Writing one would read like a control in the
-# repo and do nothing in the cluster.
+# cluster and blocks nothing. Writing one would read like a control in the repo and do nothing in
+# the cluster.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:

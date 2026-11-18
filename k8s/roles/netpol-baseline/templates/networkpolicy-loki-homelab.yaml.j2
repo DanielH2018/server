@@ -2,15 +2,14 @@
    stays bespoke.
    The callers model (`netpol_from` / `netpol_fences`, macro in
    k8s/templates/networkpolicy.yml.j2) renders one TCP port admitting same-namespace `app:`
-   peers, and its header rules out growing it to absorb another shape. Census: #3701.
+   peers, and its header rules out growing it to absorb another shape.
    One rule here would fit that model on its own, but splitting it out leaves this file
    behind anyway, doubles the policy objects on one pod and renames a live object under the
    armed prune, so the whole fence keeps one owner.
 #}
 ---
-# The homelab log store — distinct from `loki` in the observability namespace, which slice 3
-# fenced with its own policy (networkpolicy-loki.yaml.j2). Both listen on 3100; do not confuse
-# them.
+# The homelab log store, distinct from `loki` in the observability namespace, which
+# networkpolicy-loki.yaml.j2 fences. Both listen on 3100; do not confuse them.
 #
 # Six callers beyond the baseline, each read from the caller's own template:
 #   alloy           — the DaemonSet that ships every pod's logs here (loki-homelab/templates/
@@ -23,7 +22,7 @@
 #                     grafana.yaml.j2). Prometheus scrapes it from there too, but the baseline
 #                     already carries that one.
 #
-# 3100 is the containerPort AND the Service port — verified 2026-08-20, they match.
+# 3100 is the containerPort AND the Service port.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:

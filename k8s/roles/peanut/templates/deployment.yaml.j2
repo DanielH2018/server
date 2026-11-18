@@ -27,8 +27,7 @@ spec:
       # /app/config emptyDir group-writable without knowing that UID.
 {{ pod_shell('homelab-best-effort', fs_group=1000) }}
       # PeaNUT WRITES /config (it persists UI settings beside settings.yml). A read-only
-      # subPath mount there EROFS'd
-      # the app at first deploy (2026-08-12), so the Secret seeds a writable emptyDir
+      # subPath mount there EROFS'd the app, so the Secret seeds a writable emptyDir
       # instead, same copy-not-mount shape as the app-config scratch below.
       initContainers:
         - name: seed-config

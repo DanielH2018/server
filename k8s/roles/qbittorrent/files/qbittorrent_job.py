@@ -89,8 +89,8 @@ DESIRED: dict[str, bool | int | str] = {
 
 # The socket timeout of each WebUI or egress request, in seconds, as `apply_prefs.py` uses.
 TIMEOUT = 15
-# How long the first connect retries a refusal, in seconds. It replaced the Ansible verify
-# tasks' 20 x 2s loop, which waited out kube-router learning a new pod's address.
+# How long the first connect retries a refusal, in seconds: kube-router needs time to learn a
+# new pod's address.
 REACH_RETRY_SECONDS = 60
 # How long the tunnel check waits for qBittorrent to learn its external address, in seconds.
 # A pod that has only just started reports an empty address until a DHT node or a tracker

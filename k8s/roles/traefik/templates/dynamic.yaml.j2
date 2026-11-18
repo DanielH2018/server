@@ -18,10 +18,10 @@ spec:
   headers:
     customResponseHeaders:
       Permissions-Policy: "geolocation=(self), microphone=(), camera=(), fullscreen=(self), usb=()"
-      # No global Content-Security-Policy, same as the Docker side: customResponseHeaders
-      # REPLACES the backend's header, so a blanket CSP clobbers the stricter per-app ones
-      # (FreshRSS even detects the weakened header and warns). Clickjacking is covered by
-      # X-Frame-Options SAMEORIGIN below; set CSP per-app where the origins are known-good.
+      # No global Content-Security-Policy: customResponseHeaders REPLACES the backend's header, so
+      # a blanket CSP clobbers the stricter per-app ones (FreshRSS even detects the weakened
+      # header and warns). Clickjacking is covered by X-Frame-Options SAMEORIGIN below; set CSP
+      # per-app where the origins are known-good.
     referrerPolicy: "strict-origin-when-cross-origin"
     browserXssFilter: true
     contentTypeNosniff: true
@@ -96,21 +96,18 @@ apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
   # Response compression, attached ENTRYPOINT-WIDE in static-config.yaml.j2 rather than
-  # per-router: there is no service here that wants its HTML/JSON shipped uncompressed, so
-  # an opt-in list would only ever be a list of everything, drifting one service at a time.
-  # Nothing compressed anything before this (2026-08-16) — invisible on the LAN, and the
-  # reason a Grafana board or an *arr UI feels heavy over WireGuard or through Cloudflare.
+  # per-router: no service here wants its HTML/JSON shipped uncompressed, so an opt-in list
+  # would only ever be a list of everything, drifting one service at a time.
   name: compress
   namespace: {{ k8s_namespace }}
 spec:
   compress:
-    # An ALLOW-list, not excludedContentTypes. Two reasons, and the first is a correctness
-    # trap: Traefik compares excludedContentTypes by parsed media type EQUALITY, so the
-    # obvious-looking `video/` prefix entry matches nothing and Jellyfin's streams would be
-    # gzipped — CPU burned to make already-compressed bytes slightly larger. Enumerating
-    # every video/image/archive type instead is a list that silently rots as new types
-    # appear. Naming what compresses well is the closed set; everything else — video, audio,
-    # images, torrents, fonts, downloads — is excluded by construction.
+    # An ALLOW-list, not excludedContentTypes: Traefik compares excludedContentTypes by parsed
+    # media type EQUALITY, so the obvious-looking `video/` prefix entry matches nothing and
+    # Jellyfin's streams would be gzipped, burning CPU to make already-compressed bytes larger.
+    # Enumerating every video/image/archive type instead silently rots as new types appear.
+    # Naming what compresses well is the closed set; everything else is excluded by
+    # construction.
     includedContentTypes:
       - text/html
       - text/plain
@@ -135,8 +132,8 @@ metadata:
   # IngressRoute that names it explicitly can never resolve it and every affected router
   # fails to build:
   #   error "unknown TLS options: homelab-default@kubernetescrd"
-  # The object exists and is valid the whole time, which is what makes it confusing — the
-  # reference is looking up a key the provider never registered.
+  # The object exists and is valid; the reference looks up a key the provider never
+  # registered.
   name: modern
   namespace: {{ k8s_namespace }}
 spec:
@@ -152,17 +149,16 @@ spec:
     - TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305
 ---
 # The public-Host twin of `modern`: same policy plus a required Cloudflare client certificate.
-# The macro file carries the reasoning (#1990); origin-pull-secret.yaml.j2 renders the CA it
+# The macro file carries the reasoning; origin-pull-secret.yaml.j2 renders the CA it
 # verifies against.
 {{ origin_pull_tlsoption(k8s_namespace) }}
 {% if traefik_k8s_manage_crowdsec %}
 ---
-# Slice-6 B1 — the CrowdSec bouncer, carried from the Docker edge's config.yml.j2 with two
-# deliberate differences: the LAPI is the in-cluster engine (Service `crowdsec`), and the
-# key is a FILE path, not an inline value — a Middleware CRD is readable by the read-only
-# kubeconfig, so an inline crowdsecLapiKey would hand the ban-management API to anything
-# holding that kubeconfig. The file lives in the traefik-crowdsec Secret, mounted into the
-# traefik container only.
+# The CrowdSec bouncer. The LAPI is the in-cluster engine (Service `crowdsec`), and the key is
+# a FILE path, not an inline value: a Middleware CRD is readable by the read-only kubeconfig,
+# so an inline crowdsecLapiKey would hand the ban-management API to anything holding that
+# kubeconfig. The file lives in the traefik-crowdsec Secret, mounted into the traefik container
+# only.
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
@@ -177,29 +173,24 @@ spec:
       crowdsecMode: stream
       updateIntervalSeconds: 60
       # Consecutive failed stream polls tolerated before the plugin declares the stream
-      # unhealthy. The plugin's default is 0 — ONE missed poll flips it, and an unhealthy
+      # unhealthy. The plugin's default is 0: ONE missed poll flips it, and an unhealthy
       # stream is a blanket 403 for every IP (bouncer.go ServeHTTP: "if we cannot join the
-      # stream we forbid the request to go on"), which is a self-inflicted edge outage, not
-      # a security control. This Deployment is replicas:1 + strategy:Recreate on an RWO PVC,
-      # so a LAPI gap on every roll is EXPECTED, not exceptional: 2026-08-16 a routine
-      # crowdsec roll took the whole fleet 403 for 2 minutes.
+      # stream we forbid the request to go on"), a self-inflicted edge outage rather than a
+      # security control. This Deployment is replicas:1 + strategy:Recreate on an RWO PVC, so a
+      # LAPI gap on every roll is EXPECTED, not exceptional.
       #
-      # 5 ≈ 6 min of tolerance. Sized when a cold metabase image pull was the slowest part of
-      # a crowdsec roll; metabase left the pod 2026-08-22, so this is now headroom rather than
-      # a fitted bound. Kept — the cost of spare tolerance is bounded by the paragraph below.
-      # Safe because the cache lookup happens BEFORE this health gate: an IP already in the
-      # decision cache is still blocked, and AppSec below still inspects inline. Only a
-      # NEWLY added ban is delayed by up to the tolerance window. Not -1 (never flip) — a
-      # permanently dead LAPI must still eventually fail closed rather than serve a
+      # 5 ≈ 6 min of tolerance. Safe because the cache lookup happens BEFORE this health gate:
+      # an IP already in the decision cache is still blocked, and AppSec below still inspects
+      # inline. Only a NEWLY added ban is delayed by up to the tolerance window. Not -1 (never
+      # flip): a permanently dead LAPI must still eventually fail closed rather than serve a
       # silently frozen ban-list forever.
       updateMaxFailure: 5
       # DECIDED: no usage-metrics ticker. At the default 600s the plugin's metrics tick lands
       # on every tenth stream tick, and on some of those coincidences (v1.7.1, under Yaegi) the
       # stream ticker then skips every pull until a later metrics tick, silently and with no
-      # log line: 13 stalls of exactly 600s or 1200s in 3 days here, each starting on a
-      # metrics tick (#2752). A ban or an unban made in that window never reaches the edge.
-      # Upstream maxlerebourg/crowdsec-bouncer-traefik-plugin#377 reproduced it with both
-      # periods scaled down 30x, and saw zero stalls over 284 host-hours with this set to 0.
+      # log line, in stalls of exactly 600s or 1200s, each starting on a metrics tick. A ban or
+      # an unban made in that window never reaches the edge. Upstream tracks it as
+      # maxlerebourg/crowdsec-bouncer-traefik-plugin#377, where 0 showed zero stalls.
       # 0 passes the plugin's validation and New() starts no metrics ticker. The cost is the
       # bouncer's dropped-request count in `cscli metrics`, which nothing here reads. Revisit
       # when a release closes #377. The ticker is a package global, so only a Traefik restart

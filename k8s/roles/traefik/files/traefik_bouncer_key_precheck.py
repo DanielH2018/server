@@ -1,7 +1,7 @@
 """traefik's precheck Job: refuse a bouncer key the CrowdSec LAPI rejects, before Traefik rolls.
 
-Flux runs it from `templates/precheck/` as `traefik-precheck`, which `traefik` depends on
-(#6095). A key rotation that skips `cscli bouncers delete k8straefik` leaves the LAPI holding
+Flux runs it from `templates/precheck/` as `traefik-precheck`, which `traefik` depends on.
+A key rotation that skips `cscli bouncers delete k8straefik` leaves the LAPI holding
 the old key's hash, and the new pod's startupProbe then fails on AppSec's 401. traefik rolls
 `Recreate`, so that failure is an edge outage. A failed precheck holds `traefik` instead, and
 the old pod keeps serving.

@@ -19,12 +19,11 @@ k8s_autodeploy: false
 k8s_autodeploy_reason: "state coupled outside the volume — reverting qbittorrent-config to a snapshot rewinds in-flight torrent bookkeeping while the media-data volume it references does not move; the snapshot Job and the operator revert work fine and are not the blocker"
 # The claim snapshotted before each revision applies. Under Flux the renderer turns this
 # list into the qbittorrent-snapshot Kustomization, whose Job snapshots it before qbittorrent applies
-# (D5.2a). Declared regardless of k8s_autodeploy.
+# Declared regardless of k8s_autodeploy.
 k8s_autodeploy_snapshot_pvcs: [qbittorrent-config]
 
 # The gate Job Flux runs in `qbittorrent-verify`, copied from the drift check's jobTemplate
-# (scripts/renderer/renderer_lib/cronjob_gate.py). It replaced the k8s/cronjob-gate run in
-# tasks/main.yml at qbittorrent's flip. The check reads the preferences and logs a verdict, and
+# (scripts/renderer/renderer_lib/cronjob_gate.py). The check reads the preferences and logs a verdict, and
 # exits 0 on a match and on drift alike, so it is a verify: a run that starts and reaches the
 # WebUI proves the check's image, Secret and fence peer.
 flux_cronjob_gates:
@@ -32,9 +31,8 @@ flux_cronjob_gates:
     kind: verify
 
 # The manifest whose Secret holds the all-digit Mullvad account number, which no Flux
-# placeholder can carry as a string. A placeholder render (scripts/renderer, target slice R2)
-# leaves it out, and D3 ships it as a SOPS-encrypted manifest instead. Ansible renders and
-# applies it like any other secret file. `sops-manifest-entries` in
+# placeholder can carry as a string; it ships as a SOPS-encrypted manifest instead.
+# `sops-manifest-entries` in
 # scripts/renderer/renderer_lib/sops_entries.py holds the entry to one Secret of
 # `SOPS_MANIFEST_KEYS` keys.
 render_sops_manifests: [mullvad-account-secret.yaml]
@@ -97,10 +95,8 @@ qbittorrent_k8s_mem_limit: 2048Mi
 qbittorrent_k8s_cpu_request: "100m"
 qbittorrent_k8s_mem_request: 256Mi
 
-# The qbittorrent-prefs-check CronJob's schedule, read on Etc/UTC. Until H2.5d
-# (docs/target-architecture/host/h2-shrink-host-plane.md, Steps item 15) it was a daniel-box
-# host cron, whose clock is UTC; daniel-box's host package retires it through legacy entries. The host
-# cron's fields, unchanged. Daily, not */10 like the health readers: a WebUI edit or a Longhorn
+# The qbittorrent-prefs-check CronJob's schedule, read on Etc/UTC. Daily, not */10 like the health
+# readers: a WebUI edit or a Longhorn
 # restore that reverts files/apply_prefs.py's eight throughput settings is rare, and there is
 # no deadline this needs to stay under (files/prefs_check.py logs, it does not
 # push).

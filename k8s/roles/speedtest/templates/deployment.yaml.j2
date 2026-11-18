@@ -48,33 +48,24 @@ spec:
             - name: OOKLA_EULA_GDPR
               value: "true"
             # DECIDED: the schedule stays INTERNAL to the app rather than becoming a k8s
-            # CronJob. #1483 raised the CronJob because nothing outside the container can see
-            # a tick fire. Measured 2026-09-10, the internal scheduler is not the flaky part:
-            # rows 825-849 land on :00 at 05/11/17/23 UTC every day, with exactly ONE miss —
-            # 2026-09-09 17:00, on a day the pod was rescheduled by the 20:12 daniel-box
-            # reboot. A CronJob would move the transcript, not the reliability, and it cannot
-            # write into the app's own results table without reimplementing the Ookla run.
+            # CronJob. A CronJob would make a tick visible outside the container, but the internal
+            # scheduler is not the flaky part: ticks land on :00 at 05/11/17/23 UTC, and the only
+            # miss coincided with a pod reschedule. A CronJob would move the transcript, not the
+            # reliability, and it cannot write into the app's own results table without
+            # reimplementing the Ookla run.
             # Revisit if a miss ever occurs without a pod restart beside it.
             - name: SPEEDTEST_SCHEDULE
               value: "0 */6 * * *"
-            # Pinned to 41671 (x99.cloud, Chicago) on 2026-08-24, restoring the pin that came
-            # off on 2026-08-13 — to a different server, and this time on measured evidence.
+            # Pinned to 41671 (x99.cloud, Chicago). Results under auto-select are BIMODAL, and the
+            # mode is decided by which server the run draws: runs that landed on 41671 returned a
+            # median 910 Mbps, runs on any of six other servers (SUMOFIBER, TNAHosting, Highline,
+            # Tata, GigeNET, Sangoma) a median 12.8 Mbps, and the groups do not overlap. Upload
+            # read 37-41 Mbps throughout, so only the download leg collapses.
             #
-            # Auto-select did not fix what removing the old pin was meant to fix; it randomised
-            # it. Results under auto-select are BIMODAL, and the mode is decided by which server
-            # the run draws. Over 2026-08-14..24, all 20 runs that landed on 41671 returned a
-            # median 910 Mbps, and all 17 that landed on any of six other servers (SUMOFIBER,
-            # TNAHosting, Highline, Tata, GigeNET, Sangoma) returned a median 12.8 Mbps. The two
-            # groups do not overlap: worst run on 41671 was 119 Mbps, best run elsewhere 42.8.
-            # Upload read 37-41 Mbps throughout, so the link is fine on the bad runs and only
-            # the download leg collapses.
-            #
-            # The old pin's story stands and is the reason to distrust this one eventually:
-            # 1775 (Comcast, Baltimore) returned ~900 Mbps on all 54 runs from 07-25 to 08-07,
-            # then ~13 Mbps on all 21 runs from 08-08 to 08-13. A pin is only as good as its
-            # last verification, so re-check 41671 against auto-select periodically — the
-            # monitor-bridge `speedtest` check's 100 Mbps floor is what makes a repeat visible
-            # rather than silent.
+            # A pin is only as good as its last verification: a previously pinned server
+            # (1775, Comcast, Baltimore) returned ~900 Mbps, then ~13 Mbps. Re-check 41671 against
+            # auto-select periodically — the monitor-bridge `speedtest` check's 100 Mbps floor is
+            # what makes a repeat visible rather than silent.
             #
             # NOT A DIAGNOSIS. Six independent providers all congesting to the same ~13 Mbps is
             # odd, and curl to two distant non-Ookla hosts showed the same shape. This pin fixes

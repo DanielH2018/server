@@ -104,7 +104,7 @@ DESIRED: dict[str, bool | int | str] = {
     # cores.
     "hashing_threads": 2,
     # INERT ON LINUX, kept only so a WebUI edit cannot set something worse. Traced in
-    # qBittorrent's source 2026-08-29: applyMemoryWorkingSetLimit() (app/application.cpp) is
+    # qBittorrent's source: applyMemoryWorkingSetLimit() (app/application.cpp) is
     # compiled under `QBT_USES_LIBTORRENT2 && !Q_OS_LINUX && !Q_OS_MACOS`, so on this image the
     # function does not exist and is never called — setMemoryWorkingSetLimit() only persists the
     # value to QSettings. Even the unreachable Q_OS_UNIX branch says "has no effect on linux" and
@@ -113,9 +113,7 @@ DESIRED: dict[str, bool | int | str] = {
     # limit is the only ceiling, and page cache expands to fill whatever it is given. That is why
     # the container limit stays at 2048Mi: a working set pinned at 99.9% of it with zero restarts
     # and zero OOM events is reclaimable cache, not unmet demand, and raising the limit would just
-    # move where it pins. The earlier comment here read this setting as a working control and told
-    # the next reader to raise the container limit "before going past this" — it isn't, and doing
-    # so buys nothing.
+    # move where it pins.
     "memory_working_set_limit": 1024,
     # Blocks held in memory while hash-checking, in MiB (sessionimpl.cpp multiplies by 64 to reach
     # libtorrent's count of 16 KiB blocks). 32 is stock. Raised because piece verification here
@@ -132,7 +130,7 @@ DESIRED: dict[str, bool | int | str] = {
     "enable_piece_extent_affinity": True,
     # NOT A THROUGHPUT SETTING. qBittorrent marks a file matching one of these patterns
     # "do not download" when the torrent is added, so a fake episode that is only an
-    # executable or an archive downloads and seeds nothing (issue #6274). Indexers served
+    # executable or an archive downloads and seeds nothing. Indexers served
     # three shapes in 2026-10: a release holding a `.exe`, a single `.7z` wrapping a padded
     # `.exe`, and (2023) a `.iso` inside a folder named `.mkv`. Sonarr still flags the empty
     # download, so the Arr Queue Warnings monitor still pages and a human still removes it.
@@ -218,8 +216,7 @@ class QbtClient:
         # SUCCESS IS THE SESSION COOKIE, NOT THE BODY. qBittorrent 5.2.3 answers a good
         # login with **HTTP 204 and an empty body**; older builds answered 200 with the
         # literal string "Ok.". Checking for "Ok." therefore rejects a login that in fact
-        # succeeded — measured against 5.2.3 on 2026-08-26, and the reason this comment
-        # exists. A bad password answers 200 with "Fails." and sets no cookie, so the
+        # succeeded. A bad password answers 200 with "Fails." and sets no cookie, so the
         # cookie is the one signal that means the same thing across versions.
         body = self._post(
             "/api/v2/auth/login", {"username": username, "password": password}

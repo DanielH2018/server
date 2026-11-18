@@ -23,8 +23,8 @@ spec:
       port: {{ container_item.port }}
       targetPort: {{ container_item.port }}
 ---
-# Instance 2's web port, and the ONLY caller is pihole-exporter. Added 2026-09-10 for issue
-# #1444: DNS is load-balanced across two independent FTLs, each keeping its own pihole-FTL.db,
+# Instance 2's web port, and the ONLY caller is pihole-exporter. DNS is load-balanced across two
+# independent FTLs, each keeping its own pihole-FTL.db,
 # so a metrics scrape that reached only the Service above would report roughly HALF the house's
 # query volume — silently, and with a plausible-looking graph. There is no IngressRoute for it
 # and there must not be one: the reason the admin UI is pinned to instance 1 (see above) is that
@@ -44,8 +44,7 @@ spec:
       port: {{ container_item.port }}
       targetPort: {{ container_item.port }}
 ---
-# The LAN DNS seam (slice-6 D4): one pinned VIP the router's DHCP DNS option flips to at
-# cutover. Both Pi-holes serve simultaneously while leases renew — the free strangler.
+# The LAN DNS seam: one pinned VIP the router's DHCP DNS option points at.
 apiVersion: v1
 kind: Service
 metadata:
@@ -57,9 +56,7 @@ spec:
   type: LoadBalancer
   # Pinned because CoreDNS forwards here by address — see coredns_upstreams.
   clusterIP: {{ pihole_k8s_dns_cluster_ip }}
-  # Preserves real client addresses — Pi-hole's per-client query log is how the drain is
-  # observed (retire the Docker copy only when ITS log flatlines, and this one shows who
-  # has moved). Safe on a single node.
+  # Preserves real client addresses in Pi-hole's per-client query log. Safe on a single node.
   externalTrafficPolicy: Local
   selector:
     app: pihole

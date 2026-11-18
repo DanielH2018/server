@@ -31,12 +31,12 @@ spec:
       # written here because the tdarr-prepull Job copies this pod's placement and cannot read
       # a PV's, and the renderer refuses a pre-pull for a workload that names no node.
 {{ node_affinity_required(k8s_primary_node) }}
-      # The file-mode half of the GPU wiring (D2) — the device plugin below handles the cgroup
+      # The file-mode half of the GPU wiring — the device plugin below handles the cgroup
       # half. Same pair as jellyfin; see that role for why the GID lives in host_vars.
       securityContext:
         supplementalGroups:
           - {{ render_gid }}
-      # ── the VAAPI encode, before tdarr starts (#5451, option 1) ──────────────────────────
+      # The VAAPI encode, before tdarr starts.
       # tdarr's OWN bundled ffmpeg, not jellyfin's: a different binary built against different
       # libraries, so jellyfin's encode proof does not carry over. It runs in tdarr's image with
       # the same device request, so a broken driver, device or ffmpeg build keeps tdarr from
@@ -96,8 +96,7 @@ spec:
             # unless this is set. This install moved to the Rust engine through that rollout,
             # and Rust migrated the library DB out of the NodeJS engine's DB2/ tree, so a 2.x
             # pod that drew NodeJS would come up on library state from before the move. 3.x
-            # runs Rust whatever this says, so the pin matters after a rollback to a 2.x tag
-            # (#4555).
+            # runs Rust whatever this says, so the pin matters after a rollback to a 2.x tag.
             - name: TDARR_ENGINE
               value: "rust"
             # Authelia's one_factor gate on the route is the only login. 3.x enables Tdarr's
@@ -108,9 +107,8 @@ spec:
               value: "false"
             # The primary node's name, so it registers as `daniel-box`
             # where the seeded database was written by a node called `daniel-server`.
-            # Measured after the move: `/api/v2/get-nodes` returns exactly ONE node, unpaused, so
-            # the rename did not strand a second registration. Worth re-checking if node-assigned
-            # work ever appears stuck, since that is where a stale ID would show up.
+            # Check that `/api/v2/get-nodes` returns exactly ONE node if node-assigned work ever
+            # appears stuck, since that is where a stale ID would show up.
             - name: nodeID
               value: "{{ k8s_primary_node }}"
           volumeMounts:
@@ -121,11 +119,11 @@ spec:
               mountPath: /app/server/Tdarr/Backups
             - name: tdarr-configs
               mountPath: /app/configs
-            # THE PATH CONTRACT (D4), and the one mount here that is read-write.
+            # THE PATH CONTRACT, and the one mount here that is read-write.
             - name: media
               mountPath: /media
               subPath: {{ tdarr_k8s_media_subpath }}
-            # Neither of these belongs on Longhorn (D6). The transcode cache holds whole
+            # Neither of these belongs on Longhorn. The transcode cache holds whole
             # intermediate video files and is rewritten constantly; the logs are capped at
             # maxLogSizeMB and rotate. Both are regenerable, and replicating either would spend
             # the cluster's storage on data nothing would ever restore.
@@ -170,7 +168,7 @@ spec:
         # job would otherwise fill `/` on daniel-box and take k3s, Longhorn and every other pod
         # with it. With a limit the kubelet evicts this pod instead, which is a recoverable
         # failure affecting one service. 100Gi against 815G free and a 6.1G largest library file
-        # (measured 2026-08-08) is ample headroom for concurrent jobs while still bounding it.
+        # is ample headroom for concurrent jobs while still bounding it.
         - name: tdarr-transcode-cache
           emptyDir:
             sizeLimit: 100Gi

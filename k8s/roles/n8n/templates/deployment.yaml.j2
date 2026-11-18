@@ -47,7 +47,7 @@ spec:
           # that a rebuild can move silently; asserted here, a move fails admission instead.
           # The uid is explicit because `runAsNonRoot` alone pins nothing, and the kubelet
           # refuses a container whose image names its user rather than numbering it — `node`
-          # is a name. PID 1 (`tini`) measured at uid 1000 on 2026-08-31, so this is a no-op.
+          # is a name.
           # Drop ALL with no cap_add. The image runs as `node` (uid 1000) and the seeded tree
           # is uid 1000 too — tar restored it with --numeric-owner — so nothing here needs
           # CHOWN or DAC_OVERRIDE.
@@ -70,9 +70,7 @@ spec:
             # instead, which sets the base URL for both test and production webhooks`. That wider
             # scope is safe here and does NOT re-expose /webhook-test/ — the dev endpoint is kept
             # off the public edge by a Traefik rule (bridge_bypass_prefixes lists /webhook/ only),
-            # never by this variable. What it can change is the Test URL shown in the editor,
-            # which n8n previously derived from N8N_HOST/N8N_PROTOCOL/N8N_PORT and now takes from
-            # here; the production URL is unchanged because the value is the same.
+            # never by this variable. It does set the Test URL shown in the editor.
             - name: N8N_HOST
               value: "{{ container_item.hostname | default(container_item.name) }}.{{ domain }}"
             - name: N8N_WEBHOOK_URL
@@ -87,16 +85,12 @@ spec:
             # are Cloudflare and the cluster Traefik — Cloudflare's ranges sit in
             # `forwardedHeaders.trustedIPs` on both entrypoints (see the traefik role's
             # cloudflare-ip-drift.sh.j2), so it is a trusted proxy that sets X-Forwarded-For
-            # and counts. This is NOT a leftover from the Docker edge Traefik uninstalled
-            # 2026-08-14; that host was never one of these two. An earlier version of this
-            # comment said the opposite and invited exactly the change that breaks it.
+            # and counts.
             - name: N8N_PROXY_HOPS
               value: "2"
             - name: N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS
               value: "true"
-            # Four outbound calls this instance makes by default and nobody here consumes. All
-            # four were simply UNSET before 2026-08-29, which meant n8n's defaults (all enabled)
-            # were live, not that a choice had been made.
+            # Four outbound calls this instance makes by default and nobody here consumes.
             #
             # N8N_TEMPLATES_ENABLED=false is a REAL UI change, not a silent one: it removes the
             # editor's "browse workflow templates" panel, which pulls from n8n.io. That is the
@@ -111,8 +105,7 @@ spec:
             - name: N8N_HIRING_BANNER_ENABLED
               value: "false"
             # Community node packages, installed from the editor's Settings → Community
-            # nodes panel. n8n's default is DISABLED, and it was unset here until 2026-09-10,
-            # so the default was live rather than chosen (#1449).
+            # nodes panel. n8n's default is DISABLED.
             #
             # The install path is PVC state, not image state: n8n npm-installs each package
             # under `$N8N_USER_FOLDER/.n8n/nodes`, N8N_USER_FOLDER is unset fleet-wide, so the
@@ -123,8 +116,7 @@ spec:
             - name: N8N_COMMUNITY_PACKAGES_ENABLED
               value: "true"
             # The two sibling flags that govern WHAT may be installed and what happens when
-            # the files are missing. Both were unset until 2026-09-10 (#1588), so n8n's
-            # defaults were live rather than chosen. Names and defaults read from
+            # the files are missing. Names and defaults read from
             # packages/cli/src/modules/community-packages/community-packages.config.ts at tag
             # `n8n@2.38.5` — the version the running pod reports.
             #
@@ -148,12 +140,12 @@ spec:
             # N8N_COMMUNITY_PACKAGES_ALLOW_TOOL_USAGE — whether an AI Agent node may call a
             # community node as a tool — is NOT set, because the variable does not exist at
             # 2.38.5. It is absent from community-packages.config.ts, from the rest of
-            # n8n-io/n8n and from n8n-io/n8n-docs at that tag (searched 2026-09-10); n8n made
+            # n8n-io/n8n and from n8n-io/n8n-docs at that tag; n8n made
             # community nodes usable as tools unconditionally and dropped the switch. Setting
             # it would be an inert line that reads like a control. Nothing here narrows what
             # an AI Agent may reach, which is a consequence of enabling community packages at
             # all — reconsider that switch if it ever matters, not this one.
-            # N8N_RUNNERS_ENABLED is gone: 2.41.6 logs it as no longer needed (#3260).
+            # N8N_RUNNERS_ENABLED is not set: 2.41.6 logs it as no longer needed.
             - name: NODE_RUNNERS_ENABLED
               value: "true"
             - name: N8N_RUNNERS_MODE
@@ -169,16 +161,15 @@ spec:
             - name: N8N_RUNNERS_TASK_REQUEST_TIMEOUT
               value: "300"
             # Three defaults n8n 2.41.6 logs as shrinking in a future version, pinned at the
-            # values that were live while they were unset (until 2026-10-02, #3255), except the
-            # task timeout, which was then lowered on purpose (#3258). Unset, a
+            # upstream defaults of 2.41.6, except the task timeout, which is lowered on purpose. Unset, a
             # Renovate digest bump would cut them silently. Defaults read from
             # packages/@n8n/config/src/configs/{runners,compression}.config.ts at `n8n@2.41.6`.
             #
             # DECIDED: 60 s, the same value deployment-runners.yaml.j2 gives the runners. Two
             # timeouts apply: this one is the BROKER's limit (upstream default 300 s, dropping
-            # to 60), and the runner aborts a task at its own. They held 300 and 60 until the
-            # operator chose 60 on 2026-10-02 (#3258): the runners pod executes arbitrary
-            # workflow code, and a short task limit backs up its resource cap as the DoS guard.
+            # to 60), and the runner aborts a task at its own. The operator chose 60 because the
+            # runners pod executes arbitrary workflow code, and a short task limit backs up its
+            # resource cap as the DoS guard.
             # To let Code nodes run longer, raise BOTH, or the lower one still wins.
             - name: N8N_RUNNERS_TASK_TIMEOUT
               value: "60"
@@ -188,8 +179,8 @@ spec:
               value: "2147483648"
             - name: N8N_COMPRESSION_NODE_MAX_ZIP_ENTRIES
               value: "5000"
-            # Keeps database.sqlite small (it once hit 840M of execution history, and its daily
-            # page churn was the biggest single driver of B2 billable growth, 2026-07-03). The
+            # Keeps database.sqlite small (execution history once reached 840M, and its daily
+            # page churn drove B2 billable growth). The
             # Kopia backup only needs workflows and credentials, so successful-run data is not
             # saved at all (the operator never reads it; errors still are), the rest is pruned
             # after 3 days, and the DB is compacted on startup so the space returns to the
@@ -203,7 +194,7 @@ spec:
             - name: DB_SQLITE_VACUUM_ON_STARTUP
               value: "true"
             # Renames /home/node/.n8n/binaryData to /home/node/.n8n/storage at boot, the move
-            # n8n v3 makes by default (#3260). It is one renameSync inside the n8n-data claim,
+            # n8n v3 makes by default. It is one renameSync inside the n8n-data claim,
             # and no volume mounts either path. n8n then records `fsStorageMigrated` in
             # /home/node/.n8n/config, merged into the settings that hold the encryption key,
             # and skips the check on every later boot, so the flag stays inert once it has run.
