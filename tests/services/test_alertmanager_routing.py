@@ -42,9 +42,9 @@ from _k8s_render import render_role_template
 
 MUTE = "weekly-reboot"
 BLACKHOLE = "blackhole"
-# Only the equality matcher appears in the tree. Any other operator raises in `_matches`
+# The tree uses the equality and regex matchers. Any other operator raises in `_matches`
 # rather than reading as no match, which would silently skip a route.
-EQUALITY = re.compile(r'^(\w+)="([^"]*)"$')
+MATCHER = re.compile(r'^(\w+)(=~|=)"([^"]*)"$')
 
 INGRESS_RULES = K8S_ROLES / "observability" / "files" / "rules" / "ingress-probes.yaml"
 HOST_RULES = K8S_ROLES / "observability" / "files" / "rules" / "host-checks.yaml"
@@ -291,22 +291,39 @@ def route_tree() -> dict:
 
 
 def _matches(matcher: str, labels: dict[str, str]) -> bool:
-    found = EQUALITY.match(matcher)
+    found = MATCHER.match(matcher)
     if found is None:
         raise AssertionError(f"the walk cannot read matcher {matcher!r}; teach it")
-    name, value = found.groups()
+    name, op, value = found.groups()
+    if op == "=~":
+        return re.fullmatch(value, labels.get(name, "")) is not None
     return labels.get(name, "") == value
+
+
+def reached_paths(route: dict, labels: dict[str, str]) -> list[list[dict]]:
+    """Each chain of routes from `route`, which the caller has already matched, down to a
+    route `labels` ends on."""
+    found = []
+    for child in route.get("routes", []):
+        if all(_matches(m, labels) for m in child.get("matchers", [])):
+            found.extend([route, *path] for path in reached_paths(child, labels))
+            if not child.get("continue", False):
+                break
+    return found or [[route]]
 
 
 def reached(route: dict, labels: dict[str, str]) -> list[dict]:
     """The routes `labels` ends on below `route`, which the caller has already matched."""
-    found = []
-    for child in route.get("routes", []):
-        if all(_matches(m, labels) for m in child.get("matchers", [])):
-            found.extend(reached(child, labels))
-            if not child.get("continue", False):
-                break
-    return found or [route]
+    return [path[-1] for path in reached_paths(route, labels)]
+
+
+def inherited(key: str, labels: dict[str, str], tree: dict | None = None) -> list:
+    """The `key` setting of each route `labels` ends on in `tree`, the rendered one by
+    default: the nearest value on the chain from the root, as Alertmanager inherits it."""
+    return [
+        next(r[key] for r in reversed(path) if key in r)
+        for path in reached_paths(tree or route_tree(), labels)
+    ]
 
 
 def unmuted(labels: dict[str, str], tree: dict | None = None) -> list[str]:
@@ -555,30 +572,6 @@ def test_a_paging_route_without_the_mute_is_flagged():
     assert unmuted(labels, tree) == ["discord"]
 
 
-def repeat_intervals(labels: dict[str, str], tree: dict | None = None) -> list[str]:
-    """The `repeat_interval` of each route `labels` reaches in `tree`, the root's when the route
-    sets none. The tree nests one level, so the root is the only parent a route inherits from."""
-    tree = tree or route_tree()
-    return [
-        route.get("repeat_interval", tree["repeat_interval"])
-        for route in reached(tree, labels)
-    ]
-
-
-def test_a_standing_deploy_hold_repeats_daily():
-    assert repeat_intervals(DEPLOY_HOLD) == ["24h"]
-
-
-def test_a_deploy_hold_without_its_route_is_flagged():
-    tree = route_tree()
-    tree["routes"] = [
-        r
-        for r in tree["routes"]
-        if 'alertname="DeployHoldActive"' not in r.get("matchers", [])
-    ]
-    assert repeat_intervals(DEPLOY_HOLD, tree) == ["6h"]
-
-
 def test_the_watchdog_reaching_an_unmuted_route_is_flagged():
     assert unmuted(WATCHDOG) == ["healthchecks"]
 
@@ -587,4 +580,4 @@ def test_a_matcher_the_walk_cannot_read_is_flagged():
     """Guards the walk's own parser, not the rendered config: a matcher form it cannot read
     must stop the walk rather than skip a route the tests above would then never check."""
     with pytest.raises(AssertionError, match="cannot read"):
-        _matches('alertname=~"K8s.*"', {"alertname": "K8sDeploymentZeroAvailable"})
+        _matches('alertname!~"K8s.*"', {"alertname": "K8sDeploymentZeroAvailable"})

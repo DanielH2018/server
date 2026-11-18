@@ -44,7 +44,9 @@ tests:
                 DocsRefreshFailed (daniel-box) has fired as a warning for 48 hours.
               description: >-
                 The warning DocsRefreshFailed for daniel-box has fired for 48 hours, and its
-                Discord repeats have not cleared it. Its own description names the failing job.
+                Discord repeats have not cleared it. Karma lists it with its own description and
+                runbook:
+                https://karma.local.daniel-hunter.com/?q=alertname%3DDocsRefreshFailed&q=service%3Ddaniel-box
                 This page resolves when the warning does. If the warning holds by design, give
                 its rule the label escalate: "false".
 
@@ -74,7 +76,9 @@ tests:
                 EvalSweepFailed (daniel-box) has fired as a warning for 48 hours.
               description: >-
                 The warning EvalSweepFailed for daniel-box has fired for 48 hours, and its
-                Discord repeats have not cleared it. Its own description names the failing job.
+                Discord repeats have not cleared it. Karma lists it with its own description and
+                runbook:
+                https://karma.local.daniel-hunter.com/?q=alertname%3DEvalSweepFailed&q=service%3Ddaniel-box
                 This page resolves when the warning does. If the warning holds by design, give
                 its rule the label escalate: "false".
 

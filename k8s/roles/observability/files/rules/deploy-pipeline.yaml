@@ -13,7 +13,7 @@ groups:
     rules:
       # A hold stops every promotion until it clears, and only the operator clears one while the
       # revert rule stays off. The 15m hold rides over a hold that settle writes and the next run
-      # clears. Alertmanager's DeployHoldActive route repeats it every 24h rather than 6h.
+      # clears. Its escalate label sends it to Alertmanager's daily repeat rather than every 6h.
       - alert: DeployHoldActive
         expr: homelab_deploy_hold_active{job="deploy-pipeline"} == 1
         for: 15m

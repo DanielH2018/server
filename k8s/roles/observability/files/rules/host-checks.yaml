@@ -430,11 +430,15 @@ groups:
       # the `node-pi` job. Every tile notified Discord only, so the rules are `warning`. Each
       # NotReporting rule fires from its deploy until the scan's first run writes the file, up to
       # a week.
+      # DECIDED: a failed scan holds until someone reviews it by hand, so each Failed rule carries
+      # escalate: "false" and Alertmanager repeats it daily. A NotReporting rule still escalates,
+      # because a scan that stops running holds by no design.
       - alert: AideCheckFailed
         expr: homelab_check_success{check="aide-check",origin="daniel-box"} == 0
         labels:
           severity: warning
           service: daniel-box
+          escalate: "false"
         annotations:
           summary: daniel-box's weekly AIDE check failed or found an unexplained change.
           description: >-
@@ -465,6 +469,7 @@ groups:
         labels:
           severity: warning
           service: daniel-server
+          escalate: "false"
         annotations:
           summary: daniel-server's weekly AIDE check failed or found an unexplained change.
           description: >-
@@ -495,6 +500,7 @@ groups:
         labels:
           severity: warning
           service: daniel-box
+          escalate: "false"
         annotations:
           summary: daniel-box's weekly rkhunter scan warned or did not complete.
           description: >-
@@ -525,6 +531,7 @@ groups:
         labels:
           severity: warning
           service: daniel-server
+          escalate: "false"
         annotations:
           summary: daniel-server's weekly rkhunter scan warned or did not complete.
           description: >-
@@ -555,6 +562,7 @@ groups:
         labels:
           severity: warning
           service: daniel-pi
+          escalate: "false"
         annotations:
           summary: daniel-pi's weekly rkhunter scan warned or did not complete.
           description: >-
@@ -824,24 +832,33 @@ groups:
       # counts the failed system units every 5 minutes on every host. node-exporter runs without
       # --collector.systemd, so this is the one rule that sees a unit with no OnFailure= hook and
       # no verdict of its own. The 10m `for` spans two runs, so a unit that fails and is restarted
-      # or reset between them stays quiet. The NotReporting absent arm carries the same 28-day
-      # history guard as the weekly jobs above, because no file exists until a host's package
-      # installs the timer, and the Pi updates once a day. Both 900s literals equal the script's
+      # or reset between them stays quiet. SystemdUnitsFailed fires once per failed unit, so an
+      # Alertmanager inhibit can let a unit's own alert, such as AideCheckFailed, hold it. Its
+      # second arm covers a failed check that named no unit. The NotReporting absent arm carries
+      # the same 28-day history guard as the weekly jobs above, because no file exists until a
+      # host's package installs the timer, and the Pi updates once a day. Both 900s literals equal the script's
       # DEADLINE_S, and hosts/tests/test_systemd_units_check.py pins them to it.
       - alert: SystemdUnitsFailed
-        expr: homelab_check_success{check="systemd-units",origin="daniel-box"} == 0
+        expr: |
+          homelab_systemd_unit_failed{origin="daniel-box"} == 1
+          or
+          (
+              homelab_check_success{check="systemd-units",origin="daniel-box"} == 0
+            unless on (origin)
+              homelab_systemd_unit_failed{origin="daniel-box"}
+          )
         for: 10m
         labels:
           severity: warning
           service: daniel-box
         annotations:
           summary: >-
-            Failed system units on daniel-box: {{ range $i, $s := query "homelab_systemd_unit_failed{origin='daniel-box'}" | sortByLabel "unit" }}{{ if $i }}, {{ end }}{{ $s.Labels.unit }}{{ else }}none named{{ end }}.
+            {{ with $labels.unit }}{{ . }} has failed on daniel-box.{{ else }}daniel-box has failed system units that its check did not name.{{ end }}
           description: >-
-            systemd-units-check on daniel-box found each unit above in the failed state. For each
-            one, read `systemctl status <unit>` and `journalctl -u <unit> -b` on daniel-box. Once
-            the cause is fixed, `systemctl reset-failed <unit>` or a clean run of the unit
-            clears the state, and the next check resolves this alert. "none named" means
+            systemd-units-check on daniel-box found the unit in the failed state. Read
+            `systemctl status <unit>` and `journalctl -u <unit> -b` on daniel-box. Once the cause
+            is fixed, `systemctl reset-failed <unit>` or a clean run of the unit clears the
+            state, and the next check resolves this alert. A summary that names no unit means
             the host wrote no homelab_systemd_unit_failed series: either systemctl could not
             list the units (`journalctl -t systemd-units`) or the host package predates the
             per-unit series, so run `systemctl --failed` on daniel-box.
@@ -868,19 +885,26 @@ groups:
             homelab-systemd-units.timer` and `journalctl -t systemd-units` on daniel-box, then
             /var/lib/node-exporter-textfile/systemd-units.prom on the host.
       - alert: SystemdUnitsFailed
-        expr: homelab_check_success{check="systemd-units",origin="daniel-server"} == 0
+        expr: |
+          homelab_systemd_unit_failed{origin="daniel-server"} == 1
+          or
+          (
+              homelab_check_success{check="systemd-units",origin="daniel-server"} == 0
+            unless on (origin)
+              homelab_systemd_unit_failed{origin="daniel-server"}
+          )
         for: 10m
         labels:
           severity: warning
           service: daniel-server
         annotations:
           summary: >-
-            Failed system units on daniel-server: {{ range $i, $s := query "homelab_systemd_unit_failed{origin='daniel-server'}" | sortByLabel "unit" }}{{ if $i }}, {{ end }}{{ $s.Labels.unit }}{{ else }}none named{{ end }}.
+            {{ with $labels.unit }}{{ . }} has failed on daniel-server.{{ else }}daniel-server has failed system units that its check did not name.{{ end }}
           description: >-
-            systemd-units-check on daniel-server found each unit above in the failed state. For each
-            one, read `systemctl status <unit>` and `journalctl -u <unit> -b` on daniel-server. Once
-            the cause is fixed, `systemctl reset-failed <unit>` or a clean run of the unit
-            clears the state, and the next check resolves this alert. "none named" means
+            systemd-units-check on daniel-server found the unit in the failed state. Read
+            `systemctl status <unit>` and `journalctl -u <unit> -b` on daniel-server. Once the cause
+            is fixed, `systemctl reset-failed <unit>` or a clean run of the unit clears the
+            state, and the next check resolves this alert. A summary that names no unit means
             the host wrote no homelab_systemd_unit_failed series: either systemctl could not
             list the units (`journalctl -t systemd-units`) or the host package predates the
             per-unit series, so run `systemctl --failed` on daniel-server.
@@ -907,19 +931,26 @@ groups:
             homelab-systemd-units.timer` and `journalctl -t systemd-units` on daniel-server, then
             /var/lib/node-exporter-textfile/systemd-units.prom on the host.
       - alert: SystemdUnitsFailed
-        expr: homelab_check_success{check="systemd-units",origin="daniel-pi"} == 0
+        expr: |
+          homelab_systemd_unit_failed{origin="daniel-pi"} == 1
+          or
+          (
+              homelab_check_success{check="systemd-units",origin="daniel-pi"} == 0
+            unless on (origin)
+              homelab_systemd_unit_failed{origin="daniel-pi"}
+          )
         for: 10m
         labels:
           severity: warning
           service: daniel-pi
         annotations:
           summary: >-
-            Failed system units on daniel-pi: {{ range $i, $s := query "homelab_systemd_unit_failed{origin='daniel-pi'}" | sortByLabel "unit" }}{{ if $i }}, {{ end }}{{ $s.Labels.unit }}{{ else }}none named{{ end }}.
+            {{ with $labels.unit }}{{ . }} has failed on daniel-pi.{{ else }}daniel-pi has failed system units that its check did not name.{{ end }}
           description: >-
-            systemd-units-check on daniel-pi found each unit above in the failed state. For each
-            one, read `systemctl status <unit>` and `journalctl -u <unit> -b` on daniel-pi. Once
-            the cause is fixed, `systemctl reset-failed <unit>` or a clean run of the unit
-            clears the state, and the next check resolves this alert. "none named" means
+            systemd-units-check on daniel-pi found the unit in the failed state. Read
+            `systemctl status <unit>` and `journalctl -u <unit> -b` on daniel-pi. Once the cause
+            is fixed, `systemctl reset-failed <unit>` or a clean run of the unit clears the
+            state, and the next check resolves this alert. A summary that names no unit means
             the host wrote no homelab_systemd_unit_failed series: either systemctl could not
             list the units (`journalctl -t systemd-units`) or the host package predates the
             per-unit series, so run `systemctl --failed` on daniel-pi.
