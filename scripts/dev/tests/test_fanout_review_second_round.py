@@ -1,4 +1,4 @@
-"""The second fix round a medium-or-worse leftover earns, and the cases that keep it to one (#7687).
+"""The second fix round a medium-or-worse leftover earns, and the cases that keep it to one.
 
 12 of 13 `needs-input` batches with findings left after one fix round held a real defect, so a
 finding of medium severity or worse that survives the first delta review gets one more fix and

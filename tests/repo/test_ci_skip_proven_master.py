@@ -1,4 +1,4 @@
-"""A master push whose tree a green PR run already tested skips the repeated jobs (#5489).
+"""A master push whose tree a green PR run already tested skips the repeated jobs.
 
 WHY THIS IS A TEST. Three properties hold the design together, and each fails silently:
 
@@ -27,18 +27,18 @@ from lib.proc_testing import fake_bin, path_with
 
 CI_WORKFLOW = REPO / ".github" / "workflows" / "ci.yml"
 GATE_NAME = "prek (lint + validate + tests + secrets)"
-# The draft arm skips every job on a draft PR (#5563); `test_ci_skips_draft_prs` below says why.
+# The draft arm skips every job on a draft PR; `test_ci_skips_draft_prs` below says why.
 DRAFT_ARM = "github.event.pull_request.draft != true"
 PROOF_CONDITION = (
     "(needs.prove.result == 'cancelled' || needs.prove.result == 'failure'"
     " || (!cancelled() && needs.prove.outputs.proven != 'true'))"
     f" && {DRAFT_ARM}"
 )
-# `pytest` skips on its own output, so a record from a selected PR run repeats it alone (#8943).
+# `pytest` skips on its own output, so a record from a selected PR run repeats it alone.
 PYTEST_PROOF_CONDITION = PROOF_CONDITION.replace(
     "outputs.proven", "outputs.pytest-proven"
 )
-# The jobs that read the build's artifacts also skip when it did not succeed (#7439), and when
+# The jobs that read the build's artifacts also skip when it did not succeed, and when
 # it had no work for them. The gate and `ci_verdict.jobs_verdict` pass that second skip, so a
 # job here may skip for no reason beyond the arm named for it.
 BUILD_ARM = "needs.host_packages_build.result == 'success'"
@@ -198,7 +198,7 @@ def test_every_repeated_job_waits_for_the_proof_and_skips_on_it():
     jobs = _jobs()
     for job in DEPENDENTS:
         # `host_tools_arm64` and the `host_packages` jobs also wait for `host_packages_build`, whose
-        # build they read (H3.11, #6151).
+        # build they read.
         needs = (
             [jobs[job]["needs"]]
             if isinstance(jobs[job]["needs"], str)
@@ -258,7 +258,7 @@ def _dependent_runs(
 @pytest.mark.parametrize(
     ("prove", "proven", "cancelled", "runs"),
     [
-        # A timed-out `prove` runs the sweep, even when it had set `proven=true` (#5783), and
+        # A timed-out `prove` runs the sweep, even when it had set `proven=true`, and
         # whether or not GitHub reads the dependent as cancelled.
         ("cancelled", "true", False, True),
         ("cancelled", "true", True, True),
@@ -301,7 +301,7 @@ def test_a_build_that_did_not_succeed_skips_the_jobs_that_read_its_artifacts(bui
 
 
 def test_ci_skips_draft_prs_and_runs_when_one_is_marked_ready():
-    """A draft PR runs no job, and `ready_for_review` starts its first real run (#5563).
+    """A draft PR runs no job, and `ready_for_review` starts its first real run.
 
     A fan-out batch opens its PR as a draft and pushes while it is reviewed. A job without the
     draft arm would run on every such push. Without `ready_for_review` in `types`, marking the
@@ -366,11 +366,11 @@ def test_the_record_names_the_context_the_pytest_scope_earned(tmp_path, scope, c
         ("pull_request", {"prove": "success", "proven": "false"}, True),
         # A proven run ran no job on the tree it would record.
         ("pull_request", {"prove": "success", "proven": "true"}, False),
-        # A `prove` that said `true` and was then cancelled ran the sweep (#5783).
+        # A `prove` that said `true` and was then cancelled ran the sweep.
         ("pull_request", {"prove": "cancelled", "proven": "true"}, True),
         ("pull_request", {"same_repo": False}, False),
         ("push", {"prove": "success", "proven": "false"}, False),
-        # A run that left test modules out records that every other job ran (#8943).
+        # A run that left test modules out records that every other job ran.
         ("pull_request", {"scope": "selected"}, True),
         (
             "pull_request",
@@ -493,7 +493,7 @@ def test_the_gate_keeps_its_required_name_and_always_runs():
         ("success", "false", _all("success"), True),
         ("success", "", _all("success"), True),
         ("skipped", "", _all("success", hooks="failure"), False),
-        # The build's own result reds the gate, so the jobs that skip after it cannot hide it (#7439).
+        # The build's own result reds the gate, so the jobs that skip after it cannot hide it.
         ("skipped", "", _all("success", host_packages_build="failure"), False),
         # The proven path: every dependent skipped, and the gate is green.
         ("success", "true", _all("skipped"), True),
@@ -505,7 +505,7 @@ def test_the_gate_keeps_its_required_name_and_always_runs():
         # `proven` alone is not a proof when the job that wrote it did not succeed.
         ("failure", "true", _all("skipped"), False),
         ("cancelled", "", _all("cancelled"), False),
-        # A timed-out `prove` proved nothing, so the full sweep decides (#5783).
+        # A timed-out `prove` proved nothing, so the full sweep decides.
         ("cancelled", "", _all("success"), True),
         ("cancelled", "true", _all("success"), True),
         ("cancelled", "true", _all("skipped"), False),

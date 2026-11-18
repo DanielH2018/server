@@ -1,10 +1,10 @@
 """A fixture `hosts/` tree around the real pi-compose component, and the census over its project.
 
 `ComposeTree` copies the real component's template and tmpfiles file into a scratch tree,
-adds the `compose:` and `outputs:` keys that H5.2b gives the real `component.yml`, and writes
+adds the `compose:` and `outputs:` keys the real `component.yml` carries, and writes
 fixture service trees beside them. `project_of` reads the rendered package back as the Compose
-project it describes, and the `*_problems` functions are the censuses H5.2a1 ships. They run
-over fixture projects now. Each move PR (H5.6 to H5.9) adds its service to `MOVED_MEMBERS` in
+project it describes, and the `*_problems` functions are the censuses over it. They run
+over fixture projects. Each moved service is added to `MOVED_MEMBERS` in
 the census test once the live component holds it.
 """
 

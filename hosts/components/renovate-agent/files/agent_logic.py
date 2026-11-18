@@ -37,7 +37,7 @@ class OpenPR:
     url: str = ""
     # GitHub's `updatedAt` for the PR, as the census read it. Comparing the before-census
     # value with the after-census one is the only signal a comment-only triage leaves on a PR
-    # that stays open (#3032). "" when the census could not read it.
+    # that stays open. "" when the census could not read it.
     updated_at: str = ""
 
 
@@ -75,13 +75,13 @@ class Delta:
     """The measured effect of the run: which Renovate PRs left the open set, and which stayed.
 
     Leaving the open set is not landing. The renovate-prs skill finishes a `manual —` bump by
-    closing the Renovate PR in favour of a superseding PR that stays open for a person (#2746),
+    closing the Renovate PR in favour of a superseding PR that stays open for a person,
     so a departed PR is split by the state GitHub reports for it: `resolved` merged, `closed`
-    was closed without merging, and `unread` is one whose state lookup failed (#2755).
+    was closed without merging, and `unread` is one whose state lookup failed.
 
     `touched` is the subset of `remaining` whose `updatedAt` moved during the run — the only
-    census-visible trace of a session that commented on or labelled a PR and left it open
-    (#3032). A Renovate rebase during the session moves `updatedAt` too, so it is evidence
+    census-visible trace of a session that commented on or labelled a PR and left it open.
+    A Renovate rebase during the session moves `updatedAt` too, so it is evidence
     something touched the PR, not proof the session did.
     """
 
@@ -174,7 +174,7 @@ def delta(
 
 
 def _touched(before: list[OpenPR], after: list[OpenPR]) -> tuple[int, ...]:
-    """The still-open PRs whose `updatedAt` moved between the two censuses (#3032).
+    """The still-open PRs whose `updatedAt` moved between the two censuses.
 
     Both timestamps must be present and different. An empty one means the census could not
     read it, and a PR whose timestamp is unreadable must read as no evidence rather than as
@@ -201,7 +201,7 @@ def run_record(
     moved: Delta | None = None,
     outcome: Outcome | None = None,
 ) -> str:
-    """One JSON line for `runs.jsonl`, the per-tick record the usage count reads (#2864).
+    """One JSON line for `runs.jsonl`, the per-tick record the usage count reads.
 
     Written on every exit path, skips included, so "how many ticks spent a session" and
     "how many PRs each one merged, closed or left open" are both a count over

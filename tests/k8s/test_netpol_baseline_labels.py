@@ -81,7 +81,7 @@ BORN_FENCED_ROLES = {
     # kind — it reads the kernel through a read-only /host/sys mount, so unlike its two
     # exporter neighbours it needs no podSelector added anywhere.
     "gpu-exporter",
-    # The dri-admission-reaper CronJob, the role's one pod in the workload namespace (#6367). It
+    # The dri-admission-reaper CronJob, the role's one pod in the workload namespace. It
     # takes no connection at all, and its one outbound call is to the API server, which is
     # egress. The DaemonSet sits in kube-system, which no baseline selects, so it stays unlabelled.
     "dri-device-plugin",
@@ -122,7 +122,7 @@ SLICE_3_ROLES = {role for role, _name in SLICE_3_WORKLOADS}
 # roles here each render a second pod-producing doc the role-granular habit would miss — pihole
 # (pihole-2, its HA pair, same app label, different instance) and crowdsec (crowdsec-node-agent,
 # the DaemonSet). crowdsec-node-agent is labelled, not exempted: its only inbound caller is
-# prometheus scraping it (verified live — count(up{job="crowdsec-node-agents"} == 1) == 2), and the
+# prometheus scraping it, and the
 # baseline already admits prometheus on every port, so the baseline alone suffices. Its own calls
 # out to the LAPI are outbound, which kube-router does not enforce and an ingress policy can't break.
 SLICE_4_WORKLOADS = {
@@ -203,8 +203,7 @@ SLICE_45C_ROLES = {role for role, _name in SLICE_45C_WORKLOADS}
 # policy" — these are fenced by nothing, on purpose.
 #
 # Entries are used only as a subtrahend, so one that matches no rendered doc is a silent no-op —
-# it neither widens nor narrows the gate, it just rots. Empty since prowlarr's flip deleted
-# flaresolverr-netpol-probe, the last member (#5594); its successor runs in `prowlarr-verify`.
+# it neither widens nor narrows the gate, it just rots.
 UNFENCED_BY_DESIGN_WORKLOADS: frozenset[tuple[str, str]] = frozenset()
 
 

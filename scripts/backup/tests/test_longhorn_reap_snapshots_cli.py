@@ -82,18 +82,17 @@ def test_snapshots_refuse_when_a_labelled_volume_resolves_to_no_job(tmp_path):
     proc, calls = _run(SNAPSHOTS_ENTRY, [], fixtures, tmp_path)
     assert proc.returncode == 1
     assert "ABORT" in proc.stderr
-    # One prefix, not two: `abort_reason` owns it, and this handler used to add its own on top,
-    # so the operator read `ABORT: ABORT: 18 volume(s) ...` (#3236). A substring check passes
-    # either way, which is why this counts.
+    # One prefix, not two: `abort_reason` owns it, so a handler adding its own reads
+    # `ABORT: ABORT: 18 volume(s) ...`. A substring check passes either way, which is why this
+    # counts.
     assert proc.stderr.count("ABORT:") == 1, proc.stderr
     assert "Traceback" not in proc.stderr, proc.stderr
     assert not any("delete" in c for c in calls)
 
 
 def test_snapshots_dry_run_completes_while_an_opt_out_volume_exists(tmp_path):
-    # The `no-backup` group has no RecurringJob by design, and before #3236 every volume in it
-    # counted as unresolved ownership -- the reaper refused every run on the live cluster, where
-    # 18 volumes carry that label. The stray on it is still reaped: the group runs no job, so a
+    # The `no-backup` group has no RecurringJob by design, so a volume in it is not unresolved
+    # ownership and the reaper does not refuse the run. The stray on it is still reaped: the group runs no job, so a
     # recurring-job snapshot there was made by a job that no longer selects the volume.
     fixtures = {
         "recurringjobs": [

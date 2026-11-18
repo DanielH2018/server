@@ -1,8 +1,8 @@
-"""Reconcile's activation step: what runs when a packaged file's hash changes (H7.2a).
+"""Reconcile's activation step: what runs when a packaged file's hash changes.
 
 Each test is one of H7's *Red proofs for the checks this slice adds*, activation entries. The
 fake host is `_reconcile_host.py`; `_reconcile_arms.py` ships files and builds the red fixtures.
-The clause "homelab-reboot then refuses" belongs to H7.7, which adds that timer: the flag file
+The clause "homelab-reboot then refuses" belongs to the reboot timer: the flag file
 this suite asserts is the interface the timer reads.
 
 Run: uv run pytest hosts/lib/tests/test_reconcile_activation.py
@@ -105,7 +105,7 @@ def test_a_reboot_action_marks_the_host_reboot_pending_and_the_metric_says_so(no
 
 def test_a_later_reboot_class_change_keeps_the_time_the_reboot_was_first_owed(node):
     """HostRebootOverdue ages the owed reboot from this series, so a second change must not
-    reset it (#6166)."""
+    reset it."""
     ship(node, "/etc/modprobe.d/50-homelab.conf", "options x y=1\n", "reboot")
     settled(node)
     flag = node.root / "run/homelab/reboot-pending"
@@ -124,7 +124,7 @@ def test_the_boot_metrics_run_reads_zero_once_the_boot_cleared_the_flag_and_acts
     node,
 ):
     """`homelab-reconcile-metrics.service` runs `--metrics` at boot, so the 1 does not outlive
-    the reboot that applied it (#6188)."""
+    the reboot that applied it."""
     ship(node, "/etc/modprobe.d/50-homelab.conf", "options x y=1\n", "reboot")
     live_unit(node, "docker.service")
     ship(node, "/etc/docker/daemon.json", "{}\n", "manual:docker.service")
@@ -328,7 +328,7 @@ def test_the_metrics_file_is_not_written_when_the_exporters_directory_is_missing
     assert not (node.root / PROM).parent.exists()
 
 
-# Legacy service retirement (H7.2a adds this rule to the legacy-entry step).
+# Legacy service retirement.
 
 LEGACY = "pi-old-check.service"
 DRIFT = 'homelab_host_reconcile_drift{host="daniel-pi",arm="legacy"}'

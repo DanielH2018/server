@@ -205,7 +205,7 @@ def _wait_args(timeout_s, token):
 
 
 def test_an_anonymous_ci_wait_backs_off_and_walks_no_descendants(capsys):
-    """#6148: anonymous reads get 60/hour per IP, shared by every anonymous reader there."""
+    """Anonymous reads get 60/hour per IP, shared by every anonymous reader there."""
     (interval, walk) = _wait_args(1200, None)[0]
     assert interval >= 60
     assert walk is False

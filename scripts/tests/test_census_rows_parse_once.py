@@ -2,7 +2,7 @@
 
 Every detector row in `test_census_rows_test_modules.py` and `test_census_rows_test_renders.py`
 reads the same census, `pytest_only_modules()`. Parsing dominates the rows' cost: `ast.parse`
-was 5.15s of the 9.23s one row took over 1620 modules (#6437). A row that reparses what another
+was 5.15s of the 9.23s one row took over 1620 modules. A row that reparses what another
 row already parsed pays that again, so `share` in `tests/_row_table.py` has the rows of
 both files find their hits in one pass over one tree per module.
 

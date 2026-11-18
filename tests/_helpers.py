@@ -15,7 +15,7 @@ from lib.proc_testing import fake_bin, path_with, run
 from lib.k8s_roles import ROLLOUT_TIMEOUT_DEFAULT
 
 # `lib.repo_paths` owns the anchors. The `X as X` names are re-exports for the guards that
-# import them from here; redefining one in a guard is what #3912 removed.
+# import them from here; a guard redefines none.
 from lib.repo_paths import (
     ALL_VARS as ALL_VARS,
     HOST_VARS as HOST_VARS,
@@ -114,7 +114,7 @@ def image_tag(ref: str) -> str:
 
     `authelia/authelia:4.39.28@sha256:bd97…` -> `4.39.28`. A bare `rsplit(":")` on that ref
     returns the digest hex, which is how the authelia and AutoKuma version guards failed their
-    digest-pin PRs (#3557, #3564).
+    digest-pin PRs.
     """
     return ref.split("@", 1)[0].rsplit(":", 1)[-1]
 
@@ -122,13 +122,10 @@ def image_tag(ref: str) -> str:
 # --- the k8s rollout budget, wherever a role spells it ---------------------------------------
 
 
-# A role's rollout budget is `manifests_rollout_timeout | default(manifests_rollout_timeout_default)`,
-# and three guards size themselves against it: the two rollback-budget tests, which read a role's
-# call site, and the inline-gate budget census, which reads a `rollout status --timeout=`. All
-# three read the literal text, so a role that moved its number into a variable — sonarr, which
-# needs the SAME budget at its manifests call site and in its verify.yml gate — silently read as
-# the shared default. Resolving the reference here, once, is what keeps that from being a green
-# no-op.
+# A role's rollout budget is `manifests_rollout_timeout | default(manifests_rollout_timeout_default)`.
+# The guards that size themselves against it read the literal text, so a role that moves its
+# number into a variable (sonarr) would silently read as the shared default. Resolving the
+# reference here keeps that from being a green no-op.
 _SECONDS = re.compile(r"^(\d+)s$")
 _ROLE_VAR = re.compile(r"^\{\{\s*(\w+)\s*\}\}$")
 
@@ -159,7 +156,7 @@ def rollout_seconds(value, role: Path) -> int | None:
 
     `role` is the role DIRECTORY, because a `{{ var }}` is resolved against that role's own
     `defaults/main.yml`. Up to two references are chased, so the alias
-    `sonarr_k8s_rollout_timeout: "{{ manifests_rollout_timeout }}"` resolves (#5464); anything
+    `sonarr_k8s_rollout_timeout: "{{ manifests_rollout_timeout }}"` resolves; anything
     else is unresolved, so a guard reading this gets None and says so.
     """
     text = str(value).strip().strip("\"'")
@@ -178,7 +175,7 @@ _ROLLOUT_KEY = "manifests_rollout_timeout"
 def manifests_rollout_timeout_s(role: Path) -> int:
     """The seconds a role declares for its rollout.
 
-    The role's own `manifests_rollout_timeout` default (#5464), else
+    The role's own `manifests_rollout_timeout` default, else
     `MANIFESTS_ROLLOUT_DEFAULT_S`. A budget this reader cannot resolve RAISES: the whole point
     is that an unreadable budget must not read as the default, which is how a 660s service
     would be sized as a 300s one.
@@ -231,13 +228,10 @@ def discover_docs() -> list[Path]:
 
 # --- Python modules under a role's files/ ----------------------------------------------------
 #
-# A role's runtime modules can sit at any depth under files/ — `files/bridge/common.py` is the
-# module `bridge.common` — and a guard that reads them must not assume one level. A one-level
-# glob returns an EMPTY set the moment the modules move down a directory, and every `all(...)`
-# over it passes; repo-root CLAUDE.md's "a check that finds its own subject by pattern" rule
-# records five guards that broke exactly that way. These readers identify a module by its
-# dotted path under the root, so a flat `bridge/config.py` and a nested `bridge/config.py`
-# are each one id, and resolve an import to that id in every spelling Python allows.
+# A role's modules can sit at any depth (`files/bridge/common.py` is `bridge.common`), and a
+# one-level glob returns an EMPTY set once they move down a directory, so every `all(...)` over
+# it passes. These readers identify a module by its dotted path under the root and resolve an
+# import to that id in every spelling Python allows.
 
 
 def is_test_file(path: Path) -> bool:

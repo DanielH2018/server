@@ -1,6 +1,6 @@
-"""daniel-box's package holds the k3s server's host half (H7.35).
+"""daniel-box's package holds the k3s server's host half.
 
-`setup/k3s` wrote this state until H7.35. These tests hold what the move must keep: each cron
+The state moved from `setup/k3s`. These tests hold what the move must keep: each cron
 retires as its timer takes over on the same schedule, the file an installed unit reads exists at
 the path it names, the live ufw rules are adopted rather than added, and a change to a netplan
 file never reconfigures the link an SSH session rides on.

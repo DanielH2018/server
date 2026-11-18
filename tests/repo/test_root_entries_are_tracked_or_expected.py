@@ -24,7 +24,7 @@ EXPECTED_IGNORED = frozenset(
         ".pytest_cache",
         ".ruff_cache",
         ".ansible",  # ansible's own tmp/collections cache when it runs from the root
-        # A checkout that ran ansible before #6217 removed ansible.cfg's `log_path` keeps its
+        # A checkout that ran ansible with a `log_path` in ansible.cfg keeps its
         # file until initial_setup's `ansible-log` tasks delete it, and a run that sets
         # ANSIBLE_LOG_PATH to this name writes one again.
         "ansible.log",

@@ -1,7 +1,7 @@
-"""A check GitHub leaves pending under a completed workflow run ends the merge wait (#7996).
+"""A check GitHub leaves pending under a completed workflow run ends the merge wait.
 
-PR #7975's required image-smoke check stayed `queued` after its run completed, GitHub refused
-every direct merge, and the landing polled for 75 minutes towards merge-timeout. The fixtures
+A required check can stay `queued` after its run completed: GitHub refuses every direct merge,
+and the landing polls towards merge-timeout. The fixtures
 are the real readings: check run 130783792832 `queued` in suite 116713431402, which read
 `completed` / `failure`.
 

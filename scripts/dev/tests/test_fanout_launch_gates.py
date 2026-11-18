@@ -105,7 +105,7 @@ def _clear(tmp_path):
 
 
 def test_finished_batches_do_not_count_against_the_cap_on_either_host(tmp_path):
-    """#5497 and #5506: 3 uncleaned batches, 2 finished, so 1 running and the launch places.
+    """3 uncleaned batches, 2 finished, so 1 running and the launch places.
 
     Run on both fleet hosts by name rather than by the hostname of the machine running the
     test, which is not a fleet host on a CI runner.

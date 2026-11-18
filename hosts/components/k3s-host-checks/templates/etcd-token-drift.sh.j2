@@ -13,14 +13,14 @@
 # rule or dead-man changes name. k3s's own schedule writes the off-box snapshots, and check 12 of
 # longhorn-backup-health reports when they stop.
 #
-# Since --secrets-encryption was armed (2026-08-20) Secrets are encrypted in etcd, so restoring a
+# With --secrets-encryption armed, Secrets are encrypted in etcd, so restoring a
 # snapshot onto a REBUILT host needs the CLUSTER TOKEN (/var/lib/rancher/k3s/server/token) supplied
 # first. The token is deliberately NOT uploaded beside the snapshots: storing it in that bucket would
 # hand anyone with the bucket both halves and undo the encryption entirely. Restoring onto daniel-box
 # with its disk intact is unaffected.
 #
 # encryption-config.json need not be preserved. Its CONTENTS ride inside the snapshot's own
-# /bootstrap blob (verified against k3s v1.36.3+k3s1), encrypted with the token, so the token is the
+# /bootstrap blob, encrypted with the token, so the token is the
 # only artifact that must survive daniel-box. docs/k3s-etcd-restore.md carries the evidence.
 set -uo pipefail
 
@@ -57,7 +57,7 @@ push_healthchecks() {
     # Bare slug, never ?create=1 — a typo would silently create an unwatched, permanently-green check.
     local url="https://hc-ping.com/${HC_PING_KEY}/etcd-snapshot-offbox"
     [[ "$status" == "up" ]] || url="${url}/fail"
-    # No `-S`, stderr discarded — see longhorn-backup-health.sh.j2 (#2511).
+    # No `-S`, stderr discarded — see longhorn-backup-health.sh.j2.
     curl -fs --max-time 10 --retry 3 "$url" >/dev/null 2>&1 \
       || logger -t etcd-snapshot-offbox "healthchecks ping failed (status=${status})"
   fi

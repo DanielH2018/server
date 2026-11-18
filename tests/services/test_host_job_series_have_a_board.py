@@ -2,8 +2,8 @@
 """Every series a host job writes through the textfile collector is on a provisioned board.
 
 The host jobs report through node_exporter's textfile directory rather than a scrape target of
-their own, and the rules in `files/rules/host-checks.yaml` read their series. Until #6203 no
-board did, so a check that sat red or late was visible only as a page. A board file that
+their own, and the rules in `files/rules/host-checks.yaml` read their series. Without a
+board, a check that sits red or late is visible only as a page. A board file that
 `observability_dashboard_folders` does not list is provisioned nowhere, so the census reads
 the boards through that map rather than a glob.
 

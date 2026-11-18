@@ -6,13 +6,12 @@ by the pod-exit wait, the unfinished Job's delete wait, the Job deadline, the ro
 that mirror's warm budget, and the run waits up to `flock -w` for the lock first. The two
 allowances are literals, because neither monitor-bridge's render nor observability's rule file
 can read a setup role's defaults. This guard derives the worst case from the rendered script,
-and holds each literal to the whole hour that covers it (#6569).
+and holds each literal to the whole hour that covers it.
 
 The script also writes its verdict to the `registry-gc` textfile with a DEADLINE_S, and
 observability's RegistryGcNotReporting carries that deadline as two literals. The deadline covers
 the week and the worst run, and both literals equal it, so a cron moved without its deadline or
-its rule fails here (M6 batch B6c). The Kuma tile that once held the same interval left with
-Cutover-1a.
+its rule fails here.
 
 Run: uv run pytest tests/services/test_registry_gc_watchers_cover_the_worst_run.py
 """

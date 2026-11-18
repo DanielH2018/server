@@ -1,4 +1,4 @@
-"""The fresh-cluster case's files, archives and verdict (#7555, `fresh_cluster_drill.py`).
+"""The fresh-cluster case's files, archives and verdict (`fresh_cluster_drill.py`).
 
 Run: uv run pytest scripts/deploy_tools/tests/test_fresh_cluster_drill.py
 """

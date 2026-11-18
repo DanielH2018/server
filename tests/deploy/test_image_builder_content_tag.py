@@ -142,10 +142,9 @@ def test_a_caller_with_no_context_at_all_still_gets_a_tag(dockerfile):
 
 # --- what the hash reads, and what it deliberately ignores -------------------------------------
 #
-# The tag hashes the `data` of context-configmap.yaml.j2's own render, so there is no second list
-# of inputs that can fall out of step with the build context. The pair below is the cost of that
-# choice: `data` alone means the render's prose and metadata must NOT move the tag, and the two
-# tests below say so.
+# The tag hashes the `data` of context-configmap.yaml.j2's own render, so no second list of
+# inputs can fall out of step with the build context. The render's prose and metadata must NOT
+# move the tag, and the two tests below say so.
 
 
 def test_rewording_a_comment_in_that_template_does_not_move_the_tag(

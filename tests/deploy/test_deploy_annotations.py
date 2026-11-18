@@ -31,7 +31,7 @@ _DASHBOARDS = "grafana-dashboards.yaml.j2"
 _PROMOTE = _REPO / "scripts/deploy_tools/promote_lib/wait.py"
 _FLUX_HOST = _REPO / "scripts/deploy_tools/flux_host.py"
 _EMITTERS = (_PROMOTE,)
-# The host emitter builds the line with `host_lib.deploy_event` (#6164), so the literal the
+# The host emitter builds the line with `host_lib.deploy_event`, so the literal the
 # query filters on is that function's, and the emitter must call it.
 # The soak Job prints the cluster's line, which a second query reads from its pod log.
 _SOAK = _REPO / "scripts/renderer/job_files/flux_soak.py"

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Sign and publish the host packages the builder staged, or re-sign the published tree.
 
-The signer half of target-architecture slice H3, PR H3.5b. The design, step by step, is
+The signer half of the host-package pipeline. The design, step by step, is
 docs/target-architecture/host/h3-pi-pilot.md, *The builder and the repository (daniel-box)*;
 the numbered comments below are its signer steps. `homelab-repo-sign.service` runs this as
 `homelab-signer` after every builder run that exits 0, through the builder unit's
@@ -46,7 +46,7 @@ the set's chosen SHA), `key`, `index`, `sign`, `staged` (it is not a plain direc
 
 It runs under the host's `/usr/bin/python3`, Ubuntu 24.04's 3.12, with the standard library
 only, so pyproject.toml formats it for 3.12. It imports `host_lib.py`, which the builder component
-installs beside it and which pyproject.toml holds to the same grammar (#6202).
+installs beside it and which pyproject.toml holds to the same grammar.
 
 Run: /usr/bin/python3 homelab_repo_sign.py
 `--help` prints this text and exits 0.
@@ -345,7 +345,7 @@ class Signer:
             if fields["Architecture"] not in ("all", *ARCHITECTURES):
                 raise Refusal(f"{package} is built for {fields['Architecture']}")
             # One build per package and architecture: `homelab-tools` stages an amd64 and an
-            # arm64 build (H3.11), and the pool name below carries the architecture.
+            # arm64 build, and the pool name below carries the architecture.
             key = (package, fields["Architecture"])
             if key in seen:
                 raise Refusal(f"{package} is staged twice for {key[1]}")

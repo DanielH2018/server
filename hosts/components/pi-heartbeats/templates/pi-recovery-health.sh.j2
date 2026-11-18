@@ -43,9 +43,8 @@ source /usr/lib/homelab/homelab-check-lib.sh || {
     same gate the compose template uses). A blanket `docker ps -a --filter status=exited`
     would catch those for free and also resurrect a container an operator `docker stop`ped
     on purpose, every 5 minutes — `restart: unless-stopped` leaves those alone, and so does
-    this. Until #1910 the set was hardcoded to autoheal + docker-proxy, so glances, wg-easy
-    and docker-proxy-lifecycle sat Exited/RestartCount 0 after a failed start until a human
-    noticed. #}
+    this. A set hardcoded to autoheal + docker-proxy would leave every other container
+    Exited/RestartCount 0 after a failed start until a human noticed. #}
 {% set _names = compose_services | map(attribute='name') | sort | list %}
 {% if 'docker-proxy' in _names %}
 {%   set _names = _names + ['docker-proxy-lifecycle'] %}
@@ -70,7 +69,7 @@ for c in "${CONTAINERS[@]}"; do
   # `docker start` below (or the next deploy's recreate) erases the exit code, the daemon's
   # `Error` string and `FinishedAt` of the instance that died, the Pi's journal rotates in
   # about a day (SystemMaxUse=32M), and this heartbeat's own line is the only record that reaches
-  # Loki. Diagnosing #1789 fourteen days on was impossible for exactly that reason (#1912).
+  # Loki.
   # Go-template braces are Jinja syntax, hence the raw block. `Error` is free text from the
   # OCI runtime and may span lines; the health.log parser reads ONE line per record, so it is
   # flattened and capped before it joins the message.
@@ -81,11 +80,10 @@ for c in "${CONTAINERS[@]}"; do
 
   # ATTEMPT RECOVERY, because nothing else will. `restart: unless-stopped` covers a container
   # whose PROCESS exits; it does not cover one whose `create` fails at the OCI runtime, and
-  # that is the failure this host actually produces under memory pressure — on 2026-08-29
-  # autoheal died with "unable to start unit ... Timeout waiting for systemd to create scope"
-  # and sat there with RestartCount 0 until a human ran `docker start`. Detection worked that
-  # day; the 50-minute outage was the missing remediation. One `docker start` from the
-  # heartbeat that already runs every 5 minutes and already reads this state closes the loop with no
+  # that is the failure this host actually produces under memory pressure: autoheal dies with
+  # "unable to start unit ... Timeout waiting for systemd to create scope" and sits there with
+  # RestartCount 0 until someone runs `docker start`. One `docker start` from the heartbeat
+  # that already runs every 5 minutes and already reads this state closes the loop with no
   # new process on a box that cannot spare one.
   if docker start "$c" >/dev/null 2>&1 &&
     [ -n "$(docker ps -q --filter "name=^${c}$" --filter status=running)" ]; then
@@ -96,20 +94,20 @@ for c in "${CONTAINERS[@]}"; do
 done
 
 # WHEN THE DAEMON ITSELF IS THE FAILURE, name it from its own journal. `inspect failed` is
-# what every container reads while dockerd is down, restarting, or wedged — the 2026-09-13
-# boot's "Timeout waiting for systemd to create scope", an OOM kill, a restart loop — and the
+# what every container reads while dockerd is down, restarting, or wedged — a "Timeout waiting
+# for systemd to create scope", an OOM kill, a restart loop — and the
 # inspect above cannot say why, because the daemon that would answer is the thing that is
 # gone. The reason sits in `journalctl -u docker`, which SystemMaxUse=32M on the RAM-backed
 # /var/log rotates away in about a day; this line is the only copy that reaches Loki (the
-# Pi ships no journal — see roles/containers/alloy/CLAUDE.md for the RSS measurement that
-# decided against a journal reader, #1922). The newest five lines of the last ten minutes
+# Pi ships no journal; see the alloy compose file's header for why). The newest five lines of
+# the last ten minutes
 # that are not dockerd's own info/debug chatter — its `level=warning`/`error` lines and
 # systemd's own unit lines ("Main process exited", "Scheduled restart job"), which carry no
 # `level=` at all. NOT `journalctl -p warning`: dockerd writes to stderr, so every line sits
-# at journal PRIORITY 6 whatever its `level=` says (measured 2026-09-17), and a priority
+# at journal PRIORITY 6 whatever its `level=` says, and a priority
 # filter returns nothing. The `Security options with ':'` deprecation warning goes too: dockerd
 # emits one per container create (every compose file here writes `no-new-privileges:true`),
-# and over a 48h window it was the ONLY non-info line, so it would crowd out the five kept.
+# and it is the only non-info line in a typical window, so it would crowd out the five kept.
 # dockerd's own `time="…"` prefix is dropped as redundant with the record's timestamp; the
 # rest is flattened and capped like `Error` above so the record stays one line. The service
 # user reads the journal through the `adm` group; no privilege.
@@ -131,12 +129,12 @@ if ! docker version --format '{% raw %}{{.Server.Version}}{% endraw %}' >/dev/nu
     tr '\n' ' ' | cut -c1-400)"
 fi
 
-# THE COMPOSE ARM (H5.2b, the interim failure signal). compose-run writes homelab_compose.prom
+# THE COMPOSE ARM. compose-run writes homelab_compose.prom
 # whatever the outcome, and a run that failed leaves every container as it was, so the loop above
 # can read all-clear while the package's project is not up. This reads the result and acts on
 # nothing. An absent file adds nothing, because it is absent by design until the first run. A file
 # that exists but cannot be read, or holds no result line, is reported: reading it as absent would
-# turn a broken signal into an all-clear. M1's rule on homelab_compose_up_result replaces this arm.
+# turn a broken signal into an all-clear.
 COMPOSE_PROM="${TEXTFILE_DIR:-/var/lib/node-exporter-textfile}/homelab_compose.prom"
 COMPOSE_MSG=""
 if [ -e "$COMPOSE_PROM" ] || [ -L "$COMPOSE_PROM" ]; then
@@ -161,11 +159,9 @@ else
   # 5 minutes would read green forever, which is the failure mode that makes self-healing
   # worse than no healing. One failing verdict per cycle that needed intervention keeps the
   # episode in Prometheus and in the alert history, and the next clean cycle clears it.
-  # Re-proposed by #1784 as "an UP with a warning would read more honestly", after two
-  # single-cycle `not running: autoheal; restarted: autoheal` episodes on 2026-09-02/03, and
-  # declined 2026-09-11: those two episodes ARE the loop this rule exists to keep visible, and
-  # no evidence was offered against the original reasoning. The recurring fault worth fixing is
-  # that autoheal stops at all, filed separately.
+  # A proposal to report `up` with a warning was declined: single-cycle `not running: autoheal;
+  # restarted: autoheal` episodes ARE the loop this rule exists to keep visible. The recurring
+  # fault worth fixing is that autoheal stops at all.
   STATUS=down; MSG=""
   if [ -n "$DOWN" ]; then
     MSG="not running: ${DOWN}"
@@ -176,8 +172,7 @@ else
   [ -n "$DAEMON" ] && MSG="${MSG}; dockerd: ${DAEMON% }"
 fi
 
-# The textfile verdict for Prometheus (M6 B5, docs/target-architecture/monitoring/
-# m6-retire-kuma.md). DEADLINE_S is 2 x the timer's 300s period + 300s, as M3 derives it; a
+# The textfile verdict for Prometheus. DEADLINE_S is 2 x the timer's 300s period + 300s; a
 # test pins the rule's literals to it. The directory is root:sys_user 2775, so this unit's user
 # can write it.
 DEADLINE_S=900
@@ -188,10 +183,8 @@ write_check_textfile pi-recovery-health "$([ "$STATUS" = up ] && echo 1 || echo 
 #
 # The textfile keeps only the CURRENT verdict, so a DOWN that clears is gone. The server's health
 # crons survive that by logging their own verdict unconditionally (longhorn-backup-health,
-# loki-read-route-health), and `probe_lib/alerts.py` reconstructs episodes from those lines. This
-# cron recorded nothing for a successful DOWN until it wrote this file, which is why the real
-# 2026-08-29 autoheal outage read as "no DOWN alerts in the last 7d" while the monitor was
-# live-DOWN.
+# loki-read-route-health), and `probe_lib/alerts.py` reconstructs episodes from those lines. Without
+# this file a successful DOWN would leave no record at all.
 #
 # It goes to a FILE rather than to `logger`, because daniel-pi ships no journal: rsyslog is
 # masked here on purpose (journald is the log of record, and a second text logger would

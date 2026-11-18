@@ -1,4 +1,4 @@
-"""The waiting gauge `fanout.py land-server` writes (#5671): what counts as waiting on a person.
+"""The waiting gauge `fanout.py land-server` writes: what counts as waiting on a person.
 
 The reason table is driven through the real `autoland.problems`, so a rewording of a reason
 there fails here rather than silently dropping that reason to zero.

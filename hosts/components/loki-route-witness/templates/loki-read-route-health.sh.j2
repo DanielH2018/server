@@ -7,21 +7,19 @@
 # its verdict to $TEXTFILE_DIR/loki-read-route-health.prom for node_exporter's textfile collector
 # (default /var/lib/node-exporter-textfile; a test points it elsewhere).
 #
-# WHAT THIS WATCHES (issue #1712). loki-homelab's IngressRoute has exactly one caller —
-# `probe.py loki-query` / `loki-labels`, running as a host process — and nothing watched it. It
-# was dead from daniel-server for as long as traefik sat on daniel-box (#1693) and nothing
-# noticed; the operator saw `404 page not found`, which does not distinguish a broken route from
-# a broken query.
+# WHAT THIS WATCHES. loki-homelab's IngressRoute has exactly one caller —
+# `probe.py loki-query` / `loki-labels`, running as a host process. A broken route reads as
+# `404 page not found`, which does not distinguish it from a broken query.
 #
 # WHY A POD CANNOT BE THE WITNESS. The route's guard is a ClientIP set of node-owned addresses
 # (k8s/roles/loki-homelab/templates/ingressroute.yaml.j2), so monitor-bridge's request would
-# arrive with a pod IP and fail for a reason unrelated to the operator's path. What broke was a
-# HOST-sourced grant, and only a host process can witness it.
+# arrive with a pod IP and fail for a reason unrelated to the operator's path. The grant is
+# HOST-sourced, and only a host process can witness it.
 #
 # WHY THIS RUNS ON BOTH NODES. Which address a host process arrives as depends on where the
 # traefik pod is: same node, the packet carries that node's cni0 gateway; other node, it crosses
-# the VXLAN overlay and carries the sending node's flannel.1 address. #1693 was invisible from
-# daniel-box and fatal from daniel-server, so one witness would have reported green throughout.
+# the VXLAN overlay and carries the sending node's flannel.1 address. A broken grant can be
+# invisible from one node and fatal from the other, so one witness could report green throughout.
 # Each host writes its OWN verdict, which Prometheus labels with the host's origin, and the
 # LokiReadRoute rules select each host's series apart.
 #

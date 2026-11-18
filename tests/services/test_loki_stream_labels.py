@@ -1,4 +1,4 @@
-"""loki-homelab's `job` label values have one owner: `loki_streams` in group_vars/all.yml (#3740).
+"""loki-homelab's `job` label values have one owner: `loki_streams` in group_vars/all.yml.
 
 Both Alloy configs stamp their streams from it, and monitor-bridge's settings render its
 selectors from it. Neither direction is checked by the render alone, so this holds both:
@@ -19,7 +19,7 @@ The rule files get four more checks, because a `job` check passes a `container`,
 `app` matcher unread, and a rule on a selector that matches nothing never fires: each label name
 is one the Alloy streams carry, each `machine` value is one `loki_streams` lists, each
 `container` value is a container a rendered template declares, and each silence rule stays on
-its side of the Pi boundary (#3739).
+its side of the Pi boundary.
 """
 
 import ast
@@ -422,7 +422,7 @@ def test_a_loki_rule_on_an_undeclared_container_is_flagged():
 
 # Each silence rule, and the `loki_streams` roles whose silence it reports. A cluster rule that
 # also matched a Pi stream would keep its count above zero through a total cluster outage and
-# never fire, and the Pi rule must not be held up by the cluster either (#3739).
+# never fire, and the Pi rule must not be held up by the cluster either.
 _SILENCE_RULES = {
     "homelab-logs.yaml LokiHostLogsSilent": {"host_syslog", "host_authlog"},
     "homelab-logs.yaml LokiPodLogsSilent": {"cluster_pods"},
@@ -489,7 +489,7 @@ def test_the_silence_rules_hold_the_pi_boundary_is_clean():
 
 
 def test_a_cluster_silence_rule_that_counts_a_pi_stream_is_flagged():
-    # The host selector as monitor-bridge deployed it before #3739.
+    # A host selector that matches the Pi's streams too.
     expr = 'absent_over_time({job=~"authlog|syslog"}[3h])'
     rules = {"r": {"host_syslog", "host_authlog"}}
     assert _pi_boundary_problems({"r": expr}, rules) == [

@@ -1,4 +1,4 @@
-"""`hosts/lib/homelab-reconcile`'s udev arm (H4.3b1).
+"""`hosts/lib/homelab-reconcile`'s udev arm.
 
 Each test is a reconcile case of ADR-0022's H4 amendment, run against the stub `udevadm` of
 `_reconcile_host.py`.

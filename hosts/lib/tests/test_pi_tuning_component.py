@@ -1,4 +1,4 @@
-"""The optimize_pi role's subjects as packaged components on daniel-pi (H7.25).
+"""The optimize_pi role's subjects as packaged components on daniel-pi.
 
 `pi-tuning`, `pi-node-exporter`, `pi-resolver` and `pi-peer-backup-target` replace the
 `optimize_pi` and `config_files` roles and `k8s_host_files`' two Pi tasks. These tests hold what
@@ -229,7 +229,7 @@ def _journal_caps(package: host_mode.Package) -> tuple[float, float, float]:
 
 # Measured on daniel-pi: pacct grows about 28 MB a day, and savelog gzips it to about a fifth.
 # sysstat writes about 1.4 MB a day. Each budget counts today's file beside the kept ones.
-# The rest of /var/hdd.log, outside these four trees, held 3 MB on 2026-11-14.
+# The rest of /var/hdd.log, outside these four trees, held 3 MB.
 PACCT_MB_PER_DAY = 28
 PACCT_GZIP_RATIO = 0.2
 SYSSTAT_MB_PER_DAY = 1.4
@@ -264,8 +264,8 @@ def test_the_whole_sd_copy_fits_under_the_log2ram_boot_guard(package):
     tmpfs = _mb(_edits(package, LOG2RAM_CONF)["SIZE=128M"]["line"].split("=")[1])
     use, _, _ = _journal_caps(package)
     assert use < tmpfs
-    # log2ram's boot guard `du`s the SD copy against SIZE and refuses to start when it is over
-    # (#4583, #8234). `--sparse` is patched out, so every archive lands there at its full size.
+    # log2ram's boot guard `du`s the SD copy against SIZE and refuses to start when it is over.
+    # `--sparse` is patched out, so every archive lands there at its full size.
     assert sd_copy_worst_mb(package) <= tmpfs
 
 
@@ -317,7 +317,7 @@ def test_a_drop_in_that_only_adds_a_schedule_is_flagged():
 
 # auditd's free-space thresholds.
 
-# The least free space /var/log held in the 30 days to 2026-11-13, in MB, from
+# The least free space /var/log held over 30 days, in MB, from
 # node_filesystem_avail_bytes.
 LOG_TMPFS_LOW_WATER_MB = 13
 

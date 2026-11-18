@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
-"""Guard that Renovate does not rebase a green automerge PR every time master moves (#5587).
+"""Guard that Renovate does not rebase a green automerge PR every time master moves.
 
 Under automerge, the top-level `rebaseWhen: "auto"` resolves to `behind-base-branch`. Renovate
 then rebased each automerge branch onto every master move and re-ran its full CI, and inside
-the before-6am window master moves faster than one CI run. From 2026-10-16 to 2026-10-18 the
-automerge branches drew 77 PR runs and 1,389 runner-minutes; the three named below ran CI 15,
-14 and 13 times. Both automerge rules set `rebaseWhen: "conflicted"`, so a green PR that is
+the before-6am window master moves faster than one CI run. Both automerge rules set `rebaseWhen: "conflicted"`, so a green PR that is
 behind merges as it stands.
 
 Two things can undo it silently, so each gets an assertion:
@@ -24,7 +22,7 @@ Run: uv run pytest scripts/tests/test_renovate_automerge_does_not_chase_master.p
 import pytest
 from _renovate import _PACKAGE_RULES, _REPO, _resolve_setting
 
-# The branches #5587 measured, as package -> (file carrying the pin, the update type the
+# The branches that chased master, as package -> (file carrying the pin, the update type the
 # branch carried). Named rather than derived, so a moved pin fails as a missing member instead
 # of resolving against a path no rule was written for.
 CHASED = {

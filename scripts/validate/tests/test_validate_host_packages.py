@@ -190,7 +190,7 @@ def test_a_base_without_the_workflow_is_a_job_change():
 
 
 def test_an_edit_to_any_named_job_is_a_change():
-    """CI names the build job and the cases job, and an edit to either runs the cases (#6151)."""
+    """CI names the build job and the cases job, and an edit to either runs the cases."""
     edited = _WORKFLOW.replace("prek run", "prek run --all-files")
     assert not host_packages.jobs_differ(_WORKFLOW, edited, ["host_packages"])
     assert host_packages.jobs_differ(_WORKFLOW, edited, ["host_packages", "hooks"])

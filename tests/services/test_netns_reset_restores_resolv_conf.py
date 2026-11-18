@@ -1,4 +1,4 @@
-"""A wireguard sidecar restarted after a SIGKILL resolves through the kubelet's nameserver (#8489).
+"""A wireguard sidecar restarted after a SIGKILL resolves through the kubelet's nameserver.
 
 The kubelet bind-mounts one resolv.conf into every container of the pod, so it outlives a
 container restart. wg-quick points it at `MULLVAD_DNS` while the tunnel is up, and only the

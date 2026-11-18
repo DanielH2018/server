@@ -59,8 +59,8 @@ def _read_raw(path: Path) -> str:
     A guard on a `*.sh.j2`'s source reads `{{ ... }}` wherever a value moved into a role
     default, and both failure modes this module exists to catch hide there: a URL assembled
     from a default carries neither a literal `create=1` nor a literal `/fail`, so
-    `test_no_auto_provisioning` and `test_failure_is_reported` pass on text that says nothing
-    (#3190). `_shell_render.rendered_shell_text` renders through the same gate that shellchecks
+    `test_no_auto_provisioning` and `test_failure_is_reported` pass on text that says nothing.
+    `_shell_render.rendered_shell_text` renders through the same gate that shellchecks
     these scripts, so what is asserted here is what the host runs.
 
     The routing is per file rather than a swap to `rendered_shell_texts()`: this census also
@@ -221,7 +221,7 @@ def test_a_shell_template_is_read_rendered_not_as_source() -> None:
 
     The source side of the assertion is what makes this able to go red: `disk-health.sh.j2`
     carries Jinja, so a `_read_raw` that reverted to `path.read_text()` would return text
-    holding `{{` and fail here rather than silently reading templates again (#3190).
+    holding `{{` and fail here rather than silently reading templates again.
     """
     plane, role, name = _RENDERED_SENDER
     path = shell_template_path(plane, role, name)

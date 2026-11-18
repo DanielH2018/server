@@ -47,7 +47,7 @@ def test_seed_is_deterministic():
 
 def test_seed_never_immediately_overdue_and_within_window():
     today = dt.date(2026, 6, 11)
-    # Explicit tiers: `external` is set by a registry edit, never by `classify` (#3749).
+    # Explicit tiers: `external` is set by a registry edit, never by `classify`.
     for name, tier in (
         ("a_push_token", "assisted"),
         ("b_push_token", "assisted"),

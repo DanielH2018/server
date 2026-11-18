@@ -15,7 +15,7 @@ Three parts have to hold together per sidecar, and each fails silently on its ow
 - **The netpol admits prometheus to it.** netpol-baseline's
   `networkpolicy-crowdsec-sidecars.yaml.j2` renders one policy per app in
   `crowdsec_k8s_sidecar_agents`, so a pod that leaves `baseline-ingress` for a bespoke fence
-  does not lose the scrape (#4088). That grant is a `from` item of its own: a NetworkPolicy
+  does not lose the scrape. That grant is a `from` item of its own: a NetworkPolicy
   rule ANDs its `from` with its `ports`, so appending 6060 to an existing rule admits that
   rule's caller and not prometheus.
 
@@ -239,7 +239,7 @@ def _sidecar_grants(agents):
 
 
 def test_a_new_map_entry_renders_its_grant_with_no_template_edit():
-    """#4088's Verify-by: a third app in the map gets its :6060 grant from the map alone."""
+    """A third app in the map gets its :6060 grant from the map alone."""
     before = _sidecar_grants({"traefik": "t", "authelia": "a"})
     assert "newapp" not in before, "the grant renders for an app the map does not name"
     after = _sidecar_grants({"traefik": "t", "authelia": "a", "newapp": "n"})

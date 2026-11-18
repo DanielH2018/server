@@ -182,7 +182,7 @@ def test_a_host_independent_of_a_changed_shared_package_is_clean(tmp_path):
 
 
 def test_a_host_depending_on_a_changed_shared_package_is_flagged(tmp_path):
-    """#6859: a homelab-tools change reaches every host whose package depends on it."""
+    """A homelab-tools change reaches every host whose package depends on it."""
     snapshot, _ = _snapshots(
         tmp_path, {MERGE: ["daniel-pi"], PARENT: ["daniel-pi"]}, packages=["tools"]
     )
@@ -252,7 +252,7 @@ def test_the_real_pi_render_reads_its_drop_in_schedule():
     tree = host_wait.render_host_tree(REPO, "daniel-pi")
     assert tree is not None
     target = host_wait._target("daniel-pi", tree, REPO)
-    # Since #7065 the package also arms the poll, whose fires join the daily one.
+    # The package also arms the poll, whose fires join the daily one.
     assert target.triggers == {
         "OnCalendar": ["*-*-* 03:05:00"],
         "OnBootSec": ["15min"],
@@ -482,7 +482,7 @@ def test_a_mid_day_merge_on_the_pi_daily_schedule_ends_deferred_naming_the_next_
 
 
 def test_a_mid_day_merge_on_the_pi_with_its_poll_armed_waits_until_the_host_applies():
-    # #7065: the poll's 15-minute fires bound the deadline, so the landing waits, not defers.
+    # The poll's 15-minute fires bound the deadline, so the landing waits, not defers.
     tree = _dropin(PI_DROPIN) | {
         LINK: ("link", 0, b"../homelab-updater.timer"),
         POLL_UNIT: ("file", 0o644, POLL_TEXT),

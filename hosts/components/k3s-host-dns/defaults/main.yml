@@ -10,8 +10,7 @@
 #
 # A cold start does not need Pi-hole: the forwarder's public fallback upstreams cover it. The
 # window before the VIP exists is nearly empty — k3s is active ~20s into boot, and a warm
-# containerd store resolves no registry names at boot (zero image pulls and zero
-# name-resolution failures in the first 10 minutes). A REBUILT node with an empty image store
+# containerd store resolves no registry names at boot. A REBUILT node with an empty image store
 # is the real case, and hosts/bootstrap-host.sh step 6 proves the forwarder answers on one.
 #
 # DELIBERATELY NO FALLBACK ENTRY. Adding `1.1.1.1` behind the forwarder would make a dead

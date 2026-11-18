@@ -17,8 +17,8 @@
 # machine identities are dropped just ahead of it, so kubelet and apiserver Secret reads
 # stay out of the file. That rule's volume is measured at its comment below.
 #
-# VOLUME. The file ships to loki-homelab as `{job="k8s-audit"}`, and on 2026-11-14 it was about
-# 60 percent of that Loki's ingest (53 MB an hour). To find the top producers, count by
+# VOLUME. The file ships to loki-homelab as `{job="k8s-audit"}`, and without the drops below it
+# is about 60 percent of that Loki's ingest (53 MB an hour). To find the top producers, count by
 # `user.username`, `verb`, `objectRef.resource` and `objectRef.subresource` with a `| json`
 # stage over `bytes_over_time`. Each `level: None` rule under "controller status and churn"
 # names its share of that hour.
@@ -68,7 +68,7 @@ rules:
   # readonly ServiceAccount's own drop, because that SA's refused Secret reads are exactly
   # the signal wanted. `Metadata` names the reader, the Secret and the time, never the value.
   #
-  # Kept despite its volume, about 15 percent of the stream on 2026-11-14. kustomize-controller
+  # Kept despite its volume, about 15 percent of the stream. kustomize-controller
   # reads `homelab-cluster-vars` once per substituting Kustomization per reconcile (3,300 an
   # hour), and notification-controller reads `flux-github-status` per commit-status post (930 an
   # hour). Both are SOPS-delivered credentials, so a drop for them would hide a read of the
@@ -133,7 +133,7 @@ rules:
       - /openapi/*
       - /api*
 
-  # ── dropped: controller status and churn (measured 2026-11-14) ───────────────────────
+  # ── dropped: controller status and churn ──────────────────────────────────────────────
   # Each rule names the controller's own identity, so the same write by a person or any other
   # ServiceAccount still reaches the catch-all.
 
@@ -190,7 +190,7 @@ rules:
   # create, update, patch, delete, deletecollection — plus anything a future resource adds.
   #
   # kustomize-controller's server-side-apply patches are the largest producer left here, about
-  # 15 percent of the stream on 2026-11-14 (configmaps, deployments, Kustomizations, services,
+  # 15 percent of the stream (configmaps, deployments, Kustomizations, services,
   # IngressRoutes). They are kept: Flux is the only write path to the workloads, so these
   # entries are the record of what each promotion changed. The policy has no selector for
   # dry-run requests, so the no-op dry-run patches cannot be dropped without the real ones.

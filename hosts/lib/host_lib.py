@@ -14,7 +14,7 @@ with its ``logfmt`` fields and crash hook, the node-exporter textfile write, and
 session's oneshot unit with the guarded read of what it left. Stdlib only.
 
 The repository signer (homelab_repo_sign.py) imports it under the host's /usr/bin/python3,
-Ubuntu 24.04's 3.12, so this file keeps to the 3.12 grammar (#6202): pyproject.toml formats
+Ubuntu 24.04's 3.12, so this file keeps to the 3.12 grammar: pyproject.toml formats
 it for py312, and tests/test_host_lib.py parses it with that grammar.
 """
 
@@ -50,14 +50,14 @@ KUBECTL_TIMEOUT_RC = 124
 KUBECTL_UNRUNNABLE_RC = 125
 
 # Discord rejects a message over 2000 characters with HTTP 400. This is the one cap every host
-# poster shares (#3351). monitor-bridge's bridge/common.py carries the pod-side twin of this cap
+# poster shares. monitor-bridge's bridge/common.py carries the pod-side twin of this cap
 # and `clamp_discord`, because the two programs ship by different mechanisms and cannot share a
 # module, so edit both together.
 DISCORD_MAX = 1900
 DISCORD_TRUNCATED = "\n…(truncated)"
 
-# discord_post's opt-in spool (#3905). A daily script spools one message a day, so 50 holds an
-# outage far longer than the three days of #3882, and a revoked webhook cannot grow it without
+# discord_post's opt-in spool. A daily script spools one message a day, so 50 holds an
+# outage of weeks, and a revoked webhook cannot grow it without
 # bound. A flush posts at most four, so a backlog drains over several calls instead of in one
 # burst; a 429 from a burst only re-queues the message anyway.
 DISCORD_SPOOL_MAX = 50
@@ -67,8 +67,8 @@ GITHUB_API = "https://api.github.com"
 GITHUB_TIMEOUT_S = 15
 
 # sd-daemon(3) priorities for `log`'s `level`. Without one, journald files a line at the unit's
-# `SyslogLevel=` (notice on checkout-sync and the builder), so `journalctl -p err` finds nothing for a failure
-# (#4446). ERR marks a failure the run could not work around; WARNING a read or a gate that
+# `SyslogLevel=` (notice on checkout-sync and the builder), so `journalctl -p err` finds nothing for a failure.
+# ERR marks a failure the run could not work around; WARNING a read or a gate that
 # failed and the run worked around.
 ERR = 3
 WARNING = 4
@@ -128,7 +128,7 @@ def deploy_event(
     """The `event=deploy` logfmt line Grafana draws as a deploy annotation.
 
     `result` is `ok`, `fail` or `rollback`. A `result=ok` line carries no `duration_s`, so it
-    stays byte-identical to the line every emitter wrote before failures were recorded (#6164).
+    stays byte-identical to the line every emitter wrote before failures were recorded.
     `observability_deploy_annotation_expr` reads these lines from syslog, and flux_soak.py
     writes the same shape from a pod that cannot import this module.
     """
@@ -173,7 +173,7 @@ def install_excepthook() -> None:
     """Make an uncaught exception's traceback reach the journal at err priority.
 
     A unit at `SyslogLevel=notice` files a re-raised traceback at notice, so `journalctl -p
-    err` missed every crash; #4446 fixed only the failures the code handles. The hook writes
+    err` misses every crash unless this hook runs. The hook writes
     the traceback through `log` on stderr, which prefixes `<3>` when stderr is the journal and
     leaves it byte for byte Python's own otherwise. A script calls this from `__main__`, never
     at import, so a test importing the module keeps the default hook.
@@ -264,10 +264,9 @@ _FRACTIONAL_SECONDS_RE = re.compile(r"\.\d+")
 def rfc3339_to_epoch(ts: str) -> float | None:
     """Seconds since the epoch for an RFC3339 timestamp, or None if unparseable.
 
-    Was duplicated between longhorn_backup_health_logic.py and longhorn_reap_lib/logic.py, and
-    already diverged once: only the backup-health copy stripped fractional seconds, so the same
-    Longhorn `snapshotCreatedAt` parsed in one module and returned None in the other (2026-09-04
-    review). This is the single copy both now call.
+    The single copy longhorn_backup_health_logic.py and longhorn_reap_lib/logic.py both call: two
+    copies would diverge on fractional seconds, so the same Longhorn `snapshotCreatedAt` would
+    parse in one module and return None in the other.
 
     Mirrors `date -d "$ts" +%s 2>/dev/null` returning empty on failure — permissively, not
     strictly: `.status.snapshotCreatedAt` is a plain string Longhorn writes itself with no format
@@ -334,8 +333,8 @@ def clamp_discord(content: str, limit: int = DISCORD_MAX) -> str:
     """``content`` verbatim when it fits ``limit``, else cut so it ENDS in the truncation marker.
 
     The marker is the reader's only way to tell a cut message from a complete one. Two caps
-    used to apply in sequence: renovate_notify clamped to 1950 with this marker, then
-    discord_post cut to 1900 and sliced the marker off every clamped digest (#3351).
+    applying in sequence, as renovate_notify clamping to 1950 with this marker and then
+    discord_post cutting to 1900, slice the marker off every clamped digest.
     """
     if len(content) <= limit:
         return content
@@ -488,7 +487,7 @@ def discord_post(
     fails for a reason another attempt can fix (no network, a 5xx, a 429) is queued there, and
     ``flush_discord_spool`` later sends it with a ``(delayed: first attempt <UTC time>)`` line.
     This call runs that flush first; while the flush fails, the new post joins the queue without
-    an attempt of its own. Such a caller also runs the flush once per run (#3905). A caller
+    an attempt of its own. Such a caller also runs the flush once per run. A caller
     that gates a marker on the return value must NOT pass it: its next run re-sends the post,
     so it would arrive twice. The return value is unchanged.
     """
@@ -523,14 +522,11 @@ def github_token(source: Mapping[str, str], run: Callable) -> str | None:
     during a landing, renovate_notify, the ruleset-drift cron. ``await_ci.py`` polls every 20s
     for up to land.sh's CI budget, which would be hundreds of polls of 2 or more requests each.
     When this returns None it makes at most 15 polls, at least 90s apart, and skips its
-    descendant walk, which bounds a wait at 30 requests (``await_ci.ANONYMOUS_MAX_POLLS``,
-    #6148). Before that back-off, two
-    ``land.sh`` runs in an hour exhausted it, after which the tick's
-    gate reads ``HTTP Error 403: rate limit exceeded`` and defers as ``CI not finished``. That
-    is correct fail-closed behaviour, and also a deploy outage nobody asked for. Measured
-    2026-09-01: two landings and a manual tick, three 403 deferrals. Authenticated, the limit
-    is 5000/hour per token. **HISTORY —** This was two copies, in deploy_git and
-    renovate_notify, that disagreed on which variables they read (#3362).
+    descendant walk, which bounds a wait at 30 requests (``await_ci.ANONYMOUS_MAX_POLLS``).
+    Without that back-off, two ``land.sh`` runs in an hour exhaust the limit, after which the
+    tick's gate reads ``HTTP Error 403: rate limit exceeded`` and defers as ``CI not finished``.
+    That is correct fail-closed behaviour, and also a deploy outage nobody asked for.
+    Authenticated, the limit is 5000/hour per token.
     """
     for name in ("GH_TOKEN", "GITHUB_TOKEN"):
         value = (source.get(name) or "").strip()
@@ -563,7 +559,7 @@ def github_get(
     """GET ``https://api.github.com/<path>`` and return the parsed JSON body.
 
     The one request shape every host GitHub reader shares, so the readers cannot drift on the
-    headers, the auth or the timeout (#2136, #3362). What a failure MEANS stays with the caller:
+    headers, the auth or the timeout. What a failure MEANS stays with the caller:
     checkout-sync's and the builder's CI gates read an error as ``pending``, a landing lets it
     raise.
 
@@ -642,8 +638,7 @@ def file_mtime(path):
     `unreadable` is True only when the path EXISTS but could not be stat'd, which on these
     hosts means a permissions change. A caller that folded the two together would report "the
     file is gone" for a file it merely could not look at, and those have different fixes — the
-    lesson longhorn_backup_health._read_stamp records from the 2026-08-19 restore-drill
-    incident. The Longhorn heartbeat's check 10 reads a cron file's install time this way.
+    lesson longhorn_backup_health._read_stamp records. The Longhorn heartbeat's check 10 reads a cron file's install time this way.
     """
     try:
         return os.stat(path).st_mtime, False
@@ -658,7 +653,7 @@ def journal_reader(binary, window_hours, timeout):
 
     Reads the messages a syslog tag wrote in the last `window_hours`. A host cron that reports
     through `logger` is only evidence once something reads it back, and the caller that needs
-    that is the Longhorn backup-plane heartbeat (check 9, #2418). Bound the same way
+    that is the Longhorn backup-plane heartbeat (check 9). Bound the same way
     kubectl_runner is, for the same reason: the binary path, the window and the deadline are the
     caller's settings, and the subprocess handling should not be copied per caller.
 
@@ -698,8 +693,8 @@ def journal_reader(binary, window_hours, timeout):
     return journal
 
 
-# A unit an agent's controller starts, and the files its session leaves for it (dotfiles#967's
-# I1 and I3). The renovate agent and triage both cross this boundary.
+# A unit an agent's controller starts, and the files its session leaves for it. The renovate
+# agent and triage both cross this boundary.
 
 
 @dataclass(frozen=True)

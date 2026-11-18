@@ -3,7 +3,7 @@
 A policy-shaped guard is a selector, a predicate and a floor that stops the census passing over
 nothing. Written as its own file, each guard restated the walk, the floor, the offender report
 and the red-proof pair. As a row, the selector and the predicate are the row's own code and
-everything else is here once (#3384, #3407).
+everything else is here once.
 
 Two tables use it:
 
@@ -205,15 +205,15 @@ def proof_problems(row: Census) -> list[str]:
 # ── Rows that share one census's parse ───────────────────────────────────────────────
 #
 # Every row of `scripts/tests/test_census_rows_test_*.py` reads the same modules, and parsing
-# was 5.15s of the 9.23s one row took over 1620 of them (#6437). `share` makes those rows judge
+# was 5.15s of the 9.23s one row took over 1620 of them. `share` makes those rows judge
 # a module together. The first shared row to ask about a module runs every shared row's offence
 # on it from one tree, keeps only their hits, and drops the tree.
 #
 # DECIDED: keep each module's hits, not its tree. Holding every tree cut the two census files
 # from 11.7s to 8.4s but held 618 MiB per process (measured 2026-10-29, 1624 modules), and
-# dropping the trees did not lower RSS: pymalloc keeps the freed arena pages resident (#6465).
+# dropping the trees did not lower RSS: pymalloc keeps the freed arena pages resident.
 # An LRU of trees never hits, because each row sweeps the census in the same order. The hits
-# are a few strings per module, and PR #6464 records the measurements.
+# are a few strings per module.
 
 
 def _digest(rel: str, text: str) -> tuple[str, bytes]:
@@ -283,7 +283,7 @@ class Sharing:
         """Find every shared row's hits on every census module now, before any test runs.
 
         Without it the first census file to run in a process pays the whole pass, about 8s,
-        and its sibling about 0.05s, so neither file's `--durations` is its own (#7976). An
+        and its sibling about 0.05s, so neither file's `--durations` is its own. An
         offence that raises is kept as that row's hit, for its own test to report.
         """
         for rel in self._census():

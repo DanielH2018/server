@@ -1,9 +1,7 @@
 """traefik and authelia render their CrowdSec agent from one macro file, driven by one map.
 
 `k8s/templates/crowdsec-agent.yml.j2` carries the three seeding init containers, the
-`crowdsec-agent` sidecar and the volumes they share. Until #3741 each pod held a hand-kept copy
-of about 120 lines, and the copies had drifted: the scratch volume carried a different name in
-each pod.
+`crowdsec-agent` sidecar and the volumes they share.
 
 `crowdsec_k8s_sidecar_agents` in group_vars maps each host app to the LAPI machine its agent
 logs in as. Four readers derive from it, in roles that cannot see each other's defaults: the
@@ -60,7 +58,7 @@ def _agents() -> dict[str, str]:
 
 
 def test_a_written_out_copy_is_flagged():
-    """Reject case: the pre-#3741 shape, a sidecar and a volume written out beside no call."""
+    """Reject case: a sidecar and a volume written out beside no call."""
     copy = (
         "      containers:\n"
         "        - name: crowdsec-agent\n"

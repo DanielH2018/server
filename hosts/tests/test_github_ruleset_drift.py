@@ -158,7 +158,7 @@ def test_a_200_that_is_not_a_ruleset_is_a_bad_fetch(tmp_path):
 @pytest.mark.parametrize("visibility", ["private", "internal"])
 def test_a_repo_that_is_not_public_names_visibility(tmp_path, visibility):
     """GitHub enforces no ruleset on a private repo on the free plan, while every ruleset still
-    reads `active` (#3610). Each ruleset body here is clean, so only the repo read can say so."""
+    reads `active`. Each ruleset body here is clean, so only the repo read can say so."""
     rc, status, msg = run(
         tmp_path,
         curl_body=ruleset_body(DECLARED),
@@ -171,7 +171,7 @@ def test_a_repo_that_is_not_public_names_visibility(tmp_path, visibility):
 
 
 def test_an_anonymous_not_found_names_visibility_not_a_bad_fetch(tmp_path):
-    """The shape #3610 actually saw: no token, so a private repo answers 404 `Not Found`."""
+    """No token, so a private repo answers 404 `Not Found`."""
     rc, status, msg = run(
         tmp_path, curl_body=ruleset_body(DECLARED), repo_body=ANONYMOUS_PRIVATE_REPO
     )

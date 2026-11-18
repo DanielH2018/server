@@ -141,9 +141,8 @@ def test_the_regressed_suffix_strip_matches_what_the_publisher_prints():
 
 # --- Every variable a cron reads is one it can see ------------------------------------------
 #
-# All three scripts run under `set -uo pipefail`, so reading an unset variable aborts the script
-# at that line. Every other check misses it: the templates render, ansible-lint passes, and the
-# abort only happens on the branch that reads the variable, such as the DEGRADED-run branch.
+# All three scripts run under `set -uo pipefail`, so reading an unset variable aborts at that
+# line, and only on the branch that reads it, such as the DEGRADED-run branch.
 #
 # A read is satisfied when the same template assigns it, when homelab-check-lib.sh does, or when
 # it is in _CRON_ENV below. Forms that survive `set -u` --

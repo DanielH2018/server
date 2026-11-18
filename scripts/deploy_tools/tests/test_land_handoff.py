@@ -264,8 +264,13 @@ def test_the_follower_is_stopped_however_the_start_ends(tmp_path, fake):
         )
         return started[0]
 
-    _hand_off(tmp_path, follow=follow, **fake)
-    assert started and started[0].poll() is not None
+    try:
+        _hand_off(tmp_path, follow=follow, **fake)
+        assert started and started[0].poll() is not None
+    finally:
+        for process in started:
+            process.kill()
+            process.wait()
 
 
 def test_a_handed_off_landing_is_recorded_in_this_users_verdict_log(

@@ -226,7 +226,7 @@ def _include_component(root):
 
 
 def test_a_render_the_package_would_ship_broken_is_flagged(tmp_path):
-    """The guard renders through the package's environment, so it judges the bytes that ship (#8182).
+    """The guard renders through the package's environment, so it judges the bytes that ship.
 
     The package's `strict_env` drops an include's last newline, which joins the two keys
     into invalid YAML; an environment that keeps it renders valid YAML the package never ships.

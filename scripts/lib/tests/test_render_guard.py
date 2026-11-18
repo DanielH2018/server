@@ -123,7 +123,7 @@ def test_load_yaml_returns_empty_for_a_non_mapping(tmp_path):
 
 def test_load_yaml_parses_an_unchanged_file_once(tmp_path):
     # A render reads all.yml, host_vars and role defaults once per render_context call, and
-    # parsing them again each time was 8% of the renderer round trip (#5592).
+    # parsing them again each time was 8% of the renderer round trip.
     path = tmp_path / "a.yml"
     path.write_text(f"path: {tmp_path}\n")
     before = render_guard._parsed_mapping.cache_info()

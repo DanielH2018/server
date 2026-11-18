@@ -268,7 +268,7 @@ def test_cron_liveness_separates_a_missing_cron_from_one_it_cannot_stat():
 
 
 def test_cron_liveness_names_a_cron_that_fired_and_logged_no_completed_run():
-    """The 2026-10-08 case: /etc/cron.d is root-only, and the cron fired but only refused (#3677)."""
+    """A root-only /etc/cron.d, where the cron fired but only refused."""
     fired = _B2._replace(
         installed_at=None,
         unreadable=True,

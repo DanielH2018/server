@@ -1,7 +1,7 @@
-"""A rendered-property row enforces Kubernetes' IANA_SVC_NAME rule on container port names (#6543).
+"""A rendered-property row enforces Kubernetes' IANA_SVC_NAME rule on container port names.
 
-#6537 rendered a port named `dockerhub-mirror` (16 characters), every PR check passed, and
-Flux's dry run refused the Deployment. The row may carry any name, so these tests find it by
+A port named `dockerhub-mirror` (16 characters) passes every PR check, and
+Flux's dry run refuses the Deployment. The row may carry any name, so these tests find it by
 behaviour: a row in `test_rendered_properties.PROPERTIES` that reports an offender for a pod
 whose only defect is its port name, and reports none for the same pod with a valid one.
 

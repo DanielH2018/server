@@ -278,11 +278,10 @@ def test_a_comment_with_no_timestamp_leaves_the_order_alone():
 
 # --- the non-vacuity assertion ------------------
 #
-# A parser test that counts is vacuous the moment its fixtures move — `all(...)` over an
-# empty set passes. So the fixture set is NAMED, a census asserts every name is present, and
-# the verdicts are asserted per name: a rename, or a regex that stops matching, then fails
-# saying WHICH member went missing rather than that a count moved. Same shape as
-# `KNOWN_CONSUMERS` in `scripts/diagnostics/tests/test_probe_boundaries.py`.
+# A parser test that counts is vacuous when its fixtures move: `all(...)` over an empty set
+# passes. So the fixture set is NAMED, a census asserts every name is present, and the verdicts
+# are asserted per name, so a rename or a regex that stops matching fails saying WHICH member
+# went missing.
 
 # The cases the claim parser must answer, by name -> (comment bodies, the holder they yield).
 CLAIM_PARSER_FIXTURES: dict[str, tuple[list, str | None]] = {
