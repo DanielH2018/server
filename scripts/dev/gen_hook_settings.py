@@ -3,14 +3,14 @@
 
 Run: uv run python scripts/dev/gen_hook_settings.py [--check | --list]
 
-WHY. The `hooks` object in `.claude/settings.json` was hand-written JSON, and two tests
-watched it from one side only: `.claude/hooks/tests/test_hook_scripts_executable.py` asserts
-that every REGISTERED script exists and is executable, and `test_project_settings_shape.py`
-that every entry declares a timeout. Nothing asserted the reverse -- that every hook file on
-disk is registered somewhere -- so a hook that existed but fired nowhere was a silent gap
-(dotfiles issue #537, the server half of #528). Each hook now declares its own registrations
-in a comment block the shell and Python both ignore, this script renders the `hooks` object
-from those declarations, and `--check` fails on a file that declares nothing.
+WHY. A hand-written `hooks` object in `.claude/settings.json` is watched from one side only
+by two tests: `.claude/hooks/tests/test_hook_scripts_executable.py` asserts that every
+REGISTERED script exists and is executable, and `test_project_settings_shape.py` that every
+entry declares a timeout. Nothing asserts the reverse -- that every hook file on disk is
+registered somewhere -- so a hook that exists but fires nowhere is a silent gap. Each hook
+therefore declares its own registrations in a comment block the shell and Python both ignore,
+this script renders the `hooks` object from those declarations, and `--check` fails on a file
+that declares nothing.
 
 THE GRAMMAR is the one `bin/gen-hooks-lib.js` in the dotfiles repo reads, minus the chezmoi
 keys (`when:` and a raw `command:` override) that a plain-JSON file has no use for. One block
@@ -40,10 +40,9 @@ that is not a `#   key: value` continuation. In a Python hook the block sits bet
 shebang and the module docstring, as a comment, so the docstring stays the docstring.
 
 THE CENSUS is every `*.sh` and `*.py` directly under `.claude/hooks/`, by suffix and not by
-the exec bit, non-recursive. The bit is the property with the recorded history of drifting:
-`uv-python.sh` shipped 100644 in #361, which is the incident `test_hook_scripts_executable.py`
-exists for, and a new hook committed the same way would be exactly the file a bit-based
-census skips. It is also incoherent on the Python modules here: some are 100755, and none
+the exec bit, non-recursive. The bit is the property with a history of drifting:
+a hook committed as 100644 is exactly the file a bit-based census skips, the incident
+`test_hook_scripts_executable.py` exists for. It is also incoherent on the Python modules here: some are 100755, and none
 is ever exec'd, since `run-hook.sh` runs each through `uv run python`.
 `tests/` and `hooklib/` are one level down and are reached by import, never by a
 registration.
@@ -76,13 +75,13 @@ SETTINGS = REPO / ".claude" / "settings.json"
 # own census on this prefix, so a change here must change that test's regex too.
 #
 # DECIDED: `$CLAUDE_PROJECT_DIR`, so each session runs the hooks its own checkout carries
-# (#3394). Claude Code sets it to the directory the session started in, which is the worktree
-# root for a worktree session. The absolute `~/server/` path it replaced ran the PRIMARY
-# checkout's copy, so a worktree cut from a fresher master registered a script the primary
-# lacked, `/bin/sh` exited 127, and the guard was skipped (#2675). A guard registration now
-# denies on that exit instead; see GUARD_SUFFIX.
+# (Claude Code sets it to the directory the session started in, which is the worktree root
+# for a worktree session). An absolute `~/server/` path would run the PRIMARY checkout's
+# copy, so a worktree cut from a fresher master could register a script the primary lacks:
+# `/bin/sh` exits 127 and the guard is skipped. A guard registration denies on that exit
+# instead; see GUARD_SUFFIX.
 #
-# The cost: a session's edit to a hook in its own worktree now takes effect in that same
+# The cost: a session's edit to a hook in its own worktree takes effect in that same
 # session, so a half-finished edit can disable its own guard. A `SyntaxError` in
 # `bash-pretool.py` makes `uv run` exit non-zero, and the harness skips a hook that does. That
 # is accepted because these hooks stop footguns; they are not a boundary against the session
@@ -91,7 +90,7 @@ COMMAND_PREFIX = '"$CLAUDE_PROJECT_DIR"/.claude/hooks/'
 
 # What a `.py` registration runs through: `run-hook.sh <stem> <args>`, where `args:` carries the
 # runner's posture flags (`--project`, `--ask-on-cd[=<guards>]`). One interpreter pin and one
-# failure posture for every Python hook, instead of a per-hook shim each (#3278).
+# failure posture for every Python hook, instead of a per-hook shim each.
 RUNNER = "run-hook.sh"
 
 # What a guard registration appends after the runner call, so a missing runner denies instead
@@ -99,10 +98,8 @@ RUNNER = "run-hook.sh"
 # only decisions are deny and ask. `{name}` is the stem, `{guards}` what the `ask` would name.
 #
 # `/bin/sh` exits 127 when `$CLAUDE_PROJECT_DIR` no longer holds the runner, and the harness
-# treats every exit but 2 as non-blocking, so the tool call went ahead unchecked. A session
-# outlived its worktree's deletion that way for four hours: 378 hook runs failed and every
-# guarded call ran (#3887). `run-hook.sh` cannot catch this itself, because it is the file that
-# is gone. The suffix runs only when the runner exited non-zero, and denies only when the
+# treats every exit but 2 as non-blocking, so the tool call goes ahead unchecked. `run-hook.sh`
+# cannot catch this itself, because it is the file that is gone. The suffix runs only when the runner exited non-zero, and denies only when the
 # runner is not executable. Every other exit passes through unchanged: a guard's own deny (2),
 # and a missing `uv` (127 from the runner's `exec`), which `run-hook.sh`'s `# DECIDED:` keeps
 # fail-open.

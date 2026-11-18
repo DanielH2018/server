@@ -8,7 +8,7 @@ the local master so ``homelab-checkout-sync`` can still fast-forward it once the
 under a new SHA, open the PR, and hand it to a detached ``land.py`` that merges it.
 
 WHY A LANDING AND NOT GITHUB'S AUTO-MERGE. When this was written, a ruleset blocked every
-auto-merged PR, because auto-merge never applies a bypass (#3609, #3911). Ruleset 27167149
+auto-merged PR, because auto-merge never applies a bypass. Ruleset 27167149
 blocks it again, and the landing also merges at the head SHA it read green and then deploys
 the merge. ``land.py --arm-merge --await-merge`` waits for CI and merges through
 the REST endpoint, pinned to that SHA. ``--detach`` matters as much as the merge. The callers hold the git-tree lock on
@@ -16,7 +16,7 @@ fd 9 and read this script's output through a pipe, so a landing that inherited e
 keep the lock for the whole CI wait. The detached landing closes every inherited descriptor
 from 3 up and rebinds its stdio to its own log (``land_lib/detach.py``). The callers are
 system units, and a system unit kills its whole cgroup when its script exits, so the landing
-starts in the operator's user manager instead (``lib/detach_fork.py:in_user_manager``, #6864).
+starts in the operator's user manager instead (``lib/detach_fork.py:in_user_manager``).
 
 ``publish`` expects the commit to already be at HEAD of the primary checkout; the caller
 made it, because what to stage and how to word it is the cron's business. It prints ONE
@@ -59,10 +59,9 @@ passes cleanly in exactly that state. Merged branches are deleted on this repo
      the one a human has to clear
   4  a branch is on origin and its PR is open with a FAILED check. Its landing has stopped
      at ``pr-ci-red`` and nothing retries it, so the PR blocks every later run until a human
-     fixes or closes it. PR #6544 sat red for five hours reading as 2, which the crons
-     report up (#6588). A PR that CONFLICTS with its base is the same code, with its own
+     fixes or closes it. A PR that CONFLICTS with its base is the same code, with its own
      message: GitHub creates no ``pull_request`` run for it, so CI never starts and its
-     landing has nothing to wait on. PR #6766 sat for 18 hours reading as 2 (#6847)
+     landing has nothing to wait on.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_publish_pr.py
 """
@@ -185,7 +184,7 @@ def real_tools(
                 env.get("PATH", "/usr/bin:/bin"),
             ]
         )
-        # A cron's system unit would kill the detached landing when the cron exits (#6864).
+        # A cron's system unit would kill the detached landing when the cron exits.
         argv, env = detach_fork.in_user_manager(
             [sys.executable, str(land_script), *args], repo, env, read_cgroup
         )
@@ -382,7 +381,7 @@ def failed_checks(view: dict) -> list[str]:
     """The names of the checks in ``view`` that concluded red, in rollup order.
 
     The gate job is ``if: always()``, so a cancelled run still runs it and it concludes
-    ``FAILURE`` on a head no job failed on (#5931). ``hosts/lib/ci_verdict.py`` excuses that
+    ``FAILURE`` on a head no job failed on. ``hosts/lib/ci_verdict.py`` excuses that
     gate once the check-suites API confirms the suite was cancelled. The rollup carries no
     suite, so this excuses a failed gate whenever a need was cancelled and no need failed. A
     need past its ``timeout-minutes`` also reads cancelled and is excused with it: that errs

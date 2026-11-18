@@ -5,6 +5,10 @@
 Description=One Renovate agent session (headless Claude over the open Renovate PRs)
 After=network-online.target homelab-secrets.service
 Wants=network-online.target homelab-secrets.service
+{% if t2_egress_proxy is defined %}
+Wants=squid.service
+After=squid.service
+{% endif %}
 
 [Service]
 Type=oneshot
@@ -44,6 +48,13 @@ Environment=DISABLE_AUTOUPDATER=1
 # A memory written here would die with the tmpfs home, and none may reach a later run.
 Environment=CLAUDE_CODE_DISABLE_AUTO_MEMORY=1
 EnvironmentFile=/etc/renovate-agent/session.env
+{% if t2_egress_proxy is defined %}
+# The T2 egress proxy (hosts/components/t2-egress). curl reads only the lowercase names, and Go
+# tools both. Loopback stays direct.
+Environment=HTTPS_PROXY=http://{{ t2_egress_proxy }} https_proxy=http://{{ t2_egress_proxy }}
+Environment=HTTP_PROXY=http://{{ t2_egress_proxy }} http_proxy=http://{{ t2_egress_proxy }}
+Environment=NO_PROXY=localhost,127.0.0.1,::1 no_proxy=localhost,127.0.0.1,::1
+{% endif %}
 # Only this script's own lines reach the journal: it captures the session's output and writes
 # it to a file the runner reads, so session text never becomes a syslog line.
 SyslogLevel=notice

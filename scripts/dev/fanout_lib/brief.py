@@ -61,7 +61,7 @@ def relevant_health(health: Sequence[str], issues: Sequence["Issue"]) -> list[st
     """The host-state lines that name a role or host the batch's issues cite, and a count.
 
     Every line of the placed host's SessionStart banner went into every brief, so a batch
-    spent turns ruling out k3s-owed and release-staleness warnings about other roles (#3956).
+    spent turns ruling out k3s-owed and release-staleness warnings about other roles.
     A read failure is always kept: it says the state is unknown, not that it is unrelated.
     The `[<host>] ` prefix the dispatcher adds is not matched, or every line would name its
     own host.
@@ -94,7 +94,7 @@ class Issue:
     """One GitHub issue: the text the brief carries, and the labels the launch gate reads.
 
     `comments` holds only the operator's own non-bookkeeping comments, oldest first. An
-    operator decision posted as a comment otherwise never reached the agent (#3498).
+    operator decision posted as a comment otherwise never reached the agent.
     """
 
     number: int
@@ -230,7 +230,7 @@ of your final message. A {LANDS} session lands it and closes the issue.
 
 
 def drafts_pr(target: Target) -> bool:
-    """Whether a review batch opens its PR as a draft, which stays one through the review (#5563).
+    """Whether a review batch opens its PR as a draft, which stays one through the review.
 
     This repo's `ci.yml` skips every job on a draft PR. A fan-out batch pushes again while its
     review runs, so CI on the first push was wasted: from 2026-10-16 to 2026-10-18, 27 PR runs
@@ -310,7 +310,7 @@ TESTS_FAIL_HEADING = "Tests fail without the change"
 
 
 def _test_proof_step(base: str) -> str:
-    """The instruction to prove each new test fails without the change (#5499).
+    """The instruction to prove each new test fails without the change.
 
     The wording follows `fanout_lib.review.base_check`, which runs the same check on the PR:
     the changed files outside the tests go back to the merge base, a file the PR added is
@@ -343,7 +343,7 @@ def _precomputed(cited: list[str]) -> str:
     DECIDED: a call-time import. That module reaches `land.sh`'s classifier, which imports
     PyYAML. `fanout.py review` and `clean`'s remote leg import this module under
     `uv run --no-project`, which has no PyYAML. A module-level import killed every review
-    unit and every remote clean at import (#4167). Only `launch` renders a brief, and it runs
+    unit and every remote clean at import. Only `launch` renders a brief, and it runs
     in the project env.
     """
     from findings_lib.precomputed import precomputed
@@ -400,8 +400,8 @@ def render_brief(
         findings = "`findings.py open`"
     else:
         # The agent's cwd is the other repo, which has no `findings.py`. The batch's snapshot
-        # of this repo's `origin/master` has it, where the host's primary checkout can lag
-        # (#3783). `--project` rather than `--directory` keeps the cwd, so a relative
+        # of this repo's `origin/master` has it, where the host's primary checkout can lag.
+        # `--project` rather than `--directory` keeps the cwd, so a relative
         # `--body-file` still resolves against the agent's worktree.
         snapshot = _snapshot_root(batch, target)
         findings = (

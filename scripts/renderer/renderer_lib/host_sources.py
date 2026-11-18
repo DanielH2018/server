@@ -45,7 +45,7 @@ SHARED_FILES = {
 # The components whose defaults and templates another component or a host's package.yml may
 # borrow with `component:`. Each file stays single in its owner, so two renderers cannot fork
 # it. claude-code's agent user and its per-uid slice cap sit in each host's package.yml, because
-# the uid differs per host (#6773). k3s-agent renders k3s-server's defaults and address-pin
+# the uid differs per host. k3s-agent renders k3s-server's defaults and address-pin
 # template, and k3s-host-dns renders pi-resolver's resolv.conf. A named allowlist, so a spec
 # cannot read any other component.
 COMPONENT_SOURCES = frozenset({"claude-code", "k3s-server", "pi-resolver"})

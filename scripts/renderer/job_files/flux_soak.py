@@ -283,7 +283,7 @@ def await_ready(reads: Reads, inputs: Inputs, digests: tuple, deadline: float) -
             logged = left
         # A reset moves `homelab` off R, and the Kustomizations then apply another revision,
         # so none of them would ever name R. kustomize-controller holds the next promotion's
-        # health check behind this Job (#5704), so the Job ends itself rather than wait out
+        # health check behind this Job, so the Job ends itself rather than wait out
         # its deadline.
         retry_transient(reads, deadline, lambda: read_sources(reads, inputs.revision))
         reads.sleep(POLL_SECONDS)
@@ -558,7 +558,7 @@ def soak(reads: Reads, inputs: Inputs) -> Verdict:
 def deploy_line(revision: str, services: str, result: str, duration_s=None) -> str:
     """The `event=deploy` line, in `host_lib.deploy_event`'s shape, which this pod cannot import.
 
-    `test_flux_soak.py` holds the two byte-identical; a pass's line is the one before #6164.
+    `test_flux_soak.py` holds the two byte-identical.
     """
     line = f"event=deploy services={services} sha={revision[:8]} result={result}"
     if duration_s is not None:
@@ -594,7 +594,7 @@ def main(argv: list[str] | None = None, reads: Reads | None = None) -> int:
         return 1
     if not verdict.failures:
         if verdict.judged:
-            # A judged pass names what it judged, so its log never reads like a missing one (#5419).
+            # A judged pass names what it judged, so its log never reads like a missing one.
             print(
                 f"soak: {inputs.revision[:8]} judged {', '.join(verdict.judged)} over "
                 f"{verdict.window:.0f}s; pass"
@@ -605,7 +605,7 @@ def main(argv: list[str] | None = None, reads: Reads | None = None) -> int:
         return 0
     for service, why in verdict.failures:
         print(f"soak: {service}: {why}", file=sys.stderr)
-    # The failure's annotation names the failed services (#6164).
+    # The failure's annotation names the failed services.
     duration = time.monotonic() - started
     print(deploy_line(inputs.revision, ",".join(verdict.services()), "fail", duration))
     args.termination_log.write_text(

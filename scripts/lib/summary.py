@@ -1,7 +1,7 @@
 """One line for many names that share a few reasons: a count for a big group, names for a small one.
 
 A broad landing waits on some seventy Kustomizations, nearly all for the same reason, and
-naming each one with its reason fills an agent's context (#7894). `grouped` names the reason
+naming each one with its reason fills an agent's context. `grouped` names the reason
 once with a count and spells out only the names held for some rarer reason.
 
 Typical usage example:

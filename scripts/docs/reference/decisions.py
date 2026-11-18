@@ -36,7 +36,7 @@ the page should still list the marker.
 
 NO LINE NUMBERS. A row names its file, never its line. A line number moves under every edit
 above the marker, so a page carrying them changed on nearly every PR, and two in-flight PRs
-that each regenerated it conflicted on it (#7612). Without them the body changes only when a
+that each regenerated it conflicted on it. Without them the body changes only when a
 marker is added, removed, reworded or moved to another file. `.claude/rules/facts.md` rejects
 a `file:line` citation for the same reason.
 

@@ -164,10 +164,10 @@ def main(argv=None, *, plan=plan):
 
     A verdict subcommand's output ends with one `PROBE-VERDICT: <ok|fail|skip|unreadable> (...)`
     line, rendered from the exit code by `lib.exit_messages.verdict_line` so every subcommand
-    shares one vocabulary (#4454). A source the subcommand could not read raises
-    `core.Unreadable`, which exits `PROBE_UNREADABLE` (75) with the failure on stderr (#4444).
+    shares one vocabulary. A source the subcommand could not read raises
+    `core.Unreadable`, which exits `PROBE_UNREADABLE` (75) with the failure on stderr.
     An argument it cannot act on raises `core.UsageError`, which exits 64 with no verdict
-    line, and any other message-carrying exit is the `fail` verdict (#4471).
+    line, and any other message-carrying exit is the `fail` verdict.
     The line is printed after the subcommand returns, so `verdict_line` is the only place a
     code becomes a verdict word.
     """
@@ -190,7 +190,7 @@ def main(argv=None, *, plan=plan):
         rc = PROBE_USAGE_ERROR
     except SystemExit as exc:
         # A message-carrying SystemExit -- a group_vars key missing, an automation not found
-        # -- is not a failed read: retrying it never helps, so it must not exit 75 (#4471).
+        # -- is not a failed read: retrying it never helps, so it must not exit 75.
         # A failed read raises `core.Unreadable` at its own site instead. A verdict subcommand
         # reports the rest as the `fail` verdict, still with its line, rather than exiting 1
         # with none.
@@ -259,7 +259,7 @@ def _dispatch(ns, argv, plan):
             # Every kubectl read names the cluster it is about (`--cluster`, default prod) and
             # lib.kubectl refuses before running when the local kubectl serves another one.
             # One line, not a traceback. Nothing about the subject was read, so this is 75
-            # with the refusal on stderr, never the `fail` verdict (#4468).
+            # with the refusal on stderr, never the `fail` verdict.
             print(f"{ns.cmd}: {exc}", file=sys.stderr)
             return PROBE_UNREADABLE
     # metric / loki-query default to a formatted view; --json and --dry-run fall

@@ -1,4 +1,4 @@
-"""The git state outside a red batch's worktree that the red author could write (#3864, #3879).
+"""The git state outside a red batch's worktree that the red author could write.
 
 `reset_worktree` returns the worktree to a commit and runs every git call under `hardened_runs.hardened`, so
 nothing planted in git's own state runs during the reset. That state still outlives it. Every

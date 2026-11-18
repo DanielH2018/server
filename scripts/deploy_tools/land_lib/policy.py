@@ -7,7 +7,7 @@ which is every interactive session and renovate-agent's lander:
   and target master. The agent's GitHub account can push only under its own prefix ("agent
   branch fence", ruleset 24517167), so this keeps the lander to the branches the fence gives
   the agent. The policy binds only a landing: the agent's account can also arm GitHub's
-  auto-merge, which skips it, by the operator's choice on 2026-10-11.
+  auto-merge, which skips it, by the operator's choice.
 - `LAND_APPROVAL_PATHS`: a file of path entries, one per line, each a prefix or, holding `*`,
   a glob over the whole path (`listed`). A PR changing a path under one of them is refused. Those are the paths that widen the agent's own authority: its roles, its
   credentials, the rulesets' drift checks and this code. A PR changing a module this landing
@@ -30,7 +30,7 @@ When any of these but `LAND_APPROVER` is set, `check`
 returns the head SHA it checked. `merge.py` pins every merge path to that SHA, so a push after
 the checks fails the merge rather than landing unchecked.
 
-WHY IN land.sh AND NOT IN THE LANDER. The operator chose on 2026-10-05 that landing logic lives
+WHY IN land.sh AND NOT IN THE LANDER. The operator chose that landing logic lives
 here rather than being re-implemented in a unit's own script. The approval list therefore
 names `scripts/deploy_tools/land`, so a PR that weakens these checks needs the operator's
 approval as well.
@@ -160,7 +160,7 @@ def gate_hits(
 
     `modules` and `search_dirs` are `sys.modules` and `sys.path` when the policy runs. By then
     land.py has imported every module the checks use, so the loaded set is the gate's own
-    import closure, with no hand-kept list to drift (#3888). A path is a hit when it is the
+    import closure, with no hand-kept list to drift. A path is a hit when it is the
     source of a loaded module, or when it would import under a name already loaded from a
     directory on `sys.path`. The second form catches a new `scripts/json.py` or
     `scripts/lib/__init__.py`, which would shadow `json` or turn the `lib` namespace package

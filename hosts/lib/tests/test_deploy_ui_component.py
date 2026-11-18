@@ -130,6 +130,8 @@ def test_reconcile_relabels_the_live_allows_rather_than_deleting_them(
     node.state["users"] = {u["name"]: u["uid"] for u in manifest["users"]["users"]}
     # The package's filter restarts rsyslog, which the Pi fixture masks.
     live_unit(node, "rsyslog.service")
+    # t2-egress restarts squid, a dependency the Pi fixture never installed.
+    live_unit(node, "squid.service")
     declared = [r for r in manifest["ufw"]["rules"] if r.get("keep")]
     others = [r for r in manifest["ufw"]["rules"] if not r.get("keep")]
     port_rules = _port_rules(manifest)

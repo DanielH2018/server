@@ -7,7 +7,7 @@ runs the script through `--until 3` with real apt, so it proves the package name
 package ships `age-keygen`, and that the update survives a dead source. The script's REPO_URL
 points at a closed port, the way step 2's source reads while the homelab repository is down.
 
-The fetch goes to snapshot.ubuntu.com, which answers 5xx often enough to redden PRs (#8041). A
+The fetch goes to snapshot.ubuntu.com, which answers 5xx often enough to redden PRs. A
 run that dies at the age install while apt shows that mirror answering 5xx, or not answering at
 all, gives no verdict rather than a failure, and `host_package_cases.py` counts it in its last
 line. A 404 still fails: it means the pinned snapshot is wrong. So does a run that dies anywhere

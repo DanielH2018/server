@@ -12,7 +12,7 @@ nothing and `prod` stays where it was. `report` runs the source, host and no-stu
   path `./cluster/<name><suffix>` (the per-file rule, D4.3 and D5.1a1): `-deferred` when the
   role sets `manifests_deferred_files`, `-snapshot` when it declares
   `k8s_autodeploy_snapshot_pvcs`, `-prepull` when it sets `flux_prepull_timeout`,
-  `-precheck` when it ships `templates/precheck/` (#5719), and `-verify` when it ships
+  `-precheck` when it ships `templates/precheck/`, and `-verify` when it ships
   `templates/verify/`;
 - each published tag and each shared kind has its directory `cluster/<name>/`, and each
   per-tag kind its directory `cluster/<name><suffix>/`, each with a `kustomization.yaml`;
@@ -155,7 +155,7 @@ def prepull_tags(
 ) -> tuple[frozenset[str], list[str]]:
     """The published tags whose role sets `flux_prepull_timeout`, and one line per problem.
 
-    That default alone calls for `<tag>-prepull` (#5525). It reads `prepull_timeouts`, the
+    That default alone calls for `<tag>-prepull`. It reads `prepull_timeouts`, the
     reader the renderer reads too.
     """
     timeouts, problems = prepull_timeouts(published, roles)
@@ -179,7 +179,7 @@ def prechecking_tags(
 ) -> frozenset[str]:
     """The published tags whose role ships pre-apply check Jobs as `templates/precheck/`.
 
-    That directory alone calls for `<tag>-precheck` (#5719). It reads `precheck_files`, the
+    That directory alone calls for `<tag>-precheck`. It reads `precheck_files`, the
     reader the renderer renders that directory from too.
     """
     return frozenset(

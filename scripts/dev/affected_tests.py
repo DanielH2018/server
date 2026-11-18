@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Record what each test module depends on, and say which modules a diff can affect.
 
-A pull request's CI run executes only the test modules its diff can affect (#8458). The table
+A pull request's CI run executes only the test modules its diff can affect. The table
 that decides this is `affected_tests.json` beside this file. `record` writes it and
 `pytest_shard.py --changed-since` reads it on each CI leg. `select` prints the same answer
 for a diff you name.

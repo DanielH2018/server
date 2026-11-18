@@ -19,7 +19,7 @@ from lib.git import git
 _TOKEN = re.compile(r"[A-Za-z0-9_./-]*[A-Za-z_][A-Za-z0-9_./-]*")
 # A version or a number: `v0.33.0-rootless`, `3.14-alpine`, `2026.10.0-ls253`, `10.0.0.240`.
 # `version-as-fact` owns a version in prose, and a Renovate bump removes one on every PR, which
-# #4012 ruled must not arrive red over documentation.
+# must not arrive red over documentation.
 _VERSIONISH = re.compile(r"v?\d")
 _EDGE = re.compile(r"^(?:\./|[-/])+")
 # Markdown is the prose under test, not the tree it describes.
@@ -181,8 +181,7 @@ class Code:
         DECIDED: content counts as a substring, not a whole word. Docs name a family by its
         stem (speedtest's `_upload_bits` for `speedtest_tracker_upload_bits`), and a
         whole-word match read every such stem as vanished. The cost is a rename that only
-        appends to the old name, which this rule then misses. The 2026-10-10 replay that
-        measured the rule's precision used substring matching too.
+        appends to the old name, which this rule then misses.
         """
         if self._all is None:
             self._all = "\n".join(self._texts.values())

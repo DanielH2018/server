@@ -2,9 +2,8 @@
 
 WHY. A test that passes on the code as it stood before the fix cannot be checking what the
 fix changed. The red gate proves that property for the red phase's tests, but only a batch
-whose every issue carries the `red-green` label gets a red phase: 8 of the 10 review records
-written on 2026-10-10 had none. In #4182 the reviewer found an implementer test that "passes on
-the unchanged code" (low, 0.9) by reading it. This module finds such a test by running it.
+whose every issue carries the `red-green` label gets a red phase, and a reviewer can only find an implementer test that "passes on the
+unchanged code" by reading it. This module finds such a test by running it.
 
 HOW. In a clean clone of HEAD (`hardened_runs.clone_at`), every file the PR changed outside its
 tests goes back to the merge base, and a file the PR added is deleted. The tests stay at HEAD.

@@ -1,6 +1,6 @@
 """The rules a red test is held to: why it failed and what it suppresses.
 
-WHY IT FAILED (#4023). `red_by_absence` sorts each red test's failure on the unchanged code
+WHY IT FAILED. `red_by_absence` sorts each red test's failure on the unchanged code
 into an assertion or a name that is not there yet. The red gate accepts any `FAILED`. `red_prompt` tells the red author to reach a
 not-yet-existing module inside the test body, so `assert import_module("new").f() is not None`
 fails at the gate on the import and passes after any implementation of `f`. That test proves
@@ -11,19 +11,19 @@ exists yet to calibrate one against. The reviewer is told which nodes to check f
 The failure text is the part of pytest's short summary after ` - `. It is cut to the terminal
 width unless the run is `-vv`, which is how the red gate runs it.
 
-WHAT IT SUPPRESSES (#4439). The red author commits with a plain `git commit`, so the `ty` hook
+WHAT IT SUPPRESSES. The red author commits with a plain `git commit`, so the `ty` hook
 checks the red tree, and ty reports an import of a module that does not exist yet as an
 `import-not-found` error. A `# ty: ignore[import-not-found]` passes that commit. Once the fix
 adds the module, ty reports the same comment as an `unused-ignore-comment` warning, the hook
-fails on it, and the fix commits nothing: the red file is not the fix's to edit, and in #4403
-the auto-mode classifier denied removing the comments as a CI bypass. `stale_suppressions`
+fails on it, and the fix commits nothing: the red file is not the fix's to edit, and
+the auto-mode classifier denies removing the comments as a CI bypass. `stale_suppressions`
 names each such comment the red commits add, so the red gate refuses them before any fix
 exists. It counts a suppression that names no rule, in either the `ty:` or the `type:`
 spelling, and one naming a rule in `ABSENCE_RULES`, the rules a fix resolves by adding a name.
 `red_prompt` says how to reach a missing name without one.
 
-WHAT THE ISSUE NAMES (#5400). `issue_subjects` reads the identifiers an issue spells in
-backticks, such as `_restarts_privately` in #5197, which the green gate lets a fix change when
+WHAT THE ISSUE NAMES. `issue_subjects` reads the identifiers an issue spells in
+backticks, such as `_restarts_privately`, which the green gate lets a fix change when
 one is a helper the red file already held. What a fix may change in a red test file is
 `red_lock`'s.
 """

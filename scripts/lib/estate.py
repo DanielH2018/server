@@ -1,13 +1,10 @@
 #!/usr/bin/env python3
 """The inventory as the docs generators read it: hosts, each host's vars, and its entries.
 
-WHY ONE LOADER. Before #3899 every generator under ``scripts/docs/`` found and parsed the
-inventory itself. ``gen_doc_fragments`` read ``all.yml`` and two host_vars files through a
-helper named ``role_defaults``, ``fragment_readers.host_has_docker`` and
-``reference/hosts._flag`` each re-implemented host-over-group precedence, and
-``gen_role_glance``, ``glance_facts``, ``service_catalog`` and ``reference/networking``
-each walked the service list through a different helper. ``Estate`` is that reading
-done once; a generator asks it for values and only renders.
+WHY ONE LOADER. Every generator under ``scripts/docs/`` would otherwise find and parse the
+inventory itself: read ``all.yml`` and host_vars files through its own helper, re-implement
+host-over-group precedence, and walk the service list through its own helper. ``Estate`` is
+that reading done once; a generator asks it for values and only renders.
 
 THE PRECEDENCE RULE LIVES HERE, ONCE. ``inventory_layers`` is the order Ansible applies,
 role defaults < ``group_vars/all.yml`` < host_vars. ``render_context`` builds its render

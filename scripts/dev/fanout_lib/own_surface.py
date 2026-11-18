@@ -1,4 +1,4 @@
-"""Which daniel-server batch PRs an unattended landing leaves for a person (#5496, #5659).
+"""Which daniel-server batch PRs an unattended landing leaves for a person.
 
 `pr_problems` is the PR half of the rule. `autoland.problems` adds the review record's half for
 the server lander, and a daniel-server review pipeline asks it before it lands its own draft
@@ -57,7 +57,7 @@ OWN_PATHS = (
     "uv.toml",
     ".python-version",
 )
-# One narrowing of OWN_PATHS (#5659), and no others: skills, hooks and workflows steer what
+# One narrowing of OWN_PATHS, and no others: skills, hooks and workflows steer what
 # agents do or run as CI, so a self-landed change to one could loosen a guardrail with no
 # person in the loop. `pyproject.toml` stays held unless its only change is to
 # `[tool.pytest.ini_options].testpaths` (`testpaths_only`).

@@ -77,7 +77,7 @@ for _d in DOMAINS:
 # it did before — internal to the findings modules, not an API another script may import.
 # Conventions for a new module: docs/python-code-organization.md.
 _LIST_FIELDS = "number,title,state,stateReason,labels,body,createdAt,closedAt,url,comments,blockedBy,author,milestone"
-# The one account whose issues a session takes as work (dotfiles#967 slice 1). Any collaborator
+# The one account whose issues a session takes as work. Any collaborator
 # can open a `claude`-labelled issue, and its body would reach a session as instructions.
 REGISTER_AUTHOR = "DanielH2018"
 
@@ -467,8 +467,8 @@ def release_comment(worktree: str, when: str, reason: str | None) -> str:
 
 # What `gh issue view --json comments` returns at most: its GraphQL query asks for
 # `comments(first: 100)` and nothing paginates. Past this the fold stops seeing new
-# trailers — a release at #101 would leave the issue claimed forever, and a claim at #101
-# would make `cmd_claim`'s read-back report a race against nobody. Latent while the
+# trailers — a release in comment 101 would leave the issue claimed forever, and a claim in
+# comment 101 would make `cmd_claim`'s read-back report a race against nobody. Latent while the
 # busiest issue in the register carries a handful of comments, so this WARNS rather than
 # changing the read: a wrong claim verdict that announces itself is the point.
 COMMENT_PAGE_CAP = 100
@@ -560,7 +560,7 @@ def current_claim(issue: dict) -> str | None:
 
 
 # The repository this register lives in, as GitHub spells it in a qualified closing
-# reference. A PR body may write `Closes DanielH2018/server#2078` rather than `Closes #2078`
+# reference. A PR body may write `Closes DanielH2018/server#12` rather than `Closes #12`
 # -- an agent filing a cross-repo companion PR tends to qualify both for symmetry -- and
 # GitHub honours that form the same as the bare one.
 PR_REPO = "DanielH2018/server"
@@ -570,9 +570,9 @@ _ISSUE_URL_RE = re.compile(r"https?://github\.com/([\w.-]+/[\w.-]+)/issues/\d+")
 # let `next` offer an issue whose fix is already open as a PR, which is the exact duplicated
 # work `next` exists to prevent. The optional `owner/repo` group is captured rather than
 # pinned to `PR_REPO` in the pattern, so `pr_refs` can tell a same-repo reference (withheld)
-# from one aimed at another repository (ignored): `Closes DanielH2018/dotfiles#558` must not
-# withhold server issue #558. GitHub also closes on the full URL,
-# `Closes https://github.com/DanielH2018/server/issues/558`; that arm captures its
+# from one aimed at another repository (ignored): `Closes DanielH2018/dotfiles#12` must not
+# withhold server issue #12. GitHub also closes on the full URL,
+# `Closes https://github.com/DanielH2018/server/issues/12`; that arm captures its
 # `owner/repo` into a second group, so a match is (url_repo, slug_repo, number) with exactly
 # one of the first two set.
 _PR_REF_RE = re.compile(

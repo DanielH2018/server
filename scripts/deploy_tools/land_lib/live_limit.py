@@ -3,7 +3,7 @@
 `slots.py` reads both: the kind decides which of its rules bar a merge, and the floor lowers
 the count of landing slots. `batch.py` reads the kind to keep a serial PR out of a batch.
 Every landing polls GitHub on one shared token, whose core quota is 5000 calls an hour, and
-on 2026-11-11 thirteen live landings spent it (#8018).
+on 2026-11-11 thirteen live landings spent it.
 
 THE READS FAIL OPEN. A read that fails lowers nothing and bars nothing. `gh api rate_limit`
 costs no core quota, and the PR's own file list is one GraphQL read.

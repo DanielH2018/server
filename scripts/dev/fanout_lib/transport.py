@@ -49,14 +49,12 @@ REPO = SERVER_CHECKOUT
 # from its own worktree, and that worktree's copy is the one whose `--repo` it just used.
 FINDINGS = str(_Path(__file__).resolve().parents[1] / "findings.py")
 SSH_OPTS = ["-o", "BatchMode=yes", "-o", "ConnectTimeout=8"]
-# Every ssh call to one host rides one connection (#5667's follow-up). `ufw limit ssh`
+# Every ssh call to one host rides one connection. `ufw limit ssh`
 # rejects a sixth NEW connection within 30s and counts nothing that reuses one, so with
 # a master open a run's reads and launches cost one connection however many batches it
-# places. Measured to daniel-server on 2026-10-18: eight calls in a row through one
-# socket all answered, the first in 0.22s and each later one in 0.01s, and no call
-# waited on the backgrounded master's pipes. ServerAlive bounds a master whose network
-# went away, which every call riding it would otherwise wait on. ssh falls back to a
-# fresh connection when the socket is dead, as after a reboot.
+# places. No call waits on the backgrounded master's pipes. ServerAlive bounds a master
+# whose network went away, which every call riding it would otherwise wait on. ssh falls
+# back to a fresh connection when the socket is dead, as after a reboot.
 MUX_PERSIST_S = 60
 CONTROL_DIR_NAME = "fanout-ssh"
 READ_TIMEOUT_S = 20.0
@@ -69,7 +67,7 @@ HOST_READ_COMMAND = f"{READ_COMMAND}; {signing.signing_key_read_command(REPO)}"
 # `labels` is what the launch gate reads; dropping it from this list would refuse every
 # issue rather than fail loudly, which is why issue_from_view indexes it. `comments` is
 # indexed the same way: a fetch that stopped asking for it would silently drop every
-# operator decision posted as a comment, which is the defect #3498 fixed.
+# operator decision posted as a comment.
 ISSUE_FIELDS = "number,title,body,labels,comments"
 
 # The openings of the records `findings.py` and the fan-out itself post as the operator's
@@ -391,7 +389,7 @@ def head_branch() -> str:
 
     `launch` and `claim` take the orchestrator's branch from here rather than from a flag:
     the orchestrator runs the dispatcher from its own worktree, and pasting the name by hand
-    was the step the issue-fanout skill spent a page on (#3695).
+    was the step the issue-fanout skill spent a page on.
     """
     from lib.git import git_stdout
 
@@ -443,7 +441,7 @@ def read_host(
         host: the host to read.
         standing: the host's uncleaned batches. Their unit states ride this same connection,
             behind `unit_state.MARKER`, because the ssh budget has no connection to spare for
-            a read of their own (#5506). They come back on `HostReading.unit_states`.
+            a read of their own. They come back on `HostReading.unit_states`.
     """
     try:
         proc = tools.run(

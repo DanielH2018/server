@@ -6,7 +6,7 @@ deploys: PR CI is scoped to changed files, so a whole-tree failure can appear on
 the merge.
 
 `hosts/lib/ci_verdict.py:ci_verdict` is the right logic, and `checkout-sync` and the builder
-grade by the same rules; it reads the gate's jobs when the gate has not run (#5507). This is a
+grade by the same rules; it reads the gate's jobs when the gate has not run. This is a
 CLI over that function, so a session's verdict and a host's agree by construction rather than
 by convention.
 
@@ -15,11 +15,11 @@ Exit codes:
   1   the SHA is red
   2   the gate could not be armed (no required contexts) -- nothing was checked
   4   no verdict can arrive: GitHub never ran CI for the SHA, and no later master commit
-      stands in for it -- the line names the tip and the way out (#4641, #4649)
+      stands in for it -- the line names the tip and the way out
   75  the wait budget elapsed with no verdict (land.sh also uses 75 for a wait that gave up)
 
 A SHA GitHub never ran CI for at all reads green through its nearest green descendant on
-master; `descendant_verdict` has the rule and why it is safe (#4621).
+master; `descendant_verdict` has the rule and why it is safe.
 
 Run: uv run python scripts/deploy_tools/await_ci.py <sha>
 """
@@ -66,8 +66,7 @@ REQUIRED_CONTEXTS = frozenset({"prek (lint + validate + tests + secrets)"})
 
 
 # A push event GitHub never delivered leaves the SHA with no check suite from Actions, for
-# good: #4596's merge commit and ee451b26e both read `total_count: 0` long after their
-# neighbours went green (#4621). A freshly pushed SHA also has none for its first seconds, so
+# good: such a SHA reads `total_count: 0` long after its neighbours went green. A freshly pushed SHA also has none for its first seconds, so
 # the wait reads the absence as a dropped push only once it has waited this long.
 DROPPED_PUSH_GRACE_S = 180
 
@@ -75,7 +74,7 @@ DROPPED_PUSH_GRACE_S = 180
 # request against the hourly budget `fetch_check_runs` describes.
 DESCENDANT_LIMIT = 10
 
-# The most polls an anonymous wait makes, whatever its budget (#6148, #6857). Anonymous reads share
+# The most polls an anonymous wait makes, whatever its budget. Anonymous reads share
 # 60 per hour per source IP with every other anonymous read from the same host, and a poll before
 # any required run registers costs 2 requests (check-runs, then check-suites), so 15 polls spend at
 # most 30. `poll_interval` stretches the interval to fit the budget into them, never below
@@ -85,7 +84,7 @@ ANONYMOUS_MAX_POLLS = 15
 ANONYMOUS_INTERVAL_S = 90
 
 
-# The cause a pending line names for a head whose every gate run was skipped (#6077). Only a
+# The cause a pending line names for a head whose every gate run was skipped. Only a
 # draft PR's run skips the `prek` gate (ci.yml's `draft != true`), and a re-run replays that
 # run's draft event, so it skips again. `land_lib/merge.py` reads the phrase to act on it.
 DRAFT_SKIPPED = "every CI run on it skipped the gate because the PR was a draft"
@@ -104,7 +103,7 @@ class RateLimitedError(Exception):
     """GitHub refused a read for the caller's request rate, which says nothing about the SHA.
 
     It is not a `URLError`, so it passes every catch that reads an unreachable API as pending,
-    and `wait` sleeps `wait_s` before the next poll (#8139).
+    and `wait` sleeps `wait_s` before the next poll.
     """
 
     def __init__(self, wait_s: int) -> None:
@@ -164,8 +163,8 @@ def poll_interval(requested: int, authenticated: bool, timeout_s: int) -> int:
     """`requested`, or with no token, the interval that fits `timeout_s` into the anonymous polls.
 
     The anonymous interval spreads `timeout_s` over `ANONYMOUS_MAX_POLLS` polls and is never
-    below `ANONYMOUS_INTERVAL_S`. Backing off rather than refusing keeps an anonymous landing working: the operator ruled
-    on #6148 that an anonymous read is a fail-safe case, not a fault to stop on.
+    below `ANONYMOUS_INTERVAL_S`. Backing off rather than refusing keeps an anonymous landing working: an anonymous read
+    is a fail-safe case, not a fault to stop on.
     """
     # A wait polls once at the start and once per interval after, hence the `- 1`.
     anonymous = max(ANONYMOUS_INTERVAL_S, -(-timeout_s // (ANONYMOUS_MAX_POLLS - 1)))
@@ -180,7 +179,7 @@ def poll_interval(requested: int, authenticated: bool, timeout_s: int) -> int:
 
 
 def _github_pages(path: str, key: str) -> list[dict]:
-    """Every page of a listing, as checkout-sync reads it (#5977); short reads raise."""
+    """Every page of a listing, as checkout-sync reads it; short reads raise."""
     token = lookup_token()
     url = f"repos/{CI_REPO}/{path}"
     return read_check_pages(
@@ -274,7 +273,7 @@ def draft_skipped(runs: list[dict], required) -> bool:
     as `pytest (shard ${{ matrix.shard }} of ...)`. A ready run's gate beside the skipped one
     makes this False, but the gate gets its check run only once every job it needs finishes,
     so a ready run still in progress reads as True; `land_lib/merge.py` reads the workflow
-    runs before it acts on this (#6566).
+    runs before it acts on this.
     """
     seen = [r for r in runs if r.get("name") in required]
     return bool(seen) and all(
@@ -360,11 +359,11 @@ def descendant_verdict(
     # merge commit, which is the rule `homelab-checkout-sync` already follows (it
     # fast-forwards to the newest green ancestor of the tip). What it does not prove is the merge commit's own
     # tree, the one the landing gates. Nothing can prove that once the
-    # push event is gone, and the alternative is a landing no re-run converges (#4621).
+    # push event is gone, and the alternative is a landing no re-run converges.
     # A RED one ends the walk rather than being stepped over: a later green commit may hold
     # the fix the merge commit lacks, so its green says nothing about the tree deployed.
     # Neither verdict changes once both exist, so `wait` ends that case on CI_UNPROVEN, not
-    # on CI_RED: CI_RED's resume is a re-run, and every re-run reads the same red (#4649).
+    # on CI_RED: CI_RED's resume is a re-run, and every re-run reads the same red.
     # `green_after` finds the later green, and the CI_UNPROVEN line says to promote the tip.
     # While a later one has no verdict yet, `wait` keeps polling rather than ending red.
     required = required_contexts()
@@ -390,7 +389,7 @@ def green_after(
 
     A commit whose runs are only cancelled, or whose push was dropped too, stays `pending` to
     `ci_verdict` for good. Counting it as pending held the wait to its deadline and then
-    printed a re-run hint no re-run satisfies (#4667), so it is skipped. The newest commit in
+    printed a re-run hint no re-run satisfies, so it is skipped. The newest commit in
     the window is the exception for a dropped push: a freshly merged tip has no Actions suite
     for its first seconds either, and `wait` names the way out if it never gets one.
     """
@@ -520,7 +519,7 @@ def wait(
 
     `walk_descendants=False` is the anonymous wait. A dropped push then ends at once on 75
     rather than reading up to `DESCENDANT_LIMIT` descendants a poll, which would spend the
-    host's 60 anonymous requests an hour (#6148).
+    host's 60 anonymous requests an hour.
 
     A SHA with no Actions suite after `DROPPED_PUSH_GRACE_S` is a push GitHub dropped, and
     its verdict comes from `descendant_verdict` instead. Until one goes green it keeps waiting,
@@ -534,7 +533,7 @@ def wait(
 
     Raises:
         RateLimitedError: GitHub refused a read for its rate under a zero budget, which has
-            no time to wait the quota out; the one-poll caller sleeps `wait_s` itself (#8147).
+            no time to wait the quota out; the one-poll caller sleeps `wait_s` itself.
     """
     fetch = _unless_rate_limited(fetch)
     fetch_suites = _unless_rate_limited(fetch_suites)
@@ -546,7 +545,7 @@ def wait(
         try:
             # One check-suites read per SHA per poll. `_no_verdict_will_ever_arrive` and the
             # dropped-push check both want it while no required run exists, and reading it twice
-            # made each such poll cost 3 requests rather than 2 (#6148).
+            # made each such poll cost 3 requests rather than 2.
             suites_this_poll = _read_once(fetch_suites)
             try:
                 runs = fetch(target)
@@ -620,10 +619,10 @@ def wait(
                             f"{nearest[:8]} is its nearest descendant with a verdict)"
                         )
                     # A later commit may still go green and stand in for the merge commit,
-                    # which is the usual #4649 shape at merge time: the fix's CI is running.
+                    # which is the usual shape at merge time: the fix's CI is running.
                     if now >= deadline and _is_run_less(unsettled, fetch, fetch_suites):
                         # Only the tip is left, and GitHub never ran CI for it either: no re-run
-                        # converges until something runs CI on it (#4667).
+                        # converges until something runs CI on it.
                         return CI_UNPROVEN, (
                             f"{target[:8]}: no verdict can arrive — GitHub never ran CI for it, "
                             f"its nearest descendant {nearest[:8]} is RED, and GitHub never ran "

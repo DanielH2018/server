@@ -120,7 +120,7 @@ def is_gate_copy(
 ) -> bool:
     """Whether `job` is a gate Job that `gate_job` copied from a CronJob in the bundle.
 
-    The Job census exempts such a Job from its `delivery` and `helper` rows (#5562): it runs
+    The Job census exempts such a Job from its `delivery` and `helper` rows: it runs
     the CronJob's own image and command, so it has no mounted script for those rows to read.
     A copy sits in `<tag>-verify`, carries `homelab/role-digest8`, and its pod template less
     that annotation equals the `jobTemplate` pod template of a CronJob in `<tag>`. Any other

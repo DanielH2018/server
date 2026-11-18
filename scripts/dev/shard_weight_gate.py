@@ -7,9 +7,9 @@ far above what its module measured, and a heavy module whose recorded weight is 
 fails the run. This module holds the bounds and the three arms; `pytest_shard.main` reads the
 report, hands over the committed table and prints each complaint as an annotation.
 
-Split out of `pytest_shard.py` when the margin band (#4010) took that module past the
+Split out of `pytest_shard.py` when the margin band took that module past the
 600-line cap. The runner-seconds table that `pytest_shard.py` packs the shards on lives here
-too, at the end, for the same reason (#6149), with the fetch of CI's pytest leg logs that both
+too, at the end, for the same reason, with the fetch of CI's pytest leg logs that both
 the table and `leg_spread` read.
 """
 
@@ -35,15 +35,14 @@ _DURATION_LINE = re.compile(r"^([0-9.]+)s\s+(call|setup|teardown)\s+(\S+?)::")
 # WHY A CI MEASUREMENT AND NOT A STATIC ARM. A neighbour heuristic sees an
 # unweighted file only where a recorded pole already sits in its directory. A heavy module
 # landing in a quiet directory is invisible to it, and no static proxy separates the two:
-# `def test_` count, byte size and directory mean were all checked against a heavy module
-# (6 tests, 248 lines, a directory averaging 0.19s) and none discriminates.
+# `def test_` count, byte size and directory mean each fail to separate a heavy module from a
+# light one.
 # Only running the file says what it costs, and CI already runs it.
 #
 # WHY TEN. The gate reads the runner's own per-test seconds, summed per file, where the table
 # holds workstation seconds — the two are not the same scale, so the number is set against the
 # shard it would skew rather than against the table. A shard projects around 40s at six ways,
 # so an unweighted module worth 10s is a quarter of a shard placed by a 0.0s guess. The
-# module that motivated the gate measured about 30s. The
 # runner is slower per test than the workstation, so 10 runner seconds is FEWER than 10
 # recorded seconds: the gate sits at or below the pole cutoff a neighbour heuristic would use.
 RUNNER_HEAVY_SECONDS = 10.0
@@ -60,8 +59,8 @@ RUNNER_HEAVY_SECONDS = 10.0
 # flipped.
 #
 # WHY A RATIO AND NOT A DELTA. The table holds workstation seconds and the report holds runner
-# seconds, and the two are not the same scale. Controls measured on daniel-server
-# ran 1.10x to 1.46x their recorded values, so anything under about 3x is that scale
+# seconds, and the two are not the same scale. Controls
+# run 1.10x to 1.46x their recorded values, so anything under about 3x is that scale
 # difference rather than a stale entry. FIVE leaves room above that noise; a busy recording
 # host still overshoots it on its own (`LOCAL_READING_MAX_RATIO`).
 #
@@ -89,35 +88,31 @@ STALE_WEIGHT_FLOOR_SECONDS = 3.0
 # recorded weight, and `--record-missing` writes the runner seconds.
 #
 # WHY TWENTY. A host busy with fan-out batches reads up to about nine times what the runner
-# measures (#5616): `test_fanout_clean_chain.py` read 9.14s against 0.99s. A cost that is real on
-# one host alone reads further off still, such as a test walking untracked files: 85.09s against
-# CI's 2.08s (#7132). `UNDER_WEIGHT_RATIO` uses twenty for the same variance.
+# measures. A cost that is real on one host alone reads further off still, such as a test
+# walking untracked files. `UNDER_WEIGHT_RATIO` uses twenty for the same variance.
 LOCAL_READING_MAX_RATIO = 20.0
 
 # How many times its recorded weight a module may measure on the runner before the shard check
 # reads the entry as too LOW. The arm annotates from `UNDER_WEIGHT_WARN_SECONDS` below.
 #
 # WHY A THIRD ARM. The stale arm above catches a recorded number far too high, and
-# `--record-missing` never touches a present entry, so a weight far too low stood unseen. On
-# the master run in #4873, `test_guard_tests_read_renders_not_templates.py` measured 45.67s
-# against a recorded 0.48s and `test_nut_fsd_login_confined.py` 14.65s against 0.01s. Each
-# module had grown after its weight was recorded, so the split packed it as free: the skew of
-# an unweighted heavy file, with an entry present.
+# `--record-missing` never touches a present entry, so a weight far too low would stand unseen:
+# a module that grew after its weight was recorded is packed as free, the skew of an
+# unweighted heavy file, with an entry present.
 #
-# WHY TWENTY. The runner is not a fixed multiple of the workstation. On that same run,
-# `scripts/docs/tests/test_gen_reference_decisions.py` measured 36.15s against 5.73s serial
-# on daniel-box, 6.3x, and #3604 saw one module vary 2x between two runs of the same code. A
-# correctly recorded module can therefore reach about 13x, and twenty clears it. The entries
-# this arm exists for were 34x to 1500x off.
+# WHY TWENTY. The runner is not a fixed multiple of the workstation: a module can run 6.3x
+# its serial seconds on daniel-box, and one module can vary 2x between two runs of the same
+# code. A correctly recorded module can therefore reach about 13x, and twenty clears it. The
+# entries this arm exists for are 34x to 1500x off.
 UNDER_WEIGHT_RATIO = 20.0
 
 # Where the under-recorded arm starts ANNOTATING, below the 10s the unweighted arm uses.
 #
-# WHY LOWER. #4873's verify-by is "no module recorded under 1s totals over 5s", and four of
-# the six rows that issue named measured 7.41-7.66s against 0.0-0.01s recorded: under the 10s
-# bound, so the arm could not have seen them. Those four were the k8s render charged to its
-# first reader, which `tests/conftest.py` now builds outside every timed phase; this
-# band is what makes that shape visible again if the build ever lands back on a test. Between
+# WHY LOWER. The bar is "no module recorded under 1s totals over 5s", and a module measuring
+# 7.4-7.7s against 0.0-0.01s recorded sits under the 10s bound, so the arm could not see it.
+# That shape is the k8s render charged to its first reader, which `tests/conftest.py` builds
+# outside every timed phase; this band makes the shape visible again if the build ever lands
+# back on a test. Between
 # here and `RUNNER_HEAVY_SECONDS` a 20x ratio needs a weight of 0.25-0.5s or less, so the band
 # annotates only near-free entries.
 UNDER_WEIGHT_WARN_SECONDS = 5.0
@@ -318,19 +313,17 @@ def durations_complaints(
     return complaints
 
 
-# ── The runner-seconds table the shards are packed on (#6149) ─────────────────────────────────
+# ── The runner-seconds table the shards are packed on ─────────────────────────────────
 #
 # WHY A SECOND TABLE. `pytest_shard_weights.json` holds workstation seconds, and the runner does
-# not scale them evenly. Over three CI runs on 2026-10-24 (40125170130, 40131095618,
-# 40130851623), the middle 90% of the 290 modules recorded at 0.5s or more measured 1.0x to
-# 5.5x their recorded weight on the runner, with a median of 2.3x. On run 40125170130 every
-# shard recorded 157-159s, the runner measured them at 327-612s, and their test steps took 133s
-# to 241s. Packing on what the runner measured projects every shard at 460-468 runner seconds
-# over the same three runs.
+# not scale them evenly. The middle 90% of the modules recorded at 0.5s or more measure
+# 1.0x to 5.5x their recorded weight on the runner, with a median of 2.3x, so shards that
+# record 157-159s each measure 327-612s there. Packing on what the runner measures projects
+# every shard at about the same runner seconds.
 #
 # WHY NOT WRITE RUNNER SECONDS INTO THE WEIGHT TABLE. The docs-refresh cron's
 # `--refresh-drifted` re-measures that table on daniel-box and rewrites any entry 1.5x away from
-# what it measured, so runner seconds there would drift back within days (#5432). The shard
+# what it measured, so runner seconds there would drift back within days. The shard
 # check's ratio arms also compare that table with the runner on purpose, at bounds wide enough
 # for the scale gap. So the weight table keeps feeding the check and the cron, and this one feeds
 # only `assign`.
@@ -339,31 +332,30 @@ def durations_complaints(
 # recorded weight times the median runner-to-recorded ratio, and an entry for a deleted module
 # is ignored. The docs-refresh cron refreshes it twice a day with `pytest_shard.py
 # --refresh-runner 3`, which downloads every pytest leg's log from the three newest green master
-# runs and rewrites only the rows that drifted (#6178). Each module takes the median of what the
-# logs measured, because one module measured about 8s on one run and 15.6s on the next (#3604).
+# runs and rewrites only the rows that drifted. Each module takes the median of what the
+# logs measured, because one module can measure about 8s on one run and 15.6s on the next.
 # `--record-runner LOG...` is the by-hand full rewrite from logs you downloaded yourself.
 #
 # EACH LEG'S READINGS ARE SCALED TO ONE REFERENCE RUNNER FIRST, because the hardware a leg draws
-# sets the speed of every module in it. Over three master runs on 2026-11-08 (42529937412,
-# 42532417368, 42532752393) one unchanged shard ran 0.67x its table on one leg and 1.22x on the
-# next, and the six legs of one run spread 140s to 290s on a split projected flat (#7708). That
-# spread is wider than `DRIFT_RATIO`, and every module in a shard shares it, so the medians of
-# three runs moved 63 to 94 rows on each refresh, correlated by shard. The leg's own cold
-# `uv sync` bytecode compile measures the same hardware before any test runs. Its seconds per
-# file predicted the leg's factor within ±8% on all 18 legs, and scaling by it cut a module's
-# spread across the three runs from a median of 1.41x to 1.12x.
+# sets the speed of every module in it. One unchanged shard can run 0.67x its table on one leg
+# and 1.22x on the next, and the six legs of one run can spread 140s to 290s on a split
+# projected flat. That spread is wider than `DRIFT_RATIO`, and every module in a shard shares
+# it, so the medians of several runs move many rows on each refresh, correlated by shard. The
+# leg's own cold `uv sync` bytecode compile measures the same hardware before any test runs.
+# Its seconds per file predicts the leg's factor within about 8%, and scaling by it cuts a
+# module's spread across runs.
 _COMPILE_LINE = re.compile(r"Bytecode compiled (\d+) files in ([0-9.]+)(ms|s)\b")
 # The cold compile's seconds per file on a leg that measures its modules at their table weight.
 # A fixed constant, so the table's scale does not move with the runs a refresh happens to read.
 REFERENCE_COMPILE_SECONDS_PER_FILE = 0.00085
 # A compile faster than this per file found its bytecode already built, so it measures no CPU.
-# Cold compiles measured 0.53-1.0 ms per file and warm ones 0.03-0.06 ms (#7708).
+# Cold compiles measured 0.53-1.0 ms per file and warm ones 0.03-0.06 ms.
 _COLD_COMPILE_FLOOR_SECONDS_PER_FILE = 0.0002
 RUNNER_WEIGHTS_PATH = (
     Path(__file__).resolve().with_name("pytest_shard_runner_weights.json")
 )
 # How far apart a module's recorded and measured seconds may sit, either way, before
-# `--refresh-drifted` rewrites the entry. It is #4888's Verify-by bound, so a refreshed table
+# `--refresh-drifted` rewrites the entry. It is the table's Verify-by bound, so a refreshed table
 # holds every module within it, and a re-measurement inside it is treated as noise.
 DRIFT_RATIO = 1.5
 # An entry within this many seconds of what it measured stays, whatever the ratio: 0.02s
@@ -414,7 +406,7 @@ def leg_spread(legs: dict[str, str]) -> str:
     Returns:
         A first line holding both slowest-minus-fastest gaps, then one line per leg. Dividing
         by `leg_speed` takes out the hardware a leg drew, so the normalised gap is what the
-        split itself left unbalanced (#7718).
+        split itself left unbalanced.
 
     Raises:
         ValueError: `legs` is empty, or a leg's log holds no pytest summary line to read.
@@ -568,8 +560,8 @@ CI_BRANCH = "master"
 # changing the matrix needs no edit here.
 PYTEST_JOB_PREFIX = "pytest (shard "
 # How many green master runs `fetch_runner_logs` reads through to find the ones that ran pytest.
-# A push whose paths the matrix does not cover skips every leg: two of the newest three green
-# runs on 2026-10-28 did. The listing is one call whatever its length, and each run read costs
+# A push whose paths the matrix does not cover skips every leg, so many of the newest green
+# runs ran none. The listing is one call whatever its length, and each run read costs
 # one more.
 RUN_WINDOW = 30
 
@@ -612,7 +604,7 @@ def fetch_runner_logs(runs: int, gh=gh_mod.gh) -> list[str]:
     Raises:
         RuntimeError: fewer than `runs` of the newest `RUN_WINDOW` green runs carried a pytest
             log. A median over fewer
-            runs is one noisy reading per module (#3604), so nothing is written from it.
+            runs is one noisy reading per module, so nothing is written from it.
         subprocess.CalledProcessError: any `gh` call failed.
     """
     list_args = (

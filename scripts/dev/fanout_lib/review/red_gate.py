@@ -1,7 +1,7 @@
-"""The red and green gates a `red-green` fan-out batch passes through (#3674).
+"""The red and green gates a `red-green` fan-out batch passes through.
 
 WHY. A test written after the fix, by the agent that wrote the fix, can pass without checking
-the property it names: #339 shipped 16 green tests for an optimisation that fired for 0 of 25
+the property it names: 16 green tests can ship for an optimisation that fires for 0 of 25
 claims (`docs/failure-classes.md` class 2, "The check observes a proxy, not the property"). A
 red/green batch has a separate session write the tests from the issue text alone, before any
 fix exists, and this module proves those tests fail on the unchanged code.
@@ -13,14 +13,14 @@ THE RED GATE reads the test author's commit range `base..red`. It refuses the ra
   touches. An untracked or ignored config file, which no diff shows, is refused too;
 - it adds a type-checker suppression that a fix leaves unused, such as a `# ty: ignore` on
   the import of a module the fix creates. The `ty` hook then fails the fix's commit on a file
-  the fix may not edit (#4439); `red_tests.stale_suppressions` says which comments count;
+  the fix may not edit; `red_tests.stale_suppressions` says which comments count;
 - it adds no test node, collected at `red` but not at `base`;
 - running only the new nodes does not exit 1 with every node reported `FAILED`. Exit 2 is a
   collection error, such as a module-level ImportError of a module the fix will create, and a
   node that errors, skips or xfails proves nothing about the behaviour. The pipeline runs
   them `RUNS` times, and a node that fails in only some runs is refused as flaky;
 - `pytest --setup-plan` does not list every new node's fixture closure, which the green gate
-  locks (#4548). A node that failed got through setup, so the plan lists it, and a refusal
+  locks. A node that failed got through setup, so the plan lists it, and a refusal
   here most likely means pytest's output format moved.
 
 Only test files change in the range, so running at `red` runs the new tests against `base`'s
@@ -28,27 +28,27 @@ code. In the pipeline, `reset_worktree` runs before the red gate, so the tree al
 `red` alone and the two refusals about uncommitted and untracked files guard direct callers.
 
 Every git call on the worktree runs under `hardened_runs.hardened`, so the repo's hooks, filters, replace
-refs and the settings that move or skip a reset do not apply (#3871).
+refs and the settings that move or skip a reset do not apply.
 
 THE GREEN GATE runs after the implementer and again after every fix round. The working tree
 must match HEAD, because the PR ships HEAD: an uncommitted edit to a red test or to the code
-would otherwise pass a gate the pushed head fails (#3821). Every pytest config file but a
+would otherwise pass a gate the pushed head fails. Every pytest config file but a
 `conftest.py`, the `leakguard` plugin and any red data file must be unchanged since `red`. A
-patch registry may change only in lines naming a file the red commits added (#4875). A
-`conftest.py` may only lose what no red test requests (`red_lock.forbidden_conftest_change`,
-#4542). In a red `test_*.py`, what the red commits wrote and what it reaches must be unchanged,
+patch registry may change only in lines naming a file the red commits added. A
+`conftest.py` may only lose what no red test requests (`red_lock.forbidden_conftest_change`).
+In a red `test_*.py`, what the red commits wrote and what it reaches must be unchanged,
 less a helper the issue names (`Gate.subjects`), and anything else may only be a test, a
-helper, a fixture, an import or a constant; `red_lock.forbidden_change` defines both (#4214,
-#4517, #5400). What a red test reaches includes every fixture in its closure, builtin ones
-included, as the red gate's setup plan listed it (#4548). No untracked config file may exist,
+helper, a fixture, an import or a constant; `red_lock.forbidden_change` defines both.
+What a red test reaches includes every fixture in its closure, builtin ones
+included, as the red gate's setup plan listed it. No untracked config file may exist,
 and every red node must pass in a fresh clone of HEAD, in every one of the pipeline's `RUNS`
 runs. The clone is what makes the verdict HEAD's: the implementer controls the worktree's index
 and git config, so a skip-worktree entry, an `info/exclude` line or
 `status.showUntrackedFiles=no` each hides an edit from `git status`. The clone reads none of
 that repo's config or `info/attributes`, so a smudge filter cannot rewrite a test on checkout
 either, and it is a repository, so a red test that runs `git ls-files` passes there as it would
-in CI (#3837). Its `origin/master` is the SHA the red gate read, so a test that diffs against
-it sees the same base at both gates (#3845). It shares the worktree's object store, which the
+in CI. Its `origin/master` is the SHA the red gate read, so a test that diffs against
+it sees the same base at both gates. It shares the worktree's object store, which the
 agent can also write; CI's run is the backstop there too.
 
 Both gates run pytest with `-c pyproject.toml`, so the root configuration decides every run.
@@ -145,16 +145,16 @@ class Gate:
     files: list[str] = field(default_factory=list)
     nodes: list[str] = field(default_factory=list)
     # `refs/remotes/origin/master` when the red gate ran, "" when there was none. Every
-    # worktree shares that ref, so the green gate pins its clone's copy here (#3845).
+    # worktree shares that ref, so the green gate pins its clone's copy here.
     origin: str = ""
-    # The nodes that failed on a missing name rather than an assertion (`red_tests.red_by_absence`, #4023).
+    # The nodes that failed on a missing name rather than an assertion (`red_tests.red_by_absence`).
     absent: list[str] = field(default_factory=list)
     # The commit the red commits start from, "" when unknown. The green gate reads each red
-    # file there to tell what the red commits wrote from what the file already held (#4517).
+    # file there to tell what the red commits wrote from what the file already held.
     base: str = ""
-    # Each node's fixture closure at `red`, builtin and plugin fixtures included (#4548).
+    # Each node's fixture closure at `red`, builtin and plugin fixtures included.
     closures: dict[str, list[str]] = field(default_factory=dict)
-    # The names the issue spells in backticks; a helper among them is the fix's (#5400).
+    # The names the issue spells in backticks; a helper among them is the fix's.
     subjects: set[str] = field(default_factory=set)
 
     @property
@@ -190,7 +190,7 @@ def review_flags(
 
 
 def red_skip_reason(labels: Sequence[Sequence[str]], server: bool) -> str:
-    """Why a batch whose issues carry `labels` runs no red phase; "" when it runs one (#3950)."""
+    """Why a batch whose issues carry `labels` runs no red phase; "" when it runs one."""
     if not server:
         return "other-repo"
     labelled = [RED_GREEN_LABEL in names for names in labels]
@@ -312,7 +312,7 @@ def _blob(run: Runner, worktree: Path, rev: str, path: str) -> str | None:
 
 
 def _conftests(run: Runner, worktree: Path, rev: str, paths: list[str]) -> list[str]:
-    """Every `conftest.py` pytest loads for a test in `paths`, as `rev` has it (#4543).
+    """Every `conftest.py` pytest loads for a test in `paths`, as `rev` has it.
 
     Conftests are green-protected, so the copy at the red commit is the one HEAD runs, less
     what `red_lock.forbidden_conftest_change` let the fix delete.
@@ -335,7 +335,7 @@ def _red_names(nodes: list[str], path: str) -> set[str]:
 def _stale_suppressions(
     run: Runner, worktree: Path, base: str, red: str, paths: list[str]
 ) -> list[str]:
-    """Each suppression `base..red` adds to `paths` that a fix would leave unused (#4439)."""
+    """Each suppression `base..red` adds to `paths` that a fix would leave unused."""
     found = []
     for path in paths:
         before, after = (
@@ -591,8 +591,8 @@ REPEATED_GREEN = partial(green_gate, runs=RUNS)
 class Gates:
     """The two gates a `review.Pipeline` runs; tests pass scripted ones.
 
-    The pipeline's gates run the red nodes `RUNS` times. One run is not enough: #4178, the
-    issue of one of the first four red batches, was itself a minute-boundary flake.
+    The pipeline's gates run the red nodes `RUNS` times. One run is not enough: a minute-boundary
+    flake can pass a single run.
     TestGen-LLM (arXiv 2402.09171) reruns each generated test five times for the same reason.
     """
 

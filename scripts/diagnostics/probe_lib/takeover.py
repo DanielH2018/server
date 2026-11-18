@@ -282,7 +282,7 @@ def render_tag(tag, out):
     """The tag's placeholder-render documents, from its directory and its deferred one.
 
     Each directory's `kustomization.yaml` lists the files Flux applies under `resources:`,
-    including a role's vendored `upstream/` files, which a top-level glob missed (#5721). Its
+    including a role's vendored `upstream/` files, which a top-level glob missed. Its
     `patches:` stay out: a patch names the object it modifies and is no object of its own.
     """
     proc = subprocess.run(
@@ -363,7 +363,7 @@ def census(tag, docs, live_of):
             # DECIDED: route an unreadable object to the operator rather than widen the
             # read-only ServiceAccount. Its ClusterRole leaves `rbac.*` out on purpose
             # (k8s/roles/cluster-base/templates/readonly-rbac.yaml.j2, *Deliberately absent*), and
-            # `view` omits Roles too, so every RBAC object a tag renders lands here (#5258).
+            # `view` omits Roles too, so every RBAC object a tag renders lands here.
             lines.append(
                 f"  {name}: not readable by the read-only ServiceAccount, so not checked"
             )

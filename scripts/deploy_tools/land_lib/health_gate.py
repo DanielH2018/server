@@ -86,11 +86,11 @@ COUNTED_AS = {"ok": "healthy", "unreadable": "not graded"}
 class GateResult(NamedTuple):
     """The landing's headline verdict, a count line, and a line per tag not healthy.
 
-    A healthy or skipped tag is only counted, so a broad landing's log stays short (#7894).
+    A healthy or skipped tag is only counted, so a broad landing's log stays short.
 
     `unreadable` is True when the gate is unsettled only because a probe could not read its
     store (`PROBE_UNREADABLE`): no tag was found unhealthy, and at least one was not graded at
-    all. Prometheus rolling under the gate is the usual cause (#5543), and a re-run a minute
+    all. Prometheus rolling under the gate is the usual cause, and a re-run a minute
     later answers. An unhealthy tag beside an unreadable one leaves it False, because one
     workload already failed.
 
@@ -115,7 +115,7 @@ def check_one(
     """('ok'|'unhealthy'|'unreadable'|'skipped', first line of probe.py's output) for one tag.
 
     `unreadable` is probe.py's `PROBE_UNREADABLE`: it could not reach the store it reads, so
-    the workload was not graded. That is no verdict on the workload, healthy or not (#5543).
+    the workload was not graded. That is no verdict on the workload, healthy or not.
 
     `cwd` is the checkout the probe runs in, defaulting to this file's own. It decides WHICH
     TREE THE ROLE'S MANIFESTS ARE RENDERED FROM, because `scripts/diagnostics/probe.py` is
@@ -131,9 +131,9 @@ def check_one(
       - {'docker'} probes the Pi only, and a miss there is `unhealthy`, never `skipped`. The
         k8s probe is not consulted at all: a Docker-only tag has no role under k8s/roles/, so
         probe.py falls back to guessing a workload by the tag's name, and a same-named cluster
-        workload answers for it. That is issue #929: `alloy` is the Pi's log shipper AND the
-        name of loki-homelab's cluster DaemonSet, so the gate read the DaemonSet's 2/2 ready
-        and reported the Pi's undeployed container healthy.
+        workload answers for it. `alloy` is the Pi's log shipper AND the
+        name of loki-homelab's cluster DaemonSet, so the gate would read the DaemonSet's 2/2
+        ready and report the Pi's undeployed container healthy.
       - {'k8s'} probes the cluster only, `skipped` when the role declares no workload.
       - both probes both, and each side's own rule applies.
       - neither (a block tag, a typo --skip-tag-check let through) keeps the old order: k8s

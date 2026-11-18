@@ -139,7 +139,7 @@ def land_through_unit(
 
     Prints the unit's `VERDICT:` line to stdout. When the landing stopped without one, prints
     `land: <why>` to stderr and a `VERDICT:` line of its own for an exit 1 or 75, as a landing
-    run here would (#4451). A verdict file the unit did not write during this start is an
+    run here would. A verdict file the unit did not write during this start is an
     earlier landing's, and is never reported as this one's.
 
     `follow` starts a reader of the unit's journal from a given epoch second; while the start

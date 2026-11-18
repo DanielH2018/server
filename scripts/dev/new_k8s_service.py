@@ -6,10 +6,10 @@ Usage::
     uv run python scripts/dev/new_k8s_service.py miniflux \\
         --image ghcr.io/miniflux/miniflux:2.2.16 --port 8080 --authelia one_factor
 
-The role is a `containers_list` entry plus a Deployment template (#4298). The entry is
+The role is a `containers_list` entry plus a Deployment template. The entry is
 appended to `cluster/services.yml`, and `templates/deployment.yaml.j2`
 is the one manifest the role ships. The role has no `tasks/`: the renderer derives the file
-lists from `templates/` and the entry (#3662), and the workload to restart from the role's name.
+lists from `templates/` and the entry, and the workload to restart from the role's name.
 Two small files sit beside the template:
 
 * `defaults/main.yml` holds what has no other home: the image pin Renovate's k8s-defaults
@@ -19,15 +19,13 @@ Two small files sit beside the template:
   this script runs last, writes the tag, image, route, claims and stance between them, so the
   rest of the doc holds only what the generator cannot derive.
 
-WHY A GENERATOR AND NOT A SIBLING (#2855). Step 1 of the `new-k8s-service` skill used to say
-"copy a close sibling". A sibling's files carry its narration, and that narration is dated: the
-littlelink role's Deployment cited a Compose template that had not existed since 2026-08-14.
-A role carrying someone else's history is a worse starting point than one carrying none.
+WHY A GENERATOR AND NOT A SIBLING. A copied sibling's files carry its narration, and that
+narration goes stale: a Deployment can cite a Compose template that no longer exists. A role carrying someone else's history is a worse starting point than one carrying none.
 
 WHAT IT DOES NOT WRITE, deliberately:
 
 * No `service.yaml.j2`. The renderer renders `k8s/templates/service-default.yaml.j2`
-  for a role that ships none (#2872), reading the name and port off the entry this script
+  for a role that ships none, reading the name and port off the entry this script
   writes. A Service that needs more than that is a decision, so it stays a hand edit.
 * No PVC, no Secret, no NetworkPolicy, no probes beyond the readiness/liveness pair on the
   service's own port. Each is a decision about the service, and a generated placeholder for a
@@ -356,7 +354,7 @@ def next_steps(args, role: Path) -> str:
         else ""
     )
     # The route's blackbox target renders in observability, and until Flux applies that render
-    # `probe.py health` skips the probe half (#5346).
+    # `probe.py health` skips the probe half.
     probe_step = (
         f"Once Flux has applied `observability`, which loads {args.name}'s ingress probe, "
         f"gate it with `probe.py health {args.name}`.\n"

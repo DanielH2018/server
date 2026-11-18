@@ -17,15 +17,15 @@ to a file", and why doing it inside the script is safer than asking a caller to 
 WHAT IS SHARED. The fork itself: `lib/detach_fork.py` owns the double fork and the move out of a
 fan-out unit's cgroup. The rest stays here.
 
-THE LANDING IS A GRANDCHILD, SO A KILL OF THE CALLER CANNOT REACH IT (issue #3158). A harness that
+THE LANDING IS A GRANDCHILD, SO A KILL OF THE CALLER CANNOT REACH IT. A harness that
 times out a Bash call kills the call's whole descendant tree, found by walking parent pids, not
-just its process group. A child in its own session (`setsid`) is still a descendant, and on
-2026-10-01 the landing of PR #3137 died that way 7m34s into a fleet deploy with no verdict line.
+just its process group. A child in its own session (`setsid`) is still a descendant, so a
+landing killed that way dies partway through a fleet deploy with no verdict line.
 So `fork` forks twice through `detach_fork.fork_detached`: the landing reparents to init or the
 nearest subreaper, outside the caller's tree, and it holds no inherited descriptor beyond its log
 and /dev/null.
 
-THE LANDING LEAVES A FAN-OUT UNIT'S CGROUP (issue #3160). A fan-out agent runs in
+THE LANDING LEAVES A FAN-OUT UNIT'S CGROUP. A fan-out agent runs in
 `fanout-<n>.service`, and stopping that unit kills its whole cgroup, grandchildren included. The
 landing moves itself into `land<pr>-<pid>.scope` before it starts anything, so stopping the batch
 leaves its landing running to its verdict. The log's first line names the scope to stop instead.
