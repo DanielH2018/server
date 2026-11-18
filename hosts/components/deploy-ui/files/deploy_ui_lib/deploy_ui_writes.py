@@ -49,8 +49,8 @@ def spawn_logged(argv: list[str], cwd: Path, log_dir: Path, action: str) -> Path
 
     The name carries a random suffix because the timestamp alone is one-second granular:
     two writes in the same second named the same file, and the second `open("wb")`
-    truncated a log the first process was still writing to and overwrote its `.pid`
-    (GitHub issue #1597). `mkstemp` opens O_EXCL, so uniqueness is decided by the
+    truncated a log the first process was still writing to and overwrote its `.pid`.
+    `mkstemp` opens O_EXCL, so uniqueness is decided by the
     filesystem rather than by a counter this daemon would have to hold a lock over — and it
     still holds across a daemon restart.
     """

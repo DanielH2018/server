@@ -19,8 +19,7 @@ loki_homelab_claim: loki-homelab-data
 loki_homelab_size: 5Gi
 loki_homelab_storage_class: longhorn-nobackup
 
-# The claim the renderer emits for this role, which the loki-homelab Kustomization applies
-# (#3387).
+# The claim the renderer emits for this role, which the loki-homelab Kustomization applies.
 k8s_claims:
   - name: "{{ loki_homelab_claim }}"
     storage_class: "{{ loki_homelab_storage_class }}"

@@ -8,8 +8,8 @@ starts that unit and waits for it. The runner writes the framed prompt to
 `<EXCHANGE_DIR>/in/prompt.txt`. This script feeds it to `claude -p` on stdin, so the episode
 text is on no command line, and writes the session's JSON result to
 `<EXCHANGE_DIR>/out/result.json`. It prints nothing the session said: a unit's output goes to
-the journal, and a line the session shaped there could raise the next episode (dotfiles#967's
-I6). The unit's `TimeoutStartSec` bounds the session, and its `KillSignal=SIGINT` ends the turn
+the journal, and a line the session shaped there could raise the next episode. The unit's
+`TimeoutStartSec` bounds the session, and its `KillSignal=SIGINT` ends the turn
 cleanly.
 
 The session's home is a tmpfs that ends with the unit, so once claude exits, on its own or at the
@@ -113,8 +113,8 @@ def session_env(environ: dict[str, str]) -> dict[str, str]:
     """`environ` with the session's Claude token set from the unit's credential, whitespace removed.
 
     The credential file holds the token as it was pasted, and `claude setup-token` wraps it onto
-    an indented second line: the 2026-10-17 paste kept the wrap, and Claude answered "Not
-    logged in". A token holds no whitespace, so joining the whole file loses nothing and rejoins
+    an indented second line: a paste that keeps the wrap makes Claude answer "Not logged in". A
+    token holds no whitespace, so joining the whole file loses nothing and rejoins
     a wrapped token. Without the credential, a token already in `environ` is joined the same way.
     """
     env = dict(environ)

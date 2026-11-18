@@ -1,6 +1,6 @@
 # Shipped by the github-checks component with its enable link. Reruns
-# homelab-github-interaction-limit.service once at boot, only when its last verdict was not up
-# (#4495). The start is an ExecStart= rather than a Wants=, because systemd pulls in a Wants=
+# homelab-github-interaction-limit.service once at boot, only when its last verdict was not up.
+# The start is an ExecStart= rather than a Wants=, because systemd pulls in a Wants=
 # dependency even when this unit's own condition fails.
 [Unit]
 Description=GitHub interaction-limit re-arm (boot rerun while red)

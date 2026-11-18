@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """mkv attachment-name repair — sweep the library and rename attachments ffmpeg 7.1 rejects.
 
-The one-off repair of 2026-08-29 fixed the 21 files then present. This is the durable half: every
-new mkv arriving from any path (Sonarr, Radarr, a manual copy) can carry the same bad attachment
+Every new mkv arriving from any path (Sonarr, Radarr, a manual copy) can carry the same bad attachment
 name, and the symptom — burned-in-subtitle transcodes returning "source error" while direct play
 works — points at Jellyfin rather than at the file, so it is expensive to rediscover.
 

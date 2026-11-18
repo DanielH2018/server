@@ -1,33 +1,26 @@
-# The log and telemetry pipeline's loss, ported from monitor-bridge's shipper_dropped check
-# (the retired "Log Shipper Dropped Entries" tile). Plain YAML, never Jinja: prometheus-rules.yaml.j2
-# carries this file verbatim. The design is
-# docs/target-architecture/monitoring/m6-retire-kuma.md, batch A3.
+# The log and telemetry pipeline's loss, from monitor-bridge's shipper_dropped check
+# arms. Plain YAML, never Jinja: prometheus-rules.yaml.j2 carries this file verbatim. The
+# design is docs/target-architecture/monitoring/m6-retire-kuma.md, batch A3.
 #
-# These rules page since M6's batch A3 Cutover-b. The tile went in Cutover-a1 and the bridge's
-# shipper_dropped check in Cutover-a2, so each check has one pager.
-#
-# The check had four arms and two boot graces. Each arm is a rule below. The graces read
-# `node_boot_time_seconds` of daniel-box, the node the bridge's own uptime came from:
+# Each arm is a rule below. The two boot graces read `node_boot_time_seconds` of daniel-box:
 #
 # - BOOT_SETTLE_S (1200s). The weekly reboot makes Alloy's pushes fail while Loki is down, and
-#   the bridge never read back past the end of that settle window (#3490). A rule cannot
+#   the bridge never read back past the end of that settle window. A rule cannot
 #   shorten its range, so it holds for the settle window PLUS the 1h range, after which the
 #   reboot's own drops have left the range. A real drop in that 80 minutes pages when the hold
 #   ends, where the bridge paged at once. DECIDED: the later page is the price of expressing
 #   the grace in PromQL, and the 168h soak found no episode where it mattered.
 # - SHIPPER_BACKLOG_GRACE_S (21600s). After a reboot Alloy ships a backlog for hours and Loki
-#   discards the late part as `too_far_behind` (#2783). That one reason is held for 6h, and
+#   discards the late part as `too_far_behind`. That one reason is held for 6h, and
 #   every other reason pages through it.
 #
 # The bridge compares the larger of the client and server totals against one threshold, and
 # names the top server reason. A rule cannot take a max of two metrics' totals into one alert
 # without losing the reason, so the two sides are separate rules, and the server side counts
-# per reason. A reboot morning with two reasons each under 3000 and a sum over it paged the
-# tile and does not page the rule; the 168h soak found no such morning.
+# per reason. A reboot morning with two reasons each under 3000 and a sum over it does not
+# page.
 #
-# The bridge's check and its env keys are deleted, so the numbers below are the record of what
-# it carried. tests/services/test_scrape_target_rule_jobs.py pins each of them as a
-# literal.
+# tests/services/test_scrape_target_rule_jobs.py pins each number below as a literal.
 groups:
   - name: log-pipeline
     rules:
@@ -50,7 +43,7 @@ groups:
             Loki. Read loki_write_dropped_entries_total by reason and instance, then the Alloy
             pod's log. A burst right after a shipper restart is a re-tail and not loss.
       # Server side: entries the homelab Loki discarded, which a shipper never attributes to
-      # itself. A `too_far_behind` count is held for 6h (the bridge's SHIPPER_BACKLOG_GRACE_S) after a reboot.
+      # itself. A `too_far_behind` count is held for 6h (SHIPPER_BACKLOG_GRACE_S) after a reboot.
       - alert: LokiDiscardingEntries
         expr: >-
           (
@@ -116,7 +109,7 @@ groups:
             reaches neither Loki, Prometheus nor Tempo and no other counter records the loss.
             Read otelcol_exporter_send_failed_* by exporter, then the collector pod's log.
       # Tempo's blocklist poll arm. A failed poll leaves the blocklist empty after a restart,
-      # so every stored trace is unsearchable while the pod stays Ready (#4626).
+      # so every stored trace is unsearchable while the pod stays Ready.
       - alert: TempoBlocklistPollFailing
         expr: sum(increase(tempodb_blocklist_tenant_index_errors_total[15m])) > 0
         for: 5m

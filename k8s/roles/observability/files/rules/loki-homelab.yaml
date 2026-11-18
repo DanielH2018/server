@@ -2,18 +2,16 @@
 # never Jinja: prometheus-rules.yaml.j2 carries this file verbatim. The design is
 # docs/target-architecture/monitoring/m5-loki-ruler.md, "The rules".
 #
-# The ruler's series exist only once a rule group loads. M5's PR 2a and PR 2b read their
-# names and labels from the live job on 2026-10-13: user="fake", and a rule_group that embeds
-# the ruler's rule_path. A renamed group or a moved rule_path changes that value, and
+# The ruler's series exist only once a rule group loads. Their labels are user="fake" and a
+# rule_group that embeds the ruler's rule_path. A renamed group or a moved rule_path changes that value, and
 # LokiRulerNotEvaluating's absent() arm is what fires on the stale name.
 groups:
   - name: loki-homelab
     rules:
       # This family's zero-series alert. A renamed or dropped loki-homelab scrape job would
       # leave every other rule here evaluating to nothing. A failed scrape of the job pages as
-      # ScrapeTargetDown (service loki-homelab, 10m), which replaced LokiHomelabDown in M6's batch
-      # A3 Cutover-b. Nothing reads a missing scrape job but this rule, so it never carried a
-      # shadow label.
+      # ScrapeTargetDown (service loki-homelab, 10m). Nothing reads a missing scrape job but this
+      # rule.
       - alert: LokiHomelabMetricsMissing
         expr: absent(up{job="loki-homelab"})
         for: 10m
@@ -27,8 +25,7 @@ groups:
             prometheus.yml or its target was renamed. No rule that reads the homelab Loki's
             metrics can fire until the series is back.
       # Each evaluation is a Loki query, so this also catches a Loki that answers its scrape
-      # but fails its queries. The Loki Reachable and Loki Log Ingestion tiles are gone
-      # (M5's PR 4a), so this rule is that fault's pager. A one-off failure
+      # but fails its queries. A one-off failure
       # holds the 10m increase above zero for 10 minutes, less than the 15m hold, so only a
       # recurring failure fires.
       - alert: LokiRulerEvaluationFailing
@@ -47,9 +44,8 @@ groups:
             Loki query: read the loki-homelab pod's log for the query error.
       # The `up == 1` conjunct leaves a Loki outage to
       # ScrapeTargetDown. The last-evaluation gauge reads 0 from a Loki start until the
-      # group's first evaluation, which waits for the group's offset inside its 5m interval:
-      # 291s after the pod started on 2026-10-13, and at most one interval plus startup. The
-      # 10m hold, two intervals, outlasts that gap.
+      # group's first evaluation, which waits for the group's offset inside its 5m interval: at
+      # most one interval plus startup. The 10m hold, two intervals, outlasts that gap.
       - alert: LokiRulerNotEvaluating
         expr: >-
           (
@@ -73,9 +69,9 @@ groups:
             rule_group this alert selects.
       # Pages: no other check reads the ruler's sends. Loki v3.7.8 vendors Prometheus's notifier,
       # whose sendLoop.sendAll adds the batch's alert count to the error counter on each
-      # failed send, so one refused batch steps it by however many alerts were firing. A threshold on its
-      # increase cannot tell one refused batch of four alerts from a broken path with one rule
-      # firing. `changes - resets` counts failed sends instead, and `resets` drops the step to
+      # failed send, so one refused batch steps it by however many alerts were firing. A
+      # threshold on its increase cannot tell one refused batch of four alerts from a broken
+      # path with one rule firing. `changes - resets` counts failed sends instead, and `resets` drops the step to
       # 0 when Loki restarts. A broken path fails every 5m send, so a 15m window holds at least
       # two. A new Loki pod's first send can be refused while kube-router admits the pod
       # (ADR 0009), and one refused send never reaches two.

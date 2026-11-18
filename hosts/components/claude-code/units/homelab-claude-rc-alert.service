@@ -25,8 +25,8 @@ ExecStart=/usr/bin/curl -fsS -m 10 --retry 5 --retry-delay 10 --retry-all-errors
 SyslogLevel=notice
 ExecStartPost=/bin/echo homelab-claude-rc failure alert delivered
 # A delivered page silences the next 360 minutes. The host's Restart=always fires OnFailure= on
-# every exit of its restart loop, so a host that cannot start would page about every 10 seconds
-# (#4676). The stamp marks a delivery, never an attempt, and the check fails open.
+# every exit of its restart loop, so a host that cannot start would page about every 10 seconds.
+# The stamp marks a delivery, never an attempt, and the check fails open.
 StateDirectory=homelab-claude-rc-alert
 ExecCondition=/bin/sh -c 'test -z "$$(find %S/homelab-claude-rc-alert/delivered -mmin -360 2>/dev/null)"'
 ExecStartPost=/usr/bin/touch %S/homelab-claude-rc-alert/delivered

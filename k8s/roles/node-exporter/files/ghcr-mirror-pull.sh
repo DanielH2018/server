@@ -1,6 +1,6 @@
 #!/bin/sh
 # Whether this node's ghcr.io mirror endpoint serves nut's manifest, written as a node_exporter
-# textfile check file (#5542).
+# textfile check file.
 #
 # containerd tries the registry role's ghcr-mirror first and then ghcr.io itself, so a mirror
 # that a NetworkPolicy grant, a bad endpoint or a crash loop has broken stays invisible while
@@ -17,8 +17,8 @@
 # skipped write. The file follows the check-file half of M3's producer metric contract
 # (docs/target-architecture/monitoring/m3-textfile-timer.md).
 #
-# The `dockerhub-mirror-pull` sidecar runs this same script against the docker.io mirror
-# (#6535). It sets CHECK, and names a fixed REPOSITORY and REFERENCE in place of TARGET_DIR's
+# The `dockerhub-mirror-pull` sidecar runs this same script against the docker.io mirror.
+# It sets CHECK, and names a fixed REPOSITORY and REFERENCE in place of TARGET_DIR's
 # files: the exporter's own image by digest. A digest GET is served from the mirror's store once
 # cached, so the check spends none of Docker Hub's anonymous pull limit, where a tag GET would.
 #

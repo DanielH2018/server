@@ -3,7 +3,7 @@
 //
 // Lets the triage controller START a triage run, the session it runs and the page that reports
 // one, and nothing else. No other user may start any of them: neither `claude`, whose interactive
-// sessions read untrusted text, nor the session user (dotfiles#967's I1).
+// sessions read untrusted text, nor the session user.
 // The run is claude-triage@<episode>.service, which runs as the agent itself, so this grants
 // no new identity: it lets the agent's own timer or a drill start a hardened, capped unit
 // rather than a bare session. The page is claude-triage-report-alert@<episode>:<state>.service,

@@ -1,4 +1,4 @@
-# The host-check library the checkout timers source (H7.36). Several daniel-box components ship
+# The host-check library the checkout timers source. Several daniel-box components ship
 # scripts that `source /usr/lib/homelab/homelab-check-lib.sh` to write their verdict as a
 # node_exporter textfile: secret-rotation, loki-route-witness and the other checkout timers. A
 # package that lists this component installs the one copy, so no other component of that package
@@ -9,5 +9,5 @@
 # copy of the same bytes.
 files:
   - {shared: homelab-check-lib.sh, dst: /usr/lib/homelab/homelab-check-lib.sh}
-# Each host package's legacy list retires the Ansible-era copy at /usr/local/lib (H7.63), once no
+# Each host package's legacy list retires the old copy at /usr/local/lib, once no
 # shipped script sources it.

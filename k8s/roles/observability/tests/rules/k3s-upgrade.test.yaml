@@ -7,7 +7,7 @@
 # condition is false, and a failed Job in another namespace. K3sNodeVersionSkew has the family's
 # zero-series case, which fires it after its 2h hold, a skew case that fires it, and one with a
 # single version that keeps it silent. Promtool uses synthetic series, so it cannot prove
-# kube-state-metrics emits them; the H6.1b landing queries kube_job_failed for namespace
+# kube-state-metrics emits them; the landing queries kube_job_failed for namespace
 # `homelab` live.
 rule_files:
   - ../../files/rules/k3s-upgrade.yaml

@@ -1,6 +1,6 @@
 #!/usr/bin/bash
 # /usr/local/sbin/homelab-takeover-check: the D5 flip PR's pre-merge dry-run checks, run as root
-# through one NOPASSWD sudoers line (issue #5494). Shipped by the homelab host package
+# through one NOPASSWD sudoers line. Shipped by the homelab host package
 # (hosts/components/claude-code).
 #
 # Usage: homelab-takeover-check --label L --render DIR --src DIR --tags a,b[,...]
@@ -64,7 +64,6 @@ if [ $# -eq 1 ] && { [ "$1" = -h ] || [ "$1" = --help ]; }; then
   exit 0
 fi
 
-# ── Arguments: exactly four flags, each once ────────────────────────────────────────────────
 label="" render="" src="" tags=""
 have_label=0 have_render=0 have_src=0 have_tags=0
 while [ $# -gt 0 ]; do
@@ -93,7 +92,6 @@ for tag in "${tag_list[@]}"; do
   [[ $tag =~ ^[a-z0-9][a-z0-9-]{0,62}$ ]] || refuse "tag $tag must match ^[a-z0-9][a-z0-9-]{0,62}\$"
 done
 
-# ── The invoking user's home bounds both directories ────────────────────────────────────────
 case "${SUDO_USER:-}" in "" | root) refuse "run this through sudo as a non-root user" ;; esac
 home=$(getent passwd "$SUDO_USER" | cut -d: -f6)
 [ -n "$home" ] || refuse "no passwd entry for $SUDO_USER"
@@ -112,7 +110,6 @@ src=$(under_home "$src") || refuse "--src must be an existing path under $home"
 [ -d "$render" ] || refuse "--render is not a directory"
 [ -d "$src" ] || refuse "--src is not a directory"
 
-# ── Host prerequisites, before anything is written ──────────────────────────────────────────
 [ -x "${KUBECTL[0]}" ] || { echo "missing binary: ${KUBECTL[0]}" >&2; exit 3; }
 [ -x "$FLUX" ] || { echo "missing binary: $FLUX" >&2; exit 3; }
 [ -r "$KUBECONFIG_FILE" ] || { echo "missing kubeconfig: $KUBECONFIG_FILE" >&2; exit 3; }
@@ -124,7 +121,7 @@ full="$STATE/$label"
 [ ! -L "$full" ] || refuse "state path for $label is a symlink"
 install -d -m 0700 "$full" || exit 3
 
-# ── Copies: root reads the user's files once, into a tree only root can reach ───────────────
+# Root reads the user's files once, into a tree only root can reach.
 # A tree is refused if it holds anything but regular files and directories, so a symlink in the
 # render cannot make root read a file outside it. The copy feeds the census, which loads plain
 # manifests with -f. Kustomize never runs on it as root: the build below runs as the user.
@@ -199,7 +196,7 @@ for tag in "${tag_list[@]}"; do
 
   # A tag's Kustomization is the document of its flux file whose metadata.name is the tag. A
   # `<tag>-snapshot`, `-verify` or `-deferred` directory has no flux file of its own: its
-  # Kustomization is a later document of `flux/<base>.yaml` (#5575). With no document of that
+  # Kustomization is a later document of `flux/<base>.yaml`. With no document of that
   # name, `own` stays empty and the tag takes the kubectl stand-in below.
   fluxname=$tag
   if [ ! -e "$render/flux/$fluxname.yaml" ] && [ ! -L "$render/flux/$fluxname.yaml" ]; then
