@@ -42,6 +42,9 @@ CONF = Path("/etc/gh-quota.conf")
 BUCKETS = ("graphql", "core")
 SAMPLE_EVERY_S = 30
 KEEP_S = 8 * 24 * 3600
+# GitHub's reported reset for one core window moves by up to 45 s between samples, and its
+# two graphql counters for one token reset about 21 minutes apart.
+RESET_DRIFT_S = 120
 # `status` lists a session at or above this share of a bucket's limit.
 ATTENTION_SHARE = 0.2
 _FAILURE_LOG_MAX = 64 * 1024
@@ -267,7 +270,7 @@ class Ledger:
                 for bucket in BUCKETS:
                     truth = db.execute(
                         "SELECT window, used, quota FROM truth WHERE bucket = ? AND window > ? "
-                        "ORDER BY window DESC LIMIT 1",
+                        "ORDER BY sampled DESC LIMIT 1",
                         (bucket, now),
                     ).fetchone()
                     if truth is None:
@@ -374,13 +377,24 @@ class Ledger:
         return db
 
     def _window(self, db: sqlite3.Connection, bucket: str) -> int:
-        # GitHub's own reset time names the window. Until a sample has one, the hour's end does.
+        # The freshest sample's window, because GitHub can answer one token from two counters.
+        # Until a sample has named a reset, the hour's end does.
         now = self.now()
-        (reset,) = db.execute(
-            "SELECT MAX(window) FROM truth WHERE bucket = ? AND window > ?",
+        row = db.execute(
+            "SELECT window FROM truth WHERE bucket = ? AND window > ? "
+            "ORDER BY sampled DESC LIMIT 1",
             (bucket, now),
         ).fetchone()
-        return reset or (int(now) // 3600 + 1) * 3600
+        return row[0] if row else (int(now) // 3600 + 1) * 3600
+
+    def _named_window(self, db: sqlite3.Connection, bucket: str, reset: int) -> int:
+        # A reset within RESET_DRIFT_S of a stored one is that window, reported late or early.
+        row = db.execute(
+            "SELECT window FROM truth WHERE bucket = ? AND ABS(window - ?) <= ? "
+            "ORDER BY ABS(window - ?) LIMIT 1",
+            (bucket, reset, RESET_DRIFT_S, reset),
+        ).fetchone()
+        return row[0] if row else reset
 
     def _sample_if_due(self, db: sqlite3.Connection) -> None:
         now = self.now()
@@ -407,19 +421,20 @@ class Ledger:
                 # An unused bucket reports a reset an hour ahead of every sample, so it has no
                 # window to name yet.
                 if seen["used"]:
+                    window = self._named_window(db, bucket, seen["reset"])
                     db.execute(
                         "INSERT INTO truth VALUES (?, ?, ?, ?, ?) "
                         "ON CONFLICT (window, bucket) DO UPDATE SET "
                         "used = excluded.used, quota = excluded.quota, sampled = excluded.sampled",
-                        (seen["reset"], bucket, seen["used"], seen["limit"], now),
+                        (window, bucket, seen["used"], seen["limit"], now),
                     )
                     db.execute(
                         "INSERT OR REPLACE INTO sampler VALUES (?, ?, ?, ?, ?)",
-                        (seen["reset"], bucket, *self._caller()),
+                        (window, bucket, *self._caller()),
                     )
                     db.execute(
                         "INSERT OR REPLACE INTO sampler_process VALUES (?, ?, ?, ?)",
-                        (seen["reset"], bucket, *process),
+                        (window, bucket, *process),
                     )
         except (
             OSError,
