@@ -40,8 +40,8 @@ session-level identity itself.
 
 `LABELS` in `findings_lib/issue_model.py` holds every label that `sync-labels` creates. The table
 below is generated from it. This spec added `manual`, a grey state marker. A claim carries no
-label: the Claim comment is the record, and the Status issue field is the filter (see *The
-Status field and the Project board follow the issue*).
+label: the Claim comment is the record, and the Project board's Status shows it (see *The
+Project board follows the issue*).
 
 --8<-- "assets/generated/fragments/findings-labels.md"
 
@@ -114,41 +114,37 @@ no internal race. `fanout.py place launch` takes those claims itself. The only r
 cost of losing is a duplicated triage rather than corruption. The read-back handles it —
 the session whose claim comment sorts first holds the issue, and the loser releases.
 
-## The Status field and the Project board follow the issue
+## The Project board follows the issue
 
-`findings_lib/board.py` derives three fields from the issue alone:
+The "Server Issue Tracking" Project shows every open finding. `findings_lib/board.py` derives
+three of its fields from the issue alone:
 
-- **Status** is an issue field, set on the issue itself. It is `Done` once the issue is
-  closed. It is `In Progress` while a worktree holds the issue's `Claim:` comment, or while
-  an open pull request names it as closing. Otherwise it is `Todo`.
-- **Severity** is a field on the "Server Issue Tracking" Project: the `severity/<level>`
-  label's level.
-- **Not before** is a Project field: the `not-before:<date>` label's date.
+- **Status** is `Done` once the issue is closed. It is `In Progress` while a worktree holds
+  the issue's `Claim:` comment, or while an open pull request names it as closing. Otherwise
+  it is `Todo`.
+- **Severity** is the `severity/<level>` label's level.
+- **Not before** is the `not-before:<date>` label's date.
 
-Status is an issue field, not a label, because a GitHub issue field lives on the issue. Issue
-search filters it with `field.status:"In Progress"`, and every Project can show it as a
-column with no item to keep in step. The account owns the field's definition: the operator
-creates `Status` once under Settings > Planning > Issue fields, with the options `Todo`,
-`In Progress` and `Done` and Public visibility. The gh token cannot read or create the
-account's field definitions, but `repository.issueFields` lists them, which is what
-`board.py` reads. A missing field fails every sync with a line naming where to add it.
+The board's Status is the one claim state a person reads. GitHub shows it in each issue's
+sidebar and logs its changes on the issue's timeline. It is not the issue's own `status`
+field, which is a preview this account cannot set through the API, so GitHub reserves the
+name `Status` and an issue field cannot take it.
 
 `findings.main` records every issue a subcommand writes to through `gh issue
-edit|close|reopen|create|comment`. When the subcommand returns, `main` syncs those issues'
-fields and adds an issue the board lacks. So `claim` moves an issue to `In Progress`, and
-`release`, `reap`, `manual` and a stale-claim takeover move it back, with no per-command field
-code. A dry run writes nothing, so it syncs nothing. Another repo's register (`--repo`) has no
-board, so it is skipped.
+edit|close|reopen|create|comment`. When the subcommand returns, `main` syncs those issues' board items
+and adds an issue the board lacks. So `claim` moves an issue to `In Progress`, and `release`,
+`reap`, `manual` and a stale-claim takeover move it back, with no per-command board code. A
+dry run writes nothing, so it syncs nothing. Another repo's register (`--repo`) has no board,
+so it is skipped.
 
-The claim comment stays the record: `next`, `claim` and the fan-out fold comments and never
-read a field. A field write that fails therefore prints one warning naming the issues and
-leaves the exit code alone. `findings.py sync-board [<n> ...]` repairs the fields. With no
-numbers it checks every open issue and every issue closed in the past week, so an issue a
-pull request closed still reaches `Done`. Two paths change an issue without findings.py: a
-label someone changed in the GitHub UI, and a session whose gh token cannot write the fields,
-such as one run as the `claude` user. To catch both, `homelab-board-sync.timer` on daniel-box
-runs `sync-board` hourly, as `ubuntu` (`hosts/components/board-sync/`). Writing the board
-needs the `project` scope on the gh token, which the `ubuntu` user's token carries.
+The issue stays the record: `next`, `claim` and the fan-out never read the board. A board
+write that fails therefore prints one warning naming the issues and leaves the exit code
+alone. `findings.py sync-board [<n> ...]` repairs the board, and with no numbers it checks
+every open issue. Two paths change an issue without findings.py: a label someone changed in
+the GitHub UI, and a session whose gh token cannot reach the board, such as one run as the
+`claude` user. To catch both, `homelab-board-sync.timer` on daniel-box runs `sync-board` over
+every open issue hourly, as `ubuntu` (`hosts/components/board-sync/`). Writing the board needs
+the `project` scope on the gh token, which the `ubuntu` user's token carries.
 
 ## Staleness: a claim expires with its worktree, not with a pid
 

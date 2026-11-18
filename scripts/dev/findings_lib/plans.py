@@ -273,8 +273,8 @@ def plan_claim(
     files the issue under. None, for a branch that never ran `milestone start`, files it
     under nothing.
 
-    The comment is the whole claim. `findings.main` then syncs the issue's Status field to
-    In Progress, which is what a GitHub search or the board reads.
+    The comment is the whole claim. `findings.main` then syncs the issue's board Status to
+    In Progress.
 
     Returns an EMPTY list when ``worktree`` already holds the claim and the issue is filed
     under ``milestone``, so re-running a claim is idempotent rather than a second comment on
