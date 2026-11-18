@@ -10,7 +10,7 @@
 # wholesale, and a `.d/` directory is the placement it leaves alone.
 #
 # The empty `ExecStart=` clears the installer's command line, flags included, and the bare
-# `k3s agent` reads its flags from /etc/rancher/k3s/config.yaml.d/50-homelab.yaml (H6.5b). The
+# `k3s agent` reads its flags from /etc/rancher/k3s/config.yaml.d/50-homelab.yaml. The
 # installer's `EnvironmentFile=` stays, because it supplies K3S_URL and K3S_TOKEN.
 [Service]
 StandardOutput=append:{{ k3s_log_file }}

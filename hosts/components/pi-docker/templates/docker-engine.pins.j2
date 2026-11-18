@@ -2,7 +2,7 @@
 # Shipped by homelab-daniel-pi. One line per held Docker package: the package, then the shell glob
 # its installed version must match. homelab-docker-engine.service installs the newest version apt
 # offers that matches. The Debian revision is a glob because Docker publishes several revisions of
-# one upstream version (#2357). The keys are exactly docker_engine_packages, the hold list.
+# one upstream version. The keys are exactly docker_engine_packages, the hold list.
 docker-ce 5:{{ docker_engine_version }}{{ suffix }}
 docker-ce-cli 5:{{ docker_engine_version }}{{ suffix }}
 containerd.io {{ docker_engine_containerd_version }}{{ suffix }}

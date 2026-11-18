@@ -1,4 +1,4 @@
-# Shipped by homelab-daniel-pi with its enable link (#7065). Every 15 minutes, so a published
+# Shipped by homelab-daniel-pi with its enable link. Every 15 minutes, so a published
 # daniel-pi package installs within about 15 minutes plus one updater run. The daily
 # homelab-updater.timer stays the fallback.
 [Unit]

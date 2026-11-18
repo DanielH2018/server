@@ -6,7 +6,7 @@ defaults, so a component default would pin nothing. This file is on the lander's
 Each value is a literal. hosts/tests/test_renovate_agent_unit.py holds the caps equal to the
 component's defaults/main.yml, which the docs fragments read.
 -#}
-{#- Who runs what (dotfiles#967's I1): the controller runs the runner, holds the write token
+{#- Who runs what: the controller runs the runner, holds the write token
 and the state, and alone may start the session and lander units; the session user runs claude.
 Both polkit rules key on these, so a host_vars edit cannot hand the session a start right. -#}
 {%- set user = "renovate-agent" -%}
@@ -33,10 +33,9 @@ dotfiles tag and this component's overlay. -#}
 {#- The whole run: the session, then the landings it nominated, one after another. -#}
 {%- set run_timeout_s = 67260 -%}
 {#- The session alone, which only triages and writes requests. An assumption, not a measurement
-of a session that does no landing: the 15 runs to 2026-11-12, landings included, each ended
-within 16 minutes of the timer. It and one whole landing fit inside run_timeout_s. -#}
+of a session that does no landing. It and one whole landing fit inside run_timeout_s. -#}
 {%- set session_timeout_s = 2700 -%}
-{#- The session's bounds (dotfiles#967's I2 and I8). Its home, /tmp, /var/tmp and /dev/shm are
+{#- The session's bounds. Its home, /tmp, /var/tmp and /dev/shm are
 tmpfs mounts that end with the unit. Their pages count against memory_max, so the sizes sum well
 below it and a full mount fails with ENOSPC rather than an OOM kill. The home's mount takes the
 session's numeric uid, which component.yml declares. -#}

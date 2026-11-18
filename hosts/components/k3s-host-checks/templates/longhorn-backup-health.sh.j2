@@ -14,17 +14,12 @@
 # because the cron's tunables have to be templated in, and a templated file should hold as
 # little logic as possible. Same shape as fake-remux-health.sh.
 #
-# Until this existed at all, the cluster's backup path had no monitor: `grep -ic longhorn` over
-# monitor-bridge's check.py returned 0. On 2026-08-02 the Longhorn backup target went unavailable
-# at 10:02 and nothing anywhere noticed — the outage surfaced only because Kopia, sharing the same
-# B2 account, tripped its own freshness check nine minutes later. Had the cap been hit by Longhorn
-# alone, nothing would have alerted. The ten checks that now exist to prevent a repeat of that,
-# and every incident that shaped one of their thresholds, are documented in
+# The checks, and every incident that shaped one of their thresholds, are documented in
 # longhorn_backup_health_logic.py rather than here.
 #
 # DECIDED: a host cron, not a monitor-bridge check (#3287). The bridge is an in-cluster pod on
 # daniel-box, and checks 9-10 have an in-cluster path: Alloy ships daniel-box's /var/log/syslog
-# to loki-homelab, where the `logger` lines check 9 matches are queryable (measured 2026-10-03),
+# to loki-homelab, where the `logger` lines check 9 matches are queryable,
 # and /etc/cron.d is reachable over a hostPath. What a fold would cost:
 #   - Checks 1-8 read Longhorn CRs through kubectl. The bridge has no ServiceAccount or RBAC and
 #     never calls the Kubernetes API, so a fold adds a cluster-read grant to the alerting pod and
@@ -33,8 +28,7 @@
 #     suppress it during a Loki outage.
 #   - This script's hc-ping is the backup plane's off-site channel, independent of the bridge. A
 #     bridge outage would blind backup monitoring too.
-# The shim is 258 lines, and the reader and logic module would move and be rewritten rather than
-# shrink. Revisit if the bridge gains Kubernetes API access for another check.
+# The reader and logic module would move and be rewritten rather than shrink. Revisit if the bridge gains Kubernetes API access for another check.
 #
 # The textfile write and the boot-grace test come from /usr/lib/homelab/homelab-check-lib.sh, which
 # the check-lib component ships.
@@ -53,9 +47,8 @@
 # that checks 9 and 11 share, +1 trim CronJob for checks 9 and 10, +1 ETCDSnapshotFile list for
 # check 12), each with a 30s timeout, plus
 # the B2 arms' two journalctl reads at 10s each — a 560s worst case against this script's 600s
-# cron period. Left as-is: `k3s kubectl` calls against the local API server return in well under a
-# second in practice (the pod-log read took 0.1s on 2026-10-09), and 30s is a timeout for a
-# wedged cluster, not an expected duration. The margin is 40s, so one more kubectl call fits
+# cron period. `k3s kubectl` calls against the local API server return in well under a
+# second in practice, and 30s is a timeout for a wedged cluster, not an expected duration. The margin is 40s, so one more kubectl call fits
 # before one needs a shorter deadline or a longer cron period.
 set -uo pipefail
 
@@ -105,7 +98,7 @@ fi
 #
 # The arm state of each BackupTarget and the daily and weekly run times are not among them. The
 # reader reads the arm state off each target's live `spec.backupTargetURL` and the run times off
-# the live RecurringJobs' `spec.cron` (H1.7a). The `longhorn-backup` tag writes both (H1.7b), and
+# the live RecurringJobs' `spec.cron`. The `longhorn-backup` tag writes both, and
 # Flux applies it with no host apply in between. A value
 # baked here would go stale the moment either changed: a stale disarm leaves the monitor
 # permanently red, and a stale arm leaves a new target unchecked.
@@ -144,7 +137,7 @@ export LONGHORN_CRON_EVIDENCE_WINDOW_HOURS="{{ k3s_longhorn_cron_evidence_window
 export LONGHORN_B2_DELETIONS_CRON_FILE="/usr/lib/systemd/system/homelab-b2-deletion-accounting.timer"
 export LONGHORN_B2_DELETIONS_CRON_EXPECTED="{{ has_repo_checkout | bool }}"
 # The file the service touches before its job runs. The stamp says whether the timer fired, and
-# the stat above says only whether it is installed (#3677).
+# the stat above says only whether it is installed.
 export LONGHORN_B2_DELETIONS_CRON_FIRED_STAMP="{{ k3s_cron_fired_stamp_dir }}/b2-deletion-accounting"
 # The budget listing's timer and stamp, read the same way. Its `OVER BUDGET:` line is the one
 # forward-looking reading of a B2 Class C cap breach.
@@ -162,16 +155,16 @@ export LONGHORN_ETCD_DROP_IN="/etc/rancher/k3s/config.yaml.d/50-homelab.yaml"
 # Stdout and stderr are captured SEPARATELY (not `2>&1` into one pipe): this reader spawns a
 # subprocess of its own — it shells out to `logger` to write the full verdict before
 # printing the ranked one. `logger: socket /dev/log: ...`, or any uv/Python warning, landing on
-# stderr ahead of Python's own stdout flush used to become STATUS once `2>&1` merged the two
+# stderr ahead of Python's own stdout flush would become STATUS if `2>&1` merged the two
 # streams, silently turning an `up` into whatever garbage text preceded it — which the textfile
-# records as down, and which pings healthchecks.io `/fail` on a backup plane that was fine. Taking the verdict from
+# records as down, and which pings healthchecks.io `/fail` on a backup plane that is fine. Taking the verdict from
 # the LAST LINE of stdout (rather than the whole capture) is a second, independent guard against
 # the same class of contamination: even a stray stdout line ahead of the reader's own print
 # doesn't reach STATUS/MSG. longhorn_backup_health.py additionally redirects its own `logger`
 # subprocess's stdout/stderr to /dev/null so this can't happen even from inside the reader.
-# mktemp failure is unchecked no longer: an empty ERR_FILE would make `2>"$ERR_FILE"` below fail
-# the whole command substitution (a full or read-only /tmp), which used to read as RC nonzero —
-# STATUS=down and a /fail push for a backup plane that never even got a chance to run.
+# A mktemp failure is checked: an empty ERR_FILE would make `2>"$ERR_FILE"` below fail
+# the whole command substitution (a full or read-only /tmp), which would read as RC nonzero —
+# STATUS=down and a /fail push for a backup plane that never got a chance to run.
 if ! ERR_FILE=$(mktemp /tmp/longhorn-backup-health.XXXXXX); then
   STATUS=down
   MSG="longhorn backup health reader failed: mktemp could not create a stderr capture file"
@@ -182,9 +175,8 @@ else
   ERR=$(cat "$ERR_FILE" 2>/dev/null || true)
   rm -f "$ERR_FILE"
   # The verdict is the last stdout line that OPENS with `up<TAB>` or `down<TAB>`, not simply the
-  # last line. A verdict whose message carried a newline (a kubectl error, before the reader
-  # flattened each problem's text) left its `(+N more ...)` tail as the last line, and the
-  # verdict read "unrecognized status:" with the real cause cut off for 70 hours (#3883). With no
+  # last line. A verdict whose message carried a newline leaves its `(+N more ...)` tail as the
+  # last line, and the verdict reads "unrecognized status:" with the real cause cut off. With no
   # such line, the last line still decides and is flagged below.
   LAST_LINE="${OUT##*$'\n'}"
   while IFS= read -r line; do
@@ -247,7 +239,7 @@ if [[ -n "$HC_PING_KEY" ]]; then
   # new check that nobody is watching and that reads green forever.
   HC_URL="https://hc-ping.com/${HC_PING_KEY}/longhorn-backup-health"
   [[ "$STATUS" == "up" ]] || HC_URL="${HC_URL}/fail"
-  # `-fs` without `-S`, and stderr discarded on top of it (#2511): `--retry` writes
+  # `-fs` without `-S`, and stderr discarded on top of it: `--retry` writes
   # `Warning: ... Will retry` to stderr for an attempt a later one recovers, and cron mails
   # that from a run that succeeded. Whether `-s` alone silences it varies by curl version, so
   # the redirect is the guarantee. Nothing is lost — the `|| logger` below is the report, and

@@ -12,7 +12,7 @@
 # a `.d/` directory is the placement it leaves alone.
 #
 # The empty `ExecStart=` clears the installer's command line, flags included, and the bare
-# `k3s server` reads its flags from /etc/rancher/k3s/config.yaml.d/50-homelab.yaml (H6.4b).
+# `k3s server` reads its flags from /etc/rancher/k3s/config.yaml.d/50-homelab.yaml.
 [Service]
 StandardOutput=append:{{ k3s_log_file }}
 StandardError=inherit

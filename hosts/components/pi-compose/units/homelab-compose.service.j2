@@ -1,5 +1,4 @@
-{#- The Pi's Compose project (H5, docs/target-architecture/host/h5-pi-compose.md,
-    *homelab-compose.service*). The package ships this unit without an enable link until H5.2b.
+{#- The Pi's Compose project.
 
     Compose's `--wait` returns once a container reports healthy and declares it failed only after
     `retries` consecutive failed checks. The worst case before a verdict is therefore the largest
@@ -18,8 +17,7 @@
     + (container_healthcheck_retries | int)
     * ((seconds(container_healthcheck_interval) | int) + (seconds(container_healthcheck_timeout) | int))
     + 120 -%}
-# Shipped by homelab-daniel-pi. Only homelab-reconcile starts or restarts it (H4, *The restart
-# contract*). It has no ExecStop=, so stopping it never stops a container. component.yml carries
+# Shipped by homelab-daniel-pi. Only homelab-reconcile starts or restarts it. It has no ExecStop=, so stopping it never stops a container. component.yml carries
 # the contract.
 [Unit]
 Description=Bring up the Pi's homelab Compose project
@@ -42,7 +40,7 @@ Environment=HOMELAB_COMPOSE_INPUTS_SHA256={{ compose_inputs_sha256 }}
 TimeoutStartSec={{ wait + 660 }}
 ExecStartPre=/usr/bin/systemd-tmpfiles --create /usr/lib/tmpfiles.d/homelab-compose.conf
 # The project declares each shared network `external: true`, so Compose never recreates one the
-# live Pi already holds, and each line below creates it on a host that lacks it (H7.26). The list
+# live Pi already holds, and each line below creates it on a host that lacks it. The list
 # is every external network the rendered compose files name (`compose_external_networks`).
 {% for network in compose_external_networks %}
 ExecStartPre=/bin/sh -c 'docker network inspect {{ network }} >/dev/null 2>&1 || docker network create {{ network }}'

@@ -1,5 +1,4 @@
-# The `vale` the prek hook runs (H7.61, docs/target-architecture/host/h7-delete-ansible.md,
-# item 35). The hook is `language = "system"`, so it runs whatever binary is on PATH and fails with
+# The `vale` the prek hook runs. The hook is `language = "system"`, so it runs whatever binary is on PATH and fails with
 # exit 127 where there is none. homelab-tools installs the pinned binary at
 # /usr/lib/homelab/bin/vale, off PATH, so this component ships /usr/bin/vale, a one-line exec of
 # that path, as the sops component does.
