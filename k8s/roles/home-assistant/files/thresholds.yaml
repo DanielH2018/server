@@ -18,9 +18,8 @@
 - platform: threshold
   name: "Bedroom VOC high"          # -> binary_sensor.bedroom_voc_high
   entity_id: sensor.bedroom_airgradient_one_voc_index
-  # Tuned 2026-06-27 to this room's observed baseline (7-day recorder: median 124,
-  # p95 171, spikes ~290). upper 250 only caught near-max events; 200 sits just above
-  # the room's normal band so a genuine VOC elevation alerts. Severe (400) unchanged.
+  # Sits just above this room's normal band (median 124, p95 171, spikes ~290) so a
+  # genuine VOC elevation alerts; 250 only catches near-max events.
   upper: 200                         # alerts >= 225, clears <= 175 (index)
   hysteresis: 25
 - platform: threshold
@@ -32,7 +31,7 @@
 # genuinely unhealthy. Feeds the `airqualitysevere` category of bedroom_threshold_alert, the only
 # alerts that PIERCE DND/sleep with sound (the moderate ones above are routine). Escalation-aware:
 # a gradual CO2 climb trips the moderate sensor first (routine nudge), then these (critical wake).
-# Cutoffs are STARTING POINTS (join the ~2026-06-25 tuning pass).
+# Cutoffs are STARTING POINTS.
 - platform: threshold
   name: "Bedroom CO2 severe"        # -> binary_sensor.bedroom_co2_severe
   entity_id: sensor.bedroom_airgradient_one_carbon_dioxide
@@ -93,7 +92,7 @@
   hysteresis: 0
 # Humidity comfort — two-sided, so TWO one-sided sensors (high = mold risk, low = winter-dry).
 # Both feed the humidity category of bedroom_threshold_alert. Starting points — tune with the
-# air-quality thresholds (~2026-06-25 baseline pass).
+# air-quality thresholds.
 - platform: threshold
   name: "Bedroom humidity high"     # -> binary_sensor.bedroom_humidity_high
   entity_id: sensor.bedroom_airgradient_one_humidity
@@ -108,7 +107,7 @@
 # curve and the window advisor go SILENT while away (the fan is off; the advisor is gated on
 # person home), so an AC/HVAC failure or heatwave (high) — or a heating failure / freeze risk
 # (low) — would otherwise raise no alert at all. Two-sided, so two one-sided sensors; feed the
-# `temperature` category of bedroom_threshold_alert. Starting points — tune in the ~2026-06-25 pass.
+# `temperature` category of bedroom_threshold_alert. Starting points.
 - platform: threshold
   name: "Bedroom temp high"         # -> binary_sensor.bedroom_temp_high
   entity_id: sensor.bedroom_airgradient_one_temperature
@@ -122,7 +121,7 @@
 # Outdoor air quality (source = Open-Meteo sensor.outdoor_pm2_5, files/rest.yaml). Two tiers like
 # the indoor air-quality sensors: moderate (high) and the wildfire/"unhealthy" cutoff (severe).
 # Feed the airqualityoutdoor / airqualityoutdoorsevere categories of bedroom_threshold_alert AND
-# the smoke guard in the window advisor. Starting points — tune with the indoor ones (~2026-06-25).
+# the smoke guard in the window advisor. Starting points — tune with the indoor ones.
 - platform: threshold
   name: "Outdoor PM2.5 high"        # -> binary_sensor.outdoor_pm2_5_high
   entity_id: sensor.outdoor_pm2_5

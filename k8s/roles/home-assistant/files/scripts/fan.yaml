@@ -132,7 +132,7 @@ bedroom_fan_nudge:
     bedroom_fan_expected_level accumulator. Engages the manual fan override.
   mode: queued
   # DECIDED: 30, not 10. The Tap Dial starts this without waiting, so a whole dial burst lands in
-  # this queue: Z2M logged 11 dial_rotate_* events in the 2026-11-05 burst and 22 in the 11-07 one.
+  # this queue: a burst logs 11-22 dial_rotate_* events.
   max: 30
   fields:
     delta:

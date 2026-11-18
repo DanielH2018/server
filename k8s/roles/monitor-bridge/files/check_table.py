@@ -1,4 +1,4 @@
-"""Every check and gate monitor-bridge runs (#3659).
+"""Every check and gate monitor-bridge runs.
 
 This table is the one place a check is declared. Everything else derives from it:
 
@@ -54,18 +54,18 @@ CHECKS: tuple[PushCheck, ...] = (
     # the check's staleness arm catches a dead scheduler.
     PushCheck(name="speedtest", fn=host_edge.check_speedtest, gate="startup_grace"),
     PushCheck(name="discord", fn=notify.check_discord, gate="wan_reachable", critical=True),
-    # WAN-gated rather than startup-graced since #2784; the WAN gate covers the reboot transient.
+    # WAN-gated rather than startup-graced: the WAN gate covers the reboot transient.
     PushCheck(name="r2_usage", fn=r2.check_r2_usage, gate="wan_reachable", critical=True, runbook="longhorn-backup-tiering"),
     # cloudflare_ips gates Traefik's forwardedHeaders.trustedIPs. The bridge caches a success for a
     # day and re-probes a failure every cycle.
     PushCheck(name="cloudflare_ips_drift", fn=cloudflare_ips.check_cloudflare_ips_drift, gate="wan_reachable"),
-    # #2566. Same cache shape as cloudflare_ips_drift.
+    # Same cache shape as cloudflare_ips_drift.
     PushCheck(name="healthchecks_drift", fn=healthchecks.check_healthchecks_drift, gate="wan_reachable"),
     # Down only when RDAP cannot be read; the days-left gauge carries the expiry thresholds.
     PushCheck(name="domain_registration", fn=domain_registration.check_domain_registration, gate="wan_reachable"),
     PushCheck(name="b2_storage", fn=b2.check_b2_storage, gate="b2_reachable", critical=True, runbook="longhorn-backup-tiering"),
     # The two reachability gates. A gate has no gate of its own: a gate that cannot go red is
-    # not coverage (#2825). The `prometheus` gate left with Cutover-2: the Watchdog covers a dead
+    # not coverage. There is no `prometheus` gate: the Watchdog covers a dead
     # Prometheus, and `host_packages` keeps the value as the label of its exporter suppression.
     PushCheck(name="b2_reachable", fn=b2.check_b2_reachable, is_gate=True, critical=True, runbook="longhorn-backup-tiering"),
     PushCheck(name="wan_reachable", fn=wan.check_wan_reachable, is_gate=True, critical=True),
