@@ -386,7 +386,7 @@ _TORZNAB = (
 
 
 def test_parse_loki_redacts_the_torznab_apikey():
-    """A `query_logs` row over a *arr line shipped before the Alloy stage (#6276)."""
+    """A `query_logs` row over a *arr line shipped before the Alloy stage."""
     resp = {
         "data": {
             "result": [{"stream": {"container": "sonarr"}, "values": [["1", _TORZNAB]]}]

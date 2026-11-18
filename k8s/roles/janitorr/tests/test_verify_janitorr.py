@@ -268,8 +268,6 @@ def test_the_arr_fences_admit_janitorr(fence, port, flipped, stubs):
     """Each fence admits the Job's pod and janitorr's own, on the app's port.
 
     The Job proves the apps answer `janitorr-verify`, so this also holds `janitorr` admitted.
-    The `janitorr-verify` peers landed in a PR of their own (#5709), because the cross-plane
-    gate refuses them beside a janitorr change.
     """
     # fact: k8s/roles/janitorr/CLAUDE.md#The Flux verify Job
     (policy,) = [

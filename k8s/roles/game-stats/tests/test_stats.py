@@ -201,7 +201,7 @@ def test_run_cycle_end_to_end(tmp_path):
 
 
 def test_main_requires_the_metrics_port_from_the_deployment():
-    """The port is the containers_list metrics item's, passed in by the Deployment (#3816)."""
+    """The port is the containers_list metrics item's, passed in by the Deployment."""
     env = {k: v for k, v in os.environ.items() if k not in ("METRICS_PORT", "DB_PATH")}
     result = subprocess.run(
         [sys.executable, stats.__file__],

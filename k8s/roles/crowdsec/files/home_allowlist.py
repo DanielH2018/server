@@ -17,7 +17,7 @@ IPv4-only network and cannot see the /64 itself.
 inspect home-ips` and compares them with the ConfigMap. This job owns every entry in
 `home-ips`, so for each family it adds the wanted value and removes any other entry of that
 family. **An empty wanted value removes nothing**, so a failed or empty IPv6 lookup never
-removes a stored /64, and the IPv4 entry syncs whatever happened to IPv6 (#1248).
+removes a stored /64, and the IPv4 entry syncs whatever happened to IPv6.
 
 The verdict, first match wins:
 
@@ -27,7 +27,7 @@ The verdict, first match wins:
   unreachable WAN. A stale /64 can rotate out from under a green tile, so an IPv6 fault is
   reported even when the IPv4 half synced cleanly;
 - up, naming the skip, when the IPv4 lookup failed because no WAN probe answered. The WAN
-  Reachable tile owns that fault (#2793);
+  Reachable tile owns that fault;
 - up otherwise, naming any change.
 
 Usage:

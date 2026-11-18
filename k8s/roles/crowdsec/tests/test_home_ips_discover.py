@@ -184,7 +184,7 @@ def test_a_second_run_patches_the_same_values():
 
 
 def test_a_failed_ipv6_lookup_writes_its_error_and_leaves_the_stored_prefix():
-    """A merge patch that omits `ipv6_prefix` leaves the stored /64 as it is (#1248)."""
+    """A merge patch that omits `ipv6_prefix` leaves the stored /64 as it is."""
     # fact: k8s/roles/crowdsec/CLAUDE.md#The home allowlist is a host-network lookup and a sidecar sync
     kube = _Recorder()
     table = TABLE + "\n" + _row("2a02:1:2:3::1")

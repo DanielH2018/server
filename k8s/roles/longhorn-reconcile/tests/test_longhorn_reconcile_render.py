@@ -2,7 +2,7 @@
 
 The script's behaviour is in test_longhorn_reconcile.py. These cases read the render: the
 ConfigMap's tier lists against the keys `setup/k3s` still derives, and the CronJob and its grants
-against the CSI sidecars, which the `longhorn` role's Setting owns (#5958).
+against the CSI sidecars, which the `longhorn` role's Setting owns.
 
 Run: uv run pytest k8s/roles/longhorn-reconcile/tests/test_longhorn_reconcile_render.py
 """

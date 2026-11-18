@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prune the LAPI bouncer rows every past Traefik pod IP left behind (#2762).
+"""Prune the LAPI bouncer rows every past Traefik pod IP left behind.
 
 LAPI authenticates a bouncer by the pair (API-key hash, client IP). A key it knows arriving
 from an IP it has no row for gets a new auto-created row, `<base>@<ip>`, and the old row is

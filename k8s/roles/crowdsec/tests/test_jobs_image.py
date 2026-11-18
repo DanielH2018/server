@@ -11,8 +11,8 @@ python image too, which is the linkage this test checks.
 
 The `lapi-register` initContainer's script, taken from the rendered Deployment, runs in
 `crowdsec_k8s_image` twice with no network, so no LAPI can answer it. Its database directory
-holds the entrypoint's links into the image's read-only `/staging` and no database yet. The legs check that `cscli machines add` and `cscli allowlists create` work with
-no LAPI running (#5741).
+holds the entrypoint's links into the image's read-only `/staging` and no database yet. The
+legs check that `cscli machines add` and `cscli allowlists create` work with no LAPI running.
 
 No leg reaches a LAPI. What the sidecar's `cscli` reads from the live engine's
 `/etc/crowdsec` and database is checked by the post-landing `--run` in the role's CLAUDE.md.

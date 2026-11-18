@@ -4,8 +4,8 @@
 The home-allowlist cron covers the home address, which daniel-box can look up for itself.
 A remote session — a VPN exit, a phone — arrives from an address nothing on the server side
 can predict, and the only evidence of who is behind it is that the session is authenticated.
-Until 2026-09-21 that case was a hand-pinned /32 in `crowdsec-trusted-remote-whitelist.yaml`,
-and the operator self-banned every time the exit rotated (#2123).
+A hand-pinned /32 in `crowdsec-trusted-remote-whitelist.yaml` would self-ban the operator
+every time the exit rotated.
 
 The signal is Traefik's access log, not Authelia's. A login is logged once per session and a
 session outlives it by days, so 48 hours of Authelia logs held zero logins while the operator
@@ -27,8 +27,9 @@ capped, and reaching the cap is a DOWN that names the entries rather than a sile
 private, loopback and CGNAT addresses never enter, so an Authelia LAN bypass rule cannot feed
 it. An address inside a `home-ips` entry never enters either, and a live entry inside one is
 pruned on the next run: home devices rotate IPv6 privacy addresses, and each one held a slot for
-TTL until the cap refused the remote exits this list exists for (#6709). The way out is `cscli allowlists remove remote-ips <ip>`, or letting the entry lapse; the
-way to see it is `cscli allowlists inspect remote-ips`.
+TTL until the cap refused the remote exits this list exists for. The way out is
+`cscli allowlists remove remote-ips <ip>`, or letting the entry lapse; the way to see it is
+`cscli allowlists inspect remote-ips`.
 
 Runs every 5 minutes in the `crowdsec-jobs` sidecar of the crowdsec pod, started by
 `crowdsec_jobs.py`, which owns the verdict gauge and the log line. This module owns the decision.

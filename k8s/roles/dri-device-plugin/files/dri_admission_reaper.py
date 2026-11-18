@@ -22,7 +22,7 @@ workload namespace a pod is deleted only when all three hold:
 
 The add-on namespaces, `kube-system` and `longhorn-system`, run Jobs this repo does not render:
 k3s's helm-install Jobs and Longhorn's backup Jobs. No `ttlSecondsAfterFinished` reaches them,
-so a run the weekly reboot interrupts stays Failed (#6460). There a pod is deleted when it is a
+so a run the weekly reboot interrupts stays Failed. There a pod is deleted when it is a
 workload-namespace tombstone, or when both of these hold:
 
 - its phase is `Failed`;

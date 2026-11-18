@@ -208,7 +208,7 @@ def cert_target_allowed(host: str, port: int, domains: str, ports: str = "443") 
     Its siblings each constrain their input to the character set the downstream uses
     (container_ref_valid, entity_id_valid, k8s_name_valid); this is the same idea for a socket:
     the destination is bounded to the hostnames Traefik serves, so a bearer holder cannot use
-    the pod as a TCP-connect oracle against the pod network, the LAN or the internet (#1931).
+    the pod as a TCP-connect oracle against the pod network, the LAN or the internet.
 
     `domains` is a comma-separated list of zone suffixes (`CERT_EXPIRY_DOMAINS`, rendered from
     `domain`); a host matches when it IS a listed zone or sits under one. The match is on a
