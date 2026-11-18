@@ -59,10 +59,6 @@ LABELS: dict[str, tuple[str, str]] = {
         "Reserved for the operator; no Claude session claims or fans this out",
     ),
     "review-leftover": ("fab387", "Left after a fan-out fix round; next ranks it last"),
-    "claimed": (
-        "9399b2",
-        "A session is working this issue; see the newest Claim: comment",
-    ),
 }
 # `not-before:<YYYY-MM-DD>` is NOT listed here: its name carries a date, so there is one label
 # per date and `plan_sync_labels` cannot know them ahead of time. `plan_ensure_label` creates

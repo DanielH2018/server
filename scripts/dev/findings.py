@@ -51,13 +51,14 @@ Usage (every subcommand also takes `--repo OWNER/NAME`; see below)::
     uv run python scripts/dev/findings.py new-issues [--after N] [--describe]
     uv run python scripts/dev/findings.py sync-board [688 701] [--dry-run]
 
-THE PROJECT BOARD FOLLOWS THE ISSUE. After any subcommand that writes an issue, `main` makes
-that issue's item on the "Server Issue Tracking" Project agree with it: Status (Todo, In
-Progress while `claimed` or while an open PR will close it, Done once closed), Severity and
-Not before. `findings_lib/board.py` owns the mapping. A board write that fails prints one
-warning and leaves the exit code alone, because nothing reads the board back; `sync-board`
-repairs it, and with no numbers it checks every open issue. Another repo's register has no
-board, so `--repo` other than this one skips it.
+THE STATUS FIELD AND THE PROJECT BOARD FOLLOW THE ISSUE. After any subcommand that writes or
+comments on an issue, `main` makes the issue's Status issue field agree with it (Todo, In
+Progress while a worktree holds its claim or an open PR will close it, Done once closed),
+and its item on the "Server Issue Tracking" Project carry Severity and Not before.
+`findings_lib/board.py` owns the mapping. A write that fails prints one warning and leaves
+the exit code alone, because nothing reads a field back; `sync-board` repairs it, and with
+no numbers it checks every open issue and every issue closed in the past week. Another
+repo's register has no board, so `--repo` other than this one skips it.
 
 WORKING ANOTHER REPO'S REGISTER. Every subcommand takes `--repo OWNER/NAME` and then works
 that repo's own `claude` register, with the same labels, trailer, fingerprint dedup and claim
@@ -82,9 +83,9 @@ whoever holds it — `close` and `open`'s reopen path alike, both through `plan_
 `next` read OPEN issues, so a claim left on a closed one is invisible to every view at once rather than merely
 wrong, and a reopen brings it back LIVE.
 
-CLAIMING AN ISSUE. `claim` posts a `Claim:` comment and adds the `claimed` label, so a
-worktree fanning out several issues at once knows which are its own; `release` reverses
-that. A claim only counts from the operator's own comment — this repo is public, so any
+CLAIMING AN ISSUE. `claim` posts a `Claim:` comment, which moves the issue's Status field to
+In Progress, so a worktree fanning out several issues at once knows which are its own;
+`release` reverses that. A claim only counts from the operator's own comment — this repo is public, so any
 account can post a `Claim:` or `Released:` trailer and none of them decide anything. `claim`
 refuses an issue another worktree LIVE-holds, refuses `manual` issues, closed issues and
 issues outside the `claude` register, RELEASES a claim it finds stale and takes the issue,
@@ -147,6 +148,7 @@ import dataclasses
 import json
 import subprocess
 import sys
+from datetime import timedelta
 
 # Reach the sibling package directories: a directly-invoked script gets only its own
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
@@ -538,16 +540,27 @@ def cmd_sync_labels(args: argparse.Namespace, tools: FindingsTools) -> int:
     return 0
 
 
-def cmd_sync_board(args: argparse.Namespace, tools: FindingsTools) -> int:
-    """Handles ``sync-board``: makes each named issue's board item, or every open one's, agree.
+RECENTLY_CLOSED_DAYS = 7
 
-    The backfill for issues filed while nothing wrote the board, and the repair for a field
-    someone changed on the board by hand or a write that failed.
+
+def cmd_sync_board(args: argparse.Namespace, tools: FindingsTools) -> int:
+    """Handles ``sync-board``: makes each named issue's fields agree with it.
+
+    With no numbers it covers every open issue and every issue closed in the past
+    `RECENTLY_CLOSED_DAYS` days, so a close findings.py never saw still reaches Done. The
+    repair for a field someone changed by hand or a write that failed.
 
     Returns:
-        1 if any issue's board item could not be synced, 0 otherwise.
+        1 if any issue's fields could not be synced, 0 otherwise.
     """
-    numbers = args.numbers or [i["number"] for i in load_issues("open", tools)]
+    since = (today_utc() - timedelta(days=RECENTLY_CLOSED_DAYS)).isoformat()
+    numbers = args.numbers or sorted(
+        {
+            i["number"]
+            for i in load_issues("open", tools)
+            + load_issues("closed", tools, search=f"closed:>={since}")
+        }
+    )
     outcomes = tools.sync_board(numbers, tools.repo, dry_run=args.dry_run)
     counts = dict.fromkeys((UPDATED, UNCHANGED, FAILED), 0)
     for outcome, _ in outcomes.values():
@@ -564,7 +577,7 @@ def cmd_sync_board(args: argparse.Namespace, tools: FindingsTools) -> int:
     return 1 if counts[FAILED] else 0
 
 
-_ISSUE_WRITES = frozenset({"edit", "close", "reopen", "create"})
+_ISSUE_WRITES = frozenset({"edit", "close", "reopen", "create", "comment"})
 
 
 def _recording_writes(tools: FindingsTools) -> tuple[FindingsTools, set[int]]:

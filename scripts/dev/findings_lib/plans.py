@@ -269,20 +269,16 @@ def plan_claim(
 ) -> list[list[str]]:
     """Plans the gh argv to claim ``issue`` for ``worktree``.
 
-    ``milestone`` is the title of the worktree's session milestone, which the label edit
+    ``milestone`` is the title of the worktree's session milestone, which an issue edit
     files the issue under. None, for a branch that never ran `milestone start`, files it
     under nothing.
 
-    Returns an EMPTY list when ``worktree`` already holds the claim AND the `claimed` label
-    is on, so re-running a claim is idempotent rather than a second comment on the same
-    thread. A reclaim whose label is MISSING plans the label edit alone — see below.
+    The comment is the whole claim. `findings.main` then syncs the issue's Status field to
+    In Progress, which is what a GitHub search or the board reads.
 
-    LABEL-AWARE, IN BOTH DIRECTIONS. The comment is the claim and the label is
-    decorative, so the two can disagree: `cmd_claim` posts the comment first, and a failed
-    `--add-label` (rate limit, transient 502) exits 1 with the claim held and the label off.
-    Returning `[]` for every reclaim made that unrepairable — the retry short-circuited
-    before the label plan, so the label could never be added. The damage is silent and
-    permanent: a wrong answer for anyone filtering GitHub by `label:claimed`.
+    Returns an EMPTY list when ``worktree`` already holds the claim and the issue is filed
+    under ``milestone``, so re-running a claim is idempotent rather than a second comment on
+    the same thread. A reclaim whose milestone edit failed plans that edit alone.
 
     Raises:
         ClaimRefused: the issue is closed, lacks the `claude` label, is labelled `manual`,
@@ -319,22 +315,16 @@ def plan_claim(
             f"`block {issue['number']} --clear` lifts it"
         )
     n = str(issue["number"])
-    add_label = ["issue", "edit", n, "--add-label", "claimed"]
-    if milestone:
-        add_label += ["--milestone", milestone]
+    file_under = [["issue", "edit", n, "--milestone", milestone]] if milestone else []
     held = current_claim(issue)
     if held == worktree:
-        # The repair. A fresh claim below re-adds the label unconditionally, because
-        # `--add-label` on a label already present is a no-op; here the plan IS the repair,
-        # so an already-correct label and milestone have to plan nothing or the reclaim
-        # stops being a no-op.
         filed = (issue.get("milestone") or {}).get("title") == milestone
-        return [] if "claimed" in names and (filed or not milestone) else [add_label]
+        return [] if filed else file_under
     if held:
         raise ClaimRefused(f"already claimed by `{held}`")
     return [
         ["issue", "comment", n, "--body", claim_comment(worktree, session, when)],
-        add_label,
+        *file_under,
     ]
 
 
@@ -351,32 +341,25 @@ def plan_release(
     Takes the issue out of ``worktree``'s session milestone unless ``detach`` is False. A
     milestone the operator set, or another session's, is left alone.
 
-    LABEL-AWARE, the mirror of `plan_claim`. A release whose `--remove-label` failed
-    left the comment posted and the label on, and the retry then raised `ClaimRefused("not
-    claimed")` — so a stuck `claimed` label could never be removed. An issue nobody holds
-    that still carries the label therefore plans the label edit alone rather than refusing.
-
     Raises:
-        ClaimRefused: nobody holds the issue and no label needs removing, or somebody else
-            holds it. One session releasing another's claim is always a mistake, so it is
-            refused rather than allowed with a warning.
+        ClaimRefused: nobody holds the issue, or somebody else holds it. One session
+            releasing another's claim is always a mistake, so it is refused rather than
+            allowed with a warning.
     """
     n = str(issue["number"])
-    remove_label = ["issue", "edit", n, "--remove-label", "claimed"]
-    if detach and branch_of(issue.get("milestone")) == worktree:
-        remove_label.append("--remove-milestone")
     held = current_claim(issue)
     if held is None:
-        # The repair: nobody holds it, but the label says somebody does. Removing the label
-        # is the whole of what is left to do, so plan that instead of refusing.
-        if "claimed" in label_names(issue):
-            return [remove_label]
         raise ClaimRefused("not claimed")
     if held != worktree:
         raise ClaimRefused(f"claimed by `{held}`, not by `{worktree}`")
+    detach_plan = (
+        [["issue", "edit", n, "--remove-milestone"]]
+        if detach and branch_of(issue.get("milestone")) == worktree
+        else []
+    )
     return [
         ["issue", "comment", n, "--body", release_comment(worktree, when, reason)],
-        remove_label,
+        *detach_plan,
     ]
 
 

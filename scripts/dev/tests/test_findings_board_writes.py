@@ -3,6 +3,7 @@
 from _findings_fakes import Fakes, build_tools, live_worktree, make_issue
 
 from dev.findings import main
+from dev.findings_lib.issue_model import claim_comment
 
 WT = "worktree-issue-1132"
 
@@ -89,3 +90,27 @@ def test_sync_board_covers_every_open_issue_and_exits_1_on_a_failure(capsys):
         "#1 Status Todo -> In Progress",
         "#3 failed: not an issue",
     ]
+
+
+def test_sync_board_also_covers_the_issues_closed_in_the_past_week():
+    tools, calls = build_tools(Fakes(issues=[make_issue(1)], board={}))
+
+    assert main(["sync-board"], tools) == 0
+
+    closed_reads = [
+        c
+        for c in calls.gh_json
+        if c[:2] == ["issue", "list"] and "closed" in c and "--search" in c
+    ]
+    assert len(closed_reads) == 1
+    search = closed_reads[0][closed_reads[0].index("--search") + 1]
+    assert search.startswith("closed:>=")
+
+
+def test_a_comment_is_a_write_that_syncs_the_issue():
+    issue = make_issue(1132, comments=[claim_comment(WT, None, "t")])
+    tools, calls = build_tools(Fakes(issues=[issue], view=issue))
+
+    assert main(["release", "1132", "--worktree", WT], tools) == 0
+
+    assert calls.board == [([1132], None)]

@@ -38,7 +38,7 @@ from dev.findings_lib.claim import (
     claim_states,
     stale_holder,
 )
-from dev.findings_lib.gh_calls import _existing_labels, _load_issue, load_issues, run
+from dev.findings_lib.gh_calls import _load_issue, load_issues, run
 from dev.findings_lib.issue_model import (
     current_claim,
     now_iso,
@@ -49,7 +49,6 @@ from dev.findings_lib.plans import (
     ClaimRefused,
     plan_claim,
     plan_release,
-    plan_sync_labels,
 )
 from dev.findings_lib.boundaries import FindingsTools
 from dev.fanout_lib.target import SERVER
@@ -116,10 +115,6 @@ def cmd_claim(args: argparse.Namespace, tools: FindingsTools) -> int:
             "warning: worktree read failed; not checking whether this claim reads stale, "
             "and a stale claim will refuse rather than reap\n"
         )
-    # `gh issue edit --add-label` fails on a label the repo lacks, which is why cmd_close
-    # syncs first. Without this the FIRST claim posts its comment, fails the label edit and
-    # exits 1; the retry then reads "already claimed" and the label is never added at all.
-    run(plan_sync_labels(_existing_labels(tools)), args.dry_run, tools)
     # Read once for the batch. None for a branch that never ran `milestone start`.
     milestone = tools.attach_milestone(
         args.worktree, tools.owner_name, dry_run=args.dry_run
@@ -181,14 +176,12 @@ def cmd_claim(args: argparse.Namespace, tools: FindingsTools) -> int:
             print(f"#{number} already claimed by `{args.worktree}`")
             continue
         if already_mine:
-            # A reclaim planning something is `plan_claim` repairing a `claimed` label a
-            # failed `--add-label` left off. No comment is posted, so there is no
-            # race to read back for — and saying "claimed" would misreport a repair as a
-            # first claim.
+            # A reclaim planning something files the issue under the milestone a failed
+            # edit left it out of. No comment is posted, so there is no race to read back.
             run(plans, args.dry_run, tools)
             print(
                 f"#{number} already claimed by `{args.worktree}`; "
-                f"{'would repair' if args.dry_run else 'repaired'} the `claimed` label"
+                f"{'would file' if args.dry_run else 'filed'} it under `{milestone}`"
             )
             continue
         run(plans, args.dry_run, tools)
@@ -223,15 +216,9 @@ def cmd_release(args: argparse.Namespace, tools: FindingsTools) -> int:
     if bad:
         sys.stderr.write(f"release: --worktree `{args.worktree}` {bad}\n")
         return FINDINGS_BAD_ARGS
-    # The same label sync `cmd_claim` makes, for the mirror-image reason: `gh issue
-    # edit --remove-label` fails on a label the repo does not have, and a claim can arrive
-    # with the label never created — hand-posted, or after an `--add-label` that failed.
-    # Without this the release comment is posted and THEN the label edit exits 1, leaving
-    # the claim released in the fold and the label standing.
     if bool(args.numbers) == args.all:
         sys.stderr.write("release: give issue numbers or --all, not both or neither\n")
         return FINDINGS_BAD_ARGS
-    run(plan_sync_labels(_existing_labels(tools)), args.dry_run, tools)
     # `--all` is the bulk way out of `claims --worktree` (#3925): an orchestrator's claims
     # sit under a branch that stays live, so `reap` never clears them.
     if args.all:
@@ -331,9 +318,6 @@ def cmd_reap(args: argparse.Namespace, tools: FindingsTools) -> int:
         # Must not read a git failure as "every worktree is gone" and release everything.
         print("reap: could not read git; refusing to release anything", file=sys.stderr)
         return 1
-    # Same reason as `cmd_release`: a `--remove-label` on a label the repo lacks fails after
-    # the release comment is already posted, leaving the reap half-applied.
-    run(plan_sync_labels(_existing_labels(tools)), args.dry_run, tools)
     issues = load_issues("open", tools)
     by_number = {i["number"]: i for i in issues}
     reaped = 0
