@@ -2,8 +2,7 @@
 
 A test module renders Jinja and finds the repo root through the shared helpers, never by hand:
 its Jinja environment comes from `lib.guard_jinja_env`, the repo root from `lib.repo_paths`,
-and a shell template's text from `_shell_render`. Each rule was a test in
-`test_tests_share_render_and_path_helpers.py` until #3430. The detectors are in
+and a shell template's text from `_shell_render`. The detectors are in
 `_render_helper_rules.py`, and the census is `_test_module_rules.pytest_only_modules`, shared
 with the git and subprocess rows in `test_census_rows_test_modules.py`.
 
@@ -149,7 +148,7 @@ ROWS = (
             # A local INVENTORY shadowing the repo_paths one, and a chain built from it.
             Subject("f.py", 'INVENTORY = REPO / "inventory"\n'),
             Subject("g.py", 'INVENTORY / "group_vars" / "all.yml"\n'),
-            # The k3s component directories and files/, however the chain is rooted (#4133).
+            # The k3s component directories and files/, however the chain is rooted.
             Subject("h.py", 'REPO / "hosts" / "components" / "k3s-host-checks"\n'),
             Subject(
                 "i.py", 'REPO / "hosts/components/k3s-host-checks/files" / "x.py"\n'
@@ -158,7 +157,7 @@ ROWS = (
                 "j.py",
                 'v.K8S_ROLES.parent.parent / "hosts/components/k3s-server" / "units"\n',
             ),
-            # A path built in two steps (#4135). The first step of `l.py` is a hit on its
+            # A path built in two steps. The first step of `l.py` is a hit on its
             # own; `k.py`'s owns nothing, so only resolving HOSTS makes it red.
             Subject(
                 "l.py",
@@ -205,8 +204,8 @@ ROWS = (
             ),
         ),
         min_matches=MODULE_FLOOR,
-        # The classifier tests holding repo-relative inventory strings as inputs, and modules
-        # #4002, #4133 and #4135 converted, are in the census the row reads.
+        # The classifier tests holding repo-relative inventory strings as inputs, and the
+        # converted modules are in the census the row reads.
         must_find=frozenset(
             {
                 "tests/deploy/test_tree_lock_single_definition.py",
@@ -253,7 +252,7 @@ ROWS = (
                 '(K3S_HOST_CHECKS / "templates" / "drill.sh.j2").read_text()\n',
             ),
             Subject("d.py", 'for p in TEMPLATES.glob("*.sh.j2"):\n    pass\n'),
-            # One `.sh.j2` constant that no substring of the source text spells (#5501).
+            # One `.sh.j2` constant that no substring of the source text spells.
             Subject("k2.py", 'T = ROLES / "t" / "drill.sh" ".j2"\nT.read_text()\n'),
             # A resolver hands back paths, so the module names no `*.sh.j2` anywhere.
             Subject(
@@ -421,7 +420,7 @@ ROWS = (
 )
 
 # Every row here and in its sibling file reads the same census, so they judge each module in
-# one pass over one tree (#6437, #6465).
+# one pass over one tree.
 ROWS = share(ROWS)
 
 

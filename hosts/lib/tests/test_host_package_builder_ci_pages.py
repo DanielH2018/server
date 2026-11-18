@@ -1,4 +1,4 @@
-"""The builder's CI gate reads every page of a commit's check runs (#5991).
+"""The builder's CI gate reads every page of a commit's check runs.
 
 GitHub pages the check-runs listing at 100 runs. A commit with more runs than that can carry a
 failing re-run of a required check on page 2 only, so a gate that reads page 1 alone grades a

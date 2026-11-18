@@ -40,7 +40,7 @@ OLD_BODY = "restore_history() { git reset >/dev/null 2>&1; }"
 def _function(name: str) -> str:
     """The body of one shell function, from `name() {` to the closing brace in column one.
 
-    Reads the RENDER, not the .j2 source (#3178): a value moved into a role default would leave
+    Reads the RENDER, not the .j2 source: a value moved into a role default would leave
     a source-text match looking for `{{ ... }}` matching nothing, and sourcing the render means a
     stray Jinja expression would arrive substituted rather than literal.
     """
@@ -303,7 +303,7 @@ def _docs_refresh_function(name: str) -> str:
 
 def test_the_suite_alert_and_failure_log_are_docs_refresh_s_own_code():
     """The copies stay identical, so test_docs_refresh_failure_path.py's behavioural tests cover
-    them here too: the summary that names the failing ids, and one log per run (#4764)."""
+    them here too: the summary that names the failing ids, and one log per run."""
     for name in ("suite_summary", "say_suite_failure", "keep_failure_log"):
         assert _function(name) == _docs_refresh_function(name), name
     for text in (SCRIPT, DOCS_REFRESH):
@@ -314,7 +314,7 @@ def test_the_suite_alert_and_failure_log_are_docs_refresh_s_own_code():
 
 
 def test_the_suite_failure_branch_pushes_the_summary():
-    """REJECT the old call site: say_failure's `Failed` token matches pytest's shutdown noise."""
+    """REJECT the call site that uses say_failure: its `Failed` token matches pytest's shutdown noise."""
     branch = SCRIPT[SCRIPT.index('if [ "$SUITE_RC" -ne 0 ]; then') :]
     branch = branch[: branch.index("\nfi\n")]
     assert 'say_suite_failure "eval-run: the test suite failed' in branch, branch
@@ -374,7 +374,7 @@ def _keep(tmp_path: Path, n: int, archive: Path) -> None:
 
 
 def test_a_sweep_keeps_its_per_run_reports_and_console_log(tmp_path):
-    """ACCEPT: the reports and the log naming each failing run survive the temp dirs (#4019)."""
+    """ACCEPT: the reports and the log naming each failing run survive the temp dirs."""
     stamp = tmp_path / "stamp"
     _keep(tmp_path, 1, stamp / "sweeps")
     (kept,) = (stamp / "sweeps").iterdir()

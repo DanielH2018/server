@@ -57,11 +57,11 @@ the counter.
 opposite until 2026-09-05 -- a listed file could sit anywhere between its cap and its listed
 max, so that a one-line deletion in a 900-line module would not force an allowlist edit. The
 gap that buys is regrowth headroom no check reports: three entries drifted during the
-module-split plan (PRs #1108-#1191) and every one was caught by a reviewer counting by hand.
+module-split plan and every one was caught by a reviewer counting by hand.
 `Ratchet.violations` now flags `count < listed` too, naming the number to write. The cost is
 the one the old stance avoided -- a PR that shrinks a listed file edits its line -- and that is
 one line, in a sorted file, in the same PR that moved the number. Two PRs colliding there are
-two PRs already colliding in the file itself. Re-examined on 2026-09-28 (#2809) and kept: 70
+two PRs already colliding in the file itself. Re-examined on 2026-09-28 and kept: 70
 commits touched a list in the 30 days to that date, 49 of them only lowering or deleting an
 entry, and bound semantics would have left every one of those 49 a silent regrowth headroom.
 What changed instead is that nobody writes the edit by hand -- `tighten` below is the fixer,
@@ -85,7 +85,7 @@ from _helpers import is_test_file
 # DECIDED: count code lines, not `wc -l` lines, with caps of 450 and 400. Under `wc -l`
 # (600 and 500) a docstring-heavy module was listed for its documentation: deploy_state.py
 # was 641 lines, of which 232 were code and 268 docstring. The new caps keep the list about
-# the size it was: 15 files over the old caps on 2026-10-24, 13 over these, with 6 modules
+# the size it was: 15 files over the old caps, 13 over these, with 6 modules
 # and 7 test modules. Any number here is a judgement; to move one, re-run that census.
 NON_TEST_CAP = 450
 TEST_CAP = 400
@@ -248,7 +248,7 @@ def raised_entries(
             # guard diff is in the same PR a reviewer reads, and a file the branch edited gets
             # no exemption at all.
             # A rewording alone would wave through any growth, so the restated reason has
-            # to name the number it approves (#4301 review).
+            # to name the number it approves.
             reason = conjoined.get(path)
             restated = (
                 reason is not None

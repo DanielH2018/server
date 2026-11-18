@@ -110,17 +110,14 @@ def _init_scratch_repo(path: Path) -> None:
 
 
 def test_remove_actually_deletes_a_locked_worktree_on_disk(tmp_path, monkeypatch):
-    # Real git calls rather than mocks: the mocked tests above only prove call order, not
-    # that git accepts the sequence. Without the unlock, `git worktree remove` on a locked
-    # tree fails outright ("cannot remove a locked working tree") and the caller would
-    # report success while removing nothing — this is the bug itself, reproduced.
+    # Real git calls rather than mocks, which prove only call order: without the unlock,
+    # `git worktree remove` on a locked tree fails outright and the caller would report success
+    # while removing nothing.
     #
-    # Scrub GIT_* for remove()'s own git calls: it takes no environment argument, so this
-    # is the only way to keep them off the real repository. git exports GIT_DIR and
-    # GIT_INDEX_FILE into hook processes and `git -C <path>` does NOT override them, so
-    # under the prek pre-commit hook an unscrubbed remove() unlocks and deletes worktrees
-    # of the live repo. The fixture's own calls go through lib.git_testing, which scrubs
-    # for itself.
+    # Scrub GIT_* for remove()'s own git calls: it takes no environment argument. git exports
+    # GIT_DIR and GIT_INDEX_FILE into hook processes and `git -C <path>` does NOT override them,
+    # so under the prek pre-commit hook an unscrubbed remove() unlocks and deletes worktrees of
+    # the live repo.
     scrub_process_git_env(monkeypatch)
     ignore_foreign_slice_holds(monkeypatch)
 
@@ -204,7 +201,7 @@ def test_remove_refuses_a_tree_a_live_process_has_as_cwd_is_flagged(
     tmp_path, monkeypatch
 ):
     # fact: .claude/skills/worktree-cleanup/SKILL.md#The pruner
-    # #3910: a session deleted out from under itself loses every repo hook. The lock here
+    # A session deleted out from under itself loses every repo hook. The lock here
     # names no live owner, so classify() would call the tree REMOVABLE; the process is what
     # still uses it.
     scrub_process_git_env(monkeypatch)
@@ -269,7 +266,7 @@ def test_a_process_in_a_sibling_tree_does_not_block_removal_is_clean(
 
 
 def test_another_uids_process_in_my_login_slice_holds_every_tree_is_flagged(tmp_path):
-    # #3994: `sudo -u claude sleep` run from inside a worktree keeps its inherited cwd and
+    # `sudo -u claude sleep` run from inside a worktree keeps its inherited cwd and
     # stays in the caller's slice, and the caller cannot read that cwd.
     me = os.getuid()
     proc = _unreadable_proc(
@@ -311,7 +308,7 @@ def test_unreadable_processes_outside_that_rule_do_not_block_removal_is_clean(tm
 def test_remove_still_deregisters_a_deleted_tree_a_session_names_is_clean(
     tmp_path, monkeypatch
 ):
-    # #3887's state: the directory is already gone and a live session still points at it.
+    # The directory is already gone and a live session still points at it.
     # Deregistering cannot hurt that session further, and fan-out's `_clean_missing_tree`
     # reaches this through the same remover.
     scrub_process_git_env(monkeypatch)

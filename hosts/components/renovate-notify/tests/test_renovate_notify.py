@@ -58,8 +58,8 @@ def test_discord_returns_false_on_error(monkeypatch):
 def test_an_over_long_digest_reaches_the_webhook_ending_in_the_truncation_marker(
     monkeypatch,
 ):
-    # Two caps used to apply in sequence, and the second sliced off the first's marker, so a
-    # cut digest read as a complete one (#3351).
+    # Two caps applied in sequence would let the second slice off the first's marker, so a
+    # cut digest would read as a complete one.
     captured = {}
 
     def fake_urlopen(req, timeout=None):
@@ -76,12 +76,11 @@ def test_discord_returns_false_without_webhook():
     assert rn.discord("", "hi") is False
 
 
-# --- #6002: the check-runs read walks every page and refuses a short one ---------------------
+# --- the check-runs read walks every page and refuses a short one ---------------------
 #
-# GitHub answers an unparameterised check-runs GET with its default page of 30. The fake below
-# honours `per_page` (default 30, cap 100) and `page` the way the API does, so only a reader
-# that walks the pages sees a run past the first 30. It stubs urlopen, the transport, so the
-# read is caught whether it goes through `rn.get` or a shared walk in host_lib.
+# GitHub answers an unparameterised check-runs GET with its default page of 30. The fake honours
+# `per_page` (default 30, cap 100) and `page` like the API, so only a reader that walks the pages
+# sees a run past the first 30. It stubs urlopen, so `rn.get` and a shared walk are both caught.
 
 _SHA = "c0ffee"
 _OPEN_PR = {
@@ -160,7 +159,7 @@ def test_a_check_runs_read_short_of_total_count_is_not_read_as_green(monkeypatch
 
 
 # The notifier cannot import the builder's module, so notify_logic carries a copy of the page
-# walk. These hold the copy equal to `builder_ci_grade`'s (#5991).
+# walk. These hold the copy equal to `builder_ci_grade`'s.
 
 
 def _listing(runs: int, total: int | None = None):

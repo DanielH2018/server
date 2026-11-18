@@ -122,7 +122,7 @@ def _specs(tag: RenderedTag) -> list[dict]:
 
 
 def test_only_a_tags_own_directory_with_a_placeholder_substitutes():
-    """`<tag>` holds a placeholder and `<tag>-deferred` none, as D3.3b's fixture asks (#5154).
+    """`<tag>` holds a placeholder and `<tag>-deferred` none, as the fixture asks.
 
     It goes red on a writer that gives `<tag>-deferred` `postBuild` because its tag
     substitutes.

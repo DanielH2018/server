@@ -1,4 +1,4 @@
-"""The backup-health reader's libraries ship as `longhorn_lib/` in daniel-box's package (#4354).
+"""The backup-health reader's libraries ship as `longhorn_lib/` in daniel-box's package.
 
 The package sits in `scripts/lib/longhorn_lib/` since H7.2e, so the reapers and `probe.py` import
 the same modules from the checkout. A module added there and left off the component's `shared:`

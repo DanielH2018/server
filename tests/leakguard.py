@@ -57,37 +57,37 @@ marker takes the same exemption and is run by `image-leg.yml` alone.
 `homelab-check-lib.sh`'s `write_check_textfile` writes `$TEXTFILE_DIR/<check>.prom` and
 defaults to `/var/lib/node-exporter-textfile`, which node_exporter scrapes. On daniel-server
 the deploy user can write there, so a test that ran a check script published its fake verdict
-as a production metric (#6191). `pytest_configure` sets `TEXTFILE_DIR` to a directory under the
+as a production metric. `pytest_configure` sets `TEXTFILE_DIR` to a directory under the
 stub directory, overriding any exported value, so every child that inherits this process's
 environment writes there.
 
 A child given an environment built from scratch inherits nothing, so the plugin also wraps
 `subprocess.Popen.__init__`. Every launch that passes `env=` gets each `CARRIED_VARS` entry
 it does not set itself: `TEXTFILE_DIR`, and `LEAKGUARD_CALLS` so a shim the child reaches
-records the call. Two tests once wrote fake verdicts into the real directory that way
-(#6191, #6238). The wrapper covers `subprocess.run`, `Popen`, `lib.proc_testing.run` and
+records the call.
+The wrapper covers `subprocess.run`, `Popen`, `lib.proc_testing.run` and
 asyncio's subprocesses alike, because all of them construct a `Popen`. A test that sets its
 own `TEXTFILE_DIR` keeps it.
 
 The wrapper also shims a hand-built `PATH`, such as `/usr/bin:/bin`, which would otherwise
-reach the real `logger`, `curl` or `kubectl` with nothing recorded (#6418). It prepends a
+reach the real `logger`, `curl` or `kubectl` with nothing recorded. It prepends a
 directory holding a shim for each binary whose first match on the child's `PATH` is the real
 binary, and for nothing else. A test's own stub earlier on that `PATH` still wins, and a binary
 the `PATH` hides stays hidden. The `DECIDED:` marker at the wrapper has the reasoning.
 
 A child started by absolute path, such as `/usr/bin/logger`, never consults `PATH` at all. The
 wrapper swaps such a program for its shim when it names a shimmed binary in one of the
-directories the real `PATH` lists, whether it arrives as `argv[0]` or as `executable` (#6463).
+directories the real `PATH` lists, whether it arrives as `argv[0]` or as `executable`.
 A program in any other directory, such as a test's own stub, runs as given. A `shell=True`
 command string gets the same swap for each word naming such a path, such as
-`"/usr/bin/logger x"` (#6485). The wrapper sees only the direct child, so a script that
+`"/usr/bin/logger x"`. The wrapper sees only the direct child, so a script that
 hardcodes `/usr/bin/logger` and runs it itself would still reach the real binary. The
 `scripts-run-no-shimmed-binary-by-hardcoded-path` row of
 `tests/repo/test_census_rows_text.py` refuses that path in every script a test can run,
 unless it is only the default of a variable the test can set. A script that puts a fixed
 directory ahead of the `PATH` it inherited, such as `export PATH="/usr/local/bin:${PATH}"`,
 hides this stub directory the same way, and the `scripts-append-to-path-rather-than-prepend`
-row refuses it (#7623). A script that replaces `PATH` outright drops the stub directory, and
+row refuses it. A script that replaces `PATH` outright drops the stub directory, and
 the `scripts-keep-the-inherited-path-or-say-why` row refuses that unless an `allow` entry says
 how each test that runs the script keeps its stubs first.
 
@@ -109,7 +109,7 @@ drives.
 The `claude` agent user's login profile exports `RUN_HOOK_PROJECT_DIR` as its own clone, and
 `scripts/dev/fanout_lib/target.py` reads it into `SERVER_CHECKOUT` at import. The fan-out tests
 assert the primary checkout, so run as the agent user they went red while CI
-stayed green (#3629). A fixture cannot help, because the constant is computed at collection,
+stayed green. A fixture cannot help, because the constant is computed at collection,
 before any fixture runs. `AGENT_PROFILE_VARS` is the set, stripped at load with the git hook
 variables, so every test reads the operator's defaults whichever user runs the suite. A test
 that wants the agent user's value passes it explicitly, as `test_fanout_target.py` does.
@@ -143,7 +143,7 @@ SHIMMED_BINARIES = (
     "docker",
     "gh",
     "journalctl",
-    "k3s",  # crictl, ctr and kubectl link to it; it can self-extract into ./data (#7569)
+    "k3s",  # crictl, ctr and kubectl link to it; it can self-extract into ./data
     "kubectl",
     "logger",
     "mosquitto_pub",
@@ -163,7 +163,7 @@ SHIMMED_BINARIES = (
 # leave them green while checking nothing.
 _LIVE_API_TESTS = frozenset(
     {
-        # It starts and stops a real systemd user unit, because issue #3160 is about what that
+        # It starts and stops a real systemd user unit, because the behaviour under test is what its
         # stop kills. Skipped where no user manager answers.
         "scripts/deploy_tools/tests/test_land_detach.py::test_stopping_the_callers_unit_leaves_the_landing_running_to_its_verdict",
         # It restarts, stops and kills stand-in systemd user units, because what a restart does
@@ -171,7 +171,7 @@ _LIVE_API_TESTS = frozenset(
         # manager answers.
         "hosts/lib/tests/test_pi_watchdog_dropin.py::test_a_restart_leaves_the_watchdog_daemon_running_and_a_stop_or_a_crash_starts_the_keepalive",
         # They `docker run` crowdsec's sidecar modules in the pinned
-        # images, which is the linkage the operator's ruling on #5655 asked to check. They
+        # images, which is the linkage the operator asked to check. They
         # skip where docker is missing and CI is unset.
         "k8s/roles/crowdsec/tests/test_jobs_image.py::test_the_appsec_verify_runs_in_the_jobs_image_against_a_stub_cscli",
         "k8s/roles/crowdsec/tests/test_jobs_image.py::test_the_engines_cscli_runs_in_the_jobs_image",
@@ -521,10 +521,10 @@ def pytest_configure(config: pytest.Config) -> None:
     # stub directory. That would put every shim in FRONT of the test's own stub directory, so
     # a test's stub `curl` would lose to the shim, and a test that pins `/usr/bin:/bin` to hide
     # a binary would find a shim instead. `shim_hand_built_path` shims only a name whose first
-    # match on the child's PATH is already the real binary, so neither case changes (#6418).
+    # match on the child's PATH is already the real binary, so neither case changes.
     # It runs only while a non-exempt test owns the process, as the PATH prefix in
     # `pytest_runtest_setup` does. `shim_absolute_program` follows the same rule for a child
-    # started by absolute path: only a program in a real PATH directory is swapped (#6463).
+    # started by absolute path: only a program in a real PATH directory is swapped.
 
     def carrying_popen_init(self, *args, **kwargs):  # type: ignore[no-untyped-def]
         # Every caller in this repo passes `env` by keyword; a positional one is not covered.

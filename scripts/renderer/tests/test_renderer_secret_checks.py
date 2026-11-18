@@ -226,7 +226,7 @@ def _refused(source: str, **kwargs) -> list[tuple[str, str]]:
         "{% endfor %}",
         "{% filter indent(4) %}{{ fixture_key }}{% endfilter %}",
         "{% set x %}{{ fixture_key }}{% endset %}",
-        # #4939's shapes, each used bare.
+        # Each shape used bare.
         "{% set x %}{{ fixture_key }}{% endset %}{{ x }}",
         "{% macro m() %}{{ fixture_key }}{% endmacro %}{{ m() }}",
         "{% macro m() %}{{ caller() }}{% endmacro %}"
@@ -260,7 +260,7 @@ def test_no_secret_expression_is_clean(source):
             "{% filter indent(4) %}{{ pi_peer_backup_ssh_key }}{% endfilter %}",
             "block filter indent",
         ),
-        # #4938: a block filter around a macro argument, a binding or a loop.
+        # A block filter around a macro argument, a binding or a loop.
         (
             "{% macro m(v) %}{{ v }}{% endmacro %}"
             "{% filter trim %}{{ m(fixture_key) }}{% endfilter %}",
@@ -274,7 +274,7 @@ def test_no_secret_expression_is_clean(source):
             "{% filter trim %}{% for c in fixture_key %}{{ c }}{% endfor %}{% endfilter %}",
             "block filter trim",
         ),
-        # #4939: a filter where a captured block, a macro or a call body is used.
+        # A filter where a captured block, a macro or a call body is used.
         ("{% set x %}{{ fixture_key }}{% endset %}{{ x | trim }}", "filter trim"),
         (
             "{% macro m() %}{{ fixture_key }}{% endmacro %}{{ m() | trim }}",

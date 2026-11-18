@@ -61,11 +61,11 @@ def test_the_scrape_job_reads_the_group_var_rather_than_a_literal() -> None:
     Asserted on the RENDERED scrape config, so the target the guard compares against is the
     one Prometheus is handed. A source-text assertion that the template spells
     `{{ k8s_node_dns_metrics_port }}` matches nothing the moment the expression is spelled any
-    other way, and a pattern that matches nothing passes (#3202).
+    other way, and a pattern that matches nothing passes.
     """
     group_vars = yaml_fast.safe_load(ALL_VARS.read_text())
-    # daniel-box's own literal, not k8s_node_client_ip: that derives from it through hostvars
-    # (#4063), and a derivation that lost the entry would render `None` here too.
+    # daniel-box's own literal, not k8s_node_client_ip: that derives from it through hostvars,
+    # and a derivation that lost the entry would render `None` here too.
     box_ip = yaml_fast.safe_load((HOST_VARS / "daniel-box.yml").read_text())[
         "server_ip"
     ]

@@ -2,7 +2,7 @@
 
 `scripts-run-no-shimmed-binary-by-hardcoded-path` reads only scripts outside `tests/`. A test
 can still write a script body to disk and run it, and leakguard's `Popen` wrapper sees only that
-script, never the `/usr/local/bin/k3s` it execs (#7663). This row reads those bodies. In a test-tree Python
+script, never the `/usr/local/bin/k3s` it execs. This row reads those bodies. In a test-tree Python
 module a body is a string literal that opens with a shebang, follows a shell's `-c` in an argv
 literal, or is passed to `.write_text()`. Every shell script or tracked executable under a
 `tests/` directory is one body, read whole. A test module's own docstrings and asserts name

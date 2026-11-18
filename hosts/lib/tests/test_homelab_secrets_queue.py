@@ -20,7 +20,7 @@ LOCK = "/run/homelab-secrets/pending.lock"
 DIGESTS = "/var/lib/homelab-secrets/.digests"
 KEY = "/var/lib/homelab-secrets/.hmac-key"
 # Plaintext the state files must never hold. Long, because KEY is 32 random bytes: a two-byte
-# marker such as "t1" turns up in it about once in 2,100 runs, which failed CI (#6297).
+# marker such as "t1" turns up in it about once in 2,100 runs.
 NUT_PW_MARKER = "nut-pw-plaintext-marker-6297"
 TOK_MARKER = "tok-plaintext-marker-6297"
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for the instructions-log rows session-health.py writes at SessionStart (#4656).
+"""Tests for the instructions-log rows session-health.py writes at SessionStart.
 
 Claude Code fires no InstructionsLoaded event for the auto-memory `MEMORY.md` or for the
 active output style, so log-instructions.py never rows them and `fact_status.py report`

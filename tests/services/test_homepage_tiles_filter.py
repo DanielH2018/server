@@ -2,7 +2,7 @@
 
 `homepage_widget: true` on a containers_list entry both opens the entry's fence to homepage
 (`netpol_callers`) and is how homepage's tile list builds a ClusterIP widget URL
-(`homepage_widget_url`). Refusing an unflagged entry keeps the two halves equal (#3691). That
+(`homepage_widget_url`). Refusing an unflagged entry keeps the two halves equal. That
 the fences actually render the derived callers is test_netpol_from.py's job.
 
 The filter guards only the URLs written through it. A tile that hand-writes
@@ -191,7 +191,7 @@ def test_caller_fences_skip_what_a_role_renders_itself():
     ]
 
 
-# ── error shape (#4480) ─────────────────────────────────────────────────────────────────────
+# ── error shape ─────────────────────────────────────────────────────────────────────
 
 
 @pytest.mark.parametrize(

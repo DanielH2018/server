@@ -5,7 +5,7 @@ and 9) and every `flux/<tag>.yaml` Kustomization (step 6). Step 3 applies `compo
 alone, and the test does not scan it: `components.yaml` quotes `${var:=default}` in a CRD
 description. `cluster/flux/secret.yaml` is not applied by hand either. It holds `${...}`
 placeholders and arrives through the `flux` tag's own Kustomization, with substitution, once
-cluster-vars is up (operator ruling, 2026-10-22).
+cluster-vars is up.
 
 From D5 step 29 the flux role is flux-owned, so its render also writes `flux/flux.yaml`: the
 Kustomization `flux` at `prune: false` and `flux-deferred` at `prune: true`. The sync objects

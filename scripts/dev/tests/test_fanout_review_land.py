@@ -1,4 +1,4 @@
-"""The review pipeline's own landing (#3960): land.sh run once, the model resumed on need.
+"""The review pipeline's own landing: land.sh run once, the model resumed on need.
 
 The fake runner answers `bash -l` with a scripted landing: land.sh writes a log ending on
 `run.verdict`, and cc-wait exits with each of `run.waits` in turn.
@@ -30,7 +30,7 @@ def _clean_review():
 
 
 def test_a_no_pr_batch_citing_its_branchs_merged_pr_starts_no_landing(tmp_path):
-    """A relaunch reuses the branch name, so the earlier launch's merged PR is on it (#7402)."""
+    """A relaunch reuses the branch name, so the earlier launch's merged PR is on it."""
     pipeline, run = _pipeline(tmp_path, [_report(f"Already fixed by {EARLIER}.")])
     run.branch_prs = [EARLIER_ROW]
     final = pipeline.run_all()
@@ -88,7 +88,7 @@ def test_a_needs_manual_apply_verdict_resumes_the_implementer_with_the_log(tmp_p
 def test_the_re_land_a_resumed_implementer_gets_runs_land_sh_from_the_fresh_checkout(
     tmp_path,
 ):
-    """A re-land from the batch worktree's stale copy is refused by land.sh (#7875)."""
+    """A re-land from the batch worktree's stale copy is refused by land.sh."""
     pipeline, run = _pipeline(tmp_path, _clean_review())
     run.verdict = "VERDICT: unhealthy (rollout stuck)"
     pipeline.run_all()
@@ -168,7 +168,7 @@ def _checkout(tmp_path):
 def test_land_sh_runs_from_a_fresh_checkout_of_the_base_not_the_batch_worktree(
     tmp_path,
 ):
-    """The batch worktree is branched at launch, so its landing code goes stale (#7871)."""
+    """The batch worktree is branched at launch, so its landing code goes stale."""
     pipeline, run = _pipeline(tmp_path, _clean_review())
     pipeline.run_all()
     (argv, *_) = run.lands

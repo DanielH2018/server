@@ -1,4 +1,4 @@
-"""compose-run and compose-adopt against a stub `docker` that logs its argv (H5.2a3).
+"""compose-run and compose-adopt against a stub `docker` that logs its argv.
 
 Each case covers a rule of compose-adopt or compose-run. A rule that a fixture script can
 break has a `_is_flagged` case, so a check that stopped matching fails its own test.

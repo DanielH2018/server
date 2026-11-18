@@ -1,8 +1,7 @@
 """Behavioural tests for host_lib — the shared I/O shell for gitops_deploy.py / renovate_notify.py.
 
 host_lib is importable (stdlib only, no module-level config read), so its invariants are tested here
-directly. This is the behavioural home of the Discord User-Agent + 2xx-only contract that gitops's
-un-importable discord() previously pinned via AST guards (test_gitops_deploy_alert_delivery.py).
+directly. This is the behavioural home of the Discord User-Agent + 2xx-only contract.
 """
 
 import ast
@@ -20,7 +19,7 @@ import host_lib
 def test_host_lib_parses_with_the_3_12_grammar():
     # fact: hosts/components/builder/CLAUDE.md#The signer and the publish (H3.5b)
     # The repository signer imports host_lib under daniel-box's /usr/bin/python3, which is 3.12
-    # on Ubuntu 24.04 (#6202). A 3.14-only construct, such as an unparenthesised `except A, B:`,
+    # on Ubuntu 24.04. A 3.14-only construct, such as an unparenthesised `except A, B:`,
     # would fail every signer run there and none here. pyproject.toml formats it for py312.
     source = Path(host_lib.__file__).read_text()
     ast.parse(source, feature_version=(3, 12))
@@ -142,7 +141,7 @@ def test_clamp_discord_leaves_a_message_that_fits_alone():
 
 def test_discord_post_clamps_the_marked_message_and_keeps_the_truncation_marker():
     # The cap applies after the marker prefix, and the cut message must END in the marker:
-    # a reader cannot otherwise tell a cut message from a complete one (#3351).
+    # a reader cannot otherwise tell a cut message from a complete one.
     captured = {}
 
     def fake_urlopen(req, timeout=None):
@@ -169,7 +168,7 @@ class _Body:
 
 
 # --- github_token / github_get -----------------------------------------------------------
-# One lookup for every host GitHub reader (#3362). The anonymous limit is 60/hour per source
+# One lookup for every host GitHub reader. The anonymous limit is 60/hour per source
 # IP and shared by every caller on the host, so each rule is an accept/reject pair: a resolver
 # that always returned a token and one that never did are indistinguishable from one side.
 

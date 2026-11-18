@@ -163,8 +163,7 @@ def test_vale_ini_turns_the_styles_off_for_archive_and_reference():
     """The hook regex must not be the only thing excluding those trees.
 
     Vale's section globs cross directory separators, so `[docs/*.md]` also matches
-    docs/archive/README.md and every docs/reference/ page -- measured at 101 findings in
-    reference/ before the opt-out sections existed. Without them a bare `vale docs` lints
+    docs/archive/README.md and every docs/reference/ page. Without the opt-out sections a bare `vale docs` lints
     generated pages, and the cron's protection lives in prek.toml rather than in the config
     that documents it.
     """

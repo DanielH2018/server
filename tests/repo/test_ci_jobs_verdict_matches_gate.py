@@ -1,7 +1,7 @@
 """The verdict readers' job list equals the CI gate's `needs`, and their rule equals its script.
 
 WHY THIS IS A TEST. `ci_verdict.jobs_verdict` (hosts/lib) decides green or red from the check-runs of the jobs
-the `prek` gate aggregates, so a landing does not wait on a runner for the gate job (#5507). It
+the `prek` gate aggregates, so a landing does not wait on a runner for the gate job. It
 holds a hand-written list of check-run names, and a drift in either direction is silent:
 
 - A job added to the gate's `needs` and missing from the list is a job the readers never wait
@@ -119,7 +119,7 @@ def test_a_skipped_dependent_can_only_mean_the_tree_was_proven():
         # `proven` is false, so a skipped `pytest` beside the others' skips also means proof.
         output = "pytest-proven" if job_id == "pytest" else "proven"
         # The draft arm adds no skip `jobs_verdict` can see: a draft PR's head is never a
-        # master commit, and the gate skips with its dependents there (#5563).
+        # master commit, and the gate skips with its dependents there.
         assert condition == (
             "(needs.prove.result == 'cancelled' || needs.prove.result == 'failure'"
             f" || (!cancelled() && needs.prove.outputs.{output} != 'true'))"
@@ -226,7 +226,7 @@ _PYTEST_LEGS = sorted(n for n in CI_GATE_NEEDS_JOBS if n.startswith("pytest (sha
     [("success", True), ("failure", False), ("cancelled", False)],
 )
 def test_a_push_after_a_selected_pr_run_passes_only_on_its_pytest_legs(leg, passes):
-    """`proven=true` and `pytest-proven=false`: every job but the `pytest` legs skipped (#8943)."""
+    """`proven=true` and `pytest-proven=false`: every job but the `pytest` legs skipped."""
     results = _all("skipped", **dict.fromkeys(_PYTEST_LEGS, leg))
     gate_passes = _gate_exit("success", "true", results, pytest_proven="false") == 0
     verdict = jobs_verdict(_runs("success", results))

@@ -50,7 +50,7 @@ def _dispatch_repo(tmp_path, target: str):
 
 
 def test_what_a_dispatch_target_runs_inherits_the_dispatchers_kind_is_clean(tmp_path):
-    """`deploy_cli.py` calls `run.main`, and `run` calls `staleness.main` (#4347)."""
+    """`deploy_cli.py` calls `run.main`, and `run` calls `staleness.main`."""
     repo, scripts = _dispatch_repo(
         tmp_path, '"""Summary."""\nimport helper\ndef main(argv=None):\n    return 0\n'
     )

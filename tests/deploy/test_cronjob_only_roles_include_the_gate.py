@@ -5,7 +5,7 @@ flux-owned role names each CronJob in `flux_cronjob_gates`, and the renderer cop
 gate Job in `<tag>-verify` that Flux runs once per role revision. A CronJob-only role without
 that entry ships an image nobody has run. This test catches the missing entry before the
 revision lands, the same way `test_k8s_autodeploy_batch_gates.py` catches a missing wait for a
-plain Job. The `k8s/cronjob-gate` role that gated an Ansible-owned role was retired (#5716).
+plain Job.
 
 Run: uv run pytest tests/deploy/test_cronjob_only_roles_include_the_gate.py
 """
@@ -34,7 +34,7 @@ _KNOWN_CRONJOB_ONLY_ROLES = frozenset(
 # under the fixed name `restore-drill-<pvc>` that a scheduled run also uses, so an extra run can
 # tear down another run's restore. The plan's *First run* says the same: the bouncer prune and the
 # drill are not gated. The first scheduled run is the evidence instead (H2.3e): its CronJob
-# carries `homelab/gate: schedule`, and `probe.py health` gates it on its schedule (#6128).
+# carries `homelab/gate: schedule`, and `probe.py health` gates it on its schedule.
 UNGATED_BY_DESIGN = frozenset({"longhorn-restore-drill"})
 
 
@@ -124,7 +124,7 @@ def _schedule_gated_roles(census):
 
 
 def test_the_schedule_gate_marker_names_exactly_the_ungated_roles():
-    """The probe's leniency (`format_schedule_gated`) and this exemption are one set (#6128).
+    """The probe's leniency (`format_schedule_gated`) and this exemption are one set.
 
     A marked CronJob with a gate Job would hide a missing gate run, and an exempt one without
     the marker reads unhealthy until its first scheduled run and every revision after.

@@ -275,7 +275,7 @@ def test_a_check_table_change_lands_with_its_own_role_alone():
 
 # --- a k8s role's defaults whose change is comments only -------------------------
 #
-# A comment-only edit to a k8s role's `defaults/` renders the same manifests (#4460), so the
+# A comment-only edit to a k8s role's `defaults/` renders the same manifests, so the
 # landing derives no tag for it and gates no workload that did not change.
 
 _SONARR_DEFAULTS = "k8s/roles/sonarr/defaults/main.yml"

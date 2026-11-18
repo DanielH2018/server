@@ -120,9 +120,9 @@ def test_split_accepts_a_well_shaped_spec():
 def test_split_refuses_a_spec_entry_of_the_wrong_shape(entry, match):
     """The spec comes from `json.loads`, so the TypedDict enforces nothing at that boundary.
 
-    Every one of these reached the body before: a non-string header was written into the new
-    file's first line, and a non-list `names` raised straight out of the `for` loop as a
-    TypeError. `main()` catches ValueError only, so an unchecked shape bug printed a traceback
+    Unchecked, a non-string header is written into the new
+    file's first line, and a non-list `names` raises straight out of the `for` loop as a
+    TypeError. `main()` catches ValueError only, so an unchecked shape bug prints a traceback
     where every other spec bug prints `error: ...`.
     """
     with pytest.raises(ValueError, match=match):

@@ -1,8 +1,8 @@
 """The builder's `published/` record: a package counts as published only once the signer can take it.
 
-2026-10-23: `shutil.copytree` raised on the Pi package's dangling `timers.target.wants` link
-after it had copied every other file, `stage()` never reached `state["staged"] = ...`, and the
-next run read the Pi package as already published and deleted its staged `.deb`. The render
+A `shutil.copytree` that raises on the Pi package's dangling `timers.target.wants` link
+after copying every other file leaves `stage()` short of `state["staged"] = ...`, and the
+next run reads the Pi package as already published and deletes its staged `.deb`. The render
 here ships the same link. The cases are the link, the comparison that missed it, a run that
 fails between `published/` and `state["staged"]`, the production leftover of that failure,
 and a package the rollout gate defers out of an unsigned set.
@@ -151,14 +151,14 @@ def test_a_deferred_package_leaves_published_so_it_builds_when_the_gate_closes(l
 
 
 class FailsAtStage(LinkedBuilder):
-    """A run whose stage step raises, as the dangling-link copytree did on 2026-10-23."""
+    """A run whose stage step raises, such as a copytree over a dangling link."""
 
     def stage(self, chosen, out, debs, ver) -> None:
         raise OSError("dangling symlink in the render")
 
 
 def test_a_failing_stage_step_reaches_stderr_with_its_type_and_step(lab, capsys):
-    # #6074: the journal held only systemd's lines, so the cause had to be reproduced by hand.
+    # The cause must reach the journal, because systemd's own lines do not name it.
     origin, state, _, _ = lab
     edit(origin, "daniel-pi", "pi 1")
     assert go(lab, cls=FailsAtStage) == 1

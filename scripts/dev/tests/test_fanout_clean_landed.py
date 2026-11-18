@@ -1,9 +1,9 @@
-"""`place clean` removes a squash-merged batch whose worktree carries a pre-#6552 script (#6571).
+"""`place clean` removes a squash-merged batch whose worktree carries an older `clean-one`.
 
-#6552 taught `clean-one` to count a tip inside a merged PR's head as landed, but the remote leg
-ran the BATCH WORKTREE's own `fanout.py`. That copy is frozen at the batch's launch, so
-every batch started before #6552 kept judging by the old ladder and `clean` kept them with
-"not merged into origin/master" although their PRs had merged. These tests drive the real
+`clean-one` counts a tip inside a merged PR's head as landed, but the remote leg runs the BATCH
+WORKTREE's own `fanout.py`. That copy is frozen at the batch's launch, so a batch started before
+the rule kept judging by the old ladder, and `clean` kept it with "not merged into
+origin/master" although its PR had merged. These tests drive the real
 `place clean` entry over a saved manifest, run the command it builds under bash, and let the
 real `clean-one` run against a scratch repo with a stub `gh` on PATH.
 
@@ -25,7 +25,7 @@ from _fanout_fakes import fake_tools
 
 BRANCH = "worktree-fanout-x"
 UNIT = "fanout-x"
-# The `clean-one` a batch launched before #6552 carries in its own worktree.
+# The older `clean-one` a batch's own worktree carries, frozen at launch.
 STALE_SCRIPT = 'import sys\nprint("kept:", sys.argv[-2], sys.argv[-1], "not merged into origin/master")\n'
 SCRIPTS = Path(clean_mod.__file__).resolve().parents[2]
 

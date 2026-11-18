@@ -160,7 +160,7 @@ def test_a_promotion_timeout_is_deferred_with_promote_timeout(land_run):
 
 
 def test_an_unreadable_cluster_is_deferred_with_gate_unreadable(land_run):
-    """#8295: `land_probe` reads the cause as a resume point; the timeout note would mislead."""
+    """`land_probe` reads the cause as a resume point; the timeout note would mislead."""
     unreadable = WaitResult(
         "gave-up", "gate-unreadable", "this host cannot read the cluster"
     )
@@ -271,7 +271,7 @@ def test_an_unreadable_k8s_entry_list_deploys_nothing(land_run):
 
 
 def test_a_landing_deadline_caps_the_promotion_wait(land_run, monkeypatch):
-    """`LAND_DEADLINE` less what the landing spent and the reserve for the gate (#5199)."""
+    """`LAND_DEADLINE` less what the landing spent and the reserve for the gate."""
     monkeypatch.setenv("LAND_DEADLINE", "5400")
     _, _, _, calls, _ = land_run([], _fakes())
     (cap,) = [c[1][3] for c in calls if c[0] == "land_wait"]
@@ -284,7 +284,7 @@ def test_without_a_landing_deadline_the_promotion_wait_is_uncapped(land_run):
 
 
 def test_a_landers_window_grace_reaches_the_promotion_wait(land_run, monkeypatch):
-    """`LAND_WINDOW_GRACE` is what the reboot window may add to the cap (#5457); unset is 0."""
+    """`LAND_WINDOW_GRACE` is what the reboot window may add to the cap; unset is 0."""
     monkeypatch.setenv("LAND_WINDOW_GRACE", "22200")
     _, _, _, calls, _ = land_run([], _fakes())
     assert [c[1][4] for c in calls if c[0] == "land_wait"] == [22200]
@@ -328,7 +328,7 @@ def _repo_with_services(repo: Path, services: str) -> str:
 
 
 def test_an_empty_k8s_service_read_is_flagged(tmp_path):
-    """A reader older than the merge commit's layout reads no service at all (#7807)."""
+    """A reader older than the merge commit's layout reads no service at all."""
     sha = _repo_with_services(tmp_path, "containers_list: []\n")
     with pytest.raises(ValueError, match="older than that commit"):
         land_flux.k8s_tags_at(tmp_path, sha)

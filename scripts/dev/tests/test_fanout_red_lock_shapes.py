@@ -1,7 +1,7 @@
-"""Two shapes the green gate's lock refused although the fix was correct (#5400).
+"""Two shapes the green gate's lock refused although the fix was correct.
 
-A constant built from another constant (#5229), and a helper in the red file that the issue
-names as the code under test (#5197). Both were landed by hand. Source-to-source like
+A constant built from another constant, and a helper in the red file that the issue
+names as the code under test. Both were landed by hand. Source-to-source like
 `test_fanout_red_lock.py`, so no case here starts git or pytest.
 
 Run: uv run pytest scripts/dev/tests/test_fanout_red_lock_shapes.py
@@ -11,7 +11,7 @@ import importlib
 
 from fanout_lib.review.red_lock import forbidden_change
 
-# #5229: the red commits added `RENDERER_ONLY` and a test that reads it, and the fix appended
+# The red commits added `RENDERER_ONLY` and a test that reads it, and the fix appended
 # a second constant built from it for its own test.
 RENDERER_BASE = '''"""The renderer guard."""
 
@@ -47,7 +47,7 @@ def test_an_appended_constant_built_from_another_constant_is_clean():
     assert _renderer_change(rebound) != ""
 
 
-# #5197's shape: `_twice` was in the file before the red commits, and the red test calls it.
+# `_twice` was in the file before the red commits, and the red test calls it.
 BASE = '''"""Tests for mod."""
 
 from mod import double
@@ -68,7 +68,7 @@ RED = BASE + "\n\ndef test_two():\n    assert _twice(1) == 4\n"
 
 
 def test_a_helper_the_issue_names_as_its_subject_is_the_fixs_to_change():
-    """The fix for #5197 restricted `_restarts_privately`, the helper the issue was about.
+    """A fix restricting `_restarts_privately`, the helper the issue was about.
 
     The lock refused it as a change to what the red test stands on. The issue names the
     helper, so `forbidden_change(..., subjects=...)` frees it. The function is reached through
@@ -78,7 +78,7 @@ def test_a_helper_the_issue_names_as_its_subject_is_the_fixs_to_change():
     check = getattr(importlib.import_module("fanout_lib.review.red_lock"), name)
     restricted = RED.replace("return _once(_once(x))", "return _once(_once(x)) * 1")
     assert check(BASE, RED, restricted, {"test_two"}, subjects={"_twice"}) == ""
-    # Unnamed, the same helper stays locked: #4183's weakened helper was not the subject.
+    # Unnamed, the same helper stays locked: a weakened helper is not the subject.
     assert check(BASE, RED, restricted, {"test_two"}, subjects=set()) != ""
     # Naming the helper frees it, never the red test that calls it.
     weakened = RED.replace("assert _twice(1) == 4", "assert True")
@@ -110,7 +110,7 @@ import pytest  # noqa: E402
 def test_an_appended_constant_reading_a_name_no_constant_binds_is_flagged(
     appended, name
 ):
-    """An imported object's `__add__` would run the fix's code at import (#5229)."""
+    """An imported object's `__add__` would run the fix's code at import."""
     problem = _renderer_change(f"{RENDERER_RED}\n\n{appended}\n")
     assert problem.endswith(f"reads `{name}`, which no constant above it binds")
 
@@ -139,7 +139,7 @@ def test_deleting_a_conftest_constant_that_reads_an_import_is_flagged():
     )
 
 
-# #5520: the fix appended a table of lambdas that only its own appended test reads.
+# The fix appended a table of lambdas that only its own appended test reads.
 LAMBDA_TABLE = '_TABLE = {"a": (1, lambda x: x), "b": ([2], lambda x: judge(x))}'
 
 

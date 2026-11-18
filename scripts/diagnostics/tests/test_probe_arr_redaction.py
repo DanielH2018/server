@@ -170,7 +170,7 @@ def test_non_json_body_is_passed_through():
     assert text.strip() == "<html>404</html>"
 
 
-# --- a credential inside a value: a Prowlarr download URL (#6582) -----------------------
+# --- a credential inside a value: a Prowlarr download URL -----------------------
 
 
 # Shaped like a Radarr `GET /api/v3/history/movie` page: a `grabbed` record's downloadUrl is
@@ -261,7 +261,7 @@ def test_sort_key_query_param_is_clean():
     assert _download_url(arr.redact_arr_payload(_history(url))) == url
 
 
-# --- a credential inside a percent-encoded nested URL (#6603) ----------------------------
+# --- a credential inside a percent-encoded nested URL ----------------------------
 
 
 NESTED_KEY = "NESTED-KEY"

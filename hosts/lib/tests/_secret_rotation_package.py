@@ -1,4 +1,4 @@
-"""Render daniel-box's checkout-timer components into a fixture package (H7.36).
+"""Render daniel-box's checkout-timer components into a fixture package.
 
 `hosts/daniel-box/package.yml` lists the components the operator has armed; the tests for
 `secret-rotation` and `loki-route-witness` must render those two whatever the live spec says, and

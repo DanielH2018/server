@@ -126,7 +126,7 @@ def test_the_census_sees_a_module_inside_a_package(tmp_path):
 
 # --- The second invariant: every patched name is bound in the module the test patches it on ---
 #
-# No test patches a runtime module since #3986: each one hands its I/O, clock and sink in as a
+# No test patches a runtime module: each one hands its I/O, clock and sink in as a
 # parameter, and tests/repo/monkeypatch_allowlist.txt carries no monitor-bridge row. This
 # guard stays for the next test that does patch one. A function reads its
 # globals from the module it is DEFINED in, so a patch lands only if the module named in the
@@ -188,7 +188,7 @@ def _patched_pairs(test_files=None, module_names=None):
                 # DECIDED: a method call on `module.NAME` is not a patch. On an unbound name,
                 # `mod.gone.clear()` raises AttributeError, so the test fails loudly and this
                 # guard has nothing to catch. Counting the shape also counted every read, such
-                # as `gates.STARTUP_GRACE.isdisjoint(...)` (#4007). The boundary census in
+                # as `gates.STARTUP_GRACE.isdisjoint(...)`. The boundary census in
                 # test_bridge_patch_boundary.py omits it for the same reason.
             targets = []
             if isinstance(node, ast.Assign):
@@ -286,7 +286,7 @@ def test_the_patch_census_resolves_every_spelling_of_a_packaged_module(tmp_path)
 
 
 def test_the_patch_census_skips_method_calls_on_a_module_attribute(tmp_path):
-    """Red/green for #4007: an assignment counts, a mutating or a reading method call does not."""
+    """Red/green: an assignment counts, a mutating or a reading method call does not."""
     test = tmp_path / "test_calls.py"
     test.write_text(
         "import mod\n\n"

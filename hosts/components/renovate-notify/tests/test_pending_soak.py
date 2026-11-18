@@ -249,7 +249,7 @@ def test_soak_constants_match_renovate_json():
 
     A minimumReleaseAge change there must fail here rather than silently leave notify_logic
     measuring against a soak that no longer applies. The expected set carries the per-package
-    exceptions too (#2886), so a shortened soak with no `FAST_DIGEST_SOAK_DAYS` entry fails.
+    exceptions too, so a shortened soak with no `FAST_DIGEST_SOAK_DAYS` entry fails.
     """
     rules = json.loads((REPO / "renovate.json").read_text())["packageRules"]
     digest = {r["minimumReleaseAge"] for r in _digest_soak_rules(rules)}

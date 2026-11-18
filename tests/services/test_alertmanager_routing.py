@@ -19,7 +19,7 @@ and reads each route the walk ends on. Each label set carries one expected outco
   and the two `TextfileCollectorError` sets in M6's batch A1. H3's host-plane rules page from
   the start: each `HostReconcileFailed`, and each `HostUpdateStale` once
   `observability_expected_hosts` lists a host and `host-checks.yaml` carries its rule (H3.9c).
-  Each node's `WiredLinkDown` warning pages Discord from the start too (#5124).
+  Each node's `WiredLinkDown` warning pages Discord from the start too.
   M5's four log rules and four ruler-watching alerts page from its PR 4b.
   M6's `HealthGateDrill` (`DRILL`) is critical and carries `drill="true"`, so it must reach
   the blackhole ahead of both critical routes.
@@ -395,7 +395,7 @@ def test_every_deploy_pipeline_rule_has_an_expected_outcome():
 
 def test_host_sets_names_every_host_check_rule():
     """Non-vacuity for `host_sets`: every shadow rule of the group, per host for the rules each
-    host carries (#6166), and the paging host-plane rules, M3's two disk-health rules among
+    host carries, and the paging host-plane rules, M3's two disk-health rules among
     them since its PR 5 and B9's four AIDE and rkhunter rules per host since its Cutover-1b."""
     hosts = ("daniel-box", "daniel-server", "daniel-pi")
     assert set(host_sets(shadow=True)) == (
@@ -516,7 +516,7 @@ def test_every_a4_edge_rule_pages_with_its_ported_severity():
 def test_every_a5_storage_rule_pages_as_critical():
     """Non-vacuity for `literal_sets`: batch A5's ten storage rules all page since Cutover-b, so
     none routes to the blackhole, and each is critical, so it mails as well as posting. The
-    Longhorn disk floor (#8214) joined the file later on the same terms."""
+    Longhorn disk floor joined the file later on the same terms."""
     assert literal_sets(STORAGE_RULES, shadow=True) == {}
     sets = literal_sets(STORAGE_RULES, shadow=False)
     assert set(sets) == {

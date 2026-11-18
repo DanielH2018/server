@@ -1,4 +1,4 @@
-"""The Pi's first three `initial_setup` subjects as packaged components (H7.27).
+"""The Pi's first three `initial_setup` subjects as packaged components.
 
 `unattended-upgrades`, `sshd` and `host-tuning` replace initial_setup's apt, sshd and sysctl
 tasks on daniel-pi. These tests hold what the move added: the rendered files, the line-arm
@@ -26,7 +26,7 @@ from renderer.renderer_lib import host as host_mode
 SSHD_D = "/etc/ssh/sshd_config.d"
 SYSCTL = "/etc/sysctl.conf"
 # The twenty keys initial_setup's two `ansible.posix.sysctl` tasks set on the Pi, and the two
-# zram keys that joined them from optimize_pi in H7.25.
+# zram keys from optimize_pi.
 SYSCTL_KEYS = {
     "vm.swappiness": "130",
     "vm.page-cluster": "0",
@@ -222,13 +222,13 @@ def seeded_pi(package: host_mode.Package, tmp_path: Path) -> Node:
     """
     node = Node(tmp_path)
     node.manifest = json.loads(package.files["/usr/lib/homelab/manifest.json"][0])
-    # The package ships `secrets-unit` (H4.5): reconcile needs its secrets.json and credentials.
+    # The package ships `secrets-unit`: reconcile needs its secrets.json and credentials.
     secrets = package.files["/usr/lib/homelab/secrets.json"][0]
     (node.root / "usr/lib/homelab").mkdir(parents=True, exist_ok=True)
     (node.root / "usr/lib/homelab/secrets.json").write_bytes(secrets)
     for key in json.loads(secrets)["credentials"]:
         node.credential(key)
-    # H5.7: the Compose env file is an output the secrets unit renders.
+    # The Compose env file is an output the secrets unit renders.
     for output in json.loads(secrets)["outputs"]:
         node.output_file(output["destination"], persist=output["persist"])
     for name in node.manifest["units"]:

@@ -17,8 +17,8 @@ SERVICE = "apiVersion: v1\nkind: Service\nmetadata:\n  name: {{ name }}\n"
 
 
 def test_the_label_wrapper_ends_as_the_template_module_writes_it(tmp_path):
-    # Every file of a role that arms `manifests_prune` renders through this wrapper, and the
-    # operator's shadow pair at 446a367a differed on every one by a second newline (#4848).
+    # Every file of a role that arms `manifests_prune` renders through this wrapper, and
+    # a stray second trailing newline would change every one.
     inner = tmp_path / "service.yaml.j2"
     inner.write_text(SERVICE)
     variables = {

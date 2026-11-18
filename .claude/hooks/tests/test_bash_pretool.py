@@ -192,7 +192,7 @@ def test_accept_a_rewrite_keeps_the_rest_of_the_tool_input(
 ):
     """The harness replaces the input with `updatedInput`, so a key left out is a key lost.
 
-    Sending `command` alone ran a backgrounded call inline under the 120s default (#3501).
+    Sending `command` alone ran a backgrounded call inline under the 120s default.
     """
     out = dispatch(
         "pytest --version",
@@ -214,7 +214,7 @@ def test_accept_a_rewrite_keeps_the_rest_of_the_tool_input(
 def test_accept_a_cd_into_the_cwd_reaches_uv_python_without_the_cd(
     sandbox, monkeypatch, capsys
 ):
-    """The two rewrites chain: the stripped text is what `uv-python` routes (#3957)."""
+    """The two rewrites chain: the stripped text is what `uv-python` routes."""
     out = dispatch(
         f"cd {_REPO} && pytest --version",
         sandbox,

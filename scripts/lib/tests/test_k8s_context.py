@@ -18,12 +18,9 @@ from lib.render_guard import StrictChainableUndefined
 # --- resolve_vars: values nested inside lists and dicts ---
 #
 # Ansible expands `{{ ... }}` wherever a string sits inside a variable's value, not only when
-# the whole value IS a string. Scanning top-level strings alone left the braces in place one
-# level down, so a list-valued variable reached a template unexpanded and rendered literal
-# `{{ ... }}` into YAML — the same defect resolve_vars exists to prevent, one level deeper.
-#
-# `traefik_k8s_watched_namespaces` is the live case: a YAML list of namespace references,
-# looped over by both rbac.yaml.j2 and static-config.yaml.j2.
+# the whole value IS a string. Scanning top-level strings alone leaves a list-valued variable
+# unexpanded, and it renders literal `{{ ... }}` into YAML. `traefik_k8s_watched_namespaces` is
+# the live case: a YAML list looped over by both rbac.yaml.j2 and static-config.yaml.j2.
 
 
 def test_resolve_vars_expands_a_string_inside_a_list():
@@ -60,11 +57,10 @@ def test_resolve_vars_leaves_a_brace_free_value_alone():
 
 # ── resolve_vars: a whole-value alias keeps the aliased variable's own type ────────────────────
 #
-# Ansible does this for real: a role default that is nothing but `"{{ other_var }}"` comes back
-# as `other_var`'s own type, list included — confirmed against a live `ansible-playbook` run
-# (see the commit that added this). `.render()` alone cannot reproduce that: Jinja templates
-# always render to text, so a list-valued alias would come back as the literal characters of its
-# Python repr, and a `{% for %}` loop over it would iterate one character at a time.
+# Ansible returns a role default that is nothing but `"{{ other_var }}"` as `other_var`'s own
+# type, list included. `.render()` alone cannot reproduce that: Jinja always renders to text, so
+# a list-valued alias would come back as the characters of its Python repr, and a `{% for %}`
+# loop over it would iterate one character at a time.
 
 
 def test_resolve_vars_a_whole_value_alias_keeps_the_list_type():
@@ -133,14 +129,14 @@ def test_resolve_vars_under_a_strict_class_raises_on_an_undefined_name_is_flagge
 # ansible-core resolves a var through `AnsibleEnvironment`, whose `keep_trailing_newline` is
 # False, then pads the result as `TemplateEngine._post_render_mutation` does: newlines are added
 # only until it ends in as many as the source. `resolve_vars` renders through `make_env`, which
-# keeps the source's last newline, so a render that already ends in one gains a second (#4853).
+# keeps the source's last newline, so a render that already ends in one gains a second.
 #
 # Each value has text around its expression. Without that text `_PURE_TEMPLATE` matches, and
 # the value is evaluated as an expression and never reaches `keep_trailing_newline`.
 
 
 # Each expected value is what ansible-core 2.22's `Templar` returned for `{{ y }}` with the
-# source held in `y`, taken before H7 removed it.
+# source held in `y`.
 @pytest.mark.parametrize(
     ("source", "expected"),
     [
@@ -179,7 +175,7 @@ def test_resolve_vars_resolves_a_whole_value_expression_as_ansible_core_does(
 
 
 def test_resolve_vars_reads_a_default_through_dirname_and_basename():
-    """k3s's `k3s_host_coredns_tarball` is a `dirname`; it rendered as STUB before (#6475)."""
+    """k3s's `k3s_host_coredns_tarball` is a `dirname`; it rendered as STUB before."""
     raw = {
         "bin": "/usr/local/lib/coredns/1.14.7/coredns",
         "tarball": "{{ bin | dirname }}/coredns.tgz",
@@ -191,7 +187,7 @@ def test_resolve_vars_reads_a_default_through_dirname_and_basename():
 
 
 def test_resolve_vars_reads_a_default_through_the_search_test():
-    """netpol-baseline drops `cloudflare_ips`' IPv6 half with `reject('search', ':')` (#6495)."""
+    """netpol-baseline drops `cloudflare_ips`' IPv6 half with `reject('search', ':')`."""
     raw = {
         "cidrs": ["104.16.0.0/13", "2400:cb00::/32"],
         "v4": "{{ cidrs | reject('search', ':') | list }}",
@@ -205,7 +201,7 @@ def test_resolve_vars_reads_a_default_through_the_search_test():
 #
 # A render resolves every inventory value once per role and pass, through a per-key fallback,
 # so the same strings reach `resolve_vars` thousands of times. Compiling each one afresh was
-# about a third of a full k8s render (#7710).
+# about a third of a full k8s render.
 
 
 def test_resolve_vars_compiles_a_repeated_value_once(monkeypatch):

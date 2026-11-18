@@ -1,4 +1,4 @@
-"""The agent's home, written by `claude-agent-home` and `claude-agent-setup` in a temporary home (H7.40).
+"""The agent's home, written by `claude-agent-home` and `claude-agent-setup` in a temporary home.
 
 hosts/components/claude-code ships `claude-agent-setup`, which runs as root, and the
 `claude-agent-home` it calls. Each test renders daniel-box's package with the agent's home, keys
