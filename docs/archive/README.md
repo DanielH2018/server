@@ -58,6 +58,8 @@ recording rather than that nobody looked.
 | `gitops-deployer.md` (from `docs/gitops-pipeline.md`) | H7.52 retired `gitops-deploy.timer` ([#7828](https://github.com/DanielH2018/server/pull/7828)); the deployer's code stays under `ansible/roles/setup/gitops_deploy/files/` until H7.53 deletes it | `docs/deploying.md`, which keeps what runs in the deployer's place; `hosts/components/checkout-sync/` | the `# DECIDED:` markers at the lines they govern in the deployer's code |
 | `gitops-deploy-role.md` (from the `gitops_deploy` role's `CLAUDE.md`) | the same H7.52 retirement; H7.55 deleted the emptied role | `docs/deploying.md` | the H7.55 entry in `docs/target-architecture/host/h7-delete-ansible.md` |
 | `setup-role-loop-measurement.md` | the #4265 measurement for #3734, taken 2026-10-10; H7.55 deleted `ansible/initial_setup.yml` and `ansible/deploy.yml`, so the question it answers no longer arises | none — no playbook remains | — |
+| `uptime-kuma-autokuma-record.md` | M6 retired Uptime Kuma; C-2b deleted the role | `docs/monitor-bridge-checks.md`; `docs/observability-dashboards.md` | [ADR-0026](../adr/0026-one-alert-plane-on-prometheus-and-alertmanager.md) |
+| `alert-triggered-diagnosis.md` | the #4616 no-go was superseded on 2026-10-15, when the operator ruled that the `claude` user triages a monitor alert end to end | `docs/claude-agent-user.md` → *Alert-triggered triage* | — |
 | `gitops-pipeline.md` | H7.53 deleted the GitOps deployer the page described; what stays true of it moved on 2026-11-12 (#8164) | `docs/deploying.md`; `docs/landing.md` → *The CI wait* | — |
 
 `docs/superpowers/plans/` and `docs/superpowers/ledgers/` are **not** in this archive: that
@@ -87,9 +89,8 @@ system that no longer runs; what survives out of them is the libvirt substrate i
 
 The target-architecture plans are archived in place, under `docs/target-architecture/`, and
 are not listed in the table above. Hundreds of files link into those paths, so a `git mv`
-would break more links than it tidies. Each plan's `Status:` line says whether it is done,
-and the site's nav lists the plans under *Architecture*, as *Migration plans*. The live
-documentation is
+would break more links than it tidies. Each plan's `Status:` line says whether it is done.
+The site's nav omits the plans, as it omits this archive. The live documentation is
 [What the migration built](../what-the-migration-built.md), which links the decisions:
 [ADR-0020](../adr/0020-flux-applies-the-cluster-from-a-promoted-artifact.md),
 [ADR-0026](../adr/0026-one-alert-plane-on-prometheus-and-alertmanager.md) and
