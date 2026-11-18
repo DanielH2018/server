@@ -216,14 +216,15 @@ def test_in_turn_a_head_with_no_ci_run_is_updated_from_master_before_its_run(lan
     updated = {**OPEN, "headRefOid": UPDATED}
     ln, calls = turn_landing(
         landing,
-        polls=(OPEN, updated, {**MERGED, "headRefOid": UPDATED}),
+        polls=(OPEN, updated, updated, {**MERGED, "headRefOid": UPDATED}),
         compare=MASTER_MOVED,
     )
     land_in_turn(ln)
+    # Ready only once GitHub shows the updated head, so the one run starts there.
     assert call_order(calls) == [
         "try_turn",
-        "pr ready",
         "update",
+        "pr ready",
         "merge",
         "release_turn",
     ]
@@ -263,10 +264,10 @@ def test_a_head_that_moved_after_the_policy_pinned_it_is_refused_and_not_updated
 
 
 def test_an_update_github_refuses_leaves_the_pr_the_run_it_has(landing, capsys):
-    # gh answers: `pr ready`, then the refused update, then the merge.
-    ln, calls = turn_landing(landing, compare=MASTER_MOVED, gh_merge_rc=[0, 1, 0])
+    # gh answers: the refused update, then `pr ready`, then the merge.
+    ln, calls = turn_landing(landing, compare=MASTER_MOVED, gh_merge_rc=[1, 0, 0])
     land_in_turn(ln)
-    assert call_order(calls)[-3:] == ["update", "merge", "release_turn"]
+    assert call_order(calls)[-4:] == ["update", "pr ready", "merge", "release_turn"]
     assert merged_sha(calls) == HEAD
     assert "going on with the run the PR has" in capsys.readouterr().out
 

@@ -4,7 +4,7 @@
 # verdict for Prometheus.
 # Until H2.5b (docs/target-architecture/host/h2-shrink-host-plane.md, Steps item 13) that reader
 # was a daniel-box host cron; daniel-box's host package retires it through legacy entries.
-configarr_k8s_image: ghcr.io/raydak-labs/configarr:1.39.1@sha256:e61e12c776f33d2e14a8d7ded4b27fc7253181df9b8fd3a6c7e510f323cf8f46
+configarr_k8s_image: ghcr.io/raydak-labs/configarr:1.39.2@sha256:48893921c607e96e40310d3ced50a92584667a84595dc9b782f523d46267f2e7
 
 # Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
 k8s_autodeploy: true
@@ -68,7 +68,7 @@ configarr_k8s_health_verdict_configmap: configarr-health-verdict
 # and the layer listing of this digest's linux/amd64 manifest, 2026-10-18). Its kubectl minor
 # matches the server's v1.37.
 configarr_k8s_health_image: python:3.15-alpine@sha256:0f9552bb28711333da16915ec146f5e6bb44a7fdac9ced15dc17c2e0206346dd
-configarr_k8s_health_kubectl_image: alpine/k8s:1.37.2@sha256:dcb7185e112a453aa72f426754849a97357727ef8f40168fb208c8cf59952042
+configarr_k8s_health_kubectl_image: alpine/k8s:1.37.2@sha256:7a82aeefea3d554a43a8676b137f2b88bae6c1fe11c13862b191b3a086cc28c0
 
 # Above the reader's worst case; the gate Job copies it, and `bundle.flux_files` raises the
 # `configarr-verify` timeout above it. The worst case is two 30 s

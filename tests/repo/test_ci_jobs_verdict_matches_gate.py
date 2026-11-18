@@ -115,11 +115,14 @@ def test_a_skipped_dependent_can_only_mean_the_tree_was_proven():
             continue
         condition = str(job["if"]).strip().removeprefix("${{").removesuffix("}}")
         condition = condition.strip()
+        # `pytest` reads `pytest-proven`, which `tested_tree.py` never sets true while
+        # `proven` is false, so a skipped `pytest` beside the others' skips also means proof.
+        output = "pytest-proven" if job_id == "pytest" else "proven"
         # The draft arm adds no skip `jobs_verdict` can see: a draft PR's head is never a
         # master commit, and the gate skips with its dependents there (#5563).
         assert condition == (
             "(needs.prove.result == 'cancelled' || needs.prove.result == 'failure'"
-            " || (!cancelled() && needs.prove.outputs.proven != 'true'))"
+            f" || (!cancelled() && needs.prove.outputs.{output} != 'true'))"
             " && github.event.pull_request.draft != true"
         ), job_id
 
@@ -133,11 +136,12 @@ def _gate_exit(
     proven: str,
     results: dict[str, str],
     build_said: dict[str, str] | None = None,
+    pytest_proven: str | None = None,
 ) -> int:
     """Run the gate's own script. It reads one env var per `needs` job, not per matrix leg.
 
     `build_said` holds the build's outputs the script reads, by env name; an output left out is
-    one the build never wrote.
+    one the build never wrote. `pytest_proven` defaults to `proven`, as a full record sets it.
     """
     jobs = _jobs()
     gate = _gate_job()
@@ -155,6 +159,7 @@ def _gate_exit(
     env = {
         "PROVE": prove,
         "PROVEN": proven,
+        "PYTEST_PROVEN": proven if pytest_proven is None else pytest_proven,
         "PATH": "/usr/bin:/bin",
         **per_job,
         **(build_said or {}),
@@ -211,6 +216,34 @@ def test_jobs_verdict_agrees_with_the_gates_own_script(prove, proven, results):
     assert (verdict == "pass") is gate_passes, (prove, proven, verdict)
     if not gate_passes:
         assert verdict in ("fail", "pending")
+
+
+_PYTEST_LEGS = sorted(n for n in CI_GATE_NEEDS_JOBS if n.startswith("pytest (shard "))
+
+
+@pytest.mark.parametrize(
+    ("leg", "passes"),
+    [("success", True), ("failure", False), ("cancelled", False)],
+)
+def test_a_push_after_a_selected_pr_run_passes_only_on_its_pytest_legs(leg, passes):
+    """`proven=true` and `pytest-proven=false`: every job but the `pytest` legs skipped (#8943)."""
+    results = _all("skipped", **dict.fromkeys(_PYTEST_LEGS, leg))
+    gate_passes = _gate_exit("success", "true", results, pytest_proven="false") == 0
+    verdict = jobs_verdict(_runs("success", results))
+    assert gate_passes is passes
+    assert (verdict == "pass") is passes, verdict
+
+
+def test_the_pytest_legs_alone_skipped_is_never_a_pass():
+    results = _all("success", **dict.fromkeys(_PYTEST_LEGS, "skipped"))
+    assert _gate_exit("success", "true", results, pytest_proven="false") != 0
+    assert jobs_verdict(_runs("success", results)) != "pass"
+
+
+def test_the_gate_fails_a_skipped_pytest_without_pytest_proven():
+    """`jobs_verdict` reads this run as a pass, and leans on `tested_tree.py`, which never
+    writes `proven=true` and `pytest-proven=false` for a run that then skips `pytest`."""
+    assert _gate_exit("success", "true", _all("skipped"), pytest_proven="false") != 0
 
 
 # A run whose build had no work for its readers: each skipped at job level.

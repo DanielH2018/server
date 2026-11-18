@@ -16,7 +16,7 @@
 
 services:
   docker-proxy:
-    image: lscr.io/linuxserver/socket-proxy:latest@sha256:823dda971e9a3951257eb251586a804199819fe1587c35faa43adc7b52a2ff16
+    image: lscr.io/linuxserver/socket-proxy:latest@sha256:18289eeb306e8e3b70901ffec23eafbb318d73b4514d0bd737dbfc7c5b4fe506
     container_name: docker-proxy
     environment:
       - CONTAINERS=1  # Allow access to viewing containers
@@ -96,7 +96,7 @@ services:
   # POST=1 STAYS: a restart is a POST, so this proxy remains write-capable by design. The
   # narrowing is real but partial, and the residual below is unchanged.
   docker-proxy-lifecycle:
-    image: lscr.io/linuxserver/socket-proxy:latest@sha256:823dda971e9a3951257eb251586a804199819fe1587c35faa43adc7b52a2ff16
+    image: lscr.io/linuxserver/socket-proxy:latest@sha256:18289eeb306e8e3b70901ffec23eafbb318d73b4514d0bd737dbfc7c5b4fe506
     container_name: docker-proxy-lifecycle
     environment:
       - CONTAINERS=1
@@ -157,7 +157,7 @@ services:
   # stay off `apps` and the internet-facing app fleet can no longer read every container's Env
   # (secrets) via CONTAINERS=1. code-server is the only apps-side consumer, hence its own proxy.
   docker-proxy-codeserver:
-    image: lscr.io/linuxserver/socket-proxy:latest@sha256:823dda971e9a3951257eb251586a804199819fe1587c35faa43adc7b52a2ff16
+    image: lscr.io/linuxserver/socket-proxy:latest@sha256:18289eeb306e8e3b70901ffec23eafbb318d73b4514d0bd737dbfc7c5b4fe506
     container_name: docker-proxy-codeserver
     environment:
       - CONTAINERS=1

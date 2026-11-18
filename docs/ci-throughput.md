@@ -2,7 +2,9 @@
 
 GitHub runs at most 20 hosted jobs at once for this account, and one full run of `ci.yml` is
 more jobs than that. This page records what the cap costs a landing, the rule for when a job
-may skip without taking a runner, and the plan to get under the cap in three phases.
+may skip without taking a runner, and the plan to get under the cap in two phases, A and B.
+Phase C, runner pods for the heavy jobs, is set aside in
+[#8982](https://github.com/DanielH2018/server/issues/8982).
 
 ## What the cap costs
 
@@ -30,7 +32,9 @@ A job with a false job-level `if:` reads `skipped` and takes no runner. A job th
 steps one by one still waits for a slot.
 
 **The `prek` gate passes a skipped need on two paths only.** The first is the proven path:
-`prove` said the pushed tree was tested, and every dependent skipped. The second is a job that
+`prove` said the pushed tree was tested, and every dependent skipped. On that path a
+skipped `pytest` passes only when `prove` also said `pytest-proven=true`, because a record
+from a selected run proves every job but `pytest`. The second is a job that
 reads the build's artifacts and had nothing to run. That job skipped, `host_packages_build`
 succeeded, and the build's output said `false` for it: `run-cases` for the cases legs and
 `arm64-tools` for the arm64 job. Any other skipped need fails the gate, because GitHub reads a
@@ -55,7 +59,10 @@ every module (#8458, ruled by the operator on 2026-11-15).
 - **The legs.** The matrix stays at six legs, because GitHub fixes the leg count before any
   step runs. The selection is packed into as few legs as keep each no heavier than a full
   sweep's leg. A leg past that count gets an empty list and skips every later step, so it
-  still takes a runner for its checkout and setup.
+  still takes a runner for its checkout and setup. `scripts/dev/ci_slot_cost.py --recent 20
+  --pull-requests` prints the empty legs' slot-seconds beside what one planning job on every
+  run would cost instead (#8944). A planning job pays off only once enough pull requests run
+  a selection, and on 2026-11-16 none of the 20 newest green pull-request runs had.
 - **A selection has to save legs.** `scripts/dev/pytest_shard.py:worthwhile` runs the whole
   census when the selection needs more than half the legs. Such a run records its tested
   tree as a full run does, so its push run still skips as proven. Every run takes this path
@@ -65,17 +72,21 @@ every module (#8458, ruled by the operator on 2026-11-15).
 - **What a selection gives up.** A module can gain a dependency after its row was recorded.
   A pull request that changes the dependency then leaves the module out, and the module
   fails on master, where a red run parks every landing. The operator accepted that cost.
-- **No proof from a selected run.** A run that left modules out did not test its tree, so
-  the `prek` gate records a tested tree only when `needs.pytest.outputs.scope` is `full`.
-  Master's run after a selected pull-request run therefore sweeps in full, and a landing
-  batch whose run was selected records nothing on its members.
+- **A selected run proves every job but `pytest`.** A run that left modules out did not
+  test its tree with `pytest`, but every other job ran in full on it. The `prek` gate
+  records `ci/tested-tree` when `needs.pytest.outputs.scope` is `full`, and
+  `ci/tested-tree-but-pytest` when it is `selected` (#8943). `scripts/dev/tested_tree.py
+  prove` answers `proven=true` and `pytest-proven=false` for the second record, so master's
+  run after a selected pull-request run repeats only the `pytest` legs. A landing batch
+  whose run was selected still records nothing on its members.
 
 **The saving is on the pull-request run, and the push run gives part of it back.** On
 2026-11-14 a run with no host change used a median 1,414 slot-seconds, about 1,020 of them
 in the six `pytest` legs. A pull request whose selection fits one leg saves most of those
-1,020. Its push run no longer skips as proven, which costs about 1,414. A landing that takes
-one pull-request run therefore uses more slot-seconds than before, and a pull request that
-runs CI several times before it merges uses fewer. `scripts/dev/ci_slot_cost.py --recent 20`
+1,020. Its push run repeats the `pytest` legs, which costs about 1,050, where a proven push
+costs about 394. A landing that takes one pull-request run therefore uses about the same
+slot-seconds as one that runs in full, and a pull request that runs CI several times before
+it merges uses fewer. `scripts/dev/ci_slot_cost.py --recent 20`
 prints the measured figure.
 
 **`host_packages_build` owns the answer to whether a case has anything to run.** Its
@@ -623,13 +634,53 @@ during that run, so the PR rejoined and repeated: #8879 rejoined three times and
 About five full runs and one sweep in the window came from this. A rejoined head now counts as
 untested (`merge._start_run`), because its update made it while the PR was a draft.
 
-### Phase C: runner pods for `hooks` and `pytest`
+#### After option B and the turn fixes, measured
 
-**D8 stays closed, ruled by the operator on 2026-11-15** after the measurement under load.
+The window is 22:01 UTC on 2026-11-15 to 01:55 on 2026-11-16, from the merge of the give-back
+(#8908) until 30 landings after it had ended. It held 28 merges. The counts come from GitHub's run and
+job listings. Batches are counted from their `queue/` pull requests, because the copy of
+daniel-server's landing logs collected none. The per-landing counts in the section above read
+daniel-box's logs only, and its batch count matches GitHub's.
+
+- **Full CI runs per merge: 1.75**, against 1.78 under load. 47 pull-request runs ran more than
+  two jobs, and 2 master runs swept.
+- **Master runs that skipped as tested: 25 of 27**, against 28 of 37. The sweeps left are
+  Renovate's digest bumps, whose PRs open ready.
+- **Batches: three**, of two PRs each: #8911 with #8903, #8909 with #8913, and #8923 with
+  #8922. #8911's batch is the first a daniel-server pipeline formed under option B.
+- **The 20-job cap: 18.4 minutes at it**, 0.66 per merge, against 0.65 under load. It came in
+  bursts: 11 of those minutes fell in the hour from 01:00 UTC. Pull-request runs of sessions
+  and fan-out batches, image-smoke and promote held the slots, and cancelled runs held almost
+  none.
+- **The waits.** Every one of 21 landings took a slot after 0 s, and the longest wait for the
+  turn was 570 s.
+
+Option B ran live. Six daniel-server pipelines landed their own drafts with an empty
+`land_hold`: #8911, #8913, #8921, #8923, #8936 and #8940. The pipeline for #8949 left it for a
+person, because it changes `.github/workflows/ci.yml` and `.claude/rules/generated-docs.md`.
+#8936's landing ended `pr-ci-red`, `land_draft` resumed its agent once, and its record reads
+`failed after one resume: pytest (shard 2 of 6)`. That is the `pr-ci-red` branch the
+remaining-work brief listed for daniel-box, and the code is the same on both hosts.
+
+**A draft was marked ready before its branch update.** `merge._start_run` marked a draft ready
+and then updated its branch, so the flip started a run on the stale head. The update's push
+cancelled it, minutes later: #8921's run on `051b6a86` went from 23:05:05 to 23:07:11 before
+the run it merged on started. The landing now updates the branch first, waits up to
+60 s for GitHub to show the new head, and then marks the draft ready.
+
+## Phase C, set aside: runner pods for `hooks` and `pytest`
+
+**The operator took Phase C out of the plan on 2026-11-18**, and
+[#8982](https://github.com/DanielH2018/server/issues/8982) tracks it for later. The plan ends
+with Phase B. The cap still bound for 18.4 minutes in the window after option B and the turn
+fixes, in bursts (*After option B and the turn fixes, measured*). This section keeps C2 and C3
+as they were planned, for whoever picks the issue up.
+
+**D8 stayed closed, ruled by the operator on 2026-11-15**, after the measurement under load.
 The pool spent 24.1 minutes at the cap in that window, in 245 spans of at most 0.7 minutes,
 and 17.3 of them fell from 19:00 to 21:00 UTC during a burst of daniel-server fan-out
-batches. Option B, the rejoin fix and the rejoin at the turn remove most of what held the
-slots then. Measure again on the next busy stretch with them in place.
+batches. The measurement after option B, the rejoin fix and the rejoin at the turn found
+18.4 minutes in a window of 28 merges.
 
 **Phase C stopped at C1 on 2026-11-14.** The queue of Phase B removes more runs than runner
 pods could take, and it needs no runner. C2 and C3 are kept here as they were planned, with
@@ -696,8 +747,6 @@ The decisions, all the operator's:
 
 ## See also
 
-- [CI throughput: what remains](ci-throughput-remaining.md) is the brief for the session
-  that takes this plan up: the work left, in order, and the traps this page does not carry.
 - [Landing a merged PR](landing.md) holds the turn, the line and the batch as built.
 - [Self-hosted runner spike](archive/self-hosted-runner-spike.md) holds the 2026-09-22
   measurements behind ADR-0018.

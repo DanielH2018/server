@@ -3,8 +3,8 @@
 The target-architecture migration ran from 2026-10-11 to 2026-11-12. It replaced the GitOps
 deployer, Uptime Kuma and Ansible with three planes that each have one write path from git.
 This page says what runs at the end of it and where each part is documented. The plans that
-sequenced the work sit under it in the *Architecture* section, as *Migration plans*. They
-describe how the lab got here, not how it runs.
+sequenced the work are off the site's navigation, and [The plans](#the-plans) below links
+them. They describe how the lab got here, not how it runs.
 
 ## The cluster: Flux applies a promoted artifact
 

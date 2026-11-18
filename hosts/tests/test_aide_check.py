@@ -136,6 +136,10 @@ EXCLUDED = (
     "/srv/media/media/movies/Film (2026)/Film.mkv",
     "/swap.img",
     "/swapfile",
+    "/var/lib/claude/server/.claude/worktrees/fix-9000/.venv/bin/python",
+    "/var/lib/claude/.cache/prek/repoabc/hook.py",
+    "/var/lib/renovate-agent/.npm/_cacache/index-v5/aa/bb",
+    "/var/lib/homelab-builder/uv-cache/archive-v0/x/lib.py",
 )
 CHECKED = (
     "/home/ubuntu/server/ansible/deploy.yml",
@@ -149,6 +153,12 @@ CHECKED = (
     "/home/ubuntu/.claude/settings.json",
     "/srv/other/file",
     "/swap.img.bak",
+    "/var/lib/claude/server/.claude/hooks/block-footguns.py",
+    "/var/lib/claude/server/.git/hooks/pre-commit",
+    "/var/lib/claude/.local/share/uv/python/cpython-3.14/bin/python3",
+    "/var/lib/claude/.ssh/authorized_keys",
+    "/var/lib/homelab-builder/published/hosts/daniel-box",
+    "/var/lib/homelab-signer/repo/dists/stable/InRelease",
 )
 
 
