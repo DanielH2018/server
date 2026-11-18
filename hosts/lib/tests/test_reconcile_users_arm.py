@@ -1,4 +1,4 @@
-"""Reconcile's users arm, against stub `getent`, `usermod` and `systemd-sysusers` (H7.2d).
+"""Reconcile's users arm, against stub `getent`, `usermod` and `systemd-sysusers`.
 
 The clauses are H7's *Red proofs for the checks this slice adds*, users arm. A run that ends
 `ok` is what homelab-updater accepts as reconciled, and a failed run is what it holds the host

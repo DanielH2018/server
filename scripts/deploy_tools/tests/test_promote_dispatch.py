@@ -2,7 +2,7 @@
 
 Both jobs check out nothing, so the dispatch is the workflow env's `dispatch_newer_green`
 function, which each job's dispatch step loads and calls with the commit it settled: `settle`
-after it applies T's verdict, `reconcile` after it moves `last-good` for a lost settle (#7877).
+after it applies T's verdict, `reconcile` after it moves `last-good` for a lost settle.
 Each test runs a step's own `run:` under the fakes of `test_promote_settle.py`.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_promote_dispatch.py

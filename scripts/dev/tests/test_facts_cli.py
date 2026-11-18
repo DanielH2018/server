@@ -67,7 +67,7 @@ def test_lint_warning_only_exits_zero_without_the_fix_pointer(tmp_path, capsys):
 
 
 def test_lint_flags_a_value_only_a_built_in_renovate_manager_bumps(tmp_path, capsys):
-    """#4158: `extends` enables the built-in github-actions manager, which rewrites a
+    """`extends` enables the built-in github-actions manager, which rewrites a
     workflow's `uses:` ref with no `customManagers` entry naming the file."""
     repo = _repo(tmp_path)
     (repo / "renovate.json").write_text('{"extends": ["config:recommended"]}\n')
@@ -139,7 +139,7 @@ def _total_on_session_line(out, sid, total):
 
 
 def test_report_prints_each_sessions_total_instruction_bytes(tmp_path, capsys):
-    # #4610: the bytes of instructions a session loads, summed per session from the sizes
+    # The bytes of instructions a session loads, summed per session from the sizes
     # log-instructions.py records. A user-level file outside the repo counts too: most of
     # the always-loaded context is ~/.claude/CLAUDE.md and MEMORY.md, not a repo doc.
     repo = _repo(tmp_path / "repo")

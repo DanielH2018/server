@@ -1,4 +1,4 @@
-"""Every probe.py verdict subcommand ends with one `PROBE-VERDICT:` line (#4454).
+"""Every probe.py verdict subcommand ends with one `PROBE-VERDICT:` line.
 
 The line comes from `lib.exit_messages.verdict_line`, so its verdict token is derived from the exit
 code rather than from each subcommand's own vocabulary. The oracle for the token is the probe's
@@ -104,7 +104,7 @@ def test_verdict_line_renders_a_probe_verdict_for_each_probe_code(rc):
 
 
 def test_health_not_applicable_renders_a_skip_verdict():
-    """detach_notify grades a skip from this code, never from health's wording (#7895)."""
+    """detach_notify grades a skip from this code, never from health's wording."""
     line = verdict_line(PROBE, PROBE_NOT_APPLICABLE, "probe.py health, exit 3")
     assert line == "PROBE-VERDICT: skip (probe.py health, exit 3)"
 
@@ -220,7 +220,7 @@ def test_a_json_view_prints_no_verdict_line_after_its_document(capsys):
 def test_a_message_exit_from_a_verdict_subcommand_is_a_failure_with_its_line(
     monkeypatch, capsys
 ):
-    """`SystemExit("...")` skips the line unless main catches it, and is never 75 (#4471).
+    """`SystemExit("...")` skips the line unless main catches it, and is never 75.
 
     A config error cannot clear on a retry, so it is the `fail` verdict; a failed read raises
     `core.Unreadable` at its own site instead.

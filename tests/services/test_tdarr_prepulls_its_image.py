@@ -1,15 +1,13 @@
 #!/usr/bin/env python3
-"""tdarr's image is on its node before the apply that triggers the Recreate (#3875).
+"""tdarr's image is on its node before the apply that triggers the Recreate.
 
 tdarr's Deployment is `Recreate`, so the apply stops the old pod before the kubelet pulls the
-new image. The 1432 MiB pull took 25m37s on 2026-10-08 (#3689), and tdarr served nothing for
+new image. A multi-minute pull leaves tdarr serving nothing for
 that whole time. Under Flux the `tdarr-prepull` Kustomization, which `flux_prepull_timeout`
 opts tdarr into, pulls the image first, and the `tdarr` Kustomization depends on it (D5 step
 26). Its Job copies the Deployment's placement, so the second test renders tdarr as a
 published tag and holds that the Job lands on the node media-data's PV pins. The first holds
 that pin.
-
-Until tdarr's flip, `tasks/main.yml` pulled the image with `k3s crictl` before it applied.
 
 Run: uv run pytest tests/services/test_tdarr_prepulls_its_image.py
 """

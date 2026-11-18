@@ -24,7 +24,7 @@ LIB = REPO / "hosts" / "lib"
 # 720 is the growth the slices state: about 100 source lines in H4.1b and 50 in H4.3b1's
 # udev arm, then 120 in H7.2a, 150 in H7.2b, 100 in H7.2c and 200 in H7.2d.
 # The 30% is headroom for fixes inside that scope, not room for another arm.
-# RULED_RAISE is the operator's 2026-11-14 ruling: +50 for #8651's batched dpkg and systemd
+# RULED_RAISE is the operator's ruling: +50 for the batched dpkg and systemd
 # reads, which cut about 800 commands per reconcile run for 26 source lines.
 #
 # DECIDED: raising CEILING is an operator ruling, never part of an ordinary change. Crossing it

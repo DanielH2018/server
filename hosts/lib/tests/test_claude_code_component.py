@@ -1,4 +1,4 @@
-"""daniel-server's Claude subjects ship in its host package, and the role ends there (H7.39).
+"""daniel-server's Claude subjects ship in its host package, and the role ends there.
 
 The component holds the templates, scripts and defaults the claude_code role installed, so
 these tests hold what the package adds: the agent user and its live uid, the packaged unit
@@ -24,7 +24,7 @@ COMPONENT = REPO / "hosts" / "components" / "claude-code"
 # A role a component may name with `role:` that still ships a `files/` script.
 UNITS = "/usr/lib/systemd/system"
 # Every unit the role installed on daniel-server, read from `systemctl list-unit-files 'claude*'`
-# there on 2026-10-29.
+# there.
 ANSIBLE_UNITS = {
     "claude-rc.service",
     "claude-rc-alert.service",

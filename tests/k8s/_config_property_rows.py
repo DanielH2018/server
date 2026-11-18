@@ -332,7 +332,7 @@ CONFIG_PROPERTIES = (
         ),
         select=_node_exporter_mount_exclusion,
         offence=_mount_exclusion_offence,
-        # The pre-#1243 pattern, which hid the CSI global mounts.
+        # A pattern that hides the CSI global mounts.
         red=(
             "node-exporter",
             {"pattern": r"^/(sys|proc|dev|host|etc|var/lib/kubelet)($|/)"},

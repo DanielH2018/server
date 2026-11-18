@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for how the other-live-sessions scan judges a fan-out worktree lock (#8576).
+"""Tests for how the other-live-sessions scan judges a fan-out worktree lock.
 
 A `fanout-<batch>` lock carries no pid, so its batch unit's systemd state decides whether the
 tree is live. The fake `systemctl` on `PATH` stands in for the user manager: it reports

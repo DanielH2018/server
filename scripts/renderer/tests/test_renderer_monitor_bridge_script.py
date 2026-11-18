@@ -1,10 +1,9 @@
 """monitor-bridge's script ConfigMaps are rendered, and its pod's `checksum/restart` covers them.
 
-D5's imperative-ConfigMap row (#5536): the ConfigMap used to be staged on the node and applied
-by a task, outside the render, so under Flux no `checksum/restart` could see a module edit.
-The render now holds one ConfigMap per module, projected into the pod's /app. These tests
-render the tag as flux-owned through `homelab_render.cluster`, with a fixture `.source` in
-`tmp_path` holding the keys the render references.
+A ConfigMap staged on the node by a task, outside the render, leaves `checksum/restart` blind
+to a module edit under Flux. The render holds one ConfigMap per module, projected into the
+pod's /app. These tests render the tag as flux-owned through `homelab_render.cluster`, with a
+fixture `.source` in `tmp_path` holding the keys the render references.
 
 Run: uv run pytest scripts/renderer/tests/test_renderer_monitor_bridge_script.py
 """

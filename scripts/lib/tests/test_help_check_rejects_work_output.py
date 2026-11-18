@@ -2,7 +2,7 @@
 
 `test_the_entry_point_answers_help_with_exit_zero` accepted any run that exited 0 and printed
 something, so `validate_ha_config.py --help` passed while printing `Home Assistant config OK`
-after a full validation (#5579). These tests hand it a fake entry point, registered in its own
+after a full validation. These tests hand it a fake entry point, registered in its own
 census, and assert on its verdict: a help answer passes and a job's output fails.
 
 THE SEAM. The fake is registered as `ENTRY_POINTS[name] = path`, and its docstring lives in that
@@ -18,7 +18,7 @@ import test_entry_points_answer_help as help_census
 
 DOC_FIRST_LINE = "Check the compose templates against the shared macros."
 
-# What `compose_templates.py --help` printed while it ran its whole validation (#5579). It
+# What `compose_templates.py --help` printed while it ran its whole validation. It
 # shares no word with the docstring's first line and carries no `usage:`.
 WORK_OUTPUT = "4 template(s) checked, 0 failure(s)."
 

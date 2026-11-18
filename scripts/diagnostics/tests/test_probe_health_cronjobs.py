@@ -264,7 +264,7 @@ def test_cronjob_health_no_deploy_stamp_checks_the_latest_job_directly():
     assert "since the last deploy" in text
 
 
-# A Flux-owned role's gate Job (#5953). The `<role>-verify` Kustomization applies it, so it
+# A Flux-owned role's gate Job. The `<role>-verify` Kustomization applies it, so it
 # carries no ownerReferences, only the CronJob's jobTemplate labels and Flux's owner label
 # (scripts/renderer/renderer_lib/cronjob_gate.py:gate_job). longhorn-reconcile's role and
 # CronJob share a name, so its `-verify` Kustomization is `longhorn-reconcile-verify`.
@@ -412,7 +412,7 @@ def _reconcile_health(jobs, deploy_applied_at):
 
 
 def test_health_passes_right_after_a_deploy_before_the_next_hourly_firing():
-    """The Verify-by: deployed 11:30, gate run 11:31, last scheduled firing 11:17, now 12:00."""
+    """Deployed 11:30, gate run 11:31, last scheduled firing 11:17, now 12:00."""
     jobs = {
         "items": [
             _scheduled_reconcile_job(

@@ -1,7 +1,7 @@
 """Every role on every plane carries a CLAUDE.md that names what a session needs first.
 
 A session reads a role's doc before touching the role, so a missing one means reading its tasks
-cold. `PLANES` has one row per role tree, and every check below runs once per row (#3384).
+cold. `PLANES` has one row per role tree, and every check below runs once per row.
 
 A row carries what differs between planes and nothing else:
 
@@ -38,7 +38,7 @@ class Plane:
 
 PLANES = [
     # `manifests` is a member rather than an exclusion: the shared render role every other k8s
-    # role includes still needs a doc (#3246). It meets the deploy-tag arm the way the other
+    # role includes still needs a doc. It meets the deploy-tag arm the way the other
     # tagless shared roles do, by saying in its doc that there is nothing to type.
     Plane(
         "k8s",

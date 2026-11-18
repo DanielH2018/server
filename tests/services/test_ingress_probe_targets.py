@@ -1,4 +1,4 @@
-"""The `ingress_probe_targets` filter refuses a malformed `probe:` key (#3690).
+"""The `ingress_probe_targets` filter refuses a malformed `probe:` key.
 
 The filter (`scripts/renderer/template_filters/ingress_probes.py`) yields one target per `containers_list`
 entry with a `hostname`. The `blackbox-ingress` scrape job builds its targets from them, and
@@ -32,7 +32,7 @@ def test_ingress_probe_targets_is_clean_on_probe_false_and_on_no_probe_key():
     ]
 
 
-# ── error shape (#4505) ─────────────────────────────────────────────────────────────────────
+# ── error shape ─────────────────────────────────────────────────────────────────────
 
 
 def test_a_refusal_is_a_filter_error_named_for_its_filter():

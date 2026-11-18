@@ -71,7 +71,7 @@ def test_a_changed_ancestor_adds_its_timeout():
 
 def test_eleven_changed_names_with_one_longer_get_grahams_bound_not_three_rounds():
     """t0's 15m among ten 10m names: 100m / 5 + 15m = 35m of queue, where three rounds of
-    15m gave 45m (#5482). An unchanged Kustomization with a larger timeout adds nothing."""
+    15m gave 45m. An unchanged Kustomization with a larger timeout adds nothing."""
     names = [f"t{i}" for i in range(11)]
     bundle = docs(
         *(ks(n) for n in names[1:]), ks("t0", timeout="15m"), ks("idle", timeout="50m")
@@ -87,7 +87,7 @@ def test_a_uniform_bundle_keeps_rounds_times_the_largest():
 
 def test_one_long_timeout_among_short_ones_gets_grahams_bound_not_rounds_of_it():
     """valheim's 1800s among 24 600s names (D5.15): 25 * 1800s by rounds, 2880s + 1800s by
-    Graham's bound, rather than every one of the five rounds priced at 1800s (#5482)."""
+    Graham's bound, rather than every one of the five rounds priced at 1800s."""
     names = [f"t{i}" for i in range(24)]
     bundle = docs(*(ks(n) for n in names), ks("valheim", timeout="30m"))
     found = ct.promote_timeout(bundle, {*names, "valheim"}, concurrent=5)
@@ -258,7 +258,7 @@ def published_bundle(tmp_path_factory) -> tuple[list[dict], set[str]]:
     """The published tags' rendered Flux Kustomizations, and every name but `soak`'s.
 
     A placeholder render, module-scoped because the render is the cost of both tests below: about 60s each on a
-    CI runner (run 40215966021), and neither edits what it reads.
+    CI runner, and neither edits what it reads.
     """
     out = tmp_path_factory.mktemp("published") / "out"
     assert homelab_render.cluster(out, published_tags(), None) == RENDER_OK
@@ -272,7 +272,7 @@ def published_bundle(tmp_path_factory) -> tuple[list[dict], set[str]]:
 def test_the_published_bundles_chain_fits_the_cap_or_a_decided_marker_keeps_the_clamp(
     published_bundle,
 ):
-    """Every published tag changed but `soak` (#5868).
+    """Every published tag changed but `soak`.
 
     Past the cap, the soak's rendered `timeout` is pinned at VERIFY_CAP_S plus W and the
     margins, so an all-changed promotion can outlast the soak's wait. Either the chain fits,
@@ -293,7 +293,7 @@ def test_the_published_bundles_chain_fits_the_cap_or_a_decided_marker_keeps_the_
 def test_the_decided_clamp_records_a_chain_no_shorter_than_the_published_one(
     published_bundle,
 ):
-    """The `# DECIDED:` at VERIFY_CAP_S records the all-changed chain it accepts (#5868).
+    """The `# DECIDED:` at VERIFY_CAP_S records the all-changed chain it accepts.
 
     The clamp hides the chain from every capped reading, so this lifts the cap and holds the
     measured chain to the figure the marker records. A chain that grows past it turns this

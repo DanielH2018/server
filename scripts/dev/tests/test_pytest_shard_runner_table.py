@@ -67,8 +67,8 @@ def test_the_committed_runner_table_is_populated():
     No named module and no value bound. The docs-refresh cron rewrites this table and runs
     the suite before it commits, so a test an honest refresh can break would park the cron
     on its own output. No census check either: an entry for a deleted module is ignored, so
-    a PR deleting a test module need not touch the table (#5989 is the same trap on the
-    weight table)."""
+    a PR deleting a test module need not touch the table (the weight table has the
+    same trap)."""
     assert len(shard_weight_gate.load_runner_weights()) >= 100
 
 
@@ -123,7 +123,7 @@ def _leg_log(compile_seconds: float, readings: dict[str, float]) -> str:
 
 
 def test_a_runner_refresh_reads_a_slow_and_a_fast_leg_as_the_same_modules(tmp_path):
-    """The same modules on a leg twice as slow as two others (#7708 measured 0.66x to 1.22x).
+    """The same modules on a leg twice as slow as two others (a leg's speed varies 0.66x to 1.22x).
 
     Read as measured, the fast legs' median sits 2x under what the slow leg recorded and both
     rows drift. Each leg's compile ran at its leg's speed, so every reading scales the same.

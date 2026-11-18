@@ -1,4 +1,4 @@
-"""The rendered `checkout-sync` component in daniel-box's package (H7.51).
+"""The rendered `checkout-sync` component in daniel-box's package.
 
 These tests hold what the plan fixes about the unit: the 10-minute monotonic timer, the run inside
 the git-tree lock, the builder's token as a credential, the shared CI contexts and walk bound,
@@ -76,7 +76,7 @@ def test_the_script_ships_beside_the_modules_it_imports(package):
         assert f"{LIB}/{name}" in package.files, name
 
 
-# The deployer's units every host's package retires (H7.52). checkout-sync replaces the timer's
+# The deployer's units every host's package retires. checkout-sync replaces the timer's
 # fast-forward, so a host still running it would fast-forward the checkout from a stale copy.
 DEPLOYER_UNITS = (
     {"unit": "gitops-deploy.timer"},

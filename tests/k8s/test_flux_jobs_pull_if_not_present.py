@@ -3,7 +3,7 @@
 `rendered_docs()` reads a role's top-level `templates/*.j2`. A role's `templates/verify/` and
 `templates/precheck/` render only through `renderer_lib.cluster.render_tag`, into the
 `<tag>-verify` and `<tag>-precheck` directories Flux applies, so the row in
-`_image_property_rows.py` cannot see them. This module hands it that render (#6136).
+`_image_property_rows.py` cannot see them. This module hands it that render.
 
 Run: uv run pytest tests/k8s/test_flux_jobs_pull_if_not_present.py
 """

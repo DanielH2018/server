@@ -1,4 +1,4 @@
-"""`runbook_gates.py`, the one entry point over the six runbooks' gate modules (#4344).
+"""`runbook_gates.py`, the one entry point over the six runbooks' gate modules.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_runbook_gates_dispatch.py
 """

@@ -170,7 +170,7 @@ def test_a_script_that_checks_argv_first_is_clean(tmp_path):
     assert _help_failure(script) is None
 
 
-# The role scripts #4487 moved off argparse's 2 for a usage error. A role ships only its own
+# The role scripts that exit 64 rather than argparse's 2 for a usage error. A role ships only its own
 # `files/`, so none can import `scripts/lib/cli_help.ArgumentParser`, and each holds a local
 # `USAGE_ERROR = 64` instead. Named rather than derived, because a script that takes no
 # flags at all has no usage error to report.

@@ -10,7 +10,7 @@ The rules, in short. A test builds its scratch git repository through `lib.git_t
 by hand: a module that forgets one line of the `GIT_*` scrub writes the primary repository under
 `prek`'s pytest hook, where `git commit` exports `GIT_DIR` and `GIT_INDEX_FILE`. A test writes
 its fake binaries and its `PATH` through `lib.proc_testing`, which decides the launch flags, the
-`PATH` prefix and the exec bit once (#3056). And no test launches a subprocess without a
+`PATH` prefix and the exec bit once. And no test launches a subprocess without a
 deadline, because a wedged child parks the whole CI run instead of failing its own test.
 """
 
@@ -44,7 +44,6 @@ def pytest_only_modules() -> list[str]:
     ]
 
 
-# 950 modules when the census became rows (2026-10-03).
 MODULE_FLOOR = 800
 
 # The comprehension a module writes when it re-derives the scrub by filtering on a GIT_ prefix.
@@ -92,7 +91,7 @@ def raw_git_calls(source: str) -> list[str]:
     naming the old form is prose rather than a hit.
     """
     # A hit calls through the bare `subprocess` name, an identifier no module can spell
-    # any other way (#5501).
+    # any other way.
     if "subprocess" not in source:
         return []
     found = []
@@ -186,7 +185,7 @@ def handwritten_executables(source: str) -> list[str]:
     function, either as the same expression or as a join under the same directory.
     """
     # A hit needs a `.chmod(` call, and most test modules have none. Walking each function
-    # scope twice cost ~3s of the static-ratchet-tests hook over ~1400 modules (#5501).
+    # scope twice costs ~3s of the static-ratchet-tests hook over ~1400 modules.
     if "chmod" not in source:
         return []
     found = []

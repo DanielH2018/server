@@ -1,4 +1,4 @@
-"""The agent's homelab-ui browser oneshot, run against stub binaries in a temporary home (H7.40).
+"""The agent's homelab-ui browser oneshot, run against stub binaries in a temporary home.
 
 hosts/components/claude-code ships `claude-agent-browser`, which homelab-claude-agent-browser.service
 runs as the agent. Each test renders daniel-box's package with the agent's home moved under

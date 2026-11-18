@@ -52,7 +52,7 @@ def _run(
     """
     # `limit` is the one value this harness has to vary across calls; every other var the
     # template reads comes from the inventory/role defaults the shared accessor already
-    # resolves, so it is not re-declared here (#3178).
+    # resolves, so it is not re-declared here.
     body = render_shell_script(*TEMPLATE, overrides={"github_interaction_limit": limit})
 
     assert CHECK_LIB in body, "the script no longer sources homelab-check-lib.sh"

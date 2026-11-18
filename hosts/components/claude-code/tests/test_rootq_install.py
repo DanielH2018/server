@@ -1,4 +1,4 @@
-"""What the read-only root inspector ships and defaults to (#6323).
+"""What the read-only root inspector ships and defaults to.
 
 Run: uv run pytest hosts/components/claude-code/tests/test_rootq_install.py
 """
@@ -142,7 +142,7 @@ def test_the_defaults_leave_the_inspector_off_and_name_its_script_and_shim() -> 
     assert defaults["claude_code_rootq_enabled"] is False
     assert defaults["claude_code_rootq_script"] == SCRIPT
     assert defaults["claude_code_rootq_shim"] == "/usr/local/bin/rootq"
-    # The operator's account only: the agent user's sudo grant became a socket in #4297.
+    # The operator's account only: the agent user's sudo grant became a socket.
     assert defaults["claude_code_rootq_users"] == ["{{ sys_user }}"]
 
 
@@ -155,7 +155,7 @@ def test_daniel_box_and_daniel_server_enable_the_inspector() -> None:
     assert enabled == {"daniel-box", "daniel-server"}
 
 
-# ── The agent user's socket (#6350) ───────────────────────────────────────────────────────
+# ── The agent user's socket ───────────────────────────────────────────────────────
 
 
 def directives(template: str) -> dict[str, str]:

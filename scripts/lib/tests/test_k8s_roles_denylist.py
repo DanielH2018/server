@@ -196,11 +196,9 @@ def test_the_real_repo_derives_a_plausible_denylist() -> None:
         "code-server",
     ):
         assert role in denied
-    # A SECOND, DISTINCT denial category — state coupled to something OUTSIDE the volume, so
-    # the pre-apply snapshot and revert cannot see it and a revert can desynchronise the two.
-    # Not the load-bearing reasons above, and not "migrating state with no recovery point"
-    # either (the snapshot/revert covers that for these three). Each is denied for the coupling
-    # question asked per service:
+    # A SECOND, DISTINCT denial category: state coupled to something OUTSIDE the volume, so the
+    # pre-apply snapshot and revert cannot see it and a revert can desynchronise the two. Each
+    # is denied for the coupling question asked per service:
     #   - zigbee2mqtt — the SLZB-06M coordinator's own NVRAM (network key, frame counters)
     #   - livesync    — CouchDB revisions already synced to connected Obsidian clients
     #   - qbittorrent — the media-data volume qbittorrent-config's bookkeeping references
@@ -212,10 +210,9 @@ def test_the_real_repo_derives_a_plausible_denylist() -> None:
         "zigbee2mqtt",
     ):
         assert role in denied
-    # A FOURTH denial reason, tdarr alone. The snapshot/revert machinery works fine for tdarr —
-    # this is not the trio's hazard recurring — the compounding reasons are specific to it: it
+    # A FOURTH denial reason, tdarr alone: the snapshot/revert machinery works for it, but it
     # also mounts media-data (shared RWX, never reverted) and rewrites library files there IN
-    # PLACE, so a revert can't undo an already-committed transcode; and its own two claims
+    # PLACE, so a revert can't undo an already-committed transcode, and its two claims
     # (tdarr-configs, tdarr-server) revert non-atomically. The denylist also turns Renovate's
     # automerge off for it (test_renovate_automerge_follows_the_autodeploy_denylist.py).
     # Checked by name for the same reason as the groups above.
@@ -239,12 +236,10 @@ def test_the_real_repo_derives_a_plausible_denylist() -> None:
     for role in denied:
         data = yaml_fast.safe_load((K8S_ROLES / role / "defaults/main.yml").read_text())
         assert data["k8s_autodeploy"] is False
-    # The named-role assertions above move WITH a bulk flip — flip sonarr/etc to true and
-    # they simply stop being asserted, not caught. This count is what actually catches that:
-    # it is derived independently, by walking k8s/roles/ in this test rather than trusting
-    # the filter's own count, so a bulk flip of several roles to true shrinks it and fails
-    # here even though every assertion above still passes. Do not remove or loosen this floor
-    # to "simplify" the test — it is the one assertion that can't move with the thing it checks.
+    # The named-role assertions above move WITH a bulk flip: they stop being asserted, not
+    # caught. This count catches that: it is derived independently by walking k8s/roles/ rather
+    # than trusting the filter's own count, so a bulk flip shrinks it and fails even though every
+    # assertion above still passes. Do not loosen this floor: it can't move with what it checks.
     k8s_roles_dir = K8S_ROLES
     actually_false = [
         role_dir.name

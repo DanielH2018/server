@@ -1,4 +1,4 @@
-"""A scrape target that flaps without holding down for ScrapeTargetDown's `for:` still pages (#6626).
+"""A scrape target that flaps without holding down for ScrapeTargetDown's `for:` still pages.
 
 `ScrapeTargetDown` holds each series at `up == 0` for 10 minutes, so a target that fails for 1
 to 4 minutes at a time never fires it. Kuma's Cluster Scrape Targets tile paged that case
@@ -228,7 +228,7 @@ def test_a_promtool_case_keeps_the_flap_arm_quiet_after_a_gap_as_long_as_the_hol
 
 def test_a_promtool_case_keeps_the_flap_arm_quiet_on_a_missed_scrape_after_an_outage():
     """A zero run of at least ScrapeTargetDown's hold, then a shorter run after it recovers,
-    with the flap arm quiet after the second run ends (#6642). The outage and the miss are two
+    with the flap arm quiet after the second run ends. The outage and the miss are two
     resets, so only the arm that reads the outage's all-failed window holds the page back."""
     names = {r["alert"] for r in flap_rules()}
     assert names, f"no alerting rule in {RULES.name} reads a range of up"

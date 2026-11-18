@@ -6,7 +6,7 @@ WAN outage. These properties keep it from being decorative or from breaking the 
   * the mirror is its OWN Deployment. A registry with `REGISTRY_PROXY_REMOTEURL` refuses every
     manifest Put and Delete, so the setting on the push store would break every image-builder
     push and registry-gc.sh's untag DELETEs. And a mirror inside the push store's pod could be
-    collected only by scaling that pod, which the operator ruled out on #5680;
+    collected only by scaling that pod, which the operator ruled out;
   * it keeps the address every consumer names: the loopback hostPort on the registry node, and
     the pinned ClusterIP through a Service that routes each port to one Deployment by name;
   * its TTL is zero. The 168h default drops nut's image a week after its last rebuild;
@@ -15,9 +15,9 @@ WAN outage. These properties keep it from being decorative or from breaking the 
   * its store is its own claim. Every ghcr.io image in the cluster pulls through it and none
     expires, so on the push store's claim it would fill the volume and fail every build;
   * its weekly prune keeps untagged revisions. The push store's `--delete-untagged` would
-    delete every digest-pinned image the mirror caches (#5541);
-  * the docker.io mirror has the same zero TTL, unrendered replica count and weekly prune
-    (#6536). A TTL counts from the fetch, so it dropped an image a pod still ran.
+    delete every digest-pinned image the mirror caches;
+  * the docker.io mirror has the same zero TTL, unrendered replica count and weekly prune.
+    A TTL counts from the fetch, so it drops an image a pod still runs.
 
 The `registries.yaml` half is `hosts/tests/test_k3s_registries_mirror_ghcr.py`, and the
 NetworkPolicy half is in `tests/k8s/test_registry_netpol_grants_follow_the_pinned_node.py`.
@@ -101,7 +101,7 @@ def test_one_container_mirrors_ghcr_with_no_expiry():
 
 
 def test_the_mirror_reaches_ghcr_through_a_loopback_resume_sidecar():
-    """distribution never resumes a cut blob, so a sidecar in its pod does it for them (#6401).
+    """distribution never resumes a cut blob, so a sidecar in its pod does it for them.
 
     The sidecar binds the pod's loopback, so nothing outside the pod reaches an unauthenticated
     relay to ghcr.io, and it runs the role's own script from a ConfigMap the pod mounts.
@@ -123,7 +123,7 @@ def test_the_mirror_reaches_ghcr_through_a_loopback_resume_sidecar():
 
 
 def test_the_resume_sidecar_listens_before_the_mirror_starts():
-    """distribution's NewApp panics when REGISTRY_PROXY_REMOTEURL refuses a dial (#7792).
+    """distribution's NewApp panics when REGISTRY_PROXY_REMOTEURL refuses a dial.
 
     As a peer container the sidecar raced the mirror, which restarted on every rollout and failed
     the registry health gate. A native sidecar's startupProbe holds every regular container until
@@ -140,7 +140,7 @@ def test_the_resume_sidecar_listens_before_the_mirror_starts():
 
 
 def test_the_mirror_is_its_own_deployment():
-    """The operator's ruling on #5680: the mirror's GC must never scale the push store.
+    """The mirror's GC must never scale the push store.
 
     A mirror container inside deploy/registry's pod can only be taken offline by scaling that
     Deployment, so the push store's pod must carry no proxy container at all.
@@ -207,7 +207,7 @@ def test_the_mirror_stores_on_its_own_claim():
 
 
 def test_the_dockerhub_mirror_proxies_docker_hub_with_no_expiry_or_replica_count():
-    """A TTL counts from the fetch, so any TTL drops an image a pod still runs (#6536).
+    """A TTL counts from the fetch, so any TTL drops an image a pod still runs.
 
     The weekly GC bounds the store instead, and it scales the Deployment to zero, so a rendered
     `replicas` would let Flux restore the pod mid-GC.
@@ -277,8 +277,8 @@ def _gc_jobs() -> dict[str, dict]:
 
 
 def test_only_the_mirror_stores_have_a_gc_job():
-    """The push store's GC is retired (D5, Wave D's registry bullet): under Flux its scale-down
-    of deploy/registry would be a second writer on a field Flux renders."""
+    """The push store has no GC job: under Flux its scale-down of deploy/registry would be a
+    second writer on a field Flux renders."""
     templates = sorted(
         p.name
         for base in (K8S / ROLE, GC_COMPONENT)
@@ -305,7 +305,7 @@ def _job_claims(job: dict) -> set[str]:
 @pytest.mark.parametrize("store", sorted(_STORES))
 def test_the_mirror_gc_job_collects_the_mirror_store_without_delete_untagged(store):
     """A digest-pinned pull is cached as a revision with no tag, so --delete-untagged on the
-    mirror's store would delete nearly every cached image (#5541)."""
+    mirror's store would delete nearly every cached image."""
     _, claim, keep = _STORES[store]
     job = _gc_jobs()[f"registry-gc-{store}"]
     assert _job_claims(job) == {CTX[claim]}, job
@@ -376,7 +376,7 @@ def test_the_service_routes_each_port_to_one_deployment_by_name():
 
 
 def test_registry_gc_applies_the_mirror_manifests_the_deploy_stages():
-    """Each mirror's Job is its own file, which the script reads at GC time (#1669)."""
+    """Each mirror's Job is its own file, which the script reads at GC time."""
     reads = re.findall(
         r"^(?:MIRROR|DOCKERHUB)_JOB_MANIFEST=(\S+)$",
         rendered_shell_text("components", "registry-gc", "registry-gc.sh.j2"),

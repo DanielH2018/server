@@ -1,8 +1,8 @@
 """The census rows that keep a shipped script from reaching a leakguard-shimmed binary for real.
 
 `leakguard`'s `Popen` wrapper swaps an absolute shimmed program for its shim, but only for the
-test's direct child (#6463). A script a test runs that names `/usr/bin/logger` itself execs
-the real binary, and nothing records it (#6485). This row reads the scripts a test can run:
+test's direct child. A script a test runs that names `/usr/bin/logger` itself execs
+the real binary, and nothing records it. This row reads the scripts a test can run:
 shell and Python sources, their `.j2` templates, and every tracked executable, outside the
 tests' own directories. Unit files, cron `job:` lines and k8s manifests are left out because
 no test execs them, and a manifest's `/usr/bin/kubectl` is a path inside a container image.
@@ -10,7 +10,7 @@ no test execs them, and a manifest's `/usr/bin/kubectl` is a path inside a conta
 The second row reads the same scripts for a `PATH` that puts a fixed directory in front of the
 one the script inherited, such as `export PATH="/usr/local/bin:${PATH}"`. leakguard puts its
 stub directory first on the test's `PATH`, so that line hands every bare `k3s` or `kubectl`
-after it the real binary (#7623). Appending the directory keeps it reachable from a bare
+after it the real binary. Appending the directory keeps it reachable from a bare
 environment and keeps a test's stubs first.
 """
 

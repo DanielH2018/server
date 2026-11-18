@@ -152,8 +152,7 @@ def test_role_still_renders_the_default_replica_count_setting():
 
 def test_the_patch_targets_the_configmap_the_upstream_file_declares():
     # Kustomize refuses a build whose patch matches nothing, so a refresh that renames the
-    # ConfigMap fails here before it fails the render. A patch has no order to get wrong, which
-    # the deleted apply-after-install test used to guard.
+    # ConfigMap fails here before it fails the render. A patch has no order to get wrong.
     patch, upstream = _patched_configmap(), _upstream_configmap()
     assert patch["kind"] == "ConfigMap"
     assert patch["metadata"]["name"] == upstream["metadata"]["name"]
@@ -189,10 +188,8 @@ def test_a_class_that_drops_a_parameter_or_keeps_the_replica_count_is_flagged():
 # ── backup routing lists ────────────────────────────────────────────────────────────────────
 # Three hand-maintained lists of `namespace/pvcName` decide where every volume's backups go and
 # how often: r2 (daily, Cloudflare), weekly (sharded across weekdays, B2), nobackup (neither).
-# They are plain YAML with no schema and no cross-check, and the consequence of a typo is
-# silent: a misspelt weekly entry leaves that volume in the daily group, so it keeps paying
-# daily B2 transactions — the exact spend the weekday sharding exists to cut. Nothing would
-# report it.
+# They have no schema and no cross-check, and a typo is silent: a misspelt weekly entry leaves
+# that volume in the daily group, paying daily B2 transactions the weekday sharding exists to cut.
 
 _ROUTING_LISTS = (
     "k3s_longhorn_r2_volumes",
@@ -206,7 +203,7 @@ def _declared_pvcs() -> set[str]:
 
     Every claim is rendered: a role declares it in `k8s_claims` or, for observability and
     media-volume, in its own template. Both arrive through `rendered_docs()`, so no defaults or
-    tasks sweep is needed now that `k8s/volume-claim` is retired (#3387).
+    tasks sweep is needed now that `k8s/volume-claim` is retired.
 
     The manifests are read RENDERED rather than text-scanned, because a PVC's name is a Jinja
     expression: scanning the templates would match `{{ ... }}` and find almost nothing, which

@@ -2,8 +2,7 @@
 
 `test_census_rows_test_renders.py` states the rules, holds the exemptions and runs each as a
 `Census` row over the tree; this module is the pure half each rule needs — a function from source
-text to the offending spellings it found. Split out when the detector for a shell template's
-source grew the resolver-fed shape (#3200) and pushed the one file past its 500-line cap.
+text to the offending spellings it found.
 
 Every detector takes TEXT rather than a path, so a test can hand it a two-line snippet. That is
 what the per-spelling tests next to each rule do, and it is why a rule's rejecting half costs
@@ -28,7 +27,7 @@ def bare_jinja_envs(source: str) -> list[str]:
     A name counts only when it was imported from `jinja2` or `jinja2.nativetypes`, so
     `liquid.Environment()` — a different template language — is not a hit.
     """
-    # An import is an identifier, so a module that never spells `jinja2` imports neither (#5501).
+    # An import is an identifier, so a module that never spells `jinja2` imports neither.
     if "jinja2" not in source:
         return []
     tree = parse(source)
@@ -124,19 +123,17 @@ _READ_METHODS = frozenset({"read_text", "read_bytes", "open"})
 _GLOB_METHODS = frozenset({"glob", "rglob"})
 
 # Functions that hand back template PATHS off the real tree, by their terminal name. A read
-# through one is a source read even though no `*.sh.j2` literal appears anywhere in the module
-# (#3200). The terminal name is what matches, so `sv.discover_templates`, a bare
+# through one is a source read even though no `*.sh.j2` literal appears anywhere in the module.
+# The terminal name is what matches, so `sv.discover_templates`, a bare
 # `discover_templates` and any alias of either are the same hit.
 #
-# `discover_templates` is three different functions — `validate.shell_templates`,
-# `validate.setup_templates` and `validate.unit_templates` each define one over a different
-# file set. Matching the bare name over-matches the setup and unit planes deliberately: no test
-# reads through those today, and one that starts gets an exemption with its reason, which is
-# cheaper than teaching the matcher which module an alias came from.
+# `discover_templates` is three functions (`validate.shell_templates`, `.setup_templates`,
+# `.unit_templates`), each over a different file set. Matching the bare name over-matches the
+# setup and unit planes deliberately: a test that reads through those gets an exemption with its
+# reason, which is cheaper than teaching the matcher which module an alias came from.
 #
-# `validate.jinja_bash_collisions.templates` is deliberately NOT here. It resolves every `*.j2`
-# in the tree, and the collision it looks for (`${#x}` meeting Jinja) is a property of the
-# source that a render cannot answer, so declaring that read beats flagging it.
+# `validate.jinja_bash_collisions.templates` is deliberately NOT here: the collision it looks
+# for (`${#x}` meeting Jinja) is a property of the source that a render cannot answer.
 _TEMPLATE_RESOLVERS = frozenset({"discover_templates"})
 _KEY_METHODS = frozenset({"items", "keys"})
 
@@ -161,7 +158,7 @@ def _resolver_returning_fixtures(tree: ast.Module) -> dict[str, str]:
     """The pytest fixtures in `tree` that hand back a template resolver's result, by name.
 
     A fixture's name is the name its consumers take the value under, so binding the name here
-    puts a consumer's `for tpl in templates:` within reach of the loop clause below (#3206).
+    puts a consumer's `for tpl in templates:` within reach of the loop clause below.
     Both fixture shapes count: a `return` and the `yield` a fixture with teardown uses.
 
     A decorator counts when its text mentions `fixture`, which covers `@pytest.fixture`,
@@ -184,12 +181,12 @@ def _resolver_returning_fixtures(tree: ast.Module) -> dict[str, str]:
 def _resolver_fed_names(tree: ast.Module) -> dict[str, str]:
     """The names `tree` binds to a template path by looping over a resolver's result.
 
-    Two shapes, both from #3200: a loop straight over the resolver call, and a loop over a name
+    Two shapes: a loop straight over the resolver call, and a loop over a name
     an assignment bound to one. A tuple-unpack binds only its FIRST element, the position a
     resolver yielding pairs would put the template in, so a read of the second is not flagged.
 
     A resolver result that arrives as a FUNCTION PARAMETER is reachable too, through the
-    fixture that produced it (#3206). `_resolver_returning_fixtures` resolves each fixture's
+    fixture that produced it. `_resolver_returning_fixtures` resolves each fixture's
     return expression once per module and binds the fixture's NAME, which is the name every
     consumer takes the value under, so a loop in a consumer's body reads as a loop over the
     resolver.
@@ -316,7 +313,7 @@ def _reading_helpers(tree: ast.Module) -> dict[str, _ReadingHelper]:
     no `*.sh.j2` of its own. `tests/deploy/test_setup_drift_check.py` was the live
     instance: a module-level `_CHECK` path, a local `_source(path)` that stripped comments out
     of `path.read_text()`, and four tests asserting on the result. It read a source through two
-    directory-wide conversions and the rule never saw it (#3220). So the helper's own read is
+    directory-wide conversions and the rule never saw it. So the helper's own read is
     recorded here, and the CALL to it counts as the read instead.
 
     Only a function THIS module defines qualifies. An imported one has no body to read, and
@@ -416,7 +413,7 @@ def _mentions_a_shell_template(tree: ast.Module) -> bool:
 
     Every clause below needs one or the other, and most test modules have neither, so one walk
     here spares them the scope-by-scope descent: ~4s of the static-ratchet-tests hook over
-    ~1400 modules (#5501). It reads the parsed constants rather than the source text, because
+    ~1400 modules. It reads the parsed constants rather than the source text, because
     `"drill.sh" ".j2"` is one `.sh.j2` constant that no substring of the text spells.
     """
     for node in ast.walk(tree):

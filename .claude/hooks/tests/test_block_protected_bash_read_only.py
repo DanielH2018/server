@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for block-protected-bash's third arm: a read-only agent's writes are denied (#4617).
+"""Tests for block-protected-bash's third arm: a read-only agent's writes are denied.
 
 Each rule is a `..._is_flagged` / `..._is_clean` pair, as in `test_block_protected_bash.py`,
 so a rule that stopped matching fails its own test. The flagged inputs are the writes an

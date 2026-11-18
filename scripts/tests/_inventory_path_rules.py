@@ -1,7 +1,7 @@
 """The AST detector behind the census row that keeps inventory paths in `lib.repo_paths`.
 
 `test_census_rows_test_renders.py` runs `inline_inventory_paths` as the
-`tests-take-inventory-paths-from-repo-paths` row over `pytest_only_modules()` (#4002). It sits
+`tests-take-inventory-paths-from-repo-paths` row over `pytest_only_modules()`. It sits
 apart from `_render_helper_rules.py`, whose detectors filled that module to its line cap. Like
 them, it takes TEXT, so a row's red and green subjects can be one-line snippets; the module's
 location is an optional second argument, read to resolve `Path(__file__)` arithmetic and the
@@ -109,8 +109,8 @@ def _search_dirs(parent: Path | None) -> tuple[Path, ...]:
 
 
 # The census resolves ~22000 imports across ~1400 modules, mostly the same few helpers and
-# the standard library, which misses every root. Searching every root per import cost ~5s of
-# the static-ratchet-tests hook before these caches (#5501).
+# the standard library, which misses every root. These caches keep the static-ratchet-tests hook
+# from searching every root per import (~5s).
 def _first_on_disk(parent: Path | None, dotted: str) -> Path | None:
     own = () if parent is None else (parent, parent.parent / "files")
     return next(
@@ -239,13 +239,13 @@ def _local_anchors(
     """The anchors plus every name `tree` binds to a path in the repo, at any scope.
 
     `from _helpers import and `K3S = REPO / "hosts" /
-    "components" / "k3s-server"` binds a name a later chain is rooted at (#4135). The bindings resolve to a fixed
+    "components" / "k3s-server"` binds a name a later chain is rooted at. The bindings resolve to a fixed
     point, so a name bound through another local resolves too. A name bound to two different
     things anywhere in the module is dropped, because the walk does not know which scope a
     chain reads it from.
 
     A name imported from a first-party module takes that module's own binding, so
-    `from _restore_drill import K3S` resolves to whatever `_restore_drill.py` built (#4155).
+    `from _restore_drill import K3S` resolves to whatever `_restore_drill.py` built.
     An imported module binds `<name>.__file__` to its file, for `Path(check.__file__)`.
     `seen` holds the modules already being read, so an import cycle stops.
     """
@@ -363,7 +363,7 @@ def inline_inventory_paths(
             continue
         spelled_from, segments = chain
         # A module binding its own `INVENTORY` hides every chain built from it, so the binding
-        # is a hit too: the two-step build is how #4139's review found one the row passed.
+        # is a hit too: the two-step build is the shape a row can miss.
         if segments == ["inventory"] and spelled_from < 2:
             found.append(f"{ast.unparse(node)} (import INVENTORY from lib.repo_paths)")
             continue

@@ -47,7 +47,7 @@ OPENED_BUT_NOT_LANDED = (
 )
 FAILED = "=== b\nActiveState=failed\nResult=exit-code\nExecMainStatus=1\n--- stderr\nError: not logged in\n--- report\n"
 VANISHED = "=== b\nActiveState=inactive\nResult=success\nExecMainStatus=\n--- stderr\n--- report\n"
-# Batch E of run 20260910T190414Z: the agent removed its own worktree on exit, taking
+# The agent removed its own worktree on exit, taking
 # .fanout/report.json with it, so the unit exited 0 and there is nothing left to read.
 # The blank line between the sections is `_one`'s bare `echo`, so an empty stderr log
 # reads as empty rather than swallowing the next marker.
@@ -342,7 +342,7 @@ def test_cli_status_ranks_a_failed_batch_over_another_hosts_read_timeout(
     tmp_path, capsys
 ):
     # 75 is numerically larger than 5, so a `max` over the tiers would report "read again
-    # later" for a run with a failed batch in it (#4452).
+    # later" for a run with a failed batch in it.
     timed_out = Batch(
         "2", "daniel-server", "/w/2", "worktree-fanout-2", "fanout-2", [2], "t"
     )

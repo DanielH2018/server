@@ -77,7 +77,7 @@ def _forwarded_module(member: Subject) -> str | None:
     """The module a forwarding shim hands its argv to, or None when `member` is not a shim.
 
     A consolidation leaves a shim at an old path that shipped code or an older checkout still
-    runs (#4346, #4347). Its whole body is a docstring, imports and a `__main__` guard holding
+    runs. Its whole body is a docstring, imports and a `__main__` guard holding
     one statement: a call, optionally wrapped in `sys.exit`, of a name imported with `from`,
     whose arguments call nothing. Anything more is program logic.
     """
@@ -202,7 +202,7 @@ ROWS = (
             _fixture("scripts/x/foo_*.py", foo_a="X = 1\n", foo_b="", foo_c=""),
             _fixture("scripts/x/foo_*.py", foo=_MAIN, foo_a=_SHIM, foo_b=_SHIM),
         ),
-        # Four groups once #7962 deleted the deployer's `gitops_*` family.
+        # Four groups; the deployer's `gitops_*` family is not one.
         min_matches=4,
         must_find=frozenset({"scripts/validate/*_templates.py"}),
         allow={

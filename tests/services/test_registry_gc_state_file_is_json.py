@@ -2,7 +2,7 @@
 
 `finish()` writes `/var/lib/registry-gc/state.json` from `MSG`, which carries crane and kubectl
 error text. An operator reads the file with `jq` after a run, so a message that breaks the JSON
-breaks that read on the run whose message mattered (#4606).
+breaks that read on the run whose message mattered.
 
 `finish()` is sliced out of the RENDERED script and run with `curl`, `logger` and `kuma_push`
 stubbed as shell functions. The `curl` stub is load-bearing: `finish()` reads the unit's

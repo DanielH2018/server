@@ -73,7 +73,7 @@ def test_a_cycle_that_restarted_a_container_writes_success_zero(tmp_path):
 
 
 # What a push leaves in a rendered script: the Kuma helper, its push call, the success flag it
-# sets, the push URL, or the credential the unit used to load for it.
+# sets, the push URL, or the credential the unit loads for it.
 PUSH_MARKERS = ("kuma-push-lib", "kuma_push", "KUMA_PUSH_OK", "api/push", "push_token")
 
 

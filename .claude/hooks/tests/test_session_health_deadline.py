@@ -1,4 +1,4 @@
-"""The SessionStart banner runs its probes at once, under one total deadline (#6153).
+"""The SessionStart banner runs its probes at once, under one total deadline.
 
 Every probe is a fake passed through main()'s keyword seams, for the reason
 `test_session_health.py`'s `_run_main` gives.

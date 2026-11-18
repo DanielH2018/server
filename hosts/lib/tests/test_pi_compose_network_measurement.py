@@ -1,8 +1,8 @@
-"""What `docker compose up` does with a project network whose name an unlabelled network holds (H7.26).
+"""What `docker compose up` does with a project network whose name an unlabelled network holds.
 
 The live Pi's `proxy` and `lifecycle` networks were created by `docker network create`, so they
-carry none of the labels Compose puts on a network it creates. H7's *The old step list*, H7.5,
-asks for this measurement before the networks stay `external: true`. Moving a network into the
+carry none of the labels Compose puts on a network it creates. The measurement decides whether
+the networks stay `external: true`. Moving a network into the
 project is only safe if Compose would adopt the existing one; if it refuses, or keeps the
 network without its labels, the project cannot own it short of recreating it, which stops every
 attached container on the Pi.

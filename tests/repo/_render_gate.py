@@ -12,23 +12,23 @@ site:
 * **Through a binding.** A name an assignment, a `for` or a comprehension bound to a template
   path. `_bindings` resolves these to a fixed point, because one binding feeds another.
 * **Through a wrapper.** `sorted(tdir.glob("*.j2"))` puts a `sorted` call where `_bindings`
-  looked for a `glob`, so the loop target never bound and the read dropped out of the census
-  (#3209, #3211). `_unwrap` looks through the wrapping call.
+  looked for a `glob`, so the loop target never bound and the read dropped out of the census.
+  `_unwrap` looks through the wrapping call.
 * **Through a helper's parameter.** `def f(p): return p.read_text()` called as `f(tpl)` leaves
-  no template path at the read site at all (#3209). `_reading_helpers` finds the functions
+  no template path at the read site at all. `_reading_helpers` finds the functions
   THIS module defines whose parameter is read as a file, and the call to one counts as the read.
   Only a locally defined function qualifies: `_k8s_render.render_role_template("prowlarr",
   "x.yaml.j2", {})` reads a path it builds from its `name` argument, so resolving imported
   functions would flag every sanctioned render call as a source read.
 * **Through a function's return value.** `for path in _manifest_files():` where the callee
-  returns `K8S_ROLES.rglob("templates/*.j2")` leaves no template path at either site (#3219).
+  returns `K8S_ROLES.rglob("templates/*.j2")` leaves no template path at either site.
   `_template_yielding_functions` finds the functions THIS module defines whose return is a
   template glob, and a call to one binds its loop target.
 * **Through a `+` of globs.** `list(role.rglob("*.j2")) + list(role.rglob("*.yaml"))` is a
   `BinOp`, so `_unwrap` reaches no `glob` call inside it. `_enumerates_templates` recurses over
-  both operands (#3219).
+  both operands.
 * **Through an import.** A template path bound in one module and read in another escaped the
-  census entirely (#3210): `from _fence_probe import ORCHESTRATOR` followed by
+  census entirely: `from _fence_probe import ORCHESTRATOR` followed by
   `ORCHESTRATOR.read_text()`. `imported_template_names` resolves a `from <module> import
   <NAME>` against the exporting module's own bindings, for a module in the same test directory
   or at the `tests` root that `pythonpath` supplies. Resolution is one hop deep: a
@@ -155,9 +155,9 @@ def _enumerates_templates(
 
     The pattern alone misses `tdir.glob("*")` over a name bound to a `templates/` directory, so
     the receiver counts too — either because it names a template path or because it is already
-    bound as one (#3211).
+    bound as one.
 
-    Two spellings put the glob somewhere a single `_unwrap` cannot reach (#3219):
+    Two spellings put the glob somewhere a single `_unwrap` cannot reach:
 
     * **A `+` of globs.** `list(role.rglob("*.j2")) + list(role.rglob("*.yaml"))` is a `BinOp`,
       so BOTH operands are tried — a template glob on either side yields template paths, and
@@ -217,7 +217,7 @@ def _template_yielding_functions(
     `tests/k8s/test_root_security_context_is_written_out_in_full.py` is the shape —
     `def _manifest_files(): return sorted(p for p in K8S_ROLES.rglob("templates/*.j2") ...)`
     read as `for path in _manifest_files(): path.read_text()`, where neither site carries a
-    template path (#3219).
+    template path.
 
     Resolved against the `bound` the caller has so far, and recomputed on every pass of
     `_bindings`' fixed point, because a return value can be a name an earlier pass bound:
@@ -242,7 +242,7 @@ def _parametrized(
 
     A parametrized test never writes the binding itself: pytest reads the argument names out of
     the decorator's first argument and passes the second argument's items in. Without this the
-    path reaches the test body — and the helper that reads it — with nothing bound (#3219).
+    path reaches the test body — and the helper that reads it — with nothing bound.
     """
     pairs: list[tuple[list[ast.expr], ast.expr]] = []
     for decorator in node.decorator_list:
@@ -339,7 +339,7 @@ def _reading_helpers(
 
     Keyed by function name, valued by the argument positions that get read. A call to one with
     a template path at a reading position is a template source read, whatever the call site
-    spells (#3209).
+    spells.
     """
     helpers: dict[str, frozenset[int]] = {}
     for node in ast.walk(tree):

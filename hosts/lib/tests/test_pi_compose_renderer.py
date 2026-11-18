@@ -1,6 +1,6 @@
-"""The include renderer, the two-pass inputs hash and the Compose env output (H5.2a1).
+"""The include renderer, the two-pass inputs hash and the Compose env output.
 
-Each case is one of H5's *Verification* cases for H5.2a1. A render reads a scratch `hosts/` tree
+A render reads a scratch `hosts/` tree
 that holds the real pi-compose template and tmpfiles file, with fixture services (`_compose_tree.py`).
 
 Run: uv run pytest hosts/lib/tests/test_pi_compose_renderer.py

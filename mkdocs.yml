@@ -231,8 +231,6 @@ nav:
       - CI and the repo:
           # What the 20-job runner cap costs a landing, and the phased plan to get under it.
           - CI throughput: ci-throughput.md
-          # The brief for the session that takes that plan up: the work left and its traps.
-          - "CI throughput: what remains": ci-throughput-remaining.md
           # One coverage run with per-test contexts: deletion candidates, not a gate.
           - Test coverage snapshot: test-coverage-snapshot.md
           # What exhausts the shared GitHub API quota, and the per-session budget ADR-0034 chose.

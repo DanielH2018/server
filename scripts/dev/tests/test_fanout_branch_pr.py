@@ -1,7 +1,7 @@
-"""A batch's PR is the one GitHub holds for its branch, not the first URL in its final text (#6551).
+"""A batch's PR is the one GitHub holds for its branch, not the first URL in its final text.
 
-Batch 6309's body linked #6449 before its own #6523, so its review, ready flip and `done` line
-all went to #6449. The pipeline half runs `Pipeline.run_all` through `_review_fakes.FakeRunner`;
+A body that links another PR before its own must not send the review, ready flip and `done`
+line there. The pipeline half runs `Pipeline.run_all` through `_review_fakes.FakeRunner`;
 the status half runs `status.with_own_pr` over a parsed block.
 
 Run: uv run pytest scripts/dev/tests/test_fanout_branch_pr.py
@@ -72,7 +72,7 @@ def test_own_pr_prefers_the_branch_pr_the_text_names_and_reads_a_failed_lookup_a
 
 
 def test_parse_branch_prs_lists_open_before_merged_and_drops_closed_ones():
-    """An abandoned batch's closed PR keeps its branch name; a relaunch must not bind it (#6442)."""
+    """An abandoned batch's closed PR keeps its branch name; a relaunch must not bind it."""
     rows = [
         {"url": "closed9", "number": 9, "state": "CLOSED"},
         {"url": "open5", "number": 5, "state": "OPEN"},
@@ -161,7 +161,7 @@ def test_status_reads_a_foreign_only_text_as_needs_input_never_done():
 
 
 def test_status_reads_a_citation_of_a_pr_merged_before_the_launch_as_no_pr():
-    """The relaunched batch for #7291 opened nothing and cited its branch's merged #7295 (#7402)."""
+    """A relaunched batch that opened nothing cites its branch's earlier merged PR."""
     parsed = _status(f"Already fixed by {FOREIGN}.")
     cited = with_own_pr(
         parsed, B.branch, lambda *_: [FOREIGN], "o/r", lambda: [FOREIGN]

@@ -87,7 +87,7 @@ def _seconds(duration: str) -> float:
 @cache
 def pi_ip() -> str:
     # The Pi's own literal, not the k8s_pi_client_ip that all.yml derives from it through
-    # hostvars (#3719). Reading the derived value would compare the render against itself, and
+    # hostvars. Reading the derived value would compare the render against itself, and
     # a derivation that resolved to None would still match.
     return load_yaml(HOST_VARS / "daniel-pi.yml")["server_ip"]
 

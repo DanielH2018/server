@@ -1,4 +1,4 @@
-"""Each lander unit's LAND_DEADLINE leaves land-wait room for `verify`'s wait on the soak (#5427).
+"""Each lander unit's LAND_DEADLINE leaves land-wait room for `verify`'s wait on the soak.
 
 `land_wait` gives up once `promotion.wait_cap` runs out, whatever the soak's own deadline
 says. The cap is LAND_DEADLINE less what the landing already spent and `DEADLINE_RESERVE_S`.
@@ -14,7 +14,7 @@ each of the three jobs at its `timeout-minutes`, so `images`' 20 minutes bound t
 own rebuild. `test_the_pipeline_counts_every_job_publish_waits_on` derives the jobs from
 `publish`'s `needs` in the workflow, so a job added ahead of `publish` turns it red.
 
-Another commit's rebuild can still delay the landing's `images` job (#5431). The `images`
+Another commit's rebuild can still delay the landing's `images` job. The `images`
 concurrency group runs one job and keeps one pending, and a newer pending job evicts the
 older. So one rebuild can run ahead of the landing, and the wait counts it as FULL_REBUILD_S,
 one measured rebuild of every built image. A second rebuild is inside the landing's own job:
@@ -27,7 +27,7 @@ added one's `timeout` once Graham's bound is the smaller (`chained_timeout.queue
 PR that hands the next tags to Flux is the one this turns red.
 
 Inside the weekly reboot's no-promotion window `decide` defers every promotion, so a landing that
-merges as the window opens waits the whole window before any promotion starts (#5457). The cap
+merges as the window opens waits the whole window before any promotion starts. The cap
 moves by what the window has left, up to the unit's LAND_WINDOW_GRACE, so each lander's grace
 must cover the window, and every bound above LAND_DEADLINE must cover the grace too.
 
@@ -59,17 +59,17 @@ LANDERS = {
         "renovate-agent-land@.service.j2",
     ),
 }
-# What each unit set before D5.14 counted `images` (#5466), for the red half against the same
-# render. #5427 had raised them from 5400 and 3300.
+# What each unit set before D5.14 counted `images`, for the red half against the same
+# render.
 BEFORE_IMAGES = {"claude-land": 10800, "renovate-agent-land": 10800}
-# What each unit set before D5.16 handed code-server to Flux with a 4500s pre-pull (#5512).
+# What each unit set before D5.16 handed code-server to Flux with a 4500s pre-pull.
 BEFORE_CODE_SERVER = {"claude-land": 18000, "renovate-agent-land": 18000}
-# What each unit set before karakeep, pi-peer-backup and media-volume joined the soak with their
-# snapshot and verify Kustomizations.
+# What each unit set before the snapshot and verify Kustomizations of karakeep, pi-peer-backup
+# and media-volume counted toward the soak.
 BEFORE_KARAKEEP = {"claude-land": 25200, "renovate-agent-land": 25200}
 # The promote jobs a promotion waits on, each counted at its `timeout-minutes`.
 PIPELINE = ("render", "images", "publish")
-# One `images` job that rebuilds every built image, measured on 2026-10-17 (#5431). Run
+# One `images` job that rebuilds every built image, measured on 2026-10-17. Run
 # 38992066819's job 117276493018 built all ten in 368s, but n8n-runners failed there after 19s
 # (01:49:13 to 01:49:32). Its successful build in run 39036029019 took 45s (13:19:12 to
 # 13:19:57), so 368 - 19 + 45. code-server was the longest, at 213s.
@@ -200,7 +200,7 @@ def test_the_handoff_outwaits_the_claude_lander():
 
 
 def test_published_tags_build_images():
-    """ical-proxy and homelab-mcp build images and are flux-owned since D5.14 (#5466)."""
+    """ical-proxy and homelab-mcp build images and are flux-owned since D5.14."""
     builders = set(images.builder_roles())
     assert "code-server" in builders, builders
     assert {"homelab-mcp", "ical-proxy"} <= builders & set(published_tags()), (
@@ -229,7 +229,7 @@ def grace_shortfall(grace: int) -> int:
 
 @pytest.mark.parametrize("lander", LANDERS)
 def test_each_landers_grace_covers_the_whole_reboot_window(lander):
-    """A landing that merges as the window opens waits it out rather than giving up (#5457).
+    """A landing that merges as the window opens waits it out rather than giving up.
 
     Both landers need it. The renovate session's run_timeout_s does not bound a landing: the
     lander unit runs on after the session ends, so a Saturday landing reaches Sunday's window.
@@ -243,5 +243,5 @@ def test_each_landers_grace_covers_the_whole_reboot_window(lander):
 
 
 def test_a_lander_without_a_grace_falls_short_of_the_window():
-    """The red half: both units before #5457 set no grace, which unit_env reads as 0."""
+    """The red half: both units set no grace, which unit_env reads as 0."""
     assert grace_shortfall(0) > 0

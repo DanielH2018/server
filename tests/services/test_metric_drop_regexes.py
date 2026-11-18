@@ -281,7 +281,7 @@ SERVER = {"node_role_kubernetes_io_control_plane": "true"}
 def test_the_server_node_registry_is_kept_once_across_the_two_jobs(
     job, extra, name, kept
 ):
-    """#6331: the apiserver job keeps `apiserver_` and `etcd_`, the server's kubelet the rest.
+    """The apiserver job keeps `apiserver_` and `etcd_`, the server's kubelet the rest.
 
     An agent node's kubelet carries no control-plane label, so it keeps its own `apiserver_`
     client series.

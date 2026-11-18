@@ -1,9 +1,9 @@
-"""`verify` during a Flux hop: kustomize-controller's own replacement posts failures (#6013).
+"""`verify` during a Flux hop: kustomize-controller's own replacement posts failures.
 
 When a promotion changes kustomize-controller's Deployment, the old pod posts `failure` for
 `flux` and `soak` as it is replaced, and the new pod posts `success` for `flux` 12 seconds
-later. Promote run 39977616897 held 627fd395 `failed=flux,soak` on the first failure. The
-replay below is that commit's status timeline.
+later. The first failure holds the promotion `failed=flux,soak`. The
+replay below is a real status timeline.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_verify_promotion_controller_rollout.py
 """
@@ -45,7 +45,7 @@ def test_the_soaks_parting_failure_waits_for_its_fresh_success():
 
 
 def test_regression_guard_without_flux_in_the_changed_set_the_same_failure_holds():
-    """Passes on the code before #6013 too: the tolerance needs a revision expecting `flux`."""
+    """A regression guard that passes without the fix too: the tolerance needs a revision expecting `flux`."""
     expected = vp.expected_set(NO_HOP, PROD)
     clock = Clock()
     verdict = vp.verify(timeline(clock, [(0, REPLACED)]), T, PRIOR, expected)
@@ -70,7 +70,7 @@ def test_a_flux_failure_no_success_follows_holds_when_the_grace_ends():
 
 
 def test_regression_guard_another_names_failure_stays_final_in_a_flux_hop():
-    """Passes on the code before #6013 too: only `flux` and `soak` are tolerated."""
+    """A regression guard that passes without the fix too: only `flux` and `soak` are tolerated."""
     expected = vp.expected_set(HOP, PROD)
     clock = Clock()
     states = {**FLUX_UP, "flux/sonarr": "failure"}

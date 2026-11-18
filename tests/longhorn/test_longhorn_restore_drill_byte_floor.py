@@ -13,7 +13,7 @@ widened to everything, and a volume on the list that has since filled up must fa
 list is a permanent exemption rather than a claim about what the volume holds.
 
 The guards are lifted out of the RENDERED drill by pattern rather than restated, so a reworded
-check is exercised as written and every tunable arrives with the value the host runs (#3186). The
+check is exercised as written and every tunable arrives with the value the host runs. The
 three hand substitutions this file used to make are what the render replaces.
 
 Run: uv run pytest tests/longhorn/test_longhorn_restore_drill_byte_floor.py
@@ -53,7 +53,7 @@ def _run_floor_guard(
     match = _FLOOR_GUARD.search(rendered_shell_text(*DRILL))
     assert match, "the drill's files/bytes guard moved — update _FLOOR_GUARD"
     guard = match.group(0)
-    # Non-vacuity for the lift, and what the three dropped `.replace()` calls used to assert: a
+    # Non-vacuity for the lift: a
     # regex that matched a slice missing one of the three tunables would run a guard the host
     # does not have, and `"{{" not in guard` cannot see that on a rendered script.
     defaults = load_yaml(DRILL_DEFAULTS)

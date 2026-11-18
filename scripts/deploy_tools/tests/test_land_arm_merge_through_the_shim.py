@@ -10,7 +10,7 @@ deleted test_land_arm_merge.py did, and reads the recorded argv back.
 The two tests are a pair: an OPEN PR must be handed to the merge wait, and a MERGED one must
 not be. An assertion that only ever sees the arming path cannot tell a `--arm-merge` that
 always fires from one that fires correctly. Neither run issues a `gh pr merge`: every PR
-merges through await_merge's REST merge (#4001). That merge needs await_ci to read the head
+merges through await_merge's REST merge. That merge needs await_ci to read the head
 green over HTTP, which the stubs cannot answer, so the stubbed poll reads the PR MERGED and
 `test_land_merge_past_review.py` pins the REST argv instead.
 
