@@ -26,6 +26,10 @@
 # No MemoryMax, for the same reason neither plane has one: systemd applies it to the whole
 # slice, so it would OOM-kill every login session and the RC host at once, including the SSH
 # connection running the deploy. MemoryHigh throttles allocation instead of killing.
+#
+# CPUWeight ranks the fleet below system.slice, where k3s runs, only while the CPU is contended.
+# defaults/main.yml beside claude_code_fleet_cpu_weight says why.
 [Slice]
 MemoryHigh={{ claude_code_fleet_memory_high }}
 MemorySwapMax={{ claude_code_fleet_swap_max }}
+CPUWeight={{ claude_code_fleet_cpu_weight }}
