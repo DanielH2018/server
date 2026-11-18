@@ -77,7 +77,7 @@ def test_non_remux_quality_is_never_evidence_even_with_long_gop():
 
 
 def test_2160p_reencode_labeled_remux_is_still_caught():
-    # generalization win over the old codec heuristic: UHD isn't excluded — a real 2160p remux has a
+    # generalization win over a codec heuristic: UHD isn't excluded — a real 2160p remux has a
     # short GOP + no re-encoder tag, so only a genuine re-encode trips regardless of resolution
     ev = frl.reencode_evidence("Bluray-2160p Remux", "x265", [0.0], 40, 5, MARKERS)
     assert ev is not None
@@ -252,7 +252,7 @@ def test_host_path_tolerates_a_trailing_slash_on_the_root():
 def test_the_scan_logs_bare_lines_for_journald_to_stamp(tmp_path, capsys, monkeypatch):
     """Each cron pipes to `logger`, which timestamps every line, so the scan writes none.
 
-    The scan logs through host_lib's `log` (#6202), not a printer of its own. An empty webhook
+    The scan logs through host_lib's `log`, not a printer of its own. An empty webhook
     makes the spool flush return before it reads the spool directory.
     """
     from fake_remux_lib import fake_remux_scan as scan

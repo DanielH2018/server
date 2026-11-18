@@ -42,12 +42,11 @@ PINS_TEMPLATE = "hosts/components/pi-docker/templates/docker-engine.pins.j2"
 
 _PI_DOCKER_GROUP_PREFIX = "docker engine on the Pi"
 
-# The apt version strings the index actually serves, read from
-# https://download.docker.com/linux/ubuntu/dists/noble/stable/binary-arm64/Packages. Both
-# shapes are present: containerd.io carries bare `<version>-<rev>` rows alongside the
-# suffixed ones, and docker-ce carries a `5:` epoch. A version extractVersion cannot match
-# is dropped from the version space, so a regex anchored on `~ubuntu` would silently narrow
-# it.
+# The apt version strings the index serves
+# (https://download.docker.com/linux/ubuntu/dists/noble/stable/binary-arm64/Packages):
+# containerd.io carries bare `<version>-<rev>` rows beside the suffixed ones, and docker-ce a `5:`
+# epoch. A version extractVersion cannot match is dropped from the version space, so a regex
+# anchored on `~ubuntu` would silently narrow it.
 _APT_VERSION_FIXTURES = [
     ("5:29.8.1-1~ubuntu.24.04~noble", "29.8.1"),
     ("2.3.5-1~ubuntu.24.04~noble", "2.3.5"),

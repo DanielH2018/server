@@ -21,9 +21,8 @@ registry_k8s_netpol_probe_image: alpine:3.24@sha256:be2656061b536c1883c4034790e2
 
 # How long registry-gc.sh's warm phase may read manifests and blobs through the mirror after the
 # GC. Not a copy: only this component's script reads it. A cold warm of every ghcr.io image the
-# cluster ran on 2026-10-24, about 6.1 GB before deduplication, takes about 2 minutes at the
-# 49 MB/s measured that day. 1800s leaves room for a slow week and bounds how long the run holds
-# the GC lock.
+# cluster runs, about 6.1 GB before deduplication, takes about 2 minutes at 49 MB/s. 1800s leaves
+# room for a slow week and bounds how long the run holds the GC lock.
 registry_gc_ghcr_mirror_warm_budget_s: 1800
 # The same bound on the dockerhub-mirror's warm phase, which runs after the ghcr-mirror's. Half
 # the ghcr-mirror's: Docker Hub's anonymous limit refuses a cold warm's manifest reads long before

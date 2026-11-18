@@ -167,7 +167,7 @@ def test_a_failed_systemd_run_after_the_claim_gives_the_claim_back():
         "daniel-box",
     ]
     assert run.calls[3][1].startswith("release 763 --worktree worktree-fanout-763 ")
-    # No unit started and no manifest names the batch, so the tree goes too (#4192).
+    # No unit started and no manifest names the batch, so the tree goes too.
     assert f"worktree remove --force {DOT_WT}" in run.calls[4][1]
 
 
@@ -192,7 +192,7 @@ def test_a_dotfiles_review_unit_runs_its_snapshots_script():
 def test_the_snapshot_holds_origin_master_while_the_primary_checkout_lags(
     tmp_path, monkeypatch
 ):
-    """#3762: a dotfiles batch ran a lagging checkout's review pipeline and reported nothing."""
+    """A dotfiles batch ran a lagging checkout's review pipeline and reported nothing."""
     scrub_process_git_env(monkeypatch)
     origin = init_repo(tmp_path / "origin.git", bare=True)
     server = tmp_path / "server"
@@ -219,7 +219,7 @@ def test_the_snapshot_holds_origin_master_while_the_primary_checkout_lags(
     snap = wt / ".fanout" / "server"
     assert (snap / script).read_text() == "new\n"
     assert (snap / ".claude/hooks/fanout-stop.py").read_text() == "hook\n"
-    # #3783: the brief's `uv run --project` names the snapshot, so uv needs its project files.
+    # The brief's `uv run --project` names the snapshot, so uv needs its project files.
     assert (snap / "uv.lock").read_text() == "l\n"
     assert (snap / ".python-version").read_text() == "3.14\n"
     # scripts/lib/gh.py counts each gh call into the ledger module, so the snapshot carries it.

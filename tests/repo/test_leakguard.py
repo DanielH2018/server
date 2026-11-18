@@ -172,6 +172,14 @@ def test_a_test_that_touches_nothing_passes(tmp_path: Path) -> None:
     )
 
 
+def test_a_run_removes_its_stub_directory_when_it_ends(tmp_path: Path) -> None:
+    temp = tmp_path / "temp"
+    temp.mkdir()
+    proc = _run_child(tmp_path, _CLEAN, extra_env={"TMPDIR": str(temp)})
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert list(temp.iterdir()) == []
+
+
 def test_a_skipped_test_does_not_inherit_the_previous_test_s_calls(
     tmp_path: Path,
 ) -> None:
@@ -415,8 +423,8 @@ def test_strip_env_removes_only_the_hook_variables() -> None:
 
 
 # The host path node_exporter scrapes, exported to the child as a careless caller would. The
-# child runs the real check library's writer and asserts the file landed anywhere but there
-# (#6191). A child without the plugin is the red half: the exported path reaches it, and the
+# child runs the real check library's writer and asserts the file landed anywhere but there.
+# A child without the plugin is the red half: the exported path reaches it, and the
 # child's first assert fails before the writer runs, so the red half writes nothing there.
 _REAL_TEXTFILE_DIR = "/var/lib/node-exporter-textfile"
 _CHECK_LIB = REPO / "hosts/components/check-lib/files/homelab-check-lib.sh"
@@ -463,7 +471,7 @@ def test_without_the_plugin_the_exported_textfile_dir_reaches_the_test(
 
 # The agent user's profile value, which `fanout_lib.target` reads into SERVER_CHECKOUT.
 # Not the agent's real clone, /var/lib/claude/server: run as `claude`, PRIMARY_CHECKOUT is that
-# clone already, so the profile would move nothing and the red half below would pass (#4108).
+# clone already, so the profile would move nothing and the red half below would pass.
 # The plugin strips the variable by name, so any value no checkout has does.
 _PROFILE_ENV = {"RUN_HOOK_PROJECT_DIR": "/nonexistent/agent-profile-checkout"}
 
@@ -484,7 +492,7 @@ def test_the_server_checkout_is_the_primary_one_not_the_profiles():
 def test_the_plugin_strips_the_agent_profile_variables_before_collection(
     tmp_path: Path,
 ) -> None:
-    """The agent user's suite asserts the primary checkout, as CI's does (#3629)."""
+    """The agent user's suite asserts the primary checkout, as CI's does."""
     proc = _run_child(tmp_path, _READS_SERVER_CHECKOUT, extra_env=_PROFILE_ENV)
     assert proc.returncode == 0, proc.stdout + proc.stderr
 

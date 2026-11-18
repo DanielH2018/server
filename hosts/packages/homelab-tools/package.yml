@@ -1,6 +1,6 @@
-# The shared package that ships pinned upstream binaries (H3, C5, *`homelab-tools`*). Each lands
+# The shared package that ships pinned upstream binaries. Each lands
 # at /usr/lib/homelab/bin/<tool>, never on PATH, so a caller names the absolute path:
-# homelab-secrets calls /usr/lib/homelab/bin/sops (H4).
+# homelab-secrets calls /usr/lib/homelab/bin/sops.
 #
 # The builder downloads each file, checks its sha256 against the pin below, and builds the
 # package once per architecture. A digest that differs builds nothing and writes
@@ -15,7 +15,7 @@
 # and `member` names the file the builder installs from inside the archive.
 description: Pinned upstream binaries the homelab packages call by absolute path
 # DECIDED: the arm64 package ships only the tools daniel-pi's packages name (#8883). daniel-pi is
-# the one arm64 host, and it takes no work the other two hosts could do: the full set was a
+# the one arm64 host, and it takes no work the other two hosts could do: the full set is a
 # 119 MB download and a 349 MB unpack onto its SD card at every publish. Every tool still pins
 # arm64 below, because hosts/bootstrap-host.sh embeds the nfpm and uv blocks.
 # scripts/renderer/tests/test_renderer_host_tools.py holds this list equal to the tools the Pi's
@@ -47,7 +47,7 @@ tools:
       sha256: 8c62619c4303770342e7c7e75d168b6cc6efee4ad5e4b994980de7cf794d68e2
       url: https://github.com/twpayne/chezmoi/releases/download/{version}/chezmoi_{bare}_linux_arm64.tar.gz
       member: chezmoi
-  # H7.25: the Pi's node exporter, the version the cluster DaemonSet's image pins
+  # The Pi's node exporter, the version the cluster DaemonSet's image pins
   # (hosts/tests/test_pi_node_exporter_host_unit.py holds the two equal). The tarball names
   # its directory after the release, so `member` carries {bare}. Both digests come from the
   # release's sha256sums.txt:
@@ -65,7 +65,7 @@ tools:
       sha256: ad35b605f9954b9f1ffddf5ba054bdc5a98d790b9eae5291e1eeb83f1ecbd0e7
       url: https://github.com/prometheus/node_exporter/releases/download/{version}/node_exporter-{bare}.linux-arm64.tar.gz
       member: node_exporter-{bare}.linux-arm64/node_exporter
-  # #6699: the flux CLI the D5 takeover check runs as root on daniel-box, at the cluster's
+  # The flux CLI the takeover check runs as root on daniel-box, at the cluster's
   # `flux_version` (k8s/roles/flux; hosts/components/claude-code/tests/test_takeover_check_install.py
   # holds the two equal). Both digests come from the release's checksums file:
   # https://github.com/fluxcd/flux2/releases/download/v2.9.6/flux_2.9.6_checksums.txt
@@ -82,7 +82,7 @@ tools:
       sha256: 6663c154755b732f43dc993d72321f71c2fc1ff0bcb94b2696e0a8638fa562b4
       url: https://github.com/fluxcd/flux2/releases/download/{version}/flux_{bare}_linux_arm64.tar.gz
       member: flux
-  # H7.61: the Vale the prek hook runs, at the version CI installs
+  # The Vale the prek hook runs, at the version CI installs
   # (tests/repo/test_vale_matches_the_ci_pin.py holds the copies equal). Both digests come
   # from the release's checksums file:
   # https://github.com/vale-cli/vale/releases/download/v3.25.1/vale_3.25.1_checksums.txt
@@ -101,7 +101,7 @@ tools:
       member: vale
   # The host DNS forwarder on daniel-box (k3s-host-dns). Each digest is the release's coredns_<ver>_linux_<arch>.tgz
   # digest. renovate.json's packageRules hold the version to three components: coredns/coredns
-  # carries stray tags `v002` ... `v011`, which Renovate once ranked above 1.14.7 (#3087).
+  # carries stray tags `v002` ... `v011`, which Renovate ranks above 1.14.7.
   coredns:
     amd64:
       # renovate: datasource=github-release-attachments depName=coredns/coredns
@@ -116,7 +116,7 @@ tools:
       url: https://github.com/coredns/coredns/releases/download/{version}/coredns_{bare}_linux_arm64.tgz
       member: coredns
   # nfpm and uv stay the last two blocks: hosts/bootstrap-host.sh embeds this tail byte for byte.
-  # H7.24a: daniel-box builds the host packages itself, so it needs nfpm at the builder's pin.
+  # daniel-box builds the host packages itself, so it needs nfpm at the builder's pin.
   # Both digests come from the release's checksums.txt:
   # https://github.com/goreleaser/nfpm/releases/download/v2.48.0/checksums.txt
   nfpm:
@@ -132,7 +132,7 @@ tools:
       sha256: a9a75213763783b7669719e505474c748c5ad7dc66591a195619deb50f85c2f4
       url: https://github.com/goreleaser/nfpm/releases/download/{version}/nfpm_{bare}_Linux_arm64.tar.gz
       member: nfpm
-  # H7.41a: daniel-box's builder runs uv. The uv
+  # daniel-box's builder runs uv. The uv
   # component puts it on PATH as /usr/bin/uv for the units and scripts that name it. uv ships
   # tarballs only, with the binary one directory down. Both digests come from the release's
   # uv-<arch>-unknown-linux-gnu.tar.gz.sha256 files.

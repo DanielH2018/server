@@ -3,8 +3,8 @@
 # Pin this node's LAN address so k3s can start while the gateway's DHCP server is down.
 # k3s binds {{ server_ip }} itself (etcd's peer listener, the apiserver's advertise address),
 # so with no address on the link it crash-loops on `bind: cannot assign requested
-# address`. A WAN outage that took the gateway's DHCP with it, spanning a reboot, kept the
-# whole cluster down for ~70h from 2026-10-05 (#3882).
+# address`. A WAN outage that takes the gateway's DHCP with it across a reboot keeps the
+# whole cluster down.
 #
 # DHCPv4 is switched OFF rather than kept alongside the static address: with both, the lease
 # and the static config claim the same address, and whether networkd removes it when the
@@ -28,18 +28,18 @@ network:
       dhcp4: false
       # The IPv6 default route arrives by router advertisement, and networkd gives it the
       # `[DHCP] RouteMetric`, or 1024 with none. netplan 1.1.2 has no `ra-overrides` metric key
-      # and emits `[DHCP]` only with a DHCP client on, so `dhcp4: false` alone left the RA route
-      # at 1024, behind wifi's 600, and IPv6 egress took wlo1 (#4561). `dhcp6: true` adds no
+      # and emits `[DHCP]` only with a DHCP client on, so `dhcp4: false` alone leaves the RA route
+      # at 1024, behind wifi's 600, and IPv6 egress takes wlo1. `dhcp6: true` adds no
       # client in practice: the gateway's RA sets the M flag, so networkd already runs DHCPv6.
       dhcp6: true
       dhcp6-overrides:
         route-metric: 100
-      # Configure the address even with no link. Carrier held through the 2026-10-05 outage,
-      # but a gateway that is also the switch and loses power takes the link with it, and k3s
-      # on this node needs the address to bind whether or not anything can reach it.
+      # Configure the address even with no link: a gateway that is also the switch loses power
+      # and takes the link with it, and k3s on this node needs the address to bind whether or not
+      # anything can reach it.
       # This also keeps the default route below installed with no carrier, so static-address.yml
       # sets ignore_routes_with_linkdown on the link, for IPv4 and IPv6, to let a fallback route
-      # win (#4510).
+      # win.
       ignore-carrier: true
       addresses:
         - "{{ server_ip }}/{{ lan_subnet.split('/')[1] }}"

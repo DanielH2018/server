@@ -2,7 +2,7 @@
 
 The Dockerfile pins each pip dependency exactly behind a digest-pinned base, so a rebuild
 resolves nothing. The pins are read off the RENDERED Dockerfile, the text k8s/image-builder
-stages for the build (#3175). mcp must stay below 2: mcp 2.0.0 removes `mcp.server.fastmcp`, which app.py
+stages for the build. mcp must stay below 2: mcp 2.0.0 removes `mcp.server.fastmcp`, which app.py
 imports, and the container would crash-loop. renovate.json's `allowedVersions: "<2"` rule on
 `mcp` holds that line for Renovate. The two must agree: a pin that crossed the cap by hand, or
 a cap that went missing, each recreates the crash-loop one way or the other.

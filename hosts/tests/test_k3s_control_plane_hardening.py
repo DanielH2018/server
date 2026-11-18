@@ -58,9 +58,8 @@ def _apiserver_arg_names() -> set[str]:
 def _audit_policy() -> dict:
     """The audit policy daniel-box's package ships, as host mode renders it (H6.4a).
 
-    The package ships the file before any k3s start can name it, so the old "written before the
-    installer runs" ordering test left with the task. `test_k3s_server_component.py` holds that
-    every file a flag names is a file the package ships.
+    The package ships the file before any k3s start can name it. `test_k3s_server_component.py` holds that every file a flag names is a file the
+    package ships.
     """
     return yaml_fast.safe_load(_package().files[AUDIT_POLICY][0].decode())
 
@@ -284,7 +283,7 @@ def _audit_level(user: str, verb: str, group: str, resource: str) -> str:
 def test_controller_status_churn_is_dropped_and_other_writes_are_kept(
     user: str, verb: str, group: str, resource: str, level: str
 ):
-    """The audit stream's largest producers are controller status writes (#8512).
+    """The audit stream's largest producers are controller status writes.
 
     Each drop names the controller's own identity, so the same write by a person still lands.
     """
@@ -298,9 +297,9 @@ def test_controller_status_churn_is_dropped_and_other_writes_are_kept(
 def test_alloy_tails_the_audit_log():
     """A log nobody can read is not a control — and the tail has two halves.
 
-    Both halves read the rendered PATH rather than the variable's name in the template. The
-    name appearing anywhere — a comment, a different directive — satisfied the old form, and the
-    rendered path is what Alloy and the kubelet actually get (#3202).
+    Both halves read the rendered PATH rather than the variable's name in the template. A
+    name appearing anywhere, such as a comment or a different directive, would satisfy a name
+    check, and the rendered path is what Alloy and the kubelet actually get.
     """
     # Resolved, not raw: `k3s_audit_log_path` is itself a template over `k3s_audit_log_dir`,
     # so group_vars holds `{{ k3s_audit_log_dir }}/audit.log` and only the render context
@@ -362,7 +361,7 @@ def test_both_namespaces_carry_the_psa_labels():
     """Labels on one namespace and not the other leave the two namespaces enforcing different policy."""
     obs = rendered_k8s_text("observability", "00-namespace.yaml.j2")
     # The rendered labels, not the variable's name: a Namespace that mentions k8s_psa_labels in
-    # a comment and labels nothing passed the old form.
+    # a comment and labels nothing would pass a name check.
     missing = sorted(
         f"{key}: {value}"
         for key, value in _all_vars()["k8s_psa_labels"].items()

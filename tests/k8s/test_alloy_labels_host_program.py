@@ -1,7 +1,7 @@
 """The Alloy `loki.process "host"` stage must label host lines by program and leave them intact.
 
 The HostLogErrors rule groups host syslog by a `program` label, which this stage extracts from
-the rsyslog tag (#6163). The stage has two ways to be wrong:
+the rsyslog tag. The stage has two ways to be wrong:
 
 - it labels nothing, or labels the wrong field, and HostLogErrors fires with `program` empty;
 - it rewrites the line, and the LogQL that reads the raw rsyslog line stops matching: the line

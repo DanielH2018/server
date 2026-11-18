@@ -48,7 +48,7 @@ def test_the_token_file_is_the_agents_alone_and_the_operator_only_traverses_its_
         "0600",
     )
     assert output["keys"] == ["claude_code_agent_gh_token"]
-    # The operator's group traverses to stat the token file (#6487); it never lists or reads.
+    # The operator's group traverses to stat the token file; it never lists or reads.
     for flag, mode in ((True, "0710"), (False, "0700")):
         setup = agent_setup_script(
             tmp_path / str(flag), claude_code_agent_operator_read=flag

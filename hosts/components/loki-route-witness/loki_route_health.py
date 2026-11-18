@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 """Turn `probe.py loki-labels` output into an up/down verdict for the Loki read-route witness.
 
-WHY THE EXIT CODE CANNOT BE THE VERDICT (issue #1712). `probe.py` builds its curl argv without
+WHY THE EXIT CODE CANNOT BE THE VERDICT. `probe.py` builds its curl argv without
 `-f` (`scripts/diagnostics/probe_lib/core.py`, `curl_argv`), so a request Traefik refuses returns
 the body `404 page not found` and exits **0**. A check that pushed on the exit code alone would
-have read UP through the entire window #1693 describes, when this route was dead from
-daniel-server — green and inert. `docs/failure-classes.md` records this as class 2, a check that
+read UP while this route was dead from daniel-server — green and inert. `docs/failure-classes.md` records this as class 2, a check that
 observes a proxy rather than the property.
 
 So the verdict is read from the BODY: valid JSON, `status: success`, and a non-empty `data`
@@ -30,7 +29,7 @@ import sys
 # rather than carried.
 _MAX_DETAIL = 160
 
-# `lib/exit_codes.py:USAGE_ERROR`, which this host-shipped script cannot import (#4487).
+# `lib/exit_codes.py:USAGE_ERROR`, which this host-shipped script cannot import.
 USAGE_ERROR = 64
 
 

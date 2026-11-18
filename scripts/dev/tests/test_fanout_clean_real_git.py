@@ -217,7 +217,7 @@ def _merged_tree_under_the_repo_gitignore(
 
 
 def test_a_merged_tree_holding_only_a_scratch_draft_is_removed(tmp_path, monkeypatch):
-    """#4461: an agent's `.claude/scratch/` PR-body draft kept a merged fan-out tree as
+    """An agent's `.claude/scratch/` PR-body draft kept a merged fan-out tree as
     'uncommitted changes', and the kept tree held one of its host's batch slots."""
     _scrub_git_env(monkeypatch)
     ignore_foreign_slice_holds(monkeypatch)

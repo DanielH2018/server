@@ -94,7 +94,7 @@ def test_from_the_landing_host_the_pi_is_one_ssh_call():
 
 
 def test_from_another_host_the_pi_is_reached_through_the_landing_host():
-    # daniel-pi accepts no key from daniel-server (#8773). The Pi's own shell must still be
+    # daniel-pi accepts no key from daniel-server. The Pi's own shell must still be
     # the one that expands the substitution, so daniel-box's shell gets it quoted.
     assert pi_plane.pi_containers_argv("daniel-server") == [
         "ssh",
@@ -199,7 +199,7 @@ def test_format_targets_all_up_is_clean():
 
 
 def test_format_targets_flags_only_the_down_target():
-    """The healthy target prints no row: the view is the exceptions and a count (#7896)."""
+    """The healthy target prints no row: the view is the exceptions and a count."""
     active = [_target("node"), _target("loki", health="down", last_error="refused")]
     active[1]["labels"]["job"] = "loki"
     text, code = pi_plane.format_targets(active)
@@ -237,7 +237,7 @@ def _run_targets_one_down(scaled):
 
 
 def test_run_targets_passes_a_down_target_whose_deployment_is_scaled_to_zero(capsys):
-    """An idle on-demand game server's exporter is down by design, not a failure (#7912)."""
+    """An idle on-demand game server's exporter is down by design, not a failure."""
     assert _run_targets_one_down({"terraria-stats"}) == 0
     assert capsys.readouterr().out.splitlines() == [
         "  - terraria-stats [daniel-pi] scaled to 0",

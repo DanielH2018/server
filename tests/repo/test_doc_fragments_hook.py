@@ -1,4 +1,4 @@
-"""The `regen-doc-fragments` prek hook rewrites a stale docs fragment at commit time (#3827).
+"""The `regen-doc-fragments` prek hook rewrites a stale docs fragment at commit time.
 
 Changing a tunable a fragment reads used to fail `static-ratchet-tests` until someone ran
 `scripts/docs/gen_doc_fragments.py` by hand. The hook runs it in `--fix` mode on the commit

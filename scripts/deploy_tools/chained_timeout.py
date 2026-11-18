@@ -43,7 +43,8 @@ CONCURRENT = 5
 # names (d4-ordering.md, *The cap*). The three workflow limits are sized from this figure
 # (tests/repo/test_promote_workflow_verify.py).
 # DECIDED: the clamp stands although the published bundle's all-changed chain is past it
-# (#5868: 37032s with 124 Kustomizations, against 19800s; it was 36912s until #8370 added
+# (#5868: 37152s with 125 Kustomizations, against 19800s; it was 37032s until the
+# vaultwarden role added `vaultwarden`, 36912s until #8370 added
 # `lidarr-verify`, 36732s until #8192 added
 # `slskd`, 36480s until #8190 added
 # `lidarr` and `lidarr-snapshot`, which lidarr waits on, 36360s until #8194 added

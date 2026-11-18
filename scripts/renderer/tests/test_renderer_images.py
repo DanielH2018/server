@@ -136,7 +136,7 @@ def test_a_render_of_every_target_builds_all_ten():
 
 
 def test_a_role_render_writes_only_the_contexts_its_roles_build(tmp_path):
-    """A consumer reads only its own role's images, so `--role` builds no other (#5374)."""
+    """A consumer reads only its own role's images, so `--role` builds no other."""
     out = tmp_path / "out"
     argv = ["cluster", "--out", str(out), "--role", "pihole", "--role", "n8n"]
     assert homelab_render.main(argv) == RENDER_OK
@@ -176,7 +176,7 @@ def test_all_images_beside_secret_stubs_is_a_usage_error(tmp_path, capsys):
 
 def test_a_shared_only_render_with_all_images_passes_the_images_jobs_plan(tmp_path):
     """The publish job's no-tag render: the `images` job's plan refuses one without tags.json,
-    and `publish` needs that job (#5593). The census still passes the bundle beside it."""
+    and `publish` needs that job The census still passes the bundle beside it."""
     out = tmp_path / "out"
     argv = ["cluster", "--out", str(out), "--shared-only", "--all-images"]
     assert homelab_render.main(argv) == RENDER_OK

@@ -10,7 +10,7 @@ Three things have to hold together, and each has a way of failing that reads gre
 - The record runs BEFORE `git diff --cached --quiet`. That gate exits the script when the
   generated trees did not move, which is most runs, so a record after it never publishes.
 - Both weights tables are in the `git add`: the recorded one, and the runner-seconds one that
-  `--refresh-runner` rewrites from CI's logs (#6178). Written and left unstaged, a table is a
+  `--refresh-runner` rewrites from CI's logs. Written and left unstaged, a table is a
   modified file in the primary checkout, which `homelab-checkout-sync` reads as dirty and
   which parks it.
 - `restore_generated_tree`'s per-tree check names them too. That check is what decides between
@@ -19,7 +19,7 @@ Three things have to hold together, and each has a way of failing that reads gre
 
 The runner refresh runs before the gate for the same reason the record does.
 
-The cron also records what each test module depends on (`affected_tests.py record`, #8458),
+The cron also records what each test module depends on (`affected_tests.py record`),
 into a third table that a pull request's CI run selects its test modules from. The same
 three things hold for it, and it needs `strace`, which the component has to install.
 
@@ -211,7 +211,7 @@ def _flags(text: str, arguments: str) -> set[str]:
     ],
 )
 def test_a_successful_weight_step_reaches_the_crons_output(tmp_path, message):
-    """#7132, #7136, #7711: a successful step's report is the only record of what it moved.
+    """A successful step's report is the only record of what it moved.
 
     Runs the rendered step with a stub `uv` that exits 0. The step ends at its closing
     unindented `fi`, and `alert` and `logger` count as output.
@@ -239,7 +239,7 @@ def test_a_successful_weight_step_reaches_the_crons_output(tmp_path, message):
 
 
 def test_the_cron_also_refreshes_weights_that_are_present():
-    """#4888: `--record-missing` never touches a present entry, so a module that grew 1.5-2x
+    """`--record-missing` never touches a present entry, so a module that grew 1.5-2x
     past its weight keeps the old number. The cron is the one place that measures serially on
     the recording host, which is where drift that small is distinguishable from runner scale.
 

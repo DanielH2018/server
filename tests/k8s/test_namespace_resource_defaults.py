@@ -62,7 +62,7 @@ _VENDORED_EXEMPT = {
         "tests/longhorn/test_longhorn_control_plane_resources.py holds it",
     ),
     # DECIDED: MetalLB's controller and speaker carry no memory limit, because an OOM kill
-    # would drop the load balancer (#8326; operator ruling 2026-11-14).
+    # would drop the load balancer (operator ruling 2026-11-14).
     "metallb Deployment/controller containers/controller": (
         frozenset({"limits.memory"}),
         "no memory limit by design, an OOM kill would drop the load balancer "
@@ -218,8 +218,8 @@ def test_every_rendered_container_sets_requests_and_limits() -> None:
 def test_every_vendored_container_sets_requests_and_limits_or_is_exempt() -> None:
     """The render walk above holds no vendored file, so a vendored controller is checked here.
 
-    system-upgrade-controller ran BestEffort past the guard above until its patch (#8225),
-    because a role's `files/upstream/` and `files/patches/` never reach `rendered_docs()`.
+    A vendored controller such as system-upgrade-controller would run BestEffort past the guard
+    above, because a role's `files/upstream/` and `files/patches/` never reach `rendered_docs()`.
     Their namespaces carry no LimitRange either, so a container left at upstream's
     `resources: {}` runs BestEffort.
     """

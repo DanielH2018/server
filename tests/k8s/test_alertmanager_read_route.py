@@ -1,9 +1,9 @@
-"""Alertmanager's read door stays narrow, and Karma, the silence UI, stays LAN-only (#6691).
+"""Alertmanager's read door stays narrow, and Karma, the silence UI, stays LAN-only.
 
 The read door is a GET-only, LAN-only read of two API paths. `probe.py health` and `probe.py
 monitors` read silences and inhibitions through it. It carries no Authelia, so its matcher is
 the whole control: a dropped `Method(GET)` would let any LAN host POST a silence that mutes
-every page, and a missing node address makes `probe.py` 404 from one node's shell (#1693).
+every page, and a missing node address makes `probe.py` 404 from one node's shell.
 
 Karma can create silences too, behind the `authelia` chain. A public name would put that on
 the internet under Authelia's `*.<domain>` wildcard, which carries no `admins` subject.

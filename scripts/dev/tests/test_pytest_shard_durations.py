@@ -130,7 +130,7 @@ def test_both_arms_report_together():
 
 
 # REPORT's new module recorded at the 0.48s that `test_guard_tests_read_renders_not_templates.py`
-# carried while it measured 45.67s on a master run (#4873): present in the table, and as good as
+# carried while it measured 45.67s on a master run: present in the table, and as good as
 # missing from it.
 UNDER_RECORDED = RECORDED | {NEW_MODULE: 0.48}
 
@@ -159,7 +159,7 @@ CACHE_FIRST_REPORT = f"7.41s setup    {NEW_MODULE}::test_the_long_one\n"
 
 
 def test_a_near_free_entry_measuring_over_five_seconds_annotates():
-    """Below the unweighted arm's 10s, where four of #4873's six rows sat."""
+    """Below the unweighted arm's 10s."""
     weights = RECORDED | {NEW_MODULE: 0.0}
     complaints = shard_weight_gate.durations_complaints(CACHE_FIRST_REPORT, weights)
     assert len(complaints) == 1
@@ -256,7 +256,7 @@ def test_the_stale_repair_refuses_a_path_no_shard_runs():
 
 
 def test_no_mode_names_every_mode(capsys):
-    """The usage error lists all seven modes, not the three it named before #4448."""
+    """The usage error lists all seven modes, not the three."""
     with pytest.raises(SystemExit) as exc:
         pytest_shard.main([])
     assert exc.value.code == 64

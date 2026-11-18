@@ -1,16 +1,14 @@
-# The secondary upsmon, the client half of the UPS shutdown chain, on both cluster nodes (H4,
-# docs/target-architecture/host/h4-secrets-unit.md, *NUT on daniel-server*; daniel-box since H7.33).
+# The secondary upsmon, the client half of the UPS shutdown chain, on both cluster nodes.
 # The package owns the host half: nut-monitor reads the rendered upsmon.conf through a drop-in, a
 # timer runs the UPS watchdog, and the APC udev rule installs from the package. The udev rule
-# is harmless on daniel-box, which has no UPS on USB. The Ansible `nut_host` role
-# that wrote it before H7.33 is gone.
+# is harmless on daniel-box, which has no UPS on USB.
 #
 # defaults/main.yml sits beneath the `defaults:` map, so `nut_host_upsd_host` resolves to
 # 127.0.0.1 on daniel-server (inventory_hostname == ups_host) and to `nut_host_upsd_clusterip` on
 # daniel-box.
 #
-# The output persists, against C5's default, because nut-monitor must start at boot even when the
-# decrypt cannot run (*Persisted outputs*). It installs to
+# The output persists, against the default, because nut-monitor must start at boot even when the
+# decrypt cannot run. It installs to
 # /var/lib/homelab-secrets/etc/nut/upsmon.conf, root:nut 0640, and ships no symlink at `path`,
 # which is the nut-client conffile. /etc/nut/nut.conf and /etc/nut/upsmon.conf stay in place as
 # conffiles and are not legacy entries: they are the rollback path, read again by the vendor unit
@@ -29,7 +27,7 @@
 #   reads the upsmon.conf output that unit renders.
 defaults:
   # The nut Service's pinned ClusterIP, which any host but ups_host (daniel-box) names in its
-  # MONITOR line (H7.33). ups_host reads 127.0.0.1 instead, so daniel-server ignores the value.
+  # MONITOR line. ups_host reads 127.0.0.1 instead, so daniel-server ignores the value.
   # k8s/roles/nut/defaults/main.yml:nut_k8s_cluster_ip is the other copy; a test pins the two.
   nut_host_upsd_clusterip: 10.43.171.124
 depends:
@@ -57,7 +55,7 @@ files:
   - {src: units/homelab-ups-watchdog.timer.j2, dst: /usr/lib/systemd/system/homelab-ups-watchdog.timer}
 enable:
   homelab-ups-watchdog.timer: {target: timers.target, when: nut_host_watchdog_armed}
-# What the nut_host role installed on daniel-server before H4.3c. Reconcile retires each once the
+# What the nut_host role installed on daniel-server. Reconcile retires each once the
 # package's units have started.
 legacy:
   - {cron_file: ups-secondary-health}

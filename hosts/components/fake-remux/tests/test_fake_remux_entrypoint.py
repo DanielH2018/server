@@ -1,4 +1,4 @@
-"""fake-remux runs behind one `fake_remux.py {scan,replace}` entrypoint (#4353).
+"""fake-remux runs behind one `fake_remux.py {scan,replace}` entrypoint.
 
 The two entrypoints `fake_remux_scan.py` and `fake_remux_replace.py` fold into one
 `files/fake_remux.py`, and their two libraries move into a PEP 420 namespace package

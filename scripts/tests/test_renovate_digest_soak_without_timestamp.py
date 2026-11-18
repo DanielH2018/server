@@ -5,12 +5,11 @@ Renovate ages a digest update against the release timestamp of the newest versio
 tag, and only Docker Hub returns one. A GHCR or lscr.io digest, or any digest on a tag that
 names no version (`latest`, `jvm-stable`), has none. Under the default
 `minimumReleaseAgeBehaviour: timestamp-required` such an update sits in Pending Status Checks
-indefinitely, which is how four digests sat there 4 to 13 days past their 3-day soak (#3368).
+indefinitely.
 The k8s digest rule in `renovate.json` sets `timestamp-optional`, so Renovate raises them with
 no age check while still enforcing the soak wherever a timestamp exists.
 
-A version bump on GHCR or lscr.io has no timestamp either (#3370). bazarr v1.6.2-ls366,
-released 2026-09-26, still sat in Pending Status Checks past its 7-day soak. The k8s version
+A version bump on GHCR or lscr.io has no timestamp either. The k8s version
 rule sets `timestamp-optional` for `docker` minor and patch bumps, so a Docker Hub release keeps
 its 7-day soak and a GHCR or lscr.io release raises on the first run.
 
@@ -30,7 +29,7 @@ Run: uv run pytest scripts/tests/test_renovate_digest_soak_without_timestamp.py
 import pytest
 from _renovate import _REPO, _resolve_setting
 
-# The digests #3368 found held, as package -> the file carrying the pin. Named rather than
+# The digests held, as package -> the file carrying the pin. Named rather than
 # derived, so a moved pin fails as a missing member instead of resolving against a path no
 # rule was written for. cloudflare-ddns is a Docker Hub image on `latest`: it has no
 # timestamp because its tag names no version, not because of its registry.
@@ -40,7 +39,7 @@ HELD_PINS = {
     "favonia/cloudflare-ddns": "k8s/roles/cloudflare-ddns/defaults/main.yml",
 }
 
-# The version bumps #3370 found held, as package -> the file carrying the pin. Named for the
+# The version bumps held, as package -> the file carrying the pin. Named for the
 # same reason as HELD_PINS. crane is on gcr.io, the third registry with no timestamps.
 HELD_VERSION_PINS = {
     "lscr.io/linuxserver/bazarr": "k8s/roles/bazarr/defaults/main.yml",
@@ -134,5 +133,5 @@ def test_a_digest_rule_setting_the_key_is_clean() -> None:
 
 
 def test_a_digest_rule_without_the_key_is_flagged() -> None:
-    """The pre-#3368 config: Renovate's default `timestamp-required` holds the digest."""
+    """Without the key, Renovate's default `timestamp-required` holds the digest."""
     assert _behaviour(*_QBITTORRENT, "digest", rules=[_DIGEST_RULE]) is None

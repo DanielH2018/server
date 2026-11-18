@@ -2,7 +2,9 @@
 
 GitHub runs at most 20 hosted jobs at once for this account, and one full run of `ci.yml` is
 more jobs than that. This page records what the cap costs a landing, the rule for when a job
-may skip without taking a runner, and the plan to get under the cap in three phases.
+may skip without taking a runner, and the plan to get under the cap in two phases, A and B.
+Phase C, runner pods for the heavy jobs, is set aside in
+[#8982](https://github.com/DanielH2018/server/issues/8982).
 
 ## What the cap costs
 
@@ -666,13 +668,19 @@ cancelled it, minutes later: #8921's run on `051b6a86` went from 23:05:05 to 23:
 the run it merged on started. The landing now updates the branch first, waits up to
 60 s for GitHub to show the new head, and then marks the draft ready.
 
-### Phase C: runner pods for `hooks` and `pytest`
+## Phase C, set aside: runner pods for `hooks` and `pytest`
 
-**D8 stays closed, ruled by the operator on 2026-11-15** after the measurement under load.
+**The operator took Phase C out of the plan on 2026-11-18**, and
+[#8982](https://github.com/DanielH2018/server/issues/8982) tracks it for later. The plan ends
+with Phase B. The cap still bound for 18.4 minutes in the window after option B and the turn
+fixes, in bursts (*After option B and the turn fixes, measured*). This section keeps C2 and C3
+as they were planned, for whoever picks the issue up.
+
+**D8 stayed closed, ruled by the operator on 2026-11-15**, after the measurement under load.
 The pool spent 24.1 minutes at the cap in that window, in 245 spans of at most 0.7 minutes,
 and 17.3 of them fell from 19:00 to 21:00 UTC during a burst of daniel-server fan-out
-batches. Option B, the rejoin fix and the rejoin at the turn remove most of what held the
-slots then. Measure again on the next busy stretch with them in place.
+batches. The measurement after option B, the rejoin fix and the rejoin at the turn found
+18.4 minutes in a window of 28 merges.
 
 **Phase C stopped at C1 on 2026-11-14.** The queue of Phase B removes more runs than runner
 pods could take, and it needs no runner. C2 and C3 are kept here as they were planned, with
@@ -739,8 +747,6 @@ The decisions, all the operator's:
 
 ## See also
 
-- [CI throughput: what remains](ci-throughput-remaining.md) is the brief for the session
-  that takes this plan up: the work left, in order, and the traps this page does not carry.
 - [Landing a merged PR](landing.md) holds the turn, the line and the batch as built.
 - [Self-hosted runner spike](archive/self-hosted-runner-spike.md) holds the 2026-09-22
   measurements behind ADR-0018.

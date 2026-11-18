@@ -387,7 +387,7 @@ class TestSkipExitCodes:
 
         assert renovate_agent.main(_tools(host), self._cfg(tmp_path)) == 0
         assert host.posts == []
-        # The quiet skip posts nothing, so only this flush delivers an outage's queue (#3905).
+        # The quiet skip posts nothing, so only this flush delivers an outage's queue.
         assert host.flushed == [f"{tmp_path}/state/discord-spool"]
         (rec,) = _records(tmp_path)
         assert rec["result"] == "skipped" and rec["reason"]

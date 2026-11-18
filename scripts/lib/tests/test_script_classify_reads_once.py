@@ -2,7 +2,7 @@
 
 Three readers need a script's syntax tree: the import graph, the scripts it names, and its
 module-level shape. A `classify()` of the real tree parsed each Python source up to six times
-and walked it up to five, about 7s that two test modules paid (#5564). The verdicts do not
+and walked it up to five, about 7s that two test modules paid. The verdicts do not
 depend on how often a file is read, so only a count can see a repeat creep back.
 
 Run: uv run pytest scripts/lib/tests/test_script_classify_reads_once.py

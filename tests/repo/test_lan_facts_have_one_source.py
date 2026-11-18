@@ -27,16 +27,14 @@ from lib.repo_paths import HOST_VARS
 
 # --- the four LAN-fact literal shapes -----------------------------------------------------
 #
-# Deliberately narrower than a `10.0.0.`/`10.42.`/`10.43.` prefix sweep — see the module
-# docstring for why the pod/Service CIDRs and per-service ClusterIPs are out of scope. A LAN
-# octet immediately followed by `/` is a CIDR mention (`10.0.0.0/24`, `10.0.0.0/8`), which is
-# either the `lan_subnet` definition itself or a supernet comment, not a duplicated host/VIP
-# address — excluded so those don't need their own allowlist rows.
+# Deliberately narrower than a `10.0.0.`/`10.42.`/`10.43.` prefix sweep; the module docstring says
+# why the pod/Service CIDRs and per-service ClusterIPs are out of scope. A LAN octet followed by
+# `/` is a CIDR mention (the `lan_subnet` definition or a supernet comment), not a duplicated
+# address, so it is excluded.
 #
-# `lan_octet` is a CLOSED set of the seven values group_vars/host_vars actually assign as a
-# host address or MetalLB VIP — not every `10.0.0.*`. A bare digit pattern also matches every
-# unrelated LAN device this repo happens to mention (a smart display, a Zigbee coordinator),
-# and those are not one of the LAN facts this guard owns.
+# `lan_octet` is a CLOSED set of the seven values group_vars/host_vars assign as a host address
+# or MetalLB VIP. A bare digit pattern would also match every unrelated LAN device the repo
+# mentions (a smart display, a Zigbee coordinator).
 _LAN_OCTETS = ("139", "161", "215", "240", "241", "242", "243")
 PATTERNS = {
     "staging_subnet": re.compile(r"192\.168\.140\.\d+"),

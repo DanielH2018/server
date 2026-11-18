@@ -1,7 +1,7 @@
 """The k8s render is built before any test's timed phases, by the `render_share` plugin.
 
 Under xdist each worker builds `_k8s_render`'s render once, and `--durations` charges it to
-whichever test asks first (#4873). The plugin's hook builds it when collection finishes
+whichever test asks first. The plugin's hook builds it when collection finishes
 instead, through `_k8s_render.prebuild`.
 
 The hook cases run pytest in a child process, because only a fresh session shows whether the

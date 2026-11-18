@@ -260,7 +260,7 @@ def test_markdown_omits_the_duplicates_warning_when_none_found(tmp_path):
 
 
 def test_lines_added_above_a_marker_leave_the_page_unchanged(tmp_path):
-    """Two PRs that each shift a marker down must not both rewrite the page (#7612)."""
+    """Two PRs that each shift a marker down must not both rewrite the page."""
     _write(tmp_path, "a.py", "# DECIDED: use the retry flag.\n")
     before = g.render_markdown(_rows(tmp_path), tmp_path)
     _write(tmp_path, "a.py", "import os\nimport sys\n# DECIDED: use the retry flag.\n")
@@ -283,7 +283,7 @@ def _live_rows() -> tuple[dict, ...]:
 
     `/dev/null` as the blame repo skips the `git blame` per marker: no test here reads a
     live row's `decided` date, and the ~200 blames over full history were 57s of CI's
-    pytest time (run 40215966021). `test_blame_is_unknown_outside_a_git_repo` covers the
+    pytest time. `test_blame_is_unknown_outside_a_git_repo` covers the
     skipped path; a cwd that is not a directory never reaches `git`, so a `GIT_DIR` set by
     a hook cannot point the blame back at the real repo.
     """
@@ -341,7 +341,7 @@ def test_live_tree_excludes_its_own_generator_and_test_file():
 
 
 def test_this_roles_claude_md_pointer_is_flagged_when_the_file_is_missing(tmp_path):
-    """The shape issue #1857 was filed on: a role's markers said "this role's CLAUDE.md"
+    """A role's markers said "this role's CLAUDE.md"
     while the role had no `CLAUDE.md`.
     """
     _write(
@@ -466,7 +466,7 @@ def test_markdown_omits_the_unresolved_pointers_warning_when_all_resolve(tmp_pat
 def test_live_tree_carries_pointers_and_every_one_resolves():
     """Both halves in one place: the census must FIND pointers (non-vacuity — 45 on
     2026-09-17, floor set well under that) and none may dangle. A marker that sends a
-    reviewer to a file that does not exist is what issue #1857 was filed on.
+    reviewer to a file that does not exist is a defect.
     """
     rows = _live_rows()
     found = sum(len(g._pointers_in(r, REPO)) for r in rows)

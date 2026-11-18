@@ -275,9 +275,9 @@ def test_claim_is_stale_when_locked_with_dead_owner_clean_and_merged():
 # --- the merged read is asked once per worktree, not once per claim ------------------
 #
 # `claim_states` calls `merged(tree)` once per claimed issue, and a fan-out's claims all name
-# ONE orchestrator worktree. For an unmerged branch each of those calls is four git layers
-# ending in a `gh pr list` network read, so the memo lives with the callable rather than in
-# `classify`, which still receives an eagerly-computed bool.
+# ONE orchestrator worktree. For an unmerged branch each call ends in a `gh pr list` network
+# read, so the memo lives with the callable rather than in `classify`, which receives an
+# eagerly-computed bool.
 
 
 def _counting_ask():
@@ -320,7 +320,7 @@ def test_two_different_worktrees_each_get_their_own_answer():
     assert calls == [("/repo", "abc", "b1"), ("/repo", "def", "b2")]
 
 
-# #4103: each Unix user's clone lists only its own worktrees, so a claim made from the other
+# Each Unix user's clone lists only its own worktrees, so a claim made from the other
 # clone always read "no worktree" and was reaped while its session worked on.
 AGENT_WT = "worktree-claude+issue-1132"
 

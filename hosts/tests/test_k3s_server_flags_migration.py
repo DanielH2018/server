@@ -49,10 +49,10 @@ MERGE_BASE_ARGS = [
     "--etcd-snapshot-compress",
     "--etcd-snapshot-schedule-cron=0 */12 * * *",
     "--etcd-snapshot-retention=28",
-    # #8359: image GC below Longhorn's replica scheduling floor.
+    # Image GC below Longhorn's replica scheduling floor.
     "--kubelet-arg=image-gc-high-threshold=65",
     "--kubelet-arg=image-gc-low-threshold=55",
-    # #8644: memory pods use without requesting it.
+    # Memory pods use without requesting it.
     "--kubelet-arg=system-reserved=memory=7Gi",
 ]
 
@@ -110,8 +110,8 @@ def test_a_flag_lost_in_the_move_is_detected():
 def reserved_memory_problems(config: dict) -> list[str]:
     """The kubelet must reserve memory, so allocatable excludes what unrequested pods use.
 
-    Longhorn's instance-manager has no memory request (#8617), so without a reserve the
-    scheduler counts its working set as free (#8644).
+    Longhorn's instance-manager has no memory request, so without a reserve the
+    scheduler counts its working set as free.
     """
     for item in config.get("kubelet-arg", []):
         name, _, value = item.partition("=")
@@ -137,7 +137,7 @@ def image_gc_problems(config: dict) -> list[str]:
 
     The image filesystem is the root volume Longhorn's disk shares, and
     k3s-host-checks' `k3s_disk_max_pct` is that floor. GC that starts above it leaves every
-    superseded image on disk until Longhorn stops scheduling replicas (#8307). The kubelet
+    superseded image on disk until Longhorn stops scheduling replicas. The kubelet
     refuses to start when the low threshold is not below the high one.
     """
     match = re.search(

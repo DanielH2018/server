@@ -2,10 +2,10 @@
 """Every external image pin must carry an `@sha256:` digest, not a tag alone.
 
 Two rules live here. The base-image rule below is the older and stricter one: it has no
-exemptions. The fleet rule (`test_every_external_image_pin_carries_a_digest`, issue #3281)
+exemptions. The fleet rule (`test_every_external_image_pin_carries_a_digest`)
 extends the same requirement to every `*_image` default, so the repo has one pinning policy
 rather than a digest for half the fleet and a bare tag for the rest. Renovate adds the
-digests itself (`pinDigests`, re-enabled for the regex manager by PR #3326), so a bare pin
+digests itself (`pinDigests`, enabled for the regex manager), so a bare pin
 is a pin Renovate could not see or was told to skip. The fleet rule has no exemptions: a pin
 renovate.json disables, such as `coredns_image`, carries a digest moved by hand.
 

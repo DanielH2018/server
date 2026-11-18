@@ -1,4 +1,4 @@
-"""The rkhunter baseline refresh after every package change, outside apt's lock (#7680).
+"""The rkhunter baseline refresh after every package change, outside apt's lock.
 
 rkhunter's own APT_AUTOGEN hook ran `rkhunter --propupd` inside apt's DPkg::Post-Invoke, so apt
 held the dpkg lock for about 2 minutes on the Pi after every package change. The integrity-scans
@@ -7,7 +7,7 @@ without blocking. The unit's script waits for apt to release the lock, refreshes
 again when dpkg changed packages during the refresh, because a start while the unit is active
 does nothing. A needrestart override keeps apt's own needrestart hook from restarting the unit
 while it waits, which deadlocked daniel-box on 2026-11-14. A dpkg run that changed only
-homelab-* packages keeps the baseline (#8650), which is safe only while no host package ships a
+homelab-* packages keeps the baseline, which is safe only while no host package ships a
 file rkhunter records; the census below holds that.
 
 Run: uv run pytest hosts/tests/test_rkhunter_propupd.py

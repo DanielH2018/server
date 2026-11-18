@@ -1,4 +1,4 @@
-"""await_ci waits out a rate-limit 403 rather than reading it as pending (#8139).
+"""await_ci waits out a rate-limit 403 rather than reading it as pending.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_await_ci_rate_limit.py
 """

@@ -202,7 +202,7 @@ def test_a_wiped_clock_reaches_discord_and_names_the_date(monkeypatch, tmp_path)
     """The run reports the reset rather than completing healthy.
 
     The item below is inside its allowance, so `stuck_pending` is empty — exactly the state
-    the reset creates, and the one that used to post nothing at all.
+    the reset creates.
     """
     posts = []
     now = 1_788_990_155.26  # 2026-09-09 21:42 UTC
@@ -276,7 +276,7 @@ def test_a_re_pushed_branch_inside_the_churn_allowance_stays_silent(
 
 
 def test_an_autoclosed_pr_reaches_discord(monkeypatch, tmp_path):
-    """#4630: the autoclosed arm is folded into the post, not only into the fingerprint."""
+    """The autoclosed arm is folded into the post, not only into the fingerprint."""
     posts = []
     now = 1_000_000.0
     pr = {

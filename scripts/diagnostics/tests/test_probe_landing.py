@@ -170,7 +170,7 @@ def test_worktrees_carry_their_claims_and_the_primary_checkout_is_left_out():
 
 
 def test_a_clear_landing_counts_the_worktrees_rather_than_listing_them():
-    """Nothing blocks, so the list answers no question; `--json` still carries it (#7896)."""
+    """Nothing blocks, so the list answers no question; `--json` still carries it."""
     snap = landing.collect(fake_deploy_ui, fake_run(GREEN))
     text = landing.format_text({**snap, "claims": None})
     assert "2 worktree(s); `probe.py landing --json` lists them." in text

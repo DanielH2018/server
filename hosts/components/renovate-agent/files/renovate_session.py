@@ -9,9 +9,9 @@ The session's home is a tmpfs that ends with the unit, so once claude exits, on 
 wall clock, this script also copies the transcript into `out/`, where the runner keeps it.
 
 The session's output never reaches the journal: it is captured here and written to a file, so
-text a session controls cannot become a syslog line that loki-homelab's rules read
-(dotfiles#967's I3 and I6). The unit's `TimeoutStartSec` is the session's wall clock; systemd
-stops the whole unit at it, and the runner reads `Result=timeout`.
+text a session controls cannot become a syslog line that loki-homelab's rules read.
+The unit's `TimeoutStartSec` is the session's wall clock; systemd stops the whole unit at it,
+and the runner reads `Result=timeout`.
 
 Usage: renovate_session.py   (takes no arguments; -h/--help prints this text)
 """

@@ -59,7 +59,7 @@ def _suspended_landing(
 def test_a_suspended_wait_settles_with_no_missing_tags_reason(
     landing, capsys, classification, host_targets
 ):
-    """#7380: no `--tags` flag was missing here, and the empty gate list still reads settled."""
+    """No `--tags` flag was missing here, and the empty gate list still reads settled."""
     outcome, out = _suspended_landing(landing, capsys, classification, host_targets)
     assert (outcome.rc, outcome.verdict) == (0, "settled"), out
     assert "no --tags given" not in out, out
@@ -69,6 +69,6 @@ def test_a_suspended_wait_settles_with_no_missing_tags_reason(
 def test_a_suspended_wait_credits_no_ansible_exit_code(
     landing, capsys, classification, host_targets
 ):
-    """#7380: no Ansible ran on this path, so nothing reads its exit code."""
+    """No Ansible ran on this path, so nothing reads its exit code."""
     _, out = _suspended_landing(landing, capsys, classification, host_targets)
     assert "ansible exit code" not in out, out

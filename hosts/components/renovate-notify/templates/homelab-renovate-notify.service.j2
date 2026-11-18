@@ -28,7 +28,7 @@ Environment=PYTHONDONTWRITEBYTECODE=1
 # ReadWritePaths: this is the unit that parses attacker-influenceable API JSON, so a cache that
 # survives between runs is state one compromised run could poison for the next. PrivateTmp is
 # destroyed at exit, and a cold cache costs nothing here — the script is stdlib-only and
-# --no-project means there are no packages to fetch (measured: 28K, 56ms).
+# --no-project means there are no packages to fetch.
 # NB the interpreter itself lives under $HOME (~/.local/share/uv/python) and is only *read*,
 # which ProtectHome=read-only permits.
 Environment=UV_CACHE_DIR=/tmp/uv-cache

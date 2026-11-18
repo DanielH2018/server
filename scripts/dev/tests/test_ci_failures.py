@@ -1,7 +1,7 @@
 """`scripts/dev/ci_failures.py` run as its CLI, against a fake GitHub on `PATH`.
 
 `ci_failures_fake_github.txt` holds the fake. It answers as both `gh` and `ghread`, so the tool
-may read through either. It serves the REST shapes of run 42041106424 and reproduces the traps a
+may read through either. It serves REST shapes and reproduces the traps a
 by-hand survey hit: a run object that reports only its latest attempt, a `created=` search capped
 at 1,000 results, a `--job` log read that returns the latest attempt, and `ghread api` refusing a
 job log's terminal escapes. Only `run view --log-failed` ties a log line to its step.
@@ -123,7 +123,7 @@ def _survey(tmp_path: Path, *runs: dict) -> subprocess.CompletedProcess[str]:
 
 
 def _rerun_green_on_master() -> dict:
-    """Run 42041106424's shape: red on attempt 1, green on attempt 2."""
+    """Red on attempt 1, green on attempt 2."""
     return _run(
         42041106424,
         _attempt(

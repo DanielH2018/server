@@ -1,4 +1,4 @@
-"""daniel-pi's Alloy runs through the Pi's Compose project (H5.8).
+"""daniel-pi's Alloy runs through the Pi's Compose project.
 
 Three guards moved here with the service from `tests/services/`
 (`test_alloy_pi_config_labels.py`, `test_alloy_pi_http_surface.py` and
@@ -15,7 +15,7 @@ Three guards moved here with the service from `tests/services/`
   still parses while /metrics needs a credential Prometheus does not send.
 - **GOMEMLIMIT.** The limit bounds the Go runtime's total memory, and a limit under the heap the
   runtime needs makes it collect continuously at a measured 0.28 of a core.
-- **The secret reaches Alloy through the environment only.** The password is no longer in a 0640
+- **The secret reaches Alloy through the environment only.** The password is not in a 0640
   file. The config reads it with `sys.env` and carries no secret, and the compose file fills the
   variable from the project's Compose env file, an operator ruling.
 

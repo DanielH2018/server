@@ -1,6 +1,6 @@
 """The Alloy `host_audit` pipeline ships every keyed audit record and drops the unkeyed noise.
 
-server#8250 watches Claude Code's guardrail paths with auditd, so a record that leaves the host
+auditd watches Claude Code's guardrail paths, so a record that leaves the host
 is the evidence. The pipeline can be wrong three ways: it tails a path auditd does not write;
 its drops catch a keyed watch's records; or it ships the kernel's BPF, netfilter and service
 bookkeeping, about 15000 of 27000 lines in 10 hours on daniel-box.

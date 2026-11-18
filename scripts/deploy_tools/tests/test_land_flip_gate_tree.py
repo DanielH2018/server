@@ -1,4 +1,4 @@
-"""#5744: a flip PR's health gate reads tag ownership from the commit that landed.
+"""A flip PR's health gate reads tag ownership from the commit that landed.
 
 `probe.py health` reads which tags Flux applies from the checkout it runs in, and only a tree carrying the flip knows Flux applies the tag. Run from a tree before the
 flip, it grades `traefik` against Ansible's frozen release record (NOT ROLLED) and looks
@@ -115,7 +115,7 @@ def _land(
 
 
 def _flip(**kwargs: object) -> Fakes:
-    """#5720's shape: traefik and traefik-crds flip to Flux beside an Ansible tag.
+    """Traefik and traefik-crds flip to Flux beside an Ansible tag.
 
     The `host_vars` edit is a deploy-plane change, and the primary checkout does not carry
     the merge commit (`merge_applied_rc` defaults to 1). The promotion's changed set names
@@ -136,7 +136,7 @@ def _flip(**kwargs: object) -> Fakes:
 
 
 def test_a_flip_landed_from_a_checkout_before_its_merge_settles(monkeypatch, capsys):
-    """Verify-by, first half: healthy workloads, a tree before the flip, still `settled`."""
+    """Healthy workloads, a tree before the flip, still `settled`."""
     rc, out = _land(monkeypatch, capsys, _flip())
     assert "VERDICT: settled" in out, out
     assert rc == 0
@@ -150,7 +150,7 @@ def test_a_flux_only_flip_gates_from_the_commit_that_landed(monkeypatch, capsys)
 
 
 def test_a_crd_only_tag_is_graded_or_not_applicable(monkeypatch, capsys):
-    """Verify-by, second half: `traefik-crds` is no `not graded` line and no deferral.
+    """`traefik-crds` is no `not graded` line and no deferral.
 
     traefik reads healthy from every tree here, so the CRD-only tag alone decides the verdict.
     """

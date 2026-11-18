@@ -1,4 +1,4 @@
-"""`hosts/lib/homelab-reconcile` says in the journal how long each action took (#7490).
+"""`hosts/lib/homelab-reconcile` says in the journal how long each action took.
 
 Each test makes one stub command slow by rewriting its wrapper, so the time a line must report
 comes from the test. Reconcile's stderr is its journal stream. A line counts when it names the
@@ -199,7 +199,7 @@ def test_the_wait_for_the_dpkg_lock_reports_its_time(node):
 
 
 def test_wait_for_apt_returns_once_the_lock_is_free_and_acts_on_nothing(node):
-    # homelab-reconcile-wait.service runs this, so apt's post-invoke hooks spend its limit (#7648).
+    # homelab-reconcile-wait.service runs this, so apt's post-invoke hooks spend its limit.
     argv, env = node.command()
     with node.lock.open("r+") as held:
         fcntl.lockf(held, fcntl.LOCK_EX)

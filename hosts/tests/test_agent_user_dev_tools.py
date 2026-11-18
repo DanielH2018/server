@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """The claude agent user gets the commit hooks and the Ansible collections the operator has.
 
-Without prek the agent's commits skipped gitleaks and the commit-time ratchets (#4100). Without
+Without prek the agent's commits skipped gitleaks and the commit-time ratchets. Without
 a readable collections fallback every playbook it ran from a worktree died at `couldn't resolve
-module/action` (#4108). Without jsonq the operator's instruction to use it failed (#4101). Each
+module/action`. Without jsonq the operator's instruction to use it failed. Each
 test pins one leg of the fix, with a reject case beside it.
 
 Run: uv run pytest hosts/tests/test_agent_user_dev_tools.py
@@ -46,7 +46,7 @@ def test_the_agents_clone_gets_hooks_from_its_own_prek(tmp_path) -> None:
 
 
 def test_the_install_reruns_while_any_listed_shim_is_missing(tmp_path) -> None:
-    # A clone made before commit-msg joined the list holds only pre-commit (#7989).
+    # A clone made while the list lacked commit-msg holds only pre-commit.
     setup = agent_setup_script(tmp_path / "render")
     assert "commit-msg" in HOOK_TYPES
     for missing in HOOK_TYPES:

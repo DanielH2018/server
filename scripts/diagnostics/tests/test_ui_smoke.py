@@ -50,12 +50,11 @@ SERVICES = [
     # `Homepage`. `Homepage` is the app's OWN fallback — `initialSettings.title || "Homepage"`
     # at `src/pages/index.jsx:410` in gethomepage/homepage v1.13.2, the revision this cluster
     # runs — so seeing it means the page rendered with NO settings at all, which is the
-    # failure this entry exists to catch. Verified 2026-09-06 against the live pod:
+    # failure this entry exists to catch. The live pod's
     # `__NEXT_DATA__.props.pageProps.initialSettings.title` reads `My Awesome Homepage`, and
     # `title:` at `k8s/roles/homepage/templates/config/settings.yaml.j2:2` is what puts it
-    # there. Issue #1399 read a `Homepage` failure as a stale expectation and proposed both
-    # relaxing this line and deleting that setting; both would have made the check permanently
-    # green on the broken state.
+    # there. A `Homepage` failure is not a stale expectation: relaxing this line or deleting that
+    # setting would make the check permanently green on the broken state.
     #
     # The MECHANISM behind a `Homepage` failure here is not an
     # unreadable config Secret: the image bakes a config-less render of `/` (`en.json` reads

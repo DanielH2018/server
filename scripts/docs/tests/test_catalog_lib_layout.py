@@ -1,6 +1,6 @@
 """The catalog and facts libraries live in `scripts/docs/catalog_lib/`, behind unmoved generators.
 
-#4352 moves the six libraries out of `scripts/docs/` into a PEP 420 namespace package. The
+The six libraries sit in a PEP 420 namespace package, not in `scripts/docs/` itself. The
 generators that import them keep their paths, because the `docs-refresh` cron and the
 `generated_from:` banners name those paths. Each generator still runs the way the cron and
 the prek hooks run it, by file path from any working directory.

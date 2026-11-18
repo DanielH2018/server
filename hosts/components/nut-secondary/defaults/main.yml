@@ -6,7 +6,7 @@
 # /32s precisely because "a cross-node host->pod packet arrives as the SENDING node's flannel.1
 # address". No policy change is needed for this.
 #
-# The Service pins its clusterIP (H7.33), and component.yml's `defaults:` carries that address
+# The Service pins its clusterIP, and component.yml's `defaults:` carries that address
 # as nut_host_upsd_clusterip.
 nut_host_upsd_host: "{{ '127.0.0.1' if inventory_hostname == ups_host else nut_host_upsd_clusterip | default('') }}"
 
@@ -20,5 +20,5 @@ nut_host_watchdog_armed: true
 
 # One value drives both the timer cadence and the check's DEADLINE_S, so a schedule change
 # cannot leave the deadline derived from the old one. The deadline is 2x the cadence plus
-# 300 s, which is one missed run of slack (M3's rule).
+# 300 s, which is one missed run of slack.
 nut_host_watchdog_interval_minutes: 10

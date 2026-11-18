@@ -41,18 +41,18 @@ Environment=CLAUDE_GUARD_HOME={{ pins.tools_dir }}/.local/share/claude-guard
 Environment=CLAUDE_WORKTREE_HOME={{ pins.tools_dir }}/.local/share/claude-worktree
 # The controller owns the binary; the session cannot update it.
 Environment=DISABLE_AUTOUPDATER=1
-# A memory written here would die with the tmpfs home, and none may reach a later run (I2).
+# A memory written here would die with the tmpfs home, and none may reach a later run.
 Environment=CLAUDE_CODE_DISABLE_AUTO_MEMORY=1
 EnvironmentFile=/etc/renovate-agent/session.env
 # Only this script's own lines reach the journal: it captures the session's output and writes
-# it to a file the runner reads, so session text never becomes a syslog line (#967's I3, I6).
+# it to a file the runner reads, so session text never becomes a syslog line.
 SyslogLevel=notice
 # SIGINT ends the session's turn and leaves the script alive to copy the transcript out.
 KillSignal=SIGINT
 NoNewPrivileges=yes
 ProtectHome=yes
 ProtectProc=invisible
-# Nothing the session writes reaches a later run (dotfiles#967's I2): every other path is
+# Nothing the session writes reaches a later run: every other path is
 # read-only, and each writable one but the exchange's requests/ and out/ is a tmpfs that ends
 # with the unit. The runner keeps the transcript out of out/ and then deletes both.
 ProtectSystem=strict

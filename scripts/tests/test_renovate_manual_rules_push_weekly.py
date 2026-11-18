@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Guard that Renovate pushes to a `manual —` PR at most once a week (#4011).
+"""Guard that Renovate pushes to a `manual —` PR at most once a week.
 
 A `manual —` group names a half Renovate cannot write: a ledger row, a paired checksum, a
 coupled pin. Its PR is red by design until a person pushes that half, so every push Renovate
@@ -23,7 +23,6 @@ Run: uv run pytest scripts/tests/test_renovate_manual_rules_push_weekly.py
 from _renovate import _PACKAGE_RULES
 
 # Named rather than derived, so a renamed group fails here instead of leaving the census short.
-# These two produced 32 of the 268 failed CI runs from 2026-06-07 to 2026-10-09.
 MUST_FIND = ("n8n (manual", "code-server build pins (manual")
 
 WEEKLY = {

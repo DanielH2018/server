@@ -28,7 +28,7 @@ from validate import host_packages
 from validate.validate_lib import host_fixtures as fx
 
 BOX = "10.0.0.215"
-# The names the signed fixture repository adds (#5147). Each is reached through getattr, as the
+# The names the signed fixture repository adds. Each is reached through getattr, as the
 # fix adds it: the keyword `publish` takes for the moment the Release stops being valid, and the
 # file name, inside the published repository, of the public keyring that verifies its InRelease.
 VALID_UNTIL = "valid_until"

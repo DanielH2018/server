@@ -128,7 +128,7 @@ def test_a_batch_under_a_day_old_is_named(tmp_path):
 
 def test_batches_over_a_day_old_fold_into_one_count_per_host(tmp_path):
     # A run nobody ran `clean` on stays in the manifest forever; naming every batch put
-    # 35 finished worktrees into each session's context (2026-10-25).
+    # 35 finished worktrees into each session's context.
     _aged_manifest(tmp_path)
     lines = _mod.remote_fanout_lines(
         manifest_dir=tmp_path,

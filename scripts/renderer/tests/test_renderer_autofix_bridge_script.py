@@ -1,9 +1,9 @@
 """autofix-bridge's script ConfigMap is rendered, and its reader's `checksum/restart` covers it.
 
-D5's imperative-ConfigMap row: the ConfigMap used to be staged on the node and applied by a
-task, outside the render, so under Flux no `checksum/restart` could see a module edit. These
-tests render the tag as flux-owned through `homelab_render.cluster`, with a fixture `.source`
-in `tmp_path` holding the keys the render references.
+A ConfigMap staged on the node by a task, outside the render, leaves `checksum/restart` blind
+to a module edit under Flux. These tests render the tag as flux-owned through
+`homelab_render.cluster`, with a fixture `.source` in `tmp_path` holding the keys the render
+references.
 
 Run: uv run pytest scripts/renderer/tests/test_renderer_autofix_bridge_script.py
 """

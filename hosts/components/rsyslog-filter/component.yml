@@ -1,12 +1,11 @@
-# The rsyslog info filter (H7.59, docs/target-architecture/host/h7-delete-ansible.md, step 34). It
-# is the other half of the `host-tuning` component's MaxLevelSyslog=info, and each host lists it in
+# The rsyslog info filter. It is the other half of the `host-tuning` component's MaxLevelSyslog=info, and each host lists it in
 # its own PR, because `host-tuning` is shared and a file added there would reach every host at once.
 # A host with `has_rsyslog: false` never lists it: its rsyslog is masked, so the try-restart has
 # nothing to restart and forwarding reaches nothing.
 # hosts/tests/test_journald_syslog_forwarding.py holds the listing to has_rsyslog.
 #
 # Without the filter every info line on the host lands in /var/log/syslog, which Alloy ships to Loki
-# as {job="syslog"}: +7 MB/day/host against 1.33 MB/day with it. The name sorts before
+# as {job="syslog"}, at several times the volume. The name sorts before
 # 50-default.conf, because `stop` only keeps a message from the rules that run after it.
 #
 # The exemptions decide what survives. auth and authpriv carry the records MaxLevelSyslog=info

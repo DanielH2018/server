@@ -1,6 +1,6 @@
-"""The `verdict-status` and `reconcile` jobs' shell, run as written under fakes (#7865).
+"""The `verdict-status` and `reconcile` jobs' shell, run as written under fakes.
 
-A run that ended without its `settle` (#7863) leaves `prod` apart from `last-good`.
+A run that ended without its `settle` leaves `prod` apart from `last-good`.
 `verdict-status` posts `verify`'s verdict on T as the commit status `homelab/promote-verdict`,
 and a later run's `reconcile` reads it: a good status for `prod`'s digest moves `last-good`,
 anything else writes `settle`'s hold. Both jobs check out nothing, so each test runs a
@@ -121,7 +121,7 @@ def test_the_dispatch_runs_only_after_the_apply_step_moved_last_good(jobs):
 
 
 def test_a_good_status_for_prods_digest_moves_last_good_is_clean(tmp_path, jobs):
-    """The #7863 tags: `prod` names the lost run's digest, which `last-good` does not."""
+    """The lost-settle tags: `prod` names the lost run's digest, which `last-good` does not."""
     result, calls = _reconcile(
         tmp_path, jobs, FAKE_STATUSES=_statuses(("success", f"good {DIGEST} reset"))
     )

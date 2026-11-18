@@ -181,7 +181,7 @@ def test_main_fails_closed_when_shellcheck_missing():
 def test_role_defaults_reach_the_render_context():
     # The gate lints what the host runs only if a role's own defaults are in the context: the
     # artifacts sync script is almost entirely a `{% for peer in claude_code_artifacts_peer_sources %}`
-    # body, and StubUndefined iterates empty (#3178). The template sits in a component, whose
+    # body, and StubUndefined iterates empty. The template sits in a component, whose
     # own defaults/main.yml carries the list.
     path = v.COMPONENTS / "claude-code" / "templates" / "sync-artifacts.sh.j2"
     ctx = v.template_context(path)
@@ -210,8 +210,8 @@ def test_component_defaults_and_host_reach_the_render_context():
 
 
 def test_hostvars_carries_every_hosts_inventory_address():
-    # A `hostvars` stub here once replaced render_context's whole map with daniel-server alone,
-    # so the etcd drill's fence rendered `STUB` where daniel-box's and daniel-pi's addresses go.
+    # A `hostvars` stub that replaced render_context's whole map would render `STUB` where
+    # daniel-box's and daniel-pi's addresses go in the etcd drill's fence.
     path = v.COMPONENTS / "hypervisor" / "templates" / "etcd-restore-drill-vm.sh.j2"
     text = render_shipped_text(path, v.template_context(path))
     box, pi = (

@@ -164,8 +164,8 @@ def test_reencrypt_guard_suppresses_the_reencrypt_but_finds_the_real_earlier_rot
 def test_a_key_introduced_at_a_reencrypt_commit_still_dates_to_it():
     """A key added at a whole-file re-encrypt commit is a real introduction, not noise.
 
-    It must date to that commit — the `healthchecks_api_read_only_key` shape in 3e731bcec,
-    which added a key on the same commit that re-encrypted everything else.
+    It must date to that commit — the `healthchecks_api_read_only_key` shape: a key
+    added on the same commit that re-encrypted everything else.
     """
     stable = _stable_keys(10)
     tools = _history_tools(

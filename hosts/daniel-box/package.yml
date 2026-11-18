@@ -1,10 +1,8 @@
-# daniel-box's host package. H6.2 shipped `reconcile` only. H6.3b adds the windowed k3s restart
-# (docs/target-architecture/host/h6-k3s-suc.md, *Steps, as PRs*, item 7) and, with it, the first
-# credential: the secrets unit decrypts `k3s_readonly_token` into /run/credstore, and
-# homelab-k3s-restart loads it to read the API. secrets/hosts/daniel-box.sops.yaml carries
+# daniel-box's host package. The secrets unit decrypts `k3s_readonly_token` into /run/credstore,
+# and homelab-k3s-restart loads it to read the API. secrets/hosts/daniel-box.sops.yaml carries
 # every key this tree names, and `host_secrets.py sync daniel-box` rewrites it (operator-only).
 #
-# H7.33 adds the UPS secondary (hosts/components/nut-secondary): its upsmon.conf output reads
+# The UPS secondary (hosts/components/nut-secondary): its upsmon.conf output reads
 # `nut_monitor_password` from the same SOPS file. Listing the component is what arms this host.
 # daniel-box draws from daniel-server's UPS: a 16-core burn here moved `upsc` ups.load by ~5
 # points (~45 W). Without the secondary, a power cut hard-cuts etcd, Longhorn's primary
@@ -13,58 +11,53 @@
 # k8s/roles/nut/defaults/main.yml) and the console-attended `upsmon -c fsd` drill from
 # k8s/roles/nut/CLAUDE.md, because a broken chain looks like a working one while mains is up.
 #
-# Since H7.29 it ships the first three subjects of initial_setup, the same components as daniel-pi
-# and daniel-server: apt's unattended upgrades, the sshd drop-ins and the kernel, journald, limits
-# and login hardening. No file needs a credential.
-#
-# Since H7.32 it ships the rest of initial_setup's subjects, the same components as daniel-pi and
-# daniel-server: the fail2ban group (fail2ban, integrity-scans for rkhunter and aide-scan for AIDE, postfix and
+# The initial_setup subjects ship as the same components as daniel-pi and daniel-server: apt's
+# unattended upgrades, the sshd drop-ins, the kernel, journald, limits and login hardening, the
+# fail2ban group (fail2ban, integrity-scans for rkhunter and aide-scan for AIDE, postfix and
 # accounting), the maintenance timers (host-maintenance: the weekly reboot, apt autoremove, dpkg
 # purge and, as `has_fwupd` is true only here, the firmware update; this host has no Docker) and
 # ufw (ssh-firewall). The scans and the reboot read one more credential,
 # `healthchecks_ping_key` (`host_secrets.py sync daniel-box`, operator-only).
 #
-# H7.60 adds the host baseline, the same components as daniel-pi and daniel-server: `host-hardening`
-# ships the sudo cache, auditd's rules, the module blacklist, the core-dump drop-in, the login banner
-# and the base packages, and `rsyslog-filter` ships the info filter. The role's tasks for these
-# subjects are deleted on every host, which ends its dist-upgrade here. No file needs a credential,
+# The host baseline is the same components as daniel-pi and daniel-server: `host-hardening` ships
+# the sudo cache, auditd's rules, the module blacklist, the core-dump drop-in, the login banner
+# and the base packages, and `rsyslog-filter` ships the info filter. No file needs a credential,
 # and `has_igpu` is false here, so no i915 option ships.
 #
-# H7.35 moves the k3s server's host half here: `k3s-server` gains Longhorn's packages, the read-only
+# The k3s server's host half: `k3s-server` carries Longhorn's packages, the read-only
 # kubeconfig, the inotify key, the join rules declared `keep` and the address pin, whose wifi half
 # reads `wifi_ssid` and `wifi_password`. `k3s-host-dns` holds the resolver and the host forwarder, and
 # `k3s-host-checks` the backup, disk and token checks, whose restore credentials read `r2_*`
 # (`host_secrets.py sync daniel-box`, operator-only).
 #
-# Since H7.37 it ships the Renovate pair, fake_remux and the two GitHub checks (their components).
-# They read four more keys: renovate_agent_gh_token, renovate_agent_claude_oauth_token,
-# sonarr_api_key and arr_discord_webhook_url (`host_secrets.py sync daniel-box`, operator-only).
+# The Renovate pair, fake_remux and the two GitHub checks (their components) read four more keys:
+# renovate_agent_gh_token, renovate_agent_claude_oauth_token, sonarr_api_key and
+# arr_discord_webhook_url (`host_secrets.py sync daniel-box`, operator-only).
 #
-# H7.50 re-homes the deploy UI daemon with its in-flight panel (hosts/components/deploy-ui), which
-# declares the port's three ufw allows. It reads no credential.
+# The deploy UI daemon with its in-flight panel (hosts/components/deploy-ui) declares the port's
+# three ufw allows. It reads no credential. The builder and the repository are
+# hosts/components/builder.
 #
-# The builder and the repository moved in H7.41b (hosts/components/builder). Other timers stay with
-# Ansible until H7. H6.4a adds the k3s-server component, whose first k3s.service drop-in lets the
-# package mark k3s.service `windowed` (the renderer refuses a unit policy that no package installs
-# or drops in on, item 5, Amended 2026-10-24). Reconcile therefore never restarts k3s, and
-# homelab-k3s-restart does it once per changed hash of the files the component marks
-# `manual:k3s.service`. H6.4a is forward-only.
+# The k3s-server component's first k3s.service drop-in lets the package mark k3s.service
+# `windowed` (the renderer refuses a unit policy that no package installs or drops in on).
+# Reconcile therefore never restarts k3s, and homelab-k3s-restart does it once per changed hash of
+# the files the component marks `manual:k3s.service`. The component is forward-only.
 #
 # The restart window is `k3s_restart_window` in inventory/host_vars/daniel-box.yml, which
-# sits above the component's defaults (H3, *Component variables*). A package-level `defaults:` map
-# reaches only the package's own files, never a component's.
+# sits above the component's defaults. A package-level `defaults:` map reaches only the package's
+# own files, never a component's.
 description: daniel-box's homelab host package
 # media-volume's host path, a copy of the k8s role's default for the tmpfiles.d file below. puid
 # and pgid come from group_vars. hosts/lib/tests/test_box_k3s_host_half.py holds the copy equal.
 defaults:
   media_volume_host_path: /srv/media
 # The claude-code component's agent user. Its uid differs per host, so the users entry and the
-# agent's login-slice cap sit here; `component: claude-code` reaches only these files (H7.40).
+# agent's login-slice cap sit here; `component: claude-code` reaches only these files.
 component: claude-code
 users:
-  # The homelab band 900-949 sits below the uids Ubuntu hands out from 999 down (#8100).
+  # The homelab band 900-949 sits below the uids Ubuntu hands out from 999 down.
   - {name: claude, uid: 900, home: /var/lib/claude, shell: /bin/bash, comment: Claude agent}
-  # Triage's controller (guardrails plan B2): owns triage's records and reports, and alone will
+  # Triage's controller: owns triage's records and reports, and alone will
   # start its units. Declared here, not in the claude-code component, because triage ships only
   # on daniel-box. Its name and home are pinned in claude-triage-pins.j2.
   - {name: claude-triage-ctl, uid: 906, home: /var/lib/claude-triage-ctl, shell: /usr/sbin/nologin, comment: Triage controller}
@@ -72,7 +65,7 @@ users:
   # and no start right.
   - {name: claude-triage, uid: 907, home: /var/lib/claude-triage, shell: /usr/sbin/nologin, comment: Triage session}
   # Renders the triage and Renovate sessions' Claude Code config from the verified dotfiles tag
-  # (dotfiles#967 I1 and D13). It is no session's user, so no session reaches its stage.
+  # It is no session's user, so no session reaches its stage.
   - {name: claude-triage-render, uid: 908, home: /run/homelab-claude-config-render, shell: /usr/sbin/nologin, comment: T2 config render}
 components:
   - reconcile
@@ -99,7 +92,7 @@ components:
   - apt-github-cli
   - failure-alert
   - builder
-  # H7.51: fast-forwards the primary checkout. It ran beside the GitOps deployer until H7.52 retired it.
+  # Fast-forwards the primary checkout.
   - checkout-sync
   - unattended-upgrades
   - sshd
@@ -115,7 +108,7 @@ components:
   - fake-remux
   - github-checks
   - deploy-ui
-  # H7.61: this package's own units name /usr/bin/uv.
+  # This package's own units name /usr/bin/uv.
   - uv
   - vale
   - worktree-holders
@@ -128,7 +121,7 @@ units:
 credentials:
   - k3s_readonly_token
   - healthchecks_ping_key
-# Two claude-code secrets only this host uses (H7.40's third slice). They sit here rather than in
+# Two claude-code secrets only this host uses. They sit here rather than in
 # the component, because host_secrets.py names every output key a component declares for each
 # host that lists it, and daniel-server's SOPS file must not carry them.
 outputs:
@@ -159,16 +152,16 @@ outputs:
     format: json
     when: claude_code_agent_user_enabled and claude_code_agent_homelab_ui_enabled
 maintainer_scripts: [preinst, postinst, prerm]
-# #6218: arms the shared updater schedule here, as daniel-server and the Pi do. daniel-box ships
-# no drop-in on the timer. See docs/target-architecture/host/h6-k3s-suc.md, H6.2's amendment.
+# Arms the shared updater schedule here, as daniel-server and the Pi do. daniel-box ships
+# no drop-in on the timer.
 enable:
   homelab-updater.timer: timers.target
-# H7.24a: nfpm, for the builder this host runs. libyaml-dev: pyproject.toml forces PyYAML's C
+# nfpm, for the builder this host runs. libyaml-dev: pyproject.toml forces PyYAML's C
 # extension, so a repo venv on an interpreter PyYAML ships no wheel for builds it from source.
 depends:
   - homelab-tools
   - libyaml-dev
-  # H7.62: what the dotfiles' install-cli-tools script wants and cannot install itself: it shells
+  # What the dotfiles' install-cli-tools script wants and cannot install itself: it shells
   # out to sudo, which has no TTY on a non-interactive apply. Its PKGS list is the source.
   - bat
   - fd-find
@@ -187,26 +180,26 @@ files:
     dst: /usr/lib/systemd/system/user-900.slice.d/homelab-claude-caps.conf
     when: claude_code_login_caps_enabled and claude_code_agent_user_enabled
 legacy:
-  # The hypervisor role's teardown half kept this host free of the network source directory until
-  # H7.34 emptied the role. Nothing recreates it, so the entry stays a no-op on a clean host.
+  # The hypervisor role's teardown half kept this host free of the network source directory. The
+  # role is empty and nothing recreates it, so the entry stays a no-op on a clean host.
   - {path: /etc/libvirt/declared-networks}
-  # #7919: the Ansible-era enable link, left dangling when its unit file went. The package's own
+  # The enable link the Ansible role left dangling when its unit file went. The package's own
   # link is in /usr/lib/systemd/system/sockets.target.wants.
   - {path: /etc/systemd/system/sockets.target.wants/homelab-rootq.socket}
-  # H7.24b: the binary sops_setup installed, which sits ahead of the packaged /usr/bin/sops on PATH.
+  # The binary sops_setup installed, which sits ahead of the packaged /usr/bin/sops on PATH.
   - {path: /usr/local/bin/sops}
-  # H7.32: the maintenance wrapper the crons ran, and the firmware cron, which host-maintenance's
+  # The maintenance wrapper the crons ran, and the firmware cron, which host-maintenance's
   # own legacy list cannot name because only a `has_fwupd` host carries it.
   - {path: /usr/local/bin/host-maintenance.sh}
   - {cron: "Weekly firmware update", user: root}
-  # H7.62: the copies initial_setup installed, ahead of /usr/bin/vale and /usr/bin/uv on PATH.
+  # The copies initial_setup installed, ahead of /usr/bin/vale and /usr/bin/uv on PATH.
   - {path: /usr/local/bin/vale}
   - {path: /usr/local/bin/uv}
-  # H7.60: the absent arms of initial_setup's crons.yml that reached this host.
+  # The absent arms of initial_setup's crons.yml that reached this host.
   - {path: /etc/sudoers.d/20-worktree-holders}
   - {path: /etc/homelab/cert-expiry-webhook.env}
-  # H7.48: the absent arms k8s_host_files held for the k8s roles' retired host halves. The cron
-  # files are H2's retired health readers and drift checks, whose CronJobs or monitor-bridge
+  # The absent arms k8s_host_files held for the k8s roles' retired host halves. The cron
+  # files are retired health readers and drift checks, whose CronJobs or monitor-bridge
   # checks replaced them. tests/repo/_retired_cron_row.py holds the crons and fragments
   # to this list. Reconcile removes a directory only when it is empty, so the readers' code
   # directories under /opt, /var/lib/crowdsec-home-allowlist and observability's dashboard
@@ -231,14 +224,14 @@ legacy:
   - {cron_file: cloudflare-ip-drift}
   - {path: /usr/local/bin/cloudflare-ip-drift.sh}
   # The push store's retired GC Job manifest, and the apply-time SHA-256 record directory nothing
-  # writes or reads (#6987). k8s_host_files' record was the only one ever written in it.
+  # writes or reads. k8s_host_files' record was the only one ever written in it.
   - {path: /etc/rancher/k3s/manifests/registry-jobs/gc-job.yaml}
   - {path: /var/lib/homelab/setup-applied-sha256.d/k8s_host_files}
   - {path: /var/lib/homelab/setup-applied-sha256.d}
-  # H7.48: the TLS cert-expiry watch, crons.yml's last cron absent arm here. The secret-rotation
+  # The TLS cert-expiry watch, crons.yml's last cron absent arm here. The secret-rotation
   # component lists the two secret-rotation crons.
   - {cron: "TLS cert-expiry watch", user: "{{ sys_user }}"}
-  # H7.48: docker_install's teardown half, which this host ran since its Docker retired. Each
+  # docker_install's teardown half, which this host runs because it has no Docker. Each
   # drop-in comes before its directory, because reconcile removes a directory only once it is empty.
   - {cron: "Redeploy ical-proxy", user: "{{ sys_user }}"}
   - {cron: "Clean stale tdarr transcode cache", user: "{{ sys_user }}"}
@@ -246,11 +239,11 @@ legacy:
   - {path: /etc/systemd/system/docker.service.d}
   - {path: /etc/systemd/system/containerd.service.d/20-go-runtime.conf}
   - {path: /etc/systemd/system/containerd.service.d}
-  # H7.52: the GitOps deployer's timer and the units, rule and records its role installed. The
+  # The GitOps deployer's timer and the units, rule and records its role installed. The
   # timer goes first, and reconcile keeps the service's entry while a tick is still running.
-  # H7.53 deleted every reader of /opt/gitops-deploy, /etc/gitops-deploy and
-  # /var/lib/gitops-deploy. They are the operator's cleanup, not entries here: reconcile removes
-  # only an empty directory, and each holds files and interpreter caches no list names.
+  # Nothing reads /opt/gitops-deploy, /etc/gitops-deploy or /var/lib/gitops-deploy. They are the
+  # operator's cleanup, not entries here: reconcile removes only an empty directory, and each
+  # holds files and interpreter caches no list names.
   - {unit: gitops-deploy.timer}
   - {unit: gitops-deploy.service}
   - {unit: gitops-deploy-alert.service}
@@ -261,7 +254,7 @@ legacy:
   - {path: /var/lib/node-exporter-textfile/gitops_tick.prom}
   - {path: /var/lib/homelab/setup-render-manifest.d/gitops-deploy}
   - {path: /var/lib/homelab/setup-deployed-manifest.d/gitops-deploy}
-  # H7.63: the setup-drift check initial_setup installed, the Ansible-era copy of the host-check
+  # The setup-drift check initial_setup installed, the Ansible copy of the host-check
   # library (check-lib ships /usr/lib/homelab/homelab-check-lib.sh), their stamp fragments, and
   # the ansible.log cron's absent arm. The timer goes first. The two manifest directories stay:
   # reconcile removes a directory only when it is empty, and other fragments may remain.
@@ -277,7 +270,7 @@ legacy:
   - {path: /var/lib/homelab/setup-deployed-manifest.d/setup-drift-lib}
   - {path: /var/lib/homelab/setup-deployed-manifest.d/homelab-check-lib}
   - {cron: "Clear ansible log file", user: root}
-  # R1 of docs/ci-throughput.md: what the shadow sweep's unit and tool wrote outside the package.
+  # What the shadow sweep's unit and tool wrote outside the package.
   # The package no longer ships the timer, so reconcile stops it. A file goes before its directory.
   # The cache directory is not listed: a stopped sweep leaves a randomly named scratch tree in it.
   - {path: /var/lib/homelab-local-sweep/last-swept}

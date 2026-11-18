@@ -76,10 +76,9 @@ def test_freshness_is_flagged_on_an_unparseable_timestamp():
 
 # ── rfc3339_to_epoch: `.status.snapshotCreatedAt` is a plain string, not a metav1.Time ─────────
 #
-# Unlike `.metadata.creationTimestamp`, Longhorn writes snapshotCreatedAt itself with no format
-# guarantee. `date -d` (what the original shell used) accepts fractional seconds and a numeric
-# UTC offset; a parser that doesn't page a false RED on check 2/4 the first time a sub-second
-# stamp shows up.
+# Longhorn writes snapshotCreatedAt itself with no format guarantee, so the parser must accept
+# fractional seconds and a numeric UTC offset, or it pages a false RED on check 2/4 the first
+# time a sub-second stamp shows up.
 
 
 def test_rfc3339_to_epoch_accepts_fractional_seconds():
@@ -386,7 +385,7 @@ def test_build_verdict_ties_break_by_encounter_order():
 
 
 def test_build_verdict_flattens_a_multi_line_problem_onto_one_line():
-    """A kubectl error carries its own newlines, and the wrapper reads ONE stdout line (#3883)."""
+    """A kubectl error carries its own newlines, and the wrapper reads ONE stdout line."""
     problems = [
         (
             1,

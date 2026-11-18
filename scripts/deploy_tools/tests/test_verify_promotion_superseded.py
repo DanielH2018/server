@@ -112,7 +112,7 @@ def test_a_soak_failure_on_r_after_homelab_moved_past_r_keeps_waiting_is_flagged
     assert result.verdict == "settled" and result.revision == D
 
 
-# -- who a hold points at (#6199) -------------------------------------------------------------
+# -- who a hold points at -------------------------------------------------------------
 
 
 def test_a_hold_naming_another_prs_service_says_so_is_flagged():

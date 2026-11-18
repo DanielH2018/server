@@ -4,7 +4,7 @@ Step 5 of `hosts/bootstrap-host.sh` runs `systemd-sysusers`, then `systemd-tmpfi
 straight after the install; `test_bootstrap_host.py` holds that order. These tests hold what the
 packages declare. A line naming a user no package declares fails at step 5, and a missing parent
 under the operator's home is created root-owned, which tmpfiles then refuses as an unsafe path
-transition (#8088).
+transition.
 
 Run: uv run pytest hosts/lib/tests/test_host_package_tmpfiles_users.py
 """
@@ -79,7 +79,7 @@ def test_every_tmpfiles_d_file_a_package_ships_is_applied_by_reconcile_on_instal
     packages,
 ):
     # Reconcile runs `systemd-tmpfiles --create` on a file with the `tmpfiles` action when its
-    # hash changes, so a new line does not wait for the next boot (#8267).
+    # hash changes, so a new line does not wait for the next boot.
     unapplied = {}
     for host, files in packages.items():
         activations = json.loads(files[MANIFEST][0]).get("activations", {})
@@ -102,7 +102,7 @@ def declared_uids(files: Files) -> dict[str, int]:
 def test_every_declared_uid_sits_below_the_range_ubuntu_allocates_from_999_down(
     packages,
 ):
-    # The base install and step 4's LXD snap take uids from 999 down before step 5 runs (#8100).
+    # The base install and step 4's LXD snap take uids from 999 down before step 5 runs.
     declared = {host: declared_uids(files) for host, files in packages.items()}
 
     assert {"claude", "renovate-agent", "homelab-builder"} <= set(

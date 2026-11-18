@@ -1,8 +1,7 @@
-"""The census row that holds a non-root unit reaching the cluster to setting `KUBECONFIG` (#8155).
+"""The census row that holds a non-root unit reaching the cluster to setting `KUBECONFIG`.
 
 k3s's kubectl defaults to `/etc/rancher/k3s/k3s.yaml`, which is root-only. A unit running as
-another user with no `KUBECONFIG` reads an empty cluster and exits 0, the trap the cron-era rule
-in `cron_checks.py` held until #8125 retired it.
+another user with no `KUBECONFIG` reads an empty cluster and exits 0.
 
 "Reaches the cluster" is a closure over what `ExecStart=` runs. A token resolves through the
 component's `component.yml` file map, matched on the installed basename (so a `{{ var }}` prefix

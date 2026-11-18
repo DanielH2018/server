@@ -242,8 +242,7 @@ def test_a_tree_without_the_lock_is_clean(tmp_path):
 
 # ── retired-host ─────────────────────────────────────────────────────────────────────────
 
-# The two sentences that still described daniel-stage at 8181ee59f, twelve days after
-# 8adf98ecc retired it. Both sections graded IN, because no atom they cite had moved.
+# Two sentences that described daniel-stage after it was retired. Both sections graded IN, because no atom they cite had moved.
 _K3S_PRE_FIX = """# `setup/k3s` — the host plane
 
 The role that turns a host into a k3s node. `daniel-box` is
@@ -342,7 +341,7 @@ def _version_findings(tmp_path, doc, **files):
 
 
 def test_stale_image_tag_is_a_warning(tmp_path):
-    """The registry title sentence as it stood at 8181ee59f, against a 3.1.2 pin."""
+    """The registry title sentence, against a 3.1.2 pin."""
     doc = "# registry\n\nA local `registry:3.1.1` that stores images.\n"
     [detail] = _version_findings(tmp_path, doc)
     assert detail.startswith("`registry:3.1.1` is stale: `registry_k8s_image` in ")

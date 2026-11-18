@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Guard the flux CLI pin in the CI workflows (#4822, #7778).
+"""Guard the flux CLI pin in the CI workflows.
 
 Each workflow that runs the flux CLI pins it in env as `FLUX_VERSION` and `FLUX_SHA256`, and
 its jobs fetch that release through a cache keyed on the pin.

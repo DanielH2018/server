@@ -93,12 +93,9 @@ def test_land_annotation_is_intercepted(tmp_path, logger_calls):
     assert "event=landing" in captured
     assert "pr=939" in captured
 
-    # This module's landings must reach no target checkout at all: the run ends at the
-    # merge-commit read, which is before `fetch_branch`. Whether LAND_PRIMARY aims a landing
-    # that DOES reach git is pinned by test_land_arm_merge_through_the_shim.py, which runs
-    # that far. Stated positively, so it holds wherever this checkout sits: the only PWD any gh
-    # call may have is land.sh's own repo root. A landing that cd'd into the `LAND_PRIMARY`
-    # sentinel, or anywhere else, fails here — and no hardcoded live path is involved.
+    # The run ends at the merge-commit read, before `fetch_branch`, so the only PWD any gh call
+    # may have is land.sh's own repo root. A landing that cd'd into the `LAND_PRIMARY` sentinel
+    # fails here. test_land_arm_merge_through_the_shim.py pins where LAND_PRIMARY aims a landing.
     gh_calls = (tmp_path / "gh-calls").read_text().splitlines()
     assert gh_calls, (
         "the gh stub recorded nothing, so this proves nothing about where it ran"

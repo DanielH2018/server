@@ -1,4 +1,4 @@
-"""`probe.py health <tag>` run from a checkout that predates the tag's k8s role (#5909).
+"""`probe.py health <tag>` run from a checkout that predates the tag's k8s role.
 
 A worktree six hours behind master had no `k8s/roles/metallb/`, so the probe guessed a workload
 named `metallb` in the default namespace and failed a healthy MetalLB. The role existed on
@@ -62,7 +62,7 @@ def test_role_on_origin_reads_the_origin_master_tree(tmp_path):
 
 
 def _behind_origin(tmp_path, role="metallb"):
-    """A checkout holding `role` at commit A, whose `origin/master` changed the role at B (#5912).
+    """A checkout holding `role` at commit A, whose `origin/master` changed the role at B.
 
     Returns `(repo, roles_dir, a, b)` with HEAD detached at A, as a long-lived orchestrator
     worktree is locked at an old master. The role directory is present here, so a check that
@@ -91,11 +91,10 @@ def _deployment(name, namespace="metallb-system"):
 def test_a_role_origin_master_changed_after_this_checkout_is_stale(
     tmp_path, monkeypatch
 ):
-    """A checkout behind origin/master on the role's files cannot judge it (#5912).
+    """A checkout behind origin/master on the role's files cannot judge it.
 
-    The orchestrator worktree locked at `77c560a64` ran `probe.py health metallb` after
-    `53b77befc` merged. A role that exists here but changed on origin/master since is the same
-    exposure one step later: the gate reads the old role definition. The git read must find
+    A role that exists here but changed on origin/master since is stale: the gate reads the old
+    role definition. The git read must find
     the repository from `roles_dir`, which is how a test hands it a fixture tree.
     """
     scrub_process_git_env(monkeypatch)
@@ -105,7 +104,7 @@ def test_a_role_origin_master_changed_after_this_checkout_is_stale(
     )
     assert reason is not None
     assert "origin/master" in reason
-    # The land gate words its deferral from this marker (#7816).
+    # The land gate words its deferral from this marker.
     assert reason.startswith(health_checkout.STALE_CHECKOUT)
 
     # At the merged SHA, or past it with the checkout's own commit, the checkout can judge.
@@ -197,7 +196,7 @@ def _quiet_prom():
 def test_health_from_a_checkout_behind_the_roles_merge_is_unreadable(
     tmp_path, monkeypatch, capsys
 ):
-    """No verdict from a stale role definition, even when the cluster reads healthy (#5912).
+    """No verdict from a stale role definition, even when the cluster reads healthy.
 
     The fixture role borrows `sonarr`, a real k8s `containers_list` entry, because the gate
     resolves only such a role. Its workload is healthy, so a probe that gates from the stale
@@ -230,7 +229,7 @@ def test_a_squash_merged_branch_holding_origins_role_is_not_stale(
 
     `origin/master` carries the role change as a commit the branch never had, yet the role's
     files match. Refusing it would fail the post-merge gate for exactly the roles the PR changed.
-    It passes before #5912's change, which refused no role it held, and fails when the stale
+    It passes on a check that refuses no role it holds, and fails when the stale
     check drops the `git diff` half; `..._changed_after_this_checkout_is_stale` is the refusal.
     """
     scrub_process_git_env(monkeypatch)

@@ -122,7 +122,7 @@ def _run_chain(repo, worktree, stub_bin, proc_root=None):
 
     `proc_root` defaults to an empty directory, because the scan forks per pid and the host's
     process count then sets the test's cost: about 4s a test on daniel-box against 1.6s on a CI
-    runner (#4873, the shape #4876 fixed in test_fanout_abandon.py). Only a test that needs the
+    runner. Only a test that needs the
     scan to find a live process passes `/proc`.
     """
     if proc_root is None:
@@ -174,7 +174,7 @@ def _gh_merged_head_and_compare(merged_head, status):
 
 
 def test_a_branch_inside_the_merged_pr_head_is_deleted(tmp_path):
-    """#6365: `land.sh` merged master into the branch, so the merged head is the tip plus a merge.
+    """`land.sh` merged master into the branch, so the merged head is the tip plus a merge.
 
     The SHAs differ, but GitHub's compare calls the tip an ancestor of the merged head, which
     means no local commit is unlanded.
@@ -187,7 +187,7 @@ def test_a_branch_inside_the_merged_pr_head_is_deleted(tmp_path):
 
 
 def test_a_branch_with_commits_the_merged_pr_head_lacks_survives(tmp_path):
-    """The reject half of #6365: a diverged tip holds work nothing proves landed."""
+    """The reject half: a diverged tip holds work nothing proves landed."""
     repo, worktree, _tip = _scratch_with_a_gone_worktree(tmp_path)
     gh = _gh_merged_head_and_compare("1" * 40, "diverged")
     proc = _run_chain(repo, worktree, _stub_bin(tmp_path, gh_script=gh))
@@ -319,7 +319,7 @@ def test_a_directory_that_is_still_a_checkout_reaches_clean_one(tmp_path):
 
 
 def test_a_stub_a_live_process_still_uses_is_kept_not_deleted(tmp_path):
-    """#3995: the gone-tree leg deleted the stub without `remove`'s live-process refusal."""
+    """The gone-tree leg deleted the stub without `remove`'s live-process refusal."""
     repo, worktree, tip = _scratch_with_a_gone_worktree(tmp_path)
     (worktree / ".remember").mkdir(parents=True)
     holder = subprocess.Popen(["sleep", "60"], cwd=worktree)
@@ -337,7 +337,7 @@ def test_a_stub_a_live_process_still_uses_is_kept_not_deleted(tmp_path):
 
 @pytest.fixture
 def sock():
-    """A socket path under `/tmp`, which a long `tmp_path` would push past `sun_path` (#4763)."""
+    """A socket path under `/tmp`, which a long `tmp_path` would push past `sun_path`."""
     with short_socket_path() as path:
         yield path
 
@@ -389,7 +389,7 @@ def _busy_with_helper(sock, worktree, answer: bytes) -> str:
 def test_the_root_helper_sees_another_uids_holder_the_proc_loop_cannot_is_flagged(
     tmp_path, sock
 ):
-    """#4170: a `systemd-run --uid=claude` process in the tree is invisible to /proc as ubuntu."""
+    """A `systemd-run --uid=claude` process in the tree is invisible to /proc as ubuntu."""
     worktree = tmp_path / "wt"
     worktree.mkdir()
     sibling = f"{worktree}-other"
@@ -425,7 +425,7 @@ def test_a_socket_nothing_listens_on_keeps_the_tree_is_flagged(tmp_path, sock):
 
 def test_no_socket_falls_back_to_the_proc_loop_and_says_so_is_clean(tmp_path):
     # A host the apply has not reached. A shell under claude-rc.service's NoNewPrivileges=yes
-    # no longer lands here: it connects like any other (#4297).
+    # does not land here: it connects like any other.
     worktree = tmp_path / "wt"
     worktree.mkdir()
 
@@ -463,7 +463,7 @@ def test_a_helper_that_names_only_other_trees_leaves_the_tree_free_is_clean(
 def test_a_holder_whose_cwd_has_a_line_break_holds_only_its_tree_is_clean(
     tmp_path, sock
 ):
-    # #4294: the helper escapes the cwd, and the awk compares escaped forms, so the holder of
+    # The helper escapes the cwd, and the awk compares escaped forms, so the holder of
     # the oddly named tree is found and an unrelated tree stays free.
     odd = tmp_path / "wt\nx y"
     odd.mkdir()
