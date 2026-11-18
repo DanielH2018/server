@@ -38,8 +38,8 @@ ALL_VARS_FILE = ALL_VARS
 #
 # Deliberately an explicit registry rather than a glob over `*_cluster_ip`. A glob also collects
 # `pihole_k8s_dns_cluster_ip: "{{ dns_k8s_cluster_ip }}"` (pihole/defaults/main.yml:47), which is
-# a deliberate alias whose raw value is a Jinja string, not an address — so the glob version of
-# this fix false-positives on day one. Adding a sixth pin means adding a line here, which is the
+# a deliberate alias whose raw value is a Jinja string, not an address — so a glob
+# false-positives. Adding a sixth pin means adding a line here, which is the
 # point: a new pin that collides with an existing one is exactly what this catches.
 CROSS_ROLE_PINS = {
     "observability_loki_cluster_ip": DEFAULTS,

@@ -1,4 +1,4 @@
-"""rootq's output filter as a case table: what tier 2 must hide and what it must keep (#6351).
+"""rootq's output filter as a case table: what tier 2 must hide and what it must keep.
 
 The filter redacts by default. A value prints only when it matches one of the token classes in
 homelab_rootq.py, and a value under a credential-named key never prints. MUST_REDACT holds

@@ -4,7 +4,7 @@ journald stores notice and above (`MaxLevelStore=notice`,
 `hosts/components/host-tuning/templates/50-homelab-journald.conf`). It forwards info to rsyslog, and
 `49-homelab-info-filter.conf` then stops info for every facility except auth, authpriv, kern
 and mail. A unit's stdout and stderr reach journald at its `SyslogLevel=`, which defaults to
-info, so a unit left on the default loses every line it prints (#6160). The row runs on
+info, so a unit left on the default loses every line it prints. The row runs on
 `tests/_row_table.py`'s harness from its own module, because `test_census_rows_text.py`
 is at its module-length allowlist entry.
 

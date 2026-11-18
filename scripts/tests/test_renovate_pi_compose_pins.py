@@ -132,7 +132,7 @@ _ALLOY = ("grafana/alloy", f"{_SERVICES}/alloy/compose.yaml.j2")
 def test_a_digest_bump_to_autoheal_or_docker_proxy_automerges(pin) -> None:
     assert _resolve("automerge", *pin, "digest") is True
     assert _resolve("groupName", *pin, "digest") == "pi image {{depName}}"
-    # Neither registry returns a timestamp for a `latest` digest (#3368).
+    # Neither registry returns a timestamp for a `latest` digest.
     assert (
         _resolve("minimumReleaseAgeBehaviour", *pin, "digest") == "timestamp-optional"
     )

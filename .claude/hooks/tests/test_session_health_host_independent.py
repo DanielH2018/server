@@ -1,13 +1,13 @@
-"""test_session_health.py must cost the same on daniel-box as on CI's runner (#5432).
+"""test_session_health.py must cost the same on daniel-box as on CI's runner.
 
 Its subprocess test runs session-health.py for real, and the hook's stale-worktree read walks
 every `.claude/worktrees/*` checkout on the host until `WORKTREE_TIMEOUT_S` kills it. CI's
-runner has no such checkouts, so the file measured 0.77s there (PR #5430's shard 5 of 6, run
-39061304325) and 4-5s on daniel-box. `pytest_shard.py`'s weight, recorded on daniel-box, then
-trips the shard gate's over-recorded arm on CI.
+runner has no such checkouts, so the file measures 0.77s there and 4-5s on daniel-box.
+`pytest_shard.py`'s weight, recorded on daniel-box, then trips the shard gate's over-recorded
+arm on CI.
 
 No test here times the file: a wall-clock bound goes red on a loaded fan-out host with no code
-change (#5916). The subprocess test's `_fence_worktree_survey` assertion guards host
+change. The subprocess test's `_fence_worktree_survey` assertion guards host
 independence instead.
 
 Run: uv run pytest .claude/hooks/tests/test_session_health_host_independent.py

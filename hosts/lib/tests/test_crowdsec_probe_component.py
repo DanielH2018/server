@@ -1,4 +1,4 @@
-"""The rendered `crowdsec-probe` component: crowdsec's edge probe timer in the Pi package (H5.14).
+"""The rendered `crowdsec-probe` component: crowdsec's edge probe timer in the Pi package.
 
 D5's first crowdsec conversion installed the timer through `setup/k8s_host_files`. These tests
 hold what the move added: the script and unit paths, the timer's enable link, the legacy entries

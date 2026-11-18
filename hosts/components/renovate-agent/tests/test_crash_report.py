@@ -1,10 +1,9 @@
 """A crashed run must report itself, rather than leave the NotReporting rule to expire.
 
-Issue #1477: the unit's textfile write is its `ExecStartPost`, which systemd runs only when the
-process exited 0. A crash wrote nothing, `RenovateAgentNotReporting` fired 28 hours later with no
-reason attached, and an operator reading it saw exactly what a host that is simply off looks like.
-Two days of that hid a one-line `prepare_worktree` failure. M6 batch B4's Cutover-1a removed the
-Kuma push this report used to make, so the reason now reaches the runs file and Discord.
+The unit's textfile write is its `ExecStartPost`, which systemd runs only when the process
+exited 0. A crash writes nothing, so `RenovateAgentNotReporting` would fire hours later with no
+reason attached, and look like a host that is simply off. The reason reaches the runs file and
+Discord.
 
 Boundaries come through `renovate_agent.AgentTools` and the config path is a parameter, so
 nothing here patches a module attribute.
@@ -57,7 +56,7 @@ def test_a_crash_posts_the_exception_text_to_discord_and_the_runs_file(tmp_path)
     # No curl at all: the Kuma push this report once made went with the tile.
     assert rec.curls == []
     assert rec.posts and "CRASHED" in rec.posts[0] and "already exists" in rec.posts[0]
-    # A crash inside an outage is the post the spool exists for (#3905).
+    # A crash inside an outage is the post the spool exists for.
     assert rec.spools == [str(tmp_path / "discord-spool")]
     (line,) = (tmp_path / renovate_agent.RUNS_FILE).read_text().splitlines()
     assert '"result": "crashed"' in line and "already exists" in line

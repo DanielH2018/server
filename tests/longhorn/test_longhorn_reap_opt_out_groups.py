@@ -5,7 +5,7 @@
 RecurringJob CR by design, because the module is pure stdlib logic with no file or cluster
 reads. That makes it a copy of a fact the k3s role declares in a StorageClass's
 `recurringJobSelector`, and a copy drifts: a second opt-out class added later would put every
-volume it provisions back into the unresolved-owner abort that #3236 was filed for.
+volume it provisions back into the unresolved-owner abort.
 
 The pair here reads the role's own StorageClasses and asserts the two lists agree, so adding an
 opt-out class without extending `OPT_OUT_GROUPS` fails here rather than on the cluster.

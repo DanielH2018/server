@@ -43,13 +43,11 @@ def test_dedupes():
 
 
 def test_config_required_images_are_still_emitted():
-    # These four are the shapes a bare boot cannot run: two that hard-exit without their
-    # config, one whose baked healthcheck never reaches "healthy" in the poll window, and one
-    # whose Cmd is a CLI binary that prints help and exits 1.
-    #
-    # Emitting them is the point. The workflow's fatal checks do not execute the image, so a
-    # config-required entrypoint decides nothing; excluding them would also exclude them from
-    # the `docker pull`, leaving those refs verified by nothing at all.
+    # These four are the shapes a bare boot cannot run: two hard-exit without their config, one's
+    # baked healthcheck never reaches "healthy" in the poll window, one's Cmd is a CLI binary
+    # that prints help and exits 1. The workflow's fatal checks do not execute the image, and
+    # excluding them would also exclude them from the `docker pull`, leaving those refs
+    # verified by nothing at all.
     diff = (
         "+    image: authelia/authelia:4.39.20\n"
         "+    image: couchdb:3.5.2@sha256:abc123\n"
@@ -116,7 +114,7 @@ def test_k8s_default_image_ignores_removed_and_non_image_vars():
 
 
 def test_a_moved_defaults_file_with_identical_pins_selects_nothing():
-    """An unpaired move: the old path's lines all removed, the new path's all added (#8434)."""
+    """An unpaired move: the old path's lines all removed, the new path's all added."""
     diff = (
         "diff --git a/ansible/roles/k8s/homepage/defaults/main.yml "
         "b/ansible/roles/k8s/homepage/defaults/main.yml\n"

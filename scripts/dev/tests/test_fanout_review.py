@@ -92,12 +92,12 @@ def test_an_actionable_finding_runs_a_fix_a_delta_review_and_the_landing_in_orde
     assert "body one" in review_stdin and "git diff base0...aaa" in review_stdin
     assert "land.sh" not in review_stdin
     assert run.claude[2][0][-2:] == ["--resume", "sid-1"]
-    # The delta reviewer gets the fix round and the whole change it sits in, each named (#3954).
+    # The delta reviewer gets the fix round and the whole change it sits in, each named.
     assert "The fix round: `git diff aaa..bbb`" in run.claude[3][1]
     assert (
         "The whole change, the fix included: `git diff base0...bbb`" in run.claude[3][1]
     )
-    # The pipeline lands the PR itself (#3960), under a login shell for the agent user's
+    # The pipeline lands the PR itself, under a login shell for the agent user's
     # LAND_HANDOFF_UNIT.
     land_sh = [
         str(tmp_path / ".fanout/land-checkout-4000/scripts/deploy_tools/land.sh"),
@@ -137,7 +137,7 @@ def _fix_round(left):
         _report(structured={"summary": "", "findings": [first]}),
         _report(f"Fixed. {PR}"),
         _report(structured={"summary": "", "findings": left}),
-        # A medium-or-worse leftover earns a second fix round (#7687); it commits nothing here.
+        # A medium-or-worse leftover earns a second fix round; it commits nothing here.
         *[_report(f"Fixed again. {PR}") for f in left[:1] if f["severity"] != "low"],
         _report(f"Filed #9. {PR}"),
     ]
@@ -249,13 +249,13 @@ def _test_finding(subkind, confidence=0.5):
 
 
 def test_a_low_vacuous_test_finding_reaches_the_fix_round():
-    # The severity floor dropped these anti-patterns unfiled (#4023).
+    # The severity floor dropped these anti-patterns unfiled.
     vacuous = _test_finding("vacuous")
     assert actionable([vacuous]) == [vacuous]
 
 
 def test_a_low_scaffold_test_finding_stays_below_the_bar():
-    # 1 of 7 actionable scaffold findings was real when #3675 judged them.
+    # Only 1 of 7 actionable scaffold findings was real.
     assert actionable([_test_finding("scaffold")]) == []
 
 
@@ -347,7 +347,7 @@ def test_the_reviewer_prompt_is_the_text_read_before_the_implementer_ran(tmp_pat
 
 def test_every_phase_runs_the_prompt_and_hooks_read_at_start(tmp_path):
     """The implementer can rewrite the worktree's prompt file, settings and hooks, so none is
-    read again once it has run (#3794, #3810)."""
+    read again once it has run."""
     reports = [
         _report(f"Opened {PR}"),
         _report(structured={"summary": "", "findings": [_finding("off by one")]}),
@@ -391,7 +391,7 @@ def test_every_phase_runs_the_prompt_and_hooks_read_at_start(tmp_path):
 
 def test_a_resumed_phase_loads_no_settings_file_the_agent_can_write(tmp_path):
     """The fix and apply phases resume the implementer's session after it could edit
-    `.claude/settings.json` and every guard hook (#3810)."""
+    `.claude/settings.json` and every guard hook."""
     reports = [
         _report(f"Opened {PR}"),
         _report(structured={"summary": "", "findings": [_finding("off by one")]}),
@@ -415,8 +415,8 @@ def test_a_resumed_phase_loads_no_settings_file_the_agent_can_write(tmp_path):
             for group in groups
             for h in group["hooks"]
         ]
-        # session-health reads the tree around its own file, and the held copy has none
-        # (#4393), so a held phase registers every project hook but the SessionStart one.
+        # session-health reads the tree around its own file, and the held copy has none, so a held
+        # phase registers every project hook but the SessionStart one.
         assert "SessionStart" in held["hooks"]
         assert "SessionStart" not in settings["hooks"]
         assert len(commands) == len(
@@ -437,7 +437,7 @@ def test_a_resumed_phase_loads_no_settings_file_the_agent_can_write(tmp_path):
 
 def test_the_reviewers_load_no_settings_file_and_get_claude_md_read_at_start(tmp_path):
     """The reviewer starts after the implementer could edit the settings, the guard hooks
-    and `CLAUDE.md`, and it has Bash (#3825)."""
+    and `CLAUDE.md`, and it has Bash."""
     reports = [
         _report(f"Opened {PR}"),
         _report(structured={"summary": "", "findings": [_finding("off by one")]}),
@@ -488,7 +488,7 @@ def test_another_repos_later_phases_keep_its_own_project_settings(tmp_path):
 
 def test_the_final_report_replaces_whatever_was_already_in_report_json(tmp_path):
     """systemd opens the file without truncating it, and status reads its last result line,
-    so a line the red author planted past the report's end would otherwise win (#3871)."""
+    so a line the red author planted past the report's end would otherwise win."""
     from fanout_lib.review_unit import write_report
 
     planted = json.dumps(_report(f"Opened {PR}")) + "\n"

@@ -1,4 +1,4 @@
-"""Guard: every prek hook runs at the pre-commit stage and no other (#4018).
+"""Guard: every prek hook runs at the pre-commit stage and no other.
 
 A hook without `stages` runs at EVERY stage, so a `.git/hooks/pre-push` shim an older
 `prek install` left behind re-ran every commit hook on push, fixers included. `default_stages`

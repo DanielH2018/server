@@ -1,14 +1,14 @@
 """A `verify_drill` dispatch of `promote.yml` pushes a bundle no signed push can carry.
 
 WHY THIS IS A TEST. The drill is meant to make the `verify-drill` OCIRepository read
-Ready=False. On 2026-10-13 it verified instead (#4820): `--reproducible` gave the drill the
+Ready=False. On 2026-10-13 it verified instead: `--reproducible` gave the drill the
 same digest as the `sha-<X>` bundle `publish` had already signed, and cosign v3 stores a
 signature as a referrer of the digest, so every tag on that digest verifies. The drill push
 therefore carries an annotation the signed push never does, and the same dispatch proves its
 own red half: `cosign verify` under promote's identity must refuse the drill digest, and the
 registry must answer that the digest has no referrer and no legacy `.sig` tag. cosign's refusal
 alone is not enough, because cosign v3.1.3 reads a registry error on its bundle probe as "no
-bundle" (#4829). The last test runs the step's own script against a fake cosign and curl, since
+bundle". The last test runs the step's own script against a fake cosign and curl, since
 `workflow_run` never runs a branch's copy of the file.
 
 These checks sit beside `test_promote_workflow.py` rather than in it because that module was
@@ -181,7 +181,7 @@ if [ -n "$out" ]; then printf '%s' "$body" > "$out"; else printf '%s' "$body"; f
 if [ -n "$fmt" ]; then printf '%s' "$status"; fi
 """
 
-# cosign v3.1.3's message on a signed digest whose referrers call failed: #4829's case.
+# cosign v3.1.3's message on a signed digest whose referrers call failed.
 FAKE_COSIGN = """#!/usr/bin/env bash
 echo 'Error: no signatures found' >&2
 exit "${FAKE_COSIGN_RC:-1}"

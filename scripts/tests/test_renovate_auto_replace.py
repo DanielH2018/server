@@ -32,7 +32,7 @@ TEMPLATE_DIGEST_PIN = "homepage_k8s_image"
 # currentValue -> newValue inside the matched text and there is no digest to substitute, so
 # `pinDigests: true` never added an @sha256 suffix to a tag-only pin. The template converts every
 # live bare pin it reaches, so the guards derive one from the digest pin rather than naming a
-# live one: bazarr, the last named bare pin, gained its digest in Renovate #4149.
+# live one.
 _DIGEST_SUFFIX = re.compile(r"@sha256:[0-9a-f]{64}")
 
 

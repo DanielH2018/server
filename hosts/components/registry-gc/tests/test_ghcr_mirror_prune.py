@@ -1,4 +1,4 @@
-"""The ghcr-mirror store's offline prune, `files/ghcr-mirror-prune.sh` (#5541).
+"""The ghcr-mirror store's offline prune, `files/ghcr-mirror-prune.sh`.
 
 The script runs under `sh` against a store tree built in `tmp_path` with the distribution
 filesystem layout: a revision link per cached manifest, a blob holding each manifest's body,
@@ -188,7 +188,7 @@ def test_a_tag_of_another_repository_keeps_nothing_here(tmp_path):
 
 
 def test_a_missing_layers_directory_is_created_even_with_an_empty_keep_set(tmp_path):
-    """garbage-collect aborts on the first repository whose `_layers` is missing (#7926)."""
+    """garbage-collect aborts on the first repository whose `_layers` is missing."""
     store = _store(tmp_path)
     repo = "linuxserver/bazarr"
     store.cache(1, repo=repo)

@@ -119,7 +119,7 @@ def test_the_shim_still_calls_the_ported_reader() -> None:
     """The shell no longer holds check 6's logic; it must still invoke the module that does.
 
     Read off the RENDER rather than the template: the shim's path to the reader is built from
-    role defaults, so a source-text search would match `{{ ... }}` and pass over nothing (#3186).
+    role defaults, so a source-text search would match `{{ ... }}` and pass over nothing.
     """
     text = rendered_shell_text(
         "components", "k3s-host-checks", "longhorn-backup-health.sh.j2"

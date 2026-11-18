@@ -235,7 +235,7 @@ def test_the_lapi_route_never_gains_a_public_host_rule():
 
 @pytest.mark.parametrize("name", ["bazarr", "slskd", "speedtest", "prowlarr"])
 def test_a_route_ruled_lan_only_renders_no_public_host_with_public_routes_on(name):
-    """The operator ruled these four LAN-only on 2026-11-15 (#8514): WireGuard covers remote use."""
+    """The operator ruled these four LAN-only on 2026-11-15: WireGuard covers remote use."""
     domain = "example.com"
     entry = next(c for c in _k8s_entries() if c["name"] == name)
     hosts = []

@@ -7,7 +7,7 @@ into the *Settled findings* table of `docs/reference/backlog.md`. Each agent nam
 
 This guards the shape, not the content: a pointer dropping out, or a section heading naming a
 domain `findings.py` does not know. An inline list creeping back into an agent is the
-`agents-carry-no-inline-reflag-list` row of `test_census_rows_text.py` (#3430). What
+`agents-carry-no-inline-reflag-list` row of `test_census_rows_text.py`. What
 a reviewer does with the list is a session's judgment, which no test here can see.
 
 Run: uv run pytest tests/repo/test_reviewer_agents_carry_no_hand_reflag_list.py

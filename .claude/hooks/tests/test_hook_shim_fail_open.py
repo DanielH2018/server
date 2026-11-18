@@ -1,21 +1,19 @@
 """Every registered hook's `cd /home/ubuntu/server || …` arm, run as settings.json writes it.
 
-Issue #1014: a hook that cannot change into the repo was fail-open (exit 0, normal permission
-flow), which is defensible for a permission hook — a broken guard must not brick every tool
-call — but the `cd` arm disarmed the guard with nothing to notice. Issue #2171: for the DENY/ASK
+A hook that cannot change into the repo fails open (exit 0, normal permission flow), which is
+defensible for a permission hook: a broken guard must not brick every tool call. For the DENY/ASK
 guards a silent exit 0 is still an allow, so their `cd` arm emits an `ask` decision naming the
-hook. Issue #2394 merged five PreToolUse:Bash guards into `bash-pretool`, so its `ask` reason
-names every deny guard it stands in front of.
+hook. `bash-pretool` stands in front of five PreToolUse:Bash guards, so its `ask` reason names
+every deny guard it stands in front of.
 
-Since #3278 every registration runs `run-hook.sh <name> <flags>`, and the posture a session
-gets is the flags `settings.json` passes the runner. This file runs each registered command as
-written against a runner whose `cd` target does not exist: the deny guards must ask, and every
-other hook must stay silent. `test_run_hook.py` covers the flags one at a time, and pins the
-runner's `# DECIDED:` marker. The six per-hook `.sh` shims these tests once covered were deleted
-in #3304.
+Every registration runs `run-hook.sh <name> <flags>`, and the posture a session gets is the
+flags `settings.json` passes the runner. This file runs each registered command as written
+against a runner whose `cd` target does not exist: the deny guards must ask, and every other
+hook must stay silent. `test_run_hook.py` covers the flags one at a time, and pins the runner's
+`# DECIDED:` marker.
 
 The deny guards also carry `gen_hook_settings.GUARD_SUFFIX` after the runner call, because a
-session whose `$CLAUDE_PROJECT_DIR` was deleted has no runner left to ask from (#3887). The
+session whose `$CLAUDE_PROJECT_DIR` was deleted has no runner left to ask from. The
 last tests here run those commands under `/bin/sh`, the way the harness does.
 
 Run: uv run pytest .claude/hooks/tests/test_hook_shim_fail_open.py
@@ -151,7 +149,7 @@ def test_only_the_deny_guards_carry_the_missing_runner_suffix():
 
 @pytest.mark.parametrize("name", sorted(ASKING))
 def test_reject_a_deny_guard_whose_project_dir_is_gone_exits_2(tmp_path, name):
-    """The #3887 verify-by: bare, `/bin/sh` exits 127 here, which the harness lets through."""
+    """Bare, `/bin/sh` exits 127 here, which the harness lets through."""
     proc = _run_as_the_harness(COMMANDS[name], tmp_path / "gone")
     assert proc.returncode == 2, proc.stderr
     assert f"run-hook.sh {name}:" in proc.stderr

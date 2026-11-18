@@ -14,12 +14,10 @@ from lib.repo_paths import REPO
 
 LOKI_STREAMS = load_yaml(ALL_VARS)["loki_streams"]
 
-# The k8s pod stream vocabulary, read off a live Loki stream. `app` is NOT in it — a
-# selector with app="home-assistant" matches no stream and reports "no ip_ban events" forever. A fail-open arm cannot tell "nothing to report" from "wrong question",
-# so the selector label has to be checked by something other than the check's own verdict.
-# Transcribed from a live stream. Kept as a FLOOR rather than the whole answer:
-# `filename`, `stream` and `service_name` are added by Alloy/Loki itself and appear in no
-# config, so deriving alone would under-count and reject a valid selector.
+# The k8s pod stream vocabulary, read off a live Loki stream. `app` is NOT in it: a selector with
+# app="home-assistant" matches no stream, and a fail-open arm reads that as "nothing to report".
+# A FLOOR, not the whole answer: `filename`, `stream` and `service_name` come from Alloy/Loki
+# itself and appear in no config, so deriving alone would reject a valid selector.
 _LOKI_STREAM_LABELS_OBSERVED = frozenset(
     {
         "container",

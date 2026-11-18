@@ -44,7 +44,7 @@ def test_shared_files_names_the_file_and_every_batch_that_cites_it():
 
 
 def test_a_fragment_collides_with_the_full_path_it_names():
-    """#4232: `probe_lib/alerts.py` and the full path are one file to two agents."""
+    """`probe_lib/alerts.py` and the full path are one file to two agents."""
     issues = {
         1: Issue(1, "a", f"`{ALERTS}` drops the row", ("claude",)),
         2: Issue(2, "b", "`probe_lib/alerts.py:336` drops it too", ("claude",)),
@@ -99,7 +99,7 @@ def test_allow_shared_file_excuses_the_named_file_only(tmp_path, capsys, monkeyp
         == 1
     )
     err = capsys.readouterr().err
-    # One run prints both, under argparse's prefix rather than a hand-written `launch:` (#4479).
+    # One run prints both, under argparse's prefix rather than a hand-written `launch:`.
     assert f"fanout.py: warning: batches 1780, 1782 all cite {doc} — allowed by" in err
     assert f"fanout.py: error: batches 1780, 1782 all cite {ALERTS} — two agents" in err
     assert not run.calls
@@ -141,7 +141,7 @@ def test_launch_refuses_a_batch_holding_a_fanout_tooling_issue_before_any_ssh(
 def test_launch_accepts_another_repos_issue_that_only_mentions_the_fanout_tooling(
     tmp_path,
 ):
-    """The clean half of the refusal above: a dotfiles batch cannot edit this repo (#4624)."""
+    """The clean half of the refusal above: a dotfiles batch cannot edit this repo."""
     here = socket.gethostname()
     issue = Issue(838, "hook", "like the counter in `fanout-stop.py`", ("claude",))
     tools, _ = fake_tools(answers={here: ok(HEADROOM)}, issues=[issue])

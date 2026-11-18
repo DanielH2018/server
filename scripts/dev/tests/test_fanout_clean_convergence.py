@@ -95,7 +95,7 @@ def test_the_gone_tree_branch_deregisters_only_its_own_worktree():
     # Inside the gone-tree branch — not on the path that still has a tree for `clean-one`.
     assert cmd.index("worktree remove") < cmd.index("else cd /home/ubuntu/server")
     # BEFORE the branch is touched: git refuses `branch -D` while a registration holds it,
-    # so the old order printed `kept: … not deleted` for every merged gone-tree batch.
+    # so deleting the branch first prints `kept: … not deleted` for every merged gone-tree batch.
     assert cmd.index("worktree remove") < cmd.index("branch -D worktree-fanout-1")
 
 
@@ -186,7 +186,7 @@ def test_a_kept_verdict_stays_exit_zero(tmp_path):
 
 
 def test_the_sweep_retires_a_landed_run_and_keeps_an_unmerged_one(tmp_path):
-    """#8575: the unattended sweep records a removal the way `place clean` does."""
+    """The unattended sweep records a removal the way `place clean` does."""
     landed = save(Manifest("20260101T000010Z", "o", [B1]), root=tmp_path)
     unmerged = save(Manifest("20260101T000020Z", "o", [B2]), root=tmp_path)
     tools, _calls = fake_tools(

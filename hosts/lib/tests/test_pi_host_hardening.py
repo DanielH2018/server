@@ -1,7 +1,7 @@
-"""The Pi's host baseline as the `host-hardening` component (H7.58).
+"""The Pi's host baseline as the `host-hardening` component.
 
 The component replaces initial_setup's access, accounting, audit-and-kernel and integrity tasks
-and the package tasks of host-basics on daniel-pi. H7.60 deleted those tasks, so `WRITTEN` and the
+and the package tasks of host-basics on daniel-pi. Those tasks are gone, so `WRITTEN` and the
 constants beside it carry what they wrote. These tests hold the shipped bytes to them, and the
 line-arm edits that adopt them.
 
@@ -25,7 +25,7 @@ BANNER = (
     "All connections are monitored and recorded.\n"
     "Disconnect immediately if you are not an authorized user.\n"
 )
-# The bytes initial_setup's tasks wrote to each path before H7.60 deleted them.
+# The bytes initial_setup's tasks wrote to each path.
 WRITTEN = {
     "/etc/audit/rules.d/hardening.rules": (
         "# Identity file changes\n"

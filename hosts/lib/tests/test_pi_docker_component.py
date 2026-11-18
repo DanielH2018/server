@@ -1,4 +1,4 @@
-"""The docker_install role's subjects as the `pi-docker` component on daniel-pi (H7.26).
+"""The docker_install role's subjects as the `pi-docker` component on daniel-pi.
 
 These tests hold what the move must keep: the engine moves only through
 homelab-docker-engine.service, which stops and recreates the project around the apt run; the
@@ -52,7 +52,7 @@ QUIET_WINDOW = (15 * 60, 59 * 60 + 59)
 _DAY = date(2026, 11, 3)
 CONTAINERD_CONFIG = "/etc/containerd/config.toml"
 SUFFIX = "~ubuntu.24.04~noble"
-# What `grep -v '^#' /etc/containerd/config.toml` printed on daniel-pi on 2026-10-29, with the
+# `grep -v '^#' /etc/containerd/config.toml` on daniel-pi, with the
 # markers the Ansible task wrote around its block.
 LIVE_CONTAINERD = """disabled_plugins = ["cri"]
 
@@ -479,7 +479,7 @@ def test_an_engine_answer_that_is_not_zero_or_one_writes_no_series(tmp_path):
     assert _ok(host.metrics()) == "1"
 
 
-# The windowed timer (operator ruling 2026-10-30, H7 Open question 8).
+# The windowed timer (operator ruling).
 
 
 def _on_calendar(text: str) -> str:

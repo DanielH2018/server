@@ -1,6 +1,6 @@
-"""The artifacts node's peer sync and OTLP-door heartbeat ship in daniel-box's package (H7.40).
+"""The artifacts node's peer sync and OTLP-door heartbeat ship in daniel-box's package.
 
-They were the claude_code role's two crons until H7.40's fourth slice. The package ships each as
+They were the claude_code role's two crons. The package ships each as
 a `homelab-*` timer on `claude_code_artifacts_node` alone, retires the Ansible-era cron file and
 script, and creates the directories the artifacts pod mounts.
 

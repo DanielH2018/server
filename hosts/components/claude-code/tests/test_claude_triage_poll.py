@@ -442,7 +442,7 @@ def test_a_failed_prometheus_read_is_logged_with_its_url_at_warning(
     capsys, monkeypatch
 ) -> None:
     # read_all falls back to the next URL, so a silent None hid a dead loopback Prometheus
-    # behind an answering ClusterIP (#6202).
+    # behind an answering ClusterIP.
     def refuse(url, timeout):
         raise OSError("connection refused")
 
@@ -470,7 +470,7 @@ def _stdout_as_journal(monkeypatch) -> None:
 def test_a_refusal_with_a_fallback_behind_it_logs_without_a_priority(
     capfd, monkeypatch, cause
 ) -> None:
-    # On the node Prometheus does not run on, loopback refuses every poll (#6862).
+    # On the node Prometheus does not run on, loopback refuses every poll.
     def refuse(url, timeout):
         raise cause
 

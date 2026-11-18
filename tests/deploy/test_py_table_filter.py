@@ -1,6 +1,6 @@
 """Unit tests for `py_table` in renderer/template_filters/py_table.py.
 
-monitor-bridge's env-secret reads the bridge's check table through this filter (#3659, #3781).
+monitor-bridge's env-secret reads the bridge's check table through this filter.
 A row the filter drops is a check missing from the rendered Secret, so each way it can lose a
 row raises instead.
 
@@ -47,4 +47,4 @@ def test_an_element_that_is_not_a_call_is_flagged():
         py_table("T = (Row(a=1), {'a': 2})\n", "T")
 
 
-# ── error shape (#4505) ─────────────────────────────────────────────────────────────────────
+# ── error shape ─────────────────────────────────────────────────────────────────────

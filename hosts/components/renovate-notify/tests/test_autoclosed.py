@@ -1,4 +1,4 @@
-"""The autoclosed arm (#4630): a Renovate PR closed unmerged while its update stays listed."""
+"""The autoclosed arm: a Renovate PR closed unmerged while its update stays listed."""
 
 import pathlib
 from datetime import datetime, timezone

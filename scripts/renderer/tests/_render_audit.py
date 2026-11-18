@@ -38,10 +38,9 @@ SEEDS = ("1", "2")
 # A part's render takes about 2.5s on daniel-box. The bound only stops a wedged child.
 RENDER_TIMEOUT = 300
 # One module per position. A module runs about 3.4 times slower on a CI runner than serially
-# on daniel-box: the two-module split took 28.0s there against 8.2s here (2026-10-13). Four
-# parts keep each under the R1 plan's 20s, where three were projected at 20.3s.
+# on daniel-box. Four parts keep each under the 20s budget.
 PARTS = 4
-# Each part holds 14 or 15 tags at 58 render targets (2026-10-13).
+# Each part holds 14 or 15 tags at 58 render targets.
 PART_FLOOR = 12
 MODULE_PREFIX = "test_renderer_determinism_"
 # The report property `check_part` records its digest lines under, for `log_digest_lines`.

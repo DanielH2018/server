@@ -4,11 +4,11 @@
 for the two template classes the manifest harness skips: every k8s role's `Dockerfile*.j2`,
 and every role's `*.sh.j2`. A guard built on any of them reads a set it does not enumerate itself, so an
 accessor that quietly came back short would turn each of those guards into a pass over nothing
-(#3175, #3178).
+
 
 `_k8s_render.render_role_template` is covered here too, for the same reason rather than because
 it skips anything: a guard reaches for a template's BYTES when the accessor cannot render it,
-and an included helper role with no `containers_list` entry was one such case (#3107).
+and an included helper role with no `containers_list` entry was one such case.
 
 Run: uv run pytest tests/repo/test_shared_render_accessors.py
 """
@@ -37,10 +37,9 @@ from _setup_render import CLAUDE_CODE
 def test_an_included_role_with_no_census_entry_renders() -> None:
     """`k8s/image-builder` is included by caller roles and is in no `containers_list`.
 
-    The accessor looked its entry up with a bare `next()`, so asking it for such a role raised
-    `StopIteration` before the render started — and a guard had to read the template's bytes
-    instead, which is the exposure #2809's series removes. The caller's own `vars:` arrive as
-    overrides, so the Job renders under the name its caller hands over.
+    A bare `next()` lookup would raise `StopIteration` for such a role before the render
+    starts, and a guard would have to read the template's bytes instead. The caller's own
+    `vars:` arrive as overrides, so the Job renders under the name its caller hands over.
     """
     job = yaml_fast.safe_load(
         render_k8s_template(
@@ -79,8 +78,8 @@ def test_an_unrendered_dockerfile_is_named_rather_than_missed() -> None:
         rendered_build_text("code-server", "Containerfile.j2")
 
 
-# The shell templates a guard reads today, across `tests/services/` (#3178) and
-# `tests/longhorn/` (#3186). Named so a renamed or moved template fails as a missing
+# The shell templates a guard reads today, across `tests/services/` and
+# `tests/longhorn/`. Named so a renamed or moved template fails as a missing
 # member rather than as a guard over an empty set.
 GUARDED_SHELL_TEMPLATES = frozenset(
     {

@@ -1,4 +1,4 @@
-"""registry-gc's second phase, which prunes and warms the dockerhub-mirror store (#6536).
+"""registry-gc's second phase, which prunes and warms the dockerhub-mirror store.
 
 The functions are sliced out of the RENDERED script and run with `k3s`, `curl` and `logger`
 stubbed as shell functions that log each call, as test_registry_gc_ghcr_mirror.py does for the

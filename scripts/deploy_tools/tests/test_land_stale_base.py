@@ -1,4 +1,4 @@
-"""--await-merge on a green head whose base master has moved past since its CI ran (#4013).
+"""--await-merge on a green head whose base master has moved past since its CI ran.
 
 Inside the landing turn a head gets its run on the master its merge lands on
 (`test_land_turn.py`, `test_land_rejoin_line.py`). A stale green head that reaches the merge
@@ -20,9 +20,9 @@ OLD, NEW = "a" * 40, "b" * 40
 # The master commit OLD's green CI run tested it against, newer than OLD's merge base.
 TESTED = "c" * 40
 PREFIX = "worktree-claude+"
-# What master changed between #2922's merge base and the commit before its merge
-# (cc2a71fd8), as GitHub's compare endpoint lists it, cut to the path that turned master red:
-# a role CLAUDE.md the PR's new size test read, in a directory the PR never touched.
+# What master changed between the PR's merge base and the commit before its merge, as GitHub's
+# compare endpoint lists it, cut to the path that turned master red: a role CLAUDE.md the PR's
+# new size test read, in a directory the PR never touched.
 INCIDENT_2922 = [
     ".claude/hooks/session-health.py",
     "k8s/roles/claude-otel/CLAUDE.md",
@@ -250,7 +250,7 @@ def test_an_up_to_date_approved_head_merges(landing, tmp_path):
 
 
 def test_an_approved_head_whose_files_master_did_not_touch_merges(landing, tmp_path):
-    """#2922's shape: the accepted risk of the 2026-10-29 ruling, traded for a re-approval."""
+    """The accepted risk of the approval ruling, traded for a re-approval."""
     ln, calls = _approved_landing(landing, tmp_path, [INCIDENT_2922])
     merge.await_merge(ln)
     assert _gh_writes(calls) == ["merge aaaa"]

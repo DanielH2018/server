@@ -1,4 +1,4 @@
-"""`homelab-compose.service`: its timeout and its place in reconcile's restart contract (H5.2a3).
+"""`homelab-compose.service`: its timeout and its place in reconcile's restart contract.
 
 Each case covers the `homelab-compose.service` contract that ADR-0013 records.
 The unit renders from the real component with the Pi's real healthcheck variables. The restart
@@ -112,7 +112,7 @@ def test_a_larger_start_period_lengthens_both_timeouts_and_an_hour_is_refused(tr
         unit_of(tree)
 
 
-# ComposeUpStale's bound, which only the boot run's timeout derives (#6187).
+# ComposeUpStale's bound, which only the boot run's timeout derives.
 
 RULES = REPO / "k8s/roles/observability/files/rules/host-checks.yaml"
 # Boot reaching the unit, plus one scrape. The rule's comment carries the measured boot run.

@@ -27,7 +27,7 @@ COSIGN_FETCH = "sigstore/cosign/releases/download/$COSIGN_VERSION/"
 
 # The reset_to_last_good dispatch's two jobs (D5.2b2), guarded by RESET_GUARDS instead.
 RESET_JOBS = ("reset-check", "reset-move")
-# The job that fails a run started by an account off the starter list (dotfiles#967 slice 1).
+# The job that fails a run started by an account off the starter list.
 REFUSE_JOB = "refuse-starter"
 JOBS = (
     "render",

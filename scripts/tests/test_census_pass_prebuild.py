@@ -1,7 +1,7 @@
 """The census rows' shared pass runs before any test's timed phases, by `conftest.py` here.
 
 The two `test_census_rows_test_*.py` files share one pass over the census, and `--durations`
-charged it to whichever ran first (#7976). The case runs pytest in a child process, because
+charged it to whichever ran first. The case runs pytest in a child process, because
 only a fresh session shows whether the hits existed before its first test ran. The probe test
 it runs, a red/green proof, reads no census module, so the hits can only be there because the
 hook found them.

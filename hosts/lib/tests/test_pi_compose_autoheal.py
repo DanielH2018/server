@@ -1,4 +1,4 @@
-"""autoheal runs through the Pi's Compose project (H5.7).
+"""autoheal runs through the Pi's Compose project.
 
 Two guards moved here with the service from `tests/services/`, and both read the
 rendered service of the real `hosts/daniel-pi/package.yml`, not the template text:
@@ -10,7 +10,7 @@ rendered service of the real `hosts/daniel-pi/package.yml`, not the template tex
   an input that must pass and one that must be flagged.
 - autoheal carries no healthcheck of its own. `AUTOHEAL_CONTAINER_LABEL=all` has no
   self-exclusion, so a probe makes autoheal its own patient and it restarts itself under the
-  Pi's deploy load (#1789). `healthcheck: {disable: true}` is the accepted shape.
+  Pi's deploy load. `healthcheck: {disable: true}` is the accepted shape.
 
 The webhook URL renders as `${monitor_discord_webhook_url}`, which the Compose env file fills,
 so the guard keys on the field being set, never on its value.

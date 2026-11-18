@@ -1,4 +1,4 @@
-"""daniel-server's host baseline and Loki witness move into its package (H7.59).
+"""daniel-server's host baseline and Loki witness move into its package.
 
 `test_pi_host_hardening.py` holds the `host-hardening` component's content. These tests hold
 what is specific to this host: the i915 option, the witness's uv path and textfile directory on a

@@ -137,9 +137,9 @@ FENCE_BYPASS = ["Integration:2740:always", "RepositoryRole:5:always"]
 
 
 def fence_ruleset(**overrides):
-    """The agent branch fence as the live endpoint returned it on 2026-10-05, as a dict.
+    """The agent branch fence as the live endpoint returns it, as a dict.
 
-    Master joined the exclusions on 2026-10-11, so that the agent's account can merge a PR.
+    Master is among the exclusions, so that the agent's account can merge a PR.
     """
     body = {
         "id": FENCE_RULESET_ID,
@@ -238,8 +238,7 @@ def run(
     one. Each defaults to a clean body, so a case reads the verdict of the arm it is about.
     Every value the template reads comes from the inventory and
     the role's own defaults, which the shared accessor resolves. The `..._matches_the_role_defaults`
-    tests in test_github_ruleset_drift.py keep this module's constants honest against them
-    (#3178).
+    tests in test_github_ruleset_drift.py keep this module's constants honest against them.
     """
     if branch_body is None:
         branch_body = branch_ruleset_body()

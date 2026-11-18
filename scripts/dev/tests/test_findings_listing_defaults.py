@@ -1,4 +1,4 @@
-"""`list` and `claims` print a count, then the items that need attention (#7897).
+"""`list` and `claims` print a count, then the items that need attention.
 
 `next` and `show` have their default-view tests beside their other tests, in
 test_findings_defer.py and test_findings_history.py.

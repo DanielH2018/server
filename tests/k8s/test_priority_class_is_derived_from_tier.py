@@ -1,9 +1,8 @@
-"""A tiered role's PriorityClass is derived from its containers_list `tier`, never written (#3452).
+"""A tiered role's PriorityClass is derived from its containers_list `tier`, never written.
 
-Each pod template used to pass `pod_shell(...)` a literal class, which ranked the same services a
-second time beside their `tier`. A tiered role now passes `containers_list |
-tier_priority_class('<role>')`, and `SERVICE_TIERS` in `template_filters/service_tier.py` maps each
-tier to one class.
+A tiered role passes `containers_list | tier_priority_class('<role>')`, and `SERVICE_TIERS` in
+`template_filters/service_tier.py` maps each tier to one class. A literal class passed to
+`pod_shell(...)` would rank the same services a second time beside their `tier`.
 
 Run: uv run pytest tests/k8s/test_priority_class_is_derived_from_tier.py
 """
@@ -135,7 +134,7 @@ def test_every_tier_names_a_declared_priority_class():
     ],
 )
 def test_a_refusal_is_a_filter_error_named_for_its_filter(name, args):
-    """A render failure names the filter that refused, through the filter Ansible calls (#4480)."""
+    """A render failure names the filter that refused, through the filter Ansible calls."""
     with pytest.raises(FilterError) as caught:
         repo_filters()[name](*args)
     assert str(caught.value).startswith(f"{name}: "), str(caught.value)

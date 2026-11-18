@@ -1,7 +1,7 @@
-"""`await_ci` reads a gate failed by its own run's cancellation as no verdict (#5931).
+"""`await_ci` reads a gate failed by its own run's cancellation as no verdict.
 
-PR #5922's run was cancelled mid-sweep, its `always()` gate failed on the cancelled jobs, and
-`land.sh` ended `pr-ci-red`. A job past its `timeout-minutes` also reads `cancelled` on a run
+A run cancelled mid-sweep fails its `always()` gate on the cancelled jobs, and `land.sh` would
+end `pr-ci-red`. A job past its `timeout-minutes` also reads `cancelled` on a run
 nobody cancelled, so only the check suite's own `cancelled` conclusion excuses the gate.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_await_ci_cancelled_gate.py
@@ -12,7 +12,7 @@ from lib.exit_codes import CI_PENDING
 from ci_verdict import CI_GATE_NAME, CI_GATE_NEEDS_JOBS
 
 REQUIRED = frozenset({CI_GATE_NAME})
-# Suite 7's jobs were cancelled and its gate failed on them, as run 39791122833 attempt 1 did.
+# Suite 7's jobs were cancelled and its gate failed on them.
 RUNS = [
     {
         "name": n,

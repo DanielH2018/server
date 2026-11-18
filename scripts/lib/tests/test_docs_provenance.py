@@ -40,7 +40,7 @@ def test_banner_warns_against_hand_editing():
 
 
 def test_banner_does_not_name_the_retired_ansible_tree():
-    """The generators read host packages and the k8s roles, not a playbook tree (#8175)."""
+    """The generators read host packages and the k8s roles, not a playbook tree."""
     banner = generated_banner(
         "scripts/docs/service_catalog.py", when=FIXED, sha="abc1234"
     )

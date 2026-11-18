@@ -15,9 +15,9 @@ real rendered manifests behind a non-vacuity assertion:
   NetworkPolicy's port are written in three files across two roles. Any two of them agreeing is
   not enough — a policy on the wrong port renders, applies, and silently drops the traffic.
 - **`authelia-redis` restarts on its own Secret only.** It is in `manifests_extra_rollouts`
-  so the drain waits on its roll (#4564), with `restart_on: ['secret']`, and its pod names no
+  so the drain waits on its roll, with `restart_on: ['secret']`, and its pod names no
   ConfigMap or Secret but `authelia-redis`. Its `checksum/restart` then moves when the redis
-  password or redis.conf does (#7575), and never on a portal config change, which would roll
+  password or redis.conf does, and never on a portal config change, which would roll
   the session store several times a day and destroy the sessions this setup exists to keep.
 """
 
@@ -100,7 +100,7 @@ def test_restarting_redis_on_every_signal_is_flagged():
 
 
 def test_never_restarting_redis_is_flagged():
-    """The state #7575 found: a rotated redis password reached the Secret and never redis."""
+    """A rotated redis password reaches the Secret and never redis."""
     assert not redis_restarts_on_its_secret_only(
         [{"name": REDIS_SERVICE, "restart_on": []}]
     )
@@ -212,7 +212,7 @@ def test_the_rendered_redis_pod_reads_only_its_own_secret():
 
 def test_the_drain_waits_on_redis_only_while_the_lever_deploys_it():
     """A redis image bump rolls it through the apply, and only a queued entry makes the deploy
-    wait on that roll (#4564). With the lever off a cluster may have no redis Deployment, and
+    wait on that roll. With the lever off a cluster may have no redis Deployment, and
     `rollout status` on a missing one fails the drain."""
     declared = include_vars(AUTHELIA_ROLE)["manifests_extra_rollouts"]
     waited = render_expr(declared, authelia_k8s_redis_sessions=True)

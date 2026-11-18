@@ -1,4 +1,4 @@
-"""land.sh refuses to land from a checkout whose landing code master has changed (#7820).
+"""land.sh refuses to land from a checkout whose landing code master has changed.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_land_own_checkout.py
 """
@@ -77,7 +77,7 @@ def test_loaded_paths_keeps_only_modules_under_the_checkout(tmp_path):
     assert got == ["scripts/a.py"]
 
 
-# The readers #7820's stale checkout misread, or that read the layout beside them.
+# The readers a stale checkout misreads, or that read the layout beside them.
 _INCIDENT_READERS = frozenset(
     {
         "scripts/lib/render_guard.py",
@@ -152,7 +152,7 @@ def test_a_comparison_git_could_not_make_refuses():
 def test_a_stale_checkout_lets_the_fresh_landing_grade_and_record(
     land_run, verdict_record
 ):
-    """#8679: the merged PR was refused ungraded, and the caller re-ran with `--fresh`."""
+    """The merged PR was refused ungraded, and the caller re-ran with `--fresh`."""
     fakes = Fakes(stale_code=["scripts/lib/render_guard.py"], fresh_rc=75)
     rc, out, err, calls, logline = land_run([], fakes)
     assert rc == 75
@@ -177,7 +177,7 @@ def test_a_hand_off_whose_checkout_failed_ends_refused_and_records_it(
 
 
 def test_an_armed_landing_from_a_stale_checkout_refuses_before_it_merges(land_run):
-    """#7830: the refusal at step 1 came after await_merge had already merged the PR."""
+    """The refusal at step 1 came after await_merge had already merged the PR."""
     fakes = Fakes(
         gh_views={
             "state,title,body,reviewDecision": {
@@ -229,7 +229,7 @@ print("\\n".join(own_checkout.stale_landing_code("origin/master") or []))
 
 
 def test_a_module_a_later_phase_imports_lazily_is_compared(tmp_path):
-    """#7830: the census was `sys.modules`, so a module not yet imported was never compared."""
+    """The census was `sys.modules`, so a module not yet imported was never compared."""
     bin_dir = fake_bin(
         tmp_path / "bin",
         git=_GIT_REPORTING_A_MASTER_CHANGE.format(python=sys.executable),
@@ -309,7 +309,7 @@ def _armed_open_pr() -> dict:
     }
 
 
-# Before the merge (#7916's refusal) and after it, from a branch master has moved past.
+# Before the merge and after it, from a branch master has moved past.
 _STALE_LANDINGS = {
     "before-merge": (["--arm-merge", "--await-merge"], _armed_open_pr()),
     "after-merge": ([], None),
@@ -329,7 +329,7 @@ def _stale_landing_output(land_run, case: str) -> str:
 def test_a_stale_landing_prints_no_remedy_that_redirects_git_to_the_primary(
     land_run, case
 ):
-    """#7933: a worktree-isolated session's guard denies `git -C <primary>`."""
+    """A worktree-isolated session's guard denies `git -C <primary>`."""
     printed = _stale_landing_output(land_run, case)
     assert "git -C" not in printed
     assert f"-C {PRIMARY}" not in printed
@@ -337,7 +337,7 @@ def test_a_stale_landing_prints_no_remedy_that_redirects_git_to_the_primary(
 
 @pytest.mark.parametrize("case", sorted(_STALE_LANDINGS))
 def test_a_stale_landing_needs_no_hand_made_checkout(land_run, case):
-    """#7933: a checkout refreshed by hand went stale again within minutes (#7902)."""
+    """A checkout refreshed by hand went stale again within minutes."""
     printed = _stale_landing_output(land_run, case)
     assert "worktree add" not in printed
 

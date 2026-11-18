@@ -30,12 +30,12 @@ a sibling. Guard 2 mandates the bootstrap for a directly-invoked script; this gu
 redundancy, not absence: an insert of `scripts/diagnostics` in `test_ui_login.py` still resolves
 a directory `pythonpath` deliberately omits, and passes on that merit rather than by exclusion.
 
-This stays a file rather than a census row for the reason Guard 2 gives (#3430): it judges
+This stays a file rather than a census row for the reason Guard 2 gives: it judges
 each import through Guard 2's evaluator against an index of the tree, and its accept/reject
 pairs build synthetic trees under `tmp_path`, which a row's text-only subjects cannot.
 
 A role's tests get one more directory. `k8s/conftest.py` puts `k8s/roles/<role>/files`
-on `sys.path` when pytest collects a module under that role's `tests/` (#3746), so the guard
+on `sys.path` when pytest collects a module under that role's `tests/`, so the guard
 credits that directory for such a module and refuses an insert of it as redundant, the same
 two rules it applies to `pythonpath`. The rule is the conftest's own `role_files_dir`, loaded
 from the file rather than restated here, and it names only the module's OWN role: an import of

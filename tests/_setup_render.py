@@ -3,7 +3,7 @@
 `_k8s_render` reaches only roles with a `containers_list` entry. A census that has to span the
 planes — which templates render the FSD-capable `nut_monitor_password` login — could otherwise
 only scan template SOURCE, and a source scan cannot follow an alias: a template that reads the
-secret through a second variable holds it while the scan sees nothing (#3183).
+secret through a second variable holds it while the scan sees nothing.
 
 Each template renders from its OWN component's context, the one `validate/setup_templates.py`
 gives it: `lib.render_context` with the host renderer's `inventory_hostname` on top.
@@ -123,7 +123,7 @@ def pi_package() -> Package:
     return host_mode.render_host("daniel-pi")
 
 
-# The component that took over the claude_code setup role's sources (#6773).
+# The component that took over the claude_code setup role's sources.
 CLAUDE_CODE = COMPONENTS / "claude-code"
 
 

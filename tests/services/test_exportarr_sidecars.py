@@ -211,7 +211,7 @@ def test_each_pin_is_a_variable_renovate_can_see():
     A pin inlined into the macro invocation renders an identical manifest and is offered no updates,
     because Renovate's k8s-images manager matches an `_image:` key and nothing else. A pin hoisted
     into group_vars is still offered updates, but it loses automerge and the retired deployer's
-    rollback (`k8s/templates/exportarr.yml.j2` has the reason, #3277). No render assertion can
+    rollback (`k8s/templates/exportarr.yml.j2` has the reason). No render assertion can
     see either, because the manifest is the same every way.
     """
     for arr in ARRS:

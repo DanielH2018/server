@@ -1,4 +1,4 @@
-"""`k3s_longhorn_r2_volumes` is derived from the `tier` field on containers_list entries (#3389).
+"""`k3s_longhorn_r2_volumes` is derived from the `tier` field on containers_list entries.
 
 The daily R2 tier was a hand-written list in the k3s role's defaults. It is now every
 `backup_claims` volume of a `home-critical` entry, one whose tier is `home-edge` or
@@ -18,7 +18,7 @@ from renderer.template_filters.service_tier import tier_backup_claims, tier_entr
 from test_every_longhorn_pvc_has_a_tier import longhorn_pvcs_by_role
 from lib.repo_paths import LONGHORN_RECONCILE_ROLE
 
-# The hand list `k3s_longhorn_r2_volumes` held before the derivation replaced it.
+# The hand list `k3s_longhorn_r2_volumes` held, which the derivation must reproduce.
 _REPLACED_HAND_LIST = frozenset(
     {
         "homelab/traefik-acme",
@@ -28,7 +28,7 @@ _REPLACED_HAND_LIST = frozenset(
     }
 )
 
-# The entries the first slice of #3389 tagged. A census that finds fewer stopped matching.
+# The tagged entries. A census that finds fewer stopped matching.
 _KNOWN_HOME_CRITICAL = frozenset(
     {
         "crowdsec",

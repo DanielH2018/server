@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The nginx alpine digests soak 1 day, the rest of the k8s plane still soaks 3 (#2886).
+"""The nginx alpine digests soak 1 day, the rest of the k8s plane still soaks 3.
 
 `nginx:alpine` is re-pushed about every 3.6 days and Renovate always proposes the newest
 digest, so a 3-day soak restarted on every re-push left an automerge window the once-daily
