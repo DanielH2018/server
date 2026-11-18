@@ -5,15 +5,10 @@
 ---
 # kube-state-metrics — the ONLY source of workload-readiness metrics in this cluster.
 #
-# Added for slice 3 batch B1 (docs/archive/k3s-migration/slice-3-monitoring-plane.md, D8). Seven k8s
-# workloads have run since slice 2 with no monitor of any kind — registry, both cloudflare-ddns
-# copies, karakeep's chrome/meilisearch/time-tagger, and n8n-runners, which executes every
-# workflow's code. They are unmonitorable by every other means available:
-#
-#   - Three expose only a ClusterIP, which daniel-server cannot reach.
-#   - Four (cloudflare-ddns-direct, cloudflare-ddns-proxied, karakeep-time-tagger, n8n-runners)
-#     expose NO Service at all — there is no port to probe.
-#   - None has an IngressRoute.
+# Some workloads (registry, karakeep's chrome/meilisearch) expose only a ClusterIP, which
+# daniel-server cannot reach. Others (cloudflare-ddns-direct, cloudflare-ddns-proxied,
+# karakeep-time-tagger, n8n-runners) expose NO Service at all, so there is no port to probe,
+# and none has an IngressRoute.
 #
 # So "is this workload healthy" is not an HTTP property here; it is a Kubernetes API property,
 # and this is what turns it into a metric monitor-bridge can query.
@@ -67,22 +62,21 @@ rules:
     resources: [services]
     verbs: [list, watch]
   # Jobs, for the start, completion and outcome of the soak, snapshot and verify Jobs a landing
-  # waits on (#5675), which files/rules/gate-jobs.yaml records as durations. A Job's spec
+  # waits on, which files/rules/gate-jobs.yaml records as durations. A Job's spec
   # names an image and a command, never a secret value. The Prometheus job drops every family
-  # but those four, kube_job_status_active and kube_job_failed (K3sUpgradeJobFailed, H6.1b).
+  # but those four, kube_job_status_active and kube_job_failed (K3sUpgradeJobFailed).
   - apiGroups: [batch]
     resources: [jobs]
     verbs: [list, watch]
   # CronJobs, for kube_cronjob_status_last_successful_time alone: the run clock of the two
-  # health CronJobs whose verdicts M6 batch B6b exports, which files/rules/pod-producers.yaml
+  # health CronJobs, which files/rules/pod-producers.yaml
   # holds to three periods of their schedule. A CronJob's spec names an image and a command,
   # never a secret value. The Prometheus job drops every other kube_cronjob_* family.
   - apiGroups: [batch]
     resources: [cronjobs]
     verbs: [list, watch]
   # ConfigMaps, for kube_configmap_annotations alone, and for one annotation of it: the
-  # `homelab/check-verdict` the two health CronJobs patch onto their own verdict ConfigMaps (M6
-  # batch B6b). A list grant cannot be narrowed by name, so this lets kube-state-metrics read
+  # `homelab/check-verdict` the two health CronJobs patch onto their own verdict ConfigMaps. A list grant cannot be narrowed by name, so this lets kube-state-metrics read
   # every ConfigMap's data in memory. It exports only metadata: --metric-annotations-allowlist
   # below names the one annotation, no collector exports `data`, and the Prometheus job drops
   # every other kube_configmap_* family and every series without the annotation. No Secret
@@ -148,7 +142,7 @@ spec:
             - --resources=pods,deployments,replicasets,statefulsets,daemonsets,nodes,services,jobs,cronjobs,configmaps
             # The one ConfigMap annotation exported: the verdict the health CronJobs write. It
             # reaches Prometheus as the annotation_homelab_check_verdict label of
-            # kube_configmap_annotations (M6 batch B6b).
+            # kube_configmap_annotations.
             - --metric-annotations-allowlist=configmaps=[homelab/check-verdict]
             # homelab/role and kustomize.toolkit.fluxcd.io/name name the deploy tag that applied
             # a Deployment or DaemonSet. They reach Prometheus as label_homelab_role and

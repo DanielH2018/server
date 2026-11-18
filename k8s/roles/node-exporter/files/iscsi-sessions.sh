@@ -1,5 +1,5 @@
 #!/bin/sh
-# The node's iSCSI sessions, written as a node_exporter textfile check file (#5826).
+# The node's iSCSI sessions, written as a node_exporter textfile check file.
 #
 # A replaced Longhorn instance-manager leaves the sessions it served behind in the kernel, in
 # state FREE with a failed connection. The next attach of such a volume on that node fails its

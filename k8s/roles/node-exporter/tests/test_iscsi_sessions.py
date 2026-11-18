@@ -1,4 +1,4 @@
-"""iscsi-sessions.sh reports a stale iSCSI session, and the DaemonSet wires its file in (#5826).
+"""iscsi-sessions.sh reports a stale iSCSI session, and the DaemonSet wires its file in.
 
 The script runs as the node-exporter DaemonSet's `iscsi-sessions` sidecar and writes a textfile
 check file the exporter reads from a second `--collector.textfile.directory`. These tests run

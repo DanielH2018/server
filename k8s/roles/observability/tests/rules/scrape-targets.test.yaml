@@ -156,7 +156,7 @@ tests:
                 have gone stale. Read the exporter pod's events and log, or the host's unit for
                 a static target.
 
-  # The homelab Loki's failed scrape. LokiHomelabDown went in Cutover-b, so this rule is its pager.
+  # The homelab Loki's failed scrape. This rule is its pager.
   - interval: 1m
     input_series:
       - series: 'up{job="loki-homelab", instance="loki-homelab.homelab.svc:3100"}'
@@ -181,7 +181,7 @@ tests:
                 have gone stale. Read the exporter pod's events and log, or the host's unit for
                 a static target.
 
-  # autofix-bridge's check exporter (M6 batch B7): its own rule names the service, and the
+  # autofix-bridge's check exporter: its own rule names the service, and the
   # catch-all excludes the job, so exactly one rule pages it.
   - interval: 1m
     input_series:
@@ -265,7 +265,7 @@ tests:
         alertname: ScrapeTargetDown
         exp_alerts: []
 
-  # The A3 soak's case (#6626): alloy-pi fails 3 scrapes in every 4 from minute 11. No run of
+  # The flap case: alloy-pi fails 3 scrapes in every 4 from minute 11. No run of
   # zeros reaches ScrapeTargetDown's 10m hold, so only the flap arm pages it.
   - interval: 1m
     input_series:
@@ -357,7 +357,7 @@ tests:
         alertname: ScrapeTargetFlapping
         exp_alerts: []
 
-  # The same outage, then one missed scrape 2 minutes after recovery (#6642). The outage and the
+  # The same outage, then one missed scrape 2 minutes after recovery. The outage and the
   # miss are two 1-to-0 transitions and the average stays under 0.7, but the outage's 10-minute
   # all-failed window keeps the flap arm quiet, so ScrapeTargetDown's page stays the only one.
   - interval: 1m

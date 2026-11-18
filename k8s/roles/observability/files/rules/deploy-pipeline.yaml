@@ -32,7 +32,7 @@ groups:
       # hold to explain it: promote is not running, or its runs end without moving prod. The
       # first `and on()` drops the alert while a hold stands, which DeployHoldActive already
       # pages. The second drops it inside the weekly reboot's no-promotion window, where
-      # promote.py decide defers every promotion on purpose (#5458). The exporter derives that
+      # promote.py decide defers every promotion on purpose. The exporter derives that
       # gauge from the weekly_reboot_* variables, so this file holds no literal hour. The
       # `unless` keeps the alert quiet for 30 minutes after the window ends. The scheduled
       # promote run that moves prod fires at the end, and GitHub often starts a schedule: run
@@ -78,8 +78,8 @@ groups:
       # job, which no other check can see. The second pages a scrape that works but lacks any one
       # gauge: a failed GitHub or GHCR read, an empty token, or a deleted variable each export no
       # series for what they feed, never a 0. It is conjoined with up == 1, because
-      # ScrapeTargetDown already pages a failed scrape of the job (M1 convention 5) since M6's
-      # batch A3. The 15m hold rides over two failed cycles.
+      # ScrapeTargetDown already pages a failed scrape of the job (M1 convention 5). The 15m
+      # hold rides over two failed cycles.
       - alert: DeployPipelineExporterAbsent
         expr: >-
           absent(up{job="deploy-pipeline"})

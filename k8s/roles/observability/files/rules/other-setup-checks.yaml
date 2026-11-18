@@ -5,11 +5,8 @@
 # docs/target-architecture/monitoring/m3-textfile-timer.md. Plain YAML, never Jinja:
 # prometheus-rules.yaml.j2 carries this file verbatim.
 #
-# THESE RULES PAGE SINCE M6's BATCH B4 CUTOVER-1B. Each one ports the tile of the same
-# check, and Cutover-1a deleted the tile. Cutover-1b dropped the `shadow` label that held the rule
-# back. Severity is the tile's: `critical` for both UPS
-# secondaries and the full drill, which email as well as notify Discord, and `warning` for the
-# rest. `service` is the host as a literal, because a node is not a workload (M3's open
+# Severity: `critical` for both UPS secondaries and the full drill, which email as well as
+# notify Discord, and `warning` for the rest. `service` is the host as a literal, because a node is not a workload (M3's open
 # question 3). Each pair is `<Check>Failed` and `<Check>NotReporting`, the shape M3 fixed:
 # NotReporting reads the timestamp against the deadline, falls back to absent_over_time over the
 # same deadline, and leaves a dead exporter to the `targets` check.
@@ -23,29 +20,25 @@
 # THE RENOVATE PAIR HAS NO Failed RULE. Both units run their textfile line as an ExecStartPost,
 # which systemd runs only after a clean ExecStart, so the file only ever says success 1. A crash
 # writes nothing, which reads as a missed beat. OnFailure pages the
-# crash at once, and NotReporting is the rule that replaces the tile.
+# crash at once, and NotReporting is the rule that catches the missed beat.
 #
 # A DISARMED AGENT IS SILENT, NOT LATE. With renovate_agent_enabled false the timer is stopped,
 # so the renovate-agent component ships renovate-agent-disarmed.prom (homelab_check_disarmed 1), and
 # RenovateAgentNotReporting and host-checks.yaml's HostCheckOverdue both stay quiet on the check
-# while the marker reads 1. Re-arming removes the marker, and the absent arm then fires until the next 06:00 run
-# writes a verdict, so re-arm just before a run or expect that one warning.
+# while the marker reads 1. Re-arming removes the marker, and the absent arm then fires until
+# the next 06:00 run writes a verdict, so re-arm just before a run or expect that one warning.
 #
 # Each deadline is the DEADLINE_S its producer renders, and both literals of a NotReporting rule
 # are pinned to it by hosts/tests/test_b4_rule_literals.py (M1 convention 1). The two
-# 10-minute producers render 2 x period + 300 = 1500, M3's rule. The drills render the cadence
-# plus slack that their retired tiles carried, 3024000 (35 days). The renovate units render their
-# tiles' own intervals, 129600 and 100800.
+# 10-minute producers render 2 x period + 300 = 1500, M3's rule. The drills render their
+# cadence plus slack, 3024000 (35 days). The renovate units render 129600 and 100800.
 #
-# The drills' NotReporting rules fired from the deploy until the first run after it wrote its
-# file (1 November 11:20 UTC), because a monthly producer cannot write earlier. That run failed,
-# so EtcdRestoreDrillFailed (critical) pages from Cutover-1b until a drill run passes. The weekly
-# reboot (about 07:35 to 07:50) leaves every writer's gap
-# inside its deadline.
+# The drills' NotReporting rules fire from the deploy until the first run after it writes its
+# file, because a monthly producer cannot write earlier. The weekly reboot (about 07:35 to
+# 07:50) leaves every writer's gap inside its deadline.
 groups:
   - name: other-setup-checks
     rules:
-      # Replaced the "UPS Secondary (daniel-box)" tile.
       - alert: UpsSecondaryFailed
         expr: homelab_check_success{check="ups-secondary-health",origin="daniel-box"} == 0
         labels:
@@ -78,7 +71,6 @@ groups:
             `systemctl status homelab-ups-watchdog.timer` and `journalctl -u
             homelab-ups-watchdog.service` on the host, then read
             /var/lib/node-exporter-textfile/ups-secondary-health.prom.
-      # Replaced the "UPS Secondary (daniel-server)" tile.
       - alert: UpsSecondaryFailed
         expr: homelab_check_success{check="ups-secondary-health",origin="daniel-server"} == 0
         labels:
@@ -111,7 +103,6 @@ groups:
             still hear upsd. Run `systemctl status homelab-ups-watchdog.timer` and `journalctl -u
             homelab-ups-watchdog.service` on the host, then read
             /var/lib/node-exporter-textfile/ups-secondary-health.prom.
-      # Replaced the "Fake Remux Scan" tile.
       - alert: FakeRemuxScanFailed
         expr: homelab_check_success{check="fake-remux-scan",origin="daniel-box"} == 0
         labels:
@@ -141,7 +132,6 @@ groups:
             textfile collector, so nothing confirms the scan's state file is being read. Read the
             `fake-remux health` cron and the `fake-remux-health` syslog tag, then
             /var/lib/node-exporter-textfile/fake-remux-scan.prom on the host.
-      # Replaced the "Fake Remux Replace" tile.
       - alert: FakeRemuxReplaceFailed
         expr: homelab_check_success{check="fake-remux-replace",origin="daniel-box"} == 0
         labels:
@@ -171,7 +161,6 @@ groups:
             textfile collector, so nothing confirms the reconciler's state file is being read.
             Read the `fake-remux health` cron and the `fake-remux-health` syslog tag, then
             /var/lib/node-exporter-textfile/fake-remux-replace.prom on the host.
-      # Replaced the "MKV Attachment Repair" tile.
       - alert: MkvAttachmentRepairFailed
         expr: homelab_check_success{check="mkv-attachment-repair",origin="daniel-box"} == 0
         labels:
@@ -202,7 +191,6 @@ groups:
             textfile collector, so nothing confirms the repair sweep's state file is being read.
             Read the `fake-remux health` cron and the `fake-remux-health` syslog tag, then
             /var/lib/node-exporter-textfile/mkv-attachment-repair.prom on the host.
-      # Replaced the "etcd Restore Drill (full)" tile.
       - alert: EtcdRestoreDrillFailed
         expr: homelab_check_success{check="etcd-restore-drill-vm",origin="daniel-server"} == 0
         labels:
@@ -235,7 +223,6 @@ groups:
             homelab-etcd-restore-drill.timer and the journal of homelab-etcd-restore-drill.service
             on daniel-server, then /var/lib/node-exporter-textfile/etcd-restore-drill-vm.prom on
             the host.
-      # Replaced the "etcd Restore Drill (egress fence)" tile.
       - alert: EtcdRestoreDrillEgressFenceFailed
         expr: homelab_check_success{check="etcd-restore-drill-egress-fence",origin="daniel-server"} == 0
         labels:
@@ -267,7 +254,7 @@ groups:
             leg executes writes nothing here, so the fence went unmeasured this month. Read the
             newest run directory under /var/log/etcd-restore-drill, then
             /var/lib/node-exporter-textfile/etcd-restore-drill-egress-fence.prom on the host.
-      # Replaced the "Renovate Notifier — Alive" tile. No Failed rule: see the header.
+      # No Failed rule: see the header.
       - alert: RenovateNotifyNotReporting
         expr: |
           (
@@ -286,7 +273,7 @@ groups:
             textfile collector: the daily 13:00 timer did not fire or the run failed, and
             OnFailure will also have posted to Discord. It says nothing about Renovate itself.
             Read `systemctl status homelab-renovate-notify.timer` and `journalctl -u homelab-renovate-notify`.
-      # Replaced the "Renovate Agent — Alive" tile. No Failed rule: see the header.
+      # No Failed rule: see the header.
       - alert: RenovateAgentNotReporting
         expr: |
           (

@@ -7,9 +7,9 @@
 # `replicas:`, so a run killed between the two leaves it at 0/0. That passes rollout status,
 # K8sDeploymentZeroAvailable (which wants spec replicas above zero) and the registry deploy's
 # netpol probe, and containerd falls back to ghcr.io until a WAN outage finds the mirror gone.
-# The next GC run restores it from its stamp, which can be a week away. registry's deploy
-# restored it too while Ansible owned registry; Flux owns it now and renders no `replicas:`. The 2h hold is well past the GC's longest hold of
-# the mirror: registry_k8s_gc_deadline_s (1200s) plus the scale-down and scale-up waits.
+# The next GC run restores it from its stamp, which can be a week away. The 2h hold is well
+# past the GC's longest hold of the mirror: registry_k8s_gc_deadline_s (1200s) plus the
+# scale-down and scale-up waits.
 groups:
   - name: registry
     rules:
@@ -37,7 +37,7 @@ groups:
             registry-gc.sh is running, then `kubectl -n homelab scale deploy/ghcr-mirror
             --replicas=1`.
       # The same page for the dockerhub-mirror, which registry-gc.sh scales the same way after the
-      # ghcr-mirror's phase (#6536). Its Deployment renders no `replicas:` either.
+      # ghcr-mirror's phase. Its Deployment renders no `replicas:` either.
       - alert: DockerhubMirrorScaledToZero
         expr: >-
           absent(up{job="kube-state-metrics"})
@@ -59,7 +59,7 @@ groups:
             registry-gc.sh is running, then `kubectl -n homelab scale deploy/dockerhub-mirror
             --replicas=1`.
       # node-exporter's ghcr-mirror-pull sidecar GETs nut's manifest through each node's ghcr.io
-      # mirror endpoint every 600s (#5542). containerd falls back to ghcr.io past a broken
+      # mirror endpoint every 600s. containerd falls back to ghcr.io past a broken
       # mirror, so while the WAN is up nothing else sees one. The `for:` rides out the weekly GC:
       # registry-gc.sh holds the mirror at zero for at most 1620s (the pod-exit and Job-delete
       # waits of 120s each, registry_k8s_gc_deadline_s of 1200s and the 180s rollout wait), and
@@ -122,7 +122,7 @@ groups:
             endpoint serves pulls. Read the log of the node-exporter pod's `ghcr-mirror-pull`
             container on daniel-server.
       # node-exporter's dockerhub-mirror-pull sidecar GETs the exporter's own image by digest
-      # through each node's docker.io mirror endpoint every 600s (#6535). containerd falls back to
+      # through each node's docker.io mirror endpoint every 600s. containerd falls back to
       # Docker Hub past a broken mirror, as it does to GHCR. The 45m hold is GhcrMirrorPullFailed's:
       # registry-gc.sh holds this mirror at zero for the same bounded window.
       - alert: DockerhubMirrorPullFailed
@@ -180,11 +180,10 @@ groups:
             daniel-server's textfile collector, so nothing is watching whether the node's docker.io
             mirror endpoint serves pulls. Read the log of the node-exporter pod's
             `dockerhub-mirror-pull` container on daniel-server.
-      # M6 BATCH B6c (#6926). registry-gc.sh writes the registry-gc textfile, and these two rules
-      # replaced the "Registry GC" tile that Cutover-1a deleted. The NotReporting literals
-      # equal the DEADLINE_S the script renders, which equals the deleted tile's interval:
-      # tests/services/test_registry_gc_watchers_cover_the_worst_run.py pins both. The
-      # tile notified Discord only, so both rules are `warning`.
+      # registry-gc.sh writes the registry-gc textfile, and these two rules watch it. The
+      # NotReporting literals equal the DEADLINE_S the script renders:
+      # tests/services/test_registry_gc_watchers_cover_the_worst_run.py pins both. Both rules
+      # are `warning`, so Discord alone.
       - alert: RegistryGcFailed
         expr: homelab_check_success{check="registry-gc",origin="daniel-box"} == 0
         labels:

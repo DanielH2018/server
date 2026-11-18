@@ -1,7 +1,6 @@
-# The Jobs a landing waits on (#5675): flux_soak.py's `soak-<rev>`, each tag's
-# `snapshot-<tag>-<rev>` and each tag's `<tag>-verify-<rev>`. Their durations were copied from
-# Job logs into prose before kube-state-metrics collected jobs. Plain YAML, never Jinja:
-# prometheus-rules.yaml.j2 carries this file verbatim.
+# The Jobs a landing waits on: flux_soak.py's `soak-<rev>`, each tag's `snapshot-<tag>-<rev>`
+# and each tag's `<tag>-verify-<rev>`. Plain YAML, never Jinja: prometheus-rules.yaml.j2
+# carries this file verbatim.
 #
 # A Job still running has no completion time, so it records nothing here.
 # kube_job_status_active says it runs, and kube_job_status_succeeded and

@@ -2,16 +2,13 @@
 # trims to kube_service_status_load_balancer_ingress. Plain YAML, never Jinja:
 # prometheus-rules.yaml.j2 carries this file verbatim.
 #
-# MosquittoLanAddressNotPinned, JellyfinLanAddressNotPinned and PiholeLanAddressNotPinned replace
-# each role's deploy-time assert, "Fail if <Service> did not get its pinned LAN address", as the
-# verify-on-a-metric conversion of D5 (docs/target-architecture/deploy/d5-bulk-move.md). Each
-# carries verify="true", so the soak Job fails a revision that changes its service while it
-# fires. The address is a literal because a rule file is never Jinja;
+# MosquittoLanAddressNotPinned, JellyfinLanAddressNotPinned and PiholeLanAddressNotPinned verify
+# each role's pinned LAN address on a metric (docs/target-architecture/deploy/d5-bulk-move.md).
+# Each carries verify="true", so the soak Job fails a revision that changes its service while
+# it fires. The address is a literal because a rule file is never Jinja;
 # tests/services/test_lan_address_rules_agree.py holds it, the namespace and the
 # Service name to the rendered Service.
-# TraefikIngressAddressNotPinned is the same conversion of traefik's "Fail if Traefik did not
-# get the reserved ingress VIP". It lands ahead of traefik's flip, while observability is still
-# Ansible-owned, so the flip PR does not change observability (the cross-plane gate's arm 1).
+# TraefikIngressAddressNotPinned is the same check for traefik's reserved ingress VIP.
 groups:
   - name: k8s-services
     rules:
@@ -41,7 +38,7 @@ groups:
             job. Home Assistant and the LAN publishers cannot reach the broker on the VIP. MetalLB does not re-evaluate an
             existing allocation, so delete the Service and redeploy mosquitto to force
             reallocation.
-      # jellyfin's twin of the rule above (#5697). TV and phone clients have the VIP typed in by
+      # jellyfin's twin of the rule above. TV and phone clients have the VIP typed in by
       # hand, so an auto-assigned address breaks them with every pod healthy.
       - alert: JellyfinLanAddressNotPinned
         expr: >-
@@ -62,7 +59,7 @@ groups:
             job. TV and phone clients that dial the VIP cannot reach Jellyfin. MetalLB does not
             re-evaluate an existing allocation, so delete the Service and redeploy jellyfin to
             force reallocation.
-      # pihole's twin of the rules above (#5696). LAN clients get the VIP from the router's DHCP
+      # pihole's twin of the rules above. LAN clients get the VIP from the router's DHCP
       # DNS option, so an auto-assigned address leaves every client without a resolver while
       # both pods stay Ready. CoreDNS forwards to the pinned ClusterIP instead, so the cluster
       # keeps resolving and nothing else notices.
