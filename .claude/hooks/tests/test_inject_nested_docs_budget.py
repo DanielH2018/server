@@ -133,13 +133,16 @@ def test_the_facts_rule_waits_for_a_write_to_a_claude_md(repo):
     assert "# Citation grammar" in context
 
 
-def test_every_injected_byte_is_charged_to_the_session(repo):
+def test_the_secrets_rule_and_preamble_are_charged_to_the_session(repo):
+    """Foo's 6.5 KB doc fits the budget alone, not after the 2 KB secrets rule is charged."""
     (repo / ".claude" / "rules" / "secrets.md").write_text(SECRETS_RULE)
-    _add_bar(repo)
-    first, _ = _build(repo, "grep -c sops secrets/secrets.yml")
-    second, _ = _build(repo, f"cat {FOO_FILE} {BAR_DOC}")
-    spent = _mod.injected_this_session("sess-a").spent
-    assert spent == len(first.encode()) + len(second.encode())
+    (repo / "k8s" / "roles" / "foo" / "CLAUDE.md").write_text(
+        "foo doc line with some words to fill the session budget\n" * 115
+    )
+    _build(repo, "grep -c sops secrets/secrets.yml")
+    context, chosen = _mod.build_context(f"cat {FOO_FILE}", str(repo), "sess-a")
+    assert [_mod._form(block) for _, _, block in chosen] == ["outline"]
+    assert "foo doc line" not in context
 
 
 def test_a_subagent_has_its_own_budget(repo):
