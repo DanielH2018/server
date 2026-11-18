@@ -5,8 +5,8 @@
 
     The wired link stays preferred: its pinned routes sit at metric 100, and these at 600. The
     fallback wins only because the address pin sets ignore_routes_with_linkdown on the wired
-    link, so a route lookup skips its pinned routes once the cable drops (#4510). networkd gives
-    the link's IPv6 RA route the same metric, through `[DHCP] RouteMetric` (#4561).
+    link, so a route lookup skips its pinned routes once the cable drops. networkd gives
+    the link's IPv6 RA route the same metric, through `[DHCP] RouteMetric`.
 
     server_ip stays on the wired link with no carrier (`ignore-carrier`), and the kernel answers
     ARP for it on any link (arp_ignore 0), so a peer that re-resolves server_ip with the cable out

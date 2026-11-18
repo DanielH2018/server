@@ -99,16 +99,11 @@ def io_config(
         return tuple(parsed)
 
     return IoConfig(
-        # B2 REACHABILITY — the gap the 2026-08-02 transaction-cap incident exposed
-        # (docs/archive/b2-transaction-cap-monitoring-gaps.md). B2 caps TRANSACTIONS separately from
-        # storage bytes; the kopia-era state-file checks this used to gate reported their last
-        # successful cron run rather than current B2 health, so all of them read green — "B2
-        # 6.05/10GB billable (60% of plan)" among them — for nine and a half hours while B2
-        # refused every request. Worse than absent — an operator triaging the one true alert was
-        # told by these that B2 was fine. Those checks were removed 2026-08-10 (kopia is
-        # retired, backup moved to Longhorn — see
-        # docs/archive/k3s-migration/backup-consolidation-longhorn.md), but this probe stays:
-        # Longhorn still needs B2 reachable.
+        # B2 REACHABILITY (docs/archive/b2-transaction-cap-monitoring-gaps.md). B2 caps
+        # TRANSACTIONS separately from storage bytes. A check that reports the last successful
+        # cron run rather than current B2 health reads green while B2 refuses every request —
+        # worse than absent, since an operator triaging the one true alert is told B2 is fine.
+        # Longhorn needs B2 reachable, so this probe watches it directly.
         #
         # The probe authenticates against B2's native API (b2_authorize_account, Class C), then
         # makes one Class B call (checks/b2.py:b2_authorize), because B2 caps the two classes
@@ -125,9 +120,8 @@ def io_config(
         ),
         # Read through _env_file for the same reason as HA_TOKEN: envFrom has no per-key filter,
         # so a secret in monitor-bridge-env is a secret in every process's environment
-        # (2026-07-15 review H2). Named B2_PROBE_* rather than LONGHORN_B2_* even though the k8s
-        # Secret feeds it the `longhorn_b2_*` values (ADR-0014; those keys were spelled
-        # `kopia_b2_*` until 2026-09-09, after the tool that named them retired). This probe
+        # Named B2_PROBE_* rather than LONGHORN_B2_* even though the k8s
+        # Secret feeds it the `longhorn_b2_*` values (ADR-0014). This probe
         # only needs to authenticate, so swapping in a scoped read-only key later is an
         # inventory edit, not a code one.
         B2_PROBE_KEY_ID=_env_file("B2_PROBE_KEY_ID"),
@@ -150,16 +144,12 @@ def io_config(
         # not held back — see b2_reachable.
         B2_TRANSPORT_RETRY_S=_num("B2_TRANSPORT_RETRY_S"),
         # B2 free-tier STORAGE headroom — the other half of the B2 budget, billed separately
-        # from the transaction cap b2_reachable watches. kopia reported this as
-        # `kopia_b2_billable_bytes`; that metric retired with kopia on 2026-08-10 and nothing
-        # replaced it, so the storage half went unwatched at exactly the point Longhorn became
-        # its only client. Two Grafana panels kept querying the dead gauge and rendered blank
-        # while looking authoritative.
+        # from the transaction cap b2_reachable watches. Longhorn is B2's only client, and no
+        # other metric reports its billable bytes.
         #
         # Listing versions is the only way to see the real number: hidden and unfinished
         # versions bill as stored bytes and do NOT appear in a plain object listing, which is
-        # how the cap filled unnoticed before (hidden kopia bytes wedged retention deletes,
-        # 2026-08-13).
+        # how the cap can fill unnoticed.
         B2_STORAGE_CAP_BYTES=_num("B2_STORAGE_CAP_BYTES", str(10 * 1000**3)),
         B2_STORAGE_MAX_PCT=_num("B2_STORAGE_MAX_PCT"),
         # Daily rather than B2_PROBE_INTERVAL_S: a full listing costs one Class C call per 1000
@@ -175,8 +165,8 @@ def io_config(
         # and act on. The Usage-Based Billing notification that would do this natively needs a
         # Pro plan; this account is on Free. Overage is cheap ($0.015/GB-month, $4.50/M Class A,
         # $0.36/M Class B, egress free), so this is a headroom guard, not a bill-shock alarm: it
-        # exists to notice a runaway client (the shape of the 2026-08-13 Longhorn retry storm,
-        # which burned ~2.5k B2 Class B/day against a cap) while the fix is still a config edit.
+        # exists to notice a runaway client (the shape of a Longhorn retry storm,
+        # ~2.5k B2 Class B/day against a cap) while the fix is still a config edit.
         #
         # CF_ANALYTICS_TOKEN is file-mounted like HA_TOKEN and the B2 key, for the same reason
         # (H2): an account-scoped credential must not sit inline in the container Env. Its ONLY
@@ -207,7 +197,7 @@ def io_config(
         #
         # The Class A / Class B / free ACTION LISTS are not here. They read no env var —
         # Cloudflare's pricing page decides them, not this deployment — so they live in
-        # verdicts/storage.py beside r2_classify_operations, their only reader. Moved 2026-09-04.
+        # verdicts/storage.py beside r2_classify_operations, their only reader.
         R2_PROBE_INTERVAL_S=_num("R2_PROBE_INTERVAL_S", "1800"),
         # The `cloudflare_ips` allowlist traefik trusts and netpol-baseline admits, as the env
         # secret renders it (comma-separated CIDRs). Empty disables the drift check. Daily
@@ -217,7 +207,7 @@ def io_config(
             c.strip() for c in _env("CLOUDFLARE_IPS_EXPECTED").split(",") if c.strip()
         ),
         CLOUDFLARE_IPS_PROBE_INTERVAL_S=_num("CLOUDFLARE_IPS_PROBE_INTERVAL_S"),
-        # The domain's RDAP record, whose `expiration` event dates the registration (#8519).
+        # The domain's RDAP record, whose `expiration` event dates the registration.
         # Empty disables the check. Successes cached a day, failures re-probed every cycle
         # (checks/domain_registration.py).
         DOMAIN_RDAP_URL=_env("DOMAIN_RDAP_URL"),
@@ -232,7 +222,7 @@ def io_config(
             for u in _env("WAN_PROBE_URLS", WAN_PROBE_DEFAULT).split(",")
             if u.strip()
         ),
-        # The Healthchecks.io console against docs/healthchecks-io-deadman.md (#2566). The key
+        # The Healthchecks.io console against docs/healthchecks-io-deadman.md. The key
         # is the project's READ-ONLY API key, file-mounted like CF_ANALYTICS_TOKEN; the expected
         # list is monitor_bridge_healthchecks_expected rendered as JSON. Either empty disables
         # the check. Successes cached a day, failures re-probed every cycle

@@ -1,7 +1,7 @@
 """The lint tools sit in their own uv group, and a CI job that runs no lint hook skips it.
 
 actionlint-py ships no wheel, so installing it downloads the actionlint binary from a GitHub
-release. A release outage (#7625) then failed every job that installed it, the six pytest
+release. A release outage then failed every job that installed it, the six pytest
 shards included, though no test runs it. pyproject.toml's `lint` group holds the tools only
 prek hooks call, `[tool.uv] default-groups` keeps a local `uv run` installing them, and each
 job in any workflow that runs no prek hook sets `UV_NO_GROUP: lint`, at job or workflow level.

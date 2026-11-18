@@ -361,7 +361,7 @@ def test_close_fixed_with_a_pr_is_accepted(make_tools, issue):
 
 def test_close_fixed_on_another_register_names_the_pr_with_its_repo(make_tools, issue):
     """GitHub resolves a bare `#N` against the issue's own repo, so on the dotfiles
-    register a bare `#8879` links dotfiles PR 8879 rather than the server PR (#8886)."""
+    register a bare `#8879` links dotfiles PR 8879 rather than the server PR."""
     tools, calls = make_tools(Fakes(view=issue(1395)))
     argv = ["close", "1395", "--fixed", "--pr", "8879"]
     assert findings.main([*argv, "--repo", "DanielH2018/dotfiles"], tools) == 0
@@ -437,7 +437,7 @@ def test_main_requires_the_tools_seam():
     """`main` must not read `tools or FindingsTools()`, which would reach the real `gh` on
     this call.
 
-    The red-proof half: under the old default `main(["list"])` shelled out to `gh issue list`
+    The red-proof half: with the default boundaries `main(["list"])` shells out to `gh issue list`
     from a unit test instead of failing. The `__main__` block is the only site that builds the
     real boundaries.
     """
@@ -501,7 +501,7 @@ def test_cited_paths_ignores_the_trailer_findings_py_writes():
 
 
 def test_cited_paths_skips_a_span_quoting_program_output():
-    # #7898's body: one real citation, then a quoted session banner line.
+    # A body with one real citation, then a quoted session banner line.
     body = (
         "Edit `.claude/hooks/session-health.py`. Example: "
         "`• fix7828 — .claude/settings.json, .claude/skills/deploy/SKILL.md, …, +88 more`.\n"

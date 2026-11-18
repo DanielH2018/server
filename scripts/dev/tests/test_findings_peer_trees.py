@@ -1,4 +1,4 @@
-"""The other host's worktree list, and the claims it holds when this host has no worktree (#6840).
+"""The other host's worktree list, and the claims it holds when this host has no worktree.
 
 `test_findings_reap_peer_host.py` covers `reap` holding a claim the peer registers. This module
 covers the reader itself, the failed-read direction, and `claim`'s reap on the way past.

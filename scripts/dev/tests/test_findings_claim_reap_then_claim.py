@@ -157,14 +157,11 @@ def test_claim_dry_run_reaps_nothing_and_says_what_it_would_do(capsys):
 
 
 def test_reclaiming_an_issue_this_worktree_holds_still_reads_the_worktrees_once(capsys):
-    """The idempotent re-claim, and the ONE git read now in front of every claim.
+    """The idempotent re-claim, and the ONE git read in front of every claim.
 
-    This test used to wire `worktree_facts` to raise, pinning that a batch nothing blocked
-    never paid for the read at all — `another_claim_blocks` answered False for the caller's
-    own claim and the lazy read was never reached. The stale-at-birth guard
-    retires that: it asks about `--worktree` itself, which every batch has, so the read is
-    unconditional and hoisted out of the loop. What survives is the bound that mattered —
-    ONE read, not one per issue — which `test_claim_reads_the_worktrees_once_for_a_whole_batch`
+    The stale-at-birth guard asks about `--worktree` itself, which every batch has, so the read
+    is unconditional and hoisted out of the loop. The bound is ONE read, not one per issue —
+    which `test_claim_reads_the_worktrees_once_for_a_whole_batch`
     states for a batch of two and this states for the idempotent path.
     """
     reads = []
@@ -202,7 +199,7 @@ def test_claim_reads_the_worktrees_once_for_a_whole_batch():
 def test_claim_refuses_rather_than_reaps_an_operator_claim_read_by_the_agent_user(
     monkeypatch, capsys
 ):
-    """#4103's Verify-by from the agent user's side: no worktree here, and still held."""
+    """From the agent user's side: no worktree here, and still held."""
     monkeypatch.setenv("CLAUDE_WORKTREE_PREFIX", "claude")
     issue = _held_by_other()
     tools, calls = build_tools(Fakes(issues=[issue], view=issue, worktree_facts=STALE))

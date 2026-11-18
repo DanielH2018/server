@@ -81,14 +81,14 @@ def test_classify_a_miss_after_a_stable_run_is_regressed():
 
 
 def test_classify_a_miss_with_too_short_a_stable_window_is_flaky():
-    # Two passes then a miss: the old pass-then-miss rule paged, but stable_n=3 needs three.
+    # Two passes then a miss: a pass-then-miss does not page, because stable_n=3 needs three.
     hist = {"a/1": [_entry(True), _entry(True), _entry(False)]}
     assert classify(hist)["flaky"] == ["a/1"]
     assert classify(hist, stable_n=2)["regressed"] == ["a/1"]
 
 
 def test_classify_a_single_miss_after_a_mixed_window_is_flaky():
-    # 3/3, 1/3, 3/3 then 1/3: the shape skeptic/002 paged on (#5796).
+    # 3/3, 1/3, 3/3 then 1/3: the shape skeptic/002 paged on.
     hist = {"a/1": [_entry(True), _entry(False), _entry(True), _entry(False)]}
     assert classify(hist) == {
         "regressed": [],

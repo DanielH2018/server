@@ -87,7 +87,7 @@ def test_format_loki_routes_its_lines_through_the_redaction():
 
 
 # Sonarr and Radarr log a failed Torznab call with its full URL, which carries Prowlarr's API key
-# as `apikey=<32 hex>` (#6276). Loki keeps the lines shipped before the Alloy stage for 744h, so
+# as `apikey=<32 hex>`. Loki keeps the lines shipped before the Alloy stage for 744h, so
 # `probe.py loki-query` must redact them on the way out.
 APIKEY = "f" * 32
 

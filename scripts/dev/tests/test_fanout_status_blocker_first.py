@@ -1,4 +1,4 @@
-"""status tests a blocker line before a PR URL, so a held batch never reads `done` (#4910).
+"""status tests a blocker line before a PR URL, so a held batch never reads `done`.
 
 Split from test_fanout_status.py, which sits at the module-length cap.
 

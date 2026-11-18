@@ -112,8 +112,8 @@ LINE_BREAKERS = (
 def test_a_cwd_with_a_line_break_is_reported_on_one_line_and_holds_only_its_tree_is_clean(
     tmp_path, name
 ):
-    # #4294: the process holds its own tree and nothing else. Before the escape, the caller
-    # read an unparseable line and refused every removal while the process lived.
+    # The process holds its own tree and nothing else. An unescaped line break would hand the
+    # caller an unparseable line, refusing every removal while the process lived.
     root = tmp_path / "worktrees"
     held, unrelated = root / name, root / "b"
     held.mkdir(parents=True)
@@ -139,7 +139,7 @@ def test_a_cwd_printed_without_the_escape_breaks_the_caller_is_flagged(tmp_path)
 
 
 def test_a_project_dir_with_a_line_break_holds_only_its_tree_is_clean(tmp_path):
-    # #4272 dropped such a value. Escaped, it is reported, and holds only the tree it names.
+    # Escaped, such a value is reported, and holds only the tree it names.
     root = tmp_path / "worktrees"
     (root / "a").mkdir(parents=True)
     poisoned = f"{root / 'a'}/x\n4242\tcwd\t{root / 'b'}"
@@ -163,7 +163,7 @@ def test_the_helper_and_the_callers_escape_one_way_is_clean():
 
 
 def test_main_answers_under_the_callers_mapped_root_is_flagged(tmp_path):
-    # #4021: the root comes from the map, keyed by the uid the kernel names, so the agent
+    # The root comes from the map, keyed by the uid the kernel names, so the agent
     # user's removal in its own clone sees the operator's process there.
     root = tmp_path / "clone" / ".claude" / "worktrees"
     (root / "a").mkdir(parents=True)

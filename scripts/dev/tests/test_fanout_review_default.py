@@ -23,7 +23,7 @@ def _unit_command(tmp_path, *flags) -> str:
 
 
 def test_a_launch_with_no_review_flag_runs_the_review_unit(tmp_path):
-    """Review is the default (#3675): a bare launch starts `fanout.py review`."""
+    """Review is the default: a bare launch starts `fanout.py review`."""
     assert "fanout.py review --batch 1" in _unit_command(tmp_path)
 
 

@@ -216,20 +216,18 @@ def queue_warnings(
     """Pure: (app_name, title, reason) for each queue item needing an operator's eyes.
 
     Fed a sonarr/radarr /api/v3/queue payload. trackedDownloadStatus == "warning" is the
-    2026-07-01 incident's signal — the *arr blocked the import itself but only flagged the
-    queue item, so it kept seeding for a day with nothing paging. "error" is the harder
-    sibling status (upstream enum: ok/warning/error) — at least as actionable, previously
-    skipped. trackedDownloadState == "importBlocked" is the harder-blocked sibling state,
+    the signal that the *arr blocked the import itself but only flagged the
+    queue item, so it keeps seeding with nothing paging. "error" is the harder
+    sibling status (upstream enum: ok/warning/error) — at least as actionable. trackedDownloadState == "importBlocked" is the harder-blocked sibling state,
     "importFailed" its attempted-and-failed counterpart (both from the upstream
     TrackedDownloadState enum); "importPending" WITH statusMessages covers the case where
     the block reason shows up under the pending state instead. Plain "importPending" with
     no messages is the ordinary just-finished-download queue waiting its turn — not a
     problem, so it's left alone.
 
-    SELF_CLEARING_TITLE_HOLDS are held for `title_hold_grace_h` instead of flagged (#2786).
-    Three of this check's seven DOWN episodes in the 14 days to 2026-09-27 were "Episode has a
-    TBA title and recently aired" (2.9h, 7.4h and 2.9h) — a hold Sonarr applies and releases on
-    its own, so the page named no action. The grace is 48h and not the 24h the issue proposed
+    SELF_CLEARING_TITLE_HOLDS are held for `title_hold_grace_h` instead of flagged.
+    "Episode has a TBA title and recently aired" is a hold Sonarr applies and releases on
+    its own, so a page for it names no action. The grace is 48h and not 24h
     because 48h is upstream's OWN window: EpisodeTitleSpecification skips the check once
     `airDateUtc` is more than 48 hours old, so a hold still on the item after that can no longer
     be the title rule and IS stuck. `added` is the clock (it is at or after the air date, so the

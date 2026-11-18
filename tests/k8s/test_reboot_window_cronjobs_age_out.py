@@ -1,8 +1,7 @@
 """A CronJob run the weekly reboot can interrupt ages out within the hour after boot.
 
 daniel-box's weekly shutdown kills whichever runs are in flight, and each becomes a failed Job
-whose pod reads `Unknown` until `failedJobsHistoryLimit` more runs fail. The 2026-10-25 reboot
-left `crowdsec-home-ips-29881895` Failed for 15 hours (#6367). So every rendered CronJob with a
+whose pod reads `Unknown` until `failedJobsHistoryLimit` more runs fail. Every rendered CronJob with a
 run in flight at the shutdown minute sets `ttlSecondsAfterFinished`, at most `TTL_BUDGET`.
 Which CronJobs those are is derived from the `weekly_reboot_*` group vars and each CronJob's
 schedule, time zone and `activeDeadlineSeconds`, so a new frequent CronJob reaches this test
@@ -63,7 +62,7 @@ def fires_at(schedule: str, moment: datetime) -> bool:
 
 
 def shutdown_time(context: dict) -> datetime:
-    """The minute the weekly reboot halts the node, on a reboot day (2026-10-25 for #6367)."""
+    """The minute the weekly reboot halts the node, on a reboot day."""
     zone = ZoneInfo(context["weekly_reboot_timezone"])
     day = datetime(2026, 10, 25, tzinfo=zone)
     day += timedelta(

@@ -31,12 +31,9 @@ def stub_secret(monkeypatch):
     monkeypatch.setattr(postflight, "secret", lambda name: (f"<{name}>", ""))
 
 
-# The three tests below pass `main([])` rather than `main()`, and the empty list is
-# load-bearing: with no argument argparse falls back to `sys.argv[1:]`, which under pytest is
-# PYTEST'S OWN flags. Any invocation carrying a flag postflight does not define exits 2 before
-# the check under test runs. That made `pytest_shard.py --record` impossible for the whole
-# repo — it runs the suite as `-n0 -vv --durations=0`, so these three failed, and
-# `record_weights` refuses to write weights from a suite that did not pass.
+# The three tests below pass `main([])` rather than `main()`: with no argument argparse falls
+# back to `sys.argv[1:]`, which under pytest is PYTEST'S OWN flags, and a flag postflight does
+# not define exits 2 before the check under test runs.
 def test_a_workload_with_no_service_skips_not_fails(monkeypatch):
     def absent(name):
         raise postflight.Skip(f"{name} has no ClusterIP (does the Service exist?)")
@@ -67,7 +64,7 @@ def test_check_raising_does_not_abort_the_run(monkeypatch):
 
 
 def test_an_ok_check_prints_only_in_the_count(monkeypatch, capsys):
-    """A row per passing check buried the failures (#7896)."""
+    """A row per passing check buried the failures."""
     only_checks(
         monkeypatch,
         [

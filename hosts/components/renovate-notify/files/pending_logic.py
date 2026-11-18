@@ -1,6 +1,6 @@
-"""The Pending-Status-Checks dwell arm — pure logic, no I/O (issue #886, #1526).
+"""The Pending-Status-Checks dwell arm — pure logic, no I/O.
 
-Split out of `notify_logic.py`, which was at its length cap. The seam is the dashboard's
+Split out of `notify_logic.py`, which has a length cap. The seam is the dashboard's
 Pending Status Checks section: everything that parses an ITEM out of it, times that item's
 dwell, or renders a message about one lives here, while the dashboard-level parsing it sits
 inside (which sections exist, which body is the dashboard's) stays next door.
@@ -17,16 +17,16 @@ from datetime import datetime, timezone
 # --- Pending Status Checks: updates that soak forever and never get a PR ---------------
 #
 # The section lists updates Renovate detected and holds until their `minimumReleaseAge` soak
-# elapses, after which an item is supposed to leave it as a branch and a PR. Measured 2026-09-02
-# (issue #886), seven had not — grafana/promtail 3.3.0 -> 3.6.11 sat 111 days against a 7-day
-# soak — and the only signal was a checkbox in an issue nobody reads line by line.
+# elapses, after which an item is supposed to leave it as a branch and a PR. Items that do not
+# leave sit there for months, and the only signal is a checkbox in an issue nobody reads line by
+# line.
 #
 # The mechanism is undetermined: Renovate runs here as the Mend hosted app, whose debug log is
 # on developer.mend.io and unreadable from this host. So this measures the SYMPTOM — an item's
 # continuous dwell in the section — rather than the cause.
 PENDING_HEADER = "## Pending Status Checks"
 
-# Both markers Renovate has used on a pending item's checkbox: the name changed once already.
+# Both markers Renovate has used on a pending item's checkbox.
 PENDING_MARKERS = ("unpend-branch=", "approvePr-branch=")
 
 
@@ -38,9 +38,8 @@ VERSION_SOAK_DAYS = 7
 
 # The packages renovate.json soaks for LESS than DIGEST_SOAK_DAYS, as {title token: days}.
 # `nginx:alpine` and `nginxinc/nginx-unprivileged` are re-pushed about every 3.6 days, so a
-# 3-day soak restarted on every re-push left an automerge window the once-daily Renovate run
-# usually missed, and both pins only ever landed by hand (#2886). The rule there soaks them
-# 1 day. Keyed on the image reference as a pending row spells it, because the title is all this
+# 3-day soak restarted on every re-push leaves an automerge window the once-daily Renovate run
+# usually misses. The rule there soaks them 1 day. Keyed on the image reference as a pending row spells it, because the title is all this
 # module gets. `test_soak_constants_match_renovate_json` asserts this map against renovate.json,
 # so a new exception there with no entry here fails rather than silently measuring 3 days.
 FAST_DIGEST_SOAK_DAYS = {"nginx:alpine": 1, "nginxinc/nginx-unprivileged:": 1}
@@ -57,10 +56,10 @@ def parse_pending(body: str) -> dict[str, str]:
     """Parse the dashboard's Pending Status Checks section into {branch: item description}.
 
     An item renders as ` - [ ] <!-- unpend-branch=<branch> -->Update foo to v1.2.3`. Renovate
-    renamed that marker from `approvePr-branch=` between 2026-09-02 and 2026-09-09, so both are
-    matched: the older name alone read 26 live items as zero. Keyed on the BRANCH, not the
-    description — nine of the 22 items live on 2026-09-02 were mutable-tag digest bumps whose
-    description changes on every upstream re-push, which would reset their clock forever.
+    renamed that marker from `approvePr-branch=`, so both are matched: the older name alone
+    reads every live item as zero. Keyed on the BRANCH, not the description — mutable-tag digest
+    bumps have a description that changes on every upstream re-push, which would reset their
+    clock forever.
     Absent section -> empty dict, the healthy common case.
     """
     if PENDING_HEADER not in (body or ""):
@@ -93,7 +92,7 @@ def pending_section_unreadable(body: str) -> bool:
 # with. Such a row's title is the GROUP name, so it carries no update type at all — see
 # `item_soak_days`. `test_grouped_marker_appears_in_renovate_json` asserts this literal still
 # matches a real grouped rule, so a reword of those group names fails here rather than silently
-# restoring the four-day-late alert this marker exists to fix (issue #2885).
+# restoring the four-day-late alert this marker exists to fix.
 GROUPED_TITLE_MARKER = "(manual "
 
 
@@ -105,11 +104,10 @@ def item_soak_days(description: str) -> int:
     Anything unrecognised gets the LONGER soak: a misread must delay the alert, never invent one.
 
     A GROUPED row is the third shape, and it carries no update type to read. `groupSingleUpdates:
-    true` (#2646) makes Renovate title a single-dependency update with its group name, so the row
+    true` makes Renovate title a single-dependency update with its group name, so the row
     reads `Update k8s image ghcr.io/haveagitgat/tdarr (manual — k8s_autodeploy: false, ...)` where
-    an ungrouped digest row reads `... Docker digest to df221db`. Those rows took the version soak
-    and alerted four days late; five sat 10.3 days on 2026-09-28 against a 10-day threshold with
-    the digest naming none of them (#2885).
+    an ungrouped digest row reads `... Docker digest to df221db`. Those rows would take the
+    version soak and alert four days late.
 
     # DECIDED: a grouped row takes the DIGEST soak. It is not the unrecognised default breaking —
     # the shape is recognised, and only its type is erased. The cost is that a grouped VERSION
@@ -118,7 +116,7 @@ def item_soak_days(description: str) -> int:
     # four days early nudges someone who already owes the merge. Rejected alternative: put
     # `{{updateType}}` into each group's `commitMessageTopic` so the title carries the type again
     # — it cannot be verified from this host (Renovate runs as the Mend hosted app), and it edits
-    # the title/branch machinery #2620/#2641/#2646 settled.
+    # the title/branch machinery.
 
     A package in `FAST_DIGEST_SOAK_DAYS` takes its own shorter soak, matched on the image
     reference in the title. A GROUPED row for one of those packages names no reference, so it
@@ -138,12 +136,11 @@ def item_soak_days(description: str) -> int:
     return VERSION_SOAK_DAYS
 
 
-# --- Two clocks per pending item (issue #3076) ------------------------------------------
+# --- Two clocks per pending item --------------------------------------------------------
 #
 # A mutable tag's branch outlives any one digest: Renovate reuses `renovate/k8s-image-nginx`
 # across every re-push, so a dwell keyed on the branch alone measures how long SOME digest has
-# been pending. renovate-notify reported the FreshRSS cache digest stuck 18.8 days when no
-# single digest had been pending more than about 3 (#2886).
+# been pending, not how long any single digest has.
 #
 # So each item carries two first-seen stamps in the one flat `{key: epoch}` state file, in two
 # key namespaces:
@@ -212,7 +209,7 @@ def stale_pending(
     """(branch, description, whole days pending) for every item past its soak + `grace_days`.
 
     The dwell is the DIGEST clock's — the age of the update now on the branch, not the age of
-    the branch (#3076). A re-push restarts it, which is what the soak it is measured against
+    the branch. A re-push restarts it, which is what the soak it is measured against
     means: `minimumReleaseAge` applies to the version on the branch. The branch that churns so
     fast that no digest ever ages out is `churning_pending`'s subject, not this one's.
 
@@ -277,14 +274,12 @@ def render_pending(items: list[tuple[str, str, int]], limit: int = 1500) -> str:
     return "\n".join(out)
 
 
-# --- Dwell-state loss (issue #1526) -----------------------------------------------------
+# --- Dwell-state loss -------------------------------------------------------------------
 #
 # `stale_pending` treats an item with no first-seen entry as first seen NOW, so a lost or
 # unparseable `pending_seen.json` is indistinguishable from the intended first-run bootstrap:
 # every clock restarts at zero and the check can find nothing for soak + grace — 14 days for a
-# version bump, 10 for a digest one. Measured on daniel-box 2026-09-10: all 27 entries carried
-# the identical stamp 1788990155.26 (2026-09-09 21:42), the first run after #1472 fixed
-# `parse_pending`, and that window passed with the run reporting healthy throughout.
+# version bump, 10 for a digest one, with the run reporting healthy throughout.
 #
 # A check that cannot fire is reporting nothing, not reporting healthy — so the run says so.
 PENDING_RESET_MSG = (
@@ -313,7 +308,7 @@ def render_pending_reset(now_epoch: float, repo: str) -> str:
     """The Discord line for a dwell-state loss, naming every date a clock becomes usable.
 
     A loss restarts the BRANCH clocks too, so the churn arm is blind for its own, longer window
-    — `PENDING_CHURN_MULTIPLIER` times soak plus grace (#3076). The third date is the version
+    — `PENDING_CHURN_MULTIPLIER` times soak plus grace. The third date is the version
     row's, the latest of the three, so it bounds the whole blind window rather than one shape of
     row. Reporting only the dwell arm's two dates would say the check is trustworthy again weeks
     before the churn arm can fire, which is the claim this message exists to refuse.
@@ -339,14 +334,13 @@ def pending_reset_fingerprint(now_epoch: float) -> str:
     return pending_clock_ready(now_epoch, VERSION_SOAK_DAYS)
 
 
-# --- The branch that churns indefinitely (issue #3076) ----------------------------------
+# --- The branch that churns indefinitely ------------------------------------------------
 #
-# Splitting the dwell onto the digest clock closes the over-report and opens a hole: a tag
-# re-pushed faster than its own soak + grace never lets any one digest age out, so
-# `stale_pending` can never fire for it however long the branch sits there. `nginx:alpine` is
-# the live case — re-pushed about every 3.6 days against the 1-day soak and 7-day grace
-# `FAST_DIGEST_SOAK_DAYS` records, so its digest clock resets at roughly half the threshold,
-# forever. This arm is the floor under that: it pages on the BRANCH clock.
+# The digest clock leaves a hole: a tag re-pushed faster than its own soak + grace never lets
+# any one digest age out, so `stale_pending` can never fire for it however long the branch sits
+# there. `nginx:alpine` is the case — re-pushed about every 3.6 days against the 1-day soak and
+# 7-day grace `FAST_DIGEST_SOAK_DAYS` records, so its digest clock resets at roughly half the
+# threshold, forever. This arm is the floor under that: it pages on the BRANCH clock.
 #
 # DECIDED: the churn allowance is three times the item's own soak + grace, not a flat day
 # count. Three consecutive full allowances elapsed with the item never once leaving the section
@@ -354,8 +348,8 @@ def pending_reset_fingerprint(now_epoch: float) -> str:
 # re-push landing mid-soak. Keeping it a multiple of the per-item allowance preserves
 # `PENDING_GRACE_DAYS`'s rule that the threshold derives from the soak that applies: 24 days for
 # an `nginx:alpine` row, 30 for an ordinary digest row, 42 for a version row. Rejected
-# alternative: page as soon as the branch clock passes soak + grace, which is just the
-# pre-#3076 over-report back again under a new name.
+# alternative: page as soon as the branch clock passes soak + grace, which over-reports a
+# digest that is still moving.
 PENDING_CHURN_MULTIPLIER = 3
 
 

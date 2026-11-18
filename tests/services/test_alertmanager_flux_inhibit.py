@@ -2,7 +2,7 @@
 
 Both rules read the same `up{job="flux"} == 0`. `FluxControllerDown` pages it critical after 5
 minutes and `ScrapeTargetDown` pages it as a warning after 10, so without the inhibit in
-`alertmanager-secret.yaml.j2` one outage pages twice (#6654). The inhibit's `equal: [job,
+`alertmanager-secret.yaml.j2` one outage pages twice. The inhibit's `equal: [job,
 instance]` keeps another controller's scrape page live, and keeps the rule's `absent()` arm,
 which carries no `instance`, from holding any scrape page.
 

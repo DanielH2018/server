@@ -91,11 +91,10 @@ def test_daniel_boxs_watchdog_unit_loads_no_credential(tmp_path):
 
 # ── The ONBATT timer, once any host beyond ups_host is armed ────────────────────────────────
 #
-# Arming a host makes nut_onbatt_shutdown_delay a load-bearing availability number rather than
-# an agent node's private business, and it can fail in BOTH directions. Too short stops the
-# control plane during a blip the battery would have carried; too long spends the runtime the
-# poweroffs themselves need. Neither shows up anywhere until a real outage, and a green deploy
-# looks identical either way — so the band is asserted here instead.
+# Arming a host makes nut_onbatt_shutdown_delay a load-bearing availability number, and it can
+# fail in BOTH directions. Too short stops the control plane during a blip the battery would have
+# carried; too long spends the runtime the poweroffs themselves need. Neither shows until a real
+# outage, so the band is asserted here.
 
 
 def onbatt_delay_verdict(delay: int, armed_beyond_ups_host: bool) -> str | None:
@@ -167,9 +166,8 @@ def test_the_band_binds_only_once_a_second_host_is_armed():
 # ── the runtime watchdog on the secondary's upsd link ────────────
 #
 # The `wait_for` above proves reachability once, at deploy. These guard the check that proves
-# it every 10 minutes afterwards. Each asserts a property whose failure is invisible: a
-# watchdog reading the wrong address, or one leaking the credential that sits on the line it
-# reads, both look exactly like a working one.
+# it every 10 minutes afterwards. A watchdog reading the wrong address, or leaking the credential
+# on the line it reads, looks exactly like a working one.
 
 WATCHDOG = rendered_shell_text(
     "components", "nut-secondary", "ups-secondary-health.sh.j2"

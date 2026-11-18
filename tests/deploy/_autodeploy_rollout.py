@@ -110,8 +110,8 @@ def _extra_rollouts(role: Path) -> set[str]:
 
     The first `- name:` fixes the list's indent. A line at that indent starting `- name:` is
     the next entry, and a line indented deeper is a key of the entry above it (`restart_on:
-    []`, `kind: daemonset`), so an entry carrying a second key hides none listed after it
-    (#4578). A line at the list's indent or shallower that is not `- name:` ends the list,
+    []`, `kind: daemonset`), so an entry carrying a second key hides none listed after it.
+    A line at the list's indent or shallower that is not `- name:` ends the list,
     which is where a sibling var such as `manifests_rollout_timeout:` sits. Its own list is
     never credited.
     """
@@ -128,7 +128,7 @@ def _primary_rollout_name(role: Path) -> str:
     """The Deployment name this role declares as its primary rollout.
 
     Reads `manifests_rollout | default(manifests_service)`. `manifests_service` defaults to the role directory's
-    name (#4053), a caller that overrides it writes a literal string, and every
+    name, a caller that overrides it writes a literal string, and every
     `manifests_rollout` override is likewise a literal (checked repo-wide), so a regex match is
     safe here. A role that sets neither key renders under its own name.
 

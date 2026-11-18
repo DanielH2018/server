@@ -183,7 +183,7 @@ def _actions_suite(status):
 
 
 def test_a_sha_with_no_actions_suite_reads_as_a_dropped_push():
-    """#4621: GitHub delivered no push event, so no app registered anything at all."""
+    """GitHub delivered no push event, so no app registered anything at all."""
     assert await_ci._push_was_dropped([], [], REQUIRED)
     other_apps = [{"app": {"slug": "gitguardian"}, "status": "queued"}]
     assert await_ci._push_was_dropped([], other_apps, REQUIRED)
@@ -289,7 +289,7 @@ def _requests_for_a_wait(interval, walk_descendants, suites=(), budget=LAND_BUDG
 
 @pytest.mark.parametrize("suites", [(), (_actions_suite("queued"),)])
 def test_an_anonymous_wait_stays_well_under_the_hourly_quota(suites):
-    """#6148: an anonymous host shares 60 requests an hour across its anonymous readers."""
+    """An anonymous host shares 60 requests an hour across its anonymous readers."""
     interval = await_ci.poll_interval(20, False, LAND_BUDGET_S)
     code, requests = _requests_for_a_wait(interval, False, suites)
     assert code == 75
@@ -304,7 +304,7 @@ def test_the_descendant_walk_alone_spends_the_anonymous_quota():
 
 
 def test_a_fixed_anonymous_interval_overspends_land_shs_budget():
-    """#6857's reject half: at 90s regardless of budget, land.sh's wait costs more than 30."""
+    """The reject half: at 90s regardless of budget, land.sh's wait costs more than 30."""
     queued = (_actions_suite("queued"),)
     _code, requests = _requests_for_a_wait(await_ci.ANONYMOUS_INTERVAL_S, False, queued)
     assert requests > 30
@@ -326,7 +326,7 @@ def test_wait_does_not_take_a_descendant_while_an_actions_suite_is_queued():
 
 
 def test_a_dropped_push_whose_descendant_ci_is_in_flight_times_out_saying_why():
-    """The reject half of CI_UNPROVEN (#4641): a run on its way makes a re-run converge."""
+    """The reject half of CI_UNPROVEN: a run on its way makes a re-run converge."""
     running = [_run("prek (lint + validate + tests + secrets)", "in_progress", None)]
     code, msg = _wait_on_dropped([], running)
     assert code == 75
@@ -409,7 +409,7 @@ def _wait_past_a_red_descendant(later_goes_green_at):
 
 
 def test_wait_keeps_polling_past_a_red_descendant_while_a_later_one_is_in_flight():
-    """#4649 at merge time: the fix's CI is still running when the red one is found."""
+    """At merge time: the fix's CI is still running when the red one is found."""
     code, msg = _wait_past_a_red_descendant(later_goes_green_at=600)
     assert code == await_ci.CI_UNPROVEN, msg
     assert "fix" in msg and "gh workflow run promote.yml" in msg
@@ -417,7 +417,7 @@ def test_wait_keeps_polling_past_a_red_descendant_while_a_later_one_is_in_flight
 
 
 def test_a_run_less_tip_names_ci_then_a_promote_dispatch_with_the_full_sha():
-    """#7368: deploy.sh refuses every k8s tag, and promote.yml refuses an abbreviated `sha`."""
+    """`deploy.sh` refuses every k8s tag, and promote.yml refuses an abbreviated `sha`."""
     tip = "a" * 40
     now = [0]
 
@@ -470,7 +470,7 @@ def _wait_past_reds(runs_by_sha, suites_by_sha, chain):
 
 
 def test_a_cancelled_only_descendant_between_reds_does_not_hold_the_wait_to_its_deadline():
-    """#4667 Verify-by: D3's push cancels D2's run, so D2 never gets a verdict."""
+    """D3's push cancels D2's run, so D2 never gets a verdict."""
     name = "prek (lint + validate + tests + secrets)"
     red = [_run(name, "completed", "failure")]
     runs_by_sha = {"d1": red, "d2": [_run(name, "completed", "cancelled")], "d3": red}
@@ -485,7 +485,7 @@ def test_a_cancelled_only_descendant_between_reds_does_not_hold_the_wait_to_its_
 
 
 def test_a_dropped_push_descendant_between_reds_does_not_hold_the_wait_to_its_deadline():
-    """#4667: D2's push was dropped too, so it has no run and no Actions suite for good."""
+    """D2's push was dropped too, so it has no run and no Actions suite for good."""
     red = [_run("prek (lint + validate + tests + secrets)", "completed", "failure")]
     runs_by_sha = {"d1": red, "d3": red}
     suites_by_sha = {
@@ -498,7 +498,7 @@ def test_a_dropped_push_descendant_between_reds_does_not_hold_the_wait_to_its_de
 
 
 def test_a_run_less_tip_after_a_red_descendant_offers_the_dispatch_route():
-    """#4667: D2 is the master tip and has no CI run, so only dispatching CI converges."""
+    """D2 is the master tip and has no CI run, so only dispatching CI converges."""
     red = [_run("prek (lint + validate + tests + secrets)", "completed", "failure")]
     code, msg, _elapsed = _wait_past_reds(
         {"d1": red}, {"d1": [_actions_suite("completed")]}, ["d1", "d2"]
@@ -508,7 +508,7 @@ def test_a_run_less_tip_after_a_red_descendant_offers_the_dispatch_route():
 
 
 def test_a_run_less_tip_after_a_red_descendant_ends_ci_unproven():
-    """#4667: dispatching CI is the way out, so the wait ends on CI_UNPROVEN, not CI_RED."""
+    """Dispatching CI is the way out, so the wait ends on CI_UNPROVEN, not CI_RED."""
     red = [_run("prek (lint + validate + tests + secrets)", "completed", "failure")]
     code, msg, _elapsed = _wait_past_reds(
         {"d1": red}, {"d1": [_actions_suite("completed")]}, ["d1", "d2"]
@@ -532,8 +532,8 @@ _PASS = [_run("prek (lint + validate + tests + secrets)", "completed", "success"
 _FAIL = [_run("prek (lint + validate + tests + secrets)", "completed", "failure")]
 
 
-# PR #6069's head e9ec9143 at 01:39:50Z on 2026-10-24: its one CI run, from the push made while
-# the PR was a draft, skipped every job. A skipped matrix job keeps its unexpanded name.
+# A head's one CI run, from the push made while the PR was a draft, skipped every job. A skipped
+# matrix job keeps its unexpanded name.
 _DRAFT_RUN = [
     _run("prek (lint + validate + tests + secrets)", "completed", "skipped"),
     _run("prove the pushed tree was tested", "completed", "skipped"),
@@ -556,7 +556,7 @@ _DRAFT_RUN = [
     ],
 )
 def test_a_head_whose_only_ci_skipped_as_a_draft_says_so(ready_gate, names_the_draft):
-    """#6077: land.sh waited 1740s on such a head with no line naming why."""
+    """`land.sh` waited 1740s on such a head with no line naming why."""
     runs = _DRAFT_RUN + ([ready_gate] if ready_gate else [])
     code, msg = await_ci.wait(
         "e9ec9143569607f8",

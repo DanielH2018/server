@@ -30,6 +30,8 @@ def test_the_phase_timing_file_passes_with_bytecode_writing_disabled():
             "pytest",
             "-p",
             "no:randomly",
+            "-p",
+            "no:cacheprovider",
             "-n0",
             "-rA",
             "tests/repo/test_phase_timing.py",

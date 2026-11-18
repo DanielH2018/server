@@ -69,7 +69,7 @@ def test_render_shows_the_claiming_worktree():
 
 
 def test_render_escapes_a_pipe_in_the_claiming_worktree():
-    """The claim cell goes through `md_cell` like the title does (#1280).
+    """The claim cell goes through `md_cell` like the title does.
 
     A branch name may carry a `|`, which silently adds a column and renders the whole table
     wrong. Paired with `test_render_shows_the_claiming_worktree` above, which proves an
@@ -222,7 +222,7 @@ def test_build_docs_registers_the_backlog_page():
 
 
 def test_help_carries_the_docstring_summary(capsys):
-    """#1272: the description came from `__doc__.splitlines()[1]`, which is the BLANK line
+    """The description came from `__doc__.splitlines()[1]`, which is the BLANK line
     after the summary, so `--help` printed usage and then straight to `positional arguments`
     with nothing saying what the tool is for. Asserts the summary text rather than merely
     "non-empty", so a description that goes blank again fails here.

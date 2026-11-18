@@ -1,4 +1,4 @@
-"""How `decide`'s wait on a verification in flight ends when nothing settles it (#7863).
+"""How `decide`'s wait on a verification in flight ends when nothing settles it.
 
 A run that is still verifying keeps the wait going to IN_FLIGHT_WAIT_S. A run that ended
 without its `settle` is named once no other run past its `decide` has been in progress for
@@ -65,7 +65,7 @@ def _verifying(world, run_id: int, head_sha: str) -> None:
 
 
 def _lost_settle(world):
-    """The #7863 tags: c1 superseded a run, so `prod` = `superseding` = c1 != `last-good`."""
+    """The lost-settle tags: c1 superseded a run, so `prod` = `superseding` = c1 != `last-good`."""
     c0, c1, _, tip = world.commits
     world.set_prod(c1)
     world.set_last_good(c0)

@@ -26,7 +26,7 @@ position, which a parse would merge.
 `_k8s_render` skips the roles a caller renders and the roles with no `containers_list` entry,
 so their templates fall back to the source. `SOURCE_FALLBACK_WITH_VOLUMES` names the members of
 that fallback that declare a volume, and a test below holds it. A render-only census would drop
-them and still read green (#3224).
+them and still read green.
 
 Run: uv run pytest tests/k8s/test_volume_names_descriptive.py
 """
@@ -125,7 +125,7 @@ def volume_blocks(text: str) -> list[tuple[str, int, list[str]]]:
     indentless form, is what PyYAML's default dumper, `kubectl get -o yaml` and `flux install
     --export` all write, and YAML allows nothing else at that column inside the block, so a
     `- ` there continues it. The item column is fixed by the first item, so a `- name:` in a
-    nested sequence deeper down is never collected (#4733).
+    nested sequence deeper down is never collected.
     """
     lines = text.splitlines()
     blocks: list[tuple[str, int, list[str]]] = []
@@ -309,7 +309,7 @@ _INDENTLESS_VOLUMES = """\
 
 
 def test_the_scanner_reads_an_indentless_sequence() -> None:
-    """A block whose items sit at the key's column is read, not taken as empty (#4733).
+    """A block whose items sit at the key's column is read, not taken as empty.
 
     Each of the four checks gets the defect it exists for: a generic name, a mount with no
     volume, a volume nothing mounts, and a repeated volume name.

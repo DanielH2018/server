@@ -138,7 +138,7 @@ def test_the_config_carries_the_pins() -> None:
     assert config["STATE_DIR"] == pinned["state_dir"]
 
 
-# The pinned users (claude-triage-pins.j2): dotfiles#967's I1 controller and session.
+# The pinned users (claude-triage-pins.j2): the controller and the session.
 CTL_USER = "claude-triage-ctl"
 SESSION_USER = "claude-triage"
 
@@ -398,20 +398,20 @@ def tmpfiles(operator_read: bool) -> dict[str, tuple[str, str, str]]:
 def test_the_operator_traverses_the_triage_state_dir_only_under_operator_read(
     operator_read, group, mode
 ) -> None:
-    """0710 lets `probe.py applied` stat the inbox without listing the records (#6452)."""
+    """0710 lets `probe.py applied` stat the inbox without listing the records."""
     state_dir = pins()["state_dir"]
     assert tmpfiles(operator_read)[state_dir] == (mode, CTL_USER, group)
 
 
 def test_the_runners_own_directories_are_declared_without_a_listing() -> None:
-    """`runs/` and `done/` made under the old 0022 umask were 0755; tmpfiles resets them."""
+    """`runs/` and `done/` made under a 0022 umask are 0755; tmpfiles resets them."""
     declared = tmpfiles(True)
     state_dir = pins()["state_dir"]
     assert declared[f"{state_dir}/runs"][0] == "0750"
     assert declared[f"{state_dir}/done"][0] == "0750"
 
 
-# I6 of the guardrails plan (dotfiles#967): a session has no write path into what opens the next
+# I6 of the guardrails plan: a session has no write path into what opens the next
 # episode. A session can write syslog lines with any tag, so a routed alert must not count them.
 PROMETHEUS_RULES = K8S_ROLES / "observability" / "files" / "rules"
 LOKI_RULES = K8S_ROLES / "loki-homelab" / "files" / "rules"

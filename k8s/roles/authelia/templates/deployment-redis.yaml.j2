@@ -5,7 +5,7 @@
 # Authelia's session store. Nothing else talks to it — see
 # networkpolicy-redis.yaml.j2 beside this file, which is what actually fences it — and which
 # lives in this role rather than in netpol-baseline precisely so a `--tags authelia` deploy
-# ships the two together (#1609).
+# ships the two together.
 #
 # In `manifests_extra_rollouts` with `restart_on: ['secret']`, so `checksum/restart` here hashes
 # only the `authelia-redis` Secret this pod reads. Keep this pod off every ConfigMap and Secret
@@ -32,8 +32,7 @@ spec:
         netpol-baseline: enforced
     spec:
       # Pinned with the rest of the home-critical chain to the node announcing its VIPs
-      # (#3452); the DECIDED marker in k8s/roles/home-assistant/templates/deployment.yaml.j2
-      # has why.
+      # the DECIDED marker in k8s/roles/home-assistant/templates/deployment.yaml.j2 has why.
       nodeSelector:
         kubernetes.io/hostname: {{ k8s_primary_node }}
       # The same class as authelia itself: an evicted redis logs the whole fleet out of SSO, so

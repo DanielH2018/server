@@ -73,14 +73,14 @@ def _disarmed_output(landing, capsys) -> str:
 
 
 def test_a_disarmed_gate_is_named_as_disarmed(landing, capsys):
-    """Exit 2 is CI_DISARMED, not a failed CI run: the output says so (#4464)."""
+    """Exit 2 is CI_DISARMED, not a failed CI run: the output says so."""
     out = _disarmed_output(landing, capsys)
     assert "disarmed" in out.lower(), out
     assert "(exit 2)" not in out, out
 
 
 def test_a_disarmed_gate_names_where_to_re_arm_it(landing, capsys):
-    """The next step: land.sh's arm state is await_ci.REQUIRED_CONTEXTS (#4464)."""
+    """The next step: land.sh's arm state is await_ci.REQUIRED_CONTEXTS."""
     from deploy_tools import await_ci
 
     assert await_ci.REQUIRED_CONTEXTS, "the gate is armed at HEAD"
@@ -94,7 +94,7 @@ def _step_3_over_master(
     """Run step 3's wait on the first of a scratch master's commits; None when it returned.
 
     `green[i]` says whether commit i went green. A commit that did not has no check run and
-    no check suite at all, which is what GitHub left for a dropped push event (#4621), unless
+    no check suite at all, which is what GitHub left for a dropped push event, unless
     its index is in `red`, which gives it a failed required run instead. The
     REAL await_ci.wait runs over a fake clock and a fake GitHub, and the origin is a real
     repository, so the wait reaches a descendant through whichever git query a fix chooses.
@@ -151,7 +151,7 @@ def _step_3_over_master(
 def test_step_3_does_not_time_out_on_a_merge_commit_github_never_ran_ci_for(
     landing, tmp_path, monkeypatch
 ):
-    """#4621: no push run ever exists for the merge commit, and the next master commit is green.
+    """No push run ever exists for the merge commit, and the next master commit is green.
 
     Step 3 waited on the merge commit alone and ended `ci-timeout`, the verdict whose resume
     is a re-run, which entered the same wait on the same SHA. Either it now accepts the green
@@ -171,7 +171,7 @@ def test_step_3_does_not_time_out_on_a_merge_commit_github_never_ran_ci_for(
 def test_step_3_promote_dispatch_names_the_tip_not_an_older_green_commit(
     landing, tmp_path, monkeypatch
 ):
-    """#4621's second recurrence: the tip has no run either, and only a middle commit is green.
+    """The tip has no run either, and only a middle commit is green.
 
     A verdict of its own has to name the tip, whose promotion carries the merge commit.
     Accepting the green descendant and returning is also a fix.
@@ -191,7 +191,7 @@ def test_step_3_promote_dispatch_names_the_tip_not_an_older_green_commit(
 def test_step_3_accepts_the_green_middle_commit_when_the_tip_has_no_run_either(
     landing, tmp_path, monkeypatch, capsys
 ):
-    """#4621's second recurrence through the accept path: the verdict is the middle commit's.
+    """Through the accept path, the verdict is the middle commit's.
 
     The run-less tip stays unaccepted, and the step-3 line names the commit it trusted.
     """
@@ -210,7 +210,7 @@ def test_step_3_accepts_the_green_middle_commit_when_the_tip_has_no_run_either(
 def test_step_3_names_the_tip_when_no_commit_from_the_merge_on_has_a_run(
     landing, tmp_path, monkeypatch, green
 ):
-    """#4641: the run-less merge commit is the tip, or every commit after it is run-less too.
+    """The run-less merge commit is the tip, or every commit after it is run-less too.
 
     No re-run converges until somebody merges something, so step 3 must not end
     `ci-timeout` (whose resume is a re-run). Its own verdict names the tip, whichever route
@@ -228,7 +228,7 @@ def test_step_3_names_the_tip_when_no_commit_from_the_merge_on_has_a_run(
 def test_step_3_does_not_end_red_for_good_once_a_later_descendant_is_green(
     landing, tmp_path, monkeypatch
 ):
-    """#4649: the merge commit's push was dropped, D1 went red on its own bug, D2 is green.
+    """The merge commit's push was dropped, D1 went red on its own bug, D2 is green.
 
     The nearest descendant's red never changes, so every re-run ended `ci-red` while the
     tick fast-forwarded past the merge commit to D2. Either step 3 now converges, or the
@@ -247,7 +247,7 @@ def test_step_3_does_not_end_red_for_good_once_a_later_descendant_is_green(
 
 
 def test_an_unproven_merge_commit_ends_ci_unproven_and_names_the_way_out(landing):
-    """#4641/#4649: exit 1, not the 75 resume point, carrying await_ci's line and the tags."""
+    """Exit 1, not the 75 resume point, carrying await_ci's line and the tags."""
     from lib.exit_codes import CI_UNPROVEN
 
     line = "abc12345: no verdict can arrive — run `gh workflow run ci.yml --ref master`"

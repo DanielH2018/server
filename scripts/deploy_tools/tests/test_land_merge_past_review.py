@@ -30,9 +30,9 @@ def _wait(states: list[str]):
 
 
 # Every decision takes the direct merge. Armed for auto-merge, an approved agent PR once sat
-# BLOCKED until a hand merge (#3911). An empty decision, which is every PR since the master
+# BLOCKED until a hand merge. An empty decision, which is every PR since the master
 # review gate was retired on 2026-10-11, takes the same path rather than the auto-merge it once
-# did (#4001). REVIEW_REQUIRED stays covered for a review rule added back.
+# did. REVIEW_REQUIRED stays covered for a review rule added back.
 EVERY_DECISION = pytest.mark.parametrize("review", ["", "REVIEW_REQUIRED", "APPROVED"])
 
 
@@ -74,7 +74,7 @@ def test_a_direct_merge_dies_without_await_merge(landing, review):
         merge.arm_merge(ln)
     assert exc.value.rc == 1
     assert not [c for c in calls if c[0] == "gh"]
-    # --await-merge alone only polls; the direct merge needs arm_merge in the same run (#3625).
+    # --await-merge alone only polls; the direct merge needs arm_merge in the same run.
     assert "re-run with both --arm-merge --await-merge" in exc.value.error
 
 
@@ -165,7 +165,7 @@ def test_a_refused_direct_merge_keeps_the_wait_going(landing):
 
 
 def test_a_disarmed_gate_ends_a_direct_merge_wait_naming_it(landing):
-    """A direct merge fires only on await_ci's green, which a disarmed gate never gives (#4464)."""
+    """A direct merge fires only on await_ci's green, which a disarmed gate never gives."""
     ln, calls = _left_for_a_direct_merge(
         landing, ["OPEN MERGEABLE aaaa"], [(2, "await_ci: no required CI contexts")]
     )

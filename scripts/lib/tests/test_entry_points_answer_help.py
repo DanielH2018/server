@@ -8,7 +8,7 @@ its staleness gate first and answered with exit 4 and a `git rebase` remedy. A s
 
 WHAT COUNTS AS AN ANSWER. Exit 0 with output is not enough: a script that ignores `--help` and
 runs its whole check exits 0 with output too, and `validate_ha_config.py --help` passed that way
-while it printed `Home Assistant config OK` (#5579). The answer must carry the first line of the
+while it printed `Home Assistant config OK`. The answer must carry the first line of the
 entry point's docstring, which `lib.cli_help.answer_help` prints, or a `usage:` line, which
 argparse prints. A shell script's docstring is its leading comment block.
 
@@ -19,7 +19,7 @@ of those a library -- through the importing package's own directory, through a r
 or by naming the tests that are its only importers. The reverse does not hold. The classifier
 also calls a module a library once another script imports it, guard or not, and
 `ha_state_model.py`, `await_ci.py` and `fanout.py` are each imported and run directly. So a
-library with its own `__main__` guard counts as an entry point too (#4405).
+library with its own `__main__` guard counts as an entry point too.
 
 RUNTIME. Each script runs under this interpreter, not under `uv run` -- one `uv run` per entry
 point cost a minute and a half where direct invocation costs ten seconds, over a census this
@@ -30,7 +30,7 @@ NO `scripts/` ON `PYTHONPATH`. Each script runs from the repo root with `scripts
 `PYTHONPATH`, the way a cron or `uv run python scripts/...` runs it. An `import lib...` then
 resolves only through the module's own `sys.path` bootstrap, so deleting that bootstrap fails
 this test for that entry point. With `scripts/` on the path every such import succeeded
-regardless, and the test could not see the one failure a cron hits first (#3296).
+regardless, and the test could not see the one failure a cron hits first.
 
 Run: uv run pytest scripts/lib/tests/test_entry_points_answer_help.py
 """
@@ -57,8 +57,7 @@ from lib.script_classify import _has_main_guard, by_name, classify, file_text
 # a shell shim, a Python gate, an adhoc tool, a scheduled generator, and the one whose
 # `--help` answer was the reason for the test. The next three are imported by other scripts
 # and also run directly, so the classifier calls them libraries; they are here so the
-# `__main__`-guard half of `_entry_points` cannot lose them silently (#4405).
-# `ha_state_model.py` broke three times on one import (#674).
+# `__main__`-guard half of `_entry_points` cannot lose them silently.
 MUST_FIND = frozenset(
     {
         "land.sh",
@@ -87,7 +86,7 @@ def _entry_points():
     The parametrize needs these names at collection, so this reads no import graph: a Python
     module is runnable when it has its own `__main__` guard, and every shell script is
     runnable. `test_the_census_agrees_with_the_classifier` holds the answer equal to
-    `classify`'s, which costs seconds and so runs at test time (#7730).
+    `classify`'s, which costs seconds and so runs at test time.
     """
     entry_points = {}
     for name, path in by_name(SCRIPTS).items():
@@ -100,7 +99,7 @@ def _entry_points():
 def _classified_entry_points():
     """The census as `classify` derives it: everything it does not call a library.
 
-    A library with its own `__main__` guard counts too (#4405). `_has_main_guard` is the
+    A library with its own `__main__` guard counts too. `_has_main_guard` is the
     classifier's own test for "this module can be run", so the census and `classify` cannot
     disagree about what a guard is. `classify` also returns a few test fixtures that
     `by_name` does not catalogue; they are libraries with no path here.
@@ -148,7 +147,7 @@ def _answers_help(stdout, path):
     """Whether `stdout` is a help answer rather than a job's output.
 
     exit 0 with any output is what a script that ignores `--help` and runs its whole check
-    gives too (#5579), so the answer must carry the docstring's first line, which
+    gives too, so the answer must carry the docstring's first line, which
     `answer_help` prints, or a `usage:` line, which argparse and the shell scripts print.
     """
     first = _doc_first_line(path)
@@ -224,8 +223,8 @@ def test_the_entry_point_answers_help_with_exit_zero(name):
 
 # The entry points the test above once waited on: each ignored `--help` and ran its whole check,
 # which still exits 0 with output, so the subprocess test passed while
-# `k8s_manifests.py --help` took 7s to print its summary line (#5564). The last three took no
-# argv at all, so an explicit `--help` could not reach them (#6561).
+# `k8s_manifests.py --help` took 7s to print its summary line. The last three took no
+# argv at all, so an explicit `--help` could not reach them.
 WORK_BEFORE_HELP = (
     "validate.k8s_manifests",
     "validate.setup_templates",
@@ -266,13 +265,13 @@ def test_an_entry_point_answers_help_before_its_work(name, capsys):
 
 # These five defaulted `argv` to None, which `wants_help` reads as the HOST process's
 # `sys.argv[1:]`. An in-process `main()` under a runner started with `--help` then answered
-# help and exited 0 without running its check (#5638).
+# help and exited 0 without running its check.
 HOST_ARGV_DEFAULTERS = (
     "validate.grafana_dashboard_uids",
     "validate.jinja_bash_collisions",
     "home_assistant.validate_ha_config",
     "dev.k8s_autodeploy_counts",
-    # These three called `answer_help(__doc__)` with no argv at all (#6561).
+    # These three called `answer_help(__doc__)` with no argv at all.
     "grafana.export_grafana_dashboards",
     "dev.smoke_extract",
     "validate.refresh_vendored_schemas",
@@ -360,7 +359,7 @@ def test_the_census_still_finds_every_cc_wait_probe():
 
 @pytest.mark.parametrize("name", PROBES, ids=str)
 def test_a_probe_refuses_help_under_describe_with_its_usage_on_stderr(name):
-    """`cc-wait land --help` runs `land --describe --help` and parses its stdout as JSON (#4376)."""
+    """`cc-wait land --help` runs `land --describe --help` and parses its stdout as JSON."""
     r = _probe(name, "--describe", "--help")
     assert (r.returncode, r.stdout) == (64, ""), (
         f"{name} --describe --help exited {r.returncode}; cc-wait reads exit 0 as a "

@@ -54,34 +54,27 @@ def host_config(
         # NVMe endurance ceiling (percentage_used, where 100 means the controller's rated write
         # endurance is spent). Scrutiny ships this attribute with thresh=100, so its own
         # evaluation cannot fold a breach into device_status until the drive is fully consumed —
-        # days of warning where the wear curve offers months. Verified against the live API
-        # 2026-08-22: daniel-server's SHPP41-500GM reads 7 at 30,959 power-on hours,
-        # daniel-box's CT1000E100SSD8 reads 0 at 576. 0 = disabled.
+        # days of warning where the wear curve offers months. 0 = disabled.
         SCRUTINY_WEAR_MAX=_num("SCRUTINY_WEAR_MAX"),
         # speedtest-tracker's own result rows. Empty URL/token = disabled (stays up), like HA
         # above.
         #
-        # WHY THIS CHECK EXISTS: a failed speedtest run wrote nothing anywhere an operator could
+        # WHY THIS CHECK EXISTS: a failed speedtest run writes nothing anywhere an operator can
         # see — no stdout line (the container logs only its pre-run connectivity ping), no
-        # metric, no monitor. The only record was a row in the app's sqlite, which nothing could
+        # metric, no monitor. The only record is a row in the app's sqlite, which nothing can
         # read: the readonly SA holds no pods/exec, and the unauthenticated API is two endpoints,
-        # one of which returns a single row. Five of the 42 runs between 2026-08-14 and
-        # 2026-08-24 failed and none of them paged.
+        # one of which returns a single row.
         SPEEDTEST_URL=_env("SPEEDTEST_URL").rstrip("/"),
         # File-mounted (SPEEDTEST_TOKEN_FILE) for the same reason HA_TOKEN is: envFrom has no
         # per-key filter, so a token in monitor-bridge-env is a token in every process's
         # environment.
         SPEEDTEST_TOKEN=_env_file("SPEEDTEST_TOKEN", ""),
-        # Download floor, Mbit/s. 100 WAS the empty band between two populations and is no
-        # longer: re-measured 2026-09-27 (#2785). Every scheduled run now draws the pinned
-        # server 41671, so the second population the band sat above is gone from the series
-        # entirely, and 41671's own low tail is continuous — over the 95 six-hourly samples
-        # Prometheus retained (28.4d of the 30d asked for): min 61.4, p2 75.0, p5 95.1, p10
-        # 146.0, median 868.8 Mbps, with 5 samples under 100. So 100 is now a PERCENTILE CUT at
-        # about p5, not a gap, and one result beneath it is a slow run rather than a slow link.
-        # That is why the floor arm needs SPEEDTEST_FLOOR_CONSECUTIVE results, not one. The
-        # value itself stays: it still marks the fifth percentile of a ~870 Mbps link, which is
-        # the "the WAN is degraded" reading this check exists to catch.
+        # Download floor, Mbit/s. Every scheduled run draws the pinned server 41671, whose own low
+        # tail is continuous (p2 75.0, p5 95.1, p10 146.0, median 868.8 Mbps), so 100 is a
+        # PERCENTILE CUT at about p5, not a gap between two populations, and one result beneath it
+        # is a slow run rather than a slow link. That is why the floor arm needs
+        # SPEEDTEST_FLOOR_CONSECUTIVE results, not one. The value marks the fifth percentile of a
+        # ~870 Mbps link, which is the "the WAN is degraded" reading this check exists to catch.
         SPEEDTEST_DOWNLOAD_MIN_MBPS=_num("SPEEDTEST_DOWNLOAD_MIN_MBPS"),
         # Staleness ceiling, hours. SPEEDTEST_SCHEDULE runs every 6h, so 8 allows one missed slot
         # plus slack. This arm is what notices the scheduler dying — the failure mode with no
@@ -93,16 +86,15 @@ def host_config(
         # different unit, SPEEDTEST_FLOOR_CONSECUTIVE below: cycles for the fetch, RESULTS for
         # the floor.
         SPEEDTEST_CONSECUTIVE=_int("SPEEDTEST_CONSECUTIVE"),
-        # Consecutive sub-floor RESULTS the floor arm needs before it pages (#2785). A test runs
-        # every 6h, so one slow result held the tile red for ~6h — three times in the 14 days to
-        # 2026-09-27, 11.6h in total. Read from the API's own history (the fetch asks for this
+        # Consecutive sub-floor RESULTS the floor arm needs before it pages. A test runs
+        # every 6h, so one slow result would hold the tile red for ~6h. Read from the API's own history (the fetch asks for this
         # many rows), never from bridge cycles: 72 cycles re-reading one row prove nothing, while
         # two results are two measurements. They are usually 6h apart and NOT necessarily so — a
         # manual run writes into the same results table (the series carries `scheduled="false"`
         # rows against unpinned servers), so one of the two slots can hold an operator's own
         # test minutes after the scheduled one. 2 is the smallest value that rejects a
-        # single bad draw, and it caps the page's delay at one test interval. 1 restores the
-        # old page-on-sight behaviour; the status and age arms are untouched by this knob and
+        # single bad draw, and it caps the page's delay at one test interval. 1 pages on
+        # sight; the status and age arms are untouched by this knob and
         # still page on the newest row alone.
         SPEEDTEST_FLOOR_CONSECUTIVE=_int("SPEEDTEST_FLOOR_CONSECUTIVE"),
     )

@@ -1,8 +1,6 @@
 #!/bin/sh
 # bootstrap-host.sh: put a host on the homelab apt repository, install its packages, and run the
-# one-time host steps. The design is H7's *`bootstrap-host.sh`, complete*
-# (docs/target-architecture/host/h7-delete-ansible.md); H3's *Steps, as PRs*, item 8 first
-# wrote it. The step numbers are H7's.
+# one-time host steps. The step numbers are the ones the runbooks and component docs cite.
 #
 # Usage, as root, with homelab-archive-keyring.gpg beside this script:
 #   ./bootstrap-host.sh <hostname> [--until <step>] [--local-build <clone>] [--offline <kit-dir>] [--tools-seed <dir>] [--rebaseline]
@@ -128,7 +126,7 @@ KEYRING=/usr/share/keyrings/homelab-archive-keyring.gpg
 SOURCES=/etc/apt/sources.list.d/homelab.sources
 K3S_BIN=/usr/local/bin/k3s
 # Six minutes of waits between the first and last attempt: GitHub's release host has answered
-# 504 for about five minutes (CI run 42054080101), and a wrong pin costs the same wait to fail.
+# 504 for about five minutes, and a wrong pin costs the same wait to fail.
 RETRY_ATTEMPTS=13
 RETRY_DELAY=30
 # Covers the whole transfer: uv, the largest archive at 17 MB, needs 140 KB/s to finish in time.
@@ -471,7 +469,7 @@ if [ "$host" = daniel-pi ]; then
     fi
     purge=""
     # appstream's apt hook thrashes the 512 MB board for an hour on every apt-get update
-    # (#7163, docs/pi-host-tuning-record.md).
+    # (docs/pi-host-tuning-record.md).
     for package in openvswitch-switch-dpdk openvswitch-switch openvswitch-common snapd fwupd appstream; do
         if dpkg-query -W -f='${Status}' "$package" 2> /dev/null | grep -q 'install ok installed'; then
             purge="$purge $package"

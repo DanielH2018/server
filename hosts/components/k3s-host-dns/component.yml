@@ -1,5 +1,4 @@
-# The node's resolver and its host CoreDNS forwarder on the k3s server (H7.35,
-# docs/target-architecture/host/h7-delete-ansible.md). Until H7.35 setup/k3s's node.yml wrote them.
+# The node's resolver and its host CoreDNS forwarder on the k3s server.
 #
 # /etc/resolv.conf names 127.0.0.1 and nothing else, so a dead forwarder takes the node's DNS with
 # it, and the seconds of a restart are seconds with no DNS. The file is pi-resolver's template,

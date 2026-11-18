@@ -305,13 +305,10 @@ def test_reader_argv_hands_now_to_main(tmp_path):
 
 # ── fetch failures: the deadman must go DOWN with a reason, never quietly UP ────
 #
-# test_reader_green_path_pins_the_transport above is the CLEAN half of every pair below: the same
-# fixture, no knob set, verdict UP. Each test here turns exactly one fetch red and asserts the
-# verdict flips and names that fetch — so a helper that stopped appending its problem, or one
-# that started firing on a healthy answer, fails a test rather than reading green forever.
-#
-# The reader's OWN syslog line carries the full unranked problem list; stdout carries only the
-# top-ranked one plus a count, so the fetch name is asserted against `logger_calls`.
+# test_reader_green_path_pins_the_transport above is the clean half of every pair below. Each
+# test turns exactly one fetch red and asserts the verdict flips and names that fetch. The
+# reader's syslog line carries the full unranked problem list; stdout carries only the top one
+# plus a count, so the fetch name is asserted against `logger_calls`.
 
 
 @pytest.mark.parametrize(

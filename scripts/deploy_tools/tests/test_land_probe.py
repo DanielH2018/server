@@ -51,7 +51,7 @@ def test_a_landing_that_gave_up_ends_the_wait_with_3_not_75(tmp_path):
 
 
 def test_a_plain_deferral_ends_the_wait_as_deferred_not_gave_up(tmp_path):
-    """A `deferred` carrying no give-up note is not a resume point (issue #3932)."""
+    """A `deferred` carrying no give-up note is not a resume point."""
     log = landing(
         tmp_path, "VERDICT: deferred (PR #939 — landed, not yet applied)\n", rc=75
     )
@@ -60,7 +60,7 @@ def test_a_plain_deferral_ends_the_wait_as_deferred_not_gave_up(tmp_path):
 
 
 def test_the_result_line_decides_the_verdict_over_the_prose(tmp_path):
-    """`LAND-RESULT:` names the verdict; the `VERDICT:` wording no longer decides it (#7895)."""
+    """`LAND-RESULT:` names the verdict; the `VERDICT:` wording does not decide it."""
     log = landing(
         tmp_path,
         "LAND-RESULT: verdict=deferred cause=- exit=75 pr=939 sha=- tags=0\n"
@@ -71,7 +71,7 @@ def test_the_result_line_decides_the_verdict_over_the_prose(tmp_path):
 
 
 def test_a_promote_timeout_cause_gave_up_without_its_note(tmp_path):
-    """The cause on `LAND-RESULT:` decides, not the note's wording (#7895)."""
+    """The cause on `LAND-RESULT:` decides, not the note's wording."""
     log = landing(
         tmp_path,
         "LAND-RESULT: verdict=deferred cause=promote-timeout exit=75 pr=939 sha=- tags=1\n"
@@ -92,7 +92,7 @@ def test_a_deferral_no_promotion_covered_still_gave_up(tmp_path):
 
 
 def test_a_deferral_whose_health_gate_could_not_read_still_gave_up(tmp_path):
-    """#5543: no tick gates health again, so only a re-run of land.sh grades the deploy."""
+    """No tick gates health again, so only a re-run of land.sh grades the deploy."""
     log = landing(
         tmp_path,
         f"{outcome.UNREADABLE_GATE_NOTE}\nVERDICT: deferred (PR #939 — gate unreadable)\n",
@@ -102,7 +102,7 @@ def test_a_deferral_whose_health_gate_could_not_read_still_gave_up(tmp_path):
 
 
 def test_a_deferral_whose_gate_tree_was_stale_still_gave_up(tmp_path):
-    """#7816: master moved while the gate ran, and only a re-run of land.sh grades the deploy."""
+    """Master moved while the gate ran, and only a re-run of land.sh grades the deploy."""
     log = landing(
         tmp_path,
         f"{outcome.STALE_GATE_NOTE}\nVERDICT: deferred (PR #939 — gate tree stale)\n",
@@ -168,7 +168,7 @@ def test_a_live_landing_without_a_code_is_still_running(tmp_path):
 
 
 def test_a_landing_with_neither_pid_nor_code_past_the_grace_died(tmp_path):
-    """No pid and no code means no landing to wait on: the wait must end (#4513)."""
+    """No pid and no code means no landing to wait on: the wait must end."""
     log = landing(tmp_path, "")
     stale = EPOCH - land_probe.detach.START_GRACE_S - 1
     os.utime(log, (stale, stale))
@@ -220,7 +220,7 @@ def test_the_shim_runs_the_probe_and_prints_one_json_state(tmp_path):
 def test_a_gate_note_beside_a_causeless_result_line_stays_a_plain_deferral(
     tmp_path, note
 ):
-    """#7911: the cause on `LAND-RESULT:` decides a gate give-up; the note's text does not."""
+    """The cause on `LAND-RESULT:` decides a gate give-up; the note's text does not."""
     log = landing(
         tmp_path,
         "LAND-RESULT: verdict=deferred cause=- exit=75 pr=939 sha=- tags=1\n"

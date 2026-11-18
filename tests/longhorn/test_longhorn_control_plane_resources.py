@@ -6,11 +6,11 @@ Upstream's deploy/longhorn.yaml ships it at `resources: {}` — BestEffort QoS, 
 manager's fix is the `longhorn` role's kustomize patch (H1.5a), which Flux applies with the
 object it patches. The csi-* sidecars are not in the upstream file: longhorn-driver-deployer
 creates them at runtime, and longhorn-manager sets their `resources` from the
-`system-managed-csi-components-resource-limits` Setting the same role renders (#5958). The
+`system-managed-csi-components-resource-limits` Setting the same role renders. The
 Setting tests below hold it to the same rule, and it carries the longhorn-csi-plugin
-DaemonSet's three containers too (#8326). longhorn-global-manager, the Deployment v1.13
-added, has its own patch and tests (#5968). The manager DaemonSet's update strategy has its
-own patch too, which rolls one pod at a time so the admission webhook stays served (#6009).
+DaemonSet's three containers too. longhorn-global-manager, the Deployment v1.13
+added, has its own patch and tests. The manager DaemonSet's update strategy has its
+own patch too, which rolls one pod at a time so the admission webhook stays served.
 
 The manager, the global manager and the CSI components take only a request, never a limit: a
 limit set too low turns "killed by OOM badness" into "killed by cgroup cap" — a different
@@ -20,7 +20,7 @@ passing on any resources block it is handed.
 
 The containers outside the storage data path take requests AND limits: longhorn-ui,
 longhorn-driver-deployer and its init container, and the manager DaemonSet's pre-pull sidecar
-(#8543). Restarting any of them touches no volume, so a generous limit costs nothing.
+Restarting any of them touches no volume, so a generous limit costs nothing.
 
 Run: uv run pytest tests/longhorn/test_longhorn_control_plane_resources.py
 """
@@ -145,7 +145,7 @@ def test_global_manager_patch_names_the_global_manager_container():
 def test_global_manager_patch_requests_the_defaults_value_and_no_limit():
     # fact: k8s/roles/longhorn/CLAUDE.md#At a glance
     # Upstream v1.13.0 ships the Deployment with no `resources`, so without the patch its
-    # three pods run BestEffort (#5968).
+    # three pods run BestEffort.
     resources = _container_resources(_global_manager_patch())
     _assert_request_only(resources)
     assert resources["requests"]["memory"] == str(
@@ -190,7 +190,7 @@ def test_the_manager_daemonset_rolls_one_pod_at_a_time():
     # fact: k8s/roles/longhorn/CLAUDE.md#At a glance
     # The manager pods serve the admission webhook every claim's dry run calls. Upstream's
     # `maxUnavailable: 100%` replaces both at once, so a claim-holding tag reconciling then
-    # fails and pages (#6009). One pod down at a time keeps the other serving.
+    # fails and pages. One pod down at a time keeps the other serving.
     patches = [d for path in sorted(PATCHES.glob("*.y*ml")) for d in _docs(path)]
     assert _manager_max_unavailable(_docs(UPSTREAM), patches) == 1
 
@@ -229,7 +229,7 @@ def test_the_csi_setting_requests_the_defaults_values_for_every_csi_component():
     # Exact equality, not a subset: longhorn-manager compares each entry with the live
     # container's `resources`, so an extra `limits: {}` never matches and rolls the object on
     # every tick. The keys are every component the v1.13.0 manager reads from the Setting; one
-    # it omits runs BestEffort (#8326).
+    # it omits runs BestEffort.
     sidecar = _request("k3s_longhorn_csi_sidecar_memory_request")
     node_sidecar = _request("k3s_longhorn_csi_node_sidecar_memory_request")
     assert _csi_setting_value() == {

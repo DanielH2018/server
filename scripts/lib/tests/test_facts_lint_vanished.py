@@ -13,7 +13,7 @@ from lib.git_testing import commit, git, init_repo
 
 _DEFAULTS = "kuma/defaults/main.yml"
 _DOC = "kuma/CLAUDE.md"
-# The shape of a91ed2c6d: a defaults file renames the variable and the doc keeps the old name.
+# A defaults file renames the variable and the doc keeps the old name.
 _OLD = "kuma_maintenance_window_timezone: Atlantic/Reykjavik\nkuma_port: 3001\n"
 _NEW = "kuma_maint_tz: Atlantic/Reykjavik\nkuma_port: 3001\n"
 _SENTENCE = "## Window\nThe window runs in `kuma_maintenance_window_timezone`.\n"
@@ -89,7 +89,7 @@ def test_an_identifier_that_survives_elsewhere_is_clean(tmp_path):
 
 
 def test_a_renovate_tag_bump_is_not_an_error(tmp_path):
-    """#4012: a Renovate PR must not arrive red over documentation. Its versions are exempt."""
+    """A Renovate PR must not arrive red over documentation. Its versions are exempt."""
     doc = "## Image\nThe app runs `org/app:1.2-alpine`.\n"
     repo = _branch(
         tmp_path,

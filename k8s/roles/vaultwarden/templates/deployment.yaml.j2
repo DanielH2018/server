@@ -1,0 +1,63 @@
+{% from 'container-resources.yml.j2' import container_resources with context %}
+{% from 'security-context.yml.j2' import hardened_security_context with context %}
+{% from 'workload-shell.yml.j2' import spec_shell, pod_shell with context %}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vaultwarden
+  namespace: {{ k8s_namespace }}
+spec:
+{{ spec_shell('Recreate') }}
+  replicas: {{ vaultwarden_k8s_replicas }}
+  selector:
+    matchLabels:
+      app: vaultwarden
+  template:
+    metadata:
+      labels:
+        app: vaultwarden
+        netpol-baseline: enforced
+    spec:
+{{ pod_shell('homelab-best-effort', run_as_user=vaultwarden_k8s_uid, run_as_group=vaultwarden_k8s_uid, fs_group=vaultwarden_k8s_uid) }}
+      containers:
+        - name: vaultwarden
+          image: {{ vaultwarden_k8s_image }}
+          imagePullPolicy: IfNotPresent
+          env:
+            # The image binds port 80 by default, which a non-root uid cannot.
+            - name: ROCKET_PORT
+              value: "{{ container_item.port }}"
+            # WebAuthn and attachment links are built from this, so it must match the route.
+            - name: DOMAIN
+              value: "https://{{ container_item.hostname }}.local.{{ domain }}"
+            - name: SIGNUPS_ALLOWED
+              value: "false"
+            # No ADMIN_TOKEN is set, which disables /admin entirely.
+          ports:
+            - containerPort: {{ container_item.port }}
+{{ hardened_security_context(read_only=true, non_root=true) }}
+          readinessProbe:
+            httpGet:
+              path: /alive
+              port: {{ container_item.port }}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /alive
+              port: {{ container_item.port }}
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          volumeMounts:
+            - name: vaultwarden-data
+              mountPath: /data
+            - name: vaultwarden-tmp
+              mountPath: /tmp
+{{ container_resources(cpu_limit=vaultwarden_k8s_cpu_limit, mem_limit=vaultwarden_k8s_mem_limit, cpu_request=vaultwarden_k8s_cpu_request, mem_request=vaultwarden_k8s_mem_request) }}
+      volumes:
+        - name: vaultwarden-data
+          persistentVolumeClaim:
+            claimName: {{ vaultwarden_k8s_claim }}
+        - name: vaultwarden-tmp
+          emptyDir: {}

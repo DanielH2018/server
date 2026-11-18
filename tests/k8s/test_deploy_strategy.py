@@ -47,6 +47,7 @@ _RECREATE = {
     ): "sqlite config DB; two instances would double-run RSS syncs",
     ("jellyfin", "jellyfin"): "sqlite library DB",
     ("freshrss", "freshrss"): "sqlite DB plus file-based PHP sessions",
+    ("vaultwarden", "vaultwarden"): "sqlite DB on an RWO Longhorn volume",
     ("navidrome", "navidrome"): "sqlite index on an RWO Longhorn volume",
     ("speedtest", "speedtest"): "sqlite results DB",
     ("n8n", "n8n"): "sqlite DB under /home/node/.n8n",

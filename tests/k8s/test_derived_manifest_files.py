@@ -1,7 +1,7 @@
 """`lib.k8s_roles.resolved_manifest_files` derives a role's file lists.
 
 A role that sets no `manifests_files` gets one derived from its own `templates/` and its
-containers_list entry (#3662). The validator, the render corpus and the prune guards read it.
+containers_list entry. The validator, the render corpus and the prune guards read it.
 
 Run: uv run pytest tests/k8s/test_derived_manifest_files.py
 """

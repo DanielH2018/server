@@ -1,4 +1,4 @@
-"""The lost-node shed set is the untiered entries, derived from containers_list `tier` (#3481).
+"""The lost-node shed set is the untiered entries, derived from containers_list `tier`.
 
 `shed_entries` in `template_filters/service_tier.py` derives it and `probe.py shed-set` prints
 it. Scaling these to zero is meant to leave the tiered services untouched, which holds only

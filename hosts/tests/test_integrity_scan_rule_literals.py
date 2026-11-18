@@ -1,4 +1,4 @@
-"""The AIDE and rkhunter NotReporting literals equal the DEADLINE_S each scan renders (#6168).
+"""The AIDE and rkhunter NotReporting literals equal the DEADLINE_S each scan renders.
 
 `files/rules/host-checks.yaml` is plain YAML, so each NotReporting rule carries its deadline as a
 literal twice: the `>` of the stale-file arm and the `[<n>s]` window of the absent_over_time arm.

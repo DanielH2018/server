@@ -28,7 +28,7 @@ from lib.repo_paths import K3S_HOST_CHECKS
 
 COMPONENTS = REPO / "hosts" / "components"
 BACKUP_SCRIPTS = REPO / "scripts" / "backup"
-# Both reapers are subcommands of one entry point since #4345, so its name covers either.
+# Both reapers are subcommands of one entry point, so its name covers either.
 REAPERS = frozenset({"longhorn_reap.py"})
 UNIT_SUFFIXES = (".service.j2", ".timer.j2")
 
@@ -131,12 +131,10 @@ def test_a_comment_naming_a_reaper_is_clean(tmp_path: Path) -> None:
 
 # ── The CronJob arm: no k8s CronJob runs a reaper ────────────────────────────────────────
 #
-# Host crons moved into CronJobs (ADR-0029), so a schedule can arrive in a rendered manifest,
-# as well as in a unit template. A CronJob that names the reaper in its command is caught directly.
-# One that
-# runs a script from a mounted ConfigMap names it only in that ConfigMap's data, so the arm
-# reads the data of every ConfigMap the CronJob mounts, through a `configMap` volume or a
-# `projected` source.
+# A schedule can arrive in a rendered CronJob as well as in a unit template. A CronJob that names
+# the reaper in its command is caught directly; one that runs a script from a mounted ConfigMap
+# names it only in that ConfigMap's data, so the arm reads the data of every ConfigMap the
+# CronJob mounts, through a `configMap` volume or a `projected` source.
 
 # The CronJob and the mounted script ConfigMap that must be read, so an empty render cannot
 # pass. H2.3b adds the drill's script ConfigMap here when its tag renders one.

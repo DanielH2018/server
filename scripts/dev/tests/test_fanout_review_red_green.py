@@ -94,8 +94,8 @@ def test_only_a_pr_that_passes_the_green_gate_has_its_hunks_checked(tmp_path, gr
         hunk_check=hunk_check,
     )
     pipeline.run_all()
-    # The merge base, not the red commit: #4182 and #4183 both merged master into their
-    # branch, and `red..HEAD` would count master's hunks as fix hunks the red tests missed.
+    # The merge base, not the red commit: after a merge of master, `red..HEAD` would count
+    # master's hunks as fix hunks the red tests missed.
     assert checked == ([] if green else ["base0"])
     assert pipeline.record.green_first == ("unmet" if green else "passed")
     assert pipeline.record.red_hunks_missed == ([] if green else ["mod.py:6"])
@@ -159,7 +159,7 @@ def test_a_red_batchs_implementer_loads_no_settings_file_the_red_author_could_wr
     tmp_path, red
 ):
     """The red author could leave an ignored `.claude/settings.local.json` or a hidden hook
-    edit, and `git clean -fd` after a refusal keeps ignored files (#3846)."""
+    edit, and `git clean -fd` after a refusal keeps ignored files."""
     reports = [
         _red_report(),
         _report(f"Opened {PR}"),
@@ -210,8 +210,8 @@ def test_nothing_the_red_phase_hid_from_the_gates_reaches_the_implementer(
     tmp_path, passed
 ):
     """A skip-worktree edit, an ignored overwrite, an untracked root file, a planted
-    `.fanout/` log and a background process (#3852). The red gate already sees none of them,
-    nor an ignored root conftest (#3871). A process the implementer leaves is not the red
+    `.fanout/` log and a background process. The red gate already sees none of them,
+    nor an ignored root conftest. A process the implementer leaves is not the red
     phase's, and survives: the land phase's `land.sh --detach` depends on that."""
     repo = init_repo(tmp_path / "repo")
     # Launch excludes `.fanout/` through `info/exclude`; the commit helper adds everything.
@@ -266,7 +266,7 @@ def test_nothing_the_red_phase_hid_from_the_gates_reaches_the_implementer(
         argv = unprefixed(argv)
         if argv[0] == "git":
             return git(repo, *argv[3:], check=False)
-        # `bash` is the CI wait a daniel-server batch now runs (#4737): exit 0 reads as a pass.
+        # `bash` is the CI wait a daniel-server batch runs: exit 0 reads as a pass.
         if argv[0] in ("gh", "uv", "bash"):
             return subprocess.CompletedProcess(argv, 0, "", "")
         phase = (repo / ".fanout" / "phase").read_text().strip()
@@ -332,7 +332,7 @@ def _kill(pidfile):
 
 
 def test_a_process_a_red_test_starts_does_not_outlive_the_green_gate(tmp_path):
-    """#4508: the gate runs the red author's tests, the real gate and pytest here."""
+    """The gate runs the red author's tests, the real gate and pytest here."""
     pidfile = tmp_path / "pid"
     red_test = (
         "def test_orphan():\n    import subprocess\n\n    from mod import double\n\n"
@@ -361,7 +361,7 @@ def test_a_process_a_red_test_starts_does_not_outlive_the_green_gate(tmp_path):
 @pytest.mark.parametrize("check", ["base", "hunk"])
 def test_a_process_the_base_or_hunk_check_starts_does_not_outlive_it(tmp_path, check):
     """Both run the red author's code as well: the base check collects every changed test
-    file, and the hunk check runs the red nodes once per fix hunk (#4508)."""
+    file, and the hunk check runs the red nodes once per fix hunk."""
     pidfile = tmp_path / "pid"
 
     def leaves_a_process(*_):

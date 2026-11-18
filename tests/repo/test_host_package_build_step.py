@@ -1,4 +1,4 @@
-"""ci.yml's `host_packages_build` build step and the hand-off it uploads (#7706, #7707, #7834).
+"""ci.yml's `host_packages_build` build step and the hand-off it uploads.
 
 The build step's shell runs here against a scratch render and a stub `nfpm`, so each test reads
 what a real run would do: every package of both sides packs at once, and a failing spec on

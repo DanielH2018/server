@@ -1,4 +1,4 @@
-"""daniel-box's claude-code subjects ship in its host package (H7.40, slices 1-4).
+"""daniel-box's claude-code subjects ship in its host package.
 
 The component renders the claude_code role's templates in place, and the role ends on every
 host, so the package is the one writer. These tests hold each slice's subjects in the package
@@ -303,7 +303,7 @@ TIMER_TEXTFILES = {
 }
 
 
-# Retired whatever the toggles say: the GitOps deployer's tick textfile (H7.52).
+# Retired whatever the toggles say: the GitOps deployer's tick textfile.
 ALWAYS_RETIRED = {
     f"{TEXTFILES}/gitops_tick.prom",
     f"{TEXTFILES}/setup-drift-check.prom",

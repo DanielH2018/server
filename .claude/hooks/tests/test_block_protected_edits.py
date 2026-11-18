@@ -71,7 +71,7 @@ SOPS_TEXT = (
 )
 PLAINTEXT_HOST_VARS = "server_ip: 10.0.0.161\ncontainers_list:\n  - name: jellyfin\n"
 # A doc/log that merely *mentions* the marker in prose — must NOT be flagged. This is
-# the iteration-3 regression: the bare-substring check wrongly blocked such files.
+# a bare-substring check would wrongly block such files.
 PROSE_MENTIONING_MARKER = (
     "Detection keys off the file's " + "ENC[" + "AES256_GCM markers.\n"
 )

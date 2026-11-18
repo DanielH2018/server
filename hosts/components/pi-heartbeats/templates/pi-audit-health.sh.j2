@@ -11,9 +11,8 @@
 #
 # auditd stops writing while its unit stays active. A write that finds too little free space, a
 # full filesystem or a write error suspends logging, and only a restart resumes it. /var/log is
-# the 128 MB log2ram tmpfs, and in the 12 days to 2026-11-13 the packaged 50 MB threshold kept the
-# log silent for 74% of the time with nothing reporting it. Only the log's age shows a suspended
-# daemon.
+# the 128 MB log2ram tmpfs, and the packaged 50 MB threshold keeps the log silent for long
+# stretches with nothing reporting it. Only the log's age shows a suspended daemon.
 #
 # Prometheus reads the textfile (pi-checks.yaml). PiAuditFailed names a log that stays silent,
 # and PiAuditNotReporting fires when the verdict goes stale.

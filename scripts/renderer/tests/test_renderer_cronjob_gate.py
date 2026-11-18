@@ -1,9 +1,9 @@
-"""A CronJob's gate Job in `<tag>-verify`, copied from its `jobTemplate` (D5, #5556).
+"""A CronJob's gate Job in `<tag>-verify`, copied from its `jobTemplate`.
 
 The fixture renders pi-peer-backup, the real role whose gate the plan converted first, through
 the real CLI as `owner: flux`, from a copy of its role tree. The copy's defaults drop the live
 `flux_cronjob_gates` and append the opt-in a test names, so a test can render the role with and
-without it. The live role opts in since its flip (#5652).
+without it.
 
 Run: uv run pytest scripts/renderer/tests/test_renderer_cronjob_gate.py
 """
@@ -42,7 +42,7 @@ GATE_FILE = f"{TAG}-deploy-gate.yaml"
 PULL_SCRIPT = K8S_ROLES / TAG / "files" / "pull-pi-peers.sh"
 OPT_IN = f"\nflux_cronjob_gates:\n  {TAG}:\n    kind: verify\n"
 # The census rows a gate Job copied from a CronJob meets. It skips `delivery` and `helper`,
-# which read a mounted script, because it runs pi-peer-backup's own image (#5562).
+# which read a mounted script, because it runs pi-peer-backup's own image.
 GATE_ROWS = ("kind", "ttl", "name", "backoff", "rerun-safe")
 
 
@@ -141,7 +141,7 @@ def test_the_gate_passes_check_bundle_and_the_job_census_rows_it_owns(rendered):
     assert [p for p in problems(bundle) if p.split(":")[0] in GATE_ROWS] == []
 
 
-# The rows a gate Job is exempt from once its pod template equals its CronJob's (#5562).
+# The rows a gate Job is exempt from once its pod template equals its CronJob's.
 EXEMPT_ROWS = ("delivery", "helper")
 
 

@@ -102,7 +102,7 @@ def test_a_changed_active_service_and_an_enabled_timer_are_each_restarted_once(n
 
 
 def test_an_inactive_timer_with_no_link_stays_inactive_when_its_dropin_changes(node):
-    # The Pi's homelab-updater.timer before H3.9b: a drop-in, and no enable link.
+    # A timer with a drop-in and no enable link.
     node.write_dropin("homelab-updater.timer", "[Timer]\nOnCalendar=\n")
     first = node.run()
     node.write_dropin(

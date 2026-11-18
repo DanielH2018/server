@@ -211,11 +211,10 @@ def test_open_pr_returns_the_first_of_several():
 
 # --- A `gh` timeout is a state, not a traceback ------------------------------------------------
 #
-# lib.gh.gh bounds every call at 60s where the inline shell the crons carried had no bound at
-# all, so TimeoutExpired is a state these callers did not have before. It is reachable in normal
-# operation: the anonymous GitHub quota is 60/hour and shared per host. Both `gh` calls in
-# publish() sit after the push and after `reset --hard HEAD~1`, so a raise there exits 1 with a
-# traceback -- the code that promises the commit is still local and origin is untouched.
+# lib.gh.gh bounds every call at 60s, so TimeoutExpired is reachable in normal operation: the
+# anonymous GitHub quota is 60/hour and shared per host. Both `gh` calls in publish() sit after
+# the push and after `reset --hard HEAD~1`, so a raise there exits 1 with a traceback while the
+# commit is still local and origin is untouched.
 
 
 def test_a_timeout_creating_the_pr_is_exit_2_not_a_raise():
@@ -296,7 +295,7 @@ def _run_cli(
         tmp_path / "bin",
         git=_stub_body("git", log, fail_on),
         gh=_stub_body("gh", log, fail_on),
-        # CI's runner is a system unit, so the landing goes through systemd-run there (#6864).
+        # CI's runner is a system unit, so the landing goes through systemd-run there.
         **{"systemd-run": _SYSTEMD_RUN_PASSTHROUGH},
     )
     # The stubs above answer instead of git, but an inherited GIT_DIR from a hook or a parent
@@ -341,7 +340,7 @@ def test_cli_publish_drives_real_processes_in_order(tmp_path):
     ],
 )
 def test_a_cron_units_landing_starts_in_the_user_manager(tmp_path, cgroup, starts_with):
-    """Issue #6864: in a system unit, the detached landing died when the cron exited."""
+    """In a system unit, the detached landing died when the cron exited."""
     seen: list[list[str]] = []
 
     def fake_run(argv, **_kw):

@@ -27,7 +27,7 @@ from check_table import CHECKS
 from checks.domain_registration import days_remaining
 
 # `lib/exit_codes.py:USAGE_ERROR`, which the pod cannot import: it mounts only this role's
-# `files/` (#4487). 2 stays the config-fault exit `main()` documents.
+# `files/`. 2 stays the config-fault exit `main()` documents.
 USAGE_ERROR = 64
 
 
@@ -109,8 +109,7 @@ def main(
     # Building the config never raises; bridge.common.CONFIG_PROBLEMS carries HTTP_TIMEOUT's own
     # parse failure, parsed there because autofix-bridge shares that module.
     #
-    # `env` reaches `load_config` and nothing else: the registry reads no environment since
-    # Cutover-2 deleted the push tokens.
+    # `env` reaches `load_config` and nothing else: the registry reads no environment.
     environment = os.environ if env is None else env
     cfg = load_config(environment, problems=bridge.common.CONFIG_PROBLEMS)
     if cfg.CONFIG_PROBLEMS:

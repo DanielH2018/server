@@ -277,7 +277,7 @@ def test_a_dotenv_output_refuses_a_value_with_a_quote_or_line_break(host, bad, c
 
 
 def test_a_failure_reaches_the_journal_at_err_priority(host, tmp_path, monkeypatch):
-    # Every line the script prints is a failure, so `journalctl -p err` must find each (#6202).
+    # Every line the script prints is a failure, so `journalctl -p err` must find each.
     journal = tmp_path / "journal"
     journal.touch()
     st = journal.stat()

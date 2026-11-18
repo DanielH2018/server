@@ -2,7 +2,7 @@
 
 HA's cast integration runs pychromecast's Home Assistant controller on its connection, and that
 controller can hold the socket thread for 30 s at a time, so HA's own `media_player.turn_off`
-times out while the dashboard is up (#8201). A connection opened here carries no such
+times out while the dashboard is up. A connection opened here carries no such
 controller, so the device answers its quit. `bedroom_display_dismiss` runs this through
 `shell_command.bedroom_display_quit_app` when its own turn_off has not taken effect.
 

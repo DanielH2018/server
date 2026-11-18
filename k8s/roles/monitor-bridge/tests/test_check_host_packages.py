@@ -97,7 +97,7 @@ def test_an_absent_unbuilt_series_is_red(cfg):
 
 
 def test_a_non_canary_reason_pages_at_the_floor(cfg):
-    # A keyring refusal, a hold or a red master no longer waits out the Pi's day (#6919).
+    # A keyring refusal, a hold or a red master pages at the floor, not after the Pi's day.
     ok, msg = _run(cfg, 60, [_unbuilt(NOW - 7200 - 60, reason="keyring")])
     assert not ok and "master unbuilt for 121m (> 120m)" in msg, msg
 

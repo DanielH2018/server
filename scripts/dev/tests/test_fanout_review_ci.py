@@ -1,4 +1,4 @@
-"""The review pipeline's CI wait on daniel-server, and its one resume on both hosts (#4737, #5498).
+"""The review pipeline's CI wait on daniel-server, and its one resume on both hosts.
 
 The fake runner answers `cc-wait gh-ci` with the scripted `run.ci` exits and output, the PR's
 `statusCheckRollup` with `run.rollup`, and a failed job's log with `run.job_logs`.
@@ -167,7 +167,7 @@ def test_a_wait_that_uses_its_slice_is_re_run_without_a_pause(tmp_path):
 
 
 def test_ci_that_runs_twenty_minutes_on_a_loaded_host_still_ends_done(tmp_path):
-    # Runs took 1089-1404s on 2026-10-29 (#6195). Four 300s slices exceed a 15-minute budget.
+    # Four 300s slices exceed a 15-minute budget.
     pipeline, run, clock = _server_batch(tmp_path, _clean_review())
     timeout = (75, "WAIT: timeout still running after 300s; re-run: cc-wait ...\n")
     run.ci = [timeout] * 4 + [PASSED]
@@ -176,7 +176,7 @@ def test_ci_that_runs_twenty_minutes_on_a_loaded_host_still_ends_done(tmp_path):
 
 
 def test_ci_still_running_past_the_budget_is_waited_on_and_ends_done(tmp_path):
-    # PR #7059's run passed at 48.5 minutes, after the 35-minute budget (#7673).
+    # A run that passes at 48.5 minutes lands after the 35-minute budget.
     pipeline, run, _ = _server_batch(tmp_path, _clean_review())
     running = (75, "WAIT: timeout still running after 300s; re-run: cc-wait ...\n")
     run.ci = [running] * 10 + [PASSED]
@@ -475,7 +475,7 @@ def _mergeable_batch(tmp_path, answers):
 def test_a_conflicting_pr_that_starts_no_ci_is_blamed_on_the_conflict_not_actions(
     tmp_path,
 ):
-    """GitHub runs no `pull_request` workflow on a CONFLICTING PR (#5629)."""
+    """GitHub runs no `pull_request` workflow on a CONFLICTING PR."""
     pipeline, run, _, _ = _mergeable_batch(tmp_path, ["CONFLICTING"])
     final = pipeline.run_all()["result"]
     assert final.startswith("needs input: PR #4000 conflicts with master")
