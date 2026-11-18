@@ -195,7 +195,7 @@ def parse_status(batches: Sequence[Batch], stdout: str) -> list[BatchStatus]:
             if BLOCKER.search(final):
                 # Tested first, so a blocker line wins whatever URL follows it: the review
                 # holds (`held_for_findings`, `held_for_green`) end on the full PR URL, and
-                # read as `done` on daniel-server, where the URL alone is the finish (#4910).
+                # read as `done` on daniel-server, where the URL alone is the finish.
                 # `m` still fills the line's PR url below, which the orchestrator needs.
                 state = NEEDS_INPUT
             elif m and lands(b.host, b.repo) and not landed:
@@ -260,11 +260,11 @@ def with_own_pr(
     """`s` with the PR GitHub holds for `branch`, in place of the first URL its text names.
 
     `parse_status` reads `pr_url` as the first PR URL in the final text, so a body that links
-    another PR before its own reads as that PR (#6551). A `done` or `no-verdict` batch whose
+    another PR before its own reads as that PR. A `done` or `no-verdict` batch whose
     text names a PR the branch does not have becomes `needs-input` naming both, never `done`;
     a `needs-input` or `failed` one loses the foreign url. Such a batch whose text names only
-    PRs from `earlier_prs`, which merged before this launch, opened nothing and becomes `no-pr`
-    (#7402). Only a batch with a url asks the forge, and a `landed` one holds the forge's own
+    PRs from `earlier_prs`, which merged before this launch, opened nothing and becomes `no-pr`.
+    Only a batch with a url asks the forge, and a `landed` one holds the forge's own
     merged url already.
     """
     if not s.pr_url or s.state == "landed":
@@ -295,7 +295,7 @@ def reconciled(
 
     Only a `no-report` batch asks the forge, so every other state costs no network call. A PR
     from `earlier_prs`, which merged before this launch, belongs to an earlier launch of the
-    same branch name and leaves the batch `no-report` (#7407).
+    same branch name and leaves the batch `no-report`.
     """
     if s.state != NO_REPORT:
         return s
@@ -402,7 +402,7 @@ def collect(
 
     Each row carries `batch`, `host`, `branch`, `state`, `pr_url` and `line`, the text line
     `status` prints. `status --json` prints the rows themselves, so `fanout.py probe` reads the
-    state field instead of a regex over the line (#3926). Two states come from here rather
+    state field instead of a regex over the line. Two states come from here rather
     than from a host: `cleaned` for a batch `clean` removed, and `unread` for a host whose
     read timed out, which still counts as running.
 

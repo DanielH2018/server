@@ -4,19 +4,17 @@
 `shell_templates.py` covers `*.sh.j2` and `k8s_manifests.py` covers `k8s/roles/*/templates/*.j2`;
 `*.service.j2` / `*.timer.j2` fell between them — nothing rendered a unit template or checked the
 result, so a typo'd directive key reached a live host with `daemon_reload: true` reporting
-success and systemd loading the unit anyway, ignoring the bad line with only a journal warning
-(GitHub issue #948).
+success and systemd loading the unit anyway, ignoring the bad line with only a journal warning.
 
 Render context = `lib.render_context`: StubUndefined (`scripts.lib.render_guard`) under the
 OWNING ROLE's `defaults/main.yml` under `inventory/group_vars/all.yml`, every value
 expanded the way Ansible expands it. Bare stubs are not enough: `systemd-analyze verify` treats
-`OnCalendar=STUB` and `OnUnitActiveSec=STUB` as parse failures, so 3 of the 17 live timers
-(gitops-deploy, renovate-agent, claude-rc-restart) were red on a clean repo before their role's
-real schedule value was layered in. What still renders as STUB: `inventory_hostname` and
+`OnCalendar=STUB` and `OnUnitActiveSec=STUB` as parse failures, so a timer would be red on a clean repo until its role's
+real schedule value is layered in. What still renders as STUB: `inventory_hostname` and
 `ansible_managed` (Ansible magic vars with no plaintext fallback here — both are used only in
-comments or human-facing alert text, never in a directive systemd parses). Until #3692 a default
-whose own value referenced another variable (`renovate_agent_repo_dir: "/home/{{ sys_user
-}}/server"`) reached the unit as literal braces; it now arrives as the resolved path.
+comments or human-facing alert text, never in a directive systemd parses). A default
+whose own value references another variable (`renovate_agent_repo_dir: "/home/{{ sys_user
+}}/server"`) arrives at the unit as the resolved path, not as literal braces.
 
 `systemd-analyze verify`'s EXIT STATUS is ignored — measured on systemd 255.4, it is 0 on
 `SuccessExitStatuss=75` (a typo'd key) and on `TimeoutStartSec=6zz0min` (an unparsable value) on
@@ -106,7 +104,7 @@ _FAIL_MESSAGE = re.compile(r"Unknown key|Failed to parse|Assignment outside of s
 
 
 # A host component that keeps role-shaped sources, `templates/` beside a `defaults/main.yml`,
-# such as claude-code (#6773). Its templates render with that file as their owning defaults.
+# such as claude-code. Its templates render with that file as their owning defaults.
 COMPONENT_TEMPLATES = REPO / "hosts" / "components"
 
 

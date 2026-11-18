@@ -315,11 +315,11 @@ def load_longhorn_tier_lists(
     resolve over: a tier key it already holds as a list wins, which is how a test injects one.
     That dict sits under `group_vars`, the way `Estate.role_vars` layers a setup
     role, so a `group_vars/all.yml` override of a tier list reaches the catalogue and the
-    glance blocks as it reaches Ansible (#3918). `group_vars` defaults to the repo's own;
+    glance blocks as it reaches Ansible. `group_vars` defaults to the repo's own;
     `k3s_defaults` stays a file path so a test or `service_catalog --k3s-defaults` can
     inject one. `entries` is the `containers_list` the role's R2 expression derives from;
     a caller reading an injected inventory passes its k8s entries, or the R2 set is the
-    repo's (#3947).
+    repo's.
     """
     if group_vars is None:
         group_vars = Estate().group_vars

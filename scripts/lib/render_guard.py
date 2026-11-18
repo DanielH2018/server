@@ -157,7 +157,7 @@ def load_yaml(path: Path) -> dict:
 
 # Keyed on the text rather than the path, so an edit between two renders reaches the second
 # one even inside the same mtime tick. Reading the file costs little; parsing it is what a
-# render paid for again on every render_context call (#5592).
+# render paid for again on every render_context call.
 @functools.lru_cache(maxsize=512)
 def _parsed_mapping(text: str) -> dict:
     loaded = yaml_fast.parse_yaml(text)

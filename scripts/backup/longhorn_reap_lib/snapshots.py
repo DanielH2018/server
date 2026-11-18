@@ -29,9 +29,8 @@ cancels anything: kubectl has already issued the DELETE, and exceeding --timeout
 WAITING for the finalizer while the server carries on.
 
 A purge POST that gets back a non-2xx counts as a failure, and main() exits 1 when ANY volume
-was left unpurged (`urlopen` raises `HTTPError` on 4xx/5xx). bash's `curl` without `-f` printed
-nothing and returned 0 either way, so a rejected purge used to look identical to a successful
-one. The exit code is what an operator reads first, and a run that reclaimed nothing must not
+was left unpurged (`urlopen` raises `HTTPError` on 4xx/5xx), so a rejected purge never looks identical to a
+successful one. The exit code is what an operator reads first, and a run that reclaimed nothing must not
 read as a success: every snapshot it deleted stays marked-removed-but-not-coalesced, so no
 space comes back until someone purges from the Longhorn UI or re-runs.
 
@@ -131,10 +130,10 @@ def _purge(kubectl, node: str, volumes: set[str]) -> int:
     coalesces it into its parent, which is what snapshotPurge asks for. Must be the local
     node's manager pod, not the longhorn-backend ClusterIP: a process in the host netns can
     only reach its own node's pod CIDR, and kube-proxy's per-connection pick over the Service
-    fails whenever it lands on the other node's manager (measured 2026-08-16: 27 of 37 calls).
+    fails whenever it lands on the other node's manager.
 
     The ready-pod rule is `longhorn_manager.ready_manager_ip`, shared with `volume_revert.py`
-    and the trim cron (#3736).
+    and the trim cron.
 
     Returns the number of volumes left unpurged, so 0 means every POST was accepted. A path
     that never reaches the POST loop at all -- no readable pod list, no ready manager pod --
@@ -194,7 +193,7 @@ def main(argv: list[str], now: float | None = None) -> int:
 
     `now` is the epoch the age floor is measured from; a real run leaves it None and reads the
     clock. A test hands one in so a fixture dated "one day ago" stays one day old however long
-    the suite has run (#2220) — an argument, not an env var or a flag, so nothing the caller's
+    the suite has run — an argument, not an env var or a flag, so nothing the caller's
     environment carries can move it.
     """
     answer_help(__doc__, argv)
@@ -297,7 +296,7 @@ def main(argv: list[str], now: float | None = None) -> int:
         # past the age floor then becomes a candidate. classify_snapshots refuses; without this
         # the refusal reaches the operator as a traceback. `abort_reason` already writes the
         # `ABORT: ` prefix into the message, so this prints it as it stands rather than doubling
-        # it (#3236).
+        # it.
         print(str(e), file=sys.stderr)
         return 1
 

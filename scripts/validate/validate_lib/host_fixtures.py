@@ -4,8 +4,8 @@
 `scripts/validate/host_package_cases.py` runs the cases. This module builds what they install:
 the fixture homelab-daniel-pi in three versions, rendered by the real renderer from
 `hosts/lib/tests/container/fixture/`, a fourth, `sealed`, that carries `secrets-unit`
-(H4.1c), and a fifth, `conffile`, whose line-arm edit lands in another package's conffile
-(#6088), a sixth, `shadow`, whose unit an Ansible-era copy shadows (H7.41a); a homelab-updater whose unit changes; a copy of the real
+(H4.1c), and a fifth, `conffile`, whose line-arm edit lands in another package's conffile,
+a sixth, `shadow`, whose unit an Ansible-era copy shadows (H7.41a); a homelab-updater whose unit changes; a copy of the real
 homelab-daniel-pi whose drop-in on the updater's timer changes; the real homelab-daniel-pi
 rendered with its container-recovery timer disarmed; and the apt repository, in
 suite `homelab`, that serves a chosen set of them. `publish` signs that repository's `InRelease`

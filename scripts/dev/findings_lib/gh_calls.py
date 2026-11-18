@@ -191,14 +191,13 @@ FINGERPRINT_SEARCH_LIMIT = 30
 
 
 # DECIDED: `open` asks gh's search index for the one fingerprint instead of fetching the
-# register and scanning it. Measured 2026-09-28 on daniel-server: the whole-register read
-# this replaced was 995 issues, 4.3 MB and 58.4s, and it grew with every finding filed —
-# #2800 had already watched it blow through `lib.gh.gh`'s 60s default and take EVERY
-# findings.py subcommand down with it. The search is 0.6s and does not grow. The cost is
+# register and scanning it. A whole-register read grows with every finding filed and
+# would blow through `lib.gh.gh`'s 60s default and take EVERY findings.py subcommand down
+# with it. The search is fast and does not grow. The cost is
 # gh's search INDEX LAG: an issue filed seconds ago may not be findable yet, so two sessions
 # filing one fingerprint inside that window both create. That trade is right — a duplicate
 # issue is one `close --refuted` away, while a filer that cannot run drops the finding into
-# a reply and loses it, which is the harm the register exists to prevent. Long form: #2846.
+# a reply and loses it, which is the harm the register exists to prevent.
 def fingerprint_match(fp: str, tools: FindingsTools) -> dict | None:
     """The register's issue carrying fingerprint ``fp``, in any state, or None.
 

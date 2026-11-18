@@ -79,7 +79,7 @@ K8S_CRD_EDGE_EXEMPT = {
 # Roles the derived map applies after every other k8s entry, each with the reason it must run
 # last. An edge onto every other entry, not list position: a hand-added entry goes wherever
 # its author puts it, so a position-held "last" lasted only until the next role was added
-# after it (#4833). A role that declares `depends_on:` onto one of these makes a cycle, and
+# after it. A role that declares `depends_on:` onto one of these makes a cycle, and
 # toposort_containers raises. The scaffolder (scripts/dev/new_k8s_service.py:append_entry)
 # still writes a new entry ahead of the first one, so the hand-ordered list stays a
 # topological order. The plan is docs/target-architecture/deploy/d4-ordering.md (D4.1).
@@ -98,7 +98,7 @@ def _entry_is_routed(container):
     The `hostname` key is the declaration: `ingressroute()` takes it as the host label, and an
     entry carrying one is a service someone reaches through the edge. It is the only routed
     test that survives a route rendered from `k8s/templates/ingressroute-default.yaml.j2`,
-    which leaves nothing in the role for `_role_renders_traefik_crd` to find (#3043).
+    which leaves nothing in the role for `_role_renders_traefik_crd` to find.
 
     It also claims an edge the templates never did, for a role whose route lives in traefik's
     own file provider rather than in an IngressRoute of its own -- livesync is the one, and its

@@ -39,7 +39,7 @@ from diagnostics.probe_lib.health_rollout import seconds_since
 # The gate run itself is a Job Flux applies in `<tag>-verify`.
 
 
-# A Flux-owned role's gate Job (#5953). Its `<role>-verify` Kustomization applies it, so it has
+# A Flux-owned role's gate Job. Its `<role>-verify` Kustomization applies it, so it has
 # no `ownerReferences`: `scripts/renderer/renderer_lib/cronjob_gate.py:gate_name` names it
 # `<cronjob>-deploy-gate-<spec digest8>`, and Flux labels it with the Kustomization's name.
 # The exact name pins the CronJob, so a CronJob whose name extends this one's never matches.
@@ -49,7 +49,7 @@ _GATE_INFIX = "-deploy-gate-"
 _DIGEST8 = re.compile(r"^[0-9a-f]{8}$")
 
 
-# Which gate Job proves the revision Flux applies (#5955). A Flux-owned role has no release
+# Which gate Job proves the revision Flux applies. A Flux-owned role has no release
 # record, so no `applied_at` to compare a Job's creation time against. The renderer stamps the
 # same digest twice instead: `scripts/renderer/renderer_lib/bundle.py:CONTENT_DIGEST` on
 # Kustomization `<tag>` carries the tag's `own` digest, and
@@ -151,9 +151,8 @@ def revision_applied_at(kustomization):
 
     kustomize-controller keeps one `status.history` entry per applied content digest, and the
     entry whose `metadata.revision` is `status.lastAppliedRevision` is the live one. Its
-    `firstReconciled` is when that content went live. Verified live 2026-10-25 on
-    `longhorn-restore-drill`: the entry before the live one starts at 17:38:28Z on 2026-10-24,
-    the second the CronJob's kustomize-controller `managedFields` entry records for the unsuspend.
+    `firstReconciled` is when that content went live. On
+    `longhorn-restore-drill`, the entry before the live one starts at the second the CronJob's kustomize-controller `managedFields` entry records for the unsuspend.
     """
     status = (kustomization or {}).get("status") or {}
     revision = status.get("lastAppliedRevision")
@@ -242,8 +241,8 @@ def declared_suspended(docs, default_namespace):
     )
 
 
-# The marker a CronJob carries when nothing runs it per revision and its schedule is the gate
-# (#6128). The restore drill carries it: a gate Job would run a real restore beside the
+# The marker a CronJob carries when nothing runs it per revision and its schedule is the gate.
+# The restore drill carries it: a gate Job would run a real restore beside the
 # scheduled one, under the same `restore-drill-<pvc>` name
 # (`tests/deploy/test_cronjob_only_roles_include_the_gate.py:UNGATED_BY_DESIGN`).
 SCHEDULE_GATE = "homelab/gate"

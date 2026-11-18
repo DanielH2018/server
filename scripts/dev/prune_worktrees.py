@@ -224,7 +224,7 @@ def survey(repo: str) -> list[tuple[str, Worktree, str]]:
 
     A registration whose directory is gone reads VANISHED and is never asked is_dirty, which
     runs git with the tree as its cwd and raised FileNotFoundError, taking the whole report and
-    the weekly `--prune --brief` down with it (#4191). It is never REMOVABLE either: there is
+    the weekly `--prune --brief` down with it. It is never REMOVABLE either: there is
     nothing to remove, and the `git worktree prune` in repair_object_store, at prune_all's
     tail, drops the registration on the next `--prune`.
     """
@@ -252,7 +252,7 @@ def survey_report(
 ) -> tuple[list[str], list[Worktree], int]:
     """The long report's worktree lines, the removable trees and the vanished count.
 
-    A kept worktree is counted, not listed, because it asks nothing of the reader (#7897).
+    A kept worktree is counted, not listed, because it asks nothing of the reader.
     `show_all` lists it as well.
     """
     lines, removable, vanished, kept = [], [], 0, 0
@@ -275,7 +275,7 @@ def reap_claims(repo: str) -> list[str]:
     """Run the checkout's own `findings.py reap` and return the lines to print.
 
     A removed worktree's claims read as stale from then on, but only `reap` releases them, and
-    nothing ran it outside a fan-out's launch (#3928). It is the checkout's copy, so a scratch
+    nothing ran it outside a fan-out's launch. It is the checkout's copy, so a scratch
     repo with no `scripts/dev/findings.py` reaps nothing and says so.
     """
     findings = Path(repo) / "scripts" / "dev" / "findings.py"
@@ -326,7 +326,7 @@ def prune_all(
       How many of `trees` failed to be removed. A tree a live process still uses is named on
       stderr but not counted: one session running at the weekly run's hour would otherwise
       keep its Healthchecks.io check down for a week, and the next run removes the tree once
-      its holder exits (#7949).
+      its holder exits.
     """
     remover = remove if remover is None else remover
     removed = failed = 0
@@ -369,7 +369,7 @@ def brief(prune: bool = False, reap: bool = True) -> int:
     # budgeted at 5s in `.claude/hooks/session-health.py`. Running it at every session start
     # would put N sessions' removals in a race for a saving one weekly run already gets. The
     # weekly timer of the `worktree-sweep` host component is the arm that removes, for
-    # #1435's reason: a worktree-isolated session's git commands are refused against the
+    # this reason: a worktree-isolated session's git commands are refused against the
     # primary checkout, so the sessions that SEE the mess are the ones structurally unable to
     # clear it. Full reasoning in this docstring and in that component.
     """
@@ -420,10 +420,10 @@ def brief(prune: bool = False, reap: bool = True) -> int:
 def check(branch: str) -> int:
     """Print one branch's landed/unlanded verdict and the layer that decided it.
 
-    The worktree-cleanup skill's merged check. It used to compare a `git merge-tree` SHA with
-    master's tree SHA by eye, which is only the third of is_merged's four layers: a squash
+    The worktree-cleanup skill's merged check. Comparing a `git merge-tree` SHA with master's
+    tree SHA by eye is only the third of is_merged's four layers: a squash
     merge that master has since drifted into a conflict with reads unlanded there, and only
-    the forge layer settles it (#3929).
+    the forge layer settles it.
     """
     repo = primary_checkout()
     if repo is None:

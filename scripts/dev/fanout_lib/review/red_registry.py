@@ -1,11 +1,12 @@
-"""What a fix may change in a patch registry the red commits touched (#4875).
+"""What a fix may change in a patch registry the red commits touched.
 
 `forbidden_registry_change` lets a fix change a file in
 `REGISTRIES` that the red commits touched only in the lines whose first field names a file the
 red commits added. The monkeypatch ratchet needs a `<path> <count>` line for every test module
 that patches, so a fix that appends a patching test to a red file must raise that file's count.
-In #5397 the red commits added `scripts/dev/tests/test_cross_plane_replay_renderer_only.py 8`
-and the fix raised it to 9, which the gate refused as an edit to a red data file. Every other
+Without this, the gate refuses a fix that raises a red file's own count, such as
+`scripts/dev/tests/test_cross_plane_replay_renderer_only.py 8` to 9, as an edit to a red data
+file. Every other
 line, comments and blank lines included, must stay, so a fix cannot add, raise or delete
 another module's entry. Lines compare as a multiset, because the ratchet in CI checks the order.
 Dropping a red file's own line passes here too; the ratchet refuses it while the file patches.

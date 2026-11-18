@@ -2,19 +2,19 @@
 
 `run_process` is the one call every `claude`, `git` and `gh` invocation goes through.
 
-`reaping` kills whatever the red phase left running (#3852). The red author runs with
+`reaping` kills whatever the red phase left running. The red author runs with
 `--permission-mode auto`, so it could start
 `nohup sh -c 'sleep 120; echo ... > .claude/settings.local.json' &` and have it write after
 the worktree is reset. While the block is open the pipeline is a child subreaper, so an
 orphaned descendant reparents to it rather than to init, `setsid` or not, and the block's exit
 kills each one. The red author's tests can do the same when a later gate runs them, so the
-green gate, the hunk check and the base check are reaped as well (#4508).
+green gate, the hunk check and the base check are reaped as well.
 
 DECIDED: the red phase and every test run the pipeline starts are reaped, and nothing else.
 The landing runs `land.sh --detach`, which double-forks so the landing outlives the call
 (`land_lib/detach.py`). Under a subreaper the landing would reparent to the pipeline and be
 killed. The implement and fix phases run the red tests as well, and are not reaped: the
-implementer may leave a process on purpose, and #3865 covers what a session starts.
+implementer may leave a process on purpose.
 
 A process started outside this tree, such as through `systemd-run --user`, is not reached.
 """
@@ -32,14 +32,14 @@ PR_SET_CHILD_SUBREAPER = 36
 
 
 def otel_attributes(batch: str, phase: str) -> str:
-    """The `OTEL_RESOURCE_ATTRIBUTES=` assignment one phase's `claude -p` runs under (#5673).
+    """The `OTEL_RESOURCE_ATTRIBUTES=` assignment one phase's `claude -p` runs under.
 
     Claude Code's telemetry reaches Prometheus with each resource attribute as a label, so
     `fanout_batch` and `fanout_phase` make spend, tokens and tool failures readable per batch
     and phase. Before this, those lived only in the review records, split across both hosts.
     An attribute the unit's own environment or the user's settings already carries is kept
     ahead of them. The settings value matters because Claude Code applies a settings `env`
-    over the process environment and replaces the whole string (measured 2026-10-29, #5684):
+    over the process environment and replaces the whole string:
     the agent user's `process.owner=claude` would otherwise displace the batch labels. The
     caller therefore passes this same value through the phase's `--settings` as well.
     """

@@ -55,7 +55,7 @@ HELPER = FILES / "flux_job_connect.py"
 SNAPSHOT_DEFAULTS = K8S_ROLES / "volume-snapshot" / "defaults" / "main.yml"
 FLUX_DEFAULTS = K8S_ROLES / "flux" / "defaults" / "main.yml"
 MOUNT = "/opt/snapshot"
-# Longhorn's delete webhook refuses a longer snapshot name through every route (#2734).
+# Longhorn's delete webhook refuses a longer snapshot name through every route.
 NAME_LIMIT = 63
 # `%Y%m%d%H%M%S`, the token the Job appends at run time.
 TOKEN_WIDTH = 14

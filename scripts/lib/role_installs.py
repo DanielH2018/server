@@ -1,7 +1,7 @@
 """Where a host installs each role script, and which of them a host runs `--no-project`.
 
 A role script runs from the path a host component's `files` entry installs it to, so its
-`sys.path` is the install directory, not its tree path (#4455). `install_map()` maps each
+`sys.path` is the install directory, not its tree path. `install_map()` maps each
 installed path to its tree source, `stage()` copies the sources to that layout under a temporary root, and
 `role_entries()` reads each command a role's or component's files run `--no-project` and
 returns the staged copy it runs. `lib.stdlib_only` walks those entries from the stage.

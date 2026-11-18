@@ -4,7 +4,7 @@
 the orchestrator's worktree, which carries no commits and stays clean, so once the
 orchestrator's session dies `classify` calls that worktree REMOVABLE and every claim it holds
 reads stale. The batches outlive it, because each runs as its own systemd user unit, and `next`
-would offer their issues to a second session until the batch opened its PR (#4601). This module
+would offer their issues to a second session until the batch opened its PR. This module
 answers the question the worktree cannot: is a batch that names this issue still running?
 
 A batch's unit runs on the host the manifest names, which may be a peer. A host that cannot be

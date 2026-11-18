@@ -2,7 +2,7 @@
 
 `fanout.py place launch` claims this repo's issues itself, batch by batch, immediately before
 each batch's agent starts; `fanout.py place claim` takes the same claims for an orchestrator
-that spawns its own subagents (#3695). Another repo's batches are claimed under their own
+that spawns its own subagents. Another repo's batches are claimed under their own
 branch instead, by `fanout_lib.launch`.
 """
 
@@ -90,7 +90,7 @@ def reap_register(tools: Tools, target: Target) -> None:
     """Run `findings.py reap` on the batches' register before `launch` claims anything.
 
     The issue-fanout skill had the orchestrator run `reap` by hand, as the one place anything
-    invokes it (#3943). Here it runs on every launch instead. A failed reap only warns: each
+    invokes it. Here it runs on every launch instead. A failed reap only warns: each
     `claim` still reaps a stale claim on the issue it takes, and `reap` releases nothing when
     its git read fails.
     """
@@ -114,7 +114,7 @@ def post_worked_by(
     """Record on each issue which batch branch took it, once that batch is running.
 
     The agent posted this as its first act, a model turn per issue (237 calls in the
-    transcripts, #3962), and a branch name in backticks inside double quotes made the shell
+    transcripts), and a branch name in backticks inside double quotes made the shell
     run it as a command. `launch` knows the branch, so it posts the comment itself. A failed
     post only warns: the claim, not this comment, is what keeps a second session off the issue.
     """

@@ -21,7 +21,7 @@ THE STATE.
     no-signing-host  6       no readable host signs commits GitHub verifies
 
 `full` is launch's own refusal. `place.placement` skips a host at its live-batch cap and
-places on the next host with memory headroom, so `room` means some host has both (#6421). With
+places on the next host with memory headroom, so `room` means some host has both. With
 every host out of one or the other, `full` carries the refusal launch prints.
 
 A host that cannot be read drops out, as in launch, and is named in the detail. No readable
@@ -30,7 +30,7 @@ cc-wait retries it.
 
 A FRESH READ EVERY TIME. Each read spends one ssh connection to daniel-server and one `gh api`
 call, at a 120s interval. The source does not declare `remote`, so cc-wait never answers a
-wait from another wait's reading (#6758). The ssh connection goes through the transport's
+wait from another wait's reading. The ssh connection goes through the transport's
 control socket (`transport.mux_opts`), which a `launch` started within `MUX_PERSIST_S` reuses
 rather than opening another against `ufw limit ssh`.
 """

@@ -32,10 +32,10 @@ a throwaway age key, and runs `homelab-secrets` (H4.1c; `validate_lib/secrets_ca
 installs a package that owns a conffile, then the `conffile` fixture, whose line-arm edit lands in
 that conffile, and upgrades the owner twice under `--force-confold`: once with its conffile
 unchanged and once changed. Each upgrade records whether dpkg kept the local file or held the
-package back, and the line must survive to the next reconcile (#6088; `validate_lib/conffile_case.py`).
+package back, and the line must survive to the next reconcile (`validate_lib/conffile_case.py`).
 Another holds a dummy docker-ce below the real Pi package's pin, runs the updater, and asserts the
 engine stays held and reads pending, then records what apt does with the hold when a red fixture
-of the Pi package Depends on the pinned version (#6590; `validate_lib/engine_case.py`).
+of the Pi package Depends on the pinned version (`validate_lib/engine_case.py`).
 Another installs the three apt-source components over seeded copies of the files the roles
 wrote, with no conffile prompt (H7.24a; `validate_lib/repos_case.py`). The last cases run
 `hosts/bootstrap-host.sh --local-build` on a container named after each host, then the offline
@@ -43,20 +43,20 @@ branch with a break-glass kit, the kit's two red fixtures, a local build whose D
 the homelab repository satisfies (H7.15a; `validate_lib/bootstrap_case.py`) and a host made from
 the *Adding a host* walkthrough (H7.15d; `validate_lib/fixture_host_case.py`). The last runs the
 script without `--local-build` on daniel-pi, against the test repository with a rewritten copy of
-the script that pins its throwaway key (#6245; `validate_lib/bootstrap_repo_case.py`). A last
+the script that pins its throwaway key (`validate_lib/bootstrap_repo_case.py`). A last
 case runs step 3 with real apt on an image holding no age (`validate_lib/bootstrap_age_case.py`);
 it gives no verdict, not a failure, when snapshot.ubuntu.com answers 5xx or not at all.
 
 The bootstrap cases (`validate_lib/bootstrap_case.py`) run only under `--bootstrap`, which runs
 them and nothing else. CI runs them in a job of their own, `host_packages_bootstrap`, beside the
 legs that run every other group: on one runner their offline builds and the other groups slowed
-each other, and they ran 338-477 s against 214-271 s for the next-longest group (#7819).
+each other, and they ran 338-477 s against 214-271 s for the next-longest group.
 `--bootstrap-shard K/N` runs one share of them, and that job runs three shares per release so no
-two offline builds share a runner (#7879).
+two offline builds share a runner.
 
 `--k3s-download` runs one case and nothing else: daniel-box's `--local-build` with no k3s seeded,
 so install.sh downloads and checks the release binary. CI runs it in a job that cannot fail the
-PR (#7754, #7810).
+PR.
 
 Every case that reaches step 3 asserts that the server log holds its `GET` of
 `dists/homelab/InRelease` or `dists/homelab/Release`. Every case asserts that `/var/lib/apt/lists/` holds a list for the test
@@ -72,7 +72,7 @@ reconcile component and maintainer scripts.
 
 The case groups, the three `Cases` methods and each case module's `run`, run concurrently on
 `--jobs` threads, each in its own scratch directory under `--work`, and each group's output is
-written as one block when it ends (`validate_lib/case_groups.py`, #7784).
+written as one block when it ends (`validate_lib/case_groups.py`).
 
 Usage:
     uv run python scripts/validate/host_package_cases.py --image homelab-host-test:24.04 \\

@@ -3,7 +3,7 @@
 Ported verbatim from longhorn-backup-health.sh.j2's eight `add()` checks. Checks 9 and 10 —
 the trim's and the B2 accounting's evidence and liveness — live in longhorn_cron_evidence_logic.py
 under the same contract. Check 11, the weekly
-volumes a RecurringJob skipped, lives in longhorn_skipped_volumes_logic.py (#3968). Check 12, k3s's
+volumes a RecurringJob skipped, lives in longhorn_skipped_volumes_logic.py. Check 12, k3s's
 S3 etcd snapshots, lives in longhorn_etcd_s3_logic.py. Split from
 the I/O shell (host-side kubectl reads, stamp-file reads) the same way configarr_health_logic.py is: this
 stays stdlib-only, takes every clock reading and file read as an argument, and is unit-testable
@@ -444,7 +444,7 @@ def check_restore_drill_oversize(
     """Names each backed-up volume the drill's actualSize cap keeps out of the rotation.
 
     Check 8 iterates only the drill's candidates, and the drill writes those AFTER the cap, so a
-    volume that grows past it leaves the rotation and check 8 together (#2667). `excluded` is the
+    volume that grows past it leaves the rotation and check 8 together. `excluded` is the
     drill's `excluded_oversize` file as (name, actualSize bytes) pairs. Same severity as check 8:
     both mean "a backed-up volume is not being restore-proven".
     """
@@ -461,7 +461,7 @@ def check_restore_drill_nopvc(excluded: list[str]) -> tuple[int, str] | None:
     """Names each backed-up volume the drill skips because no PVC is bound to it.
 
     The drill restores into a PVC in the source namespace, so a volume with an empty
-    `kubernetesStatus.pvcName` is never a candidate and would leave check 8 unreported (#2706).
+    `kubernetesStatus.pvcName` is never a candidate and would leave check 8 unreported.
     `excluded` is the drill's `excluded_nopvc` file. Same severity as the oversize check.
     """
     if not excluded:
@@ -522,10 +522,9 @@ def build_verdict(
         return "up", msg, msg
 
     # One line per problem, whatever the check put in it. A kubectl error carries its own
-    # newlines, and the wrapper reads the verdict off ONE stdout line: an embedded newline left
-    # the `(+N more ...)` tail as the last line, which the wrapper rejected as an unrecognized
-    # status, so for 70 hours of a dead k3s API the verdict named neither the API nor the check
-    # (#3883).
+    # newlines, and the wrapper reads the verdict off ONE stdout line: an embedded newline
+    # leaves the `(+N more ...)` tail as the last line, which the wrapper rejects as an
+    # unrecognized status.
     problems = [(rank, " ".join(text.split())) for rank, text in problems]
     msg = "; ".join(text for _, text in problems)
     ranked = sorted(problems, key=lambda p: p[0])

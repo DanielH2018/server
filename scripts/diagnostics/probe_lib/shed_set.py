@@ -2,7 +2,7 @@
 
 Each tier in `template_filters/service_tier.py` names a service the house, SSO or the platform
 needs. Everything else is the shed set: the untiered services an operator scales to zero so
-the tiered ones fit on the surviving node (#3481). The set is derived from the `tier` field on
+the tiered ones fit on the surviving node. The set is derived from the `tier` field on
 `cluster/services.yml`, through `lib.service_tiers.shed_set`, so a service joins or
 leaves it by losing or gaining a `tier:` and never by an edit here.
 

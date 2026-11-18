@@ -41,13 +41,13 @@ may promote a newer commit. The plan is docs/target-architecture/deploy/d2-first
   than promoting, for up to IN_FLIGHT_WAIT_S. So each poll that reads `prod` differing from
   `last-good` at a strict ancestor of M moves the deadline to LAND_WAIT_TIMEOUT_S past that
   poll. It stops moving IN_FLIGHT_WAIT_S after P was first read in flight, because `decide`
-  gives up there too (#5164).
+  gives up there too.
 - Inside the weekly reboot's no-promotion window `decide` defers (D5.2b2), so each poll inside
   it moves the deadline to LAND_WAIT_TIMEOUT_S past the window's end and prints that end. The
   window is the widest any T has, VERIFY_CAP_S, since a later T than M may promote M.
   The first such poll also moves `land.sh`'s cap by the window's remaining length, up to
   `window_grace_s`, so a lander whose unit leaves room for the window waits the deferral out
-  rather than giving up on a promotion nothing has failed (#5457).
+  rather than giving up on a promotion nothing has failed.
 - It reads the Kustomizations with the read-only `kubectl`, ancestry with
   `git merge-base --is-ancestor`, DEPLOY_HOLD with `gh variable get`, R's `flux/soak` status
   once the Kustomizations have settled, and `prod` and `last-good` from GHCR. A read that fails keeps the wait
@@ -128,7 +128,7 @@ POLL_S = 30
 # `retryInterval`. `verify` expects `soak` too (D5.3b3), whose `timeout` the renderer sets to
 # `_TAGS_S` plus W (below) and two 1m margins; that term is the longest, so the total adds the
 # interval and the `retryInterval` again. test_promote_land_wait_deadline.py pins this to
-# `chained_timeout.promote_timeout` (#5155). `land-wait` gives up at twice it
+# `chained_timeout.promote_timeout`. `land-wait` gives up at twice it
 # (contract C6): the second half covers `promote.yml`'s `render` and `publish`, 10m each.
 # The soak's chain counts every Kustomization in the bundle, so `land_wait` raises the deadline
 # from the live `soak` Kustomization's `timeout` too (`soak_deadline_s`).
@@ -144,7 +144,7 @@ LAND_WAIT_TIMEOUT_S = 2 * PROMOTE_TIMEOUT_S
 # DECIDED: the deadline moves while that verification is in flight, rather than
 # LAND_WAIT_TIMEOUT_S rising by IN_FLIGHT_WAIT_S. The constant would cover the same worst
 # case, but every stuck landing would then take about 6.7 hours to give up, where this costs
-# only the time a verification is actually in flight (#5164).
+# only the time a verification is actually in flight.
 IN_FLIGHT_WAIT_S = 350 * 60
 
 # How far back `_published_ancestor` walks M's first-parent history. `publish` pushes every
@@ -250,7 +250,7 @@ def hold_detail(hold: str, services: list[str] | None = None) -> str:
     them. The held SHA is the newest commit the promotion carried, which may be another PR's:
     a promotion carries every merge since `last-good`, and one that superseded a run carries
     that run's commit too (D7). So a hold naming none of this PR's services was most likely
-    caused by another merge in the same promotion (#6199).
+    caused by another merge in the same promotion.
     """
     held, _, rest = hold.partition(" ")
     detail = f"{HOLD_VARIABLE} holds {held}"
@@ -413,7 +413,7 @@ def land_wait(
             cs = expected.changes(items)
             tags = sorted(set(services) | changed_tags(cs.names))
             # A widened set names every tag, so a hold's failed names are no evidence of this
-            # PR's own (#6199): the attribution reads the tags the digests decided.
+            # PR's own: the attribution reads the tags the digests decided.
             own = tags if not cs.widened else sorted(services)
             widened, paused = cs.widened, expected.suspended(tags)
             # Every tag the wait covers is suspended, so nothing of M is left to wait on.
@@ -532,7 +532,7 @@ def soak_deadline_s(items: list[dict]) -> int:
 def _moved_past(reads: WaitReads, revision: str) -> str:
     """`homelab`'s commit when it has moved to a descendant of R, else "".
 
-    A later revision that supersedes R ends R's soak with `failure` (#5704), so a soak failure
+    A later revision that supersedes R ends R's soak with `failure`, so a soak failure
     read after `homelab` moved past R is a supersession, not a verdict on R (D7.2). A read
     that fails counts as not moved, so the failure stands.
     """

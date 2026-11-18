@@ -89,7 +89,7 @@ def write_report(report: dict, out: TextIO, path: Path | None = None) -> None:
     print(json.dumps(report), file=out)
     out.flush()
     # `status` reads the file by name. A red author who deleted it and wrote another in its
-    # place, or a symlink, left this process writing to an inode nobody reads (#3884).
+    # place, or a symlink, left this process writing to an inode nobody reads.
     if path is not None and not _same_file(path, out):
         path.unlink(missing_ok=True)
         path.write_text(json.dumps(report) + "\n")

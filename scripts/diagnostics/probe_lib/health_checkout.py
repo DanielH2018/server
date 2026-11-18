@@ -1,4 +1,4 @@
-"""Whether `probe.py health <tag>` runs from a checkout older than the tag's k8s role (#5909).
+"""Whether `probe.py health <tag>` runs from a checkout older than the tag's k8s role.
 
 The resolver in health.py reads a role's workloads from the role's manifests in THIS checkout.
 A checkout that predates the role has no `k8s/roles/<tag>/`, so the resolver returns None and
@@ -12,7 +12,7 @@ happen (`PROBE_UNREADABLE`), not a verdict. `origin/master` is read from the loc
 needs no network, so it is only as fresh as the last fetch, which is enough to see a role
 that has already merged.
 
-A role that exists here can still be stale (#5912). When `origin/master` changed the role's
+A role that exists here can still be stale. When `origin/master` changed the role's
 files after this checkout's HEAD, the gate would judge the live workload against the old
 definition, in either direction. That case is unreadable too, and the fix is the same: run the
 probe from a checkout at or after the merge.
@@ -28,7 +28,7 @@ from lib.git import git
 from lib.repo_paths import K8S_ROLES, REPO
 
 # Opens every `stale_checkout_reason`; `detach_notify.gate` reads it to word the deferral apart
-# from a store that did not answer, because a re-run from the same tree refuses again (#7816).
+# from a store that did not answer, because a re-run from the same tree refuses again.
 STALE_CHECKOUT = "stale checkout"
 
 

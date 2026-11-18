@@ -1,6 +1,6 @@
 """What a session working an issue would otherwise rediscover: the deploy plane and the tests.
 
-WHY (#3955). Across 204 fan-out implementer transcripts, half of all tool calls were
+WHY. Across 204 fan-out implementer transcripts, half of all tool calls were
 exploration. `docs/gitops-pipeline.md` was re-read 22 times, mostly to work out whether and how
 a change deploys, and 22 full-suite runs took up to 188s. Both answers follow from the paths an
 issue cites, and both have a tool that already gives them.

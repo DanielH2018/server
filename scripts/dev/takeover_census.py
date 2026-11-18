@@ -147,7 +147,7 @@ def declares_nothing(obj_key, live, dryrun):
     It reads `removed` from `compare` with nothing declared, so a path another manager co-owns
     and a presumed server default are not counted as deleted, exactly as for any other object.
     Any path left in `removed` fails the census except `last-applied-configuration`, the
-    expected entry every client-side-applied object carries (#5933).
+    expected entry every client-side-applied object carries.
     """
     removed, _, defaulted = compare(live, dryrun)
     by_manager = owners(live)

@@ -85,8 +85,7 @@ def plane_note(
     # DECIDED: name the changed keys by comparing ciphertext across the PR's range, never by
     # decrypting. This contradicts the marker that fired on ANY change because naming the keys
     # "means decrypting": SOPS leaves an untouched value's ciphertext alone, and
-    # `git_dates.rotation_evidence` already reads rotations that way. PR #8362 refreshed every
-    # copy it applied and still ended needs-manual-apply (#8369). Anything the range cannot
+    # `git_dates.rotation_evidence` reads rotations that way. Anything the range cannot
     # answer keeps the blanket note: a missing range, an unreadable side, a key no file reads.
     if SECRETS_FILE not in files:
         return ""
@@ -127,7 +126,7 @@ def derive(
     than none, because it looks like an answer.
 
     `quiet` is `quiet_paths`'s set: a comment-only k8s `defaults/` edit renders the same
-    manifests (#4460), so it deploys nothing.
+    manifests, so it deploys nothing.
     """
     files = list(files)
     if len(files) != changed_files:

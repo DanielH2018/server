@@ -15,7 +15,7 @@ Usage::
 `fanout.py <command> --help` prints that command's own options. Each command's logic is one
 module under `fanout_lib/`, named in `COMMANDS`. This file imports only the module the command
 names: `review` and `place clean-one` run under `uv run --no-project`, which installs nothing,
-so no other command's imports may reach them (#4167).
+so no other command's imports may reach them.
 """
 
 import argparse

@@ -119,9 +119,9 @@ def plan(work: Path, green: Path) -> list[Planned]:
     script = SCRIPT.read_text()
     # DECIDED: every online case seeds k3s, so no case exercises install.sh's own binary
     # download or its check of that binary. One unseeded case fails the run whenever a GitHub
-    # release outage outlasts `retry`'s window (#7625, #7729), and install.sh still writes the
+    # release outage outlasts `retry`'s window, and install.sh still writes the
     # unit that unit_problems reads. The `k3s-download` case below covers that download, in
-    # the `continue-on-error` step of ci.yml's `host_packages` job (#7754).
+    # the `continue-on-error` step of ci.yml's `host_packages` job.
     cases = [
         Planned(
             f"bootstrap {host} with --local-build",
@@ -211,7 +211,7 @@ def submission_order(planned: list[Planned]) -> list[int]:
     """The plan positions of `planned`, the offline builds first and otherwise in plan order.
 
     The builds are the longest items, so starting them in the first wave keeps the short host
-    items from delaying them (#7866).
+    items from delaying them.
     """
     return sorted(range(len(planned)), key=lambda i: not planned[i].builds_offline)
 
@@ -225,7 +225,7 @@ def shard(planned: list[Planned], number: int, count: int) -> list[Planned]:
     """The items shard `number` of `count` runs, in plan order.
 
     The offline builds are dealt first, one to each shard while they last, then the other items
-    round-robin. With as many shards as builds, no two builds share a runner's CPUs (#7879).
+    round-robin. With as many shards as builds, no two builds share a runner's CPUs.
     """
     dealt = [p for p in planned if p.builds_offline]
     dealt += [p for p in planned if not p.builds_offline]

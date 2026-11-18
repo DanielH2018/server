@@ -42,10 +42,9 @@
 # (LIVE_TOKEN below, and the --cluster-reset note further down). docs/k3s-etcd-restore.md
 # carries the evidence and the re-verify command.
 #
-# STATUS. The FULL drill passes, in a throwaway guest: a run restored and served 8 namespaces,
-# 72 Deployments, 45 PVCs, 48 CRDs and 51 Secrets, 50 seconds end to end. The 2026-11-01 run on
-# k3s v1.37.1 failed at the scratch server's start on its loopback advertise address; the
-# endpoint-reconciler flag in ISOLATION_ARGS is the fix (#6846). `--list-only` is the
+# STATUS. The FULL drill passes in a throwaway guest. The endpoint-reconciler flag in
+# ISOLATION_ARGS lets k3s v1.37.1 start the scratch server on its loopback advertise address.
+# `--list-only` is the
 # weekly cheap proof of the off-box leg on daniel-box. It also runs restore gate 3 against the
 # snapshot it lists, so the runbook's ETCDSnapshotFile read is drilled weekly rather than on the
 # day of an outage — see require_snapshot_restorable.
@@ -159,18 +158,17 @@ log() { echo "[$(date -u +%H:%M:%S)] $*"; }
 
 # DECIDED: the stamp is read, and both halves are shipped. homelab-etcd-restore-drill.timer runs
 # `--list-only` weekly (k3s_etcd_restore_drill_cron, Monday 10:20),
-# run in place from the primary checkout, since 2026-08-28 (PR #531). The fail-closed staleness
-# reader is `check_etcd_restore_drill` in monitor-bridge/files/checks/service.py, since PR #535:
+# run in place from the primary checkout. The fail-closed staleness
+# reader is `check_etcd_restore_drill` in monitor-bridge/files/checks/service.py:
 # it reads `last-success-list-only` from this STAMP_DIR, monitor-bridge serves the verdict as
 # `homelab_check_success{check="etcd_restore_drill"}`, and the `EtcdRestoreDrillFailing` rule in
 # observability's bridge-exporter.yaml pages on it.
 #
-# The ordering this block fixed is kept rather than deleted, because it is the reason the pair
-# works. A fail-closed reader wired BEFORE the cron existed would have sat red essentially
-# always, which is a pager that trains the operator to ignore it; the cron is what makes a red
-# mean something. monitor-bridge is the owner because it already aggregates unrelated
-# stamps — not longhorn-backup-health.sh, which would be reading a second drill's evidence out of
-# the first drill's watchdog (2026-08-23b review M7).
+# The ordering is the reason the pair works. A fail-closed reader wired BEFORE the cron
+# exists sits red essentially always, which is a pager that trains the operator to ignore it;
+# the cron is what makes a red mean something. monitor-bridge owns the reader because it
+# already aggregates unrelated stamps — not longhorn-backup-health.sh, which would be reading
+# a second drill's evidence out of the first drill's watchdog.
 #
 # The reader keys on the MODE. `last-success-list-only` and `last-success-full` are written
 # separately and must not be conflated: only the weekly list-only leg is scheduled, so a reader
@@ -178,9 +176,7 @@ log() { echo "[$(date -u +%H:%M:%S)] $*"; }
 # nothing has ever proven it on this host. The reader opens `last-success-list-only` by name and
 # says so in its message.
 #
-# The stamp still earns its place unread: it is what makes "when did this last pass" answerable
-# at all, where before 2026-08-23 the only record was a hand-edited line in
-# docs/k3s-etcd-restore.md.
+# The stamp makes "when did this last pass" answerable at all.
 #
 # Record a pass. $1 is the mode — `list-only` or `full` — and it is written into the file so a
 # reader cannot mistake the cheaper proof for the stronger one. Best-effort: a drill that passed
@@ -342,8 +338,8 @@ ISOLATION_ARGS=(--data-dir "$SCRATCH"
                 --advertise-address 127.0.0.1
                 # A loopback advertise address needs the endpoint reconciler off. From k3s
                 # v1.37.1 the API server refuses to start with one ("cannot use public IP
-                # 127.0.0.1 with endpoint reconciler ... may not be in the loopback range"),
-                # measured on the 2026-11-01 monthly drill (#6846). The check is the reconciler's
+                # 127.0.0.1 with endpoint reconciler ... may not be in the loopback range").
+                # The check is the reconciler's
                 # own ValidateIP (kubernetes pkg/controlplane/instance.go), and only `none`
                 # accepts any address. `none` also leaves the restored `kubernetes` Endpoints
                 # untouched, so the drill reads the snapshot's object rather than one it rewrote.

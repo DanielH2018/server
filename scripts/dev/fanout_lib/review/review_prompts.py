@@ -55,7 +55,7 @@ FINDINGS_SCHEMA = {
                     # The delta review quotes the line it cites as the fix head holds it;
                     # `delta_confirm` counts the finding as left only if that quote is there.
                     "evidence": {"type": "string"},
-                    # Only on a `test` finding; `review_record.actionable` reads it (#4023).
+                    # Only on a `test` finding; `review_record.actionable` reads it.
                     "subkind": {
                         "type": "string",
                         "enum": ["vacuous", "scaffold", "missing-coverage"],
@@ -113,7 +113,7 @@ def _passing_note(passing: Sequence[str]) -> str:
 def _absent_note(absent: Sequence[str]) -> str:
     """The red tests to check for vacuity: they failed at the red gate on a missing name.
 
-    Such a test proves the name was missing, not that its assertion can fail (#4023).
+    Such a test proves the name was missing, not that its assertion can fail.
     """
     if not absent:
         return ""
@@ -131,7 +131,7 @@ def delta_prompt(
     """The second reviewer's prompt: the fix round, inside the whole change it sits in.
 
     The fix alone hid how it interacts with the rest of the PR: 3 of 10 findings left after a
-    fix round were new titles the delta pass surfaced (#3954). So the reviewer reads the whole
+    fix round were new titles the delta pass surfaced. So the reviewer reads the whole
     change and is told which part of it is the fix.
     """
     return f"""An earlier review of this pull request raised the findings below, and the author

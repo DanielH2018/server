@@ -25,7 +25,7 @@ SERVER = "DanielH2018/server"
 HEADLESS_PYTHON = "3.15.2"
 # The agent user cannot read /home/ubuntu, and its login profile
 # (hosts/components/claude-code/templates/agent-user-profile.j2) points RUN_HOOK_PROJECT_DIR at its
-# own clone instead (#3627). The repo's hook shim, .claude/hooks/run-hook.sh, reads the same
+# own clone instead. The repo's hook shim, .claude/hooks/run-hook.sh, reads the same
 # variable. Unset, the checkout is the primary one this module lives under, which is the
 # operator's /home/ubuntu/server for `ubuntu`.
 PROJECT_DIR_ENV = "RUN_HOOK_PROJECT_DIR"
@@ -84,7 +84,7 @@ def branch_name(batch: str) -> str:
     """The branch a batch's worktree is created on, claimed under and pushed from.
 
     The agent user's GitHub account may push only `worktree-<prefix>+**` (the "agent branch
-    fence" ruleset, #3618), the branch EnterWorktree gives a `<prefix>/<slug>` worktree. When
+    fence" ruleset), the branch EnterWorktree gives a `<prefix>/<slug>` worktree. When
     the running user's environment names a prefix, the batch branch takes that shape.
     Otherwise it is `worktree-fanout-<batch>`. `lib.worktree_owner` reads the same prefix
     to decide whose clone a claimed branch lives in.

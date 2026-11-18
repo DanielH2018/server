@@ -2,7 +2,7 @@
 
 `monitors` lists what fires. A check can be red without firing: held `up` by its `*_CONSECUTIVE`
 streak, skipped behind a down gate, or missing its rule in `bridge-exporter.yaml`. Sessions read
-those cases by hand through `probe.py metric` (#8860). This prints one line per exported check:
+those cases by hand through `probe.py metric`. This prints one line per exported check:
 its value, the age of its last run, and its notes:
 
 - `down` and the members the row names, from `homelab_check_success` and `homelab_check_detail`;

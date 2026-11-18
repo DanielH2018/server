@@ -316,7 +316,7 @@ _MANIFEST_FILE_KEY = re.compile(
 _MANIFEST_BASENAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*\.ya?ml\b")
 _YAML_COMMENT = re.compile(r"(^|\s)#.*$")
 
-# The derivation for a role that sets no `manifests_files` (#3662).
+# The derivation for a role that sets no `manifests_files`.
 #
 # A role's own manifests are its top-level `templates/*.yaml.j2`. A Dockerfile, a `.sh.j2` and a
 # `templates/config/` file are not, by their name or their depth.
@@ -604,7 +604,7 @@ def role_fields(
 
     `prune` goes on `<tag>` alone, and `<tag>-deferred` keeps `prune: true`, as H1 states it:
     "prune: false on that Kustomization, and prune: true everywhere else". The operator ruled
-    so on 2026-10-22 for D5 step 29, where `flux-deferred`'s prune deletes the `verify-drill`
+    so for D5 step 29, where `flux-deferred`'s prune deletes the `verify-drill`
     OCIRepository once the drill is off. A plumbing role that adds deferred files later
     therefore gets deferred objects that Flux prunes. `bundle.flux_files` makes the split, and
     its decision marker carries the reasoning. `timeout` goes on both `<tag>` and

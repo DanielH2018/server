@@ -3,7 +3,7 @@
 WHY A MODULE WITH NO IMPORTS. ``render_guard.containers_entries_in`` was meant to be the one
 rule for which ``containers_list`` entries count, but importing ``render_guard`` costs a
 ``jinja2`` and a ``yaml`` import. So eight readers wrote their own filter, and they disagreed
-about an entry with an empty ``name`` or none at all (#3357), and host names were copied by
+about an entry with an empty ``name`` or none at all, and host names were copied by
 hand into two tuples. This module imports only the standard library and ``repo_paths``, the same reason
 ``repo_paths`` was split out of ``render_guard``.
 

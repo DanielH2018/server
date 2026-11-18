@@ -36,7 +36,7 @@ from lib.exit_codes import USAGE_ERROR
 from lib.kubectl import MissingKubectl, Tools, WrongCluster, kubectl_json
 from lib.repo_paths import MONITOR_BRIDGE_FILES
 
-# The robustness allow-list is monitor-bridge's, shared rather than restated (#3668). Appended,
+# The robustness allow-list is monitor-bridge's, shared rather than restated. Appended,
 # not prepended, so that role's `check.py` and packages cannot shadow anything a caller of this
 # module imports later.
 sys.path.append(str(MONITOR_BRIDGE_FILES))
@@ -126,7 +126,7 @@ class Unreadable(RuntimeError):
 
     `cluster` says whether that source was a kubectl read. The runner prefixes a cluster read's
     message with "cannot ask the cluster"; a local read, such as a drill's stamp, prints its
-    own message, which names the file (#4485).
+    own message, which names the file.
     """
 
     def __init__(self, message: str, *, cluster: bool = True):

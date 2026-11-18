@@ -1,9 +1,9 @@
-"""The implementer's contest of a red test whose premise is false (#5400, #4874).
+"""The implementer's contest of a red test whose premise is false.
 
 WHY. The red author writes the tests from the issue text alone, and an issue can be wrong
-about the tree. In #4874 the red author assumed `claude-rc.service` ran on every host, but it
-runs only on daniel-box, so the correct fix failed the red test. The implementer had no way
-to say so that the pipeline read, the green gate held the PR, and it was landed by hand.
+about the tree: a red author can assume `claude-rc.service` runs on every host when it runs
+only on daniel-box, so the correct fix fails the red test. Without a contest the implementer
+has no way to say so that the pipeline reads, and the green gate holds the PR.
 
 THE CONTEST. A fix round's reply contests the green gate when it says `<node> is wrong` of
 every red node the gate's last run reports not passing and cites at least one `path:line`
@@ -17,9 +17,8 @@ so it upholds nothing. Only an `unmet` run can be contested: a refusal about wha
 touched, an untracked config file or a failed clone says nothing about whether a test is
 wrong.
 
-The alternative #4875 named, having the red author verify each premise against the tree, was
-not taken: the red author already reads the tree, and #4874's premise was one it did not think
-to check. A second reader who sees the cited line catches that; a stricter brief does not.
+Having the red author verify each premise against the tree is not an alternative: the red
+author already reads the tree, and a premise it did not think to check stays unchecked. A second reader who sees the cited line catches that; a stricter brief does not.
 
 AFTER. An upheld contest goes on past the failing red test, and the PR comment says so. CI runs
 the whole suite on the PR, so the contested test fails there, and `review_ci.ci_hold` holds the

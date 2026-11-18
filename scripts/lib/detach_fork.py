@@ -2,13 +2,13 @@
 
 Two different kills can reach a detached run, and each half of this module escapes one.
 
-THE CALLER'S PROCESS TREE (issues #3158, #3159). A harness that times out a Bash call kills the
+THE CALLER'S PROCESS TREE. A harness that times out a Bash call kills the
 call's whole descendant tree, found by walking parent pids. A child in its own session
 (`setsid`) is still a descendant while its parent lives. `fork_detached` forks twice: the
 intermediate child calls `setsid`, forks the worker and exits at once. The worker reparents to
 init or the nearest subreaper -- `systemd --user` on daniel-box -- outside the caller's tree.
 
-THE CALLER'S CGROUP (issue #3160). A fan-out agent runs inside a systemd user unit
+THE CALLER'S CGROUP. A fan-out agent runs inside a systemd user unit
 (`fanout-<n>.service`), and every process it starts sits in that unit's cgroup whatever its
 fork shape. `systemctl --user stop` kills the whole cgroup, so a landing died mid-deploy with
 nothing recording that it stopped. `leave_unit_cgroup` moves the calling process into its own
@@ -20,7 +20,7 @@ the line this writes into the run's log names the scope.
 Only a `.service` under `user@<uid>.service` is left. A system unit is left
 alone on purpose: moving out of it needs root. A login session's scope is left alone too.
 
-A SYSTEM UNIT'S CALLER STARTS THE RUN IN THE USER MANAGER INSTEAD (issue #6864). The cron units
+A SYSTEM UNIT'S CALLER STARTS THE RUN IN THE USER MANAGER INSTEAD. The cron units
 such as `homelab-docs-refresh.service` run as the operator with `KillMode=control-group`, so a
 landing they detach dies when their script exits, and no move can save it. `in_user_manager`
 wraps the command in `systemd-run --user`, so the user manager starts it fresh in a transient
@@ -50,7 +50,7 @@ BUSCTL_TIMEOUT_S = 10
 
 # How long a log may sit unchanged with neither a pid nor a code beside it before a probe reads
 # the run as dead. The caller writes the pid milliseconds after it touches the log, so a run
-# past this never forked, or its caller died before writing the pid (issue #4513).
+# past this never forked, or its caller died before writing the pid.
 START_GRACE_S = 60
 
 # The cgroup v2 line of a process inside a user manager's service, and that service's name.

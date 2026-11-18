@@ -53,11 +53,11 @@ bundle and its changed set (`chained_timeout.promote_timeout`), and capped at
 
 THE STORAGE ROLLOUT. While `longhorn` is expected, a failure of any other name is provisional
 until `flux/longhorn` has read `success` for a grace, or `longhorn` overruns its own timeout
-(`storage_rollout.py`, #5997).
+(`storage_rollout.py`).
 
 THE CONTROLLER ROLLOUT. While `flux` is expected, a failure of `flux` or `soak` is provisional:
 a later `success` on the same name ends it, and none inside a fixed grace turns it final
-(`controller_rollout.py`, #6013).
+(`controller_rollout.py`).
 
 THE OTHER TWO HALVES `decide` calls:
   - `wait_settled`, the wait on a verification in flight (the DECIDED marker below);
@@ -132,11 +132,11 @@ POLL_S = 30
 # run's `decide` and an earlier run's `tag` (promote.yml, the `Move prod` step). A run that
 # never settles stalls promotion as `current`, which D2.6d's `PromotionStalled` alert pages.
 # When no other promote run past its decide is in progress for LOST_SETTLE_S, the run that
-# moved `prod` finished without a `settle` (#7863): the wait ends `current` at once and names
+# moved `prod` finished without a `settle`: the wait ends `current` at once and names
 # `prod`'s commit and digest (`Settled.lost_settle`). `decide` never moves `last-good` itself:
 # its job holds no write to the registry. promote.yml's `reconcile` job, which runs no
 # repository code, reads that run's `homelab/promote-verdict` status and moves `last-good` or
-# writes the hold (#7865). The long form is docs/flux-deploy-plane.md, *Verification*.
+# writes the hold. The long form is docs/flux-deploy-plane.md, *Verification*.
 #
 # Longer than the `verify` job's timeout-minutes plus `settle`'s, with ten minutes for runner
 # queueing, so the wait outlasts any run still verifying
@@ -157,7 +157,7 @@ VERDICT_STATUS_CONTEXT = "homelab/promote-verdict"
 
 # A wait that runs the full IN_FLIGHT_WAIT_S reads DEPLOY_HOLD about 700 times and the
 # registry's tags two or three times as often, so one 5xx among them ended a wait that would
-# have succeeded (run 40197827680, #6269). A read in the wait that fails with a 5xx is tried
+# have succeeded (run 40197827680). A read in the wait that fails with a 5xx is tried
 # again, READ_RETRY_S apart, up to READ_ATTEMPTS reads in all. Any other failure, and a
 # missing or empty variable, still ends the run at once.
 READ_ATTEMPTS = 3
@@ -713,7 +713,7 @@ def lost_settle(
     """The reason for a `prod` that differs from `last-good` with no promote run in progress.
 
     The run that moved `prod` ended without a `settle` that moved `last-good` or wrote a hold,
-    as when GitHub never created the job (#7863). This run's `reconcile` job acts on the
+    as when GitHub never created the job. This run's `reconcile` job acts on the
     `homelab/promote-verdict` status, and the operator's two ways out cover a `reconcile`
     that fails. `no_reset_hold` is `settle`'s hold for a `prod` that changes a snapshot role
     or a forward-only tag; the second way out then writes it and tags `prod` held, never a

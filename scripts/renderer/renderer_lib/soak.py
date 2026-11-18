@@ -237,7 +237,7 @@ def rbac() -> list[dict]:
     Kustomization. A ClusterRole lets it list pods and read ReplicaSets, the hop from a
     Deployment's pod to its Deployment, in any namespace. The grant is cluster-wide because a
     Role in a namespace that a tag's own revision creates would fail `soak`'s apply on that
-    revision: `soak` has no `dependsOn` edges, so Flux may apply it before the tag (#5380).
+    revision: `soak` has no `dependsOn` edges, so Flux may apply it before the tag.
     `snapshot.rbac` puts its PVC read in a ClusterRole for the same reason.
     """
     return [

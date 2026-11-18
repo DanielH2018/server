@@ -1,7 +1,7 @@
 """Judge the directories under .claude/worktrees/ that git no longer registers.
 
 An orphan holds nothing git lacks when it has no regular files, or when a ref reaches a blob
-holding each file's content (#4425). `prune_worktrees.py --prune` removes those and
+holding each file's content. `prune_worktrees.py --prune` removes those and
 keeps the rest, naming each file git never stored. The CLI there is the only caller.
 """
 
@@ -69,17 +69,16 @@ def unstored_files(repo: str, path: str) -> list[str] | None:
 
     An empty list means the orphan holds nothing git lacks, so removing it loses nothing:
     it has no regular files, or every one's content is a blob some ref reaches, under any
-    path (#4425). None means a walk or a git call failed, so nothing is known about it.
+    path. None means a walk or a git call failed, so nothing is known about it.
 
     `git hash-object --no-filters --stdin-paths` hashes the content without `-w`, so nothing
     is written to the store. Symlinks and other non-regular entries are skipped, because
-    removing one loses no file content. So is the orphan's own `.git` gitdir pointer (#4511).
+    removing one loses no file content. So is the orphan's own `.git` gitdir pointer.
 
     # DECIDED: "stored" means reachable from a ref (`git rev-list --objects --all`), not
-    # present in the store, the check #4425 proposed. A blob staged in a worktree and never
+    # present in the store. A blob staged in a worktree and never
     # committed is present but unreachable, and `repair_object_store` at the same `--prune`'s
     # tail prunes unreachable objects after a day; the orphan would have been its last copy.
-    # The walk costs 0.12s for 89k objects on daniel-box.
 
     # DECIDED: a gitignored file counts like any other, so a virtualenv or a cache keeps its
     # orphan. Exempting ignored paths would also delete an untracked credentials file or a
@@ -151,7 +150,7 @@ def prune_orphans(paths: list[str]) -> int:
     Returns:
       How many of `paths` failed to delete, each named on stderr. The caller exits non-zero
       on any, so the weekly timer cannot read a failed removal as a clean sweep. An orphan a
-      live process uses is named on stderr too but not counted: it is a skip (#7949).
+      live process uses is named on stderr too but not counted: it is a skip.
     """
     failed = 0
     for path in paths:

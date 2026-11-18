@@ -46,7 +46,7 @@ LONGHORN_DRIVER = "driver.longhorn.io"
 # `volume-snapshot`'s run token: the UTC time the Job's pod starts.
 TOKEN_FORMAT = "%Y%m%d%H%M%S"
 # Longhorn's delete webhook refuses a longer name through every route, so nothing could prune
-# the snapshot (#2734).
+# the snapshot.
 NAME_LIMIT = 63
 # The retention floor `claim.yml` clamps to: a rollback takes its own snapshot and prunes
 # before `volume-revert` reads the chain, so both must survive one run's prune.

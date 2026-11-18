@@ -16,7 +16,7 @@ as the host renderer does. The defaults are not optional: StubUndefined
 iterates empty, so a `{% for %}` over a list a role declares renders its whole body away and
 both linters sweep what is left. `tests/_shell_render.py` renders through this module
 for the same reason in reverse — a guard asserting on a rendered script must assert on the
-script this gate lints (#3178).
+script this gate lints.
 
 Structural check only: SOPS secrets and other runtime vars are stubbed (StubUndefined, plus a
 small override map for values that need to be shell-plausible — see SHELL_STUB_OVERRIDES), so no
@@ -75,11 +75,11 @@ def template_context(path: Path, overrides: dict | None = None) -> dict:
     A render without a role's own defaults is not the script the host runs. `StubUndefined`
     iterates empty, so `{% for peer in artifacts_peer_sources %}` dropped the whole body of
     `sync-artifacts.sh.j2` — ~45 of its 100 lines, including every rsync call — and both
-    linters swept the remainder as if the loop were not there (#3178). `render_context` lays
+    linters swept the remainder as if the loop were not there. `render_context` lays
     the defaults under the inventory and expands them.
 
     Exposed so `tests/_shell_render.py` renders a script with the context this gate
-    lints it in — one render, two consumers, no second stub set to drift (#3178). `overrides`
+    lints it in — one render, two consumers, no second stub set to drift. `overrides`
     go over the stubs, for a guard that needs a value the inventory does not hold.
     """
     overrides = {**SHELL_STUB_OVERRIDES, **(overrides or {})}

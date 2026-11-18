@@ -1,9 +1,9 @@
-"""The textfile gauge of fan-out work that waits on a person, written by each lander pass (#5671).
+"""The textfile gauge of fan-out work that waits on a person, written by each lander pass.
 
 WHY. Most of the fan-out pipeline's idle hours are work that waits on a person, and nothing
 counted them as they happened. Over 2026-10-13 to 10-18, 15 PRs idled more than 2h before
 their first land attempt, 207h in all. Every one was opened between 21:00 and 05:00 UTC, and
-the lander held four of them about 10h each for touching its own surface (#5659).
+the lander held four of them about 10h each for touching its own surface.
 
 WHERE IT RUNS. `fanout.py land-server` already reads daniel-server's review records over one
 ssh call and the open PRs in one `gh` call, and `autoland.problems` already says why each PR
@@ -28,7 +28,7 @@ DECIDED: `manual` issues are not counted. They are parked for the operator by de
 their oldest age would always be the largest and would hide every other reason.
 
 Each pass also stamps every counted PR wait into `operator-waits.json` beside the lander's
-logs (#5682): `{"pr", "reason", "since"}` when a pass first sees the PR held for that reason,
+logs: `{"pr", "reason", "since"}` when a pass first sees the PR held for that reason,
 and `until` when a later pass sees it held for another reason or not at all. The gauge says
 how many waits are open; the stamps say which PR's wait ended when, and
 `scripts/dev/pipeline_timeline.py` joins them into `waited_h`. A stamp has the pass's resolution (10 minutes).
@@ -208,7 +208,7 @@ ISSUE_STATES = ("free", "claimed", "deferred", "blocked", "manual")
 
 
 def issue_states(issues: Iterable[Mapping], today: str) -> dict[str, int]:
-    """How many open `claude` issues sit in each state, read from labels, blockers and claims (#5672).
+    """How many open `claude` issues sit in each state, read from labels, blockers and claims.
 
     `manual` wins, then a `not-before:<date>` label later than `today` (`deferred`), then an
     open "blocked by" issue (`blocked`), then a held `Claim:` comment (`claimed`); the rest

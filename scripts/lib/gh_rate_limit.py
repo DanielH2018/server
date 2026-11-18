@@ -1,9 +1,9 @@
-"""How long a `gh` call that GitHub refused for rate limiting has to wait (#7993).
+"""How long a `gh` call that GitHub refused for rate limiting has to wait.
 
 A rate-limit 403 is not an answer about the request. The shared token spends 5000 core calls an
 hour, and a landing that refused on the 403 was relaunched by hand, which spent more. A caller
 that reads through `gh` asks `wait_s` for the pause and retries after it; one that reads the
-REST API itself asks `http_wait_s` (#8139).
+REST API itself asks `http_wait_s`.
 """
 
 import re

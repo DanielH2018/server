@@ -1,11 +1,10 @@
 """Resolve a path an issue cites relative to some directory to the tracked file it names.
 
-WHY (#4232). An issue body often cites a path from a subdirectory: #4116 cites
-`fanout_lib/clean.py`, meaning `scripts/dev/fanout_lib/clean.py`. `issue_model.cited_paths`
-returns what the body spells, so two consumers that compare against repo-root paths missed:
-`red_green_eligible` refused the fragment, and the fan-out collision check let a fragment and
-its full path land in two batches. 337 of the 1,617 `claude` issues filed from 2026-09-01 to
-2026-10-10 cite at least one such fragment.
+WHY. An issue body often cites a path from a subdirectory: `fanout_lib/clean.py`, meaning
+`scripts/dev/fanout_lib/clean.py`. `issue_model.cited_paths` returns what the body spells, so
+two consumers that compare against repo-root paths would miss: `red_green_eligible` would
+refuse the fragment, and the fan-out collision check would let a fragment and its full path
+land in two batches.
 
 A fragment resolves only when exactly one tracked file ends with `/<fragment>`. An ambiguous or
 unmatched one stays as written, so nothing is resolved by guesswork.

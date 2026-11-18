@@ -18,7 +18,7 @@ read, not a command, and a field for the same reason `worktree_facts` is one.
 `running_batch_holds` reads the same manifests and asks each batch's host whether its unit is
 still running. It does run a command, `systemctl --user is-active`, over ssh for a peer host,
 and it is a field so no test reads a real unit.
-`peer_worktrees` reads the other host's `git worktree list` over ssh (#6840). It is the one
+`peer_worktrees` reads the other host's `git worktree list` over ssh. It is the one
 field whose default is NOT the real implementation: the shared test fake leaves it unset, and
 a default that opened ssh would make every test with a "no worktree" claim depend on reaching
 the peer. `findings.py`'s entry point passes `read_peer_worktrees` instead.
@@ -99,7 +99,7 @@ class FindingsTools:
     # real `~/.claude/fanout`.
     launched_branches: Callable[[str, str], set[str]] = branches_launched_by
     # `(repo, stale issue numbers) -> {issue: BatchHold}` for the issues a still-running fan-out
-    # batch works, which keeps their claims live after the orchestrator's session dies (#4601).
+    # batch works, which keeps their claims live after the orchestrator's session dies.
     # None is this repo, as for `repo` above.
     running_batch_holds: Callable[
         [str | None, Collection[int]], Mapping[int, BatchHold]
@@ -136,7 +136,7 @@ def aimed(tools: FindingsTools, repo: str | None) -> FindingsTools:
 
     Reads and writes move together. A dedup read against this repo while the create went
     elsewhere re-files the finding on every run, and issue numbers collide across repos: a
-    server PR saying `Closes #750` read by `next` would withhold dotfiles #750.
+    server PR saying `Closes #12` read by `next` would withhold dotfiles #12.
 
     The worktree read moves with them, to the checkout `REGISTER_CHECKOUTS` names, since a
     claim names a branch in the repo that owns the issue. A repo with no entry keeps this

@@ -19,7 +19,7 @@ The file rules:
 One rule is the renderer's alone: a role's `templates/verify/*.yaml.j2` (`verify_files`) render
 unlabelled into `DIR/cluster/<tag>-verify/`, the verify and post-apply mutation Jobs Flux runs
 once the tag is applied (D5.1a1). Its `templates/precheck/*.yaml.j2` (`precheck_files`) render
-the same way into `DIR/cluster/<tag>-precheck/`, the check Jobs the tag waits on (#5719).
+the same way into `DIR/cluster/<tag>-precheck/`, the check Jobs the tag waits on.
 Ansible never reads either directory. Those templates also see `flux_job_image`, the image
 every such Job runs, and `flux_job_connect`, the text of the helper a Job script that dials a
 Service carries beside it.
@@ -126,11 +126,11 @@ class RenderedTag:
         snapshot: The same for `DIR/cluster/<tag>-snapshot/`, which `snapshot.attach_snapshots`
             adds last, for a published tag with snapshot claims (D5.2a).
         prepull: The same for `DIR/cluster/<tag>-prepull/`, which `prepull.attach_prepulls`
-            adds, for a published tag whose role sets `flux_prepull_timeout` (#5525).
+            adds, for a published tag whose role sets `flux_prepull_timeout`.
         verify: The same for `DIR/cluster/<tag>-verify/`, empty for a role that ships no
             `templates/verify/` (D5.1a1).
         precheck: The same for `DIR/cluster/<tag>-precheck/`, empty for a role that ships no
-            `templates/precheck/` (#5719).
+            `templates/precheck/`.
         sources: Each rendered file of `files` and `deferred` mapped to the basename of the
             template it renders from, such as `service-default.yaml.j2` for `service.yaml`.
     """

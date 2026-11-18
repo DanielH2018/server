@@ -107,7 +107,7 @@ def _name_is_sensitive(name):
 
 
 # A credential can also sit inside a value. A Prowlarr proxy download URL in a history record's
-# `data.downloadUrl` carries Prowlarr's API key under a dict key no name rule matches (#6582),
+# `data.downloadUrl` carries Prowlarr's API key under a dict key no name rule matches,
 # and a log message can quote the same URL, so the walk below passes every string through
 # `core.redact_query_params` rather than only the URL-shaped keys.
 

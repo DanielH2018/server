@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The container case for the Pi's held Docker engine (#6590).
+"""The container case for the Pi's held Docker engine.
 
 H7's *Verification* names the proof: a dummy `docker-ce` at version A is installed and held, the
 real homelab-daniel-pi pins docker-ce to version B, and after a homelab-updater run docker-ce is
@@ -27,7 +27,7 @@ so the updater never asks apt to move the engine, and the hold is apt's to keep.
 
 Measured. The container half runs only in the `host_packages` job: it needs
 `docker run --privileged --cgroupns=host` with systemd as PID 1, which `dockrun` refuses, and
-daniel-box has no Docker. What ran locally, on 2026-10-30 with apt 2.8.3 as a non-root
+daniel-box has no Docker. What ran locally, with apt 2.8.3 as a non-root
 simulation (`apt-get install -s` over a throwaway status file, the same dummy debs from
 `engine_debs`, a stand-in `homelab-daniel-pi` with `Depends: docker-ce (= B)`):
 

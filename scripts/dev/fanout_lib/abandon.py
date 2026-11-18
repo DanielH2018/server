@@ -2,11 +2,11 @@
 
 `clean` keeps an unmerged tree by design, so giving up on a batch took a hand-run teardown on
 its host: unlock, force-remove, `branch -D`, a second `clean`, then one `findings.py release`
-per issue (#3919, #3924). `abandon` is that teardown as one command. It discards whatever the
+per issue. `abandon` is that teardown as one command. It discards whatever the
 agent committed and stops the batch's agent, which is why it names exactly one batch.
 
 `stop` ends the agents and keeps their trees for `clean`. Both release the batches' claims,
-which sit under the orchestrator's branch and so outlive any `reap` (#3925).
+which sit under the orchestrator's branch and so outlive any `reap`.
 """
 
 import dataclasses
@@ -198,7 +198,7 @@ def cmd_stop(args, tools: Tools) -> int:
         print(
             f"{b.batch} on {b.host}: {'stopped' if proc.returncode == 0 else proc.stderr.strip()}"
         )
-        # A stopped agent works nothing, so its claims go back (#3925). An open PR it left
+        # A stopped agent works nothing, so its claims go back. An open PR it left
         # still withholds the issue from `next`, so nobody duplicates work that may merge.
         if proc.returncode == 0:
             try:
@@ -211,7 +211,7 @@ def cmd_stop(args, tools: Tools) -> int:
         # The worktree stays locked until `clean` runs it through lib.worktrees' content
         # check — stopping a batch says nothing about whether its PR merged.
         print(f"  run `clean {args.run_id}` once its PR merges")
-        # A landing or detached deploy left the unit's cgroup for its own scope (#3160), so
+        # A landing or detached deploy left the unit's cgroup for its own scope, so
         # the stop above did not end it.
         print(
             "  a landing or detached deploy it started keeps running in its own scope; "

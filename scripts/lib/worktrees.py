@@ -186,7 +186,7 @@ def contained_in_merged_pr(repo: str, head: str, branch: str, run_gh=_forge_gh) 
 
     `forge_says_merged` matches the forge's merged head to the local tip exactly (Ruling 38).
     That misses the batch `land.sh` landed after merging master into it on the remote: the
-    merged head is the local tip plus that merge commit, so the SHAs differ (#6365). GitHub's
+    merged head is the local tip plus that merge commit, so the SHAs differ. GitHub's
     compare answers `ahead` (or `identical`) when `head` is an ancestor of the merged head,
     which proves every local commit was in the merged PR. A tip that was never pushed, or has
     commits the merged head lacks, compares `diverged`, `behind` or 404, and a `gh` that fails
@@ -476,7 +476,7 @@ def processes_using(
 ) -> list[tuple[int, str]]:
     """(pid, how) for every live process whose cwd, or `CLAUDE_PROJECT_DIR`, is inside `path`.
 
-    A Claude session whose project dir is deleted loses every repo hook (#3887), and its
+    A Claude session whose project dir is deleted loses every repo hook, and its
     worktree lock is no proof it is gone: the session can run from a tree it never locked,
     and a lock's owner pid says nothing about a shell or hook that `cd`'d in. So the removal
     asks the kernel which processes still use the directory.
@@ -486,11 +486,11 @@ def processes_using(
     and a hook or tool shell a session spawned carries the variable too.
 
     `/proc/<pid>/cwd` and `environ` refuse another user's process, so the root helper at
-    `WORKTREE_HOLDERS` answers first when this caller may run it (#4170); see
+    `WORKTREE_HOLDERS` answers first when this caller may run it; see
     `privileged_holders`. Without it, the scan is `claude_worktree.process_holds`, the one
-    the dotfiles worktree hooks run too (dotfiles#822). It skips an unreadable process,
+    the dotfiles worktree hooks run too. It skips an unreadable process,
     with one exception: a non-root process of another uid inside this uid's own login slice
-    counts as a holder, because it inherited a cwd this uid handed it (#3994).
+    counts as a holder, because it inherited a cwd this uid handed it.
 
     Args:
         path: the worktree directory.
@@ -503,9 +503,9 @@ def processes_using(
     if answer is not None:
         return answer
     # DECIDED: count an unreadable process only when another non-root uid runs it inside
-    # `user-<this uid>.slice` (#3994); every wider rule refuses every removal on daniel-box.
+    # `user-<this uid>.slice`; every wider rule refuses every removal on daniel-box.
     # The rule and its reasoning live in `claude_worktree._foreign_in_my_slice`, the one copy
-    # this repo and the dotfiles worktree hooks share (dotfiles#822).
+    # this repo and the dotfiles worktree hooks share.
     roots = tree_roots(path)
     found = []
     seen = set()
@@ -558,7 +558,7 @@ def privileged_holders(
     joined that group is one of those until it restarts.
 
     The socket needs no setuid, so a caller with `NoNewPrivs` set asks it too. That includes
-    every claude-rc.service session, which sudo never could serve (#4297).
+    every claude-rc.service session, which sudo never could serve.
 
     Once the socket accepts the connection, every failure refuses the removal: a refusal, a
     timeout, a refused connection, an answer that does not parse, and any process the helper
@@ -571,7 +571,7 @@ def privileged_holders(
         ask: reads the helper's whole answer from `sock`.
     """
     # DECIDED: the socket fails closed once it accepts, and an absent socket or a connect
-    # refused for permission falls back to the #3994 slice rule. The helper reads every uid's
+    # refused for permission falls back to the slice rule. The helper reads every uid's
     # cwd and environ, so a gap in its answer is a process that could hold this tree, and a
     # refused removal is retried next week. Neither fallback can fail closed the same way:
     # without root, claude-rc.service and the claude user's own sessions are always
@@ -600,7 +600,7 @@ def read_answer(raw: bytes, tree: Path, sock: str) -> list[tuple[int, str]]:
     socket carries no exit status: an instance that died mid-scan sends a prefix of a good
     answer, or nothing at all, and neither may read as "no holders".
 
-    Each value arrives escaped with `unicode_escape` (#4294), so a path holding a line break
+    Each value arrives escaped with `unicode_escape`, so a path holding a line break
     or a tab is still one line. It is decoded before `_inside` compares it, and the escaped
     form names it in the refusal, where it stays one printable line.
     """
@@ -666,7 +666,7 @@ def in_use_reason(path: str) -> str:
     """Why `path` must not be removed: `IN_USE` and each pid using it, or "" when none does.
 
     A removal refused with this reason is a skip, not a failure: the weekly sweep removes the
-    directory once its holder exits, so the caller must not exit non-zero for it (#7949).
+    directory once its holder exits, so the caller must not exit non-zero for it.
     """
     users = processes_using(path)
     if not users:
@@ -679,7 +679,7 @@ def remove(repo: str, tree: Worktree) -> tuple[bool, str]:
 
     The process check runs first, before the unlock, so a refusal leaves the lock exactly
     as it was. It is skipped when the directory is already gone: deregistering a deleted
-    tree cannot break the session still pointing at it, which #3887's hook deny covers.
+    tree cannot break the session still pointing at it, which the hook deny covers.
     The refusal names each pid, so the operator can find the session.
 
     Never --force: git's own refusal on a tree with uncommitted or untracked files is the backstop

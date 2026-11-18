@@ -1,14 +1,13 @@
 """The filter stamping `homelab/role: <service>` onto every object a render produced.
 
-The manifests role pruned an armed role's dropped objects with `kubectl apply --prune -l
-homelab/role=<service>` (#3388). The selector does two jobs there. It decides which live
+`kubectl apply --prune -l homelab/role=<service>` prunes an armed role's dropped objects.
+The selector does two jobs there. It decides which live
 objects the prune may delete, and it also FILTERS THE APPLY: kubectl applies only the
 documents in the directory that carry the label and skips the rest without a word. So every
 document an armed role stages must carry the label, its Secrets and claims included, or the
 deploy stops applying that object while still reporting green.
 
-Hand-writing the label into each template was the blocker the old `DECIDED:` marker named.
-The shared `service.yaml` and `ingressroute.yaml` defaults serve dozens of roles, so the label
+Hand-writing the label into each template does not work. The shared `service.yaml` and `ingressroute.yaml` defaults serve dozens of roles, so the label
 cannot be a literal in them. Stamping it here, after the template renders, needs no template
 edit at all.
 
@@ -19,7 +18,7 @@ Only `metadata.labels` changes. A Deployment's `spec.selector` and pod-template 
 rendered, so labelling a workload rolls no pods and touches no Service selector.
 
 `lib.guard_jinja_env` registers it so a `ValueError` fails the render as
-`FilterError("homelab_role_label: ...")` before any apply (#4505).
+`FilterError("homelab_role_label: ...")` before any apply.
 """
 
 import re
@@ -62,7 +61,7 @@ class _GoPlain(str):
 
 
 # libyaml's parser, where PyYAML's wheel ships it: the pure-Python one was a quarter of a full
-# k8s render (#7710).
+# k8s render.
 class _Loader(getattr(yaml, "CSafeLoader", yaml.SafeLoader)):
     """SafeLoader that marks a plain scalar go-yaml would not read as a string."""
 

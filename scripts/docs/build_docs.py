@@ -281,7 +281,7 @@ def run_generators() -> list[str]:
             failed.append(script)
             print(f"build_docs: {script} FAILED rc={code}", file=sys.stderr)
     # One line for the whole pass: each generator already reports its own page, so a
-    # per-generator "ok" here only doubled the log (#4448).
+    # per-generator "ok" here only doubled the log.
     print(
         f"build_docs: {len(GENERATORS) - len(failed)}/{len(GENERATORS)} generator(s) ok"
     )
@@ -319,7 +319,7 @@ def stderr_tail(text: str, limit: int) -> str:
     """The last `limit` characters of `text`, cut at a line start.
 
     mkdocs and rsync print the error that decides a failure last, so a cap keeps the tail.
-    The head that it replaced dropped exactly that line on a long log (#4448).
+    The head that it replaced dropped exactly that line on a long log.
     """
     text = text.strip()
     if len(text) <= limit:

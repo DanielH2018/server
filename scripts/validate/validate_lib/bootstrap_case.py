@@ -11,18 +11,18 @@ systemd loads that unit:
     no case downloads the k3s release. It fetches uv's packages from the network, then builds
     the three packages from a scratch clone of the checkout.
   * `--local-build` on daniel-box with no k3s in its seed, so install.sh downloads the release
-    binary and checks its sha256 whatever the cases above seed (#7754). It runs only under
+    binary and checks its sha256 whatever the cases above seed. It runs only under
     `--k3s-download`, in a CI job that cannot fail the PR, so a GitHub release outage cannot
     fail the run.
   * `--local-build --offline <kit>` on daniel-box, in a container with no network at all, which
     is stricter than the spec's unresolvable GitHub and GHCR hostnames. The kit is stocked on the
     runner from the script's own pins. Its output says the clone is unchecked. Its apt makes no
     retries, so step 5's update of Ubuntu's sources fails in seconds rather than backing off for
-    181 s (#7982).
+    181 s.
   * The kit's two red fixtures, each the green kit with one file changed and each in a fresh
     container: with no k3s binary the script refuses and names `k3s`, and with an nfpm archive
     that differs from its pin it refuses and names the archive.
-  * The local build's red fixture (#6244): a second scratch clone, one commit past the first,
+  * The local build's red fixture: a second scratch clone, one commit past the first,
     gives homelab-daniel-box a `Depends` on HOMELAB_ONLY, which only the homelab repository
     carries. The offline build on daniel-box must then reach step 5's install, and apt's
     simulation must refuse it. Without it the green cases prove only that today's Depends
@@ -32,15 +32,15 @@ systemd loads that unit:
     renders, builds and simulates the install of that host's package on a container of its name.
 
 `run` prepares the clones, the kit and the seed once, then runs the cases concurrently, at
-most one per CPU (#7785). It submits the offline builds first, because they are the longest
-items and the host items fill in behind them (#7866). Under `--bootstrap-shard K/N` it runs only
-`bootstrap_plan.shard`'s K-th share, so CI can give each offline build a runner of its own
-(#7879). Each case boots its own container and mounts its clone and seed
+most one per CPU. It submits the offline builds first, because they are the longest
+items and the host items fill in behind them. Under `--bootstrap-shard K/N` it runs only
+`bootstrap_plan.shard`'s K-th share, so CI can give each offline build a runner of its own.
+Each case boots its own container and mounts its clone and seed
 read-only. The script copies out of a kit, and uv runs the kit's `uv-python` interpreter in
 place, taking at most a file lock there. The verdicts print in plan order, each followed by
 `[DONE] <label> in Ns`, the seconds that item's own run took; the prepare prints its seconds
-the same way (#7811). Under each `[DONE]` come the script's own `took Ns` lines, one per phase of
-its local build, so a CI log says where a slow build spent its time (#7982). A container's own
+the same way. Under each `[DONE]` come the script's own `took Ns` lines, one per phase of
+its local build, so a CI log says where a slow build spent its time. A container's own
 diagnostics print as they happen, outside the group's block.
 
 The cases read `systemctl show` after the run: the installer leaves the node's k3s unit disabled
