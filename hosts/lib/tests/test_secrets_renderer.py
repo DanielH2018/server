@@ -273,6 +273,7 @@ def test_the_secrets_json_names_the_ciphertext_credentials_and_outputs(tree):
                 "persist": False,
                 "dependents": ["a.service", "b.service"],
                 "keys": ["alpha_token"],
+                "link": "/etc/app/app.conf",
             }
         ],
     }

@@ -309,10 +309,12 @@ snapd_rule_verdict() {
     END { print (bad ? "active" : "inert") }' "$1"
 }
 
-# Prints the absolute path of each tmpfs output the host package's secrets manifest declares, one
-# per line, or nothing when the manifest is missing or unreadable, so every such link pages.
+# Prints `<link>><target>` for each symlinked tmpfs output the host package's secrets manifest
+# declares, space-separated, or nothing when the manifest is missing or unreadable, so every such
+# link pages.
 secret_links() {
-  jq -r '.outputs[] | select(.persist != true) | "/" + .destination' \
+  jq -r '.outputs[] | select(.persist != true and .link != null)
+    | .link + ">/run/homelab-secrets/" + .destination' \
     "$FS_ROOT$SECRETS_MANIFEST" 2>/dev/null | tr '\n' ' '
 }
 
@@ -407,8 +409,8 @@ unexplained_entries() {
       # `systemctl enable` makes it.
       link_ok = $7 != "-" && ($7 == "/dev/null" || (norm($7) in owned) || (path ~ /^\/etc\/systemd\/system\// && $7 ~ ENVIRON["ROLE_WRITTEN"]))
       # The host package links each output its secrets manifest declares into the tmpfs its
-      # secrets unit fills, at the same relative path.
-      if (scope != "persist" && index(ENVIRON["SECRET_LINKS"], " " path " ") && $7 == "/run/homelab-secrets" path && owner_matches(p, "^homelab-")) link_ok = 1
+      # secrets unit fills, at the destination named in the row for that output.
+      if (scope != "persist" && index(ENVIRON["SECRET_LINKS"], " " path ">" $7 " ") && owner_matches(p, "^homelab-")) link_ok = 1
       # A distro link into a package that is not installed. Only a system-tree target, because a
       # file created there later pages on its own as unowned.
       if ($8 == "dangling" && $7 ~ ENVIRON["SYSTEM"] && $7 !~ /^\/usr\/local(\/|$)/ && owner_ran(p, touched)) link_ok = 1
