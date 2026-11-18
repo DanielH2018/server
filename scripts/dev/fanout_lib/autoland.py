@@ -185,10 +185,11 @@ def read_open_prs() -> list[dict]:
 
 
 def read_open_issues() -> list[dict]:
-    """Every open `claude` issue with its labels and blockers, for the queue gauge; raises on a failed read."""
+    """Every open `claude` issue with its labels, blockers and comments, for the queue gauge; raises on a failed read."""
     out = gh(
         "issue", "list", "--repo", SERVER, "--label", "claude", "--state", "open",
-        "--limit", "1000", "--json", "number,labels,blockedBy", timeout=GH_TIMEOUT_S,
+        "--limit", "1000", "--json", "number,labels,blockedBy,comments",
+        timeout=GH_TIMEOUT_S,
     )  # fmt: skip
     data = json.loads(out.stdout)
     if not isinstance(data, list):

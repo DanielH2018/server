@@ -9,10 +9,10 @@
 #   - `k3s etcd-snapshot list` does not talk to S3 itself. Since k3s 1.29 the etcd-snapshot
 #     subcommands authenticate to a RUNNING k3s server's supervisor API and list through it.
 #     A server-less host fails at `open .../server/token`, and this guest — token staged, no
-#     server — fails at the connection (measured 2026-09-11, the first run in the guest).
+#     server — fails at the connection.
 #   - `--etcd-s3` handed to `k3s server --cluster-reset` downloads the snapshot into
 #     <data-dir>/server/db/snapshots and joins that absolute path onto the same directory a
-#     second time (measured 2026-08-22, the drill script's header item 4).
+#     second time (the drill script's header item 4).
 # So the guest lists the bucket with a SigV4 ListObjectsV2, downloads the newest offbox-*
 # object with a SigV4 GET, and hands the file to the drill's `--local-snapshot`, which is the
 # script's documented way around the second point. The credentials, bucket and folder are
@@ -47,8 +47,8 @@ die() { echo "etcd-drill-guest-run: $*" >&2; exit 1; }
 
 # --detached: start the real run in the background, owning none of the caller's descriptors, and
 # return at once. The orchestrator polls $RC over fresh ssh sessions instead of holding one open
-# for the whole run — a held session hung for 20 minutes after the drill had died (run
-# 20260911T135526Z), and a hung session is exactly what the orchestrator cannot diagnose.
+# for the whole run — a held session can hang after the drill has died, and a hung session is
+# exactly what the orchestrator cannot diagnose.
 if [[ "${1:-}" == "--detached" ]]; then
   rm -f "$RC" "$OUT"
   nohup sh -c "$0 >$OUT 2>&1; echo \$? >$RC" >/dev/null 2>&1 </dev/null &

@@ -207,7 +207,7 @@ def test_open_cli_reopen_releases_a_claim_the_closed_issue_still_carries(
     tmp_path, issue, make_tools
 ):
     """The closing mechanism the spec names is the PR body's `Closes #<n>`, which GitHub
-    honours directly — it posts no release comment and leaves the `claimed` label on.
+    honours directly — it posts no release comment.
     `plan_open` then reopens that issue for a later re-observation, and the stale claim
     comes back LIVE: it blocks `claim` and withholds the issue from `next` for as long as
     the claiming worktree exists, which for an orchestrator can be a long time.
@@ -218,7 +218,6 @@ def test_open_cli_reopen_releases_a_claim_the_closed_issue_still_carries(
     closed = issue(
         3,
         state="CLOSED",
-        labels=("claimed",),
         fp=fp,
         comments=[claim_comment(_HOLDER, None, "t")],
     )
@@ -227,7 +226,6 @@ def test_open_cli_reopen_releases_a_claim_the_closed_issue_still_carries(
     assert findings.main(argv, tools) == 0
     assert ["issue", "reopen", "3"] in calls.gh
     assert any(f"Released: `{_HOLDER}`" in a for c in calls.gh for a in c)
-    assert ["issue", "edit", "3", "--remove-label", "claimed"] in calls.gh
 
 
 def test_open_cli_reopen_writes_no_release_when_nothing_holds_the_issue(
@@ -284,7 +282,6 @@ def test_open_cli_with_repo_aims_the_reopen_and_release_there(
     closed = issue(
         3,
         state="CLOSED",
-        labels=("claimed",),
         fp=fp,
         comments=[claim_comment(_HOLDER, None, "t")],
     )
@@ -292,8 +289,9 @@ def test_open_cli_with_repo_aims_the_reopen_and_release_there(
     argv = [*_open_argv(body), "--file", "a.py:1", "--repo", _OTHER]
     assert findings.main(argv, tools) == 0
     assert ["issue", "reopen", "3", "--repo", _OTHER] in calls.gh
-    assert ["issue", "edit", "3", "--remove-label", "claimed", "--repo", _OTHER] in (
-        calls.gh
+    assert any(
+        c[:3] == ["issue", "comment", "3"] and f"Released: `{_HOLDER}`" in c[4]
+        for c in calls.gh
     )
     assert all(c[-2:] == ["--repo", _OTHER] for c in calls.gh + calls.gh_json)
 

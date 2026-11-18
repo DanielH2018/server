@@ -12,8 +12,8 @@
 #
 # fixtures/host-update-stale.yaml holds the HostUpdateStale rule for a one-host map,
 # fixture-host at 11400s, which gives the rule's shape cases that name no shipped host.
-# host-checks.yaml carries daniel-pi's rule (job node-pi, 90000s) since H3.9c, and the cases
-# after the fixture's own exercise it.
+# host-checks.yaml carries daniel-pi's rule (job node-pi, 90000s), and the cases after the
+# fixture's own exercise it.
 rule_files:
   - ../../files/rules/host-checks.yaml
   - fixtures/host-update-stale.yaml
@@ -210,7 +210,7 @@ tests:
         alertname: DiskHealthNotReporting
         exp_alerts: []
 
-  # M6 batch B1. The zero-series case: no input at all, so no k3s cron has written a verdict
+  # The zero-series case: no input at all, so no k3s cron has written a verdict
   # inside its deadline. Each NotReporting rule fires through absent_over_time, once the
   # longest deadline (90000s) has passed. The Failed rules read a series and stay quiet.
   - interval: 10m
@@ -253,7 +253,7 @@ tests:
         alertname: EtcdSnapshotOffboxFailed
         exp_alerts: []
 
-  # M6 batch B1. Every check turns red from minute 3 while its file stays fresh. Each Failed
+  # Every check turns red from minute 3 while its file stays fresh. Each Failed
   # rule fires at once and no NotReporting rule does.
   - interval: 1m
     input_series:
@@ -316,7 +316,7 @@ tests:
         alertname: EtcdSnapshotOffboxNotReporting
         exp_alerts: []
 
-  # M6 batch B1. The file stops being refreshed: node_exporter keeps serving the timestamp
+  # The file stops being refreshed: node_exporter keeps serving the timestamp
   # written at 0. The first arm fires once the timestamp is more than the deadline old, so
   # longhorn-backup-health (1500s) fires between minutes 25 and 26.
   - interval: 1m
@@ -347,7 +347,7 @@ tests:
                 Read the `Longhorn backup health` cron and the `longhorn-backup-health` syslog tag,
                 then /var/lib/node-exporter-textfile/longhorn-backup-health.prom on the host.
 
-  # M6 batch B1. The exporter is down from minute 0 and every file is gone, so the bridge's
+  # The exporter is down from minute 0 and every file is gone, so the bridge's
   # `targets` check pages the dead exporter and the `unless` clause keeps both
   # NotReporting rules quiet past the point the zero-series case fires them.
   - interval: 10m
@@ -713,7 +713,7 @@ tests:
   # daniel-pi's last success stays at 0 while node-pi answers (`up` at 1). HostUpdateStale is
   # quiet at 1491 minutes (89460s) and fires at 1501 (90060s) for daniel-pi alone: the
   # fixture host has no series here. 1491 minutes is one day between the daily 03:05 fires,
-  # then the next fire's delay and full run (H3.13).
+  # then the next fire's delay and full run.
   - interval: 1m
     input_series:
       - series: 'homelab_host_update_success_timestamp_seconds{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
@@ -978,7 +978,7 @@ tests:
       - eval_time: 6m
         alertname: IscsiSessionsNotReporting
         exp_alerts: []
-  # B6a's two daniel-box crons, paging since Cutover-1b. A failing verdict fires both Failed
+  # The two daniel-box crons. A failing verdict fires both Failed
   # rules and leaves both NotReporting rules quiet.
   - interval: 1m
     input_series:
@@ -1469,7 +1469,7 @@ tests:
         exp_alerts: []
 
   # Reconcile restarted homelab-compose.service at 1000, after a digest bump, and compose-run
-  # wrote nothing: the result still ends at 500 (#6342). The rule is quiet at 4m inside its
+  # wrote nothing: the result still ends at 500. The rule is quiet at 4m inside its
   # 5m `for` and fires at 10m. Another unit's start time is ignored.
   - interval: 1m
     input_series:
@@ -1519,7 +1519,7 @@ tests:
   # its reconcile file every minute without moving that time. It crosses the 691200s bound at
   # 20m, is quiet at 30m inside the 15m `for`, and fires at 40m. daniel-server has owed its
   # reboot for longer than 8 days, then reboots at 5m, and homelab-reconcile-metrics.service
-  # rewrites its 1 to 0 at 10m (#6188). Its rule stays quiet, because the 1 never lasts 15m.
+  # rewrites its 1 to 0 at 10m. Its rule stays quiet, because the 1 never lasts 15m.
   - interval: 1m
     input_series:
       - series: 'homelab_host_reboot_pending{host="daniel-box", instance="daniel-box", job="node", origin="daniel-box"}'
@@ -1583,7 +1583,7 @@ tests:
                 with it, which running the script by hand does not. Read /var/log/rkhunter.log
                 and `journalctl -t rkhunter-check` on daniel-box.
 
-  # The claude_code timers (#6165). Every check file stopped being refreshed at 0 while both
+  # The claude_code timers. Every check file stopped being refreshed at 0 while both
   # exporters stay up. Each NotReporting rule stays quiet at its deadline and fires in the next
   # minute: claude-triage-poll at 660s, the three syncs at 2100s, the lander at 3300s. The two
   # syncs that run on both hosts fire once per host. The absent_over_time arm is the
@@ -1778,7 +1778,7 @@ tests:
                 homelab-claude-fanout-server-lander` on daniel-box. If
                 `claude_code_fanout_server_lander_enabled` was set false on purpose, delete this rule.
 
-  # The weekly host-maintenance crons (#6179). Every check file holds a green verdict taken
+  # The weekly host-maintenance crons. Every check file holds a green verdict taken
   # 611000s before time 0, so each NotReporting rule's first arm stays quiet at 10m (611600s old)
   # and fires at 20m, past the 612000s deadline, once per host that runs the cron. The
   # verdicts are green, so the Failed rules stay quiet.
@@ -2263,7 +2263,7 @@ tests:
                 `systemctl status homelab-claude-guardrail-ack.timer` and `journalctl -t
                 claude-guardrail-ack`, then
                 /var/lib/node-exporter-textfile/claude-guardrail-ack.prom on the host.
-  # SystemdUnitsFailed (#8219): every host counts a failed unit from minute 0. The 10m `for`
+  # SystemdUnitsFailed: every host counts a failed unit from minute 0. The 10m `for`
   # holds the page through the 9th minute, and each failed unit fires its own alert at the 10th:
   # daniel-box's two units, daniel-server's escaped unit, and one unnamed alert for daniel-pi,
   # which writes no per-unit series.

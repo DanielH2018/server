@@ -2,14 +2,12 @@
 # What github-ruleset-drift and github-interaction-limit compare the repo with.
 github_repo: DanielH2018/server
 
-# --- The MERGE gate, which is a different thing from `ci_required_contexts` in group_vars ---
-#
 # `ci_required_contexts` is what a deploy waits for on master. The list here is what GitHub's
 # ruleset requires before a PR can merge at all, and it is a superset: `renovate config
 # validator` gates merges while deliberately not gating deploys, and `pull + boot changed
 # images` is required for merges but has no `push:` trigger, so it never produces a check run on
 # master and could never be waited on. `flux-deletion-drill` is the same shape: it runs
-# on `pull_request` only, skips itself when no deletion path changed, and always reports (#6042).
+# on `pull_request` only, skips itself when no deletion path changed, and always reports.
 #
 # Declared here so github-ruleset-drift.sh can compare it against the live ruleset daily. That
 # comparison is the whole point: this list is a hand-copy of remote state that can silently go
@@ -23,8 +21,7 @@ github_expected_ruleset_contexts:
   - flux-deletion-drill
 # The app every required context is pinned to: 15368 is GitHub Actions. GitHub matches an unpinned
 # required check by name alone, so a commit status of that name from any token with write access
-# satisfies it. Three of the four contexts were unpinned until the operator pinned them on
-# 2026-11-13 (#8398). tested_tree.py and slice B3 of docs/ci-throughput.md trust a check's creator,
+# satisfies it. tested_tree.py and slice B3 of docs/ci-throughput.md trust a check's creator,
 # which only the pin guarantees, so the drift check fails on a context with no pin or another app.
 github_actions_app_id: 15368
 # Nobody merges past the CI gate. A bypass actor added here could merge an un-CI'd PR, through
@@ -33,10 +30,8 @@ github_actions_app_id: 15368
 github_ruleset_bypass_actors: []
 # The CI gate's pull_request rule: every change to master arrives as a PR, and none needs an
 # approving review. GitHub's auto-merge never applies a bypass, so a non-zero count leaves every
-# auto-merged PR BLOCKED. The operator chose on 2026-10-11 that PRs from the operator's account
-# and the agent's account both auto-merge once CI is green. D12's update restriction ended that
-# on 2026-11-13: it blocks every auto-merge, for the reason this comment gives, and land.sh's
-# direct merge is the one way onto master.
+# auto-merged PR BLOCKED. The update restriction below blocks every auto-merge for the same
+# reason, and land.sh's direct merge is the one way onto master.
 github_ruleset_required_approvals: 0
 
 # The branch-protection ruleset ("Default": `deletion` + `non_fast_forward` on every ref, admin
@@ -47,7 +42,7 @@ github_ruleset_required_approvals: 0
 github_branch_ruleset_id: 17358590
 github_branch_ruleset_renovate_exclude: refs/heads/renovate/**
 
-# The fence ruleset ("agent branch fence", created 2026-10-05): creating, updating and deleting
+# The fence ruleset ("agent branch fence"): creating, updating and deleting
 # a branch is restricted everywhere except the exclusions below. The agent's GitHub account is
 # not a bypass actor, so it cannot push onto a branch an operator session or Renovate opened,
 # where the next landing of that branch would carry its commit to master. An exclusion added to
@@ -59,7 +54,7 @@ github_fence_ruleset_exclude:
   # github_update_restriction_rulesets owns master.
   - refs/heads/master
   # EnterWorktree names a `claude/<slug>` worktree's branch `worktree-claude+<slug>`: it
-  # replaces `/` with `+` (observed 2026-10-05). `worktree-claude-*` would also match operator
+  # replaces `/` with `+`. `worktree-claude-*` would also match operator
   # branches such as worktree-claude-agent-github-identity.
   - refs/heads/worktree-claude+**
 github_fence_ruleset_bypass_actors:
@@ -67,7 +62,7 @@ github_fence_ruleset_bypass_actors:
   - RepositoryRole:5:always
   - Integration:2740:always
 
-# The update restrictions (dotfiles#967 D12 and D13, created by the operator on 2026-11-13). Each
+# The update restrictions. Each
 # lets only its bypass actors update its refs: this repo's master, and the dotfiles repo's `main`
 # and every tag. Every landing path merges as the admin through land.sh or bin/land, which applies
 # the bypass; GitHub's auto-merge applies none, so an auto-merge on master stays BLOCKED for any

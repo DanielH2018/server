@@ -46,8 +46,7 @@ def test_reap_holds_a_claim_whose_worktree_the_peer_host_registers(monkeypatch, 
 
     assert main(["reap"], tools) == 0
 
-    assert ["issue", "edit", "6840", "--remove-label", "claimed"] not in calls.gh
     assert not any(c[:3] == ["issue", "comment", "6840"] for c in calls.gh)
     # The rejecting half: a claim neither host registers is still released.
-    assert ["issue", "edit", "6841", "--remove-label", "claimed"] in calls.gh
+    assert any(c[:3] == ["issue", "comment", "6841"] for c in calls.gh)
     assert "reap: 1 stale claim(s) released" in capsys.readouterr().out

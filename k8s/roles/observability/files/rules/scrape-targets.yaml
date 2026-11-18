@@ -2,12 +2,8 @@
 # Jinja: prometheus-rules.yaml.j2 carries this file verbatim. The design is
 # docs/target-architecture/monitoring/m6-retire-kuma.md, "A3 and the handoffs it closes".
 #
-# These rules page since M6's batch A3 Cutover-b. The Scrape Targets and Cluster Scrape Targets
-# tiles went in Cutover-a1, and monitor-bridge's two checks behind them in Cutover-a2:
-# check_targets_down read `up{origin="daniel-server"}` and check_cluster_targets read the
-# complement, so between them they read every series below with no job exempt, and neither may
-# this rule. `for: 10m` replaces the bridge's CLUSTER_TARGETS_CONSECUTIVE streak of three
-# 300-second cycles.
+# Every series below is read, with no job exempt. `for: 10m` is the bridge's
+# CLUSTER_TARGETS_CONSECUTIVE streak of three 300-second cycles.
 #
 # One `ScrapeTargetDown` rule per owning role. A rule's `service` is a literal, because
 # scripts/validate/alert_conventions.py takes `service` from a literal, a workload-service
@@ -117,7 +113,7 @@ groups:
             minutes, so its exporter is down or unreachable from Prometheus and its series have
             gone stale. Read the exporter pod's events and log, or the host's unit for a static
             target.
-      # autofix-bridge's check exporter (M6 batch B7). It gets its own rule rather than the
+      # autofix-bridge's check exporter. It gets its own rule rather than the
       # catch-all's `unmapped` service. AutofixBridgeDown reads the same series with an `absent()`
       # arm and a critical severity; this rule keeps A3's one-rule-per-job census whole.
       - alert: ScrapeTargetDown
@@ -333,14 +329,14 @@ groups:
             minutes, so its exporter is down or unreachable from Prometheus and its series have
             gone stale. Read the exporter pod's events and log, or the host's unit for a static
             target.
-      # The flap arm (#6626). ScrapeTargetDown holds one series at `up == 0` for 10 minutes, so
+      # The flap arm. ScrapeTargetDown holds one series at `up == 0` for 10 minutes, so
       # a target that fails for 1 to 4 minutes at a time never fires it. This arm reads the last
       # 30 minutes instead: more than 30% of them failed, the target went from up to down at
       # least twice, and no 11-minute window of the last 30 failed every scrape. The `resets`
       # count keeps one short gap quiet through the 20 minutes its failed scrapes drag the
       # average down. The subquery arm keeps an outage that fired ScrapeTargetDown quiet for
       # 30 minutes after it, so one missed scrape soon after recovery cannot supply the second
-      # reset and page the outage twice (#6642). Its window is 11m, not 10m, because the
+      # reset and page the outage twice. Its window is 11m, not 10m, because the
       # hold's `for: 10m` needs 11 failed one-minute scrapes: a 10m window would count a run
       # of 10 as an outage that never paged, and a target failing in runs of 10 would page
       # nothing at all.
@@ -647,7 +643,7 @@ groups:
             over 30 minutes, failing at least twice and answering in between, so it flaps
             rather than staying down.
             Read the host's load and memory, then the exporter pod's restarts and log.
-      # The bridge's two fail-closed floors, ported: CLUSTER_TARGETS_MIN visible series outside
+      # The bridge's two fail-closed floors: CLUSTER_TARGETS_MIN visible series outside
       # daniel-server and TARGETS_MIN on it. A Prometheus that answers while its `up` vector has
       # emptied makes every rule above evaluate to nothing, which this rule reads as a fault.
       # `or vector(0)` turns an empty count into 0, so the empty-input case fires. The 10m hold

@@ -1,5 +1,5 @@
 #!/usr/bin/python3 -I
-"""rootq-socket: read root-only host state through homelab-rootq.socket (#6350).
+"""rootq-socket: read root-only host state through homelab-rootq.socket.
 
 Shipped as /usr/local/bin/rootq-socket by the homelab host package (hosts/components/claude-code),
 for a user in the socket's group that has no sudo, such as the agent user. The operator's

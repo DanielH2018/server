@@ -7,8 +7,8 @@
   Use it only for an LSIO image. A literal `runAsUser: 1000` elsewhere in the fleet is the uid
   an image bakes in (n8n's `node`, karakeep's built tagger, cloudflare-ddns), which equals
   `puid` by coincidence; tying it to `puid` would move it when the operator's uid moves. A
-  non-LSIO container that wants only `TZ` writes the two-line entry out (#3729 measured that
-  a one-line call saves nothing there).
+  non-LSIO container that wants only `TZ` writes the two-line entry out, since
+  a one-line call saves nothing there.
 
   Indentation is fixed at 12 spaces, the `env:` list depth of a container in a Deployment pod
   template. The call goes on its own line straight after `env:`; other entries follow it.

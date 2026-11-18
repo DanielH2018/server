@@ -4,7 +4,7 @@
 #
 # THE MAPPING IS AN INPUT HERE, NOT A RULE, for the reason k8s-workloads.test.yaml gives: this
 # file loads container-checks.yaml alone and writes homelab:pod_service:info as input. No case
-# carries `shadow`, because M6 batch A2's Cutover-b dropped it from every rule.
+# carries `shadow`, because no rule has one.
 rule_files:
   - ../../files/rules/container-checks.yaml
 evaluation_interval: 1m

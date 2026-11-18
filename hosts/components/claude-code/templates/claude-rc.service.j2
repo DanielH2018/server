@@ -48,7 +48,7 @@ WorkingDirectory={{ claude_code_rc_workdir }}
 # /run/user as well as /home and /root (systemd.exec(5)), so a session could not reach its own
 # user bus at /run/user/<uid>/bus. `systemd-run --user`, which starts every local fan-out
 # batch, failed there with "Failed to connect to bus: Permission denied", sandbox on or off
-# (#6764). tmpfs mounts the same three directories as empty and read-only, and BindPaths=
+# tmpfs mounts the same three directories as empty and read-only, and BindPaths=
 # puts back the agent's runtime directory alone, so /home stays hidden. ProtectHome=read-only
 # would re-expose /home and is rejected for that reason. The bus lets a session start a user
 # unit outside this unit's sandbox, under user-<uid>.slice's caps. An ssh login as the agent
@@ -79,17 +79,16 @@ UMask=0027
 {% set runtime_uid = claude_code_user_uid if claude_code_user != sys_user else claude_code_login_uid %}
 # A system unit gets neither variable, and sd-bus finds the user bus through one of them. With
 # both unset, `systemd-run --user` and `systemctl --user` fail with "No medium found". The
-# operator's unit needs them as much as the agent's (#6868).
+# operator's unit needs them as much as the agent's.
 Environment=XDG_RUNTIME_DIR=/run/user/{{ runtime_uid }}
 Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/{{ runtime_uid }}/bus
 
 {% if claude_code_fleet_caps_enabled %}
 # DECIDED: this unit lives in {{ claude_code_fleet_slice }}, not the default system.slice, so
 # that it shares ONE parent cgroup with the other half of the Claude fleet — the login-session
-# plane in user-{{ claude_code_login_uid }}.slice. Until 2026-09-06 both planes carried
-# claude_code_rc_memory_high independently, which reads as one 8G bound and was two: siblings
-# under different parents, neither seeing the other's usage, so the fleet could reach 16G of
-# anon plus 4G of swap before either throttled. Issue #1264. The single bound now sits on
+# plane in user-{{ claude_code_login_uid }}.slice. A cap on each plane reads as one bound and is
+# two: siblings under different parents, neither seeing the other's usage, so the fleet could
+# reach 16G of anon plus 4G of swap before either throttled. The single bound sits on
 # {{ claude_code_fleet_slice }} (templates/fleet-slice-caps.conf.j2) and MemoryHigh below is
 # this plane's sub-bound under it.
 #
@@ -112,8 +111,7 @@ Slice={{ claude_code_fleet_slice }}
 
 # Claude Code is a PER-USER install (binary under ~/.local/share/claude, launcher symlinked
 # at ~/.local/bin/claude) and reads its OAuth token from ~/.claude/.credentials.json, so
-# HOME must be the real user's home and not systemd's default. Same reasoning the role's
-# tasks give for become: false — running any of this as root would read /root/.claude.
+# HOME must be the real user's home and not systemd's default.
 Environment=HOME={{ claude_code_user_home }}
 
 # systemd supplies a minimal PATH, exactly as cron does, and this is the same trap already
@@ -121,7 +119,7 @@ Environment=HOME={{ claude_code_user_home }}
 # uv, then reports an EMPTY CLUSTER rather than failing. The failure is silent in precisely
 # the direction that reads like a working session.
 # Node comes from the operator's fnm default alias: ~/.zshrc returns before fnm for the
-# non-interactive shell a session snapshots. The agent's home holds no fnm (#7972).
+# non-interactive shell a session snapshots. The agent's home holds no fnm.
 {% set fnm_node = claude_code_user_home ~ '/.local/share/fnm/aliases/default/bin:' if claude_code_user == sys_user else '' %}
 Environment=PATH={{ fnm_node }}{{ claude_code_user_home }}/.local/bin:/usr/local/bin:/usr/bin:/bin
 Environment=KUBECONFIG={{ claude_code_user_home }}/.kube/config
@@ -140,7 +138,7 @@ Environment=KUBECONFIG={{ claude_code_user_home }}/.kube/config
 # auto-merge is armed and BEFORE the CI wait, so the PR merges and nothing follows it
 # through to a deploy — the undeployed-behind-green-master state the skill exists to
 # prevent. The kill arrives as a task notification rather than an error in the logfile, so
-# the session reads clean. Three kills in a row on 2026-09-04, issue #1096.
+# the session reads clean.
 #
 # Turning the reaper off removes no memory bound. MemoryHigh below still throttles the whole
 # cgroup, and claude_code_rc_pytest_workers below bounds the fan-out that fills it. What the
@@ -150,8 +148,8 @@ Environment=CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1
 
 # Bound the pytest fan-out. `addopts` in pyproject.toml carries `-n auto`, which pytest-xdist
 # resolves to one worker per core — 16 on daniel-box. Nothing caps how many pytest runs the
-# sessions on this host launch at once, so on 2026-09-05 nine concurrent runs resolved `auto`
-# nine times over and put ~144 workers in this cgroup.
+# sessions on this host launch at once, so nine concurrent runs resolve `auto` nine times over
+# and put ~144 workers in this cgroup.
 #
 # xdist reads this variable FIRST in `pytest_xdist_auto_num_workers` and returns it before any
 # CPU detection (`xdist/plugin.py`, verified against the installed 3.8.0), so it governs both
@@ -177,29 +175,25 @@ RestartSec=10
 # session would take the OOM kill for all of them, and Restart=always would then bring back
 # an empty host with every phone session gone. MemoryHigh throttles instead of killing.
 #
-# CONTRADICTED 2026-09-05, the clause that read "and claude_code_rc_capacity is the real
-# bound". The conclusion above stands — no MemoryMax — but that premise is false, and it is
-# why this host stalled for 30 minutes on 2026-09-05. Capacity bounds session COUNT. The
-# memory goes to what a session SPAWNS: two live sessions put 203 processes in this cgroup,
-# 143 of them pytest workers, holding 6.96 GB anon plus all 8 GB of the system's swap. The
-# `claude` processes themselves measured 404 MB and 376 MB, exactly as capacity's own
-# estimate predicts — the per-process figure was never the problem, the inference from it
-# was. claude_code_rc_pytest_workers below is what actually bounds the fan-out. Full
-# analysis in this role's CLAUDE.md. The swap half of that stall is bounded by
-# MemorySwapMax below, not by this directive.
+# Capacity bounds session COUNT, not memory: the memory goes to what a session SPAWNS. Two live
+# sessions put 203 processes in this cgroup, 143 of them pytest workers, holding 6.96 GB anon
+# plus all 8 GB of the system's swap, while the `claude` processes themselves measured 404 MB
+# and 376 MB. claude_code_rc_pytest_workers below is what bounds the fan-out. Full analysis in
+# this role's CLAUDE.md. The swap half of that is bounded by MemorySwapMax below, not by this
+# directive.
 #
-# This is ONE PLANE's sub-bound since 2026-09-06, not the fleet's bound: the same value is
+# This is ONE PLANE's sub-bound, not the fleet's bound: the same value is
 # applied to user-{{ claude_code_login_uid }}.slice, and what holds the two of them together
 # is claude_code_fleet_memory_high on {{ claude_code_fleet_slice }}. It is deliberately more
 # than half the fleet bound, so this plane can use most of the budget while the login plane is
-# idle. Issue #1264.
+# idle.
 MemoryHigh={{ claude_code_rc_memory_high }}
 
 # DECIDED: MemorySwapMax is set, and set to a FRACTION of the box's swap rather than to 0.
 # MemoryHigh above throttles the cgroup instead of capping it, and a throttled cgroup's anon
-# pages go to swap — so with swap unbounded the throttle had no ceiling at all. That is how
-# this cgroup took all 8 GiB of the host's swap on 2026-09-05 and starved k3s and
-# kubepods.slice alongside it, while the unit read `active (running)`. Issue #1154.
+# pages go to swap — so with swap unbounded the throttle had no ceiling at all. One cgroup then
+# takes all 8 GiB of the host's swap and starves k3s and kubepods.slice alongside it, while
+# the unit reads `active (running)`.
 #
 # Zero would be the wrong cap. It contains nothing: with no swap outlet nothing reclaims the
 # cgroup's anon pages, MemoryMax is deliberately infinity, and the growth simply stays
@@ -207,10 +201,9 @@ MemoryHigh={{ claude_code_rc_memory_high }}
 # process rather than anything in this cgroup. That is the same kill the no-MemoryMax
 # decision above rejects, minus the containment.
 #
-# Be clear about what this does NOT do. It converts silent theft of the whole box's swap
-# into a bounded share, harder reclaim throttling inside this cgroup, and global OOM as the
-# terminal state. It does not make the cgroup safe; claude_code_rc_pytest_workers is still
-# the bound on the fan-out that fills it.
+# It converts silent theft of the whole box's swap into a bounded share, harder reclaim
+# throttling inside this cgroup, and global OOM as the terminal state. It does not make the
+# cgroup safe; claude_code_rc_pytest_workers is still the bound on the fan-out that fills it.
 MemorySwapMax={{ claude_code_rc_memory_swap_max }}
 
 # Stopping the host is meant to stop the sessions it spawned; they are its children, so the

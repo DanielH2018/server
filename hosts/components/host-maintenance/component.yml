@@ -1,9 +1,8 @@
-# The weekly maintenance jobs (H7.7d, docs/target-architecture/host/h7-delete-ansible.md), and the
-# 5-minute failed-unit check. Each weekly job was a root cron that initial_setup installed; each
-# is a oneshot service on a timer at the cron's slot here.
+# The weekly maintenance jobs and the 5-minute failed-unit check, each a oneshot service on a
+# timer.
 #
 # - homelab-apt-autoremove and homelab-dpkg-purge run files/host-maintenance.sh. It writes the textfile
-#   verdict the AptAutoremoveNotReporting and DpkgPurgeNotReporting rules read (#6179).
+#   verdict the AptAutoremoveNotReporting and DpkgPurgeNotReporting rules read.
 # - homelab-reboot pings this host's `weekly-reboot-<host>` Healthchecks.io check, then schedules
 #   the reboot `weekly_reboot_shutdown_delay_minutes` ahead. It refuses while
 #   /run/homelab/validate-failed exists, which reconcile writes when a changed config failed its
@@ -11,22 +10,22 @@
 #   ping, so the Healthchecks.io deadman pages.
 # - homelab-docker-prune, on a `has_docker` host, prunes images, containers and build cache older
 #   than a week and pings `<host>-docker-prune` on success. A failed prune pings nothing.
-# - homelab-firmware-update, on a `has_fwupd` host (daniel-box alone, since H7.32), runs the same
+# - homelab-firmware-update, on a `has_fwupd` host (daniel-box alone), runs the same
 #   wrapper's `firmware-update` job: fwupdmgr refreshes its metadata and stages any update, and the
 #   weekly reboot 30 minutes later commits it. It writes the `firmware-update` textfile the
 #   FirmwareUpdateNotReporting rule reads.
 # - homelab-systemd-units runs files/systemd-units-check.sh every 5 minutes. It counts the failed
 #   system units and writes the `systemd-units` textfile the SystemdUnitsFailed and
-#   SystemdUnitsNotReporting rules read (#8219), so a unit with no OnFailure= hook and no verdict
+#   SystemdUnitsNotReporting rules read, so a unit with no OnFailure= hook and no verdict
 #   of its own still pages when it fails.
 #
-# The schedules render from the variables the old crons read: `weekly_reboot_*` in group_vars,
+# The schedules render from `weekly_reboot_*` in group_vars,
 # which Alertmanager's reboot mute also reads, and this component's
 # `host_maintenance_docker_prune_cron_*` (defaults/main.yml), which the Healthchecks.io cadences fragment and
 # monitor-bridge read. The Healthchecks.io key arrives as the credential `healthchecks_ping_key`,
 # so each host package lists that key.
 #
-# Each unit sets its Environment= explicitly: a cron line ran with cron's PATH and nothing else.
+# Each unit sets its Environment= explicitly, so it does not depend on a login PATH.
 #
 # Autonomous-role contract (each job runs with no human in the loop).
 #
@@ -68,8 +67,7 @@ legacy:
   - {cron: "Weekly apt autoremove", user: root}
   - {cron: "Weekly dpkg purge orphaned configs", user: root}
   - {cron: "Weekly system restart", user: root}
-  # Root's crontab, not sys_user's: the task named `ansible_facts.user_id`, which Ansible's
-  # escalated fact gather resolved to root.
+  # Root's crontab, not sys_user's.
   - {cron: "Clean unused Docker images", user: root}
   - {cron: "Weekly firmware update", user: root, when: has_fwupd}
   # What the crons above ran and sourced. They sit here so a kept cron keeps them too. daniel-box

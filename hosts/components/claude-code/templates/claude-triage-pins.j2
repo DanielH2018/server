@@ -2,11 +2,11 @@
 assignment outranks every inventory value, so an agent PR that edits only host_vars cannot raise a
 run's budget, turns or wall clock, run the unit as another user, or arm the poller. The host
 package renderer puts the inventory above a component's defaults, so a component default would pin
-nothing. The `claude-triage` template prefix is on the lander's approval list (operator decision,
-2026-10-15). Each value is a literal. hosts/tests/test_claude_triage.py holds them equal to
+nothing. The `claude-triage` template prefix is on the lander's approval list. Each value is a
+literal. hosts/tests/test_claude_triage.py holds them equal to
 the component's defaults/main.yml.
 -#}
-{#- Who runs what (dotfiles#967's I1, guardrails plan B2). The controller runs the poller and
+{#- Who runs what. The controller runs the poller and
 the runner, owns the records, the reports, the clone and the session's toolchain, and alone may
 start the units. The session user runs claude and holds no GitHub token and no start right.
 Neither is `claude`, so no interactive session can start a run, plant an episode or change what a
@@ -18,7 +18,7 @@ artifacts_triage_dir in k8s/roles/artifacts/defaults/main.yml, which mounts it. 
 {%- set state_dir = "/var/lib/claude-triage-ctl/state" -%}
 {%- set session_user = "claude-triage" -%}
 {%- set session_home = "/var/lib/claude-triage" -%}
-{#- The session's bounds (dotfiles#967's I2 and I8). Its home, /tmp, /var/tmp and /dev/shm are
+{#- The session's bounds. Its home, /tmp, /var/tmp and /dev/shm are
 tmpfs mounts that end with the unit. Their pages count against memory_max, so the sizes sum well
 below it and a full mount fails with ENOSPC rather than an OOM kill. The home's mount takes the
 session's numeric uid, which hosts/daniel-box/package.yml declares. -#}

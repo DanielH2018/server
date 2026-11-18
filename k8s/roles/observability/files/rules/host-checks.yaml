@@ -22,7 +22,7 @@ groups:
             failed. Longhorn stops scheduling replicas on the node at 75%.
             homelab_disk_root_used_ratio{check="disk-health"} holds the share it read, and the
             `disk-health` syslog tag holds the run's message.
-      # PAGING SINCE M3's PR 5. This rule pages a silent cron.
+      # This rule pages a silent cron.
       #
       # The first arm catches a file that stopped being refreshed: node_exporter keeps serving
       # its last timestamp. The second catches a file that is gone, or a series that never
@@ -52,14 +52,12 @@ groups:
             textfile collector, so nothing is watching the root disk. Read the `daniel-box disk
             health` cron and the `disk-health` syslog tag, then
             /var/lib/node-exporter-textfile/disk-health.prom on the host.
-      # M6 BATCH B6a, PAGING SINCE CUTOVER-1b. The next four rules replaced Kuma's `Artifacts
-      # Peer Sync` and `k3s Telemetry OTLP Door` tiles, which Cutover-1a deleted
-      # (docs/target-architecture/monitoring/m6-retire-kuma.md, "The cutover order").
+      # The next four rules cover the Artifacts Peer Sync and k3s Telemetry OTLP Door checks.
       # Both producers are daniel-box crons that write a check file through
       # homelab-check-lib.sh. Each NotReporting pair mirrors DiskHealthNotReporting, and its two
       # literals equal the deadline the producer renders from its own cron minute:
-      # tests/services/test_b6a_rule_literals.py pins them. Both tiles notified Discord
-      # only, so the rules are `warning`. No inhibit: each NotReporting rule carries its own
+      # tests/services/test_b6a_rule_literals.py pins them. The rules are `warning`, so
+      # Discord alone. No inhibit: each NotReporting rule carries its own
       # `unless on (origin) (up{job="node"} == 0)`, and a dead exporter leaves each Failed rule
       # no series, so `ScrapeTargetDown` is the one page.
       - alert: ArtifactsSyncFailed
@@ -120,7 +118,7 @@ groups:
             textfile collector, so nothing is watching the OTLP door. Read the `Claude Code
             telemetry health` cron and `journalctl -t claude-otel-health`, then
             /var/lib/node-exporter-textfile/claude-otel-health.prom on the host.
-      # The guardrail audit (server#8250): claude-guardrail-audit loads the auditd watches on
+      # The guardrail audit: claude-guardrail-audit loads the auditd watches on
       # Claude Code's guardrail paths every 5 minutes, and its textfile says whether auditd runs
       # with every watch in place. One pair per host that runs Claude Code. The NotReporting
       # literals equal the DEADLINE_S the script renders, which
@@ -189,7 +187,7 @@ groups:
             Read `systemctl status homelab-claude-guardrail-audit.timer` and `journalctl -t
             claude-guardrail-audit`, then
             /var/lib/node-exporter-textfile/claude-guardrail-audit.prom on the host.
-      # The guardrail acknowledgement (server#8250 slice 2): claude-guardrail-ack posts the
+      # The guardrail acknowledgement: claude-guardrail-ack posts the
       # guardrail changes that nothing merged explains. Same shape and deadline as the audit pair.
       - alert: ClaudeGuardrailAckFailed
         expr: homelab_check_success{check="claude-guardrail-ack",origin="daniel-box"} == 0
@@ -317,7 +315,7 @@ groups:
             `systemctl status homelab-claude-dotfiles-mirror.timer` and `journalctl -t
             claude-dotfiles-mirror`, then
             /var/lib/node-exporter-textfile/claude-dotfiles-mirror.prom on the host.
-      # The weekly summary of the unattended Claude runs (dotfiles#967 C7), on daniel-box only.
+      # The weekly summary of the unattended Claude runs, on daniel-box only.
       # Its timer runs every Monday and 10 minutes after each activation, so the 608400s
       # deadline is a week plus an hour.
       - alert: ClaudeWeeklySummaryFailed
@@ -351,13 +349,11 @@ groups:
             `journalctl -t claude-weekly-summary`, then
             /var/lib/node-exporter-textfile/claude-weekly-summary.prom on the host. If
             `claude_code_weekly_summary_enabled` was set false on purpose, delete this rule.
-      # M6 BATCH B1, LIVE SINCE ITS CUTOVER-1B. The two k3s crons write the textfile beside
-      # their Kuma push, and Cutover-1a deleted Kuma's tiles for the same verdicts, so these
-      # rules are their pager. Each check has the DiskHealth pair: `Failed` reads the verdict, and
-      # `NotReporting` reads the file's age. The deadline literal in a NotReporting rule
-      # equals the DEADLINE_S its producer renders, and
+      # These rules are the pager for the two k3s crons. Each check has the DiskHealth pair:
+      # `Failed` reads the verdict, and `NotReporting` reads the file's age. The deadline
+      # literal in a NotReporting rule equals the DEADLINE_S its producer renders, and
       # tests/services/test_b1_rule_literals.py pins the two together. A daily check
-      # gets a day plus an hour (k3s_daily_check_deadline_s), the interval of its Kuma tile.
+      # gets a day plus an hour (k3s_daily_check_deadline_s).
       # The `unless` clause leaves a dead exporter to the bridge's `targets` check.
       - alert: LonghornBackupHealthFailed
         expr: homelab_check_success{check="longhorn-backup-health",origin="daniel-box"} == 0
@@ -420,16 +416,14 @@ groups:
             textfile collector, so nothing is comparing the cluster token with its stamp. Read the
             `etcd token drift` cron and the `etcd-snapshot-offbox` syslog tag, then
             /var/lib/node-exporter-textfile/etcd-snapshot-offbox.prom on the host.
-      # M6 BATCH B9 (#6168). The weekly AIDE and rkhunter scans run on every host and write the
-      # textfile beside their Kuma push, and these rules replaced the "AIDE Integrity" and
-      # "rkhunter Scan" tiles that Cutover-1a deleted. Each host gets a Failed and a NotReporting
-      # rule for each scan it schedules; daniel-pi schedules no AIDE scan
-      # (integrity_scans_aide_unscheduled_hosts in hosts/components/integrity-scans/component.yml). A NotReporting rule's two literals equal the DEADLINE_S its script
-      # renders, which equalled the deleted tile's interval:
+      # The weekly AIDE and rkhunter scans run on every host and write a textfile. Each host
+      # gets a Failed and a NotReporting rule for each scan it schedules; daniel-pi schedules no
+      # AIDE scan (integrity_scans_aide_unscheduled_hosts in
+      # hosts/components/integrity-scans/component.yml). A NotReporting rule's two literals
+      # equal the DEADLINE_S its script renders:
       # hosts/tests/test_integrity_scan_rule_literals.py pins them. daniel-pi's rules read
-      # the `node-pi` job. Every tile notified Discord only, so the rules are `warning`. Each
-      # NotReporting rule fires from its deploy until the scan's first run writes the file, up to
-      # a week.
+      # the `node-pi` job. The rules are `warning`, so Discord alone. Each NotReporting rule
+      # fires from its deploy until the scan's first run writes the file, up to a week.
       # DECIDED: a failed scan holds until someone reviews it by hand, so each Failed rule carries
       # escalate: "false" and Alertmanager repeats it daily. A NotReporting rule still escalates,
       # because a scan that stops running holds by no design.
@@ -598,7 +592,7 @@ groups:
             textfile collector, so nothing confirms the malware scan still runs. Read the
             `Weekly rkhunter malware scan` cron and `journalctl -t rkhunter-check`, then
             /var/lib/node-exporter-textfile/rkhunter-check.prom on the host.
-      # The weekly host-maintenance crons (#6179): apt autoremove and the dpkg purge on every
+      # The weekly host-maintenance crons: apt autoremove and the dpkg purge on every
       # host, the firmware update on daniel-box, the one host with fwupd. Each runs through
       # initial_setup's files/host-maintenance.sh, which writes the check's textfile with
       # success 0 when the job's command failed. No Healthchecks.io check watches these crons,
@@ -838,7 +832,7 @@ groups:
             collector, so nothing confirms the weekly firmware update still runs. Read the `Weekly firmware update` cron in
             root's crontab and `journalctl -t fwupd-auto`, then
             /var/lib/node-exporter-textfile/firmware-update.prom on the host.
-      # The failed-unit check (#8219): systemd-units-check.sh in the host-maintenance component
+      # The failed-unit check: systemd-units-check.sh in the host-maintenance component
       # counts the failed system units every 5 minutes on every host. node-exporter runs without
       # --collector.systemd, so this is the one rule that sees a unit with no OnFailure= hook and
       # no verdict of its own. The 10m `for` spans two runs, so a unit that fails and is restarted
@@ -986,7 +980,7 @@ groups:
             collector, so nothing is counting its failed units. Read `systemctl status
             homelab-systemd-units.timer` and `journalctl -t systemd-units` on daniel-pi, then
             /var/lib/node-exporter-textfile/systemd-units.prom on the host.
-      # The catch-all deadman (#6166), one rule per host so `service` stays a literal. It reads
+      # The catch-all deadman, one rule per host so `service` stays a literal. It reads
       # each check's own homelab_check_deadline_seconds, so a producer that writes the textfile
       # is covered the day it ships, before anyone writes its NotReporting pair. It is the
       # backstop, never the rule a check relies on, for two reasons the per-check literals keep:
@@ -998,7 +992,7 @@ groups:
       # pod-producers.yaml already compare against the deadline. It fires beside every per-check
       # NotReporting rule's stale arm, at the same threshold, so an Alertmanager inhibit keyed on
       # `check` and `origin` (alertmanager-secret.yaml.j2) mutes it wherever a pair exists. It
-      # pages alone only for a producer with no pair (#6186), and so it carries no `shadow`.
+      # pages alone only for a producer with no pair, and so it carries no `shadow`.
       # The `for: 2m` lets the pair fire first. Most pairs sit in another group, which Prometheus
       # evaluates at its own offset inside the 1m evaluation interval, so a pair can start up to
       # a minute after this rule crosses. Without the hold, this rule's page would flush after
@@ -1070,8 +1064,8 @@ groups:
       # check_mem's cgroup arm, and a malformed disk-health.prom through DiskHealthNotReporting,
       # so a paging collector alert would page twice for one cause. Until A1 its value is the
       # diagnosis it leaves in ALERTS. One rule per host whose node_exporter runs the textfile
-# collector, so `service` stays a literal: the two k3s nodes, and daniel-pi, whose host unit
-# reads the same directory (hosts/components/pi-node-exporter/units/node_exporter.service.j2, #6166).
+      # collector, so `service` stays a literal: the two k3s nodes, and daniel-pi, whose host unit
+      # reads the same directory (hosts/components/pi-node-exporter/units/node_exporter.service.j2).
       - alert: TextfileCollectorError
         expr: node_textfile_scrape_error{origin="daniel-box"} == 1
         for: 10m
@@ -1128,7 +1122,7 @@ groups:
             list can omit it. Confirm in `journalctl -u node_exporter` on daniel-pi.
       # A replaced Longhorn instance-manager leaves the iSCSI sessions it served in the kernel,
       # FREE with a failed connection, and the next attach of such a volume on that node loops
-      # (#5826). The node-exporter DaemonSet's `iscsi-sessions` sidecar writes one
+      # The node-exporter DaemonSet's `iscsi-sessions` sidecar writes one
       # homelab_iscsi_session_info series per session. A session is FAILED for up to iscsid's
       # replacement_timeout while it reconnects, so 15m keeps a recovering session quiet. One
       # rule per k3s node, so `service` stays a literal. Both NotReporting rules mirror
@@ -1201,7 +1195,7 @@ groups:
             No iscsi-sessions verdict newer than 5 minutes reached Prometheus from daniel-server's
             textfile collector, so nothing is watching the node's iSCSI sessions. Read the
             log of the node-exporter pod's `iscsi-sessions` container on daniel-server.
-      # The claude_code timers (#6165). Each service writes its file from an ExecStartPost=, which
+      # The claude_code timers. Each service writes its file from an ExecStartPost=, which
       # systemd runs only after a clean ExecStart=, so the file only ever says success 1 and these
       # rules have no Failed twin: OnFailure= pages a crash at once, and NotReporting catches a
       # timer that stopped firing, which pages nothing else. Not shadow, because no other
@@ -1461,7 +1455,7 @@ groups:
             /usr/lib/homelab/homelab-updater --clear-hold --install-newest` clears the hold and
             then installs the newest packages as a timer run does.
           runbook_url: https://docs.local.daniel-hunter.com/host-packages/
-      # The Pi's Compose project (H5). compose-run writes homelab_compose_up_result each time
+      # The Pi's Compose project. compose-run writes homelab_compose_up_result each time
       # homelab-reconcile starts homelab-compose.service, and a failed `up --wait` writes 0. The
       # Pi's recovery heartbeat pages the same 0 through PiRecoveryFailed, so this rule is SHADOW
       # until that arm retires (h5-pi-compose.md, open question 5, "M1"). ComposeUpStale below
@@ -1480,7 +1474,7 @@ groups:
             `docker compose up --wait` failed. Read `journalctl -u homelab-compose` and
             `docker ps -a` on daniel-pi.
       # No schedule bounds the age of the compose result: reconcile restarts the unit only when
-      # its file changes, so a quiet week leaves the timestamp a week old (#6187). Boot does
+      # its file changes, so a quiet week leaves the timestamp a week old. Boot does
       # bound it. The unit is enabled for multi-user.target, so every boot runs compose-run
       # once, and TimeoutStartSec caps that run. A timestamp older than node_boot_time_seconds,
       # once the boot is older than the cap, means the boot run never wrote: the unit was
@@ -1490,8 +1484,7 @@ groups:
       #
       # 1690s is the TimeoutStartSec that homelab-compose.service renders from the Pi's
       # healthcheck variables, 1390s, plus 300s for boot to reach the unit and for one scrape.
-      # The boot run of 2026-10-25 wrote 94s after boot. Both literals are pinned to the
-      # rendered unit by hosts/lib/tests/test_pi_compose_unit.py.
+      # Both literals are pinned to the rendered unit by hosts/lib/tests/test_pi_compose_unit.py.
       - alert: ComposeUpStale
         expr: |
           (
@@ -1520,7 +1513,7 @@ groups:
       # writes that time as homelab_host_unit_started_seconds. A compose-run that wrote its
       # result ended after that time, so a result older than it means the run wrote nothing:
       # systemd killed it at TimeoutStartSec, or the write failed after `up` succeeded. The
-      # second exits 0, so HostReconcileFailed stays quiet for it (#6342). ComposeUpStale covers
+      # second exits 0, so HostReconcileFailed stays quiet for it. ComposeUpStale covers
       # the boot run, which reconcile does not start, and a file that is gone. Reconcile writes
       # its file after compose-run's, so no scrape between the two writes can fire this; the 5m
       # `for` is defensive.
@@ -1540,13 +1533,13 @@ groups:
             no result for it. systemd killed the run at its TimeoutStartSec, or the write to
             /var/lib/node-exporter-textfile/homelab_compose.prom failed. Read `journalctl -u
             homelab-compose -u homelab-reconcile` on daniel-pi.
-      # One rule per inventory host, so `service` stays a literal (#6166). Reconcile writes
+      # One rule per inventory host, so `service` stays a literal. Reconcile writes
       # homelab_host_reboot_pending 1 when a package change needs a reboot, and the weekly
       # reboot is what applies it. homelab_host_reboot_pending_since_seconds is when the host
       # first owed that reboot, the flag's mtime, which a later change never moves. The age is
       # read from it rather than from the file's mtime, because every later package change
       # rewrites the file. homelab-reconcile-metrics.service rewrites the file at boot, so a 1
-      # does not outlive the reboot that cleared the flag (#6188). The 15m `for` covers the
+      # does not outlive the reboot that cleared the flag. The 15m `for` covers the
       # scrapes between boot and that unit. 691200s is 8 days, a weekly reboot slot plus a day.
       - alert: HostRebootOverdue
         expr: |
@@ -1605,18 +1598,19 @@ groups:
             refused. Read `journalctl -t weekly-restart` on daniel-pi and docs/host-packages.md,
             "Reboot-pending and activation-pending", then reboot the host.
           runbook_url: https://docs.local.daniel-hunter.com/host-packages/
-      # The Pi's held Docker engine (H7.26, #6607). The updater writes
+      # The Pi's held Docker engine. The updater writes
       # homelab_docker_engine_pending 1 while an engine package is off its pin, and only
       # homelab-docker-engine.service, started by its 00:30 UTC timer, moves the engine. A run
       # that fails leaves homelab-updater.timer masked, and HostUpdateStale pages that half. This
       # rule pages a pin that no run applied: the engine timer paused, the Pi off at 00:30, or a
       # run that failed without masking the updater.
       #
-      # 26h is the longest a pin legitimately waits, from the Pi's daily schedule (H3.13). The
+      # 26h is the longest a pin legitimately waits, from the Pi's daily schedule. The
       # updater first writes 1 at its 03:05 fire, so the pin waits 21h25m for the next 00:30. The
       # unit's TimeoutStartSec is 90 minutes, and the updater's 03:05 fire after it, its 60s delay
-      # and its own 50-minute TimeoutStartSec rewrite the 1 to 0: 24h51m in all. scripts/renderer/tests/test_renderer_host_update_limits.py derives it from the
-      # unit files and fails a window shorter than it.
+      # and its own 50-minute TimeoutStartSec rewrite the 1 to 0: 24h51m in all.
+      # scripts/renderer/tests/test_renderer_host_update_limits.py derives it from the unit
+      # files and fails a window shorter than it.
       #
       # It reads the range, never a `for:`. A failed scrape or the Pi's weekly reboot marks the
       # series stale, and a stale evaluation resets a `for:` to zero, so the page would slip a

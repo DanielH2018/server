@@ -1,6 +1,5 @@
-# The deploy UI daemon on daniel-box, the host half of deploy.local (H7.50,
-# docs/target-architecture/host/h7-delete-ansible.md). Until H7.50 the deploy_ui setup role installed
-# it. CLAUDE.md beside this file holds the rules.
+# The deploy UI daemon on daniel-box, the host half of deploy.local. CLAUDE.md beside this file
+# holds the rules.
 #
 # The unit keeps the name deploy-ui.service, so the Ansible copy under /etc/systemd/system shadows
 # the packaged one. Reconcile's shadow handoff removes it, runs one daemon-reload and restarts the
@@ -29,12 +28,12 @@ ufw:
     - {id: deploy-ui-pods, spec: "allow from {{ k3s_pod_cidr }} to any port {{ deploy_ui_port }} proto tcp"}
     - {id: deploy-ui-daniel-box, spec: "allow from {{ server_ip }} to any port {{ deploy_ui_port }} proto tcp"}
     - {id: deploy-ui-daniel-server, spec: "allow from {{ hosts['daniel-server'].server_ip }} to any port {{ deploy_ui_port }} proto tcp"}
-  # The Ansible rules carried this comment. The arm relabels each live rule in place.
+  # The legacy rules carry the live rules' comment; the arm relabels each live rule in place.
   legacy:
     - {spec: "allow from {{ k3s_pod_cidr }} to any port {{ deploy_ui_port }} proto tcp", comment: deploy-ui from the k3s cluster, replaced_by: deploy-ui-pods}
     - {spec: "allow from {{ server_ip }} to any port {{ deploy_ui_port }} proto tcp", comment: deploy-ui from the k3s cluster, replaced_by: deploy-ui-daniel-box}
     - {spec: "allow from {{ hosts['daniel-server'].server_ip }} to any port {{ deploy_ui_port }} proto tcp", comment: deploy-ui from the k3s cluster, replaced_by: deploy-ui-daniel-server}
-# What the deploy_ui role installed before H7.50.
+# The earlier install.
 legacy:
   - {path: /etc/systemd/system/deploy-ui.service}
   - {path: /etc/systemd/system/multi-user.target.wants/deploy-ui.service}

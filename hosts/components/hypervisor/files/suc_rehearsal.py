@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The host-side decisions of the drill orchestrator's SUC rehearsal mode (H6.1b2).
+"""The host-side decisions of the drill orchestrator's SUC rehearsal mode.
 
 Usage:
     suc_rehearsal.py pins REPO
@@ -8,7 +8,7 @@ Usage:
 
 `pins` prints the five pins the guest installs from, as `key=value` lines. REPO is a checkout:
 each key is found by globbing every k8s role's `defaults/main.yml`, so a pin that moves between
-roles (H6.1b moves the k3s pins) needs no edit here, and a key held by none or by two files is an
+roles needs no edit here, and a key held by none or by two files is an
 error.
 The registry image is read from the `registry` role alone, because a second role copies it.
 The flux CLI's tarball digest is homelab-tools' amd64 pin. `overlay` copies the system-upgrade bundle rendered at RENDERED into OUT and rewrites it

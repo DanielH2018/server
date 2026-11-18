@@ -14,7 +14,6 @@
 | `no-vetted-remediation` | `#585b70` | Every proposed fix failed the fix-skeptic |
 | `manual` | `#6c7086` | Reserved for the operator; no Claude session claims or fans this out |
 | `review-leftover` | `#fab387` | Left after a fan-out fix round; next ranks it last |
-| `claimed` | `#9399b2` | A session is working this issue; see the newest Claim: comment |
 | `domain/backup-observability` | `#b4befe` | Reviewer domain: backup-observability |
 | `domain/cicd` | `#b4befe` | Reviewer domain: cicd |
 | `domain/container` | `#b4befe` | Reviewer domain: container |

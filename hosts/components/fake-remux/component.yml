@@ -1,8 +1,7 @@
-# The fake-remux detector, reconciler and mkv repair on daniel-box as packaged timers (H7.37, H7.11,
-# docs/target-architecture/host/h7-delete-ansible.md). Until H7.37 the fake_remux role installed
-# them as four crons. CLAUDE.md beside this file holds the rules and the contract.
+# The fake-remux detector, reconciler and mkv repair on daniel-box as packaged timers. CLAUDE.md
+# beside this file holds the rules and the contract.
 #
-# The services carry no OnFailure= alert, as the crons had none. Each state file's verdict is
+# The services carry no OnFailure= alert. Each state file's verdict is
 # what pages, and `flock -w 600` losing its wait is not a broken unit. The three that touch media
 # keep `policy: manual`, so reconcile never restarts one mid-swap.
 units:
@@ -49,7 +48,7 @@ enable:
   homelab-fake-remux-reconcile.timer: timers.target
   homelab-mkv-attachment-repair.timer: timers.target
   homelab-fake-remux-health.timer: timers.target
-# What the fake_remux role installed before H7.37. Reconcile retires each once the timers above have
+# The earlier install. Reconcile retires each once the timers above have
 # started. /var/lib/autofix-fake-remux stays: it holds the ledger and the three state files.
 legacy:
   - {cron_file: fake-remux-scan}

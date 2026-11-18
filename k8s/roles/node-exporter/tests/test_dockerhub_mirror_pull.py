@@ -1,4 +1,4 @@
-"""The dockerhub-mirror-pull sidecar reports whether a node's docker.io mirror serves pulls (#6535).
+"""The dockerhub-mirror-pull sidecar reports whether a node's docker.io mirror serves pulls.
 
 It runs ghcr-mirror-pull.sh with CHECK, REPOSITORY and REFERENCE set, so it GETs the exporter's
 own image by digest through the node's docker.io mirror endpoint. These tests run the script

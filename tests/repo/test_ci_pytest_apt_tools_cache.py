@@ -1,6 +1,6 @@
-"""The ci.yml pytest job installs age and apt-utils from apt once per runner image version.
+"""The pytest-tools action installs age and apt-utils from apt once per runner image version.
 
-A leg copies the binaries apt-get installed into `$RUNNER_TEMP/pinned/apt-tools`, and a later
+ci.yml's pytest legs and the nightly sweep both call the action. A leg copies the binaries apt-get installed into `$RUNNER_TEMP/pinned/apt-tools`, and a later
 leg installs those copies instead of running apt-get (#8684). The copies link against the
 image's own libraries, so the cache key carries the image version, and apt-get stays as the
 branch a leg takes when the copies are absent or do not run.
@@ -14,15 +14,14 @@ import pytest
 from _helpers import REPO
 from lib import yaml_fast
 
-CI_WORKFLOW = REPO / ".github" / "workflows" / "ci.yml"
-JOB = "pytest"
+ACTION = REPO / ".github" / "actions" / "pytest-tools" / "action.yml"
 CACHE_STEP = "Cache the age and apt-utils binaries"
 INSTALL_STEP = "Install sops, age and apt-utils for the tests"
 IMAGE_VERSION = "steps.image.outputs.version"
 
 
 def _step(workflow: dict, name: str) -> dict:
-    return next(s for s in workflow["jobs"][JOB]["steps"] if s.get("name") == name)
+    return next(s for s in workflow["runs"]["steps"] if s.get("name") == name)
 
 
 def apt_runs_only_without_working_copies(run: str) -> bool:
@@ -55,10 +54,10 @@ def problems(workflow: dict) -> list[str]:
 
 @pytest.fixture(scope="module")
 def workflow() -> dict:
-    return yaml_fast.safe_load(CI_WORKFLOW.read_text(encoding="utf-8"))
+    return yaml_fast.safe_load(ACTION.read_text(encoding="utf-8"))
 
 
-def test_the_pytest_job_is_clean(workflow):
+def test_the_action_is_clean(workflow):
     assert problems(workflow) == []
 
 

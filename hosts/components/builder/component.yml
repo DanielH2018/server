@@ -1,6 +1,4 @@
-# The host-package builder, the signer and the apt repository on daniel-box (H7.41b,
-# docs/target-architecture/host/h7-delete-ansible.md, item 14). Until H7.41b the `homelab_builder`
-# role installed them. The role is emptied and ends on every host.
+# The host-package builder, the signer and the apt repository on daniel-box.
 #
 # - homelab-builder.timer runs homelab-builder.service every 2 minutes. A run that exits 0 starts
 #   homelab-repo-sign.service through OnSuccess=, a held run included.
@@ -17,8 +15,8 @@
 # - The units keep the names the Ansible copies had. Reconcile's shadow handoff removes each copy in
 #   /etc/systemd/system, runs one daemon-reload, and restarts each packaged unit whose file differed.
 #
-# The signing key is not generated here. The Ansible role generated it once, and docs/break-glass.md
-# item 9 holds the restore and the rebuild procedures.
+# The signing key is not generated here. docs/break-glass.md item 9 holds the restore and the
+# rebuild procedures.
 #
 # A host that lists this component lists `secrets-unit`, `failure-alert` and the `homelab-tools`
 # dependency too, and has `server_ip`, `host_python_version`, `ci_required_contexts` and
@@ -43,9 +41,9 @@
 #
 # ENFORCED: hosts/lib/tests/test_builder_component.py.
 users:
-  # Declared by uid only (h7-delete-ansible.md, item 17, ruling 1): the install adopts the live
+  # Declared by uid only: the install adopts the live
   # accounts, and a rebuilt host gets groups with gid equal to uid. The uids sit in the homelab
-  # band 900-949, below the ones Ubuntu hands out from 999 down (#8100).
+  # band 900-949, below the ones Ubuntu hands out from 999 down.
   - {name: homelab-builder, uid: 902, home: /var/lib/homelab-builder, shell: /usr/sbin/nologin, comment: Homelab package builder}
   - {name: homelab-signer, uid: 903, home: /var/lib/homelab-signer, shell: /usr/sbin/nologin, comment: Homelab repository signer}
 defaults:
@@ -53,7 +51,7 @@ defaults:
   builder_github_repo: DanielH2018/server
   # k8s/roles/observability/defaults/main.yml:observability_prometheus_cluster_ip, and a test holds
   # the two equal. No loopback entry: nothing serves Prometheus on daniel-box's loopback, so one
-  # logged a refused connection on every run and said nothing (#7047).
+  # logged a refused connection on every run and said nothing.
   builder_prom_urls:
     - http://10.43.39.218:9090
 depends:
@@ -90,13 +88,13 @@ ufw:
   rules:
     - {id: apt-repo-daniel-server, spec: "allow from {{ hosts['daniel-server'].server_ip }} to any port {{ builder_repo_port }} proto tcp"}
     - {id: apt-repo-daniel-pi, spec: "allow from {{ hosts['daniel-pi'].server_ip }} to any port {{ builder_repo_port }} proto tcp"}
-  # The Ansible rules carried the comment 'homelab apt repository'. A spec holds no quote, so the
-  # comment goes in its own key. The arm relabels the live rule in place, so a rule that a declaration
-  # shares is never deleted.
+  # The rules' comment 'homelab apt repository' goes in its own key, because a spec holds no
+  # quote. The arm relabels the live rule in place, so a rule that a declaration shares is never
+  # deleted.
   legacy:
     - {spec: "allow from {{ hosts['daniel-server'].server_ip }} to any port {{ builder_repo_port }} proto tcp", comment: homelab apt repository, replaced_by: apt-repo-daniel-server}
     - {spec: "allow from {{ hosts['daniel-pi'].server_ip }} to any port {{ builder_repo_port }} proto tcp", comment: homelab apt repository, replaced_by: apt-repo-daniel-pi}
-# What the homelab_builder role installed before H7.41b. Reconcile retires each once the package's
+# The builder's earlier installs. Reconcile retires each once the package's
 # units are in place. The six unit files and the two enable links shadow the packaged units of the
 # same name, so reconcile hands them off with one daemon-reload and restarts each unit that differed.
 legacy:

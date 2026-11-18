@@ -9,7 +9,7 @@ OnFailure=homelab-alert@%n.service
 
 [Service]
 Type=oneshot
-# The controller (dotfiles#967's I1): it owns the records, the reports and the run lock, and alone
+# The controller: it owns the records, the reports and the run lock, and alone
 # may start the session unit. It runs no session text. The session runs as {{ pins.session_user }},
 # whose group lets this unit read the result the session leaves in the exchange.
 User={{ pins.ctl_user }}

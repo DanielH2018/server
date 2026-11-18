@@ -2,9 +2,7 @@
 # `scripts/validate/alert_tools.sh promtool test rules <this file>`; the validate-alert-rules
 # hook runs it on every commit that touches the rules.
 #
-# Every rule pages, the Pi pressure rules (PiLoadHigh, PiMemoryLow, PiDiskFull,
-# PiFilesystemReadOnly and PiMetricsMissing) since B8's Cutover-b and the rest since A1's, so no
-# case asserts `shadow`. Each case loads both x86 hosts, so
+# Every rule pages, so no case asserts `shadow`. Each case loads both x86 hosts, so
 # a rule that fires for one host and not the other shows in the same expected list. Annotation text is rendered from the rule's own template, so a case checks which
 # alerts fire and with which labels; the wording lives in the rule file.
 rule_files:
