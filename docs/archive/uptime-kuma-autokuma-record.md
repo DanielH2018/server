@@ -403,5 +403,5 @@ The move followed a shadow soak in which the probes caught every outage the tile
 
 ## See also
 
-- [monitor-bridge checks](monitor-bridge-checks.md) — the producer side of most push tiles,
+- [monitor-bridge checks](../monitor-bridge-checks.md) — the producer side of most push tiles,
   including Swallowed Push Verdicts.
