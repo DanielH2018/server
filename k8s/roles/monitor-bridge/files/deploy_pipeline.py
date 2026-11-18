@@ -67,8 +67,8 @@ CI_RUNS = (
     API + "/actions/workflows/ci.yml/runs"
     "?branch=master&event=push&status=success&exclude_pull_requests=true&per_page=%d"
 )
-# Each run in the listing is about 13.5 kB of JSON. Measured from daniel-box on 2026-10-15, 20
-# runs answered in 0.75-1.92s and 50 in 3.2-6.7s, against HTTP_TIMEOUT's 10s. While more than 20
+# Each run in the listing is about 13.5 kB of JSON. 20 runs answer in 0.75-1.92s and 50 in
+# 3.2-6.7s, against HTTP_TIMEOUT's 10s. While more than 20
 # green commits wait, `prod`'s own run falls off the page and the gauge reads the oldest listed
 # run's age, which is younger than the real one. PromotionStalled fires at 2 hours, and 20
 # merges in 2 hours has not happened here.
@@ -168,7 +168,7 @@ def prod_contains(cfg: Config, src: Sources, commit: str, prod_commit: str) -> b
 
     The compare runs `commit...prod_commit`. While `prod` lacks the commit, the usual case when
     this is asked, `prod` reads `behind` or `diverged` and the response lists no commits and no
-    files: 13 kB in 0.5s, measured on 2026-10-15. The other orientation lists every commit and
+    files: 13 kB in 0.5s. The other orientation lists every commit and
     file `prod` lacks, 820 kB for 30 commits.
     """
     body = as_object(

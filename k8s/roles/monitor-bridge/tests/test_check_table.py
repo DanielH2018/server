@@ -1,11 +1,11 @@
 """`files/check_table.py` against the registry, the gates, the env, SOPS and the deploy's reading.
 
-The table is the one place a check is declared (#3659, #3788). The registry and the gate sets
+The table is the one place a check is declared. The registry and the gate sets
 derive from it in Python, and the docs fragments derive from it through
 `scripts/renderer/template_filters/py_table.py`, which parses the module instead of running it. What is
 left to check is that each derivation reads what the table says.
 
-The rows carry no secret since M6 batch A6-8, so nothing here reads `secrets.yml`.
+The rows carry no secret, so nothing here reads `secrets.yml`.
 """
 
 import dataclasses

@@ -23,10 +23,10 @@ def check_speedtest(cfg: Config, src: Sources) -> tuple[bool, str]:
 
     Empty URL/token -> disabled (stays up), like check_ha_heartbeat.
 
-    NO CONSECUTIVE-CYCLE HYSTERESIS ON THE VERDICT, deliberately, and that is still true after
-    #2785. The app runs every 6h and this loop every 5 min, so a cycle streak would re-read the
+    NO CONSECUTIVE-CYCLE HYSTERESIS ON THE VERDICT, deliberately. The app runs every 6h and
+    this loop every 5 min, so a cycle streak would re-read the
     IDENTICAL row up to 72 times: it would delay the page by N*INTERVAL and prove nothing new
-    about the run. What #2785 added is hysteresis in a different unit — SPEEDTEST_FLOOR_CONSECUTIVE
+    about the run. The floor arm has hysteresis in a different unit — SPEEDTEST_FLOOR_CONSECUTIVE
     counts RESULTS, read from the API's own history in one fetch, so each one is a fresh
     measurement. It applies to the floor arm alone; the status and age arms still judge the
     newest row on sight.
@@ -39,9 +39,9 @@ def check_speedtest(cfg: Config, src: Sources) -> tuple[bool, str]:
     if not cfg.SPEEDTEST_URL or not cfg.SPEEDTEST_TOKEN:
         return True, "speedtest monitoring disabled (no URL/token)"
     # DECIDED: the verdict reads the REST API, not Prometheus, although Prometheus scrapes the
-    # same app (#3105 asked for the switch and this is the recorded reason). Three facts decide
-    # it. (1) The scrape carries NO timestamp: `count by (__name__) ({job="speedtest"})` returned
-    # 28 names on 2026-10-01 and not one of them is a created-at, age or timestamp series, so the
+    # same app. Three facts decide
+    # it. (1) The scrape carries NO timestamp: none of the `{job="speedtest"}` series names is a
+    # created-at, age or timestamp series, so the
     # staleness arm — the one SPEEDTEST_MAX_AGE_H exists for, and the only arm whose failure mode
     # (the scheduler dying while the pod stays Ready) nothing else sees — could only be inferred
     # from when `speedtest_tracker_result_id` last changed over an 8h window. (2)
@@ -50,7 +50,7 @@ def check_speedtest(cfg: Config, src: Sources) -> tuple[bool, str]:
     # samples by result id before it could count anything. (3) The scrape itself depends on a
     # manual UI toggle that k8s/roles/speedtest/CLAUDE.md records as impossible to set from
     # config at the pinned build, on a longhorn-nobackup PVC — a human step this alert path should not
-    # acquire. The scrape stays what it was added for in #996: history in Grafana.
+    # acquire. The scrape stays what it is for: history in Grafana.
     try:
         # sort=-created_at, because the default order is ASCENDING and would hand back the
         # OLDEST row in the 30-day window — a stale-forever reading that looks like a verdict.
@@ -82,11 +82,11 @@ def check_speedtest(cfg: Config, src: Sources) -> tuple[bool, str]:
         "speedtest results data",
     )
     # DECIDED: the check cannot tell a failing Ookla run from a stopped scheduler, and this
-    # repo accepts that (#1603). speedtest-tracker writes NO row for a failed run — that is the
+    # repo accepts that. speedtest-tracker writes NO row for a failed run — that is the
     # LinuxServer image's own behaviour, decided between the Ookla CLI exiting non-zero and the
-    # results table, and the role has no hook in between. Measured 2026-09-10 against the live
-    # app: 25 rows, ids 825-849, every one `status: completed`, so speedtest_verdict's
-    # `status != "completed"` branch is reachable by test and has never been taken by data.
+    # results table, and the role has no hook in between. Every live row is
+    # `status: completed`, so speedtest_verdict's `status != "completed"` branch is reachable
+    # by test and not seen in data.
     # The two rejected alternatives are a LogQL check for the per-tick log line (Loki does not
     # retain the pod's logs across the restart that is exactly when it is wanted) and replacing
     # the internal scheduler with a k8s CronJob (rejected at the `# DECIDED:` on the

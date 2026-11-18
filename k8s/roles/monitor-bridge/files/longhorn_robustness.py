@@ -1,21 +1,18 @@
-"""Which Longhorn robustness states count as lost redundancy. The one definition (#3668).
+"""Which Longhorn robustness states count as lost redundancy. The one definition.
 
 Two readers classify a volume's robustness, over different transports:
 
 - The `LonghornVolumeDegraded` rule in observability's `storage.yaml` selects the one-hot
   `longhorn_volume_robustness` metric with `state!~"healthy|unknown"`, a regex that
-  `tests/services/test_storage_rule_literals.py` holds to `SAFE_ROBUSTNESS`. Until M6
-  batch A5 deleted the `longhorn_volumes` check, monitor-bridge called `unsafe_volumes` on the
-  same metric inside its stdlib-only pod.
+  `tests/services/test_storage_rule_literals.py` holds to `SAFE_ROBUSTNESS`.
 - `scripts/deploy_tools/runbook_gates.py` reads `status.robustness` off each `volumes.longhorn.io`
   CR through kubectl, before a k3s upgrade or a Longhorn hop.
 
 Both carry the same Longhorn enum: longhorn-manager exports the metric from the CR field, so
-`healthy`, `degraded`, `faulted` and `unknown` mean the same thing on both sides. Until #3668
-each side held its own rule, and the rules disagreed. The runbook gates allowed
-`{healthy, unknown}` and refused anything else. The bridge selected `degraded|faulted`, so a
-state Longhorn renamed or added would read green on the tile while the same volume stopped a
-runbook.
+`healthy`, `degraded`, `faulted` and `unknown` mean the same thing on both sides. If each side
+held its own rule, the rules could disagree: a selector of `degraded|faulted` reads a state
+Longhorn renamed or added as green on the tile, while the same volume stops a runbook gate that
+allows only `{healthy, unknown}`.
 
 This module is the allow-list both sides hold. It stays in monitor-bridge's `files/`, where the
 runbook gates run from the checkout and reach it through a `sys.path` insert of
@@ -28,8 +25,8 @@ from collections.abc import Iterable
 
 # An allow-list, not a deny-list: a state this module has not heard of (a rename, a new value
 # after a Longhorn bump) must read as lost redundancy, not pass. `healthy` is a volume with every
-# replica; `unknown` is what an idle, detached volume reports, which is not a fault — 6 of 43
-# volumes read it on 2026-08-17, including the game servers scaled to zero on purpose.
+# replica; `unknown` is what an idle, detached volume reports, which is not a fault — the game
+# servers scaled to zero on purpose read it.
 SAFE_ROBUSTNESS = frozenset({"healthy", "unknown"})
 
 # The worst state wins when one volume reports twice (two longhorn-manager pods, or a scrape

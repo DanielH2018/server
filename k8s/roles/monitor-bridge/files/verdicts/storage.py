@@ -8,8 +8,8 @@ silently rather than loudly.
 The three R2 action-class frozensets below are the exception that proves the rule: they are
 POLICY, not configuration. Cloudflare's pricing page decides which operations bill as Class A and
 which as Class B, no env var names them, and `r2_classify_operations` is their only reader. They
-sat in bridge/config.py — the env-reading module — until 2026-09-04, where a reader looking for
-the billing rules had no reason to look and a reader of config.py had no way to tell them from a
+stay out of bridge/config.py — the env-reading module — where a reader looking for the billing
+rules would have no reason to look and a reader of config.py could not tell them from a
 tunable.
 """
 

@@ -233,7 +233,7 @@ def test_a_malformed_number_is_recorded_rather_than_raised():
 
 
 def test_a_rendered_key_missing_from_the_env_is_recorded_rather_than_defaulted():
-    """A key the pod environment renders has no Python default since #3659, so its absence is a
+    """A key the pod environment renders has no Python default, so its absence is a
     config fault main() reports, never a quiet fall back to a second copy of the value."""
     # fact: k8s/roles/monitor-bridge/CLAUDE.md#Configuration is a parameter, not a module global
     env = bridge_env()
