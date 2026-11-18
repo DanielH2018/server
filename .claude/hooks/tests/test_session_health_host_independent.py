@@ -18,7 +18,7 @@ import shard_weight_gate
 
 _FILE = ".claude/hooks/tests/test_session_health.py"
 
-# What CI's runner measured for _FILE in run 39061304325, quoted in #5432.
+# What CI's runner measured for _FILE.
 _CI_SECONDS = 0.77
 
 
