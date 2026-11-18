@@ -59,6 +59,20 @@ def settled(node: Node) -> None:
             id="try-restart-rsyslog",
         ),
         pytest.param(
+            "try-restart:squid.service",
+            [
+                [
+                    "squid",
+                    "-k",
+                    "parse",
+                    "-f",
+                    "/usr/lib/homelab/t2-egress/t2-squid.conf",
+                ],
+                ["systemctl", "try-restart", "squid.service"],
+            ],
+            id="try-restart-squid",
+        ),
+        pytest.param(
             "reload:ssh.service",
             [["sshd", "-t"], ["systemctl", "reload", "ssh.service"]],
             id="reload",
@@ -76,6 +90,7 @@ def test_a_changed_file_runs_its_action_and_an_unchanged_one_runs_nothing(
     live_unit(node, "ssh.service")
     live_unit(node, "fail2ban.service")
     live_unit(node, "rsyslog.service")
+    live_unit(node, "squid.service")
     live_unit(node, "systemd-modules-load.service")
     path = PATHS.get(action, SSHD_FILE)
     ship(node, path, "kernel.sysrq = 0\n", action)

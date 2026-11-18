@@ -133,6 +133,7 @@ def test_without_a_proxy_address_no_session_names_one(tmp_path):
 
 def test_the_triage_kubeconfig_names_the_api_by_the_hosts_lan_address(box, tmp_path):
     """B3-1: no loopback port stays open to the session; the API goes through the proxy."""
+    # fact: hosts/components/claude-code/CLAUDE.md#Autonomous-role contract (`claude-triage@`, a session started by a monitor episode)
     server_ip = yaml_fast.safe_load((HOST_VARS / "daniel-box.yml").read_text())[
         "server_ip"
     ]
