@@ -175,6 +175,10 @@ directory.
 
 `claude_code_fleet_memory_high` / `claude_code_fleet_swap_max` bound both Claude cgroups on
 `user.slice`, their shared parent; `claude_code_fleet_caps_enabled: false` removes both.
+The same drop-in sets
+`hosts/components/claude-code/defaults/main.yml:claude_code_fleet_cpu_weight`, which ranks the
+fleet below `system.slice`, where k3s runs, while the CPU is contended. A weight on
+`user-1000.slice` would rank it only against its siblings under `user.slice`, never against k3s.
 `docs/claude-code-rc-caps.md` has the derivation. **The `Slice=` line takes effect at the next
 start**, so the deploy that changes it drops the RC host's sessions.
 
