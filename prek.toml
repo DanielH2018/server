@@ -577,7 +577,8 @@ exclude = "^(docs/assets/generated/|scripts/dev/pytest_shard_weights\\.json$|eva
 # `--dist loadscope` keeps each module on one worker, so the slowest module bounds the hook.
 # The render-and-path census and the git-and-subprocess census sit in the
 # `static-ratchet-tests-test-modules` sibling below for that reason, and each census detector
-# skips a module that cannot spell a hit.
+# skips a module that cannot spell a hit. On daniel-server at load average 2.9-3.4, it
+# took 12.1-12.6s.
 #
 # It sits after `tighten-ratchet-allowlists` because the ratchet test reads the lists that hook
 # rewrites. `files` is wider than `.py`: a cited
