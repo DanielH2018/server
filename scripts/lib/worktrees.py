@@ -280,9 +280,9 @@ def merged_layer(
 # only ever written over "".
 #
 # The forge's "not merged" can change, so it is kept under its own "forge-no:<head>:<branch>"
-# key with the epoch second it was asked, and trusted for FORGE_NO_TTL_S only. Measured
-# 2026-10-25 on daniel-box with 180 worktrees: 160 of them reached the forge at ~0.3s each, 47s
-# of a 52s report, so without this a `--prune` straight after the report paid it all again.
+# key with the epoch second it was asked, and trusted for FORGE_NO_TTL_S only. The forge layer
+# costs about 0.3s per unsettled worktree, so without this a `--prune` straight after the
+# report would pay it all again.
 # A stale "no" can only keep a tree a little longer, the safe direction for a pruner.
 #
 # It lives in the git common dir, never in a working tree: one untracked file in the primary

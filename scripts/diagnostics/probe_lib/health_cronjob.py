@@ -22,8 +22,8 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from diagnostics.probe_lib.health_rollout import seconds_since
 
-# RBAC decides which of two paths this gate can take: trigger a fresh run itself, the way the
-# retired `k8s/cronjob-gate` role did at deploy time, or fall back to reading the most recent existing run.
+# RBAC decides which of two paths this gate can take: trigger a fresh run itself, or fall back
+# to reading the most recent existing run.
 # probe.py runs as `homelab-readonly` (see `k8s/roles/cluster-base/templates/readonly-rbac.yaml.j2`),
 # bound to the built-in `view` ClusterRole plus one additive ClusterRole, neither granting any
 # write verb. Verified live, running as that identity:

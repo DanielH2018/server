@@ -7,7 +7,8 @@ documents in the directory that carry the label and skips the rest without a wor
 document an armed role stages must carry the label, its Secrets and claims included, or the
 deploy stops applying that object while still reporting green.
 
-Hand-writing the label into each template does not work. The shared `service.yaml` and `ingressroute.yaml` defaults serve dozens of roles, so the label
+Hand-writing the label into each template does not work. The shared `service.yaml` and
+`ingressroute.yaml` defaults serve dozens of roles, so the label
 cannot be a literal in them. Stamping it here, after the template renders, needs no template
 edit at all.
 

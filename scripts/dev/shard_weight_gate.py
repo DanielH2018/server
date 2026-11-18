@@ -35,15 +35,14 @@ _DURATION_LINE = re.compile(r"^([0-9.]+)s\s+(call|setup|teardown)\s+(\S+?)::")
 # WHY A CI MEASUREMENT AND NOT A STATIC ARM. A neighbour heuristic sees an
 # unweighted file only where a recorded pole already sits in its directory. A heavy module
 # landing in a quiet directory is invisible to it, and no static proxy separates the two:
-# `def test_` count, byte size and directory mean were all checked against a heavy module
-# (6 tests, 248 lines, a directory averaging 0.19s) and none discriminates.
+# `def test_` count, byte size and directory mean each fail to separate a heavy module from a
+# light one.
 # Only running the file says what it costs, and CI already runs it.
 #
 # WHY TEN. The gate reads the runner's own per-test seconds, summed per file, where the table
 # holds workstation seconds — the two are not the same scale, so the number is set against the
 # shard it would skew rather than against the table. A shard projects around 40s at six ways,
 # so an unweighted module worth 10s is a quarter of a shard placed by a 0.0s guess. The
-# module that motivated the gate measured about 30s. The
 # runner is slower per test than the workstation, so 10 runner seconds is FEWER than 10
 # recorded seconds: the gate sits at or below the pole cutoff a neighbour heuristic would use.
 RUNNER_HEAVY_SECONDS = 10.0
@@ -60,8 +59,8 @@ RUNNER_HEAVY_SECONDS = 10.0
 # flipped.
 #
 # WHY A RATIO AND NOT A DELTA. The table holds workstation seconds and the report holds runner
-# seconds, and the two are not the same scale. Controls measured on daniel-server
-# ran 1.10x to 1.46x their recorded values, so anything under about 3x is that scale
+# seconds, and the two are not the same scale. Controls
+# run 1.10x to 1.46x their recorded values, so anything under about 3x is that scale
 # difference rather than a stale entry. FIVE leaves room above that noise; a busy recording
 # host still overshoots it on its own (`LOCAL_READING_MAX_RATIO`).
 #
@@ -89,9 +88,8 @@ STALE_WEIGHT_FLOOR_SECONDS = 3.0
 # recorded weight, and `--record-missing` writes the runner seconds.
 #
 # WHY TWENTY. A host busy with fan-out batches reads up to about nine times what the runner
-# measures: `test_fanout_clean_chain.py` read 9.14s against 0.99s. A cost that is real on
-# one host alone reads further off still, such as a test walking untracked files: 85.09s against
-# CI's 2.08s. `UNDER_WEIGHT_RATIO` uses twenty for the same variance.
+# measures. A cost that is real on one host alone reads further off still, such as a test
+# walking untracked files. `UNDER_WEIGHT_RATIO` uses twenty for the same variance.
 LOCAL_READING_MAX_RATIO = 20.0
 
 # How many times its recorded weight a module may measure on the runner before the shard check

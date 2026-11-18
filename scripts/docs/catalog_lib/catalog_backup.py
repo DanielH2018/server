@@ -44,8 +44,7 @@ __all__ = [
 # k8s/roles/longhorn-reconcile/files/longhorn_reconcile.py):
 #
 #   1. an inline `kind: PersistentVolumeClaim` block carrying its own `storageClassName:` line
-#      (no role's template carries one since media-volume moved to `k8s_claims`; the shape stays
-#      read so a new one is classified);
+#      (the shape stays read so a new one is classified);
 #   2. a `k8s_claims` entry in the role's defaults/main.yml, `{name, size, storage_class}`,
 #      which the renderer renders from the shared claim-default.yaml.j2 (every other claim).
 #

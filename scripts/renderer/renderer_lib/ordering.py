@@ -63,7 +63,8 @@ VERIFY_SUFFIX = "-verify"
 # A role's pre-pull Job, which pulls the tag's images onto its node before `<tag>` applies
 # (`prepull.py`).
 PREPULL_SUFFIX = "-prepull"
-# A role's own pre-apply check Jobs, such as pihole's sibling guard, which `<tag>` waits on.
+# A role's own pre-apply check Jobs, such as pihole's sibling guard,
+# which `<tag>` waits on.
 PRECHECK_SUFFIX = "-precheck"
 # Every per-tag kind's suffix, in the order its document follows `<tag>`'s in
 # `flux/<tag>.yaml`. The publish census expects exactly this order.

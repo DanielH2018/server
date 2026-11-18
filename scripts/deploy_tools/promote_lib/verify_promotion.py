@@ -156,8 +156,8 @@ LOST_SETTLE_S = 10 * 60
 VERDICT_STATUS_CONTEXT = "homelab/promote-verdict"
 
 # A wait that runs the full IN_FLIGHT_WAIT_S reads DEPLOY_HOLD about 700 times and the
-# registry's tags two or three times as often, so one 5xx among them ended a wait that would
-# have succeeded (run 40197827680). A read in the wait that fails with a 5xx is tried
+# registry's tags two or three times as often, so one 5xx among them would end a wait that
+# would have succeeded. A read in the wait that fails with a 5xx is tried
 # again, READ_RETRY_S apart, up to READ_ATTEMPTS reads in all. Any other failure, and a
 # missing or empty variable, still ends the run at once.
 READ_ATTEMPTS = 3

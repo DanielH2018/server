@@ -174,7 +174,8 @@ def reserved_tags(
 
     A reserved name is the root's, a shared kind's, one in `RESERVED_NAMES`, or any name
     ending in a per-tag kind's suffix, so no tag's Kustomization can collide with another
-    tag's `-deferred`, `-snapshot`, `-prepull`, `-precheck` or `-verify` one (D4.2, D5.1a1).
+    tag's `-deferred`, `-snapshot`, `-prepull`, `-precheck` or `-verify` one
+    (D4.2, D5.1a1).
     """
     names = {ROOT} | set(kinds) | RESERVED_NAMES
     return sorted(t for t in set(tags) if t in names or t.endswith(TAG_KIND_SUFFIXES))
