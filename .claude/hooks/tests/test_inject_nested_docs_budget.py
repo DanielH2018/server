@@ -106,7 +106,8 @@ def test_the_generated_docs_rule_is_a_pointer_on_a_read(repo):
 
 def test_a_second_read_sends_no_second_pointer(repo):
     _add_docs_page(repo)
-    _build(repo, "grep -n Page docs/page.md")
+    _, first = _mod.build_context("grep -n Page docs/page.md", str(repo), "sess-a")
+    assert [_mod._form(block) for _, _, block in first] == ["pointer"]
     assert _build(repo, "cat docs/page.md") == ("", [])
 
 
