@@ -16,11 +16,9 @@ package is not already importable, then imports `claude_guard` itself so a calle
 `sys.modules["claude_guard"]` being populated.
 
 # DECIDED: no fallback to a stale local copy when the deploy is missing. Raise instead. A
-# machine mid-deploy can have the new hook code without yet having the dotfiles package behind it, and a private fallback copy would keep serving a permission
-# decision that looks current but was pinned at whatever the fallback last held — nobody sees
-# that it fell behind. This module raises; `_hook_common.py` catches it and reports the
-# segmenter as missing, and each guard turns that into its own posture on an unreadable
-# command.
+# machine mid-deploy can have the new hook code before the dotfiles package, and a fallback
+# copy would silently serve decisions pinned at whatever it last held. `_hook_common.py`
+# reports the segmenter as missing, and each guard applies its own unreadable-command posture.
 """
 
 import os

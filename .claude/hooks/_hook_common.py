@@ -24,13 +24,9 @@ from typing import Any
 
 HOOKS_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# The stage splitter is the dotfiles package's segmenter. The package's `parse` cuts on the
-# same separators, keeps a quoted `;` inside its word, treats a newline as a separator, and
-# lifts heredoc bodies off the segment text. `_claude_guard` raises when the package is not
-# deployed (its DECIDED marker refuses a stale fallback); `segments` turns that into
-# `Unsplittable`, and each consumer decides what a guard that cannot read its input does — an
-# `ask` for a deny guard with a real cost, no decision for the rest. Never a silent "nothing
-# here".
+# The stage splitter is the dotfiles package's segmenter. When the package is not deployed,
+# `segments` raises `Unsplittable` and each consumer picks its posture: `ask` for a deny guard
+# with a real cost, no decision for the rest, never a silent "nothing here".
 try:
     import _claude_guard  # noqa: F401  (bootstraps claude_guard onto sys.path)
     from claude_guard.segment import parse as _parse
@@ -333,13 +329,9 @@ def primary_checkout(start: str = HOOKS_DIR) -> str | None:
     return os.path.dirname(common)
 
 
-# A test points the instructions log at a scratch file through this variable rather than by
-# patching a module attribute; nothing on a host sets it. The appender writes to and
-# eventually renames whatever file it names, so a value leaked into a real session must not
-# reach a state file or another log. The override is honoured only for a file named
-# `instructions.log` under the temp dir, where pytest's tmp_path lives. The name matters as
-# much as the directory: the temp dir also holds this module's own `claude-<name>-<sid>`
-# state files.
+# Test-only override; nothing on a host sets it. The appender renames the file it names, so
+# it is honoured only for `instructions.log` under the temp dir, never this module's
+# `claude-<name>-<sid>` state files that share that dir.
 INSTRUCTIONS_LOG_ENV = "CLAUDE_INSTRUCTIONS_LOG"
 INSTRUCTIONS_LOG_MAX_BYTES = 256 * 1024
 _INSTRUCTIONS_LOG_NAME = "instructions.log"

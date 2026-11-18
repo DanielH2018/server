@@ -208,17 +208,9 @@ def test_an_unterminated_quote_leaves_the_command_alone():
     assert rewrite("""python3 -c 'unterminated && pytest""") is None
 
 
-# --- heredocs: a document body is data, not a command sequence -----------------------------
-#
-# The walk reads a newline as a command separator, and a heredoc body is part of the Bash
-# tool's command text. A line of prose starting with a `.py` filename must not be spliced as
-# if it were a program — e.g. a commit message reading `uv run health.py had grown to 938
-# lines`. Auto mode writes files through heredocs too, so `cat > foo.py <<'EOF'` is the same
-# bug on a more common surface.
-#
-# Body apostrophes are why these vectors need reading carefully: a body containing "doesn't"
-# flips the quote state, and the unterminated-quote bail would return None for the wrong
-# reason. The vectors below are apostrophe-free so they isolate the heredoc handling.
+# Heredocs: a document body is data, not a command sequence, even when a body line starts
+# with a `.py` filename. The vectors are apostrophe-free: an apostrophe flips the quote state,
+# and the unterminated-quote bail would return None for the wrong reason.
 
 
 def test_a_commit_message_naming_a_py_file_is_left_alone():

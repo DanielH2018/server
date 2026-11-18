@@ -127,13 +127,8 @@ def decision(payload):
     if not command:
         return None
     # DECIDED: the process cwd, not `claude_guard.hook.read_cwd`'s `""`, when the payload
-    # carries no `cwd`. Every arm joins `repo_root` as a path prefix — `os.path.join` for
-    # a relative write target, and as `find_repo_root`'s fallback for a target in no
-    # checkout — and an empty prefix resolves against the
-    # process cwd implicitly, the same silent probe `read_cwd`'s docstring refuses for
-    # `git -C ""`. Naming the directory says which
-    # checkout those paths resolve in. The shim's `cd` makes it the
-    # primary checkout, a real repo root, so both arms keep a tree to read.
+    # carries no `cwd`. Every arm joins `repo_root` as a path prefix, and an empty prefix
+    # resolves against the cwd implicitly. The shim's `cd` makes the cwd the primary checkout.
     repo_root = payload.get("cwd") or os.getcwd()
     denied = read_only_decision(payload, command, repo_root, written_paths)
     if denied:
