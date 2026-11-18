@@ -336,7 +336,7 @@ def primary_checkout(start: str = HOOKS_DIR) -> str | None:
 # A test points the instructions log at a scratch file through this variable rather than by
 # patching a module attribute; nothing on a host sets it. The appender writes to and
 # eventually renames whatever file it names, so a value leaked into a real session must not
-# reach a state file or another log (#3805). The override is honoured only for a file named
+# reach a state file or another log. The override is honoured only for a file named
 # `instructions.log` under the temp dir, where pytest's tmp_path lives. The name matters as
 # much as the directory: the temp dir also holds this module's own `claude-<name>-<sid>`
 # state files.

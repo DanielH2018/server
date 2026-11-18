@@ -161,10 +161,8 @@ def main():
     if data is None:
         return 0
     file_path = ((data.get("tool_input") or {}).get("file_path")) or ""
-    # Guard the checkout that owns the edited file, not the one this hook runs from. Up to
-    # #3394 settings.json invoked the primary checkout's copy of this hook, so a root derived
-    # from __file__ aimed the path-prefix guard at the primary checkout even for an edit inside
-    # a worktree. A session still edits files outside its own checkout by absolute path.
+    # Guard the checkout that owns the edited file, not the one this hook runs from: a
+    # session edits files outside its own checkout by absolute path.
     hook_root = os.path.dirname(
         os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     )

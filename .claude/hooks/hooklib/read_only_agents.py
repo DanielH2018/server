@@ -25,7 +25,7 @@ _OWN_CHECKOUT = os.path.dirname(
 # An agent whose frontmatter carries `read_only: true` still lists Bash, and Bash can write a
 # file, commit and push. The description's "Read-only" was a prompt instruction, and these
 # agents read untrusted text: the skeptic reads open PRs, and a Renovate PR body quotes
-# upstream release notes (#4617). A subagent's hook payload names it in `agent_type`, its
+# upstream release notes. A subagent's hook payload names it in `agent_type`, its
 # frontmatter `name:`.
 #
 # DECIDED: deny, not arm 1's ask. Arm 1 asks because one wrong extraction must not block the

@@ -46,8 +46,8 @@ to remove and fan-out batches running on another host.
 # SESSION_HEALTH_VERBOSE=1 forces output.
 # DECIDED: the gen-hooks block above carries no `matcher`, so the hook also fires on `compact`.
 # A compaction is not a no-op here: `main` rows `MEMORY.md` under `compact` before it returns,
-# because Claude Code reloads the file with no InstructionsLoaded event (#4668). A
-# `startup|resume|clear` matcher would drop that row (#6153). A second, `compact`-only entry
+# because Claude Code reloads the file with no InstructionsLoaded event. A
+# `startup|resume|clear` matcher would drop that row. A second, `compact`-only entry
 # pointing at a row-only script saves nothing: `run-hook.sh` starts the same `uv run`
 # interpreter for every registration, and that start is the whole cost of a compaction here.
 
@@ -377,7 +377,7 @@ def other_live_sessions(
         mine = set()
     # One thread per live worktree, each with its own diff and dirty read: run in turn, a
     # handful of sessions on a loaded box passed the banner's deadline and lost the whole
-    # list. A tree that does not finish costs its own line, never its siblings' (#6153).
+    # list. A tree that does not finish costs its own line, never its siblings'.
     sections = run_sections(
         [
             (f"the scan of {name_of(tree)}", functools.partial(describe, tree))
@@ -518,7 +518,7 @@ def main(
     compact = payload.get("source") == "compact"
     try:
         # Imported here so a broken module costs these rows, never the banner. A compaction
-        # reloads MEMORY.md with no InstructionsLoaded event, so it rows that too (#4668).
+        # reloads MEMORY.md with no InstructionsLoaded event, so it rows that too.
         from hooklib.instruction_rows import log_unevented_loads
 
         log_unevented_loads(payload, "compact" if compact else "session_start")
@@ -528,7 +528,7 @@ def main(
     if compact:
         return 0
 
-    # Every probe at once, under one deadline (#6153): run in turn, their caps summed to more
+    # Every probe at once, under one deadline: run in turn, their caps summed to more
     # than the hook's budget, and the harness's kill took the whole banner with it.
     cwd = os.getcwd()
     (
@@ -560,7 +560,7 @@ def main(
     if sessions:
         context += ["Other Claude sessions in this repo:", *sessions]
 
-    # Operator housekeeping goes to `systemMessage`, which the model never reads (#7900).
+    # Operator housekeeping goes to `systemMessage`, which the model never reads.
     print_hook_output(fit_to_budget(context), worktrees + fanout)
     return 0
 

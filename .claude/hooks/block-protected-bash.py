@@ -133,7 +133,7 @@ def decision(payload):
     # process cwd implicitly, the same silent probe `read_cwd`'s docstring refuses for
     # `git -C ""`. Naming the directory says which
     # checkout those paths resolve in. The shim's `cd` makes it the
-    # primary checkout, a real repo root, so both arms keep a tree to read. Issue #2135.
+    # primary checkout, a real repo root, so both arms keep a tree to read.
     repo_root = payload.get("cwd") or os.getcwd()
     denied = read_only_decision(payload, command, repo_root, written_paths)
     if denied:

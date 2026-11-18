@@ -301,7 +301,7 @@ def test_a_body_apostrophe_no_longer_decides_the_outcome():
 #
 # Everything above drives the arm directly. These two cover the half only the dispatcher can
 # get wrong: that the rewrite reaches the emitted `hookSpecificOutput` at all, and that it
-# rides beside another arm's verdict rather than replacing it (#3286).
+# rides beside another arm's verdict rather than replacing it.
 
 
 def _dispatch(command, monkeypatch, capsys):
@@ -321,7 +321,7 @@ def _dispatch(command, monkeypatch, capsys):
 
 def test_the_dispatcher_emits_the_rewrite(monkeypatch, capsys):
     # One module, not a suite: run from a fan-out batch, `block-batch-full-suite` denies a
-    # command selecting over 300 modules, and `_REPO` is then the batch worktree (#6146).
+    # command selecting over 300 modules, and `_REPO` is then the batch worktree.
     command = "pytest .claude/hooks/tests/test_uv_python.py"
     out = _dispatch(command, monkeypatch, capsys)
     assert out["updatedInput"] == {"command": f"uv run {command}"}

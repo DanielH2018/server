@@ -72,7 +72,7 @@ def test_an_override_naming_another_file_is_neither_written_nor_rotated_is_flagg
     tmp_path, monkeypatch, target
 ):
     # A leaked value naming a large state file must not reach it: the appender would add a
-    # row and then rename the file aside (#3805). The row lands in the normal log instead.
+    # row and then rename the file aside. The row lands in the normal log instead.
     monkeypatch.setattr(tempfile, "gettempdir", lambda: str(tmp_path / "tmp"))
     primary = init_repo(tmp_path / "primary", initial_commit="init")
     outside = tmp_path / target
@@ -118,8 +118,7 @@ def _load(log, path, session_id):
 
 
 def test_each_load_row_carries_the_byte_size_of_the_file_it_loaded(tmp_path):
-    # #4610: nothing recorded how much instruction context a session loads. Two files of
-    # different sizes, so a row carrying a running sum or the other file's size fails.
+    # Two files of different sizes, so a row carrying a running sum or the other file's size fails.
     log = tmp_path / "instructions.log"
     big = tmp_path / "big" / "CLAUDE.md"
     small = tmp_path / "small" / "CLAUDE.md"
