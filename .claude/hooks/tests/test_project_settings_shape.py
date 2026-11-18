@@ -160,12 +160,9 @@ def test_the_timeout_check_reads_the_entries_it_claims_to():
     )
 
 
-# The project-scope plugin disables this file may carry. `superpowers` is off here by choice
-# (commit 6d84aa665). `claude-permission-audit` is the reader docs/claude-tooling.md names for
-# the OTEL `tool_decision` stream, and its `false` here outlived the double-logging it was
-# written for: this repo's own permission logger went away in fe63a79da and the entry stayed
-# until #3142. Disabling it removes `/audit-permissions` from every session opened in this repo,
-# and nothing in a session says so.
+# The project-scope plugin disables this file may carry. `claude-permission-audit` is the reader
+# docs/claude-tooling.md names for the OTEL `tool_decision` stream; disabling it removes
+# `/audit-permissions` from every session opened in this repo, and nothing in a session says so.
 PLUGINS_ALLOWED_TO_BE_DISABLED = frozenset({"superpowers@claude-plugins-official"})
 
 PERMISSION_AUDIT_PLUGIN = "claude-permission-audit@daniel-tools"

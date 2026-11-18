@@ -245,7 +245,7 @@ def test_a_module_from_another_checkout_is_reported(scratch):
 
 # A review pipeline runs every phase after the implementer with each hook pointed at a held
 # copy outside the worktree (`fanout_lib.review.held_hooks`). A hook that finds `scripts/`
-# through its own `__file__` finds the held copy's, so the copy must carry it (#4420).
+# through its own `__file__` finds the held copy's, so the copy must carry it.
 @pytest.fixture(scope="module")
 def held(tmp_path_factory) -> Path:
     from fanout_lib.review.held_hooks import read_hooks, write_hooks
@@ -314,7 +314,7 @@ def test_a_held_copy_of_the_hooks_alone_cannot_read_the_inventory(hooks_alone):
 
 
 # With no inventory the guard cannot tell a homelab host from any other, so it matches a
-# remote git on every host rather than on none (#4420). A cd into the repo still passes.
+# remote git on every host rather than on none. A cd into the repo still passes.
 def test_the_remote_git_rule_fails_closed_when_the_inventory_is_unreadable(
     hooks_alone,
 ):

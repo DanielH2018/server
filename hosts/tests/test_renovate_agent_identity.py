@@ -15,7 +15,6 @@ import importlib.util
 import json
 import re
 import shlex
-import sys
 
 import claude_config_render
 import pytest
@@ -370,9 +369,9 @@ def test_the_session_settings_carry_the_auto_mode_deny_floor() -> None:
     assert "allow" not in auto
 
 
-def guard_decision(command: str) -> str | None:
+def guard_decision(command: str, monkeypatch) -> str | None:
     """The decision the repo's PreToolUse:Bash dispatcher reaches for `command`, or None."""
-    sys.path.insert(0, str(HOOKS))  # the arms import _hook_common
+    monkeypatch.syspath_prepend(str(HOOKS))  # the arms import _hook_common
     spec = importlib.util.spec_from_file_location(
         "bash_pretool", HOOKS / "bash-pretool.py"
     )
@@ -392,8 +391,8 @@ def guard_decision(command: str) -> str | None:
     return dispatcher.merge(verdicts)[0]
 
 
-def test_the_project_guard_still_denies_what_it_should() -> None:
-    assert guard_decision("gh issue create --title x --body y") == "deny"
+def test_the_project_guard_still_denies_what_it_should(monkeypatch) -> None:
+    assert guard_decision("gh issue create --title x --body y", monkeypatch) == "deny"
 
 
 def test_land_sh_ends_its_landing_before_the_lander_script_kills_it() -> None:
