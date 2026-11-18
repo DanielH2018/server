@@ -202,8 +202,8 @@ bedroom_run_scenario:
                 entity_id: switch.adaptive_lighting_bedroom_adaptive_lighting_sleep_mode_bedroom
         # Un-pause AL when the preview paused it: bedtime marks the bulbs manual_control
         # (hands-off) and neither the snapshot scene nor the flags above clear that — without
-        # this, a fast bedtime preview left AL not adapting until the next wake release
-        # (2026-07-03 review). Only when the pre-test list was empty — a room that was
+        # this, a fast bedtime preview leaves AL not adapting until the next wake release.
+        # Only when the pre-test list was empty — a room that was
         # genuinely paused before the test stays paused; the clear no-ops if already clear.
         - if: "{{ snap_al_manual_empty }}"
           then:
@@ -223,9 +223,9 @@ bedroom_run_scenario:
             notification_id: test_scenario
             title: "↩️ Preview restored"
             message: "Fast preview complete — restored the room to its pre-test state."
-    # Re-arm the picker to its safe default (added 2026-08-16). OUTSIDE the `wrap` block on
-    # purpose: it must also run at `real` speed, which is the dangerous combination. The picker
-    # was found parked on bedtime/real, leaving the dashboard's Run button one tap from a
+    # Re-arm the picker to its safe default. OUTSIDE the `wrap` block on
+    # purpose: it must also run at `real` speed, which is the dangerous combination. A picker
+    # parked on bedtime/real leaves the dashboard's Run button one tap from a
     # production bedtime — sleep mode on, AL sleep on, a 30-min fade to amber 3%, fan capped.
     # `off` being the first option is the whole reason this is an input_select rather than an
     # input_boolean (only input_select has a creation default), so drifting off it forfeits that.

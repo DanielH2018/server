@@ -46,7 +46,7 @@ import time
 
 # Discord rejects a message over 2000 characters with HTTP 400. The pod-side twin of host_lib's
 # `DISCORD_MAX` and `clamp_discord`: the two programs ship by different mechanisms and cannot
-# share a module (host_lib's `discord_post` says so too), so edit both together (#3351).
+# share a module (host_lib's `discord_post` says so too), so edit both together.
 DISCORD_MAX = 1900
 DISCORD_TRUNCATED = "\n…(truncated)"
 
@@ -59,7 +59,7 @@ def _env(name: str, default: str) -> str:
 # each.
 #
 # IMPORTING A MODULE THAT USES THESE MUST NOT RAISE. `python /app/cli.py` imports both this
-# module and bridge/config.py transitively, so a ValueError on one malformed number used to kill
+# module and bridge/config.py transitively, so a ValueError on one malformed number would kill
 # the pod during import — before the heartbeat file existed, before a single monitor could be
 # told, and with a traceback naming neither the env var nor its value. `_int`/`_num` below
 # record the problem, fall back to the documented default, and let cli.py's `main()` print the
@@ -112,8 +112,7 @@ def _num(name: str, default: str) -> float:
 # scripts drifts in the one direction nobody notices: the slower copy fails open more often, and
 # a check that fails open is inert behind a green monitor.
 #
-# It is a CEILING, not a budget. The glances incident (docs/monitor-bridge-checks.md, retired section) is what
-# that distinction costs: /api/4/containers answered in 4.43s and then timed out at this bound
+# It is a CEILING, not a budget. A glances /api/4/containers shows what that distinction costs: it answered in 4.43s and then timed out at this bound
 # on the very next call, where its siblings answer in 0.03-0.06s. A source that slow needs the
 # cheap signal to decide and the expensive one only to explain — this constant cannot make that
 # choice for a caller, it can only stop a hang.
@@ -125,10 +124,9 @@ def log(*args: object) -> None:
 
     It carries NO timestamp of its own. Both bridges run as containers, and the container runtime
     already stamps every line — `kubectl logs --timestamps` prepends the true UTC ingestion time.
-    The stamp this function used to print was `time.strftime` with no offset, so it rendered the
-    container's local America/Chicago wall clock while looking like an ISO instant; reading it as
-    UTC shifted a B2 cap breach five hours early on 2026-08-16 and pointed the investigation at
-    the wrong window. One stamp from the runtime beats two that disagree.
+    A `time.strftime` stamp with no offset would render the container's local America/Chicago
+    wall clock while looking like an ISO instant, and reading it as UTC shifts an event five
+    hours. One stamp from the runtime beats two that disagree.
 
     Callers must reach this qualified as `bridge.common.log(...)`; see this module's header.
     """

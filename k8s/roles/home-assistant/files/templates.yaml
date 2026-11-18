@@ -18,16 +18,16 @@
       unique_id: bedroom_wake_start
       device_class: timestamp
       # `> now() - 2h` rejects a STALE past alarm: a Wear OS next_alarm can hold an already-fired
-      # alarm for hours (seen 2026-07-01 — the watch held the prior morning's 06:00 all night,
-      # so this sensor pointed at a PAST time and the `at:` wake trigger had nothing to fire on).
-      # The hour guard alone (3-11) passed that stale value; require it to be recent too so a
+      # alarm for hours (the watch can hold the prior morning's 06:00 all night, so this sensor
+      # would point at a PAST time and the `at:` wake trigger would have nothing to fire on).
+      # The hour guard alone (3-11) passes that stale value; require it to be recent too so a
       # lagging watch makes this `unavailable` (fallback handles it) instead of masquerading.
-      # BUG (2026-07-02, fixed same day): a bare `> now()` rejects the CURRENT morning's own alarm
-      # the instant it rings — i.e. 15 min into every 45-min ramp window (window = alarm-15 to
-      # alarm+30, so `now() > na` becomes true at exactly elapsed=15, not at window close). That
-      # broke bedroom_wake_ramp (elapsed fell back to the -1 sentinel, so in_window/release_due were
-      # both permanently false for the rest of the window) and stranded Adaptive Lighting's
-      # manual_control (the hand-off release never ran). The 2-hour grace comfortably covers the
+      # A bare `> now()` would reject the CURRENT morning's own alarm the instant it rings — i.e.
+      # 15 min into every 45-min ramp window (window = alarm-15 to alarm+30, so `now() > na`
+      # becomes true at exactly elapsed=15, not at window close). That would break
+      # bedroom_wake_ramp (elapsed falls back to the -1 sentinel, so in_window/release_due are
+      # both permanently false for the rest of the window) and strand Adaptive Lighting's
+      # manual_control (the hand-off release never runs). The 2-hour grace comfortably covers the
       # ramp + its bounded [45,90)-min catch-up release window (in_wake_release_window in
       # lighting.jinja) while still catching a genuinely stale (many-hours/overnight) alarm.
       availability: >-
@@ -43,11 +43,11 @@
 #
 # The future-alarm guard DIFFERS from bedroom_wake_start ON PURPOSE. wake_start uses `> now() - 2h`
 # because it anchors an IN-FLIGHT 45-min ramp + [45,90)-min AL-release window, so its availability
-# must outlive the WINDOW (a bare `> now()` killed the ramp the instant the alarm rang — the
-# 2026-07-02 bug). This sensor is a ONE-SHOT anchor with NO post-fire window (the prompt fires once,
+# must outlive the WINDOW (a bare `> now()` kills the ramp the instant the alarm rings). This
+# sensor is a ONE-SHOT anchor with NO post-fire window (the prompt fires once,
 # 8h before the alarm), so a bare `as_datetime(na) > now()` is correct: a lagging Wear OS next_alarm
 # holding an ALREADY-FIRED (past) alarm makes this `unavailable`, so the prompt's 22:30 fallback fires
-# instead of a dead dynamic `at:` on a past time (the 2026-07-01 stale-alarm case).
+# instead of a dead dynamic `at:` on a past time.
 # NOTE: `> now()` on the ALARM does NOT cover the "alarm is future but its winddown is ALREADY PAST"
 # case (an alarm set AFTER alarm-8h has passed, e.g. a 06:00 alarm created at 23:00 -> winddown 22:00,
 # past). The sensor stays `available` with a past value, so the dynamic `at:` can't fire on it; that
@@ -65,7 +65,7 @@
 
 # Pixel Watch staleness: hours the watch's next alarm has sat in the past (0 when it is in the
 # future or there is none). A watch that stops reporting freezes next_alarm on an already-rung alarm
-# while the entity stays available, so an offline alert cannot see it (2026-11-03, #8382). Fed to
+# while the entity stays available, so an offline alert cannot see it. Fed to
 # the threshold engine by binary_sensor.pixel_watch_next_alarm_overdue_high (thresholds.yaml).
 - sensor:
     - name: "Pixel Watch next alarm overdue"
@@ -138,7 +138,7 @@
 # apply_natural_gated (button-1 HOLD) lights instead of turning off; each blip stays the exact
 # complement of its lighting path because both read this one sensor.
 # Reads sensor.aqara_t1_illuminance, NOT the FP300: the bulbs swing the FP300 13x (48 <-> 640) and only
-# 1.6x the T1, so the old gate was largely reading its own output. sun.sun is passed as the
+# 1.6x the T1, so a gate on the FP300 would largely read its own output. sun.sun is passed as the
 # dark_fallback because the T1 reports only on change and parks at `unknown` after an HA restart.
 - binary_sensor:
     - name: "Bedroom auto-light allowed"
@@ -154,7 +154,7 @@
 # the wake window covers the 45 min after it, on the alarm or the 06:00 fallback. The two are
 # gap-free, so this is one continuous hold from lights-out until the wake routine finishes.
 # DECIDED: the window is computed here through wake_elapsed, not read from
-# binary_sensor.bedroom_in_wake_window (#8383). At the alarm nothing changes state, so that sensor
+# binary_sensor.bedroom_in_wake_window. At the alarm nothing changes state, so that sensor
 # turns on only at its next minute refresh, and the morning reset clears sleep_mode at the same
 # second; reading the sensor would drop this hold for an instant, and hold_end would cut the purifier.
 - binary_sensor:

@@ -82,17 +82,16 @@ def check_arr_queue(cfg: Config, src: Sources, now=None) -> tuple[bool, str]:
     on purpose.** Those let the error bubble to `_evaluate`, which renders it `down` with no
     grace. The *arrs are different in one respect that matters: they are Deployments this same
     bridge watches rolling, so their API refuses connections every time k3s replaces the pod —
-    three of this monitor's DOWN episodes over the 30 days to 2026-09-11 were a fetch error
-    co-timed with a k3s Workload Health `radarr(1)` episode, which is a rollout being reported
-    twice. `ARR_FETCH_CONSECUTIVE` holds `up` through that and pages on a *arr that stays
+    a fetch error co-timed with a k3s Workload Health `radarr(1)` episode is a rollout being
+    reported twice. `ARR_FETCH_CONSECUTIVE` holds `up` through that and pages on a *arr that stays
     unreachable. Do not restore the bubbling convention here without also removing that knob.
 
     The QUEUE verdict below is deliberately ungraced: a poisoned release sitting in the queue
-    is not a transient, and delaying it is the 2026-07-01 incident this check exists for.
+    is not a transient, and delaying it is what this check exists to prevent.
     pageSize=250 mirrors n8n's page cap — ample for a homelab queue.
 
     The ONE exception to that ungraced queue verdict is Sonarr's self-clearing title hold,
-    held for `ARR_TITLE_HOLD_GRACE_H` (#2786). It is not a fault waiting to be diagnosed:
+    held for `ARR_TITLE_HOLD_GRACE_H`. It is not a fault waiting to be diagnosed:
     Sonarr applies it and releases it itself, and the four conditions that turn the hold off are
     in queue_warnings.
 
@@ -110,7 +109,7 @@ def check_arr_queue(cfg: Config, src: Sources, now=None) -> tuple[bool, str]:
             "Radarr",
             # includeUnknownMovieItems is Radarr's spelling of Sonarr's
             # includeUnknownSeriesItems — both default FALSE, hiding exactly the unmapped/
-            # poisoned-release queue items this check exists for (2026-07-01 incident class).
+            # poisoned-release queue items this check exists for.
             cfg.RADARR_URL + "/api/v3/queue?includeUnknownMovieItems=true&pageSize=250",
             cfg.RADARR_API_KEY,
         ),
@@ -163,8 +162,7 @@ def bazarr_problems(status: dict | None, health: dict | None) -> list[tuple[str,
     The peer-version fields are the interesting half. Bazarr fills `sonarr_version` /
     `radarr_version` by calling each app with ITS OWN stored copy of that app's API key, so a
     key Bazarr no longer holds correctly leaves the field empty while everything else about
-    Bazarr still looks healthy. Measured against the live app 2026-08-29 after the keys were
-    fixed: `sonarr_version='4.0.17.2952'`, `radarr_version='6.1.1.10360'`.
+    Bazarr still looks healthy. A working field reads like `sonarr_version='4.0.17.2952'`.
 
     An ABSENT field is not the same as an empty one and is deliberately ignored: Bazarr omits
     the key entirely when that integration is switched off, and alerting on a peer the operator
@@ -193,22 +191,22 @@ def bazarr_problems(status: dict | None, health: dict | None) -> list[tuple[str,
 def check_bazarr(cfg: Config, src: Sources) -> tuple[bool, str]:
     """Bazarr's own health, and whether it can still talk to Sonarr and Radarr.
 
-    Bazarr is the one *arr with no exporter, and that is why the 2026-08-29 stale-key incident
-    surfaced only as an OOM 90 minutes later. Sonarr's and Radarr's own stale keys showed up
-    immediately as failing exportarr scrapes; Bazarr had nothing watching it.
+    Bazarr is the one *arr with no exporter, so a stale key of its own surfaces only as an OOM
+    about 90 minutes later. Sonarr's and Radarr's own stale keys show up immediately as failing
+    exportarr scrapes.
 
     NOT an exportarr sidecar, deliberately. exportarr does speak bazarr, but at the pinned
     v2.3.0 its collector always performs the full episode-subtitle walk — upstream measures
     that in "tens of seconds", spent inside Bazarr — and v2.3.0 predates the
     overlapping-collection skip that upstream added specifically to stop concurrent walks
-    stacking (their issue #380, "bazarr CPU drainage"). Pointing that at the workload that had
+    stacking (their "bazarr CPU drainage" issue). Pointing that at the workload that had
     just OOM-killed would risk causing the failure this exists to detect. These two endpoints
-    cost 477 and 13 bytes and measured 2-7 ms over three runs each, 2026-08-29.
+    cost 477 and 13 bytes and take 2-7 ms.
 
     Empty BAZARR_API_KEY -> disabled (stays up), like check_n8n. An unreachable Bazarr is NOT
     caught here — it bubbles up and _evaluate renders it `down` with the error, the
-    check_prowlarr_indexers/check_n8n convention (check_arr_queue LEFT that convention on
-    2026-09-11 — see its docstring). That covers the 401 a wrong key
+    check_prowlarr_indexers/check_n8n convention (check_arr_queue departs from that convention —
+    see its docstring). That covers the 401 a wrong key
     returns, which is itself the signal that Bazarr's API key in SOPS has gone stale.
     """
     if not cfg.BAZARR_API_KEY:
@@ -245,7 +243,7 @@ def check_prowlarr_indexers(cfg: Config, src: Sources) -> tuple[bool, str]:
     Empty PROWLARR_API_KEY -> disabled (stays up), like check_n8n. An unreachable Prowlarr is NOT
     caught here — it bubbles up and _evaluate renders it `down` with the error (the
     check_n8n/check_bazarr convention; the sustained-failure grace is about indexer flaps, not
-    the bridge's own reach). check_arr_queue no longer shares it — its *arrs are Deployments
+    the bridge's own reach). check_arr_queue does not share it — its *arrs are Deployments
     this bridge watches rolling, where a Prowlarr rollout is not a recurring source of pages. The all-indexers-down red error stays with Prowlarr's own in-app
     onHealthIssue notification — this owns the per-indexer sustained signal Prowlarr can't express.
     """
@@ -293,9 +291,9 @@ def check_etcd_restore_drill(
 ) -> tuple[bool, str]:
     """Is the off-box etcd snapshot still PROVABLY restorable?
 
-    The snapshot half has been taken, uploaded and alarmed since 2026-08-16. Until 2026-08-28
-    nothing watched the restore half: the drill wrote a stamp no code read, so a silently
-    failing drill was indistinguishable from a passing one. etcd carries the Longhorn `Backup`
+    The snapshot half is taken, uploaded and alarmed elsewhere. This watches the restore half:
+    the drill writes a stamp, and without a reader a silently failing drill is
+    indistinguishable from a passing one. etcd carries the Longhorn `Backup`
     CRs needed to FIND the volume backups, so this is the tier whose failure voids the rest of
     the recovery chain.
 

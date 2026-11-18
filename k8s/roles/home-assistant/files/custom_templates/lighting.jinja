@@ -29,10 +29,10 @@
 {%- endmacro -%}
 
 {# Wake-ramp RELEASE catch-up window: [45, 90) minutes since the wake anchor. The hand-off back to
-   Adaptive Lighting (set_manual_control:false + apply at window end) used to fire on a SINGLE tick
-   (elapsed in [45,46)); an HA restart/deploy or a gated-off minute spanning that one tick stranded AL
-   paused for the rest of the day. This widens it to a 45-min catch-up window so a missed release
-   self-heals on a later tick. The caller ALSO gates on AL actually still being paused, so once the
+   Adaptive Lighting (set_manual_control:false + apply at window end) is a 45-min catch-up window,
+   not a single tick (elapsed in [45,46)): an HA restart/deploy or a gated-off minute spanning
+   one tick would strand AL paused for the rest of the day, so a missed release self-heals on a
+   later tick. The caller ALSO gates on AL actually still being paused, so once the
    release lands, re-running is a no-op (idempotent). Upper bound 90 = 45 min after window end: covers
    a long deploy/boot yet ends well before any plausible daytime manual control, so the ramp can't
    stomp a hand-set scene later in the day. Keep the 45 lower bound equal to in_wake_window's end. #}
@@ -43,20 +43,15 @@
 
 {# Wake-ramp brightness %: a long gentle dawn that STAYS DIM through the alarm and the ~20 min after,
    then climbs steeply to FULL brightness in the last stretch so the hand-off to Adaptive Lighting at
-   window end is still seamless (no sudden jump — the old curve stopped at 40% then AL popped the room
-   to its daytime target). Three segments: 1% at window start (e=0) -> a low mid at the alarm (e=15)
+   window end is still seamless (no sudden jump to AL's daytime target). Three segments: 1% at window start (e=0) -> a low mid at the alarm (e=15)
    -> a still-dim knee at alarm+20 (e=35) -> 100% at alarm+30 (e=45). The steep run is deliberately
    pushed into the final 10 min: you get a soft, non-jarring alarm (~3%) and it only gets bright once
    you should already be up. Re-evaluated once a minute by bedroom_wake_ramp, so a single call
    returns the level for the current elapsed.
 
-   Sleep-awareness was REMOVED 2026-08-16. The curve took a second `sleep_min` argument and softened
-   the mid/knee for a short night (0 < sleep_min < 360), sourced from
-   `sensor.pixel_9_pro_sleep_duration`. That entity no longer exists in HA and no replacement exists
-   on either device — the watch exposes next_alarm / bedtime_mode / on_body, but no sleep duration —
-   so every caller passed `| float(0)`, the knee was unreachable, and the branch was dead code that
-   read as live. Rebuilding it means a locally-derived signal (e.g. bedtime_mode's last_changed),
-   not another cloud sensor that can vanish silently. #}
+   The curve takes no sleep-duration argument: the watch exposes next_alarm / bedtime_mode /
+   on_body, but no sleep duration. A short-night softening would need a locally-derived signal
+   (e.g. bedtime_mode's last_changed), not a cloud sensor that can vanish silently. #}
 {%- macro wake_brightness(elapsed_min) -%}
 {%- set e = elapsed_min | float(0) -%}
 {%- set start = 1 -%}

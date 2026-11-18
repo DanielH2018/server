@@ -1,8 +1,8 @@
 """The weekday fallback wake starts whatever bedroom_manual_off holds, and only its ramp honours it.
 
 START is the branch that clears manual_off (through script.bedroom_clear_overrides), so a
-top-level manual_off gate made a night that ended with manual_off on a night with no wake at all
-(#8381). A mid-ramp "off" still has to stop RAMP and RELEASE.
+top-level manual_off gate made a night that ended with manual_off on a night with no wake at all.
+A mid-ramp "off" still has to stop RAMP and RELEASE.
 """
 
 from datetime import datetime, timezone
