@@ -1,7 +1,7 @@
 ---
 server_ip: 10.0.0.215
 # The link carrying server_ip. The k3s-server component's netplan file pins the address on it
-# statically, so k3s still starts when the gateway's DHCP server is down (#3882). Confirm the
+# statically, so k3s still starts when the gateway's DHCP server is down. Confirm the
 # gateway keeps server_ip out of its DHCP pool before applying it: with DHCPv4 off, nothing
 # renews a lease on it.
 k3s_node_static_link: eno1
@@ -10,15 +10,15 @@ k3s_node_static_link: eno1
 k3s_node_wifi_link: wlp4s0
 # daniel-server's node-to-node traffic (6443/8472/10250, k3s_join_server_ports) is
 # UFW-allowed here by the k3s-server component's k3s-join-* rules. Derived from daniel-server's one
-# literal (#4063).
+# literal.
 k3s_agent_node_ips:
   - "{{ hosts['daniel-server'].server_ip }}"
 # Cloud-init (subiquity) image: sshd's real config is the drop-in, not the bare
 # /etc/ssh/sshd_config. The sshd and integrity-scans components read this path, so a wrong
 # value points them at a file sshd never loads.
 ssh_config_path: /etc/ssh/sshd_config.d/50-cloud-init.conf
-# fwupd is installed here (`dpkg -l fwupd`, 2026-10-31), so the host-maintenance component ships
-# the weekly firmware update. group_vars/all.yml defaults this false.
+# fwupd is installed here, so the host-maintenance component ships the weekly firmware update.
+# group_vars/all.yml defaults this false.
 has_fwupd: true
 # Reconciler mode: live = grab a genuine replacement, verify (host ffprobe), delete the
 # fake + import. off/shadow also available.
@@ -53,42 +53,40 @@ has_github_cli: true
 has_chezmoi: true
 has_claude_code: true
 # The only memory store sessions write; claude-memory-sync.timer copies it, one-way and
-# overwriting, to daniel-server (issue #3123, the operator's decision of 2026-10-01).
+# overwriting, to daniel-server.
 claude_code_memory_sync_enabled: true
 # Lands a finished daniel-server fan-out batch's PR when its review record and its PR both pass
-# autoland.py's rule (issue #5496, the operator's go-ahead of 2026-10-18). False removes the
+# autoland.py's rule. False removes the
 # timer and its units, and every server batch stops at its PR again.
 claude_code_fanout_server_lander_enabled: true
-# Snapshots the per-PR pipeline timeline daily, before its journal inputs rotate (issue #5661).
+# Snapshots the per-PR pipeline timeline daily, before its journal inputs rotate.
 # False removes the timer and its units; the snapshots stay.
 claude_code_pipeline_timeline_enabled: true
-# Posts the previous week's triage runs and Renovate ticks every Monday (dotfiles#967 C7).
+# Posts the previous week's triage runs and Renovate ticks every Monday.
 # False removes the timer and its units; the posted-week record stays.
 claude_code_weekly_summary_enabled: true
-# The D5 flip pre-merge checks as one sudoers-granted wrapper (issue #5494); daniel-box holds the
+# The D5 flip pre-merge checks as one sudoers-granted wrapper; daniel-box holds the
 # cluster-admin kubeconfig. False removes the grant, the wrapper, the flux copy and the state dir.
 claude_code_takeover_check_enabled: true
-# The read-only root inspector, `rootq` (issue #6323), for the operator's account.
+# The read-only root inspector, `rootq`, for the operator's account.
 # False removes the grant, the shim and the script.
 claude_code_rootq_enabled: true
-# The same inspector for the agent user through a socket (issue #6350). False removes the
+# The same inspector for the agent user through a socket. False removes the
 # socket, its units, the helper, the client and the group, and the agent leaves the group.
 claude_code_rootq_socket_enabled: true
 # The `claude` Unix user the operator's Claude sessions move to, with no sudo and no read on
 # /home/ubuntu. It needs one interactive `claude` login as that user, like has_claude_code
 # above. False expires the account and keeps its home.
 claude_code_agent_user_enabled: true
-# The account claude-rc.service runs as: the phone's sessions run as the agent user. The first
-# apply after this lands restarts the host and drops live sessions, copies the operator's memory
-# store into the agent's once, and needs one interactive `/login` as `claude` afterwards
-# (docs/claude-agent-user.md, slice 4). Rollback: set it to `ubuntu`, or delete this line.
-# Rolled back to `ubuntu` on 2026-11-08 while GitHub support restores the agent account's
-# GitHub access. To move the phone's sessions back to the agent, set this to
-# "{{ claude_code_agent_user }}".
+# The account claude-rc.service runs as. `ubuntu` while GitHub support restores the agent
+# account's GitHub access. Setting it to "{{ claude_code_agent_user }}" runs the phone's
+# sessions as the agent user: the first apply then restarts the host and drops live sessions,
+# copies the operator's memory store into the agent's once, and needs one interactive `/login`
+# as `claude` afterwards (docs/claude-agent-user.md, slice 4).
 claude_code_user: ubuntu
 # That account's uid, which must equal the `claude` entry in hosts/daniel-box/package.yml's
 # `users:`. claude-rc.service binds /run/user/<uid> into its sandbox and points the user bus
-# there, so `systemd-run --user` works from a phone session (#6764). It has no default: a host
+# there, so `systemd-run --user` works from a phone session. It has no default: a host
 # that sets claude_code_user to a non-operator account and not this fails its render.
 claude_code_user_uid: 900
 # claude-land@<n>.service: the agent user starts it to land its own PR as the operator, under
@@ -101,7 +99,7 @@ claude_code_lander_enabled: true
 claude_code_triage_enabled: true
 claude_code_config_render_enabled: true
 # The agent user's own Node, @playwright/mcp, Chromium and homelab-ui MCP registration, so a
-# phone session can check that a UI renders (#4058). False removes all four.
+# phone session can check that a UI renders. False removes all four.
 claude_code_agent_homelab_ui_enabled: true
 # The agent user takes the operator's dotfiles through chezmoi, under their `agent` flag, in
 # place of the hand-picked config copy (operator, 2026-10-10; docs/claude-agent-user.md, "The
@@ -111,7 +109,7 @@ claude_code_agent_dotfiles: true
 # Slice 6 (docs/claude-agent-user.md): sessions here are meant to run as `claude`, but background
 # jobs and fan-out still start as ubuntu. The login caps leave user-1000.slice, and
 # claude-cgroup-metrics.sh counts any `claude` process uid 1000 still runs. No alert rule reads
-# that count, so such a process never pages (#5125). Rollback: delete both lines.
+# that count, so such a process never pages. Rollback: delete both lines.
 claude_code_login_uids: []
 claude_code_watch_uids: ["{{ claude_code_login_uid }}"]
 # `has_igpu` is deliberately unset. It means "pass /dev/dri through" (README §7) and is the
@@ -132,10 +130,8 @@ render_gid: 993
 # to renovate_agent_max_prs of them through the renovate-agent-land@ lander. Setting this back
 # to false stops and disables the timer; that is the rollback.
 #
-# Disarmed on 2026-10-03 and re-armed on 2026-10-05, once the session ran as its own user on
-# a repo-scoped token with no contents write (renovate_agent_gh_token) and the lander unit
-# alone could merge. Disarmed again by the operator's ruling of 2026-11-12 (#8241): the
-# session's token can still write to PRs and Actions. Re-arm only once two slices of the
+# Disarmed: the session's token (renovate_agent_gh_token) can still write to PRs and Actions.
+# Re-arm only once two slices of the
 # guardrails plan have landed: B2r, which moves that write to a controller user and gives the
 # session a read-only token, and B3, which fences the session's egress.
 renovate_agent_enabled: false
@@ -146,7 +142,7 @@ t2_egress_enabled: true
 # both sessions.
 t2_egress_proxy: "127.0.0.2:3128"
 
-# The window in which homelab-k3s-restart may restart k3s (H6.3b, hosts/components/k3s-restart).
+# The window in which homelab-k3s-restart may restart k3s (hosts/components/k3s-restart).
 # An OnCalendar value, read by the component's timer: host_vars sit above a component's defaults,
 # so each host's package carries its own slot (H3, *Component variables*). The slot falls between
 # the `*/10` and `*/30` cron fires at 11:30 and the next at 11:40, misses the `*/15` fire at

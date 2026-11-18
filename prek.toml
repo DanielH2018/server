@@ -3,10 +3,9 @@
 #:schema https://www.schemastore.org/prek.json
 
 # Every hook runs at commit time and at no other stage. A hook without `stages` runs at EVERY
-# stage, so a `.git/hooks/pre-push` shim left by an older `prek install` (from when the
-# `pytest` hook ran pre-push, removed 2026-10-02) re-ran all of them over the pushed range,
-# fixers included (#4018). Setting this here covers every checkout and any future shim; a hook
-# that genuinely belongs at another stage sets its own `stages`.
+# stage, so a stale `.git/hooks/pre-push` shim left by an older `prek install` would re-run all
+# of them over the pushed range, fixers included. Setting this here covers every checkout and
+# any future shim; a hook that genuinely belongs at another stage sets its own `stages`.
 #
 # default_stages does NOT reach a hook whose upstream manifest declares `stages` itself, and
 # pre-commit-hooks v6.0.0 lists `[pre-commit, pre-push, manual]` on three of ours. So every hook
@@ -138,13 +137,11 @@ files = "^(k8s/roles/observability/files/dashboards/.*\\.json|k8s/roles/observab
 # lokitool parses loki-homelab's LogQL rule files, and the hook fails when those files,
 # loki_homelab_rule_groups and the rendered loki-homelab-rules ConfigMap disagree. alloy boots
 # the pinned Alloy on loki-homelab's rendered config.alloy, because Alloy's parser rejects
-# selectors that Loki accepts (#6177) and `alloy validate` does not build the components.
+# selectors that Loki accepts and `alloy validate` does not build the components.
 # scripts/validate/alert_tools.sh provisions promtool and amtool at the observability role's
 # image tags, lokitool and alloy at loki-homelab's, and pint at its own pin, into alert-tools/ under the
 # git common dir, shared by every worktree of the clone. CI's `alert_rules.py --prove-red` step
 # is the tools' red proof.
-#
-# CI cost on ubuntu-26.04 runners, 2026-11-09: 118-154s, the sweep's costliest hook by ~10x (#7728).
 #
 # The `files` regex names every input the hook reads, because a PR run skips a hook no
 # changed file matches: the role's rule, rule-test and Alertmanager sources and the templates
@@ -200,8 +197,8 @@ pass_filenames = false
 # group_vars/all.yml is in scope because the validator renders with it (ALL_VARS) — an
 # edit there can change what the rendered scripts contain. The five library modules are
 # where the render, the lint and the two cron rules actually live; naming only the entry point
-# would leave the hook's selector matching a 197-line facade while its subject sat elsewhere.
-# A host component's templates are in scope since H3.8b, with its component.yml, whose
+# would leave the hook's selector matching a thin facade while its subject sat elsewhere.
+# A host component's templates are in scope, with its component.yml, whose
 # defaults the render reads, and each host's package.yml, which names the host it renders for.
 files = "^(hosts/lib/host_lib\\.py|scripts/lib/longhorn_lib/longhorn_backups\\.py|scripts/renderer/renderer_lib/(dialect|environment|jinja_filters)\\.py|hosts/components/.*|hosts/[^/]+/package\\.yml|scripts/validate/validate_lib/(ok_lines|shipped_render)\\.py|k8s/roles/.*\\.sh\\.j2|inventory/group_vars/all\\.yml|scripts/validate/shell_templates\\.py|scripts/lib/(inventory_lists|guard_jinja_env|cli_help|exit_codes|estate|git|k8s_context|k8s_yaml|render_context|render_guard|repo_paths|role_files|yaml_fast)\\.py|scripts/validate/validate_lib/shell_lint\\.py|scripts/renderer/template_filters/[^/]+\\.py)$"
 
@@ -228,7 +225,7 @@ pass_filenames = false
 # validate-shell-templates includes it: host_python_version and the other cross-role fallbacks
 # it carries feed every unit's render. The polkit rules are a third suffix in the first
 # alternative. Every file under hosts/ and the host renderer's modules are in scope because the
-# validator renders every host package through that renderer (H3.2c); a package unit may be a
+# validator renders every host package through that renderer; a package unit may be a
 # static file, so no suffix narrows the hosts/ alternative.
 files = "^(hosts/lib/host_lib\\.py|scripts/lib/longhorn_lib/longhorn_backups\\.py|hosts/.*|scripts/renderer/renderer_lib/[^/]+\\.py|scripts/deploy_tools/(chained_timeout|changed_set|kustomizations)\\.py|scripts/validate/validate_lib/(ok_lines|shipped_render)\\.py|k8s/roles/.*\\.(service|timer|socket|rules)\\.j2|inventory/group_vars/all\\.yml|scripts/validate/unit_templates\\.py|scripts/lib/guard_jinja_env\\.py|scripts/renderer/template_filters/[^/]+\\.py|scripts/lib/(inventory_lists|cli_help|exit_codes|estate|git|jinja_comments|k8s_context|k8s_lookups|k8s_role_callers|k8s_roles|k8s_yaml|render_context|render_guard|repo_paths|role_files|yaml_fast)\\.py)$"
 
@@ -281,7 +278,7 @@ pass_filenames = false
 files = "^(hosts/lib/host_lib\\.py|scripts/lib/longhorn_lib/longhorn_backups\\.py|scripts/renderer/renderer_lib/(dialect|environment|jinja_filters)\\.py|scripts/validate/validate_lib/(ok_lines|shipped_render)\\.py|hosts/components/.*\\.(j2|yml)|inventory/(group_vars/all|host_vars/[^/]+)\\.yml|secrets/secret_rotation\\.yml|scripts/validate/setup_templates\\.py|scripts/lib/guard_jinja_env\\.py|scripts/renderer/template_filters/[^/]+\\.py|scripts/lib/(inventory_lists|cli_help|exit_codes|estate|git|k8s_context|k8s_yaml|render_context|render_guard|repo_paths|role_files|yaml_fast)\\.py)$"
 
 # Lint the GitHub Actions workflows themselves. `check-yaml` above only proves they PARSE —
-# nothing until now checked that a job's `needs:` names a job that exists, that a `${{ }}`
+# nothing else checks that a job's `needs:` names a job that exists, that a `${{ }}`
 # expression references a real context, or that a matrix key is spelled the way the steps read
 # it. Those fail at trigger time, in a workflow whose whole job is to be the gate. actionlint
 # also runs shellcheck over every `run:` block (shellcheck-py is already a dev dep, so it is on
@@ -354,10 +351,9 @@ files = "^(secrets/secrets\\.yml|secrets/secret_rotation\\.yml|scripts/secrets_m
 # writes them, so this runs the checks that need no render or key: every value is ciphertext,
 # a file whose content moved also moved its MAC and lastmodified lines since HEAD, each file
 # is encrypted to its own creation rule, and .source matches secrets.yml's ciphertext. A
-# plaintext value or a hand edit then fails here rather than after a push. From target slice
-# PR D3.2c, which commits the first cluster file, CI's full `check` is the backstop for a
-# commit made without hooks, which is how the rotation cron commits. While no cluster file
-# exists the hook checks nothing and passes, in about 0.1s.
+# plaintext value or a hand edit then fails here rather than after a push. CI's full `check`
+# is the backstop for a commit made without hooks, which is how the rotation cron commits.
+# While no cluster file exists the hook checks nothing and passes.
 # `files` is the cluster paths plus the entry's import closure, which
 # scripts/tests/test_prek_files_cover_entry_imports.py derives and holds this regex to. The
 # closure reaches the renderer through `write` and the full `check`, which this hook never
@@ -391,9 +387,9 @@ files = "^(pyproject\\.toml|uv\\.lock)$"
 
 # Rewrites a role CLAUDE.md's generated `## At a glance` block in the commit that moves one of
 # its sources, and fails like a formatter so the author stages the doc and commits again
-# (#3698). Before it, every such edit went red in CI on
-# test_every_deployed_role_block_matches_what_the_generator_writes_now and cost a fix commit.
-# The test stays as the backstop for a commit that skipped prek.
+# (a stale block otherwise fails
+# test_every_deployed_role_block_matches_what_the_generator_writes_now in CI, which stays as
+# the backstop for a commit that skipped prek).
 #
 # `files` is every input the generator reads: the roles, the inventory, the shared templates
 # whose macros declare claims, the template filter it imports, and the Python under scripts/docs and
@@ -401,8 +397,6 @@ files = "^(pyproject\\.toml|uv\\.lock)$"
 # markers is reverted in the same commit. None of the docs-refresh cron's three staged paths
 # match, so that cron's commit never writes under k8s/roles/. Renovate edits defaults
 # without prek, but only an image tag or digest, which the block does not print.
-#
-# Cost, measured: 0.5s wall for a full run.
 [[repos.hooks]]
 id = "regen-role-glance"
 name = "Role At a glance blocks match their sources"
@@ -413,10 +407,9 @@ files = "^(hosts/lib/host_lib\\.py|scripts/lib/longhorn_lib/longhorn_backups\\.p
 
 # Rewrites a stale docs fragment (docs/assets/generated/fragments/) in the commit that moves
 # one of its tunables, and fails like a formatter so the author stages the fragment and commits
-# again (#3827). Before it, `static-ratchet-tests` ran
-# test_every_committed_fragment_matches_what_the_generator_writes_now at commit time, which
-# only failed, and the root CLAUDE.md carried a row teaching the hand repair. It sits above
-# `static-ratchet-tests` so that test reads the rewritten fragment.
+# again. It sits above `static-ratchet-tests`, which runs
+# test_every_committed_fragment_matches_what_the_generator_writes_now, so that test reads the
+# rewritten fragment.
 #
 # `files` is every input the generator reads: role defaults and templates (the auto-deploy
 # coverage walks every k8s role's defaults, which no fragment header lists), the inventory,
@@ -425,8 +418,6 @@ files = "^(hosts/lib/host_lib\\.py|scripts/lib/longhorn_lib/longhorn_backups\\.p
 # so a hand edit is reverted in the same commit. That makes the hook fire on the docs-refresh
 # cron's commit, which stages docs/assets/generated/; build_docs.py regenerates the fragments
 # into that directory before the cron commits, so there it writes nothing and exits 0.
-#
-# Cost, measured: 0.2s wall for a full run.
 [[repos.hooks]]
 id = "regen-doc-fragments"
 name = "Docs fragments match their sources"
@@ -447,8 +438,6 @@ files = "^(hosts/lib/host_lib\\.py|scripts/lib/longhorn_lib/longhorn_backups\\.p
 #
 # It is its own hook, not a mode of `regen-doc-fragments`, because the cron also runs the
 # fragment generator, and a second entry point cannot rewrite a doc from the cron by mistake.
-#
-# Cost, measured: 0.1s wall.
 [[repos.hooks]]
 id = "regen-doc-values"
 name = "Stated values in docs match the tree"
@@ -536,21 +525,17 @@ files = '''(?x)^(
 
 # Lower each ratchet allowlist entry to what its file is today, so a PR that SHRINKS a listed
 # module needs no hand edit. An entry has to MATCH its file (the `DECIDED:` marker in
-# tests/_ratchet.py), which made every such PR edit a line by hand: 70 commits touched
-# one of the two lists in the 30 days to 2026-09-28, 49 of them only lowering or deleting.
-# It only ever tightens -- a grown file's entry is left verbatim, so the ratchet still fails on
-# it -- and it writes unconditionally, never running the suite first, which is what keeps it out
-# of the #1799 repair deadlock.
+# tests/_ratchet.py). It only ever tightens -- a grown file's entry is left verbatim, so the
+# ratchet still fails on it -- and it writes unconditionally, never running the suite first, so
+# a failing ratchet cannot block its own repair.
 #
 # `static-ratchet-tests` sits after this hook, and CI's `pytest` job and `uv run pytest` run
 # after the commit, so by the time test_no_module_is_longer_than_its_cap_or_its_allowlist_entry
 # reads the lists off disk this hook has already rewritten them. Like a formatter, it exits non-zero when it
 # rewrote a list, so the author stages what it wrote.
 #
-# Cost, measured: 4.0s wall for a full run, almost all of it the monkeypatch
-# census AST-parsing every test module. The `files` gate keeps it off a docs-only commit,
-# and prek SKIPS a hook whose gate matches nothing even with pass_filenames = false
-# (verified), so the docs-refresh and eval-run crons never pay it.
+# The `files` gate keeps it off a docs-only commit, and prek SKIPS a hook whose gate matches
+# nothing even with pass_filenames = false, so the docs-refresh and eval-run crons never pay it.
 [[repos.hooks]]
 id = "tighten-ratchet-allowlists"
 name = "Ratchet allowlist entries match their files"
@@ -571,11 +556,7 @@ files = "(\\.py|^tests/repo/(module_length|monkeypatch)_allowlist\\.txt)$"
 # The same run adds `vanished-identifier`: a CLAUDE.md still naming an identifier this branch
 # removed from the last non-Markdown file holding it. That commit is usually code-only, so the
 # gate fires on any non-Markdown file as well as on a CLAUDE.md. A commit touching only other
-# Markdown stays skipped, as the docs-refresh and eval-run crons' commits did before. Measured
-# 2026-10-10 on daniel-box, three runs each, against the same branch diff (3 commits plus the
-# uncommitted rule): the code
-# before the rule took 0.32-0.33s and the code with it 0.37-0.39s. A code-only commit used to
-# skip the hook, so it pays the whole ~0.4s. Against a 300-commit range the run took 1.9s.
+# Markdown stays skipped, as the docs-refresh and eval-run crons' commits do.
 [[repos.hooks]]
 id = "facts-lint-changed"
 name = "fact citations in edited instruction-file sections, and identifiers the branch removed"
@@ -588,34 +569,15 @@ files = "(^|/)CLAUDE\\.md$|^\\.claude/(rules|agents)/[^/]+\\.md$|^\\.claude/skil
 # next-run review says to check before a hook gains one of its staged paths.
 exclude = "^(docs/assets/generated/|scripts/dev/pytest_shard_weights\\.json$|evals/history\\.json$)"
 
-# Twelve static test modules that turned more PRs red than any other test the author's own code
-# did not break. The first four were 24 of 154 failed CI runs from 2026-08-30 to 2026-10-05
-# (#3605). The three census-row modules and the role CLAUDE.md check failed 6 PRs between them
-# after that, to 2026-10-09 (#4008). Three of those were the role check's size arm, which the
-# operator retired on 2026-10-12 (#2826). The module still runs its existence and tag checks.
-# The last four are the other census-row modules: #4894 went red in CI on the suite module's
-# glob-census row on 2026-10-13, and #4904 added all four. Each failure names its own repair,
-# so finding it at commit time saves a CI round trip and a fix commit. The first four ran in
-# 3.4s on daniel-box and 7.5s on daniel-server; all eight measured 10.7-12.6s on daniel-server
-# against 8.1-8.8s for the four, back to back on 2026-10-09. On daniel-box on 2026-10-13, back
-# to back, the eight measured 14.4-14.9s and all twelve 15.0-15.2s. The whole suite left prek
-# on 2026-10-02 because it cost 89-235s, and still runs only in CI and the two crons.
+# Static test modules that turn more PRs red than any other test the author's own code did not
+# break. Each failure names its own repair, so finding it at commit time saves a CI round trip
+# and a fix commit. The whole suite stays out of prek because it costs minutes, and runs only
+# in CI and the two crons.
 #
-# Cost, `prek run static-ratchet-tests --all-files`, back to back against the parent commit on
-# 2026-10-18 (#5501), three runs a side. On daniel-box at load average 3.2-4.7, it took
-# 9.2-9.4s against 19.0-19.2s. On daniel-server at load average 4.6-6.5, it took 14.3-16.8s
-# against 31.5-45.5s; at 7.5-12.8, under other sessions' test runs, 21.4-34.7s against
-# 40.5-65.9s. #5501 had measured 27.6s at load 3.3 and 49.0s at load 7.0 there. The census
-# detectors over the test modules held most of the cost, re-walking modules that could not
-# match; each now skips a module that cannot spell a hit. `--dist loadscope` keeps each module
-# on one worker, so the slowest module bounds the hook, and `--dist load` measured no faster on
-# daniel-box. The slowest was the render-and-path census, about 6.5s alone with `-n0` on
-# daniel-box, so it and the git-and-subprocess census moved to the
-# `static-ratchet-tests-test-modules` sibling below (#5599). Measured again on 2026-10-28,
-# three rounds interleaved with the parent commit, each run started at a load average of 3.5
-# or less. On daniel-server at load average 2.9-3.4, it took 12.1-12.6s against 20.6-21.6s.
-# The module length ratchet and the Python census rows now bound it, each about 7.5s alone with
-# `-n0` on daniel-box at load average 9.7.
+# `--dist loadscope` keeps each module on one worker, so the slowest module bounds the hook.
+# The render-and-path census and the git-and-subprocess census sit in the
+# `static-ratchet-tests-test-modules` sibling below for that reason, and each census detector
+# skips a module that cannot spell a hit.
 #
 # It sits after `tighten-ratchet-allowlists` because the ratchet test reads the lists that hook
 # rewrites. `files` is wider than `.py`: a cited
@@ -638,10 +600,9 @@ exclude = "^(docs/assets/generated/|scripts/dev/pytest_shard_weights\\.json$|eva
 # the edit that usually breaks the row deletes a macro template, which `.j2` already gates.
 #
 # CI skips it on both `prek run` steps, because its `pytest` job runs the same ten files.
-# The `static-ratchet-tests-*` siblings below carry the eleven more #5481 added and six more
-# from the 2026-10-25 survey of a week's PR reds.
+# The `static-ratchet-tests-*` siblings below carry further modules.
 # That job's checkout is not shallow (`fetch-depth: 0`), so the ratchet's allowlist comparison
-# runs there too, against the merge base with origin/master (#4009). docs-refresh
+# runs there too, against the merge base with origin/master. docs-refresh
 # stages scripts/dev/pytest_shard_weights.json, so this fires on that cron's commit, which
 # runs the whole suite green first. eval-run stages nothing this matches. To commit past it, `SKIP=static-ratchet-tests git commit`.
 # The shell, `hosts/` and wait-source paths are the scripts the shimmed-path census row reads.
@@ -655,19 +616,16 @@ files = "(\\.py$|(^|/)CLAUDE\\.md$|^scripts/dev/pytest_shard_weights\\.json$|^te
 
 # The two census modules over the pytest-only modules, `_test_module_rules.pytest_only_modules`:
 # the git and subprocess rows and the render-and-path rows. They were the slowest two in the
-# hook above, about 3.8s and 6.5s alone with `-n0` on daniel-box, and under `--dist loadscope`
-# the slowest module bounds a hook (#5599). Their census reads only the tracked modules
+# hook above, and under `--dist loadscope` the slowest module bounds a hook. Their census reads only the tracked modules
 # `is_pytest_only` accepts under a test root, so the gate is those paths (a `test_*.py`, a
 # `conftest.py`, anything under a `tests/` directory), the import closure the two modules
 # reach through scripts/lib and tests, and pyproject.toml and uv.lock. A commit that
 # touches only non-test `.py` outside scripts/lib/ skips both. prek.toml is in the gate
 # because test_census_rows_test_modules.py reads this hook's own `files`.
 #
-# A commit that matches both gates pays both, because prek runs hooks one after another. On
-# daniel-server on 2026-10-28 at load average 2.9-3.5, this hook took 11.8-13.7s with `-n 2`
-# against 17.0-20.4s with `-n0`, and the two hooks together took 26.0-27.4s, against 20.6-21.6s
-# for the single hook before the split. Only a commit that skips this gate gains; parsing each
-# test module once across the census rows is the lever left for the rest (#6437).
+# A commit that matches both gates pays both, because prek runs hooks one after another. Only
+# a commit that skips this gate gains; parsing each test module once across the census rows is
+# the lever left for the rest.
 [[repos.hooks]]
 id = "static-ratchet-tests-test-modules"
 name = "Census rows over the pytest-only modules (git, subprocess, render and path helpers)"
@@ -676,39 +634,21 @@ language = "system"
 pass_filenames = false
 files = "^((scripts|k8s|\\.claude/hooks|evals|hosts/components|hosts/lib)/(.*/)?((test_[^/]*|conftest)\\.py|tests/.*\\.py)|(hosts/)?tests/.*\\.py|scripts/lib/[^/]+\\.py|prek\\.toml|pyproject\\.toml|uv\\.lock)$"
 
-# Eleven more cheap ratchet and census modules, which failed 15 PR runs across 13 PRs between
-# 2026-10-15 and 2026-10-17 (#5481). They sit in sibling hooks rather than in the entry above,
-# so that each runs only on a commit that can change its verdict. Widening the gate above to
-# `renovate.json` or a planning doc would make those commits pay all twenty-nine modules.
+# Cheap ratchet and census modules in sibling hooks rather than in the entry above, so that
+# each runs only on a commit that can change its verdict. Widening the gate above to
+# `renovate.json` or a planning doc would make those commits pay every module.
 # Each `files` gate is the data the tests read, plus the test module and its import closure
 # (scripts/tests/test_prek_files_cover_entry_imports.py), plus pyproject.toml and uv.lock,
 # which decide the pytest that runs them. None matches a path the docs-refresh or eval-run
 # crons commit.
 #
-# Cost, measured on daniel-server on 2026-10-17, one module at a time with `-n0`, each
-# including its ~0.4s interpreter start: lander deadlines 5.4s, the Renovate pair 3.5-4.0s
-# each, import direction 3.6s, checksum annotations 3.5s, tracked Python hazards 3.1s, prek
-# files 1.9s, exit codes 1.5s, shell `--help` 1.3s, the owner census 0.8s (deleted since), probe health 0.4s.
-# That is 19s together, well above the issue's 7.5s estimate from recorded weights, because
-# each module's fixtures render or walk the tree. As hooks under `prek run <id> --all-files`,
-# at load average 3.3: `-python` 4.6s, `-owners` 0.9s, `-lander` 5.2s, `-checksum` 3.5s,
-# `-shell` 1.3s, `-renovate` 3.9s, against 27.6s for the hook above in the same run. The
-# gates keep a typical commit near budget: a `.py` commit outside scripts/lib/,
-# deploy_tools/ and renderer/, outside tests/_*.py and outside the k8s roles runs
-# `-python` and the since-deleted `-owners` alone, about 5.5s on 2026-10-17. Those `-python` figures predate
-# xdist_width (below); on 2026-10-22 at load average 3.6-3.9, `-python` took 5.9-6.3s.
-#
-# `-n0` on the one-module hooks: pyproject.toml's `-n auto` spent longer bringing up xdist
-# workers than they take, and each worker repeats the module-scoped render (checksum 3.5s
-# against 4.3-5.0s, the Renovate pair 4.1-4.4s against 4.8-5.4s, back to back on 2026-10-17).
-# The `-python` hook pins `-n 4` rather than taking pyproject.toml's `-n auto`, because
-# tests/xdist_width.py then sized `auto` at one worker per 15 modules, which put its five
-# modules on a single worker (#5917). It sizes `auto` from recorded seconds since #5967, which
-# gives these five 3; the pin stays because it is the width measured here. Measured on daniel-server on 2026-10-22, three rounds
-# interleaved at load average 4.3-5.4: `-n 4` 6.7-8.5s, `-n auto` 13.3-16.6s. `-n 3`, `-n 5`
-# and `-n 4 --dist load` measured no faster than `-n 4`. Under `--dist loadscope` each module
-# stays on one worker, so the slowest module, test_prek_files_cover_entry_imports.py at about
-# 7s alone with `-n0` at that load, bounds the hook.
+# `-n0` on the one-module hooks: pyproject.toml's `-n auto` spends longer bringing up xdist
+# workers than the module takes, and each worker repeats the module-scoped render.
+# The `-python` hook pins `-n 4` rather than taking pyproject.toml's `-n auto`: tests/xdist_width.py
+# sizes `auto` from recorded seconds and gives its five modules 3 workers, while `-n 4` is the
+# width measured fastest (`-n 3`, `-n 5` and `-n 4 --dist load` are no faster). Under
+# `--dist loadscope` each module stays on one worker, so the slowest module,
+# test_prek_files_cover_entry_imports.py, bounds the hook.
 # CI skips all of them on both `prek run` steps, as it skips the hook above, because its
 # `pytest` job runs the same files. To commit past one, `SKIP=<its id> git commit`.
 
@@ -731,7 +671,7 @@ files = "(\\.py$|^scripts/.*\\.sh$|^(prek\\.toml|pyproject\\.toml|uv\\.lock)$)"
 # test_no_published_tag_builds_an_image reads every role's tasks for an image-builder
 # include (`images.builder_roles`). So a k8s role edit pays this hook's ~5s. The test module
 # reaches the template filters, hosts/lib and the secrets_mgmt, validate and probe_lib code
-# through pytest's `pythonpath`, so the gate covers those too (#5921).
+# through pytest's `pythonpath`, so the gate covers those too.
 [[repos.hooks]]
 id = "static-ratchet-tests-lander"
 name = "Lander deadlines cover the soak"
@@ -742,7 +682,7 @@ files = "^(cluster/services\\.yml|\\.github/workflows/promote\\.yml|inventory/.*
 
 # Every `checksum/<name>` a CLAUDE.md names, against the k8s roles' rendered manifests. The
 # render reaches scripts/validate/k8s_manifests.py and its validate_lib through pytest's
-# `pythonpath` (#5921).
+# `pythonpath`.
 [[repos.hooks]]
 id = "static-ratchet-tests-checksum"
 name = "Documented checksum annotations exist in the manifests"
@@ -753,7 +693,7 @@ files = "^(hosts/lib/host_lib\\.py|scripts/lib/longhorn_lib/longhorn_backups\\.p
 
 # Every tracked `.sh` and rendered `*.sh.j2` answers `--help`. The test module renders the
 # templates through scripts/lib, scripts/validate and the template filters, which it reaches
-# through pytest's `pythonpath` (#5921).
+# through pytest's `pythonpath`.
 [[repos.hooks]]
 id = "static-ratchet-tests-shell"
 name = "Shell entry points answer --help"
@@ -767,7 +707,7 @@ files = "(^(hosts/lib/host_lib|scripts/lib/longhorn_lib/longhorn_backups)\\.py$|
 # owns each pin. Role defaults and the Dockerfile templates hold nearly every pin; a pin a
 # custom manager reads from a workflow, a task file or prek.toml reaches CI's `pytest` job
 # instead of this hook. The modules reach every template filter and scripts/validate through
-# pytest's `pythonpath`, so the gate covers those too (#5921).
+# pytest's `pythonpath`, so the gate covers those too.
 [[repos.hooks]]
 id = "static-ratchet-tests-renovate"
 name = "Renovate rules carry the autodeploy denylist marker"
@@ -776,20 +716,13 @@ language = "system"
 pass_filenames = false
 files = "^(hosts/lib/host_lib\\.py|scripts/lib/longhorn_lib/longhorn_backups\\.py|cluster/services\\.yml|renovate\\.json|inventory/.*|k8s/roles/[^/]+/(defaults/.*|templates/Dockerfile[^/]*)|scripts/renderer/template_filters/[^/]+\\.py|tests/(_[^/]+|render_share|deploy/_autodeploy|deploy/test_renovate_[^/]+)\\.py|scripts/(deploy_tools|lib|renderer|validate)/.*\\.py|scripts/secrets_mgmt/cluster_vars_check\\.py|scripts/dev/k8s_autodeploy_counts\\.py|pyproject\\.toml|uv\\.lock)$"
 
-# Six more rules that failed PR CI between 2026-10-18 and 2026-10-25: the eval cases'
-# CLAUDE.md quotes, the k8s_host_files pairs (deleted with the role's rows in H7.48), the Landings board, the retired deployer's import
-# boundary, the alert conventions and the unit-template census. Each failed 2 to 4 branches
-# that changed an input the hook below names, and none ran before CI. Two of them run one node
-# rather than the module: the alert module's promtool cases took 4.8-5.2s and the unit module's
-# systemd-analyze cases 10.6-11.2s, where the convention node and the census node, the ones
-# that failed, took 1.0s and 0.6s.
+# More rules that failed PR CI: the eval cases' CLAUDE.md quotes, the Landings board, the
+# alert conventions and the unit-template census. Each failed branches that changed an input
+# the hook below names, and none ran before CI. Two of them run one node rather than the
+# module: the alert module's promtool cases and the unit module's systemd-analyze cases are
+# slow, where the convention node and the census node, the ones that failed, are fast.
 #
-# Cost, one at a time with `-n0` on daniel-box on 2026-10-25 at load average 4.1-4.7, each
-# including its interpreter start: eval cases 0.3-0.8s, host-files pairs 0.4-0.5s, Landings
-# board 0.4s, retired deployer imports 0.7-0.8s, alert conventions 1.0s, unit census 0.6s.
-#
-# `test_cluster_vars_tree.py` failed four branches in the same week and stays out. It takes
-# 11-12s because it renders every flux-owned role, so its gate would be every k8s template,
+# `test_cluster_vars_tree.py` stays out. It takes 11-12s because it renders every flux-owned role, so its gate would be every k8s template,
 # and its only repair is `cluster_vars.py write`, which is operator-only: catching it at commit
 # saves no round trip an agent can act on.
 
@@ -850,16 +783,14 @@ files = "^(\\.claude/hooks/[^/]+\\.(sh|py)|\\.claude/settings\\.json|scripts/dev
 #
 # `files` names pyproject.toml and uv.lock as well as the code, the way the `ty` hook below
 # does: a commit that only enables a rule in [tool.ruff.lint] changes what every .py must
-# satisfy, and with `\.py$` alone the PR ran no ruff at all — master's --all-files sweep found
-# the 3 errors after the merge, twice, on 2026-09-02 (runs 33632377189 and 33632621818).
+# satisfy, and with `\.py$` alone a commit-time run would skip ruff entirely.
 #
 # uv.lock is here for the same reason one step further out: `uv run --frozen` runs the ruff
 # pinned in the lock, so a lock-file maintenance PR decides which ruff version gates every
-# .py in the tree and used to run none of it. Renovate #2548 moved ruff 0.16.8 -> 0.16.9 that
-# way (#2552); a release that tightens a rule would have passed the PR and turned master red
-# on its first full sweep, which is what the Vale binary did in #2536. A CI pull request run now sweeps
-# every hook over the whole tree (#5489), so the PR run catches the same escape regardless of `files`;
-# `files` still decides what a commit-time run checks.
+# .py in the tree. A release that tightens a rule would otherwise pass the PR and turn master
+# red on its first full sweep. A CI pull request run sweeps every hook over the whole tree, so
+# the PR run catches the same escape regardless of `files`; `files` still decides what a
+# commit-time run checks.
 [[repos.hooks]]
 id = "ruff"
 name = "Lint first-party Python (ruff)"
@@ -891,10 +822,8 @@ files = "(\\.py$|^(pyproject\\.toml|uv\\.lock)$)"
 # an override whose signature does not match its base, and a submodule reached through a parent
 # import. No file is exempt from `invalid-argument-type`.
 #
-# It does NOT catch an attribute read off an unnarrowed Optional, a wrongly typed assignment, or
-# an operator applied to a union — `unresolved-attribute`, `invalid-assignment` and
-# `unsupported-operator` are the three rules still off in pyproject [tool.ty.rules], each with
-# its measured count and the reason.
+# It also catches an attribute read off an unnarrowed Optional, a wrongly typed assignment and
+# an operator applied to a union: pyproject [tool.ty.rules] sets those rules to error.
 #
 # `pass_filenames = false` because ty resolves imports across the whole project, and a per-file
 # run would report first-party imports as unresolved. `files` covers the config as well as the
@@ -911,7 +840,7 @@ files = "(\\.py$|^(pyproject\\.toml|uv\\.lock)$)"
 
 # Fast syntax-only gate: `bash -n` parses (doesn't run) every shell script. Catches the bug
 # class of an apostrophe inside a single-quoted `python3 -c '...'` block, which breaks bash's
-# own quote parsing and once killed a backup-maintenance watchdog cron for a day. shellcheck
+# own quote parsing. shellcheck
 # above would also catch this, but `bash -n` is near-free and independent of it — a belt-and-
 # suspenders backstop if the shellcheck-py hook is ever skipped/broken.
 # `types = ["shell"]` (identify's shebang-aware detection, same as the shellcheck hook above)
@@ -937,10 +866,9 @@ types = ["shell"]
 # and would ALSO hand it docs/reference/, whose commits come from the docs-refresh cron.
 #
 # The duplication is safe only because scripts/tests/test_vale_scope.py asserts this regex covers
-# every .vale.ini section. It did not, for two commits: docs/deploying.md and
-# docs/gitops-pipeline.md entered .vale.ini in PR #418 and never entered this regex, so the
-# hook reported "no files to check" and both pages went ungated while reading green. Adding
-# a page to .vale.ini alone does not lint it — it has to be in both.
+# every .vale.ini section. A page in .vale.ini but not in this regex makes the hook report
+# "no files to check" and goes ungated while reading green. Adding a page to .vale.ini alone
+# does not lint it — it has to be in both.
 #
 # DECIDED: never widen this hook to docs/reference/; the docs-refresh cron commits those paths
 # with hooks running, so a strict failure stops every refresh.
@@ -954,7 +882,7 @@ types = ["shell"]
 # by hand in that worktree. `scripts/validate/vale.sh` provisions the package and then execs
 # Vale. It is a script rather than a `bash -c` entry because prek splits the file list across
 # several CONCURRENT invocations, and an inline guard on the directory raced itself in a fresh
-# worktree — read that script's header for the failure and the lock that fixes it (#1189).
+# worktree — read that script's header for the failure and the lock that fixes it.
 # ENFORCED by scripts/validate/tests/test_vale_sync_guard.py.
 [[repos.hooks]]
 id = "vale"
@@ -965,9 +893,9 @@ language = "system"
 # docs/archive/ and docs/reference/ out. See .vale.ini for why each is excluded.
 #
 # DECIDED: the generated fragments under docs/assets/generated/fragments/ are linted here,
-# although the docs-refresh cron commits them with hooks running. The operator chose this on
-# 2026-09-30 (#3008) so that a generator's prose is gated in CI and not only by a hand
-# `vale docs` run, where #3006 was found. The cost is accepted: a Vale error in a fragment
+# although the docs-refresh cron commits them with hooks running. The operator chose this so
+# that a generator's prose is gated in CI and not only by a hand
+# `vale docs` run. The cost is accepted: a Vale error in a fragment
 # aborts the cron's commit, and its commit-failure stamp reports DOWN on every run until the
 # generator in scripts/docs/gen_doc_fragments.py is fixed. docs/reference/ stays out.
 files = "^(docs/adr/.*\\.md|docs/[^/]+\\.md|docs/assets/generated/fragments/[^/]+\\.md)$"
@@ -1006,7 +934,7 @@ files = "^(docs/.*|mkdocs\\.yml|scripts/docs/.*\\.py|uv\\.lock)$"
 
 # The harness's attribution reminder ends every commit message with a footer that opens with
 # the robot emoji (U+1F916), and the operator's no-emoji rule wins over it. A squash merge makes
-# the message master history, so this rejects it at the commit-msg stage (#7978). It is the
+# the message master history, so this rejects it at the commit-msg stage. It is the
 # one hook not at pre-commit: git passes it the message file, and `prek run` never runs it.
 [[repos.hooks]]
 id = "reject-robot-emoji"

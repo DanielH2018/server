@@ -1,7 +1,7 @@
 name: host-test-image
 
 # Publishes the test images ci.yml's host_packages and host_tools_arm64 jobs pull, so a PR run
-# with an unchanged Dockerfile fetches nothing from snapshot.ubuntu.com (#7664). Those jobs pull
+# with an unchanged Dockerfile fetches nothing from snapshot.ubuntu.com. Those jobs pull
 # the digest hosts/lib/tests/container/image.pins names, or this Dockerfile's tag while the pin is
 # stale, and build from the Dockerfile when neither pulls.
 #
@@ -39,7 +39,7 @@ jobs:
     # A dispatch from a branch would publish that branch's Dockerfile under a write-once tag.
     if: github.ref == 'refs/heads/master'
     runs-on: ubuntu-26.04
-    # A cold build took 14-39 minutes per leg on 2026-11-04 with the mirror slow (#7133).
+    # A cold build takes up to 40 minutes per leg when the mirror is slow.
     timeout-minutes: 60
     permissions:
       contents: read
