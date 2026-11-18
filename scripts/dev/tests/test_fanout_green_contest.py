@@ -1,8 +1,8 @@
-"""A red test with a false premise, contested by the implementer (#5400, #4874).
+"""A red test with a false premise, contested by the implementer.
 
-In #4874 the red author assumed `claude-rc.service` ran on every host, and the correct fix
-failed the red test. The implementer could not contest it, and the green gate's hold did not
-say that the reviewer had found the fix correct. These run the pipeline against scripted gate
+A red author may assume `claude-rc.service` runs on every host, and the correct fix then fails
+the red test. The implementer must be able to contest it, and the green gate's hold must say
+that the reviewer found the fix correct. These run the pipeline against scripted gate
 verdicts, as `test_fanout_review_red_green.py` does.
 
 Run: uv run pytest scripts/dev/tests/test_fanout_green_contest.py

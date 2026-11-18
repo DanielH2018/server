@@ -13,11 +13,9 @@ put that, and the capability list is written literally at every call site so a g
 `DAC_OVERRIDE` still finds every container granted it.
 
 THIS IS NOT THE DAC CENSUS'S EYES. `test_root_needs_dac_capability.py` reads each template as
-the deploy renders it (#3223), so a macro-built securityContext arrives expanded and is scanned
+the deploy renders it, so a macro-built securityContext arrives expanded and is scanned
 like any other, and its accept coverage has its own render-side non-vacuity pin
-(`test_every_documented_root_site_still_renders_a_clean_root_block`). This file once also pinned
-the six root sites to literal `runAsUser: 0` blocks, which was that census's non-vacuity half
-before the census had its own; #3228 retired that pin as duplicated.
+(`test_every_documented_root_site_still_renders_a_clean_root_block`).
 
 `test_container_security_context_uses_the_macro.py` holds the mirror of the rule below: every
 hand-written securityContext at pod-template depth must BE a root block. Together the two say a

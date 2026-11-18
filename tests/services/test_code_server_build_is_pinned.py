@@ -7,7 +7,7 @@ and the CURRENT version of each VS Code extension from Open VSX and the marketpl
 for a platform-specific extension is whichever build the API lists first (alpine-arm64 for
 ruff and ty, win32-x64 for Claude Code). Each guard here names one of those inputs, so the
 failure says which one floated rather than that a count moved. Every guard reads the RENDERED
-Dockerfile, through `_k8s_render.rendered_build_text` (#3175).
+Dockerfile, through `_k8s_render.rendered_build_text`.
 
 Run: uv run pytest tests/services/test_code_server_build_is_pinned.py
 """
@@ -170,11 +170,11 @@ EXTENSION_REFRESH = "--refresh 'code_server_k8s_extensions[Anthropic.claude-code
 
 
 def test_the_renovate_rule_names_the_extension_finish() -> None:
-    """A CLI bump's PR title and body both say the extension moves by hand (#4584).
+    """A CLI bump's PR title and body both say the extension moves by hand.
 
     VS Code extensions have no Renovate datasource, so every CLI bump this rule raises fails
-    the lockstep test above until someone moves the extension. #4559 arrived red with the
-    finish only in its body; the group name is what reaches the title.
+    the lockstep test above until someone moves the extension.
+    A finish only in the body is not enough: the group name is what reaches the title.
     """
     rules = json.loads((REPO / "renovate.json").read_text())["packageRules"]
     rule = next(

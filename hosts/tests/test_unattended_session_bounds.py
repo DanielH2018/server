@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The unattended session units' bounds: what a session may write, and how much (guardrails B2-3).
 
-dotfiles#967's I2 says nothing a session writes reaches a later run, and I8 caps the run. Both
+Nothing a session writes reaches a later run, and the run is capped. Both
 session units, triage's and Renovate's, get these from systemd: per-run tmpfs mounts, a read-only
 system and cgroup caps. Each case is one session: its component, unit, pins file, user, the
 package that declares the user, and the exchange paths it may write.

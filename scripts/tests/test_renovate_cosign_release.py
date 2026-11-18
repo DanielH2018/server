@@ -2,11 +2,11 @@
 """Guard the cosign release pin in the promote, prune and flux-deletion-drill workflows.
 
 Each workflow pins cosign in env as `COSIGN_VERSION` and `COSIGN_SHA256`, and its jobs fetch
-that release through a cache keyed on the pin (#7781). A custom manager reads each pin from the
+that release through a cache keyed on the pin. A custom manager reads each pin from the
 `# renovate:` comment on the line above it.
 
 The cosign version decides the signature format Flux's source-controller verifies, so a bump
-must not automerge (#4767). These tests hold three things. The manager finds every pin, version
+must not automerge. These tests hold three things. The manager finds every pin, version
 and digest in one match, and every pin equals promote.yml's. Each pin resolves to the one
 manual cosign group. And the rule stays off any other `sigstore/` dep.
 

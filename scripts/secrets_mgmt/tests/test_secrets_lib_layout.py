@@ -1,4 +1,4 @@
-"""The rotation tool's two libraries live in `scripts/secrets_mgmt/secrets_lib/` (#4350).
+"""The rotation tool's two libraries live in `scripts/secrets_mgmt/secrets_lib/`.
 
 `secret_classify` and `secret_registry` are libraries, so they move into a PEP 420 namespace
 package beside the entry points, the way `deploy_tools/land_lib/` holds `land.py`'s modules.

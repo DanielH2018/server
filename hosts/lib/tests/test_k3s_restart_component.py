@@ -1,7 +1,7 @@
 """The `k3s-restart` component as daniel-box's package renders it.
 
-H6.3b: the unit, the timer, the credential and the two files the unit runs. `k3s_gates.py` arrives through the `k3s-gates` component, which the package lists
-beside this one (#6413). The package needs `k3s_readonly_token` in `secrets.yml` and a daniel-box SOPS file to
+The unit, the timer, the credential and the two files the unit runs. `k3s_gates.py` arrives through the `k3s-gates` component, which the package lists
+beside this one. The package needs `k3s_readonly_token` in `secrets.yml` and a daniel-box SOPS file to
 render, so the fixtures below stand in for both; the operator adds the real ones.
 """
 
@@ -135,7 +135,7 @@ def test_a_host_without_a_window_fails_the_render():
 
 def test_the_timer_is_enabled_from_timers_target(package):
     link = f"{SYSTEM}timers.target.wants/homelab-k3s-restart.timer"
-    # The UPS watchdog timer (H7.33) is a second enable link, so only this one is held.
+    # The UPS watchdog timer is a second enable link, so only this one is held.
     assert package.links[link] == "../homelab-k3s-restart.timer"
 
 
@@ -180,7 +180,7 @@ UPDATER_LINK = f"{SYSTEM}timers.target.wants/homelab-updater.timer"
 
 
 def test_daniel_box_arms_the_updater_timer(package):
-    # #6218: without the link, every daniel-box package change waits for a hand start.
+    # Without the link, every daniel-box package change waits for a hand start.
     assert package.links[UPDATER_LINK] == "../homelab-updater.timer"
 
 

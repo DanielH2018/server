@@ -157,7 +157,7 @@ def test_the_operator_reads_the_seed_only_under_operator_read(
     operator_read: bool, modes: tuple[str, str], tmp_path: Path
 ) -> None:
     """The operator reads seed.toml directly, since rootq refuses any path under the
-    agent-owned home (#6408). The False case holds the flag-off modes, so an expression
+    agent-owned home. The False case holds the flag-off modes, so an expression
     that always opens the seed fails it."""
     setup = agent_setup_script(tmp_path, claude_code_agent_operator_read=operator_read)
     dir_mode, seed_mode = modes
@@ -168,7 +168,7 @@ def test_the_operator_reads_the_seed_only_under_operator_read(
 @pytest.mark.parametrize("host", ["daniel-box", "daniel-server"])
 def test_every_agent_host_switches_the_dotfiles_on(host: str) -> None:
     """Each host with the agent user gives it the dotfiles, whose claude-guard shim every
-    headless launch needs (#6117)."""
+    headless launch needs."""
     host_vars = load_yaml(HOST_VARS / f"{host}.yml")
     assert host_vars["claude_code_agent_user_enabled"] is True
     assert host_vars["claude_code_agent_dotfiles"] is True

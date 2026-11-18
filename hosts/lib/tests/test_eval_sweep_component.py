@@ -1,6 +1,6 @@
-"""The rendered `eval-sweep` component: the weekly eval sweep in daniel-box's package (H7.10b).
+"""The rendered `eval-sweep` component: the weekly eval sweep in daniel-box's package.
 
-Until H7.36 `initial_setup` installed the sweep as a cron and rendered its Anthropic key into an
+`initial_setup` installed the sweep as a cron and rendered its Anthropic key into an
 env file. These tests hold what the move carries: the credential that replaces the env file, the
 `+` ExecStartPre that creates the state directory as
 root for a service that runs as `sys_user`, the PATH and HOME the cron set, the timer's slot and

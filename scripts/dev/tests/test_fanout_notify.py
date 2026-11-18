@@ -1,4 +1,4 @@
-"""A stopped batch pages on every state but `done`, from its unit's ExecStopPost= (#4602).
+"""A stopped batch pages on every state but `done`, from its unit's ExecStopPost=.
 
 Run: uv run pytest scripts/dev/tests/test_fanout_notify.py
 """

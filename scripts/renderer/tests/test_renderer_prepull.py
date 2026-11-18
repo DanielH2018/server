@@ -1,4 +1,4 @@
-"""A pre-pull role's `<tag>-prepull`: its Jobs, its edges and its timeout (#5525).
+"""A pre-pull role's `<tag>-prepull`: its Jobs, its edges and its timeout.
 
 The fixture renders code-server, a real role that sets `flux_prepull_timeout`, through the
 real CLI with only that tag marked `owner: flux`, so the render holds no other tag.
@@ -144,7 +144,7 @@ def _retries(job: dict) -> bool:
 
 
 def test_the_job_retries_a_failed_pod_and_the_census_admits_it(rendered):
-    """An evicted or interrupted Pod must not leave a Failed Job that wedges `<tag>` (#5552)."""
+    """An evicted or interrupted Pod must not leave a Failed Job that wedges `<tag>`."""
     text = (rendered / "cluster" / f"{TAG}-prepull" / "job.yaml").read_text()
     assert _retries(yaml_fast.safe_load(text))
     assert problems(load(rendered)) == []
@@ -247,7 +247,7 @@ def test_a_prepull_shell_script_other_than_the_renderers_is_flagged():
 
 
 def test_a_verify_job_running_the_shell_no_op_is_flagged():
-    # The backoff row fires too: a verify Job takes 0 and a pre-pull 3 (#5552).
+    # The backoff row fires too: a verify Job takes 0 and a pre-pull 3.
     assert _census_rows(kind="verify") == {"backoff", "delivery"}
 
 
@@ -345,7 +345,7 @@ def test_a_prepull_scope_that_cannot_apply_is_a_problem(tmp_path, text, problem)
 
 
 def test_only_the_backoff_row_refuses_a_prepull_job_set_to_zero():
-    # The red test above accepts any row; this pins the one that holds the retry (#5552).
+    # The red test above accepts any row; this pins the one that holds the retry.
     files = prepull_files("app", [({"nodeSelector": {"h": "a"}}, ["app:1"])])
     configmap = yaml_fast.safe_load(files["configmap.yaml"])
     job = yaml_fast.safe_load(files["job.yaml"])

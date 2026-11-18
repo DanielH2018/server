@@ -1,4 +1,4 @@
-{#- Each user's worktree root. The map entry is the per-user grant (#4295): the service refuses a
+{#- Each user's worktree root. The map entry is the per-user grant: the service refuses a
     uid it does not name. World-readable, because lib.worktrees.holder_root reads it as the caller. -#}
 {%- set roots = {sys_user: '/home/' ~ sys_user ~ '/server/.claude/worktrees'} -%}
 {%- for agent in worktree_holders_agents_by_host.get(inventory_hostname, []) -%}

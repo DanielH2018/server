@@ -107,7 +107,7 @@ def test_syntax_newer_than_3_12_is_flagged(newer):
 
 def test_the_metrics_unit_rewrites_the_textfile_once_per_boot(package):
     """The boot path runs it through its enable link, and RemainAfterExit keeps reconcile's
-    step 2 from starting it again on every run (#6188)."""
+    step 2 from starting it again on every run."""
     unit = package.files[METRICS_SERVICE][0].decode()
     assert f"ExecStart={SCRIPT} --metrics\n" in unit
     assert "Type=oneshot\n" in unit
@@ -120,7 +120,7 @@ def test_the_metrics_unit_rewrites_the_textfile_once_per_boot(package):
 
 
 def test_reconcile_starts_behind_its_wait_unit_and_survives_its_failure(package):
-    # A queued start job is not activating, so apt's wait spends the wait unit's limit (#7648).
+    # A queued start job is not activating, so apt's wait spends the wait unit's limit.
     unit = package.files[SERVICE][0].decode()
     assert "Wants=homelab-reconcile-wait.service\n" in unit
     assert "After=homelab-reconcile-wait.service\n" in unit
@@ -134,7 +134,7 @@ def test_reconcile_starts_behind_its_wait_unit_and_survives_its_failure(package)
 def test_a_leveled_reconcile_line_carries_its_priority_only_on_the_journal(
     tmp_path, monkeypatch, capsys
 ):
-    # The distro tier's copy of host_lib's prefix rule (#6202): `journalctl -p err` finds a
+    # The distro tier's copy of host_lib's prefix rule: `journalctl -p err` finds a
     # reconcile failure, and a terminal never sees `<3>`.
     from reconcile_lib import common
 

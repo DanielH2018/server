@@ -168,7 +168,7 @@ def test_arm_merge_refuses_a_body_that_would_close_an_unfixed_issue(landing):
 @pytest.mark.parametrize("review", ["", "REVIEW_REQUIRED"])
 def test_arm_merge_refuses_while_the_repo_is_private(landing, review):
     """No ruleset is enforced on a private free-plan repo, so the direct merge arm_merge
-    leaves for await_merge may not go ahead (#3610)."""
+    leaves for await_merge may not go ahead."""
     ln, calls = landing(
         Fakes(
             gh_views={
@@ -307,7 +307,7 @@ def test_the_merge_budget_ends_the_wait_with_its_own_verdict(landing):
 def test_the_merge_budget_names_a_head_ci_never_decided(
     landing, ci_rc, names_the_rerun
 ):
-    """A cancelled or draft-skipped run on the head waits out the budget (#5931). The message
+    """A cancelled or draft-skipped run on the head waits out the budget. The message
     is the only difference from a disarmed gate's timeout, so it is asserted."""
     ln, _ = landing(
         Fakes(
@@ -347,8 +347,8 @@ def test_the_merge_wait_never_hand_polls_ci():
 def test_a_head_ci_skipped_as_a_draft_ends_the_wait_once_the_pr_is_ready(
     landing, capsys, is_draft, ends_early
 ):
-    """#6077: PR #6069 was ready, its head's only run had skipped as a draft, and the wait sat
-    out its whole budget. A PR still a draft gets its run once it is marked ready, so it waits.
+    """A ready PR whose head's only run had skipped as a draft waited out
+    its whole budget. A PR still a draft gets its run once it is marked ready, so it waits.
     The ending's message is what tells the two apart, so it is asserted."""
     line = f"dead1234: no verdict after 0s — {merge.await_ci.DRAFT_SKIPPED}"
     ln, _ = landing(
@@ -377,7 +377,7 @@ def _ready_toggles(calls):
 def test_a_ready_pr_whose_head_skipped_as_a_draft_is_converted_once_and_the_wait_goes_on(
     landing, capsys
 ):
-    """#6546: GitHub starts no run on the ready flip, so the landing converts the PR to draft
+    """GitHub starts no run on the ready flip, so the landing converts the PR to draft
     and back itself. The second poll after the toggle reads a run, so the wait proceeds to the
     merge instead of ending merge-timeout."""
     skipped = f"dead1234: no verdict after 0s — {merge.await_ci.DRAFT_SKIPPED}"
@@ -445,7 +445,7 @@ _DRAFT_RUN = {"id": 1, "status": "completed", "conclusion": "skipped"}
     ids=["queued", "in-progress", "cancelled", "gh-fails", "not-a-list", "not-a-run"],
 )
 def test_a_ready_run_or_an_unreadable_run_list_stops_the_conversion(landing, head_runs):
-    """#6566: the ready run's gate has no check run until its jobs finish, so await_ci reads
+    """The ready run's gate has no check run until its jobs finish, so await_ci reads
     only the draft run's skipped gate, and converting cancelled the ready run on 6443 and 6531.
     The conversion is what cancels, so a runs read that fails or parses wrong also stops it."""
     skipped = f"dead1234: no verdict after 0s — {merge.await_ci.DRAFT_SKIPPED}"

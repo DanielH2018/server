@@ -1,6 +1,6 @@
 """The Renovate floor: which changes need the operator's approval, and its three exceptions.
 
-dotfiles#967 slice 1. Each rule gets a change it must pass and a change it must flag. The
+Each rule gets a change it must pass and a change it must flag. The
 coverage test holds every top-level entry of the tracked tree to a decision, so a new root
 file cannot reach a session unclassified.
 

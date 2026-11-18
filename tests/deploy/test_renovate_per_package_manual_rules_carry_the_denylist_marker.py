@@ -65,7 +65,7 @@ BUILTIN_MANAGERS = [
 # `managerFilePatterns` (upstream `lib/modules/manager/<name>/index.ts`). A rule whose
 # `matchManagers` names only these reads its pin from a workflow or a local action, so no role
 # owns the pin and no deploy follows its merge. Such a rule is outside this census rather than
-# unmappable: the cosign binary in the promote and prune workflows is one (#4767).
+# unmappable: the cosign binary in the promote and prune workflows is one.
 # `test_no_role_file_is_read_by_a_non_role_manager` checks the "no role file" half.
 NON_ROLE_MANAGERS = {
     "github-actions": (
@@ -128,7 +128,7 @@ def pin_owner_roles(
     means the rule matches every datasource.
 
     `file_names` is the rule's `matchFileNames`, which narrows the files the same way: a
-    Pi-only wg-easy rule does not own `k8s/roles/wg-easy`'s pin (#6503). None means every file.
+    Pi-only wg-easy rule does not own `k8s/roles/wg-easy`'s pin. None means every file.
     """
     if file_names:
         files = [rel for rel in files if _in_file_scope(rel, file_names)]
@@ -436,7 +436,7 @@ def test_a_promoted_owner_whose_rule_still_carries_the_marker_is_flagged() -> No
     assert len(problems) == 1 and "drop the marker" in problems[0], problems
 
 
-# --- a rule's matchFileNames narrows the files its pin is read from (#6503) ---
+# --- a rule's matchFileNames narrows the files its pin is read from ---
 
 _WG_EASY = "ghcr.io/wg-easy/wg-easy"
 _WG_EASY_ROLE_FILES = ["k8s/roles/wg-easy/defaults/main.yml"]

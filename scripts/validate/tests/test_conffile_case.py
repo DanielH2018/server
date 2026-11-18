@@ -1,4 +1,4 @@
-"""The line arm's two owning-package upgrade cases, without a container (#6088).
+"""The line arm's two owning-package upgrade cases, without a container.
 
 H7's *Red proofs*, line arm, names two upgrades of the package that owns a conffile the arm
 edits. In the first, the conffile is unchanged and the line stays. In the second, the upgrade

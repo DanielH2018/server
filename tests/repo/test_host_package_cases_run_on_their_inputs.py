@@ -1,4 +1,4 @@
-"""A PR that changes only the container cases' inputs runs those cases, on both legs (#5004).
+"""A PR that changes only the container cases' inputs runs those cases, on both legs.
 
 `host_packages` in ci.yml runs its container cases (H3.3b) when the render diff in
 `host_packages_build` reports `changed=true`, or on a dispatch. The cases' own inputs are not render inputs: the test image's
@@ -67,7 +67,7 @@ CASE_PREREQUISITES = (
 )
 
 DOCKERFILE = "hosts/lib/tests/container/Dockerfile"
-# The inputs #5004 names, each by a concrete member. The nested fixture file catches a trigger
+# The container cases' inputs, each by a concrete member. The nested fixture file catches a trigger
 # that matches exact names where it should match the directory.
 NAMED_INPUTS = (
     "hosts/lib/tests/container/fixture/base.yml",
@@ -316,7 +316,7 @@ def _assert_cases_run(clone: Path, tmp_path: Path, path: str) -> None:
 def test_a_dockerfile_only_pr_runs_the_cases_on_both_legs(
     clone: Path, tmp_path: Path
 ) -> None:
-    """#5004's Verify-by. The README edit after it is the control: the trigger is the inputs,
+    """The README edit after it is the control: the trigger is the inputs,
     not every PR."""
     _assert_cases_run(clone, tmp_path / "dockerfile", DOCKERFILE)
 
@@ -342,7 +342,7 @@ def test_a_dockerfile_only_pr_builds_the_debs_and_image_the_cases_read(
 
 class TestTheRealRender:
     # Each class is its own `--dist loadscope` group, so the ~30s tests here and in the
-    # two classes below run on separate workers instead of queueing on one (#7710).
+    # two classes below run on separate workers instead of queueing on one.
     def test_the_real_render_reports_no_change_for_a_case_input(
         self, clone: Path, tmp_path: Path
     ) -> None:
@@ -403,7 +403,7 @@ HANDOFF_INVOCATION = "render debs bin/nfpm"
 def test_a_pr_editing_only_the_build_job_runs_the_cases(
     clone: Path, tmp_path: Path
 ) -> None:
-    """The build job makes what the cases read, so editing its hand-off alone runs them (#6151)."""
+    """The build job makes what the cases read, so editing its hand-off alone runs them."""
     workflow = ".github/workflows/ci.yml"
     git(clone, "checkout", "-q", "--detach", "master")
     git(clone, "checkout", "-q", "-B", "pr-build-step")
@@ -434,7 +434,7 @@ def _artifacts(job: dict, action: str) -> set[str]:
 
 
 def test_the_arm64_job_and_the_cases_legs_wait_for_the_build_alone() -> None:
-    """#6151: neither consumer waits for the other, and each reads what the build uploads."""
+    """Neither consumer waits for the other, and each reads what the build uploads."""
     jobs = yaml_fast.safe_load(CI_WORKFLOW.read_text())["jobs"]
     built = _artifacts(jobs[BUILD_JOB], "upload")
     for consumer in (JOB, "host_tools_arm64"):
@@ -447,9 +447,9 @@ def test_the_arm64_job_and_the_cases_legs_wait_for_the_build_alone() -> None:
 
 
 def test_the_cases_legs_restore_the_cache_the_build_fetched() -> None:
-    """#7437: a pin the build fetched is not requested again by a cases leg.
+    """A pin the build fetched is not requested again by a cases leg.
 
-    #7706: the legs restore it from actions/cache under the build's own key, not from the tar.
+    The legs restore it from actions/cache under the build's own key, not from the tar.
     """
     jobs = yaml_fast.safe_load(CI_WORKFLOW.read_text())["jobs"]
     build = "\n".join(str(step.get("run", "")) for step in jobs[BUILD_JOB]["steps"])
@@ -476,7 +476,7 @@ def test_the_cases_legs_restore_the_cache_the_build_fetched() -> None:
 def test_a_crashing_verdict_fails_the_render_step(
     clone: Path, tmp_path: Path, subcommand: str
 ) -> None:
-    """#5071's Verify-by: a verdict that cannot be computed fails the step, never reads false.
+    """A verdict that cannot be computed fails the step, never reads false.
 
     The README PR fires no other trigger, so a step that swallowed the crash would write
     `cases=false` and succeed.
@@ -498,7 +498,7 @@ class TestARendererChange:
     def test_a_renderer_change_seen_only_in_the_fixture_runs_the_cases(
         self, clone: Path, tmp_path: Path
     ) -> None:
-        """#5066's Verify-by: the renderer changes only how it renders a systemd drop-in.
+        """The renderer changes only how it renders a systemd drop-in.
 
         No real package ships a drop-in, so the stubbed `changed=false` is what the real diff
         reports; only the fixture's render differs. The comment-only edit after it is the control:

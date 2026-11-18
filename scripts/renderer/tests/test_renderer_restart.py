@@ -368,7 +368,7 @@ def outside_references(
     """Each `(tag, kind, name)` a pod of `tags` names and its own render does not hold.
 
     A Secret the tag ships as a SOPS manifest counts as its own, and so does one its
-    `manifests_outside_secrets` declares, whose keys `checksum/restart` hashes (#5416).
+    `manifests_outside_secrets` declares, whose keys `checksum/restart` hashes.
     """
     found = []
     forms = {t.tag: t for t in render.tags}

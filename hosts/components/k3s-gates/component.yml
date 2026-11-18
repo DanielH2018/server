@@ -1,9 +1,8 @@
-# The apply-time gates of H6 (docs/target-architecture/host/h6-k3s-suc.md, *Gates at apply
-# time*). `/usr/lib/homelab/k3s_gates.py` is one stdlib-only script with three callers: the
-# k3s-server Plan's `prepare` on daniel-box, the k3s-agent Plan's `prepare` on daniel-server, and
-# `homelab-k3s-restart` in `host` mode. Each Plan's `prepare` runs the script from the host's root,
-# mounted at /host, so every node a Plan selects must have this component installed, or `prepare`
-# fails with `can't open file` (#6413). The k3s-restart component shipped the file until #6413.
+# The apply-time gates for k3s upgrades. `/usr/lib/homelab/k3s_gates.py` is one stdlib-only script
+# with three callers: the k3s-server Plan's `prepare` on daniel-box, the k3s-agent Plan's `prepare`
+# on daniel-server, and `homelab-k3s-restart` in `host` mode. Each Plan's `prepare` runs the script
+# from the host's root, mounted at /host, so every node a Plan selects must have this component
+# installed, or `prepare` fails with `can't open file`.
 #
 # A host can list this component without `k3s-restart`, as daniel-server does. `agent` mode reads
 # the API with the Plan pod's own ServiceAccount token, so the script needs no host credential.

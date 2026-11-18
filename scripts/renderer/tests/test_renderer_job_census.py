@@ -197,7 +197,7 @@ def test_a_script_that_connects_without_the_helper_is_flagged(script):
     assert _rows(_verify(script=script)) == {"helper"}
 
 
-# #5274: each reaches a connecting module through one ALLOWED_IMPORTS lets in, by a name
+# Each reaches a connecting module through one ALLOWED_IMPORTS lets in, by a name
 # FORBIDDEN does not hold, so the import allowlist alone does not catch it.
 @pytest.mark.parametrize(
     "script",

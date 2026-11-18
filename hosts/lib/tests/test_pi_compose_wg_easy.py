@@ -1,4 +1,4 @@
-"""daniel-pi's wg-easy runs through the Pi's Compose project (H5.9).
+"""daniel-pi's wg-easy runs through the Pi's Compose project.
 
 The healthcheck guard moved here with the service from
 `tests/services/test_wg_easy_healthcheck_timing.py`. It reads the rendered package of

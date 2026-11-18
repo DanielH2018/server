@@ -86,7 +86,7 @@ def test_the_committed_blocks_name_a_tier_from_each_list():
 
 
 def test_claims_line_reads_a_group_vars_override_of_a_tier_list(tmp_path):
-    """An all.yml override of a tier list moves the claim's tier, as in a deploy (#3918)."""
+    """An all.yml override of a tier list moves the claim's tier, as in a deploy."""
     roles = tmp_path / "roles"
     role = roles / "svc"
     (role / "templates").mkdir(parents=True)
@@ -117,7 +117,7 @@ def test_claims_line_reads_a_group_vars_override_of_a_tier_list(tmp_path):
 
 
 def test_stale_k8s_docs_derives_the_r2_set_from_the_injected_service_list(tmp_path):
-    """The role's R2 expression reads the estate the generator was given, not the repo (#3947)."""
+    """The role's R2 expression reads the estate the generator was given, not the repo."""
     roles = tmp_path / "roles"
     role = roles / "svc"
     (role / "templates").mkdir(parents=True)

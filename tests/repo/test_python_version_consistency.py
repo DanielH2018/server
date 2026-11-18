@@ -39,9 +39,9 @@ def workflow_pins(name: str, text: str) -> list[tuple[str, str]]:
     """(file, pin) for every setup step's `python-version:` in one parsed workflow or action.
 
     A workflow's steps sit under `jobs.<id>.steps`, a composite action's under `runs.steps`;
-    the CI pin lives in `.github/actions/setup/action.yml` since #3733, so both are read.
+    the CI pin lives in `.github/actions/setup/action.yml`, so both are read.
 
-    Read as YAML rather than matched as a quoted string (#3663): an unquoted
+    Read as YAML rather than matched as a quoted string: an unquoted
     `python-version: 3.14` parses as the float 3.14, which the old pattern skipped and this
     reads as the two-part pin it is.
     """
@@ -136,7 +136,7 @@ def test_role_dockerfiles_build_on_the_canonical_python():
 
 
 def test_a_composite_actions_pin_is_read():
-    """The CI pin's home since #3733; a workflow-only reader would find nothing there."""
+    """The CI pin's home; a workflow-only reader would find nothing there."""
     text = 'runs:\n  using: composite\n  steps:\n    - uses: actions/setup-python@v6\n      with:\n        python-version: "3.14.7"\n'
     assert workflow_pins("action.yml", text) == [("action.yml", "3.14.7")]
 
@@ -167,7 +167,7 @@ def _k8s_defaults() -> dict[str, str]:
 
 
 def test_k8s_python_image_pins_match_the_python_version_file():
-    """Role `files/` code runs in these images and CI tests it on `.python-version` (#8532)."""
+    """Role `files/` code runs in these images and CI tests it on `.python-version`."""
     canonical = _canonical()
     defaults = _k8s_defaults()
     found = {

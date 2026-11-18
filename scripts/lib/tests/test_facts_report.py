@@ -116,7 +116,7 @@ def test_session_bytes_split_start_from_total_and_skip_unsized_and_subagent_rows
         # A subagent's load shares the parent's id but fills its own context window.
         f"{stamp} [aaaaaaaa] session_start    Project  CLAUDE.md agent=ab12 bytes=3000\n"
         f"{stamp} [aaaaaaaa] bash_path_match  Project  a/CLAUDE.md trigger=a/x.py\n"
-        # inject-nested-docs sizes its row by the block it injected (#4653).
+        # inject-nested-docs sizes its row by the block it injected.
         f"{stamp} [aaaaaaaa] bash_path_match  Project  b/CLAUDE.md trigger=b/y.py bytes=700\n"
         # A session whose rows predate the field is left out, not listed as 0.
         f"{stamp} [bbbbbbbb] session_start    Project  CLAUDE.md\n"

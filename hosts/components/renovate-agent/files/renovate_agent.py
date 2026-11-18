@@ -77,10 +77,10 @@ SESSION_UNIT = "homelab-renovate-agent-session.service"
 
 
 def discord_spool(state_dir: str) -> str:
-    """Where a post the host could not deliver waits for the next tick's post (#3905).
+    """Where a post the host could not deliver waits for the next tick's post.
 
     Every post here is fire-and-forget, so without the spool a digest sent while the host
-    could not reach Discord was lost: 2026-10-08 11:04 UTC, inside the outage of #3882.
+    could not reach Discord would be lost.
     """
     return os.path.join(state_dir, "discord-spool")
 
@@ -91,7 +91,7 @@ def _open_pr_listing(repo: str, tools: AgentTools) -> tuple[int, str]:
     Never `gh pr list --author`: with that flag gh runs a GraphQL `search(` query, and the
     search index is eventually consistent. The after-census runs seconds after the session
     exits, so the index can still omit a PR the session just opened, or list one it just
-    merged (#2772). Without `--author`, gh reads `repository.pullRequests`, which is current.
+    merged. Without `--author`, gh reads `repository.pullRequests`, which is current.
     """
     return tools.run(
         [
@@ -105,7 +105,7 @@ def _open_pr_listing(repo: str, tools: AgentTools) -> tuple[int, str]:
             "--limit",
             str(OPEN_PR_LIMIT),
             "--json",
-            # `updatedAt` is the one field a comment-only triage moves (#3032).
+            # `updatedAt` is the one field a comment-only triage moves.
             "number,title,url,updatedAt,author",
         ]
     )
@@ -177,7 +177,7 @@ def request_line(request: Outcome) -> str:
     """The journal line for one request, in fixed words only.
 
     The file name and a refusal's detail are session text. They stay in requests.jsonl, a file,
-    and never reach the journal, where loki-homelab's rules read them (#967's I3 and I6, #8676).
+    and never reach the journal, where loki-homelab's rules read them.
     """
     done = "done" if request.done else "not done"
     return f"request {request.action or 'refused'} #{request.pr} {done}"
@@ -236,10 +236,10 @@ def main(tools: AgentTools = TOOLS, config_path: str = CONFIG) -> int:
     log_path = os.path.join(state_dir, "last_session.json")
     spool = discord_spool(state_dir)
     # Every tick, before anything can fail or take the quiet skip: a crash report queued during
-    # an outage would otherwise wait for a day that has PRs to digest (#3905).
+    # an outage would otherwise wait for a day that has PRs to digest.
     tools.flush_discord_spool(spool, webhook, USER_AGENT, log=log)
     # Before the skip too: a run killed after its session leaves the session's files here, and
-    # a tick with no PRs would otherwise keep them until the next session (dotfiles#967's I2).
+    # a tick with no PRs would otherwise keep them until the next session.
     requests_dir = fresh_dir(exchange, REQUESTS_DIR)
     out = fresh_dir(exchange, OUT_DIR)
 
@@ -277,7 +277,7 @@ def main(tools: AgentTools = TOOLS, config_path: str = CONFIG) -> int:
     )
     for request in requests:
         log(request_line(request))
-    # Nothing the session wrote outlives the run (dotfiles#967's I2).
+    # Nothing the session wrote outlives the run.
     shutil.rmtree(out, ignore_errors=True)
     shutil.rmtree(requests_dir, ignore_errors=True)
 
@@ -313,7 +313,7 @@ def report_crash(
     The unit's textfile write is its `ExecStartPost`, which systemd runs only when the process
     exited 0, so a crash writes no verdict and `RenovateAgentNotReporting` fires 28 hours later
     with no reason attached. An operator reading that sees what a host that is simply off looks
-    like: for two days from 2026-09-08 that hid a one-line `prepare_worktree` failure (#1477).
+    like, and can hide a one-line `prepare_worktree` failure for days.
     The runs file and the Discord post carry the reason.
 
     Best effort throughout, and it never re-raises: a failed report must not replace the

@@ -2,8 +2,8 @@
 # Prune the ghcr-mirror store offline — shipped by the registry-gc component; edits overwritten.
 #
 # The ghcr-mirror container is a pull-through cache with REGISTRY_PROXY_TTL=0s, so nothing
-# expires what it cached, and a registry in proxy mode refuses manifest DELETE (#5541). The
-# dockerhub-mirror's GC Job runs this same script over that mirror's store (#6536). This
+# expires what it cached, and a registry in proxy mode refuses manifest DELETE. The
+# dockerhub-mirror's GC Job runs this same script over that mirror's store. This
 # script edits the store's filesystem directly while registry-gc.sh holds the registry pod at
 # zero replicas. The Job's second container then runs plain `garbage-collect`, which sweeps the
 # blobs no remaining revision references.
@@ -50,7 +50,7 @@ KEEP_NEWEST=${KEEP_NEWEST:-3}
 V2="${MIRROR_ROOT}/docker/registry/v2"
 DIGEST_RE='sha256:[0-9a-f]\{64\}'
 
-# garbage-collect aborts on a repo with no `_layers` (#7926); it runs even if nothing is pruned.
+# garbage-collect aborts on a repo with no `_layers`; it runs even if nothing is pruned.
 if [ -d "${V2}/repositories" ]; then
   find "${V2}/repositories" -type d -name _manifests -prune | sort | while read -r manifests; do
     layers="${manifests%_manifests}_layers"

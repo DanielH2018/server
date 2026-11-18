@@ -1,4 +1,4 @@
-"""The Alloy `k3s` pipeline ships k3s.log's warn-and-worse lines and nothing below (#6177).
+"""The Alloy `k3s` pipeline ships k3s.log's warn-and-worse lines and nothing below.
 
 k3s writes its output to a file because journald keeps none of it (setup/k3s's
 tasks/unit-logging.yml), and the file keeps four rotations. The pipeline has three ways to be

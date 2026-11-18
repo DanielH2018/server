@@ -159,9 +159,9 @@ def test_multiple_pvcs_report_each_tier_deduplicated(tmp_path):
 #
 # Longhorn backs a volume up only when its StorageClass asks (`longhorn`, not
 # `longhorn-nobackup`) AND the k3s role's no-backup list leaves it alone. One accept/reject
-# pair per branch of `_classify`, then one test per shape a role declares a claim in — the
-# class is found by pattern, so a regex that stops matching would otherwise turn every claim
-# of that shape "unknown" without any test noticing.
+# pair per branch of `_classify`, then one test per shape a role declares a claim in, because
+# the class is found by pattern and a regex that stops matching would turn every claim of that
+# shape "unknown" unnoticed.
 
 
 def _pvc_block(name, storage_class=None):
@@ -206,7 +206,7 @@ def test_backup_tier_backup_class_off_every_list_is_not_no_backup(tmp_path):
 
 
 def test_backup_tier_reads_a_group_vars_override_of_a_tier_list(tmp_path):
-    # #3918: an all.yml override reaches Ansible, so it must reach the catalogue too.
+    # An all.yml override reaches Ansible, so it must reach the catalogue too.
     paths = make_repo(tmp_path)
     pvc = _pvc_block("jellyfin-config", "longhorn")
     assert _jellyfin_tier(paths, pvc).startswith("weekly")
@@ -223,7 +223,7 @@ def test_backup_tier_reads_a_group_vars_override_of_a_tier_list(tmp_path):
 
 
 def test_backup_tier_derives_the_r2_set_from_the_injected_service_list(tmp_path):
-    # #3947: the role's R2 expression derives from the inventory build_rows was given, not
+    # The role's R2 expression derives from the inventory build_rows was given, not
     # from the repo's. Neither `lab/svc-config` nor the `lab` namespace exists in the repo.
     paths = make_repo(tmp_path)
     write(paths["all_vars"], "k8s_namespace: lab\n")
@@ -381,7 +381,7 @@ def test_claim_index_reads_the_real_tree_for_each_declaration_shape():
     check that finds its subject by pattern is a named member it must find: one claim per
     declaration shape the tree still uses (`k8s_claims` entries, one per StorageClass), so a
     task walk that stops matching names the claim it lost rather than moving a count. No role
-    template carries an inline claim block since #3387; the fixtures above hold that shape.
+    template carries an inline claim block; the fixtures above hold that shape.
     """
     index = claim_index(K8S_ROLES)
     expected = {

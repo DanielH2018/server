@@ -1,20 +1,16 @@
-# The Pi's Compose project (H5, docs/target-architecture/host/h5-pi-compose.md). H5.2a1 ships the
-# renderer's inputs: the Compose env template and the tmpfiles file. H5.2a3 ships the unit and its
-# two scripts. H5.2b lists this component in hosts/daniel-pi/package.yml, ships the unit's enable
-# link and adds the first service, `pi-canary`: the first PR that runs anything through the package.
-# H5.10 removed the canary, and `up --remove-orphans` removed its container (exit observation 3).
+# The Pi's Compose project: the renderer's inputs (the Compose env template and the tmpfiles
+# file), the unit and its two scripts, and the per-service trees.
 #
 # Autonomous-role contract (compose-adopt removes containers unattended).
 # - Scope / exclusions: compose-adopt removes a container only when its name is a service the
 #   merged project declares and its com.docker.compose.project label is not `homelab`. It touches
 #   no other container, image, volume or network. compose-run's `up --remove-orphans` removes a
 #   `homelab` container that the project no longer declares, and nothing from another project.
-# - Mode (explicit and reversible): the enable link below arms the unit, since H5.2b. Reconcile's
-#   step 2 starts an enabled unit that is not active, and H4's restart set restarts only an
+# - Mode (explicit and reversible): the enable link below arms the unit. Reconcile's
+#   step 2 starts an enabled unit that is not active, and the restart set restarts only an
 #   enabled or active one. Dropping the link from a later package version stops the boot start,
 #   and `sudo systemctl mask homelab-compose.service` stops every other start until it is
-#   unmasked. Neither stops a container, because the unit has no ExecStop=. A revert of H5.2b
-#   therefore leaves `pi-canary` running until `docker rm -f pi-canary` removes it.
+#   unmasked. Neither stops a container, because the unit has no ExecStop=.
 # - Authoritative sources: `docker compose config --services` for the names, and `docker ps -a`
 #   for each container's project label, read before any removal.
 # - Required evidence, every run: one `logger -t compose-adopt` line for each removal, naming the
@@ -30,17 +26,16 @@
 # `compose_services` in the Pi's host_vars.
 #
 # The networks. Every shared network stays `external: true`, so Compose never recreates one the
-# live Pi holds, which would stop every attached container (H7.26). The unit's `ExecStartPre=`
+# live Pi holds, which would stop every attached container. The unit's `ExecStartPre=`
 # lines create each external network the rendered compose files name, from the renderer's
 # `compose_external_networks`, so a fresh Pi gets them on first start.
 # hosts/lib/tests/test_pi_docker_component.py holds the created set equal to the project's, and
 # hosts/lib/tests/test_pi_compose_network_measurement.py records what Compose does with an
 # unlabelled network of the same name.
 #
-# The `outputs:` entry below is the Compose env file. Since H5.7, autoheal's webhook is the first
-# secret a compose file reads, and since H5.8 alloy's HTTP password is the second. The includes
-# carry `env_file:` and `keys:` lists exactly the secrets the compose files read (operator ruling
-# 2026-10-24, h5-pi-compose.md *Open questions* 7).
+# The `outputs:` entry below is the Compose env file. Autoheal's webhook and alloy's HTTP password
+# are the secrets a compose file reads. The includes carry `env_file:` and `keys:` lists exactly
+# the secrets the compose files read.
 # The Pi's SOPS file must hold each key: the operator runs `host_secrets.py sync daniel-pi`.
 compose: services
 outputs:
@@ -52,7 +47,7 @@ outputs:
     keys: [alloy_pi_http_password, monitor_discord_webhook_url]
     dependents: [homelab-compose.service]
     format: dotenv   # homelab-secrets refuses a `'` or a newline in a value
-# The boot path, reconcile's step 2 and H4's restart set all need this link.
+# The boot path, reconcile's step 2 and the restart set all need this link.
 enable:
   homelab-compose.service: multi-user.target
 defaults:
@@ -62,7 +57,7 @@ defaults:
   container_healthcheck_interval: 10s
   container_healthcheck_timeout: 5s
   container_healthcheck_retries: 3
-  # The largest start_period any service in the project declares. docker-proxy's is 10s. A move PR
+  # The largest start_period any service in the project declares. docker-proxy's is 10s. A service
   # that adds a larger one raises this value, and the unit's wait grows with it.
   compose_start_period: 10s
 files:
@@ -71,13 +66,13 @@ files:
   - {src: compose-adopt, dst: /usr/lib/homelab/compose-adopt, mode: "0755"}
   # Marked inputs_sha256: it renders after every other file, with the hash over the project's files.
   - {src: units/homelab-compose.service.j2, dst: /usr/lib/systemd/system/homelab-compose.service, inputs_sha256: true}
-# What the Ansible-era projects wrote. Reconcile removes each file in its step 4, after step 3 has
+# Files a project wrote before the package. Reconcile removes each file in its step 4, after step 3 has
 # restarted homelab-compose.service, so a file goes only once the project has run its service. Each
-# move PR (H5.6 to H5.9) adds its service's docker-compose.yml here.
+# service's docker-compose.yml is listed here.
 legacy:
   - {path: /home/ubuntu/server/containers/docker-proxy/docker-compose.yml}
   - {path: /home/ubuntu/server/containers/autoheal/docker-compose.yml}
-  # alloy's role rendered its config at 0640 beside the compose file. Its password now reaches the
+  # alloy's role rendered its config at 0640 beside the compose file. Its password reaches the
   # container through the Compose env file, and the package installs a config without it.
   - {path: /home/ubuntu/server/containers/alloy/docker-compose.yml}
   - {path: /home/ubuntu/server/containers/alloy/config/config.alloy}

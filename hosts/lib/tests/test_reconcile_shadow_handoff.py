@@ -1,6 +1,6 @@
 """A packaged unit takes over from the Ansible-era copy under /etc/systemd/system that shadows it.
 
-H7.41's builder units are already named `homelab-*`, so the package ships the same names as the
+The builder units are named `homelab-*`, so the package ships the same names as the
 copies in /etc/systemd/system, and those copies win. Reconcile removes the shadowing file, runs
 one daemon-reload, and restarts the packaged unit whose fragment changed. A `{path:}` entry
 whose unit the package does not ship stays in place and counts as drift.
@@ -113,7 +113,7 @@ def test_a_path_under_etc_whose_unit_the_package_does_not_ship_is_left_and_repor
 
 
 def test_the_packages_enable_link_survives_the_handoff_of_the_ansible_era_link(node):
-    # H7.41b: Ansible enabled homelab-builder.timer with a link under /etc, and the package
+    # Ansible enabled homelab-builder.timer with a link under /etc, and the package
     # enables it with its own link. Removing the /etc link must not disable or stop the timer.
     timer = "homelab-builder.timer"
     node.unit(
@@ -136,7 +136,7 @@ def test_the_packages_enable_link_survives_the_handoff_of_the_ansible_era_link(n
 
 
 def test_a_handed_off_unit_takes_its_etc_enable_links_and_keeps_every_other_link(node):
-    # #7930: retiring the Ansible-era homelab-rootq.socket left its sockets.target.wants link.
+    # Retiring homelab-rootq.socket leaves its sockets.target.wants link, which the handoff keeps.
     socket = "homelab-rootq.socket"
     node.unit(
         socket, "[Socket]\nNew=1\n", active="active", enabled="enabled", linked=True
@@ -187,7 +187,7 @@ def test_a_handed_off_template_takes_the_enable_links_of_its_instances(node):
     "slice_dir", ["user.slice.d", "user-1000.slice.d", "user-995.slice.d"]
 )
 def test_an_ansible_era_slice_drop_in_is_removed_as_an_unowned_file(node, slice_dir):
-    # H7.39: a drop-in's file name is never a packaged unit name, so it is no shadow copy.
+    # A drop-in's file name is never a packaged unit name, so it is no shadow copy.
     dropin = f"{ETC}/{slice_dir}/claude-memcaps.conf"
     shadow(node, dropin, "[Slice]\nMemoryMax=8G\n")
     node.manifest["legacy"].append({"path": f"/{dropin}"})

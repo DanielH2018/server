@@ -1,4 +1,4 @@
-"""The Alloy config must redact Prowlarr's `apikey=` out of the *arr Torznab error lines (#6276).
+"""The Alloy config must redact Prowlarr's `apikey=` out of the *arr Torznab error lines.
 
 Sonarr and Radarr log every failed Torznab call with its full request URL, and that URL embeds
 Prowlarr's API key as `apikey=<32 hex>`. Alloy ships those lines to `loki-homelab`, which the LAN

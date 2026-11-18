@@ -1,8 +1,8 @@
-"""`forge.GitHub.check_runs` reads every page of a commit's check-runs (#5977).
+"""`forge.GitHub.check_runs` reads every page of a commit's check-runs.
 
 GitHub's check-runs endpoint holds 100 runs to a page. A reader of page 1 alone hides a failing
 or pending run on page 2, so `decide` could read a partial list as a complete green one. The
-same single-page shape hung promote's verify on the combined status (#5974).
+same single-page shape hung promote's verify on the combined status.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_forge_check_run_pages.py
 """

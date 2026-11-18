@@ -1,4 +1,4 @@
-"""A workload that reads a Secret through env is a restart target of its flux-owned tag (#7575).
+"""A workload that reads a Secret through env is a restart target of its flux-owned tag.
 
 Env resolves once at pod start, so a rotated value reaches the Secret and never the running
 pods unless the pod template carries `checksum/restart`. A Secret mounted as a plain volume is

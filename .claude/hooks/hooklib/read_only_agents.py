@@ -22,19 +22,16 @@ _OWN_CHECKOUT = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 )
 
-# An agent whose frontmatter carries `read_only: true` still lists Bash, and Bash can write a
-# file, commit and push. The description's "Read-only" was a prompt instruction, and these
-# agents read untrusted text: the skeptic reads open PRs, and a Renovate PR body quotes
-# upstream release notes (#4617). A subagent's hook payload names it in `agent_type`, its
-# frontmatter `name:`.
+# A `read_only: true` agent still lists Bash, and it reads untrusted text (open PRs, quoted
+# release notes), so its Bash is enforced here. The payload's `agent_type` is its `name:`.
 #
 # DECIDED: deny, not arm 1's ask. Arm 1 asks because one wrong extraction must not block the
 # operator's own session. Here the session is an agent that has declared it writes nothing, so
 # a false positive costs it one rephrased read, while a missed write is the injected action the
-# arm exists to stop. Outside git and gh, each command is judged against the allowlist in
-# `read_only_commands.py`, whose docstring says why it is an allowlist. A wrapper (`timeout`,
-# `env`, `xargs`, `uv run`, …) is read past, an `ssh` remote command and a `$( )` body are
-# judged as commands of their own, and a nested shell or `eval` is denied.
+# arm exists to stop. Outside git and gh, `read_only_commands.py`'s allowlist judges each
+# command. A wrapper (`timeout`, `env`, `xargs`, `uv run`, …) is read past, an `ssh`
+# remote command and a `$( )` body are judged on their own, and a nested shell or `eval` is
+# denied.
 
 _AGENTS_DIR = os.path.join(_OWN_CHECKOUT, ".claude", "agents")
 

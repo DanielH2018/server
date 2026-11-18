@@ -9,7 +9,7 @@ reads:
   stale branch rather than recomputing it, so a branch cut before an earlier bump landed keeps
   naming the older version.
 - **It rewrites one copy of a version and leaves another.** `pip install prek==` appeared in
-  TWO jobs until #3723 moved it into the setup action, and the Vale download URL carries its version TWICE (the release tag and the asset
+  TWO jobs, and the Vale download URL carries its version TWICE (the release tag and the asset
   name). A partial rewrite leaves one job installing the old tool, which is green and wrong.
   `renovate.json`'s Vale manager already carries two `matchStrings` for exactly this reason;
   nothing asserted the outcome.
@@ -21,7 +21,7 @@ the marker goes where the decision is made rather than in a list somewhere else.
 The comparison reads master's pins at `git merge-base HEAD origin/master`, never the live
 `origin/master` tip. CI tests a PR's merge ref, and Renovate bumps pins on master. Against the
 live tip, a pin master raised after the merge ref was built reads as one this PR moved backwards
-(#4040, the race #4009 fixed in `test_module_length_ratchet.py`). The merge base is the merge
+(the race `test_module_length_ratchet.py` also guards against). The merge base is the merge
 ref's first parent in CI, the fork point on a local branch, and HEAD itself on master.
 
 The comparison needs the `origin/master` ref. It skips, naming the reason, when the ref is not
@@ -173,7 +173,7 @@ def base_of(run_git: Callable[..., subprocess.CompletedProcess[str]]) -> str | N
 
 
 def test_a_pin_master_raised_after_the_merge_ref_was_built_is_not_flagged(tmp_path):
-    """The #4040 race: CI's merge ref is built, then Renovate bumps a pin the PR never touched.
+    """The race: CI's merge ref is built, then Renovate bumps a pin the PR never touched.
 
     The live tip reads the untouched pin as moved backwards, which is the red half. The base
     resolves to the merge ref's first parent, where the pin still has the PR's version.

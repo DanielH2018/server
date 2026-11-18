@@ -1,4 +1,4 @@
-"""Each landing fact prints as one line, once (#7894).
+"""Each landing fact prints as one line, once.
 
 The 2026-11-09 audit of 162 landing logs found facts printed twice in a row, repeated on
 every merge attempt, or spread over several lines of raw `gh` text.

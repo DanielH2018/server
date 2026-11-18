@@ -1,10 +1,10 @@
 """The determinism digest printer, and the `hosts` fixture the host-mode tests share.
 
-The determinism modules' digest lines print to the job log.
+The determinism modules' digest lines go to the file CI uploads, and one count line to the log.
 
 pytest loads this file in the controller as well as in every xdist worker, because CI names
 the test files under this directory on its command line. `_render_audit.log_digest_lines` says
-why the printing happens here and not in the test.
+why the saving happens here and not in the test.
 """
 
 import pytest

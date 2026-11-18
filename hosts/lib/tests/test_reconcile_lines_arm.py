@@ -1,4 +1,4 @@
-"""Reconcile's line arm, against stub `dpkg` and `dpkg-query` (H7.2d).
+"""Reconcile's line arm, against stub `dpkg` and `dpkg-query`.
 
 The clauses are H7's *Red proofs for the checks this slice adds*, line arm. The arm edits a real
 file under the test root, so the assertions read the file. What a stub cannot show is dpkg

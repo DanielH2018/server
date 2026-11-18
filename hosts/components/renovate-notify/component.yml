@@ -1,6 +1,5 @@
-# The Renovate reporting half on daniel-box as a packaged timer (H7.37, H7.11,
-# docs/target-architecture/host/h7-delete-ansible.md). Until H7.37 the renovate_notify role
-# installed it as renovate-notify.timer. CLAUDE.md beside this file holds the rules.
+# The Renovate reporting half on daniel-box as a packaged timer. CLAUDE.md beside this file holds
+# the rules.
 #
 # The notifier merges, closes and edits nothing, so it owes no Autonomous-role contract beyond the
 # fields below: it reads GitHub and posts to Discord.
@@ -38,7 +37,7 @@ outputs:
     link: true
 enable:
   homelab-renovate-notify.timer: timers.target
-# What the renovate_notify role installed before H7.37. Reconcile retires each once the timer above
+# What the renovate_notify role installed. Reconcile retires each once the timer above
 # has started. /var/lib/renovate-notify stays: it holds the digest's state, and monitor-bridge reads
 # it.
 legacy:

@@ -1,4 +1,4 @@
-"""Collecting the `--help` census modules costs under a second each (#7730).
+"""Collecting the `--help` census modules costs under a second each.
 
 `test_entry_points_answer_help.py` classified every script at import, and
 `test_help_check_rejects_work_output.py` imports it, so each module's collection cost 4.5s

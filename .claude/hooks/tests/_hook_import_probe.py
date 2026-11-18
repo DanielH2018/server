@@ -9,7 +9,7 @@ module-scope imports and `sys.path` inserts run as they do under `run-hook.sh`. 
 import statement in the file, deferred ones included, it puts back the `sys.path` the module
 scope left, applies the inserts the enclosing function makes before that import, and imports
 the module. A hook catches its own ImportError and fails open, so an import that raised there
-reads as a working hook; doing the import here is what makes a stale insert visible (#718).
+reads as a working hook; doing the import here is what makes a stale insert visible.
 
 An insert's argument is evaluated in the hook's globals. A local variable built from a function
 parameter is evaluated too, after binding every parameter named `repo_root` to `<checkout

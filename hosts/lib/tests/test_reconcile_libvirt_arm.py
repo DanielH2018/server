@@ -1,4 +1,4 @@
-"""Reconcile's libvirt arm, against a stub `virsh` (H7.2c).
+"""Reconcile's libvirt arm, against a stub `virsh`.
 
 The clauses are H7's *Red proofs for the checks this slice adds*, libvirt arm. A refused undefine
 is drift, so the run succeeds and the updater does not hold the host

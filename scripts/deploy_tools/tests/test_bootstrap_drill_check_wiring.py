@@ -1,8 +1,8 @@
 """The drill's `main` reaches each predicate it defines, or the predicate lives elsewhere.
 
-`check` reaches `closure_problems` and `sync_problems`, or neither exists (#8170).
+`check` reaches `closure_problems` and `sync_problems`, or neither exists.
 `main` reaches `placeholder_problems` and its `_strings`, through `check` or `build`, or the
-predicate lives only in the renderer test (#8254). A census over `bootstrap_drill.py`'s call graph: the
+predicate lives only in the renderer test. A census over `bootstrap_drill.py`'s call graph: the
 module is parsed, never imported.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_bootstrap_drill_check_wiring.py

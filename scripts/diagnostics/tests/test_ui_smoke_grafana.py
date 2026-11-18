@@ -62,7 +62,7 @@ GRAFANA_DASHBOARDS = [
     # 4 panels, every one a `row`: it mounts fully and draws no panel header until a row is
     # expanded, so 0 here means "assert on rows instead". See grafana_panel_report.py.
     ("6L2GdB47z", 0),  # crowdsec-details-per-machine
-    # Observed live 2026-09-06. The shape the four above do not have: no `row` at all, so
+    # The shape the four above do not have: no `row` at all, so
     # every panel must draw on load and `min_headers` is the board's whole panel count.
     # DECIDED: `speedtest-tracker` is not enrolled, and its `table` panel is not why
     # `exportarr-arr-stack` is. Two of the four boards above already carry a `table`
@@ -70,13 +70,10 @@ GRAFANA_DASHBOARDS = [
     # speedtest-tracker is that same flat shape carrying only `stat` and `timeseries`, both
     # enrolled twice over, so under this list's own one-per-shape rule it adds nothing while
     # costing another board in the single browser the 2Gi limit bounds. Re-enrol it only
-    # against a shape argument, not because it is unenrolled. Issue #1387.
-    # Re-measured live 2026-09-06 after `Download queue depth` (panel id 14) landed:
-    # the board drew 13 headers when it was enrolled, and draws 14 now.
-    # Re-measured live 2026-09-10 after `sonarr episode quality mix` (panel id 15, a flat
-    # `piechart`) landed: enrolled at 999 and read the observed count out of the failure —
-    # `the dashboard mounted but drew 15 panel header(s)`. That is how to re-measure this
-    # list; a derivation from the board's panel count only holds while it carries no `row`.
+    # against a shape argument, not because it is unenrolled.
+    # Enrol at 999 and read the observed count out of the failure (`the dashboard mounted but
+    # drew N panel header(s)`) to re-measure this list; a derivation from the board's panel
+    # count only holds while it carries no `row`.
     ("exportarr-arr-stack", 15),
 ]
 

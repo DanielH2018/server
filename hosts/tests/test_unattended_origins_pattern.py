@@ -135,7 +135,7 @@ def test_each_host_ships_the_regular_updates_pocket(host: str):
     assert any(matches(p, REGULAR_UPDATES) for p in shipped_patterns(host))
 
 
-# An unattended engine swap took the Pi down (#1961), and the updater alone moves homelab-*.
+# An unattended engine swap took the Pi down, and the updater alone moves homelab-*.
 @pytest.mark.parametrize("host", HOSTS)
 @pytest.mark.parametrize("release", [DOCKER, HOMELAB], ids=["docker", "homelab"])
 def test_no_shipped_pattern_reaches_docker_or_the_homelab_repository(

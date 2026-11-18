@@ -45,16 +45,20 @@
 # Claude Code worktrees: each is a full checkout of this repo with its own .venv, created and
 # removed by agent sessions every day. On 2026-10-20 daniel-box held 83 of them, 2.19M of the
 # 5.1M inodes on its root filesystem, and the weekly check ran 35 hours without finishing
-# (#5785). The primary checkout beside them stays checked.
-!/home/{{ sys_user }}/server/\.claude/worktrees/
+# (#5785). The primary checkout beside them stays checked. The service users (claude,
+# renovate-agent, homelab-builder) have their homes under /var/lib, so every home rule below
+# matches both roots.
+!/(home|var/lib)/[^/]+/server/\.claude/worktrees/
 
 # Per-user caches and session state: package-manager download caches (uv, prek, npm) and
 # per-session review scratch, all rewritten by ordinary use. ~/.local/share stays checked,
 # because the uv-managed Pythons, uv tools and node versions there are executables.
-!/home/[^/]+/\.cache/
-!/home/[^/]+/\.kube/cache/
-!/home/[^/]+/\.npm/
-!/home/[^/]+/\.local/state/
+!/(home|var/lib)/[^/]+/\.cache/
+!/(home|var/lib)/[^/]+/\.kube/cache/
+!/(home|var/lib)/[^/]+/\.npm/
+!/(home|var/lib)/[^/]+/\.local/state/
+# The builder's UV_CACHE_DIR: 1131 of daniel-box's changed entries on 2026-11-16.
+!/var/lib/homelab-builder/uv-cache/
 
 # The media library: 432 GB on daniel-box's root filesystem on 2026-10-20, under
 # fake_remux_host_data_root. Every file there gets AIDE's Full rule (about ten digests), which

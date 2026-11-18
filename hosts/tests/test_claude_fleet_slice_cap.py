@@ -78,7 +78,7 @@ def render(template: str, **overrides: object) -> str:
 
     Through `_setup_render` rather than a synthetic context of this module's own: the context
     this module carried drifted to a fleet cap of 12G while defaults/main.yml moved to 14G, so
-    every assertion below was checking a number the host never renders (#3202).
+    every assertion below was checking a number the host never renders.
     """
     return render_component_text(COMPONENT, template, overrides)
 

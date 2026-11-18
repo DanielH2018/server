@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/freshness.py
-generated_at: 2026-11-18 18:17 UTC
-generated_sha: 0439823f9
+generated_at: 2026-11-18 20:19 UTC
+generated_sha: dbd4393a6
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,24 +12,24 @@ generated_sha: 0439823f9
 
 # Doc freshness
 
-140 hand-written page(s). *Changed* is the page's last commit; *moved* counts the repo files the page names whose last commit is later than that. A moved source does not prove the page is wrong -- it marks the page to reread next. The generated reference pages are not listed: they are rebuilt from the tree.
+137 hand-written page(s). *Changed* is the page's last commit; *moved* counts the repo files the page names whose last commit is later than that. A moved source does not prove the page is wrong -- it marks the page to reread next. The generated reference pages are not listed: they are rebuilt from the tree.
 
 | Page | Changed | Sources named | Moved since | Most recently moved |
 |---|---|---|---|---|
-| [target-architecture/monitoring/m6-retire-kuma.md](../target-architecture/monitoring/m6-retire-kuma.md) | 2026-11-13 | 256 | 139 | `hosts/components/pi-compose/services/autoheal/compose.yaml.j2` (2026-11-18) |
-| [target-architecture/host/h7-delete-ansible.md](../target-architecture/host/h7-delete-ansible.md) | 2026-11-13 | 186 | 92 | `hosts/packages/homelab-tools/package.yml` (2026-11-18) |
-| [target-architecture/monitoring/m5-loki-ruler.md](../target-architecture/monitoring/m5-loki-ruler.md) | 2026-11-13 | 64 | 42 | `secrets/secrets.yml` (2026-11-16) |
-| [target-architecture/render/r4-delete-k8s-ansible-path.md](../target-architecture/render/r4-delete-k8s-ansible-path.md) | 2026-11-13 | 75 | 40 | `scripts/dev/pytest_shard_weights.json` (2026-11-17) |
+| [target-architecture/monitoring/m6-retire-kuma.md](../target-architecture/monitoring/m6-retire-kuma.md) | 2026-11-13 | 255 | 138 | `scripts/dev/pytest_shard_weights.json` (2026-11-18) |
+| [target-architecture/host/h7-delete-ansible.md](../target-architecture/host/h7-delete-ansible.md) | 2026-11-13 | 186 | 92 | `docs/reference/state.md` (2026-11-18) |
+| [target-architecture/monitoring/m5-loki-ruler.md](../target-architecture/monitoring/m5-loki-ruler.md) | 2026-11-13 | 64 | 42 | `docs/archive/uptime-kuma-autokuma-record.md` (2026-11-18) |
+| [target-architecture/render/r4-delete-k8s-ansible-path.md](../target-architecture/render/r4-delete-k8s-ansible-path.md) | 2026-11-13 | 75 | 40 | `scripts/dev/pytest_shard_weights.json` (2026-11-18) |
 | [target-architecture/render/r2-secret-placeholders.md](../target-architecture/render/r2-secret-placeholders.md) | 2026-11-13 | 73 | 38 | `scripts/renderer/renderer_lib/secret_checks.py` (2026-11-16) |
 | [target-architecture/deploy/d2-first-leaf.md](../target-architecture/deploy/d2-first-leaf.md) | 2026-11-13 | 54 | 35 | `docs/reference/services.md` (2026-11-16) |
 | [target-architecture/docs-guard/g5-shrink-root-claude-md.md](../target-architecture/docs-guard/g5-shrink-root-claude-md.md) | 2026-11-13 | 56 | 32 | `CLAUDE.md` (2026-11-16) |
 | [target-architecture/monitoring/m2-first-bridge-family.md](../target-architecture/monitoring/m2-first-bridge-family.md) | 2026-11-13 | 51 | 31 | `CLAUDE.md` (2026-11-16) |
 | [target-architecture/host/h6-k3s-suc.md](../target-architecture/host/h6-k3s-suc.md) | 2026-11-13 | 69 | 29 | `CLAUDE.md` (2026-11-16) |
-| [target-architecture/docs-guard/g2-retire-lock.md](../target-architecture/docs-guard/g2-retire-lock.md) | 2026-11-13 | 39 | 28 | `scripts/dev/pytest_shard_weights.json` (2026-11-17) |
-| [target-architecture/deploy/d6-delete-old-path.md](../target-architecture/deploy/d6-delete-old-path.md) | 2026-11-14 | 88 | 27 | `secrets/secrets.yml` (2026-11-16) |
-| [target-architecture/deploy/d1-flux-installed.md](../target-architecture/deploy/d1-flux-installed.md) | 2026-11-13 | 47 | 26 | `CLAUDE.md` (2026-11-16) |
+| [target-architecture/docs-guard/g2-retire-lock.md](../target-architecture/docs-guard/g2-retire-lock.md) | 2026-11-13 | 39 | 28 | `mkdocs.yml` (2026-11-18) |
+| [target-architecture/deploy/d6-delete-old-path.md](../target-architecture/deploy/d6-delete-old-path.md) | 2026-11-14 | 88 | 27 | `mkdocs.yml` (2026-11-18) |
+| [target-architecture/deploy/d1-flux-installed.md](../target-architecture/deploy/d1-flux-installed.md) | 2026-11-13 | 47 | 26 | `mkdocs.yml` (2026-11-18) |
 | [target-architecture/deploy/d4-ordering.md](../target-architecture/deploy/d4-ordering.md) | 2026-11-13 | 40 | 26 | `CLAUDE.md` (2026-11-16) |
-| [target-architecture/render/r1-shadow-render.md](../target-architecture/render/r1-shadow-render.md) | 2026-11-13 | 46 | 26 | `scripts/dev/pytest_shard_weights.json` (2026-11-17) |
+| [target-architecture/render/r1-shadow-render.md](../target-architecture/render/r1-shadow-render.md) | 2026-11-13 | 46 | 26 | `scripts/dev/pytest_shard_weights.json` (2026-11-18) |
 | [target-architecture/render/r3-remove-live-reads.md](../target-architecture/render/r3-remove-live-reads.md) | 2026-11-13 | 47 | 26 | `secrets/secret_rotation.yml` (2026-11-16) |
 | [target-architecture/host/h4-secrets-unit.md](../target-architecture/host/h4-secrets-unit.md) | 2026-11-13 | 40 | 22 | `.github/workflows/ci.yml` (2026-11-16) |
 | [claude-tooling.md](../claude-tooling.md) | 2026-11-14 | 78 | 22 | `CLAUDE.md` (2026-11-16) |
@@ -39,29 +39,29 @@ generated_sha: 0439823f9
 | [monitor-bridge-checks.md](../monitor-bridge-checks.md) | 2026-11-14 | 45 | 19 | `CLAUDE.md` (2026-11-16) |
 | [target-architecture/deploy/d5-bulk-move.md](../target-architecture/deploy/d5-bulk-move.md) | 2026-11-14 | 80 | 18 | `CLAUDE.md` (2026-11-16) |
 | [target-architecture/host/h1-cluster-config-to-flux.md](../target-architecture/host/h1-cluster-config-to-flux.md) | 2026-11-14 | 93 | 18 | `CLAUDE.md` (2026-11-16) |
-| [target-architecture/host/h2-shrink-host-plane.md](../target-architecture/host/h2-shrink-host-plane.md) | 2026-11-14 | 74 | 18 | `docs/reference/state.md` (2026-11-17) |
+| [target-architecture/host/h2-shrink-host-plane.md](../target-architecture/host/h2-shrink-host-plane.md) | 2026-11-14 | 74 | 18 | `docs/reference/state.md` (2026-11-18) |
 | [target-architecture/monitoring/alertmanager-ui-and-readers.md](../target-architecture/monitoring/alertmanager-ui-and-readers.md) | 2026-11-13 | 24 | 17 | `docs/reference/services.md` (2026-11-16) |
-| [break-glass.md](../break-glass.md) | 2026-11-14 | 49 | 16 | `docs/reference/secrets.md` (2026-11-17) |
+| [break-glass.md](../break-glass.md) | 2026-11-14 | 49 | 16 | `docs/reference/secrets.md` (2026-11-18) |
 | [target-architecture/design.md](../target-architecture/design.md) | 2026-11-13 | 19 | 14 | `CLAUDE.md` (2026-11-16) |
-| [target-architecture/monitoring/m4-blackbox-ingress.md](../target-architecture/monitoring/m4-blackbox-ingress.md) | 2026-11-13 | 30 | 14 | `CLAUDE.md` (2026-11-16) |
-| [target-architecture/deploy/d3-secrets.md](../target-architecture/deploy/d3-secrets.md) | 2026-11-14 | 45 | 14 | `secrets/cluster-vars.source` (2026-11-16) |
+| [target-architecture/deploy/d3-secrets.md](../target-architecture/deploy/d3-secrets.md) | 2026-11-14 | 45 | 14 | `mkdocs.yml` (2026-11-18) |
 | [target-architecture/docs-guard/g3-freshness-reviewer.md](../target-architecture/docs-guard/g3-freshness-reviewer.md) | 2026-11-13 | 25 | 13 | `CLAUDE.md` (2026-11-16) |
 | [target-architecture/docs-guard/g4-drop-size-test.md](../target-architecture/docs-guard/g4-drop-size-test.md) | 2026-11-13 | 29 | 13 | `docs/reference/backlog.md` (2026-11-17) |
+| [target-architecture/monitoring/m4-blackbox-ingress.md](../target-architecture/monitoring/m4-blackbox-ingress.md) | 2026-11-13 | 29 | 13 | `CLAUDE.md` (2026-11-16) |
 | [python-code-organization.md](../python-code-organization.md) | 2026-11-14 | 40 | 13 | `.github/workflows/ci.yml` (2026-11-16) |
 | [secret-rotation.md](../secret-rotation.md) | 2026-11-14 | 37 | 13 | `secrets/secrets.yml` (2026-11-16) |
 | [target-architecture/monitoring/m3-textfile-timer.md](../target-architecture/monitoring/m3-textfile-timer.md) | 2026-11-13 | 31 | 12 | `CLAUDE.md` (2026-11-16) |
-| [longhorn-disaster-recovery.md](../longhorn-disaster-recovery.md) | 2026-11-14 | 21 | 10 | `docs/reference/state.md` (2026-11-17) |
+| [longhorn-disaster-recovery.md](../longhorn-disaster-recovery.md) | 2026-11-14 | 21 | 10 | `docs/reference/state.md` (2026-11-18) |
 | [k3s-etcd-restore.md](../k3s-etcd-restore.md) | 2026-11-13 | 15 | 9 | `inventory/group_vars/all.yml` (2026-11-16) |
 | [issue-claiming-and-fanout.md](../issue-claiming-and-fanout.md) | 2026-11-14 | 23 | 9 | `docs/reference/scripts.md` (2026-11-16) |
 | [autofix-bridge-actuators.md](../autofix-bridge-actuators.md) | 2026-11-13 | 13 | 8 | `CLAUDE.md` (2026-11-16) |
 | [k3s-node-plane-crons-and-incidents.md](../k3s-node-plane-crons-and-incidents.md) | 2026-11-13 | 16 | 8 | `CLAUDE.md` (2026-11-16) |
 | [networkpolicy-default-deny.md](../networkpolicy-default-deny.md) | 2026-11-13 | 9 | 8 | `tests/k8s/test_netpol_baseline_labels.py` (2026-11-15) |
 | [host-bring-up.md](../host-bring-up.md) | 2026-11-14 | 22 | 8 | `CLAUDE.md` (2026-11-16) |
+| [target-architecture/host/h3-pi-pilot.md](../target-architecture/host/h3-pi-pilot.md) | 2026-11-15 | 90 | 8 | `hosts/packages/homelab-tools/package.yml` (2026-11-18) |
 | [ubuntu-26.04-upgrade-plan.md](../ubuntu-26.04-upgrade-plan.md) | 2026-11-12 | 13 | 7 | `.github/workflows/ci.yml` (2026-11-16) |
 | [adr/0020-flux-applies-the-cluster-from-a-promoted-artifact.md](../adr/0020-flux-applies-the-cluster-from-a-promoted-artifact.md) | 2026-11-13 | 13 | 7 | `docs/landing.md` (2026-11-16) |
 | [observability-dashboards.md](../observability-dashboards.md) | 2026-11-13 | 15 | 7 | `k8s/roles/observability/CLAUDE.md` (2026-11-15) |
 | [homelab-render.md](../homelab-render.md) | 2026-11-15 | 64 | 7 | `scripts/renderer/renderer_lib/secret_checks.py` (2026-11-16) |
-| [target-architecture/host/h3-pi-pilot.md](../target-architecture/host/h3-pi-pilot.md) | 2026-11-15 | 90 | 7 | `hosts/packages/homelab-tools/package.yml` (2026-11-18) |
 | [test-coverage-snapshot.md](../test-coverage-snapshot.md) | 2026-11-15 | 834 | 7 | `scripts/dev/pytest_shard.py` (2026-11-16) |
 | [crowdsec-waf-record.md](../crowdsec-waf-record.md) | 2026-11-13 | 13 | 6 | `k8s/roles/crowdsec/CLAUDE.md` (2026-11-15) |
 | [headlamp-oidc-and-plugins.md](../headlamp-oidc-and-plugins.md) | 2026-11-13 | 9 | 6 | `renovate.json` (2026-11-15) |
@@ -84,11 +84,9 @@ generated_sha: 0439823f9
 | [adr/0022-the-cluster-decrypts-its-own-file-with-its-own-key.md](../adr/0022-the-cluster-decrypts-its-own-file-with-its-own-key.md) | 2026-11-13 | 8 | 4 | `secrets/secrets.yml` (2026-11-16) |
 | [adr/0023-fact-support-is-a-diff-notice.md](../adr/0023-fact-support-is-a-diff-notice.md) | 2026-11-13 | 4 | 4 | `CLAUDE.md` (2026-11-16) |
 | [registry-push-store-gc.md](../registry-push-store-gc.md) | 2026-11-13 | 5 | 4 | `k8s/roles/registry/CLAUDE.md` (2026-11-15) |
-| [alert-triggered-diagnosis.md](../alert-triggered-diagnosis.md) | 2026-11-14 | 8 | 4 | `docs/claude-agent-user.md` (2026-11-15) |
 | [claude-code-root-helpers.md](../claude-code-root-helpers.md) | 2026-11-14 | 11 | 4 | `hosts/packages/homelab-tools/package.yml` (2026-11-18) |
 | [claude-memory-sync.md](../claude-memory-sync.md) | 2026-11-14 | 4 | 4 | `CLAUDE.md` (2026-11-16) |
 | [claude-shell-permissions.md](../claude-shell-permissions.md) | 2026-11-14 | 10 | 4 | `CLAUDE.md` (2026-11-16) |
-| [uptime-kuma-autokuma-record.md](../uptime-kuma-autokuma-record.md) | 2026-11-14 | 7 | 4 | `scripts/diagnostics/probe.py` (2026-11-15) |
 | [adr/0012-zero-downtime-deploys-gate-on-rollout-and-restarts.md](../adr/0012-zero-downtime-deploys-gate-on-rollout-and-restarts.md) | 2026-11-13 | 6 | 3 | `scripts/diagnostics/probe.py` (2026-11-15) |
 | [adr/0016-code-scanning-stays-on-default-setup.md](../adr/0016-code-scanning-stays-on-default-setup.md) | 2026-11-13 | 9 | 3 | `scripts/deploy_tools/land_lib/land_tags.py` (2026-11-14) |
 | [adr/0024-code-scanning-is-off.md](../adr/0024-code-scanning-is-off.md) | 2026-11-13 | 3 | 3 | `.github/workflows/ci.yml` (2026-11-16) |
@@ -117,10 +115,10 @@ generated_sha: 0439823f9
 | [claude-code-rc-caps.md](../claude-code-rc-caps.md) | 2026-11-14 | 3 | 2 | `hosts/components/claude-code/CLAUDE.md` (2026-11-15) |
 | [game-stats-internals.md](../game-stats-internals.md) | 2026-11-14 | 6 | 2 | `k8s/roles/game-stats/CLAUDE.md` (2026-11-15) |
 | [target-architecture/docs-guard/g10-value-rows.md](../target-architecture/docs-guard/g10-value-rows.md) | 2026-11-14 | 3 | 2 | `.claude/rules/generated-docs.md` (2026-11-16) |
-| [target-architecture/docs-guard/g8-memory-resolver-and-replica.md](../target-architecture/docs-guard/g8-memory-resolver-and-replica.md) | 2026-11-14 | 6 | 2 | `CLAUDE.md` (2026-11-16) |
+| [target-architecture/docs-guard/g8-memory-resolver-and-replica.md](../target-architecture/docs-guard/g8-memory-resolver-and-replica.md) | 2026-11-14 | 6 | 2 | `docs/archive/README.md` (2026-11-18) |
 | [target-architecture/docs-guard/g11-binding-sweep.md](../target-architecture/docs-guard/g11-binding-sweep.md) | 2026-11-15 | 12 | 2 | `CLAUDE.md` (2026-11-16) |
 | [target-architecture/docs-guard/g7-removed-names.md](../target-architecture/docs-guard/g7-removed-names.md) | 2026-11-15 | 10 | 2 | `CLAUDE.md` (2026-11-16) |
-| [host-baseline-record.md](../host-baseline-record.md) | 2026-11-16 | 33 | 2 | `scripts/dev/affected_tests.json` (2026-11-17) |
+| [host-baseline-record.md](../host-baseline-record.md) | 2026-11-16 | 33 | 2 | `scripts/dev/pytest_shard_runner_weights.json` (2026-11-18) |
 | [adr/0010-pull-based-gitops-over-argo-and-flux.md](../adr/0010-pull-based-gitops-over-argo-and-flux.md) | 2026-11-07 | 2 | 1 | `scripts/validate/k8s_manifests.py` (2026-11-13) |
 | [adr/0002-k3s-over-docker-compose-for-the-cluster-nodes.md](../adr/0002-k3s-over-docker-compose-for-the-cluster-nodes.md) | 2026-11-13 | 1 | 1 | `scripts/diagnostics/probe.py` (2026-11-15) |
 | [adr/0005-traefik-is-the-edge-with-ingressroute-crds.md](../adr/0005-traefik-is-the-edge-with-ingressroute-crds.md) | 2026-11-13 | 1 | 1 | `k8s/templates/ingressroute.yml.j2` (2026-11-14) |
@@ -143,7 +141,6 @@ generated_sha: 0439823f9
 | [pi-host-tuning-record.md](../pi-host-tuning-record.md) | 2026-11-15 | 23 | 1 | `hosts/packages/homelab-tools/package.yml` (2026-11-18) |
 | [renovate-agent-bounds-and-digest.md](../renovate-agent-bounds-and-digest.md) | 2026-11-15 | 34 | 1 | `CLAUDE.md` (2026-11-16) |
 | [target-architecture/docs-guard/handoff.md](../target-architecture/docs-guard/handoff.md) | 2026-11-15 | 15 | 1 | `CLAUDE.md` (2026-11-16) |
-| [what-the-migration-built.md](../what-the-migration-built.md) | 2026-11-15 | 1 | 1 | `CLAUDE.md` (2026-11-16) |
 | [ci-throughput.md](../ci-throughput.md) | 2026-11-16 | 19 | 1 | `scripts/dev/affected_tests.json` (2026-11-17) |
 | [adr/0004-authelia-is-the-single-sign-on-layer.md](../adr/0004-authelia-is-the-single-sign-on-layer.md) | 2026-09-02 | 0 | 0 | — |
 | [jellyfin-attachment-latency.md](../jellyfin-attachment-latency.md) | 2026-10-30 | 0 | 0 | — |
@@ -151,8 +148,8 @@ generated_sha: 0439823f9
 | [adr/0013-daniel-pi-stays-on-docker.md](../adr/0013-daniel-pi-stays-on-docker.md) | 2026-11-13 | 2 | 0 | — |
 | [adr/0034-github-quota-is-budgeted-per-session-in-the-wrappers.md](../adr/0034-github-quota-is-budgeted-per-session-in-the-wrappers.md) | 2026-11-14 | 2 | 0 | — |
 | [adr/index.md](../adr/index.md) | 2026-11-14 | 1 | 0 | — |
-| [index.md](../index.md) | 2026-11-15 | 1 | 0 | — |
 | [k3s-upgrade.md](../k3s-upgrade.md) | 2026-11-15 | 22 | 0 | — |
 | [volume-revert-drill-and-sizing.md](../volume-revert-drill-and-sizing.md) | 2026-11-15 | 3 | 0 | — |
-| [ci-throughput-remaining.md](../ci-throughput-remaining.md) | 2026-11-16 | 5 | 0 | — |
 | [landing.md](../landing.md) | 2026-11-16 | 43 | 0 | — |
+| [index.md](../index.md) | 2026-11-18 | 1 | 0 | — |
+| [what-the-migration-built.md](../what-the-migration-built.md) | 2026-11-18 | 1 | 0 | — |

@@ -3,7 +3,7 @@
 The test starts, stops and kills two stand-in units in the systemd user manager, because only
 systemd's job queue decides what a restart does to the daemon. The leak guard lists it in
 `_LIVE_API_TESTS`, and it skips where no user manager answers. docs/pi-host-tuning-record.md has
-the 2026-11-13 stop behind it.
+the stop behind it.
 
 Run: uv run pytest hosts/lib/tests/test_pi_watchdog_dropin.py
 """
