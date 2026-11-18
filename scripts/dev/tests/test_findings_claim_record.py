@@ -71,9 +71,8 @@ def test_the_operator_is_trusted_by_association_as_well_as_by_viewer():
     assert is_operator_comment({}) is False
 
 
-def test_both_new_labels_are_declared():
+def test_manual_is_a_declared_label():
     assert "manual" in LABELS
-    assert "claimed" in LABELS
 
 
 def test_claim_comment_carries_a_parseable_trailer():

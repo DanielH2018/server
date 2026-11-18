@@ -2,10 +2,13 @@
 
 The board holds three fields findings.py owns, each derived from the issue alone:
 
-    Status      Done when the issue is closed; In Progress when it carries `claimed` or an
-                open pull request will close it; Todo otherwise.
+    Status      Done when the issue is closed; In Progress while a worktree holds its
+                `Claim:` comment or an open pull request will close it; Todo otherwise.
     Severity    the `severity/<level>` label's level, or empty.
     Not before  the `not-before:<date>` label's date, or empty.
+
+The board's Status is what GitHub shows in an issue's sidebar and logs on its timeline. It
+is not the issue's own `status`, a preview this account cannot set.
 
 THE ISSUE STAYS THE RECORD. `next`, `claim` and the fan-out read labels and comments, never
 the board, so a board write is best-effort: `findings.main` syncs every issue a command
@@ -35,7 +38,7 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
-from dev.findings_lib.issue_model import PR_REPO, not_before
+from dev.findings_lib.issue_model import PR_REPO, current_claim, not_before
 from lib.gh import gh as real_gh
 
 PROJECT_TITLE = "Server Issue Tracking"
@@ -61,6 +64,7 @@ _ISSUE = (
 fragment I on Issue {
   id number state
   labels(first: 100) { nodes { name } }
+  comments(first: 100) { nodes { body createdAt authorAssociation viewerDidAuthor } }
   closedByPullRequestsReferences(first: 10, includeClosedPrs: false) { nodes { state } }
   projectItems(first: 20) {
     nodes { id project { id } fieldValues(first: 30) { nodes {"""
@@ -110,7 +114,8 @@ class BoardIssue:
     Attributes:
         number: the issue number.
         content_id: the issue's node id, which adding it to the board takes.
-        wanted: field name to the value the issue's state and labels call for, None for empty.
+        wanted: field name to the value the issue's state, claim and labels call for, None
+            for empty.
         item_id: the issue's item on the board, or None when it is not on it.
         held: field name to the value the item holds; a field it leaves empty is absent.
     """
@@ -122,11 +127,20 @@ class BoardIssue:
     held: dict[str, str]
 
 
-def wanted_fields(state: str, labels: set[str], open_prs: int) -> dict[str, str | None]:
-    """The value each board field takes for an issue in ``state`` carrying ``labels``."""
+def wanted_fields(
+    state: str, labels: set[str], open_prs: int, claimed: bool
+) -> dict[str, str | None]:
+    """The value each board field takes for one issue.
+
+    Args:
+        state: the issue's GraphQL state, `OPEN` or `CLOSED`.
+        labels: the issue's label names.
+        open_prs: how many open pull requests will close it.
+        claimed: whether a worktree holds its `Claim:` comment.
+    """
     if state != "OPEN":
         status = DONE
-    elif "claimed" in labels or open_prs:
+    elif claimed or open_prs:
         status = IN_PROGRESS
     else:
         status = TODO
@@ -180,10 +194,11 @@ def parse_issue(node: dict, board: Board) -> BoardIssue:
                 name = ((value or {}).get("field") or {}).get("name")
                 if name:
                     held[name] = value.get("name") or value.get("date")
+    claimed = current_claim({"comments": node["comments"]["nodes"]}) is not None
     return BoardIssue(
         node["number"],
         node["id"],
-        wanted_fields(node["state"], labels, open_prs),
+        wanted_fields(node["state"], labels, open_prs, claimed),
         item_id,
         held,
     )
