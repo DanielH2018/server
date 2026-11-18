@@ -33,6 +33,7 @@ class FakeGh:
     def __init__(self):
         self.logins: dict[str | None, str] = {None: "gho_operator"}
         self.graphql_used = 100
+        self.graphql_reset = RESET
         self.core_used = 0
         self.fail: Exception | None = None
         self.env: dict[str, str] = {}
@@ -50,7 +51,11 @@ class FakeGh:
         if self.fail is not None:
             raise self.fail
         resources = {
-            "graphql": {"used": self.graphql_used, "limit": 5000, "reset": RESET},
+            "graphql": {
+                "used": self.graphql_used,
+                "limit": 5000,
+                "reset": self.graphql_reset,
+            },
             "core": {"used": self.core_used, "limit": 5000, "reset": RESET + 60},
         }
         return subprocess.CompletedProcess(
@@ -172,6 +177,45 @@ def test_github_is_sampled_once_per_interval(recording):
     ledger.record(["pr", "list"])
     (window,) = ledger.windows()
     assert window.used == 180
+
+
+def test_a_reset_reported_seconds_later_is_the_same_window(recording):
+    ledger, clock, gh = recording
+    ledger.record(["pr", "list"])
+
+    clock.t += 31
+    gh.graphql_reset = RESET + 45
+    gh.graphql_used = 180
+    ledger.record(["pr", "list"])
+
+    (window,) = ledger.windows()
+    assert (window.reset, window.used) == (RESET, 180)
+
+
+def test_status_and_new_calls_follow_the_freshest_sample_not_the_latest_reset(
+    recording,
+):
+    ledger, clock, gh = recording
+    gh.graphql_reset, gh.graphql_used = RESET + 1260, 1853
+    ledger.record(["pr", "list"])
+
+    clock.t += 31
+    gh.graphql_reset, gh.graphql_used = RESET, 2219
+    ledger.record(["pr", "list"])
+    ledger.record(["pr", "view"])
+
+    (window,) = ledger.windows()
+    assert (window.reset, window.used) == (RESET, 2219)
+    (path,) = ledger.root.glob("*.sqlite")
+    with closing(sqlite3.connect(path)) as db:
+        spend = db.execute(
+            "SELECT window, argv_class, n FROM spend ORDER BY window, argv_class"
+        ).fetchall()
+    assert spend == [
+        (RESET, "pr list", 1),
+        (RESET, "pr view", 1),
+        (RESET + 1260, "pr list", 1),
+    ]
 
 
 def test_a_token_caller_gets_a_ledger_named_by_fingerprint(tmp_path: Path):
