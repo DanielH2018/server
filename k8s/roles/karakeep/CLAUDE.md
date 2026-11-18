@@ -106,9 +106,10 @@ loop to auto-tag bookmarks
   which `manifests_extra_rollouts` already covers. The main pod's `wait-for-deps` initContainer
   runs this image too — it is the role's only image with a `python3` and no s6 init — so both
   init containers assert uid 1000 as well.
-- `files/karakeep-time-tagger.py` is vendored (not fetched at render time) because CI renders
-  every template on a machine that has never deployed; `test_karakeep_time_tagger_script.py`
-  pins it to its upstream commit URL and sha256.
+- `files/karakeep-time-tagger.py` is a fork of upstream's script (not fetched at render time)
+  because CI renders every template on a machine that has never deployed. It carries the
+  logging changes of #8985, so `test_karakeep_time_tagger_script.py` holds it to its own sha256
+  and names the upstream commit it forked from. Edit the script and the test's hash together.
 - **`karakeep-archive-pruner`** (CronJob) prunes archived bookmarks by age, and only logs a
   dry run while `karakeep_k8s_pruner_apply` is false. Rules: `files/karakeep_archive_pruner.py`.
 - **The pruner's gate Job, in `karakeep-verify`.** `defaults/main.yml` names the CronJob in

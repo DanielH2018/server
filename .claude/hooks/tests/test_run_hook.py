@@ -357,7 +357,7 @@ def test_the_runner_runs_the_py_beside_itself_not_beside_the_cwd(tmp_path):
     assert proc.stdout.strip() == "from the runner dir", proc.stderr
 
 
-# --- A primary venv the session cannot rebuild (#6969) ------------------------------------
+# A primary venv the session cannot rebuild.
 
 
 def _venv(path: Path) -> None:

@@ -557,6 +557,12 @@ def pytest_configure(config: pytest.Config) -> None:
     socket.socket.connect_ex = guarded_connect_ex  # type: ignore[method-assign]
 
 
+def pytest_unconfigure(config: pytest.Config) -> None:
+    stub_dir = _state.get("stub_dir")
+    if isinstance(stub_dir, str):
+        shutil.rmtree(stub_dir, ignore_errors=True)
+
+
 def _record(line: str) -> None:
     calls = _state.get("calls")
     if isinstance(calls, Path):

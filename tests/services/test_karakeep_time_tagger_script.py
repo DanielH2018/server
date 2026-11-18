@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
-"""The karakeep role vendors the time-tagger script, held to a pinned commit plus sha256.
+"""The karakeep role carries a fork of the upstream time-tagger script, held to a sha256.
 
-A vendored copy does not inherit a download's pin by itself, so this guard holds the copy to
-`PINNED_URL` and `PINNED_SHA256` below.
+The script is upstream's file at `PINNED_URL` with the logging changes of #8985 (one filtered
+INFO handler, no file sink, no non-TTY progress bar). A fork has no upstream bytes to match, so
+this guard holds the copy to `FORK_SHA256` and keeps `PINNED_URL` as the commit it forked from.
 
 The script is vendored because a ConfigMap renders from a file that must be present at render
 time, and CI renders every manifest template on a machine that has never run a deploy, so a
 lookup on a download destination could only ever fail there.
 
-To update the vendored script, re-download it from a new commit and change all three together.
+To change the script, edit it and update `FORK_SHA256` together; to rebase onto a newer
+upstream, re-apply the logging changes to the new commit and update `PINNED_URL` as well.
 
 Run: uv run pytest tests/services/test_karakeep_time_tagger_script.py
 """
@@ -24,16 +26,15 @@ PINNED_URL = (
     "37fa33fdd62b2ee5275ce8cdc1c86d29d0ec4237/community_scripts/karakeep-time-tagger/"
     "karakeep-time-tagger.py"
 )
-PINNED_SHA256 = "066c675df6f316cd4419d376ee5f63b5f3ab871216b40d76f5f4545d6cc74dd1"
+FORK_SHA256 = "b0e4e7de8606251d1d3082efa0b2d1370942f477fa56db5f6a2bf36814856009"
 
 
 def test_the_vendored_script_matches_the_pinned_checksum():
     actual = hashlib.sha256(VENDORED.read_bytes()).hexdigest()
 
-    assert actual == PINNED_SHA256, (
-        f"{VENDORED.name} hashes {actual} but the pin records {PINNED_SHA256}. The vendored "
-        "copy has drifted: re-download from PINNED_URL, or update the URL, checksum and file "
-        "together."
+    assert actual == FORK_SHA256, (
+        f"{VENDORED.name} hashes {actual} but the test records {FORK_SHA256}. Update "
+        "FORK_SHA256 in the same change as an intended edit to the script."
     )
 
 

@@ -166,7 +166,7 @@ def test_a_review_phase_may_stop_on_its_json_but_the_same_text_outside_one_is_bl
 
 
 def test_a_review_batch_owes_no_verdict_in_any_phase(tmp_path):
-    # Its pipeline runs land.sh itself (#3960), so the apply phase it resumes finishes on the
+    # Its pipeline runs land.sh itself, so the apply phase it resumes finishes on the
     # PR URL, and a PR URL alone still finishes a landing brief's session.
     issues = [Issue(1, "one", "body")]
     brief = render_brief(issues, "daniel-box", "1", "worktree-orch", [], review=True)

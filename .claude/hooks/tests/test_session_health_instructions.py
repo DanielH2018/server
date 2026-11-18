@@ -139,7 +139,6 @@ def _report_sessions(tmp_path, log):
 def test_report_counts_memory_and_output_style_in_the_session_start_total(
     tmp_path, monkeypatch
 ):
-    # Verify-by of #4656: fact_status.py report's at-start total includes both files.
     _home, log, memory, style = _session(tmp_path, monkeypatch)
     sessions = _report_sessions(tmp_path, log)
     expected = memory.stat().st_size + style.stat().st_size
@@ -149,7 +148,7 @@ def test_report_counts_memory_and_output_style_in_the_session_start_total(
 def test_a_compaction_rows_memory_md_alone_and_the_report_totals_it(
     tmp_path, monkeypatch
 ):
-    # Verify-by of #4668: a compaction reloads MEMORY.md with no InstructionsLoaded event,
+    # A compaction reloads MEMORY.md with no InstructionsLoaded event,
     # so the hook rows it under `compact`. The output style is in the system prompt and is
     # not re-injected, so it gets no row, and neither file counts as an at-start load.
     _home, log, memory, style = _session(tmp_path, monkeypatch, source="compact")
