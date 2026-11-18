@@ -171,3 +171,11 @@ k3s_join_agent_ports:  # allowed FROM the server, ON the agent
 # Agent node IPs the server-side firewall admits. Set in daniel-box host_vars once an
 # agent exists; empty means the allow tasks are no-ops.
 k3s_agent_node_ips: []
+
+# k3s's CPU weight inside system.slice, where its siblings (100 each, systemd's default) include
+# the docs-refresh run's pytest and mkdocs. Range 1-10000, and it divides CPU only under
+# contention. etcd and the controllers' leases run in this one process: on 2026-11-18 etcd applies
+# took 150-480 ms on a saturated box and kube-controller-manager lost its lease three times, each
+# time exiting k3s. 1000 gives k3s ten times a sibling's share. It does not rank system.slice
+# against user.slice; claude_code_fleet_cpu_weight in hosts/components/claude-code does that.
+k3s_cpu_weight: 1000

@@ -35,6 +35,7 @@ STARTUP_FILES = {DROPIN, CONFIG, GRACEFUL_SHUTDOWN, "/etc/rancher/k3s/registries
 LOGROTATE = "/etc/logrotate.d/k3s-agent"
 TMPFILES = "/usr/lib/tmpfiles.d/homelab-k3s-agent.conf"
 AGENT_CA = "/var/lib/rancher/k3s/agent/server-ca.crt"
+CPU_WEIGHT = "/usr/lib/systemd/system/k3s-agent.service.d/60-homelab-cpu-weight.conf"
 
 
 @pytest.fixture(scope="module")
@@ -80,6 +81,13 @@ def test_the_drop_in_logs_both_streams_and_runs_a_bare_agent(package):
     assert found.pop("StandardError") == ["inherit"]
     assert found.pop("ExecStart") == ["", "/usr/local/bin/k3s agent"]
     assert found == {}
+
+
+def test_the_cpu_weight_drop_in_carries_the_servers_weight_with_no_restart(package):
+    assert settings(text(package, CPU_WEIGHT)) == {
+        "CPUWeight": [str(load_yaml(K3S_DEFAULTS)["k3s_cpu_weight"])]
+    }
+    assert CPU_WEIGHT not in package.activations
 
 
 def test_the_config_drop_in_is_the_only_k3s_config_file(package):
