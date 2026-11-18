@@ -1150,7 +1150,9 @@ tests:
                 aide-check on daniel-box ended with status=down: a file changed that no package
                 explains, AIDE exited with an error and checked nothing, or the previous week's
                 run still held the lock. Run `journalctl -t aide-check` on daniel-box; once every
-                unexplained path is reviewed, `sudo /usr/lib/homelab/aide-check --accept`.
+                unexplained path is reviewed, `sudo /usr/lib/homelab/aide-check --accept`, then
+                `sudo systemctl start homelab-aide-check.service`, which re-runs the check and
+                clears this alert and the unit's failed state together.
           - exp_labels:
               check: aide-check
               escalate: "false"
@@ -1163,9 +1165,11 @@ tests:
               summary: daniel-server's weekly AIDE check failed or found an unexplained change.
               description: >-
                 aide-check on daniel-server ended with status=down: a file changed that no package
-                explains, AIDE exited with an error and checked nothing, or the previous week's
-                run still held the lock. Run `journalctl -t aide-check` on daniel-server; once every
-                unexplained path is reviewed, `sudo /usr/lib/homelab/aide-check --accept`.
+                explains, AIDE exited with an error and checked nothing, or the previous week's run
+                still held the lock. Run `journalctl -t aide-check` on daniel-server; once every
+                unexplained path is reviewed, `sudo /usr/lib/homelab/aide-check --accept`, then
+                `sudo systemctl start homelab-aide-check.service`, which re-runs the check and
+                clears this alert and the unit's failed state together.
 
   # No AIDE file on any host, and every exporter is up. The absent_over_time arm fires for the
   # two k3s nodes and not for daniel-pi, which carries no AIDE rule.
@@ -1574,8 +1578,10 @@ tests:
               description: >-
                 rkhunter-check.sh on daniel-box ended with status=down: rkhunter raised a
                 warning, a suspect file or a possible rootkit, or the scan wrote no summary. An
-                account change clears when the script is run again by hand. Read
-                /var/log/rkhunter.log and `journalctl -t rkhunter-check` on daniel-box.
+                account change clears on the next run: `sudo systemctl start
+                homelab-rkhunter-check.service` runs it now and clears the unit's failed state
+                with it, which running the script by hand does not. Read /var/log/rkhunter.log
+                and `journalctl -t rkhunter-check` on daniel-box.
 
   # The claude_code timers (#6165). Every check file stopped being refreshed at 0 while both
   # exporters stay up. Each NotReporting rule stays quiet at its deadline and fires in the next
