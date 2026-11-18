@@ -796,9 +796,13 @@ jobs:
       # `=0` rather than `=15`, and the log is teed because the next step reads it.
       # A per-file total cannot be summed out of the top 15 lines: a module costing 30s across
       # 200 sub-second tests contributes nothing to them. `=0` prints every duration above
-      # pytest's own 0.005s floor — 355 lines and 76 KB for one shard of six — and the
+      # pytest's own 0.005s floor — 1,188 lines and 156 KB for one shard of six — and the
       # report is still sorted descending, so the top-15 reading above
-      # survives as its first fifteen lines.
+      # survives as its first fifteen lines. The `failure_report` plugin prints FAILURES after
+      # it, so a red shard's log still ends on the traceback and the short summary.
+      #
+      # `--github-report` prints one `::error` annotation per failed test and leads the job
+      # summary with a count line. No `--color`: escape codes split tokens inside assertion text.
       #
       # pipefail is what makes the tee safe: without it the pipeline reports tee's exit status
       # and a failing suite would read green.
@@ -807,7 +811,7 @@ jobs:
         run: |
           set -euo pipefail
           mapfile -t files < "$RUNNER_TEMP/shard.txt"
-          uv run python -m pytest --color yes --durations=0 "${files[@]}" \
+          uv run python -m pytest --github-report --durations=0 "${files[@]}" \
             | tee "$RUNNER_TEMP/durations.log"
 
       - name: Save pytest's rewritten test modules
