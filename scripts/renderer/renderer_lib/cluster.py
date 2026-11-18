@@ -55,6 +55,7 @@ from lib.k8s_roles import (
     MANIFESTS_PRUNE_DEFAULT,
     SECRET_TEMPLATE,
     SHARED_MANIFEST_DEFAULTS,
+    declared_secret_file,
     resolved_manifest_files,
     role_fields,
 )
@@ -407,7 +408,7 @@ def render_tag(
         rendered[name] = render(CLAIM_TEMPLATE, name, prune, manifests_claim=claim)
         sources[name] = CLAIM_TEMPLATE.name
     for entry in secret_entries(tag, ctx.get("render_secrets"), stubs):
-        name = f"secret-{entry['name']}.yaml"
+        name = declared_secret_file(entry["name"])
         if name in rendered:
             raise RenderError(
                 f"{tag}: render_secrets entry `{entry['name']}` writes {name}, "
