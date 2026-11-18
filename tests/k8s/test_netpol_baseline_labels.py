@@ -99,6 +99,9 @@ BORN_FENCED_ROLES = {
     # localhost. It dials Soulseek peers through its tunnel and Lidarr in-cluster, which is
     # egress and unenforced here.
     "slskd",
+    # The password store. Traefik is its only caller; its outbound calls (favicon fetches, push
+    # relay) are egress and unenforced here.
+    "vaultwarden",
 }
 
 LABEL = ("netpol-baseline", "enforced")
