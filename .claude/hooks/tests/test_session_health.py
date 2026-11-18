@@ -259,7 +259,7 @@ def test_stale_worktree_lines_swallows_a_timeout():
 
 # settings.json kills the hook at its `timeout`, and a kill discards whatever Python still
 # buffers — the whole banner, parked-checkout warning included. The worktree read is
-# the slow step (it reaches GitHub), so its own cap sits inside that budget. Since #6153 every
+# the slow step (it reaches GitHub), so its own cap sits inside that budget. Every
 # probe runs before anything prints, under `TOTAL_DEADLINE_S` (test_session_health_deadline.py
 # pins the deadline).
 
