@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Post one Discord summary of the past week's unattended Claude runs.
 
-dotfiles#967 C7. homelab-claude-weekly-summary.timer runs this as root on daniel-box every Monday
+homelab-claude-weekly-summary.timer runs this as root on daniel-box every Monday
 at 09:00 UTC. A run covers the ISO week before its own, Monday 00:00 to Sunday 23:59 UTC, so a
 catch-up run on a later day still covers that week. It reads each source the config lists:
 

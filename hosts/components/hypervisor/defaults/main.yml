@@ -5,10 +5,8 @@ hypervisor_user_groups:
   - libvirt
   - kvm
 
-# The staging NAT network.
-#
 # DECIDED: 192.168.140.0/24, chosen against a census of what daniel-server actually routes
-# rather than by picking an unused-looking number (2026-08-27). In use there: 10.0.0.0/24
+# rather than by picking an unused-looking number. In use there: 10.0.0.0/24
 # (LAN), 10.42.0.0/16 and 10.43.0.0/16 (k3s pods and services), 10.200.0.0/16 and
 # 172.17.0.0/16 (bridges left by the retired Docker install), and 192.168.122.0/24
 # (libvirt's own `default`, defined-but-stopped). Sitting outside 10/8 entirely means a
@@ -17,7 +15,7 @@ hypervisor_user_groups:
 hypervisor_staging_net_name: staging
 # DECIDED: the live network's UUID (`virsh net-uuid staging`, 2026-11-07). `net-define` replaces an
 # existing network only when the UUIDs match, and libvirt refuses a same-name define under any other
-# UUID even after net-undefine, which failed the apply on 2026-09-11 (#1175). A rebuilt host takes
+# UUID even after net-undefine. A rebuilt host takes
 # the same value.
 hypervisor_staging_net_uuid: 255b2bc3-f6fa-4a2f-9d0c-8c14507eb82a
 hypervisor_staging_net_bridge: virbr-stage
@@ -46,8 +44,6 @@ hypervisor_base_image_url: https://cloud-images.ubuntu.com/noble/current/noble-s
 hypervisor_base_image_sha256: d0fe84bb5f80853425fa6be28e2c106f30104c3cfe8611933f2e65c9b63f0e30
 hypervisor_base_image_path: /var/lib/libvirt/images/noble-server-cloudimg-amd64.img
 
-# ── The etcd restore drill guest ─────────────────────────────────────────────────────────
-#
 # A THROWAWAY guest that exists only while a FULL etcd restore drill runs in it.
 # `scripts/backup/etcd_restore_drill.sh` restores the newest off-box snapshot into a
 # scratch data-dir and reads the object graph back — but `k3s server --cluster-reset` assumes it
@@ -58,20 +54,20 @@ hypervisor_base_image_path: /var/lib/libvirt/images/noble-server-cloudimg-amd64.
 # the script already reads — which is exactly the rebuilt-host shape a real restore would face.
 #
 # DECIDED: transient domain (`virsh create`), never `virsh define`. A transient domain vanishes when it is destroyed, and its
-# disk is recreated from the base image on every run and deleted on every exit, pass or fail. That
-# is the answer to the issue's cleanup constraint: no restored etcd database, token copy or R2
+# disk is recreated from the base image on every run and deleted on every exit, pass or fail, so
+# no restored etcd database, token copy or R2
 # credential outlives the run anywhere. What persists is under hypervisor_etcd_drill_log_dir —
 # the drill's stdout plus k3s's restore.log and server.log, none of which carry a credential —
 # pruned at hypervisor_etcd_drill_log_retention_days.
 #
 # Sizing: the drill runs one API server against one restored etcd (~8 MB compressed snapshot) and
-# nothing else — no kubelet, no CNI, no pods. Measured on daniel-box at 6 s of CPU for
-# the restore stage. 2 GiB / 2 vCPU / 20 G is generous; the cloud image itself needs ~2.5 G.
+# nothing else — no kubelet, no CNI, no pods. 2 GiB / 2 vCPU / 20 G is generous; the cloud image
+# itself needs ~2.5 G.
 hypervisor_etcd_drill_armed: true
 # The drill's files, under a directory the package owns.
 hypervisor_etcd_drill_share_dir: /usr/lib/homelab/etcd-drill
 # The cadence (`etcd_drill_full_cron`) and the deadline derived from it
-# (`etcd_drill_full_kuma_interval_s`, named for the Kuma tile it sized until M6 batch B4) live in
+# (`etcd_drill_full_kuma_interval_s`) live in
 # group_vars/all.yml. The orchestrator renders the deadline as its textfile's DEADLINE_S.
 
 # Guest identity. The MAC is the staging network's one DHCP reservation (the guest attaches to
@@ -134,8 +130,6 @@ hypervisor_etcd_drill_log_retention_days: 400
 # on the lock says why.
 hypervisor_etcd_drill_lock: /var/lock/etcd-restore-drill-vm.lock
 
-# ── The egress-fence leg of a drill run ──────────────────────────────────────────────────
-#
 # The orchestrator dials every range staging-nwfilter.xml.j2 drops, plus an internet control
 # target, from inside the guest — before the guest is handed the cluster token or the R2
 # credentials. It is the half of the fence a repo-side check cannot see: a filter that is
@@ -162,7 +156,7 @@ hypervisor_etcd_drill_fence_deadline: 90
 # on daniel-box when the leg reports it stale.
 hypervisor_etcd_drill_fence_longhorn_url: http://10.43.152.244/v1/nodes
 
-# The SUC rehearsal mode of the orchestrator (`--rehearse-suc`, H6.1b2). The host-side helper
+# The SUC rehearsal mode of the orchestrator (`--rehearse-suc`). The host-side helper
 # reads the pins from a checkout and judges the guest, and the guest-side script is copied into
 # the guest for the run. The deadline is how long the Plan may take to reach its verdict after
 # the bundle is published: a server upgrade is about ten minutes, plus the pulls and the restart.
@@ -170,7 +164,7 @@ hypervisor_suc_rehearsal_helper_path: "{{ hypervisor_etcd_drill_share_dir }}/suc
 hypervisor_suc_rehearsal_guest_script_path: "{{ hypervisor_etcd_drill_share_dir }}/suc-rehearsal-guest-run.sh"
 hypervisor_suc_rehearsal_deadline: 2400
 
-# The bootstrap drill mode of the orchestrator (`--rehearse-bootstrap`, H7.15c's host half). The
+# The bootstrap drill mode of the orchestrator (`--rehearse-bootstrap`). The
 # guest-side script is copied into the guest for the run. One detached step may take the step
 # deadline: the full bootstrap-host.sh run builds a venv, installs three packages and writes the
 # first AIDE baseline. The ready deadline bounds the check after k3s.service starts.

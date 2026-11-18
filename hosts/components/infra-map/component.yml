@@ -1,5 +1,4 @@
-# The infrastructure-map refresh on daniel-box (H7.10a). Until H7.36 initial_setup installed it as
-# the "Refresh homelab infrastructure map" cron, every 15 minutes. It regenerates the architecture
+# The infrastructure-map refresh on daniel-box, every 15 minutes. It regenerates the architecture
 # diagram and the declared-versus-live map (scripts/infra_map/gen_infra_map.py) on daniel-box,
 # because kubectl is local there: both cluster nodes are read from the cluster, and only daniel-pi
 # is polled remotely, over ONE ssh call per run, well clear of the `ufw limit ssh`
@@ -33,7 +32,7 @@ files:
   - {src: units/homelab-infra-map.timer, dst: /usr/lib/systemd/system/homelab-infra-map.timer}
 enable:
   homelab-infra-map.timer: timers.target
-# What initial_setup installed before H7.36. Reconcile retires the cron once the timer above has
+# The earlier install. Reconcile retires the cron once the timer above has
 # started, so the map never regenerates twice or not at all.
 legacy:
   - {cron: "Refresh homelab infrastructure map", user: "{{ sys_user }}"}

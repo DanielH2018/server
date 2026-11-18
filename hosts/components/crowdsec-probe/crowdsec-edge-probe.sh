@@ -3,7 +3,7 @@
 # Shipped by homelab-daniel-pi (hosts/components/crowdsec-probe); edits are overwritten.
 #
 # The evidence half of crowdsec's off-cluster verify (D5, *crowdsec's verify from outside the
-# cluster*, and its Open question 9, confirmed by the operator on 2026-10-18). A ban is enforced
+# cluster*, and its Open question 9). A ban is enforced
 # against the connecting address, so only a host the cluster bans can prove the edge enforces
 # it. The `crowdsec-verify` Job bans this Pi for a bounded window and reads the 403s this probe
 # records. The Pi's Alloy counts each line by status (`stage.metrics` in

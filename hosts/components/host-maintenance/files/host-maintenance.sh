@@ -12,9 +12,9 @@
 # tag, and writes the verdict to the node_exporter textfile as check JOB. Running it by hand is
 # safe and does what the cron does.
 #
-# WHY A WRAPPER (#6179). Each cron used to pipe its command straight into `logger`. The
-# pipeline's exit status was logger's, and nothing wrote a textfile, so a job that failed every
-# week, or stopped running, read the same as one that ran clean. The <job>NotReporting rules in
+# WHY A WRAPPER. A cron that pipes its command straight into `logger` reports logger's exit
+# status and writes no textfile, so a job that failed every week, or stopped running, reads the
+# same as one that ran clean. The <job>NotReporting rules in
 # k8s/roles/observability/files/rules/host-checks.yaml read the file this writes.
 set -uo pipefail
 

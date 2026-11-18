@@ -1,6 +1,4 @@
-# daniel-box's two GitHub repository checks as packaged timers (H7.37, H7.11's check half,
-# docs/target-architecture/host/h7-delete-ansible.md). Until H7.37 the gitops_deploy role installed
-# them as the Ansible-era `kuma-check-github-*` timers.
+# daniel-box's two GitHub repository checks as packaged timers.
 #
 # - homelab-github-ruleset-drift, daily 06:40: compares the live rulesets, the repo's visibility
 #   and its fork approval policy with the declarations in defaults/main.yml. It writes github-ruleset-drift.prom and never
@@ -9,7 +7,7 @@
 #   GitHub lets lapse after six months, and writes github-interaction-limit.prom.
 #
 # Each script exits 1 after a `down` verdict, so Restart=on-failure reruns it every 30 minutes until
-# it exits 0, and its boot unit reruns it once at boot while the last verdict was not up (#4495).
+# it exits 0, and its boot unit reruns it once at boot while the last verdict was not up.
 # Both run as root, and read the deploy user's GitHub login through `sudo -u <sys_user> gh auth
 # token`. Neither loads a credential.
 #
@@ -50,7 +48,7 @@ enable:
   homelab-github-ruleset-drift-boot.service: multi-user.target
   homelab-github-interaction-limit.timer: timers.target
   homelab-github-interaction-limit-boot.service: multi-user.target
-# What the gitops_deploy role installed before H7.37. Reconcile retires each once the timers above
+# The earlier installs of these checks. Reconcile retires each once the timers above
 # have started, so neither check runs twice or not at all.
 legacy:
   - {unit: kuma-check-github-ruleset-drift.timer}

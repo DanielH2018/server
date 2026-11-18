@@ -5,14 +5,14 @@ host_python_version in inventory/group_vars/all.yml) and fully
 unit-testable without HTTP or ffprobe. The shell reads Sonarr's library, runs the host's ffprobe,
 and hands the results here to decide which "remux"-quality files are actually re-encodes.
 
-The signal (definitive, codec/resolution/size-independent — the generalization of the old codec
-heuristic in autofix.py): a genuine Blu-ray remux preserves the source video stream, so its
+The signal (definitive, codec/resolution/size-independent): a genuine Blu-ray remux preserves
+the source video stream, so its
 per-stream ENCODER tag is never a consumer re-encoder and its GOP stays short (~1-2 s). A file that
 CLAIMS a remux quality but whose video stream was re-encoded gives itself away two ways —
   - the ENCODER tag names a re-encoder (x264/x265/*_qsv/*_nvenc/Lavc/handbrake …), the cheap
     metadata-only tell; or
   - the keyframe interval (GOP) exceeds a threshold real remuxes never reach.
-The NTRX "BD Remux 1080p AVC" that shipped a 10.4 s-GOP hevc_qsv re-encode (2026-07-16) trips both.
+The NTRX "BD Remux 1080p AVC" that shipped a 10.4 s-GOP hevc_qsv re-encode trips both.
 """
 
 from __future__ import annotations

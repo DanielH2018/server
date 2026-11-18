@@ -1,6 +1,6 @@
 # Shipped by the claude-code host component — edits here are overwritten.
 #
-# The read-only root inspector's socket (#6350). A user in the group below, such as the agent
+# The read-only root inspector's socket. A user in the group below, such as the agent
 # user, connects here to run one `rootq` verb as root. `sudo` cannot give the agent that:
 # claude-rc.service runs with NoNewPrivileges=yes, and a socket needs no setuid. The group
 # decides who may connect. The helper then runs the same script as the operator's sudo path.

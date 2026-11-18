@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Render the unattended sessions' Claude Code config from the verified dotfiles tag, then publish it.
 
-dotfiles#967 D13 and I7, the render half of the T2 config source. homelab-claude-config-render
+The render half of the T2 config source. homelab-claude-config-render
 runs both commands in one unit:
 
 - `render`, as `claude-triage-render`, with no network: clone the commit `verified.json` names

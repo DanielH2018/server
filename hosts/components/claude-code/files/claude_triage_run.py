@@ -144,7 +144,7 @@ def classify(result: dict, timed_out: bool) -> str:
 def stop_reason(result: dict, timed_out: bool) -> str:
     """Why a run produced no diagnosis, in the session's own words; empty when it did.
 
-    A failed session still prints its error as `result` (2026-10-17's drill: "Not logged in ·
+    A failed session still prints its error as `result` (for example "Not logged in ·
     Please run /login", status 401), and a report that only says `failed` sends the operator
     to reproduce the run by hand to read it.
     """
@@ -309,7 +309,7 @@ def main(
         transcript_bytes = keep_transcript(
             out, os.path.join(runs_dir, f"{episode_id}.transcript.jsonl"), TAG
         )
-        # Nothing the session wrote outlives the run (dotfiles#967's I2).
+        # Nothing the session wrote outlives the run.
         shutil.rmtree(out, ignore_errors=True)
         state = classify(result, timed_out)
         error = stop_reason(result, timed_out)

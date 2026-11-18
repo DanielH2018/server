@@ -1,6 +1,4 @@
-# The Claude Code host of daniel-server (H7.39) and daniel-box (H7.40,
-# docs/target-architecture/host/h7-delete-ansible.md). H7.55 deleted the claude_code setup role,
-# so this component is the one writer.
+# The Claude Code host of daniel-server and daniel-box.
 #
 # What it ships, by subject:
 #   - the agent user: homelab-claude-agent.service gives it its groups, home, identity and clone.
@@ -14,42 +12,39 @@
 #   - the session stop alert and the fan-out alert, with the polkit rules that let a session start
 #     them;
 #   - the root inspector: the operator's sudo grant and the agent's socket;
-#   - daniel-box's own timers and grants (H7.40's second slice): the agent's lander, the
-#     server-batch lander, the pipeline timeline, the memory store copy, and the D5 takeover
-#     check's wrapper and sudoers grant. Each is armed only in daniel-box's host_vars, so
-#     daniel-server's package ships none of them.
-#   - H7.40's fourth slice: the artifacts node's peer sync and OTLP-door heartbeat timers with
-#     the directories the artifacts pod mounts;
-#   - H7.40's third slice: alert-triggered triage, armed only in daniel-box's host_vars; the
-#     agent's peer key and ssh config on claude_agent_ssh_key_host and its one-time memory seed,
-#     both in claude-agent-setup; its homelab-ui login; and its homelab-ui browser oneshot,
-#     which ships wherever the agent exists so that switching homelab-ui off takes it back. The
-#     operator config subset is not shipped: the deleted role copied it only where
-#     claude_code_agent_dotfiles was false, which no host sets.
+#   - daniel-box's own timers and grants: the agent's lander, the server-batch lander, the
+#     pipeline timeline, the memory store copy, and the D5 takeover check's wrapper and sudoers
+#     grant. Each is armed only in daniel-box's host_vars, so daniel-server's package ships none
+#     of them;
+#   - the artifacts node's peer sync and OTLP-door heartbeat timers with the directories the
+#     artifacts pod mounts;
+#   - alert-triggered triage, armed only in daniel-box's host_vars; the agent's peer key and ssh
+#     config on claude_agent_ssh_key_host and its one-time memory seed, both in
+#     claude-agent-setup; its homelab-ui login; and its homelab-ui browser oneshot, which ships
+#     wherever the agent exists so that switching homelab-ui off takes it back. The operator
+#     config subset is not shipped.
 #
-# The templates, scripts and defaults the claude_code role used to install sit beside this file
-# (#6773): `templates/`, `files/` and `defaults/main.yml`, which the renderer loads beneath the
-# `defaults:` below. Each template that names a sibling unit takes that name from a variable whose
-# default in defaults/main.yml is the Ansible-era name; the defaults below give the packaged names.
-# Each host's package.yml reaches them with `component: claude-code`.
+# Templates, scripts and defaults sit beside this file (`templates/`, `files/` and
+# `defaults/main.yml`); the renderer loads defaults/main.yml beneath the `defaults:` below. Each
+# template that names a sibling unit takes that name from a variable, which the `defaults:` below
+# set to the packaged name. Each host's package.yml reaches them with `component: claude-code`.
 #
 # DECIDED: the scripts keep their /usr/local paths (/usr/local/bin/rootq, the clone and dotfiles
 # syncs, homelab-rootq and its socket helper). The scripts, the sudoers grant and the dotfiles'
-# claude-guard allowlist name those paths. dpkg took each file the role had installed over at
-# install.
+# claude-guard allowlist name those paths.
 #
-# Each file, output and enable link carries the `when:` of the role toggle that gated its task,
-# so a toggle set false in a host's host_vars still takes its subject back. The host's `users:`
-# entry takes no `when:`: to switch the agent off, delete it, and the users arm expires the user.
+# Each file, output and enable link carries the `when:` of its role toggle, so a toggle set false
+# in a host's host_vars still takes its subject back. The host's `users:` entry takes no
+# `when:`: to switch the agent off, delete it, and the users arm expires the user.
 #
-# The agent's peer login: daniel-box's agent logs in here as `claude` with a key the role used
-# to read over ssh from daniel-box. The package cannot read that key, so the host carries its
-# public half as `claude_agent_peer_public_key` (in `defaults:` below). claude-agent-setup
-# installs exactly that one line as authorized_keys, so a rotation replaces the old key. Once
-# `claude_agent_ssh_login_enabled` is false, the setup script removes the file and drops the agent
-# from ssh-users. While the key is blank, the file Ansible wrote stays untouched.
+# The agent's peer login: daniel-box's agent logs in here as `claude`. The package cannot read
+# the key, so the host carries its public half as `claude_agent_peer_public_key` (in `defaults:`
+# below). claude-agent-setup installs exactly that one line as authorized_keys, so a rotation
+# replaces the old key. Once `claude_agent_ssh_login_enabled` is false, the setup script removes
+# the file and drops the agent from ssh-users. While the key is blank, an existing
+# authorized_keys file stays untouched.
 #
-# Not shipped: the operator's own Claude Code install, which the dotfiles repo owns since H7.38.
+# Not shipped: the operator's own Claude Code install, which the dotfiles repo owns.
 defaults:
   # The packaged unit names the templates read (see the header).
   claude_code_rc_unit: homelab-claude-rc.service
@@ -62,10 +57,10 @@ defaults:
   claude_code_agents_present: [claude]
   claude_code_worktree_holders_group: worktree-holders
   # The public half of the key daniel-box's agent logs in with: one `ssh-ed25519 ...` line.
-  # A rotation of that key edits this value. Blank leaves the authorized_keys Ansible wrote.
+  # A rotation of that key edits this value. Blank leaves an existing authorized_keys untouched.
   claude_agent_peer_public_key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJKVVuTPBnaLKLqpjXXSIozN+t+uzJ2Xq5deus3yau/P claude peers (daniel-box)"
   # The agent's homelab-ui browser toolchain, which homelab-claude-agent-browser.service installs
-  # as the agent (H7.40's third slice, ruled 2026-10-30). A Node tarball rather than fnm: the agent
+  # as the agent. A Node tarball rather than fnm: the agent
   # needs one fixed Node, and the operator's fnm lives in their home. The sha256 is the tarball's,
   # from the release's SHASUMS256.txt; a bump finishes with
   # `uv run python scripts/validate/asset_pins.py --refresh node`. x64 is literal because
@@ -77,7 +72,7 @@ defaults:
     https://nodejs.org/dist/v{{ claude_code_agent_node_version
     }}/node-v{{ claude_code_agent_node_version }}-linux-x64.tar.xz
   claude_code_agent_node_sha256: fd8e59d5a511510f6a298afb548f18c7d2b1be404d8b4a27d94fbe49f56cb2d6
-  # The release the operator's homelab-ui runs on daniel-box (0.0.79, measured 2026-10-09), so the
+  # The release the operator's homelab-ui runs on daniel-box, so the
   # agent's browser behaves as the operator's does. Chromium is the revision this package's own
   # playwright pins, installed with that playwright's CLI.
   # renovate: datasource=npm depName=@playwright/mcp
@@ -102,7 +97,6 @@ outputs:
 # not of this component: host_secrets.py names every output key a host's components declare,
 # whatever its `when:`, and daniel-server's SOPS file must not carry either secret.
 files:
-  # The agent user.
   - {src: templates/claude-agent-setup.sh.j2, dst: /usr/lib/homelab/claude-agent-setup, mode: "0755", activate: "try-restart:homelab-claude-agent.service", when: "claude_code_agent_user_enabled"}
   - {src: templates/claude-agent-home.sh.j2, dst: /usr/lib/homelab/claude-agent-home, mode: "0755", activate: "try-restart:homelab-claude-agent.service", when: "claude_code_agent_user_enabled"}
   - {src: templates/agent-user-profile.j2, dst: /usr/lib/homelab/claude-agent/profile, activate: "try-restart:homelab-claude-agent.service", when: "claude_code_agent_user_enabled"}
@@ -110,7 +104,7 @@ files:
   - {src: templates/agent-user-claude-md.j2, dst: /usr/lib/homelab/claude-agent/CLAUDE.md, activate: "try-restart:homelab-claude-agent.service", when: "claude_code_agent_user_enabled"}
   - {src: templates/agent-chezmoi-seed.toml.j2, dst: /usr/lib/homelab/claude-agent/chezmoi-seed.toml, activate: "try-restart:homelab-claude-agent.service", when: "claude_code_agent_user_enabled"}
   - {src: templates/agent-authorized-keys.j2, dst: /usr/lib/homelab/claude-agent/authorized_keys, activate: "try-restart:homelab-claude-agent.service", when: "claude_agent_ssh_login_enabled and (claude_agent_peer_public_key | trim) != ''"}
-  # The key host's half of the agent's peer login (H7.40's third slice): the ssh config naming each
+  # The key host's half of the agent's peer login: the ssh config naming each
   # peer. claude-agent-setup generates the key beside it.
   - {src: templates/agent-ssh-config.j2, dst: /usr/lib/homelab/claude-agent/ssh-config, activate: "try-restart:homelab-claude-agent.service", when: "claude_code_agent_user_enabled and inventory_hostname == claude_agent_ssh_key_host"}
   - {src: units/homelab-claude-agent.service.j2, dst: /usr/lib/systemd/system/homelab-claude-agent.service, when: "claude_code_agent_user_enabled"}
@@ -119,23 +113,19 @@ files:
   - {src: templates/claude-agent-browser.sh.j2, dst: /usr/lib/homelab/claude-agent-browser, mode: "0755", when: "claude_code_agent_user_enabled"}
   - {src: units/homelab-claude-agent-browser.service.j2, dst: /usr/lib/systemd/system/homelab-claude-agent-browser.service, when: "claude_code_agent_user_enabled"}
   - {src: units/homelab-claude-agent-browser.timer, dst: /usr/lib/systemd/system/homelab-claude-agent-browser.timer, when: "claude_code_agent_user_enabled"}
-  # The Remote Control host.
   - {src: templates/claude-rc.service.j2, dst: /usr/lib/systemd/system/homelab-claude-rc.service}
   - {src: units/homelab-claude-rc-alert.service, dst: /usr/lib/systemd/system/homelab-claude-rc-alert.service}
   - {src: templates/claude-rc-restart.service.j2, dst: /usr/lib/systemd/system/homelab-claude-rc-restart.service}
   - {src: templates/claude-rc-restart.timer.j2, dst: /usr/lib/systemd/system/homelab-claude-rc-restart.timer}
-  # Background sessions come back at boot.
   - {src: files/bg_session_resume.py, dst: /usr/local/lib/claude-bg-resume/bg_session_resume.py, when: "claude_code_bg_resume_enabled"}
   - {src: templates/claude-bg-resume.service.j2, dst: /usr/lib/systemd/system/homelab-claude-bg-resume.service, when: "claude_code_bg_resume_enabled"}
-  # The cgroup metrics.
   - {src: files/claude-cgroup-metrics.sh, dst: /usr/local/bin/claude-cgroup-metrics.sh, mode: "0755"}
   - {src: templates/claude-cgroup-metrics.service.j2, dst: /usr/lib/systemd/system/homelab-claude-cgroup-metrics.service}
   - {src: templates/claude-cgroup-metrics.timer.j2, dst: /usr/lib/systemd/system/homelab-claude-cgroup-metrics.timer}
-  # The guardrail audit (server#8250). It ships armed or not, because its own run is the way out.
+  # The guardrail audit ships armed or not, because its own run is the way out.
   - {src: templates/claude-guardrail-audit.sh.j2, dst: /usr/lib/homelab/claude-guardrail-audit, mode: "0755"}
   - {src: units/homelab-claude-guardrail-audit.service.j2, dst: /usr/lib/systemd/system/homelab-claude-guardrail-audit.service}
   - {src: units/homelab-claude-guardrail-audit.timer.j2, dst: /usr/lib/systemd/system/homelab-claude-guardrail-audit.timer}
-  # The guardrail acknowledgement (server#8250 slice 2).
   - {src: files/claude_guardrail_ack.py, dst: /usr/lib/homelab/claude-guardrail-ack/claude_guardrail_ack.py, when: "claude_code_guardrail_ack_enabled"}
   - {lib: host_lib.py, dst: /usr/lib/homelab/claude-guardrail-ack/host_lib.py, when: "claude_code_guardrail_ack_enabled"}
   - {src: templates/claude-guardrail-ack.json.j2, dst: /etc/homelab/claude-guardrail-ack.json, when: "claude_code_guardrail_ack_enabled"}
@@ -147,14 +137,13 @@ files:
   - {src: templates/claude-dotfiles-allowed-signers.j2, dst: /etc/claude-dotfiles/allowed_signers, when: "claude_code_dotfiles_mirror_enabled"}
   - {src: units/homelab-claude-dotfiles-mirror.service.j2, dst: /usr/lib/systemd/system/homelab-claude-dotfiles-mirror.service, when: "claude_code_dotfiles_mirror_enabled"}
   - {src: units/homelab-claude-dotfiles-mirror.timer.j2, dst: /usr/lib/systemd/system/homelab-claude-dotfiles-mirror.timer, when: "claude_code_dotfiles_mirror_enabled"}
-  # The weekly summary of the unattended runs (dotfiles#967 C7).
   - {src: files/claude_weekly_summary.py, dst: /usr/lib/homelab/claude-weekly-summary/claude_weekly_summary.py, when: "claude_code_weekly_summary_enabled"}
   - {lib: host_lib.py, dst: /usr/lib/homelab/claude-weekly-summary/host_lib.py, when: "claude_code_weekly_summary_enabled"}
   - {src: templates/claude-weekly-summary.json.j2, dst: /etc/homelab/claude-weekly-summary.json, when: "claude_code_weekly_summary_enabled"}
   - {src: units/homelab-claude-weekly-summary.service.j2, dst: /usr/lib/systemd/system/homelab-claude-weekly-summary.service, when: "claude_code_weekly_summary_enabled"}
   - {src: units/homelab-claude-weekly-summary.timer.j2, dst: /usr/lib/systemd/system/homelab-claude-weekly-summary.timer, when: "claude_code_weekly_summary_enabled"}
-  # The render of the unattended sessions' Claude Code config from the mirror's verified tag
-  # (dotfiles#967 D13 and I7). Each session component ships its overlay into overlays/.
+  # The render of the unattended sessions' Claude Code config from the mirror's verified tag.
+  # Each session component ships its overlay into overlays/.
   - {src: files/claude_config_render.py, dst: /usr/lib/homelab/claude-config-render/claude_config_render.py, when: "claude_code_config_render_enabled"}
   - {lib: claude_config_lock.py, dst: /usr/lib/homelab/claude-config-render/claude_config_lock.py, when: "claude_code_config_render_enabled"}
   - {src: files/claude-config-render-chezmoi.toml, dst: /usr/lib/homelab/claude-config-render/chezmoi.toml, when: "claude_code_config_render_enabled"}
@@ -168,20 +157,17 @@ files:
   - {src: files/claude-dotfiles-sync.sh, dst: /usr/local/bin/claude-dotfiles-sync.sh, mode: "0755", when: "claude_code_agent_user_enabled and claude_code_agent_dotfiles"}
   - {src: templates/claude-dotfiles-sync.service.j2, dst: /usr/lib/systemd/system/homelab-claude-dotfiles-sync.service, when: "claude_code_agent_user_enabled and claude_code_agent_dotfiles"}
   - {src: templates/claude-dotfiles-sync.timer.j2, dst: /usr/lib/systemd/system/homelab-claude-dotfiles-sync.timer, when: "claude_code_agent_user_enabled and claude_code_agent_dotfiles"}
-  # The caps. systemd merges drop-ins by file name across /etc and /usr/lib, so these sort after
-  # the Ansible-era claude-*.conf copies and their values govern while those remain. The login
-  # caps cover the operator while claude_code_login_uids names uid 1000; each host's package.yml
-  # caps its agent's uid.
+  # The caps. These drop-ins sort after any claude-*.conf copy in /etc, so their values govern
+  # while one remains. The login caps cover the operator while claude_code_login_uids names uid
+  # 1000; each host's package.yml caps its agent's uid.
   - {src: templates/fleet-slice-caps.conf.j2, dst: /usr/lib/systemd/system/user.slice.d/homelab-claude-fleet-caps.conf, when: "claude_code_fleet_caps_enabled"}
   - {src: templates/login-slice-caps.conf.j2, dst: /usr/lib/systemd/system/user-1000.slice.d/homelab-claude-caps.conf, when: "claude_code_login_caps_enabled and 1000 in claude_code_login_uids"}
-  # Every user manager on the host reads it, where the role wrote one copy per capped home.
+  # Every user manager on the host reads it.
   - {src: templates/pytest-fanout-cap.conf.j2, dst: /usr/lib/environment.d/90-homelab-claude-pytest-cap.conf, when: "claude_code_login_caps_enabled"}
-  # The stop and fan-out alerts.
   - {src: units/claude-stop-alert@.service, dst: /usr/lib/systemd/system/claude-stop-alert@.service, when: "claude_code_stop_alert_enabled"}
   - {src: templates/50-claude-stop-alert.rules.j2, dst: /usr/share/polkit-1/rules.d/50-claude-stop-alert.rules, when: "claude_code_stop_alert_enabled"}
   - {src: units/fanout-alert@.service, dst: /usr/lib/systemd/system/fanout-alert@.service, when: "claude_code_fanout_alert_enabled"}
   - {src: templates/50-claude-fanout-alert.rules.j2, dst: /usr/share/polkit-1/rules.d/50-claude-fanout-alert.rules, when: "claude_code_fanout_alert_enabled"}
-  # The root inspector.
   - {src: files/homelab_rootq.py, dst: /usr/local/sbin/homelab-rootq, mode: "0755", when: "claude_code_rootq_enabled"}
   - {src: files/rootq.sh, dst: /usr/local/bin/rootq, mode: "0755", when: "claude_code_rootq_enabled"}
   - {src: templates/claude-rootq.sudoers.j2, dst: /etc/sudoers.d/homelab-rootq, mode: "0440", when: "claude_code_rootq_enabled"}
@@ -190,8 +176,8 @@ files:
   - {src: templates/homelab-rootq.socket.j2, dst: /usr/lib/systemd/system/homelab-rootq.socket, when: "claude_code_rootq_socket_armed"}
   - {src: templates/homelab-rootq@.service.j2, dst: /usr/lib/systemd/system/homelab-rootq@.service, when: "claude_code_rootq_socket_armed"}
   # The agent's lander. Its name and settings are pinned in templates/claude-land-pins.j2, so
-  # no inventory value reaches them. The rule ships under /usr/share, where the Ansible-era copy
-  # in /etc shadows it until reconcile retires that copy.
+  # no inventory value reaches them. An /etc copy of the rule shadows the one under /usr/share
+  # until reconcile retires it.
   - {src: templates/claude-land-approval-paths.j2, dst: /etc/claude-land/approval-paths, when: "claude_code_agent_user_enabled and claude_code_lander_enabled"}
   - {src: templates/claude-land@.service.j2, dst: /usr/lib/systemd/system/homelab-claude-land@.service, when: "claude_code_agent_user_enabled and claude_code_lander_enabled"}
   - {src: templates/50-claude-land.rules.j2, dst: /usr/share/polkit-1/rules.d/50-claude-land.rules, when: "claude_code_agent_user_enabled and claude_code_lander_enabled"}
@@ -209,11 +195,10 @@ files:
   # package depends on, and the wrapper creates its own state directory.
   - {src: files/homelab-takeover-check.sh, dst: /usr/local/sbin/homelab-takeover-check, mode: "0755", when: "claude_code_takeover_check_enabled"}
   - {src: templates/claude-takeover-check.sudoers.j2, dst: /etc/sudoers.d/homelab-takeover-check, mode: "0440", when: "claude_code_takeover_check_enabled"}
-  # The artifacts node's peer sync and OTLP-door heartbeat (H7.40's fourth slice), and the
-  # directories the artifacts pod mounts. They push to nothing: each logs a `status=` line and
-  # writes a textfile (M6 batch B6a's Cutover-2). The tags and textfiles keep the names
-  # `sync-artifacts` and `claude-otel-health`, which Loki and observability's host-checks
-  # rules read.
+  # The artifacts node's peer sync and OTLP-door heartbeat, and the directories the artifacts pod
+  # mounts. They push to nothing: each logs a `status=` line and writes a textfile. The tags and
+  # textfiles keep the names `sync-artifacts` and `claude-otel-health`, which Loki and
+  # observability's host-checks rules read.
   - {src: tmpfiles.d/homelab-artifacts.conf.j2, dst: /usr/lib/tmpfiles.d/homelab-artifacts.conf, when: "inventory_hostname == claude_code_artifacts_node"}
   - {src: templates/sync-artifacts.sh.j2, dst: /usr/lib/homelab/sync-artifacts, mode: "0755", when: "inventory_hostname == claude_code_artifacts_node"}
   - {src: units/homelab-sync-artifacts.service.j2, dst: /usr/lib/systemd/system/homelab-sync-artifacts.service, when: "inventory_hostname == claude_code_artifacts_node"}
@@ -221,7 +206,7 @@ files:
   - {src: templates/claude-otel-health.sh.j2, dst: /usr/lib/homelab/claude-otel-health, mode: "0755", when: "inventory_hostname == claude_code_artifacts_node"}
   - {src: units/homelab-claude-otel-health.service.j2, dst: /usr/lib/systemd/system/homelab-claude-otel-health.service, when: "inventory_hostname == claude_code_artifacts_node"}
   - {src: units/homelab-claude-otel-health.timer.j2, dst: /usr/lib/systemd/system/homelab-claude-otel-health.timer, when: "inventory_hostname == claude_code_artifacts_node"}
-  # Alert-triggered triage (H7.40's third slice). Its caps and identity are pinned in
+  # Alert-triggered triage. Its caps and identity are pinned in
   # templates/claude-triage-pins.j2, which every triage template imports, so no inventory value reaches them.
   # The code and its config are root-owned, so a session cannot change what the next run executes.
   - {src: files/claude_triage_run.py, dst: /opt/claude-triage/claude_triage_run.py, when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}
@@ -286,14 +271,11 @@ enable:
   homelab-claude-otel-health.timer:
     target: timers.target
     when: inventory_hostname == claude_code_artifacts_node
-# What the role installed. Reconcile retires each unit not shipped under its old name (disable,
-# stop, remove), and hands off each /etc copy of a unit shipped under the same name.
-# Retiring claude-rc.service stops the Remote Control host and drops the phone's sessions, so the
-# PR that adds this list merges in a window the operator picks. Retiring claude-land@.service
-# leaves a landing already running to finish, but a session that started before the agent's
-# profile changed still hands its next landing to the retired name.
+# Names the role once installed. Reconcile retires each unit not shipped under its old name
+# (disable, stop, remove), and hands off each /etc copy of a unit shipped under the same name.
+# Retiring claude-rc.service stops the Remote Control host and drops the phone's sessions.
 legacy:
-  # Not Ansible-era: the textfiles a disarmed timer leaves behind. Reconcile stops the dropped
+  # The textfiles a disarmed timer leaves behind. Reconcile stops the dropped
   # unit in step 1, before it retires these, so a run in flight cannot write one back.
   - path: /var/lib/node-exporter-textfile/fanout_operator_waits.prom
     when: not claude_code_fanout_server_lander_enabled
@@ -359,7 +341,7 @@ legacy:
   - {path: /var/lib/claude/.config/environment.d/90-claude-pytest-cap.conf}
   - {path: /etc/polkit-1/rules.d/50-claude-triage.rules}
   - {path: /etc/claude-triage/alert-webhook.env}
-  # The triage credential as an EnvironmentFile=, before it became a LoadCredential= file.
+  # The triage credential's former EnvironmentFile=.
   - {path: /etc/claude-triage/session.env}
   - {path: /var/lib/homelab/setup-deployed-manifest.d/claude-code-triage}
   - {path: /var/lib/homelab/setup-render-manifest.d/claude-code}
@@ -368,14 +350,14 @@ legacy:
   - {path: /var/lib/homelab/setup-deployed-manifest.d/claude-code-cgroup-metrics}
   - {path: /var/lib/homelab/setup-deployed-manifest.d/claude-code-clone-sync}
   - {path: /var/lib/homelab/setup-deployed-manifest.d/claude-code-dotfiles-sync}
-  # H7.40's fourth slice: the artifacts node's two crons, their scripts, which embedded the push
+  # The artifacts node's two crons, their scripts, which embedded the push
   # tokens, and their render stamp.
   - {cron_file: sync-artifacts}
   - {cron_file: claude-otel-health}
   - {path: /usr/local/bin/sync-artifacts.sh}
   - {path: /usr/local/bin/claude-otel-health.sh}
   - {path: /var/lib/homelab/setup-render-manifest.d/claude-code-node-crons}
-  # #6699: the takeover check's flux copy and its pin stamp, before homelab-tools shipped flux.
+  # The takeover check's former flux copy and its pin stamp.
   # Reconcile only rmdirs a directory, so its two files come first.
   - {path: /usr/local/lib/homelab-takeover-check/flux}
   - {path: /usr/local/lib/homelab-takeover-check/flux.sha256}

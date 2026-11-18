@@ -1,4 +1,4 @@
-# The Project board resync on daniel-box (#8702). homelab-board-sync.timer starts
+# The Project board resync on daniel-box. homelab-board-sync.timer starts
 # homelab-board-sync.service every hour at :47, as sys_user, in the primary checkout. The service
 # runs `findings.py sync-board`, which makes each open issue's item on the Server Issue Tracking
 # board agree with the issue's state, claim comments and labels (scripts/dev/findings_lib/board.py).
