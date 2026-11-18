@@ -94,6 +94,9 @@ SECRET_LINK = "/etc/svc/config.env"
 SECRET_TARGET = "/run/homelab-secrets/etc/svc/config.env"
 SYSTEM_SECRET_LINK = "/usr/lib/homelab/compose/compose.env"
 SYSTEM_SECRET_TARGET = "/run/homelab-secrets/usr/lib/homelab/compose/compose.env"
+# An output whose `destination` is not its path, as the etcd drill's R2 credentials are.
+RENAMED_SECRET_LINK = "/etc/homelab/drill-s3.env"
+RENAMED_SECRET_TARGET = "/run/homelab-secrets/drill/s3.env"
 SECRETS_MANIFEST = "/usr/lib/homelab/secrets.json"
 # The host package's apt hook and a script root runs, which dpkg lists with no digest here.
 HOMELAB_FILES = ("/etc/apt/apt.conf.d/91homelab-hook", "/usr/lib/homelab/check")
@@ -111,7 +114,8 @@ def _fake_host(root):
     and the filesystem also holds an alternatives link to the package's binary, a unit masked by
     a maintainer script, the usr-merge links, the boot links and GRUB files, a compiled module,
     a unit with its enable link, and one file in each tree nothing packages. A `homelab-host`
-    package owns SECRET_LINK and SYSTEM_SECRET_LINK, which SECRETS_MANIFEST declares.
+    package owns SECRET_LINK, SYSTEM_SECRET_LINK and RENAMED_SECRET_LINK, which SECRETS_MANIFEST
+    declares.
     """
     dpkg, fs = root / "dpkg", root / "fs"
     (dpkg / "info").mkdir(parents=True)
@@ -128,19 +132,25 @@ def _fake_host(root):
     for link, target in PACKAGE_LINKS.items():
         (fs / link.lstrip("/")).parent.mkdir(parents=True, exist_ok=True)
         (fs / link.lstrip("/")).symlink_to(target)
-    for link, target in (
-        (SECRET_LINK, SECRET_TARGET),
-        (SYSTEM_SECRET_LINK, SYSTEM_SECRET_TARGET),
-    ):
+    secret_links = {
+        SECRET_LINK: SECRET_TARGET,
+        SYSTEM_SECRET_LINK: SYSTEM_SECRET_TARGET,
+        RENAMED_SECRET_LINK: RENAMED_SECRET_TARGET,
+    }
+    for link, target in secret_links.items():
         (fs / link.lstrip("/")).parent.mkdir(parents=True, exist_ok=True)
         (fs / link.lstrip("/")).symlink_to(target)
     outputs = [
-        {"destination": link.lstrip("/"), "persist": False}
-        for link in (SECRET_LINK, SYSTEM_SECRET_LINK)
+        {
+            "destination": target.removeprefix("/run/homelab-secrets/"),
+            "link": link,
+            "persist": False,
+        }
+        for link, target in secret_links.items()
     ]
     (fs / SECRETS_MANIFEST.lstrip("/")).write_text(json.dumps({"outputs": outputs}))
     (dpkg / "info" / "homelab-host.list").write_text(
-        "".join(f"{p}\n" for p in (SECRET_LINK, SYSTEM_SECRET_LINK, *HOMELAB_FILES))
+        "".join(f"{p}\n" for p in (*secret_links, *HOMELAB_FILES))
     )
     (dpkg / "info" / "tool.list").write_text(
         "".join(f"{_dpkg_name(p)}\n" for p in [*PACKAGE, *PACKAGE_LINKS])
