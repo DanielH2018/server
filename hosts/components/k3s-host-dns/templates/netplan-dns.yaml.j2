@@ -5,7 +5,7 @@
 # `Domains=~.`, so the ISP's servers are never queried — but systemd-resolved still writes
 # them into /run/systemd/resolve/resolv.conf, six entries deep. kubelet reads that file and
 # copies it into every pod with an effective dnsPolicy of Default, and Kubernetes caps a pod
-# at 3 nameservers, so kubelet emitted a DNSConfigForming warning on each sync for the
+# at 3 nameservers, so kubelet emits a DNSConfigForming warning on each sync for the
 # hostNetwork pods on this node (metallb speaker, node-exporter). Dropping the DHCP
 # resolvers collapses the file to the pinned upstreams and the warning stops.
 #
@@ -21,9 +21,8 @@ network:
       dhcp6-overrides:
         use-dns: false
       # The IPv6 resolvers arrive by router advertisement, not by DHCPv6, so the override
-      # above never reached them: the first deploy took the file from 6 nameservers to 4 and
-      # kubelet went on warning with `1.1.1.1 1.0.0.1 2001:558:feed::1`. This maps to
-      # networkd's [IPv6AcceptRA] UseDNS=false and is what actually drops them.
+      # above never reaches them: it alone leaves 4 nameservers and kubelet keeps warning. This
+      # maps to networkd's [IPv6AcceptRA] UseDNS=false and is what actually drops them.
       ra-overrides:
         use-dns: false
 {% endfor %}

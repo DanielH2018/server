@@ -1,6 +1,6 @@
 """Fetch, verify and place the pinned binaries of a rendered `homelab-tools` tree.
 
-Split from host_package_builder.py (H3.11), which imports it and re-exports these names. The
+Split from host_package_builder.py, which imports it and re-exports these names. The
 builder runs it on daniel-box, and CI's `host_packages` job runs the same `install_tools`
 through `scripts/validate/host_packages.py fetch-tools`, so a pin that does not verify fails in
 CI before it reaches master. Stdlib only, because the builder ships beside it with nothing else.

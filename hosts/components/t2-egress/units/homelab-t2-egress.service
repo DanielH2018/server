@@ -1,5 +1,5 @@
 # Shipped by daniel-box's package (the t2-egress component), enabled at boot. Loads
-# `table inet t2_egress`, the T2 session users' egress table (dotfiles#967 B3). In B3-0 the table
+# `table inet t2_egress`, the T2 session users' egress table. In B3-0 the table
 # only records, so a session's traffic is unchanged.
 [Unit]
 Description=Load the T2 session users' egress table (table inet t2_egress)

@@ -1,7 +1,6 @@
-# The host checks that watch the backup plane and the root disk on the k3s server (H7.35,
-# docs/target-architecture/host/h7-delete-ansible.md). Until H7.35 setup/k3s installed them as
-# crons. Now one timer starts each oneshot, on the same schedule, and each logs to the journal
-# under the tag its cron gave `logger`, which the reader's checks 9 and 10 and Loki match.
+# The host checks that watch the backup plane and the root disk on the k3s server. One timer
+# starts each oneshot, and each logs to the journal under its `logger` tag, which the reader's
+# checks 9 and 10 and Loki match.
 #
 # A package that lists this component also lists `check-lib`, whose library each script sources,
 # `secrets-unit`, and the credential `healthchecks_ping_key`. The drill and the two B2 timers run
@@ -73,7 +72,7 @@ enable:
   homelab-b2-deletion-accounting.timer: timers.target
   homelab-b2-budget-listing.timer: timers.target
   homelab-etcd-restore-drill.timer: {target: timers.target, when: k3s_etcd_restore_drill_armed}
-# What setup/k3s installed before H7.35. Reconcile retires each once the timers above have started,
+# Paths the setup/k3s role installed. Reconcile retires each once the timers above have started,
 # so no check runs twice or not at all. Two kinds of path stay for the operator, because reconcile
 # never removes a non-empty directory: /opt/homelab/releases/k3s-*, which holds one directory per
 # release, and /opt/longhorn-backup-health, which holds a __pycache__ of no fixed name.

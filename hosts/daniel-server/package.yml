@@ -1,72 +1,62 @@
-# daniel-server's host package (H4.2). It ships reconcile, the secrets unit and the enable link
-# for homelab-updater.timer, which arms the host's unattended updates from the first version
-# (docs/target-architecture/host/h4-secrets-unit.md, *Steps, as PRs*, item 7). The timer keeps
-# the shared schedule: daniel-server ships no drop-in on it.
+# daniel-server's host package. It ships reconcile, the secrets unit and the enable link for
+# homelab-updater.timer, which arms the host's unattended updates. The timer keeps the shared
+# schedule: daniel-server ships no drop-in on it.
 #
 # secrets/hosts/daniel-server.sops.yaml carries every key this tree names, and
 # `host_secrets.py sync daniel-server` rewrites it (operator-only).
-# Since H7.28 it ships the first three subjects of initial_setup, the same components as daniel-pi:
-# apt's unattended upgrades, the sshd drop-ins and the kernel, journald, limits and login hardening.
-# initial_setup keeps no task for them. No file needs a
-# credential.
 #
-# #6413 adds `k3s-gates` alone: the k3s-agent Plan's `prepare` runs /usr/lib/homelab/k3s_gates.py
-# from the host's root (H6.3d). The windowed restart, `k3s-restart`, stays off this package until
-# H6 *Open questions* 7 decides it.
-#
-# H6.5a adds `k3s-agent`, the agent's same-path files: registries.yaml, the logging drop-in, its
-# logrotate file and the log file's tmpfiles.d entry. It ships the first k3s-agent.service drop-in,
-# so the package marks k3s-agent.service `windowed` (H6.2's amendment) and reconcile never restarts
-# it. With no `k3s-restart` here, a change to those files goes live at the agent's next start: the
-# Sunday weekly reboot, a SUC upgrade, or a hand restart. H6.5a is forward-only.
-#
-# H7.39 adds `claude-code`, the agent user and everything the claude_code role installed here,
-# and `failure-alert`, the page its oneshots name. The role ends on this host. Both need
-# `discord_alert_webhook`, and the agent's gh login needs `claude_code_agent_gh_token`.
-#
-# Since H7.31 it ships the rest of initial_setup's subjects, the same components as daniel-pi: the
-# fail2ban group (fail2ban, integrity-scans for rkhunter and aide-scan for AIDE, postfix and accounting), the
+# The initial_setup subjects ship as the same components as daniel-pi: apt's unattended upgrades,
+# the sshd drop-ins, the kernel, journald, limits and login hardening, the fail2ban group
+# (fail2ban, integrity-scans for rkhunter and aide-scan for AIDE, postfix and accounting), the
 # maintenance timers (host-maintenance: the weekly reboot, apt autoremove and dpkg purge; this
-# host has no Docker, and no fwupd per the DECIDED marker at its has_fwupd) and ufw (ssh-firewall). check-lib ships the textfile library
-# the scans and the maintenance wrapper source. initial_setup keeps no task for them. The scans and the reboot read one more credential,
-# `healthchecks_ping_key` (`host_secrets.py sync daniel-server`, operator-only).
+# host has no Docker, and no fwupd per the DECIDED marker at its has_fwupd) and ufw
+# (ssh-firewall). check-lib ships the textfile library the scans and the maintenance wrapper
+# source. The scans and the reboot read one more credential, `healthchecks_ping_key`
+# (`host_secrets.py sync daniel-server`, operator-only).
 #
-# #6815 adds `worktree-sweep`, the weekly removal of merged worktrees and unreachable objects
-# that daniel-box already runs. Fan-out batches run in this host's primary checkout too, and
-# nothing else cleared its 42 worktrees, 1173 loose objects or stale gc.log. The sweep pings
+# `k3s-gates` ships alone from the k3s-restart pair: the k3s-agent Plan's `prepare` runs
+# /usr/lib/homelab/k3s_gates.py from the host's root. The windowed restart, `k3s-restart`, stays
+# off this package.
+#
+# `k3s-agent` carries the agent's same-path files: registries.yaml, the logging drop-in, its
+# logrotate file and the log file's tmpfiles.d entry, the join rules declared `keep`, the
+# multipath drop-in, the inotify key and the address pin, whose wifi half reads `wifi_ssid` and
+# `wifi_password`, and the read-only kubeconfig, which reads `k3s_readonly_token`. It ships the
+# first k3s-agent.service drop-in, so the package marks k3s-agent.service `windowed` and
+# reconcile never restarts it. With no `k3s-restart` here, a change to those files goes live at
+# the agent's next start: the Sunday weekly reboot, a SUC upgrade, or a hand restart. The
+# component is forward-only. The `hypervisor` component carries the monthly etcd restore drill and
+# its libvirt state (`r2_*`, `host_secrets.py sync daniel-server`, operator-only).
+#
+# `claude-code` ships the agent user and everything the claude_code role installed here, and
+# `failure-alert` the page its oneshots name. Both need `discord_alert_webhook`, and the agent's gh
+# login needs `claude_code_agent_gh_token`.
+#
+# `worktree-sweep` is the weekly removal of merged worktrees and unreachable objects that
+# daniel-box also runs: fan-out batches run in this host's primary checkout too. The sweep pings
 # `daniel-server-worktree-sweep` with the `healthchecks_ping_key` credential listed below.
 #
-# H7.61 adds the dev tooling and the worktree holder scan. `uv` and `vale` put the homelab-tools
-# binaries on PATH as /usr/bin/uv and /usr/bin/vale, and `worktree-holders` ships the scan's socket.
-# initial_setup keeps no task for them. The dotfiles
-# repo owns the per-user uv, prek and Python, and the cluster-node procedure runs `prek install`.
+# `uv` and `vale` put the homelab-tools binaries on PATH as /usr/bin/uv and /usr/bin/vale, and
+# `worktree-holders` ships the scan's socket. The dotfiles repo owns the per-user uv, prek and
+# Python, and the cluster-node procedure runs `prek install`.
 #
 # `gh-quota` ships the GitHub spend ledger that scripts/lib/gh.py and ghread record into
 # (docs/github-quota.md), as on daniel-box.
 #
-# H7.59 adds the host baseline and the Loki witness: `host-hardening` ships the sudo cache,
-# auditd's rules, the module blacklist, the core-dump drop-in, the login banner, the i915 option
-# and the base packages; `rsyslog-filter` ships the info filter; `loki-route-witness` replaces the
-# Ansible-era timer. initial_setup keeps no task for them, which ends the role's dist-upgrade here. No file needs a
-# credential. The `unattended-upgrades` component above applies the regular updates pocket, this
-# host has no Docker to hold, and no homelab origin is allowed.
-#
-# H7.34 adds the rest of the k3s agent's host half to `k3s-agent` (the join rules declared `keep`,
-# the multipath drop-in, the inotify key and the address pin, whose wifi half reads `wifi_ssid` and
-# `wifi_password`) and the `hypervisor` component, the monthly etcd restore drill and its libvirt
-# state (`r2_*`, `host_secrets.py sync daniel-server`, operator-only).
-#
-# #8261 adds the read-only kubeconfig to `k3s-agent`, which reads `k3s_readonly_token`
-# (`host_secrets.py sync daniel-server`, operator-only).
+# The host baseline and the Loki witness: `host-hardening` ships the sudo cache, auditd's rules,
+# the module blacklist, the core-dump drop-in, the login banner, the i915 option and the base
+# packages; `rsyslog-filter` ships the info filter; `loki-route-witness` ships the witness timer.
+# No file needs a credential. The `unattended-upgrades` component above applies the regular
+# updates pocket, this host has no Docker to hold, and no homelab origin is allowed.
 description: daniel-server's homelab host package
 # The claude-code component's agent user. Its uid differs per host, so the users entry and the
-# agent's login-slice cap sit here; `component: claude-code` reaches only these files (H7.40).
+# agent's login-slice cap sit here; `component: claude-code` reaches only these files.
 component: claude-code
 users:
-  # The homelab band 900-949 sits below the uids Ubuntu hands out from 999 down (#8100).
+  # The homelab band 900-949 sits below the uids Ubuntu hands out from 999 down.
   - {name: claude, uid: 900, home: /var/lib/claude, shell: /bin/bash, comment: Claude agent}
-# #8227: daniel-server's resolver has no record for the Pi, so `ssh daniel-pi` and `probe.py pi`
-# failed here for every user. The regexp anchors on the NAME, so a new Pi address rewrites the
+# daniel-server's resolver has no record for the Pi, so `ssh daniel-pi` and `probe.py pi`
+# fail here for every user. The regexp anchors on the NAME, so a new Pi address rewrites the
 # line rather than adding a second one. The arm never removes a line: dropping this entry leaves
 # the live line until it is deleted by hand.
 lines:
@@ -88,39 +78,38 @@ files:
   - src: "component:templates/login-slice-caps.conf.j2"
     dst: /usr/lib/systemd/system/user-900.slice.d/homelab-claude-caps.conf
     when: claude_code_login_caps_enabled and claude_code_agent_user_enabled
-# H7.24a: daniel-server installs `gh` by hand. The apt-github-cli component ships the source, and
+# daniel-server installs `gh` by hand. The apt-github-cli component ships the source, and
 # the hand-installed github-cli.list names the same repository, so reconcile retires it.
 legacy:
   - {path: /etc/apt/sources.list.d/github-cli.list}
-  # #7919: the Ansible-era enable link, left dangling when its unit file went. The package's own
+  # The enable link the Ansible role left dangling when its unit file went. The package's own
   # link is in /usr/lib/systemd/system/sockets.target.wants.
   - {path: /etc/systemd/system/sockets.target.wants/homelab-rootq.socket}
-  # H7.24b: the binary sops_setup installed, which sits ahead of the packaged /usr/bin/sops on PATH.
+  # The binary sops_setup installed, which sits ahead of the packaged /usr/bin/sops on PATH.
   - {path: /usr/local/bin/sops}
-  # H7.61 and H7.59: the copies initial_setup installed, which sit ahead of /usr/bin/vale and
-  # /usr/bin/uv on PATH. The Ansible-era Loki witness was the last reader of the uv copy here.
+  # The copies initial_setup installed, which sit ahead of /usr/bin/vale and /usr/bin/uv on PATH.
   - {path: /usr/local/bin/vale}
   - {path: /usr/local/bin/uv}
-  # #7537: a prek 0.4.3 no tracked file writes; the dotfiles repo owns prek, in ~/.local/bin.
+  # A prek no tracked file writes; the dotfiles repo owns prek, in ~/.local/bin.
   - {path: /usr/local/bin/prek}
-  # #6716: the Compose-era CrowdSec hub update the retired traefik role installed in root's crontab
-  # (`docker exec crowdsec cscli hub update && … upgrade`, 07:15 daily). This host has had no
-  # Docker since 2026-08-14, so it fails every day, and no other tree path retires it.
+  # The Compose-era CrowdSec hub update the retired traefik role installed in root's crontab
+  # (`docker exec crowdsec cscli hub update && … upgrade`, 07:15 daily). This host has no
+  # Docker, so it fails every day, and no other tree path retires it.
   - {cron: Update Crowdsec Hub, user: root}
-  # #6735: not Ansible-era. A 2026-10-25 test run leaked this textfile; the eval sweep runs on
+  # Not Ansible-managed: a test run leaked this textfile; the eval sweep runs on
   # daniel-box alone, so nothing here overwrites it and HostCheckOverdue holds on it.
   - {path: /var/lib/node-exporter-textfile/eval-run.prom}
-  # H7.59: the absent arms of initial_setup's crons.yml that reached this host.
+  # The absent arms of initial_setup's crons.yml that reached this host.
   - {path: /etc/sudoers.d/20-worktree-holders}
   - {path: /usr/local/bin/secret-rotation-audit.sh}
   - {path: /usr/local/bin/secret-rotate.sh}
   - {path: /etc/homelab/cert-expiry-webhook.env}
-  # H7.48: the cron absent arms of crons.yml. This host has no gitops, so the secret-rotation
+  # The cron absent arms of crons.yml. This host has no gitops, so the secret-rotation
   # component never lists its two crons here.
   - {cron: "Daily secret rotation audit", user: "{{ sys_user }}"}
   - {cron: "Weekly secret rotation (auto tier)", user: "{{ sys_user }}"}
   - {cron: "TLS cert-expiry watch", user: "{{ sys_user }}"}
-  # H7.48: docker_install's teardown half, which this host ran since its Docker retired. Each
+  # docker_install's teardown half, which this host runs because it has no Docker. Each
   # drop-in comes before its directory, because reconcile removes a directory only once it is empty.
   - {cron: "Redeploy ical-proxy", user: "{{ sys_user }}"}
   - {cron: "Clean stale tdarr transcode cache", user: "{{ sys_user }}"}
@@ -128,7 +117,7 @@ legacy:
   - {path: /etc/systemd/system/docker.service.d}
   - {path: /etc/systemd/system/containerd.service.d/20-go-runtime.conf}
   - {path: /etc/systemd/system/containerd.service.d}
-  # H7.52: what gitops_deploy's teardown half removed from this host, which never ran the
+  # What gitops_deploy's teardown half removed from this host, which never ran the
   # deployer. Its three directories are not listed: the teardown removed them, and reconcile
   # removes a directory only when it is empty.
   - {unit: gitops-deploy.timer}
@@ -156,7 +145,7 @@ legacy:
   - {path: /var/lib/homelab/setup-render-manifest.d/gitops-deploy-github-checks}
   - {path: /usr/local/bin/github-ruleset-drift.sh}
   - {path: /usr/local/bin/github-interaction-limit.sh}
-  # H7.63: the setup-drift check initial_setup installed, the Ansible-era copy of the host-check
+  # The setup-drift check initial_setup installed, the Ansible copy of the host-check
   # library (check-lib ships /usr/lib/homelab/homelab-check-lib.sh), their stamp fragments, and
   # the ansible.log cron's absent arm. The timer goes first. The two manifest directories stay:
   # reconcile removes a directory only when it is empty, and other fragments may remain.

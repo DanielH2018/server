@@ -21,15 +21,14 @@ Environment=RENOVATE_AGENT_REPO_DIR={{ renovate_agent_repo_dir }}
 # land.sh's own author check, behind the lander's: --arm-merge refuses any other author.
 Environment=LAND_REQUIRE_AUTHOR=app/renovate
 # land_renovate_pr.py's LAND_TIMEOUT_S, so land.sh ends a long promotion wait `deferred`
-# before the script kills it with no verdict (#5199). Both count from land.sh's start, after the
-# flock wait below has already spent part of TimeoutStartSec (#5203). A pin bump on a tag Flux
+# before the script kills it with no verdict. Both count from land.sh's start, after the
+# flock wait below has already spent part of TimeoutStartSec. A pin bump on a tag Flux
 # applies waits on the soak, so this leaves land-wait room for `verify`'s wait on the rendered
-# soak plus promote's `render`, `images` and `publish`, after the merge and CI waits (#5427,
-# #5466).
+# soak plus promote's `render`, `images` and `publish`, after the merge and CI waits.
 Environment=LAND_DEADLINE=41460
 # The reboot window's grace, as claude-land sets it. The session's own run_timeout_s does not
 # bound a landing: this unit runs on after the session ends, so one started late on a Saturday
-# can still be waiting on Sunday's window (#5457).
+# can still be waiting on Sunday's window.
 Environment=LAND_WINDOW_GRACE=22200
 # /var/lib/renovate-agent-land/<n>.verdict is what the runner reads back as the controller,
 # so the directory is world-readable and only this unit writes it.
@@ -39,7 +38,7 @@ SyslogLevel=notice
 # Room for the flock wait below, the script's own checks and LAND_TIMEOUT_S, so the script
 # reports a slow landing itself rather than systemd killing it inside an Ansible run. systemd
 # counts the lock wait too: a landing queued 40 minutes behind another would otherwise be
-# killed 20 minutes in, with no verdict line (#5203).
+# killed 20 minutes in, with no verdict line.
 TimeoutStartSec=1071min
 # land_renovate_pr.py's REFUSED_EXIT: a refusal before any merge is an expected end, so it leaves
 # the unit inactive and SystemdUnitsFailed quiet. The runner reads the verdict file, not this.

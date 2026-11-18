@@ -1,6 +1,6 @@
 """Carry out the GitHub writes a session asked for, treating its request files as untrusted.
 
-Guardrails plan B1, #967's I3. The Renovate session reads GitHub with a read-only token and
+The Renovate session reads GitHub with a read-only token and
 cannot close, comment on or re-run a PR itself. It writes one JSON file per request into
 `REQUESTS_DIR` under the state directory instead, and the runner carries the requests out
 with its own token once the session has ended:
@@ -10,7 +10,7 @@ with its own token once the session has ended:
     {"action": "rerun", "pr": 71}
     {"action": "land", "pr": 71}
 
-A `land` request nominates a PR; the session never lands one (#967's I9). After the other
+A `land` request nominates a PR; the session never lands one. After the other
 requests, the runner starts `renovate-agent-land@<n>` for each nomination in file order, one at
 a time, and grades how each ended. It goes on after `settled`, `nothing-to-deploy` or the
 lander's own pre-merge `REFUSED:`, and starts no further landing after anything else. It drops a

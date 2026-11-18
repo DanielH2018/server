@@ -8,7 +8,7 @@ OnFailure=homelab-alert@%n.service
 
 [Service]
 Type=oneshot
-# The controller, not {{ sys_user }} and not the session's user (dotfiles#967's I1). It holds the
+# The controller, not {{ sys_user }} and not the session's user. It holds the
 # write token and the run's state, and polkit lets it alone start the session unit and each
 # renovate-agent-land@<n>.service; the session it starts runs as {{ pins.user }} and holds a
 # read-only token. The session's group lets it read the requests and output the session writes

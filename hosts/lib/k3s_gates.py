@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The gates that stand between a k3s restart and the cluster: the apply-time checks of H6.
+"""The gates that stand between a k3s restart and the cluster: the apply-time checks.
 
 Three callers share this one stdlib-only script, shipped as `/usr/lib/homelab/k3s_gates.py`:
 
@@ -60,7 +60,7 @@ CONTROL_PLANE_LABEL = "node-role.kubernetes.io/control-plane"
 RESTART_QUIET_S = 15 * 60
 LEASE_RENEW_SLACK_S = 30
 
-# ── API paths. H6.1b's Role and ClusterRole grant exactly these reads ────────────────────────
+# ── API paths. The Role and ClusterRole grant exactly these reads ────────────────────────────
 # `coredns` and the Lease are read by name: the Role grants `get` on them by `resourceNames`,
 # so a list of either is Forbidden.
 _LONGHORN = "/apis/longhorn.io/v1beta2/namespaces/longhorn-system"
