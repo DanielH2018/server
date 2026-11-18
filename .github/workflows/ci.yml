@@ -620,11 +620,7 @@ jobs:
       matrix:
         # DECIDED: six shards, on slot-seconds per landing and p90 queue wait (#8456, 2026-11-14)
         shard: [1, 2, 3, 4, 5, 6]
-    # The dotfiles commit the suite imports claude_guard and claude_worktree from. A pin,
-    # not `main`: tracking the branch would turn this job red on an unrelated dotfiles commit.
-    # The `git-refs` custom manager in renovate.json proposes each bump as its own PR.
     env:
-      DOTFILES_SHA: 38373c2f9a0590d78a183898b5beade559a88440
       # Skips pyproject.toml's `lint` group, which no step here runs (test_ci_lint_group.py).
       UV_NO_GROUP: lint
     steps:
@@ -662,107 +658,11 @@ jobs:
           if [ "$GITHUB_EVENT_NAME" = pull_request ]; then since=(--changed-since "HEAD^1"); fi
           uv run python scripts/dev/pytest_shard.py --of "$SHARDS" --shard "$SHARD" \
             "${since[@]}" --out "$RUNNER_TEMP/shard.txt"
-      # `cluster_vars.py write`'s tests (target slice D3) run the real sops against a throwaway
-      # age key, and they fail rather than skip without it. The step reads the hosts' pin, the
-      # amd64 `version` and `sha256` of `sops` in homelab-tools' package.yml, as the
-      # sops_manifest_type_proof job does, so a sops bump has no CI copy to move. Renovate moves
-      # the version and the digest together there. age comes from apt, as the hosts install it.
-      # apt-utils is for the repository signer's tests, which drive apt-ftparchive as the
-      # signer does on daniel-box (hosts/lib/tests/test_repo_signer.py). Both share one
-      # apt-get, and NEEDRESTART_SUSPEND skips needrestart's post-install scan, which adds
-      # about 1.5s per apt-get and which no runner needs.
-      #
-      # The apt-get runs once per runner image version. It took a median 4.1s of a leg's 28s
-      # outside `Run the test suite` on 18 master legs of 2026-11-15: 1.1s to start, 1.0s to
-      # fetch, 1.6s for dpkg to read its database (#8684). The step copies the binaries the two
-      # packages put in /usr/bin into a cache keyed on the image version, and a later leg on
-      # the same image installs those copies. A copy that does not run falls back to apt-get,
-      # as does a runner that sets no `ImageVersion`.
-      - name: Read the runner image version
+      # sops, age, apt-utils and the dotfiles packages, from the action the nightly sweep in
+      # pytest-sweep.yml shares.
+      - name: Install the tools the tests run
         if: steps.select.outputs.count != '0'
-        id: image
-        run: echo "version=${ImageVersion:-}" >> "$GITHUB_OUTPUT"
-      - name: Cache the age and apt-utils binaries
-        if: steps.select.outputs.count != '0' && steps.image.outputs.version != ''
-        uses: actions/cache@v6.1.0
-        with:
-          path: ${{ runner.temp }}/pinned/apt-tools
-          key: apt-tools-${{ runner.os }}-${{ steps.image.outputs.version }}
-      - name: Read the sops pin
-        if: steps.select.outputs.count != '0'
-        id: sops
-        run: |
-          set -euo pipefail
-          tools=hosts/packages/homelab-tools/package.yml
-          sops_version=$(awk '/^  sops:/ {s=1} s && /version:/ {print $2; exit}' "$tools")
-          sops_sha256=$(awk '/^  sops:/ {s=1} s && /sha256:/ {print $2; exit}' "$tools")
-          [ -n "$sops_version" ] && [ -n "$sops_sha256" ]
-          echo "version=$sops_version" >> "$GITHUB_OUTPUT"
-          echo "sha256=$sops_sha256" >> "$GITHUB_OUTPUT"
-      - name: Cache the sops release
-        if: steps.select.outputs.count != '0'
-        uses: actions/cache@v6.1.0
-        with:
-          path: ${{ runner.temp }}/pinned/sops
-          key: sops-${{ runner.os }}-${{ steps.sops.outputs.version }}-${{ steps.sops.outputs.sha256 }}
-      - name: Install sops, age and apt-utils for the tests
-        if: steps.select.outputs.count != '0'
-        env:
-          SOPS_VERSION: ${{ steps.sops.outputs.version }}
-          SOPS_SHA256: ${{ steps.sops.outputs.sha256 }}
-        run: |
-          set -euo pipefail
-          sops="$RUNNER_TEMP/pinned/sops/sops"
-          if [[ -f "$sops" ]]; then
-            echo "sops $SOPS_VERSION: cached"
-          else
-            mkdir -p "$RUNNER_TEMP/pinned/sops"
-            curl --retry 12 --retry-all-errors --retry-delay 30 -fsSLo "$sops" \
-              "https://github.com/getsops/sops/releases/download/$SOPS_VERSION/sops-$SOPS_VERSION.linux.amd64"
-          fi
-          echo "$SOPS_SHA256  $sops" | sha256sum -c --strict || {
-            echo "::error::sops $SOPS_VERSION does not match its sha256 in hosts/packages/homelab-tools/package.yml"
-            exit 1
-          }
-          mkdir -p "$RUNNER_TEMP/bin"
-          install -m 0755 "$sops" "$RUNNER_TEMP/bin/sops"
-          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
-          apt_tools="$RUNNER_TEMP/pinned/apt-tools"
-          cached_apt_tools_run() {
-            [[ -x "$apt_tools/age-keygen" && -x "$apt_tools/apt-ftparchive" ]] \
-              && sudo install -m 0755 "$apt_tools"/* /usr/bin/ \
-              && age-keygen --version > /dev/null && apt-ftparchive --version > /dev/null
-          }
-          if cached_apt_tools_run; then
-            echo "age and apt-utils: cached"
-          else
-            apt_install=(sudo env NEEDRESTART_SUSPEND=1 apt-get install -y --no-install-recommends age apt-utils)
-            "${apt_install[@]}" || { sudo apt-get update -q && "${apt_install[@]}"; }
-            mkdir -p "$apt_tools"
-            dpkg -L age apt-utils | grep '^/usr/bin/' | xargs cp -t "$apt_tools"
-          fi
-          "$RUNNER_TEMP/bin/sops" --version --disable-version-check
-          age-keygen --version
-          command -v apt-ftparchive
-      # The Bash hooks split commands with the dotfiles repo's `claude_guard` package, and the
-      # worktree pruner reads `claude_worktree` from it. A host gets both from `chezmoi apply`;
-      # this step lays the same two directories out where a host has them, so the bootstraps
-      # (`.claude/hooks/_claude_guard.py`, `scripts/dev/_claude_worktree.py`) import them
-      # unchanged. Both packages are plain files under `home/dot_local/share/` in that repo,
-      # so no chezmoi render is needed. The fetch lands in $RUNNER_TEMP rather than in the
-      # workspace, where an untracked tree would show up in the git-status tests. The repo is
-      # public, so the fetch needs no token.
-      - name: Deploy the dotfiles packages the hooks and the pruner import
-        if: steps.select.outputs.count != '0'
-        run: |
-          set -euo pipefail
-          src="$RUNNER_TEMP/dotfiles"
-          git init --quiet "$src"
-          git -C "$src" fetch --quiet --depth 1 https://github.com/DanielH2018/dotfiles "$DOTFILES_SHA"
-          git -C "$src" checkout --quiet FETCH_HEAD
-          mkdir -p "$HOME/.local/share"
-          ln -s "$src/home/dot_local/share/claude-guard" "$HOME/.local/share/claude-guard"
-          ln -s "$src/home/dot_local/share/claude-worktree" "$HOME/.local/share/claude-worktree"
+        uses: $/.github/actions/pytest-tools
       # Every xdist worker collects the whole shard, and on a cold checkout each one rewrites
       # every module's assertions itself: 2.3-2.5s of a 6.7s collection on daniel-server (#8693).
       # pytest names a rewritten module `<name>.<cache tag>-pytest-<version>.pyc` and validates it

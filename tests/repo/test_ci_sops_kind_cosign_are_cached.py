@@ -36,6 +36,7 @@ RELEASES = {
 FETCHES = (
     ("sops", "ci.yml", "pytest"),
     ("sops", "ci.yml", "sops_manifest_type_proof"),
+    ("sops", "pytest-sweep.yml", "sweep"),
     ("sops", "bootstrap-drill.yml", "drill"),
     ("kind", "ci.yml", "sops_manifest_type_proof"),
     ("kind", "bootstrap-drill.yml", "drill"),
@@ -66,8 +67,9 @@ def _steps(job: dict) -> list[dict]:
     found = []
     for step in job.get("steps") or []:
         uses = str(step.get("uses", ""))
-        action = REPO / uses.removeprefix("./") / "action.yml"
-        if uses.startswith("./") and action.is_file():
+        local = uses.startswith(("./", "$/"))
+        action = REPO / uses[2:] / "action.yml"
+        if local and action.is_file():
             inner = (_load(str(action.relative_to(REPO))).get("runs") or {}).get(
                 "steps"
             )
