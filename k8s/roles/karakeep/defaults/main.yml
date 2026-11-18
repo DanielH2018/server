@@ -3,14 +3,14 @@
 # and opens digest-bump PRs. A bare repo@sha256 with NO tag is DIGEST_PINNED_EXEMPT
 # (scripts/tests/test_renovate_managers.py) and gets ZERO Renovate tracking — the fully-manual
 # pull-digest-redeploy loop tdarr is on.
-karakeep_k8s_image: ghcr.io/karakeep-app/karakeep:release@sha256:69ae5315c618b7c14c1af3e34c6e211acdb231793af424ecd1cab0b70691d987
+karakeep_k8s_image: ghcr.io/karakeep-app/karakeep:release@sha256:6f7d32ef296ddf1fc7c67ff56b8a201b7006a6a47b92b202afee1338841b353d
 # karakeep's own headless-shell build. karakeep publishes the sidecar its app is tested against
 # (docker/chrome/Dockerfile: chromedp/headless-shell pinned by digest, plus USER 65534:65534), so
 # the browser tracks the app's release cadence instead of a third party's.
 #
 # `release` is a moving tag behind a digest, the same shape as karakeep_k8s_image above, so the
 # k8s-defaults manager's `matchUpdateTypes: [digest]` rule bumps it after its soak.
-karakeep_k8s_chrome_image: ghcr.io/karakeep-app/karakeep-chrome:release@sha256:6c80ed470871bb8c129dc58692ca1714cddbc1392faad3ebf59aecd2e6e58eac
+karakeep_k8s_chrome_image: ghcr.io/karakeep-app/karakeep-chrome:release@sha256:00fb4fa9c37aa74c58e74d0bdd16c4e3b81dddb5f264917c879f9579c3b3ad95
 # The rollout budget for all four Deployments, declared once. Read as Flux's
 # health-check `timeout`, by the drain's `rollout status --timeout` and by `progressDeadlineSeconds` in every deployment template. The
 # deadline has to move with the timeout: at the 600s Kubernetes default, `rollout status` fails

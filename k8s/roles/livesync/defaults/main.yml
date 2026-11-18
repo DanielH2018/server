@@ -1,5 +1,5 @@
 ---
-livesync_k8s_image: couchdb:3.5.2@sha256:5fc596110eac7f412173a7d9de14f70aa5d3e816790fb6e70642755d4a4cf464
+livesync_k8s_image: couchdb:3.5.3@sha256:907eab5b7e55ab7cfd241d39b90b2a335ea40bef82acee5a37388c08bf201dda
 
 # Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
 # DENIED — state coupling, not missing recovery. The volume's state is coupled to something

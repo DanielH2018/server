@@ -1,0 +1,35 @@
+# Shipped by daniel-box's package (the t2-egress component): the T2 sessions' egress proxy
+# (dotfiles#967 I5). Each session unit points HTTPS_PROXY and HTTP_PROXY at t2_egress_proxy.
+#
+# B3-1 runs it in shadow. It admits a loopback client to any destination, so no session breaks,
+# and it logs each request: the CONNECT host and port, or the URL. B3-2 replaces the admit with
+# the allowlist and fences the session uids to this port.
+#
+# Its logs go to files under /var/log/squid only. Alloy ships none of them, and the unit's drop-in
+# starts squid without -s, so no request text a session shaped reaches syslog or loki-homelab (I6).
+
+http_port {{ t2_egress_proxy }}
+
+# A session reaches loopback directly (NO_PROXY), so the proxy never connects back into the host.
+http_access deny to_localhost
+http_access deny to_linklocal
+acl loopback src 127.0.0.0/8 ::1
+http_access allow loopback
+http_access deny all
+
+# A proxy, not a cache: nothing a session fetched is kept for a later run (I2).
+cache deny all
+
+# %ru is the URL, or host:port for a CONNECT.
+logformat t2 %ts.%03tu %>a %rm %ru %>Hs %<st
+access_log daemon:/var/log/squid/t2-access.log t2
+cache_log /var/log/squid/cache.log
+# Ubuntu's /etc/logrotate.d/squid renames the files and signals squid, which then only reopens.
+logfile_rotate 0
+
+via off
+forwarded_for delete
+httpd_suppress_version_string on
+coredump_dir /var/spool/squid
+# The stock path, so the package's `squid -k rotate` signals this process.
+pid_filename /run/squid.pid

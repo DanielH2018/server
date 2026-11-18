@@ -516,6 +516,10 @@ Applying it: a new version of daniel-box's host package, which its updater insta
   and reads the clone and its toolchain read-only
   (`hosts/tests/test_claude_triage.py::test_the_session_shares_only_read_access_with_the_controller`).
   Neither is `claude` (dotfiles#967's I1).
+  The session reaches the network through the T2 egress proxy, `hosts/components/t2-egress/`,
+  and its kubeconfig names the API at the host's LAN address, so that request goes through the
+  proxy too
+  (`hosts/lib/tests/test_t2_egress_component.py::test_the_triage_kubeconfig_names_the_api_by_the_hosts_lan_address`).
 - **Mode:** `hosts/components/claude-code/defaults/main.yml:claude_code_triage_enabled`, false
   by default; false stops the poller, then removes
   the rule, the units, the code and the config, and keeps the records.
