@@ -1,6 +1,6 @@
 ---
-# Gives longhorn-ui requests and limits (#8326, #8543). Upstream ships the container with no
-# `resources`, and longhorn-system has no LimitRange, so the pod ran BestEffort. The values are
+# Gives longhorn-ui requests and limits. Upstream ships the container with no
+# `resources`, and longhorn-system has no LimitRange, so the pod runs BestEffort. The values are
 # k3s_longhorn_ui_resources in defaults/main.yml; a kustomize patch is copied verbatim and
 # cannot read a variable, so tests/longhorn/test_longhorn_control_plane_resources.py holds the
 # two equal.

@@ -1,6 +1,6 @@
 # Drops Traefik access-log events that a backend answered behind its own authentication, so
-# the operator's normal use of these apps never feeds http-probing or http-crawl-non_statics
-# (#6708). Each rule pairs one router with a backend status. `OriginStatus` is 0 when Traefik
+# the operator's normal use of these apps never feeds http-probing or http-crawl-non_statics.
+# Each rule pairs one router with a backend status. `OriginStatus` is 0 when Traefik
 # answered without reaching the backend: an Authelia redirect, the bouncer's 403, or the
 # LiveSync gate's no-router 404. None of those is ever exempt, so a ban still feeds itself and
 # a scanner is scored as before.

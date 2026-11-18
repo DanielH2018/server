@@ -1,5 +1,4 @@
-# The MCP pod's own read-only cluster identity (Phase G: the cluster-API successors to
-# the Docker-socket tools). Deliberately narrower than the shell's homelab-readonly SA:
+# The MCP pod's own read-only cluster identity. Deliberately narrower than the shell's homelab-readonly SA:
 # no watch, no secrets, no exec — get/list on workload shapes plus pods/log, which is
 # exactly the tool surface (list_pods / workload_status / list_nodes / pod_logs).
 apiVersion: v1

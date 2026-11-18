@@ -3,13 +3,11 @@
 {#
   The home allowlist's discovery half: look up the home public IPv4 address and IPv6 /64 and
   write them into the crowdsec-home-ips ConfigMap. The crowdsec-jobs sidecar syncs the
-  `home-ips` allowlist from it. It replaced the daniel-box root cron `CrowdSec home allowlist`
-  at H2.4c (docs/target-architecture/host/h2-shrink-host-plane.md, Steps item 12), by the
-  operator's ruling of 2026-10-18 on #5701.
+  `home-ips` allowlist from it.
 
   `hostNetwork: true` on daniel-box, because the pod network is IPv4-only and the /64 is
   visible only in the host's network namespace, where the job reads `/proc/net/if_inet6`. The
-  consequences, from the H2 plan's *CrowdSec*:
+  consequences:
     - the namespace's `pod-security.kubernetes.io/warn: baseline` label records a warning on
       apply, and nothing refuses it;
     - the pod leaves from the node's address, outside NetworkPolicy selection, so it needs no
@@ -33,7 +31,6 @@ metadata:
   namespace: {{ k8s_namespace }}
 spec:
   schedule: "*/{{ crowdsec_k8s_home_ips_period_minutes }} * * * *"
-  # The host cron's fields were UTC, and */5 reads the same in any zone.
   timeZone: Etc/UTC
   concurrencyPolicy: Forbid
   # A missed run is not made up: the next one looks the addresses up again.

@@ -1,4 +1,4 @@
-"""arr-notification's seed as a Job in sonarr-verify, radarr-verify and lidarr-verify (target slice D5).
+"""arr-notification's seed as a Job in sonarr-verify, radarr-verify and lidarr-verify.
 
 The render tests render each app's `templates/verify/` through `render_tag`, so the Job is
 checked as Flux receives it in `<app>-verify`. The run tests write out the rendered
@@ -188,7 +188,7 @@ def _render_tree_copy(tree, stubs, app: str, rotate: bool) -> list[dict]:
 
 @pytest.mark.parametrize("app", APPS)
 def test_a_webhook_rotation_alone_renames_the_seed_job(stubs, tmp_path, app):
-    """The app stores the URL in its own database, so a rotation must re-run the seed (#8602)."""
+    """The app stores the URL in its own database, so a rotation must re-run the seed."""
     # fact: k8s/roles/arr-notification/CLAUDE.md#The Job form
     before = _seed(_render_tree_copy(tmp_path / "a", stubs, app, rotate=False))
     after = _seed(_render_tree_copy(tmp_path / "b", stubs, app, rotate=True))
@@ -363,7 +363,7 @@ def test_the_apps_fence_admits_every_flipped_job(flipped, stubs, app):
     """Each Job in `<app>-verify` dials the app's API, so the app's own fence must admit its pod.
 
     The fence is the NetworkPolicy the tree renders for the app, with the `<app>-verify` peer
-    its `netpol_from` lists (#5535).
+    its `netpol_from` lists.
     """
     # fact: k8s/roles/arr-notification/CLAUDE.md#The Job form
     (policy,) = [

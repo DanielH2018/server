@@ -55,15 +55,14 @@ TOKEN = os.environ.get("HOMELAB_MCP_TOKEN", "")
 HA_TOKEN = os.environ.get("HOMELAB_HA_TOKEN", "")
 PROMETHEUS = os.environ.get("PROMETHEUS_URL", "http://prometheus:9090")
 LOKI = os.environ.get("LOKI_URL", "http://loki:3100")
-# The observability Loki (verbatim prompt/response content — KL1). Only the metadata
+# The observability Loki (verbatim prompt/response content). Only the metadata
 # whitelist in k8s_reads.claude_event_rows ever leaves through this server.
 CLAUDE_LOKI = os.environ.get("CLAUDE_LOKI_URL", "")
 # In-cluster API access with the pod's own read-only ServiceAccount (rbac.yaml).
 KUBE_API = os.environ.get("KUBE_API_URL", "https://kubernetes.default.svc")
 _SA_DIR = Path("/var/run/secrets/kubernetes.io/serviceaccount")
-# Empty since the k8s rehome: the cluster is deliberately barred from the Docker socket
-# (Security M1), so the container tools are dark until their cluster-API successor
-# (Phase G). Set the URL to re-light them on a host that can reach a docker-proxy.
+# Empty: the cluster is deliberately barred from the Docker socket, so the container tools
+# are dark. Set the URL to re-light them on a host that can reach a docker-proxy.
 DOCKER_PROXY = os.environ.get("DOCKER_PROXY_URL", "")
 SCRUTINY = os.environ.get("SCRUTINY_URL", "http://scrutiny:8080")
 HA = os.environ.get("HA_URL", "http://home-assistant:8123")
@@ -74,7 +73,7 @@ FILE_MAX_BYTES = 256 * 1024
 PUBLIC_HOST = os.environ.get("MCP_PUBLIC_HOST", "")
 # The zones cert_expiry may dial (comma-separated suffixes) and the ports it may use. Unset
 # admits nothing: the tool then refuses every target rather than becoming a TCP-connect
-# oracle sourced from the pod (#1931). deployment.yaml.j2 renders both from `domain`.
+# oracle sourced from the pod. deployment.yaml.j2 renders both from `domain`.
 CERT_EXPIRY_DOMAINS = os.environ.get("CERT_EXPIRY_DOMAINS", "")
 CERT_EXPIRY_PORTS = os.environ.get("CERT_EXPIRY_PORTS", "443")
 

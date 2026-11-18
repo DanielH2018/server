@@ -1,6 +1,6 @@
 {#
-  The restore drill's state: the rotation, retry and seen stamps, one key each (H2.3c writes
-  them). Rendered empty here. The two annotations below are the reason it is a template of its
+  The restore drill's state: the rotation, retry and seen stamps, one key each (the script
+  writes them). Rendered empty here. The two annotations below are the reason it is a template of its
   own.
 
   ssa: IfNotPresent makes Flux create the object once and never revert the drill's writes to its
@@ -8,11 +8,11 @@
 
   prune: disabled keeps the object when a render drops it. The tag prunes like any per-tag
   Kustomization, and a revert or a render bug that dropped this ConfigMap would delete state no
-  render can restore. Contract C3 exempts it by name (*Prune exemptions*).
+  render can restore. The prune-exemption list names it.
 
   The namespace is `longhorn_drill_namespace`. No Namespace object renders here, because a second
   writer of `homelab` beside the renderer's shared `homelab-namespace` kind
-  (scripts/renderer/renderer_lib/namespace.py) is what C4 forbids.
+  (scripts/renderer/renderer_lib/namespace.py) is forbidden.
 #}
 apiVersion: v1
 kind: ConfigMap

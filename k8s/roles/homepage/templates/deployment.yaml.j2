@@ -24,13 +24,12 @@ spec:
       # The identity behind kubernetes.yaml's `mode: cluster` (rbac.yaml.j2). Without the
       # name here the pod falls back to the namespace `default` SA and every kubernetes
       # widget renders empty instead of failing.
-      # 02e9cfac swept this to false across 56 pods that never call the API — homepage was
-      # correctly in that set until the widget above gave it a reason to. Left explicit
-      # rather than defaulted so the next estate-wide sweep sees a deliberate value here.
+      # automount stays explicit rather than defaulted: this pod calls the API, so an
+      # estate-wide sweep that sets it to false must see a deliberate value here.
 {{ pod_shell('homelab-best-effort', service_account='homepage', automount=true) }}
       # Copy-not-mount (the peanut pattern): homepage seeds every file of its skeleton
       # config set into /app/config at startup, and that set GROWS with the image —
-      # custom.js and proxmox.yaml both joined it in 2026-08 updates, each crash-looping
+      # custom.js and proxmox.yaml both joined it in later updates, each crash-looping
       # the pod against a read-only Secret mount (EROFS on the seed copy). A writable
       # emptyDir seeded from the Secret ends the whack-a-mole: our files win, and the app
       # seeds whatever else it invents next to them.
@@ -79,11 +78,8 @@ spec:
           # WHY: the image ships a build-time render of `/` that carries NO settings.
           # gethomepage's `getStaticProps` (src/pages/index.jsx, v1.13.2) has no `revalidate`
           # key, so `next build` bakes the page into the image — against the skeleton config
-          # the build has, whose settings.yaml is empty. Verified against the pinned digest:
-          # `/app/.next/server/pages/en.json` in the image reads
-          # `"initialSettings":{}` and `/app/.next/server/pages/en.html` reads
-          # `<title data-next-head="">Homepage</title>`, and prerender-manifest.json records
-          # `"initialRevalidateSeconds": false` — the cached page never expires on its own.
+          # the build has, whose settings.yaml is empty. prerender-manifest.json records
+          # `"initialRevalidateSeconds": false`, so the cached page never expires on its own.
           #
           # Upstream's only re-render trigger is client-side: the browser compares
           # `/api/hash` (config hashes plus HOMEPAGE_BUILDTIME, reset by docker-entrypoint.sh
@@ -91,7 +87,6 @@ spec:
           # MISMATCH. A browser with no stored hash stores it and triggers nothing. So a fresh
           # pod visited only by fresh browsers serves the config-less page for the container's
           # whole life, while the Deployment stays 1/1 and `probe.py health homepage` exits 0.
-          # That is the 2026-09-06 `-m ui -k homepage` failure behind #1399/#1410.
           #
           # This hook removes the failure mode instead of detecting it: no CI-runnable detector
           # exists (the pod IP is fenced by the netpol baseline, `pods/exec` is forbidden to the
@@ -121,7 +116,7 @@ spec:
               path: /api/healthcheck
               port: {{ container_item.port }}
               # kubelet probes carry the pod IP as Host, which HOMEPAGE_ALLOWED_HOSTS
-              # rejects (400) — pin an allowed Host (failed live at first deploy).
+              # rejects (400) — pin an allowed Host.
               httpHeaders:
                 - name: Host
                   value: "{{ container_item.hostname }}.local.{{ domain }}"
@@ -132,7 +127,7 @@ spec:
               path: /api/healthcheck
               port: {{ container_item.port }}
               # kubelet probes carry the pod IP as Host, which HOMEPAGE_ALLOWED_HOSTS
-              # rejects (400) — pin an allowed Host (failed live at first deploy).
+              # rejects (400) — pin an allowed Host.
               httpHeaders:
                 - name: Host
                   value: "{{ container_item.hostname }}.local.{{ domain }}"
@@ -143,8 +138,8 @@ spec:
         - name: homepage-config
           secret:
             secretName: homepage-config
-        # The writable /app/config the init container seeds; logs no longer need their own
-        # emptyDir carve-out (the whole dir is writable now).
+        # The writable /app/config the init container seeds; the whole dir is writable, so logs
+        # need no emptyDir carve-out of their own.
         - name: homepage-config-live
           emptyDir: {}
         - name: homepage-icons

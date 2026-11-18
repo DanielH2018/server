@@ -88,7 +88,7 @@ def parse_targets(resp: dict) -> list[dict]:
 
 
 # Credentials the apps write into their own log lines: Home Assistant's cast `refresh_token`
-# (#3015) and Prowlarr's `apikey=` in the *arr Torznab error URLs (#6276). Alloy redacts new
+# and Prowlarr's `apikey=` in the *arr Torznab error URLs. Alloy redacts new
 # records on the way into Loki, but the older records stay for its 744h retention and a pod's
 # live log never passes through Alloy. The image imports no first-party module, so these copy
 # `scripts/diagnostics/probe_lib/core.py:redact_log_secrets` rather than import it.

@@ -2,7 +2,7 @@
   The configarr-health CronJob's exported verdict: annotations on this object, patched by the reader
   each run (files/configarr_health.py:export_verdict), exported by kube-state-metrics as
   kube_configmap_annotations and read by the shadow rules in observability's pod-producers
-  group (M6 batch B6b, docs/target-architecture/monitoring/m6-retire-kuma.md).
+  group.
 
   DECIDED: rendered with no annotations, so the annotations have one writer. The object must
   exist before the first run, because RBAC cannot narrow `create` by name and the CronJob's Role
@@ -12,7 +12,7 @@
   crowdsec's home-ips ConfigMap rests on (crowdsec/templates/home-ips-configmap.yaml.j2).
   It holds only while the reader's field manager is not named `kubectl*`. Flux takes over fields
   owned by such a manager and drops them at its next apply, which is what `kubectl patch`'s
-  default `kubectl-patch` manager did (#6746), so the reader patches with
+  default `kubectl-patch` manager would suffer, so the reader patches with
   `--field-manager=configarr-health`.
 #}
 ---

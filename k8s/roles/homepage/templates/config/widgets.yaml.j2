@@ -3,9 +3,7 @@
 # https://gethomepage.dev/latest/configs/service-widgets
 
 # Cluster + per-node CPU/memory, read from metrics.k8s.io through the pod's ServiceAccount
-# (k8s/roles/homepage: kubernetes.yaml.j2 `mode: cluster` + rbac.yaml.j2). This template is
-# shared with the archived Docker role, where it is inert: that deployment has no cluster
-# identity, and homepage renders an unreachable info widget as nothing rather than erroring.
+# (k8s/roles/homepage: kubernetes.yaml.j2 `mode: cluster` + rbac.yaml.j2).
 - kubernetes:
     cluster:
       show: true
@@ -34,8 +32,8 @@
 
 # Longhorn volume and node capacity. THE URL IS NOT HERE — homepage splits this widget across two
 # files, and `providers.longhorn.url` in settings.yaml.j2 holds the connection while this entry
-# holds only the display options. A `url:` written here is ignored, which is how PR #1391 shipped
-# a widget that logged `<longhorn> Missing Longhorn URL` every refresh behind a 1/1 Deployment.
+# holds only the display options. A `url:` written here is ignored, and the widget logs
+# `<longhorn> Missing Longhorn URL` every refresh behind a 1/1 Deployment.
 #
 # It dials `longhorn-frontend`, NOT `longhorn-backend`, and
 # the distinction is the whole reason this widget works. The manager's own API is fenced by
@@ -48,8 +46,8 @@
 #
 # This is also why the node-local-manager trap (only that node's manager answers a HOST caller)
 # does not apply: the caller is a pod, and it addresses the frontend Service rather than the
-# backend one. Verified 2026-09-06: `GET /v1/nodes` on the frontend ClusterIP answers 200 with
-# both nodes' disk conditions.
+# backend one. `GET /v1/nodes` on the frontend ClusterIP answers 200 with both nodes' disk
+# conditions.
 - longhorn:
     expanded: true
     total: true

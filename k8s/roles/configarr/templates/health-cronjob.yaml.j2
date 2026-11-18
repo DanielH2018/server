@@ -29,7 +29,6 @@ metadata:
   namespace: {{ k8s_namespace }}
 spec:
   schedule: "{{ configarr_k8s_health_schedule }}"
-  # The host cron's fields were UTC, and */10 reads the same in any zone.
   timeZone: Etc/UTC
   concurrencyPolicy: Forbid
   # A run missed by more than one period is not made up: the next one reports the same Job.

@@ -32,8 +32,7 @@ SERVICES_FILE = Path(
 )
 
 # A service name is only tagged on a WORD match, never a substring: `nut` occurs inside
-# "minute" and "minutes", which appear in nearly every document here — measured 2026-08-19,
-# substring matching tagged 33 of 48 artifacts `nut` where word matching tags 16.
+# "minute" and "minutes", which appear in nearly every document here.
 #
 # Word boundaries are not enough on their own for a name that is also an ordinary noun. These
 # need two mentions before the document is about that service, so one passing "the container
@@ -138,7 +137,7 @@ FALLBACK_CATEGORY = "infra"
 
 # Where an artifact came from. A headless run with no operator in the session, such as the
 # changelog-watch timer, declares `scheduled`; anything that declares nothing was written by an
-# interactive session, which is how every artifact here was written before the field existed.
+# interactive session.
 SCHEDULED_ORIGIN = "scheduled"
 SESSION_ORIGIN = "session"
 
@@ -147,8 +146,7 @@ SESSION_ORIGIN = "session"
 SCHEDULED_NAME_PREFIXES = ("changelog-watch_",)
 
 # How many service chips a document shows, most-mentioned first. Uncapped, a broad review
-# tagged a dozen services and the row stopped carrying information (measured: 5.8 per tagged
-# document across the real corpus).
+# tags a dozen services and the row stops carrying information.
 MAX_SERVICES = int(os.environ.get("ARTIFACTS_MAX_SERVICES", "5"))
 
 _META_RE = re.compile(

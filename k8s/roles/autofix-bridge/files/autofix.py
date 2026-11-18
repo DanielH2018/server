@@ -47,9 +47,8 @@ from bridge.common import HTTP_TIMEOUT, _env, clamp_discord, sanitize
 
 INTERVAL = int(_env("INTERVAL", "300"))
 HEARTBEAT_FILE = _env("HEARTBEAT_FILE", "/tmp/heartbeat")
-# The cycle's verdict leaves the pod as gauges (M6 batch B7). The `check` label is the name the
-# Kuma tile's token carried, and the deadline is three cycles: one missed cycle is a slow poll
-# and two is a hung one, so the third is the first that is not noise.
+# The cycle's verdict leaves the pod as gauges. The deadline is three cycles: one missed cycle
+# is a slow poll and two is a hung one, so the third is the first that is not noise.
 # Unset or 0 serves nothing, which keeps a hand-run and the tests off the port.
 CHECK_EXPORTER_PORT = int(_env("CHECK_EXPORTER_PORT", "0"))
 CHECK = "arr-autoblock"
@@ -106,10 +105,10 @@ def is_candidate(item, patterns):
     - bare error (trackedDownloadStatus=='error') -> candidate. At the pinned Sonarr
       4.0.19.2979 / Radarr 6.3.0.10514 only RejectedImportService writes this status (a
       dangerous or executable file), so no outage exemption is needed: a download-client
-      outage empties the queue for that client instead of flipping its items to error. The
-      CLIENT_ERROR_PATTERNS exemption that guarded this branch was retired on 2026-09-18
-      (#1951) because none of its phrases is a string either app writes into errorMessage.
-      A future *arr bump re-opens the question: re-run #1951's verify-by against the new tag.
+      outage empties the queue for that client instead of flipping its items to error. There
+      is no CLIENT_ERROR_PATTERNS exemption, because none of its phrases is a string either
+      app writes into errorMessage. A future *arr bump re-opens the question: re-check that
+      no outage phrase reaches errorMessage at the new tag.
     - everything else (transient warning, plain importPending) -> not a candidate (fails SAFE).
     """
     status = item.get("trackedDownloadStatus")

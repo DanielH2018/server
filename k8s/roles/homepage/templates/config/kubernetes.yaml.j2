@@ -1,14 +1,14 @@
 ---
-# This file has to exist whatever it contains, and that is separate from what it now says.
+# This file has to exist whatever it contains, and that is separate from what it says.
 #
 # Why it must exist: servicesFromKubernetes() calls checkAndCopyConfig("kubernetes.yaml") on
 # EVERY service/widget lookup (service-helpers.js, via getServiceItem's docker/kubernetes
 # discovery fallback — unconditional, not gated on any service actually using a kubernetes:
 # widget). checkAndCopyConfig only copies its skeleton when the file is missing; against a
 # read-only mount that copy fails with EROFS and the app calls process.exit(1) — a crash loop
-# on the very first widget poll. Since E3 the config lives on a writable emptyDir seeded from
-# the Secret, so this is no longer the crash it once was, but the file stays declared here so
-# our content wins over whatever skeleton the image would seed.
+# on the very first widget poll. The config lives on a writable emptyDir seeded from the
+# Secret, so a missing file is not a crash, but the file stays declared here so our content
+# wins over whatever skeleton the image would seed.
 #
 # What it says: `cluster` mode makes homepage authenticate to the API with the pod's mounted
 # ServiceAccount — the one rbac.yaml.j2 creates and deployment.yaml.j2 names. That backs both
@@ -22,8 +22,8 @@ mode: cluster
 # are falsy when absent (`traefik-list.js`, `httproute-list.js` in v1.13.2), so omitting them
 # leaves those calls unmade. `ingress-list.js` instead destructures `const { ingress = true }`,
 # so an absent key means the pod lists `ingresses.networking.k8s.io` cluster-wide on every page
-# load. rbac.yaml.j2 does not grant that read, so each load logged an RBAC denial the pod's whole
-# life (#1428, #1459) — a handful of lines that buried the widget errors worth reading.
+# load. rbac.yaml.j2 does not grant that read, so each load would log an RBAC denial — a
+# handful of lines that bury the widget errors worth reading.
 #
 # `false` rather than granting the read: this cluster routes with Traefik `IngressRoute` CRDs and
 # has no `Ingress` objects, so the permission would widen a read-only identity to list an empty

@@ -37,8 +37,7 @@ spec:
 {{ hardened_security_context(read_only=true) }}
           # The settings, as plain values; the credentials come from render_secrets. A
           # quoted number belongs here, never in the Secret: Flux's typed patch reads a
-          # Secret's "300" back as a number and refuses it (#5574). Only what CHANGED in the
-          # move from the Docker compose template is commented.
+          # Secret's "300" back as a number and refuses it.
           env:
             - name: TZ
               value: "{{ tz }}"
@@ -50,11 +49,11 @@ spec:
               value: "300"
             # The port the check exporter serves /metrics on (jobs_metrics.py, through
             # autofix.py): the `autofix-bridge` item on this role's containers_list entry, which
-            # also renders the scrape job and the Service port (M6 batch B7).
+            # also renders the scrape job and the Service port.
             - name: CHECK_EXPORTER_PORT
               value: "{{ services | metrics_port('autofix-bridge') }}"
-            # LIVE remediation, carried over unchanged — the operator flipped it 2026-07-06 and
-            # the autonomous-role contract (this role's CLAUDE.md) governs any change here.
+            # LIVE remediation: the autonomous-role contract (this role's CLAUDE.md) governs any
+            # change here.
             - name: DRY_RUN
               value: "false"
             - name: GRACE_CYCLES
@@ -87,12 +86,10 @@ spec:
               readOnly: true
             - name: autofix-bridge-tmp
               mountPath: /tmp
-          # 1 core, not 100m: a periodic poller wakes, bursts, and sleeps, so a 100m quota —
-          # 10ms of every 100ms period — is exhausted by a sub-second burst while the minute
-          # average reads near zero. Throttled on 45.8% of CFS periods, measured 2026-08-29,
-          # against p95 usage of 0.0015 cores. On a cluster burning ~1.5 of 24 cores the
-          # request is what earns this pod CPU under contention; the limit only clipped
-          # bursts. Requests and the memory limit are unchanged.
+          # 1 core, not 100m: a periodic poller bursts then sleeps, so a 100m quota (10ms of every
+          # 100ms period) is exhausted by a sub-second burst while the minute average reads near
+          # zero. The request is what earns this pod CPU under contention; the limit only clips
+          # bursts.
 {{ container_resources(cpu_limit='1', mem_limit='64Mi', cpu_request='20m', mem_request='32Mi') }}
       volumes:
         - name: autofix-bridge-script

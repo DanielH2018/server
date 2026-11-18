@@ -80,16 +80,10 @@ def fields_of(body: dict) -> list[dict]:
     return body["fields"]
 
 
-# ── the app table ───────────────────────────────────────────────────────────────────────────
-
-
 def test_every_app_with_a_port_has_an_api_version_and_lidarr_alone_is_v1() -> None:
     # A port without a version raises KeyError in the Job instead of a SeedError naming the app.
     assert seed.ARR_API_VERSIONS.keys() == seed.ARR_PORTS.keys()
     assert {app for app, v in seed.ARR_API_VERSIONS.items() if v == "v1"} == {"lidarr"}
-
-
-# ── the match key ───────────────────────────────────────────────────────────────────────────
 
 
 def test_the_live_discord_notification_is_found_by_name() -> None:
@@ -108,9 +102,6 @@ def test_a_differently_named_discord_notification_is_not_adopted() -> None:
     # The reject half of the same rule: a name that matches nothing must return None so the
     # caller creates one, rather than quietly adopting whatever Discord row happens to exist.
     assert seed.find_notification([LIVE], "Discord") is None
-
-
-# ── the rewrite decision ────────────────────────────────────────────────────────────────────
 
 
 def test_the_live_row_is_already_what_we_declare_so_no_deploy_rewrites_it() -> None:
@@ -161,9 +152,6 @@ def test_the_field_lists_the_app_populated_survive_the_rewrite() -> None:
     assert body["id"] == 3
 
 
-# ── the trigger set is the whole truth ──────────────────────────────────────────────────────
-
-
 def test_every_trigger_the_app_carries_is_declared_true_or_false() -> None:
     body = declare(LIVE, triggers=["onGrab"])
     assert body["onGrab"] is True
@@ -185,9 +173,6 @@ def test_a_trigger_name_the_app_does_not_carry_fails_the_deploy() -> None:
 def test_supports_flags_are_not_mistaken_for_triggers() -> None:
     assert "supportsOnGrab" not in seed.trigger_keys(LIVE)
     assert "onGrab" in seed.trigger_keys(LIVE)
-
-
-# ── the create path ─────────────────────────────────────────────────────────────────────────
 
 
 def test_the_schema_entry_becomes_a_postable_body() -> None:

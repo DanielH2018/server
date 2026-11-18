@@ -107,12 +107,11 @@ spec:
             type: Directory
 {% if artifacts_agent_dir | length > 0 %}
         # type: Directory, not DirectoryOrCreate — kubelet would create a missing path as
-        # root inside the agent's home, where the agent could not write and
-        # claude-agent-setup would then fight it. With Directory a missing path leaves the new pod in
-        # ContainerCreating, and the RollingUpdate keeps the old pod serving, so the failure
-        # is visible on the rollout rather than an empty index. claude-agent-setup
-        # (hosts/components/claude-code/) creates the directory (2750 claude:ubuntu); this role
-        # must not.
+        # root inside the agent's home, where the agent could not write and claude-agent-setup
+        # would then fight it. With Directory a missing path leaves the new pod in
+        # ContainerCreating while the old pod keeps serving, so the failure is visible on the
+        # rollout rather than an empty index. claude-agent-setup (hosts/components/claude-code/)
+        # creates the directory (2750 claude:ubuntu); this role must not.
         - name: artifacts-agent
           hostPath:
             path: {{ artifacts_agent_dir }}

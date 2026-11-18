@@ -41,12 +41,12 @@ spec:
             - name: media
               mountPath: /data
             # The JVM writes /tmp/hsperfdata_* and a truststore even with everything else
-            # read-only — the same two paths the Docker copy covers with a tmpfs.
+            # read-only.
             - name: janitorr-tmp
               mountPath: /tmp
 {{ container_resources(cpu_limit=janitorr_k8s_cpu_limit, mem_limit=janitorr_k8s_mem_limit, cpu_request=janitorr_k8s_cpu_request, mem_request=janitorr_k8s_mem_request) }}
           livenessProbe:
-            # Same assertion as the Docker healthcheck: PID 1 is the JVM. It proves the process
+            # PID 1 is the JVM. It proves the process
             # is alive and nothing more — janitorr's real failures are logged, not exposed.
             exec:
               command: [sh, -c, "grep -q java /proc/1/comm"]

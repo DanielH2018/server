@@ -28,13 +28,13 @@ spec:
           imagePullPolicy: IfNotPresent
           # uid pinned with the assertion: `runAsNonRoot` alone does not pin one, and the
           # kubelet refuses a container whose image names its user instead of numbering it.
-          # `/bin/ddns` measured at uid 1000 on 2026-08-31.
+          # `/bin/ddns` runs as uid 1000.
 {{ hardened_security_context(read_only=true, non_root=true, run_as_user=1000) }}
           env:
             - name: CLOUDFLARE_API_TOKEN_FILE
               value: /etc/ddns-secrets/cf_dns_token
-            # terraria and valheim (reactivated onto k3s 2026-08-13) are live; minecraft is
-            # still archived, and its record stays out — publishing an A record for a game
+            # terraria and valheim are live; minecraft is
+            # archived, and its record stays out — publishing an A record for a game
             # server that does not exist points the unproxied home IP at nothing and
             # needlessly exposes the raw IP. Re-add a domain here when its server comes back.
             - name: DOMAINS
@@ -44,9 +44,8 @@ spec:
             - name: IP6_PROVIDER
               value: none
           volumeMounts:
-            # /etc, not /run/secrets: this image (scratch-based) lacks the /var/run
-            # symlink so the old path happened to work, but the convention guard bans the
-            # class — on any distro-based image it shadows the ServiceAccount token mount.
+            # /etc, not /run/secrets: on a distro-based image /run/secrets shadows the
+            # ServiceAccount token mount, so the convention guard bans it.
             - name: cloudflare-ddns-token
               mountPath: /etc/ddns-secrets
               readOnly: true

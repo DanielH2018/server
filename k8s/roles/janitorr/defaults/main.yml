@@ -14,7 +14,7 @@ k8s_autodeploy: false
 k8s_autodeploy_reason: "probe-less — no readinessProbe on the Deployment; also the only role that deletes real media, so a wedge is not merely inert"
 
 # "false" is the operator's decision to run live. Dry running cannot show what media-deletion
-# does: it is keyed on free-disk percentage and its loosest rung is 25% (#5806). With the disk at
+# does: it is keyed on free-disk percentage and its loosest rung is 25%. With the disk at
 # 9% used no rung applies and the deletion pass does not execute at all, so there is no dry
 # "would delete" line to wait for.
 #
@@ -25,7 +25,7 @@ k8s_autodeploy_reason: "probe-less — no readinessProbe on the Deployment; also
 # Set back to "true" to make janitorr inert again; verify.yml asserts the live file matches.
 janitorr_k8s_dry_run: "false"
 
-# The WHOLE tree at /data, no subPath — the *arr side of the D4 contract, not the jellyfin side.
+# The WHOLE tree at /data, no subPath — the *arr side, not the jellyfin side.
 # It is load-bearing here rather than incidental: janitorr writes symlinks whose TARGETS are
 # absolute `/data/media/...` paths, and Jellyfin resolves them through its own second
 # `/data/media` mount. Mount this one level deeper and every symlink it writes would point at a
@@ -47,15 +47,12 @@ janitorr_k8s_mem_request: 128Mi
 janitorr_k8s_error_window_hours: 12
 janitorr_k8s_startup_grace_seconds: 600
 
-# The janitorr-health CronJob's schedule. Until H2.5c
-# (docs/target-architecture/host/h2-shrink-host-plane.md, Steps item 14) it was a daniel-box
-# host cron. */10 like the other
-# cluster-side health readers. The `JanitorrHealthNotReporting` rule reads the CronJob's last
-# successful time. The host cron's UTC minute field, unchanged.
+# The janitorr-health CronJob's schedule, */10 like the other cluster-side health readers. The
+# `JanitorrHealthNotReporting` rule reads the CronJob's last successful time.
 janitorr_k8s_health_schedule: "*/10 * * * *"
 
 # The ConfigMap the health reader writes its verdict to as annotations, which kube-state-metrics
-# exports (M6 batch B6b). The shadow rule JanitorrHealthNotReporting holds the CronJob's last
+# exports. The shadow rule JanitorrHealthNotReporting holds the CronJob's last
 # successful run to three periods of the schedule above, 1800s.
 janitorr_k8s_health_verdict_configmap: janitorr-health-verdict
 
@@ -66,12 +63,11 @@ janitorr_k8s_health_image: python:3.15-alpine@sha256:0f9552bb28711333da16915ec14
 janitorr_k8s_health_kubectl_image: alpine/k8s:1.37.2@sha256:7a82aeefea3d554a43a8676b137f2b88bae6c1fe11c13862b191b3a086cc28c0
 
 # Above the reader's worst case: two 30 s kubectl calls (JANITORR_KUBECTL_TIMEOUT_S) plus
-# the cold pull of both images. The figure kept the margin the retired push needed until
-# M6 batch B6b's Cutover-2. No flux_cronjob_gates entry copies this CronJob into a gate Job, so no gate timeout
-# bounds it from above.
+# the cold pull of both images. No flux_cronjob_gates entry copies this CronJob into a gate
+# Job, so no gate timeout bounds it from above.
 janitorr_k8s_health_deadline_seconds: 420
 # How long a finished janitorr-health Job, and so its pod, stays visible. A run the weekly reboot
-# interrupts fails, and without a TTL it reads Failed until two later runs fail (#6367).
+# interrupts fails, and without a TTL it reads Failed until two later runs fail.
 # 30 minutes clears it inside the hour after boot
 # (tests/k8s/test_reboot_window_cronjobs_age_out.py); the run's output is in Loki past that.
 janitorr_k8s_health_job_ttl_seconds: 1800

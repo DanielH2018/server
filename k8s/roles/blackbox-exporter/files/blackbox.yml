@@ -32,8 +32,7 @@ modules:
         Accept: "*/*"
       follow_redirects: false
       valid_status_codes: [302]
-  # The modules of the blackbox-extra job, from M6's batch B8
-  # (docs/target-architecture/monitoring/m6-retire-kuma.md, "B0, B5, B7 and B8").
+  # The modules of the blackbox-extra job.
   #
   # A TCP connect and nothing else. The blackbox-pi-ports job uses it too, for the Pi's published
   # ports.

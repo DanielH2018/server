@@ -62,8 +62,8 @@ def http_get_json(url, timeout, user_agent):
 
 
 # DECIDED: this builder stays here rather than routing through
-# `scripts/diagnostics/probe_lib/obs_api.py`, the shared Prometheus/Loki client #2860 minted
-# (#3096, evaluated 2026-10-01). Three reasons, in order of weight.
+# `scripts/diagnostics/probe_lib/obs_api.py`, the shared Prometheus/Loki client. Three reasons,
+# in order of weight.
 #
 # The window semantics differ, and that is the part a shared builder would have to express. This
 # one is a CURSOR resume over the half-open interval `(start_ns, end_ns]` — hence `start_ns + 1`,

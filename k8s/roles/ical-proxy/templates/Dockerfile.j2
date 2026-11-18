@@ -1,8 +1,7 @@
 # DIGEST-PINNED. `python:3.15-slim` is a version tag but still a MOVING one: it re-points at every
-# 3.15.x patch and every base-OS refresh, so the tag alone left this image drifting under a name
-# that reads pinned. Renovate cannot offer an update for movement inside a tag — only for a tag
-# change (3.15 -> 3.16) — so nothing signalled a rebuild, the same failure the `:latest` bases had
-# until 2026-08-19, one notch weaker.
+# 3.15.x patch and every base-OS refresh, so the tag alone leaves this image drifting under a
+# name that reads pinned. Renovate cannot offer an update for movement inside a tag — only for a
+# tag change (3.15 -> 3.16) — so nothing would signal a rebuild.
 #
 # The digest is what makes the movement visible: Renovate's dockerfile manager raises a digest PR
 # when the tag re-points, and the merged commit lands under k8s/roles/**, which
@@ -12,11 +11,11 @@ FROM python:3.15-slim@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87
 WORKDIR /app
 # Pin to the versions uv.lock resolves for the `dev` group, so the runtime image matches what
 # test_app.py validates against (a bare `pip install flask requests` re-resolves to newest PyPI on
-# every weekly rebuild, certifying a flask the container never runs — 2026-07-18 review L1). Kept in
-# lockstep with uv.lock by tests/services/test_ical_proxy_pins_match_uv_lock.py.
+# every rebuild, certifying a flask the container never runs). Kept in lockstep with uv.lock by
+# tests/services/test_ical_proxy_pins_match_uv_lock.py.
 RUN pip install flask==3.1.3 requests==2.34.2
 # Flat path: the k8s image-builder stages context files as ConfigMap keys, which cannot
-# contain '/'. (The retired Docker build staged app/ itself; nothing uses that shape now.)
+# contain '/'.
 COPY app.py .
 # Drop root: the app only reads app.py and binds :5000 (no privileged port, read-only rootfs).
 RUN useradd -u 1000 -m appuser

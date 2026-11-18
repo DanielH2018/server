@@ -56,9 +56,6 @@ def _by_name(samples):
     return {name: (labels, value) for name, labels, value in samples}
 
 
-# ── discovery ────────────────────────────────────────────────────────────────────────────
-
-
 def test_discovery_finds_the_card_and_names_its_driver(tmp_path):
     assert gpu_exporter.discover_cards(_amd_tree(tmp_path)) == [("card1", "amdgpu")]
 
@@ -78,9 +75,6 @@ def test_discovery_rejects_connectors_that_match_the_card_glob(tmp_path):
 def test_the_card_number_is_not_assumed(tmp_path):
     """daniel-box is card1 and daniel-server is card0, so nothing may index a fixed number."""
     assert gpu_exporter.discover_cards(_intel_tree(tmp_path)) == [("card0", "i915")]
-
-
-# ── amdgpu: a direct busy gauge ──────────────────────────────────────────────────────────
 
 
 def test_amdgpu_busy_percent_is_the_sysfs_value(tmp_path):
@@ -103,9 +97,6 @@ def test_amdgpu_emits_no_rc6_counter(tmp_path):
     assert gpu_exporter._RC6 not in _by_name(gpu_exporter.collect(_amd_tree(tmp_path)))
 
 
-# ── i915: RC6 residency, the unprivileged stand-in for a busy gauge ──────────────────────
-
-
 def test_i915_rc6_residency_is_reported_in_seconds(tmp_path):
     # The file is MILLISECONDS and the series is named _seconds_total. Getting this backwards
     # scales every derived utilization figure by 1000 and still plots a plausible line.
@@ -124,9 +115,6 @@ def test_i915_emits_no_busy_percent(tmp_path):
     assert gpu_exporter._BUSY not in _by_name(
         gpu_exporter.collect(_intel_tree(tmp_path))
     )
-
-
-# ── the exposition itself ────────────────────────────────────────────────────────────────
 
 
 def test_a_node_with_no_gpu_renders_nothing_rather_than_zeroes(tmp_path):

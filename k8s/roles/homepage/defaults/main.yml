@@ -13,8 +13,7 @@ k8s_autodeploy: true
 k8s_autodeploy_reason: "stateless RollingUpdate Deployment, no PVC (config is rendered templates, not runtime state), readinessProbe, digest-pinned image"
 
 homepage_k8s_cpu_limit: "500m"
-# 7-day p95 working set 226Mi on 2026-11-14: the request is that p95 rounded up, and the
-# limit puts it at 59%.
+# The request is the 7-day p95 working set (226Mi) rounded up, and the limit puts it at 59%.
 homepage_k8s_mem_limit: 384Mi
 homepage_k8s_cpu_request: "50m"
 homepage_k8s_mem_request: 256Mi
@@ -28,14 +27,14 @@ homepage_k8s_mem_request: 256Mi
 # `label_replace(vector(scalar(<count> or vector(0))), "k", "<name>", "", "")` and the two are
 # joined with `or`:
 #   - `scalar()` collapses a count to a bare number and `vector()` lifts it back to a one-sample
-#     series, which is what lets `or` concatenate four otherwise-unrelated counts.
+#     series, which is what lets `or` concatenate otherwise-unrelated counts.
 #   - the inner `or vector(0)` is what makes an EMPTY match render as 0. Without it `count()`
 #     over nothing returns no series, `scalar()` of that is NaN, and the tile reads "NaN" for
 #     exactly the healthy case (zero degraded deployments) it exists to confirm.
 #   - `label_replace` is LOAD-BEARING, and not for display: `or` is set union over series
 #     SIGNATURES, and bare `vector()` samples all carry the empty signature — so without a
 #     distinguishing label the union collapses to ONE result and the tile renders a single
-#     number. Dropping label_replace returns `result` of length 1, not 4.
+#     number. Dropping label_replace returns `result` of length 1, not 2.
 #     The names it assigns are also what makes the query legible when curled by hand, which is
 #     how you check the widget's positional mappings still line up (services.yaml.j2).
 # Counts, not gauges: cluster and node CPU/memory are already on this dashboard twice
@@ -53,8 +52,7 @@ homepage_k8s_mem_request: 256Mi
 # counter is most likely to catch. The visible consequence: every rollout, including homepage's
 # own, briefly shows a non-zero DOWN while new pods schedule.
 #
-# The node and degraded-deployment counters were dropped on 2026-09-10 at the operator's
-# request, along with the mappings that rendered them — the tile shows pod Up and Down only.
+# The tile shows pod Up and Down only.
 homepage_k8s_headlamp_cluster_query: >-
   label_replace(vector(scalar(count(kube_pod_status_phase{phase="Running"} == 1) or vector(0))), "k", "Up", "", "")
   or label_replace(vector(scalar(count(kube_pod_status_phase{phase=~"Pending|Failed|Unknown"} == 1) or vector(0))), "k", "Down", "", "")

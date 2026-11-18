@@ -4,8 +4,7 @@
   The janitorr error health reader, every 10 minutes: read the running janitorr pod's start
   time and, past the startup grace, count the cleanup errors in its log, then record the
   verdict as a log line and on the verdict ConfigMap's annotations
-  (health-verdict-configmap.yaml.j2). It replaced the daniel-box host cron `janitorr
-  error health` at H2.5c (docs/target-architecture/host/h2-shrink-host-plane.md, Steps item 14).
+  (health-verdict-configmap.yaml.j2).
 
   Two containers, because the reader is Python and kubectl ships in neither image alone. The
   init container copies kubectl out of alpine/k8s into an emptyDir, and the reader runs it from
@@ -17,8 +16,7 @@
   read this pod instead of janitorr's.
 
   No gate Job: janitorr's defaults declare no `flux_cronjob_gates`, so `janitorr-verify` runs no
-  copy of this CronJob, and the H2 plan's *Who applies each grant* records the first scheduled
-  run instead.
+  copy of this CronJob.
 #}
 ---
 apiVersion: batch/v1
@@ -28,7 +26,6 @@ metadata:
   namespace: {{ k8s_namespace }}
 spec:
   schedule: "{{ janitorr_k8s_health_schedule }}"
-  # The host cron's fields were UTC, and */10 reads the same in any zone.
   timeZone: Etc/UTC
   concurrencyPolicy: Forbid
   # A run missed by more than one period is not made up: the next one reads the same pod.

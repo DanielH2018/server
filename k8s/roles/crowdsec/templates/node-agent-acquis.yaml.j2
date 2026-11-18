@@ -1,8 +1,7 @@
 ---
-# Acquisition for the node-agent DaemonSet (Phase F drain, 2026-08-13): each node's own
-# auth.log — the SSH brute-force signal the demoted Docker agent used to carry for
-# daniel-server, extended to daniel-box (whose host auth.log was covered by NOTHING
-# while the engine pod parsed only AppSec events). Plain ConfigMap: paths, not secrets.
+# Acquisition for the node-agent DaemonSet: each node's own auth.log, the SSH brute-force
+# signal. The engine pod parses only AppSec events, so nothing else covers the host auth.log.
+# Plain ConfigMap: paths, not secrets.
 apiVersion: v1
 kind: ConfigMap
 metadata:

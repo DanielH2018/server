@@ -114,7 +114,7 @@ def parse_nodes(resp: dict) -> list[dict]:
 
 
 # Metadata-only projection for claude_code_events. The observability Loki holds prompts,
-# responses and tool output VERBATIM (content logging is on, by design), and KL1's
+# responses and tool output VERBATIM (content logging is on, by design), and the
 # whole boundary is that this content never gets a LAN-reachable path — so rows leaving
 # through the (bearer-gated, LAN-routed) MCP carry ONLY these fields. A whitelist, not
 # a blacklist: an OTLP attribute added upstream stays withheld until named here. The

@@ -1,10 +1,9 @@
 ---
 # The Longhorn backup plane: the two credential Secrets, the BackupTargets `default` (B2) and `r2`,
-# and the RecurringJobs. Flux applies the tag. Every key below kept the name it had in
-# `setup/k3s`'s defaults, so a reader that moved with the key changed its path and not its name.
+# and the RecurringJobs. Flux applies the tag.
 #
 # No host file reads any of these keys. The backup-health reader derives each target's arm state
-# and each tier's schedule from the live objects (H1.7a), so a flip here reaches the cluster
+# and each tier's schedule from the live objects, so a flip here reaches the cluster
 # through Flux alone and leaves no host cron stale. The `no Flux-born key on the host plane` row
 # of tests/repo/test_census_rows_roles.py keeps it that way.
 
@@ -27,11 +26,9 @@ k8s_autodeploy: false
 k8s_autodeploy_reason: "platform — the arm flags and the schedules govern every Longhorn backup; a wrong arm re-opens the B2 transaction-cap spiral, and host probes stay green through it"
 
 # The B2 region of the `default` target's URL, `s3://<bucket>@<region>/<prefix>`. A plain
-# variable, not a secret: docs/break-glass.md already publishes the B2 target URL. It replaces the
-# Ansible task that derived the region from the SOPS key `longhorn_b2_endpoint`, so nothing now
-# ties the two together. A wrong region makes the target unreachable, which `probe.py health
-# longhorn-backup` reports as `available: false` within one probe run. Measured 2026-10-22 against
-# the live `default` target: us-east-005.
+# variable, not a secret: docs/break-glass.md already publishes the B2 target URL. Nothing ties
+# it to the SOPS key `longhorn_b2_endpoint`. A wrong region makes the target unreachable, which
+# `probe.py health longhorn-backup` reports as `available: false` within one probe run.
 k3s_longhorn_b2_region: us-east-005
 
 # How often Longhorn lists the B2 backup store, in seconds. Upstream default is 300, which
@@ -45,14 +42,13 @@ k3s_longhorn_b2_region: us-east-005
 # separately). That read count grows with retention: ~100-150 cfg GETs/poll x 24 polls against a
 # 14-day daily tier reach the Class B cap by midday with zero restore traffic — surfacing as
 # the restore drill failing with a masked "cannot find volume.cfg in backupstore" (a cap 403,
-# not data loss). 0 disables polling entirely:
-# Longhorn still syncs a volume's backup list right after each backup completes, so the
-# only loss is UI staleness between nightlies (manual sync: Backup -> Sync). That also
-# removes the poll's LISTs from Class C.
+# not data loss). 0 disables polling entirely: Longhorn still syncs a volume's backup list
+# right after each backup completes, so the only loss is UI staleness between nightlies
+# (manual sync: Backup -> Sync). That also removes the poll's LISTs from Class C.
 #
 # The failure mode 0 guards against is a ratchet: once the cap trips, every BackupVolume
-# controller retries its denied LISTs (~60/min observed), so the failed state
-# itself burns transactions and eats into the next day's allowance.
+# controller retries its denied LISTs, so the failed state itself burns transactions and eats
+# into the next day's allowance.
 k3s_longhorn_backupstore_poll_interval: 0
 
 # Longhorn writes under this prefix inside the B2 bucket, so its objects keep their own
@@ -64,27 +60,25 @@ k3s_longhorn_backup_prefix: longhorn
 # The spiral is driven purely by failure. BackupVolumeController.reconcile runs `longhorn backup
 # ls --volume <vol>` — ONE LIST PER BackupVolume CR. Once the cap trips, B2 answers
 # `AccessDenied Transaction cap exceeded`, a FAILED reconcile is requeued and a successful one
-# is not, so the loop runs whatever pollInterval says. Rate: 64-192 req/min, i.e. 92k-276k/day
-# against a 2,500/day cap. That is 40-110x the entire daily allowance, which is why it cannot
-# recover on its own and why the daily reset alone is not a fix. A denied metadata GET surfaces
-# as "cannot find volume.cfg in backupstore", NOT as a 403 — a masked failure mode.
+# is not, so the loop runs whatever pollInterval says. It runs at 40-110x the entire daily
+# allowance, which is why it cannot recover on its own and why the daily reset alone is not a
+# fix. A denied metadata GET surfaces as "cannot find volume.cfg in backupstore", NOT as a 403
+# — a masked failure mode.
 #
-# Where the Class C goes, from the backupstore source and one direct listing of the bucket
-# (10 Class C — the measurement was never the expensive part):
+# Where the Class C goes, from the backupstore source:
 #
 #   1. THE PRUNE IS THE COST, and it is priced in DIRECTORIES, not bytes or changed blocks.
 #      DeleteDeltaBlockBackup -> getBlockNamesForVolume walks `blocks/<lv1>/<lv2>/` with one
 #      delimited ListObjects per directory (backupstore deltablock.go:1496-1510, s3.go:108), so a
-#      volume's prune costs 1 + lv1dirs + lv2dirs LISTs — about 1.28 per stored block. One
-#      volume's prune measured ~2,738 LISTs.
-#   2. IT RUNS ONCE PER DELETED BACKUP, not once per run. 93 backups against retain 4 queue ~71
-#      tree walks costing ~22,989 Class C — nine days of cap. Delete an over-retention backlog
-#      directly against the B2 API instead: deletes are Class A and unmetered, so the end state
-#      Longhorn wants costs nothing to reach.
+#      volume's prune costs 1 + lv1dirs + lv2dirs LISTs — about 1.28 per stored block.
+#   2. IT RUNS ONCE PER DELETED BACKUP, not once per run, so an over-retention backlog queues
+#      dozens of tree walks worth days of cap. Delete such a backlog directly against the B2
+#      API instead: deletes are Class A and unmetered, so the end state Longhorn wants costs
+#      nothing to reach.
 #   3. RE-ARMING ITSELF IS CHEAP. The target sync pulls one BackupVolume CR per remote prefix
-#      (~25 Class C) and one Backup CR per remote backup (~93 Class B), once. At pollInterval 0
-#      nothing re-lists afterwards: btc.go's isBackupTargetSyncRequired gates on
-#      SyncRequestedAt > LastSyncedAt and no BackupStoreTimer exists to advance it.
+#      and one Backup CR per remote backup, once. At pollInterval 0 nothing re-lists
+#      afterwards: btc.go's isBackupTargetSyncRequired gates on SyncRequestedAt > LastSyncedAt
+#      and no BackupStoreTimer exists to advance it.
 #
 # The storm is failure-driven — a failed sync returns before LastSyncedAt is set, so the gate
 # never closes and every watch event re-lists — but it only starts once the cap is already
@@ -106,25 +100,24 @@ k3s_longhorn_backup_armed: true
 k3s_longhorn_backup_cron: "30 3 * * *"
 k3s_longhorn_backup_retain: 14
 
-# Longhorn's native filesystem trim (the `trim` RecurringJob, H2.2a). 06:10 UTC follows both backup
+# Longhorn's native filesystem trim (the `trim` RecurringJob). 06:10 UTC follows both backup
 # windows, because a trim before the day's snapshot hands back blocks that the snapshot then pins
-# again. It replaced the host trim cron in `setup/k3s` (H2.2c).
+# again.
 k3s_longhorn_trim_cron: "10 6 * * *"
 
 # Weekly tier: B2 transaction spend scales with volume COUNT per run — each backup pays fixed
-# lock/list/config overhead plus per-block existence checks (HeadObject, Class B; the console
-# census read 34k Heads / 37k Lists) — and even a Sunday-only weekly batch, stacked with the
-# daily tier, retention pruning on both, and the 07:30 Sunday-reboot resync, blows both
-# 2,500/day caps. Every B2-destined volume therefore backs up WEEKLY, sharded across the seven
-# weekdays (declared shard = cron day-of-week, 0=Sunday) so no single cap-day carries more
-# than 3 volumes' worth of transactions. The operator accepted a week-old worst-case restore
-# for the B2 set; the four R2-routed volumes keep the daily cadence, R2's caps being monthly
-# and vast.
+# lock/list/config overhead plus per-block existence checks (HeadObject, Class B) — and even a
+# Sunday-only weekly batch, stacked with the daily tier, retention pruning on both, and the
+# 07:30 Sunday-reboot resync, blows both 2,500/day caps. Every B2-destined volume therefore
+# backs up WEEKLY, sharded across the seven weekdays (declared shard = cron day-of-week,
+# 0=Sunday) so no single cap-day carries more than 3 volumes' worth of transactions. The B2 set
+# accepts a week-old worst-case restore; the four R2-routed volumes keep the daily cadence,
+# R2's caps being monthly and vast.
 #
 # retain 2 ≈ a fortnight of weeklies. Retention is what costs: a prune walks the volume's whole
 # block tree (see k3s_longhorn_backup_armed), so the price is set by how many blocks the
 # retained backups pin. A lower count pins fewer, and every prune is cheaper for it. The trade
-# the operator accepted is recovery REACH: a corruption noticed on day 15 has no clean copy
+# is recovery REACH: a corruption noticed on day 15 has no clean copy
 # behind it. Raising this is a storage-and-transaction decision, not a free one.
 #
 # Note retention is enforced PER RECURRING JOB, over that job's own backups only, and only while
@@ -134,14 +127,13 @@ k3s_longhorn_trim_cron: "10 6 * * *"
 k3s_longhorn_weekly_backup_minute_hour: "30 4"
 k3s_longhorn_weekly_backup_retain: 2
 
-# ── Cloudflare R2: the second backup target ──────────────────────────────────────────────
 # Longhorn has supported more than one BackupTarget since v1.8.0. A volume is routed by its
 # OWN spec.backupTargetName, and
 # RecurringJob carries no target field — so daily-backup and weekly-backup keep working
 # unchanged and simply follow each volume to wherever it points. Nothing below changes how
 # any volume is scheduled, only where its backups land.
 #
-# R2 is here for the axis B2 ran out of, not for capacity: 10M Class B operations/month and
+# R2 is here for the axis B2 runs out of, not for capacity: 10M Class B operations/month and
 # ZERO egress, against B2's 2,500/day Class B allowance, whose exhaustion takes the entire
 # backup plane down and makes a restore drill read as data loss. R2's free storage
 # is 10 GB against ~8.2 GB of live volume data, so it could not hold everything anyway.

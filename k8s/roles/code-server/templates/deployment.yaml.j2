@@ -24,12 +24,11 @@ spec:
     spec:
       # No fsGroup: the LSIO image chowns /config itself on startup.
 {{ pod_shell('homelab-best-effort') }}
-      # Pinned to daniel-box (operator ruling 2026-10-18, #5547): CPU-bound builds and language
+      # Pinned to daniel-box: CPU-bound builds and language
       # servers run there, and the pre-pull Job copies this placement, so a required affinity
       # guarantees the image is pulled onto the node the pod runs on.
 {{ node_affinity_required(k8s_primary_node) }}
-      # ── first boot only: copy the four keepers onto the backed-up claim ──────────────────
-      # It has to run here, before the workload's subPath mounts land, because those mounts
+      # First boot only: copies the four keepers onto the backed-up claim. It has to run here, before the workload's subPath mounts land, because those mounts
       # shadow the originals: once /config/workspace, /config/.ssh and /config/.config point at
       # the workspace claim, the copies on the config volume are unreachable from this pod.
       # Nothing is deleted — the config volume keeps everything, it just stops being backed up.

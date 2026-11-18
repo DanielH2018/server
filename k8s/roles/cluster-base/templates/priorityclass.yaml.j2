@@ -5,21 +5,17 @@
 # manifest and in kubectl's last-applied annotation but absent from the live object. The
 # three-way merge therefore finds a patch to make on every single run, and never converges.
 #
-# Measured on daniel-stage: two consecutive applies of the old file both printed "configured"
-# for all four classes; with the field removed, the first converges and the second prints
-# "unchanged". That was 4 of the 5 tasks reporting a spurious change on a settled cluster.
 # ENFORCED by tests/k8s/test_priorityclass_omits_defaulted_fields.py.
 #
 # The homelab's workload tiers, as PriorityClasses. Four bands, all below
 # system-node-critical (2000001000) and system-cluster-critical (2000000000) on purpose:
 # the scheduler, CNI and kubelet plumbing still win every contest against a workload.
 #
-# WHAT THESE ACTUALLY DO, so the next reader does not overestimate them. Priority decides
-# two things and nothing else: which pod the scheduler preempts when a node has no room,
-# and the order the kubelet evicts under node pressure. It does NOT throttle CPU, reserve
-# memory, or influence normal placement. With requests sitting near 36% of both nodes, the
-# scheduler currently never has to preempt — so in practice these are insurance against
-# memory pressure on daniel-box, which runs at ~60% with limits overcommitted to 160%.
+# Priority decides two things and nothing else: which pod the scheduler preempts when a node
+# has no room, and the order the kubelet evicts under node pressure. It does NOT throttle CPU,
+# reserve memory, or influence normal placement. With requests well below node capacity the
+# scheduler never has to preempt, so in practice these are insurance against memory pressure on
+# daniel-box, whose limits are overcommitted.
 #
 # DECIDED: no PodDisruptionBudgets; every Deployment is single-replica, so a PDB blocks node
 # drains permanently.
@@ -37,8 +33,7 @@
 # why homelab-best-effort exists as a real class rather than as the absence of one.
 ---
 # TIER 1 — base infrastructure: all ingress, all auth, LAN DNS, the WAF, the image registry,
-# the alert bridge, the UPS primary, and wg-easy. Before this class existed the GPU
-# device-plugin (system-node-critical, its own template documents why) outranked the edge trio.
+# the alert bridge, the UPS primary, and wg-easy.
 #
 # The two that look out of place both earn it. `nut` runs the UPS primary — evicting it
 # breaks the chain that powers daniel-server down on a battery FSD, which is a hardware

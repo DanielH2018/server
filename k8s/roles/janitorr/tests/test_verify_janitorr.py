@@ -408,7 +408,7 @@ def test_the_job_reads_no_other_roles_file():
 
 
 def test_the_rendered_config_trims_media_at_longhorns_25_percent_floor(flipped_tag):
-    """#5806: the loosest rung is 25% free, so janitorr acts before Longhorn stops scheduling."""
+    """The loosest rung is 25% free, so janitorr acts before Longhorn stops scheduling."""
     # fact: k8s/roles/janitorr/CLAUDE.md#Retention rungs
     (secret,) = [
         doc

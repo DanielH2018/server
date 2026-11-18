@@ -39,7 +39,7 @@ spec:
           volumeMounts:
             - name: freshrss-config
               mountPath: /config
-            # FreshRSS favicon/content cache — kopia excluded it; re-fetched on demand.
+            # FreshRSS favicon/content cache, re-fetched on demand.
             - name: freshrss-app-cache
               mountPath: /config/www/freshrss/data/cache
           readinessProbe:

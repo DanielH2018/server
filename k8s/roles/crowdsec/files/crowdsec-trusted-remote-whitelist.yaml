@@ -14,4 +14,4 @@ whitelist:
   reason: "Trusted remote — operator's pinned VPN exit(s)"
   ip:
     - "87.249.134.18" # Mullvad multihop exit
-    - "68.235.46.141" # VPN exit, banned 2026-08-09 (TZULO, AS11878)
+    - "68.235.46.141" # VPN exit (TZULO, AS11878)

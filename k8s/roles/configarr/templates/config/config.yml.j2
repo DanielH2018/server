@@ -1,5 +1,5 @@
-# Configarr config — managed by Ansible (k8s/roles/configarr). DO NOT hand-edit
-# the rendered copy under containers/ — edit this template.
+# Configarr config, rendered from this template (k8s/roles/configarr). Edit the template, never
+# the rendered copy.
 #
 # SCOPE IS DELIBERATELY MINIMAL. The Sonarr "Anime" profile is the operator's own bespoke
 # scheme (52 scored "Anime Profile N_N_N" custom formats). We do NOT reproduce or manage
@@ -9,22 +9,18 @@
 # touches the bespoke scheme or its scores.
 #
 # Why this exists: NTRX advertised "BD Remux 1080p AVC" but shipped a long-GOP HEVC 10-bit
-# re-encode (Mushoku Tensei S2, 2026-07-16) -> Jellyfin buffering + slow seeks. Sonarr trusts
+# re-encode -> Jellyfin buffering + slow seeks. Sonarr trusts
 # the release TITLE at grab time, so only release-group reputation can stop a lying label.
 trashGuideUrl: https://github.com/TRaSH-Guides/Guides
 # configarr resolves the `include: - template:` entries below from the recyclarr config-templates
 # repo (the guide-backed WEB-1080p / HD Bluray + WEB profiles recyclarr v8 dropped from `include:`
-# but configarr still pulls). This replaces the retired recyclarr role's trash_id profiles.
+# but configarr still pulls).
 recyclarrConfigUrl: https://github.com/recyclarr/config-templates
-# PINNED 2026-08-08, and this is a hold rather than a preference. Upstream master moved to
-# 9faf65ff with `feat(radarr)!: convert to guide-backed templates`, which DELETED the entire
-# `includes/` tree — so all four template ids below are gone and every sync fails with
+# PINNED, and this is a hold rather than a preference. Upstream master (9faf65ff, `feat(radarr)!:
+# convert to guide-backed templates`) DELETED the entire `includes/` tree — so all four template
+# ids below are gone and every sync fails with
 # `ENOENT: ... scandir '/app/repos/recyclarr-config/sonarr/includes/custom-formats'`.
-#
-# 4ae377b is the last commit that still has them, and it is exactly where daniel-server's clone
-# already sat: the 2026-08-07 04:30 sync ran against this tree, so pinning reproduces the last
-# known-good run rather than inventing a new state. It was green only because that clone had not
-# fetched yet — nothing about the k3s port caused this.
+# 4ae377b is the last commit that still has them.
 #
 # EXIT CONDITION: the replacements are `web-1080p` (sonarr) and `hd-bluray-web` (radarr), in
 # upstream's new lean guide-backed format; the two `custom-formats` ids have no direct successor.
@@ -101,7 +97,7 @@ sonarr:
     base_url: http://sonarr:8989
     api_key: {{ sonarr_api_key }}
 
-    # Guide-backed WEB-1080p profile (ported from the retired recyclarr role). Syncs onto the
+    # Guide-backed WEB-1080p profile. Syncs onto the
     # existing "WEB-1080p" Sonarr profile by name — no duplicate. delete_unmanaged_custom_formats
     # stays OFF (default) so the 52 bespoke "Anime Profile N_N_N" CFs are never touched.
     quality_definition:
@@ -139,7 +135,7 @@ radarr:
     base_url: http://radarr:7878
     api_key: {{ radarr_api_key }}
 
-    # Guide-backed HD Bluray + WEB profile (ported from the retired recyclarr role). Syncs onto the
+    # Guide-backed HD Bluray + WEB profile. Syncs onto the
     # existing "HD Bluray + WEB" Radarr profile by name. No local CFs here — Radarr has no bespoke
     # scheme to protect, but delete_unmanaged stays OFF (default) for symmetry/safety.
     quality_definition:

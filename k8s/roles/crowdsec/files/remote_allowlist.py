@@ -63,15 +63,12 @@ NAMESPACE = "homelab"
 # Sighting window. The cron runs every 5 min; 6 min overlaps the previous run so a request on
 # the boundary is seen once by each rather than by neither.
 LOG_WINDOW = "6m"
-# An exit is exempt for a week after its last authenticated request. Sized from the incidents:
-# the same exit banned the operator on 2026-09-19 and again 2026-09-21, two days apart, and the
-# 2026-08-09 entry it replaced held for six weeks. The refresh threshold is half the TTL so a
-# daily-used exit costs one rewrite every 3.5 days, not one per run.
+# An exit is exempt for a week after its last authenticated request. The refresh threshold is
+# half the TTL so a daily-used exit costs one rewrite every 3.5 days, not one per run.
 TTL = timedelta(hours=168)
 REFRESH_BELOW = TTL / 2
-# The cap is the bound on the trade-off named in the module docstring. The operator ruled 16 on
-# 2026-11-05, after authenticated addresses filled a cap of 8 and it refused a new one. Hitting
-# it means the list needs reading, and the DOWN message lists the entries so that can be done.
+# The cap is the bound on the trade-off named in the module docstring. Hitting it means the
+# list needs reading, and the DOWN message lists the entries so that can be done.
 CAP = 16
 # The sidecar's initContainers copy both binaries into the shared `tools` emptyDir
 # (`templates/deployment.yaml.j2`).
@@ -128,7 +125,7 @@ def authenticated_clients(lines, routers):
         # Cloudflare appends the address it saw, so only the RIGHTMOST entry is not client-chosen.
         # From any other source forwardedHeaders has already dropped the header, leaving the
         # connection address. The crowdsecurity/traefik-logs parser takes the same entry, so
-        # this list holds the address CrowdSec bans (#2446).
+        # this list holds the address CrowdSec bans.
         host = (entry.get("ClientHost") or "").rsplit(",", 1)[-1].strip()
         if is_remote_client(host):
             seen.add(host)

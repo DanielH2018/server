@@ -1,6 +1,6 @@
 {#
   The configarr-health CronJob's identity. Its rules are the calls configarr_health.py makes
-  and nothing else (the H2 plan's *The *arr checks*):
+  and nothing else:
 
     get jobs -l app=configarr -o json   list on jobs.batch
     logs job/<name>                     get on jobs.batch, list on pods, get on pods/log

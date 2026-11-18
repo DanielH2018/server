@@ -3,8 +3,7 @@
 
 The `crowdsec-home-ips` CronJob runs this on daniel-box every few minutes with `hostNetwork:
 true`, because the pod network is IPv4-only and only the host's own network namespace holds
-the home IPv6 /64 (the operator's ruling of 2026-10-18 on #5701, recorded in the H2 plan's
-*Open questions* 2). It runs no `cscli` and execs into nothing. The `crowdsec-jobs` sidecar of
+the home IPv6 /64. It runs no `cscli` and execs into nothing. The `crowdsec-jobs` sidecar of
 the LAPI pod reads the ConfigMap and syncs the `home-ips` allowlist from it
 (`home_allowlist.py`).
 
