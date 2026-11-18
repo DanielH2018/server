@@ -440,7 +440,7 @@ def test_role_health_all_present_is_clean():
 
 
 def test_role_health_prints_a_row_only_for_the_failed_workload():
-    """A healthy workload is in the count, not a row of its own (#7896)."""
+    """A healthy workload is in the count, not a row of its own."""
     text, code = health.format_role_health(
         "observability",
         [

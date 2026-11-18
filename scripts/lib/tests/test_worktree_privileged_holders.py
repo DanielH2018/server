@@ -3,7 +3,7 @@
 The helper itself, `/usr/lib/homelab/worktree-holders`, is tested in
 `hosts/components/worktree-holders/tests/test_worktree_holders.py`, which also drives this
 caller over a real socket. These tests cover when the caller asks, which root it asks about,
-how a failed connection is read, and how it reads the answer (#4170, #4021, #4297).
+how a failed connection is read, and how it reads the answer.
 
 Run: uv run pytest scripts/lib/tests/test_worktree_privileged_holders.py
 """
@@ -44,7 +44,7 @@ def _ask(tmp_path: Path, ask):
 
 
 def test_the_helper_sees_another_uid_outside_this_slice_is_flagged(tmp_path):
-    # #4170: `systemd-run --uid=claude --working-directory=<tree>` lands in claude's slice,
+    # `systemd-run --uid=claude --working-directory=<tree>` lands in claude's slice,
     # where the unprivileged scan cannot look. The helper reads it as root.
     root = tmp_path / "worktrees"
     tree, sibling = root / "a", root / "b"
@@ -115,7 +115,7 @@ def test_no_socket_a_group_that_shuts_this_uid_out_or_a_tree_outside_its_root_fa
 
 
 def test_the_caller_asks_about_the_root_the_helper_maps_it_to_is_flagged(tmp_path):
-    # #4021: the agent user's root is its own clone, /var/lib/claude/server, which the root map
+    # The agent user's root is its own clone, /var/lib/claude/server, which the root map
     # names. Asking only under ~/server/.claude/worktrees could disagree with the root the
     # helper scans, and then an empty answer would read as "no holder".
     clone = tmp_path / "clone" / ".claude" / "worktrees"

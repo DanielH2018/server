@@ -1,10 +1,10 @@
 """A Failed pod the weekly reboot leaves in an add-on namespace has something that deletes it.
 
-#6367 gave `homelab` two cleanups: `ttlSecondsAfterFinished` on every in-window CronJob
+`homelab` has two cleanups: `ttlSecondsAfterFinished` on every in-window CronJob
 (`test_reboot_window_cronjobs_age_out.py`) and the `dri-admission-reaper` CronJob, whose Role
 grants only in `homelab`. The add-on namespaces run Jobs this repo does not render, so neither
 reaches them: k3s's helm-install Jobs in `kube-system` and Longhorn's backup Jobs in
-`longhorn-system` (#6460). A pod the reboot fails there stays Failed, because the
+`longhorn-system`. A pod the reboot fails there stays Failed, because the
 controller-manager's `terminated-pod-gc-threshold` is 12500 pods.
 
 Covered means the render holds a CronJob whose ServiceAccount may `list` and `delete` pods in
@@ -21,7 +21,7 @@ Run: uv run pytest tests/k8s/test_failed_pods_outside_homelab_have_a_cleanup.py
 import pytest
 from _k8s_render import rendered_docs
 
-# The add-on namespaces whose Job pods no rendered TTL or grant reaches (#6460).
+# The add-on namespaces whose Job pods no rendered TTL or grant reaches.
 UNREAPED_NAMESPACES = ("kube-system", "longhorn-system")
 
 

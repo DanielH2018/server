@@ -144,14 +144,11 @@ def test_the_scan_finds_keys_across_most_configmaps() -> None:
     """Guard the guard: a broken scan reports no keys and every assertion below vacuously passes."""
     templates = len(cases())
     keys = sum(len(k) for _, _, _, k in cases())
-    # Measured: 51 templates, 321 keys; 290 keys since monitor-bridge's 44 push tokens moved
-    # into a loop (#3659), and 154 since the two bridges' 162 settings left their Secrets for
-    # the Deployment's `env` (#5574). The floors sit just under that, high enough
-    # to catch the two ways this scan can lose coverage silently: stopping at a
-    # multi-line `{# ... #}` header drops it to 49/312, and stopping at the first column-0
-    # `{{ lookup(...) }}` line drops home-assistant from ten checked keys to one. Both still
-    # leave the great majority of templates passing, which is why the floor is close to the
-    # measured value rather than a round number well below it.
+    # The floors sit just under the measured counts, high enough to catch the two ways this scan
+    # can lose coverage silently: stopping at a multi-line `{# ... #}` header drops it to
+    # 49/312, and stopping at the first column-0 `{{ lookup(...) }}` line drops home-assistant
+    # from ten checked keys to one. Both still leave most templates passing, so a round number
+    # well below the measured value would miss them.
     assert templates >= 50, (
         f"only {templates} templates carry scanned keys — the source scan broke"
     )

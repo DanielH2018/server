@@ -1,4 +1,4 @@
-"""A dead orchestrator's claims stay live while a batch it launched is still running (#4601).
+"""A dead orchestrator's claims stay live while a batch it launched is still running.
 
 Every fixture holds the claim under an orchestrator worktree whose lock owner is dead, clean
 and merged: `classify` calls it REMOVABLE, so the worktree alone reads every claim stale. The
@@ -128,7 +128,7 @@ def test_claim_reads_the_batches_once_for_a_whole_batch_of_stale_claims(capsys):
 
 def test_claims_names_a_holder_the_batch_did_not_claim_under(capsys):
     # A stale claim by another worktree on an issue a running batch works stays held, but the
-    # row must not read as if the batch held it (#4688).
+    # row must not read as if the batch held it.
     issue = make_issue(1132, comments=[claim_comment("worktree-gone", None, "t")])
     tools, _ = build_tools(
         Fakes(issues=[issue], worktree_facts=DEAD_ORCH_FACTS, batch_holds=RUNNING)

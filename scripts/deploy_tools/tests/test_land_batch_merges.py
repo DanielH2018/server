@@ -200,7 +200,7 @@ def test_a_holder_that_does_not_merge_after_its_batch_gets_a_full_run(batch_of):
 
 def test_a_member_merges_after_a_batch_merge_that_changed_landing_code(batch_of):
     ln, hub, _ = batch_of(drafts=("7", "9"))
-    # The holder's own PR changes a module the landing runs, as PR 8550 did on 2026-11-14.
+    # The holder's own PR changes a module the landing runs.
     ln.tools = replace(
         ln.tools,
         stale_code=lambda base: ["scripts/lib/exit_codes.py"] if hub.merged else [],

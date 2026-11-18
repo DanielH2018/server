@@ -7,7 +7,7 @@ the comparison, the reporting and the refusals, and proves nothing about Flux: C
 `flux_roundtrip` job runs both subcommands against the pinned CLI.
 
 Most of the module's time is the real renderer, so each tag set renders once per module
-through `_render_sides` (#5582).
+through `_render_sides`.
 
 Run: uv run pytest scripts/renderer/tests/test_renderer_roundtrip.py
 """
@@ -39,8 +39,7 @@ from renderer.renderer_lib.roundtrip import (
 )
 
 # The scalar the pinned CLI v2.9.6 printed for each resolver corpus value, built as a
-# standalone `stringData` field; None where the build failed. Measured on daniel-server on
-# 2026-10-13.
+# standalone `stringData` field; None where the build failed.
 MEASURED = {
     "0123": "83",
     "true": "true",
@@ -245,9 +244,7 @@ def test_a_standalone_use_outside_the_map_is_flagged_in_the_0123_pass(
 def test_observability_with_its_checksum_annotations_compared_is_clean(
     flux_on_path, tmp_path, capsys
 ):
-    # #4952: Prometheus's `checksum/config` hashed a config holding `${domain}`, so the round
-    # trip left the five checksum annotations out. With `domain` published, no hashed config
-    # holds a placeholder, and the round trip compares every annotation.
+    # No hashed config holds a placeholder, so the round trip compares every checksum annotation.
     out = tmp_path / "rt"
     assert _main("roundtrip", "--out", str(out), "--role", "observability") == 0
     assert capsys.readouterr().out.count(" 0 differences, ") == 2
@@ -366,7 +363,7 @@ def test_roundtrip_drops_one_document_per_sops_manifest_entry_is_clean(
     # names ssh-key-secret.yaml, qbittorrent's names mullvad-account-secret.yaml and
     # authelia's names oidc-jwk-secret.yaml. Placeholder mode emits none of them, so the stub
     # side drops all four too and counts one Secret for each. Nothing else is left out:
-    # authelia-config, which held the OIDC key until R2's PR 7, is compared like any other.
+    # authelia-config is compared like any other.
     out = tmp_path / "rt"
     entries = {
         "authelia": "oidc-jwk-secret.yaml",

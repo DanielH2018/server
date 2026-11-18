@@ -1,4 +1,4 @@
-"""The age bootstrap case's verdicts, without a container (#8041).
+"""The age bootstrap case's verdicts, without a container.
 
 `validate_lib/bootstrap_age_case.py` runs only in CI's `host_packages` job, which has Docker.
 This holds what it decides from a container's output: a green run passes, a red run fails, and a

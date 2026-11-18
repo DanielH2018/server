@@ -7,12 +7,11 @@ timer fires, the timer's `RandomizedDelaySec`, and a run that takes the whole
 `homelab-updater.timer` with the host package's drop-in over it, both as the host renderer
 emits them, so a drop-in that outgrows a limit fails here before the rule pages a healthy host.
 A host that ships `homelab-docker-engine.timer` also needs the engine run's mask: the run can
-hold the updater masked for its whole `TimeoutStartSec`, and no updater fires until it ends
-(#6613).
+hold the updater masked for its whole `TimeoutStartSec`, and no updater fires until it ends.
 
 DockerEnginePinUnapplied's window is sized from the same schedule and the Pi's engine timer, so
 a moved engine window or a longer engine run fails here before that rule pages a pin that is
-still waiting (#6607).
+still waiting.
 
 Run: uv run pytest scripts/renderer/tests/test_renderer_host_update_limits.py
 """

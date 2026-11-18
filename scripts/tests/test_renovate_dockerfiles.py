@@ -29,11 +29,10 @@ from _renovate import (
 
 
 # Renovate's BUILT-IN dockerfile manager's default managerFilePatterns, copied verbatim from source
-# (lib/modules/manager/dockerfile/index.ts). The fleet's Dockerfile base pins are tracked ONLY by
-# that manager (no custom manager covers them), so a build file renamed/added outside these shapes
-# drops out of update tracking with no signal. NB the 2nd pattern's `[^/]*$` matches suffixed names
-# too (`Dockerfile-runners.j2` IS visible), so this guard reflects exactly what Renovate scans;
-# upstream is `[Cc]ontainer`.
+# (lib/modules/manager/dockerfile/index.ts). Only that manager tracks the fleet's Dockerfile base
+# pins, so a build file outside these shapes drops out of update tracking with no signal. The 2nd
+# pattern's `[^/]*$` matches suffixed names (`Dockerfile-runners.j2` IS visible); upstream is
+# `[Cc]ontainer`.
 DOCKERFILE_MANAGER_FILE_RES = [
     re.compile(r"(^|/|\.)([Dd]ocker|[Cc]ontainer)file$"),
     re.compile(r"(^|/)([Dd]ocker|[Cc]ontainer)file[^/]*$"),
@@ -121,13 +120,10 @@ def test_no_built_image_floats_on_an_unpinned_base(tracked: list[str]) -> None:
             # Strip the registry host before looking for a tag, so the `:5000` in a
             # `localhost:5000/foo` host:port is never mistaken for one.
             tag = ref.rsplit("/", 1)[-1].partition(":")[2]
-            # A tag naming a LINE rather than a release still moves — `python:3.14-slim`
-            # re-points at every 3.14.x, `debian:bookworm-slim` at every point release. Renovate
-            # can only offer a TAG change for those (3.14 -> 3.15), never the movement inside
-            # one, so the tag reads pinned while the base drifts. A release tag is the case
-            # where the tag alone suffices, and two dots is what separates the two:
-            # `2.35.4` and `4.133.0-ls358` are releases, `3.14-slim` / `3.22` / `bookworm-slim`
-            # are lines. A line tag must therefore carry a digest as well.
+            # A tag naming a LINE (`python:3.14-slim`, `debian:bookworm-slim`) re-points at every
+            # point release, and Renovate offers only a TAG change for it, so the tag reads pinned
+            # while the base drifts. Two dots separates a release (`2.35.4`, `4.133.0-ls358`)
+            # from a line, and a line tag must also carry a digest.
             if not tag or tag == "latest" or tag.count(".") < 2:
                 floating.append(f"{f}: FROM {ref}")
     assert not floating, (
@@ -144,9 +140,9 @@ def test_n8n_base_pins_in_lockstep() -> None:
     The two images are version-coupled: the runners execute Code-node tasks on behalf of the
     n8n they serve, and the runners Dockerfile pins pnpm to the base's own store version. A
     skew does not fail the build — it surfaces at RUNTIME as every Code-node workflow timing
-    out while both pods stay Ready, which is precisely the 2026-08-06 `@n8n/di` failure that
-    file's header records. Renovate groups them into one PR (the "n8n (manual — … lockstep:
-    app + task runners)" packageRule); this asserts the coupling actually held.
+    out while both pods stay Ready, which is precisely the `@n8n/di` failure. Renovate groups
+    them into one PR (the "n8n (manual — … lockstep: app + task runners)" packageRule); this
+    asserts the coupling actually held.
 
     It does NOT see which way the version moved — both tags are `stable`, so a lockstep
     downgrade compares equal. That is the ledger guard's job, below.
@@ -181,20 +177,13 @@ def test_n8n_base_pins_in_lockstep() -> None:
 
 # ── the n8n base-pin ledger: a channel pin's version has to appear SOMEWHERE ─────────────
 #
-# The lockstep guard above compares the two TAGS, and both tags are `stable`, which never
-# moves. So it passes equally on a lockstep DOWNGRADE (the 2.37.10 digests to the 2.37.9
-# digests). Nothing in the repo read the version behind either digest; a human did, by hand.
+# The lockstep guard above compares the two TAGS, and both are `stable`, so it passes equally on
+# a lockstep DOWNGRADE. The ledger (k8s/roles/n8n/base-pin-history.tsv) records the version
+# behind each digest, appended once per bump, and these guards tie it to the live FROMs and to
+# each other. The check is offline because `-p leakguard` fails any test that reaches the network.
 #
-# The ledger (k8s/roles/n8n/base-pin-history.tsv) is where the version lands,
-# appended once per bump. These guards tie it to the live FROMs and to each other. The check
-# is deliberately offline: `-p leakguard` in pyproject's addopts fails any test that reaches
-# the network, so resolving a digest against the registry is not available to the suite, and
-# a version recorded at bump time is the alternative that needs no transport.
-#
-# THE HOLE, named rather than engineered around: editing the ledger's last line in place,
-# instead of appending, passes both guards while hiding the move. That is a deliberate
-# rewrite, not the mechanical digest bump this is aimed at, and closing it would mean reading
-# the merge base out of git — which a shallow CI checkout may not have.
+# THE HOLE: editing the ledger's last line in place, instead of appending, passes both guards.
+# Closing it would mean reading the merge base out of git, which a shallow CI checkout may lack.
 
 
 def _live_digest(dockerfile: str, image: str) -> str:
@@ -334,7 +323,7 @@ def test_shellcheck_py_pins_in_lockstep() -> None:
     )
 
 
-# Where the CI toolchain pins live since #3733. Every workflow and local action is scanned, so a
+# Where the CI toolchain pins live. Every workflow and local action is scanned, so a
 # copy that reappears in a workflow is compared too, but the action must hold exactly one of each:
 # that is the member a scan finding nothing would otherwise pass over.
 SETUP_ACTION = ".github/actions/setup/action.yml"
@@ -348,7 +337,7 @@ def _ci_files() -> dict[str, str]:
 
 
 def ci_pins(key: str, files: dict[str, str]) -> list[tuple[str, str]]:
-    """(file, version) for EVERY quoted `<key>: "X"` in each file, not just the first (#3731)."""
+    """(file, version) for EVERY quoted `<key>: "X"` in each file, not just the first."""
     return [
         (name, version)
         for name, text in files.items()
@@ -361,7 +350,7 @@ def _minor(v: str) -> str:
 
 
 def test_a_drifted_later_copy_is_found() -> None:
-    """The #3731 red proof: a second copy that differs must show up as a second version."""
+    """A red proof: a second copy that differs must show up as a second version."""
     files = {
         "ci.yml": 'a:\n  python-version: "3.14.7"\nb:\n  python-version: "3.14.6"\n',
         "smoke.yml": 'c:\n  python-version: "3.14.7"\n',

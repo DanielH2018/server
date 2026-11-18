@@ -2,8 +2,7 @@
 
 WHY. AIDE 0.18 has no default config path. A bare `aide --check` exits on its first line with
 `ERROR: missing configuration`, and the cron piped that line to `logger -t aide`, where nothing
-alerted on it. Every host ran the check that way until #4591 and checked nothing. Since #4594 the
-cron runs aide-check.sh, which pushes that exit DOWN, but a check that never reads its config
+alerted on it. aide-check.sh pushes that exit DOWN, but a check that never reads its config
 still checks nothing.
 
 Run: uv run pytest hosts/tests/test_aide_check_names_its_config.py

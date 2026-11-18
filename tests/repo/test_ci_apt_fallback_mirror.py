@@ -1,7 +1,7 @@
 """Every apt install on a CI runner happens after the setup action adds its fallback mirror.
 
 The runner's apt sources list only ubuntu.com hosts, so a DNS outage there failed all six pytest
-shards at their `age` install (#7957). `.github/actions/setup` appends a kernel.org mirror as
+shards at their `age` install. `.github/actions/setup` appends a kernel.org mirror as
 its first step, which helps only a step that runs after it.
 
 Run: uv run pytest tests/repo/test_ci_apt_fallback_mirror.py

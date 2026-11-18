@@ -6,8 +6,7 @@ Not a test module itself.
 
 These scripts are exercised for real rather than pattern-matched, because what breaks is
 shell logic and line formatting, neither of which a textual guard can see. The render goes
-through `_shell_render`, so what runs here cannot differ from what the shellcheck gate lints
-(#3178). Only two absolute paths are repointed at temp files -- the check library it sources,
+through `_shell_render`, so what runs here cannot differ from what the shellcheck gate lints. Only two absolute paths are repointed at temp files -- the check library it sources,
 and the health log it appends to. Every decision the script makes runs unmodified. The scripts
 push nothing since M6 batch B5's Cutover-2, so the verdict a run reports is read back from the
 health log line it appends.

@@ -1,6 +1,6 @@
-"""The rendered `builder` and `failure-alert` components in daniel-box's package (H7.41b).
+"""The rendered `builder` and `failure-alert` components in daniel-box's package.
 
-Until H7.41b the `homelab_builder` role installed the builder, the signer and the apt repository.
+The `homelab_builder` role installed the builder, the signer and the apt repository.
 These tests hold what the move carries: the sandbox lists of the plan's *The builder and the
 repository*, the credential that replaces the token in the settings, the interpreter install and
 the one `ExecStart=` that sets `UV_PYTHON_DOWNLOADS=never`, the fingerprint script, the shared

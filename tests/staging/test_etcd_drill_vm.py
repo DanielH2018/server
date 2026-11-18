@@ -102,7 +102,7 @@ def test_the_drill_guest_mac_matches_its_dhcp_reservation():
 
 
 def test_the_staging_network_pins_the_live_uuid():
-    """`net-define` under any other UUID refuses on the name, which failed an apply (#1175)."""
+    """`net-define` under any other UUID refuses on the name, which failed an apply."""
     net = ET.fromstring(_render("staging-network.xml.j2"))
     assert net.findtext("uuid") == "255b2bc3-f6fa-4a2f-9d0c-8c14507eb82a"
 

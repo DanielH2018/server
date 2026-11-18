@@ -74,10 +74,8 @@ def test_no_custom_manager_tracks_the_retired_compose_plane() -> None:
     pin nothing reads.
 
     The Pi's images ARE tracked, by the manager over
-    hosts/components/pi-compose/services/*/compose.yaml.j2. Until H5 the operator kept them
-    untracked, because the Pi had no deploy path a merged bump could reach. On 2026-10-29 the
-    operator ruled that Pi digest bumps auto-deploy: they automerge like an eligible k8s digest
-    bump, and the Pi's updater health-gates the install.
+    hosts/components/pi-compose/services/*/compose.yaml.j2. Pi digest bumps auto-deploy: they
+    automerge like an eligible k8s digest bump, and the Pi's updater health-gates the install.
     scripts/tests/test_renovate_pi_compose_pins.py guards that manager and its rules.
     """
     offenders = []
@@ -183,7 +181,7 @@ def test_control_plane_version_pins_are_tracked() -> None:
 
 
 def test_coredns_allowed_versions_skip_the_upstream_stray_tags() -> None:
-    """coredns/coredns carries stray tags `v002` ... `v011` beside its releases (#3087).
+    """coredns/coredns carries stray tags `v002` ... `v011` beside its releases.
 
     Renovate would rank `v011` above 1.14.7 and raise a PR whose download URL 404s and whose paired
     digest stays at 1.14.7. Asserted on the pattern rather than on a version bound, because a
@@ -200,14 +198,10 @@ def test_coredns_allowed_versions_skip_the_upstream_stray_tags() -> None:
     assert not [t for t in ("v002", "v005", "v011") if allowed.fullmatch(t)]
 
 
-# Images BUILT by this repo and pushed to the node-local registry, not pulled from an upstream
-# registry — so there is no upstream ref for Renovate to compare against and no version for it to
-# offer. Exempt by variable name rather than by pattern, so adding one is a deliberate act with a
-# reviewer looking at it, the same rule the bridge allow-lists use.
-#
-# These are NOT untracked in practice: what actually moves is the FROM line in the Dockerfile each
-# is built from, and Renovate's built-in dockerfile manager already watches those
-# (test_every_dockerfile_is_renovate_visible asserts it sees them).
+# Images BUILT by this repo and pushed to the node-local registry have no upstream ref for
+# Renovate to compare against. Exempt by variable name rather than by pattern, so adding one is a
+# deliberate act. The FROM line of each Dockerfile is what moves, and Renovate's built-in
+# dockerfile manager watches it (test_every_dockerfile_is_renovate_visible).
 REGISTRY_BUILT_IMAGES = {
     "n8n_k8s_image",  # k8s/roles/n8n/templates/Dockerfile.j2
     "n8n_k8s_runners_image",  # k8s/roles/n8n/templates/Dockerfile-runners.j2
@@ -252,15 +246,10 @@ def test_every_k8s_role_image_is_renovate_tracked() -> None:
         re.compile(_to_python_regex(ms)) for ms in _k8s_image_manager()["matchStrings"]
     ]
     disabling_rules = _disabling_currentvalue_rules(_PACKAGE_RULES)
-    # group_vars/all.yml is included deliberately: crowdsec_k8s_image lives in group_vars, and
-    # a role-defaults-only glob cannot see it — so the test written to catch an untracked
-    # cluster image would be structurally blind to the one image (the WAF core) whose staleness
-    # is a security problem.
-    #
-    # The registry-gc component's defaults are included for the same reason:
-    # registry_k8s_image and registry_k8s_netpol_probe_image
-    # (hosts/components/registry-gc/defaults/main.yml) sit outside the k8s role defaults, so a
-    # role-defaults-only glob would leave them matched by no manager and by no test.
+    # group_vars/all.yml is included because crowdsec_k8s_image lives there, outside the role
+    # defaults. The registry-gc component's defaults are included for the same reason:
+    # registry_k8s_image and registry_k8s_netpol_probe_image sit outside the role defaults.
+    # A role-defaults-only glob would leave them matched by no manager and by no test.
     defaults = sorted((_REPO / "k8s/roles").glob("*/defaults/main.yml"))
     assert defaults, "no k8s role defaults found"
     defaults.append(_REPO / "hosts/components/registry-gc/defaults/main.yml")
@@ -337,14 +326,12 @@ def test_disabling_currentvalue_rule_scoped_to_its_files() -> None:
     )
 
 
-# Every `image:` line in a k8s deployment template must come from a Jinja variable, not a
-# literal — a literal bypasses the k8s-defaults customManager above entirely (it only scans
-# defaults/main.yml, never templates/*.j2), so it would age with NO update signal at all, worse
-# than even the `latest` disable bug. One exception below; every other k8s template's image is a var. Add
-# an entry here only as a deliberate, reviewed exception; it defeats the point otherwise.
-# `rancher/k3s-upgrade` is the one exception (H6.1b): a SUC Plan's `upgrade.image` names the
-# repository alone, and SUC appends the Plan's `version` as the tag, so the pin that ages is
-# `k3s_version`, which an annotation tracks (ADR-0025).
+# Every `image:` line in a k8s deployment template must come from a Jinja variable: a literal
+# bypasses the k8s-defaults customManager (it only scans defaults/main.yml, never templates/*.j2)
+# and ages with no update signal. Add an entry only as a deliberate, reviewed exception.
+# `rancher/k3s-upgrade` is the one exception: a SUC Plan's `upgrade.image` names the repository
+# alone, and SUC appends the Plan's `version` as the tag, so the pin that ages is `k3s_version`,
+# which an annotation tracks (ADR-0025).
 IMAGE_LITERAL_ALLOWLIST: frozenset[str] = frozenset({"rancher/k3s-upgrade"})
 
 
@@ -376,7 +363,7 @@ def test_no_literal_image_lines_in_k8s_templates() -> None:
     [
         ("prek", ".github/actions/setup/action.yml", "pypi"),
         # python is absent on purpose: its minor and major bumps resolve to the cross-manager
-        # `python (manual` group, held by test_renovate_python_group.py (#5479).
+        # `python (manual` group, held by test_renovate_python_group.py.
         ("node", ".github/actions/setup/action.yml", "node-version"),
         ("vale-cli/vale", ".github/workflows/ci.yml", "github-releases"),
         ("goreleaser/nfpm", ".github/workflows/ci.yml", "github-release-attachments"),
@@ -440,7 +427,7 @@ def _pin_digest_rule_for(path: str) -> dict | None:
 def test_every_k8s_image_file_gets_pin_digests_from_a_package_rule(
     tracked: list[str],
 ) -> None:
-    """The top-level `pinDigests: true` does not reach a regex-managed pin (#3281).
+    """The top-level `pinDigests: true` does not reach a regex-managed pin.
 
     Renovate's regex custom manager ships `defaultConfig = { pinDigests: false }`, and a
     manager default is merged over the repository's top-level options, so only a packageRule

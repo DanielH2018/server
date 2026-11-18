@@ -41,7 +41,7 @@ def _records(tmp_path):
     )
     _write(tmp_path / "claude", "1-20261010T130000Z.json", red)
     _write(tmp_path / "operator", "2-20261010T140000Z.json", plain)
-    # Written before #4214's fields existed, and before the --since cut.
+    # Written without the newer fields, and before the --since cut.
     (tmp_path / "operator" / "3-20260901T000000Z.json").write_text(
         json.dumps({"batch": "3", "outcome": "pr", "costs": {"implement": 1.0}})
     )

@@ -188,7 +188,7 @@ def test_a_red_phase_may_stop_on_its_json(tmp_path):
 def test_the_worktrees_copy_stands_down_while_the_pipeline_runs_its_own_and_no_other_does(
     tmp_path,
 ):
-    """The worktree's copy and the pipeline's snapshot both run on a server batch (#3794)."""
+    """The worktree's copy and the pipeline's snapshot both run on a server batch."""
     root = _fanout_tree(tmp_path / "wt")
     in_tree = root / ".claude" / "hooks" / "fanout-stop.py"
     snapshot = tmp_path / "state" / ".claude" / "hooks" / "fanout-stop.py"

@@ -5,7 +5,7 @@
 the helper the package installs. If those drift apart, every caller falls back to the
 unprivileged scan, or every removal is refused. The root map both the helper and the caller
 read names each user's worktree root, and it must name every agent user a host package
-declares (#4295, #6831). Every host package retires the sudo grant the socket replaced (#4297).
+declares. Every host package retires the sudo grant the socket replaced.
 
 Both hosts get all of it from the `worktree-holders` component (H7.61, H7.62).
 
@@ -101,7 +101,7 @@ def package(request) -> tuple[str, host_mode.Package]:
 
 
 def test_every_claude_host_package_retires_the_old_sudoers_rule_is_clean(package):
-    # #4297: a host that had the sudo grant keeps a NOPASSWD root rule unless something
+    # A host that had the sudo grant keeps a NOPASSWD root rule unless something
     # deletes it, and no setup task does since H7.60.
     assert _retires_the_old_sudoers_rule(package[1].legacy)
 
@@ -158,7 +158,7 @@ def test_the_packaged_socket_makes_its_group_before_systemd_binds(package):
 
 
 def test_the_packaged_root_map_names_the_operator_and_the_package_agents(package):
-    # #6831: each host's map matches its package's `users:` entry. The map is where the service
+    # Each host's map matches its package's `users:` entry. The map is where the service
     # looks a caller up, so an agent missing from it is refused every scan.
     host, rendered = package
     packaged = json.loads(_text(rendered, WORKTREE_HOLDER_ROOTS))

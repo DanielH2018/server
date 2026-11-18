@@ -1,4 +1,4 @@
-"""`probe.py health coredns|longhorn`: the plumbing checks H1 moves off the host (#5923, #5924).
+"""`probe.py health coredns|longhorn`: the plumbing checks H1 moves off the host.
 
 Each check reads through an injected `read` (kubectl's `-o json` document, or None for a
 NotFound) and, for CoreDNS, an injected resolver, so no case needs a cluster or a dig binary.
@@ -54,7 +54,7 @@ class _Reader:
     """A `read` that answers from {(resource, name): doc}, None for anything else.
 
     Like `kubectl get -o json`, it strips `metadata.managedFields` unless the argv carries
-    `--show-managed-fields`, so a read that drops the flag loses the Corefile write time (#5935).
+    `--show-managed-fields`, so a read that drops the flag loses the Corefile write time.
     """
 
     def __init__(self, objects):
@@ -204,7 +204,7 @@ def test_a_settled_corefile_is_dug_at_once_and_is_clean():
 
 
 def test_a_fresh_corefile_is_waited_out_before_the_first_dig():
-    """Written 10s ago: a dig now could be answered by the previous Corefile (#5929 review)."""
+    """Written 10s ago: a dig now could be answered by the previous Corefile."""
     resolve = _Answers(**_RESOLVING)
     failures, notes = _coredns(
         _coredns_objects(managed=[_written(600), _written(10)]), resolve

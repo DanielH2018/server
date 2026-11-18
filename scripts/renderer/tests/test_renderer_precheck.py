@@ -1,4 +1,4 @@
-"""The role-owned kind that applies before `<tag>`: `templates/precheck/` into `<tag>-precheck` (#5719).
+"""The role-owned kind that applies before `<tag>`: `templates/precheck/` into `<tag>-precheck`.
 
 A role ships a pre-apply check, such as pihole's sibling guard, as `templates/precheck/`. The
 renderer writes it to `cluster/<tag>-precheck/` and its own Kustomization, which `<tag>`
@@ -151,7 +151,7 @@ def test_a_rendered_precheck_directory_applies_before_its_tag_and_passes_check_b
     assert bundle_census.report(out, [TAG]) == FAILED
 
 
-# -- the ordering (D4.2's rules, applied to the new kind) -------------------------------------
+# -- the ordering (D4.2's rules, applied to this kind) -------------------------------------
 
 TIMEOUT = "600s"
 CONFIGMAP = "kind: ConfigMap\nmetadata:\n  name: x\n  namespace: homelab\n"

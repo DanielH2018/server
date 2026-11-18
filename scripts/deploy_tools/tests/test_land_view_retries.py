@@ -1,4 +1,4 @@
-"""`Landing.view` retries a transient `gh` read failure before it refuses the landing (#5503).
+"""`Landing.view` retries a transient `gh` read failure before it refuses the landing.
 
 Four landings were refused from 2026-10-15 to 2026-10-17 on one GraphQL i/o timeout each. A
 timeout or a 5xx is retried, three attempts in all, with a 5s and then a 15s backoff. A 4xx is
@@ -17,7 +17,7 @@ from deploy_tools.land_lib.pr_json import parse_file
 from lib import gh_rate_limit
 from lib.proc_testing import fake_bin, path_with
 
-# What gh exits with when GitHub's GraphQL endpoint does not answer: the shape #5296 logged.
+# What gh exits with when GitHub's GraphQL endpoint does not answer.
 IO_TIMEOUT = subprocess.CalledProcessError(
     1,
     "gh",
@@ -159,7 +159,7 @@ RATE_LIMITED = subprocess.CalledProcessError(
 
 
 def test_a_rate_limited_read_waits_and_continues(landing):
-    """The 2026-11-11 refusal: a rate-limit 403 waits instead of refusing the landing (#7993)."""
+    """The 2026-11-11 refusal: a rate-limit 403 waits instead of refusing the landing."""
     ln, calls = landing()
     attempts = _reads(ln, [RATE_LIMITED, ANSWER])
     assert _view_or_fail(ln) == ANSWER
@@ -184,7 +184,7 @@ GRAPHQL_RATE_LIMITED = subprocess.CalledProcessError(
 def test_a_read_refused_by_the_spent_graphql_quota_waits_and_continues(
     landing, monkeypatch, tmp_path, capsys
 ):
-    """The 2026-11-14 refusals of PR 8699: GraphQL's message says "already exceeded" (#8708)."""
+    """GraphQL's message says "already exceeded"."""
     # A `gh` that reports no reset, so the wait is the fixed fallback rather than the clock's.
     monkeypatch.setenv("PATH", path_with(fake_bin(tmp_path, gh="exit 0\n")))
     ln, calls = landing()

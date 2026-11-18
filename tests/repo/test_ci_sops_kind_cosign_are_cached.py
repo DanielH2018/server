@@ -1,8 +1,7 @@
-"""Every CI job that fetches sops, kind or cosign restores it from a cache keyed on its pin (#7781).
+"""Every CI job that fetches sops, kind or cosign restores it from a cache keyed on its pin.
 
-On 2026-11-09 PR #7780's CI run failed three jobs on GitHub release-host 504s: the bootstrap
-drill's `Install sops, age and kind` step curled both binaries uncached with a 5x5s retry
-window, and the flux-deletion drill's `sigstore/cosign-installer` fetched cosign the same way.
+A GitHub release-host 504 fails any job that fetches a binary uncached with a short retry
+window, so each fetch is cached.
 Each fetch takes the shape `test_ci_flux_cli_is_cached.py` holds the flux CLI to: an
 `actions/cache` step keyed on the pin, a curl only on a miss with nfpm's `--retry-all-errors`
 window, and a `sha256sum -c` against the pin on every run. cosign leaves its installer action
@@ -46,7 +45,7 @@ FETCHES = (
     ("cosign", "promote.yml", "promote"),
     ("cosign", "prune-artifacts.yml", "prune"),
 )
-# ci.yml's two jobs cached sops and kind under #7693.
+# ci.yml's two jobs already cache sops and kind.
 UNCACHED = tuple(f for f in FETCHES if f[1] != "ci.yml")
 # The drills already check sops and kind against their pins.
 UNCHECKED = tuple(f for f in FETCHES if f[0] == "cosign")

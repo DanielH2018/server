@@ -126,7 +126,7 @@ def test_the_session_runs_as_its_own_user_in_its_own_clone() -> None:
 
 
 def test_the_runner_runs_as_the_controller_with_its_own_lock() -> None:
-    """dotfiles#967's I1: the controller runs the runner; the session's group lets it read
+    """The controller runs the runner; the session's group lets it read
     what the session writes into the exchange."""
     unit = render(UNIT, MOVED)
     assert directive(unit, "User") == [CTL_USER]
@@ -191,7 +191,7 @@ def test_the_unit_hides_what_another_local_user_could_still_read(
 def test_the_session_holds_only_the_read_token_and_the_controller_the_write_one() -> (
     None
 ):
-    """dotfiles#967's I1: the write token never reaches the session's environment."""
+    """The write token never reaches the session's environment."""
     # fact: .claude/skills/renovate-prs/SKILL.md#4. Finish the incomplete ones in a worktree
     session = render("session.env.j2", MOVED)
     assert f"\nGH_TOKEN={GH_READ_SENTINEL}\n" in session
@@ -398,7 +398,7 @@ def test_the_project_guard_still_denies_what_it_should(monkeypatch) -> None:
 def test_land_sh_ends_its_landing_before_the_lander_script_kills_it() -> None:
     """land_renovate_pr.py's LAND_TIMEOUT_S counts from land.sh's start, as LAND_DEADLINE does.
 
-    The reboot window can add LAND_WINDOW_GRACE to the promotion wait (#5457), so the script's
+    The reboot window can add LAND_WINDOW_GRACE to the promotion wait, so the script's
     kill covers both.
     """
     script = (COMPONENT / "files" / "land_renovate_pr.py").read_text()
@@ -423,7 +423,7 @@ SCRIPT_OVERHEAD_S = 60
 
 
 def test_the_lock_wait_and_the_landing_both_fit_inside_the_units_timeout() -> None:
-    """systemd counts the flock wait against TimeoutStartSec; LAND_DEADLINE does not (#5203)."""
+    """systemd counts the flock wait against TimeoutStartSec; LAND_DEADLINE does not."""
     unit = render(LANDER)
     timeout = _seconds(directive(unit, "TimeoutStartSec")[-1])
     (flock_wait,) = re.findall(r"flock -w (\d+) ", directive(unit, "ExecStart")[0])
@@ -452,7 +452,7 @@ def test_a_lock_wait_that_times_out_leaves_no_earlier_verdict(tmp_path) -> None:
 
 
 def test_the_landers_placeholder_stops_the_run() -> None:
-    """A lander systemd stops mid-landing leaves its placeholder, which is no verdict (#5205)."""
+    """A lander systemd stops mid-landing leaves its placeholder, which is no verdict."""
     script = (COMPONENT / "files" / "land_renovate_pr.py").read_text()
     (pending,) = re.findall(r'atomic_write\(result, "([A-Z]+)\\n"\)', script)
     landed, go_on, _ = run_requests.grade("exit-code", pending + "\n")

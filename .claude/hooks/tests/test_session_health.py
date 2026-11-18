@@ -157,7 +157,7 @@ def test_main_is_flagged_when_the_parked_checkout_probe_reports(monkeypatch, cap
 
 
 def test_a_parked_checkout_only_banner_names_probe_landing(monkeypatch, capsys):
-    """A banner holding only the parked-checkout line prints `probe.py landing` (#3936)."""
+    """A banner holding only the parked-checkout line prints `probe.py landing`."""
     run_main = _run_main(
         monkeypatch,
         '{"source":"startup"}',
@@ -330,7 +330,7 @@ def _fence_worktree_survey(fenced_calls, tmp_path, monkeypatch):
     `prune_worktrees.py --brief` surveys every `.claude/worktrees/*` checkout on the host, and
     the hook kills it at `WORKTREE_TIMEOUT_S`. daniel-box carries over a hundred of them and
     CI's runner none, so letting it run made this file take 4-5s on daniel-box and 0.77s on CI.
-    That recorded shard weight then tripped CI's over-recorded check (#5432). Every other `uv`
+    That recorded shard weight then tripped CI's over-recorded check. Every other `uv`
     call, such as `probe.py targets`, still runs for real.
     """
     real_uv = shutil.which("uv")

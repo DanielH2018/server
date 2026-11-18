@@ -1,8 +1,8 @@
-"""Every entry point's function-local imports execute under each way its module is loaded (#4403).
+"""Every entry point's function-local imports execute under each way its module is loaded.
 
 WHY `--help` IS NOT ENOUGH. `test_entry_points_answer_help.py` catches a broken top-level
-import, but an import inside a subcommand never runs under `--help`. #674 is the case:
-`ha_state_model refresh` raised `ModuleNotFoundError: probe_core` while `--help` passed.
+import, but an import inside a subcommand never runs under `--help`. One shape:
+`ha_state_model refresh` raising `ModuleNotFoundError: probe_core` while `--help` passes.
 `importlib.util.find_spec` would pass it too, because the function-local
 `diagnostics.probe_ha` resolved; what failed was probe_ha's own top-level `import probe_core`.
 So the check imports and executes each function-local import, transitively.
@@ -52,15 +52,15 @@ def _keys(findings) -> set[tuple[str, str, str, str]]:
     return {(f.file, f.function, f.module, f.kind) for f in findings}
 
 
-# -- #674's shape: the function-local import resolves, its own top-level import does not ---
+# -- the function-local import resolves, its own top-level import does not ---
 
 
 def _issue_674_tree(tmp_path: Path, *, fixed: bool) -> Path:
-    """The #674 layout under names no real module shares, so no caller PYTHONPATH can mask it.
+    """The `ha_state_model` layout under names no real module shares, so no caller PYTHONPATH can mask it.
 
     `fx_diag/fx_ha.py` imports its sibling bare, as `diagnostics/probe_ha.py` imported
-    `probe_core`. The entry point inserts only `scripts/`, which is #674's parent commit;
-    `fixed=True` adds the second insert that #674 added.
+    `probe_core`. The entry point inserts only `scripts/`, which leaves the sibling import unresolvable;
+    `fixed=True` adds the second insert.
     """
     scripts = tmp_path / "scripts"
     _write(scripts, "fx_diag/fx_core.py", "VALUE = 1\n")
@@ -96,7 +96,7 @@ def _issue_674_tree(tmp_path: Path, *, fixed: bool) -> Path:
 
 
 def test_issue_674_unfixed_is_flagged_while_help_still_passes(tmp_path):
-    """Verify-by: #674's parent commit turns the check red while `--help` still passes."""
+    """The unfixed layout turns the check red while `--help` still passes."""
     from lib.function_imports import check
 
     scripts = _issue_674_tree(tmp_path, fixed=False)
@@ -154,7 +154,7 @@ def test_a_break_two_hops_below_a_resolvable_import_is_flagged(tmp_path):
 def _dotted_tree(
     tmp_path: Path, *, imported: bool, function: str = "run", pad: int = 0
 ) -> Path:
-    """`fx_pkg/fx_mod.py` imports its sibling bare inside `function`, as `359858b27` broke.
+    """`fx_pkg/fx_mod.py` imports its sibling bare inside `function`.
 
     With `imported`, `fx_user/fx_user.py` loads it as `from fx_pkg import fx_mod`.
     `pad` adds comment lines above the function, to move the import without changing it.
@@ -243,7 +243,7 @@ EXPECTED_EXEMPTIONS = {
 }
 
 # Non-vacuity: `ha_state_model.py` is the #674 module and the classifier calls it a library
-# (#4405), so a census borrowed from `--help` would lose it. `longhorn_reap.py` carries the two
+# so a census borrowed from `--help` would lose it. `longhorn_reap.py` carries the two
 # bare imports only the by-path mode applies to.
 MUST_COVER = frozenset(
     {"ha_state_model.py", "validate_ha_config.py", "longhorn_reap.py", "probe.py"}

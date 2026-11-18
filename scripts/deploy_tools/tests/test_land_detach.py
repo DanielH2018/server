@@ -193,14 +193,14 @@ def _full_pipe() -> tuple[int, int]:
 def test_killing_the_callers_whole_tree_leaves_the_landing_running_to_its_verdict(
     tmp_path,
 ):
-    """Issue #3158: a harness timeout killed the waiting call and the landing died with it.
+    """A harness timeout killed the waiting call and the landing died with it.
 
     The kill here is both halves of what a harness does: the caller's process group and every
     descendant found by parent pid. `setsid` alone survives the first and not the second, so
     this goes red on a landing that is merely a child in its own session.
 
     The second half only reaches a setsid-only child while `land.py` is alive to be its parent;
-    once `land.py` exits, the child reparents to init and leaves the walk (issue #3526). So
+    once `land.py` exits, the child reparents to init and leaves the walk. So
     the caller's stdout is a pipe with no room left. `land.py` writes the pid file, then
     blocks in its announcement, and stays alive across the walk and the kill. The pid file
     therefore stands in for the announcement line, which can never be read here.
@@ -278,7 +278,7 @@ def _user_manager_reachable() -> bool:
     reason="needs a systemd user manager to start and stop a unit; CI runners have none",
 )
 def test_stopping_the_callers_unit_leaves_the_landing_running_to_its_verdict(tmp_path):
-    """Issue #3160: `systemctl --user stop fanout-<n>` killed the cgroup its landing sat in.
+    """`systemctl --user stop fanout-<n>` killed the cgroup its landing sat in.
 
     The caller runs in a real transient user unit, the shape `fanout_lib/launch.py` gives a
     batch, and the unit is stopped while the landing waits on a slow `gh`. A landing that

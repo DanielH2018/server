@@ -17,7 +17,7 @@ The rejecting half renders the policy with each source removed in turn and asser
 below names the missing one, so a policy that drops a source fails by name rather than by count.
 
 The list carries no IPv6 CIDR. The cluster is single-stack IPv4, so a v6 ipBlock fences nothing,
-and kube-router logs a warning per v6 CIDR on every policy sync (#6495).
+and kube-router logs a warning per v6 CIDR on every policy sync.
 
 Run: uv run pytest tests/k8s/test_traefik_netpol_https_origin_lock.py
 """

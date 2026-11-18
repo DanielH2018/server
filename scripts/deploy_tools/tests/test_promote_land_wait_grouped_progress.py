@@ -1,4 +1,4 @@
-"""`land-wait` groups its pending Kustomizations by reason (#7894).
+"""`land-wait` groups its pending Kustomizations by reason.
 
 A broad promotion printed `name (at <sha>, before this merge)` once per Kustomization, about
 seventy times on one line. The line now names the shared reason once with a count, and names

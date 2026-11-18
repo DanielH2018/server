@@ -121,7 +121,6 @@ def _pihole_guard_rbac() -> list[dict]:
 
 def test_the_pihole_guard_role_grants_every_call_its_script_makes(monkeypatch) -> None:
     needs = rest_needs(_pihole_guard_calls(monkeypatch))
-    # The operator's grant on #5695.
     assert needs == {("homelab", "discovery.k8s.io", "endpointslices", "list", None)}
     granted = grants(_pihole_guard_rbac(), "homelab", "pihole-sibling-guard")
     assert missing(needs, granted) == []
@@ -176,7 +175,7 @@ def _home_ips_rbac() -> list[dict]:
 
 def test_the_home_ips_role_grants_every_call_its_script_makes(monkeypatch) -> None:
     needs = rest_needs(_home_ips_calls(monkeypatch))
-    # The operator's grant on #5701, less the `get` the merge patch never needs.
+    # The merge patch never needs `get`.
     assert needs == {("homelab", "", "configmaps", "patch", "crowdsec-home-ips")}
     granted = grants(_home_ips_rbac(), "homelab", "crowdsec-home-ips")
     assert missing(needs, granted) == []
@@ -197,7 +196,7 @@ def _reconcile_calls(monkeypatch, tmp_path) -> list[tuple[str, str]]:
     """H1.6: the longhorn-reconcile CronJob's calls on a run that has every write to make.
 
     One volume sits in a group it must leave, so the run lists both collections and patches the
-    volume. Since #5958 it makes no Deployment call: the CSI request is a Longhorn Setting.
+    volume. It makes no Deployment call: the CSI request is a Longhorn Setting.
     """
     monkeypatch.syspath_prepend(str(K8S_ROLES / "longhorn-reconcile" / "files"))
     script = importlib.import_module("longhorn_reconcile")
@@ -274,7 +273,7 @@ def test_the_longhorn_reconcile_role_without_the_pvc_list_is_flagged(
 def _reaper_calls(monkeypatch, env: dict[str, str]) -> list[tuple[str, str]]:
     """A reaper CronJob's calls on a run that finds one pod to delete per namespace.
 
-    #6367's tombstone is served in homelab, and #6460's failed Job pod everywhere else.
+    The tombstone is served in homelab, and the failed Job pod everywhere else.
     """
     monkeypatch.syspath_prepend(str(K8S_ROLES / "dri-device-plugin" / "files"))
     script = importlib.import_module("dri_admission_reaper")
@@ -362,7 +361,7 @@ def test_the_admission_reaper_role_without_delete_is_flagged(monkeypatch) -> Non
 def test_the_addon_job_reaper_roles_grant_every_call_its_script_makes(
     monkeypatch,
 ) -> None:
-    """#6460: the kube-system CronJob's calls, against its own account's grants."""
+    """The kube-system CronJob's calls, against its own account's grants."""
     needs = rest_needs(_reaper_calls(monkeypatch, _cronjob_env("addon-job-reaper")))
     assert needs == {
         ("kube-system", "", "pods", "list", None),
@@ -376,6 +375,6 @@ def test_the_addon_job_reaper_roles_grant_every_call_its_script_makes(
 
 def test_the_workload_namespace_reaper_holds_no_grant_outside_homelab() -> None:
     """The add-on grant reaches every pod in two system namespaces, so a pod that runs as
-    the homelab account must not reach it (#6460 review)."""
+    the homelab account must not reach it."""
     scopes = {g[0] for g in grants(_reaper_rbac(), "homelab", "dri-admission-reaper")}
     assert scopes == {"homelab"}

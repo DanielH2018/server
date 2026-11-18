@@ -1,6 +1,6 @@
 """Each production name that only a test calls is deleted or carries a vulture ignore reason.
 
-The names come from #8632: a vulture pass with the test trees excluded reports each one, and
+The names come from a vulture pass with the test trees excluded, which reports each one, and
 a test under a `tests/` directory is its only caller. Each name is triaged one of two ways.
 Either its own unit test is the only consumer, so the name goes. Or a guard is its consumer,
 so the name stays and `[tool.vulture] ignore_names` lists it under a comment giving that

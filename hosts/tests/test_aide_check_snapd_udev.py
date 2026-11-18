@@ -1,4 +1,4 @@
-"""Guards on how the weekly AIDE check judges snapd's generated udev rules (#7929).
+"""Guards on how the weekly AIDE check judges snapd's generated udev rules.
 
 snapd rewrites /etc/udev/rules.d/70-snap.<snap>.rules from its own snap at each refresh, so no
 package owns the file. A udev rule runs as root, so the name alone explains nothing: the rule is

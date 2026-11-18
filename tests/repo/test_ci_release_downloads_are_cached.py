@@ -1,6 +1,6 @@
 """Every release download in ci.yml and promote.yml sits behind an actions/cache keyed on its pin.
 
-On 2026-11-08 a GitHub release asset answered HTTP 504 for over an hour (#7625), longer than
+On 2026-11-08 a GitHub release asset answered HTTP 504 for over an hour, longer than
 any step's `curl --retry` window, so each job that downloaded a pinned binary failed, and in
 promote.yml that blocks a deploy. With the download cached under its version, a run fetches it
 only when the pin moves. A piped `| curl` is a registry or API call, not a download, and is
