@@ -194,7 +194,7 @@ def test_an_unknown_argument_is_a_usage_error(host):
     assert [call[0] for call in host.calls()] == ["hostname"]
 
 
-# A homelab package beyond the two (H3.11, homelab-tools).
+# A homelab package beyond the two (homelab-tools).
 
 
 def test_an_installed_shared_package_with_a_newer_one_published_is_named(host):

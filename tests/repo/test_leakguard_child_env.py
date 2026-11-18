@@ -2,11 +2,11 @@
 
 `tests/leakguard.py` points `TEXTFILE_DIR` at a temp directory, but a test that hands
 its child an explicit `env` used to drop it, and a check script the child ran wrote a fake
-verdict into node_exporter's real directory (#6191, #6238). The same wrapper shims a
-hand-built PATH without overriding a test's own stub or un-hiding a binary (#6418), and swaps
-a real binary started by absolute path for its shim (#6463), a `shell=True` string's
-included (#6485). `k3s`, the binary `kubectl` links to, is shimmed under each of its names
-(#7569). These run in this process, under
+verdict into node_exporter's real directory. The same wrapper shims a
+hand-built PATH without overriding a test's own stub or un-hiding a binary, and swaps
+a real binary started by absolute path for its shim, a `shell=True` string's
+included. `k3s`, the binary `kubectl` links to, is shimmed under each of its names
+These run in this process, under
 the plugin `pyproject.toml` loads, because the wrapper is what they check.
 
 Run: uv run pytest tests/repo/test_leakguard_child_env.py
@@ -27,7 +27,7 @@ from test_leakguard import _run_child
 _CHECK_LIB = REPO / "hosts/components/check-lib/files/homelab-check-lib.sh"
 
 # A child handed a PATH built from scratch, the shape of a test that pins `/usr/bin:/bin` for
-# its child (#6418). The pytest PATH prefix never reaches it, so only the `Popen` wrapper can.
+# its child. The pytest PATH prefix never reaches it, so only the `Popen` wrapper can.
 _LEAKS_THROUGH_A_HAND_BUILT_PATH = """
 import subprocess
 
@@ -37,7 +37,7 @@ def test_it_logs_through_a_hand_built_path():
 """
 
 
-# The real `logger` by absolute path, which no PATH reaches (#6463). None where the host has
+# The real `logger` by absolute path, which no PATH reaches. None where the host has
 # none, and the test that runs it skips there.
 _REAL_LOGGER = shutil.which("logger", path="/usr/bin:/bin")
 
@@ -47,7 +47,7 @@ _REAL_LOGGER = shutil.which("logger", path="/usr/bin:/bin")
 _ABSOLUTE_LAUNCHES = {
     "argv": f"[{_REAL_LOGGER!r}, 'leakguard-6463-argv']",
     "executable": f"['logger', 'leakguard-6463-executable'], executable={_REAL_LOGGER!r}",
-    # A command string the shell runs, which names the program by absolute path (#6485).
+    # A command string the shell runs, which names the program by absolute path.
     "shell": f"'{_REAL_LOGGER} leakguard-6463-shell', shell=True",
 }
 
@@ -122,7 +122,7 @@ def test_a_child_started_by_absolute_path_is_failed_for_its_call(
 def test_a_tests_own_stub_started_by_absolute_path_still_runs(tmp_path: Path) -> None:
     """Accept case: a test's own stub, named by absolute path, runs as given.
 
-    The code before #6463 swapped nothing, so this passes there too. It is the regression guard
+    It is the regression guard
     against a swap that matches by name alone, which would run the shim in place of this stub.
     The memory-seed test's rsync symlink depends on the same rule.
     """
@@ -134,7 +134,7 @@ def test_a_tests_own_stub_started_by_absolute_path_still_runs(tmp_path: Path) ->
 
 
 def test_a_hand_built_path_keeps_the_tests_own_stub_first(tmp_path: Path) -> None:
-    """A stub the test put before `/usr/bin` still wins over leakguard's shim (#6418)."""
+    """A stub the test put before `/usr/bin` still wins over leakguard's shim."""
     fake_bin(tmp_path, logger="echo own-stub\n")
     seen = subprocess.run(
         ["logger", "x"],
@@ -221,7 +221,7 @@ def test_a_test_that_runs_the_k3s_multicall_binary_is_failed(
 ) -> None:
     """`kubectl`'s own binary under another name, by PATH or by absolute path, is shimmed.
 
-    The real one self-extracts into `./data/` when its data dir resolves empty (#7569).
+    The real one self-extracts into `./data/` when its data dir resolves empty.
     """
     ran = tmp_path / "ran"
     bin_dir = fake_bin(tmp_path / "bin", **{name: f'echo "$0" >> {ran}\n'})

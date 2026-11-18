@@ -2,9 +2,9 @@
 """claude-clone-sync.sh fast-forwards the agent's clone only when it is a clean master.
 
 The hook shim and the homelab-ui launcher run from that clone's main working tree, which the
-shared agent_user.yml clones once and never pulls (#4067, #4099). claude-clone-sync.timer runs
-the script, because a merge that touches only the launcher or `.claude/hooks/` applies no role
-(#4162). The script runs here
+shared agent_user.yml clones once and never pulls. claude-clone-sync.timer runs
+the script, because a merge that touches only the launcher or `.claude/hooks/` applies no role.
+The script runs here
 against real scratch repositories, so a test passes only if the gate decides correctly.
 
 Run: uv run pytest hosts/tests/test_agent_clone_fast_forward.py

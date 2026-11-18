@@ -1,4 +1,4 @@
-"""Every stderr line `fanout.py place` prints carries argparse's `<prog>:` prefix (#4500).
+"""Every stderr line `fanout.py place` prints carries argparse's `<prog>:` prefix.
 
 One `place launch` run mixed `fanout.py: error:` lines with lines that carried no prefix at
 all, so a grep for the prefix missed part of what a run reported. Each case drives one path

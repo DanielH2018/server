@@ -1,4 +1,4 @@
-"""The schedule-gate test file must pass however far its checkout is behind master (#7396).
+"""The schedule-gate test file must pass however far its checkout is behind master.
 
 The file runs in a copy of the tree under its own pytest, because `lib.repo_paths.REPO` follows
 the module's location and only a copy can sit behind an `origin/master` of its own.

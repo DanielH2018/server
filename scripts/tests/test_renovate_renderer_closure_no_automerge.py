@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Guard the Renovate rule that keeps the renderer's dependency closure off automerge.
 
-R4 Open question 12 (option 2, ruled 2026-11-07) keeps no required render-diff context. A
+The repo keeps no required render-diff context. A
 renderer dependency bump that moves output is stopped only by this rule, so the rule must name
 every package the renderer imports and every package those depend on in `uv.lock`, and it must
 come after every rule that sets `automerge: true`, because Renovate lets a later rule win.

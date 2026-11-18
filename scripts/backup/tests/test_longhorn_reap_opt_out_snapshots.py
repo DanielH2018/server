@@ -3,9 +3,9 @@
 
 The `no-backup` group is an opt-out: `k8s/roles/longhorn/templates/storageclass-nobackup.yaml.j2`
 selects it so Longhorn's default-group job stops claiming the volume, and no RecurringJob ever
-claims it. Before #3236 `snapshot_owner_map` resolved it to `""` — the same value a renamed
-RecurringJob leaves — so the unresolved-owner ABORT refused every run on the live cluster, where
-18 volumes carry that label.
+claims it. `snapshot_owner_map` must not resolve it to `""` — the same value a renamed
+RecurringJob leaves — or the unresolved-owner ABORT refuses every run on a cluster where
+volumes carry that label.
 
 The pair here is the opt-out floor: a run with opt-out volumes proceeds, and a genuinely missing
 RecurringJob beside one still refuses. `tests/longhorn/test_longhorn_reap_opt_out_groups.py`
@@ -26,7 +26,7 @@ from test_longhorn_reap_logic import _NOW, _recurringjob, _snapshot, _volume
 
 def test_snapshot_owner_map_is_clean_for_an_opt_out_group_with_no_recurringjob():
     # The `no-backup` group deliberately has no RecurringJob CR, so every no-backup volume
-    # resolved to "" and rule 4 refused every run on this cluster while any existed (#3236).
+    # resolved to "" and rule 4 refused every run on this cluster while any existed.
     # The sentinel is the third owner state, and `unresolved_owner_count` must not count it.
     group_job = logic.recurringjob_group_to_job(
         [_recurringjob("daily-backup", ["default"])]

@@ -1,9 +1,7 @@
-"""The weekly host-maintenance crons write a textfile verdict their rules read (#6179).
+"""The weekly host-maintenance crons write a textfile verdict their rules read.
 
-The apt autoremove, dpkg purge and firmware update crons used to pipe their command into
-`logger`, so the pipeline's status was logger's and nothing wrote a textfile. A job that failed
-every week, or stopped running, was silent. They now run through `files/host-maintenance.sh`,
-and three properties hold:
+The apt autoremove, dpkg purge and firmware update crons run through
+`files/host-maintenance.sh`, and three properties hold:
 
 THE VERDICT IS THE JOB'S OWN EXIT CODE. fwupdmgr exits 2 when there is nothing to update, the
 normal weekly case, so 2 is a success there and nowhere else. A failed purge inside the dpkg

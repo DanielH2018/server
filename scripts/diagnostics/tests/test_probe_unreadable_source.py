@@ -1,4 +1,4 @@
-"""A probe that cannot read its source exits TEMP_FAIL (75), never a verdict code (#4444).
+"""A probe that cannot read its source exits TEMP_FAIL (75), never a verdict code.
 
 Exit 1 means the probe looked and saw something bad. A curl that failed, an ssh that never
 reached daniel-pi or a Prometheus query that returned no series is not that: nothing was

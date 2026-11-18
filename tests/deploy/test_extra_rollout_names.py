@@ -66,7 +66,7 @@ def test_extra_rollout_entry_with_a_second_key_hides_no_later_entry(
     """An entry carrying `restart_on: []` on its own line leaves the entries after it readable.
 
     The old pattern stopped at the first line that was not `- name:`, so `widget-cache` read as
-    ungated and karakeep had to keep its `restart_on` entry last (#4578). A sibling var's own
+    ungated and karakeep had to keep its `restart_on` entry last. A sibling var's own
     `- name:` list after the block still credits nothing, nor does a `- name:` across a blank
     line, which the old `\\s*` crossed to credit cloudflare-ddns with `Wait`.
     """
@@ -91,7 +91,7 @@ def test_extra_rollout_entry_with_a_second_key_hides_no_later_entry(
     )
     assert _extra_rollouts(after_a_blank_line) == {"widget-direct"}
     # scrutiny lists scrutiny-collector after a `restart_on: []` entry, the real-role shape
-    # the old pattern missed.
+    # a bare `- name:` pattern misses.
     assert _extra_rollouts(_K8S_ROLES / "scrutiny") == {
         "scrutiny-influxdb",
         "scrutiny-collector",

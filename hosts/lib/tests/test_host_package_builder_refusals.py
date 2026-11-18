@@ -1,7 +1,7 @@
 """The builder's refusals that must keep their own reason: a refused token and a keyring check.
 
-#5089: a 401 or 403 from the check-runs read is the builder's token, not a pending verdict.
-#5090: a worktree cleanup that fails must not replace the keyring refusal in flight. The
+A 401 or 403 from the check-runs read is the builder's token, not a pending verdict.
+A worktree cleanup that fails must not replace the keyring refusal in flight. The
 fixture history, the stub GitHub and the stub render are test_host_package_builder.py's.
 
 Run: uv run pytest hosts/lib/tests/test_host_package_builder_refusals.py
@@ -56,7 +56,7 @@ def failure_reason(state) -> str:
 
 @pytest.mark.parametrize("status", [401, 403])
 def test_a_refused_token_reads_token_and_pages_once(lab, status):  # noqa: F811
-    # #5089: the anonymous fetch keeps succeeding, so only the check-runs read sees the
+    # The anonymous fetch keeps succeeding, so only the check-runs read sees the
     # revoked token. Read as pending, it ended the run `no-green` with exit 0.
     origin, state, etc, _ = lab
     origin.commit("a")
@@ -89,8 +89,7 @@ def test_adr_0021_lists_exactly_the_builders_reasons():
 
 
 def test_a_failed_worktree_cleanup_keeps_the_keyring_reason(lab):  # noqa: F811
-    # #5090: the `finally` cleanup raised RuntimeError over the in-flight keyring Failure,
-    # and the run read `build`.
+    # The `finally` cleanup must not raise over the in-flight keyring Failure.
     origin, state, _, github = lab
     tip = origin.commit("a")
     github.runs[tip] = GREEN

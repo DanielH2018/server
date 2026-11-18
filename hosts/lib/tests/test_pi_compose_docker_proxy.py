@@ -1,4 +1,4 @@
-"""docker-proxy runs through the Pi's Compose project (H5.6).
+"""docker-proxy runs through the Pi's Compose project.
 
 The censuses in `test_pi_compose_census.py` run over fixture services. This file runs them over
 the real render of `hosts/daniel-pi/package.yml` and checks the one name contract the move

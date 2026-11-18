@@ -1,4 +1,4 @@
-"""daniel-box's package carries the deploy UI daemon with its in-flight panel (H7.50).
+"""daniel-box's package carries the deploy UI daemon with its in-flight panel.
 
 The daemon's behaviour has its own tests under `hosts/components/deploy-ui/tests/`. These hold what
 the move added: the unit and its enable link, the port's ufw allows, and the legacy entries that hand
@@ -128,7 +128,7 @@ def test_reconcile_relabels_the_live_allows_rather_than_deleting_them(
         "homelab-daniel-pi"
     )
     node.state["users"] = {u["name"]: u["uid"] for u in manifest["users"]["users"]}
-    # H7.60's filter restarts rsyslog, which the Pi fixture masks.
+    # The package's filter restarts rsyslog, which the Pi fixture masks.
     live_unit(node, "rsyslog.service")
     declared = [r for r in manifest["ufw"]["rules"] if r.get("keep")]
     others = [r for r in manifest["ufw"]["rules"] if not r.get("keep")]

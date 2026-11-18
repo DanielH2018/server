@@ -128,18 +128,15 @@ def test_non_watchtower_label_without_equals_is_ignored():
     assert vct.find_watchtower_label_bugs(docs) == []
 
 
-# The synthetic tests above only exercise the two detector functions. This is the
-# ONLY pytest coverage of the *real* render path (every service in the Pi's
-# compose_services). It mirrors the sibling validators' live-config guards
-# (validate_ha_config.test_validate_real_config_is_clean, validate_grafana
-# .test_real_role_passes). Without it, a Jinja-indent regression in a template that
-# the prek `validate-compose-templates` hook's file filter doesn't match would slip
-# past CI entirely.
+# The synthetic tests above only exercise the two detector functions. This is the ONLY pytest
+# coverage of the *real* render path (every service in the Pi's compose_services). Without it, a
+# Jinja-indent regression in a template that the prek `validate-compose-templates` hook's file
+# filter doesn't match would slip past CI entirely.
 
 
 def test_real_templates_render_clean(capsys):
     assert vct.main() == 0
-    # A clean template prints nothing by default, so a [FAIL] is not buried in a list (#4448).
+    # A clean template prints nothing by default, so a [FAIL] is not buried in a list.
     assert "[ok]" not in capsys.readouterr().out
 
 

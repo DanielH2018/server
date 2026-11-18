@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""tdarr's VAAPI encode runs as an initContainer, not as an exec from Ansible (#5451).
+"""tdarr's VAAPI encode runs as an initContainer, not as an exec from Ansible.
 
 The encode proves tdarr's OWN ffmpeg can drive the render node. A Flux-applied Job cannot run
 it, because the Job image has no ffmpeg and the Job census forbids spawning a process. So the
-operator chose option 1 of #5451: an initContainer in tdarr's pod, with tdarr's image and the
-same device request, so a failed encode keeps tdarr from starting under Ansible and Flux alike.
+encode is an initContainer in tdarr's pod, with tdarr's image and the same device request,
+so a failed encode keeps tdarr from starting under Ansible and Flux alike.
 
 Run: uv run pytest tests/services/test_tdarr_vaapi_encode_init_container.py
 """

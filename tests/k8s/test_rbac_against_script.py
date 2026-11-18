@@ -439,7 +439,7 @@ def test_the_crowdsec_jobs_role_grants_every_call_the_home_allowlist_makes(
     monkeypatch,
 ) -> None:
     needs = recorded_needs(_home_allowlist_argvs(monkeypatch))
-    # The operator's grant on #5701: `get` on the one ConfigMap the CronJob writes.
+    # `get` on the one ConfigMap the CronJob writes.
     assert needs == {("homelab", "", "configmaps", "get", "crowdsec-home-ips")}
     docs = list(
         yaml_fast.safe_load_all(render_role_template("crowdsec", "jobs-rbac.yaml.j2"))

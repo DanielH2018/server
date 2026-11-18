@@ -45,7 +45,7 @@ def _bodies(plans: list[list[str]]) -> list[str]:
 
 
 def test_the_issue_fetch_carries_operator_decisions_and_drops_bookkeeping():
-    """#3498: an operator decision posted as a comment never reached the agent.
+    """An operator decision posted as a comment never reached the agent.
 
     Every record below is posted as the operator's own account, so the author check alone
     keeps all of them. Each is built by the writer that posts it, so a reworded writer fails

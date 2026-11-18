@@ -1,4 +1,4 @@
-"""The way out of a hold: a uid mismatch holds the host, and only a fixed version clears it (H7.2d).
+"""The way out of a hold: a uid mismatch holds the host, and only a fixed version clears it.
 
 Which outcomes hold the host (ADR-0029) ends in a
 procedure: install the fix or the revert, then run `homelab-updater --clear-hold`. This drives

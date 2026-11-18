@@ -105,7 +105,7 @@ def test_a_role_directory_reads_the_same_defaults_as_its_template(tree):
 
 def test_a_default_aliasing_an_overridden_name_carries_the_override(tree):
     # The override must be in place while values resolve, or the alias expands to the name's
-    # stub before the override is laid on (#3191).
+    # stub before the override is laid on.
     template, inv = tree({"alias": "{{ some_secret }}"})
     ctx = rc.render_context(
         template, overrides={"some_secret": "SENTINEL"}, inventory=inv
@@ -169,7 +169,7 @@ def test_a_strict_context_raises_naming_the_value_that_will_not_expand(tree):
 
 
 def test_a_group_var_reads_another_hosts_server_ip_through_hosts(tree):
-    # all.yml's k8s_pi_client_ip is this shape (#3719). A strict render raises only when
+    # all.yml's k8s_pi_client_ip is this shape. A strict render raises only when
     # `hosts` is absent. A `hosts` missing the Pi's entry resolves to None without
     # raising, so the rows in _scrape_property_rows.py and _edge_property_rows.py compare each
     # consumer against the Pi's literal.
@@ -203,7 +203,7 @@ def test_hosts_carries_no_value_that_would_resolve_against_the_wrong_host(tree):
 
 
 def test_hosts_carries_a_literal_compose_services_and_omits_a_templated_one(tree):
-    # observability's alloy-pi job reads the Pi's entry port this way (#3860). A templated
+    # observability's alloy-pi job reads the Pi's entry port this way. A templated
     # list would resolve against the rendered host, so it stays out like `ansible_host`.
     pi_list = [{"name": "alloy", "port": 12345}]
     template, inv = tree(
@@ -274,7 +274,7 @@ def test_a_withheld_name_and_a_value_reading_it_are_dropped(tree):
 
 
 def test_an_edit_between_two_renders_reaches_the_second(tree):
-    # load_yaml caches each parsed file (#5592); a fixture tree edited between renders must
+    # load_yaml caches each parsed file; a fixture tree edited between renders must
     # still render with its new values, on every file layer. Each edit keeps the file's size
     # and its mtime is put back, so a cache keyed on (path, mtime, size) fails here too.
     names = ("from_defaults", "from_group", "from_host")

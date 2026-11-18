@@ -258,7 +258,7 @@ def test_a_stale_verdict_reads_down(tmp_path):
     assert "older than" in msg, msg
 
 
-# -- the heartbeat's log2ram mount probe (#4583) ---------------------------------------------
+# -- the heartbeat's log2ram mount probe ---------------------------------------------
 
 
 @pytest.mark.parametrize("fstype", ["", "ext4"])

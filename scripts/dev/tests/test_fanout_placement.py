@@ -125,7 +125,7 @@ def test_refuses_when_neither_has_headroom():
 
 def test_the_reservation_sits_between_the_measured_peak_and_2_25_gib():
     """A host with 2.25 GiB free takes a batch; one with 1.75 GiB, under the 1781 MiB anon
-    peak the per-batch series recorded in the week to 2026-10-29 (#5667), does not."""
+    peak the per-batch series recorded, does not."""
     assert place(["a"], [_r("h", 10 * GIB, 7.75 * GIB)]) == [("a", "h")]
     with pytest.raises(NoHeadroom):
         place(["a"], [_r("h", 10 * GIB, 8.25 * GIB)])
@@ -153,7 +153,7 @@ def test_a_pin_wins_while_it_has_headroom_and_refuses_when_it_does_not():
 
 
 def test_a_host_with_no_batch_slots_left_is_skipped_for_the_next_host():
-    """#6421: the roomiest host is at its live-batch cap, so the batch goes to the other one."""
+    """The roomiest host is at its live-batch cap, so the batch goes to the other one."""
     readings = [_r("daniel-box", 12 * GIB, 1), _r("daniel-server", 6 * GIB, 1)]
     assert place(["1"], readings) == [("1", "daniel-box")]
     slots = {"daniel-box": 0, "daniel-server": 1}
@@ -235,7 +235,7 @@ def test_the_read_command_reads_both_cgroups_an_agent_lives_in():
 
 
 def test_the_read_command_reads_the_running_users_own_login_plane():
-    """The `claude` agent user launches into its own slice, not uid 1000's (#4098)."""
+    """The `claude` agent user launches into its own slice, not uid 1000's."""
     assert READ_COMMAND.startswith("u=$(id -u); ")
     assert "pgrep -c -x claude -u $u" in READ_COMMAND
     assert "1000" not in READ_COMMAND

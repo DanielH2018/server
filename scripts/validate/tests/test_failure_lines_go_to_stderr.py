@@ -27,7 +27,7 @@ from lib import proc_testing
 from lib.repo_paths import REPO
 from validate import asset_pins
 
-# The `[FAIL] <path>: <reason>` line every validator shares (#4480).
+# The `[FAIL] <path>: <reason>` line every validator shares.
 FAIL_LINE = re.compile(r"\s*\[FAIL\] \S+: \S")
 UNRENDERABLE_URL = "https://example.invalid/{{ undefined_version }}/asset"
 DIGEST = "ab" * 32
@@ -170,7 +170,7 @@ def test_asset_pins_prints_nothing_on_stdout_when_it_refuses(asset_pins_refusal)
 
 
 def test_asset_pins_prints_its_refusal_on_stderr(asset_pins_refusal):
-    """What the run used to print on stdout reaches stderr instead of being dropped."""
+    """What the run prints on stdout reaches stderr instead of being dropped."""
     refusal, run = asset_pins_refusal
     assert run.returncode == refusal.exit_code, run.stdout + run.stderr
     if refusal.names is None:

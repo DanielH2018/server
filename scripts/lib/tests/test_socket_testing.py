@@ -33,7 +33,7 @@ def test_a_socket_path_ignores_a_long_temp_root_and_binds_is_clean(long_root):
 
 
 def test_a_socket_under_the_long_temp_root_is_flagged(long_root):
-    # The shape before #4763: the socket sat in tmp_path, so the temp root's length decided.
+    # A socket in tmp_path, so the temp root's length decides.
     sock = Path(tempfile.gettempdir()) / "worktree-holders.sock"
 
     assert len(str(sock).encode()) > SUN_PATH_MAX

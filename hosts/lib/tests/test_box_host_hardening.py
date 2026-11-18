@@ -1,8 +1,8 @@
-"""daniel-box's host baseline moves into its package, and the role's tasks for it go (H7.60).
+"""daniel-box's host baseline moves into its package, and the role's tasks for it go.
 
 `test_pi_host_hardening.py` holds the `host-hardening` component's content against the bytes
 the role wrote. These tests hold what is specific to the last host: daniel-box ships the same
-bytes, takes no i915 option, and retires what the role's absent arms removed. H7.48's tests hold
+bytes, takes no i915 option, and retires what the role's absent arms removed. The cross-host tests hold
 every host's package to the crons `crons.yml`'s absent arms removed, and each cluster node's to
 `docker_install`'s teardown.
 
@@ -93,7 +93,7 @@ def test_every_host_retires_the_crons_whose_absent_arms_left_crons_yml(host):
 
 @pytest.mark.parametrize("host", ["daniel-box", "daniel-pi", "daniel-server"])
 def test_every_host_retires_the_ansible_log_cron(host):
-    """H7.63 deleted crons.yml's last absent arm, so each host's legacy list removes the cron."""
+    """crons.yml's last absent arm is gone, so each host's legacy list removes the cron."""
     assert {"cron": "Clear ansible log file", "user": "root"} in _legacy(host)
 
 

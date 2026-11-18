@@ -15,8 +15,8 @@ The rule is textual. A literal `allowPrivilegeEscalation:` line must sit in a bl
 sets `runAsUser: 0`. The rule reads the line at 12 spaces, the key depth under
 `hardened_security_context()`'s 10-space `securityContext:`. It also reads the line at 16
 spaces, the key depth under `job_hardened_security_context()`, which a CronJob's `jobTemplate`
-needs one level further in (#3721). Before #3721 the deeper depth was exempt, and 12 CronJob
-containers had drifted into hand-written copies there.
+needs one level further in. Exempting the deeper depth lets CronJob
+containers drift into hand-written copies.
 
 Run: uv run pytest tests/k8s/test_container_security_context_uses_the_macro.py
 """

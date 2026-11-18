@@ -191,7 +191,7 @@ def _vendored_source_controller_pod_labels() -> dict[str, str]:
 
 
 def test_source_controller_reaches_the_push_port_and_nothing_else_does():
-    """Break-glass points Flux's OCIRepository at this registry (#6046).
+    """Break-glass points Flux's OCIRepository at this registry.
 
     source-controller fetches the artifact before Flux applies anything in it, so the grant has
     to stand rather than arrive with the break-glass render. The peer must AND the namespace and
@@ -225,7 +225,7 @@ def test_the_dockerhub_mirror_port_is_admitted_only_from_the_node_grants():
     """The docker.io mirror's own policy admits containerd's two host sources and nothing else.
 
     The same failure shapes as the ghcr.io mirror's: a missing grant drops every pull to
-    Docker Hub without a word, and a pod-network rule lets any pod fill its claim (#6257).
+    Docker Hub without a word, and a pod-network rule lets any pod fill its claim.
     """
     mirror = DEFAULTS["k8s_registry_dockerhub_mirror_port"]
     admitting = [

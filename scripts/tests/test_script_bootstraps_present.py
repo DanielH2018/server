@@ -33,13 +33,13 @@ Those fall through to `None` and are reported as `unresolvable`, not silently pa
 `test_no_import_bootstrap_is_unresolvable` below, which currently expects zero.
 
 Why `lib/tests/test_entry_points_answer_help.py` does not replace this guard: that test runs
-every entry point with `scripts/` off `PYTHONPATH` (#3296), so it fails on a missing bootstrap
+every entry point with `scripts/` off `PYTHONPATH`, so it fails on a missing bootstrap
 for any import that executes before `--help` answers. It cannot see an import that runs only
 after that point, such as one deferred inside a function, or one in a module no entry point
 imports on its way to `--help`. This guard reads those statically.
 
-Why this guard stays whole rather than narrowing to what the `--help` test cannot reach (#3310,
-measured 2026-10-03). The tree holds 559 cross-directory imports in 174 modules. 216 are
+Why this guard stays whole rather than narrowing to what the `--help` test cannot reach.
+The tree holds 559 cross-directory imports in 174 modules. 216 are
 module-level imports in an entry point, which the `--help` test also exercises; 46 are deferred
 inside a function; 297 are module-level imports in a library module. Narrowing would skip only
 the first group, and it removes no code. The evaluator (`eval_path_expr`, `_resolve_name`,
@@ -48,7 +48,7 @@ A narrowed scope would instead add a reachability pass to decide which library m
 point loads before `--help`. That pass needs submodule resolution (`from land_lib import ci`),
 shell-shim entry points and the classifier, all to save a guard that runs in about 2.4s.
 
-Why this is not a census row (#3430): the predicate is an import resolver, not a per-file test.
+Why this is not a census row: the predicate is an import resolver, not a per-file test.
 It follows a constant into another module's own assignment, reports two outcomes (missing and
 unresolvable), and Guard 3 and the shared-helper rows import its evaluator and `is_pytest_only`.
 

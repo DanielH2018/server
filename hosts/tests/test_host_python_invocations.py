@@ -268,7 +268,7 @@ def _shebang_runs(text: str, installed: list[str]) -> list[str]:
 
 def test_no_installed_script_runs_by_its_shebang():
     """A role script's `#!/usr/bin/env python3` is the host's system 3.12, so running it by path
-    escapes the pin the tests above enforce on command strings (#4489)."""
+    escapes the pin the tests above enforce on command strings."""
     installed = sorted(live for live in role_installs.install_map() if "{{" not in live)
     # Non-vacuous: a script the backup-health timer runs must be in the census this scans for.
     assert (
@@ -304,7 +304,7 @@ def test_a_script_run_through_uv_is_clean():
 
 
 # A bare `python3` word, wherever it sits: PATH picks it, and under cron's PATH that is the system
-# 3.12. The two needles above are absolute paths, so `python3 -c …` slipped past them (#4605).
+# 3.12. The two needles above are absolute paths, so `python3 -c …` slipped past them.
 # DECIDED: match the word, not a command position. `_COMMAND_POSITION` misses `if`/`then`/`!`,
 # an env assignment, `sudo`, `env`, a cron user field and Ansible's `shell:`/`cmd:`, and a list
 # of shell grammar stays one shape short. A path (`/usr/bin/python3`) and a package or flag

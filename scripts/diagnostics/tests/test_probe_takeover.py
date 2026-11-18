@@ -333,7 +333,7 @@ def test_a_tag_with_no_live_object_is_unreadable_not_clean():
         )
 
 
-# A tag's vendored files reach the render under `upstream/` and `patches/` (#5721). Each of
+# A tag's vendored files reach the render under `upstream/` and `patches/`. Each of
 # these tags vendors files, and traefik-crds renders nothing else. The value is one object
 # the tag's `files/upstream/` declares, which the census must reach.
 VENDORED_TAGS = {
@@ -393,7 +393,7 @@ def _upstream_crd_names():
 
 
 def test_takeover_of_a_vendored_only_tag_lists_the_live_crds_it_compares(capsys):
-    """`probe.py takeover traefik-crds` compares each live CRD rather than none (#5721)."""
+    """`probe.py takeover traefik-crds` compares each live CRD rather than none."""
     names = _upstream_crd_names()
     assert any(n == "ingressroutes.traefik.io" for n in names)
 

@@ -164,7 +164,7 @@ def _host_scripts() -> list[str]:
 
 
 # registry-gc.sh.j2's scale-down, held as a red case. The script's ghcr-mirror phase outlives
-# registry's flip, so its allow entry below rests on the operator's ruling on #5732.
+# registry's flip, so its allow entry below rests on the operator's ruling.
 # tests/services/test_registry_gc_ghcr_mirror.py holds this line to the template's.
 REGISTRY_GC_SCALE = '  $KUBECTL scale "deploy/${1}" --replicas=0 >/dev/null 2>&1\n'
 

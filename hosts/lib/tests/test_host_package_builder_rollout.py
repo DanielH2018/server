@@ -1,6 +1,6 @@
 """The builder's staged-rollout gate: the canary's package first, the others after it reports.
 
-H3.12. The render writes `packages/homelab-updater` and one `hosts/<host>` package per host
+The render writes `packages/homelab-updater` and one `hosts/<host>` package per host
 file in the commit, so a commit that edits `daniel-pi` changes only the Pi's package. Prometheus
 is a stub keyed by the PromQL's metric and host, and it can refuse an address. Each refusal case
 is paired with the case that lets the other host's package build.
@@ -103,7 +103,7 @@ def run(
 
 
 def sign(state: Path) -> None:
-    """The signer took the staged set, as H3.5b's does after every run."""
+    """The signer takes the staged set after every run."""
     for entry in (state / "staged").iterdir():
         entry.unlink()
 
@@ -193,7 +193,7 @@ def test_a_canary_not_yet_settled_leaves_the_gate_open(opened, case):
 
 
 def test_a_stale_canary_logs_its_sha_beside_the_gate_s(opened, capsys):
-    # #7047: the gate stayed open for hours with Prometheus answering and no line saying why.
+    # An open gate logs why: the canary's sha beside the gate's.
     lab, prom, v, _state, _ = opened
     older = git(lab[0].path, "rev-parse", f"{v}~1")[:12]
     prom.applied["daniel-server"], prom.reconcile["daniel-server"] = older, 1

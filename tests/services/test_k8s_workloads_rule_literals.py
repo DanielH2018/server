@@ -1,8 +1,6 @@
 """The k8s-workloads rules' literals that the estate, not the bridge, decides.
 
-The rules were ported from monitor-bridge's `k8s_workloads` check, and until M2's PR 4a each
-literal was held to its bridge source. The bridge arms are gone, so the rules are their own
-source. Two checks remain, because they hold a rule to the estate:
+The rules are their own source. Two checks hold a rule to the estate:
 
 - the DaemonSet floor equals the DaemonSets the roles in `containers_list` render, plus the
   add-on DaemonSets Longhorn and MetalLB bring;

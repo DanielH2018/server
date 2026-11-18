@@ -58,7 +58,7 @@ def test_an_armed_render_names_the_bucket_region_and_prefix():
 
 
 def test_the_b2_target_renders_the_inventory_bucket_as_a_literal():
-    """Inventory's `k3s_longhorn_b2_bucket` is the one copy, and the probe reads it too (#8507)."""
+    """Inventory's `k3s_longhorn_b2_bucket` is the one copy, and the probe reads it too."""
     bucket = yaml_fast.safe_load(ALL_VARS.read_text())["k3s_longhorn_b2_bucket"]
     assert bucket
     assert _url(DEFAULT_TARGET, k3s_longhorn_b2_region="us-west-004") == (

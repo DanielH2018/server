@@ -1,8 +1,8 @@
-"""A component retires the setup-manifest fragments its Ansible-era task actually stamped (#6279).
+"""A component retires the setup-manifest fragments its Ansible-era task actually stamped.
 
 An Ansible setup role recorded what it installed in two fragments,
 `setup-render-manifest.d/<stamp_render_name>` and `setup-deployed-manifest.d/<stamp_deployed_name>`,
-through the shared stamp task files H7.63 deleted. The two names can differ. When a component
+through the shared stamp task files. The two names can differ. When a component
 took a task over, its `legacy:` list had to name each fragment as the task stamped it, or the
 fragment stayed behind naming a file reconcile removed. loki-route-witness listed its render name
 for both and left `setup-deployed-manifest.d/loki-route-health` on daniel-box.
@@ -49,7 +49,7 @@ RECORDED = {
     "docs-refresh": {("render", "docs-refresh")},
     "eval-sweep": {("render", "eval-run")},
     "secret-rotation": {("render", "secret-rotation")},
-    # c1d338364, the k3s role's tasks/health-crons.yml, and #2978 retired the reap one.
+    # c1d338364, the k3s role's tasks/health-crons.yml
     "k3s-host-checks": {
         ("render", "k3s-backup-health"),
         ("render", "k3s-disk-health"),
@@ -62,9 +62,9 @@ RECORDED = {
     # 84bb0bbf0a, the initial_setup role's tasks/integrity.yml
     "integrity-scans": {("render", "rkhunter-check"), ("render", "aide-check")},
     # 85d2bf9f7, the claude_code role's tasks/main.yml, before the role's render stamp
-    # took the name claude-code-ansible. H7.40's third slice moved triage, whose templates were
+    # took the name claude-code-ansible. Triage's templates were
     # all claude-code-ansible still listed, so it retires that render stamp and the triage one.
-    # H7.40's fourth slice moved the artifacts node's crons, whose task stamped
+    # The artifacts node's crons' task stamped
     # claude-code-node-crons (the role task file node_crons.yml, since deleted).
     "claude-code": {
         ("render", "claude-code"),
