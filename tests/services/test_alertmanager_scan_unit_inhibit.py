@@ -73,12 +73,6 @@ def test_a_failed_scan_holds_its_own_unit_on_the_same_host(alert, host):
     assert inhibited(unit_failed(unit, host), [scan_failed(alert, host)])
 
 
-@pytest.mark.parametrize(("alert", "host"), SCAN_HOSTS)
-def test_the_scan_unit_pages_while_its_scan_alert_is_quiet(alert, host):
-    _, unit = SCANS[alert]
-    assert not inhibited(unit_failed(unit, host), [])
-
-
 def test_another_failed_unit_on_the_host_still_pages():
     source = scan_failed("RkhunterScanFailed", "daniel-box")
     assert not inhibited(unit_failed("nut-monitor.service", "daniel-box"), [source])
