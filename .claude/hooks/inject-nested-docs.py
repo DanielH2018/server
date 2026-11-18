@@ -23,8 +23,8 @@ doc is returned as PreToolUse `additionalContext` ONCE per session, and once mor
 subagent (its payload's `agent_id`), whose context starts empty. Every injection is logged
 to `instructions.log` with reason `bash_path_match`, so the same log that measured the gap
 grades the fix. Each row ends in `bytes=<n>`, the UTF-8 size of the block injected for its
-doc, and the row of a doc delivered as a head or an outline carries `form=head` or
-`form=outline` before that. The root
+doc, and the row of a doc delivered as a head, an outline or a pointer carries `form=head`,
+`form=outline` or `form=pointer` before that. The root
 `CLAUDE.md` is never injected: it loads at session start.
 
 ONLY DOCS THIS HOOK CHOSE ARE EVER READ. A path lifted from the command selects a directory;
@@ -42,14 +42,16 @@ EDITING RULES ARRIVE WITH A WRITE. A rule outside `READ_RULES` is injected only 
 command writes (`block-protected-bash.written_paths`), or for every named path under an inline
 interpreter. Rules are mostly injected on reads, but 23% of rule-scoped writes go through
 Bash, so they are not dropped from Bash outright. The measurements are in
-`docs/claude-tooling.md`.
+`docs/claude-tooling.md`. A rule in `POINTER_RULES` gets one pointer line on a read, logged
+`form=pointer`, and still arrives whole with the first write.
 
-EACH SESSION HAS A BYTE BUDGET. Role `CLAUDE.md` files and `facts.md` are inlined, whole or as
-a head, until their blocks would take the session past `SESSION_BUDGET_BYTES`. A doc after
-that arrives as its outline: the headings and a read pointer, logged `form=outline`. The rules
-in `ALWAYS_WHOLE` never count against the budget and are always inlined in full, because a
-read-only grep is where the secrets rule matters (#7899). The full preamble goes with a
-session's first injection, and every later one carries `_SHORT_PREAMBLE`.
+EACH SESSION HAS A BYTE BUDGET. Every byte the hook injects is charged to
+`SESSION_BUDGET_BYTES`: the preamble, the separators and every block. Role `CLAUDE.md` files
+and editing rules are inlined, whole or as a head, until their blocks would take the session
+past it. A doc after that arrives as its outline: the headings and a read pointer, logged
+`form=outline`. The rules in `ALWAYS_WHOLE` are charged but never outlined, because a
+read-only grep is where the secrets rule matters. The full preamble goes with a session's
+first injection, and every later one carries `_SHORT_PREAMBLE`.
 
 THE HEAD, NOT THE HEADINGS. The over-budget form was the heading outline alone until #2650.
 Headings alone bought almost nothing over no injection: sessions read the full doc after only
@@ -102,8 +104,7 @@ _SHORT_PREAMBLE = (
     "[inject-nested-docs] More project instructions for paths this command names.\n\n"
 )
 
-# What a session's role docs and facts.md may inline before the rest arrive as outlines.
-# The 2026-11-09 audit measured a median of 16.6 KB injected per session, 56 KB at worst.
+# Everything a session is injected before its role docs and editing rules arrive as outlines.
 SESSION_BUDGET_BYTES = 8000
 
 # How many headings the trailer names. The whole outline of the busiest role docs fits.
@@ -111,13 +112,18 @@ TRAILER_MAX_HEADINGS = 40
 
 REASON = "bash_path_match"
 
-# The rules a READ needs: `secrets.md` warns before a content grep prints a credential,
-# `generated-docs.md` before a generated page is edited by hand, and `facts.md` governs the
-# citations a CLAUDE.md read leans on. Every other rule waits for a write.
-READ_RULES = frozenset({"secrets.md", "facts.md", "generated-docs.md"})
+# The rules a READ needs whole: `secrets.md` warns before a content grep prints a credential.
+# Every other rule waits for a write.
+READ_RULES = frozenset({"secrets.md"})
 
-# Inlined in full on every first match, outside the session budget.
+# Editing rules a read gets as one pointer line, so the first write still inlines them whole.
+POINTER_RULES = frozenset({"generated-docs.md"})
+
+# Inlined in full on every first match however much of the session budget is spent.
 ALWAYS_WHOLE = frozenset({"secrets.md", "generated-docs.md"})
+
+# The state-file entry recording that a doc's pointer, not the doc, was sent.
+_POINTER_KEY = "pointer:"
 
 # An inline interpreter (`python3 - <<'EOF'`) writes through code the command text cannot show,
 # so every path such a command names counts as written.
@@ -239,6 +245,10 @@ def _is_always_whole(doc):
     return _rule_name(doc) in ALWAYS_WHOLE
 
 
+def _is_pointer_rule(doc):
+    return _rule_name(doc) in POINTER_RULES
+
+
 # ── which docs the harness would have loaded for them ────────────────────────────────
 
 
@@ -344,7 +354,8 @@ def loaded_by_harness(session_id, doc, log_path=None, agent_id=None):
     A row carries only the 8-char session prefix, so the parent and every subagent share
     it. A row tagged `agent=` belongs to a subagent and never counts for the parent. A
     subagent skips the log entirely, because an untagged row may be its parent's; the
-    cost is a repeat load when the subagent itself used Read on the role first.
+    cost is a repeat load when the subagent itself used Read on the role first. A
+    `form=pointer` row never counts, because it delivered a pointer, not the doc.
     """
     sid = (session_id or "")[:8]
     if not sid or agent_id:
@@ -360,6 +371,7 @@ def loaded_by_harness(session_id, doc, log_path=None, agent_id=None):
                         marker in line
                         and doc in fields
                         and not any(f.startswith(AGENT_FIELD) for f in fields)
+                        and f"form={_POINTER_FORM}" not in fields
                     ):
                         return True
         except OSError:
@@ -422,10 +434,12 @@ def _notice(doc, text, header):
 
 
 _OUTLINE_NOTICE_MARK = "so this is its outline."
+_POINTER_NOTICE_MARK = "so this is its pointer."
+_POINTER_FORM = "pointer"
 
 
 def _form(block):
-    """`head`, `outline` or None for a whole doc, read from the block's notice line.
+    """`head`, `outline`, `pointer` or None for a whole doc, read from the block's notice line.
 
     Only the second line counts: a doc delivered whole may quote a notice in its body.
     """
@@ -434,7 +448,18 @@ def _form(block):
         return "head"
     if _OUTLINE_NOTICE_MARK in notice:
         return "outline"
+    if _POINTER_NOTICE_MARK in notice:
+        return _POINTER_FORM
     return None
+
+
+def _pointer_block(doc, header):
+    """An editing rule on a read, as one line naming it."""
+    notice = (
+        f"This rule governs writes and this command only reads, {_POINTER_NOTICE_MARK} "
+        f"Read `{doc}` before you change this path; a Bash write inlines it whole."
+    )
+    return f"{header}\n{notice}\n"
 
 
 def _outline_block(doc, text, header):
@@ -552,64 +577,79 @@ def build_context(command, cwd, session_id, log_path=None, agent_id=None):
     the head in turn, because they only get the budget left after the first head's
     `head_floor`. A whole doc that does not fit under that reserve is deferred instead.
     `python-layout.md` is 6,960 chars, so it always defers beside a head. An `ALWAYS_WHOLE`
-    rule goes before the other whole docs.
+    rule goes before the other whole docs, and a pointer before both.
 
-    A block outside `ALWAYS_WHOLE` that would take the session past `SESSION_BUDGET_BYTES` is
-    replaced by the doc's `_outline_block`, which is recorded and never re-sent.
+    Every byte of the returned text is charged to `SESSION_BUDGET_BYTES`. A block outside
+    `ALWAYS_WHOLE` that would take the session past it is replaced by the doc's
+    `_outline_block`, which is recorded and never re-sent. A `POINTER_RULES` rule on a read
+    is recorded under `_POINTER_KEY`, so its doc stays unsent for the first write.
     """
     key = context_key(session_id, agent_id)
     state = injected_this_session(key)
-    already, spent = state.docs, state.spent
+    already = state.docs
     written = written_targets(command, cwd)
-    candidates = []
+    # doc -> (root, rel, floor, pointer); a write of the doc replaces a pointer to it.
+    candidates = {}
     for root, rel in named_paths(command, cwd):
         writes = written is None or (root, rel) in written
         for doc in docs_for(root, rel):
-            if doc in already or any(doc == c[1] for c in candidates):
+            if doc in already or (doc in candidates and not candidates[doc][3]):
                 continue
-            if not writes and _is_edit_rule(doc):
+            pointer = not writes and _is_edit_rule(doc)
+            if pointer and (
+                not _is_pointer_rule(doc)
+                or doc in candidates
+                or _POINTER_KEY + doc in already
+            ):
                 continue
             if loaded_by_harness(session_id, doc, log_path, agent_id):
                 already.add(doc)
+                candidates.pop(doc, None)
                 continue
             try:
-                floor = head_floor(root, doc, rel)
+                floor = None if pointer else head_floor(root, doc, rel)
             except OSError:
                 continue
-            candidates.append((root, doc, rel, floor))
+            candidates[doc] = (root, rel, floor, pointer)
     # Only the first head is reserved for: it spends nearly all it is given, so a second
     # head in the same command defers whatever the whole docs leave.
-    floors = [c[3] for c in candidates if c[3] is not None]
+    floors = [c[2] for c in candidates.values() if c[2] is not None]
     reserve, reserve_lines = (floors[0][0] + 1, floors[0][1] + 1) if floors else (0, 0)
+    preamble = _SHORT_PREAMBLE if state.preambled else _PREAMBLE
+    spent = state.spent + len(preamble.encode("utf-8"))
     blocks, chosen = [], []
     remaining = INLINE_MAX_CHARS - len(_PREAMBLE)
     remaining_lines = INLINE_MAX_LINES - _PREAMBLE.count("\n")
     order = sorted(
-        candidates, key=lambda c: (c[3] is not None, not _is_always_whole(c[1]))
+        candidates.items(),
+        key=lambda c: (c[1][2] is not None, not c[1][3], not _is_always_whole(c[0])),
     )
-    for root, doc, rel, floor in order:
+    for doc, (root, rel, floor, pointer) in order:
         whole = floor is None
+        # The 1 is the newline `"\n".join` puts before every block after the first.
+        separator = 1 if blocks else 0
         try:
-            block = render(
-                root,
-                doc,
-                rel,
-                remaining - reserve if whole else remaining,
-                remaining_lines - reserve_lines if whole else remaining_lines,
-            )
-            if block is not None and not _is_always_whole(doc):
-                size = len(block.encode("utf-8"))
-                if spent + size <= SESSION_BUDGET_BYTES:
-                    spent += size
-                else:
-                    block = _outline_block(doc, _read(root, doc), _header(doc, rel))
-                    if len(block) > remaining or block.count("\n") > remaining_lines:
-                        continue
+            if pointer:
+                block = _pointer_block(doc, _header(doc, rel))
+            else:
+                block = render(
+                    root,
+                    doc,
+                    rel,
+                    remaining - reserve if whole else remaining,
+                    remaining_lines - reserve_lines if whole else remaining_lines,
+                )
+            if block is None:
+                continue
+            size = separator + len(block.encode("utf-8"))
+            if spent + size > SESSION_BUDGET_BYTES and not _is_always_whole(doc):
+                block = _outline_block(doc, _read(root, doc), _header(doc, rel))
+                if len(block) > remaining or block.count("\n") > remaining_lines:
+                    continue
+                size = separator + len(block.encode("utf-8"))
         except OSError:
             continue
-        if block is None:
-            continue
-        # The +1 is the blank line `"\n".join` puts between two blocks.
+        spent += size
         remaining = max(0, remaining - len(block) - 1)
         remaining_lines = max(0, remaining_lines - block.count("\n") - 1)
         blocks.append(block)
@@ -618,8 +658,10 @@ def build_context(command, cwd, session_id, log_path=None, agent_id=None):
         if already:
             remember(key, state._replace(docs=already))
         return "", []
-    remember(key, SessionState(already | {d for d, _, _ in chosen}, spent, True))
-    preamble = _SHORT_PREAMBLE if state.preambled else _PREAMBLE
+    sent = {
+        (_POINTER_KEY if _form(b) == _POINTER_FORM else "") + d for d, _, b in chosen
+    }
+    remember(key, SessionState(already | sent, spent, True))
     return preamble + "\n".join(blocks), chosen
 
 
