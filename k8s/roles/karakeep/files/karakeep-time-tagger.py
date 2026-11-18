@@ -13,6 +13,11 @@ from karakeep_python_api import KarakeepAPI
 VERSION: str = "1.3.0"
 
 
+def not_library_record(record) -> bool:
+    """Reject records from karakeep_python_api, whose own sink already prints them."""
+    return not (record["name"] or "").startswith("karakeep_python_api")
+
+
 class AddTimeToRead:
     """Class to add time-to-read tags to bookmarks based on content length."""
 
@@ -96,9 +101,9 @@ class AddTimeToRead:
         """Set up one stderr handler, at DEBUG when verbose and INFO otherwise."""
         logger.remove()
         if verbose:
-            logger.add(sys.stderr, level="DEBUG")
+            logger.add(sys.stderr, level="DEBUG", filter=not_library_record)
         else:
-            logger.add(sys.stderr, level="INFO")
+            logger.add(sys.stderr, level="INFO", filter=not_library_record)
 
     def extract_content_text(self, bookmark) -> str:
         """

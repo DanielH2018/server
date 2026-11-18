@@ -226,3 +226,16 @@ def test_a_day_of_runs_stays_under_the_loki_line_budget():
         f"{lines} lines x {handlers} stderr handlers x {RUNS_PER_DAY} runs = {per_day} lines "
         f"a day, over the {DAILY_LINE_BUDGET}-line budget"
     )
+
+
+def test_the_script_handler_rejects_the_library_records_its_own_sink_prints():
+    """karakeep_python_api prints its records through its own sink, so an unfiltered
+    script handler would ship each of them twice."""
+    adds = [
+        n
+        for n in ast.walk(_method(_tree(), "setup_logging"))
+        if _logger_call(n, "add") and n.args and _is_stderr(n.args[0])
+    ]
+    assert adds and all(any(k.arg == "filter" for k in n.keywords) for n in adds), (
+        "every stderr handler setup_logging adds needs a filter= that drops the library's records"
+    )
