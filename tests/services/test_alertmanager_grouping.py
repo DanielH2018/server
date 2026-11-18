@@ -9,6 +9,7 @@ Run: uv run pytest tests/services/test_alertmanager_grouping.py
 """
 
 import pytest
+from lib.inventory_lists import host_names
 from test_alertmanager_routing import (
     DEPLOY_HOLD,
     PAGING,
@@ -79,3 +80,13 @@ def test_a_host_plane_alert_without_its_grouping_route_is_flagged():
     tree["routes"] = [r for r in tree["routes"] if r.get("group_by") != ["alertname"]]
     labels, _ = PAGING["RkhunterScanFailed/daniel-pi"]
     assert inherited("group_by", labels, tree) == [["alertname", "service"]]
+
+
+def host_plane_matcher(tree: dict) -> str:
+    [route] = [r for r in tree["routes"] if r.get("group_by") == ["alertname"]]
+    [matcher] = route["matchers"]
+    return matcher
+
+
+def test_the_host_plane_route_names_every_inventory_host():
+    assert host_plane_matcher(route_tree()) == (f'service=~"{"|".join(host_names())}"')
