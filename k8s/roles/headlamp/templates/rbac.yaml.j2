@@ -15,9 +15,10 @@
 # through Ansible (repo CLAUDE.md). tests/k8s/test_k8s_manifests.py enforces both.
 #
 # The second subject on each binding is the OIDC identity. Every binding below names two
-# subjects, the ServiceAccount and a Group, and they are the same grant to two identities. Headlamp does not authorise anything itself under OIDC: it
-# forwards the browser's `id_token` and the API SERVER decides. So an OIDC login carries none
-# of the SA's RBAC, and a Headlamp that logs a user in without this subject renders an EMPTY
+# subjects, the ServiceAccount and a Group, and they are the same grant to two identities.
+# Headlamp does not authorise anything itself under OIDC: it forwards the browser's `id_token`
+# and the API SERVER decides. So an OIDC login carries none of the SA's RBAC, and a Headlamp
+# that logs a user in without this subject renders an EMPTY
 # cluster — the login succeeds and every list call is Forbidden. Binding the Group to exactly
 # what the SA already holds is what makes the two identities see the same thing.
 #
