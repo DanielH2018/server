@@ -643,7 +643,7 @@ def context(payload):
         return None
     tag = f" {AGENT_FIELD}{agent_id}" if agent_id else ""
     for doc, trigger, block in chosen:
-        # The block, not the file: `fact_status.py report` totals what entered context (#4653).
+        # The block, not the file: `fact_status.py report` totals what entered context.
         size = f" bytes={len(block.encode('utf-8'))}"
         form = f" form={_form(block)}" if _form(block) else ""
         append_instructions_row(

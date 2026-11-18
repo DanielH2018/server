@@ -107,16 +107,8 @@ def classify(file_path, repo_root):
         guard = os.path.normpath(os.path.join(repo_root, tree))
         if target == guard or target.startswith(guard + os.sep):
             rel = os.path.relpath(target, repo_root)
-            # A page under docs/reference/ is protected because a generator OWNS it, and
-            # every generator stamps a provenance banner. docs/reference/topology.md is
-            # hand-written prose that happens to live there — the only page in the tree with
-            # no banner — so a path-only guard made the one editable page uneditable, and
-            # editing it meant reaching for a bypass. Derived from the file rather than a
-            # hand-kept exemption list: a new generated page is protected the moment its
-            # banner lands, and a new hand-written one is never falsely guarded.
-            # Fails CLOSED: only a file that exists and demonstrably lacks the banner is
-            # exempt. A path that is absent (a new page, or a worktree the check cannot
-            # read) cannot prove it is hand-written, so it stays guarded.
+            # A docs/reference/ page is generator-owned when it carries the provenance
+            # banner. Fails closed: only an existing file without the banner is exempt.
             if (
                 target.endswith(".md")
                 and os.path.isfile(target)
@@ -161,10 +153,8 @@ def main():
     if data is None:
         return 0
     file_path = ((data.get("tool_input") or {}).get("file_path")) or ""
-    # Guard the checkout that owns the edited file, not the one this hook runs from. Up to
-    # #3394 settings.json invoked the primary checkout's copy of this hook, so a root derived
-    # from __file__ aimed the path-prefix guard at the primary checkout even for an edit inside
-    # a worktree. A session still edits files outside its own checkout by absolute path.
+    # Guard the checkout that owns the edited file, not the one this hook runs from: a
+    # session edits files outside its own checkout by absolute path.
     hook_root = os.path.dirname(
         os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     )
