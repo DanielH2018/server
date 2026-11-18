@@ -300,13 +300,13 @@ def main() -> int:
     stale = dashboard_stale(find_dashboard(issues))
     # Repository Problems (per-package lookup failures, config warnings) get no PR and
     # don't touch dashboard staleness — a package can silently stop updating forever
-    # otherwise (karakeep's gcr.io image, 2026-08). Problem strings go straight into the
+    # otherwise. Problem strings go straight into the
     # fingerprint so a NEW problem re-pages even while an old one is still unresolved.
     problems = find_dashboard_problems(issues)
-    # Updates that soaked past their minimumReleaseAge and never got a PR (issue #886). Neither
+    # Updates that soaked past their minimumReleaseAge and never got a PR. Neither
     # of the two checks above can see this one: the dashboard keeps updating (not stale) and a
     # held update is not a lookup failure (no Repository Problem) — the item just sits in
-    # "Pending Status Checks" indefinitely, which is how promtail ran 3.3.0 for 111 days.
+    # "Pending Status Checks" indefinitely.
     body = dashboard_body(issues)
     unparseable = body is not None and (
         dashboard_headers_unrecognized(body) or pending_section_unreadable(body)
@@ -317,15 +317,15 @@ def main() -> int:
     run_file = os.path.join(state_dir, "last_run")
     # A lost dwell file restarts every clock at zero, which reads exactly like the intended
     # first-run bootstrap and leaves the arm above able to find nothing for up to 14 days
-    # (issue #1526). Report the reset instead of completing healthy through that window.
+    # Report the reset instead of completing healthy through that window.
     pending_reset = pending_state_lost(seen_file, run_file)
     seen = update_pending_seen(read_pending_seen(seen_file), pending, now)
     stuck_pending = stale_pending(seen, pending, now)
     # A tag re-pushed faster than its own soak + grace resets the dwell above forever, so the
-    # branch clock is the floor under it (#3076).
+    # branch clock is the floor under it.
     churning = churning_pending(seen, pending, now)
     # An autoclosed PR is no longer open, so the digest drops it, and its update sits on the
-    # dashboard as an ordinary awaiting row (#4630).
+    # dashboard as an ordinary awaiting row.
     now_dt = datetime.fromtimestamp(now, timezone.utc)
     autoclosed = find_autoclosed(
         [p for p in autoclosed_candidates(repo, now_dt) if is_renovate(p)],

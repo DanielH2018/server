@@ -5,10 +5,10 @@ Description=Loki read-route witness (timer)
 
 [Timer]
 OnCalendar=*-*-* *:23:00
-# Persistent=true, decided 2026-09-19. Cron skips a slot that falls inside an outage, and the
+# Persistent=true. Cron skips a slot that falls inside an outage, and the
 # tile then stays red until the next slot because nothing pushed a fresh verdict. A slot that
 # never fired runs once at boot; a check that went red before a reboot already fired its slot,
-# so homelab-loki-route-witness-boot.service reruns it instead (#4495).
+# so homelab-loki-route-witness-boot.service reruns it instead.
 Persistent=true
 
 [Install]

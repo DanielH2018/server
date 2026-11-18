@@ -14,18 +14,17 @@
 #
 # A rotated .gz that stops decompressing has two causes here, and the point is to tell either
 # from silence rather than to tell them apart:
-#   * A sync bug. log2ram's shipped `rsync --sparse --inplace` clobbered the trailing NUL bytes
-#     of 37 rotated .gz on the SD copy (#2694). `gzip -t` was the ONLY reader that disagreed —
-#     every CRC32 matched and `zcat` recovered every byte — so nothing else would have noticed.
+#   * A sync bug. log2ram's shipped `rsync --sparse --inplace` can clobber the trailing NUL
+#     bytes of rotated .gz files on the SD copy. `gzip -t` is the ONLY reader that disagrees —
+#     every CRC32 matches and `zcat` recovers every byte — so nothing else would notice.
 #   * A failing SD card. mmcblk0 has no SMART, so a bad block announces itself only through a
-#     file that reads back wrong (#2668). A compressed log is the most sensitive file on this
+#     file that reads back wrong. A compressed log is the most sensitive file on this
 #     host for that, because gzip carries a CRC32 over every byte it holds.
 #
-# Cost, measured by running THIS script on daniel-pi 2026-09-27 over 144 files and 9.7 MB:
-# 1.9s wall on the first run, 1.7s (1.44s user) once warm, and ~13s when the SD-side copies are
-# cold. One gzip process, not one per file. That is why the timer is daily and not the 5-minute
-# heartbeat: at */5 this would be ~8 min/day of CPU and ~2.8 GB/day of reads on a 512 MB
-# Zero 2 W whose probe cadence has already caused RCU stalls (pi-healthcheck-fork-churn).
+# Cost: ~2s wall over 144 files and 9.7 MB, and ~13s when the SD-side copies are cold. One gzip
+# process, not one per file. That is why the timer is daily and not the 5-minute heartbeat: at
+# */5 this would be ~8 min/day of CPU and ~2.8 GB/day of reads on a 512 MB Zero 2 W whose probe
+# cadence has already caused RCU stalls (pi-healthcheck-fork-churn).
 #
 # No bash array-length operator anywhere below, on purpose: the renderer templates this file,
 # and the brace-hash that operator opens with is how Jinja starts a comment block, so a single
@@ -51,8 +50,8 @@ detail=
 # Per root, not just in total: a root that exists but holds no rotated log is the case the
 # combined floor below cannot see. /var/hdd.log survives as a plain directory when log2ram stops
 # syncing to it, and /var/log's own 72 files would then clear a floor of 40 on their own while the
-# SD-side tree — the one that carries the signal — went unswept. One extra `find` per root, 0.03s
-# measured, is the price of catching it.
+# SD-side tree — the one that carries the signal — went unswept. One extra `find` per root is
+# the price of catching it.
 missing=
 empty=
 for root in ${ROOTS[@]+"${ROOTS[@]}"}; do

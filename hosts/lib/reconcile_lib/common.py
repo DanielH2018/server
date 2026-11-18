@@ -14,7 +14,7 @@ T = TypeVar("T")
 
 
 # sd-daemon(3) priorities. Without one, journald files a line at the unit's default priority,
-# so `journalctl -p err` finds no failure (#4446, #6202).
+# so `journalctl -p err` finds no failure.
 ERR = 3
 WARNING = 4
 

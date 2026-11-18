@@ -1,5 +1,4 @@
-# The Pi's resolver and its own hostname (H7.25, old step H7.4; docs/target-architecture/host/
-# h7-delete-ansible.md). Both replace optimize_pi's `pi-dns` tasks.
+# The Pi's resolver and its own hostname.
 #
 # - /etc/resolv.conf is templates/resolv.conf.j2, which daniel-box's k3s-host-dns renders too
 #   through `component: pi-resolver`, so the two hosts cannot fork. The nameserver
@@ -18,9 +17,9 @@
 # stub symlink; dpkg replaces the link with the file in step 5 of hosts/bootstrap-host.sh, and
 # step 6 stops and disables systemd-resolved. The order is the safety property: step 5 still
 # needs the stub to reach Ubuntu's archive. The live Pi already has resolved disabled. Docker pins its upstream resolvers when a container starts, so a later change to this
-# file leaves running containers on the old ones until they restart. The Ansible role restarted
-# every container after a change. The package does not, so the operator restarts the containers
-# by hand after such a change (docs/pi-host-tuning-record.md has the 2026-09-01 incident).
+# file leaves running containers on the old ones until they restart. The package does not
+# restart them, so the operator restarts the containers by hand after such a change
+# (docs/pi-host-tuning-record.md has the incident).
 defaults:
   common_resolver_nameservers:
     - "{{ dns_k8s_vip }}"

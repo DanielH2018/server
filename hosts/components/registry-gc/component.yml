@@ -1,8 +1,7 @@
-# The mirror registries' weekly garbage collection (H7.64,
-# docs/target-architecture/host/h7-delete-ansible.md). Nothing else collects the ghcr-mirror and
+# The mirror registries' weekly garbage collection. Nothing else collects the ghcr-mirror and
 # dockerhub-mirror stores, which run with a zero proxy TTL, so without this component they grow
-# until their claims fill. It stays a host script by the operator's ruling on #5680 and #5732:
-# the script is the one writer of each mirror Deployment's `spec.replicas`.
+# until their claims fill. It stays a host script: the script is the one writer of each mirror
+# Deployment's `spec.replicas`.
 #
 # homelab-registry-gc.timer starts homelab-registry-gc.service on Sunday at 04:20. The service
 # runs as root because registry-gc.sh reads the root kubeconfig. It runs `systemd-tmpfiles
@@ -21,8 +20,7 @@
 #   `deploy/dockerhub-mirror`, one at a time. It runs each mirror's Job from
 #   /etc/rancher/k3s/manifests/registry-jobs/, writes each keep-set ConfigMap, and warms each
 #   mirror through its loopback hostPort. It never scales `deploy/registry`, the push store. The
-#   operator accepted the script as the one writer of the ghcr-mirror's `spec.replicas` (#5732),
-#   and #6536 extends that to the dockerhub-mirror's. Nothing else.
+#   script is the one writer of the two mirrors' `spec.replicas`. Nothing else.
 # - Mode (explicit and reversible): the timer's enable link arms it. `registry_k8s_manage_gc: false`
 #   in host_vars, or reverting this component, stops it on the install that drops the link.
 #   `systemctl stop homelab-registry-gc.timer` stops it until the next package install.

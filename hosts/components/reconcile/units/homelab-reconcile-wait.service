@@ -1,6 +1,6 @@
 # Shipped by every host package. homelab-reconcile.service wants this unit and is ordered after
 # it, so the wait for apt's transaction, post-invoke hooks included, spends this unit's start
-# timeout and not reconcile's (#7648). It has no install section: only reconcile pulls it in.
+# timeout and not reconcile's. It has no install section: only reconcile pulls it in.
 [Unit]
 Description=Wait for apt to release the dpkg lock before reconcile starts
 

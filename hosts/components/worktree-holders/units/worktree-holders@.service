@@ -1,5 +1,5 @@
 # One answer of the worktree holder scan, started by worktree-holders.socket for each
-# connection (#4297). The helper reads the caller's uid from the connection on stdin, scans
+# connection. The helper reads the caller's uid from the connection on stdin, scans
 # /proc as root and writes the answer back on that connection.
 [Unit]
 Description=Worktree holder scan for one caller

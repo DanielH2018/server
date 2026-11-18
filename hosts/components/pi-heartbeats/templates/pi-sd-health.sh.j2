@@ -15,7 +15,7 @@
 # reliable "replace this card" signal (it persists across reboots until fsck clears
 # the superblock error state).
 #
-# Prometheus reads the textfile (pi-checks.yaml, M6 batch B5). PiSdHealthFailed names a `down`
+# Prometheus reads the textfile (pi-checks.yaml). PiSdHealthFailed names a `down`
 # verdict fast, and PiSdHealthNotReporting fires when the verdict goes stale, which is how a
 # dead timer or host shows.
 set -uo pipefail
@@ -47,7 +47,7 @@ else
 fi
 
 # The rotated-log integrity verdict, produced daily by pi-gz-integrity and folded in here.
-# Same check on purpose (#2715): a rotated log that stops decompressing and a climbing ext4
+# Same check on purpose: a rotated log that stops decompressing and a climbing ext4
 # errors_count are the same operator action on the same device, and a second check would need
 # its own textfile, rules and deadline literals. A verdict older than the
 # sweep's own period is itself a down — the unreachable-source rule above, applied to a source
@@ -69,7 +69,7 @@ MSG="${MSG}; ${GZ_MSG}"
 
 # Whether log2ram is mounted at all. When its boot guard refuses to start, /var/log stays a
 # plain directory on the SD card, and every log write lands on the card. The integrity sweep
-# above notices that only indirectly and only once a day, as an empty /var/hdd.log (#4583).
+# above notices that only indirectly and only once a day, as an empty /var/hdd.log.
 # This check names the cause directly. It reads the mount table rather than the unit's
 # state, because the mount is what protects the card.
 LOG_FSTYPE=$(findmnt -n -o FSTYPE --mountpoint /var/log 2>/dev/null)
@@ -78,8 +78,7 @@ if [ "$LOG_FSTYPE" != "tmpfs" ]; then
   MSG="${MSG}; /var/log is not log2ram's tmpfs (fstype '${LOG_FSTYPE:-none}'), so logs write to the SD card — check systemctl status log2ram"
 fi
 
-# The textfile verdict for Prometheus (M6 B5, docs/target-architecture/monitoring/
-# m6-retire-kuma.md). DEADLINE_S is 2 x the timer's 300s period + 300s, as M3 derives it; a
+# The textfile verdict for Prometheus. DEADLINE_S is 2 x the timer's 300s period + 300s; a
 # test pins the rule's literals to it. The directory is root:sys_user 2775, so this unit's user
 # can write it.
 DEADLINE_S=900

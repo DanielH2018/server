@@ -1,6 +1,6 @@
 """The builder's staged-rollout gate: the canary's package first, the other hosts' after it reports.
 
-Split from host_package_builder.py (H3.12), which inherits `RolloutGate`. The design is
+Split from host_package_builder.py, which inherits `RolloutGate`. The design is
 docs/target-architecture/host/h3-pi-pilot.md, *Staged rollout*. A run whose changed set holds
 more than one host package stages the canary's alone and opens a gate at that commit. While the
 gate is open the builder builds no other host package. The gate closes when the operator's
@@ -159,7 +159,7 @@ class RolloutGate:
         ):
             return True
         # Prometheus answered, so say what it holds: without this line a gate held by a
-        # canary that reports an older SHA, or none, looks like a gate held by nothing (#7047).
+        # canary that reports an older SHA, or none, looks like a gate held by nothing.
         shas = ",".join(s["metric"].get("sha", "") for s in applied) or "none"
         oks = ",".join(str(s["value"][1]) for s in reconcile) or "none"
         log(
