@@ -6,10 +6,8 @@ a module global, so nothing here can be patched: a test builds the config it wan
 `load_config({...})` or narrows a fixture with `dataclasses.replace(cfg, X=...)`, and what the
 code under test reads is the object it was handed.
 
-That replaces the module-constant-plus-`monkeypatch` arrangement this file carried until
-2026-09-04, where 118 test sites patched attributes on this module and two more `importlib
-.reload()`d it to re-derive a field from a different environment. A patched module
-constant is a process-wide global with a test-shaped hole in it; a parameter is not.
+A patched module constant is a process-wide global with a test-shaped hole in it; a
+parameter is not.
 
 THE FIELDS LIVE IN THREE DOMAIN MODULES, composed here by inheritance so that flat `cfg.X`
 access survives: `config_host` (disks, SMART, temperatures, the UPS, the Pi), `config_service`
@@ -19,21 +17,21 @@ Each declares a frozen dataclass and a builder taking `load_config`'s parsers as
 a leaf never imports this facade. What stays HERE is the loop and endpoint fields every domain
 needs and the check filter.
 
-BUILDING THIS MUST NOT RAISE. A ValueError on one malformed number used to kill the pod during
+BUILDING THIS MUST NOT RAISE. A ValueError on one malformed number would kill the pod during
 import, before the heartbeat file existed and before any monitor could be told. `_int`/`_num`
 below record the problem, fall back to a placeholder, and hand the whole list to
 `main()` as `Config.CONFIG_PROBLEMS`, which prints one operator-readable line per problem and
 exits 2.
 
 A KEY THE POD'S ENVIRONMENT RENDERS HAS NO DEFAULT HERE. `templates/config/env.yaml.j2` holds the
-value the pod runs with, and `templates/env-secret.yaml.j2` the credentials, so a second default in this package was a copy the deploy never read, and 40
-of the 133 keys both files named had drifted apart (#3659). A read with no default is required:
+value the pod runs with, and `templates/env-secret.yaml.j2` the credentials, so a second default in this package would be a copy the deploy never reads, and
+the two would drift apart. A read with no default is required:
 an absent key records a problem the same way a malformed one does. A default survives only on a
 key the template does not render. `tests/test_config_reads_the_rendered_env.py` holds both
 directions.
 
 Constants only. The mutable per-check state (the streak counters and probe caches) is
-`bridge.streaks.State`, which a check reads as `src.state` (#3866).
+`bridge.streaks.State`, which a check reads as `src.state`.
 """
 
 from collections.abc import Mapping
@@ -102,7 +100,7 @@ def load_config(env: Mapping[str, str], problems: list[str] | None = None) -> Co
         """The `name` env var. With no `default`, the key is REQUIRED.
 
         A required key is one `templates/config/env.yaml.j2` or the env-secret renders, so the
-        template holds its value and this module holds none (#3659). Absent, it records a problem and reads
+        template holds its value and this module holds none. Absent, it records a problem and reads
         as "" rather than raising, and `main()` exits 2 naming it.
         """
         if default is not None:
@@ -145,14 +143,13 @@ def load_config(env: Mapping[str, str], problems: list[str] | None = None) -> Co
 
         Inlined in the container environment, a secret lands in the pod's env, which envFrom
         cannot filter per key. Pointing <name>_FILE at a 0600 mounted file keeps it out of
-        every process's environment (2026-07-15 review H2). Trailing whitespace is stripped so
+        every process's environment. Trailing whitespace is stripped so
         a rendered newline can't corrupt the value.
 
         A read error (the file went missing, or the mount source was auto-created as a
         directory because the host file was absent) falls back to the plain env var rather
         than raising: an unguarded open() would fail the whole config build over one missing
-        file, disabling every check instead of just the one whose credential is empty
-        (2026-07-15 review L1).
+        file, disabling every check instead of just the one whose credential is empty.
         """
         path = env.get(name + "_FILE", "")
         if path:
@@ -182,11 +179,9 @@ def load_config(env: Mapping[str, str], problems: list[str] | None = None) -> Co
         HEARTBEAT_FILE=_env("HEARTBEAT_FILE", "/tmp/heartbeat"),
         PROM_URL=PROM_URL,
         LOKI_URL=_env("LOKI_URL").rstrip("/"),
-        # Which checks THIS instance runs. The Phase F twin/remnant split ended with the Docker
-        # uninstall (2026-08-14): the cluster deployment is now the ONLY bridge and runs every
-        # check (disk_prune retired with the Docker daemon; pi_peers/renovate_alive
-        # became direct pushers at the host flips). The CHECKS_ONLY/CHECKS_SKIP mechanism stays —
-        # it is how any future split would be expressed, and check.py's guards keep it honest.
+        # Which checks THIS instance runs. The cluster deployment is the ONLY bridge and runs
+        # every check. The CHECKS_ONLY/CHECKS_SKIP mechanism is how any split would be
+        # expressed, and check.py's guards keep it honest.
         # CHECKS_ONLY (comma-separated names) enables exactly that set; CHECKS_SKIP drops names
         # from whatever is otherwise enabled. The three reachability gates participate under the
         # names their monitors push as (prometheus, b2_reachable, wan_reachable), and a gate row the filter

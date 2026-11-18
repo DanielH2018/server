@@ -25,10 +25,9 @@
         #
         # The selectattr runs INSIDE each expression rather than being hoisted into its own
         # `pending` variable. A State object does not survive being stored in one `variables:` entry
-        # and read from the next — it arrives as a plain string, so `u.name` / `u.entity_id` raised
-        # "'str object' has no attribute 'entity_id'" and the automation aborted during variable
-        # rendering, BEFORE the notify step. That failed silently every Sunday from 2026-06-18 until
-        # the 2026-08-16 review found it: the digest never once delivered. Read the versions off
+        # and read from the next — it arrives as a plain string, so `u.name` / `u.entity_id` raise
+        # "'str object' has no attribute 'entity_id'" and the automation aborts during variable
+        # rendering, BEFORE the notify step, failing silently. Read the versions off
         # `u.attributes` for the same reason — no second lookup by entity_id.
         count: "{{ states.update | selectattr('state', 'eq', 'on') | list | count }}"
         lines: >-

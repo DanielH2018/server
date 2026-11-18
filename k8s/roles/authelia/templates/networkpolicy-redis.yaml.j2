@@ -4,18 +4,17 @@
 # (config-secret.yaml.j2), and nothing else does.
 #
 # THIS POLICY SHIPS WITH THE ROLE THAT NEEDS IT, and that is the whole point of the file's
-# location. It lived in k8s/roles/netpol-baseline/ until 2026-09-10, one role away from the
-# Deployment whose startup depends on it. `--tags authelia` therefore staged a portal that
-# could not reach its session store, and Authelia refuses to start without one: it exits on
+# location. Kept in another role, `--tags authelia` would stage a portal that cannot reach
+# its session store, and Authelia refuses to start without one: it exits on
 # `error initializing session backend: redis connection error: ... i/o timeout` and
-# CrashLoopBackOffs behind every forwardAuth route in the fleet. That is issue #1609, and
-# `build_k8s_dep_map` cannot see a split like it — it derives a role's edges from templates
-# inside that role's own directory, so a dependency expressed in a sibling role produces no
-# edge and no ordering constraint to violate.
+# CrashLoopBackOffs behind every forwardAuth route in the fleet. `build_k8s_dep_map` cannot
+# see such a split — it derives a role's edges from templates inside that role's own
+# directory, so a dependency expressed in a sibling role produces no edge and no ordering
+# constraint to violate.
 #
-# 6379 is the containerPort AND the Service port — verified 2026-09-10, they match, and
+# 6379 is the containerPort AND the Service port, and
 # tests/services/test_authelia_redis_sessions.py keeps them matching. That test also
-# pins this file's co-location, so moving it back fails the suite rather than the pod.
+# pins this file's co-location, so moving it fails the suite rather than the pod.
 #
 # The crowdsec agent sidecar shares the authelia pod, so it arrives here carrying `app:
 # authelia` too. That is a property of pod-level identity, not a second rule to write — see

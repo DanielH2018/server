@@ -48,7 +48,7 @@ LOGGED_WHEN_UP = frozenset({"b2_storage", "r2_usage"})
 # also how `run_once` tells a gate row from any other. The dependent's body is not called and
 # its gauge reads 0, and Alertmanager's inhibit rules hold the dependent's page behind the
 # gate's own, so one outage pages once. The gate rows run first and have no gate of their own,
-# so a gate that cannot go red is not coverage (#2825). There is no `prometheus` key: the
+# so a gate that cannot go red is not coverage. There is no `prometheus` key: the
 # Watchdog pages a dead Prometheus, which cannot evaluate a rule either.
 GATE_SKIP = {
     "b2_reachable": "skipped — B2 unreachable (see B2Unreachable)",
@@ -114,8 +114,8 @@ def _exporter_suppressed(src: Sources) -> set[str]:
 
     A BARE `up`, deliberately, with no `origin` matcher. The `node` job labels each target with
     its own node name (daniel-box, daniel-server), so a probe pinned to origin="daniel-server"
-    saw one node exporter of three and missed a dead daniel-box one (#2779). A failure to DETERMINE exporter health leaves the set empty: fail toward alerting,
-    never masking.
+    sees one node exporter of three and misses a dead daniel-box one. A failure to DETERMINE
+    exporter health leaves the set empty: fail toward alerting, never masking.
     """
     # DECIDED: suppression stays keyed on the Prometheus `job`, so a dead exporter on ONE host
     # holds the dependents' verdicts estate-wide. Accepted over per-origin suppression: the
@@ -166,16 +166,15 @@ def run_once(
     only = cfg.CHECKS_ONLY if only is None else only
     skip = cfg.CHECKS_SKIP
     # A routine verdict is logged only on a narrowed run, where someone reads the output for
-    # it. The pod logged ~50 OK lines every 300 s cycle, burying the DOWN ones; it now logs each
+    # it. ~50 OK lines every 300 s cycle would bury the DOWN ones, so the pod logs each
     # DOWN line, each `up` that is holding a down streak (a page on its way), the LOGGED_WHEN_UP
-    # lines, and one CYCLE count (#4448). A SKIP line repeats what its gate's DOWN line already
+    # lines, and one CYCLE count. A SKIP line repeats what its gate's DOWN line already
     # says, so it is counted rather than logged.
     log_all = bool(only)
     counts = {"up": 0, "down": 0, "skipped": 0}
     down_gates: set[str] = set()
     # DECIDED: the exporter probe runs once per cycle, before the first row, and only when an
-    # enabled row sits under `EXPORTER_DEPENDENT`. The `prometheus` gate row used to order it
-    # (the probe ran after that row answered), and Cutover-2 deleted the row. A probe that
+    # enabled row sits under `EXPORTER_DEPENDENT`. A probe that
     # fails leaves the set empty, so the dependents run and fail toward alerting.
     dependents = frozenset().union(*EXPORTER_DEPENDENT.values())
     suppressed: set[str] = set()
@@ -244,5 +243,5 @@ if __name__ == "__main__":
         sys.exit(0)
 
     print("the entry point is cli.py — run `python cli.py` instead", file=sys.stderr)
-    # 64 is sysexits' EX_USAGE, the repo's usage-error code (`lib/exit_codes.py`, #4487).
+    # 64 is sysexits' EX_USAGE, the repo's usage-error code (`lib/exit_codes.py`).
     sys.exit(64)

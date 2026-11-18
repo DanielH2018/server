@@ -23,7 +23,7 @@ metadata:
   name: home-assistant
   namespace: {{ k8s_namespace }}
 spec:
-  # Recreate is load-bearing (slice-5 D5): the PVC is RWO, and two HAs against one MQTT
+  # Recreate is load-bearing: the PVC is RWO, and two HAs against one MQTT
   # broker and one recorder lineage must never coexist.
 {{ spec_shell('Recreate') }}
   replicas: 1
@@ -39,11 +39,10 @@ spec:
       # DECIDED: every Deployment of a home-critical entry is pinned to k8s_primary_node (#3452).
       # Traefik, pihole and mosquitto must run on the node that announces their MetalLB VIPs, so
       # the house already stops working when that node goes down. HA, authelia and its redis,
-      # the crowdsec engine and zigbee2mqtt were free to land on daniel-server, which made it a
-      # second node whose loss broke SSO and home automation. Pinning them costs no availability
-      # the VIP pins had not already spent, and the pin moves with k8s_primary_node. On
-      # 2026-10-04 daniel-box used 11.2Gi of 28.2Gi allocatable, and this pod (881Mi, limit
-      # 2Gi) is the largest that moved. The `home-critical-workloads-pinned-to-the-vip-node`
+      # the crowdsec engine and zigbee2mqtt, left free to land on daniel-server, would make it
+      # a second node whose loss breaks SSO and home automation. Pinning them costs no
+      # availability the VIP pins had not already spent, and the pin moves with
+      # k8s_primary_node. The `home-critical-workloads-pinned-to-the-vip-node`
       # row in tests/k8s/_edge_property_rows.py derives the set from `tier`.
       nodeSelector:
         kubernetes.io/hostname: {{ k8s_primary_node }}
@@ -87,7 +86,7 @@ spec:
 {% endfor %}
           # As PUID, not root: the seeded /config is uid-1000-owned and this container drops
           # ALL caps (no DAC_OVERRIDE), so only the owner can overwrite the previous copies.
-          # Root-with-no-caps failed exactly there on first boot ("can't create: File
+          # Root-with-no-caps fails exactly there ("can't create: File
           # exists"). The MAIN container can't take a pod-level runAsUser — LSIO s6 must
           # start as root — which is why this lives here per-container.
           # Asserted here, not on the pod: the main container below must still start as
@@ -129,13 +128,11 @@ spec:
           # DECIDED: exec-curl to 127.0.0.1, not httpGet — HA's ip_ban middleware runs on EVERY
           # request, and it keys on the peer address. A kubelet httpGet arrives from the node's
           # pod-network gateway (10.42.0.1), so once anything gets that IP banned HA answers 403
-          # and kubelet kills the container it just banned — a self-inflicted crash loop (2026-08-23:
-          # 3 restarts, paging k3s Workload Health). From inside the container the peer is
+          # and kubelet kills the container it just banned — a self-inflicted crash loop. From inside the container the peer is
           # 127.0.0.1, which no ban can reach. Readiness moves too: fixing liveness alone just
           # relocates the outage to a yanked Service endpoint.
           # curl over tcpSocket: tcpSocket also escapes the ban but stops proving HTTP works, so a
-          # wedged HA still holding the listener would pass. curl is proven present in this
-          # image — it was the pre-migration healthcheck's binary.
+          # wedged HA still holding the listener would pass. curl is present in this image.
           # timeoutSeconds: exec probes default to 1s; curl -m 4 keeps curl's deadline inside it.
           readinessProbe:
             exec:

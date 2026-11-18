@@ -1,4 +1,4 @@
-"""The wake-window gates count a fallback-wake morning as a wake (#8383).
+"""The wake-window gates count a fallback-wake morning as a wake.
 
 On a fallback morning sensor.bedroom_wake_start is unavailable, or dated tomorrow, and only
 input_datetime.bedroom_last_wake marks the wake. A gate that built its window from wake_start alone
