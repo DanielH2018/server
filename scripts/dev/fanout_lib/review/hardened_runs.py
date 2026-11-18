@@ -2,12 +2,12 @@
 
 Two kinds, by what the call reads. A call on the batch's worktree goes through `worktree_git`,
 under the `hardened` prefix: the agent can write that repo's config, hooks, attributes and
-replace refs, so each setting a call consults is pinned (#3871). `worktree_must` is the same
+replace refs, so each setting a call consults is pinned. `worktree_must` is the same
 call for a step that may not fail, and raises `ResetFailed`.
 
 A call that needs a tree nobody wrote goes to a fresh clone instead. `clone_at` checks a commit
 out with `BARE_GIT`, which reads no global, system or worktree configuration, and `bare_git`,
-`collect` and `pytest_argv` run there (#3837). `outcomes` reads the `-rA` summary of such a run,
+`collect` and `pytest_argv` run there. `outcomes` reads the `-rA` summary of such a run,
 and `fixture_closures` the fixtures a `--setup-plan` run lists for each node.
 
 The red gate, the green gate, the worktree reset and the two red/green measures
@@ -41,7 +41,7 @@ _PINNED = (
     ("core.symlinks", "true"),
     ("core.untrackedCache", "false"),
     # `ignoreCase` lets `clean` keep a planted case variant, `recurse` reaches into a
-    # submodule's own config, and a split index is a second file the reset reads (#3884).
+    # submodule's own config, and a split index is a second file the reset reads.
     ("core.ignoreCase", "false"),
     ("submodule.recurse", "false"),
     ("core.splitIndex", "false"),
@@ -54,7 +54,7 @@ _NO_USER_CONFIG = ("GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1")
 
 
 def hardened(run: Runner, worktree: Path) -> list[str]:
-    """The `env ... git` prefix every git call on the worktree runs under (#3871).
+    """The `env ... git` prefix every git call on the worktree runs under.
 
     The red author, and later the implementer, can write the repo's config, its hooks, its
     `info/attributes` and its replace refs, and the reset that clears the red phase would
@@ -133,7 +133,7 @@ _USED = " (fixtures used: "
 
 
 def fixture_closures(output: str, nodes: list[str]) -> dict[str, list[str]]:
-    """Each of `nodes` a `pytest --setup-plan` run lists, with every fixture it resolves (#4548).
+    """Each of `nodes` a `pytest --setup-plan` run lists, with every fixture it resolves.
 
     The plan prints a node as its id, followed by `_USED` and its `item.fixturenames` when
     it has any. A fixture's own SETUP line carries the same suffix, so a line counts only
@@ -161,7 +161,7 @@ def pytest_argv(worktree: Path, *args: str) -> list[str]:
 # git with no configuration the implementer can write: no global or system file, which a
 # clone's own fresh config leaves as the only other sources, and no user attributes file. The
 # green gate checks HEAD out this way, so no filter, `info/attributes` line or config value
-# from the worktree's repo can rewrite a file on its way to pytest (#3837).
+# from the worktree's repo can rewrite a file on its way to pytest.
 BARE_GIT = (
     "env", "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1",
     "git", "-c", "core.attributesFile=/dev/null",
@@ -184,7 +184,7 @@ def _origin_refs(run: Runner, clone: Path, origin: str) -> str:
     A clone of a path maps the source's local branches to `origin/*`, so its `origin/master`
     is the source's local `master`. Tests that diff against `origin/master` must see the base
     the red gate saw, not that branch and not the source's live remote-tracking ref, which a
-    fetch or the implementer can move between the gates (#3845). One transaction may not name
+    fetch or the implementer can move between the gates. One transaction may not name
     a ref twice, so `origin/master` is set rather than deleted and recreated.
     """
     mapped = run(
@@ -214,8 +214,8 @@ def clone_at(run: Runner, worktree: Path, rev: str, origin: str, tree: Path) -> 
     """Check `rev` out into a fresh clone at `tree`; git's error, or "" on success.
 
     The clone reads none of the worktree's config, attributes or index, so nothing the
-    implementer left there rewrites what pytest runs (#3837). Its `origin/master` is
-    `origin`, or absent when that is "" (#3845).
+    implementer left there rewrites what pytest runs. Its `origin/master` is
+    `origin`, or absent when that is "".
     """
     cloned = run(
         [

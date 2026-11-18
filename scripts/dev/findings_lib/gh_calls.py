@@ -78,22 +78,21 @@ def _operator_issues(issues: list[dict]) -> list[dict]:
 # truncation the warning below exists to announce would be silent. At 1000 the warning
 # fires exactly when gh truncates, which is what it says it does.
 #
-# Nothing fetches the whole register any more, so no live caller is near this: every
-# `findings.py` subcommand reads `--state open`, `open` asks gh's search index for one
-# fingerprint, `history` and `show` ask it for one topic or one issue, and the backlog cron
-# reads the three narrow slices `load_backlog_issues` names. The largest of those is 49
-# issues.
+# No caller fetches the whole register, so none is near this: every `findings.py`
+# subcommand reads `--state open`, `open` asks gh's search index for one fingerprint,
+# `history` and `show` ask it for one topic or one issue, and the backlog cron reads the three
+# narrow slices `load_backlog_issues` names.
 ISSUE_LIST_CAP = 1000
 
 # `lib.gh.gh`'s default timeout is 60s, which a whole-register `--state all` fetch outgrows:
-# asking for `body` and `comments` on every `claude` issue in every state is 4.19 MB across
-# ~900 issues and takes 67.5s wall, so EVERY findings.py subcommand would fail, `open`
-# included, with a bare "gh failed: ... timed out after 60.0 seconds". Raising the timeout
-# only moved the wall: at ~58s per 1000 issues, 300s breaks at about 5,100 issues, and a
-# fetch that times out never reaches the cap warning that would have explained it.
+# asking for `body` and `comments` on every `claude` issue in every state takes about 58s per
+# 1000 issues, so EVERY findings.py subcommand would fail, `open` included, with a bare "gh
+# failed: ... timed out after 60.0 seconds". Raising the timeout only moves the wall (300s
+# breaks at about 5,100 issues), and a fetch that times out never reaches the cap warning that
+# would have explained it.
 #
 # NARROWING THE FIELD SET IS THE WRONG LEVER — the field set is not what makes a fetch slow,
-# the STATE is (`--state all` 995 issues / 58.4s, `--state open` 57 issues / 0.9s), and
+# the STATE is (`--state all` takes about a minute, `--state open` under a second), and
 # `issue_model.issue_rows` structurally needs `body` for `verify_by` and `paths` and
 # `comments` for `claimed` and `reobservations`. Narrowing the QUERY is the lever:
 # `fingerprint_match` for `open`, `load_backlog_issues` for the cron. This timeout is a
@@ -191,14 +190,13 @@ FINGERPRINT_SEARCH_LIMIT = 30
 
 
 # DECIDED: `open` asks gh's search index for the one fingerprint instead of fetching the
-# register and scanning it. Measured 2026-09-28 on daniel-server: the whole-register read
-# this replaced was 995 issues, 4.3 MB and 58.4s, and it grew with every finding filed —
-# #2800 had already watched it blow through `lib.gh.gh`'s 60s default and take EVERY
-# findings.py subcommand down with it. The search is 0.6s and does not grow. The cost is
+# register and scanning it. A whole-register read grows with every finding filed and
+# would blow through `lib.gh.gh`'s 60s default and take EVERY findings.py subcommand down
+# with it. The search is fast and does not grow. The cost is
 # gh's search INDEX LAG: an issue filed seconds ago may not be findable yet, so two sessions
 # filing one fingerprint inside that window both create. That trade is right — a duplicate
 # issue is one `close --refuted` away, while a filer that cannot run drops the finding into
-# a reply and loses it, which is the harm the register exists to prevent. Long form: #2846.
+# a reply and loses it, which is the harm the register exists to prevent.
 def fingerprint_match(fp: str, tools: FindingsTools) -> dict | None:
     """The register's issue carrying fingerprint ``fp``, in any state, or None.
 

@@ -2,8 +2,8 @@
 
 `claude_worktree` holds the readers `lib.worktrees` shares with the dotfiles
 `prune-worktrees.py` SessionStart hook — the `Worktree` record, `parse_worktree_list`,
-`session_is_alive`, `cherry_says_landed`, `merge_tree_says_contained`, `default_ref`
-(#2133). It is not on the repo's `uv` environment: chezmoi deploys it to
+`session_is_alive`, `cherry_says_landed`, `merge_tree_says_contained`, `default_ref`.
+It is not on the repo's `uv` environment: chezmoi deploys it to
 `~/.local/share/claude-worktree`, beside `claude-guard`, and `CLAUDE_WORKTREE_HOME`
 overrides that path. Import this module before anything from `claude_worktree`;
 `lib.worktrees` does, and every consumer in this repo imports the readers from there.
@@ -18,7 +18,7 @@ overrides that path. Import this module before anything from `claude_worktree`;
 # is the one importer that must not crash, and `session-health.py` already catches the
 # ImportError and prints it. CI gets the real module the way a host does: the `pytest`
 # job in `.github/workflows/ci.yml` checks out the dotfiles repo at a pinned SHA and links
-# the package into `~/.local/share/` (#2812).
+# the package into `~/.local/share/`.
 """
 
 import os

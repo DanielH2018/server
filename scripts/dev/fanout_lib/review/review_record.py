@@ -32,10 +32,9 @@ BLOCKER_CHARS = 500
 SAVED_FORMAT = "%Y%m%dT%H%M%SZ"
 RECORD_NAME = re.compile(r"^(?P<batch>\d+)\S*-(?P<saved>\d{8}T\d{6}Z)\.json$")
 # The `test` findings the fix round takes at any severity: a test that checks nothing. The
-# severity floor dropped 46 of the reviewer's 50 test findings, these among them (#4023).
-# `scaffold` was acted on too until #3675 judged it: 1 of 7 actionable scaffold findings was
-# real, the rest mostly a duplicate of a stronger test, while all 9 vacuous ones were real. A
-# scaffold or missing-coverage finding keeps the severity floor.
+# severity floor would drop most of the reviewer's test findings, these among them. A
+# `scaffold` finding is mostly a duplicate of a stronger test, while a vacuous one is real, so
+# a scaffold or missing-coverage finding keeps the severity floor.
 ACTED_ON_TEST_SUBKINDS = frozenset({"vacuous"})
 
 
@@ -66,7 +65,7 @@ class Record:
     batch: str
     pr: str = ""
     # The `--effort` every reviewer call passes, read from here so the record names what ran
-    # and actionable findings per PR can be compared between settings (#3966). A record
+    # and actionable findings per PR can be compared between settings. A record
     # written before this field existed has no key.
     review_effort: str = REVIEWER.effort
     # The `fanout_lib.sizing` rung every phase that runs or resumes the implementer passes,
@@ -78,23 +77,23 @@ class Record:
     actionable: list[dict] = field(default_factory=list)
     remaining: list[dict] = field(default_factory=list)
     # The findings the delta review reported without a quote the fix head's file holds near
-    # the cited line (`delta_confirm`, #6547). They are carried, not left: they hold nothing.
+    # the cited line (`delta_confirm`). They are carried, not left: they hold nothing.
     unverified: list[dict] = field(default_factory=list)
     # How many fix rounds ran: 0 with no actionable finding, 2 when a medium-or-worse finding
-    # survived the first delta review (#7687).
+    # survived the first delta review.
     fix_rounds: int = 0
-    # The red gate's verdict (#3674): "" when the batch had no red phase, else "passed" or the
+    # The red gate's verdict: "" when the batch had no red phase, else "passed" or the
     # gate's reason. The test author reruns its tests until they fail, so a refusal is rare
     # whatever the tests are worth; `green_first` and the `red_hunks` fields measure them.
     red_gate: str = ""
     red_behaviours: int = 0
     red_tests: int = 0
-    # How many red tests failed only because a name was missing (#4023).
+    # How many red tests failed only because a name was missing.
     red_by_absence: int = 0
     green_gate: str = ""
     # The first green gate run's `red_gate.green_cause`: `passed`, `unmet`, `flaky` or `lock`.
     green_first: str = ""
-    # The implementer's contest of a red test (`green_contest`, #5400): "" when there was
+    # The implementer's contest of a red test (`green_contest`): "" when there was
     # none, else `upheld: ` or `rejected: ` and the contested nodes.
     green_contest: str = ""
     # The PR's new test nodes outside the red phase, those of them that pass with its code
@@ -110,30 +109,30 @@ class Record:
     red_hunks_error: str = ""
     # Why the batch ran no red phase (`red_gate.red_skip_reason`), "" when it ran one.
     red_skipped: str = ""
-    # How the batch ended, so the records count the batches that never reached a PR (#3940):
+    # How the batch ended, so the records count the batches that never reached a PR:
     # `failed`, `needs-input` or `no-pr` before a PR exists, then `pr` once one does, or
     # `failed` / `needs-input` when the last phase says so.
     outcome: str = ""
     # The `needs input:` or `failed:` line the last phase's report ended on, "" when it ended
-    # on none, so the records can say why a batch stopped as well as that it did (#7686).
+    # on none, so the records can say why a batch stopped as well as that it did.
     blocker: str = ""
     # The head the last reviewer read: the head the first review read, or the fix round's head
-    # when a delta review read that (#5496). `fanout_lib.autoland` lands a PR unattended only
+    # when a delta review read that. `fanout_lib.autoland` lands a PR unattended only
     # while GitHub still shows this head, so a push after the review stops at the PR. "" in a
     # record written before this field existed.
     head: str = ""
-    # The VERDICT line of the landing the pipeline ran (#3960), "" when it ran none.
+    # The VERDICT line of the landing the pipeline ran, "" when it ran none.
     verdict: str = ""
     # Why a daniel-server pipeline left its PR for the server lander rather than landing it
     # (`review_ci.server_lands`): "" when it landed it, or on daniel-box.
     land_hold: str = ""
-    # The CI wait a batch that does not land runs (#4737): "" when it ran none, else its
+    # The CI wait a batch that does not land runs: "" when it ran none, else its
     # result in words, whether the implementer was resumed for a red verdict, and whether
-    # the failed jobs were re-run after a resume that pushed nothing (#7674).
+    # the failed jobs were re-run after a resume that pushed nothing.
     ci_gate: str = ""
     ci_resumed: bool = False
     ci_rerun: bool = False
-    # The jobs the first CI attempt failed, kept when the gate re-ran them (#7884): `ci_gate`
+    # The jobs the first CI attempt failed, kept when the gate re-ran them: `ci_gate`
     # names jobs only while the head is still red. [] in a record written before this field.
     ci_rerun_jobs: list[str] = field(default_factory=list)
     # Per phase: wall-clock seconds, and the tool calls the classifier denied.
@@ -187,7 +186,7 @@ def actionable(findings: Sequence[dict]) -> list[dict]:
 
 
 def survivors(remaining: Sequence[dict]) -> list[dict]:
-    """The findings left after a delta review that earn a second fix round (#7687).
+    """The findings left after a delta review that earn a second fix round.
 
     Medium severity or worse, which excludes a vacuous `test` finding that `actionable` takes
     at any severity. 12 of the 13 batches that ended `needs-input` over 2026-10-25 to
@@ -199,8 +198,8 @@ def survivors(remaining: Sequence[dict]) -> list[dict]:
 def blocking(findings: Sequence[dict]) -> list[dict]:
     """The leftovers that hold a PR instead of landing it: medium or worse, confidence 0.8+.
 
-    Above the fix round's 0.5 floor on purpose, so only a confident leftover stops a landing
-    (#3951). Across 68 batches, 10 medium-or-worse findings survived the fix round and all 9
+    Above the fix round's 0.5 floor on purpose, so only a confident leftover stops a landing.
+    Across 68 batches, 10 medium-or-worse findings survived the fix round and all 9
     of their PRs merged, three of them later named broken by a follow-up.
     """
     return [
@@ -251,7 +250,7 @@ def held_for_findings(record: Record, state_dir: _Path) -> dict | None:
 def held_for_green(record: Record, reason: str) -> dict:
     """The hold on a PR that fails the green gate, saying whether the reviewers faulted the fix.
 
-    Without that, a correct fix held by a wrong red test reads like a wrong fix (#5400).
+    Without that, a correct fix held by a wrong red test reads like a wrong fix.
     """
     verdict, _, nodes = record.green_contest.partition(": ")
     rejected = nodes.split(", ") if verdict == "rejected" else []
@@ -338,7 +337,7 @@ def comment_body(record: Record) -> str:
             f"{held} security findings are held off this public page and kept in the "
             "orchestrator's local record."
         )
-    # Only the actionable findings are listed (#3952): 77% of all findings sat below the
+    # Only the actionable findings are listed: 77% of all findings sat below the
     # confidence floor, and the full list stays in the local record.
     shown = [f for f in record.actionable if not is_held(f)]
     below = len(record.findings) - len(record.actionable)

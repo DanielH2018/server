@@ -1,11 +1,10 @@
 """`verify` during a Flux hop: when the controller's own replacement makes a failure provisional.
 
-THE CONTROLLER ROLLOUT (#6013). A promotion whose changed set includes `flux` can change
+THE CONTROLLER ROLLOUT. A promotion whose changed set includes `flux` can change
 kustomize-controller's own Deployment. The old pod is replaced mid-reconcile and posts
 `failure` ("health check failed") for the `flux` Kustomization and for `soak`, which was
 running on it. The new pod posts `success` for `flux` about 12 seconds later and re-runs the
-soak. On 627fd395 (2026-10-23, promote run 39977616897) `verify` read the first failure,
-ended and held `failed=flux,soak`.
+soak. A `verify` that reads the first failure ends and holds `failed=flux,soak`.
 
 So while STAGE_TAG is expected, a `failure` or `error` of STAGE_TAG or of a name in
 ALSO_REPLACED is provisional for GRACE_S after the first poll that read it: `verify` keeps

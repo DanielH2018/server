@@ -1,4 +1,4 @@
-"""Check 11 of the Longhorn backup-plane heartbeat: weekly volumes a RecurringJob skipped (#3968).
+"""Check 11 of the Longhorn backup-plane heartbeat: weekly volumes a RecurringJob skipped.
 
 A RecurringJob leaves out any volume that is faulted or detached when it filters its volumes,
 logs `Cannot create job for <vol> volume in state <state>`, never retries it, and still reports
@@ -65,7 +65,7 @@ def is_backup_job(job: str) -> bool:
 # DECIDED: only weekly-tier volumes are checked. A daily volume a job skipped gets its next
 # chance the following night, inside check 4's daily limit, so flagging it would hold the check
 # DOWN for a day after every cold start over a gap that closes on its own. A weekly volume waits
-# seven days for its next run and up to 198 h for check 4 to notice (#3968).
+# seven days for its next run and up to 198 h for check 4 to notice.
 def check_skipped_weekly_volumes(
     skips: list[tuple[str, str, float]],
     watched: dict[str, str],

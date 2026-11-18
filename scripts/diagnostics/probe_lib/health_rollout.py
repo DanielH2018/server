@@ -108,7 +108,7 @@ def format_k8s_health(deploy, pods, service, now):
     stale = status.get("observedGeneration", 0) < meta.get("generation", 0)
     # Under RollingUpdate with maxSurge >= 1, a surviving old pod can supply every ready and
     # available replica while the new pod supplies `updated`, so the three counts all equal
-    # `desired` mid-rollout (#4563). Only `status.replicas` counts old and new pods together;
+    # `desired` mid-rollout. Only `status.replicas` counts old and new pods together;
     # `kubectl rollout status` refuses on the same comparison. Kubernetes omits a zero count, so
     # an absent field reads as 0. A DaemonSet's counts are per node and carry no such field.
     old_pods = 0

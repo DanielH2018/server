@@ -1,4 +1,4 @@
-"""The worktrees the other host's checkout registers, read over ssh (#6840).
+"""The worktrees the other host's checkout registers, read over ssh.
 
 `claim_is_live` judges a claim against this host's `git worktree list`. Both hosts' operator
 checkouts make unprefixed branches, so `other_clone_owner` cannot tell a daniel-server claim

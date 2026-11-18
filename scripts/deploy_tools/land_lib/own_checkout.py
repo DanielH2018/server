@@ -2,9 +2,8 @@
 
 land.sh runs land.py from the checkout it lives in, so the helpers it imports are the same
 release as land.py (`tools.py` has why). That checkout can be a worktree branched hours
-before the merge. Its readers then read the merge commit's layout with older code: on
-2026-11-09 a reader from before `cluster/services.yml` read the #7767 merge commit as
-declaring no k8s tags at all (#7820). A layout move that leaves the old reader a non-empty
+before the merge. Its readers then read the merge commit's layout with older code: a reader
+from before `cluster/services.yml` reads a merge commit as declaring no k8s tags at all. A layout move that leaves the old reader a non-empty
 but wrong answer would pass silently, so `classify.refuse_stale_code` refuses the landing
 before it reads anything at the merge.
 
@@ -12,7 +11,7 @@ The code compared is every module this process has loaded from the checkout, plu
 module those import, read from their source: a later phase's function-level import
 (`lib/k8s_roles.py` importing `lib.inventory_lists`) has not run when the refusal does.
 `classify.refuse_stale_code_before_merge` runs the same comparison against origin/master
-before `--arm-merge` merges anything (#7830).
+before `--arm-merge` merges anything.
 """
 
 import ast

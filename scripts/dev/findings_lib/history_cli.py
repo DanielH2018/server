@@ -6,8 +6,8 @@ purpose, and they read them through gh's search index rather than the register l
 
 WHY SEARCH AND NOT `list --state closed`. A label-filtered `gh issue list` goes through
 GitHub's search API, which stops at 1000 issues whatever `--limit` says, and asking for `body`
-and `comments` on every one took 58.4s for 995 issues. The register passed 1000 closed
-issues in 2026-10, so the oldest findings were unreachable and the read outran a 120s tool
+and `comments` on every one takes about a minute per thousand issues. Once the register passes
+1000 closed issues, the oldest findings are unreachable and the read outruns a 120s tool
 timeout. A search for a topic returns tens of issues in under a second and does not grow with
 the register. `list` reads the open register only.
 
@@ -192,11 +192,11 @@ def cmd_show(args: argparse.Namespace, tools: FindingsTools) -> int:
         sys.stderr.write(f"show: #{args.number} is not a `claude` finding\n")
         return 3
     if args.brief:
-        # The fan-out brief's block, for a session working the issue by hand (#3955).
+        # The fan-out brief's block, for a session working the issue by hand.
         # DECIDED: a call-time import. `precomputed` reaches land.sh's classifier, which
         # reads the `k8s/` tree through `lib.render_guard`. Another repo's batch runs
         # findings.py from a snapshot holding only `launch.SNAPSHOT_PATHS`, with no `k8s/`,
-        # and a module-level import crashed every subcommand there on import (#4271).
+        # and a module-level import crashed every subcommand there on import.
         from dev.findings_lib.precomputed import precomputed
 
         block = precomputed(cited_paths(issue.get("body") or ""))

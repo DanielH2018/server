@@ -32,14 +32,13 @@ runs them on every PR, ahead of its steps that stand down on an unchanged tree.
 
 `job-changed` says whether any `--job` it names parses differently at a commit than in the
 working tree. CI's host package jobs build what the container cases read and invoke them, so
-a PR that edits any of them runs the cases (#5004, #6151). The comparison is of the parsed YAML, so an
+a PR that edits any of them runs the cases. The comparison is of the parsed YAML, so an
 edit to a comment alone does not count.
 
 `fixture-changed` says whether the container cases' fixture `homelab-daniel-pi` renders
 differently in two trees, each with the renderer and the fixture that tree holds. The fixture
 exercises renderer paths no real host package does yet, such as a drop-in and a dropped unit,
-so a renderer change can alter the fixture and no real render. Such a PR runs the cases too
-(#5066).
+so a renderer change can alter the fixture and no real render. Such a PR runs the cases too.
 
 Usage:
     uv run python scripts/validate/host_packages.py render --tree . --out /tmp/head
@@ -59,7 +58,7 @@ problem (each `[FAIL]` line on stderr names it), or nothing to lint, or a render
 usage error. `diff` exits 0 whether or not the renders differ, and prints `changed=true` or
 `changed=false` on stdout for `$GITHUB_OUTPUT`. `job-changed` and `fixture-changed` exit 0 either way
 and print `true` or `false` on stdout. Either exits non-zero when it cannot decide, and CI's
-render step fails on that rather than reading it as `false` (#5071).
+render step fails on that rather than reading it as `false`.
 """
 
 import sys as _sys

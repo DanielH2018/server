@@ -1,7 +1,7 @@
 """`probe.py unit` — a host unit's run state: its result, last run, next trigger and journal.
 
 Sessions read this by hand, 99 times in two weeks, with `systemctl show`, `systemctl list-timers`
-and `journalctl -u`/`-t`, often over ssh (#8857). This makes one `host_reader.read_host` call on
+and `journalctl -u`/`-t`, often over ssh. This makes one `host_reader.read_host` call on
 the named host and prints:
 
 - the service's ActiveState, SubState and Result, and its last start and end;

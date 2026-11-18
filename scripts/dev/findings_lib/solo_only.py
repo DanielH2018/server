@@ -1,8 +1,8 @@
 """Which issues are solo-only: they cite the fan-out tooling, so no fan-out batch takes them.
 
 `findings.py next` marks such an issue and `fanout.py place launch` refuses a batch holding
-one (#3959). An issue cites the tooling by naming one of its files or by using the review
-pipeline's own vocabulary (#5880). Kept out of `issue_model.py`, which sits at its
+one. An issue cites the tooling by naming one of its files or by using the review
+pipeline's own vocabulary. Kept out of `issue_model.py`, which sits at its
 module-length cap.
 """
 
@@ -28,7 +28,7 @@ _FANOUT_TOOLING_RE = re.compile(
 
 # DECIDED: the pipeline's own vocabulary, not a diff-based gate in `launch`. #5400 described
 # the green gate and the red lock in prose and named no file, so the path match above never
-# saw it (#5880). A diff check needs the batch's worktree, which exists only after `launch`
+# saw it. A diff check needs the batch's worktree, which exists only after `launch`
 # has claimed the issues and started the run, so it fires after the agent has spent its
 # budget. This match reads the issue text, before any claim, in both `next` and `launch`.
 # Whole phrases only: a bare "review" or "gate" appears in half the register. A miss costs
@@ -43,7 +43,7 @@ _FANOUT_VOCABULARY_RE = re.compile(
 def fanout_tooling_paths(body: str, repo: str | None = None) -> list[str]:
     """The fan-out tooling files an issue body cites, sorted; empty for ordinary work.
 
-    An issue citing one is solo-only (#3959): `next` marks it and `fanout.py place launch`
+    An issue citing one is solo-only: `next` marks it and `fanout.py place launch`
     refuses a batch holding it. A batch that edits this code is reviewed, red-gated and
     stopped by its own edited copy, and fan-out batches on these files caused the most
     rework in 68 review records. A solo session claims and works it as usual.
@@ -51,7 +51,7 @@ def fanout_tooling_paths(body: str, repo: str | None = None) -> list[str]:
     Args:
         body: the issue body.
         repo: the register the issue is in, None for this repo's own. Another repo's issue
-            is never solo-only (#4624): its batch's worktree cannot edit this repo's
+            is never solo-only: its batch's worktree cannot edit this repo's
             pipeline, and its reviewer runs from the snapshot of this repo's `origin/master`
             that `launch` archives into the batch.
     """

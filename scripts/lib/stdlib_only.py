@@ -2,9 +2,9 @@
 
 A hook `run-hook.sh` runs `--no-project`, a cc-wait source and fan-out's review and clean units
 all run under `uv run --no-project`, which installs nothing. A third-party import anywhere they
-reach dies at import, behind a green suite whose venv has the package. #4167 was one: fan-out
-review died on `yaml`. Each break got its own one-path test after the fact (#4404); this module
-derives the whole set instead.
+reach dies at import, behind a green suite whose venv has the package. Fan-out review once
+died on `yaml`. A one-path test per break misses the next one; this module derives the whole
+set instead.
 
 - `stdlib_only_set()` maps each reached module to the directories its caller puts on
   `sys.path`: the entry's own directory (a by-path run) plus every `sys.path.insert` the
@@ -21,7 +21,7 @@ one with no flag runs `--no-project`. Each `.claude/wait-sources/*` script names
 subcommand it runs. `FANOUT_UNITS` and `RUNBOOK_UNITS` list the legs whose command line is
 built in Python or in an array of a shell script; `FANOUT_UNITS` lists the two fan-out legs built in
 Python, which `scripts/lib/tests/test_stdlib_only.py` pins against the builders. The fourth is
-the role scripts a host runs `--no-project` (#4455), which `lib.role_installs` reads from each
+the role scripts a host runs `--no-project`, which `lib.role_installs` reads from each
 role's templates and each host component's files.
 
 A role script runs from the path a host component's `files` entry installs it to, so its
@@ -116,7 +116,7 @@ def _tree(path: Path) -> ast.Module:
 
 # DECIDED: a library module contributes only the imports and inserts that run when it is
 # imported, never those inside a function body. A call-time import is how a module keeps a
-# venv-only dependency off the no-venv path (`fanout_lib/brief.py:_precomputed`, #4167), and
+# venv-only dependency off the no-venv path (`fanout_lib/brief.py:_precomputed`), and
 # following it would put the venv's whole reach in the set. An entry run with no subcommand
 # contributes everything, because its `main` runs on every call; one run with a subcommand
 # contributes its import-time code plus what that subcommand dispatches to (`_dispatched`).

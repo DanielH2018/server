@@ -1,8 +1,8 @@
 """Sum the fan-out review records into the measures that decide whether the red phase stays.
 
-#3674 said the red phase "has to show catches to stay" and counted a red-gate refusal as a
-catch. The test author reruns its tests until they fail, so refusals sit near zero whatever
-the tests are worth. These are the measures that can show a catch instead, per group of
+The red phase "has to show catches to stay", and a red-gate refusal is no catch: the test
+author reruns its tests until they fail, so refusals sit near zero whatever the tests are
+worth. These are the measures that can show a catch instead, per group of
 batches: `red` (the red gate passed), `red-refused` (a red phase ran and was refused) and
 `plain` (no red phase).
 

@@ -46,7 +46,7 @@ def claude_prefix(rung: Rung, prompt: str) -> str:
 # The `fanout-stop` Stop hook, registered for another repo's batch through `--settings`.
 # Claude Code loads project settings from the session's cwd, so a batch in this repo's
 # worktree gets the hook from `.claude/settings.json`, and a batch in the dotfiles worktree,
-# which has no such file, got no hook at all (#3363). Passing it here for the server target
+# which has no such file, got no hook at all. Passing it here for the server target
 # too would run it twice per stop and spend the hook's block cap at double speed. A probe on
 # 2026-10-03 confirmed a `--settings` Stop hook fires under `claude -p`. The hook command
 # names this repo's primary checkout by absolute path, where `.claude/settings.json` uses
@@ -73,11 +73,11 @@ RUNTIME_MAX_S = 5 * 3600
 # a landing rather than start it too close to this cap.
 REVIEW_RUNTIME_MAX_S = 8 * 3600 + 30 * 60
 # DECIDED: each batch gets its own runaway limits, on its host's cgroups rather than in a k8s
-# pod (ADR-0027). They bound a runaway and never a normal batch: over the 7 days to 2026-10-31
-# the largest batch held 1781 MiB of anon and 215 pids. MemoryMax is a multiple of the
+# pod (ADR-0027). They bound a runaway and never a normal batch: the
+# largest batch holds 1781 MiB of anon and 215 pids. MemoryMax is a multiple of the
 # placement reservation so the two move together; page cache counts against it, but the kernel
 # reclaims cache before it OOM-kills. The swap bound keeps one batch from taking the swap that
-# stalled daniel-box on 2026-09-05. `io` is not delegated to user managers, so no IOWeight.
+# stalls the host. `io` is not delegated to user managers, so no IOWeight.
 BATCH_MEMORY_MAX = 3 * RESERVATION_BYTES
 # Above this the kernel reclaims the batch's own page cache (p95 about 6 GiB) before the
 # fleet slice's MemoryHigh has to throttle every batch on the host.
@@ -87,11 +87,11 @@ BATCH_TASKS_MAX = 1024
 # The script a `--review` unit runs as `<it> review`, relative to a checkout; see `review_script`.
 REVIEW_SCRIPT = "scripts/dev/fanout.py"
 # Another repo's batch runs this repo's code from a snapshot of `origin/master` inside its own
-# worktree, never from the host's primary checkout, which can lag it (#3684, #3762). The
+# worktree, never from the host's primary checkout, which can lag it. The
 # snapshot holds what such a batch reads: the review pipeline and everything it imports under
 # `scripts/` and `hosts/lib`, the headless system prompt beside it, and the `fanout-stop` hook. It also holds
 # the uv project files, so the brief's `findings.py` command can `uv run --project` the
-# snapshot rather than the primary checkout (#3783). It lives under `.fanout/`, which
+# snapshot rather than the primary checkout. It lives under `.fanout/`, which
 # `exclude_fanout_command` keeps out of git, so `clean` reads the tree as clean and removes the
 # snapshot with the tree.
 SNAPSHOT_DIR = ".fanout/server"
@@ -111,8 +111,8 @@ SNAPSHOT_PATHS = (
 # The user manager's PATH lacks ~/.local/bin (claude, uv) and repo hooks need uv. The fnm
 # default alias is where `node` lives: the dotfiles repo's `bin/gate` runs `node --test`, and an
 # interactive shell finds node only through fnm's per-shell directory, which a unit never gets.
-# Both sit under the launching user's HOME, which is /var/lib/claude for the agent user (#3627).
-# systemd-run resolves `claude`/`uv` in its caller's PATH, so it runs under this one too (#4192).
+# Both sit under the launching user's HOME, which is /var/lib/claude for the agent user.
+# systemd-run resolves `claude`/`uv` in its caller's PATH, so it runs under this one too.
 def unit_path(home: str) -> str:
     """The PATH a batch's unit runs with, for a user whose home directory is `home`."""
     return (
@@ -229,7 +229,7 @@ def venv_sync_command(batch: str, home: str | None = None) -> str:
     """Build the batch worktree's `.venv` before its agent's first tool call.
 
     `run-hook.sh` falls back to the session checkout's own venv when the primary checkout's
-    cannot run, and a fresh worktree has none to fall back to, so every guard asks (#6978).
+    cannot run, and a fresh worktree has none to fall back to, so every guard asks.
     A failed sync only warns: the venv matters only while the primary one is broken, and a
     launch refused for it would cost the batch every other time.
     """
@@ -296,8 +296,8 @@ def review_script(batch: str, target: Target = SERVER_TARGET) -> str:
     This repo's batch runs the worktree's copy, relative to the unit's WorkingDirectory.
     `worktree add` checks that tree out at `origin/master`, so the script is there and
     current, and it imports `fanout_lib` from the same tree. The host's primary checkout
-    can lag `origin/master`: on 2026-10-09 daniel-server's was 85 commits behind, predated
-    the script, and every review unit placed there failed to spawn (#3684). Another repo's
+    can lag `origin/master` and predate the script, so a review unit placed there fails to
+    spawn. Another repo's
     worktree does not carry the script, so its batch runs the copy in its snapshot of
     `origin/master` (`snapshot_command`), which is current for the same reason.
     """
@@ -389,7 +389,7 @@ _STEP_SENTINEL_RE = re.compile(r"^fanout-step: (.+)$", re.MULTILINE)
 # Cleanup removes the worktree and its branch, so it only runs for a step that could have left
 # one half-made: `worktree add`/`worktree lock` do; a `fetch` failure precedes both and created
 # nothing (its cleanup would fail `worktree remove` with "not a working tree"). A refused
-# `systemd-run` started no unit and no manifest names its tree, so it goes too (#4192); `brief
+# `systemd-run` started no unit and no manifest names its tree, so it goes too; `brief
 # write` leaves it. `exists` must never be here: it fails BECAUSE a tree is there, and that
 # tree belongs to an earlier batch, not this launch. The snapshot step runs inside a tree this
 # launch just made, before the claim, so a failed fetch or archive removes that tree too:

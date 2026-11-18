@@ -2,7 +2,7 @@
 
 WHY A SHARED MODULE. A test that drives a shell script or an entry point does the same three
 things every time, and the 2026-09-28 tests audit found every caller deciding all three for
-itself (#3056).
+itself.
 
 1. **The launch flags.** `text=True` and `capture_output=True` are what a test wants in every
    case — it asserts on `stdout`, so bytes and an uncaptured stream are both wrong — and a

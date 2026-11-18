@@ -422,7 +422,7 @@ def plan_open(
         # so the caller gets exit 3 and no writes are planned.
         return terminal[0], 3, []
     # A review leftover is usually re-filed against the fix round's own issue, so it lands
-    # here rather than on the create path, and `next` would rank it as fresh (#4622).
+    # here rather than on the create path, and `next` would rank it as fresh.
     leftover = "review-leftover" in labels and "review-leftover" not in names
     relabel = (
         [["issue", "edit", n, "--add-label", "review-leftover"]] if leftover else []

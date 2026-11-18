@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generates docs/reference/size.md, the repo's size today and 30 and 90 days earlier.
 
-The operator asked that every proposal name its net complexity delta (#8515). This page is
+The operator asked that every proposal name its net complexity delta. This page is
 the baseline a proposal cites: tracked files and lines per top-level tree, test files,
 instruction lines, and the count of rules, skills, agents and hooks. Each measure carries
 its value at the last commit 30 and 90 days before the run, so growth between reviews shows

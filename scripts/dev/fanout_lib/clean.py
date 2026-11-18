@@ -227,7 +227,7 @@ def read_clean_result(proc: subprocess.CompletedProcess) -> tuple[str, str]:
 # What `live_process_scan`'s awk does with the root helper's answer. It reads the framing
 # `lib.worktrees.read_answer` reads, and prints `unknown (...)` for any answer that function
 # refuses, so the chain keeps the tree. `WT` is the worktree escaped the helper's way: awk
-# compares the escaped forms and never decodes (#4294). It arrives through ENVIRON, because
+# compares the escaped forms and never decodes. It arrives through ENVIRON, because
 # `awk -v` would read its backslashes as escapes.
 _HOLDER_AWK = (
     'NR == 1 { if ($0 != "ok") { bad = 1; if ($1 == "refused") refused = 1 }; next } '
@@ -250,14 +250,14 @@ def live_process_scan(
     """Shell that sets `busy` to the first pid whose cwd or `CLAUDE_PROJECT_DIR` is in `wt`.
 
     `lib.worktrees.processes_using` in shell, for the chains that run before or without an
-    interpreter (Ruling 30): `remove` refuses a tree a live process uses (#3910), and a chain
-    that deletes the tree itself skipped that check (#3995). `busy` is empty when nothing
+    interpreter (Ruling 30): `remove` refuses a tree a live process uses, and a chain
+    that deletes the tree itself skipped that check. `busy` is empty when nothing
     uses the tree.
 
     The root helper `initial_setup` installs answers first, through its socket, when this
-    uid may connect, so another uid's process outside this login slice is seen (#4170). The
+    uid may connect, so another uid's process outside this login slice is seen. The
     socket needs no setuid, so a claude-rc.service shell, which runs with `NoNewPrivs`, asks
-    it too (#4297). `nc -U` is the client, since a shell has no unix-socket redirect. As in
+    it too. `nc -U` is the client, since a shell has no unix-socket redirect. As in
     `privileged_holders`, it fails closed once the socket is there: a failed connection, a
     refusal, an answer without its framing, an `unreadable` line or a line of an unknown kind
     sets `busy`. A socket that is absent, or that this uid's groups cannot write, skips the
@@ -272,7 +272,7 @@ def live_process_scan(
         proc_root: the directory the `/proc` loop walks, one entry per pid. A test seam: the
             loop forks `readlink`, `tr` and `grep` per pid, so a test that needs only the
             chain around the scan points this at an empty directory rather than pay for the
-            host's process count (#4876).
+            host's process count.
     """
     escaped = shlex.quote(escape_holder(wt))
     return (
@@ -330,12 +330,11 @@ def remote_clean_command(
     silently falling through to that stale state.
 
     The `clean-one` leg runs the PRIMARY checkout's copy of this script
-    (`{REPO}/scripts/dev/fanout.py place`), on every host and for every repo. It used to run
-    the batch worktree's own copy for the homelab repo (Ruling E), on the theory that the
-    primary checkout there lags. That froze the merge judgement at whatever the batch was
-    launched from: a batch started before #6552 kept running the `clean-one` that has no
-    `landed`, so every squash-merged batch read "not merged into origin/master" for as long
-    as it stood (#6571). `homelab-checkout-sync` fast-forwards the primary checkout on both hosts,
+    (`{REPO}/scripts/dev/fanout.py place`), on every host and for every repo. The
+    batch worktree's own copy would freeze the merge judgement at whatever the batch was
+    launched from: a batch started before `landed` existed would run a `clean-one` that has
+    no `landed`, so every squash-merged batch would read "not merged into origin/master" for
+    as long as it stood. `homelab-checkout-sync` fast-forwards the primary checkout on both hosts,
     so the primary is the copy that carries the current fix. A host whose primary lacks the
     script fails loudly (`python: can't open file`, exit 2, reported as `failed`) rather than
     keeping the tree silently. It runs from the primary checkout's cwd (`cd {REPO}`) so a
@@ -345,10 +344,9 @@ def remote_clean_command(
     lock file fails to sync with the worktree's `uv.lock` can't take the clean down with it.
 
     The absent-tree case is answered in shell BEFORE the interpreter is needed (Ruling 30).
-    Until #6571 the interpreter leg ran the worktree's own script, which the first pass
-    deletes, so the second pass hit a path that no longer existed, python exited 2, the batch
-    read `kept`, and the run manifest was never deleted. The shell answer stays because it
-    also drops the stale registration and the merged branch, which `clean-one` does not.
+    The first pass deletes the worktree's own script, so an interpreter leg running it on the
+    second pass would hit a missing path, exit 2, read the batch as `kept`, and never delete
+    the run manifest. The shell answer also drops the stale registration and the merged branch, which `clean-one` does not.
 
     "Absent" is decided by the `.git` file every linked worktree carries, not by the
     directory. An agent that removes its own worktree on exit leaves a `.remember/`
@@ -384,7 +382,7 @@ def remote_clean_command(
     branch survives with a `kept:` line.
 
     A tip that differs from the merged head still counts when GitHub's compare calls it an
-    ancestor of that head (`ahead` or `identical`, #6365): `land.sh` merges master into a
+    ancestor of that head (`ahead` or `identical`): `land.sh` merges master into a
     stale-base branch on the remote, so the merged head is the local tip plus a merge commit.
     Every local commit is then in the merged PR. A diverged tip, a tip never pushed, or a failed
     `gh` keeps the branch.
@@ -428,8 +426,7 @@ def remote_clean_command(
     wt, branch = b.worktree, b.branch
     repo = repo or target.checkout
     # DECIDED: the `clean-one` leg runs the PRIMARY checkout's `fanout.py place`, not the batch
-    # worktree's own copy, which is frozen at the batch's launch and kept every squash-merged
-    # batch launched before #6552 (#6571). Full reasoning in this function's docstring.
+    # worktree's own copy, which is frozen at the batch's launch. Full reasoning in this function's docstring.
     clean_one_leg = (
         f"python {script_root or REPO}/scripts/dev/fanout.py place clean-one {wt} {branch}"
         + ("" if target.is_server else f" --repo {target.repo}")
@@ -561,7 +558,7 @@ def sweep_runs(
 ) -> None:
     """`clean_run` over every live run under `root`, newest first, within `SWEEP_BUDGET_S`.
 
-    The unattended reverse of `launch` (#8575): nothing else cleans a landed batch unless an
+    The unattended reverse of `launch`: nothing else cleans a landed batch unless an
     operator runs `place clean`. Each leg keeps every safety `clean` has, so a batch whose unit
     is active, whose tree is dirty or whose branch is unmerged reads `kept`. A batch whose
     branch still heads an open PR is passed over without a leg, since it cannot be merged

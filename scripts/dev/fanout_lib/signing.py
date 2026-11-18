@@ -48,7 +48,7 @@ def signing_key_read_command(repo: str) -> str:
     Resolves `user.signingkey` the way git does for a commit made in `repo`: a literal
     `ssh-…` value is printed as-is, anything else is treated as a file path with a leading
     `~` expanded. Git also accepts the PRIVATE key's path there, which is how the `claude`
-    agent user is configured (#4098), so the read takes the `.pub` file beside it when one
+    agent user is configured, so the read takes the `.pub` file beside it when one
     exists. Either way it prints only the first public-key line, so a private key file's
     contents never leave the host. An unset or unreadable value prints nothing, which the
     caller's parse refuses: the gate fails closed rather than guessing.

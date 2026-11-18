@@ -42,10 +42,9 @@
 # (LIVE_TOKEN below, and the --cluster-reset note further down). docs/k3s-etcd-restore.md
 # carries the evidence and the re-verify command.
 #
-# STATUS. The FULL drill passes, in a throwaway guest: a run restored and served 8 namespaces,
-# 72 Deployments, 45 PVCs, 48 CRDs and 51 Secrets, 50 seconds end to end. The 2026-11-01 run on
-# k3s v1.37.1 failed at the scratch server's start on its loopback advertise address; the
-# endpoint-reconciler flag in ISOLATION_ARGS is the fix (#6846). `--list-only` is the
+# STATUS. The FULL drill passes in a throwaway guest. The endpoint-reconciler flag in
+# ISOLATION_ARGS lets k3s v1.37.1 start the scratch server on its loopback advertise address.
+# `--list-only` is the
 # weekly cheap proof of the off-box leg on daniel-box. It also runs restore gate 3 against the
 # snapshot it lists, so the runbook's ETCDSnapshotFile read is drilled weekly rather than on the
 # day of an outage — see require_snapshot_restorable.
@@ -118,11 +117,11 @@ SCRATCH="/var/tmp/etcd-restore-drill.$$"
 #   LB_PORT - 1       the API-server client load-balancer, bound only when the supervisor and
 #                     the API server are on different ports; kept free anyway
 # So the supervisor stays colocated with the API server, exactly as a stock k3s runs, and the
-# isolation from the live 6443/6444 comes from the values alone. Three collisions were measured
-# before this was written down: 7445 as LB_PORT put the API-server LB on the supervisor's 7444
-# (header item 5, the agent-config loop); 7444 as SUPERVISOR_PORT collided with the API server's
-# own 7444 when the scratch server started ("bind: address already in use"); and a split
-# 7443/7445 left 7443 unbound. The test in hosts/tests pins the layout.
+# isolation from the live 6443/6444 comes from the values alone. Three collisions to avoid: 7445
+# as LB_PORT puts the API-server LB on the supervisor's 7444
+# (header item 5, the agent-config loop); 7444 as SUPERVISOR_PORT collides with the API server's
+# own 7444 when the scratch server starts ("bind: address already in use"); and a split
+# 7443/7445 leaves 7443 unbound. The test in hosts/tests pins the layout.
 PORT=7443
 SUPERVISOR_PORT=$PORT
 LB_PORT=7448
@@ -144,14 +143,12 @@ READY_TIMEOUT=180
 # modes stamp separately and MUST NOT be conflated: `list-only` proves the off-box leg —
 # credentials, bucket, folder, download, decompression — while `full` additionally proves the
 # object graph comes back. A watchdog that accepted a list-only stamp as drill coverage would be
-# the "one tier hiding behind another tier's evidence" shape this estate has already been bitten
-# by, so the mode is written into the stamp, not just the timestamp.
+# the "one tier hiding behind another tier's evidence" shape, so the mode is written into the stamp, not just the timestamp.
 STAMP_DIR="${ETCD_DRILL_STAMP_DIR:-/var/lib/etcd-restore-drill}"
-# The restore stage needs its own bound. Measured: a run wedged in k3s's
-# "Waiting to retrieve agent configuration; server is not ready" retry loop sat for 17
-# minutes on 6 seconds of CPU and would have sat there indefinitely — a drill with no
-# ceiling is a drill that hangs a terminal rather than reporting a result. 600s is well past
-# the ~60s the loop takes when it does resolve.
+# The restore stage needs its own bound. A run can wedge in k3s's "Waiting to retrieve agent
+# configuration; server is not ready" retry loop on near-zero CPU and sit there indefinitely —
+# a drill with no ceiling is a drill that hangs a terminal rather than reporting a result.
+# 600s is well past the ~60s the loop takes when it does resolve.
 RESTORE_TIMEOUT=600
 
 die() { echo "etcd-restore-drill: $*" >&2; exit 1; }
@@ -159,18 +156,17 @@ log() { echo "[$(date -u +%H:%M:%S)] $*"; }
 
 # DECIDED: the stamp is read, and both halves are shipped. homelab-etcd-restore-drill.timer runs
 # `--list-only` weekly (k3s_etcd_restore_drill_cron, Monday 10:20),
-# run in place from the primary checkout, since 2026-08-28 (PR #531). The fail-closed staleness
-# reader is `check_etcd_restore_drill` in monitor-bridge/files/checks/service.py, since PR #535:
+# run in place from the primary checkout. The fail-closed staleness
+# reader is `check_etcd_restore_drill` in monitor-bridge/files/checks/service.py:
 # it reads `last-success-list-only` from this STAMP_DIR, monitor-bridge serves the verdict as
 # `homelab_check_success{check="etcd_restore_drill"}`, and the `EtcdRestoreDrillFailing` rule in
 # observability's bridge-exporter.yaml pages on it.
 #
-# The ordering this block fixed is kept rather than deleted, because it is the reason the pair
-# works. A fail-closed reader wired BEFORE the cron existed would have sat red essentially
-# always, which is a pager that trains the operator to ignore it; the cron is what makes a red
-# mean something. monitor-bridge is the owner because it already aggregates unrelated
-# stamps — not longhorn-backup-health.sh, which would be reading a second drill's evidence out of
-# the first drill's watchdog (2026-08-23b review M7).
+# The ordering is the reason the pair works. A fail-closed reader wired BEFORE the cron
+# exists sits red essentially always, which is a pager that trains the operator to ignore it;
+# the cron is what makes a red mean something. monitor-bridge owns the reader because it
+# already aggregates unrelated stamps — not longhorn-backup-health.sh, which would be reading
+# a second drill's evidence out of the first drill's watchdog.
 #
 # The reader keys on the MODE. `last-success-list-only` and `last-success-full` are written
 # separately and must not be conflated: only the weekly list-only leg is scheduled, so a reader
@@ -178,9 +174,7 @@ log() { echo "[$(date -u +%H:%M:%S)] $*"; }
 # nothing has ever proven it on this host. The reader opens `last-success-list-only` by name and
 # says so in its message.
 #
-# The stamp still earns its place unread: it is what makes "when did this last pass" answerable
-# at all, where before 2026-08-23 the only record was a hand-edited line in
-# docs/k3s-etcd-restore.md.
+# The stamp makes "when did this last pass" answerable at all.
 #
 # Record a pass. $1 is the mode — `list-only` or `full` — and it is written into the file so a
 # reader cannot mistake the cheaper proof for the stronger one. Best-effort: a drill that passed
@@ -221,14 +215,13 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 # here is circular and would fail on a host where the drill has never passed. Gate 2 checks a
 # stamp the operator takes out of band.
 #
-# THE OBVIOUS FALSE FAILURE DOES NOT HAPPEN, and the two measurements are why. The drill names the
-# newest `offbox-*` object in the bucket, and gate 3 matches `spec.snapshotName` EXACTLY against
-# the CRs — so a name mismatch, or a CR k3s had not yet written, would fail the drill on a
-# snapshot that is fine. Measured on daniel-box: an off-box snapshot gets TWO CRs, one
-# `file://` and one `s3://`, carrying the same bare `offbox-<node>-<epoch>.zip` name the S3
-# listing's first column prints; and `metadata.creationTimestamp` runs 3 seconds behind
-# `status.creationTime` on all four of the last four s3 records, so the CR is written at upload
-# rather than reconciled later. The weekly drill runs 7.6 hours after the 02:45 upload.
+# THE OBVIOUS FALSE FAILURE DOES NOT HAPPEN. The drill names the newest `offbox-*` object in
+# the bucket, and gate 3 matches `spec.snapshotName` EXACTLY against the CRs — so a name
+# mismatch, or a CR k3s had not yet written, would fail the drill on a snapshot that is fine.
+# An off-box snapshot gets TWO CRs, one `file://` and one `s3://`, carrying the same bare
+# `offbox-<node>-<epoch>.zip` name the S3 listing's first column prints; and the CR is written
+# at upload rather than reconciled later (`metadata.creationTimestamp` runs about 3 seconds
+# behind `status.creationTime`). The weekly drill runs hours after the 02:45 upload.
 #
 # ANY NON-ZERO IS A FAILURE, exit 69 included. 69 is "could not ask the cluster" — no kubectl, an
 # unreadable kubeconfig, the wrong cluster, or a Forbidden read. That is the RBAC half of what
@@ -342,8 +335,8 @@ ISOLATION_ARGS=(--data-dir "$SCRATCH"
                 --advertise-address 127.0.0.1
                 # A loopback advertise address needs the endpoint reconciler off. From k3s
                 # v1.37.1 the API server refuses to start with one ("cannot use public IP
-                # 127.0.0.1 with endpoint reconciler ... may not be in the loopback range"),
-                # measured on the 2026-11-01 monthly drill (#6846). The check is the reconciler's
+                # 127.0.0.1 with endpoint reconciler ... may not be in the loopback range").
+                # The check is the reconciler's
                 # own ValidateIP (kubernetes pkg/controlplane/instance.go), and only `none`
                 # accepts any address. `none` also leaves the restored `kubernetes` Endpoints
                 # untouched, so the drill reads the snapshot's object rather than one it rewrote.

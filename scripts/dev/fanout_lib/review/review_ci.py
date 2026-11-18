@@ -1,10 +1,9 @@
 """The review pipeline's answer to a red CI run: one resume of the implementer, on both hosts.
 
-WHY (#4737). A daniel-server batch stops at its open PR, and the orchestrator lands it. A check
-that runs only in CI, or in a suite the agent did not run, therefore first showed up as
-`pr-ci-red` at the orchestrator's `land.sh` (#4727, #4736, #4753, #4869), and the orchestrator
-repaired the branch by hand. The daniel-box pipeline had the same gap one step later (#5498):
-`review_land` runs `land.sh`, which waits for CI but ends `pr-ci-red` on a red run, and
+WHY. A daniel-server batch stops at its open PR, and the orchestrator lands it. A check
+that runs only in CI, or in a suite the agent did not run, therefore first shows up as
+`pr-ci-red` at the orchestrator's `land.sh`. The daniel-box pipeline has the same gap one
+step later: `review_land` runs `land.sh`, which waits for CI but ends `pr-ci-red` on a red run, and
 `RESUME_VERDICTS` does not resume for it. This module gives both hosts one resume for a red
 run, after the review and its fix round.
 
@@ -15,7 +14,7 @@ batch's red run. Every daniel-box batch lands, and a daniel-server batch lands w
 `server_lands` passes it. A daniel-server batch it holds waits for its PR's own run here
 (`ready_gate`, then `ci_gate`), and the server lander leaves the PR for a person.
 
-THE DRAFT (#5563). This repo's review batch opens its PR as a draft, and `ci.yml` runs no job on
+THE DRAFT. This repo's review batch opens its PR as a draft, and `ci.yml` runs no job on
 a draft. On daniel-server, `ready_gate` marks the PR ready once the review and its fix round are
 done. It then waits for the run that marking ready starts, before any wait reads the head's
 checks.
@@ -32,29 +31,22 @@ run, a failed read and a slice that ended all read the same here: wait again aft
 `CI_RECHECK_S`, until `CI_WAIT_S` is spent. A wait that spends it without a verdict ends the
 batch `needs input:` with the last `WAIT:` line. It never reads as a pass or as red.
 
-THE BUDGET, `CI_WAIT_S`, applies to each wait, and a batch that waits makes at most two: one before the
-resume and one after it. On 2026-10-13 the last 34 `ci.yml` pull-request runs that finished
-with success or failure took 143s at the shortest, 176s at the median and 344s at the longest.
-That sized the first budget at 15 minutes. On 2026-10-24 and 2026-10-29 a fan-out launching
-several batches at once slowed the same runs: of the 40 finished runs among the 60 newest on
-2026-10-29, 12 took 1089s to 1404s (runs 40893690313, 40923262400, 40913469512, 40921080107,
-40914146732, 40908876093, 40919912025, 40896956629, 40892178310 and 40903936455 among them),
-and PR #6185's run 40134967214 took 16m18s on 2026-10-24. The 15-minute wait spent its whole
-budget and ended `needs input:` on green CI (#6195). The last line of such a wait reads
-"timeout still running after 300s" because the budget is three 300s slices. It is not a
-single slice. 35 minutes is about 1.5 times the longest run measured, 1404s.
+THE BUDGET, `CI_WAIT_S`, applies to each wait, and a batch that waits makes at most two: one
+before the resume and one after it. A `ci.yml` pull-request run takes 143s to 344s on an idle
+runner pool, but a fan-out launching several batches at once slows runs to 1404s, and a wait
+that spends its whole budget ends `needs input:` on green CI. 35 minutes is about 1.5 times
+that longest run. The last line of such a wait reads "timeout still running after 300s"
+because the budget is three 300s slices. It is not a single slice.
 
-A wait whose last line reads `timeout still running` goes on to `CI_WAIT_MAX_S` (#7673). That
-line means check runs exist on the head and some have not finished. Between 2026-10-29 and
-2026-11-08, three batches spent the 35 minutes on such a line, and their PRs' runs then passed
-at 37.8, 38.2 and 48.5 minutes (#7059, #7118, #7658). A head with no check runs, or a cancelled
+A wait whose last line reads `timeout still running` goes on to `CI_WAIT_MAX_S`. That
+line means check runs exist on the head and some have not finished, and such runs can pass
+after more than 35 minutes. A head with no check runs, or a cancelled
 run, still stops at `CI_WAIT_S`.
 
-THE RE-RUN (#7674). A resume that pushes nothing leaves the failed run on the head, so the
+THE RE-RUN. A resume that pushes nothing leaves the failed run on the head, so the
 second wait would read the same failure at once. The gate instead re-runs that run's failed jobs
-once (`gh run rerun --failed`) and waits on the new attempt. Of the 8 batches that ended `failed
-after one resume` between 2026-10-25 and 2026-11-08, 4 had pushed nothing and passed on a
-re-run of the same commit (#7110, #7169, #7643, #7647).
+once (`gh run rerun --failed`) and waits on the new attempt, because a resume that pushed
+nothing often followed a flake that passes on a re-run of the same commit.
 
 THE FAILURE the resumed implementer gets is read from the PR's `statusCheckRollup`: each failed
 check's name and the tail of its job's log (`gh run view --job <id> --log-failed`). A failed
@@ -394,7 +386,7 @@ def ready_for_ci(
         if now is not None and now - before:
             return ""
         sleep(READY_POLL_S)
-    # GitHub starts no `pull_request` run while the PR conflicts with its base (#5629), so a
+    # GitHub starts no `pull_request` run while the PR conflicts with its base, so a
     # conflict, not Actions, is why none started. The PR stays ready: GitHub cannot merge it
     # while it conflicts, and the push that resolves the conflict starts CI with no second
     # `gh pr ready`.
@@ -433,9 +425,9 @@ def server_lands(pipe: "Pipeline", head: str) -> bool:
 
     A batch on a host that does not land, this repo's own, lands its draft as a daniel-box
     batch does, but only a PR the server lander would land unattended
-    (`own_surface.pr_problems`), still at `head`. The operator ruled both on 2026-11-15
-    (option B in `docs/ci-throughput.md`). A PR that check holds after the review is marked
-    ready and waits for its run, and the server lander leaves it for a person, as before.
+    (`own_surface.pr_problems`), still at `head` (option B in `docs/ci-throughput.md`). A PR
+    that check holds after the review is marked ready and waits for its run, and the server
+    lander leaves it for a person.
     """
     if not awaits_ci(pipe.host, pipe.target):
         return False
@@ -491,7 +483,7 @@ def _again(record: Record) -> str:
 
 
 # DECIDED: a daniel-box batch spends no CI run before its landing (D9, `docs/ci-throughput.md`).
-# 6.5% of first runs were red on 2026-11-14, and a draft can share a landing batch's run.
+# About 6.5% of first runs are red, and a draft can share a landing batch's run.
 def land_draft(pipe: "Pipeline") -> tuple[Landing, dict | None]:
     """Land the PR the pipeline left a draft, resuming the implementer once on a red run.
 
@@ -542,9 +534,9 @@ def land_draft(pipe: "Pipeline") -> tuple[Landing, dict | None]:
 # DECIDED: the CI resume gets no delta review. It repairs a check CI named, and the next CI run
 # is the independent verdict on it.
 def ci_gate(pipe: "Pipeline", last: Phase) -> tuple[Phase, dict | None]:
-    """Wait for the PR's CI and resume the implementer once on red (#4737).
+    """Wait for the PR's CI and resume the implementer once on red.
 
-    A resume that pushes nothing is followed by one re-run of the failed jobs (#7674).
+    A resume that pushes nothing is followed by one re-run of the failed jobs.
 
     Returns the last phase whose report names the PR, and a `needs input:` report when CI is
     still red after the one resume, or gave no verdict within the budget; else None.
@@ -563,7 +555,7 @@ def ci_gate(pipe: "Pipeline", last: Phase) -> tuple[Phase, dict | None]:
 
     result = wait()
     # After an upheld contest, the red test CI fails on is wrong, and a resume that rewrote it
-    # would face no green gate and no reviewer. A hand corrects it instead (#5400).
+    # would face no green gate and no reviewer. A hand corrects it instead.
     contest = record.green_contest.removeprefix("upheld: ")
     if contest != record.green_contest:
         return last, ci_hold(record, result, contest)

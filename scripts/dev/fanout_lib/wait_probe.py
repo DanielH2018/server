@@ -12,8 +12,8 @@ The contract is the dotfiles repo's docs/specs/2026-10-04-cc-wait-design.md.
 
 ONE DEFINITION OF A BATCH'S STATE. This runs `fanout_lib.place.main(["status", <run-id>,
 "--json"])` and reads the `state` field of each row it prints, so `status` stays the only code
-that decides a batch's state and its exit tier (the issue-fanout skill documents both). It
-read the text lines with a regex until #3926, so a change to their wording broke it silently.
+that decides a batch's state and its exit tier (the issue-fanout skill documents both). A
+regex over the text lines would break silently when their wording changes.
 
 THE STATE. `running` while any batch runs or could not be read, with a count of the finished
 batches as its detail, and the name of each one that needs a hand. A Monitor running `cc-wait
@@ -115,7 +115,7 @@ def read(run_ids: list[str], status: StatusReader = read_status) -> dict:
         raise Unreadable(f"no batch row in `status` output for {', '.join(run_ids)}")
     if running:
         # Counts, not names: cc-wait prints a line whenever the detail changes, so a finish
-        # still prints one, and an earlier finish is not re-listed on every poll (#7897). A
+        # still prints one, and an earlier finish is not re-listed on every poll. A
         # batch that needs a hand keeps its name, because the orchestrator acts on it.
         stuck = [
             f"{batch} {state}" for batch, state, _ in finished if state not in _SUCCESS

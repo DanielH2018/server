@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The container case for a line-arm edit in a conffile another package owns (#6088).
+"""The container case for a line-arm edit in a conffile another package owns.
 
 H7's *Red proofs*, line arm, names two upgrades of the package that owns the conffile. In the
 first, the conffile is unchanged. In the second, the upgrade ships a changed conffile and runs

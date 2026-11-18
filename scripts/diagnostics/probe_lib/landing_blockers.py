@@ -2,7 +2,7 @@
 
 CLAUDE.md's *When to wait* list is checked by hand, and the SessionStart banner shows the
 state behind it once. This subcommand reads that state on demand, as one JSON document with
-`--json`, so the `deck` mod in `.claude/plugins/deck/` can redraw it every minute (#3676).
+`--json`, so the `deck` mod in `.claude/plugins/deck/` can redraw it every minute.
 
 Every fact comes from a reader that already exists; this module only joins them:
 
@@ -141,7 +141,7 @@ def parse_worktrees(porcelain: str) -> list[dict]:
     return trees
 
 
-# The blocker lines go into every deck session's system prompt (#3793), so a line interpolates
+# The blocker lines go into every deck session's system prompt, so a line interpolates
 # only a value checked against a closed shape, such as a GitHub Actions run URL.
 _RUN_URL = re.compile(
     r"https://github\.com/[\w.-]{1,100}/[\w.-]{1,100}/actions/runs/\d{1,20}"

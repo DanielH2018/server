@@ -1,7 +1,7 @@
 """The review pipeline a `launch --review` batch runs in place of a single `claude -p`.
 
-WHY. A fan-out batch used to implement, test, open its PR and land it in one context, and no
-other context ever read the change (`docs/failure-classes.md` class 1, "Findings get an
+WHY. Without this module a fan-out batch implements, tests, opens its PR and lands it in one
+context, and no other context reads the change (`docs/failure-classes.md` class 1, "Findings get an
 adversarial pass; fixes get none"). This module puts a separate review between the PR and the
 landing. The lint and test checks that finish in seconds stay with the implementer; only the
 slow model review moves here.
@@ -22,11 +22,11 @@ THE PHASES, each one `claude -p` in the batch's worktree:
    gate runs again after the fix; a batch still failing it is not landed. A batch passing it
    has each fix hunk reverted on its own under the red tests (`hunk_check`), for the record.
 4. delta review — a fresh reviewer reads the fix's commits inside the whole change. A finding
-   it reports is left only if it quotes a line the fix head's file has (`delta_confirm`,
-   #6547); the rest are carried unverified and hold nothing. A finding of medium severity or
-   worse left by it earns one more fix and delta review, and no more (#7687).
+   it reports is left only if it quotes a line the fix head's file has (`delta_confirm`);
+   the rest are carried unverified and hold nothing. A finding of medium severity or
+   worse left by it earns one more fix and delta review, and no more.
 4b. ready — on a host that does not land, `review_ci.ready_gate` marks a draft PR ready and
-   waits for its CI run (#5563).
+   waits for its CI run.
 5. land — on the deploy host, the pipeline lands the PR as the draft it is
    (`review_ci.land_draft`, which runs `land.sh` through `review_land`). The landing marks it
    ready or tests it in a landing batch, so its first CI run is the one it merges on. A landing
@@ -34,7 +34,7 @@ THE PHASES, each one `claude -p` in the batch's worktree:
    landed again. The implementer is resumed as the `apply` phase only for a verdict that
    needs a decision. Before the landing, and on every other host instead of it, a session
    resumes to file what is left.
-5b. CI wait — on a host that does not land, for this repo's batch only (#4737), `review_ci`
+5b. CI wait — on a host that does not land, for this repo's batch only, `review_ci`
    waits for the PR's CI with `cc-wait gh-ci --pr` before the comment and before the filing
    session. A red verdict resumes the implementer once, as the `ci-fix` phase, with each failed
    check's name and log tail, and the wait runs again on the new head. A resume that pushed
@@ -60,15 +60,15 @@ phase owes a PR URL; the landing's `VERDICT:` line is in its log, which the pipe
 
 WHAT THE IMPLEMENTER CAN WRITE. The worktree, and for another repo's batch the `.fanout/server`
 snapshot this module runs from. The pipeline therefore reads the review prompt, the headless
-system prompt, this repo's `.claude/settings.json` and every hook once, at start (#3763,
-#3794, #3810). Each phase gets the prompts as text and runs the Stop hook from a copy outside
+system prompt, this repo's `.claude/settings.json` and every hook once, at start.
+Each phase gets the prompts as text and runs the Stop hook from a copy outside
 the worktree that is rewritten before every call. In this repo's batch, every phase after the
 implementer also loads no settings file from the worktree, and the reviewer gets the start-time
 `CLAUDE.md` as text; `held_hooks` says why. A red batch's implement phase runs the same way,
-because the red author had the worktree before it (#3846). Both before and after the red
+because the red author had the worktree before it. Both before and after the red
 gate, the pipeline kills whatever the red phase left running (`processes.reaping`) and runs
-`worktree_reset.reset_worktree` (#3852, #3871); `Pipeline._red` says why. Every later test run
-the pipeline starts, which can run the red tests, is reaped the same way (#4508).
+`worktree_reset.reset_worktree`; `Pipeline._red` says why. Every later test run
+the pipeline starts, which can run the red tests, is reaped the same way.
 
 DISCLOSURE. The repo is public. A finding in category `security` reaches the PR comment as a
 count only, is never filed with `findings.py open`, and is kept in full only in the local
@@ -183,7 +183,7 @@ Runner = Callable[[list[str], str | None], subprocess.CompletedProcess]
 
 # DECIDED: one module, even past the line guideline, rather than a mixin. The red phase and the
 # green gate read the pipeline's state and call its `_claude`, `_git` and argv builders, so a
-# module holding them alone could not be read without this class (#3661's `conjoined:` rule).
+# module holding them alone could not be read without this class (the `conjoined:` rule).
 class Pipeline:
     """One batch's phases, run in order against one worktree.
 
@@ -233,19 +233,19 @@ class Pipeline:
         self.base_check = base_check
         self.hunk_check = hunk_check
         self.sleep = sleep
-        # Read at start for the red author and every reviewer (#4023): the skill lives outside
+        # Read at start for the red author and every reviewer: the skill lives outside
         # the worktree, but one read keeps every phase on the same text.
         self.anti_patterns = anti_patterns()
         self.record = Record(batch)
         self.session = ""
         # The implementer session's `total_cost_usd` so far: a resumed session reports its
-        # whole-session total, so each resumed phase records only the increase (#3939).
+        # whole-session total, so each resumed phase records only the increase.
         self.session_cost = 0.0
         # Read now, before the implementer runs. A server unit imports this module from the
         # batch worktree, which that agent can write, so a file read at review time would
         # take whatever the implementer left there. The headless prompt and the Stop hook
-        # are held the same way for every phase the implementer's session resumes into
-        # (#3794): each phase gets the prompt as text and runs the hook from `hook_root`,
+        # are held the same way for every phase the implementer's session resumes into: each
+        # phase gets the prompt as text and runs the hook from `hook_root`,
         # which `_snapshot_hook` rewrites from these bytes before every call.
         self.review_prompt = PROMPT_FILE.read_text()
         self.headless_prompt = HEADLESS_PROMPT_FILE.read_text()
@@ -392,7 +392,7 @@ class Pipeline:
         """The implement phase's argv: on held settings when a red phase ran before it.
 
         The red author could leave an ignored settings file or a skip-worktree hook edit,
-        neither in the range the red gate reads (#3846). `reset_worktree` removes them; held
+        neither in the range the red gate reads. `reset_worktree` removes them; held
         settings are the second layer, and drop `CLAUDE.md`, so it comes as text.
         """
         if not self.red_green:
@@ -432,10 +432,10 @@ class Pipeline:
         """Run the test author and the red gate: the red SHA and its verdict, or None.
 
         Before the gate, what the red session left running is killed and the worktree reset
-        to `red`, so the verdict is `red`'s tree alone (#3871): an ignored root `conftest.py`,
+        to `red`, so the verdict is `red`'s tree alone: an ignored root `conftest.py`,
         a `.pth` in `.venv/` or a skip-worktree edit to the code would each make the tests
         fail for a reason no diff shows. After it, the same again, to the commit the
-        implementer starts from, the base on a refusal (#3852). A failed reset raises
+        implementer starts from, the base on a refusal. A failed reset raises
         `ResetFailed`, which `run_all` turns into a failed batch.
         """
         base = self._git("rev-parse", "HEAD")
@@ -458,7 +458,7 @@ class Pipeline:
                 gate = self.gates.red(self.run, self.worktree, base, red)
             self._refuse_git_changes(held)
         reset_worktree(self.run, self.worktree, red if gate.passed else base)
-        # The Stop hook reads the brief, and the red author could edit it (#3884).
+        # The Stop hook reads the brief, and the red author could edit it.
         (self.worktree / ".fanout" / "brief.md").write_text(self.brief)
         out = phase.report.get("structured_output")
         behaviours = out.get("behaviours") if isinstance(out, dict) else None
@@ -473,7 +473,7 @@ class Pipeline:
         return (red, gate) if gate.passed else None
 
     def _refuse_git_changes(self, held: GitState) -> None:
-        """Fail the batch when git state outside the worktree moved (#3864, #3879)."""
+        """Fail the batch when git state outside the worktree moved."""
         moved = changed(held, snapshot(self.run, self.worktree))
         if moved:
             raise ResetFailed(
@@ -494,7 +494,7 @@ class Pipeline:
             return []
         try:
             # It collects every test file the PR changed, the red ones too, and runs whole any
-            # file that holds a new test, so it can run the red author's code (#4508).
+            # file that holds a new test, so it can run the red author's code.
             with reaping():
                 check = self.base_check(
                     self.run, self.worktree, base, head, red[1].nodes if red else ()
@@ -572,11 +572,11 @@ class Pipeline:
             found = worktree_own_pr(
                 impl.text, self.worktree, self.target.repo, self.run
             )
-        # A text naming only another PR is the #6551 defect: end here naming both.
+        # A text naming only another PR is a defect: end here naming both.
         report = needs_input_report(found.problem) if found.problem else impl.report
         if impl.failed or not found.url:
             # Saved whether or not the batch is red-green: a batch that never reached a PR is
-            # the failure rate the records exist to measure (#3940).
+            # the failure rate the records exist to measure.
             self.record.settle(report, has_pr=False)
             self._save()
             return report

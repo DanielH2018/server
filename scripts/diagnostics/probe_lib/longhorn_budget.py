@@ -94,26 +94,22 @@ def format_backup_budget(vols, shards, names=None, retain=2, owners=None):
     for shard in sorted(byshard):
         members = sorted(byshard[shard], key=lambda kv: -kv[1]["prune"])
         total = sum(v["prune"] for _, v in members)
-        # Backups beyond `retain` are STRANDED, not queued for deletion. Longhorn enforces retain
-        # only when the owning RecurringJob runs against a volume still in its `groups:`, and it
-        # counts only ITS OWN backups — so the daily-era backups on a volume that moved to a
-        # weekday shard are pruned by nothing, ever. For example radarr-config can sit at 4
-        # daily-backup + 1 weekly-backup-d2 against retain 4 and delete none, because the weekly
-        # job sees 1 of its own. `scripts/backup/longhorn_reap.py backups` is what clears these.
+        # Backups beyond `retain` are STRANDED, not queued for deletion, when the job that
+        # produced them is not the job that now selects the volume. STRANDED means "no job will
+        # ever prune this", which is NOT the same as "past retain" (`max(0, backups - retain)`).
+        # Longhorn enforces retain only when the owning RecurringJob runs against a volume still
+        # in its `groups:`, and it counts only ITS OWN backups — so the daily-era backups on a
+        # volume that moved to a weekday shard are pruned by nothing, ever, however many backups
+        # the volume has in total. For example radarr-config can sit at 4 daily-backup + 1
+        # weekly-backup-d2 against retain 4 and delete none, because the weekly job sees 1 of its
+        # own. `scripts/backup/longhorn_reap.py backups` is what clears these.
         #
-        # The consequence for this projection: a shard's prune cost does not begin until that job
+        # Anything the current tier owns is NOT stranded even when it sits past retain, because
+        # that job prunes it on its next run. A shard's prune cost does not begin until that job
         # has more than `retain` of its own backups, and until then its blocks only grow.
-        # STRANDED means "no job will ever prune this", which is NOT the same as "past retain"
-        # (`max(0, backups - retain)`).
-        #
-        # A backup is stranded when the job that produced it is not the job that now selects the
-        # volume. Longhorn's retain counts only a job's OWN backups, so a daily-era backup on a
-        # volume since moved to a weekday shard is pruned by nothing, ever — regardless of how
-        # many backups the volume has in total. Anything the current tier owns is NOT stranded
-        # even when it sits past retain, because that job prunes it on its next run.
         # No ownership data means nothing is PROVEN stranded, so claim nothing. Falling back to
-        # `backups - retain` is what produced the wrong number, and this figure is read
-        # immediately before someone deletes a backup.
+        # `backups - retain` gives the wrong number, and this figure is read immediately before
+        # someone deletes a backup.
         stranded = (
             0
             if owners is None

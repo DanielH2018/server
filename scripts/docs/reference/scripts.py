@@ -26,12 +26,12 @@ assembles its answers into the page.
 
 THE TESTS COLUMN NAMES ONLY A DIRECT TEST. A `test_<name>.py` in the script's `tests/` sibling
 or beside it counts, and so does one in the entrypoint's `tests/` for a module inside a `*_lib`
-package or one of its subpackages, where those packages keep their tests (#4365, #4529). There
+package or one of its subpackages, where those packages keep their tests. There
 the family-prefixed `test_<family>_<name>.py` also counts, the family being the package name
-less `_lib`, because `land_lib/ci.py` is tested by `test_land_ci.py` (#4515). Nothing else
+less `_lib`, because `land_lib/ci.py` is tested by `test_land_ci.py`. Nothing else
 does. An earlier version also credited any test that imported the script or named its path,
 and keeping that judgement honest took a module and a suite of its own for a column nobody
-acted on (#3283). An empty cell therefore means "no test named after it", not "nothing
+acted on. An empty cell therefore means "no test named after it", not "nothing
 exercises it".
 
 WHAT IT CANNOT DECIDE. Whether a script is safe to run. The summary is whatever its author
@@ -163,9 +163,9 @@ def build_rows(
         # A module inside a `*_lib` package keeps its test in the entrypoint's `tests/`, beside
         # the package, as land_lib, probe_lib and fragments_lib do. That test may carry the
         # family's prefix, which is the package name less `_lib`: land_lib/ci.py is tested by
-        # test_land_ci.py (#4515). The nearest `*_lib` ancestor decides both, so a module in a
+        # test_land_ci.py. The nearest `*_lib` ancestor decides both, so a module in a
         # subpackage counts too: fanout_lib/review/red_gate.py is tested by
-        # test_fanout_red_gate.py (#4529). The bare name is tried first, so fragments_lib's
+        # test_fanout_red_gate.py. The bare name is tried first, so fragments_lib's
         # fragments_hosts.py keeps test_fragments_hosts.py.
         places = [path.parent / "tests", path.parent]
         names = [f"test_{path.stem}.py"]

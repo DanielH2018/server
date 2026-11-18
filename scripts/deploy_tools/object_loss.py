@@ -15,7 +15,7 @@ renderer's trailing `-<digest8>` removed, still renders in T passes, as the soak
 ConfigMap do on every revision. Nor is an object labelled or annotated
 `kustomize.toolkit.fluxcd.io/prune: disabled`, which Flux's prune leaves in place (D5.1f,
 *What it exempts*). The PR gate's arm 3, `scripts/validate/render_diff_gates.py`, applies both
-exemptions through `stem` and `prune_disabled` here, so the two checks cannot drift (#5291).
+exemptions through `stem` and `prune_disabled` here, so the two checks cannot drift.
 
 `decide` reads `prod`'s bundle once per run and each weighed candidate's once, and skips an
 ineligible candidate with the line `refusal` returns. The plan is
