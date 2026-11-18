@@ -1,0 +1,31 @@
+---
+# Renovate's k8s-defaults manager tracks this pin. Keep the tag alongside a digest
+# (`repo:tag@sha256:...`) — a bare `repo@sha256:...` freezes the image with no update signal.
+vaultwarden_k8s_image: vaultwarden/server:1.37.5@sha256:4fe17f415f90087377d37c755e0ea3cf189dcc6794e49cdd2a9adbb4937d9e1f
+
+# Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
+# Vaultwarden migrates its database schema on start, and this is the password store.
+k8s_autodeploy: false
+k8s_autodeploy_reason: "password store with schema migrations on upgrade; an unattended bump could migrate the vault database with nobody watching"
+
+# DECIDED: held at 0 until the operator cuts over (2026-11-18). Raising it also means dropping
+# `probe: false` from the containers_list entry.
+vaultwarden_k8s_replicas: 0
+
+vaultwarden_k8s_cpu_limit: "500m"
+vaultwarden_k8s_mem_limit: 256Mi
+vaultwarden_k8s_cpu_request: "50m"
+vaultwarden_k8s_mem_request: 64Mi
+
+# The image runs as root by default; any uid works once /data is writable, which fsGroup gives.
+vaultwarden_k8s_uid: 1000
+
+# SQLite DB, attachments, sends and the RSA signing key all live under /data.
+vaultwarden_k8s_claim: vaultwarden-data
+vaultwarden_k8s_storage_class: longhorn
+vaultwarden_k8s_size: 1Gi
+
+k8s_claims:
+  - name: "{{ vaultwarden_k8s_claim }}"
+    storage_class: "{{ vaultwarden_k8s_storage_class }}"
+    size: "{{ vaultwarden_k8s_size }}"

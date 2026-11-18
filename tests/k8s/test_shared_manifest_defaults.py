@@ -66,6 +66,7 @@ ROLES_WITH_A_DEFAULT_SERVICE = frozenset(
         "slskd",
         "speedtest",
         "texbrain",
+        "vaultwarden",
         "zigbee2mqtt",
     }
 )
@@ -92,6 +93,7 @@ ROLES_WITH_A_DEFAULT_INGRESSROUTE = frozenset(
         "tdarr",
         "texbrain",
         "wg-easy",
+        "vaultwarden",
         "zigbee2mqtt",
     }
 )

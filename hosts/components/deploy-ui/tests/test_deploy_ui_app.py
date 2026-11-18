@@ -379,7 +379,7 @@ def test_request_line_drops_the_query_and_neuters_a_hostile_user_is_flagged():
 
 
 def test_request_line_quotes_a_path_logfmt_would_split_is_flagged():
-    """The line is host_lib's logfmt (#6202): a path with a space stays one `path` value."""
+    """The line is host_lib's logfmt: a path with a space stays one `path` value."""
     # fact: hosts/components/deploy-ui/CLAUDE.md#Usage count
     assert deploy_ui.request_line("GET", "/a b", 404, "u") == (
         'request method=GET path="/a b" status=404 user=u'
@@ -399,7 +399,7 @@ def test_client_closing_mid_response_logs_one_line_no_traceback_is_flagged(
     app, capsys, error
 ):
     """A disconnect raised out of the handler, and socketserver printed its traceback,
-    which HostLogErrors counts (#7921)."""
+    which HostLogErrors counts."""
     # fact: hosts/components/deploy-ui/CLAUDE.md#Usage count
     handler = object.__new__(deploy_ui.make_handler(app))
     handler.rfile = io.BytesIO(b"GET / HTTP/1.1\r\nRemote-User: daniel\r\n\r\n")

@@ -16,7 +16,7 @@ from lib.repo_paths import ALL_VARS, HOST_VARS
 from renderer.renderer_lib import host as host_mode
 
 SOURCE_DIR = "/etc/apt/sources.list.d/"
-# Which hosts use each source, read on 2026-10-24. docker and azlux: only daniel-pi runs the
+# Which hosts use each source. docker and azlux: only daniel-pi runs the
 # docker_install and optimize_pi roles. github-cli: daniel-box runs the github_cli role, and
 # daniel-server has `gh` from a hand install (`dpkg-query -W gh` printed 2.103.2 on both).
 USES = {

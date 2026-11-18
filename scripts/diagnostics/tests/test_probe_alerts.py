@@ -42,14 +42,11 @@ def test_rows_from_loki_handles_empty_and_missing_keys():
     assert core._rows_from_loki({"data": {"result": [{"values": None}]}}) == []
 
 
-# These pin the TRANSPORT, deliberately, and the reason is recorded rather than assumed. Three
-# assertions already covered `loki_query_url` output and `plan()` argv, and every one of them
-# sits UPSTREAM of the defect they would have had to catch: `run_query` built its own URL and
-# passed no window, so the formatted path inherited Loki's one-hour server-side default while
-# `--dry-run`/`--json` honoured `--since`. Without the explicit window, `--since 3d` returns a
-# 60-minute slice — and an empty slice prints "no logs", which reads as health. A fourth
-# builder-level assertion would have missed it exactly as the first three did. So: capture the
-# url `fetch` is actually called with.
+# These pin the TRANSPORT, deliberately: assertions on `loki_query_url` output and `plan()` argv
+# sit UPSTREAM of the defect, which was `run_query` building its own URL with no window, so the
+# path inherited Loki's one-hour server-side default while `--dry-run`/`--json` honoured
+# `--since`. Without the explicit window, `--since 3d` returns a 60-minute slice, and an empty
+# slice prints "no logs", which reads as health. So: capture the url `fetch` is called with.
 
 
 class _Seen(list):

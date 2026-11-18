@@ -47,7 +47,7 @@ def test_systemd_verify_is_clean_for_a_well_formed_service(tmp_path):
 
 @requires_systemd_analyze
 def test_systemd_verify_is_flagged_for_a_typo_d_key(tmp_path):
-    # The measured shape from the issue: a typo'd directive key that systemd itself ignores
+    # A typo'd directive key that systemd itself ignores
     # with a warning and continues loading — the class no exit-status check can see.
     unit = _write_unit(
         tmp_path,
@@ -261,7 +261,7 @@ def test_check_polkit_rule_passes_each_real_rule(tmp_path, name):
 
 
 def _broken_rule(tmp_path):
-    # The measured shape: a stray brace that survives Jinja (no `{{`/`{%`/`{#`) but leaves the
+    # A stray brace that survives Jinja (no `{{`/`{%`/`{#`) but leaves the
     # rendered JS structurally broken — the class `node --check` exists to catch.
     role = tmp_path / "roles" / "setup" / "fixture"
     (role / "templates").mkdir(parents=True)

@@ -109,14 +109,12 @@ def parse_repository_problems(body: str) -> set[str]:
 # section, as a blockquote callout appended after the branch lists
 # (`getDepWarningsDashboard` in renovate's lib/workers/repository/errors-warnings.ts). So
 # parse_repository_problems is structurally blind to them: the dashboard stays fresh, the
-# failing dependency gets no PR, and it simply stops being offered an update. Observed
-# 2026-09-02 on ruff and registry.k8s.io/kube-state-metrics (finding #887), where
-# kube-state-metrics vanished from "Pending Status Checks" between two reads with nothing
-# but this callout to say why.
+# failing dependency gets no PR, and it simply stops being offered an update, with nothing but
+# this callout to say why.
 #
-# The callout's own header has been both `> :warning: **Warning**` (the source above) and
-# `> [!WARNING]` (what the hosted app emitted on 2026-09-02), so match the sentence rather
-# than the callout marker.
+# The callout's own header is either `> :warning: **Warning**` (the source above) or
+# `> [!WARNING]` (what the hosted app emits), so match the sentence rather than the callout
+# marker.
 DEP_LOOKUP_MARKER = "renovate failed to look up the following dependencies:"
 
 _BACKTICKED = re.compile(r"`([^`]+)`")
@@ -216,8 +214,8 @@ def read_check_pages(fetch_page: Callable[[str], object], key: str) -> list[dict
     """Every entry of `key` across a paged GitHub listing, walked as `builder_ci_grade.read_check_pages`.
 
     GitHub answers a check-runs or combined-status GET with no `per_page` with one page of 30,
-    so a failing entry past it read as green and the digest dropped a PR whose CI was failing
-    (#6002). Both bodies carry `total_count` beside their list. The notifier
+    so a failing entry past it reads as green and the digest drops a PR whose CI is failing.
+    Both bodies carry `total_count` beside their list. The notifier
     cannot import `builder_ci_grade`, so this is a copy, held equal by
     `tests/test_renovate_notify.py`. `fetch_page(query)` returns the parsed body for the
     `?per_page=&page=` string this walk builds. A read short of `total_count` raises rather
@@ -279,10 +277,8 @@ def is_dead_path(pr: PR) -> bool:
     update at the LIVE path and reports the PR merely as "conflicting", which reads as ordinary
     rebase noise.
 
-    Two instances by 2026-08-20: #67/#42/#69 against compose templates the k3s migration archived,
-    then #41 against roles/containers/karakeep after the same cutover. Both needed closing and
-    recreating, not rebasing, and in both cases the plain "conflicting" label is what let them sit
-    for weeks.
+    Such a PR needs closing and recreating, not rebasing, and the plain "conflicting" label is
+    what lets it sit for weeks.
 
     Requires ALL changed files to be gone: a PR touching one live and one deleted path is an
     ordinary conflict a rebase can resolve.
@@ -355,8 +351,7 @@ def fingerprint(items: list[tuple[PR, str]], now: datetime | None = None) -> str
 
     `stuck` PRs carry a coarse age dimension (`_stuck_age_bucket`) so a PR that's been stuck for a
     while re-pages at each threshold crossing instead of paging once on day 1 and then going silent
-    forever while it ages (PR #67, stuck since 2026-08-03, is the case this closes — `manual` PRs
-    don't get one: they're "waiting on your merge", not "broken and getting worse", so there's
+    forever while it ages (`manual` PRs don't get one: they're "waiting on your merge", not "broken and getting worse", so there's
     nothing to escalate on).
     """
     now = now or datetime.now(timezone.utc)
@@ -484,7 +479,7 @@ DASHBOARD_UNPARSEABLE_MSG = (
 )
 
 
-# Renovate closes a PR whose branch it no longer wants and appends this to the title (#4630).
+# Renovate closes a PR whose branch it no longer wants and appends this to the title.
 AUTOCLOSED_SUFFIX = " - autoclosed"
 # One weekly schedule window ("before 6am on monday") plus a day of slack. Renovate reuses a
 # branch name for the next update of the same dependency, so an older autoclose on a branch
@@ -518,10 +513,10 @@ def find_autoclosed(
     now: datetime | None = None,
     lookback_days: int = AUTOCLOSED_LOOKBACK_DAYS,
 ) -> list[Autoclosed]:
-    """Autoclosed Renovate PRs whose update went back onto the dashboard (issue #4630).
+    """Autoclosed Renovate PRs whose update went back onto the dashboard.
 
-    Renovate autoclosed #4586 nine hours after opening it, inside the same schedule, and its
-    update returned to "Awaiting Schedule" for a week. None of the other arms can see that: the
+    Renovate can autoclose a PR hours after opening it, inside the same schedule, and the
+    update then returns to "Awaiting Schedule" for a week. None of the other arms can see that: the
     PR is no longer open, the dashboard keeps updating, and an awaiting item is not a problem.
     A PR is reported when Renovate closed it unmerged with the autoclosed title inside the
     lookback window, the dashboard still names its branch, and no open PR carries that branch.

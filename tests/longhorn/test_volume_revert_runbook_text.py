@@ -153,8 +153,7 @@ def offline_order_problems(branch: str) -> list[str]:
     The order is a safety rule: a queued `promote` run can start as soon as GitHub answers,
     so the hold must be set before anything else. The check pins the one sentence that
     states that order, OFFLINE_ORDER_SENTENCE, and reads no ordering words. A rule that
-    parses "before", "after", "once" or "until" opens a new bypass with each fix; three
-    review findings on PR #5377 were bypasses of exactly that kind. A reworded bullet fails
+    parses "before", "after", "once" or "until" opens a new bypass with each fix. A reworded bullet fails
     here until the same commit rewords the pinned sentence, so a reviewer reads the new
     order in the diff rather than trusting a parser to have ranked it.
 
@@ -281,7 +280,7 @@ _CANONICAL = (
     ("bullet", "refused"),
     [
         pytest.param(f"{_OFFLINE_LEAD} {_CANONICAL}", False, id="canonical-passes"),
-        # The pinned sentence reworded or replaced. Review findings 1-3 on PR #5377 first.
+        # The pinned sentence reworded or replaced.
         pytest.param(
             f"{_OFFLINE_LEAD} Once the WAN returns, before step 4 resume each suspended tag, "
             "then run this step's `gh variable set DEPLOY_HOLD`.",

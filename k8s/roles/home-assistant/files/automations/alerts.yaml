@@ -253,7 +253,6 @@
 # on the dial reporting (unlike the FP300/fan/AirGradient, which feed live automations and whose
 # silence actually breaks things). A genuinely dead dial is still caught by
 # binary_sensor.bedroom_tap_dial_battery_low (the threshold engine) and is obvious on the next press.
-# (Removed from this alert 2026-06-24 to cut idle-dial noise.)
 # Adding a watched device = add its representative entity to BOTH trigger lists below (one entity
 # per device suffices — Z2M flips all of a device's entities together). Brief flaps can emit a lone
 # recovery with no prior alert (the offline edge needs a full 5 min down) — rare and low-harm,

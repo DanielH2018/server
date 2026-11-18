@@ -62,7 +62,7 @@ def directive(unit_text: str, key: str) -> list[str]:
 
     Read off the RENDERED unit. The flags below are plain literals either way, but a value
     that moves into a role default leaves a source-text assertion matching `{{ ... }}`, and a
-    pattern that matches nothing passes (#3202).
+    pattern that matches nothing passes.
     """
     folded = re.sub(r"\\\n\s*", " ", unit_text)
     return [
@@ -104,7 +104,7 @@ def test_path_includes_usr_local_bin(unit: str) -> None:
 
 
 def test_operator_path_carries_fnms_default_node(unit: str) -> None:
-    """A session's shell never runs fnm, so without the alias it has no `node` (#7972)."""
+    """A session's shell never runs fnm, so without the alias it has no `node`."""
     sys_user = role_context(ROLE_DIR, {})["sys_user"]
     path = [v for v in directive(unit, "Environment") if v.startswith("PATH=")][-1]
     assert f"/home/{sys_user}/.local/share/fnm/aliases/default/bin" in path.split(
@@ -228,7 +228,7 @@ def render(template: str, **overrides: object) -> str:
 
     Every assertion here goes through this rather than the template's text: raw text cannot
     tell an armed `{% if %}` toggle from a dead one, and it matches `{{ ... }}` for any value
-    that has moved into a role default (#3202).
+    that has moved into a role default.
     """
     return render_component_text(COMPONENT, template, overrides)
 
@@ -357,7 +357,7 @@ def test_agent_sessions_reach_their_own_user_bus_and_no_human_home(uid: int) -> 
     """`systemd-run --user` from a phone session needs /run/user/<uid>/bus, which yes hides.
 
     `ProtectHome=yes` hides /run/user along with /home, so the agent's sessions failed with
-    "Failed to connect to bus: Permission denied" (#6764). `tmpfs` hides the same directories,
+    "Failed to connect to bus: Permission denied". `tmpfs` hides the same directories,
     and BindPaths= re-exposes only the agent's own runtime directory. Every line follows the
     uid variable, so the second uid catches one hardcoded for daniel-box.
     """
@@ -387,8 +387,8 @@ def test_agent_unit_without_a_uid_fails_the_package_render(tmp_path) -> None:
 def test_operator_sessions_reach_the_operators_user_bus(uid: int) -> None:
     """A system unit gets no user-bus variables, so `systemctl --user` reads "No medium found".
 
-    The operator's unit carries no sandbox, but it needs the same two variables as the agent's
-    (#6868). They follow claude_code_login_uid, so the second uid catches a hardcoded 1000.
+    The operator's unit carries no sandbox, but it needs the same two variables as the agent's.
+    They follow claude_code_login_uid, so the second uid catches a hardcoded 1000.
     """
     env = directive(render(UNIT, claude_code_login_uid=uid), "Environment")
     assert f"XDG_RUNTIME_DIR=/run/user/{uid}" in env

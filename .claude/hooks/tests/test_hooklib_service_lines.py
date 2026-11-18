@@ -56,7 +56,7 @@ def _targets(payload, scaled_to_zero=lambda run, job, ns: False):
 
 
 def test_target_problems_asks_for_the_raw_json():
-    """Plain `probe.py targets` prints a formatted view, which json.loads cannot read (#7896)."""
+    """Plain `probe.py targets` prints a formatted view, which json.loads cannot read."""
     argvs = []
 
     def run(argv, _timeout):

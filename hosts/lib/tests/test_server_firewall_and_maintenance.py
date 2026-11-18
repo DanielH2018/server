@@ -1,11 +1,11 @@
-"""daniel-server ships the same last three `initial_setup` subjects as the Pi (H7.31).
+"""daniel-server ships the same last three `initial_setup` subjects as the Pi.
 
 The components are host-neutral and `test_pi_firewall_and_maintenance.py` holds their content. These
 tests hold what is specific to this host: the crons the role once wrote here are retired and
 replaced by timers without the Pi's Docker prune, the scans
 read this host's own tokens, and reconcile adopts the two SSH rules while it leaves the k3s
 agent's rules and the hand-added rule alone. Reconcile also removes the `eval-run` textfile a test
-run leaked here, which no daniel-server component writes (#6735).
+run leaked here, which no daniel-server component writes.
 
 Run: uv run pytest hosts/lib/tests/test_server_firewall_and_maintenance.py
 """
@@ -117,11 +117,11 @@ def test_reconcile_adopts_the_ssh_and_join_rules_and_leaves_the_hand_added_rule(
         "homelab-daniel-pi"
     )
     node.state["users"] = {"claude": 900}
-    # H7.59's filter restarts rsyslog, which the Pi fixture masks.
+    # The package's filter restarts rsyslog, which the Pi fixture masks.
     live_unit(node, "rsyslog.service")
     lan = context["lan_subnet"]
     server = "10.0.0.215"
-    # The live rules in `ufw status` order (2026-10-31): the k3s agent's five join rules carry no
+    # The live rules in `ufw status` order: the k3s agent's five join rules carry no
     # comment, and the 45876 allow from the pod network has no writer in the repo.
     others = [
         ["allow from 10.42.0.0/16 to any port 45876", ""],

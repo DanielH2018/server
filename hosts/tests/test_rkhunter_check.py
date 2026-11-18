@@ -1,15 +1,13 @@
-"""Guards on the weekly rkhunter scan's textfile verdict (#4598).
+"""Guards on the weekly rkhunter scan's textfile verdict.
 
-The cron used to pipe `rkhunter --check` into `logger`, so the pipeline's status was logger's and
-a scan that failed outright read the same as one that passed. rkhunter-check.sh writes a textfile
-verdict and holds four properties. It pushed to one Kuma tile per host until M6 batch B9's
-Cutover-2, so a test says "pushes DOWN" for a run whose logged status is `down`:
+rkhunter-check.sh writes a textfile verdict and holds four properties. A test says "pushes DOWN"
+for a run whose logged status is `down`:
 
 A SCAN THAT DID NOT COMPLETE PUSHES DOWN. rkhunter exits 1 on a warning and on an error alike, so
 the script reads completion from the log this run wrote, and a log left from last week reads as
 no scan at all.
 
-ANY WARNING, SUSPECT FILE OR POSSIBLE ROOTKIT PUSHES DOWN (#4638). The warnings every host raised
+ANY WARNING, SUSPECT FILE OR POSSIBLE ROOTKIT PUSHES DOWN. The warnings every host raised
 every week are allowlisted in rkhunter.conf.local, so a healthy week has none; the script's
 `DECIDED:` marker has the evidence.
 
@@ -137,7 +135,7 @@ def _run_check(
 def test_a_clean_scan_pushes_up(tmp_path):
     """The accept half of the DOWN arms below: a scan with nothing to report must not page.
 
-    It passes on the pre-#4638 script too, by design. It goes red if a new DOWN arm misfires on
+    It passes on a script without the DOWN arms, by design. It goes red if a new DOWN arm misfires on
     a clean log, such as the Suspect files count check or the first-warning lookup. Whether a
     real host's routine warnings are suppressed is rkhunter.conf.local's job, and a stubbed
     rkhunter cannot exercise it. Only a real scan on a host after the apply can.
@@ -165,7 +163,7 @@ def test_a_warning_pushes_down_naming_the_first(tmp_path):
 
 
 def test_each_verdict_is_written_to_the_textfile_with_the_tiles_deadline(tmp_path):
-    """The liveness path that outlives Kuma (#6168): clean writes 1, a warning writes 0."""
+    """The liveness path that outlives Kuma: clean writes 1, a warning writes 0."""
     for name, rc, log, success in (
         ("clean", 0, _log(), "1"),
         ("warning", 1, _log(warnings=WARNINGS), "0"),
@@ -226,7 +224,7 @@ def test_a_summary_missing_a_count_pushes_down(tmp_path):
 
 
 def test_the_ssh_root_setting_follows_the_main_sshd_config():
-    """rkhunter reads PermitRootLogin from the main sshd_config only (#4638).
+    """rkhunter reads PermitRootLogin from the main sshd_config only.
 
     daniel-box's and daniel-server's main files carry the line and daniel-pi's does not, though
     all three harden a drop-in, so the setting follows the main file rather than the config path.
@@ -251,7 +249,7 @@ def test_the_scan_logs_its_verdict_and_still_runs_without_a_credential(tmp_path)
 
 
 def test_the_timer_runs_a_slot_it_missed():
-    """A weekly slot missed while the timer is stopped would otherwise wait a week (#7920)."""
+    """A weekly slot missed while the timer is stopped would otherwise wait a week."""
     for host in HOSTS:
         assert re.search(r"^Persistent=true$", shipped_text(host, TIMER), re.M), host
 

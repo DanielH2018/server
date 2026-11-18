@@ -1,4 +1,4 @@
-"""The `regen-role-glance` prek hook rewrites a stale At a glance block at commit time (#3698).
+"""The `regen-role-glance` prek hook rewrites a stale At a glance block at commit time.
 
 Editing a role's defaults, templates, tasks, playbook entry or `containers_list` entry used to
 fail CI until someone ran `scripts/docs/gen_role_glance.py` by hand. The hook runs it in

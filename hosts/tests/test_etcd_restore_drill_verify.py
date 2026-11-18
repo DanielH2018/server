@@ -109,7 +109,7 @@ def _isolation_args() -> list[str]:
 
 def test_a_loopback_advertise_address_runs_with_the_endpoint_reconciler_off():
     """From k3s v1.37.1 the API server refuses a loopback advertise address unless the endpoint
-    reconciler is `none`, the one reconciler whose ValidateIP accepts any address (#6846)."""
+    reconciler is `none`, the one reconciler whose ValidateIP accepts any address."""
     args = _isolation_args()
     advertise = ipaddress.ip_address(args[args.index("--advertise-address") + 1])
     assert advertise.is_loopback, (

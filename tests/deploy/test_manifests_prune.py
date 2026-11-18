@@ -1,7 +1,7 @@
 """Guards for the prune label an armed role renders.
 
 An armed role renders through `k8s/templates/role-labelled.yaml.j2`, whose
-`homelab_role_label` filter stamps the label onto every document (#3388). Flux's own inventory
+`homelab_role_label` filter stamps the label onto every document. Flux's own inventory
 decides what it prunes, so the label names the role on each live object.
 
 Run: uv run pytest tests/deploy/test_manifests_prune.py
@@ -21,7 +21,7 @@ from renderer.template_filters.role_label import ROLE_LABEL, _Loader, homelab_ro
 
 
 # The roles that opt out of the prune, each by operator decision recorded as a DECIDED marker
-# in its defaults (#3388). Every other role is armed.
+# in its defaults. Every other role is armed.
 _UNARMED_ROLES = frozenset({"authelia", "nut"})
 
 
@@ -101,7 +101,7 @@ def test_an_ordinary_string_and_the_keys_stay_plain() -> None:
 
 
 def test_the_filter_parses_with_libyaml() -> None:
-    """PyYAML's own parser was a quarter of every full k8s render, which each CI leg pays (#7710).
+    """PyYAML's own parser was a quarter of every full k8s render, which each CI leg pays.
 
     The plain-scalar cases above run through this parser, whose plain style is "" not None.
     """

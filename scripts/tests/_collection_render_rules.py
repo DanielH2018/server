@@ -4,7 +4,7 @@
 module that reads the k8s render or a host package at import, in a module-level assignment or
 a `parametrize` argument, renders inside collection. Under xdist every other worker then waits
 on `render_share`'s lock inside its own collection, where the render cannot overlap the fleet
-render that `render_share.build_each` starts on another worker once collection ends (#8692).
+render that `render_share.build_each` starts on another worker once collection ends.
 """
 
 import ast

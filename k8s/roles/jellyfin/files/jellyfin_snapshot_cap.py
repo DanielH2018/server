@@ -1,11 +1,7 @@
 """jellyfin's snapshot-cap Job: set `spec.snapshotMaxSize` on the Longhorn volume behind its claim.
 
-Beside the verify Job in `templates/verify/` (target slice
-D5, *jellyfin's cap* and *Post-apply mutation Jobs share `<tag>-verify`*). It replaced the
-three cap tasks the role's `tasks/main.yml` ran before its flip, and makes the same three calls
-they made through `kubectl`:
-read the claim's `spec.volumeName`, read the volume's cap, and patch the cap only when it
-differs. So a second run reads twice and writes nothing, which
+Beside the verify Job in `templates/verify/`. It makes three calls: read the claim's
+`spec.volumeName`, read the volume's cap, and patch the cap only when it differs. So a second run reads twice and writes nothing, which
 `tests/test_jellyfin_snapshot_cap.py::test_a_second_run_changes_nothing` proves.
 
 The volume's name is Longhorn's `pvc-<uid>`, which the renderer cannot know, so the Job

@@ -1,7 +1,7 @@
 """The weekly worktree sweep tells Healthchecks.io its exit code.
 
 `prune_worktrees.py` exits 1 when a removal or a branch deletion failed, and the exit code
-reaches anyone only through the ping URL (#4482). These tests run the rendered
+reaches anyone only through the ping URL. These tests run the rendered
 `worktree-sweep` script of the `worktree-sweep` component with `uv`, `curl` and `hostname`
 stubbed, so they read what the timer runs rather than a pattern over its text. The key arrives
 as systemd hands it over: a `healthchecks_ping_key` file under `$CREDENTIALS_DIRECTORY`.
@@ -107,7 +107,7 @@ def test_a_sweep_on_another_host_does_not_reap_claims(tmp_path):
 
 
 def test_a_sweep_that_skips_a_worktree_a_live_process_holds_pings_0(tmp_path):
-    # #7949: the real pruner over a checkout whose one merged worktree a live process holds.
+    # The real pruner over a checkout whose one merged worktree a live process holds.
     server = tmp_path / "home" / "server"
     init_repo(server)
     commit(server, "init", **{"a.txt": "one\n"})

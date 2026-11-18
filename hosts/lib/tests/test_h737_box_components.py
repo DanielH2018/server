@@ -1,4 +1,4 @@
-"""daniel-box's package carries Renovate, fake-remux and the GitHub checks (H7.37).
+"""daniel-box's package carries Renovate, fake-remux and the GitHub checks.
 
 The scripts' behaviour has its own tests, under each component's `tests/` and in
 `hosts/tests/`. These hold what the move added: the units and timer slots the package

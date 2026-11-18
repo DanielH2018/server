@@ -1,4 +1,4 @@
-"""`hosts/lib/homelab-reconcile`'s restart contract and secrets step (H4.1b).
+"""`hosts/lib/homelab-reconcile`'s restart contract and secrets step.
 
 Each test is a reconcile case of ADR-0022's H4 amendment, run against the stub `systemctl` of
 `_reconcile_host.py`. The fixture is
@@ -200,7 +200,7 @@ def test_a_restart_that_fails_queues_the_unit_and_the_next_run_restarts_it_once(
 
 def test_each_restart_is_timed_in_the_metrics_file_even_when_it_fails(node):
     """A rule compares this time with the unit's own result, so a restart that wrote no result
-    is visible whether or not systemctl reported a failure (#6342)."""
+    is visible whether or not systemctl reported a failure."""
     (node.root / TEXTFILE).mkdir(parents=True)
     series = (
         'homelab_host_unit_started_seconds{host="daniel-pi",unit="nut-monitor.service"}'
@@ -352,7 +352,7 @@ def test_a_secrets_json_reconcile_cannot_read_fails_the_run_and_keeps_the_legacy
     assert node.applied()["retired"] == []
 
 
-# A package without `secrets-unit`: the shape every host package had before H4.2.
+# A package without `secrets-unit`.
 
 
 def test_a_manifest_without_secrets_unit_runs_no_secrets_step(tmp_path):
@@ -405,17 +405,17 @@ def test_the_pis_real_manifest_runs_the_secrets_step_once_for_its_credentials(
     credentials = json.loads(package.files["/usr/lib/homelab/secrets.json"][0])[
         "credentials"
     ]
-    # The Healthchecks.io key (H7.30). The scan tokens left with M6 batch B9's token PR.
+    # The Healthchecks.io key.
     assert credentials == ["healthchecks_ping_key"]
     for key in credentials:
         node.credential(key)
-    # H5.7: the Compose env file is an output, which the secrets unit renders before reconcile
+    # The Compose env file is an output, which the secrets unit renders before reconcile
     # restarts homelab-compose.service.
     outputs = json.loads(package.files["/usr/lib/homelab/secrets.json"][0])["outputs"]
     for output in outputs:
         node.output_file(output["destination"], persist=output["persist"])
-    # H7.27: the line arm edits conffiles that exist on a real host. H7.30 adds the three daemons
-    # whose edited files restart them.
+    # The line arm edits conffiles that exist on a real host; the three daemons below restart
+    # when their edited files change.
     for unit in (
         "ssh.service",
         "systemd-journald.service",
@@ -444,7 +444,7 @@ def test_the_pis_real_manifest_runs_the_secrets_step_once_for_its_credentials(
 
 
 def test_a_new_user_exists_before_the_secrets_step_writes_an_output_it_owns(node):
-    """An output's owner or group can be a user the same package version declares (#8690)."""
+    """An output's owner or group can be a user the same package version declares."""
     node.manifest["reconcilers"] = ["users"]
     node.manifest["users"] = {
         "users": [

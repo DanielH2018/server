@@ -1,4 +1,4 @@
-"""Guards on how the weekly AIDE check judges a difference (#4599).
+"""Guards on how the weekly AIDE check judges a difference.
 
 A completed check pushes DOWN on a difference no package explains and keeps the baseline, and
 pushes UP and advances the baseline when every difference is a package's, a trigger's or
@@ -417,7 +417,7 @@ def test_accept_refuses_while_a_scan_holds_the_lock(tmp_path):
 
 
 def test_a_missing_baseline_is_never_created(tmp_path):
-    """A deleted aide.db must stay an error, not become a fresh, trusted baseline (#6674)."""
+    """A deleted aide.db must stay an error, not become a fresh, trusted baseline."""
     accept, scan = tmp_path / "accept", tmp_path / "scan"
     accept.mkdir()
     scan.mkdir()

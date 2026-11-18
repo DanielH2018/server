@@ -21,7 +21,7 @@ from _k8s_render import rendered_build_text
 
 # The source template, for the Renovate half alone: Renovate reads the file on disk, braces
 # intact, so asserting its matchString against a render would claim something false about the
-# real system. The pin halves read the rendered build text (#3175).
+# real system. The pin halves read the rendered build text.
 DOCKERFILES = (
     K8S_ROLES / "n8n" / "templates" / "Dockerfile.j2",
     K8S_ROLES / "n8n" / "templates" / "Dockerfile-runners.j2",

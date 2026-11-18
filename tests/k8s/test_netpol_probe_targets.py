@@ -27,8 +27,8 @@ def test_terraria_is_absent_while_its_start_is_refused() -> None:
     """The Games panel refuses to start terraria, so gating it on a ready endpoint can only fail.
 
     One direction only. Lifting the refusal does not require the row: its `expect: open` leg
-    dials :7777, which can crash a 1.4.5.7 server (#822), so the row comes back with the image
-    fix. defaults/main.yml records the decision (#3848).
+    dials :7777, which can crash a 1.4.5.7 server, so the row comes back with the image
+    fix. defaults/main.yml records the decision.
     """
     games = yaml_fast.safe_load(ALL_VARS.read_text())["game_servers"]
     [terraria] = [g for g in games if g["name"] == "terraria"]

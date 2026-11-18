@@ -95,7 +95,7 @@ def test_a_failed_verify_sibling_is_flagged():
 
 
 def test_a_reconciling_row_is_pending_not_failed():
-    """Flux's in-flight state, seen live on qbittorrent on 2026-10-25 (#6337)."""
+    """Flux's in-flight state, seen live on qbittorrent on 2026-10-25."""
     items = [
         _source(),
         _ks("sonarr"),
@@ -124,7 +124,7 @@ def test_a_sibling_waiting_on_its_reconciling_tag_is_pending():
 
 
 def test_a_row_waiting_on_a_failed_dependency_fails():
-    """configarr dependsOn sonarr, which no select() of `configarr` prints (#6340)."""
+    """configarr dependsOn sonarr, which no select() of `configarr` prints."""
     items = [
         _source(),
         _ks("sonarr", "False", "HealthCheckFailed"),
@@ -179,7 +179,7 @@ def test_a_suspended_row_names_its_resume_path():
 
 
 def test_no_tag_lists_only_the_unsettled_rows_and_a_count():
-    """A healthy cluster printed every row; the default view is the exceptions (#7896)."""
+    """A healthy cluster printed every row; the default view is the exceptions."""
     items = [_source(), _ks("sonarr"), _ks("radarr", suspend=True)]
     text, code = flux.format_flux(items, [])
     assert code == 1
@@ -279,7 +279,7 @@ def test_wait_does_not_fail_before_the_source_artifact_was_attempted():
 
 
 def test_wait_fails_on_a_dependency_that_failed():
-    """Flux holds configarr at DependencyNotReady for good once sonarr fails (#6354)."""
+    """Flux holds configarr at DependencyNotReady for good once sonarr fails."""
     items = [
         _source(),
         _ks("sonarr", "False", "HealthCheckFailed"),
@@ -320,7 +320,7 @@ def test_wait_is_ready_at_a_later_commit_that_holds_the_expected_one():
 
 
 def test_wait_without_a_revision_stays_open_until_a_reset_to_an_older_commit_applies():
-    """Master was reset to OLD, so the NEW still applied descends from it but is stale (#6336)."""
+    """Master was reset to OLD, so the NEW still applied descends from it but is stale."""
     items = [_source(OLD), _ks("sonarr")]
     state = flux.wait_state(
         items, "sonarr", None, contains=lambda c, a: (c, a) == (NEW, OLD)

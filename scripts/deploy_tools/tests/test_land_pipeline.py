@@ -37,7 +37,7 @@ def test_the_annotation_is_written_on_a_verdict(land_run):
 
 
 def test_the_result_line_sits_just_above_the_verdict(land_run):
-    """A reader takes the verdict and cause from one machine line, not the prose (#7895)."""
+    """A reader takes the verdict and cause from one machine line, not the prose."""
     _, out, _, _, _ = land_run([], Fakes(await_ci=[(75, "no verdict")]))
     result, verdict = out.rstrip().splitlines()[-2:]
     assert result.startswith("LAND-RESULT: verdict=ci-timeout cause=- exit=75 pr=999 ")
@@ -305,7 +305,7 @@ def test_the_diff_fallback_derives_between_the_ci_wait_and_the_promotion_wait(la
 def test_a_missing_primary_checkout_is_named_before_any_phase_runs(land_run):
     """Every phase runs git there, so it is checked first and named plainly.
 
-    It ends `refused`, as every exit-1 stop does (#4451), rather than the `aborted` the
+    It ends `refused`, as every exit-1 stop does, rather than the `aborted` the
     board reserves for a path that named no verdict.
     """
     from pathlib import Path

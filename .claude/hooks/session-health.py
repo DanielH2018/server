@@ -44,12 +44,9 @@ to remove and fan-out batches running on another host.
 
 # DECIDED: return [] on any error, so a broken health read never blocks a session start;
 # SESSION_HEALTH_VERBOSE=1 forces output.
-# DECIDED: the gen-hooks block above carries no `matcher`, so the hook also fires on `compact`.
-# A compaction is not a no-op here: `main` rows `MEMORY.md` under `compact` before it returns,
-# because Claude Code reloads the file with no InstructionsLoaded event (#4668). A
-# `startup|resume|clear` matcher would drop that row (#6153). A second, `compact`-only entry
-# pointing at a row-only script saves nothing: `run-hook.sh` starts the same `uv run`
-# interpreter for every registration, and that start is the whole cost of a compaction here.
+# DECIDED: the gen-hooks block above carries no `matcher`, so the hook also fires on `compact`,
+# where `main` rows `MEMORY.md`: Claude Code reloads it with no InstructionsLoaded event. A
+# separate `compact`-only entry saves nothing, since the interpreter start is the whole cost.
 
 import functools
 import json
@@ -59,12 +56,9 @@ import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# Two sections of the banner live in `.claude/hooks/hooklib/` (its own docstrings cover
-# `hooklib`-not-`lib`): the worktree and scrape-target lines. Wrapped in its own try so a
-# failure names the package that broke. `SyntaxError` is caught alongside `ImportError` because
-# these modules use PEP 758 syntax and `run-hook.sh` sends this hook's stderr to /dev/null, exits 0.
-# An uncaught SyntaxError at import would take the WHOLE banner out silently: nothing at
-# module scope may be able to stop the banner.
+# Its own try, so a failure names the package that broke. `SyntaxError` is caught too: these
+# modules use PEP 758 syntax, stderr goes to /dev/null, and nothing at module scope may stop
+# the banner.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 try:
     from _hook_common import primary_checkout, read_payload
@@ -115,14 +109,9 @@ except (ImportError, SyntaxError) as exc:
 # work it is; short enough to stay one line.
 PRIMARY_DIRTY_LIMIT = 8
 
-# How this hook asks the SHARED primary checkout whether it is dirty. `--no-optional-locks` is
-# load-bearing, not a nicety: a plain `git status` refreshes and WRITES `.git/index` in the tree
-# it reads. Without the flag a SessionStart hook running in a worktree would write the shared
-# checkout's index — the one thing the isolation guard exists to prevent — and could collide on
-# `index.lock` with homelab-checkout-sync's own `merge --ff-only`, which holds
-# the git-tree lock and knows nothing about this hook. The flag is global to git, so
-# it comes before the subcommand. A constant rather than an inline argv so a test can assert the
-# shape without patching `lib.git.git`.
+# `--no-optional-locks` is load-bearing: a plain `git status` writes `.git/index`, which would
+# write the shared primary checkout from a worktree and race homelab-checkout-sync on
+# `index.lock`. It is a global flag, so it precedes the subcommand.
 PRIMARY_STATUS_ARGV = ("--no-optional-locks", "status", "--porcelain")
 
 
@@ -377,7 +366,7 @@ def other_live_sessions(
         mine = set()
     # One thread per live worktree, each with its own diff and dirty read: run in turn, a
     # handful of sessions on a loaded box passed the banner's deadline and lost the whole
-    # list. A tree that does not finish costs its own line, never its siblings' (#6153).
+    # list. A tree that does not finish costs its own line, never its siblings'.
     sections = run_sections(
         [
             (f"the scan of {name_of(tree)}", functools.partial(describe, tree))
@@ -518,7 +507,7 @@ def main(
     compact = payload.get("source") == "compact"
     try:
         # Imported here so a broken module costs these rows, never the banner. A compaction
-        # reloads MEMORY.md with no InstructionsLoaded event, so it rows that too (#4668).
+        # reloads MEMORY.md with no InstructionsLoaded event, so it rows that too.
         from hooklib.instruction_rows import log_unevented_loads
 
         log_unevented_loads(payload, "compact" if compact else "session_start")
@@ -528,7 +517,7 @@ def main(
     if compact:
         return 0
 
-    # Every probe at once, under one deadline (#6153): run in turn, their caps summed to more
+    # Every probe at once, under one deadline: run in turn, their caps summed to more
     # than the hook's budget, and the harness's kill took the whole banner with it.
     cwd = os.getcwd()
     (
@@ -560,7 +549,7 @@ def main(
     if sessions:
         context += ["Other Claude sessions in this repo:", *sessions]
 
-    # Operator housekeeping goes to `systemMessage`, which the model never reads (#7900).
+    # Operator housekeeping goes to `systemMessage`, which the model never reads.
     print_hook_output(fit_to_budget(context), worktrees + fanout)
     return 0
 

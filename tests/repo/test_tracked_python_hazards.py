@@ -45,7 +45,7 @@ separate red-proof pairs: merging the walk must not merge the evidence that each
    `parse_args(argv)` for a parameter of `main`, or `parse_args(sys.argv[...])` — and the test
    module neither passes argv nor patches `sys.argv`. Both remedies are accepted: `main([])`
    (postflight) and `monkeypatch.setattr(sys, "argv", [...])`. No tracked test uses the second
-   since `fact_cache_guard` was deleted (#3274), so only a fixture below covers it.
+   since `fact_cache_guard` was deleted, so only a fixture below covers it.
 
 Run: uv run pytest tests/repo/test_tracked_python_hazards.py
 """
@@ -122,7 +122,7 @@ def test_the_pattern_rejects_a_root_anchored_rglob_and_accepts_a_scoped_one():
 # removed again the moment the file sheds its clock read.
 SUBPROCESS_DRIVEN: frozenset[str] = frozenset(
     {
-        # Its Valid-Until tests (#5147) sign a Release relative to the live clock because the
+        # Its Valid-Until tests sign a Release relative to the live clock because the
         # judge is a real `apt-get update`, which compares Valid-Until with the system clock
         # and takes no `now`. The margins are an hour or more, not the suite's runtime.
         "scripts/validate/tests/test_validate_host_package_cases.py",

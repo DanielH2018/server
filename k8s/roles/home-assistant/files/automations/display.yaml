@@ -29,7 +29,7 @@
         - "off"
         - standby
       # A Cast socket reconnect sets the Hub to idle for a moment, and without a hold each one
-      # re-cast into the same blocked socket window (2026-11-12, #8204).
+      # re-cast into the same blocked socket window.
       for: "00:01:00"
     - platform: state
       entity_id: input_boolean.bedroom_sleep_mode
@@ -51,8 +51,8 @@
     - condition: numeric_state
       entity_id: sensor.aqara_fp300_illuminance
       above: 60
-    # Lights-off daylight swung the FP300 between 40 and 87 for 12 minutes and met both 30 s holds
-    # three times over (2026-11-12, #8411); the 50/60 gap is narrower than that noise. Above 200
+    # Lights-off daylight swings the FP300 between 40 and 87 and meets both 30 s holds; the 50/60
+    # gap is narrower than that noise. Above 200
     # (lights on read ~600) is out of that band, so turning the lights on still casts at once.
     - condition: template
       value_template: >-
@@ -101,7 +101,7 @@
     - platform: state
       entity_id: input_boolean.bedroom_sleep_mode
       to: "on"
-    # The Cast connect-back loop can make turn_off fail for hours (#8201), so retry until it lands.
+    # The Cast connect-back loop can make turn_off fail for hours, so retry until it lands.
     - platform: time_pattern
       minutes: "/5"
   condition:

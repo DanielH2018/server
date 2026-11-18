@@ -4,7 +4,7 @@
 Longhorn v1.13.0's `deploy/longhorn.yaml` binds `longhorn-csi-service-account` to
 `ClusterRole/longhorn-csi-secret-role`, which grants `get` on every Secret in the cluster. It is
 a compatibility default for StorageClasses that carry a `csi.storage.k8s.io/*-secret-*`
-parameter, and neither class here does (#5969). Two `$patch: delete` patches under
+parameter, and neither class here does. Two `$patch: delete` patches under
 `files/patches/` drop the role and its binding. The renderer lists every file there under the
 Kustomization's `patches:`.
 

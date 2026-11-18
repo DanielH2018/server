@@ -1,6 +1,6 @@
 """daniel-server's `nut-secondary` component: the package-owned half of the UPS shutdown chain.
 
-H4.3a added the declared `upsmon.conf` output, and H4.3c added its consumers. These tests hold
+These tests hold
 the output's mode, owner, `persist` flag and dependent, the absence of a symlink onto the
 nut-client conffile, and the upsd endpoint and the placeholder in the MONITOR line. They also
 hold the nut-monitor drop-in and its boot order, the watchdog unit (which loads no credential
@@ -38,7 +38,7 @@ def test_the_output_is_persisted_root_nut_0640_and_restarts_nut_monitor(package)
 
 
 def test_no_symlink_lands_on_the_nut_client_conffile(package):
-    # A link at /etc/nut/upsmon.conf would make nut-monitor read the file H4.3a leaves unread.
+    # A link at /etc/nut/upsmon.conf would make nut-monitor read the file the package leaves unread.
     assert CONF not in package.links
     assert CONF not in package.files
 
@@ -61,7 +61,7 @@ DROPIN = f"{UNITS}/nut-monitor.service.d/50-homelab.conf"
 WATCHDOG_UNIT = f"{UNITS}/homelab-ups-watchdog.service"
 # The Kuma push token B4's token PR retired.
 TOKEN = "ups_secondary_daniel_server_push_token"
-# The role's udev rule, pinned here because H4.3c deleted the Ansible tasks that held its text.
+# The role's udev rule, pinned here because no other file holds its text.
 RULE = (
     'SUBSYSTEM=="usb", ATTR{idVendor}=="051d", ATTR{idProduct}=="0002", MODE="0666"\n'
 )

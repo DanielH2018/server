@@ -2,11 +2,11 @@
 """Renovate resolves each k8s image pin that the `registry-gc` component copies like its source.
 
 The `registry-gc` component keeps copies of the registry role's image pins for the ghcr-mirror GC
-Job (#5827), and `hosts/components/registry-gc/tests/test_registry_gc_component.py` holds each copy equal to
+Job, and `hosts/components/registry-gc/tests/test_registry_gc_component.py` holds each copy equal to
 its source. Renovate updates both copies, but it puts a dep on a branch by the group name the
 packageRules resolve for that file. When the two files resolve differently, each copy lands in
-its own PR and both PRs fail the pairs test. #5859 and #5835 did that: the copy matched none of
-the k8s-plane rules, so it got a bare digest branch with no soak, while its source sat in the
+its own PR and both PRs fail the pairs test. A copy that matches none of the k8s-plane rules
+gets a bare digest branch with no soak, while its source sits in the
 `k8s image registry (manual — …)` group waiting out a 3-day soak.
 
 So for every copied `_image` pin and every update type, the settings that decide the branch,

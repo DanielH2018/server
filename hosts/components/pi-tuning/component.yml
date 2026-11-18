@@ -1,10 +1,8 @@
-# The Pi's hardware and memory tuning, moved out of the optimize_pi role (H7.25, old step H7.3 and
-# the first half of H7.4; docs/target-architecture/host/h7-delete-ansible.md). Only daniel-pi
-# lists it. docs/pi-host-tuning-record.md has the measurements behind every number here.
+# The Pi's hardware and memory tuning. Only daniel-pi lists it. docs/pi-host-tuning-record.md has
+# the measurements behind every number here.
 #
-# Owners, measured on the live Pi with `dpkg -S` and `dpkg-query -W -f='${Conffiles}'` on
-# 2026-10-25 (the PR body quotes the output). Each path takes the mechanism *In-place edits*
-# assigns it:
+# Owners, from `dpkg -S` and `dpkg-query -W -f='${Conffiles}'` on the live Pi. Each path takes the
+# mechanism its owner allows:
 #
 # - conffiles, so the line arm: /etc/sysctl.conf (procps), /etc/default/zramswap (zram-tools),
 #   /etc/watchdog.conf (watchdog), /etc/log2ram.conf (log2ram), /etc/sysstat/sysstat (sysstat),
@@ -12,21 +10,21 @@
 # - unowned, so the line arm: /boot/firmware/config.txt and /etc/hosts (the latter is in
 #   pi-resolver);
 # - owned and not a conffile: /usr/local/bin/log2ram (log2ram). It takes the homelab copy below.
-#   No path needs a divert, so H3's whitelist stays closed.
+#   No path needs a divert.
 # - /etc/default/earlyoom (earlyoom, a conffile) becomes a drop-in for earlyoom.service that
-#   clears EnvironmentFile= and sets EARLYOOM_ARGS, as the spec assigns.
+#   clears EnvironmentFile= and sets EARLYOOM_ARGS.
 #
-# The Ansible-era edits stay in the files as harmless duplicates: the line arm adopts each line
-# by the regexp the lineinfile task used, and the arm never removes one.
+# Lines the Ansible role wrote stay in the files as harmless duplicates: the line arm adopts each
+# line by its regexp, and the arm never removes one.
 #
 # Activation. zram, Log2Ram, the watchdog and the GPU split take effect at boot, so each of those
 # files declares `reboot`; the weekly reboot applies them. The watchdog reads its file on start,
-# so `reboot` also stands for the old `Restart Watchdog` handler. Nothing here restarts
+# so `reboot` also covers a watchdog restart. Nothing here restarts
 # log2ram.service or zramswap.service live: a Log2Ram restart unmounts /var/log under whatever is
 # writing to it, and a zram restart swapoffs onto the SD swapfile and half-fails (see
 # docs/pi-host-tuning-record.md). log2ram.service carries `policy: manual` for that reason.
 #
-# What did not move, and why:
+# What the package does not carry, and why:
 #
 # - The package installs zram-tools, watchdog and earlyoom through `depends:`. It cannot depend
 #   on log2ram: Azlux's apt source arrives in the same package (apt-azlux), so a rebuilt Pi
@@ -38,7 +36,7 @@
 #   carries them for a rebuild. Step 4 also removes rsyslog's text logs, and step 7 removes the
 #   report aideinit leaves at /var/log/aide/aide.log. Audit rotations need no step, because
 #   auditd's cap below is in place before a rebuilt Pi has any to spare.
-# - The check that log2ram.conf's JOURNALD_AWARE lines agree was a read, not a write. A test in
+# - A check that log2ram.conf's JOURNALD_AWARE lines agree: a test in
 #   hosts/lib/tests/test_pi_tuning_component.py keeps the packaged log2ram copy honest instead.
 depends:
   - zram-tools
@@ -51,22 +49,22 @@ files:
   # #2726). Log2Ram ships both syncs as `rsync -aXv --sparse --inplace --no-whole-file
   # --delete-after`, and that pair corrupts files whose content ends in NUL bytes: `--sparse`
   # seeks over a run of NULs in the source, and `--inplace` makes the destination the live file,
-  # so whatever the previous file left at those offsets survives. Measured on daniel-pi
-  # 2026-09-26: 6 of 9 rotated /var/log/apt/history.log.*.gz failed `gzip -t` while their CRC32
-  # matched, because the gzip ISIZE field's trailing NULs carried stale bytes. Dropping `--sparse`
+  # so whatever the previous file left at those offsets survives. Rotated .gz files then fail
+  # `gzip -t` while their CRC32 matches, because the gzip ISIZE field's trailing NULs carry stale
+  # bytes. Dropping `--sparse`
   # alone made the transfer byte-identical under rsync 3.2.7, the Pi's version. Dropping
   # `--inplace` instead writes a full temp copy of /var/log on every sync. USE_RSYNC=false takes
   # the `cp -rfup --sparse=always` fallback, which has no `--delete`, so files deleted from the
   # tmpfs would return at boot into the 128 MB /var/log. The cost this choice carries: every hole
   # in a journald archive lands on the SD card as real zeros, which 60-homelab-pi.conf bounds
-  # with SystemMaxFiles= (#4583). Log2Ram 1.7.2 is the installed version. The script stays at
+  # with SystemMaxFiles=. Log2Ram 1.7.2 is the installed version. The script stays at
   # /usr/lib/homelab/log2ram because the log2ram package owns /usr/local/bin/log2ram, and a
   # package shipping an owned path makes dpkg refuse the unpack. vendor/log2ram-1.7.2 is the
   # upstream script; test_pi_tuning_component.py holds the difference between the two to the two
   # `--sparse` words. An `apt upgrade` of log2ram rewrites the upstream copy and not this one, so
   # a new upstream version needs a new vendored file and a re-diff.
-  # config_files' survivor (spec, *Baseline*): the SOPS export. Its other dotfiles stay as the Pi
-  # holds them; a rebuilt Pi gets Ubuntu's own ~/.bashrc and no ~/.gitconfig.
+  # The SOPS export. The Pi's other dotfiles stay as it holds them; a rebuilt Pi gets Ubuntu's
+  # own ~/.bashrc and no ~/.gitconfig.
   - {src: templates/homelab-profile.sh, dst: /etc/profile.d/homelab.sh}
   - {src: templates/log2ram, dst: /usr/lib/homelab/log2ram, mode: "0755"}
   - {src: units/log2ram-dropin.conf, dst: /usr/lib/systemd/system/log2ram.service.d/50-homelab.conf}
@@ -77,24 +75,24 @@ files:
   # this wins where the two disagree.
   - {src: templates/60-homelab-pi.conf, dst: /etc/systemd/journald.conf.d/60-homelab-pi.conf, activate: "try-restart:systemd-journald.service"}
   # The apt timers, pinned to the quiet hour. Managed drop-ins, so reconcile restarts a timer when
-  # its drop-in changes and leaves a masked one alone. The Ansible-era copies under
+  # its drop-in changes and leaves a masked one alone. The copies the Ansible role wrote under
   # /etc/systemd/system/<timer>.d/quiet-hour.conf hold the same schedule and stay as harmless
-  # duplicates: `quiet-hour.conf` sorts after `50-homelab.conf`, so a future change here would lose
-  # to them until the operator removes the old files by hand (the PR body names them).
+  # duplicates: `quiet-hour.conf` sorts after `50-homelab.conf`, so a change here loses to them
+  # until the operator removes those files by hand.
   - {src: templates/apt-daily-quiet-hour.conf, dst: /usr/lib/systemd/system/apt-daily.timer.d/50-homelab.conf}
   - {src: templates/apt-daily-upgrade-quiet-hour.conf, dst: /usr/lib/systemd/system/apt-daily-upgrade.timer.d/50-homelab.conf}
   # needrestart without its kernel check, which held apt's lock for up to two minutes after every
-  # install (#8610). needrestart reads conf.d on every run, so no activation is needed.
+  # install. needrestart reads conf.d on every run, so no activation is needed.
   - {src: templates/needrestart-homelab.conf, dst: /etc/needrestart/conf.d/50-homelab.conf}
   # apt deletes each deb once it is installed, and the daily apt run empties the archive cache
-  # (#8883). apt rereads its config on every run, so no activation is needed.
+  # apt rereads its config on every run, so no activation is needed.
   - {src: templates/apt-archives.conf, dst: /etc/apt/apt.conf.d/60homelab-pi-archives}
 lines:
   # The GPU split and the watchdog dtparam. Bookworm moved the file to /boot/firmware; the Pi runs
   # Ubuntu 24.04, which has no /boot/config.txt.
   - {path: /boot/firmware/config.txt, line: "gpu_mem=16", regexp: '^gpu_mem=', activate: reboot}
   - {path: /boot/firmware/config.txt, line: "dtparam=watchdog=on", regexp: '^dtparam=watchdog=', activate: reboot}
-  # zram. PERCENT is the device's uncompressed capacity, not its RAM cost (4.61:1 measured).
+  # zram. PERCENT is the device's uncompressed capacity, not its RAM cost (about 4.6:1).
   - {path: /etc/default/zramswap, line: "PERCENT=100", regexp: '^PERCENT=', activate: reboot}
   - {path: /etc/default/zramswap, line: "ALGO=zstd", regexp: '^#?ALGO=', activate: reboot}
   # vm.swappiness above 100 is valid on kernel 5.8 and later: it tells reclaim that compressing an
@@ -121,7 +119,7 @@ lines:
   - {path: /etc/audit/auditd.conf, line: "max_log_file = 4", regexp: '^max_log_file\s*=', activate: "try-restart:auditd.service"}
   - {path: /etc/audit/auditd.conf, line: "num_logs = 3", regexp: '^num_logs\s*=', activate: "try-restart:auditd.service"}
   # auditd's free-space thresholds, in MB of the 128 MB tmpfs. The packaged 75 and 50 are sized
-  # for a disk: the tmpfs was never above 73 MB free in the week to 2026-11-13 and fell to 13 MB,
+  # for a disk: the tmpfs has under 73 MB free and can fall to 13 MB,
   # and a write below admin_space_left under the packaged SUSPEND stops all logging until auditd
   # restarts. ROTATE drops the oldest log file instead. auditd refuses to start unless
   # admin_space_left is the smaller of the two. docs/pi-host-tuning-record.md has the measurement.
@@ -129,9 +127,8 @@ lines:
   - {path: /etc/audit/auditd.conf, line: "admin_space_left = 5", regexp: '^admin_space_left\s*=', activate: "try-restart:auditd.service"}
   - {path: /etc/audit/auditd.conf, line: "admin_space_left_action = ROTATE", regexp: '^admin_space_left_action\s*=', activate: "try-restart:auditd.service"}
   # update-notifier's two apt hooks run apt-check, which loads the whole apt cache into memory on
-  # this 456 MB host inside every apt transaction (#7681). ubuntu-server depends on
-  # update-notifier-common, so the package stays and its conffile loses both hooks. The Pi's file
-  # matched the stock md5 8c8636b1 on 2026-11-08. The motd's update count goes stale as a result,
+  # this 456 MB host inside every apt transaction. ubuntu-server depends on
+  # update-notifier-common, so the package stays and its conffile loses both hooks. The motd's update count goes stale as a result,
   # and after 7 days the login motd says the list is more than a week old. apt rereads its config
   # on every run, so no activation is needed.
   - {path: /etc/apt/apt.conf.d/99update-notifier, line: "// DPkg::Post-Invoke hook removed by homelab-daniel-pi: it ran apt-check", regexp: '^\s*(//\s*)?DPkg::Post-Invoke\b'}

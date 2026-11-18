@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Makes the host_packages test image `homelab-host-test:<release>` for one Ubuntu release (#7664).
+# Makes the host_packages test image `homelab-host-test:<release>` for one Ubuntu release.
 #
 #   build-image.sh 24.04             pull the image image.pins names, or build it
 #   build-image.sh 24.04 --publish   push this Dockerfile's image to GHCR unless already there

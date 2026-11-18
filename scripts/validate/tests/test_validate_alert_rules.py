@@ -149,7 +149,7 @@ def test_a_lokitool_rejection_of_a_loki_rule_file_is_flagged():
 
 
 def test_alloy_rejecting_the_rendered_config_is_flagged():
-    """The #6177 shape: Alloy's match-stage parser refusing a selector Loki accepts."""
+    """Alloy's match-stage parser refusing a selector Loki accepts."""
     problems = alert_rules.check_tree(
         run=lambda argv: (
             (1, "invalid selector syntax for match stage")

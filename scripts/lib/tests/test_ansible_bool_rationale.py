@@ -1,4 +1,4 @@
-"""`ansible_bool` and the filter registration justify `| bool` without an extra-vars path (#8182).
+"""`ansible_bool` and the filter registration justify `| bool` without an extra-vars path.
 
 Run: uv run pytest scripts/lib/tests/test_ansible_bool_rationale.py
 """

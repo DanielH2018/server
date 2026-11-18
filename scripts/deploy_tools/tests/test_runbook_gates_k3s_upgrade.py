@@ -184,7 +184,7 @@ def test_a_deploy_hold_stops_at_gate_three_before_the_node_read():
 
 
 def test_an_unreadable_deploy_hold_is_unavailable_not_gate_three():
-    """A placeholder offender would exit with the hold gate's number, claiming a hold (#4468)."""
+    """A placeholder offender would exit with the hold gate's number, claiming a hold."""
 
     def unreadable() -> str:
         raise HoldUnreadable("DEPLOY_HOLD: connection refused")

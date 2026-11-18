@@ -1,4 +1,4 @@
-"""registry-gc's host-side half of the ghcr-mirror prune (#5541).
+"""registry-gc's host-side half of the ghcr-mirror prune.
 
 Each function is sliced out of the RENDERED script and run with `k3s` stubbed as a shell
 function that logs each call and answers from canned output.
@@ -9,15 +9,14 @@ function that logs each call and answers from canned output.
   * `restore_mirror_store()` journals the prune's lines before anything else, and deletes the
     mirror Job only when it has not finished, so a failure keeps the log its message names.
   * the mirror's phase scales only its own Deployment, never the push store (the operator's
-    ruling on #5680), whose own GC is retired.
+    ruling), whose own GC is retired.
   * the stamp `ghcr-mirror-down` exists from before the scale-down until the mirror serves
     again, and a run that finds it restores the mirror first.
-  * the run holds the lock from before its scale-down until after its restore (#5736). The
-    deploy-time restore that took the same lock was deleted with registry's Ansible tasks.
+  * the run holds the lock from before its scale-down until after its restore.
   * lscr.io refs join the keep set and the warm list under their ghcr.io repository path,
-    because registries.yaml points lscr.io at the same mirror (#6257).
+    because registries.yaml points lscr.io at the same mirror.
   * `warm_mirror()` GETs each distinct amd64 blob of every ghcr.io ref through the mirror,
-    only after the restore succeeded, and a blob that fails to warm leaves the run up (#5654).
+    only after the restore succeeded, and a blob that fails to warm leaves the run up.
 """
 
 import json
@@ -85,7 +84,7 @@ def test_tag_only_ghcr_refs_are_written_beside_the_digests(tmp_path):
 def test_lscr_refs_are_kept_and_warmed_under_their_ghcr_path(tmp_path):
     """registries.yaml sends lscr.io pulls to the ghcr-mirror, which caches them as ghcr.io paths.
 
-    A keep set without them would let the prune delete a digest-pinned lscr.io image (#6257).
+    A keep set without them would let the prune delete a digest-pinned lscr.io image.
     """
     script = f"""
 KUBECTL="k3s kubectl -n homelab"
@@ -316,7 +315,7 @@ logger() {{ cat > /dev/null; }}
 
 
 def test_the_mirror_phase_scales_only_the_mirror_deployment(tmp_path):
-    """The operator's ruling on #5680: the mirror's GC never scales the push store."""
+    """The mirror's GC never scales the push store."""
     calls = _phase(tmp_path, "collect_mirror_store")
 
     down = _index(calls, "scale deploy/ghcr-mirror --replicas=0")
@@ -338,7 +337,7 @@ def test_the_stamp_spans_the_scale_down_to_the_restore(tmp_path):
 
 
 def test_the_run_holds_the_lock_from_the_scale_down_to_the_restore(tmp_path):
-    """#5736: the deploy's restore backs off only while the lock is held, so it must span both."""
+    """The restore backs off only while the lock is held, so the lock must span both."""
     calls = _phase(tmp_path, MAIN)
 
     down = calls[_index(calls, "scale deploy/ghcr-mirror --replicas=0")]
@@ -360,7 +359,7 @@ def test_a_mirror_that_did_not_come_back_is_not_warmed(tmp_path):
 
     assert any("--replicas=1" in c for c in calls), calls
     assert not any(c.startswith("curl ") for c in calls), calls
-    # Its stamp stays, so the dockerhub-mirror is not taken down beside it (#6536).
+    # Its stamp stays, so the dockerhub-mirror is not taken down beside it.
     assert not any("dockerhub-mirror" in c for c in calls), calls
 
 

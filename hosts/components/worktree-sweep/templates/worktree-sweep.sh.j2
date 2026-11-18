@@ -9,16 +9,16 @@
 #
 # `prune_worktrees.py --prune --brief` removes the merged worktrees, deletes the orphan
 # `worktree-*` branches whose content is on origin/master, deletes the unregistered directories
-# under .claude/worktrees/ whose every file a ref already reaches (dev/worktree_orphans.py,
-# #4425), then drops the unreachable objects older than a day and clears a stale gc.log. See
+# under .claude/worktrees/ whose every file a ref already reaches (dev/worktree_orphans.py),
+# then drops the unreachable objects older than a day and clears a stale gc.log. See
 # repair_object_store in that script for why the grace period is not `now`.
 #
-# THE EXIT CODE REACHES HEALTHCHECKS.IO (#4482). `prune_worktrees.py` exits 1 when a removal or a
-# branch deletion failed (#4445). `$rc` on the ping URL is Healthchecks.io's exit-status
+# THE EXIT CODE REACHES HEALTHCHECKS.IO. `prune_worktrees.py` exits 1 when a removal or a
+# branch deletion failed. `$rc` on the ping URL is Healthchecks.io's exit-status
 # endpoint: 0 is a success ping and anything else is a failure, so a failed sweep pages at once
 # and a sweep that never ran pages on silence. The key arrives as the systemd credential
 # `healthchecks_ping_key`, which the unit imports from /run/credstore. daniel-server's package
-# retires the old key file, so the credential is the one source both hosts carry (#6815).
+# retires the old key file, so the credential is the one source both hosts carry.
 # Without a key the script sends no ping. The check is named for the host:
 # `<host>-worktree-sweep`.
 set -u

@@ -1,4 +1,4 @@
-"""`probe.py health` gates a Flux CronJob that no gate Job runs on its schedule instead (#6128).
+"""`probe.py health` gates a Flux CronJob that no gate Job runs on its schedule instead.
 
 The restore drill ships no `<cronjob>-deploy-gate-<hash>` Job, because a copy of it runs a real
 restore. Its CronJob carries `homelab/gate: schedule`, and the gate judges it against the time
@@ -178,7 +178,7 @@ def _tools(kustomization):
 def test_run_health_routes_the_drill_through_the_schedule_gate(capsys):
     """The marker reaches the gate from the real render: the failure is the schedule gate's own.
 
-    Without the routing the same cluster reads "no Job found", the message of #6128.
+    Without the routing the same cluster reads "no Job found".
     """
     kustomization = _kustomization(NOW)
     del kustomization["status"]["history"]

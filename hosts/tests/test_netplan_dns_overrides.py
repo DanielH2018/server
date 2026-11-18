@@ -42,7 +42,7 @@ def overrides_missing_use_dns_false(text: str) -> list[str]:
     pass on a file whose prose survived and whose config did not.
 
     Takes the RENDERED netplan file. The links come out of `k3s_node_dns_dhcp_links`, so a
-    source-text scan sees one loop body rather than the per-link blocks that deploy (#3202).
+    source-text scan sees one loop body rather than the per-link blocks that deploy.
     """
     lines = [ln for ln in text.splitlines() if not _COMMENT.match(ln)]
     missing = []

@@ -226,7 +226,7 @@ def _karma_host(rules):
 
 def test_an_admins_member_reaches_a_silence_ui_at_two_factor():
     """A silence-capable UI asks the `admins` group, claude-ui included, for a second
-    factor rather than riding the `*.local` one_factor wildcard (#6689)."""
+    factor rather than riding the `*.local` one_factor wildcard."""
     rules = _rendered_rules()
     host = _karma_host(rules)
     assert _policy(rules, host, "10.0.0.5", groups=("admins", "dev")) == "two_factor"

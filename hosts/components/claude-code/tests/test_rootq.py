@@ -1,4 +1,4 @@
-"""rootq's root script as a case table: what it refuses, what it runs, and what it prints (#6323).
+"""rootq's root script as a case table: what it refuses, what it runs, and what it prints.
 
 The script runs in-process as an ordinary user. A test roots its allowlist under a scratch
 directory in the home and points its binaries at fakes that record their argv, through the
@@ -65,7 +65,7 @@ SECRETS = {
     "userinfo": "rsync rsync://backup:sentinel@nas/share\n",
     "k3s-token": "K10" + "a" * 20 + "::server:sentinel\n",
     "github": "GH=ghp_" + "S" * 30 + "\n",
-    # The shapes the tree renders into the hosts (#6323's census).
+    # The shapes the tree renders into the hosts.
     "kuma-push": 'PUSH_URL="https://${KUMA_HOST}/api/push/sentinel"\n',
     "netplan-wifi": 'wifis:\n  wlan0:\n    access-points:\n      "home":\n        password: "sentinel"\n',
     "hc-ping": "curl https://hc-ping.com/0a1b2c3d-sentinel\n",
@@ -85,8 +85,8 @@ SECRETS = {
     "mysql": "mysql -psentinel db\n",
     "slack": "WEBHOOK_URL: https://hooks.slack.com/services/T0/B0/sentinel\n",
 }
-# One allowlisted file per PATHS entry, and its neighbour: a sibling in a directory the
-# directory-wide allowlist before #6351 admitted, which the explicit list does not.
+# One allowlisted file per PATHS entry, and its neighbour: a sibling in a directory a
+# directory-wide allowlist would admit, which the explicit list does not.
 LISTED = [
     "/etc/netplan/90-static.yaml",
     "/etc/cron.d/backup",

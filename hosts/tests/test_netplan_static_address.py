@@ -2,8 +2,8 @@
 
 WHY THIS EXISTS. k3s binds server_ip itself, so a node whose address comes from DHCP cannot
 start k3s while the gateway's DHCP server is down. A WAN outage spanning the 2026-10-05 reboot
-kept daniel-box's k3s crash-looping on `bind: cannot assign requested address` for ~70h
-(#3882). The rendered file must carry the inventory's address, not merely an address, and
+kept daniel-box's k3s crash-looping on `bind: cannot assign requested address` for ~70h.
+The rendered file must carry the inventory's address, not merely an address, and
 must switch DHCPv4 off rather than run it alongside (the template says why).
 """
 
@@ -44,7 +44,7 @@ def static_address_problems(
     ):
         problems.append(f"no default route via {router}")
     # netplan emits the `[DHCP] RouteMetric` that networkd also gives RA routes only with a DHCP
-    # client on, so the metric without `dhcp6: true` renders nothing (#4561).
+    # client on, so the metric without `dhcp6: true` renders nothing.
     if (
         iface.get("dhcp6") is not True
         or (iface.get("dhcp6-overrides") or {}).get("route-metric") != 100
@@ -116,7 +116,7 @@ _LINKDOWN_FILE = "/etc/sysctl.d/90-homelab-static-link.conf"
 
 
 def linkdown_sysctl_problems(text: str, link: str) -> list[str]:
-    """What keeps the pinned link's dead default routes from losing to a fallback (#4510, #4561).
+    """What keeps the pinned link's dead default routes from losing to a fallback.
 
     `ignore-carrier` keeps the pinned routes installed with no carrier, and the kernel still routes
     over a linkdown route unless `ignore_routes_with_linkdown` is 1 on that link, per family.

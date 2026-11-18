@@ -2,8 +2,8 @@
 
 systemd adds a `Wants=` for each unit *symlinked* from a `<target>.wants/` directory, so a spec
 declares an enable link under `enable:` and the renderer ships it as an nfpm `type: symlink`
-entry (#4942, #5005). nfpm's default `version_schema: semver` rewrites
-`0.<count>+g<sha>` to `0.<count>.0+g<sha>`, so the spec opts out of it (#4976).
+entry. nfpm's default `version_schema: semver` rewrites
+`0.<count>+g<sha>` to `0.<count>.0+g<sha>`, so the spec opts out of it.
 
 Run: uv run pytest scripts/renderer/tests/test_renderer_host_package_rules.py
 """

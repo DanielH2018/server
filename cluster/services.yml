@@ -1005,6 +1005,18 @@ containers_list:
     homepage_widget: true
     # slskd's settings and transfer history; the downloads live on media-data.
     no_backup_claims: [slskd-config]
+  # The password store. Bitwarden clients call the API directly and cannot follow Authelia's
+  # 302, so the route is ungated; the LAN-only route and SIGNUPS_ALLOWED=false take its place.
+  - name: vaultwarden
+    weekly_backup_claims: {vaultwarden-data: 1}  # Mon
+    hostname: "vaultwarden"
+    port: 8080
+    use_authelia: false
+    # LAN-only; remote clients reach it over wg-easy.
+    public_route: false
+    # Held at zero replicas, so the route has no backend and the probe would read 503. Drop
+    # this once vaultwarden_k8s_replicas is raised.
+    probe: false
   # Deploys LAST: every workload role must finish before this role fences the namespace
   # (docs/networkpolicy-slice-answers.md). K8S_APPLIES_LAST in template_filters/toposort.py gives
   # it an edge onto every other entry, so it applies last wherever it sits in this list, and an

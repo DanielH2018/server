@@ -23,12 +23,12 @@ LONGHORN_B2_DELETIONS_CRON_* and LONGHORN_B2_BUDGET_CRON_* (timer file, expected
 stamp), LONGHORN_ETCD_DROP_IN, LONGHORN_JOURNALCTL, LONGHORN_JOURNAL_TIMEOUT_S and LONGHORN_CRON_EVIDENCE_WINDOW_HOURS.
 
 It takes no arm flag and no schedule from the shim. Each backup target's arm state comes from the
-cluster: a blank `spec.backupTargetURL` is a disarmed target (H1.7a). The daily and weekly run
+cluster: a blank `spec.backupTargetURL` is a disarmed target. The daily and weekly run
 times, which size the first-run grace, come from the `spec.cron` of the live RecurringJobs. Both
 are one list call each, so the reader reports what the cluster holds, whichever tool wrote it:
 Flux, through the `longhorn-backup` tag, or an operator's break-glass. No baked copy of a flag or
 a schedule can disagree with it. A target that carries the reconcile-disabled annotation is a
-problem the reader reports, never a disarm (H1.7b).
+problem the reader reports, never a disarm.
 Prints `up<TAB>msg` or `down<TAB>msg` and exits 0.
 """
 
@@ -62,8 +62,8 @@ def _require_env(name: str) -> str:
 
     Every LONGHORN_* var read below is unconditionally exported by
     longhorn-backup-health.sh.j2; there is no value for a Longhorn threshold this reader could
-    make up that is safer than refusing to guess. A hardcoded fallback here used to mean a
-    template edit that dropped one `export` line, or an install that skipped the copy, would
+    make up that is safer than refusing to guess. A hardcoded fallback here would let a
+    template edit that dropped one `export` line, or an install that skipped the copy,
     silently substitute a stale or wrong constant instead of the shim's actual setting — a wrong
     verdict with nothing in the output naming the cause. Exiting nonzero instead makes the shim's
     already-existing "reader failed" path (longhorn-backup-health.sh.j2) report it, which names
@@ -91,7 +91,7 @@ def _require_bool_env(name: str) -> bool:
     Refuses anything it doesn't recognize rather than defaulting to False. The two
     LONGHORN_*_CRON_EXPECTED flags route through this, and False means a cron is not expected,
     so its absence goes unreported. A typo'd or truncated export (a template change that renders
-    `Tru` instead of `True`, say) used to fold silently into False here, the same wrong-default
+    `Tru` instead of `True`, say) would fold silently into False here, the same wrong-default
     direction `_require_env` above exists to close for a missing var entirely.
     """
     raw = _require_env(name).strip().lower()
@@ -168,14 +168,10 @@ def _parse_volume_rows(raw: str) -> list[tuple[str, str, str, str]]:
 
 
 # DECIDED: a kubectl fetch that fails is a DOWN with a reason, not an empty result. The bash
-# this was ported from sent every one of these reads to `2>/dev/null`
-# (the shim at the parent of 62c488dd, lines
-# 144, 176, 218, 344, 395, 412 and 443) and let the empty capture flow into the checks; the first
-# Python port kept that shape as `... if rc == 0 else []`. Both read an API-server timeout, a 500
-# or RBAC drift as "nothing errored, nothing is stale, this tier has no volumes" — a green light
-# over data nobody looked at, on the deadman for the Longhorn backup plane. Parity with the bash
-# was the wrong target here, so this departs from it: a reader that cannot see the cluster says
-# so. Issue #1061 has the per-line analysis.
+# `2>/dev/null` shape, and `... if rc == 0 else []`, let the empty capture flow into the checks
+# and read an API-server timeout, a 500 or RBAC drift as "nothing errored, nothing is stale,
+# this tier has no volumes" — a green light over data nobody looked at, on the deadman for the
+# Longhorn backup plane. A reader that cannot see the cluster says so.
 #
 # The one thing that is NOT a failure is rc == 0 with empty output: that is the ordinary answer
 # for seven of the eight tier selectors and for the r2 volume set, and flagging it would
@@ -202,7 +198,7 @@ def _fetch_items(
 
     The body is checked structurally rather than by catching ValueError alone: `json.loads`
     accepts the literal `null` and returns None, so a truncated or empty-but-successful read
-    used to reach `.get("items")` as an AttributeError instead of a verdict.
+    would reach `.get("items")` as an AttributeError instead of a verdict.
     """
     out = _fetch_text(problems, what, *args)
     if out is None:
@@ -243,7 +239,7 @@ def _fetch_job_crons(problems: list[tuple[int, str]]) -> dict[str, str] | None:
 
 
 def _fetch_backups_json(problems: list[tuple[int, str]]) -> list[dict] | None:
-    """The backup list, fetched once a run; checks 2 to 5 all read it (#3735)."""
+    """The backup list, fetched once a run; checks 2 to 5 all read it."""
     return _fetch_items(problems, "backup list", *backups.LIST_ARGS)
 
 
@@ -319,8 +315,8 @@ def _syslog(message: str) -> None:
     stdout/stderr are explicitly sent to DEVNULL rather than inherited. The wrapper captures
     this reader as `OUT=$(... 2>"$ERR")`; if `logger` itself wrote anything to its own stdout or
     stderr (a missing /dev/log socket, e.g.), inheriting our fds would put that text into the
-    same stream the wrapper reads the verdict from — the contamination path the 2026-09-04
-    review found (`logger: socket /dev/log: ...` turning an `up` into a false DOWN). check=False
+    same stream the wrapper reads the verdict from — a contamination path
+    (`logger: socket /dev/log: ...` turning an `up` into a false DOWN). check=False
     only silences logger's own nonzero exit; a missing `logger` binary raises OSError, caught
     here too, since neither failure may take this reader down over its own logging call.
     """
@@ -383,7 +379,7 @@ def main(now: float | None = None) -> int:
 
     `now` is the epoch every age is measured from; the cron leaves it None and reads the
     clock. A test hands one in so its fixtures date against a fixed epoch rather than the
-    suite's own runtime (#2220) — through this argument, not an env var, so nothing in the
+    suite's own runtime — through this argument, not an env var, so nothing in the
     production environment can shift what the script thinks the time is.
     """
     now_s = time.time() if now is None else now
@@ -403,7 +399,7 @@ def main(now: float | None = None) -> int:
 
     # ── run times, for the first-run grace ────────────────────────────────────────────────
     # From each tier's live RecurringJob. One whose cron is missing or malformed degrades the
-    # first-run grace for that tier, not the reader (the 2026-09-04 review's finding #4).
+    # first-run grace for that tier, not the reader.
     job_crons = _fetch_job_crons(problems)
     run_hhmm = cluster_state.run_times(job_crons or {})
     for job, hhmm in run_hhmm.items():

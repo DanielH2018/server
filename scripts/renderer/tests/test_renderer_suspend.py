@@ -102,7 +102,7 @@ def test_every_kustomization_of_a_suspended_tag_renders_suspend_true(tmp_path):
 
 
 def test_the_rendered_soak_has_no_edges_and_lists_the_suspended_tag(tmp_path):
-    """#5317: `soak` waits at run time (D5 Open question 19) and names a suspended tag."""
+    """`soak` waits at run time and names a suspended tag."""
     soak = _docs(_bundle(_roles(tmp_path, sonarr="flux_suspend: true\n")))["soak"]
     assert "dependsOn" not in soak["spec"]
     assert _suspended_deps(soak) == "sonarr,sonarr-deferred"

@@ -84,8 +84,8 @@ bedroom_notify:
   sequence:
     - variables:
         # DND comes from the WATCH, not the phone: the watch is on-body, so its DND is the better
-        # "actually asleep" signal, and the phone's sensor silently disappeared once already
-        # (2026-08-16 review) — a missing entity renders 'unknown', which is inside the exclusion
+        # "actually asleep" signal, and the phone's sensor can silently disappear
+        # — a missing entity renders 'unknown', which is inside the exclusion
         # list below, so the term fails quiet-OFF and every routine alert pushed at `default`.
         # Watch states are off / priority_only / alarms_only / total_silence.
         quiet: >-
@@ -130,7 +130,7 @@ bedroom_notify:
     # in the HA UI as a persistent notification, so a critical/elevated event stays visible even if the
     # mobile push fails. It runs BEFORE the pushes because a re-paired phone or watch renames its
     # notify.mobile_app_* service, and the resulting ServiceNotFound aborts the script at that push even
-    # under continue_on_error (HA re-raises configuration errors; the watch rename happened 2026-06-20).
+    # under continue_on_error (HA re-raises configuration errors).
     # This is the backstop the runtime-error alert
     # can't be: it deliberately ignores script.bedroom_notify's OWN logger to avoid a loop, so a broken
     # notify service is otherwise invisible for these tiers (sensor-offline, air quality, extreme-temp

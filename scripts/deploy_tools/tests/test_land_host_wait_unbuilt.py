@@ -1,4 +1,4 @@
-"""#7024: `wait_for_hosts` does not defer on a host's updater when the builder never published it.
+"""`wait_for_hosts` does not defer on a host's updater when the builder never published it.
 
 The builder's series are served through `HostReads.fetch`, the Prometheus boundary the wait
 already crosses: `homelab_repo_published_info{package,sha,version}` and

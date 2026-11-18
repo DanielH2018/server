@@ -117,7 +117,7 @@ def _run_key_read(tmp_path, signingkey: str) -> str:
 
 
 def test_a_private_key_path_reads_the_public_key_beside_it(tmp_path):
-    """The `claude` agent user's shape (#4098): the read printed the private key's 13 lines."""
+    """The `claude` agent user's shape: the read printed the private key's 13 lines."""
     private = tmp_path / "git_signing_ed25519"
     private.write_text(PRIVATE_KEY_TEXT)
     (tmp_path / "git_signing_ed25519.pub").write_text(

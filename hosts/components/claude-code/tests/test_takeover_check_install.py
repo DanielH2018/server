@@ -1,4 +1,4 @@
-"""What the takeover check wrapper ships and pins (#5494).
+"""What the takeover check wrapper ships and pins.
 
 Run: uv run pytest hosts/components/claude-code/tests/test_takeover_check_install.py
 """

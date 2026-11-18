@@ -70,15 +70,15 @@ PUSH_ONLY_JOBS = frozenset({"prove"})
 # The proof arm of a dependent job's condition. `prove` is skipped on a dispatch, so its output
 # is empty and the comparison is true there; the evaluator reads the arm that way.
 _PROOF_ARM = "needs.prove.outputs.proven != 'true'"
-# The run arm of a dependent job's condition (#5783). A dispatch is not cancelled and `prove`
+# The run arm of a dependent job's condition. A dispatch is not cancelled and `prove`
 # is skipped, so the inner arm is true and so is the whole. It is replaced whole, because
 # `truthy` splits on `||` and does not read parentheses.
 _CANCEL_ARM = (
     "(needs.prove.result == 'cancelled' || needs.prove.result == 'failure'"
     " || (!cancelled() && needs.prove.outputs.proven != 'true'))"
 )
-# The `pytest` job's run arm, which reads `pytest-proven` where the others read `proven`
-# (#8943). `prove` is skipped on a dispatch, so it holds there too.
+# The `pytest` job's run arm, which reads `pytest-proven` where the others read `proven`.
+# `prove` is skipped on a dispatch, so it holds there too.
 _PYTEST_CANCEL_ARM = _CANCEL_ARM.replace("outputs.proven", "outputs.pytest-proven")
 # The draft arm of every job's condition. A dispatch carries no pull request, so the field is
 # unset and the comparison is true there.

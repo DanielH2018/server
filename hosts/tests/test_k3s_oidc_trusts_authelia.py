@@ -15,7 +15,7 @@ why two of the checks below are about the flags NOT being there.
 The document is the component's own template rendered with the component's own defaults, the
 inputs host mode gives it. Before H6.4a it came from `_setup_render`, the harness
 `validate/setup_templates.py` renders the setup plane with, and the keys lived in
-`hosts/components/k3s-server/defaults/main.yml` (#3202).
+`hosts/components/k3s-server/defaults/main.yml`.
 
 See `hosts/components/k3s-server/component.yml` and `templates/authentication-config.yaml.j2`
 for why each value is what it is.
@@ -341,7 +341,7 @@ def test_headlamp_client_id_agrees_across_authelia_headlamp_and_k3s():
     first mismatch fails the login at Authelia, the second passes the login and Forbids every
     call. The ids are kept as three literals rather than one shared variable because
     `roles/setup/k3s` is applied by hand and restarts the control plane; this test is the
-    tie between them (#3751).
+    tie between them.
     """
     audiences = [e["issuer"]["audiences"] for e in _rendered_auth_config()["jwt"]]
     assert audiences, "the authentication config trusts no issuer; nothing was compared"

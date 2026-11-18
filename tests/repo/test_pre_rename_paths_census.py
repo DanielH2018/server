@@ -1,7 +1,7 @@
-"""The paths ADR 0030 retired are gone from the comments that reach a manifest or an image (#8405).
+"""The paths ADR 0030 retired are gone from the comments that reach a manifest or an image.
 
-#8186 renamed `ansible/` without changing a rendered manifest, so every comment and docstring
-under `k8s/` and `scripts/renderer/job_files/` kept its pre-rename path. A line may still name
+Renaming `ansible/` changed no rendered manifest, so a comment or docstring under `k8s/` and
+`scripts/renderer/job_files/` can keep its pre-rename path. A line may still name
 `ansible/` when it is about ansible-core, or when it names a path inside a historical commit
 (`git show <sha>:ansible/...`), where the old path is the correct one.
 

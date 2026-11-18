@@ -1,4 +1,4 @@
-"""The persisted-output census: every output a package persists is on one named list (H4.3a).
+"""The persisted-output census: every output a package persists is on one named list.
 
 A package persists a decrypted output only for a consumer that must start before the
 decrypt can run (ADR-0022's H4 amendment). The list has one member, daniel-server's

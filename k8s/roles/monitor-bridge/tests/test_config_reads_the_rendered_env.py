@@ -1,10 +1,8 @@
 """Each threshold has one home: the pod environment renders it, and `bridge/config*.py` only reads it.
 
-Until #3659 `TRAEFIK_421_RPS` (since retired with its check) defaulted to "0.02" in both the env-secret template and
-`bridge/config_service.py`, and 40 of the 133 keys both files named disagreed (`TARGETS_MIN` 1
-against 2, `PROWLARR_INDEXER_MIN_DOWN_MIN` 10080 against 30). The pod read the template while the
-suite read the Python, so a test could pass at a value nothing deployed. A read with no default is
-required, and these two tests hold that shape in both directions.
+A default in the Python that differs from the template would let the pod read the template while
+the suite read the Python, so a test could pass at a value nothing deployed. A read with no
+default is required, and these two tests hold that shape in both directions.
 """
 
 import ast

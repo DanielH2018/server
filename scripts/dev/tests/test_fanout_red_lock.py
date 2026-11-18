@@ -1,4 +1,4 @@
-"""The lock the green gate puts on a red test file and on a conftest (#4214, #4517, #4542, #4548).
+"""The lock the green gate puts on a red test file and on a conftest.
 
 Pure source-to-source checks, so no case here starts git or pytest; the gate-level cases are
 in `test_fanout_red_gate.py` and `test_fanout_green_gate_test_code.py`.
@@ -110,7 +110,7 @@ def _without_test_scale(src):
 
 
 # Edits to the part of the file that was there before the red commits and that no red test
-# reaches, each one a fix forced in #3675's judged records.
+# reaches, each one a fix a real review forced.
 UNREACHED = {
     "callers that follow a parameter the fix dropped (#4338)": RED.replace(
         "def test_scale(fake_factor):\n    assert scale(2, fake_factor) == 6\n",
@@ -151,7 +151,7 @@ def test_a_weakened_red_assertion_is_flagged():
 
 @pytest.mark.parametrize("helper", ["_twice", "_once"])
 def test_an_edited_helper_a_red_test_reaches_is_flagged(helper):
-    """#4183: the fix edited a pre-existing function the red node calls, here or one call down."""
+    """The fix edited a pre-existing function the red node calls, here or one call down."""
     body = {"_twice": "_once(_once(x))", "_once": "double(x)"}[helper]
     edited = RED.replace(f"    return {body}\n", "    return 4\n")
     assert forbidden_change(BASE, RED, edited) == f"changes or removes `def {helper}`"
@@ -169,7 +169,7 @@ def test_an_unreached_constant_is_the_fixs_to_change():
     assert forbidden_change(BASE, RED, edited) == ""
 
 
-# A guard module whose red test reaches its constant only through an older helper, as #4372's
+# A guard module whose red test reaches its constant only through an older helper, as one that
 # reached `REAPERS` through `scheduled_reapers`.
 GUARD_BASE = '''"""The guard."""
 
@@ -191,7 +191,7 @@ NEW_NAMES = 'NAMES = frozenset({"old.py", "new.py"})'
 
 
 def test_a_constant_only_an_older_helper_reads_is_the_fixs_to_change():
-    """#4372: the fix had to change the guard's constant, which the red test reaches."""
+    """The fix had to change the guard's constant, which the red test reaches."""
     edited = GUARD_RED.replace('NAMES = frozenset({"old.py"})', NEW_NAMES)
     assert forbidden_change(GUARD_BASE, GUARD_RED, edited) == ""
 
@@ -252,7 +252,7 @@ def test_an_appended_assignment_that_is_not_a_literal_is_flagged(statement):
     assert "is not allowed" in forbidden_change(BASE, RED, f"{RED}\n\n{statement}\n")
 
 
-# #4543: pytest resolves `repo`'s request for `workdir` from the red test's module, so a
+# Pytest resolves `repo`'s request for `workdir` from the red test's module, so a
 # `workdir` fixture there serves every red node that requests `repo`.
 CONFTEST = """import pytest
 
@@ -300,7 +300,7 @@ def test_an_older_fixture_that_serves_a_conftest_fixture_stays_locked():
     )
 
 
-# #4548: `test_two`'s fixture closure, as `pytest --setup-plan` lists it. The builtin
+# `test_two`'s fixture closure, as `pytest --setup-plan` lists it. The builtin
 # `tmp_path` requests `tmp_path_factory`, which pytest resolves from the red test's module.
 CLOSURE = ["request", "tmp_path", "tmp_path_factory"]
 
@@ -359,7 +359,7 @@ def test_a_file_that_no_longer_parses_is_flagged():
     )
 
 
-# #4542: the shape of `scripts/conftest.py` before #4359 deleted its unused resolver.
+# The shape of `scripts/conftest.py` with an unused resolver.
 SHARED = '''"""Shared fixtures."""
 
 import json
@@ -419,7 +419,7 @@ def _conftest_change(head):
 
 
 def test_deleting_an_unrequested_fixture_and_what_only_it_used_is_clean():
-    """#4359's whole deletion: the fixture, its helper, then the map and its other fixture."""
+    """The whole deletion: the fixture, its helper, then the map and its other fixture."""
     head = _without(SHARED, "_fake_lookup", "fake_lookup", "ips").replace(
         'IPS = {"prometheus": "10.0.0.1"}\n\n\n', ""
     )
@@ -476,7 +476,7 @@ def test_deleting_a_fixture_another_conftests_fixture_requests_is_flagged():
 
 
 def test_deleting_a_fixture_in_a_red_nodes_closure_is_flagged():
-    """A plugin fixture `test_no_resolver` reaches could request `ips` (#4548)."""
+    """A plugin fixture `test_no_resolver` reaches could request `ips`."""
     head = _without(SHARED, "ips")
     assert _conftest_change(head) == ""
     assert forbidden_conftest_change(SHARED, head, [CENSUS], [SHARED], ["ips"]) == (

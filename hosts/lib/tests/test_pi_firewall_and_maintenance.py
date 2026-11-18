@@ -1,4 +1,4 @@
-"""The Pi's last three `initial_setup` subjects as packaged components (H7.30).
+"""The Pi's last three `initial_setup` subjects as packaged components.
 
 `fail2ban`, `integrity-scans`, `postfix`, `accounting`, `host-maintenance` and `ssh-firewall`, with
 the Pi package's own ufw rules, replace initial_setup's fail2ban group, maintenance crons and ufw
@@ -31,7 +31,7 @@ TIMERS = {
     "Weekly rkhunter malware scan": "homelab-rkhunter-check.timer",
 }
 # Retired with no replacement: the Pi's AIDE scan outgrew its memory and reset the board, so its
-# package lists no aide-scan (#8084).
+# package lists no aide-scan.
 UNSCHEDULED = {"Weekly AIDE file integrity check": "homelab-aide-check.timer"}
 LAN = "allow from {lan} to any port 22 proto tcp"
 
@@ -59,8 +59,8 @@ def test_each_cron_the_role_once_wrote_is_retired_and_a_timer_replaces_it(
     package, manifest
 ):
     retired = {e["cron"]: e["user"] for e in manifest["legacy"] if "cron" in e}
-    # Every job sat in root's crontab: the live Pi's sys_user crontab holds no Ansible entry
-    # (2026-10-30), and the prune's `ansible_facts.user_id` was root under the play's become.
+    # Every job sat in root's crontab: the live Pi's sys_user crontab holds no Ansible entry,
+    # and the prune's `ansible_facts.user_id` was root under the play's become.
     jobs = TIMERS | UNSCHEDULED
     assert {name: retired.get(name) for name in jobs} == dict.fromkeys(jobs, "root")
     for timer in TIMERS.values():
@@ -93,7 +93,7 @@ def test_the_scan_sources_the_check_library_and_loads_no_credential(package):
 
 
 def test_the_rkhunter_scan_downloads_no_data_files(package):
-    # Debian's WEB_CMD="/bin/false" makes `rkhunter --update` fail on every run (#6964).
+    # Debian's WEB_CMD="/bin/false" makes `rkhunter --update` fail on every run.
     unit = _text(package, "/usr/lib/systemd/system/homelab-rkhunter-check.service")
     assert "ExecStart=/usr/lib/homelab/rkhunter-check\n" in unit
     assert "--update" not in unit

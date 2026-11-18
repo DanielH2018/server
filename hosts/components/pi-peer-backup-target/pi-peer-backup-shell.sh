@@ -1,16 +1,16 @@
 #!/bin/bash
-# sshd forced command for the pi-peer-backup key on daniel-pi (issue #1927).
+# sshd forced command for the pi-peer-backup key on daniel-pi.
 #
 # The key exists for exactly one operation: the nightly CronJob's `rsync --server --sender`
-# of the wg-easy config directory, run through `sudo` because the files are root-owned. Before
-# this wrapper the key was authorized with no options, so any principal that could read the
-# `pi-peer-backup-ssh` Secret held an interactive shell as a NOPASSWD-sudo user on the Pi.
+# of the wg-easy config directory, run through `sudo` because the files are root-owned. Without
+# this wrapper a key authorized with no options gives any principal that can read the
+# `pi-peer-backup-ssh` Secret an interactive shell as a NOPASSWD-sudo user on the Pi.
 # `restrict,command="<this> <dir>"` in authorized_keys (the pi-peer-backup-target component) makes sshd run this
 # script instead of whatever the client asked for, with the client's request in
 # SSH_ORIGINAL_COMMAND.
 #
 # The request is validated STRUCTURALLY rather than against a pinned argv: the short-option
-# blob (`-logDtpre.iLsfxCIvu` on 2026-09-17) is negotiated between the two rsync versions and
+# blob (`-logDtpre.iLsfxCIvu`) is negotiated between the two rsync versions and
 # moves when the alpine base image bumps, so a literal `command=` would break the nightly as a
 # PiPeerBackupFailed page after the next Renovate merge. What is fixed: the verb must be a sender
 # (a receiver would write to the Pi), the only long option allowed is `--timeout=N`
@@ -55,7 +55,7 @@ n=${#WORDS[@]}
 # A short-option blob is letters, then optionally `e` and the protocol capability list
 # (`e.iLsfxCIvu` in the nightly). The letters before `e` are real options and may not include
 # `s`: `-s` is --secluded-args, which makes rsync re-read the path from the protocol stream
-# and would bypass the pinned SRC below (#2015). The `s` INSIDE the capability list is a
+# and would bypass the pinned SRC below. The `s` INSIDE the capability list is a
 # capability, not an option, which is why the letters and the list are matched apart — the
 # same split rrsync makes. `e` itself is excluded from the letters so the list is where the
 # blob's first `e` is.

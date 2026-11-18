@@ -325,8 +325,8 @@ def test_backup_health_a_verdict_split_across_lines_still_names_its_cause(
 ):
     """A newline inside the verdict's message must not hide the cause behind its own tail.
 
-    The 2026-10-06 shape (#3883): a kubectl error's newline left `(+N more ...)` as the last
-    line, and the tile read "unrecognized status:" for 70 hours of a dead k3s API.
+    A kubectl error's newline left `(+N more ...)` as the last
+    line, and the tile read "unrecognized status:" instead of the cause.
     """
     proc, verdict, curl_calls = _run_rendered_shim(
         tmp_path,

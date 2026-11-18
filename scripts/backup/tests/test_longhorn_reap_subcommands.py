@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""The one `longhorn_reap.py {backups,snapshots}` entry point that replaces the two reapers (#4345).
+"""The one `longhorn_reap.py {backups,snapshots}` entry point that replaces the two reapers.
 
-The consolidation is a navigation refactor, so every test here holds the new entry point to
-what the two old ones did: `--help` answers from any directory, every flag the old parsers
-accepted still parses, a fail-closed ABORT still reaches the operator through the subcommand,
+The consolidation is a navigation refactor, so every test here holds the entry point to the
+contract of the two reapers: `--help` answers from any directory, every flag their parsers
+accepted parses, a fail-closed ABORT still reaches the operator through the subcommand,
 and the `--apply` re-run hint names a file that exists. The two census tests hold the layout:
 nothing `longhorn_reap_*.py` stays flat in scripts/backup/, and the libraries sit in a
 `longhorn_reap_lib/` PEP 420 namespace package. The docs census holds the runbooks to the new
@@ -28,8 +28,8 @@ OLD_ENTRYPOINTS = (
     "longhorn_reap_orphan_snapshots.py",
 )
 
-# Every flag form the old backups parser (`longhorn_reap_orphan_backups._parse_args`) accepted,
-# in combinations its cross-flag checks allow. Each must still parse under `backups`.
+# Every flag form the backups parser (`longhorn_reap_orphan_backups._parse_args`) accepts,
+# in combinations its cross-flag checks allow. Each must parse under `backups`.
 BACKUPS_FLAG_SETS = [
     ["--apply"],
     ["--mode", "strays", "--apply-deleted-volumes"],

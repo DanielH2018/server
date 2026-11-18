@@ -3,7 +3,7 @@
 A ClusterRole labelled `aggregate-to-view` adds its rules to `view`, which the read-only
 identity and Headlamp bind, without touching either binding. Flux's vendored install ships
 `flux-view-flux-system` that way, so every identity bound to `view` reads every Flux kind. The
-operator accepted that on 2026-10-12 (#4742). These guards make the next such grant a decision:
+operator accepted that on 2026-10-12. These guards make the next such grant a decision:
 
 - every aggregating ClusterRole across the render is listed with a reason, and the list names
   only roles the render still holds;

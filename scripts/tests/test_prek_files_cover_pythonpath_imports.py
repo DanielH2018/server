@@ -3,7 +3,7 @@
 A hook whose entry is a test module runs under pytest, which puts every `pythonpath` root in
 `pyproject.toml` on `sys.path`. A bare `from _row_table import ...` in
 `tests/repo/` resolves only that way, so a census that skips those roots stops the
-closure there and cannot see a `files` gate that misses the module (#5921).
+closure there and cannot see a `files` gate that misses the module.
 """
 
 from pathlib import Path
@@ -46,8 +46,7 @@ def test_the_static_ratchet_hook_covers_the_row_table_its_entry_imports():
     assert gaps(hook, closure) == []
 
 
-# Each hook's named member is a module its entry reaches only through a `pythonpath` root,
-# measured on 2026-10-22 by adding those roots to the census for modules under `tests/`.
+# Each hook's named member is a module its entry reaches only through a `pythonpath` root.
 @pytest.mark.parametrize(
     ("hook_id", "member"),
     [

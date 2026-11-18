@@ -58,7 +58,7 @@ FAILURE_LOG_NAME = "failure-20261012T061700Z.log"
 def _function(name: str) -> str:
     """The body of one shell function, from `name() {` to the closing brace in column one.
 
-    Reads the RENDER, not the .j2 source (#3178) — a value that moved into a role default
+    Reads the RENDER, not the .j2 source — a value that moved into a role default
     would leave a source-text match looking for `{{ ... }}` matching nothing, and a Jinja
     expression inside the body would come through substituted rather than literal, so `bash`
     never sees it. The assertion below is a sanity check that the render is in fact complete.

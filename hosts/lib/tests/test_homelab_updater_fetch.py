@@ -274,7 +274,7 @@ def test_a_held_frontend_lock_exits_75_and_writes_nothing(host, output, code):
     assert host.calls("apt-get") == []
 
 
-# The candidate pick forks no dpkg per published version (#8884).
+# The candidate pick forks no dpkg per published version.
 
 # The highest builder version sits in the middle, so neither the first nor the last row wins.
 MANY = [f"0.{n}+g{n:012x}" for n in (*range(1, 75), 150, *range(75, 150))]

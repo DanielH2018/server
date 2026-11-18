@@ -1,4 +1,4 @@
-"""The recorder excludes automations and scripts by entity, never by domain (#8385).
+"""The recorder excludes automations and scripts by entity, never by domain.
 
 The recorder drops every event whose data.entity_id an exclude matches, so a domain exclude also
 drops each automation_triggered and script_started event, and the logbook loses which automation

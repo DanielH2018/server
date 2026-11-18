@@ -327,7 +327,7 @@ def test_the_vendored_schema_matches_the_pinned_image():
 
 # --- the OIDC signing key, read through Authelia's template filter ------------------------
 #
-# The key lives in Secret authelia-oidc-jwk (target slice R2, PR 7), and `jwks[].key` reads it
+# The key lives in Secret authelia-oidc-jwk, and `jwks[].key` reads it
 # with `{{- secret "<path>" | nindent 10 }}` inside its block scalar. Authelia's `template`
 # filter runs Go templating over the whole file, so the expression's path, the Deployment's
 # mount and the filter variable must agree, and the file must hold no other action. The two

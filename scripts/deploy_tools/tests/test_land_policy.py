@@ -168,7 +168,7 @@ def test_every_pr_merges_directly_at_the_checked_head(landing, tmp_path, review)
     """No PR is armed for auto-merge; each merges directly at the head the policy checked.
 
     Auto-merge would merge whatever head is green when CI finishes. Armed, an approved agent
-    PR once sat BLOCKED behind the fence until a hand merge (#3911, #4001).
+    PR once sat BLOCKED behind the fence until a hand merge.
     """
     fakes = _fakes(arm={**_ARM, "reviewDecision": review})
     fakes.gh_views["state,mergeable,headRefOid"] = [

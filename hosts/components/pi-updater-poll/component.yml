@@ -1,6 +1,6 @@
-# The Pi's updater trigger (#7065). It starts the Pi's updater when the builder publishes a new
+# The Pi's updater trigger. It starts the Pi's updater when the builder publishes a new
 # daniel-pi package, so a landing that changes the Pi's package settles within about 15 minutes
-# instead of at the daily 03:05 fire (H3.13, #6911). The Pi is never the builder's rollout canary
+# instead of at the daily 03:05 fire. The Pi is never the builder's rollout canary
 # (hosts/lib/builder_rollout_gate.py:NEVER_CANARY), so this trigger holds no other host.
 #
 # homelab-updater-poll.timer fires every 15 minutes. The script fetches the homelab Packages index
@@ -24,7 +24,7 @@
 #   installs anything.
 # - Abort valves: the poll starts the updater at most once per published version, recorded in
 #   /var/lib/homelab-updater-poll/triggered, so a failed, held or lock-refused run waits for the
-#   daily timer instead of repeating every 15 minutes (#6911's memory limit). It skips, without
+#   daily timer instead of repeating every 15 minutes, which the Pi's memory cannot bear. It skips, without
 #   recording, while homelab-updater.timer is masked or while homelab-docker-engine,
 #   homelab-updater, homelab-reconcile, homelab-reconcile-wait, apt-daily or apt-daily-upgrade is
 #   running (a oneshot reads `activating` while it runs). The updater's own hold (docs/host-packages.md) still refuses an install. The poll does not avoid man-db's

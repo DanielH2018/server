@@ -6,8 +6,8 @@
 # minutes on both cluster nodes, and its enable link ships only while nut_host_watchdog_armed is
 # true. It reads /var/lib/homelab-secrets/etc/nut/upsmon.conf. Running it by hand needs root.
 # Each run writes its verdict to $TEXTFILE_DIR/ups-secondary-health.prom for node_exporter's
-# textfile collector, which UpsSecondaryFailed and UpsSecondaryNotReporting read (M6 batch B4,
-# other-setup-checks.yaml). B4's Cutover-2 removed its Kuma push.
+# textfile collector, which UpsSecondaryFailed and UpsSecondaryNotReporting read
+# (other-setup-checks.yaml).
 #
 # Answers the one question nothing else in this estate asks: can THIS host's upsmon still
 # reach upsd, right now?
@@ -18,14 +18,11 @@
 #     nut Service's pinned ClusterIP (nut_k8s_cluster_ip) on any other host
 #   * nut-monitor dies or is left disabled
 #
-# WHY THE NEIGHBOURING CHECKS DO NOT COVER THIS, all three for the same reason — they observe a
-# different path from the one that carries the shutdown:
+# WHY THE NEIGHBOURING CHECKS DO NOT COVER THIS: they observe a different path from the one that
+# carries the shutdown.
 #   * observability's UPS* rules (UPSOnBattery, UPSBatteryLow and the rest, in hosts.yaml) read
 #     nut-exporter's scrape of upsd, i.e. the UPS as seen THROUGH the cluster. They say the UPS is
 #     fine, not that this host can hear it.
-#   * the "k3s nut (upsd)" Kuma tile, retired with Kuma, was a TCP probe from the Kuma POD over
-#     Service DNS. A probe from a pod crosses the pod network, not the host-netns path this
-#     host's upsmon takes, so it stays green while that path is broken.
 #   * node-exporter runs without --collector.systemd, so no node_systemd_unit_state series
 #     exists for anything to alert on nut-monitor being dead.
 #
@@ -35,8 +32,7 @@
 #
 # The MONITOR line carries nut_monitor_password in field 5, which is why the read is
 # field-scoped awk and never a bare grep: printing that line prints the credential into syslog
-# and into any agent transcript that ran the check. This estate has rotated three secrets after
-# exactly that mistake.
+# and into any agent transcript that ran the check.
 #
 # Runs as root because upsmon.conf is 0640 root:nut. Root buys the file read, nothing more.
 # The consequence worth knowing is that an agent session cannot trigger a run to verify this
@@ -55,9 +51,7 @@ source /usr/lib/homelab/homelab-check-lib.sh || {
   exit 1
 }
 
-# The longest legitimate gap between two textfile writes: two timer periods plus 300s, the rule
-# M3 fixed (docs/target-architecture/monitoring/m3-textfile-timer.md, "The deadline for
-# disk-health"). It renders from the same variable as the timer, and
+# The longest legitimate gap between two textfile writes: two timer periods plus 300s. It renders from the same variable as the timer, and
 # hosts/tests/test_b4_rule_literals.py pins the rules' literals to this value.
 DEADLINE_S={{ 2 * 60 * (nut_host_watchdog_interval_minutes | int) + 300 }}
 TEXTFILE_DIR=${TEXTFILE_DIR:-/var/lib/node-exporter-textfile}
@@ -71,7 +65,7 @@ UNIT_STATE="$(systemctl is-active nut-monitor 2>/dev/null || true)"
 # stdout and stderr are kept APART. upsc writes "Init SSL without certificate database" to
 # stderr on every successful call here, so folding the two with 2>&1 puts that line inside the
 # value: the logged message goes multi-line, and the empty-status branch below becomes
-# unreachable because the noise is never empty. Both were live for one cycle on 2026-08-29.
+# unreachable because the noise is never empty.
 UPSC_STDERR="$(mktemp)"
 UPS_STATUS="$(upsc "$ENDPOINT" ups.status 2>"$UPSC_STDERR")"
 UPSC_RC=$?
@@ -106,7 +100,7 @@ fi
 # Unconditional: this line is the durable record of the verdict's message, and Loki keeps it.
 # NOTICE rather than INFO: journald here is capped at MaxLevelStore=notice, so an
 # info-level line is dropped from the journal AND from forwarding to rsyslog, never reaching
-# Loki (2026-08-29 review M-15).
+# Loki.
 logger -p daemon.notice -t ups-secondary-health "status=${STATUS} ${MSG}"
 
 # The textfile carries the verdict. A failed write logs.
