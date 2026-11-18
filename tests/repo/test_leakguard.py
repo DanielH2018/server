@@ -172,6 +172,14 @@ def test_a_test_that_touches_nothing_passes(tmp_path: Path) -> None:
     )
 
 
+def test_a_run_removes_its_stub_directory_when_it_ends(tmp_path: Path) -> None:
+    temp = tmp_path / "temp"
+    temp.mkdir()
+    proc = _run_child(tmp_path, _CLEAN, extra_env={"TMPDIR": str(temp)})
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert list(temp.iterdir()) == []
+
+
 def test_a_skipped_test_does_not_inherit_the_previous_test_s_calls(
     tmp_path: Path,
 ) -> None:

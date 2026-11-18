@@ -276,13 +276,14 @@ def test_a_subagents_log_row_does_not_suppress_the_parent(repo, tmp_path, monkey
 def test_a_doc_that_fits_alone_but_not_the_remaining_budget_is_deferred(repo):
     """Outlining it would be final; deferring it lets the next command inline it.
 
-    The two docs overflow one payload but stay under `SESSION_BUDGET_BYTES` together.
+    The two docs overflow one payload but stay under `SESSION_BUDGET_BYTES` together, both
+    preambles included.
     """
     (repo / "k8s" / "roles" / "foo" / "CLAUDE.md").write_text(
         "role doc line with some words\n" * 150
     )
     (repo / ".claude" / "rules" / "ansible.md").write_text(
-        RULE + "rule line of text here\n" * 130
+        RULE + "rule line of text here\n" * 125
     )
     command = "sed -i s/a/b/ k8s/roles/foo/templates/deployment.yaml.j2"
     _, first = _build(repo, command)
@@ -385,9 +386,10 @@ def test_the_real_tree_resolves_a_known_role_to_its_doc():
 def test_every_reading_rule_names_a_real_rule_file():
     """A renamed rule would drop out of READ_RULES silently and start waiting for a write."""
     rules = os.path.join(_REPO, ".claude", "rules")
-    assert _mod.READ_RULES == {"secrets.md", "facts.md", "generated-docs.md"}
-    assert _mod.ALWAYS_WHOLE <= _mod.READ_RULES
-    for name in _mod.READ_RULES:
+    assert _mod.READ_RULES == {"secrets.md"}
+    assert _mod.POINTER_RULES == {"generated-docs.md"}
+    assert _mod.ALWAYS_WHOLE <= _mod.READ_RULES | _mod.POINTER_RULES
+    for name in _mod.READ_RULES | _mod.POINTER_RULES:
         assert os.path.isfile(os.path.join(rules, name)), name
 
 
