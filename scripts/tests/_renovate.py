@@ -171,12 +171,9 @@ def render_auto_replace(template: str, **values: str | None) -> str:
     return out
 
 
-# ── the n8n base-pin ledger ──────────────────────────────────────────────────────────────
-#
-# Both n8n FROMs pin a channel tag with a digest beside it, so a bump changes only the digest
-# and no version string appears in the diff for a reader or a test to compare. The ledger
-# beside the Dockerfiles records the version each adopted digest carries; the helpers here
-# parse it, and the guards in test_renovate_dockerfiles.py assert against it.
+# Both n8n FROMs pin a channel tag with a digest beside it, so a digest bump shows no version
+# string. The ledger beside the Dockerfiles records the version each digest carries; the helpers
+# here parse it, and test_renovate_dockerfiles.py asserts against it.
 N8N_ROLE_DIR = REPO / "k8s/roles/n8n"
 N8N_PIN_HISTORY = N8N_ROLE_DIR / "base-pin-history.tsv"
 

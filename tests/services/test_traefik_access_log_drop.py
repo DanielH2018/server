@@ -16,8 +16,8 @@ So every assertion below is a pair: a line this MUST drop, and a line it MUST ke
 that stopped matching entirely would pass a keep-only suite while saving nothing, and a rule
 that matched everything would pass a drop-only suite while blinding the operator.
 
-The config is read out of the RENDERED ConfigMap, not out of `templates/config/config.alloy.j2`
-(#3107). Reading the template proved the rule was written; it could not prove the rule ships.
+The config is read out of the RENDERED ConfigMap, not out of `templates/config/config.alloy.j2`.
+Reading the template proved the rule was written; it could not prove the rule ships.
 `configmap.yaml.j2` pulls the file in through one `lookup('template', …)` line, and deleting
 that line left every assertion here green while the Alloy pod ran with no drop stage at all.
 The file is not conditional-free either — the k8s audit-log stages sit behind

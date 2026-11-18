@@ -10,7 +10,7 @@ three.
 The base is `git merge-base HEAD origin/master`, never the live `origin/master` tip. CI tests a
 PR's merge ref, whose first parent is the master commit the ref was built on, and
 `tighten-ratchet-allowlists` lowers entries on master many times an hour. Against the live tip,
-every entry master lowered after the ref was built reads as one this PR raised (#4009). The
+every entry master lowered after the ref was built reads as one this PR raised. The
 merge base is that first parent on a merge ref, the fork point on a local branch, and HEAD
 itself on master, where the PR already ran the comparison.
 
@@ -88,7 +88,7 @@ def base() -> str | None:
     return base_of(run_git)
 
 
-# Two tests read the census, each ~3s over the tree, and neither mutates it (#5501).
+# Two tests read the census, each ~3s over the tree, and neither mutates it.
 patch_counts = cache(monkeypatch_counts)
 lengths = cache(code_line_counts)
 
@@ -268,7 +268,7 @@ def test_adding_a_path_master_already_tracks_is_flagged():
 
 
 def test_adding_a_path_with_a_conjoined_reason_is_clean():
-    """The cap prompts a decision (#3661); a stated reason is that decision, recorded.
+    """The cap prompts a decision; a stated reason is that decision, recorded.
 
     The pair is `test_adding_a_path_master_already_tracks_is_flagged` above.
     """
@@ -497,7 +497,7 @@ def test_the_base_read_raises_rather_than_returning_empty_for_an_unknown_path():
 
 
 def test_an_entry_master_lowered_after_the_merge_ref_was_built_is_not_flagged(tmp_path):
-    """The #4009 race: CI's merge ref is built, then master lowers an entry the PR never touched.
+    """The race: CI's merge ref is built, then master lowers an entry the PR never touched.
 
     The live tip flags the untouched entry as raised, which is the red half. The base resolves
     to the merge ref's first parent, where the entry still has the PR's number.

@@ -1,8 +1,8 @@
-"""The rendered `docs-refresh` component: the generated-docs refresh in daniel-box's package (H7.10a).
+"""The rendered `docs-refresh` component: the generated-docs refresh in daniel-box's package.
 
-Until H7.36 `initial_setup` installed the refresh as a cron and `k8s_host_files` created the docs
-site directory. These tests hold what the move carries: a unit that loads no credential since the
-Kuma push went (M6 batch B2's Cutover-2), the `+` ExecStartPre that creates the directories as root for a service
+`initial_setup` installed the refresh as a cron and `k8s_host_files` created the docs
+site directory. These tests hold what the move carries: a unit that loads no credential because it has no
+Kuma push, the `+` ExecStartPre that creates the directories as root for a service
 that runs as `sys_user`, the tmpfiles line that equals docs' `docs_host_site_dir`, the timer's
 slots, and the legacy entries.
 

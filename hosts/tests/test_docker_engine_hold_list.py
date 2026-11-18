@@ -3,7 +3,7 @@
 A dist-upgrade that replaces containerd.io, docker-ce and the plugins on daniel-pi with every
 container running kills autoheal's shim, makes ssh refuse connections for ~20 minutes, and
 leaves docker-proxy unhealthy behind a stale socket bind-mount until a hand redeploy
-recreates it (#1961). `live-restore` keeps containers up across a dockerd restart; it does
+recreates it. `live-restore` keeps containers up across a dockerd restart; it does
 nothing for a shim binary swapped under them.
 
 homelab-docker-engine.service installs, holds and moves the engine, and

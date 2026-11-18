@@ -1,16 +1,14 @@
-"""The parameterised shell entry point every hook is registered through (#3278).
+"""The parameterised shell entry point every hook is registered through.
 
-Six per-hook shims came in three variants that differed only in flags: a quiet
-`uv run --no-project` for the observability hooks, a `cd` + `exec` for the bridge, and the
-same with an `ask` on failure for the deny guards. `run-hook.sh <name> [--project]
-[--ask-on-cd[=<guards>]]` is the one file, and the interpreter pin is written once.
+`run-hook.sh <name> [--project] [--ask-on-cd[=<guards>]]` is the one runner, and the
+interpreter pin is written once.
 
 The runner's posture is a property of the flags a registration passes it, so every check here
 is a REJECT/ACCEPT pair over one INVOCATION — REJECT is a run that cannot reach the `.py` (a
 missing `cd` target, a missing sibling), ACCEPT is one that can.
 
-Every registration in `.claude/settings.json` runs through this file since the second half of
-#3278. `test_hook_shim_fail_open.py` runs each registered command as written; the tests here
+Every registration in `.claude/settings.json` runs through this file.
+`test_hook_shim_fail_open.py` runs each registered command as written; the tests here
 cover the flags one at a time.
 
 Run: uv run pytest .claude/hooks/tests/test_run_hook.py
@@ -135,8 +133,7 @@ def test_reject_a_deny_guard_that_cannot_run_asks(tmp_path):
 
 
 def test_reject_a_missing_py_sibling_also_asks(tmp_path):
-    """New in #3278. It used to exit non-zero through a failed `exec`, where no `ask` could
-    follow; the runner tests for the file first, so the decision is still available."""
+    """The runner tests for the file before `exec`, so the `ask` decision is still available."""
     runner = _variant_runner(tmp_path, str(tmp_path))
     proc = _run(runner, "no-such-hook", "--project", "--ask-on-cd")
     assert proc.returncode == 0, proc.stderr
@@ -238,7 +235,7 @@ def _stop_payload(runner: Path, cwd: Path) -> subprocess.CompletedProcess:
 
 
 def test_reject_fanout_stop_outside_a_fanout_worktree_starts_no_hook(tmp_path):
-    """An ordinary session's Stop is answered in shell, before uv starts (#6154)."""
+    """An ordinary session's Stop is answered in shell, before uv starts."""
     runner = _fanout_stop_runner(tmp_path)
     work = tmp_path / "plain" / "sub"
     work.mkdir(parents=True)

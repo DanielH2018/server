@@ -1,4 +1,4 @@
-"""The merge wait backs off a rate-limited CI read until the quota frees (#8147).
+"""The merge wait backs off a rate-limited CI read until the quota frees.
 
 The merge loop's CI read runs the real `await_ci_verdict` and `await_ci.wait`; only GitHub's
 check-runs and check-suites reads are replaced, by a 403 that names when the quota frees.

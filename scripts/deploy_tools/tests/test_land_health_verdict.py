@@ -67,7 +67,7 @@ UNREADABLE = GateResult(False, NOT_GRADED, unreadable=True)
 
 
 def test_a_gate_unreadable_past_the_retry_bound_defers(landing, capsys):
-    """#5543: no reading is no failure."""
+    """No reading is no failure."""
     ln, _ = _deployed(landing, Fakes())
     sleeps = _gates(ln, UNREADABLE)
     with pytest.raises(Outcome) as exc:
@@ -117,7 +117,7 @@ TIP = "e" * 40
 
 
 def test_the_gate_renders_origin_master_when_it_contains_the_deployed_commit(landing):
-    """#7816: the probe refuses a role master changed after its tree's HEAD, so a gate pinned
+    """The probe refuses a role master changed after its tree's HEAD, so a gate pinned
     to the merge commit deferred on every re-run once a later commit touched a landed role."""
     ln, calls = _deployed(landing, Fakes(tip=TIP))
     ln.deployed_at = MERGE_SHA
@@ -127,7 +127,7 @@ def test_the_gate_renders_origin_master_when_it_contains_the_deployed_commit(lan
 
 
 def test_the_gate_keeps_the_deployed_commit_when_origin_master_lacks_it(landing):
-    """CLEAN half, a regression guard that passes before #7816 too: it goes red only if the
+    """CLEAN half, a regression guard that passes without the fix too: it goes red only if the
     advance drops its ancestor check, and a tip without the commit then grades a tree lacking
     the change."""
     ln, calls = _deployed(landing, Fakes(tip=TIP, is_ancestor_of={TIP: 1}))
@@ -141,7 +141,7 @@ def test_a_landing_with_no_promoted_tag_gates_the_primary(landing):
     """CLEAN half: no snapshot, and the probe runs in the primary the tick fast-forwarded.
 
     Not in land.sh's own checkout, which may predate the merge and so see none of a role
-    the PR adds: `check_one` would read `skipped` and the landing `settled` (#5754).
+    the PR adds: `check_one` would read `skipped` and the landing `settled`.
     """
     ln, calls = _deployed(landing)
     ln.flux_tags = []
@@ -179,7 +179,7 @@ def test_a_snapshot_that_failed_over_a_primary_that_has_the_commit_gates_there(
     ln.deployed_at = MERGE_SHA
     with pytest.raises(Outcome):
         health_verdict.health(ln)
-    # The primary itself, not land.sh's own checkout, which may predate the commit (#5744).
+    # The primary itself, not land.sh's own checkout, which may predate the commit.
     assert next(c for c in calls if c[0] == "gate")[2] == {"cwd": ln.opts.primary}
     assert "already carries it" in capsys.readouterr().out
 

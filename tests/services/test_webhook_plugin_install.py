@@ -277,7 +277,7 @@ def test_the_webhook_bump_is_never_automerged():
     )
 
     # Only a later rule that sets automerge or groupName can override this rule's. A k8s-path rule
-    # setting neither (the pinDigests rule, #3281, which must sit last) is no threat to it.
+    # setting neither (the pinDigests rule, which must sit last) is no threat to it.
     k8s_plane = [
         i
         for i, r in enumerate(rules)

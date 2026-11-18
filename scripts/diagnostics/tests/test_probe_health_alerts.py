@@ -209,7 +209,7 @@ def test_a_flux_tag_alert_after_its_kustomization_revision_is_flagged():
     ("labels", "on"),
     [
         ({"revision": "master@sha1:aaaa", "content_digest": "x"}, "on(content_digest)"),
-        # A Kustomization stamped before #5338, or a kube-state-metrics that does not export
+        # A Kustomization stamped without the label, or a kube-state-metrics that does not export
         # the label: matching on it would match every sample in the lookback.
         ({"revision": "master@sha1:aaaa"}, "on(revision)"),
     ],

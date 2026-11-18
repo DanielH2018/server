@@ -283,7 +283,7 @@ def test_key_offences_is_flagged_on_a_private_half_or_a_missing_key(key):
 def test_the_github_status_provider_authenticates_as_a_github_app():
     """The Secret holds the three App keys and no `token`, with the PEM's newlines intact.
 
-    A PAT in `token` would draw on the operator's own 5,000 requests per hour (#8023).
+    A PAT in `token` would draw on the operator's own 5,000 requests per hour.
     """
     # fact: k8s/roles/flux/CLAUDE.md#Tokens
     pem = "-----BEGIN RSA PRIVATE KEY-----\nAAAA\nBBBB\n-----END RSA PRIVATE KEY-----\n"

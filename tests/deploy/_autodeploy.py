@@ -32,12 +32,10 @@ _K8S_ROLES = _REPO / "k8s/roles"
 _SHARED = {"manifests"}
 
 # Shared roles other roles rely on to block until a batch workload is terminal. Membership
-# exempts nobody from the batch guard below; the set exists so
-# `test_gating_shared_roles_actually_wait` has something to check, and it proves each role
-# named here really does hold a completion gate backed by a failure escalation.
-#
-# What belongs here: any role under k8s/roles/ whose job is to make a caller's batch workload
-# observable at deploy time. image-builder applies and waits on a build Job of its own.
+# exempts nobody from the batch guard below; `test_gating_shared_roles_actually_wait` proves each
+# role named here holds a completion gate backed by a failure escalation. A role belongs here
+# when it makes a caller's batch workload observable at deploy time (image-builder waits on its
+# own build Job).
 _GATING_SHARED_ROLES = {"image-builder"}
 
 
@@ -109,7 +107,7 @@ def _template_texts(role: Path) -> dict[str, str]:
     """`role`'s templates by name, as the deploy renders them wherever a render reaches the role.
 
     A role under k8s/roles/ that `_k8s_render` renders reads its render, so a workload's `kind`
-    or name that moves into a role default is still seen (#3178). Two kinds of role read
+    or name that moves into a role default is still seen. Two kinds of role read
     source instead, because no render reaches them: a synthetic `widget_role` tree under
     `tmp_path`, which has no inventory entry, and the caller-rendered or manifest-less roles
     `_k8s_render` skips. Every one of the latter is denylisted, and
@@ -237,17 +235,12 @@ def _declares_autodeploy(role: Path) -> bool:
 
 # ── k8s_autodeploy_snapshot_pvcs ─────────────────────────────────────────────────────────────
 #
-# The renderer writes a pre-apply Longhorn snapshot Job for a role's
-# `k8s_autodeploy_snapshot_pvcs` claims. A typo'd claim name surfaces only on a real deploy. The claim-name test below is therefore the only pre-deploy catch.
-#
-# Most roles declare their claims as `k8s_claims` entries in defaults/main.yml
-# (`name: "{{ <role>_k8s_claim }}"`) and render no PersistentVolumeClaim template of their own.
-# The roles that DO render their own PVC write `metadata.name: {{ <role>_k8s_claim }}`, a Jinja
-# reference, not a literal. A test that parsed only a role's own `templates/*.j2` for literal
-# claim names would find an empty set for the `k8s_claims` roles and fail their correct
-# declarations. `_rendered_pvc_claims` reads both sources (a role's own PVC template AND its
-# `k8s_claims` names) and resolves the single-var reference both use through the role's own
-# defaults/main.yml.
+# The renderer writes a pre-apply Longhorn snapshot Job for a role's `k8s_autodeploy_snapshot_pvcs`
+# claims, and a typo'd claim name surfaces only on a real deploy, so the claim-name test below is
+# the only pre-deploy catch. Most roles declare claims as `k8s_claims` entries in defaults/main.yml
+# (`name: "{{ <role>_k8s_claim }}"`) and render no PVC template; the rest write
+# `metadata.name: {{ <role>_k8s_claim }}`, a Jinja reference. `_rendered_pvc_claims` reads both
+# sources and resolves that single-var reference through the role's own defaults/main.yml.
 
 
 def _role_defaults(role: Path) -> dict:

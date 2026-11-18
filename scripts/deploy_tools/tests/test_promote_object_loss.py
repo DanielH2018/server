@@ -200,7 +200,7 @@ def test_a_soak_job_the_next_revision_drops_is_a_loss():
     assert undeclared_losses(prod, target, frozenset()) == [job]
 
 
-# -- a prune-disabled object is no loss (#5291) ---------------------------------------------
+# -- a prune-disabled object is no loss ---------------------------------------------
 
 PRUNE_KEY = "kustomize.toolkit.fluxcd.io/prune"
 CLAIM = "PersistentVolumeClaim/homelab/bento-pdf-data"
@@ -259,7 +259,7 @@ def test_decide_and_the_pr_gate_agree_on_a_dropped_prune_disabled_claim(where):
 
 
 def test_the_digest_suffix_is_defined_in_one_module():
-    """One implementation of the rename exemption serves `decide` and the PR gate (#5291).
+    """One implementation of the rename exemption serves `decide` and the PR gate.
 
     `bundle.py` names the suffix, and today `object_loss.py` and `render_diff_gates.py` each
     compile their own copy of the pattern that strips it.

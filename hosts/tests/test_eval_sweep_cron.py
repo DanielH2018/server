@@ -13,8 +13,8 @@ What's specific to this unit, and what this file guards:
 - The service's PATH, HOME and credentials are held by hosts/lib/tests/test_eval_sweep_component.py.
 - The script self-gates on an empty anthropic_api_key -- a host without that SOPS secret must
   install disarmed rather than red or silently non-hermetic.
-- The key reaches the script through a systemd credential, never through its own body
-  (#4607), and a run with no credential is the disarmed no-op that reports UP.
+- The key reaches the script through a systemd credential, never through its own body,
+  and a run with no credential is the disarmed no-op that reports UP.
 """
 
 import re
@@ -58,8 +58,8 @@ def _is_gated_on_the_api_key(text: str) -> bool:
 def test_the_script_does_not_hold_the_api_key():
     # Rendered at a SENTINEL. At inventory values an unset secret renders as the same empty
     # string a wrong variable name would, so only a render at a value this variable alone holds
-    # separates the two (#3202). A key inside the script is printed by every grep, cat or diff
-    # over it (#4607).
+    # separates the two. A key inside the script is printed by every grep, cat or diff
+    # over it.
     script = render_shell_script(
         "components",
         "eval-sweep",
@@ -83,7 +83,7 @@ def _run_script(tmp_path, key_text: str | None):
 
     `TEXTFILE_DIR` points the exit hook's textfile at `tmp_path`, so the assertion reads this
     test's own file. leakguard would otherwise carry its temp directory into the hand-built
-    environment (#6238); before it did, the write landed in node_exporter's real one (#6191).
+    environment; before it did, the write landed in node_exporter's real one.
     """
     creds = tmp_path / "creds"
     creds.mkdir()

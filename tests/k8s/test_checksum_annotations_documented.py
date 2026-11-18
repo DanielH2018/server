@@ -6,13 +6,13 @@ to look for a mechanism that was never there.
 
 The census reads each role's manifest templates out of `_k8s_render.rendered_texts`, so a name
 the shared `checksum_annotation()` macro builds — or one a Jinja expression assembles — arrives
-expanded (#3225). Only the files no render covers are read as source: the `*.yaml`/`*.yml` task
+expanded. Only the files no render covers are read as source: the `*.yaml`/`*.yml` task
 files, and the four kinds of template `_render_texts` skips (`SOURCE_FALLBACK_MEMBERS` names
 one of each).
 
 A name counts as DEFINED only where it is a real annotation key or a `checksum_annotation()`
 call. Matching the bare string credited a comment discussing the annotation as the annotation
-itself, in a task file and in a rendered manifest both (#3229); `CENSUS_MEMBERS` is the
+itself, in a task file and in a rendered manifest both; `CENSUS_MEMBERS` is the
 non-vacuity half of that narrowing.
 
 Run: uv run pytest tests/k8s/test_checksum_annotations_documented.py
@@ -41,12 +41,8 @@ CHECKSUM_RE = re.compile(r"checksum/([a-zA-Z0-9._-]+)")
 # it, and that is what keeps a `#` comment out: a comment line starts with `#` after its
 # indent and never matches.
 #
-# Reading the defined side with CHECKSUM_RE instead credited a prose mention as the annotation
-# (#3229). Three live mentions did it: `observability/tasks/main.yml` and
-# `observability/defaults/main.yml` both discuss `checksum/config`, and the rendered manifests
-# of autofix-bridge and game-stats carry YAML comments naming monitor-bridge's
-# `checksum/check-script` — so the source half and the render half shared the defect. One
-# regex over every YAML-ish text closes both.
+# CHECKSUM_RE would credit a prose mention (a YAML comment naming `checksum/config`) as the
+# annotation, so the source half and the render half both read the defined side with this regex.
 ANNOTATION_KEY_RE = re.compile(
     r"^[ \t]*['\"]?checksum/([a-zA-Z0-9._-]+)['\"]?[ \t]*:", re.MULTILINE
 )
@@ -162,9 +158,9 @@ def _annotations_in_plain_yaml(role: Path) -> set[str]:
     """Every `checksum/<name>` `role` defines in a plain `*.yaml`/`*.yml` file.
 
     These are the role's task files, defaults and `files/*.yaml`, read as source because no
-    render covers them (#3225 left this half on source deliberately). A name counts here only
+    render covers them. A name counts here only
     as a real annotation key or a `checksum_annotation()` call — a prose mention in a comment
-    rolls no pod, and crediting one was the false-clear of #3229.
+    rolls no pod, and crediting one would clear a claim falsely.
 
     No role defines an annotation in a plain `*.yaml`/`*.yml` today, so this returns the empty
     set everywhere and `test_an_annotation_key_line_is_clean_and_a_comment_mentioning_one_is_flagged`
@@ -318,11 +314,11 @@ def test_each_role_that_defines_an_annotation_is_still_credited_with_it(
 
 
 def test_a_prose_mention_in_a_task_file_is_flagged_as_not_an_annotation():
-    """The red half of #3229: observability's prose no longer satisfies its own CLAUDE.md.
+    """Observability's prose does not satisfy its own CLAUDE.md.
 
     `observability/defaults/main.yml` discusses `checksum/config` in a comment, and the role's
     CLAUDE.md promises that annotation. Reading the plain-YAML half with the prose pattern
-    therefore cleared the claim from a comment that rolls no pod. The second assertion is the
+    would clear the claim from a comment that rolls no pod. The second assertion is the
     non-vacuity leg: the mention really is in that file, so an empty result means the
     narrowing worked rather than that the subject moved.
     """
@@ -346,9 +342,8 @@ def test_an_annotation_key_line_is_clean_and_a_comment_mentioning_one_is_flagged
     """The accept/reject pair for `ANNOTATION_KEY_RE`, on the three shapes that matter.
 
     A bare key and a quoted key are both real annotations. A YAML comment naming one is not,
-    whatever its indent — which is the shape the rendered manifests of autofix-bridge and
-    game-stats carried for monitor-bridge's `checksum/check-script` until #5445 and #5444
-    rendered their script ConfigMaps.
+    whatever its indent, as in a rendered manifest whose comment names monitor-bridge's
+    `checksum/check-script`.
     """
     accepted = "\n".join(
         [

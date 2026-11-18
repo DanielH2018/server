@@ -2,7 +2,7 @@
 
 With no published tag the build step calls `cluster --shared-only --all-images`, because
 `cluster` without `--role` renders every tag. That bundle holds the shared kinds, a root listing
-them (D3.3a) and every image context, which the `images` job refuses to run without (#5593).
+them (D3.3a) and every image context, which the `images` job refuses to run without.
 The census and gates step, `promote.py check-bundle`, must run after the build and before
 gitleaks. So must the step that runs `cluster_vars.py check --ciphertext-only` on the
 bundle's SOPS copies, the guard that stands in for the scan `.gitleaks.toml` skips there. All
@@ -24,10 +24,10 @@ from lib import yaml_fast
 WORKFLOW = REPO / ".github" / "workflows" / "promote.yml"
 CENSUS = "promote.py check-bundle out --against-prod"
 # The no-tag branch passes --all-images too: the `images` job refuses a render without
-# tags.json, and `publish` needs that job (#5593).
+# tags.json, and `publish` needs that job.
 SHARED_ONLY = "homelab_render.py cluster --out out --shared-only --all-images"
 # The tag branch's render: a `--role` render writes only the named tags' image contexts, and
-# the `images` job builds all ten from it (#5374).
+# the `images` job builds all ten from it.
 ALL_IMAGES = 'homelab_render.py cluster --out out --all-images "${roles[@]}"'
 NO_TAG = 'if [ -z "$listed" ]; then'
 CIPHERTEXT = "cluster_vars.py check --ciphertext-only"

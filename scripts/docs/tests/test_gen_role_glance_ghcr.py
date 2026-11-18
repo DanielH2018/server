@@ -1,4 +1,4 @@
-"""The role glance names GHCR for a k8s role's built image (#5462).
+"""The role glance names GHCR for a k8s role's built image.
 
 A k8s role's built image is pulled from GHCR at its content tag (D5.4b), so its Image line
 names the GHCR repository rather than the in-cluster registry its defaults name.
@@ -55,7 +55,7 @@ def test_a_flux_owned_role_swaps_only_its_built_image_for_ghcr(tmp_path):
 
 
 def test_built_image_names_skips_a_retired_roles_pycache_shell(tmp_path):
-    # A deleted role leaves `<role>/tests/__pycache__/` on disk, which git never removes (#7917).
+    # A deleted role leaves `<role>/tests/__pycache__/` on disk, which git never removes.
     shutil.copytree(g.K8S_ROLES / "valheim", tmp_path / "valheim")
     debris = tmp_path / "retired" / "tests" / "__pycache__"
     debris.mkdir(parents=True)

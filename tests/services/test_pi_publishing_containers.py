@@ -12,10 +12,10 @@ and the rule goes blind to whichever container fell out.
 Asserted against the RENDERED `prometheus.yml`, not against the template's text. The targets
 come from a `{% for %}` loop, so a source scan can only confirm that the Jinja is still spelled
 the way it was spelled — it cannot see which containers come out, which port each one carries,
-or that `udp_port` stays out (#3107, #2809). Rendered, the same value is a list of targets the
+or that `udp_port` stays out. Rendered, the same value is a list of targets the
 test parses.
 
-The shared render context carries the Pi's literal `compose_services` in `hosts` (#3860), but
+The shared render context carries the Pi's literal `compose_services` in `hosts`, but
 this test needs to swap that list for one the inventory does not hold. So it deep-copies the
 context's `hosts` and overrides the Pi's service list.
 

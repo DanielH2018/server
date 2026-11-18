@@ -93,7 +93,7 @@ def _rendered_pvc_claims(role: Path) -> tuple[set[str], list[str]]:
     1. A `kind: PersistentVolumeClaim` document in the role's own `templates/*.j2`, such as
        the observability claims.
     2. A `name:` in the role's `k8s_claims` default, which the renderer renders from the
-       shared `claim-default.yaml.j2` — the path #3387 moved every claim onto.
+       shared `claim-default.yaml.j2` — the path every claim takes.
 
     Every token found by any path is resolved through `_resolve_claim_token`. A token that
     doesn't resolve is returned UNCHANGED in the second element rather than dropped — dropping

@@ -269,12 +269,10 @@ def test_shuffled_list_still_sorts_to_respect_every_edge(host):
 
 
 # Every pairwise ordering a role doc or a containers_list comment states in prose, as the
-# `depends_on:` edge that carries it. Without the edge these hold by hand position alone,
-# which the stable sort preserves and nothing checks: dropping the edge, or moving the entry,
-# would pass every test above. The value names where the prose lives, so a reader of a red
-# failure knows which doc to reconcile. netpol-baseline's "after everything" is no pair, and
-# no entry declares it: test_every_entry_sorts_ahead_of_an_applies_last_role_listed_first
-# guards it.
+# `depends_on:` edge that carries it. Without the edge an ordering holds by hand position alone,
+# which the stable sort preserves and nothing checks. The value names the doc to reconcile on a
+# red failure. netpol-baseline's "after everything" is no pair, and no entry declares it:
+# test_every_entry_sorts_ahead_of_an_applies_last_role_listed_first guards it.
 DOCUMENTED_ORDERINGS = {
     ("mosquitto", "zigbee2mqtt"): "k8s/roles/mosquitto/CLAUDE.md",
     ("media-volume", "sonarr"): "k8s/roles/media-volume/CLAUDE.md",
@@ -336,8 +334,8 @@ def test_documented_pairwise_ordering_survives_an_adversarial_list(host, before,
 def test_an_applies_last_role_listed_first_still_sorts_after_a_new_entry(host):
     """A K8S_APPLIES_LAST role at the head of the list, and a new entry after it, still sort it last.
 
-    The scaffolder appends a new role after the list's last item, which was netpol-baseline
-    (#4833). The hand-ordered list already ends with it and the sort is stable, so only the
+    The scaffolder appends a new role after the list's last item, which was netpol-baseline.
+    The hand-ordered list already ends with it and the sort is stable, so only the
     derived edge can move it back from the head past an entry appended after it.
     """
     _path, entries, idx = host

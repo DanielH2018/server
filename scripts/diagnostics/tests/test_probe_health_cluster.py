@@ -63,10 +63,10 @@ def test_run_health_still_gates_when_the_cluster_matches(capsys):
 
 
 def test_a_role_with_no_workload_exits_the_skip_code(capsys):
-    """netpol-baseline renders NetworkPolicies and probe Jobs, nothing with a rollout (#3596).
+    """netpol-baseline renders NetworkPolicies and probe Jobs, nothing with a rollout.
 
     Exit 1 made `probe.py health netpol-baseline` unpassable on a healthy deploy, and exit 0
-    hid the skip from the deploy notifier, which grades on the code (#7895).
+    hid the skip from the deploy notifier, which grades on the code.
     """
     assert (
         health.run_health(

@@ -1,11 +1,10 @@
 """Jellyfin's plugin init containers, read out of the RENDERED Deployment.
 
-Every guard over a plugin installer used to split `deployment.yaml.j2`'s text on `- name:
-install-...` and `- |`, then assert on lines copied out of the template — `PLUGINS =
-Path("/config/data/plugins")`, `{{ jellyfin_k8s_anisync_version }}`. Both halves pinned source
-text rather than behaviour: the cut markers broke on a reformat that changed nothing the pod
-runs, and a `{{ ... }}` assertion passes on a template whose expression no longer reaches the
-container that needs it.
+A guard that splits `deployment.yaml.j2`'s text on `- name: install-...` and `- |`, then
+asserts on lines copied out of the template — `PLUGINS = Path("/config/data/plugins")`,
+`{{ jellyfin_k8s_anisync_version }}` — pins source text rather than behaviour: the cut markers
+break on a reformat that changes nothing the pod runs, and a `{{ ... }}` assertion passes on a
+template whose expression no longer reaches the container that needs it.
 
 This module hands a guard the script the POD runs: the init container's `command[-1]` out of the
 rendered Deployment, plus its module-level constants evaluated. A constant is what an assertion

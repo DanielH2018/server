@@ -1,4 +1,4 @@
-"""The weekly and no-backup Longhorn tiers derive from containers_list entries (#4207).
+"""The weekly and no-backup Longhorn tiers derive from containers_list entries.
 
 `k3s_longhorn_weekly_volumes` and `k3s_longhorn_nobackup_volumes` were hand lists in the k3s
 role's defaults. A weekly volume's weekday was its index mod 7 in its list. Each entry now
@@ -17,7 +17,7 @@ from lib.repo_paths import LONGHORN_RECONCILE_ROLE
 from lib.guard_jinja_env import FilterError, repo_filters
 from lib.service_tiers import resolved_tier_lists
 
-# Each volume of the replaced weekly list, with its index mod 7 in that list.
+# Each volume of the hand-written weekly list, with its index mod 7 in that list.
 _REPLACED_WEEKLY = {
     "homelab/code-server-workspace": 0,
     "homelab/jellyfin-config": 1,
@@ -80,7 +80,7 @@ def test_the_nobackup_set_is_the_list_it_replaced():
     assert set(derived) == _REPLACED_NOBACKUP
 
 
-# ── error shape (#4505) ─────────────────────────────────────────────────────────────────────
+# ── error shape ─────────────────────────────────────────────────────────────────────
 
 
 @pytest.mark.parametrize(

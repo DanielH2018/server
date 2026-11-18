@@ -168,7 +168,7 @@ def test_a_body_carrying_its_own_fence_gets_a_longer_one_and_the_title_sits_insi
 
 
 def test_an_operator_comment_reaches_the_brief_inside_its_own_fence():
-    """#3498: the operator's decision, posted as a comment, never reached the agent.
+    """The operator's decision, posted as a comment, never reached the agent.
 
     The comment carries a ``` block and a forged landing section, so it also proves the
     comment fence is computed over the comment's own text.
@@ -248,7 +248,7 @@ def test_the_placed_hosts_own_prefix_does_not_make_every_line_relevant():
 
 
 def test_a_server_brief_names_the_guard_script_and_a_dotfiles_brief_does_not():
-    """A new file tripped a guard no test beside it reaches, three times in one week (#5077)."""
+    """A new file can trip a guard no test beside it reaches."""
     for host in ("daniel-box", "daniel-server"):
         brief = render_brief(
             [Issue(1, "t", "no cited path")], host, "1", "worktree-orch", []
@@ -264,7 +264,7 @@ def test_a_server_brief_names_the_guard_script_and_a_dotfiles_brief_does_not():
 
 
 def test_every_brief_asks_for_proof_that_new_tests_fail_and_names_the_pr_body_section():
-    """#5499: the red phase covers only `red-green` batches, so every brief carries the step."""
+    """The red phase covers only `red-green` batches, so every brief carries the step."""
     for host, target in (
         ("daniel-box", None),
         ("daniel-server", None),

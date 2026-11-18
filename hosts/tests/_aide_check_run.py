@@ -202,7 +202,7 @@ def _fake_host(root):
     return dpkg, fs
 
 
-# The line every host logged each Monday until #4591, and the exit it came with.
+# The line a bare `aide --check` logs, and the exit it comes with.
 ERROR_REPORT = (
     "  ERROR: missing configuration (use '--config' '--before' or '--after' "
     "command line parameter)\n"

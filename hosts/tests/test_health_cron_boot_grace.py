@@ -12,7 +12,7 @@ against the 12-second head start of the */10 crons, which ran at 07:40:00. Witho
 Each script is read as RENDERED text. The grace is a role default, so the source carries
 `boot_grace_active {{ k3s_health_cron_boot_grace_s }}` and a guard matching that string holds
 only while the call is spelled that way — a second variable, a filter, or a literal all leave it
-matching nothing, which passes (#3202). The rendered call carries the number instead, which is
+matching nothing, which passes. The rendered call carries the number instead, which is
 also the number `GRACE_S` is compared against above.
 """
 

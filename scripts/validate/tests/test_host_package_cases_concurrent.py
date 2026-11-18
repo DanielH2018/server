@@ -4,7 +4,7 @@ Each test drives `host_package_cases.main()` with the twelve case groups, `boots
 sleep instead of booting a container, so no Docker is needed. The runner must look the groups
 up when `main()` runs, the three `Cases` methods on the instance and each `validate_lib` case
 module's `run` on that module, and must run them in this process (threads, not
-`multiprocessing`), so that a stub set here is the one it calls (#7784).
+`multiprocessing`), so that a stub set here is the one it calls.
 
 Run: uv run pytest scripts/validate/tests/test_host_package_cases_concurrent.py
 """
@@ -40,7 +40,7 @@ MODULES = {
     "bootstrap_repo_case": bootstrap_repo_case,
     "bootstrap_age_case": bootstrap_age_case,
 }
-# `bootstrap_case` runs only under `--bootstrap` or `--k3s-download` (#7819).
+# `bootstrap_case` runs only under `--bootstrap` or `--k3s-download`.
 GROUPS = (frozenset(METHODS) | frozenset(MODULES)) - {"bootstrap_case"}
 SLEEP = 0.3
 

@@ -1,4 +1,4 @@
-"""Every Secret and ConfigMap value in a substituting directory stays a string unquoted (#5574).
+"""Every Secret and ConfigMap value in a substituting directory stays a string unquoted.
 
 `flux diff` refused autofix-bridge's flip on its Secret: `.stringData.INTERVAL: expected string,
 got`. Each refused key was a quoted literal that YAML reads as a number or a boolean once its
@@ -9,8 +9,7 @@ the same path, so a setting goes there and a Secret keeps only credentials.
 The census reads the placeholder render of every render target, the render the flip publishes.
 In each directory that substitutes, every value under a Secret's `stringData` or `data` and a
 ConfigMap's `data` must resolve as a YAML string when written as a plain scalar. The empty
-string is admitted: homepage's flux-owned `config-secret.yaml` carries `custom.js: ""`, and its
-Kustomization read Ready=True with the pod at 0 restarts on 2026-10-18.
+string is admitted: homepage's flux-owned `config-secret.yaml` carries `custom.js: ""`.
 
 Run: uv run pytest scripts/renderer/tests/test_renderer_string_values_census.py
 """
@@ -35,7 +34,7 @@ from renderer.renderer_lib.placeholders import (
 STRING_TAG = "tag:yaml.org,2002:str"
 # The fields Flux re-serialises, by kind.
 FIELDS = {"Secret": ("stringData", "data"), "ConfigMap": ("data",)}
-# The two Secrets #5574 moved settings out of. The census must read both, or a walk that
+# The two Secrets that hold the settings. The census must read both, or a walk that
 # reached neither would pass.
 MEMBERS = {
     ("autofix-bridge", "env-secret.yaml"),

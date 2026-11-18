@@ -1,4 +1,4 @@
-"""`verify` during a Longhorn hop: a claim's failure is provisional while the manager rolls (#5997).
+"""`verify` during a Longhorn hop: a claim's failure is provisional while the manager rolls.
 
 Longhorn's admission webhook is served by the longhorn-manager pods, so every Kustomization
 holding a PersistentVolumeClaim fails its dry run while the manager DaemonSet replaces them,
@@ -79,7 +79,7 @@ def test_a_claim_failure_holds_when_longhorn_never_reads_success():
 
 
 def test_regression_guard_a_longhorn_failure_stays_final_at_the_first_read():
-    """Passes on the code before #5997 too: it pins that `longhorn` never tolerates itself."""
+    """A regression guard that passes without the fix too: it pins that `longhorn` never tolerates itself."""
     expected = vp.expected_set(HOP, PROD)
     clock = Clock()
     states = {**CLAIMS_FAILED, "flux/longhorn": "failure"}
@@ -89,7 +89,7 @@ def test_regression_guard_a_longhorn_failure_stays_final_at_the_first_read():
 
 
 def test_regression_guard_without_a_hop_a_claims_failure_holds_at_the_first_read():
-    """Passes on the code before #5997 too: the tolerance needs a revision expecting `longhorn`."""
+    """A regression guard that passes without the fix too: the tolerance needs a revision expecting `longhorn`."""
     expected = vp.expected_set(NO_HOP, PROD)
     clock = Clock()
     verdict = vp.verify(timeline(clock, [(0, CLAIMS_FAILED)]), T, PRIOR, expected)

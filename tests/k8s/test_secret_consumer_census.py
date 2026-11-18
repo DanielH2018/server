@@ -41,7 +41,7 @@ def test_the_census_reports_nothing_for_a_name_no_role_references():
 def test_the_census_credits_a_role_rendering_the_secret_out_of_another_roles_file(
     tmp_path,
 ):
-    """uptime-kuma rendered every bridge token from monitor-bridge's check table (#3781), until
+    """uptime-kuma rendered every bridge token from monitor-bridge's check table, until
     M6 batch A6 deleted those tiles. A fixture tree keeps the mechanism pinned: the owner holds
     the name in a file, and a reader role looks that file up."""
     owner = tmp_path / "k8s/roles/owner"

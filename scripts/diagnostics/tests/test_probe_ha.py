@@ -450,7 +450,7 @@ def test_ha_reads_exit_with_the_server_s_words_on_a_401(monkeypatch, argv):
 def test_ha_state_error_page_is_unreadable_with_or_without_json(
     monkeypatch, capsys, extra
 ):
-    """`--json` used to print the error page as the document and exit 0 (#4468)."""
+    """`--json` must not print the error page as the document and exit 0."""
     from diagnostics.probe_lib.cli_parser import _build_parser
 
     page = "<html>502 Bad Gateway</html>"

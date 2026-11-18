@@ -1,9 +1,9 @@
-"""The could-not-read exits #4444 left at 1 move to `PROBE_UNREADABLE` (75), or say why 1 (#4468).
+"""A could-not-read exit is `PROBE_UNREADABLE` (75), or says why it is 1.
 
 1 is the verdict "the probe looked and saw something bad". Each path below observed nothing
 about its subject, so it either exits 75 with the failure on stderr, or carries a `# DECIDED:`
-marker at the code that chooses 1, saying why 1 is its verdict. A test accepts either, which is
-what the issue's Verify-by asks for, and refuses the bare 1 the code exits today.
+marker at the code that chooses 1, saying why 1 is its verdict. A test accepts either and refuses
+the bare 1.
 
 Each test drives the real code and stubs only the process boundary under it:
 `subprocess.run` for kubectl, sops and curl, or a state directory in `tmp_path`.

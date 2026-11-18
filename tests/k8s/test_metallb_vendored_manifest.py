@@ -7,7 +7,7 @@ refresh to a release that drops them would do the same on the next bump, so the 
 file, not only on the census before the flip.
 
 The role's two patches give the controller and the speaker requests and a CPU limit, so neither
-pod runs BestEffort (#8326, #8542); the tests at the bottom hold each patch's memory request
+pod runs BestEffort; the tests at the bottom hold each patch's memory request
 equal to its defaults key. tests/k8s/test_namespace_resource_defaults.py holds every key but
 the memory limit, which the operator ruled out on 2026-11-14.
 
@@ -72,7 +72,7 @@ def _patches() -> dict[tuple[str, str], dict]:
 
 def test_no_metallb_workload_runs_besteffort():
     # fact: k8s/roles/metallb/CLAUDE.md#At a glance
-    # An evicted speaker drops every VIP its node announces (#8326).
+    # An evicted speaker drops every VIP its node announces.
     assert besteffort_workloads(ROLE) == []
 
 

@@ -1,7 +1,7 @@
 """The shard packer charges the render prebuilds a shard triggers, not only its test seconds.
 
 `prebuild_seconds` is the oracle: whatever prebuild a shard's membership costs, `assign` must
-pack against it, so the projected legs finish together (#8900).
+pack against it, so the projected legs finish together.
 
 Run: uv run pytest scripts/dev/tests/test_pytest_shard_prebuild.py
 """

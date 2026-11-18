@@ -142,16 +142,16 @@ def _runs(*results):
 @pytest.mark.parametrize(
     ("recorded", "noisy", "settled"),
     [
-        # docs-refresh/2026-10-19-0624: one run measured 0.0s, CI measured 15.8s.
+        # One run measured 0.0s, CI measured 15.8s.
         pytest.param(16.0, None, 15.8, id="one-run-measured-nothing"),
-        # docs-refresh/2026-10-23-0624: one run measured 62.36s, CI measured 1.03s.
+        # One run measured 62.36s, CI measured 1.03s.
         pytest.param(0.57, 62.36, 1.03, id="one-run-measured-60x"),
     ],
 )
 def test_a_refresh_keeps_a_row_one_outlying_measurement_would_rewrite(
     tmp_path, recorded, noisy, settled
 ):
-    """#6286: a re-measurement that disagrees with the drifted one leaves the row alone."""
+    """A re-measurement that disagrees with the drifted one leaves the row alone."""
     module = FILES[0]
     table = tmp_path / "weights.json"
     table.write_text(json.dumps({module: recorded}))
@@ -167,7 +167,7 @@ def test_a_refresh_keeps_a_row_one_outlying_measurement_would_rewrite(
 
 
 def test_a_refresh_re_measures_only_the_files_that_drifted(tmp_path):
-    """#6286: the confirming run costs only the drifted files, not the slice again."""
+    """The confirming run costs only the drifted files, not the slice again."""
     noisy, *steady = FILES
     table = tmp_path / "weights.json"
     table.write_text(json.dumps({f: 2.0 for f in FILES}))
@@ -183,7 +183,7 @@ def test_a_refresh_re_measures_only_the_files_that_drifted(tmp_path):
 
 
 def test_a_refresh_keeps_a_row_whose_two_runs_drift_but_disagree(tmp_path):
-    """#6286: both runs leaving the band is not enough; they must agree with each other."""
+    """Both runs leaving the band is not enough; they must agree with each other."""
     module = FILES[0]
     table = tmp_path / "weights.json"
     table.write_text(json.dumps({module: 16.0}))
@@ -205,7 +205,7 @@ def test_a_refresh_keeps_a_row_whose_two_runs_drift_but_disagree(tmp_path):
     ],
 )
 def test_a_refresh_reads_a_file_a_run_omitted_as_0_0(tmp_path, first, second):
-    """A file whose tests are all deselected is absent from a run and costs its import (#6587)."""
+    """A file whose tests are all deselected is absent from a run and costs its import."""
     module = FILES[0]
     table = tmp_path / "weights.json"
     table.write_text(json.dumps({module: 16.0}))
@@ -220,7 +220,7 @@ def test_a_refresh_reads_a_file_a_run_omitted_as_0_0(tmp_path, first, second):
 
 
 def test_a_refresh_writes_the_lower_of_two_agreeing_runs(tmp_path):
-    """#6587: two loaded runs can agree with each other and still both overshoot."""
+    """Two loaded runs can agree with each other and still both overshoot."""
     module = FILES[0]
     table = tmp_path / "weights.json"
     table.write_text(json.dumps({module: 0.8}))
@@ -237,7 +237,7 @@ def test_a_refresh_writes_the_lower_of_two_agreeing_runs(tmp_path):
 @pytest.mark.parametrize(
     ("second", "expected"),
     [
-        # docs-refresh/2026-10-29-1828: one run recorded 23.39s, CI measured 0.91s (#6587).
+        # One run recorded 23.39s, CI measured 0.91s.
         pytest.param(0.8, 0.8, id="a-loaded-first-run"),
         pytest.param(24.0, 23.39, id="a-loaded-second-run"),
         pytest.param(None, 23.39, id="a-second-run-that-measured-nothing"),
@@ -289,7 +289,7 @@ def _table(tmp_path, rows):
 
 
 def test_a_refresh_keeps_a_row_the_runner_table_says_ci_would_reject(tmp_path):
-    """#7132: two agreeing runs on the recording host do not outvote CI's own seconds."""
+    """Two agreeing runs on the recording host do not outvote CI's own seconds."""
     [(module, _)] = _lightest_runner_rows(1)
     table = _table(tmp_path, {module: 2.0})
     measure, _ = _runs({module: 85.0})
@@ -303,7 +303,7 @@ def test_a_refresh_keeps_a_row_the_runner_table_says_ci_would_reject(tmp_path):
 
 
 def test_a_refresh_still_writes_a_row_the_runner_table_lacks(tmp_path):
-    """#7132: only a module CI has measured can be refused, so a new one's 85s still lands."""
+    """Only a module CI has measured can be refused, so a new one's 85s still lands."""
     [(held, _)] = _lightest_runner_rows(1)
     unmeasured = FILES[0]
     assert unmeasured not in shard_weight_gate.load_runner_weights()
@@ -319,7 +319,7 @@ def test_a_refresh_still_writes_a_row_the_runner_table_lacks(tmp_path):
 
 
 def test_the_refusal_starts_at_the_gates_floor(tmp_path):
-    """#7132: under the floor the gate compares nothing, so no ratio there can refuse a row."""
+    """Under the floor the gate compares nothing, so no ratio there can refuse a row."""
     floor = shard_weight_gate.STALE_WEIGHT_FLOOR_SECONDS
     (at_floor, _), (under_floor, _) = _lightest_runner_rows(2)
     table = _table(tmp_path, {at_floor: 1.0, under_floor: 1.0})
@@ -334,7 +334,7 @@ def test_the_refusal_starts_at_the_gates_floor(tmp_path):
 
 
 def test_the_refusal_starts_at_the_local_reading_ratio(tmp_path):
-    """#7132: a reading just under `LOCAL_READING_MAX_RATIO` is written, and one just over is not."""
+    """A reading just under `LOCAL_READING_MAX_RATIO` is written, and one just over is not."""
     ratio = shard_weight_gate.LOCAL_READING_MAX_RATIO
     (over, over_runner), (under, under_runner) = _heaviest_runner_rows(2)
     under_reading = under_runner * ratio * 0.9
@@ -350,7 +350,7 @@ def test_the_refusal_starts_at_the_local_reading_ratio(tmp_path):
 
 
 def test_the_refusal_judges_the_lower_reading_the_row_would_hold(tmp_path):
-    """#7132: the row holds the lower of the two runs, so that reading is what the gate sees."""
+    """The row holds the lower of the two runs, so that reading is what the gate sees."""
     (refused, refused_runner), (written, written_runner) = _heaviest_runner_rows(2)
     table = _table(tmp_path, {refused: 1.0, written: 1.0})
     measure, _ = _runs(
@@ -370,7 +370,7 @@ def test_the_refusal_judges_the_lower_reading_the_row_would_hold(tmp_path):
 
 
 def test_a_refresh_prints_the_module_it_refused(tmp_path, capsys):
-    """#7132: a refused row leaves no diff, so the printed report is the only trace of it."""
+    """A refused row leaves no diff, so the printed report is the only trace of it."""
     [(module, _)] = _lightest_runner_rows(1)
     table = _table(tmp_path, {module: 2.0})
     measure, _ = _runs({module: 85.0})
@@ -384,7 +384,7 @@ def test_a_refresh_prints_the_module_it_refused(tmp_path, capsys):
 
 
 def test_a_host_only_new_row_holds_the_runner_seconds(tmp_path, capsys):
-    """#7136: an 85s row is a cost of this host alone, and leaving the row out re-measures it
+    """An 85s row is a cost of this host alone, and leaving the row out re-measures it
     on every tick."""
     [(module, runner)] = _lightest_runner_rows(1)
     table = _table(tmp_path, {})

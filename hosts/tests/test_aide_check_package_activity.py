@@ -1,4 +1,4 @@
-"""Guards on the AIDE check's explanations that read what a package run did (#7919).
+"""Guards on the AIDE check's explanations that read what a package run did.
 
 The classifier credits a package's own activity in the window: an install or upgrade explains
 an owner, group or mode change on a path it owns, a dpkg event explains a distro link it left

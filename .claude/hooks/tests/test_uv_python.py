@@ -22,10 +22,9 @@ Two properties matter more than any single vector:
   `cd "$HOME/server" && pytest`, the most common multi-segment invocation in a worktree.
   Both directions are covered below.
 
-Until #3286 this was `uv-python.sh`, its own PreToolUse hook in 269 lines of bash and jq, and
-the corpus below drove it through `bash`. It is now the fifth arm of `bash-pretool.py`, so the
-corpus calls `rewrite_command` directly and `test_the_dispatcher_emits_the_rewrite` covers the
-one thing that only the dispatcher can get wrong.
+This is the fifth arm of `bash-pretool.py`, so the corpus calls `rewrite_command` directly and
+`test_the_dispatcher_emits_the_rewrite` covers the one thing that only the dispatcher can get
+wrong.
 
 Run: uv run pytest .claude/hooks/tests/test_uv_python.py
 """

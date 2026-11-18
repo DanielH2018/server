@@ -1,4 +1,4 @@
-"""Only a failed read exits TEMP_FAIL (75); a bad argument or a repo config error does not (#4471).
+"""Only a failed read exits TEMP_FAIL (75); a bad argument or a repo config error does not.
 
 75 tells a caller such as land.sh to retry. A bad `--since` can never succeed on retry, so it
 exits a usage code, and a key missing from group_vars stays a failure. The raises that really are

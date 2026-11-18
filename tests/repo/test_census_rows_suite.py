@@ -1,10 +1,8 @@
 """Censuses of the suite's own guards, one `_row_table.Census` row each.
 
-These rows replaced `test_glob_census_non_vacuity.py` and
-`test_role_tree_walks_use_role_dirs.py` (#3407). #3384 proposed retiring both once every census
-they police is a row. That precondition does not hold, and #3430 measured why it will not.
-After #3430 folded the textual censuses it named, except three whose docstrings say why, the
-non-vacuity row still finds 40 glob-using test files, and only two of them are row files. 23 of
+These rows replace `test_glob_census_non_vacuity.py` and
+`test_role_tree_walks_use_role_dirs.py`. Not every census they police can be a row: the
+non-vacuity row finds 40 glob-using test files, and only two of them are row files. 23 of
 the 40 mention a `tmp_path` fixture, which no `git ls-files` selector can stand in for. The 22 `role_dirs` callers are
 mostly render-based guards, which are not textual censuses. So the checks stay as rows.
 
@@ -61,9 +59,8 @@ def _glob_using_test_files() -> list[str]:
 # their local aliases, and the literal path written out or built a segment at a time. A tree
 # bound on one line and walked on another is invisible to it; ROLE_DIRS_CALLERS covers that.
 # The last branch is a parameter or local named for the tree (`roles_root`, `k8s_roles_dir`)
-# walked directly. A test that passes a `tmp_path` tree in still walks a real one in
-# production, and such a walk escaped every other branch (#3769). It needs the `roles` plural,
-# so a single role's `(role / "templates").iterdir()` stays clean.
+# walked directly, even from a `tmp_path` test. It needs the `roles` plural, so a single role's
+# `(role / "templates").iterdir()` stays clean.
 BARE_ROLE_WALK = re.compile(
     r"(?:K8S_ROLES|SETUP_ROLES|CONTAINERS_ROLES|DOCKER_ROLES"
     r'|k8s/roles"'

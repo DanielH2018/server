@@ -270,7 +270,7 @@ def test_without_the_flag_the_orchestrator_is_the_drill_and_with_it_the_tag_is_i
 
 
 # The k3s installer returns before the kubelet registers the Node, and `kubectl wait --all` exits
-# at once with "no matching resources found" while there is none (both 2026-10-24 rehearsals).
+# at once with "no matching resources found" while there is none.
 # This `k3s` stub reports no node for the first NODE_AFTER `get nodes` calls, then one, and its
 # `wait` fails at once while there is none.
 GUEST_STUBS = {

@@ -221,7 +221,7 @@ def render_pod_env(
     """The environment a role's first container receives, rendered: env var -> value.
 
     The Deployment's `env` values over the env Secret's `stringData`, the precedence Kubernetes
-    gives `env` over `envFrom`. Since #5574 the bridges keep only credentials in the Secret and
+    gives `env` over `envFrom`. The bridges keep only credentials in the Secret and
     every setting in `env`, so a guard reading either alone sees half the pod's environment.
     """
     data = yaml_fast.safe_load(render_role_template(role, secret, overrides))
@@ -234,7 +234,7 @@ def render_pod_env(
 
 # `_render_all` skips `Dockerfile*` because its output feeds a YAML parse. A build pin is still
 # a rendered value — code-server's Dockerfile names its node URL and every extension URL
-# through a role default — so the build files get their own accessor and their own cache (#3175).
+# through a role default — so the build files get their own accessor and their own cache.
 def traefik_static_config(
     overrides: dict | None = None, *, host: str = "daniel-box"
 ) -> dict:
@@ -310,7 +310,7 @@ def rendered_build_texts() -> tuple[tuple[str, str, str], ...]:
 def render_build_texts(overrides: dict) -> tuple[tuple[str, str, str], ...]:
     """`rendered_build_texts()` with `overrides` laid over every role's context, uncached.
 
-    The build-file counterpart of `render_texts`, for a census at a sentinel value (#3191).
+    The build-file counterpart of `render_texts`, for a census at a sentinel value.
     """
     return tuple(_render_build_files(overrides))
 

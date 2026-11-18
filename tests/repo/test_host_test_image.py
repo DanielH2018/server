@@ -1,4 +1,4 @@
-"""The host_packages test image: when build-image.sh pulls the pin, builds, or publishes (#7664).
+"""The host_packages test image: when build-image.sh pulls the pin, builds, or publishes.
 
 `build-image.sh` runs from a copy of its directory against a stub `docker`, so each test writes
 its own image.pins and reads the argv a real run would pass. The census half holds the

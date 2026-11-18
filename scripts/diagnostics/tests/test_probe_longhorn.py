@@ -423,7 +423,7 @@ def test_the_b2_budget_timer_passes_no_retain():
     assert "--retain" not in text
 
 
-# ── the bucket name is read from inventory, not SOPS (#8355) ────────────────────────────────
+# ── the bucket name is read from inventory, not SOPS ────────────────────────────────
 
 
 def _inventory_bucket():

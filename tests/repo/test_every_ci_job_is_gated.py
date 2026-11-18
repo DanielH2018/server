@@ -63,7 +63,7 @@ KNOWN_JOBS = frozenset(
 # Jobs whose failure must not block a merge, each with the reason.
 NON_GATING_JOBS = frozenset(
     {
-        # install.sh's download of the k3s release; a GitHub outage must not fail a PR (#7754).
+        # install.sh's download of the k3s release; a GitHub outage must not fail a PR.
         "k3s_download",
     }
 )

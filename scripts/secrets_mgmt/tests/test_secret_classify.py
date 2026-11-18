@@ -21,6 +21,6 @@ def test_unknown_app_secret_defaults_to_assisted():
 
 
 def test_provider_and_pinned_names_are_not_recognised_by_name():
-    # The registry's `tier` is the only place a key becomes external or pinned (#3749).
+    # The registry's `tier` is the only place a key becomes external or pinned.
     assert classify("cloudflare_dns_token") == "assisted"
     assert classify("zigbee_network_key") == "assisted"

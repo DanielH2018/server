@@ -91,7 +91,7 @@ def _runner(tmp_path: Path) -> _Runner:
     script = tmp_path / "sync-artifacts.sh"
     # The shared accessor renders what the gate lints, with one override: the peer tree has to
     # be a tmp_path, because the run is real. Role defaults come from the accessor's own
-    # context rather than being passed in here (#3178).
+    # context rather than being passed in here.
     stars = tmp_path / "stars.txt"
     script.write_text(
         render_shell_script(
@@ -247,7 +247,7 @@ def test_the_packaged_timer_runs_the_script_this_suite_renders():
     assert "/usr/lib/homelab/sync-artifacts" in files
     unit = files[f"{UNITS}/homelab-sync-artifacts.service"][0].decode()
     assert "ExecStart=/usr/lib/homelab/sync-artifacts\n" in unit
-    # The threshold line these tests prove reaches the journal under this tag (#6162).
+    # The threshold line these tests prove reaches the journal under this tag.
     assert "SyslogIdentifier=sync-artifacts\n" in unit
     # The unit loads no credential: the sync has nothing left to push to.
     assert "LoadCredential" not in unit
@@ -281,7 +281,7 @@ def test_a_sync_leaves_the_peer_directory_at_the_packaged_mode(tmp_path):
 
     With the trailing slash, `rsync -a` copies the peer root's own mode onto the destination.
     The peer's 0755 then flipped back and forth against the Ansible task's 0750 on every sync and
-    every apply (#5524).
+    every apply.
     """
     real_rsync = shutil.which("rsync", path=str(leakguard._state["real_path"]))
     if real_rsync is None:
@@ -312,7 +312,7 @@ def test_a_sync_leaves_the_peer_directory_at_the_packaged_mode(tmp_path):
         )
     )
     # The repo's check library and a temp textfile directory: the defaults are the host's
-    # installed library and node_exporter's real directory, which a test must not write (#6191).
+    # installed library and node_exporter's real directory, which a test must not write.
     textfile = tmp_path / "textfile"
     textfile.mkdir()
     proc = launch(
