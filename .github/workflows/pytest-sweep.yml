@@ -1,0 +1,98 @@
+name: pytest-sweep
+
+# Runs every test module on master's head once a day, with no selection. ci.yml's pytest legs
+# run a pull request's selection from `scripts/dev/affected_tests.json`, and a row there can
+# be older than a dependency its module gained since. This run is the one that finds such a
+# module without being told where to look (`docs/ci-throughput.md`).
+#
+# A red run here is on whatever SHA is master's head at 09:30 UTC; it is not that commit's
+# verdict. No job below carries the name of ci.yml's gate, because `ci_verdict` in
+# `hosts/lib/ci_verdict.py` takes the worst check-run per required name on a commit, and a
+# red sweep under that name would hold every landing behind a SHA whose own run was green.
+# ENFORCED by tests/repo/test_pytest_sweep_workflow.py.
+#
+# The run reaches the operator through one GitHub issue, which `scripts/dev/sweep_report.py`
+# opens on a red sweep and closes on the next green one.
+#
+# It is its own workflow for the reasons renovate-config-canary.yml gives: a `schedule:` on
+# ci.yml would run every job and the gate, in the head SHA's concurrency group.
+on:
+  schedule:
+    - cron: "30 9 * * *" # 04:30 America/Chicago, half an hour after the Renovate canary
+  workflow_dispatch: # on a branch, to run the whole suite there without ci.yml's other jobs
+
+# One run per ref. A dispatch on a branch therefore never cancels master's nightly run, and
+# the workflow name keeps every group here apart from ci.yml's.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # One runner, not ci.yml's six legs. Nothing waits on this run, so its wall does not
+  # matter, and one job spends one checkout and one setup where six legs spend six.
+  sweep:
+    name: every test module (nightly sweep)
+    runs-on: ubuntu-26.04
+    timeout-minutes: 45
+    outputs:
+      modules: ${{ steps.failed.outputs.modules }}
+    env:
+      # Skips pyproject.toml's `lint` group, as ci.yml's pytest job does.
+      UV_NO_GROUP: lint
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0 # several tests read git history and worktree state
+          persist-credentials: false
+      - uses: $/.github/actions/setup
+      - uses: $/.github/actions/pytest-tools
+
+      # No file arguments, so pytest collects `testpaths` from pyproject.toml: the census
+      # ci.yml's legs split.
+      - name: Run the whole test suite
+        run: |
+          set -euo pipefail
+          uv run python -m pytest --github-report | tee "$RUNNER_TEMP/sweep.log"
+
+      # pytest's short summary names each failure as `FAILED <module>::<test>` and each
+      # collection error as `ERROR <module>`. The list is capped so a suite-wide break
+      # cannot outgrow an issue body.
+      - name: List the modules that failed
+        id: failed
+        if: failure()
+        run: |
+          set -euo pipefail
+          modules=$({ grep -oE '^(FAILED|ERROR) [^: ]+\.py' "$RUNNER_TEMP/sweep.log" || true; } \
+            | cut -d' ' -f2 | sort -u | head -n 40 | tr '\n' ' ')
+          echo "modules=$modules" >> "$GITHUB_OUTPUT"
+
+  # `issues: write` sits on this job alone, which runs one script and no test. A dispatch on
+  # a branch reports nothing: the issue speaks for master.
+  report:
+    name: report the sweep
+    needs: sweep
+    if: ${{ always() && github.ref == 'refs/heads/master' }}
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - uses: $/.github/actions/setup
+        with:
+          uv: "false"
+      - name: Open, update or close the sweep issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RESULT: ${{ needs.sweep.result }}
+          MODULES: ${{ needs.sweep.outputs.modules }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          python scripts/dev/sweep_report.py --repo "$GITHUB_REPOSITORY" \
+            --result "$RESULT" --run-url "$RUN_URL" --modules "$MODULES"
