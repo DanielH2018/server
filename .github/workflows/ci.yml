@@ -493,6 +493,12 @@ jobs:
       - uses: $/.github/actions/setup
         if: github.event_name == 'pull_request'
 
+      # The editable install's `.pth` is the import root in project mode (docs/adr/0039). `-P`
+      # keeps the cwd off sys.path, so only the `.pth` can supply `scripts/`.
+      - name: scripts/ is installed as the import root
+        if: github.event_name == 'pull_request'
+        run: .venv/bin/python -P -c "import lib.repo_paths"
+
       # The render-diff gates. They refuse an edge added beside a change to its dependent.
       # docs/landing.md says how to split a refused PR, and there is no bypass. Their removal
       # arms refuse an object a flux-owned tag drops without a `Removes-Object:` line in the
@@ -1987,22 +1993,19 @@ jobs:
     if: github.event_name != 'push' && github.event.pull_request.draft != true
     runs-on: ubuntu-26.04
     timeout-minutes: 20  # six install attempts at 60s, plus a wedged fetch
+    env:
+      # Skips pyproject.toml's `lint` group, which no step here runs (test_ci_lint_group.py).
+      UV_NO_GROUP: lint
     steps:
       - uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0  # the merge-base diff below needs history
           persist-credentials: false  # nothing here pushes; the merge-base fetch carries its own token
 
-      - uses: $/.github/actions/setup
-        with:
-          python: "false"
-          uv: "false"
-          node: "true"
-
       # The script's `npm install renovate@latest` re-downloads Renovate on every run, which
-      # makes this job the longest in the workflow on a PR that touches renovate.json. Skip it
-      # on PRs that do not touch the file it validates; renovate.json rarely changes, so this is
-      # a fast green for nearly every PR.
+      # makes this job the longest in the workflow on a PR that runs it. Skip it on PRs that
+      # cannot change what it checks. A Renovate bump PR edits a pinned file, so it runs the
+      # extract; most other PRs get a fast green.
       #
       # Caching does not help. The key cannot be content-derived from an unpinned package, so a
       # rolling key would write a large entry every run and churn the repo's 10 GB cache budget,
@@ -2010,7 +2013,13 @@ jobs:
       # SILENTLY PINS: its manifest records `renovate: ^44.30.1`, npm sees the install satisfies
       # it and reuses it without ever contacting the registry. That would quietly defeat the
       # whole point of this job, below.
-      - name: Check whether this PR touches renovate.json
+      #
+      # `validate` runs when the PR touches renovate.json. `extract` runs when it touches
+      # renovate.json, scripts/validate/renovate_expected_deps.tsv, a file that table lists, a
+      # file a census rule of renovate_extract.py reads, or the check itself, or when it adds
+      # a file that is not prose or Python; `renovate_extract.py scope` decides, on the
+      # runner's own python3, before any setup. The daily canary runs both checks on master.
+      - name: Decide which Renovate checks this PR needs
         id: scope
         if: github.event_name == 'pull_request'
         env:
@@ -2021,12 +2030,31 @@ jobs:
           "$GITHUB_WORKSPACE/scripts/dev/pr_changed_files.sh"
           # The script diffs against the merge base, so this is the PR's own change to the file.
           # A deletion of renovate.json counts as touching it.
+          checks=""
           if grep -qFx renovate.json "$RUNNER_TEMP/changed.txt" "$RUNNER_TEMP/deleted.txt"; then
-            echo "changed=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "changed=false" >> "$GITHUB_OUTPUT"
-            echo "renovate.json untouched by this PR — the daily renovate-config-canary run validates master."
+            checks="validate"
           fi
+          # Assigned first so `set -e` fails the step when the script errors; inside the `if`
+          # test an error would read as "skip the extract" and leave the required job green.
+          # The files the PR adds: no rule can tell which new file a manager's pattern reaches.
+          git diff --name-only --no-renames --diff-filter=A "origin/$BASE_REF...HEAD" > "$RUNNER_TEMP/added.txt"
+          scope=$(python3 scripts/validate/renovate_extract.py scope "$RUNNER_TEMP/changed.txt" "$RUNNER_TEMP/deleted.txt" --added "$RUNNER_TEMP/added.txt")
+          case "$scope" in
+            true) checks="$checks extract" ;;
+            false) ;;
+            *) echo "::error::renovate_extract.py scope printed '$scope', not true or false"; exit 1 ;;
+          esac
+          echo "checks=$checks" >> "$GITHUB_OUTPUT"
+          if [ -z "$checks" ]; then
+            echo "Nothing this PR changes can move the Renovate config or its extract; the daily renovate-config-canary run checks master."
+          fi
+
+      - uses: $/.github/actions/setup
+        if: github.event_name != 'pull_request' || steps.scope.outputs.checks != ''
+        with:
+          python: "true"
+          uv: "true"
+          node: "true"
 
       # Semantic validation of renovate.json — the one dependency-management axis with no
       # fail-at-commit backstop. prek's `check-json` only proves the file is well-formed JSON;
@@ -2038,11 +2066,19 @@ jobs:
       # the same hosted Mend app version that actually consumes the config, which is why it is
       # deliberately unpinned and why neither caching variant above was taken.
       #
+      # The extract is Renovate's own matching of every custom manager over the checkout, held
+      # against the expected-dependency table, so a reformatted pin or a broken matchString
+      # fails here by name.
+      #
       # The canary beyond validating edits — a config that Renovate itself stops accepting —
       # is renovate-config-canary.yml, daily. It does not run here on a push to master: a
       # per-merge unpinned fetch fails on its own for minutes after each of
-      # Renovate's ~8 daily npm publishes. The script retries that install; the
-      # validation itself runs once, so a real config error is still final.
-      - name: Validate renovate.json
-        if: github.event_name != 'pull_request' || steps.scope.outputs.changed == 'true'
-        run: scripts/validate/renovate_config.sh renovate.json
+      # Renovate's ~8 daily npm publishes. The script retries that install; each check
+      # runs once, so a real failure is still final.
+      - name: Validate renovate.json and check Renovate's extract
+        if: github.event_name != 'pull_request' || steps.scope.outputs.checks != ''
+        env:
+          CHECKS: ${{ steps.scope.outputs.checks }}  # empty off a PR, which runs both
+        run: |
+          # shellcheck disable=SC2086 # CHECKS is a space-separated list of check names
+          scripts/validate/renovate_config.sh $CHECKS

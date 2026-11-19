@@ -152,6 +152,13 @@ def test_page_switches_logs_and_folds_the_finished_list_is_clean(app):
     assert 'onclick="showStage(${d.stages.indexOf(s)})"' in html
 
 
+def test_page_renders_the_landing_queue_from_the_inflight_rows_is_clean(app):
+    # fact: hosts/components/deploy-ui/CLAUDE.md#Landing queue
+    _, html = app.get("/")
+    assert "let s=queue(b.runs)+" in html
+    assert "r.kind==='land').sort((a,b)=>stepRank(b.step)-stepRank(a.step)" in html
+
+
 def test_page_has_no_stale_release_panel_is_flagged(app):
     _, html = app.get("/")
     assert "/api/stale" not in html and 'id="stale"' not in html

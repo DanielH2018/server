@@ -289,3 +289,7 @@ def test_the_import_roots_are_the_landers_own_inserts():
         "hosts/lib",
     } <= set(roots)
     assert "" not in roots
+
+
+def test_scripts_is_an_import_root_with_no_insert_naming_it():
+    assert policy.import_roots(policy.CHECKOUT, []) == ["scripts"]

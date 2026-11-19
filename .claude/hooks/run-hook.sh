@@ -156,7 +156,10 @@ fi
 # the primary checkout, so that rebuild fails with EACCES; the session's own venv stands in.
 # With neither, the guards ask: the project-free interpreter lacks PyYAML, which
 # block-protected-bash's secret-path arm needs. A cd target with no project runs as is.
+# DECIDED: the hook's own scripts/ goes ahead of the venv's .pth, which names the venv's own
+# checkout, and a module this checkout lacks falls through to that checkout. (ADR-0039)
 if [[ -n "$project" ]]; then
+    export PYTHONPATH="${HOOKS_DIR%/.claude/hooks}/scripts"
     if [[ -x .venv/bin/python || ! -f pyproject.toml ]]; then
         exec "$uv" run --no-sync --quiet python "$script"
     fi

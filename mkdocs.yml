@@ -198,6 +198,7 @@ nav:
       - "ADR-0036 A selected run proves its tree, and a nightly sweep is the net": adr/0036-a-selected-run-proves-its-tree-and-a-nightly-sweep-is-the-net.md
       - "ADR-0037 The renderer keeps Jinja after Ansible": adr/0037-the-renderer-keeps-jinja-after-ansible.md
       - "ADR-0038 Design is checked where code is written": adr/0038-design-is-checked-where-code-is-written.md
+      - "ADR-0039 scripts/ is installed in place": adr/0039-scripts-is-installed-in-place.md
       # The long-form documents three of the records above compress. They sit under Decisions
       # rather than in a section of their own: each one is the working-out behind a single
       # ADR, and a reader who wants that depth arrives from the record, not from a
