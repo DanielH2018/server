@@ -196,6 +196,25 @@ def test_secret_reads_are_logged_at_metadata():
         )
 
 
+def test_a_secret_watch_is_logged_once_and_a_pod_exec_at_both_stages():
+    """A watch's ResponseComplete names the same reader, so its ResponseStarted is a duplicate.
+
+    A long exec only reaches ResponseComplete when it ends, so its ResponseStarted is the record
+    that a session entered the pod, and must stay.
+    """
+    policy = _audit_policy()
+    assert "ResponseStarted" not in policy.get("omitStages", []), policy["omitStages"]
+    rules = policy["rules"]
+    (secret_rule,) = [
+        r
+        for r in rules
+        if r.get("level") == "Metadata" and "secrets" in _named_resources(r)
+    ]
+    assert "ResponseStarted" in secret_rule.get("omitStages", []), secret_rule
+    (exec_rule,) = [r for r in rules if "pods/exec" in _named_resources(r)]
+    assert "ResponseStarted" not in exec_rule.get("omitStages", []), exec_rule
+
+
 KUSTOMIZE_CONTROLLER = "system:serviceaccount:flux-system:kustomize-controller"
 LONGHORN_MANAGER = "system:serviceaccount:longhorn-system:longhorn-service-account"
 METRICS_SERVER = "system:serviceaccount:kube-system:metrics-server"

@@ -73,7 +73,11 @@ rules:
   # hour), and notification-controller reads `flux-github-status` per commit-status post (930 an
   # hour). Both are SOPS-delivered credentials, so a drop for them would hide a read of the
   # cluster's substitution values by a compromised controller token.
+  #
+  # A watch writes a `ResponseStarted` entry when it opens and a `ResponseComplete` one when it
+  # ends. The second names the same reader and Secret, so the first is omitted.
   - level: Metadata
+    omitStages: ["ResponseStarted"]
     verbs: ["get", "list", "watch"]
     resources:
       - group: ""
