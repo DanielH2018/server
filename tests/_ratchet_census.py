@@ -1,8 +1,8 @@
-"""The two ratchets themselves, and the census of the tree that feeds them.
+"""The three ratchets themselves, and the census of the tree that feeds them.
 
 `_ratchet.py` and `_ratchet_patches.py` hold the pure half — the caps, the allowlist parser,
 the two comparisons and the patch counter. This module is the impure half that reads the working tree: the
-code-line counts and the monkeypatch counts. It sits beside the
+code-line counts, the monkeypatch counts and the copied-test counts. It sits beside the
 pure module rather than inside the test module so the `--tighten` writer
 (`scripts/dev/tighten_ratchets.py`) imports the SAME census the ratchet asserts on.
 Importing a `test_*.py` from a script would work under pytest and nowhere else.
@@ -12,11 +12,13 @@ The reads of the merge base with `origin/master`, and the tests for all of this,
 """
 
 import subprocess
+from collections.abc import Mapping
 from pathlib import Path
 
 from _helpers import REPO, is_test_file
 from _ratchet import Ratchet, cap_for, code_lines
 from _ratchet_patches import count_module_patches, first_party_module_names
+from dev.duplicate_tests import duplicate_groups, tracked_test_sources
 from lib.proc_testing import run
 
 HERE = REPO / "tests" / "repo"
@@ -45,6 +47,16 @@ PATCHES = Ratchet(
         "Give the module under test a seam instead — a frozen dataclass of injectable "
         "boundaries, as in scripts/deploy_tools/land_lib/tools.py with its fakes in "
         "scripts/deploy_tools/tests/_land_fakes.py."
+    ),
+    cap_of=lambda rel: 0,
+)
+
+COPIES = Ratchet(
+    path=HERE / "copied_tests_allowlist.txt",
+    unit="tests whose body is a copy of another test's",
+    remedy=(
+        "`uv run python scripts/dev/duplicate_tests.py` names each group. Parametrize the "
+        "copies into one test, or make the shared check one census row."
     ),
     cap_of=lambda rel: 0,
 )
@@ -112,3 +124,18 @@ def monkeypatch_counts() -> dict[str, int]:
         for rel in tracked
         if is_test_file(Path(rel))
     }
+
+
+def copied_test_counts(sources: Mapping[str, str] | None = None) -> dict[str, int]:
+    """Repo-relative `test_*.py` path -> how many of its tests share a body with another test.
+
+    Zeros are in the mapping for the reason `monkeypatch_counts` gives. `sources` is each
+    module's text by path, and defaults to every tracked test module.
+    """
+    if sources is None:
+        sources = tracked_test_sources([])
+    counts = dict.fromkeys(sources, 0)
+    for group in duplicate_groups(sources):
+        for node_id in group:
+            counts[node_id.split("::", 1)[0]] += 1
+    return counts

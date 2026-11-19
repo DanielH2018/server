@@ -85,6 +85,7 @@ lint = [
   # change an inference and turn master red on an unrelated PR.
   # Renovate raises the bump as its own PR, which is where the
   # new diagnostics get read.
+  "vulture>=2.16",                  # dead-name gate (prek hook); [tool.vulture] holds its ignore list
 ]
 
 [tool.pytest.ini_options]
@@ -389,10 +390,10 @@ select = [
 "scripts/secrets_mgmt/host_secrets.py" = ["ARG001"]
 "scripts/secrets_mgmt/secret_rotation.py" = ["ARG001"]
 
-# A one-off dead-code sweep reads this, not a hook or CI job: `uvx vulture` from the
-# repo root. It scans every tracked Python root, so a caller outside scripts/, hosts/lib and the
-# role files/ trees still counts. The extensionless hosts/lib/homelab-* scripts are not read, so
-# `refresh_pending` is the one line it reports. Every name below was triaged as live.
+# The `vulture` prek hook reads this and fails on any name nothing uses: delete the name, or
+# list it below under a comment that says what calls it. It scans every tracked Python root,
+# so a caller outside scripts/, hosts/lib and the role files/ trees still counts. Every name
+# below was triaged as live.
 # A test counts as a caller here, because many library functions exist for a guard under
 # tests/. To list production code that only tests call, run a second pass with
 # `--exclude '*/tests/*,*conftest.py,*/test_*.py,*/_*_harness.py'`.
@@ -425,6 +426,8 @@ ignore_names = [
   "expiry",
   # Dataclass fields serialised with asdict() into the fan-out review record.
   "base_error", "ci_rerun_jobs",
+  # A Batch field the run manifest records for whoever reads the file; no code reads it back.
+  "excused_paths",
   # Read by test_host_census.py and named in docs/host-packages.md.
   "NEVER_CANARY",
   # Bound in scripts/conftest.py so a bare `import grafana_panel_report` resolves.
@@ -436,7 +439,14 @@ ignore_names = [
   # Module-level `pytestmark`, which pytest reads.
   "pytestmark",
   # Keyword a fake's signature accepts because the real call passes it.
-  "server_hostname",
+  "server_hostname", "ua",
+  # Fixtures a test requests for their effect and never reads.
+  "restore_sigint", "ssh_here",
+  # Called from the extensionless hosts/lib/homelab-reconcile, which vulture does not read.
+  "refresh_pending",
+  # Nothing reads it. It records the session unit's EnvironmentFile path in
+  # renovate_session.py, a file on the landers' approval lists.
+  "SESSION_ENV_FILE",
   # Guard libraries: a guard under a tests/ directory is the designed caller.
   # citations.py: FORMS is the grammar .claude/rules/facts.md cites; the rest feed
   # test_documented_paths_exist.py, test_census_rows_text.py, test_failure_class_detectors.py.
