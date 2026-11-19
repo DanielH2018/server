@@ -754,15 +754,11 @@ def parse_output(out: object) -> SecretOutput | None:
     match out:
         case {
             "destination": str(dest),
-            "persist": bool(persist),
+            "persist": bool(keep),
             "dependents": list(deps),
         }:
-            inside = all(part not in ("", ".", "..") for part in dest.split("/"))
-            return (
-                SecretOutput(PurePosixPath(dest), persist, frozenset(deps))
-                if inside
-                else None
-            )
+            if all(part not in ("", ".", "..") for part in dest.split("/")):
+                return SecretOutput(PurePosixPath(dest), keep, frozenset(deps))
     return None
 
 
