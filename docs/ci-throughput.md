@@ -367,8 +367,8 @@ B3 lands in four steps, each one exercised before the next:
       A landing stacks only the heads it would have been allowed to land. It runs its own
       checks on each member, the landing policy included, and the member's own landing ran
       its checks before it stood in the line. It stacks only landings of its own user. A
-      PR that changes a forward-only pin, the `flux` role or cluster-vars lands alone,
-      because the cluster-pin gate refuses a pin bump that shares its PR. A member merges
+      serial PR (`live_limit.kind`, listed in `docs/landing.md`) lands alone: the
+      cluster-pin gate refuses a pin bump that shares its PR. A member merges
       under its PR's title, whatever `--subject` its own landing was given.
 
       A landing compares its own code with master once, when it forms the batch
