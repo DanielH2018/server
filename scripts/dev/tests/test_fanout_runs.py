@@ -104,7 +104,7 @@ def test_a_saved_batch_has_only_keys_a_constructor_reader_accepts(tmp_path):
     (entry,) = json.loads(path("20260101T000010Z", tmp_path).read_text())["batches"]
     assert set(entry) == CONSTRUCTOR_READER_FIELDS
     assert Batch(**entry) == b
-||||||| parent of 5e0c0af2a (Park a fan-out batch when another PR's DEPLOY_HOLD stops its landing)
+
 
 def test_runs_shows_a_parked_batch_with_its_reason_in_place_of_standing(
     tmp_path, capsys
