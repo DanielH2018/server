@@ -376,7 +376,6 @@ groups:
         annotations:
           summary: Airflow's scheduler is not running, so no warehouse rollup starts.
           description: >-
-            The scheduler's own health server answers 503, or does not answer at all. No DAG run
-            starts while the scheduler is down, so no `check` task fails either. Read the
+            The scheduler's own health server answers 503, or does not answer at all. Read the
             airflow-scheduler pod's state and log in the homelab namespace.
             Its DOWN line: `kubectl -n homelab logs deploy/monitor-bridge | grep 'DOWN airflow_scheduler '`.
