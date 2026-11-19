@@ -12,6 +12,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import landing_clear
 import pytest
+from deploy_tools.land_lib import slots, turn
+from lib import proc_testing
 
 RUN_URL = "https://github.com/DanielH2018/server/actions/runs/123"
 
@@ -25,8 +27,8 @@ def _run(status="completed", conclusion="success"):
     }
 
 
-def _read(hold="none", run=None):
-    return landing_clear.read(lambda: hold, lambda: run or _run())
+def _read(hold="none", run=None, serial=False):
+    return landing_clear.read(lambda: hold, lambda: run or _run(), lambda: serial)
 
 
 def _fail():
@@ -58,6 +60,12 @@ def test_a_pending_or_cancelled_master_is_not_a_blocker(run):
     assert _read(run=run)["state"] == "clear"
 
 
+def test_a_live_serial_landing_blocks():
+    state = _read(serial=True)
+    assert state["state"] == "blocked"
+    assert "serial PR is live" in state["detail"]
+
+
 def test_both_blockers_are_named():
     state = _read(hold="abc1234", run=_run(conclusion="failure"))
     assert state["detail"] == (
@@ -72,7 +80,7 @@ def test_both_blockers_are_named():
 )
 def test_a_failed_read_exits_1_and_prints_no_state(hold_read, ci_read, capsys):
     def read_state():
-        return landing_clear.read(hold_read, ci_read)
+        return landing_clear.read(hold_read, ci_read, lambda: False)
 
     assert landing_clear.main([], read_state=read_state) == 1
     out = capsys.readouterr()
@@ -119,5 +127,48 @@ def test_any_other_gh_failure_is_a_failed_read(capsys):
 
 
 def test_a_master_with_no_ci_run_reads_pending():
-    state = landing_clear.read(lambda: "none", _ci_read(0, '{"workflow_runs": []}'))
+    state = landing_clear.read(
+        lambda: "none", _ci_read(0, '{"workflow_runs": []}'), lambda: False
+    )
     assert state == {"state": "clear", "detail": "DEPLOY_HOLD none; master CI pending"}
+
+
+def _hold(directory, name):
+    return turn.try_take(directory / name)
+
+
+def test_a_held_serial_lock_keeps_the_wait_open_and_freeing_it_clears(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setenv(turn.TURN_DIR_ENV, str(tmp_path))
+    held = _hold(tmp_path, slots.SERIAL_NAME)
+    assert slots.serial_landing_live("anywhere")
+    held()
+    assert not slots.serial_landing_live("anywhere")
+
+
+def test_a_held_landing_slot_is_not_a_serial_landing(tmp_path, monkeypatch):
+    monkeypatch.setenv(turn.TURN_DIR_ENV, str(tmp_path))
+    held = _hold(tmp_path, slots.SLOT_NAMES[0])
+    assert not slots.serial_landing_live("anywhere")
+    held()
+
+
+def test_an_unanswered_turn_host_is_a_failed_read_not_clear(
+    tmp_path, monkeypatch, capsys
+):
+    monkeypatch.delenv(turn.TURN_DIR_ENV, raising=False)
+    bin_dir = proc_testing.fake_bin(
+        tmp_path, ssh="echo 'ssh: connection refused' >&2\nexit 255\n"
+    )
+    monkeypatch.setenv("PATH", proc_testing.path_with(bin_dir))
+
+    def read_state():
+        return landing_clear.read(
+            lambda: "none",
+            lambda: _run(),
+            lambda: slots.serial_landing_live("daniel-server"),
+        )
+
+    assert landing_clear.main([], read_state=read_state) == 1
+    assert capsys.readouterr().out == ""
