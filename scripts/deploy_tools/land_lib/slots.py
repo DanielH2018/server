@@ -174,8 +174,14 @@ def _held_by_another(lock: Locker, names: Sequence[str]) -> bool:
 
 
 def serial_landing_live(hostname: str) -> bool:
-    """Whether a landing of a serial PR holds the serial lock, read from `hostname`."""
-    return _held_by_another(_locker(hostname), [SERIAL_NAME])
+    """Whether a landing of a serial PR holds the serial lock, read from `hostname`.
+
+    The read takes no lock, so it cannot make a landing's own attempt fail.
+
+    Raises:
+        OSError: The turn host did not answer; an unknown state is never "not live".
+    """
+    return turn.held_on_turn_host(SERIAL_NAME, hostname)
 
 
 def _keep_serial(ln: Landing, lock: Locker) -> bool:
