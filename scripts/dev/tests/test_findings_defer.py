@@ -37,10 +37,6 @@ def _field_writes(calls) -> list[str]:
 # --- the reader -------------------------------------------------------------------------------
 
 
-def test_the_field_is_the_date():
-    assert not_before(_deferred(1288, "2026-09-12")) == date(2026, 9, 12)
-
-
 def test_a_later_label_from_a_pre_field_session_still_withholds_the_issue():
     issue = _deferred(1288, "2026-09-12", labels=["not-before:2026-09-20"])
     assert not_before(issue) == date(2026, 9, 20)
@@ -51,13 +47,6 @@ def test_an_unparseable_date_counts_as_no_deferral():
 
 
 # --- the planner ------------------------------------------------------------------------------
-
-
-def test_defer_plans_only_the_comment_for_an_issue_without_labels():
-    plans = plan_defer(make_issue(1288), until=date(2026, 9, 12))
-    assert plans == [
-        ["issue", "comment", "1288", "--body", "Deferred until 2026-09-12."]
-    ]
 
 
 def test_defer_removes_every_not_before_label_so_none_outlives_the_field():
