@@ -2081,10 +2081,10 @@ jobs:
       # whole point of this job, below.
       #
       # `validate` runs when the PR touches renovate.json. `extract` runs when it touches
-      # renovate.json, scripts/validate/renovate_expected_deps.tsv, a file that table lists, or a
-      # file a census rule of renovate_extract.py reads; `renovate_extract.py scope` decides,
-      # on the runner's own python3, before any setup. A new file only a manager's pattern
-      # would match is left to the daily canary, which runs both checks on master.
+      # renovate.json, scripts/validate/renovate_expected_deps.tsv, a file that table lists, a
+      # file a census rule of renovate_extract.py reads, or the check itself, or when it adds
+      # a file that is not prose or Python; `renovate_extract.py scope` decides, on the
+      # runner's own python3, before any setup. The daily canary runs both checks on master.
       - name: Decide which Renovate checks this PR needs
         id: scope
         if: github.event_name == 'pull_request'
@@ -2102,7 +2102,9 @@ jobs:
           fi
           # Assigned first so `set -e` fails the step when the script errors; inside the `if`
           # test an error would read as "skip the extract" and leave the required job green.
-          scope=$(python3 scripts/validate/renovate_extract.py scope "$RUNNER_TEMP/changed.txt" "$RUNNER_TEMP/deleted.txt")
+          # The files the PR adds: no rule can tell which new file a manager's pattern reaches.
+          git diff --name-only --no-renames --diff-filter=A "origin/$BASE_REF...HEAD" > "$RUNNER_TEMP/added.txt"
+          scope=$(python3 scripts/validate/renovate_extract.py scope "$RUNNER_TEMP/changed.txt" "$RUNNER_TEMP/deleted.txt" --added "$RUNNER_TEMP/added.txt")
           case "$scope" in
             true) checks="$checks extract" ;;
             false) ;;

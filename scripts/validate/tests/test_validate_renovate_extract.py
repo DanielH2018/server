@@ -13,16 +13,23 @@ from validate.renovate_extract import (
     TABLE,
     Dep,
     PinLine,
+    Row,
+    annotation_reader_drift,
     broken_templates,
     deps_in,
     format_table,
     needs_extract,
     pin_lines,
+    pinned_versions,
+    read_file,
     read_table,
+    release_url_files,
     release_url_problems,
     render_auto_replace,
     table_drift,
     table_rows,
+    tracked_files,
+    truncated_values,
     uncovered_pin_lines,
 )
 
@@ -88,6 +95,10 @@ def _report(*package_files: tuple[str, str, list[dict], str]) -> dict:
     }
 
 
+def _row(digest: str = "-", file: str = "a.yml", dep: str = "a/b") -> Row:
+    return Row("regex", file, dep, "docker", digest, "-")
+
+
 def _dep(file: str, replace: str, value: str = "1.0", digest: str = "", **kw) -> Dep:
     return Dep(
         "regex", file, "a/b", "docker", value, digest, replace, kw.get("template", "")
@@ -99,20 +110,19 @@ def _dep(file: str, replace: str, value: str = "1.0", digest: str = "", **kw) ->
 
 def test_the_committed_table_holds_every_digest_pair_with_its_digest() -> None:
     rows = read_table(TABLE.read_text())
-    missing = [p for p in DIGEST_PAIRS if (*p, "digest") not in rows]
+    missing = [p for p in DIGEST_PAIRS if Row(*p, "digest", "-") not in rows]
     assert not missing, f"no digest-carrying row for {missing}"
-    assert all(len(r) == 5 for r in rows)
 
 
 def test_the_committed_table_reads_both_architectures_of_every_homelab_tool() -> None:
     rows = [
         r
         for r in read_table(TABLE.read_text())
-        if r[1] == "hosts/packages/homelab-tools/package.yml"
+        if r.file == "hosts/packages/homelab-tools/package.yml"
     ]
     assert len(rows) == 16, "eight tools, two architectures"
-    assert {r[4] for r in rows} == {"digest"}
-    assert len({r[2] for r in rows}) == 8
+    assert {r.digest for r in rows} == {"digest"}
+    assert len({r.dep_name for r in rows}) == 8
 
 
 def test_a_dep_with_no_value_and_untabled_managers_stay_out_of_the_table() -> None:
@@ -122,47 +132,54 @@ def test_a_dep_with_no_value_and_untabled_managers_stay_out_of_the_table() -> No
         (
             "regex",
             "a.yml",
-            [{"depName": "a/b", "datasource": "docker", "currentValue": "1"}],
+            [
+                {"depName": "a/b", "datasource": "docker", "currentValue": "1"},
+                {
+                    "depName": "p/x",
+                    "packageName": "p/all",
+                    "datasource": "github-releases",
+                    "currentValue": "1",
+                },
+            ],
             "",
         ),
     )
     rows = table_rows(deps_in(report))
-    assert rows == [("regex", "a.yml", "a/b", "docker", "-")]
+    assert rows == [
+        _row(),
+        Row("regex", "a.yml", "p/x", "github-releases", "-", "p/all"),
+    ]
     assert read_table(format_table(rows)) == rows
 
 
 def test_a_matching_extract_is_clean() -> None:
-    rows = [("regex", "a.yml", "a/b", "docker", "digest")] * 2
+    rows = [_row("digest")] * 2
     assert table_drift(rows, list(rows)) == []
 
 
 def test_a_matchstring_that_lost_its_digest_is_flagged() -> None:
-    expected = [
-        ("regex", "ci.yml", "goreleaser/nfpm", "github-release-attachments", "digest")
-    ]
-    actual = [("regex", "ci.yml", "goreleaser/nfpm", "github-release-attachments", "-")]
+    expected = [_row("digest", "ci.yml", "goreleaser/nfpm")]
+    actual = [_row("-", "ci.yml", "goreleaser/nfpm")]
     assert table_drift(expected, actual) == [
-        "digest no longer captured:\tregex\tci.yml\tgoreleaser/nfpm"
-        "\tgithub-release-attachments"
+        "digest no longer captured:\tregex\tci.yml\tgoreleaser/nfpm\tdocker\t-"
     ]
 
 
 def test_a_pin_digest_renovate_added_is_clean() -> None:
     """Renovate's pinDigest update gives a tag-only pin a digest; its own PR must stay green."""
-    expected = [("regex", "a.yml", "a/b", "docker", "-")]
-    assert table_drift(expected, [("regex", "a.yml", "a/b", "docker", "digest")]) == []
+    assert table_drift([_row("-")], [_row("digest")]) == []
 
 
 def test_a_second_occurrence_the_extract_dropped_is_flagged() -> None:
-    row = ("regex", "a.yml", "a/b", "docker", "-")
-    assert table_drift([row, row], [row]) == [
-        "not extracted:\tregex\ta.yml\ta/b\tdocker"
+    assert table_drift([_row(), _row()], [_row()]) == [
+        "not extracted:\tregex\ta.yml\ta/b\tdocker\t-"
     ]
 
 
 def test_a_dep_the_table_lacks_is_flagged() -> None:
-    row = ("regex", "a.yml", "a/b", "docker", "-")
-    assert table_drift([], [row]) == ["not in the table:\tregex\ta.yml\ta/b\tdocker"]
+    assert table_drift([], [_row()]) == [
+        "not in the table:\tregex\ta.yml\ta/b\tdocker\t-"
+    ]
 
 
 # ── the autoReplaceStringTemplate ─────────────────────────────────────────────────────────
@@ -193,6 +210,32 @@ def test_the_k8s_template_pins_a_digest_onto_a_bare_tag_and_leaves_it_bare_witho
     assert (
         render_auto_replace(K8S_TEMPLATE, **values, newDigest=None) == "_image: a/b:1.0"
     )
+
+
+# ── a captured value cut short ────────────────────────────────────────────────────────────
+
+
+def test_a_value_captured_whole_is_clean() -> None:
+    assert truncated_values([_dep("x", "X_VERSION: 1.2.3", "1.2.3")]) == []
+    assert truncated_values([_dep("x", "/download/v1.2/tool_1.2_linux", "1.2")]) == []
+
+
+def test_a_value_cut_short_of_its_version_is_flagged() -> None:
+    assert truncated_values([_dep("x", "X_VERSION: 1.2.3", "1.2")]) == [
+        "x: a/b captured '1.2' out of 'X_VERSION: 1.2.3'"
+    ]
+
+
+def test_a_jellyfin_plugin_capturing_only_its_release_tag_is_clean() -> None:
+    dep = Dep(
+        "regex",
+        "k8s/roles/jellyfin/defaults/main.yml",
+        "vosmiic/jellyfin-ani-sync",
+        "github-releases",
+        "4.4",
+        replace_string="ani-sync_4.4.0.0.zip",
+    )
+    assert truncated_values([dep]) == []
 
 
 # ── pin lines no span covers ──────────────────────────────────────────────────────────────
@@ -247,6 +290,26 @@ def test_a_control_plane_version_no_manager_reads_is_flagged() -> None:
     )
 
 
+def test_the_pin_line_census_finds_its_known_members_in_the_tree() -> None:
+    found = {
+        (line.file, line.why)
+        for line in pin_lines(tracked_files(), read_file, pinned_versions())
+    }
+    known = {
+        ("k8s/roles/traefik/defaults/main.yml", "an `_image:` key"),
+        ("inventory/group_vars/all.yml", "an `_image:` key"),
+        ("hosts/components/registry-gc/defaults/main.yml", "an `_image:` key"),
+        ("k8s/roles/system-upgrade/defaults/main.yml", "a control-plane version"),
+        (".github/workflows/ci.yml", "a `# renovate:` annotation"),
+        ("hosts/packages/homelab-tools/package.yml", "a `# renovate:` annotation"),
+        (
+            "k8s/roles/metallb/defaults/main.yml",
+            "the version a pinned download renders from",
+        ),
+    }
+    assert known <= found, sorted(known - found)
+
+
 # ── release-download URLs ─────────────────────────────────────────────────────────────────
 
 VALE = (
@@ -290,22 +353,82 @@ def test_a_release_url_in_a_file_no_manager_reads_is_flagged() -> None:
     )
 
 
+def test_the_release_url_census_finds_its_known_files_in_the_tree() -> None:
+    known = {
+        ".github/workflows/ci.yml",
+        ".vale.ini",
+        "k8s/roles/jellyfin/defaults/main.yml",
+    }
+    found = set(release_url_files(tracked_files(), read_file))
+    assert known <= found, sorted(known - found)
+
+
+# ── the Python annotation reader against Renovate's ─────────────────────────────────────
+
+ANNOTATED = (
+    "# renovate: datasource=github-releases depName=vendor/tool\n"
+    'tool_version: "v1.2.3"\n'
+)
+
+
+def _annotated_dep(file: str = ROLE) -> Dep:
+    return Dep(
+        "regex",
+        file,
+        "vendor/tool",
+        "github-releases",
+        "v1.2.3",
+        replace_string=ANNOTATED.rstrip(),
+        dep_type="annotated-pin",
+    )
+
+
+def test_an_annotation_both_readers_see_is_clean() -> None:
+    read = {ROLE: ANNOTATED}.__getitem__
+    assert annotation_reader_drift([_annotated_dep()], [ROLE], read) == []
+
+
+def test_an_annotation_only_renovate_reads_is_flagged() -> None:
+    read = {ROLE: "tool_version: v1.2.3\n"}.__getitem__
+    assert annotation_reader_drift([_annotated_dep()], [ROLE], read) == [
+        f"{ROLE}: Renovate reads the annotated pin vendor/tool (github-releases); "
+        "the Python reader does not"
+    ]
+
+
+def test_an_annotation_only_the_python_reader_reads_is_flagged() -> None:
+    read = {ROLE: ANNOTATED}.__getitem__
+    assert annotation_reader_drift([], [ROLE], read) == [
+        f"{ROLE}: the Python annotation reader reads vendor/tool (github-releases); "
+        "Renovate does not"
+    ]
+
+
 # ── which PRs run the extract ─────────────────────────────────────────────────────────────
 
 
 def test_a_pr_touching_a_pinned_file_runs_the_extract() -> None:
     table = format_table(
-        [("regex", ".vale.ini", "vale-cli/Google", "github-releases", "-")]
+        [Row("regex", ".vale.ini", "vale-cli/Google", "github-releases", "-", "-")]
     )
     assert needs_extract([".vale.ini"], table)
     assert needs_extract(["renovate.json"], table)
     assert needs_extract(["k8s/roles/new-role/defaults/main.yml"], table)
     assert needs_extract(["scripts/validate/renovate_extract.py"], table)
     assert needs_extract(["scripts/validate/asset_pins.py"], table)
+    assert needs_extract(["scripts/lib/renovate_annotations.py"], table)
 
 
 def test_a_pr_touching_only_unpinned_files_skips_the_extract() -> None:
     table = format_table(
-        [("regex", ".vale.ini", "vale-cli/Google", "github-releases", "-")]
+        [Row("regex", ".vale.ini", "vale-cli/Google", "github-releases", "-", "-")]
     )
     assert not needs_extract(["docs/landing.md", "scripts/dev/fanout.py"], table)
+    assert not needs_extract(
+        [], table, added=["docs/new.md", "scripts/dev/new_tool.py"]
+    )
+
+
+def test_a_pr_adding_a_file_a_manager_could_read_runs_the_extract() -> None:
+    table = format_table([])
+    assert needs_extract([], table, added=["k8s/roles/new/templates/Dockerfile.j2"])

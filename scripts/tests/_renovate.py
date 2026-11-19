@@ -14,7 +14,7 @@ from typing import NamedTuple
 from _ratchet_census import tracked_files
 from lib import yaml_fast
 from lib.repo_paths import REPO
-from validate.renovate_extract import TABLE, read_table
+from validate.renovate_extract import TABLE, Row, read_table
 
 # Re-export for modules that import _REPO from this module
 _REPO = REPO
@@ -27,20 +27,10 @@ _CONFIG_MANAGERS = _RENOVATE_CONFIG["customManagers"]
 _PACKAGE_RULES = _RENOVATE_CONFIG["packageRules"]
 
 
-class ExpectedDep(NamedTuple):
-    """One row of the expected-dependency table: a dep Renovate's extract finds."""
-
-    manager: str
-    file: str
-    dep_name: str
-    datasource: str
-    digest: str
+EXPECTED_DEPS = read_table(TABLE.read_text())
 
 
-EXPECTED_DEPS = [ExpectedDep(*row) for row in read_table(TABLE.read_text())]
-
-
-def expected_deps(file: str, dep_name: str) -> list[ExpectedDep]:
+def expected_deps(file: str, dep_name: str) -> list[Row]:
     """The table's rows for one dep in one file, one per occurrence Renovate extracts."""
     return [d for d in EXPECTED_DEPS if d.file == file and d.dep_name == dep_name]
 

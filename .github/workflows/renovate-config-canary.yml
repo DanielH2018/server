@@ -5,8 +5,7 @@ name: renovate-config-canary
 # when renovate.json is next touched. The reasoning for validating unpinned is on the
 # `renovate-config` job in ci.yml, which runs the same script on a PR that touches the file.
 # It also checks Renovate's extract of master against scripts/validate/renovate_expected_deps.tsv,
-# which catches a new file that only a manager's pattern reaches, a case the PR job's scope
-# step cannot see.
+# which catches a Renovate release that reads a file differently on a day nothing changed.
 #
 # This does not run on every push to master. Mend rolls its Renovate forward on its own cadence
 # and deprecates config keys a release ahead, so per-merge buys nothing over daily. Renovate

@@ -3,19 +3,23 @@
 
 `renovate_config.sh extract` runs `renovate --platform=local --dry-run=extract` and hands the
 report it writes to `check`. Renovate itself does the matching, so no Python copy of its regex
-managers can drift from what the hosted app reads. The check fails on four things:
+managers can drift from what the hosted app reads. The check fails on six things:
 
 - a row of `renovate_expected_deps.tsv` that the extract no longer finds, which is what a
   broken matchString or a reformatted pin produces, or a dep the table does not list;
 - a regex dep whose `autoReplaceStringTemplate`, rendered with the values it captured, does not
   reproduce the text it matched, so the next bump would rewrite the line into another shape;
+- a regex dep whose captured value stops short of the version beside it (`1.2` out of
+  `1.2.3`), so the next bump writes `1.3.3`;
 - a pin line that no extracted dep's span covers: a `# renovate:` comment, an `_image:` key in
   the k8s defaults, a control-plane `_version:` key, a version a pinned download renders from,
   or a second occurrence of a release-download version that a bump would leave behind;
-- a tracked file holding a release-download URL that no manager extracts from.
+- a tracked file holding a release-download URL that no manager extracts from;
+- an annotated pin that `lib.renovate_annotations`, the reader `asset_pins.py` refreshes
+  digests with, reads differently from Renovate.
 
 The table holds identity and shape (manager, file, depName, datasource, whether a digest is
-captured), never the version itself, so a Renovate bump PR leaves it unchanged. github-actions
+captured, and packageName where it differs from depName), never the version itself, so a Renovate bump PR leaves it unchanged. github-actions
 and pep621 are left out: their deps are every `uses:` line and every pyproject dependency,
 which Renovate's built-in parsers find without any config of ours.
 
@@ -23,7 +27,7 @@ Typical usage example:
 
     renovate_extract.py check "$RUNNER_TEMP/renovate-extract.json"
     renovate_extract.py write report.json     # regenerate the table after adding a pin
-    renovate_extract.py scope changed.txt     # prints true when the PR can change the extract
+    renovate_extract.py scope changed.txt --added added.txt   # true when the PR can move it
 """
 
 import json
@@ -34,6 +38,7 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from fnmatch import fnmatch
 from pathlib import Path as _Path
+from typing import NamedTuple
 
 # `lib` is a sibling package: a directly-invoked script gets only its own directory on
 # sys.path, and pyproject's `pythonpath` is a pytest setting.
@@ -41,16 +46,24 @@ sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 from lib.cli_help import ArgumentParser
 from lib.git import git_stdout
+from lib.renovate_annotations import annotations_in, is_annotation_manager
 from lib.repo_paths import REPO
 
 TABLE = REPO / "scripts/validate/renovate_expected_deps.tsv"
 # The check's own code and inputs: a PR changing one runs the extract against the real tree.
+# The annotation reader's path comes from the module, because a literal path here reads to
+# lib/script_classify.py as this script invoking it.
 CHECK_FILES = frozenset(
     {
         "scripts/validate/renovate_expected_deps.tsv",
         "scripts/validate/renovate_extract.py",
         "scripts/validate/renovate_config.sh",
         "scripts/validate/asset_pins.py",
+        str(
+            _Path(sys.modules[annotations_in.__module__].__file__ or "")
+            .resolve()
+            .relative_to(REPO)
+        ),
     }
 )
 UNTABLED_MANAGERS = frozenset({"github-actions", "pep621"})
@@ -58,7 +71,7 @@ TABLE_HEADER = (
     "# Every dependency Renovate's extract finds, one row per occurrence, sorted.\n"
     "# scripts/validate/renovate_extract.py checks CI's extract against it; after adding or\n"
     "# moving a pin, regenerate it with `renovate_extract.py write <report>`.\n"
-    "# manager\tfile\tdepName\tdatasource\tdigest\n"
+    "# manager\tfile\tdepName\tdatasource\tdigest\tpackageName\n"
 )
 
 # Images this repo builds and pushes to the node-local registry. Renovate watches each one's
@@ -85,6 +98,20 @@ IMAGE_DEFAULTS = (
 )
 CONTROL_PLANE_DEFAULTS = "k8s/roles/system-upgrade/defaults/main.yml"
 
+# (file, depName) of regex deps whose captured value is deliberately shorter than the version
+# beside it. Each jellyfin plugin's release tag is the leading part of the plugin's four-part
+# version, so the matchStrings capture the tag and rewrite every occurrence in step.
+PARTIAL_VALUE_DEPS = frozenset(
+    {
+        ("k8s/roles/jellyfin/defaults/main.yml", "vosmiic/jellyfin-ani-sync"),
+        ("k8s/roles/jellyfin/defaults/main.yml", "jellyfin/jellyfin-plugin-webhook"),
+        (
+            "k8s/roles/jellyfin/defaults/main.yml",
+            "shemanaev/jellyfin-plugin-media-cleaner",
+        ),
+    }
+)
+
 # Version keys a pinned download renders from that no manager tracks, on purpose.
 UNTRACKED_BY_DECISION = {
     # Covers traefik's in-tree CRD copy, which Renovate cannot rewrite: the image pin is the
@@ -105,6 +132,40 @@ _RELEASE_URL = re.compile(r"releases/download/v([\d.]+)/")
 _COMMENT = re.compile(r"(?m)(?:(?<=^)|(?<=\s))#[^\n]*")
 
 
+class Row(NamedTuple):
+    """One row of the expected-dependency table.
+
+    Attributes:
+        manager: the Renovate manager, `regex` for every custom manager.
+        file: the repo-relative package file.
+        dep_name: Renovate's depName.
+        datasource: Renovate's datasource.
+        digest: `digest` when the dep captures one, else `-`.
+        package_name: Renovate's packageName where it differs from depName, else `-`.
+    """
+
+    manager: str
+    file: str
+    dep_name: str
+    datasource: str
+    digest: str
+    package_name: str
+
+    def identity(self) -> tuple[str, ...]:
+        """Everything but the digest column, which `table_drift` compares one way."""
+        return (
+            self.manager,
+            self.file,
+            self.dep_name,
+            self.datasource,
+            self.package_name,
+        )
+
+    def names(self) -> set[str]:
+        """The names a packageRule's `matchPackageNames` can match this dep by."""
+        return {self.dep_name} | ({self.package_name} - {"-"})
+
+
 @dataclass(frozen=True)
 class Dep:
     """One dependency as the extract reports it.
@@ -118,6 +179,8 @@ class Dep:
         current_digest: the captured digest, empty when the dep carries none.
         replace_string: the exact text the matchString matched, empty for a built-in manager.
         template: the custom manager's autoReplaceStringTemplate, empty when it sets none.
+        package_name: Renovate's packageName, empty when it equals depName.
+        dep_type: Renovate's depType, empty when the manager sets none.
     """
 
     manager: str
@@ -128,14 +191,17 @@ class Dep:
     current_digest: str = ""
     replace_string: str = ""
     template: str = ""
+    package_name: str = ""
+    dep_type: str = ""
 
-    def row(self) -> tuple[str, str, str, str, str]:
-        return (
+    def row(self) -> Row:
+        return Row(
             self.manager,
             self.file,
             self.dep_name,
             self.datasource,
             "digest" if self.current_digest else "-",
+            self.package_name or "-",
         )
 
 
@@ -158,41 +224,47 @@ def deps_in(report: dict) -> list[Dep]:
                         current_digest=dep.get("currentDigest") or "",
                         replace_string=dep.get("replaceString") or "",
                         template=package_file.get("autoReplaceStringTemplate") or "",
+                        package_name=_package_name(dep),
+                        dep_type=dep.get("depType") or "",
                     )
                 )
     return deps
 
 
-def table_rows(deps: Iterable[Dep]) -> list[tuple[str, ...]]:
+def _package_name(dep: dict) -> str:
+    name = dep.get("packageName") or ""
+    return "" if name == dep.get("depName") else name
+
+
+def table_rows(deps: Iterable[Dep]) -> list[Row]:
     return sorted(d.row() for d in deps if d.manager not in UNTABLED_MANAGERS)
 
 
-def format_table(rows: Iterable[tuple[str, ...]]) -> str:
+def format_table(rows: Iterable[Row]) -> str:
     return TABLE_HEADER + "".join("\t".join(r) + "\n" for r in rows)
 
 
-def read_table(text: str) -> list[tuple[str, ...]]:
+def read_table(text: str) -> list[Row]:
     return [
-        tuple(line.split("\t"))
+        Row(*line.split("\t"))
         for line in text.splitlines()
         if line and not line.startswith("#")
     ]
 
 
-def table_drift(
-    expected: Iterable[tuple[str, ...]], actual: Iterable[tuple[str, ...]]
-) -> list[str]:
-    """One line per dep the table and the extract disagree on, the row tab-separated.
+def table_drift(expected: Iterable[Row], actual: Iterable[Row]) -> list[str]:
+    """One line per dep the table and the extract disagree on, the identity tab-separated.
 
-    Deps compare on (manager, file, depName, datasource), as a multiset. The digest column
-    fails only one way: a dep the table records with a digest that comes back without one,
-    which is what a matchString that stopped capturing it produces. A dep gaining a digest is
-    Renovate's own pinDigest update landing, so it passes.
+    Deps compare on `Row.identity`, as a multiset. The digest column fails only one way: a dep
+    the table records with a digest that comes back without one, which is what a matchString
+    that stopped capturing it produces. A dep gaining a digest is Renovate's own pinDigest
+    update landing, so it passes.
     """
     expected, actual = list(expected), list(actual)
-    want, got = Counter(r[:4] for r in expected), Counter(r[:4] for r in actual)
-    want_digest = Counter(r[:4] for r in expected if r[4] == "digest")
-    got_digest = Counter(r[:4] for r in actual if r[4] == "digest")
+    want = Counter(r.identity() for r in expected)
+    got = Counter(r.identity() for r in actual)
+    want_digest = Counter(r.identity() for r in expected if r.digest == "digest")
+    got_digest = Counter(r.identity() for r in actual if r.digest == "digest")
     lost = (want_digest - got_digest) & got
     return (
         [f"not extracted:\t{chr(9).join(r)}" for r in sorted((want - got).elements())]
@@ -248,6 +320,29 @@ def broken_templates(deps: Iterable[Dep]) -> list[str]:
         )
         if rendered != d.replace_string:
             problems.append(f"{d.file}: {d.replace_string!r} -> {rendered!r}")
+    return problems
+
+
+def truncated_values(deps: Iterable[Dep]) -> list[str]:
+    """Each regex dep whose captured value is followed in its own span by more version digits.
+
+    A matchString capturing `1.2` out of `X_VERSION: 1.2.3` still covers the pin line, so only
+    this check sees it, and the next bump writes `1.3.3`. PARTIAL_VALUE_DEPS are deliberate.
+    """
+    problems = []
+    for d in deps:
+        if d.manager != "regex" or not d.current_value or not d.replace_string:
+            continue
+        if (d.file, d.dep_name) in PARTIAL_VALUE_DEPS:
+            continue
+        ends = [
+            m.end() for m in re.finditer(re.escape(d.current_value), d.replace_string)
+        ]
+        if ends and all(re.match(r"\.?\d", d.replace_string[e:]) for e in ends):
+            problems.append(
+                f"{d.file}: {d.dep_name} captured {d.current_value!r} out of "
+                f"{d.replace_string!r}"
+            )
     return problems
 
 
@@ -337,9 +432,60 @@ def uncovered_pin_lines(
     return problems
 
 
+def annotation_reader_drift(
+    deps: Iterable[Dep], files: Iterable[str], read: Callable[[str], str]
+) -> list[str]:
+    """Each annotated pin the Python reader and Renovate's extract disagree on.
+
+    `asset_pins.py` reads `# renovate:` annotations through `lib.renovate_annotations`,
+    which runs renovate.json's annotation matchString as a Python regex. An RE2 construct
+    Python reads differently would make it see other pins than Renovate does; this holds the
+    two to the same (file, depName, datasource) multiset.
+    """
+    config = json.loads((REPO / "renovate.json").read_text())
+    (manager,) = [m for m in config["customManagers"] if is_annotation_manager(m)]
+    renovate = Counter(
+        (d.file, d.dep_name, d.datasource)
+        for d in deps
+        if d.manager == "regex" and d.dep_type == manager["depTypeTemplate"]
+    )
+    python = Counter(
+        (path, groups["depName"], groups["datasource"])
+        for path in files
+        if not is_release_url_exempt(path) and "renovate:" in (text := read(path))
+        for groups in annotations_in(manager, text)
+    )
+    return [
+        f"{f}: the Python annotation reader reads {name} ({ds}); Renovate does not"
+        for f, name, ds in sorted((python - renovate).elements())
+    ] + [
+        f"{f}: Renovate reads the annotated pin {name} ({ds}); the Python reader does not"
+        for f, name, ds in sorted((renovate - python).elements())
+    ]
+
+
 def is_release_url_exempt(path: str) -> bool:
     """Prose and code, where a release URL is a citation or a fixture, never a pin."""
     return path.endswith((".md", ".py")) or path == "renovate.json"
+
+
+def _release_url_pins(
+    files: Iterable[str], read: Callable[[str], str]
+) -> Iterable[tuple[str, str, str, set[str]]]:
+    """(path, text, text with comments blanked, versions) for each file with a release URL."""
+    for path in files:
+        if is_release_url_exempt(path):
+            continue
+        text = read(path)
+        code = _COMMENT.sub(lambda m: " " * len(m.group()), text)
+        versions = {m.group(1) for m in _RELEASE_URL.finditer(code)}
+        if versions:
+            yield path, text, code, versions
+
+
+def release_url_files(files: Iterable[str], read: Callable[[str], str]) -> list[str]:
+    """The files `release_url_problems` holds to the extract."""
+    return [path for path, *_ in _release_url_pins(files, read)]
 
 
 def release_url_problems(
@@ -356,14 +502,7 @@ def release_url_problems(
     """
     package_files = {d.file for d in deps}
     problems = []
-    for path in files:
-        if is_release_url_exempt(path):
-            continue
-        text = read(path)
-        code = _COMMENT.sub(lambda m: " " * len(m.group()), text)
-        versions = {m.group(1) for m in _RELEASE_URL.finditer(code)}
-        if not versions:
-            continue
+    for path, text, code, versions in _release_url_pins(files, read):
         if path not in package_files:
             problems.append(f"{path}: a release-download URL no manager extracts from")
             continue
@@ -378,16 +517,16 @@ def release_url_problems(
     return problems
 
 
-def _tracked() -> list[str]:
+def tracked_files() -> list[str]:
     out = git_stdout("ls-files", "-z", cwd=REPO)
     return [p for p in out.split("\0") if p and (REPO / p).is_file()]
 
 
-def _read(rel: str) -> str:
+def read_file(rel: str) -> str:
     return (REPO / rel).read_text(errors="replace")
 
 
-def _pinned_versions() -> list[tuple[str, str]]:
+def pinned_versions() -> list[tuple[str, str]]:
     from validate.asset_pins import discover_pins
 
     pins, _ = discover_pins()
@@ -401,24 +540,31 @@ def _pinned_versions() -> list[tuple[str, str]]:
 
 def check(report: dict, table_text: str) -> list[str]:
     deps = deps_in(report)
-    files = _tracked()
-    lines = pin_lines(files, _read, _pinned_versions())
+    files = tracked_files()
+    lines = pin_lines(files, read_file, pinned_versions())
     return (
         table_drift(read_table(table_text), table_rows(deps))
         + broken_templates(deps)
-        + uncovered_pin_lines(lines, deps, _read)
-        + release_url_problems(files, deps, _read)
+        + truncated_values(deps)
+        + uncovered_pin_lines(lines, deps, read_file)
+        + release_url_problems(files, deps, read_file)
+        + annotation_reader_drift(deps, files, read_file)
     )
 
 
-def needs_extract(changed: Iterable[str], table_text: str) -> bool:
-    """Whether a PR changing `changed` can change what the extract finds.
+def needs_extract(
+    changed: Iterable[str], table_text: str, added: Iterable[str] = ()
+) -> bool:
+    """Whether a PR changing `changed` and adding `added` can change what the extract finds.
 
-    True for renovate.json, the table, a file the table lists, a file a census rule reads, or
-    the check itself. A new file that only a manager's pattern would match is left to the
-    daily canary.
+    True for renovate.json, the table, a file the table lists, a file a census rule reads, the
+    check itself, or an added file that is not prose or Python: no rule here can tell which
+    new file a manager's pattern reaches, and a dep the table missed would fail every later
+    PR that runs the extract.
     """
-    watched = {row[1] for row in read_table(table_text)}
+    if any(not is_release_url_exempt(p) and not p.startswith("docs/") for p in added):
+        return True
+    watched = {row.file for row in read_table(table_text)}
     watched |= {"renovate.json", *CHECK_FILES}
     for path in changed:
         if path in watched or any(fnmatch(path, g) for g in IMAGE_DEFAULTS):
@@ -429,6 +575,12 @@ def needs_extract(changed: Iterable[str], table_text: str) -> bool:
             if "renovate:" in text or _RELEASE_URL.search(text):
                 return True
     return False
+
+
+def _path_lists(files: Iterable[_Path]) -> list[str]:
+    return [
+        line for f in files if f.exists() for line in f.read_text().splitlines() if line
+    ]
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -446,17 +598,14 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument(
         "changed", type=_Path, nargs="+", help="files listing one path per line"
     )
+    p.add_argument(
+        "--added", type=_Path, action="append", default=[], help="a file of added paths"
+    )
     args = parser.parse_args(argv)
 
     if args.cmd == "scope":
-        changed = [
-            line
-            for f in args.changed
-            if f.exists()
-            for line in f.read_text().splitlines()
-            if line
-        ]
-        print("true" if needs_extract(changed, TABLE.read_text()) else "false")
+        changed, added = _path_lists(args.changed), _path_lists(args.added)
+        print("true" if needs_extract(changed, TABLE.read_text(), added) else "false")
         return 0
     report = json.loads(args.report.read_text())
     if args.cmd == "write":
