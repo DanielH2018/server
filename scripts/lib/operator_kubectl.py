@@ -24,10 +24,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Protocol
 
-import sys as _sys
-from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))  # scripts/
 from lib.kubectl import (
     DEFAULT_CLUSTER,
     K3S_KUBECONFIG,

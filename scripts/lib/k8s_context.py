@@ -8,11 +8,6 @@ render context, in Ansible's precedence, is `lib.render_context`. The `bool` fil
 guard.
 """
 
-import sys as _sys
-from pathlib import Path as _Path
-
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
-
 import functools
 import re
 

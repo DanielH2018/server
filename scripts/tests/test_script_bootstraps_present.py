@@ -295,72 +295,130 @@ def _insert_target(node: ast.Call, file: Path, index) -> Path | None:
     return eval_path_expr(arg, file, index, frozenset())
 
 
+HOST_MODULES = SCRIPTS / "lib" / "host_modules.py"
+
+
+def _imports_host_modules(node: ast.AST) -> bool:
+    if isinstance(node, ast.ImportFrom):
+        return node.module == "lib" and any(
+            a.name == "host_modules" for a in node.names
+        )
+    return isinstance(node, ast.Import) and any(
+        a.name == "lib.host_modules" for a in node.names
+    )
+
+
+def host_module_dirs(index: dict[str, set[Path]]) -> set[Path]:
+    """The directories `lib.host_modules` puts on `sys.path`, read from its own inserts."""
+    return {
+        target.resolve()
+        for call, _ in _sys_path_insert_calls(_parsed(HOST_MODULES))
+        if (target := _insert_target(call, HOST_MODULES, index)) is not None
+    }
+
+
 def find_bootstrap_gaps(
     index: dict[str, set[Path]] | None = None,
 ) -> tuple[list[tuple[Path, int, str, set[Path]]], list[tuple[Path, int, str]]]:
     """Every cross-directory import missing a bootstrap that resolves to the right directory,
-    plus every one whose only candidate insert could not be evaluated at all."""
+    plus every one whose only candidate insert could not be evaluated at all.
+
+    `scripts/` itself needs no bootstrap: the editable install supplies it in a venv and the
+    launcher's `PYTHONPATH` outside one (docs/adr/0039-scripts-is-installed-in-place.md). An
+    earlier import of `lib.host_modules` supplies the directories that module inserts.
+    """
     if index is None:
         index = build_import_index()
+    host_dirs = host_module_dirs(index)
     missing: list[tuple[Path, int, str, set[Path]]] = []
     unresolvable: list[tuple[Path, int, str]] = []
     for file in sorted(SCRIPTS.rglob("*.py")):
         # A Job's ConfigMap carries a `job_files` module flat beside what it imports.
         if is_pytest_only(file.relative_to(REPO)) or "job_files" in file.parts:
             continue
-        tree = _parsed(file)
-        own_dir = file.parent.resolve()
-        inserts = _sys_path_insert_calls(tree)
-        for node, scope in _scoped_nodes(tree):
-            if isinstance(node, ast.ImportFrom):
-                if node.level != 0 or not node.module:
-                    continue
-                top = node.module.split(".")[0]
-            elif isinstance(node, ast.Import):
-                top = node.names[0].name.split(".")[0]
-            else:
-                continue
-            required_dirs = index.get(top)
-            if not required_dirs:
-                continue  # stdlib / third-party / not a repo-indexed module
-            if own_dir in required_dirs:
-                continue  # same-directory import, no bootstrap needed
-
-            candidates = [
-                (call, s, _insert_target(call, file, index))
-                for call, s in inserts
-                if s is None or (s is scope and call.lineno < node.lineno)
-            ]
-            resolved = [target for _, _, target in candidates if target is not None]
-            if any(target.resolve() in required_dirs for target in resolved):
-                continue
-            outside_repo = [
-                t
-                for t in resolved
-                if REPO not in t.resolve().parents and t.resolve() != REPO
-            ]
-            if outside_repo:
-                # Deliberate runtime-only coupling to a path deployed outside the repo tree
-                # (e.g. /opt/<role>/host_lib.py) -- not a repo cross-directory import bug.
-                continue
-            if candidates and not resolved:
-                unresolvable.append(
-                    (
-                        file,
-                        node.lineno,
-                        node.module if isinstance(node, ast.ImportFrom) else top,
-                    )
-                )
-                continue
-            missing.append(
-                (
-                    file,
-                    node.lineno,
-                    node.module if isinstance(node, ast.ImportFrom) else top,
-                    required_dirs,
-                )
-            )
+        gaps, unread = file_gaps(file, _parsed(file), index, host_dirs)
+        missing += gaps
+        unresolvable += unread
     return missing, unresolvable
+
+
+def file_gaps(
+    file: Path, tree: ast.Module, index: dict[str, set[Path]], host_dirs: set[Path]
+) -> tuple[list[tuple[Path, int, str, set[Path]]], list[tuple[Path, int, str]]]:
+    """`find_bootstrap_gaps` for one module, whose source `tree` sits at path `file`."""
+    missing: list[tuple[Path, int, str, set[Path]]] = []
+    unresolvable: list[tuple[Path, int, str]] = []
+    own_dir = file.parent.resolve()
+    inserts = _sys_path_insert_calls(tree)
+    host_import_lines = [
+        (n.lineno, s) for n, s in _scoped_nodes(tree) if _imports_host_modules(n)
+    ]
+    for node, scope in _scoped_nodes(tree):
+        if isinstance(node, ast.ImportFrom):
+            if node.level != 0 or not node.module:
+                continue
+            top = node.module.split(".")[0]
+        elif isinstance(node, ast.Import):
+            top = node.names[0].name.split(".")[0]
+        else:
+            continue
+        required_dirs = index.get(top)
+        if not required_dirs:
+            continue  # stdlib / third-party / not a repo-indexed module
+        if own_dir in required_dirs or SCRIPTS in required_dirs:
+            continue
+        if required_dirs & host_dirs and any(
+            s is None or (s is scope and line < node.lineno)
+            for line, s in host_import_lines
+        ):
+            continue
+
+        candidates = [
+            (call, s, _insert_target(call, file, index))
+            for call, s in inserts
+            if s is None or (s is scope and call.lineno < node.lineno)
+        ]
+        resolved = [target for _, _, target in candidates if target is not None]
+        if any(target.resolve() in required_dirs for target in resolved):
+            continue
+        outside_repo = [
+            t
+            for t in resolved
+            if REPO not in t.resolve().parents and t.resolve() != REPO
+        ]
+        if outside_repo:
+            # Deliberate runtime-only coupling to a path deployed outside the repo tree
+            # (e.g. /opt/<role>/host_lib.py) -- not a repo cross-directory import bug.
+            continue
+        name = node.module if isinstance(node, ast.ImportFrom) else top
+        if candidates and not resolved:
+            unresolvable.append((file, node.lineno, name))
+            continue
+        missing.append((file, node.lineno, name, required_dirs))
+    return missing, unresolvable
+
+
+def _synthetic_gaps(source: str) -> list[str]:
+    index = build_import_index()
+    file = SCRIPTS / "deploy_tools" / "_synthetic.py"
+    gaps, _ = file_gaps(file, ast.parse(source), index, host_module_dirs(index))
+    return [name for _, _, name, _ in gaps]
+
+
+def test_a_host_lib_import_after_host_modules_is_clean():
+    assert _synthetic_gaps("from lib import host_modules\nimport host_lib\n") == []
+
+
+def test_a_host_lib_import_with_no_host_modules_import_is_flagged():
+    assert _synthetic_gaps("import host_lib\n") == ["host_lib"]
+
+
+def test_a_dotted_import_from_the_installed_root_is_clean():
+    assert _synthetic_gaps("from lib.git import git\n") == []
+
+
+def test_a_bare_sibling_import_with_no_insert_is_flagged():
+    assert _synthetic_gaps("from fanout_lib import place\n") == ["fanout_lib"]
 
 
 def test_every_cross_directory_import_has_a_working_bootstrap():

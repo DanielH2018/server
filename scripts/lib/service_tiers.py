@@ -11,11 +11,6 @@ Python reader of the tier lists resolves them here, through the same filters
 shed set ``probe.py shed-set`` prints, from the same module.
 """
 
-import sys as _sys
-from pathlib import Path as _Path
-
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
-
 from lib.k8s_roles import k8s_entries
 from lib.render_guard import load_yaml
 from lib.repo_paths import ALL_VARS

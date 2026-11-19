@@ -14,11 +14,6 @@ stdlib ``secrets``.
 # Its interface is two functions over ~200 lines of import resolution, so it is deep rather
 # than a pass-through seam, and folding it in would push `script_classify` past 650 lines.
 
-import sys as _sys
-from pathlib import Path as _Path
-
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
-
 import ast
 import functools
 import tomllib

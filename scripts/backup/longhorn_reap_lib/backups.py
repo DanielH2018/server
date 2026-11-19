@@ -101,9 +101,8 @@ from pathlib import Path as _Path
 # package's parent for `longhorn_reap_lib`, and scripts/ for `lib`.
 sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))  # scripts/backup/
 sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
-from lib.repo_paths import HOST_LIB_FILES
 
-sys.path.insert(0, str(HOST_LIB_FILES))
+from lib import host_modules  # noqa: F401
 import host_lib
 from lib.cli_help import answer_help
 from lib.exit_codes import USAGE_ERROR

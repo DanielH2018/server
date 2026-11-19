@@ -6,7 +6,6 @@ builder agree on what green means. `ci_check` prints that reduction for one comm
 dispatched `sha`. `promote.py` re-exports all three names.
 """
 
-import sys
 from pathlib import Path
 
 import yaml
@@ -20,13 +19,12 @@ _sys.path.insert(1, str(_Path(__file__).resolve().parents[1]))
 from lib import yaml_fast
 from lib.cli_help import error
 from lib.exit_codes import FAILED, OK
-from lib.repo_paths import HOST_LIB_FILES
 
 import forge
 from deploy_tools.promote_lib.prune import READ_ERRORS, ReadError
 
 # ci_verdict imports nothing first-party, so this pulls in no other host module.
-sys.path.insert(0, str(HOST_LIB_FILES))
+from lib import host_modules  # noqa: F401
 from ci_verdict import CIVerdict, ci_verdict
 
 # The required check-run names, as one literal so a `git grep` for the path or the key finds

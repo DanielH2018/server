@@ -60,10 +60,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from lib.cli_help import ArgumentParser
 from lib.git import git
-from lib.repo_paths import HOST_LIB_FILES
 from lib.tree_stack import Conflict, stack
 
-sys.path.insert(0, str(HOST_LIB_FILES))
+from lib import host_modules  # noqa: F401
 from ci_verdict import CI_GATE_NAME, CIVerdict, ci_verdict, parse_check_runs
 
 # The commit-status context the PR run writes and this script reads. ci.yml's `prek` job writes
