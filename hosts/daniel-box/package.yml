@@ -116,6 +116,8 @@ components:
   - gh-quota
   - host-hardening
   - rsyslog-filter
+  # Last, so its directory entry renders after every marker entry above.
+  - kuma-check-dir
 units:
   k3s.service: {policy: windowed}
 credentials:
