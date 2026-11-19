@@ -523,7 +523,6 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/freshrss/scrape_feed.py` | freshrss | Find a feed source for a site without RSS, and check FreshRSS XPath scraping rules. | no automated caller in the tree | `test_scrape_feed.py` | — |
 | `scripts/backup/seed_volume_backup.py` | backup | Give one Longhorn volume its first backup now, instead of waiting for its recurring job. | no automated caller in the tree | — | — |
 | `scripts/z2m/set_device_option.sh` | z2m | set one Zigbee2MQTT device option over MQTT and confirm it applied. | no automated caller in the tree | `test_set_device_option.py` | — |
-| `scripts/dev/split_module.py` | dev | Split a large Python module along its seams: show the references, then move names by spec. | no automated caller in the tree | `test_split_module.py` | — |
 | `scripts/renderer/standalone_map.py` | renderer | Write the standalone-value guard's key map from a placeholder render (target slice R2). | no automated caller in the tree | — | — |
 | `scripts/diagnostics/storage_smoke.py` | diagnostics | Prove Longhorn can bind a volume on a new cluster, by binding one and removing it. | no automated caller in the tree | `test_storage_smoke.py` | — |
 | `scripts/dev/takeover_census.py` | dev | List the managed fields a Flux takeover strips or leaves behind, from two JSON inputs (H1.1j). | no automated caller in the tree | `test_takeover_census.py` | — |
@@ -857,13 +856,6 @@ uv run python scripts/docs/reference/secrets.py --out docs/reference/secrets.md
 
 ```
 uv run python scripts/docs/reference/size.py --out docs/reference/size.md
-```
-
-### `scripts/dev/split_module.py`
-
-```
-uv run python scripts/dev/split_module.py graph SRC
-uv run python scripts/dev/split_module.py split SRC SPEC.json
 ```
 
 ### `scripts/docs/reference/state.py`
