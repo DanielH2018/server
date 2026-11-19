@@ -165,6 +165,14 @@ def test_both_sessions_send_their_traffic_through_the_proxy(box):
         assert "Wants=squid.service" in text, unit
 
 
+def test_no_session_sends_claude_codes_nonessential_traffic(box):
+    """Error reports go to an intake the egress allowlist leaves out, so the session never tries."""
+    for unit in SESSION_UNITS:
+        assert "Environment=CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1\n" in rendered(
+            box, unit
+        ), unit
+
+
 def test_without_a_proxy_address_no_session_names_one(box_off):
     for unit in SESSION_UNITS:
         text = rendered(box_off, unit)
