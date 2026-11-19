@@ -127,8 +127,10 @@ pre-squash commits, so the follow-up PR opens CONFLICTING and GitHub runs no che
 ## Reading the verdict
 
 The `VERDICT:` line is the last line of the log. The line above it,
-`LAND-RESULT: verdict=… cause=… exit=… pr=… sha=… tags=<count>`, carries the same
-outcome as logfmt for a script to read. `land.sh --help` lists the closed vocabulary;
+`LAND-RESULT: verdict=… cause=… exit=… pr=… sha=… tags=<count> hold_sha=… hold_owner=… merge=…`,
+carries the same outcome as logfmt for a script to read. `hold_sha` and `hold_owner` (`own`,
+`other` or `unattributed`) are set beside cause `promote-held`, and `merge` is the whole
+merge commit; `docs/landing.md`, *The `LAND-RESULT:` line*, has each field. `land.sh --help` lists the closed vocabulary;
 `land_lib/outcome.py:Verdict` is where it is defined. Seven of them need a decision from you:
 
 | Verdict | What to do |

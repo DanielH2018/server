@@ -26,6 +26,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 
 from fanout_lib import manifest as manifest_mod
+from fanout_lib import status as status_mod
 from fanout_lib.manifest import Batch, Manifest
 from fanout_lib.target import SERVER_TARGET, Target, resolve
 from fanout_lib.transport import REPO, Tools
@@ -92,6 +93,21 @@ def _drop_merged_branch(repo: str, tree: Worktree, merged: bool, brancher) -> st
     return "" if ok else f"— branch {tree.branch} not deleted: {err}"
 
 
+PARKED_KEPT = (
+    "— parked with its PR unmerged: the tree holds the batch's claims and the PR holds its "
+    "edits, so re-land it first"
+)
+
+
+def is_parked(worktree: str) -> bool:
+    """Whether the batch in `worktree` ended `parked`, read from the report it left there."""
+    try:
+        report = (_Path(worktree) / ".fanout" / "report.json").read_text()
+    except OSError:
+        return False
+    return status_mod.final_state(report) == status_mod.PARKED
+
+
 def clean_one(
     repo: str,
     tree: Worktree,
@@ -103,6 +119,10 @@ def clean_one(
     brancher=delete_branch,
 ) -> tuple[str, str]:
     """Remove `tree` when its branch landed and it is clean; otherwise keep it and say why.
+
+    A batch that ended `parked` with its PR unmerged is kept whatever else holds, and the
+    reason names the re-land: its claims expire with the worktree, and the open PR still
+    holds the edits. A batch parked after its merge is judged like any merged one.
 
     `classify` reads a `fanout-<batch>` launch lock as live for a day after launch, and while
     the batch's unit is active (`lib.fanout_lock`). The caller has already checked the unit,
@@ -141,6 +161,8 @@ def clean_one(
     """
     unlocked = dataclasses.replace(tree, locked=False, lock_reason="")
     merged = ask(repo, tree.head, tree.branch or "")
+    if not merged and is_parked(tree.path):
+        return "kept", PARKED_KEPT
     try:
         tree_is_dirty = dirty(tree.path)
     except FileNotFoundError:

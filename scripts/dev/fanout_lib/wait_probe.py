@@ -21,7 +21,8 @@ fanout` therefore prints one line each time a batch finishes, and nothing in bet
 decides:
 
     finished         0   every batch landed, is done, or was cleaned
-    needs-attention  1   a batch needs a hand: needs-input, no-pr, no-verdict, no-report
+    needs-attention  1   a batch needs a hand: parked, needs-input, no-pr, no-verdict,
+                         no-report
     failed           5   a batch failed (status's own tier 5)
 
 The detail then carries each batch line that is not plain success, so the last line is what
