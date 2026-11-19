@@ -18,8 +18,15 @@ import k3s_gates
 from k3s_gates import Api, ReadError
 
 
+# How long `/slow` holds a request, and the bound a read cut off at a 0.2 s timeout must meet.
+STALLED = 30.0
+CUT_OFF_BY = 5.0
+
+
 class _Handler(http.server.BaseHTTPRequestHandler):
     seen_auth: ClassVar[list[str]] = []
+    # Set when the fixture ends, so a `/slow` thread does not outlive its test.
+    release: ClassVar[threading.Event] = threading.Event()
 
     def do_GET(self):
         type(self).seen_auth.append(self.headers.get("Authorization", ""))
@@ -32,7 +39,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         elif self.path == "/array":
             body, code = b"[1]", 200
         elif self.path == "/slow":
-            time.sleep(1.0)
+            type(self).release.wait(STALLED)
             body, code = b"{}", 200
         else:
             body, code = b"{}", 404
@@ -47,9 +54,11 @@ class _Handler(http.server.BaseHTTPRequestHandler):
 @pytest.fixture
 def server():
     _Handler.seen_auth = []
+    _Handler.release = threading.Event()
     httpd = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _Handler)
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
     yield f"http://127.0.0.1:{httpd.server_address[1]}"
+    _Handler.release.set()
     httpd.shutdown()
     httpd.server_close()
 
@@ -97,7 +106,7 @@ def test_a_slow_server_is_cut_off_at_the_read_timeout(server, token):
     started = time.monotonic()
     with pytest.raises(ReadError):
         Api(server, token, "/nope", timeout=0.2)("/slow")
-    assert time.monotonic() - started < 0.9
+    assert time.monotonic() - started < CUT_OFF_BY
 
 
 def test_a_passed_deadline_refuses_every_read(server, token):
@@ -111,7 +120,7 @@ def test_a_near_deadline_shortens_the_read_timeout(server, token):
     started = time.monotonic()
     with pytest.raises(ReadError):
         api("/slow")
-    assert time.monotonic() - started < 0.9
+    assert time.monotonic() - started < CUT_OFF_BY
 
 
 # ── the poll loop ────────────────────────────────────────────────────────────────────────────
