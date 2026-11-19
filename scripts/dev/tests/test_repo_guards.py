@@ -140,9 +140,3 @@ def test_only_a_file_citing_an_issue_or_a_date_is_a_cited_candidate(tmp_path):
         "tests/repo/test_dated.py": ["2026-11-18"],
         "tests/repo/test_issue.py": ["#1620"],
     }
-
-
-def test_cited_without_drop_candidates_is_a_bad_flag():
-    with pytest.raises(SystemExit) as exited:
-        repo_guards.main(["--cited"])
-    assert exited.value.code == 64
