@@ -1,4 +1,4 @@
-"""The master commit a head's green `ci.yml` PR run tested it against (issue #5487).
+"""The master commit a head's green `ci.yml` PR run tested it against.
 
 `stale_base.master_paths_since` judges a green head stale by what master changed since this
 commit. A pull_request run checks out `refs/pull/N/merge`, which GitHub builds when the PR's
@@ -28,8 +28,7 @@ def tested_base(head: str, gh_json=run_gh_json, gh=run_gh) -> str | None:
     """The master commit `head`'s green `ci.yml` PR run was tested against; None if unreadable.
 
     No API field of the run, its check suite or the PR names that merge commit's base: the
-    run's `pull_requests[].base.sha` tracks the PR's base as it stands now (it differed from
-    the logged base on #5474), and the PR's `merge_commit_sha` is rewritten as master moves.
+    run's `pull_requests[].base.sha` tracks the PR's base as it stands now, and the PR's `merge_commit_sha` is rewritten as master moves.
     The one record is the checkout step's log line `Merge <head> into <base>`, so this reads
     the newest successful run's log for that line. Any failure answers None and the caller
     falls back to the merge base, which only ever updates a branch it did not need to.

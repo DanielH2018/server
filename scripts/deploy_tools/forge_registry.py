@@ -2,7 +2,7 @@
 
 `forge.py` re-exports `Registry`, `REGISTRY`, `ARTIFACT` and `MANIFEST_ACCEPT`, so a caller
 names them as `forge.<name>` and never imports this module. `Registry` moved here when
-`forge.py` reached its length cap and the check-runs reader needed room to page (#5977).
+`forge.py` reached its length cap and the check-runs reader needed room to page.
 """
 
 import base64

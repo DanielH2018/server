@@ -4,7 +4,7 @@ Split out of longhorn_backup_health_logic.py when that module reached its length
 contract as the module it came from: stdlib only, every clock reading and every read injected,
 no cluster needed to test it.
 
-Check 9 reads what each job SAID (#2418). Check 10 reads whether it ran at all (#2443). They are
+Check 9 reads what each job SAID. Check 10 reads whether it ran at all. They are
 separate arms because silence and a bad verdict are different faults with different fixes.
 
 - The **filesystem trim** is Longhorn's `trim` RecurringJob (H2.2c of
@@ -235,7 +235,7 @@ class CronLines(NamedTuple):
 
     Attributes:
         completed: matches the line every COMPLETED run prints, and nothing a run that died
-            prints (#2545).
+            prints.
         marker: the literal a bad verdict carries.
         meaning: what the marker means, for the problem text.
     """
@@ -306,7 +306,7 @@ _CRON_PERIOD_S = 86400
 def cron_completed(tag: str, lines: list[str]) -> bool:
     """Whether the window holds the line a COMPLETED run of the cron logging under `tag` prints.
 
-    Any line at all is not enough (#2545): the unit sends both streams to the journal, so a run
+    Any line at all is not enough: the unit sends both streams to the journal, so a run
     that logged a traceback and exited non-zero would otherwise read as alive.
     """
     completed = CRON_LINES[tag].completed
@@ -330,7 +330,7 @@ class CronState(NamedTuple):
             `/etc/cron.d` is 0700 root on these hosts (initial_setup's CIS hardening), so the
             sys_user this check runs as can never stat `path`. The stamp is the reader that
             needs no root: it says the cron FIRED, which is the half of "installed and
-            firing" that matters (#3677).
+            firing" that matters.
         fired_at: the stamp's mtime, or None when it does not exist or could not be read.
     """
 
@@ -352,7 +352,7 @@ def check_cron_liveness(
     """Check 10's B2 arm: whether the cron still fires, as distinct from what it said.
 
     Check 9 reads the cron's CONTENT and stays green on an empty window, so a cron whose entry
-    is removed or whose crontab is lost would leave check 9 green forever (#2443). Silence alone
+    is removed or whose crontab is lost would leave check 9 green forever. Silence alone
     is not the alarm. Three things legitimately produce it, and each is answered without a new
     tunable:
 
@@ -363,7 +363,7 @@ def check_cron_liveness(
       just rewritten. The window is already one period plus slack, so it is the grace too.
 
     The arm judges silence on a RECOGNISED line, so it proves the cron COMPLETED rather than
-    merely fired (#2545).
+    merely fired.
     """
     if window_hours * 3600 < _CRON_PERIOD_S:
         return None

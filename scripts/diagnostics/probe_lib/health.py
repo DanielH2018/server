@@ -239,7 +239,7 @@ def _read(cluster, args, tools=DEFAULT_TOOLS):
     Only kubectl's own `(NotFound)` answer means absent. Any other failure (a timeout, an
     apiserver that did not answer, a Forbidden, output that is not JSON) means the probe did
     not see the cluster, and reading it as None printed MISSING for a workload nobody looked
-    at, or the no-Deployment line `detach_notify` counts as a skip (#4444).
+    at, or the no-Deployment line `detach_notify` counts as a skip.
 
     Raises:
         core.Unreadable: the read failed for any reason but NotFound.
@@ -389,7 +389,7 @@ def run_health(
         # reaches the Bash classifier.
         # A failed ssh or an unparseable inspect is a read that did not happen, not an absent
         # container: reporting it as `[]` printed "MISSING — the deploy did not create it"
-        # for a Pi that was only unreachable (#4444).
+        # for a Pi that was only unreachable.
         argv = pi_ssh_argv(shlex.join(inspect_argv(container)))
         out = subprocess.run(argv, capture_output=True, text=True)
         if out.returncode != 0:
@@ -419,11 +419,11 @@ def run_health(
     refusal = cluster_refusal(cluster, served_name)
     if refusal:
         # No workload was looked at, so this is a read that did not happen, not a verdict
-        # about the container (#4468).
+        # about the container.
         print(f"{container}: {refusal}", file=_sys.stderr)
         return PROBE_UNREADABLE
 
-    # Before the resolver: an old definition of the role yields no verdict (#5912).
+    # Before the resolver: an old definition of the role yields no verdict.
     if stale := stale_reason(container, roles_dir, on_origin):
         print(f"{container}: {stale}", file=_sys.stderr)
         return PROBE_UNREADABLE
@@ -491,7 +491,7 @@ def run_health(
         # one-shot setup Jobs are already gated to completion at deploy time inline, or a role
         # with neither.
         # DECIDED: PROBE_NOT_APPLICABLE, a skip (#7895), not exit 1, which made `probe.py health
-        # <role>` unpassable on a healthy deploy (#3596). Exit 0 hid the skip from the notifier,
+        # <role>` unpassable on a healthy deploy. Exit 0 hid the skip from the notifier,
         # which matched this message's wording instead. Gating the probe Jobs instead was
         # rejected: their `ttlSecondsAfterFinished: 86400` deletes them a day after a deploy, so
         # a later run would fail a healthy cluster.

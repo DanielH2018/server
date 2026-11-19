@@ -49,7 +49,7 @@ def _run_started() -> dt.datetime:
 
     Read once per process, so two renders of one page in one run carry the same
     stamp. Read per call, a pair of renders straddling a minute boundary differed
-    in the banner alone, and a comparison of whole renders failed (#4178).
+    in the banner alone, and a comparison of whole renders failed.
     """
     return dt.datetime.now(dt.timezone.utc)
 

@@ -1,4 +1,4 @@
-"""`land.sh --fresh`: land from a detached checkout of origin/master made for this run (#7933).
+"""`land.sh --fresh`: land from a detached checkout of origin/master made for this run.
 
 `classify.refuse_stale_code_before_merge` refuses a landing whose own code lags master, and
 names the flag. A checkout the caller makes by hand goes stale again as soon as master moves,
@@ -8,7 +8,7 @@ the primary's refs, runs the `land.sh` in it with the same arguments minus `--fr
 removes it afterwards.
 
 After the merge, `classify.refuse_stale_code` raises `GradeFresh` instead, and land.py runs the
-merged PR's grading from the same kind of checkout without asking (#8679).
+merged PR's grading from the same kind of checkout without asking.
 
 The checkout's `land.sh` is a child process, not an exec, so this process outlives it and the
 `finally` removes the checkout whatever the child's exit code. Under `--detach`, land.py forks

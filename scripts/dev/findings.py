@@ -63,8 +63,8 @@ WORKING ANOTHER REPO'S REGISTER. Every subcommand takes `--repo OWNER/NAME` and 
 that repo's own `claude` register, with the same labels, trailer, fingerprint dedup and claim
 protocol it has here. Every gh call carries the flag, reads included: a dedup read against
 this repo while the create went elsewhere would re-file the finding on every run, and issue
-numbers collide across repos, so `next` reading this repo's PRs would withhold dotfiles #750
-for a server PR that closes #750. `claim`, `claims`, `reap` and `next` also judge each claim
+numbers collide across repos, so `next` reading this repo's PRs would withhold dotfiles #12
+for a server PR that closes #12. `claim`, `claims`, `reap` and `next` also judge each claim
 against that repo's local checkout and its default branch (`REGISTER_CHECKOUTS` in
 `findings_lib/boundaries.py`), because a claim names a branch in the repo that owns the issue.
 They refuse a repo that table does not list, with exit 2. `issue-fanout` has the dotfiles
@@ -252,7 +252,7 @@ def cmd_open(args: argparse.Namespace, tools: FindingsTools) -> int:
     if args.review_leftover:
         labels.append("review-leftover")
     if tools.repo is None and red_green_eligible(cited_paths(body)):
-        labels.append(RED_GREEN_LABEL)  # a --review fan-out runs a red phase (#3950)
+        labels.append(RED_GREEN_LABEL)  # a --review fan-out runs a red phase
     # `gh issue create --label` fails on a label the repo lacks, so `open` creates LABELS
     # first, and a dated label or `red-green` the first time it is used.
     have = _existing_labels(tools)

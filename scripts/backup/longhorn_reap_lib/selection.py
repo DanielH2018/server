@@ -20,7 +20,7 @@ subjects are the two ways a Backup CR ends up with no owning job at all:
 A stranded chain's members may be labelled or unlabelled (a seed on a deleted volume is the
 migration's own debris), so `select_migrated_chain` must not be written as a filter over
 `BackupClassification.orphaned`: that list is the LABELLED half, and deriving from it would
-narrow the set the retired Jinja selected while reading as a refactor. ENFORCED:
+narrow the set it selects while reading as a refactor. ENFORCED:
 scripts/backup/tests/test_longhorn_reap_selectors.py
 ::test_migrated_chain_takes_the_unlabelled_strand_classify_backups_cannot_see
 

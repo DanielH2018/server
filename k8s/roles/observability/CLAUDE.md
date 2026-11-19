@@ -131,10 +131,19 @@ are in `docs/target-architecture/monitoring/m1-alertmanager.md`.
 
 **The notification text is pinned by its renders.** `files/alertmanager/homelab.tmpl` writes
 the Discord and email bodies, and `k8s/roles/observability/tests/alertmanager/` holds
-four alert groups with the text each body must render for them.
+six alert groups with the text each body must render for them.
 `scripts/validate/notification_renders.py:render_problems` fails any difference. To change the
 text, edit the template, run `uv run python scripts/validate/alert_rules.py --write-renders`,
 and review the rewritten `.txt` files.
+
+**One fault on every host is one message.** Alertmanager groups by `alertname` and `service`,
+and a host-plane rule's `service` is its host. The route for a `service` that names an
+inventory host groups by `alertname` alone, and the title lists the hosts the group carries.
+The route for `WarningUnresolved` groups by `escalated_from`, so one message names the warning
+it escalates and lists the services. Each grouping route nests the paging routes, because an
+alert stops at the first route it matches.
+`tests/services/test_alertmanager_grouping.py::test_a_host_plane_alert_groups_by_alertname_alone`
+walks the tree with inheritance.
 
 **The weekly reboot mutes every paging route, never the Watchdog.** The `weekly-reboot` time
 interval derives from the reboot cron's `weekly_reboot_*` values and the mute's lead and
@@ -150,9 +159,12 @@ walks the routing tree to prove the alerts reach the mute.
 that holds for 48 hours, so it reaches Discord and email instead of repeating in Discord
 alone (#8218). It moves the source's name and service to `escalated_from` and
 `escalated_service`, and carries `service="alert-escalation"`, a tag no health gate reads.
-To silence one escalation, match `escalated_from`. Shadow and drill alerts never escalate,
-and neither does a rule labelled `escalate: "false"`: `DeployHoldActive` and
-`FluxSuspended` hold by design.
+To silence one escalation, match `escalated_from`. Its description links Karma filtered to
+the escalated warning, because `ALERTS` carries no annotations to copy the runbook from. Shadow
+and drill alerts never escalate, and neither does a rule labelled `escalate: "false"`:
+`DeployHoldActive`, `FluxSuspended`, and the weekly scans' `AideCheckFailed` and
+`RkhunterScanFailed`, which hold until someone reviews the scan by hand. Such a warning repeats
+daily instead of every 6h.
 `tests/services/test_warning_escalation_exemptions.py` holds that exempt set to the
 rules. The rule has no `for:`, because a Prometheus restart resets every alert's activation
 (`docs/target-architecture/monitoring/m6-retire-kuma.md`, Open question 9). It counts the
@@ -182,7 +194,9 @@ pair's stale arm. An Alertmanager inhibit keyed on `check` and `origin` mutes it
 `*NotReporting` pair fires, shadow or not, so it pages alone only for a producer with no
 pair (#6186). `SystemdUnitsFailed` covers the other gap, a unit that fails with no hook or
 verdict of its own: host-maintenance's `systemd-units` check counts every failed system unit
-on each host every 5 minutes (#8219). The per-check literals and their pin tests stay, for the
+on each host every 5 minutes (#8219). It fires once per failed unit, so a weekly scan's own
+`*Failed` alert holds the copy for the scan's unit through an inhibit, and the host's other
+failed units keep paging (`tests/services/test_alertmanager_scan_unit_inhibit.py`). The per-check literals and their pin tests stay, for the
 reason `docs/target-architecture/monitoring/m3-textfile-timer.md` gives under the deadline
 series. `HostRebootOverdue` pages a reboot-class change that has waited 8 days. It ages the
 change from `homelab_host_reboot_pending_since_seconds`, which a later package change never

@@ -10,7 +10,7 @@ runs. This script is the reader. The push run of ci.yml calls it first, and ever
 skips when it answers `proven=true` and `pytest-proven=true`.
 
 A PR run whose `pytest` legs ran a selection of the test modules records the tree under a
-second context, `ci/tested-tree-but-pytest` (#8943). Every other job ran in full on that
+second context, `ci/tested-tree-but-pytest`. Every other job ran in full on that
 tree, so `prove` answers `proven=true` for it and `pytest-proven=false`: the push run repeats
 only `pytest`. `pytest-proven` is never true while `proven` is false, and
 `hosts/lib/ci_verdict.py:jobs_verdict` relies on that.

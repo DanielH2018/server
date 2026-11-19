@@ -1,8 +1,8 @@
 """Close an issue a merged PR names in `closingIssuesReferences` when GitHub left it open.
 
-GitHub listed #7291 as a closing reference of PR #7295 and never closed it, so two orchestrator
-waves dispatched work master already held (#7397). The cause is unknown, so the landing checks
-the result rather than the trigger.
+GitHub can list an issue as a PR's closing reference and never close it, so `findings.py next`
+offers work master already holds. The cause is unknown, so the landing checks the result
+rather than the trigger.
 
 `close_stranded` runs in step 1: a later step can crash or wait for hours while `findings.py next`
 offers the issue, and a docs-only PR ends there. A failed read or close changes neither the verdict
@@ -136,7 +136,7 @@ _KEYWORD = r"close[sd]?|fix(?:e[sd])?|resolve[sd]?"
 _CLOSING_REF = re.compile(rf"\b({_KEYWORD})\b:?\s+#(\d+)", re.IGNORECASE)
 # One DELIBERATE closing reference with its trailing punctuation, so a second keyword on the
 # same line is read against what is left rather than against the first reference's text.
-# `Closes #2428, closes #2429` and `Closes #2412. Closes #2477:` are both ordinary here.
+# `Closes #12, closes #13` and `Closes #12. Closes #13:` are both ordinary here.
 _CANONICAL_REF = re.compile(rf"\b({_KEYWORD})\b:?\s+#\d+[.,;:)\]]*\s*", re.IGNORECASE)
 # Markdown that carries no meaning in front of a reference: list and blockquote markers,
 # heading hashes, bold/italic runs, and the backticks of a code span — GitHub creates no

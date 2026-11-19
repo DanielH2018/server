@@ -5,7 +5,7 @@ Invoke it as ``./scripts/deploy_tools/land.sh``, which execs this file; every do
 and hook names the shim. The implementation is the ``land_lib`` package beside it, one
 module per phase; this file holds ``main`` and the docstring ``--help`` prints from.
 ``--help`` prints the summary line above and everything from ``Usage::`` on. The sections
-between are rationale for whoever edits this file, so they print nowhere (#4448).
+between are rationale for whoever edits this file, so they print nowhere.
 
 WHY ONE INVOCATION RATHER THAN A CHAIN. A session cannot write this sequence inline: shell
 control flow and command substitution defeat the worktree containment check, which refuses with
@@ -21,7 +21,7 @@ exits with the landing's code. ``--detach`` covers two steps a caller would othe
 hand: the ``git rev-parse origin/master`` for ``--since`` (resolved here when the flag is absent,
 before the merge is armed, so it is still the PRE-merge tip) and the redirect. The landing runs
 as a detached grandchild outside the caller's process tree, so a harness that kills the waiting
-call leaves it running to its verdict (issue #3158). The mechanics are ``land_lib/detach.py``.
+call leaves it running to its verdict. The mechanics are ``land_lib/detach.py``.
 
 THE WAIT IS cc-wait's, NOT THIS SCRIPT'S. ``cc-wait`` is the one wait loop every repo shares (the
 dotfiles ``cc-wait`` package), and ``land_probe.py`` is this repo's ``land`` source for it. A
@@ -195,9 +195,7 @@ def main(
     # DECIDED: a usage error is not a landing, so it annotates nothing. argparse raises
     # SystemExit(2) before a Landing or a Ledger exists, so the only line this could write is
     # `pr=unknown verdict=aborted` -- a row meaning "you typed the command wrong" in the same
-    # stream the Landings board counts. The bash original annotated it because its EXIT trap
-    # was installed before the arg loop, and this port reproduced that until issue #1304
-    # measured 592 such rows in Loki's 744h window. The wrapper below still annotates
+    # stream the Landings board counts. The wrapper below annotates
     # nothing: it only renumbers the code, and `--help` (exit 0) passes through untouched.
     #
     # WHY IT IS WRAPPED AGAIN. argparse's 2 collided with two other meanings a caller sees
@@ -356,7 +354,7 @@ def _land(opts: Options, tools: Tools, classifier: Classifier | None) -> int:
             refused.emit()
             line = refused.file_line()
     except Exception as exc:
-        # Still one VERDICT line, as every exit-1 end prints (#4451), and the same verdict a
+        # Still one VERDICT line, as every exit-1 end prints, and the same verdict a
         # crash reaches through the handoff unit's STOPPED line. The traceback follows, and
         # the annotation below stays `aborted`, so the board keeps a crash apart from a
         # refusal.

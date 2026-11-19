@@ -16,8 +16,8 @@ def _tools_pass(argv: list[str]) -> tuple[int, str]:
 
 
 def test_notification_renders_that_match_their_expected_text_are_clean():
-    # Non-vacuity: the floor names the four shapes, and each has every define's render.
-    assert len(notification_renders.render_checks()) == 4 * len(
+    # Non-vacuity: the floor names the six shapes, and each has every define's render.
+    assert len(notification_renders.render_checks()) == 6 * len(
         notification_renders.RENDER_DEFINES
     )
     assert notification_renders.render_problems(run=_tools_pass) == []

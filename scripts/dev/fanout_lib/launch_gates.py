@@ -127,7 +127,7 @@ def live_batch_slots(
     Counts as `over_live_batch_cap` does: the uncleaned batches under `root` that
     `still_running` finds running. `placement.place` takes this as its `slots`, so a batch
     falls back to a host with cap room instead of `over_live_batch_cap` refusing the host it
-    preferred (#6421).
+    preferred.
 
     Args:
         root: the manifest directory to read every run under.
@@ -156,7 +156,7 @@ def over_live_batch_cap(
     run's placements to them.
 
     A batch whose agent has finished holds no reservation, so it does not count, whether or
-    not its worktree still stands (#5497), and on either host (#5506). The unit states come
+    not its worktree still stands, and on either host. The unit states come
     from `readings`: `read_host` asked for them on the headroom connection, which costs no ssh
     the budget lacks. A host with no reading, or one whose states did not come back, keeps
     every batch counted until `clean <run-id>` removes it.
@@ -205,7 +205,7 @@ def live_elsewhere(batches: dict[str, list[int]], root: Path, repo: str) -> bool
     that is what is compared.
 
     Only batches in the same repo are compared: issue numbers collide across repos, so a
-    live dotfiles batch on #763 says nothing about server #763.
+    live dotfiles batch on #12 says nothing about server #12.
 
     Args:
         batches: `_parse_batches`' mapping of batch id to the issue numbers it would take.
@@ -241,7 +241,7 @@ def shared_files(
         issues: every fetched issue by number; a number a batch names but this lacks is
             skipped, since `_fetch_issues` has already refused that launch.
         tracked: the target repo's tracked files, which a path cited from a subdirectory
-            resolves against (#4232). Empty leaves every path as the body spells it.
+            resolves against. Empty leaves every path as the body spells it.
 
     Returns:
         `[(path, [batch, ...]), ...]` sorted by path, each batch list sorted. Empty when the
@@ -298,11 +298,11 @@ def refuse_solo_only(
 ) -> bool:
     """Whether `launch` must refuse because a batch holds an issue citing the fan-out tooling.
 
-    `next` marks such an issue `[solo-only]` (#3959). A batch that edits the pipeline runs
+    `next` marks such an issue `[solo-only]`. A batch that edits the pipeline runs
     under its own edited copy of the reviewer, the red gate and the Stop hook, which is why
     the held-settings machinery exists. Refused before the first ssh, like the shared-file
     check, and a solo session claims and works the issue instead. `repo` is the register the
-    batches come from; another repo's issue is never solo-only (#4624).
+    batches come from; another repo's issue is never solo-only.
     """
     refused = False
     for batch, numbers in batches.items():

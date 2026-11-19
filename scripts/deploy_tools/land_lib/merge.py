@@ -9,7 +9,7 @@ Idempotent: a MERGED PR is left alone, a CLOSED one dies.
 finishes, while the direct merge here is pinned to the head await_ci read green and the landing
 policy checked. Auto-merge cannot merge to master either: ruleset 27167149 lets only the
 admin role and Renovate update it, and auto-merge never applies a ruleset bypass
-(github/docs#45265), so an armed PR sits BLOCKED (#3911). A CHANGES_REQUESTED PR is refused outright, because someone asked for it
+(github/docs#45265), so an armed PR sits BLOCKED. A CHANGES_REQUESTED PR is refused outright, because someone asked for it
 to change. `gh pr merge` refuses it at its own pre-flight as well (cli/cli#13388).
 
 --await-merge polls the PR's state until merged, and merges it through the REST endpoint once
@@ -35,7 +35,7 @@ the rule.
 
 --arm-merge refuses while the repo is not public, before any merge call. On the free plan GitHub
 enforces no ruleset on a private repo, so the direct merge would go through without the CI
-gate: 29 PRs did on 2026-09-21 (#3610). `_refuse_private_repo` owns it. It cannot stop an
+gate. `_refuse_private_repo` owns it. It cannot stop an
 auto-merge armed by hand while the repo was public from firing after a later flip;
 github-ruleset-drift.sh is the cover for that.
 
@@ -84,8 +84,8 @@ from deploy_tools.land_lib.pr_json import CommitMessage
 
 
 # How long a head whose every CI run skipped as a draft waits for a ready run before the PR is
-# read for its draft state (#6077). GitHub registered PR #6069's ready run 3s after the flip
-# at 02:09:58 on 2026-10-24, and the push-delivery grace await_ci already allows is far wider.
+# read for its draft state. GitHub registers the ready run seconds after the flip, and the
+# push-delivery grace await_ci allows is far wider.
 DRAFT_SKIPPED_GRACE_S = await_ci.DROPPED_PUSH_GRACE_S
 # Takes the landing turn (`turn.held`), given the head of a draft that has had no CI run or
 # "": whether the landing holds it, and the seconds the call waited in line.
@@ -258,9 +258,8 @@ _RETRIGGER_DONE = (
 def _draft_skipped_dead_end(ln: Landing, head: str, retriggered: bool = False) -> str:
     """Why a ready PR whose head's CI skipped as a draft cannot merge; "" while it is a draft.
 
-    PR #6069 was marked ready one second after its push, and GitHub created only the push's
-    draft-era run (#6077). No run followed the ready flip, so nothing would ever supply a
-    verdict. A PR still a draft gets its run once someone marks it ready, so the wait goes on.
+    A PR marked ready right after its push can get only the push's draft-era run. No run
+    follows the ready flip, so nothing would ever supply a verdict. A PR still a draft gets its run once someone marks it ready, so the wait goes on.
     """
     if ln.view("isDraft").get("isDraft") is not False:
         return ""
@@ -279,7 +278,7 @@ def _ready_run_on(ln: Landing, head: str) -> str:
     A run that is not completed, or that completed with any conclusion but `skipped`, ran
     while the PR was ready. Its `prek` gate `needs` every other job, so the gate gets no check
     run until they finish, and for those minutes `await_ci` reads only the draft run's skipped
-    gate. Converting to draft then cancels the ready run (#6566). A failed read also forbids
+    gate. Converting to draft then cancels the ready run. A failed read also forbids
     it, because the toggle is the one action here that can cancel a run.
     """
     url = f"repos/{{owner}}/{{repo}}/actions/workflows/ci.yml/runs?head_sha={head}&event=pull_request"
@@ -308,7 +307,7 @@ def _retrigger_ready_run(ln: Landing, head: str) -> str:
     """Convert the PR to draft and back so GitHub starts a ready run; "" on success.
 
     GitHub starts no `ci.yml` run for the ready flip of a PR whose push run skipped as a
-    draft (#6546), and a re-run replays the draft event. The conversion is the only thing
+    draft, and a re-run replays the draft event. The conversion is the only thing
     that makes one, so the landing does it once per head instead of ending `merge-timeout`
     for a person to do the same two commands. A failure is returned as the reason, and names
     the PR's state when the first command had already run, because a draft PR never merges.
@@ -372,11 +371,10 @@ def _start_run(
     for the turn while it waits (`line.py`). With the turn, the PR's branch is updated from
     master when master is ahead of it, and only then is a draft marked ready, because a
     draft's run runs no job and a draft cannot merge. GitHub builds the tree a pull-request
-    run tests when the PR's branch is pushed. A ready flip does not build it again: PR #8551
-    was marked ready 16 minutes after its only push, and its run tested the master of the
-    push. The update is a push, so the run the flip after it starts tests the master of the
+    run tests when the PR's branch is pushed. A ready flip does not build it again, so a run
+    the flip starts tests the master of the push. The update is a push, so the run the flip after it starts tests the master of the
     turn. A flip before the update started a run on the stale head, which the update's push
-    cancelled after it had held runners for minutes (PR #8921 on 2026-11-15).
+    cancels after it has held runners for minutes.
 
     A head with a CI run that ran jobs keeps it and takes no turn here: `await_merge` takes
     the turn once that head is green, so no landing holds the turn while a run that started
@@ -494,11 +492,10 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
 
     A head the wait has sat on for `stuck_checks.AFTER_S` has its checks read on a poll where
     await_ci reads it green, and again each `AFTER_S` after. A check left pending under a completed workflow run
-    ends the wait `merge-timeout` with the empty-commit remedy, because no poll ever clears it
-    (#7996).
+    ends the wait `merge-timeout` with the empty-commit remedy, because no poll ever clears it.
 
     A CI read GitHub refuses for its rate sleeps until the quota frees rather than one merge
-    poll, counted as waited and cut short at `merge_timeout` (#8147).
+    poll, counted as waited and cut short at `merge_timeout`.
     """
     o, t = ln.opts, ln.tools
     waited = 0
@@ -546,7 +543,7 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
     # The head await_ci last read as skipped in a draft, and the `waited` it was first read at.
     draft_head = ""
     draft_since = 0
-    # The head this landing converted to draft and back, once (#6546); a second draft-skip on
+    # The head this landing converted to draft and back, once; a second draft-skip on
     # it ends the wait, because another conversion would loop.
     retriggered_head = ""
     # The head whose checks `stuck_checks` reads, and the `waited` of its next read.
@@ -692,9 +689,9 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
                         Verdict.MERGE_TIMEOUT,
                     )
         if waited >= wait_ends_at:
-            # A run cancelled on the head never supplies a verdict on its own (#5931). A run
+            # A run cancelled on the head never supplies a verdict on its own. A run
             # skipped as a draft names its own remedy in await_ci's line, because a re-run of
-            # it skips again (#6077).
+            # it skips again.
             if pause:
                 why = f"GitHub refused its CI read for the rate; the quota frees in {pause}s"
             elif draft_head:

@@ -1,17 +1,34 @@
-# The T2 session users' egress table on daniel-box. daniel-box's package.yml lists it, because the triage and Renovate sessions run only there.
+# The T2 session users' egress table and proxy on daniel-box. daniel-box's package.yml lists it,
+# because the triage and Renovate sessions run only there.
 #
 # B3-0 is the shadow trace: `table inet t2_egress` records each new connection the session users
-# open, in two dynamic sets, and drops nothing. The trace sets squid's tuples in B3-1, and B3-2
-# turns the same table into the fence. Read it with `rootq nft`, or as root
+# open, in two dynamic sets, and drops nothing. Read it with `rootq nft`, or as root
 # `nft list set inet t2_egress seen4` and `seen6`. A reboot empties the sets.
+#
+# B3-1 adds squid in shadow on t2_egress_proxy, which daniel-box's host_vars set and each session
+# unit reads for its HTTPS_PROXY. squid admits every loopback client and logs each request to
+# /var/log/squid/t2-access.log. Once a session runs through it, the only fresh entries in the nft
+# sets are the proxy's port and the DNS server; any other one bypassed the proxy. B3-2 turns the
+# squid admit into the allowlist and the table into the fence.
 #
 # A ruleset change reloads the unit, so the sets keep their entries. `t2_egress_enabled: false`
 # drops the unit and its enable link from the next package version, and reconcile's stop deletes
-# the table.
+# the table. The squid drop-in and config ship whenever the component is listed, because the
+# component installs squid: with the flag off, squid stays bound to loopback with no client.
+# Removing t2_egress_proxy from host_vars takes the proxy out of both session units.
+#
+# needrestart may restart squid.service on a library upgrade, which drops a session's open
+# connections. Claude Code retries a failed API call; a git or gh call in flight fails once.
+depends:
+  - squid
 files:
   - {src: files/t2-egress.nft, dst: /usr/lib/homelab/t2-egress/t2-egress.nft, activate: "reload:homelab-t2-egress.service", when: t2_egress_enabled}
   - {src: units/homelab-t2-egress.service, dst: /usr/lib/systemd/system/homelab-t2-egress.service, when: t2_egress_enabled}
+  - {src: templates/t2-squid.conf.j2, dst: /usr/lib/homelab/t2-egress/t2-squid.conf, activate: "try-restart:squid.service"}
+  - {src: units/squid-50-homelab-t2.conf, dst: /usr/lib/systemd/system/squid.service.d/50-homelab-t2.conf, activate: "try-restart:squid.service"}
 enable:
   homelab-t2-egress.service: {target: multi-user.target, when: t2_egress_enabled}
 defaults:
   t2_egress_enabled: false
+  # squid's bind when host_vars leave t2_egress_proxy out, which also leaves the sessions off it.
+  t2_egress_proxy: "127.0.0.2:3128"

@@ -3,9 +3,9 @@
 A leg builds the shared k8s render when it holds a module that imports `_k8s_render`, the
 fleet render when it holds a `render_share` consumer, and the census pass when it holds a
 census rows file. `pytest_shard.assign` packs these seconds beside each shard's test seconds,
-and `pytest_shard.py`'s module docstring has why (#8900).
+and `pytest_shard.py`'s module docstring has why.
 
-Split out of `pytest_shard.py` when the pull-request selection (#8458) took that module past
+Split out of `pytest_shard.py` when the pull-request selection took that module past
 its length cap.
 """
 
@@ -24,12 +24,12 @@ from lib.git import git
 from lib.repo_paths import REPO
 
 # The wall seconds each render prebuild holds a CI leg before its first test, read off the
-# `phase timing` sections of master run 42681237857 (#7732). The k8s render alone took 11s and
+# `phase timing` section of a master run: the k8s render alone takes 11s and
 # the fleet render alone 5-7s. `render_share.build_each` runs the two on different workers, so
 # a leg reading both waits the longer one.
 K8S_RENDER_WALL_SECONDS = 11.0
 FLEET_RENDER_WALL_SECONDS = 6.0
-# The census rows' pass `scripts/tests/conftest.py` runs: CI's 16.0s on #7950's shard 6.
+# The census rows' pass `scripts/tests/conftest.py` runs: 16.0s of CI wall time.
 CENSUS_PASS_WALL_SECONDS = 16.0
 CENSUS_FILE_PREFIX = "scripts/tests/test_census_rows_test_"
 # The module whose import makes a leg build the shared k8s render.

@@ -68,15 +68,15 @@ PACKAGE_VERSIONS_URL = "https://api.github.com/users/DanielH2018/packages/contai
 # a truncation, because `prune` reads a digest missing from the listing as deleted.
 VERSIONS_PER_PAGE = 100
 VERSION_PAGES_MAX = 300
-# A commit's statuses, 100 to a page: one page hid 13 of 113 and hung verify (#5974).
+# A commit's statuses, 100 to a page: one page hid 13 of 113 and hung verify.
 STATUS_PAGE_SIZE, STATUS_PAGES_MAX = 100, 20
-# A commit's check-runs, 100 to a page, the same shape as its statuses (#5977).
+# A commit's check-runs, 100 to a page, the same shape as its statuses.
 CHECK_RUN_PAGE_SIZE, CHECK_RUN_PAGES_MAX = 100, 20
 # Seconds between two deletes. GitHub's REST best practices ask for at least one second between
 # mutating requests, and a burst trips the secondary rate limit as a 403 that reads like a
 # permission error.
 DELETE_PAUSE_S = 1.0
-# The rate-limit waits `variable` sits through before it reports the failure (#7993).
+# The rate-limit waits `variable` sits through before it reports the failure.
 RATE_LIMIT_WAITS = 3
 
 # The keyless identity the `promote` workflow signs under, and the one the OCIRepository
@@ -150,7 +150,7 @@ class GitHub:
         """Every check-run GitHub holds for commit `sha`, page after page.
 
         One page holds 100 runs, and a commit can carry more, so a single read would hide a
-        failing or pending run on page 2 (#5977). The endpoint reports `total_count`, so a read
+        failing or pending run on page 2. The endpoint reports `total_count`, so a read
         that collects fewer runs than that is refused rather than returned as complete. A
         re-run can appear twice across pages; the caller reduces runs by name.
 
@@ -235,7 +235,7 @@ class GitHub:
         """The newest commit status per context on commit `sha`, as `{context: state}`.
 
         Reads GitHub's combined status, which keeps the newest status of each context, page
-        after page: one page holds 100 contexts, and a commit can carry more (#5974). A
+        after page: one page holds 100 contexts, and a commit can carry more. A
         state is `pending`, `success`, `failure` or `error`. A context with no status is
         absent from the map, which the caller must never read as success. With `since`, a
         status whose `updated_at` precedes it, or is unreadable, is absent too.

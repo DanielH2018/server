@@ -34,7 +34,7 @@ __all__ = [
 # The heavy-tier filters a role's DEFAULTS call, which `resolve_vars` must evaluate. The three
 # Longhorn tier lists: `longhorn-reconcile`'s defaults derive them from `containers_list`
 # (H1.7a). `basename` and `dirname`: k3s's `k3s_host_coredns_tarball` is a
-# `dirname`, and it rendered as STUB, with a warning, on every `probe.py applied k3s` (#6475).
+# `dirname`, and it rendered as STUB, with a warning, on every `probe.py applied k3s`.
 # `combine`: flux's and observability's `manifests_self_rollouts` add each
 # workload's namespace with it.
 #
@@ -53,7 +53,7 @@ _DEFAULTS_PLUGIN_FILTERS = (
 
 # The heavy-tier tests a role's DEFAULTS call, wrapped the same lazy way. netpol-baseline's
 # `netpol_baseline_traefik_https_sources` drops the IPv6 half of `cloudflare_ips` with
-# `reject('search', ':')` (#6495).
+# `reject('search', ':')`.
 _DEFAULTS_PLUGIN_TESTS = ("search",)
 
 
@@ -137,7 +137,7 @@ def resolve_vars(
 
     A value rendered as text ends in as many newlines as ansible-core gives it: Jinja drops the
     source's last one, and ``pad_to_source_newlines`` adds back only those the render lacks. So
-    ``"p {{ x }}\\n"`` with ``x`` ending in a newline resolves to one newline, not two (#4853).
+    ``"p {{ x }}\\n"`` with ``x`` ending in a newline resolves to one newline, not two.
 
     An exception raised while expanding a value carries a note naming that variable, which
     ``failed_key`` reads back.

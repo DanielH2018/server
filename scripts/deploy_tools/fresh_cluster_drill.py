@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The fresh-cluster case of the Flux deletion drill (`flux-deletion-drill.yml`, #7555).
+"""The fresh-cluster case of the Flux deletion drill (`flux-deletion-drill.yml`).
 
 Break-glass promotion onto a rebuilt cluster that can reach neither GHCR nor a registry
 (`docs/break-glass.md`, *A fresh or rebuilt cluster*). The workflow runs it on a second kind

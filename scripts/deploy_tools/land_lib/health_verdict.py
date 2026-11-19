@@ -39,7 +39,7 @@ def _gated_tree(ln: Landing) -> str:
 
     `deployed_at` once the promotion step has run. Otherwise the merge commit, when a
     promotion applied any gated tag: `probe.py health` reads which tags Flux applies from the
-    tree it runs in, and only a tree carrying the flip knows Flux applies the tag. From a tree before the flip, the probe looks a CRD-only tag up by name (#5744).
+    tree it runs in, and only a tree carrying the flip knows Flux applies the tag. From a tree before the flip, the probe looks a CRD-only tag up by name.
     """
     if ln.deployed_at:
         return ln.deployed_at
@@ -54,7 +54,7 @@ def _advanced_to_origin(ln: Landing, at: str) -> str:
 
     `probe.py health` refuses a role whose files `origin/master` changed after its tree's HEAD
     (`health_checkout.stale_checkout_reason`), so a gate pinned to the merge commit refuses
-    every role a later master commit touched, on every re-run (#7816). The snapshot shares the
+    every role a later master commit touched, on every re-run. The snapshot shares the
     primary's refs, so a tree at the very tip this reads leaves the probe nothing newer to find.
     No fetch runs between the two reads for that reason.
 
@@ -134,10 +134,10 @@ def _gate_until_readable(ln: Landing) -> GateResult:
     """The gate's answer, asked again while its store reads unreadable, up to the bound.
 
     DECIDED: an unreadable store is retried before the landing defers. The PRs that hit it
-    roll the store the gate reads (observability, monitor-bridge, loki-homelab): 29 landings
-    in the 14 days to 2026-11-09 deferred on it, and 22 were never re-run, so their deploys
-    went ungraded. The `deferred` outcome of #5543 still ends a store unreadable past the bound.
-    A stale tree is not retried: asking again reads the same tree and refuses again (#7816).
+    roll the store the gate reads (observability, monitor-bridge, loki-homelab), and a
+    deferred landing is rarely re-run, so its deploy goes ungraded. A store still unreadable
+    past the bound ends `deferred`.
+    A stale tree is not retried: asking again reads the same tree and refuses again.
     """
     give_up_at = ln.tools.clock() + UNREADABLE_RETRY_S
     result = gate_from_the_deployed_tree(ln)

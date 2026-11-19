@@ -96,8 +96,7 @@ def dashboard_body(issues: list[dict]) -> str:
 
     Raises:
         NoDashboard: no issue matched. Loud on purpose: an empty body would make every
-            branch the dashboard speaks for read as an orphan — #1629's failure through
-            a different door.
+            branch the dashboard speaks for read as an orphan.
     """
     for issue in issues:
         login = (issue.get("author") or {}).get("login", "")

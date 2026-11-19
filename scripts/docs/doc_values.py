@@ -21,7 +21,7 @@ value that went stale, because a value has no shape of its own: "14" is a retain
 one line and a port on the next. A second phrasing of the same value is a second row.
 
 WHAT GETS NONE. A value Renovate bumps, because a bump PR runs no hook and must not
-arrive red (#4012). A page under `docs/archive/`, which records the tree as it stood. A
+arrive red. A page under `docs/archive/`, which records the tree as it stood. A
 date in an `until <date>` or `as of <date>` clause: those are provenance, and a check
 that fires on a passed date fires on every correction the docs carry.
 

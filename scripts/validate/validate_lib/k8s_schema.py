@@ -4,7 +4,7 @@
 Both halves read schemas vendored under ``scripts/validate/schemas/``, which
 ``refresh_vendored_schemas.py`` writes. The core half reads Kubernetes' own per-group OpenAPI v3
 files, taken from the ``kubernetes/kubernetes`` tag that ``k3s_version`` names, so a new minor
-is checkable the day k3s ships it rather than when a third-party package republishes it (#2367).
+is checkable the day k3s ships it rather than when a third-party package republishes it.
 ``CRD_SCHEMA_DIR`` is built from ``repo_paths.SCRIPTS`` rather than from this file's own
 ``__file__`` for the same reason the refresher writes there: the schemas stay beside the
 validator that reads them.
@@ -108,7 +108,7 @@ def strict_schema(node, *, root: bool = True, nullable: bool = True):
     """Kubernetes' OpenAPI schema made strict, as kubernetes-validate's ``-strict`` set was.
 
     Two changes, and only these two, because they are the whole difference between the upstream
-    spec and the schemas this check used before #2367:
+    spec and a ``-strict`` set:
 
     - ``additionalProperties: false`` on every object that lists ``properties`` and sets no
       ``additionalProperties`` of its own. This is the half that catches a misspelled key. An

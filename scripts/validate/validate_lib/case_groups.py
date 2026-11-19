@@ -1,4 +1,4 @@
-"""Run the host package cases' groups concurrently, each in its own scratch directory (#7784).
+"""Run the host package cases' groups concurrently, each in its own scratch directory.
 
 `host_package_cases.main()` hands `run_groups` the eleven case groups: the three `Cases` methods
 and each case module's `run`. Every group boots its own containers, and their names differ, but
@@ -77,7 +77,7 @@ def groups(cases_class) -> list[tuple[str, Callable]]:
     """Every case group but bootstrap_case, longest first by CI run 42575480365's 24.04 leg.
 
     `bootstrap_case` is left out: it runs alone under `host_package_cases.py --bootstrap`, in a
-    CI job of its own (#7819).
+    CI job of its own.
 
     Each is looked up when this runs, so a stub set on a module or on `cases_class` is the one
     the group list holds.

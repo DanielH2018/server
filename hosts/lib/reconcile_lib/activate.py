@@ -41,6 +41,14 @@ COMMANDS = {
     "ssh.service": ("sshd", "-t"),
     "fail2ban.service": ("fail2ban-client", "-t"),
     "rsyslog.service": ("rsyslogd", "-N1"),
+    # t2-egress's drop-in starts squid on this file, not on the stock /etc/squid/squid.conf.
+    "squid.service": (
+        "squid",
+        "-k",
+        "parse",
+        "-f",
+        "/usr/lib/homelab/t2-egress/t2-squid.conf",
+    ),
 }
 # The files reconcile parses itself, by the action kind or the unit, and the grammar of a line.
 PARSERS = {"sysctl": "sysctl", "systemd-journald.service": "ini"}

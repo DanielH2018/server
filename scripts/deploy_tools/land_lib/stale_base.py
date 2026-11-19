@@ -1,7 +1,7 @@
 """A head whose base master has moved past: how far it moved, and the one branch update.
 
 A PR's CI run tests the PR merged into the master of its last push, and a merge onto a newer
-master makes a tree no run tested (issue #4013: 4 of 5 sampled red master runs followed a PR
+master makes a tree no run tested (a red master run can follow a PR
 whose every job was green). `master_paths_since` asks GitHub which paths master changed since
 the master commit the head's green CI run tested it against (the PR's merge base when that
 cannot be read).
@@ -89,8 +89,7 @@ def master_paths_since(ln: Landing, head: str) -> list[str]:
     landing to re-run.
     """
     # Only the base moves: a PR pushed after master moved was tested against that newer master,
-    # so the merge base alone would update a branch CI had already tested in full (149 of 235
-    # landings in 2026-10-15..17, 642 CI minutes, #5487). The tested base is the master commit
+    # so the merge base alone would update a branch CI had already tested in full. The tested base is the master commit
     # in the checkout log's `Merge <head> into <base>`; when it cannot be read the merge base
     # stands, which costs one CI run at worst.
     base = ln.tools.tested_base(head) or head
@@ -145,10 +144,10 @@ def refuse_stale_approved(ln: Landing, head: str, conflicting: bool) -> None:
         return
     moved = master_paths_since(ln, head)
     # DECIDED: only a path both master and the PR changed makes an approved head stale
-    # (operator ruling 2026-10-29, #6565). Refusing on any master move would make every
+    # Refusing on any master move would make every
     # approved PR be rebased and approved again, since master moves between nearly every
-    # approval and its landing. The accepted risk is the shape of #2922 and #2266, which went
-    # red on master from a path the PR never touched.
+    # approval and its landing. The accepted risk is a red master from a path the PR never
+    # touched.
     if moved and not conflicting and len(moved) < COMPARE_CAP:
         pr_paths = _pr_paths(ln)
         if pr_paths is not None:

@@ -228,7 +228,7 @@ SUBCOMMANDS = [
 ROUTED_IN_MAIN = frozenset({"health", "targets", "metric", "loki-query"})
 
 # The subcommands that judge something, flagged "verdict": `main()` ends their output with one
-# `PROBE-VERDICT:` line derived from the exit code (#4454). `ha` judges only through
+# `PROBE-VERDICT:` line derived from the exit code. `ha` judges only through
 # `VERDICT_HA_SUBCOMMANDS`, which `probe.verdict_path` applies.
 VERDICT_SUBCOMMANDS = frozenset(
     {

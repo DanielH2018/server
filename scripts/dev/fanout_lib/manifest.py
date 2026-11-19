@@ -90,7 +90,7 @@ def retire(run_id: str, root: Path = MANIFEST_DIR, replace=os.replace) -> None:
 
     `clean` and `abandon` call this instead of deleting the file. A deleted manifest made a
     live `cc-wait fanout` watch on the run fail every read with "no fan-out run", and that
-    watch then stopped reporting the other runs it named (#4907). A retired run still loads,
+    watch then stopped reporting the other runs it named. A retired run still loads,
     so `status` reports each batch as `cleaned` and the watch ends `finished`. Every reader of
     the live set sees what it saw after a deletion, because none of them looks in `RETIRED`.
 
@@ -168,7 +168,7 @@ def all_runs(root: Path = MANIFEST_DIR) -> list[Manifest]:
 
     A manifest that cannot be read is skipped on its own rather than raising: every caller is
     a read view or a launch gate, and one bad file must fail neither. `fanout.py place runs`
-    lists these, so a run-id lost to compaction or a resumed session is recoverable (#3923).
+    lists these, so a run-id lost to compaction or a resumed session is recoverable.
     """
     if not root.is_dir():
         return []

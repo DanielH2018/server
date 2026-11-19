@@ -68,10 +68,10 @@ from lib.json_types import JsonValue, as_object
 LABEL = "landing-batch"
 # How many PRs one batch holds, the holder's own included; the batch's gate reads no more.
 MAX_STACKED = 4
-# The seconds the batch's one full run may take. A run took 993 s under a saturated pool.
+# The seconds the batch's one full run may take. A run can take 993 s under a saturated pool.
 RUN_TIMEOUT_S = 2700
-# The seconds one member's merge may take: its own run is two short jobs, which took 164 s
-# from the ready flip on 2026-11-14 with the runner pool saturated.
+# The seconds one member's merge may take: its own run is two short jobs, which can take 164 s
+# from the ready flip with the runner pool saturated.
 MEMBER_TIMEOUT_S = 600
 
 # What GitHub failing to answer looks like, for a call the batch makes.

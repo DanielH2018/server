@@ -1,12 +1,9 @@
 #!/usr/bin/env python3
 """The Jinja environment every render guard uses, carrying the Ansible-dialect filters.
 
-Each guard used to build its own environment over ``render_guard.make_env`` and register a
-different subset: the compose guard had ``hash``, the shell guard had ``search`` and a
-hand-written ``bool``, the setup guard had the real ``bool``/``comment``/``to_uuid``/
-``mandatory``, the k8s guard had ``bool``/``hash``/``to_json`` plus the repo's two filter
-plugins, and the unit and config guards had none. A template rendered clean under one guard
-and failed under another for no reason a reader could derive from the template (#2408).
+A guard that built its own environment over ``render_guard.make_env`` and registered its own
+subset of filters would render a template clean under one guard and fail it under another for
+no reason a reader could derive from the template.
 
 This module registers ONE set: ``renderer_lib/jinja_filters.py``'s reimplementations and this repo's
 own filters in ``renderer/template_filters/``, each wrapped by ``as_filter``. ``to_json`` is ``k8s_yaml.to_json_stub``, because a guard renders secrets
@@ -110,7 +107,7 @@ def as_filter(func: FunctionType) -> FunctionType:
     """`func` as a template calls it: a `ValueError` re-raised as `FilterError`.
 
     The message opens with `<func's name>: `, which is the name the filter registers under, so
-    a render failure names the filter that refused rather than only the template (#4480). A
+    a render failure names the filter that refused rather than only the template. A
     `FilterError` from a filter `func` calls passes through unprefixed.
     """
 
@@ -225,7 +222,7 @@ def register_ansible_filters(env: Environment) -> Environment:
     with it, and ``homelab-render`` evaluates that list to stamp ``checksum/restart`` on those
     workloads. ``basename`` and ``dirname`` serve the setup-role task expressions
     ``probe.py applied`` reads: claude_code's slice-cap prune gates on a ``basename``, and its
-    homelab-ui and memory-store directories are a ``dirname`` (#6407, #6409).
+    homelab-ui and memory-store directories are a ``dirname``.
 
     Args:
         env: The environment to register on, modified in place.

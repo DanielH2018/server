@@ -219,7 +219,7 @@ def cmd_release(args: argparse.Namespace, tools: FindingsTools) -> int:
     if bool(args.numbers) == args.all:
         sys.stderr.write("release: give issue numbers or --all, not both or neither\n")
         return FINDINGS_BAD_ARGS
-    # `--all` is the bulk way out of `claims --worktree` (#3925): an orchestrator's claims
+    # `--all` is the bulk way out of `claims --worktree`: an orchestrator's claims
     # sit under a branch that stays live, so `reap` never clears them.
     if args.all:
         pairs = [

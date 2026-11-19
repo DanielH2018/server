@@ -1,17 +1,17 @@
 """Filters deriving per-tier sets from the `tier` field on containers_list entries.
 
 A service's tier is declared once, on its `containers_list` entry, and every set that ranks
-services is derived from it (#3389). Four consumers read it:
+services is derived from it. Four consumers read it:
 
 - `tier_backup_claims`: the k3s role's `k3s_longhorn_r2_volumes`, the volumes backed up daily
   to R2, is every `backup_claims` volume of a `home-critical` entry.
 - `tier_priority_class`: a tiered role's templates pass `containers_list |
-  tier_priority_class('<role>')` to `pod_shell(...)` instead of a literal PriorityClass (#3452).
+  tier_priority_class('<role>')` to `pod_shell(...)` instead of a literal PriorityClass.
 - `in_service_tier`: observability's `blackbox-ingress` and `blackbox-extra` probe jobs give a
   home-critical service's target `page_tier: critical`, so its page reaches email as well as
-  Discord and the email tier follows the tier field (#3480).
+  Discord and the email tier follows the tier field.
 - `shed_entries`: `probe.py shed-set` prints the untiered workloads to scale down when one node
-  is lost, so the tiered ones fit on the survivor (#3481). No template reads it, so it is not a
+  is lost, so the tiered ones fit on the survivor. No template reads it, so it is not a
   registered filter. It drops `NEVER_SHED`, the untiered cluster plumbing no break-glass may
   scale to zero.
 

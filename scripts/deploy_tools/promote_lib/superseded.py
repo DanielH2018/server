@@ -4,7 +4,7 @@ A verdict on T counts only while `prod` still names T's digest. Once a later run
 `prod`, that run owns the cluster and its verification covers T's changes too, so `verify`
 prints `superseded`, exits 0, and `settle` writes nothing. Each poll reads `prod`'s digest
 before T's statuses, and once more before a `failed` verdict, because a soak that a later
-revision superseded posts `failure` on T at once (#5704).
+revision superseded posts `failure` on T at once.
 
 A failed read of `prod` keeps the wait going and never reads as superseded, so an unreadable
 registry cannot end a verification. A run is superseded only while `promote.SUPERSEDE` is

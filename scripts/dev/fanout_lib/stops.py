@@ -1,4 +1,4 @@
-"""The fan-out batches that stopped for a person, and the line each agent stopped on (#7686).
+"""The fan-out batches that stopped for a person, and the line each agent stopped on.
 
 WHY. A quarter of fan-out batches end `needs-input` or `failed`, and the review record kept only
 that outcome. Over 2026-10-25 to 2026-11-08, 17 of the 49 `needs-input` batches gave no reason
@@ -30,7 +30,7 @@ LINE_CHARS = 120
 def load_stops(directory: Path, since: datetime) -> list[dict]:
     """Each batch saved on or after `since` that ended `needs-input` or `failed`.
 
-    `blocker` is the line the agent stopped on, "" in a record saved before #7686.
+    `blocker` is the line the agent stopped on, "" in a record saved before the field existed.
     """
     out = []
     for path in sorted(directory.glob("*.json")):

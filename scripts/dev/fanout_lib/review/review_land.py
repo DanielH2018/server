@@ -1,11 +1,10 @@
 """The review pipeline's landing: `land.sh` run by the pipeline, the model resumed only on need.
 
-WHY (#3960). The land phase used to resume the implementer with the brief's Landing section
-and let it run `land.sh --detach && cc-wait land <n>` itself. The model got the mechanics
-wrong: eight exit-75 re-runs, calls to the retired `--await-verdict`, a bad cc-wait source. A
-session holding its turn open through CI and the promotion also kept the batch's 2 GiB
-reservation, which bounds fan-out width. The pipeline now starts the landing and waits on it,
-and resumes the implementer only for a verdict that needs judgement: `RESUME_VERDICTS`.
+WHY. The pipeline starts the landing and waits on it, and resumes the implementer only for a
+verdict that needs judgement: `RESUME_VERDICTS`. A model that runs `land.sh --detach &&
+cc-wait land <n>` itself gets the mechanics wrong (exit-75 re-runs, a bad cc-wait source), and
+a session holding its turn open through CI and the promotion keeps the batch's 2 GiB
+reservation, which bounds fan-out width.
 
 THE COMMANDS run under `bash -l`, because the model ran them from its Bash tool, which loads
 the login profile, and the unit does not. The `claude` agent user's profile sets
@@ -13,7 +12,7 @@ the login profile, and the unit does not. The `claude` agent user's profile sets
 
 DECIDED: `land.sh` runs from a fresh detached worktree at the target's base (#7871), not the
 batch worktree. The batch worktree is branched at launch, and `land.sh` refuses to run once
-master has changed its own landing code since (#7831), so any such change between launch and
+master has changed its own landing code since, so any such change between launch and
 landing ended the batch `needs input`. The staleness check stays as it is. The implementer
 already runs arbitrary commands as this user, so the base's copy adds no boundary, and for
 the agent user the landing itself runs in `homelab-claude-land@<n>.service` from the

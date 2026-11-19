@@ -4,7 +4,7 @@
 `.gitignore` opens with `/*`, so every root-level path is ignored unless a `!/<name>` rule
 re-includes it. A new root file therefore stages nothing, commits nothing and lands nothing,
 and CI and the merge both read green because neither can see a file git never tracked.
-`LICENSE` and `SECURITY.md` were lost that way (PR #561), and `mkdocs.yml` and `.vale.ini`
+`LICENSE` and `SECURITY.md` were lost that way, and `mkdocs.yml` and `.vale.ini`
 hit the same trap. Until this check, only an agent remembering the rule prevented a third.
 
 The check lists the untracked root entries git ignores, keeps the ones `git check-ignore -v`

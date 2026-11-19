@@ -545,12 +545,12 @@ def run_ha(ns):
     url = _ha_url(ha_base(), ns)
     body = ha_get(url, ha_token(), resolve=ha_resolve())
     if ns.ha_cmd == "get":
-        print(core.redact_log_secrets(body), end="")  # #3015: see redact_log_secrets
+        print(core.redact_log_secrets(body), end="")  # see redact_log_secrets
         return 0
     if ns.ha_cmd == "state":
         try:  # parsed even for --json, which would otherwise pass an error page as 0
             obj = json.loads(body)
-        except json.JSONDecodeError:  # an error page: the entity was never read (#4468)
+        except json.JSONDecodeError:  # an error page: the entity was never read
             body = core.redact_log_secrets(body.strip())
             raise core.Unreadable(f"HA answered {url} with non-JSON:\n{body}") from None
         if ns.json:

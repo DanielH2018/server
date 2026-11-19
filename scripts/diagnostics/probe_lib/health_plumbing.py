@@ -4,19 +4,19 @@ H1 hands CoreDNS and Longhorn to Flux and deletes the `setup/k3s` host tasks tha
 after each apply (`docs/target-architecture/host/h1-cluster-config-to-flux.md`). A rollout
 verdict cannot see what those tasks saw, so each check moves here, keyed by deploy tag:
 
-  - `coredns` (#5924): the `NodeHosts` key of ConfigMap `kube-system/coredns` is not empty,
+  - `coredns`: the `NodeHosts` key of ConfigMap `kube-system/coredns` is not empty,
     which the host task `Confirm NodeHosts survived the patch` checked. A cluster name and an
     upstream-only name resolve through the `kube-dns` Service, which the host task `Verify
     cluster DNS resolves through the configured upstream` checked. The second check catches a
     Corefile that loads but resolves wrongly.
-  - `longhorn` (#5923): the live `longhorn` StorageClass carries the parameters of the class in
+  - `longhorn`: the live `longhorn` StorageClass carries the parameters of the class in
     ConfigMap `longhorn-system/longhorn-storageclass`. Parameters are immutable, and
     longhorn-manager creates the class but is not shown to replace a drifted one. After a
     parameter change the live class keeps the old values, and before this check nothing
     reported it.
 
 `health.py` folds these in after a passing rollout, on the path where the tag resolves to a k8s
-role. `coredns` resolves since H1.4 and `longhorn` since H1.5a (#5922), which added their
+role. `coredns` resolves since H1.4 and `longhorn` since H1.5a, which added their
 `k8s/roles/` roles.
 
 A Corefile edit rolls no CoreDNS pod (the `coredns` role passes `manifests_rollout: ''`), so
@@ -27,8 +27,8 @@ The resolution check therefore waits until `COREFILE_SETTLE_S` after the last wr
 A NotFound on any object read here is a FAILED check, not a skip: each object is plumbing the
 cluster cannot run without, so it exits 1 and never `PROBE_NOT_APPLICABLE`. Any other failed kubectl read raises `core.Unreadable` through `read`.
 
-Transport, measured on daniel-box on 2026-10-22: each kubectl read took 0.07-0.10s and each
-dig through `kube-dns` 0.01-0.02s, over three runs. Outside the settle wait the checks add
+Transport: each kubectl read takes 0.07-0.10s and each dig through `kube-dns` 0.01-0.02s.
+Outside the settle wait the checks add
 well under a second to a passing gate, so neither needs the cheap-signal-first shape `.claude/rules/python-layout.md`
 asks of a slow source.
 """

@@ -3,7 +3,7 @@
 GitHub words every ruleset refusal and every bypass notice the same way, and names neither the
 ruleset nor the reason: `remote: - Cannot update this protected ref.` Sessions spent two or
 three calls each time working out which of this repo's three rulesets had answered and whether
-the push had landed at all (#6327). The causes seen were an unsigned commit (the CI ruleset's
+the push had landed at all. The causes seen were an unsigned commit (the CI ruleset's
 `required_signatures`), the agent branch fence (`creation`/`update` outside the agent's own
 prefix) and a `docs-refresh/*` branch the fence also covers.
 

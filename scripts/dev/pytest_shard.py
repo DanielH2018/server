@@ -52,10 +52,10 @@ finishes, outside every test's timed phases, with the fleet render beside it, an
 pass the same way. `shard_prebuild.py` says which modules trigger which of the three. A
 leg builds each of the three only when it holds a module that reads it,
 so its cost depends on the shard's membership: the legs holding the census files ran 14-17s
-longer than a split on test seconds alone projected (#8900). `assign` therefore packs each
+longer than a split on test seconds alone projected. `assign` therefore packs each
 shard's `prebuild_seconds` beside its test seconds, and `--summary` prints both.
 
-A PULL REQUEST RUNS ONLY THE MODULES ITS DIFF CAN AFFECT (#8458). `--changed-since REF` asks
+A PULL REQUEST RUNS ONLY THE MODULES ITS DIFF CAN AFFECT. `--changed-since REF` asks
 `affected_lib/table.py` which modules the diff from REF selects and packs those alone, into as
 few legs as keep each no heavier than a full sweep's leg. The legs past that count get an
 empty list and CI skips their remaining steps. A selection that needs more than half the legs
@@ -66,7 +66,7 @@ run the whole census. `affected_lib/table.py` has the rule and what it can miss.
 The docs-refresh cron runs `--record-missing` itself, so gaps in the table fill without a human.
 
 A WEIGHT THAT DRIFTS MODERATELY LOW IS INVISIBLE TO THE CHECK, so the cron re-measures it too.
-Three modules measured 1.66x to 1.98x their recorded weight in a serial run (#4888), well
+Three modules measured 1.66x to 1.98x their recorded weight in a serial run, well
 inside the 20x under-recorded arm, and `--record-missing` never touches a present entry. A CI
 ratio that low cannot separate drift from runner scale, because the runner already measures
 correctly recorded entries 1.1x to 13x their weight. A serial run on the recording host can, so
@@ -75,11 +75,11 @@ only the entries `DRIFT_RATIO` or more away from what they measured. Measurement
 that band leaves the table alone, which is what keeps a twice-daily run from churning it.
 Noise outside the band is caught by a second run of only the drifted files: an entry is
 rewritten only when both runs drift and agree with each other within the band. One outlying
-run wrote 0.0s for a 16s module and 62s for a 1s one (#6286).
+run wrote 0.0s for a 16s module and 62s for a 1s one.
 Two agreeing runs cannot catch a cost that is real on this host alone, such as a test walking
 untracked files: 85.09s against CI's 2.08s. So the refresh keeps the recorded weight and prints
-the module when the reading is `LOCAL_READING_MAX_RATIO` or more above the runner table (#7132). A new row has no
-recorded weight to keep, so `--record-missing` writes the runner seconds instead (#7136).
+the module when the reading is `LOCAL_READING_MAX_RATIO` or more above the runner table. A new row has no
+recorded weight to keep, so `--record-missing` writes the runner seconds instead.
 
 THE CHECK NEVER FAILS A RUN. It prints each complaint as a `::warning::` annotation and exits
 zero on every event. A wrong weight costs shard balance and nothing else, at most the module's
@@ -89,8 +89,8 @@ and `--refresh-drifted` keep the recorded table. A failed run costs a full rerun
 from a runner pool that is already the throughput limit, so failing on a weight spends more CI
 time than the weight costs. Each bound also compares one wall-clock reading against a fixed
 number, and runner variance spans it: one module measured about 8s and 15.6s on two runs of
-the same code (#3604). Five narrowings of a failing version (#3604, #4010, #5480, #5616,
-#5989) each answered a run it failed for no fault of the PR in front of it.
+the same code. Each narrowing of a failing version answered a run it failed
+for no fault of the PR in front of it.
 
 Usage:
     uv run python scripts/dev/pytest_shard.py --of 4 --shard 1        # this shard's files
@@ -176,7 +176,7 @@ _SLICE_PERIOD_SECONDS = 12 * 60 * 60
 # Weights only CI can measure, which every write to the table keeps. A module whose expensive
 # legs skip on every host here and run on CI records about 0s from any local re-measure, so
 # `--record-files`, the check's own repair, would write back the number the check flagged, and
-# `--refresh-drifted` would undo a hand fix within days (#5756). Set a pin to the sum of the
+# `--refresh-drifted` would undo a hand fix within days. Set a pin to the sum of the
 # module's lines in CI's `--durations` report, then run `--record-files` on it so the table,
 # which is all CI reads, carries the pin too.
 CI_ONLY_WEIGHTS = {
@@ -328,7 +328,7 @@ def worthwhile(
 
     DECIDED: a selection runs only when it fits in half the legs or fewer (#8458 review,
     2026-11-16). A selected run proves every job but `pytest`, so the push run after its
-    merge repeats the `pytest` legs (#8943), about 1,050 slot-seconds on 2026-11-14, where a
+    merge repeats the `pytest` legs, about 1,050 slot-seconds, where a
     full pull-request run lets it skip as proven for about 394. A selection that needs every leg saves nothing and still pays that,
     which is every selection while the table holds few rows: a module with no row always
     runs. Each leg saved is about 170 slot-seconds, so under half the legs the saving is
@@ -452,17 +452,17 @@ def record_missing_weights(
     if missing:
         measured = measure(missing)
         kept |= {f: measured.get(f, 0.0) for f in missing}
-        # One reading on a loaded host recorded 23.39s for a module CI measured at 0.91s (#6587).
+        # One reading on a loaded host recorded 23.39s for a module CI measured at 0.91s.
         # Load only adds time, so a new row heavy enough for the stale arm to compare runs once
         # more and keeps the lower reading. A second run that measured nothing is no reading,
-        # not 0.0s (#6286).
+        # not 0.0s.
         heavy = [f for f in missing if kept[f] >= STALE_WEIGHT_FLOOR_SECONDS]
         again = measure(heavy) if heavy else {}
         kept |= {f: min(kept[f], again[f]) for f in heavy if again.get(f)}
         # DECIDED: a host-only reading writes the runner seconds, not no row. With no row the
         # module is measured twice on every tick, under the git-tree lock, for as long as the
         # local cost lasts. `assign` packs this module on the runner table either way, and
-        # `--refresh-drifted` refuses to raise it again (#7136).
+        # `--refresh-drifted` refuses to raise it again.
         rejected = host_only_readings({f: kept[f] for f in missing})
         for module, seconds in rejected.items():
             print(
@@ -558,7 +558,7 @@ def refresh_drifted_weights(
     measured = measure(chosen) if chosen else {}
     candidates = [f for f in chosen if drifted(kept[f], measured.get(f, 0.0))]
     # One serial run is not enough to rewrite a row: a single outlier measured 0.0s for a 16s
-    # module and 62s for a 1s one (#6286). The
+    # module and 62s for a 1s one. The
     # drifted files run once more, and a row moves only when the second run drifts too and
     # agrees with the first within DRIFT_RATIO. Load only adds time, so it keeps the lower run.
     confirmed = measure(candidates) if candidates else {}

@@ -363,7 +363,7 @@ def write(
     held = ciphertexts(tree.secrets.read_text())
     # DECIDED: `.source` digests the ciphertext, so `check` proves freshness without a key, and
     # a plaintext-neutral `sops rotate` of secrets.yml rolls every pod and re-runs every verify
-    # Job. The operator kept the full roll over a keyed plaintext hash (#8061); the runbook is
+    # Job. The operator kept the full roll over a keyed plaintext hash; the runbook is
     # docs/secret-rotation.md, "Changing secrets.yml's recipients".
     lines = {key: SourceLine(digest(held[key])) for key in desired}
     for entry in expected.manifests:

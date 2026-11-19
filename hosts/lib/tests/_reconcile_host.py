@@ -26,6 +26,7 @@ COMMANDS = (
     "systemd-tmpfiles",
     "sshd",
     "fail2ban-client",
+    "squid",
     "rsyslogd",
     "ufw",
     "iptables",
