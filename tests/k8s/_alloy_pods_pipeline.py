@@ -1,7 +1,8 @@
-"""The rendered Alloy `loki.process "pods"` pipeline's `stage.replace` stages, run in Python.
+"""The rendered Alloy `loki.process "pods"` pipeline's `stage.replace` and level stages, run in Python.
 
 `ship(container, line)` returns a line as Loki stores it, so a redaction test asserts on what
-ships rather than restating an expression. The stages are parsed out of the rendered config: a
+ships rather than restating an expression. `pod_level(line)` returns the `level` the pipeline
+attaches to a line. The stages are parsed out of the rendered config: a
 `stage.replace` at the top of the block applies to every container, and one inside a
 `stage.match` applies where the selector does. Alloy compiles each expression as RE2; Python's
 `re` stands in, which is equivalent for the literals, classes, bounded repeats and
@@ -9,6 +10,7 @@ non-capturing groups these stages use.
 """
 
 import re
+import warnings
 from functools import cache
 
 from _k8s_render import rendered_docs
@@ -70,17 +72,21 @@ def _attribute(block: str, name: str) -> str:
     return _unquote(m.group(1))
 
 
-@cache
-def _replace_stages() -> list[tuple[str | None, re.Pattern, str]]:
-    """Every (selector or None, expression, replacement) in config order."""
+def _pods_block() -> str:
     pods = [
         inner
         for name, inner in _blocks(alloy_config())
         if name == 'loki.process "pods"'
     ]
     assert len(pods) == 1, 'expected exactly one loki.process "pods" block'
+    return pods[0]
+
+
+@cache
+def _replace_stages() -> list[tuple[str | None, re.Pattern, str]]:
+    """Every (selector or None, expression, replacement) in config order."""
     stages = []
-    for name, inner in _blocks(pods[0]):
+    for name, inner in _blocks(_pods_block()):
         if name == "stage.replace":
             scoped = [(None, inner)]
         elif name == "stage.match":
@@ -133,3 +139,47 @@ def ship(container: str, line: str, namespace: str = "homelab") -> str:
                 line,
             )
     return line
+
+
+_LINE_FILTER = re.compile(r'^\{namespace=~"\.\+"\} \|~ "(.*)"$')
+
+
+@cache
+def _level_stages() -> list[tuple[re.Pattern, str]]:
+    """Every (line filter, level) of a match stage that sets `level`, in config order."""
+    stages = []
+    for name, inner in _blocks(_pods_block()):
+        if name != "stage.match":
+            continue
+        for n, stage in _blocks(inner):
+            if n == "stage.template" and _attribute(stage, "source") == "level":
+                line_filter = _LINE_FILTER.match(_attribute(inner, "selector"))
+                assert line_filter, (
+                    f"level stage selector {inner!r} is not a line filter"
+                )
+                # `[[]` is RE2's only backslash-free spelling of a literal `[`; Python warns on it.
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", FutureWarning)
+                    pattern = re.compile(line_filter.group(1))
+                stages.append((pattern, _attribute(stage, "template")))
+    return stages
+
+
+def stage_keys(kind: str) -> set[str]:
+    """The keys the pods pipeline's top-level `kind` stages name, such as `stage.labels`."""
+    keys = set()
+    for name, inner in _blocks(_pods_block()):
+        if name == kind:
+            keys |= set(
+                re.findall(r"^\s*(\w+)\s*=", inner.split("{", 1)[1], re.MULTILINE)
+            )
+    return keys
+
+
+def pod_level(line: str) -> str | None:
+    """The `level` the pipeline attaches to `line`: the last matching stage's, else None."""
+    level = None
+    for pattern, name in _level_stages():
+        if pattern.search(line):
+            level = name
+    return level
