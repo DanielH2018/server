@@ -38,9 +38,11 @@ Airflow 3 with the KubernetesExecutor, plus one Postgres holding the metadata da
   (`k8s/roles/airflow/defaults/main.yml:DECIDED: the task pods' image is the GHCR ref`).
   `tests/services/test_airflow_task_image.py::test_the_task_pod_template_names_the_schedulers_image_at_ghcr`
   holds it to the scheduler's.
-- **Two additive fences.** `k8s/roles/airflow/templates/networkpolicy.yaml.j2` admits
-  `airflow-task`, `airflow-dag-processor` and `monitor-bridge` to 8080, from the entry's
-  `netpol_from`.
+- **Three additive fences.** `k8s/roles/airflow/templates/networkpolicy.yaml.j2` admits
+  `airflow-task` and `airflow-dag-processor` to 8080, from the entry's `netpol_from`. The same
+  file admits `monitor-bridge` to the scheduler's health server on 8974, from the entry's
+  `airflow-scheduler` item under `netpol_fences`; that port also sets the containerPort, the
+  `airflow-scheduler` Service and the server's own port.
   `k8s/roles/airflow/templates/networkpolicy-postgres.yaml.j2` admits the four Airflow apps
   and observability's Grafana to 5432. A source a DAG reads needs an allow for
   `app: airflow-task` in its own fence, after a caller census (ADR 0009). Prometheus's is
@@ -81,8 +83,8 @@ Airflow 3 with the KubernetesExecutor, plus one Postgres holding the metadata da
   `airflow_warehouse_reader_password`, the operator runs `ALTER ROLE … PASSWORD` in the pod
   after the new value deploys. Nothing else changes the stored hash.
 - **A dead scheduler pages as `AirflowSchedulerDown`.** monitor-bridge's `airflow_scheduler`
-  row reads the api-server's `/api/v2/monitor/health` every cycle and goes down when the
-  scheduler is not `healthy` (`k8s/roles/monitor-bridge/files/verdicts/service.py:airflow_scheduler_verdict`).
+  row reads the scheduler's own health server every cycle, and goes down on a 503 or when the
+  server does not answer (`k8s/roles/monitor-bridge/files/checks/service.py:check_airflow_scheduler`).
   The rule waits 10 minutes, so the weekly reboot does not page.
 
 ## Editing

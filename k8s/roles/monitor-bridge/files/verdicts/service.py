@@ -371,30 +371,3 @@ def ha_ban_verdict(banned_count: float | None, window: str) -> tuple[bool, str]:
         "getting 403s; check the pod log for the address and delete its line from "
         "/config/ip_bans.yaml to clear" % (int(banned_count), window)
     )
-
-
-def airflow_scheduler_verdict(health: dict, now: datetime) -> tuple[bool, str]:
-    """Is Airflow's scheduler alive, judged from the api-server's `/api/v2/monitor/health`?
-
-    Airflow reads `scheduler.status` as `healthy` only while its newest scheduler job is RUNNING
-    and sent a heartbeat within `scheduler_health_check_threshold`, so the status is the verdict
-    and the heartbeat's age only goes in the message. A cleanly stopped scheduler leaves a fresh
-    heartbeat on a job that is no longer RUNNING, which an age bound alone would read as alive.
-    A null heartbeat means no scheduler has run against this metadata database.
-
-    Args:
-      health: The endpoint's JSON object.
-      now: The clock the heartbeat's age is measured against.
-    """
-    scheduler = health.get("scheduler") or {}
-    beat = scheduler.get("latest_scheduler_heartbeat")
-    if beat:
-        age = "last heartbeat %.0fs ago" % (now - parse_rfc3339(beat)).total_seconds()
-    else:
-        age = "no heartbeat on record"
-    status = scheduler.get("status")
-    if status == "healthy":
-        return True, "scheduler healthy, %s" % age
-    if (health.get("metadatabase") or {}).get("status") != "healthy":
-        return False, "the api-server cannot read the metadata database, %s" % age
-    return False, "scheduler %s, %s" % (sanitize(status or "unreported"), age)

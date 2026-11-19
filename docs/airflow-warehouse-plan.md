@@ -56,9 +56,9 @@ role as built.
   temperature per host. Done when `land.sh` reads healthy, the backfill fills every day
   Prometheus holds, a cleared day reloads to the same row counts, and the idle footprint is in
   the role's `CLAUDE.md`.
-- **Slice 0b, the scheduler deadman.** A monitor-bridge check on the api-server's
-  `/api/v2/monitor/health`, and its alert rule, so a dead scheduler pages. Done: the
-  `airflow_scheduler` row and `AirflowSchedulerDown`.
+- **Slice 0b, the scheduler deadman.** A monitor-bridge check on the scheduler's health,
+  and its alert rule, so a dead scheduler pages. Done: the `airflow_scheduler` row reads the
+  scheduler's own health server, and `AirflowSchedulerDown` pages it.
 - **Slice 1, long-term metrics (idea 1).** Longhorn volume size and growth, node load and
   memory, GPU busy, UPS battery, and daily B2 Class-B counts, plus a "Homelab history" board.
   Longhorn state metrics are one-hot over a label, and `actualSize` is not filesystem usage
