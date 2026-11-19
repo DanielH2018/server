@@ -1,12 +1,10 @@
 """`affected_lib/record.py`: one traced module run reduced to a row, and the budgeted refresh.
 
-The last test runs a real module under `strace`, because the parser and the launcher are only
-worth anything against what the kernel reports. It needs `strace` on the host.
+The test that runs a real module under `strace` is in `test_affected_record_traced.py`, because
+the recorder cannot trace a module that starts a tracer of its own.
 
 Run: uv run pytest scripts/dev/tests/test_affected_record.py
 """
-
-import shutil
 
 import pytest
 from affected_lib import record, table, trace, traced_pytest
@@ -121,23 +119,3 @@ def test_a_refused_module_loses_the_row_it_had():
 
     assert not recorded and refused == {TRACE_TEST: "pytest exit 1"}
     assert TRACE_TEST not in rows.rows and TRACE_TEST not in rows.stamps
-
-
-@pytest.mark.skipif(shutil.which("strace") is None, reason="needs strace on the host")
-def test_a_traced_run_records_what_the_module_read():
-    blobs = table.tracked_blobs(REPO)
-    git_dir = record.git("rev-parse", "--absolute-git-dir", cwd=REPO).stdout.strip()
-
-    row = record.record_module(TRACE_TEST, REPO, frozenset(blobs), f"{git_dir}/index")
-
-    assert isinstance(row, table.Row), row
-    assert {
-        TRACE_TEST,
-        "scripts/dev/affected_lib/trace.py",
-        "pyproject.toml",
-    } <= row.files
-    assert TABLE_TEST not in row.files
-    # pytest's collector and the import system listed these two, and the module did not.
-    assert not {"scripts/dev/tests", "scripts/dev"} & row.dirs
-    assert "scripts/dev/tests/__init__.py" in row.missing
-    assert not row.tree
