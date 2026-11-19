@@ -492,7 +492,7 @@ def render(rows: list[Notice], summary: Summary, fmt: str = "text") -> str:
         ]
         return "\n".join(lines)
     if fmt == "json":
-        return json.dumps([asdict(r) for r in rows], indent=2)
+        return json.dumps([asdict(r) for r in rows])
     if fmt == "reread":
         unedited: dict[str, list[str]] = {}
         for r in rows:

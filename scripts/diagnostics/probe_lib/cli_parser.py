@@ -233,6 +233,9 @@ def _build_parser():
         help="minutes without a firing sample that split one episode from the next "
         "(default two query steps)",
     )
+    _flag(
+        al, "--all", "list every episode with its start and end, not one row per alert"
+    )
     _flag(al, "--json", "print episodes as JSON (epoch-second times)")
     sub.add_parser("scrutiny", help="disk SMART summary")
     b2l = sub.add_parser(

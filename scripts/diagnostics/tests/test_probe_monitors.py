@@ -40,6 +40,23 @@ def test_a_shadow_alert_is_listed_and_not_counted():
     assert lines[0] == "0 paging alert(s) firing"
 
 
+def test_a_reason_shared_by_services_prints_once_and_a_repeat_collapses():
+    shared = [
+        _alert("RkhunterScanFailed", host, "warning")
+        for host in ("daniel-box", "daniel-pi", "daniel-server")
+    ]
+    escalation = _alert("WarningUnresolved", "alert-escalation", "warning")
+    data = _vector(WATCHDOG, *shared, escalation, {**escalation, "instance": "b"})
+    lines, code = monitors.format_alerts(data, [])
+    assert code == 1
+    assert lines == [
+        "5 paging alert(s) firing",
+        "warning:",
+        "  RkhunterScanFailed: daniel-box, daniel-pi, daniel-server",
+        "  alert-escalation: WarningUnresolved x2",
+    ]
+
+
 def test_an_info_alert_is_a_note_and_not_counted():
     info = _alert("CertExpiringSoon", "traefik", "info")
     lines, code = monitors.format_alerts(_vector(WATCHDOG, info), [])
