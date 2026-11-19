@@ -161,6 +161,7 @@ groups:
       # pinned the wrong TLS options on that connection.
       # DECIDED: 0.02 rps held 10 minutes, the bridge's rate and its three-cycle streak kept as
       # is, so a single 421 burst while Traefik reconciles does not page.
+      # DECIDED: `for: 10m`, the bridge's three cycles, 5 minutes apart.
       - alert: TraefikRouter421
         expr: sum by (router) (rate(traefik_router_requests_total{job="traefik-k8s", code="421"}[5m])) > 0.02
         for: 10m

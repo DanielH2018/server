@@ -173,10 +173,18 @@ PINNED_HOLDS = {
 }
 
 
+def hold_marked_alerts(text: str) -> set[str]:
+    """The alerts whose span carries a `# DECIDED:` line that names its `for:` hold."""
+    lines = [
+        line if "for:" in line else DECIDED.sub("#", line) for line in text.splitlines()
+    ]
+    return marked_alerts("\n".join(lines))
+
+
 def unmarked_holds(texts: dict[str, str]) -> dict[str, list[str]]:
     missing = {}
     for name, alerts in PINNED_HOLDS.items():
-        marked = marked_alerts(texts[name])
+        marked = hold_marked_alerts(texts[name])
         if lacking := [alert for alert in alerts if alert not in marked]:
             missing[name] = lacking
     return missing
@@ -198,3 +206,14 @@ def test_a_hold_whose_marker_is_dropped_is_flagged():
 def test_the_routing_table_rows_cover_every_rules_file_the_batches_walked():
     routed = [row[0] for row in ROUTED]
     assert [name for name in BATCH_RULE_FILES if name not in routed] == []
+
+
+def test_a_hold_with_only_a_threshold_marker_is_flagged():
+    texts = {name: (RULES_DIR / name).read_text() for name in PINNED_HOLDS}
+    texts["storage.yaml"] = texts["storage.yaml"].replace(
+        "      # DECIDED: `for: 5m`, one bridge cycle, so a single scrape does not page.\n"
+        "      - alert: EtcdDBNearQuota",
+        "      - alert: EtcdDBNearQuota",
+    )
+    assert "# DECIDED: 80% of the 2 GiB quota" in texts["storage.yaml"]
+    assert unmarked_holds(texts) == {"storage.yaml": ["EtcdDBNearQuota"]}

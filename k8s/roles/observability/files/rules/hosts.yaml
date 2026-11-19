@@ -277,6 +277,7 @@ groups:
       # subtracts no Tctl offset on this CPU (the driver's `tctl_offset_table` holds six
       # family-0x17 SKUs), so Tctl is the junction temperature. amd.com answers a plain fetch
       # only with a browser User-Agent.
+      # DECIDED: `for: 1h`, the 12-cycle hold the first marker above measures.
       - alert: HostTemperatureHot
         expr: |
           node_hwmon_temp_celsius{origin="daniel-box", chip!~".*nvme_.*"}
@@ -798,6 +799,7 @@ groups:
       # UPS read the same upsd, so it covered only nut-exporter dying while upsd lived, which
       # `ScrapeTargetDown{job="nut"}` already pages. Units are nut's own: charge in percent,
       # runtime in seconds.
+      # DECIDED: `for: 10m`, the bridge's 2-cycle UPS streak kept as is.
       - alert: UPSOnBattery
         expr: |
           max by (job, instance) (network_ups_tools_ups_status{flag="OB"}) > 0.5
@@ -814,6 +816,7 @@ groups:
           runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#upsonbattery
       # Charge under UPS_CHARGE_MIN_PCT (50), strict as the bridge's `<`.
       # DECIDED: under 50% charge on mains, the bridge's value kept as is.
+      # DECIDED: `for: 10m`, the bridge's 2-cycle UPS streak kept as is.
       - alert: UPSBatteryLow
         expr: |
           max by (job, instance) (network_ups_tools_battery_charge) < 50
@@ -831,6 +834,7 @@ groups:
           runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#upsbatterylow
       # Estimated runtime under UPS_RUNTIME_MIN_S (300).
       # DECIDED: under 300s of runtime, the bridge's value kept as is.
+      # DECIDED: `for: 10m`, the bridge's 2-cycle UPS streak kept as is.
       - alert: UPSRuntimeLow
         expr: |
           max by (job, instance) (network_ups_tools_battery_runtime) < 300
