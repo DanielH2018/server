@@ -23,6 +23,7 @@ import re
 import statistics
 from pathlib import Path
 
+import tested_tree
 from lib import gh as gh_mod
 from lib.repo_paths import REPO
 
@@ -280,9 +281,10 @@ def durations_complaints(
 # STALENESS IS GRACEFUL. A module this table lacks is packed at the median of its directory's
 # rows (`pytest_shard.packing_seconds`), and an entry for a deleted module
 # is ignored. The docs-refresh cron refreshes it twice a day with `pytest_shard.py
-# --refresh-runner 3`, which downloads every pytest leg's log from the three newest green master
-# runs and rewrites only the rows that drifted. Each module takes the median of what the
-# logs measured, because one module can measure about 8s on one run and 15.6s on the next.
+# --refresh-runner 3`, which downloads every pytest leg's log from the three newest runs that
+# tested a green master tree, and rewrites only the rows that drifted. Each module takes the
+# median of what the logs measured, because one module can measure about 8s on one run and
+# 15.6s on the next.
 # `--record-runner LOG...` is the by-hand full rewrite from logs you downloaded yourself.
 #
 # EACH LEG'S READINGS ARE SCALED TO ONE REFERENCE RUNNER FIRST, because the hardware a leg draws
@@ -450,18 +452,18 @@ def refresh_runner_weights(
     return moved
 
 
-# Where `--refresh-runner` reads its logs: the green runs of CI's workflow on pushes to master.
-# A pull request's run also measures modules that may never land, and a merge-queue run repeats
-# a commit master runs again, so only the push runs count.
+# Where `--refresh-runner` reads its logs: the trees of the green pushes to master. A push
+# that skipped its legs is read through the pull-request run that tested its tree
+# (`_tested_run`). Any other pull request's run measures modules that may never land, and a
+# merge-queue run repeats a commit master runs again, so neither counts.
 CI_WORKFLOW = "ci.yml"
 CI_BRANCH = "master"
 # Every pytest leg is named `pytest (shard N of M)` in ci.yml. A prefix rather than a count, so
 # changing the matrix needs no edit here.
 PYTEST_JOB_PREFIX = "pytest (shard "
-# How many green master runs `fetch_runner_logs` reads through to find the ones that ran pytest.
-# A push whose paths the matrix does not cover skips every leg, so many of the newest green
-# runs ran none. The listing is one call whatever its length, and each run read costs
-# one more.
+# How many green master runs `fetch_runner_logs` looks behind for the runs that measured their
+# trees. A merge whose diff selects no test module measured nothing, and one landing batch's
+# run stands behind up to four master commits, so the newest few do not always yield three.
 RUN_WINDOW = 30
 
 
@@ -494,33 +496,68 @@ def green_pytest_legs(run_id: int, gh=gh_mod.gh) -> dict[str, str]:
     }
 
 
-def fetch_runner_logs(runs: int, gh=gh_mod.gh) -> list[str]:
-    """The raw log of every pytest leg in the newest `runs` green master runs that ran them.
+def _tested_run(run: dict[str, str], gh) -> int | None:
+    """The id of the run that tested master run `run`'s tree before it merged, or None.
 
-    The docs-refresh cron runs this twice a day. Three runs of six legs is at
-    most 1 + `RUN_WINDOW` + 18 calls, against the authenticated 5000 an hour.
+    A push to master runs no pytest leg when a pull-request run already tested its tree, so
+    that run's logs are the tree's measurement. `tested_tree.tested_run` finds it from the
+    record the push itself was proven by.
+    """
+    url, _ = tested_tree.tested_run(
+        lambda path: json.loads(gh("api", path, cwd=REPO).stdout),
+        run["repo"],
+        run["sha"],
+        run["tree"],
+    )
+    return int(url.rsplit("/", 1)[1]) if url else None
+
+
+def fetch_runner_logs(runs: int, gh=gh_mod.gh) -> list[str]:
+    """The raw pytest leg logs of the newest `runs` runs that measured a green master tree.
+
+    Each green master run is read through its own pytest legs, or through the run
+    `_tested_run` names when it has none. A run counts once, however many master commits it
+    tested, and only when one of its logs holds a durations line.
+
+    The docs-refresh cron runs this twice a day. A master run costs up to four calls to look
+    at and six more to read, so three runs found at once is about 30 calls and a whole
+    `RUN_WINDOW` of unmeasured runs is 121, against the authenticated 5000 an hour.
 
     Raises:
-        RuntimeError: fewer than `runs` of the newest `RUN_WINDOW` green runs carried a pytest
-            log. A median over fewer
+        RuntimeError: fewer than `runs` runs measured the newest `RUN_WINDOW` green master
+            trees. A median over fewer
             runs is one noisy reading per module, so nothing is written from it.
         subprocess.CalledProcessError: any `gh` call failed.
     """
-    list_args = (
-        f"run list --workflow {CI_WORKFLOW} --branch {CI_BRANCH} --event push"
-        f" --status success --limit {RUN_WINDOW} --json databaseId"
-    ).split()
-    listed = json.loads(gh(*list_args, cwd=REPO).stdout or "[]")
-    reports, measured_runs = [], 0
+    listing = (
+        f"repos/{{owner}}/{{repo}}/actions/workflows/{CI_WORKFLOW}/runs"
+        f"?branch={CI_BRANCH}&event=push&status=success&per_page={RUN_WINDOW}"
+    )
+    fields = (
+        "[.workflow_runs[] | {id, sha: .head_sha, tree: .head_commit.tree_id,"
+        " repo: .repository.full_name}]"
+    )
+    listed = json.loads(gh("api", listing, "--jq", fields, cwd=REPO).stdout or "[]")
+    seen: set[int] = set()
+
+    def measured(run_id: int | None) -> list[str]:
+        if run_id is None or run_id in seen:
+            return []
+        seen.add(run_id)
+        logs = list(green_pytest_legs(run_id, gh).values())
+        with_durations = any(parse_durations(_LOG_NOISE.sub("", log)) for log in logs)
+        return logs if with_durations else []
+
+    reports: list[list[str]] = []
     for run in listed:
-        if measured_runs == runs:
+        if len(reports) == runs:
             break
-        legs = green_pytest_legs(run["databaseId"], gh)
-        measured_runs += bool(legs)
-        reports += legs.values()
-    if measured_runs < runs:
+        logs = measured(run["id"]) or measured(_tested_run(run, gh))
+        if logs:
+            reports.append(logs)
+    if len(reports) < runs:
         raise RuntimeError(
-            f"found pytest logs in {measured_runs} of the newest {len(listed)} green "
-            f"{CI_BRANCH} run(s) of {CI_WORKFLOW}, not the {runs} asked for"
+            f"read pytest durations from {len(reports)} run(s) behind the newest "
+            f"{len(listed)} green {CI_BRANCH} run(s) of {CI_WORKFLOW}, not the {runs} asked for"
         )
-    return reports
+    return [log for logs in reports for log in logs]

@@ -248,7 +248,9 @@ push to Kuma, which M6 batch B2's Cutover-2 removed. B2's token PR retired both 
 - **Why the weights come from CI's logs and not from this host (#9013).** The split packs on
   what the runner measures, and the runner does not scale this host's seconds evenly. So the
   cron runs `--refresh-runner 3`, which reads every pytest leg's log from the three newest
-  green master runs. It adds a module the table lacks, drops a deleted one, and rewrites a
+  runs that tested a green master tree. A push to master skips its pytest legs when a
+  pull-request run already tested its tree, so the step reads that run in its place (#9312).
+  It adds a module the table lacks, drops a deleted one, and rewrites a
   present row only when it is more than `DRIFT_RATIO` (1.5x) from what the logs measured, so
   noise inside that band leaves no diff.
 - **HISTORY — a second table, measured on this host.** Until 2026-11-19 the cron also wrote
