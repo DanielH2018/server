@@ -59,14 +59,14 @@ LOGGER_STUB = 'printf "%s\\n" "$*" >>"$SYNC_ARTIFACTS_JOURNAL"'
 class _Runner:
     """`run(outcome)` -> CompletedProcess, plus readers for what the run left behind."""
 
-    execute: Callable[[str], subprocess.CompletedProcess]
+    execute: Callable[..., subprocess.CompletedProcess]
     journal: Path
     calls: Path
     stars: Path
     prom: Path
 
-    def __call__(self, outcome: str) -> subprocess.CompletedProcess:
-        return self.execute(outcome)
+    def __call__(self, outcome: str, **env: str) -> subprocess.CompletedProcess:
+        return self.execute(outcome, **env)
 
     def verdict_lines(self) -> list[str]:
         """The `<status> <report>` text of every verdict line the script logged."""
@@ -111,7 +111,7 @@ def _runner(tmp_path: Path) -> _Runner:
     textfile = tmp_path / "textfile"
     textfile.mkdir()
 
-    def run(outcome: str) -> subprocess.CompletedProcess:
+    def run(outcome: str, **extra_env: str) -> subprocess.CompletedProcess:
         stub.write_text(outcome)
         return launch(
             ["bash", str(script)],
@@ -126,6 +126,7 @@ def _runner(tmp_path: Path) -> _Runner:
                 "SYNC_ARTIFACTS_STARS": str(stars),
                 "BASH_FUNC_rsync%%": f"() {{ {RSYNC_STUB}; }}",
                 "BASH_FUNC_logger%%": f"() {{ {LOGGER_STUB}; }}",
+                **extra_env,
             },
         )
 
@@ -228,6 +229,17 @@ def test_a_failed_star_push_counts_toward_the_streak(tmp_path):
     assert f"{PEER} failed (consecutive run 1)" in run.journal.read_text()
 
 
+def test_the_pull_and_the_push_share_one_ssh_connection(tmp_path):
+    """Two logins per run were half of daniel-server's sshd and PAM audit lines."""
+    run = _runner(tmp_path)
+    run.stars.write_text(f"{PEER}/plan.html\n")
+    sockets = tmp_path / "run"
+    assert run("ok", RUNTIME_DIRECTORY=str(sockets)).returncode == 0
+    pull, push = run.rsync_calls()
+    shared = f"-o ControlMaster=auto -o ControlPath={sockets}/%C -o ControlPersist="
+    assert shared in pull and shared in push, (pull, push)
+
+
 def test_the_ssh_transport_drops_inherited_local_forwards():
     """The second error shape's whole fix: a forward this script never asked for.
 
@@ -236,7 +248,7 @@ def test_the_ssh_transport_drops_inherited_local_forwards():
     sync with it. The flag has no other effect on an rsync transport.
     """
     rendered = rendered_shell_text(*TEMPLATE)
-    transports = [line for line in rendered.splitlines() if "-e 'ssh" in line]
+    transports = [line for line in rendered.splitlines() if '-e "ssh' in line]
     assert transports, rendered
     assert all("ClearAllForwardings=yes" in line for line in transports), transports
 
@@ -249,6 +261,10 @@ def test_the_packaged_timer_runs_the_script_this_suite_renders():
     assert "ExecStart=/usr/lib/homelab/sync-artifacts\n" in unit
     # The threshold line these tests prove reaches the journal under this tag.
     assert "SyslogIdentifier=sync-artifacts\n" in unit
+    # The control socket's directory, which only the sync's own user may enter.
+    assert (
+        "RuntimeDirectory=homelab-sync-artifacts\nRuntimeDirectoryMode=0700\n" in unit
+    )
     # The unit loads no credential: the sync has nothing left to push to.
     assert "LoadCredential" not in unit
 
