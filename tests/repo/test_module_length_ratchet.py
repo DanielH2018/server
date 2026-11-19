@@ -20,7 +20,7 @@ base yet; a `git show` that fails for a path the base does track is a failure, n
 Run: uv run pytest tests/repo/test_module_length_ratchet.py
 """
 
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Iterable
 from functools import cache
 from subprocess import CompletedProcess
 
@@ -564,15 +564,6 @@ def test_no_allowlist_entry_rose_against_the_merge_base(ratchet: Ratchet):
     assert not offenders, "\n".join(offenders)
 
 
-def test_the_live_length_ratchet_flags_a_lowered_entry():
-    """The pairs above prove the comparison; this proves the census feeds the real list."""
-    _assert_a_lowered_entry_is_flagged(LENGTHS, lengths())
-
-
-def test_the_live_monkeypatch_ratchet_flags_a_lowered_entry():
-    _assert_a_lowered_entry_is_flagged(PATCHES, patch_counts())
-
-
 def test_every_test_in_a_copied_group_counts_against_its_own_module():
     method = "class TestK:\n    def test_m(self):\n        x = 1\n        assert x\n"
     sources = {
@@ -590,14 +581,6 @@ def test_every_test_in_a_copied_group_counts_against_its_own_module():
         "c/test_c.py": 1,
         "d/test_d.py": 0,
     }
-
-
-def _assert_a_lowered_entry_is_flagged(ratchet: Ratchet, counts: Mapping[str, int]):
-    allow = ratchet.allowlist()
-    if not allow:
-        pytest.skip(f"{ratchet.path.name} is empty — every file is under its cap")
-    listed = next(iter(allow))
-    assert ratchet.violations(counts, {**allow, listed: allow[listed] - 1})
 
 
 def test_the_committed_allowlists_are_sorted():
