@@ -235,8 +235,10 @@ def write_state(state_file, ok, msg):
     )
 
 
-def scan(cfg):
+def scan(cfg, sonarr_cls=Sonarr, post=discord_post):
     """One full scan.
+
+    `sonarr_cls` and `post` are the seams a test replaces; the cron passes neither.
 
     Returns (ok, summary) for the state file. Raises only on a Sonarr failure that prevents the scan
     running at all (main() records that as ok=false).
@@ -259,7 +261,7 @@ def scan(cfg):
         "LEDGER_FILE", "/var/lib/autofix-fake-remux/replacements.json"
     )
 
-    sonarr = Sonarr(base, api_key, int(cfg.get("HTTP_TIMEOUT", "15")))
+    sonarr = sonarr_cls(base, api_key, int(cfg.get("HTTP_TIMEOUT", "15")))
 
     candidates = []
     file_to_episode = {}
@@ -303,7 +305,7 @@ def scan(cfg):
         ok = False
         summary = hold_notice(new_fakes, max_per_scan)
         if held_set_changed(held_file, new_fakes):
-            discord_post(
+            post(
                 webhook,
                 summary,
                 USER_AGENT,
@@ -316,7 +318,7 @@ def scan(cfg):
         for f in new_fakes:
             line = frl.format_fake_line("Seeded for replacement", f)
             log(line)
-            discord_post(
+            post(
                 webhook,
                 line,
                 USER_AGENT,

@@ -306,3 +306,64 @@ def test_the_hold_notice_names_the_first_episodes():
     assert scan.hold_notice(fakes, 2) == (
         "5 fakes — holding (max 2), investigate: S/E1.mkv, S/E2.mkv, S/E3.mkv and 2 more"
     )
+
+
+def test_a_held_scan_posts_once_per_held_set_and_clears_the_record(tmp_path):
+    from fake_remux_lib import fake_remux_scan as scan
+
+    files = [
+        {
+            "id": i,
+            "seriesId": 1,
+            "path": "/data/media/tv/E%d.mkv" % i,
+            "relativePath": "S/E%d.mkv" % i,
+            "quality": {"quality": {"name": "Bluray-1080p Remux"}},
+        }
+        for i in range(1, 4)
+    ]
+    episodes = [
+        {"id": 10 + i, "episodeFileId": i, "monitored": True} for i in range(1, 4)
+    ]
+
+    class StubSonarr:
+        shown = files
+
+        def __init__(self, *args):
+            pass
+
+        def series(self):
+            return [{"id": 1, "title": "S"}]
+
+        def episodefiles(self, series_id):
+            return self.shown
+
+        def episodes(self, series_id):
+            return episodes
+
+    ffprobe = write_exec(
+        tmp_path / "ffprobe", 'echo \'{"streams": [{"tags": {"ENCODER": "x265"}}]}\'\n'
+    )
+    posts = []
+    ledger = tmp_path / "replacements.json"
+    cfg = {
+        "SONARR_API_KEY": "k",
+        "SONARR_URL": "http://sonarr",
+        "MAX_PER_SCAN": "2",
+        "LEDGER_FILE": str(ledger),
+        "FFPROBE_BIN": str(ffprobe),
+        "HOST_DATA_ROOT": "/srv/media",
+    }
+
+    def run():
+        return scan.scan(
+            cfg, StubSonarr, lambda _webhook, text, *args, **kw: posts.append(text)
+        )
+
+    assert [run()[0], run()[0]] == [False, False]
+    assert len(posts) == 1
+    assert "S/E1.mkv, S/E2.mkv, S/E3.mkv" in posts[0]
+    assert (tmp_path / "replacements.json.held").exists()
+
+    StubSonarr.shown = files[:1]
+    assert run()[0] is True
+    assert not (tmp_path / "replacements.json.held").exists()
