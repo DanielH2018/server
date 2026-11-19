@@ -373,9 +373,11 @@ BATCH_STEPS = (
         ("pull_request", {"queue": True, "same_repo": False}, False),
         ("pull_request", {"queue": True, "prove": "success", "proven": "true"}, False),
         ("push", {"queue": True}, False),
-        ("pull_request", {"queue": True, "scope": "selected"}, False),
+        ("pull_request", {"queue": True, "scope": "selected"}, True),
+        # No leg reached its select step, so nothing says what the run tested.
+        ("pull_request", {"queue": True, "scope": ""}, False),
     ],
-    ids=["batch", "ordinary", "fork", "proven", "push", "selected"],
+    ids=["batch", "ordinary", "fork", "proven", "push", "selected", "no-scope"],
 )
 def test_only_a_batch_run_of_this_repository_records_its_members(event, facts, records):
     steps = {s["name"]: s for s in _jobs()["prek"]["steps"] if "name" in s}
