@@ -21,12 +21,10 @@ from dev.findings_lib.issue_model import (
     NOT_BEFORE_PREFIX,
     PR_REPO,
     _REOBSERVED,
+    Blocker,
+    Issue,
     claim_comment,
-    current_claim,
     fold_marker,
-    label_names,
-    not_before,
-    open_blockers,
     release_comment,
     reobservations,
     trailer,
@@ -44,7 +42,7 @@ def plan_sync_labels(existing: set[str]) -> list[list[str]]:
     return plans
 
 
-def plan_defer(issue: dict, *, until: date | None) -> list[list[str]]:
+def plan_defer(issue: Issue, *, until: date | None) -> list[list[str]]:
     """Plans the gh argv that records setting, moving or clearing ``issue``'s not-before date.
 
     The date itself is the Not Before issue field, which the caller sets with
@@ -58,12 +56,12 @@ def plan_defer(issue: dict, *, until: date | None) -> list[list[str]]:
     Raises:
         ClaimRefused: the issue is closed, or clearing an issue that carries no deferral.
     """
-    if issue.get("state", "OPEN") != "OPEN":
+    if not issue.is_open:
         raise ClaimRefused("closed — nothing to defer")
-    if until is None and not_before(issue) is None:
+    if until is None and issue.not_before is None:
         raise ClaimRefused("not deferred — no Not Before date to clear")
-    n = str(issue["number"])
-    stale = sorted(x for x in label_names(issue) if x.startswith(NOT_BEFORE_PREFIX))
+    n = str(issue.number)
+    stale = sorted(x for x in issue.labels if x.startswith(NOT_BEFORE_PREFIX))
     plans = [["issue", "edit", n, *_flat("--remove-label", stale)]] if stale else []
     note = (
         "Deferral cleared." if until is None else f"Deferred until {until.isoformat()}."
@@ -72,7 +70,7 @@ def plan_defer(issue: dict, *, until: date | None) -> list[list[str]]:
     return plans
 
 
-def plan_block(issue: dict, *, on: list[str], clear: bool) -> list[list[str]]:
+def plan_block(issue: Issue, *, on: list[str], clear: bool) -> list[list[str]]:
     """Plans the gh argv that marks ``issue`` blocked by other issues, or removes that.
 
     Writes GitHub's native "blocked by" relationship. `next` and `claim` withhold the issue
@@ -88,31 +86,40 @@ def plan_block(issue: dict, *, on: list[str], clear: bool) -> list[list[str]]:
         ClaimRefused: the issue is closed, would block itself, or ``clear`` finds no
             blocker to remove.
     """
-    if issue.get("state", "OPEN") != "OPEN":
+    if not issue.is_open:
         raise ClaimRefused("closed — nothing to block")
-    n = str(issue["number"])
+    n = str(issue.number)
     if not clear:
-        if n in on:
-            raise ClaimRefused("an issue cannot block itself")
-        return [["issue", "edit", n, "--add-blocked-by", ",".join(on)]]
+        return plan_add_blockers(issue.number, on)
     if not on:
-        nodes = (issue.get("blockedBy") or {}).get("nodes") or []
-        on = [_blocker_ref(node) for node in nodes]
+        on = [_blocker_ref(b) for b in issue.blockers]
         if not on:
             raise ClaimRefused("not blocked — no blocker to remove")
     return [["issue", "edit", n, "--remove-blocked-by", ",".join(on)]]
 
 
-def _blocker_ref(node: dict) -> str:
+def plan_add_blockers(number: int, on: list[str]) -> list[list[str]]:
+    """Plans the gh argv that records each of ``on`` as blocking issue ``number``.
+
+    `open` calls it for an issue it has just created; `plan_block` for one it has read.
+
+    Raises:
+        ClaimRefused: ``on`` names the issue itself.
+    """
+    if str(number) in on:
+        raise ClaimRefused("an issue cannot block itself")
+    return [["issue", "edit", str(number), "--add-blocked-by", ",".join(on)]]
+
+
+def _blocker_ref(blocker: Blocker) -> str:
     """How `gh issue edit` names a blocker: its number in this repo, its URL elsewhere."""
-    url = node.get("url") or ""
-    if url.lower().startswith(f"https://github.com/{PR_REPO.lower()}/issues/"):
-        return str(node["number"])
-    return url or str(node["number"])
+    if blocker.url.lower().startswith(f"https://github.com/{PR_REPO.lower()}/issues/"):
+        return str(blocker.number)
+    return blocker.url or str(blocker.number)
 
 
 def plan_release_held(
-    issue: dict, *, when: str, reason: str, detach: bool = True
+    issue: Issue, *, when: str, reason: str, detach: bool = True
 ) -> list[list[str]]:
     """The gh argv releasing whatever claim ``issue`` carries, or ``[]`` when it carries none.
 
@@ -128,13 +135,13 @@ def plan_release_held(
     ``detach=False`` keeps the issue in its session milestone. `close` passes it, because
     a closed issue is that session's finished work.
     """
-    held = current_claim(issue)
+    held = issue.holder
     if not held:
         return []
     return plan_release(issue, worktree=held, when=when, reason=reason, detach=detach)
 
 
-def plan_manual(issue: dict, *, clear: bool) -> list[list[str]]:
+def plan_manual(issue: Issue, *, clear: bool) -> list[list[str]]:
     """Plans the gh argv that reserves ``issue`` for the operator, or hands it back.
 
     `next` withholds a `manual` issue and `claim` refuses one. Unlike `not-before:`, nothing
@@ -145,10 +152,10 @@ def plan_manual(issue: dict, *, clear: bool) -> list[list[str]]:
     Raises:
         ClaimRefused: the issue is closed, already `manual`, or `clear` finds no label.
     """
-    if issue.get("state", "OPEN") != "OPEN":
+    if not issue.is_open:
         raise ClaimRefused("closed — nothing to mark")
-    n = str(issue["number"])
-    marked = "manual" in label_names(issue)
+    n = str(issue.number)
+    marked = "manual" in issue.labels
     if clear:
         if not marked:
             raise ClaimRefused("not manual — no `manual` label to clear")
@@ -180,9 +187,9 @@ def _flat(flag: str, values: list[str]) -> list[str]:
     return [arg for v in values for arg in (flag, v)]
 
 
-def plan_touch(issue: dict, source: str) -> list[list[str]]:
+def plan_touch(issue: Issue, source: str) -> list[list[str]]:
     """A re-observation is a comment; the third one adds `escalated`."""
-    n = str(issue["number"])
+    n = str(issue.number)
     seen = reobservations(issue) + 1
     plans = [
         [
@@ -193,12 +200,12 @@ def plan_touch(issue: dict, source: str) -> list[list[str]]:
             f"{_REOBSERVED} by {source} (sighting {seen + 1}).",
         ]
     ]
-    if seen >= 2 and "escalated" not in label_names(issue):
+    if seen >= 2 and "escalated" not in issue.labels:
         plans.append(["issue", "edit", n, "--add-label", "escalated"])
     return plans
 
 
-def plan_comment(issue: dict, body: str) -> list[list[str]]:
+def plan_comment(issue: Issue, body: str) -> list[list[str]]:
     """Plans the gh argv that posts ``body`` on ``issue`` as a plain comment.
 
     It adds no label and counts as no re-observation. A closed issue takes one too, since a
@@ -208,7 +215,7 @@ def plan_comment(issue: dict, body: str) -> list[list[str]]:
         ClaimRefused: the issue is outside the register, the body is blank, or the body
             carries a marker the register folds back into state (`fold_marker`).
     """
-    if "claude" not in label_names(issue):
+    if "claude" not in issue.labels:
         raise ClaimRefused("not in the register — no `claude` label")
     if not body.strip():
         raise ClaimRefused("the body is empty")
@@ -218,7 +225,7 @@ def plan_comment(issue: dict, body: str) -> list[list[str]]:
             f"the body carries {marker}, which the register would read as state; "
             "use the verb that owns it"
         )
-    return [["issue", "comment", str(issue["number"]), "--body", body]]
+    return [["issue", "comment", str(issue.number), "--body", body]]
 
 
 class ClaimRefused(Exception):
@@ -234,7 +241,7 @@ class ClaimRefused(Exception):
 
 
 def plan_claim(
-    issue: dict,
+    issue: Issue,
     *,
     worktree: str,
     session: str | None,
@@ -260,9 +267,9 @@ def plan_claim(
             carries a Not Before date after ``today``, has an open blocker, or another
             worktree already holds it.
     """
-    if issue.get("state", "OPEN") != "OPEN":
+    if not issue.is_open:
         raise ClaimRefused("closed — nothing to work")
-    names = label_names(issue)
+    names = issue.labels
     # An issue outside the register is invisible to `claims`, `reap` and `next` alike: all
     # three read `load_issues`, which filters `--label claude`, while `_load_issue` does not.
     # So a claim on one could only ever be cleared by a hand-typed `release`, and nothing
@@ -274,32 +281,32 @@ def plan_claim(
         )
     if "manual" in names:
         raise ClaimRefused(
-            f"labelled `manual` — reserved for the operator; `manual {issue['number']} --clear` lifts it"
+            f"labelled `manual` — reserved for the operator; `manual {issue.number} --clear` lifts it"
         )
-    day = not_before(issue)
+    day = issue.not_before
     if day is not None and today < day:
         # The date is the issue's own precondition, so a claim before it is a wasted
         # dispatch. The way out is named, unlike `manual`'s.
         raise ClaimRefused(
-            f"deferred until {day.isoformat()} — `defer {issue['number']} --clear` lifts it"
+            f"deferred until {day.isoformat()} — `defer {issue.number} --clear` lifts it"
         )
-    blockers = open_blockers(issue)
+    blockers = issue.open_blockers
     if blockers:
         raise ClaimRefused(
             f"blocked by {', '.join(blockers)} — it frees itself when they close; "
-            f"`block {issue['number']} --clear` lifts it"
+            f"`block {issue.number} --clear` lifts it"
         )
-    n = str(issue["number"])
-    filed_in = issue.get("milestone")
+    n = str(issue.number)
+    filed_in = issue.milestone
     # A hand-steered worker claims from a project's backlog under its own branch.
     in_their_project = is_project(filed_in) and branch_of(filed_in) != worktree
-    filed = (filed_in or {}).get("title") == milestone
+    filed = issue.milestone_title == milestone
     file_under = (
         [["issue", "edit", n, "--milestone", milestone]]
         if milestone and not filed and not in_their_project
         else []
     )
-    held = current_claim(issue)
+    held = issue.holder
     if held == worktree:
         return file_under
     if held:
@@ -311,7 +318,7 @@ def plan_claim(
 
 
 def plan_release(
-    issue: dict,
+    issue: Issue,
     *,
     worktree: str,
     when: str,
@@ -329,13 +336,13 @@ def plan_release(
             releasing another's claim is always a mistake, so it is refused rather than
             allowed with a warning.
     """
-    n = str(issue["number"])
-    held = current_claim(issue)
+    n = str(issue.number)
+    held = issue.holder
     if held is None:
         raise ClaimRefused("not claimed")
     if held != worktree:
         raise ClaimRefused(f"claimed by `{held}`, not by `{worktree}`")
-    filed_in = issue.get("milestone")
+    filed_in = issue.milestone
     detach_plan = (
         [["issue", "edit", n, "--remove-milestone"]]
         if detach and branch_of(filed_in) == worktree and not is_project(filed_in)
@@ -347,7 +354,7 @@ def plan_release(
     ]
 
 
-def plan_milestone_add(issue: dict, project: dict) -> list[list[str]]:
+def plan_milestone_add(issue: Issue, project: dict) -> list[list[str]]:
     """Plans the gh argv that files ``issue`` in the backlog of the milestone ``project``.
 
     Returns an empty list when the issue is already there.
@@ -356,41 +363,41 @@ def plan_milestone_add(issue: dict, project: dict) -> list[list[str]]:
         ClaimRefused: the issue is closed, outside the register, claimed, or held by
             another milestone, whoever made that one.
     """
-    if issue.get("state", "OPEN") != "OPEN":
+    if not issue.is_open:
         raise ClaimRefused("closed — nothing to work")
-    if "claude" not in label_names(issue):
+    if "claude" not in issue.labels:
         raise ClaimRefused(
             "not in the register — no `claude` label, so `next` is blind to it"
         )
-    title = (issue.get("milestone") or {}).get("title")
+    title = issue.milestone_title
     if title == project["title"]:
         return []
     if title is not None:
         raise ClaimRefused(
             f"in milestone `{title}` — `milestone remove` on its branch frees it"
         )
-    held = current_claim(issue)
+    held = issue.holder
     if held:
         raise ClaimRefused(f"claimed by `{held}` — a backlog holds unclaimed issues")
-    return [["issue", "edit", str(issue["number"]), "--milestone", project["title"]]]
+    return [["issue", "edit", str(issue.number), "--milestone", project["title"]]]
 
 
-def plan_milestone_remove(issue: dict, project: dict) -> list[list[str]]:
+def plan_milestone_remove(issue: Issue, project: dict) -> list[list[str]]:
     """Plans the gh argv that takes ``issue`` out of the milestone ``project``.
 
     Raises:
         ClaimRefused: the issue is not in that milestone, or a worktree holds its claim.
     """
-    if (issue.get("milestone") or {}).get("title") != project["title"]:
+    if issue.milestone_title != project["title"]:
         raise ClaimRefused(f"not in `{project['title']}`")
-    held = current_claim(issue)
+    held = issue.holder
     if held:
         raise ClaimRefused(f"claimed by `{held}` — `release` it first")
-    return [["issue", "edit", str(issue["number"]), "--remove-milestone"]]
+    return [["issue", "edit", str(issue.number), "--remove-milestone"]]
 
 
 def plan_open(
-    existing: dict | None,
+    existing: Issue | None,
     *,
     title: str,
     body: str,
@@ -437,10 +444,10 @@ def plan_open(
         for lab in labels:
             argv += ["--label", lab]
         return "created", 0, [argv]
-    n = str(existing["number"])
-    names = label_names(existing)
+    n = str(existing.number)
+    names = existing.labels
     terminal = sorted(NO_REOPEN & names)
-    if existing.get("state") == "CLOSED" and terminal:
+    if not existing.is_open and terminal:
         # Refuted means the finding was disproved; accepted means it is true and the operator
         # chose to live with it. Either way re-filing it would reopen a decision already made,
         # so the caller gets exit 3 and no writes are planned.
@@ -451,7 +458,7 @@ def plan_open(
     relabel = (
         [["issue", "edit", n, "--add-label", "review-leftover"]] if leftover else []
     )
-    if existing.get("state") == "CLOSED":
+    if not existing.is_open:
         return (
             "reopened",
             0,

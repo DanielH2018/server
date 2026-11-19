@@ -9,6 +9,7 @@ backlog.py` reaches `findings.py` with only `scripts/` on `sys.path`.
 import argparse
 from datetime import date
 from pathlib import Path
+from typing import NewType
 
 # Reach the sibling package directories: a directly-invoked script gets only its own
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
@@ -23,6 +24,35 @@ from lib.cli_help import ArgumentParser
 # How many search hits `history` reads back unless `--limit` says otherwise. A topic search
 # that needs more than this is too broad to read, and `cmd_history` warns when it fills.
 HISTORY_LIMIT = 30
+
+
+WorktreeName = NewType("WorktreeName", str)
+
+
+def worktree_name(text: str) -> WorktreeName:
+    """``text`` as a branch a claim trailer can carry; the `type=` of every `--worktree`.
+
+    `Claim: `<name>`` captures `[^`\\n]+` between backticks, so a name holding a backtick
+    or a line break would post a claim comment that then fails to parse on read-back, and
+    `claim` would report losing a race to nobody.
+
+    Raises:
+        argparse.ArgumentTypeError: the name is empty, has leading or trailing whitespace,
+            or holds a backtick or a line break. argparse prints it and exits 64.
+    """
+    if not text.strip():
+        raise argparse.ArgumentTypeError("empty")
+    if text != text.strip():
+        raise argparse.ArgumentTypeError(f"`{text}` has leading or trailing whitespace")
+    if "`" in text:
+        raise argparse.ArgumentTypeError(
+            f"`{text}` contains a backtick, which ends the claim trailer's own quoting"
+        )
+    if any(c in text for c in "\r\n"):
+        raise argparse.ArgumentTypeError(
+            f"`{text}` contains a line break, so the claim trailer would not parse"
+        )
+    return WorktreeName(text)
 
 
 def _example(args: str) -> str:
@@ -224,7 +254,12 @@ def _parser(description: str) -> argparse.ArgumentParser:
     _add_dry_run(cl, suppress=True)
     _add_repo(cl)
     cl.add_argument("numbers", nargs="+", type=int)
-    cl.add_argument("--worktree", required=True, help="the branch doing the work")
+    cl.add_argument(
+        "--worktree",
+        required=True,
+        type=worktree_name,
+        help="the branch doing the work",
+    )
     cl.add_argument("--session", help="the Claude session id, for the thread to read")
     cl.add_argument(
         "--force",
@@ -246,7 +281,7 @@ def _parser(description: str) -> argparse.ArgumentParser:
         action="store_true",
         help="release every open claim --worktree holds, in place of issue numbers",
     )
-    rl.add_argument("--worktree", required=True)
+    rl.add_argument("--worktree", required=True, type=worktree_name)
     rl.add_argument("--reason", help="why, for the release comment")
 
     cs = sub.add_parser(
@@ -262,6 +297,7 @@ def _parser(description: str) -> argparse.ArgumentParser:
     )
     cs.add_argument(
         "--worktree",
+        type=worktree_name,
         help="only the claims this branch holds, plus those held by the batch branches "
         "its `fanout.py place launch` runs started in this register",
     )
@@ -298,7 +334,12 @@ def _parser(description: str) -> argparse.ArgumentParser:
         action="store_true",
         help="with `start`: a project milestone, which holds a backlog of unclaimed issues",
     )
-    ms.add_argument("--worktree", required=True, help="the branch doing the work")
+    ms.add_argument(
+        "--worktree",
+        required=True,
+        type=worktree_name,
+        help="the branch doing the work",
+    )
 
     c = sub.add_parser(
         "close",

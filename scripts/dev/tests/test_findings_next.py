@@ -13,6 +13,7 @@ from _findings_fakes import (
     live_worktree,
     make_issue,
     operator_comment,
+    typed,
 )
 
 from dev.findings import main
@@ -20,7 +21,6 @@ from dev.findings_lib.solo_only import solo_only_reasons, fanout_tooling_paths
 from dev.findings_lib.issue_model import (
     claim_comment,
     waiting,
-    not_before,
     pickable,
     pr_refs,
 )
@@ -30,16 +30,19 @@ TODAY = date(2026, 9, 11)
 
 
 def _issue(number, labels=(), comments=(), body=""):
-    return {
-        "number": number,
-        "title": f"finding {number}",
-        "state": "OPEN",
-        "body": body,
-        "labels": [{"name": n} for n in ("claude", *labels)],
-        "comments": [operator_comment(b) for b in comments],
-        "createdAt": "2026-09-01T00:00:00Z",
-        "url": "",
-    }
+    return typed(
+        {
+            "number": number,
+            "title": f"finding {number}",
+            "state": "OPEN",
+            "body": body,
+            "labels": [{"name": n} for n in ("claude", *labels)],
+            "comments": [operator_comment(b) for b in comments],
+            "blockedBy": {"nodes": []},
+            "createdAt": "2026-09-01T00:00:00Z",
+            "url": "",
+        }
+    )
 
 
 def test_an_ordinary_open_issue_is_pickable():
@@ -84,14 +87,14 @@ def test_an_issue_deferred_to_yesterday_is_pickable():
 def test_a_not_before_label_that_does_not_parse_is_no_deferral():
     """`issue_rows` feeds the docs cron, so a hand-typed label must not raise."""
     issue = _issue(1, labels=["not-before:whenever"])
-    assert not_before(issue) is None
+    assert issue.not_before is None
     rows = pickable([issue], live_claims=set(), pr_refs=set(), today=TODAY)
     assert [r["number"] for r in rows] == [1]
 
 
 def test_several_not_before_labels_take_the_latest_date():
     issue = _issue(1, labels=["not-before:2026-09-10", "not-before:2026-09-20"])
-    assert not_before(issue) == date(2026, 9, 20)
+    assert issue.not_before == date(2026, 9, 20)
 
 
 def test_a_manual_issue_is_not_listed_as_deferred_either():

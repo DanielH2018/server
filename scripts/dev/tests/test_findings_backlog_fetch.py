@@ -11,12 +11,13 @@ what `load_backlog_issues` asks for.
 distinction under test here, so these tests answer gh themselves.
 """
 
+from _findings_fakes import make_issue
 from dev.findings_lib.boundaries import FindingsTools
 from dev.findings_lib.gh_calls import (
     SETTLED_LABELS,
     load_backlog_issues,
 )
-from dev.findings_lib.issue_model import NO_REOPEN, REGISTER_AUTHOR
+from dev.findings_lib.issue_model import NO_REOPEN
 
 
 def _tools(answer_for=lambda argv: []):
@@ -64,13 +65,9 @@ def test_the_backlog_fetch_never_asks_for_the_whole_register():
 
 def test_an_issue_carrying_both_settled_labels_comes_back_once():
     """`refuted` and `accepted` are separate fetches, so a doubly-labelled issue hits two."""
-    both = {
-        "number": 7,
-        "author": {"login": REGISTER_AUTHOR},
-        "labels": [{"name": n} for n in ("claude", *SETTLED_LABELS)],
-    }
+    both = make_issue(7, state="CLOSED", labels=SETTLED_LABELS)
     tools, _ = _tools(lambda argv: [] if _query(argv)[0] == "open" else [both])
-    assert [i["number"] for i in load_backlog_issues(tools)] == [7]
+    assert [i.number for i in load_backlog_issues(tools)] == [7]
 
 
 def test_the_settled_labels_are_the_pair_that_refuses_a_reopen():

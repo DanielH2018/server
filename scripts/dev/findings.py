@@ -206,12 +206,12 @@ from dev.findings_lib.issue_model import (
     SEVERITY_FIELD,
     SEVERITY_OPTIONS,
     KIND_TYPES,
-    recorded_blockers,
+    Issue,
+    IssueState,
     is_deferred_row,
     now_iso,
     fingerprint,
     issue_rows,
-    label_names,
     sort_key,
     today_utc,
     waiting,
@@ -219,6 +219,7 @@ from dev.findings_lib.issue_model import (
 )
 from dev.findings_lib.plans import (
     ClaimRefused,
+    plan_add_blockers,
     plan_block,
     plan_close,
     plan_comment,
@@ -301,7 +302,7 @@ def cmd_open(args: argparse.Namespace, tools: FindingsTools) -> int:
         set_fields(int(number), fields, tools, dry_run=False, issue_type=issue_type)
         if blockers:
             # `gh issue create` has no blocked-by flag, so the relationship is a second write.
-            run(plan_block({"number": number}, on=blockers, clear=False), False, tools)
+            run(plan_add_blockers(int(number), blockers), False, tools)
         print(f"#{number} created  {url}")
         _print_blocker_hints(body, number, blockers, tools)
         return 0
@@ -310,10 +311,8 @@ def cmd_open(args: argparse.Namespace, tools: FindingsTools) -> int:
     # `existing` four times between them.
     assert existing is not None
     if outcome in NO_REOPEN:
-        print(
-            f"#{existing['number']} {outcome}: closed on "
-            f"{(existing.get('closedAt') or '?')[:10]}; not reopened"
-        )
+        closed = (existing.closed_at or "?")[:10]
+        print(f"#{existing.number} {outcome}: closed on {closed}; not reopened")
         return code
     if outcome == "reopened":
         # A `Closes #<n>` merge closes an issue without going through `close`, so the claim
@@ -321,22 +320,23 @@ def cmd_open(args: argparse.Namespace, tools: FindingsTools) -> int:
         # where it blocks `claim` and withholds the issue from `next` for as long as the
         # claiming worktree exists — an orchestrator's can be a long time. Released
         # as its OWN comment rather than folded into the regression note, so the body never
-        # carries two claim trailers at once (see `current_claim`'s DECIDED marker).
+        # carries two claim trailers at once (see the DECIDED marker in `issue_model.claim_of`).
         plans += plan_release_held(
             existing, when=now_iso(), reason="reopened after a re-observation"
         )
     if blockers:
-        plans += plan_block({**existing, "state": "OPEN"}, on=blockers, clear=False)
-    if args.manual and "manual" not in label_names(existing):
+        plans += plan_add_blockers(existing.number, blockers)
+    if args.manual and "manual" not in existing.labels:
         # A matched issue would otherwise drop the flag silently. A reopened one is open by
         # the time these run, and its claim was released just above.
-        plans += plan_manual({**existing, "state": "OPEN"}, clear=False)
+        reopened = dataclasses.replace(existing, state=IssueState.OPEN)
+        plans += plan_manual(reopened, clear=False)
         if outcome != "reopened":
             plans += _release_for_manual(existing)
     run(plans, args.dry_run, tools)
     severity_only = {SEVERITY_FIELD: fields[SEVERITY_FIELD]}
     fill_missing(existing, severity_only, issue_type, tools, args.dry_run)
-    print(f"#{existing['number']} {outcome}  {existing.get('url', '')}")
+    print(f"#{existing.number} {outcome}  {existing.url}")
     return 0
 
 
@@ -351,8 +351,8 @@ def cmd_touch(args: argparse.Namespace, tools: FindingsTools) -> int:
         3 if the issue is already closed, 0 otherwise.
     """
     issue = _load_issue(args.number, tools)
-    if issue.get("state") == "CLOSED":
-        terminal = sorted(NO_REOPEN & label_names(issue))
+    if not issue.is_open:
+        terminal = sorted(NO_REOPEN & issue.labels)
         why = terminal[0] if terminal else "fixed"
         print(f"#{args.number} is closed ({why}); use open to re-file", file=sys.stderr)
         return 3
@@ -405,7 +405,7 @@ def cmd_defer(args: argparse.Namespace, tools: FindingsTools) -> int:
     print(f"#{args.number} {what}")
     if not args.clear:
         _print_blocker_hints(
-            str(issue.get("body") or ""), args.number, recorded_blockers(issue), tools
+            issue.body, args.number, [str(b.number) for b in issue.blockers], tools
         )
     return 0
 
@@ -451,7 +451,7 @@ def _split_refs(values: list[str] | None) -> list[str]:
     return [v.strip() for value in values or [] for v in value.split(",") if v.strip()]
 
 
-def _release_for_manual(issue: dict) -> list[list[str]]:
+def _release_for_manual(issue: Issue) -> list[list[str]]:
     # Load-bearing: `reap` skips `manual` issues (`another_claim_blocks`), so a claim left on
     # one would never be cleared.
     return plan_release_held(issue, when=now_iso(), reason="marked manual")
@@ -567,7 +567,7 @@ def cmd_sync_board(args: argparse.Namespace, tools: FindingsTools) -> int:
     Returns:
         1 if any issue's board item could not be synced, 0 otherwise.
     """
-    numbers = args.numbers or [i["number"] for i in load_issues("open", tools)]
+    numbers = args.numbers or [i.number for i in load_issues("open", tools)]
     outcomes = tools.sync_board(numbers, tools.repo, dry_run=args.dry_run)
     counts = dict.fromkeys((UPDATED, UNCHANGED, FAILED), 0)
     for outcome, _ in outcomes.values():

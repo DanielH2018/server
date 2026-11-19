@@ -5,8 +5,9 @@ roles. The test mapping runs against a scratch tree.
 """
 
 from _findings_fakes import Fakes, build_tools, make_issue
-from fanout_lib.brief import Issue, render_brief
+from fanout_lib.brief import render_brief
 from fanout_lib.target import Target
+from findings_lib.issue_model import Issue, IssueState
 
 from dev.findings import main
 from dev.findings_lib.precomputed import deploy_line, covering_tests
@@ -59,7 +60,7 @@ def test_a_module_no_test_names_or_imports_maps_to_nothing(tmp_path):
 
 
 def test_the_brief_carries_the_block_for_this_repo_only():
-    issue = Issue(1, "t", f"Fix `{SONARR}`.")
+    issue = Issue(1, "t", IssueState.OPEN, f"Fix `{SONARR}`.")
     brief = render_brief([issue], "daniel-box", "1", "worktree-orch", [])
     assert "## Precomputed from the cited paths" in brief
     assert "`promote` applies the k8s half" in brief
