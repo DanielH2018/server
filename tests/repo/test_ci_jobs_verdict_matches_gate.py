@@ -29,6 +29,7 @@ from ci_verdict import (
     CI_GATE_NEEDS_JOBS,
     CI_PROVE_JOB,
     CI_SKIPPED_MATRIX_JOBS,
+    CheckRun,
     jobs_verdict,
 )
 from lib import yaml_fast
@@ -162,7 +163,7 @@ def _gate_exit(
     return subprocess.run(["bash", "-c", check["run"]], env=env, timeout=30).returncode
 
 
-def _runs(prove: str, results: dict[str, str]) -> list[dict]:
+def _runs(prove: str, results: dict[str, str]) -> list[CheckRun]:
     """The check-runs as GitHub lists them.
 
     A matrix job whose legs all skipped is ONE run under the job's own name, which is what a
@@ -171,7 +172,7 @@ def _runs(prove: str, results: dict[str, str]) -> list[dict]:
     """
 
     def run(name, conclusion):
-        return {"name": name, "status": "completed", "conclusion": conclusion}
+        return CheckRun(name, "completed", conclusion)
 
     listed = dict(results)
     for name, legs in CI_SKIPPED_MATRIX_JOBS.items():
