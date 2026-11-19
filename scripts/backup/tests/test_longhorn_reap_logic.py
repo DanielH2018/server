@@ -11,7 +11,7 @@ Run: uv run pytest scripts/backup/tests/test_longhorn_reap_logic.py
 
 import pytest
 
-from longhorn_reap_lib import logic
+from backup.longhorn_reap_lib import logic
 from _reap_entrypoint_harness import _backup, _snapshot, _volume
 
 

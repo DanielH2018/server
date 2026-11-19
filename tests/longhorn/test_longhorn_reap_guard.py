@@ -27,7 +27,7 @@ import re
 
 from _shell_render import rendered_shell_texts
 
-from longhorn_reap_lib import logic
+from backup.longhorn_reap_lib import logic
 from _reap_entrypoint_harness import _backup
 
 # `{range .metadata.labels}` and friends. Ranging .items[*] is fine and ubiquitous — that IS a
