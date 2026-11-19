@@ -96,9 +96,10 @@ fleet cap ADR-0027 describes bounds `user.slice`. The runner role sets its own l
 [CI throughput](../ci-throughput.md) records the measurement that sizes it.
 
 **The cluster gets a second write path.** The launcher on daniel-box creates each runner pod
-through a ServiceAccount that can write Jobs in the runner namespace and nothing else. Flux
-stays the only write path to every other workload. The namespace's Pod Security standard and a
-ResourceQuota bound what that ServiceAccount can start.
+through a ServiceAccount that can write Jobs in the runner namespace, `ci-runners`, and nothing
+else. Flux stays the only write path to every other workload. The namespace's Pod Security
+standard and a ResourceQuota bound what that ServiceAccount can start. `ci-runners` is the one
+namespace `test_no_resourcequota_is_declared_outside_the_runner_namespace` lets carry a quota.
 
 **A pull-request run cannot use a pod.** A runner exists only for a run the launcher
 dispatched. GitHub's runner controller would start a pod for any queued job, and it needs the
