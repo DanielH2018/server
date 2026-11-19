@@ -128,6 +128,7 @@ files:
   - {src: templates/50-homelab.conf.j2, dst: /usr/lib/systemd/system/k3s-agent.service.d/50-homelab.conf, activate: "manual:k3s-agent.service"}
   # No activation: the postinst's daemon-reload applies the weight to the running unit.
   - {src: "component:templates/cpu-weight.conf.j2", dst: /usr/lib/systemd/system/k3s-agent.service.d/60-homelab-cpu-weight.conf}
+  - {src: "component:templates/system-slice-cpu-weight.conf.j2", dst: /usr/lib/systemd/system/system.slice.d/60-homelab-cpu-weight.conf}
   # The agent's flags. The only file in config.yaml.d, and nothing ships config.yaml.
   - {src: templates/50-homelab.yaml.j2, dst: /etc/rancher/k3s/config.yaml.d/50-homelab.yaml, mode: "0644", activate: "manual:k3s-agent.service"}
   - {src: templates/registries.yaml.j2, dst: /etc/rancher/k3s/registries.yaml, mode: "0600", activate: "manual:k3s-agent.service"}
