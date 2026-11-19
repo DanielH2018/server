@@ -67,6 +67,24 @@ Airflow 3 with the KubernetesExecutor, plus one Postgres holding the metadata da
   `k8s/roles/airflow/tests/fixtures/`.
 - **A source is read by ClusterIP, never through a route.** A task pod retries a refused
   connection, because kube-router admits a new pod a few seconds late.
+- **A new DAG, not a new task, for a new rollup.** Airflow creates no task instance for a task
+  added to runs that already succeeded, so a new task in an old DAG loads only from its first
+  new run. A new DAG's `catchup` backfills every day the source holds.
+
+## The DAGs
+
+- **`prom_daily_rollup`** loads `prom.ups_energy_daily` and `prom.cpu_temp_daily`, whose
+  columns are shaped to their one metric.
+- **`prom_series_rollup`** loads `prom.series_daily`, one row per day, metric and key, with the
+  day's min, mean, max and 95th percentile. Each metric is a `Rollup` row in
+  `k8s/roles/airflow/files/dags/homelab_warehouse/prom_series.py:ROLLUPS`, which also sets
+  what its `check` holds it to. A new Prometheus metric is a new row there and needs no DDL.
+- **The volume rows are filesystem usage of mounted claims**, from kubelet, not Longhorn's
+  `actualSize` (ADR 0006). Kubelet reports only a claim a running pod mounts, so a CronJob's
+  claim gaps legitimately: the `volume_*` metrics check a floor on the row count and no gap.
+- **Grafana's "Homelab history" board**
+  (`k8s/roles/observability/files/dashboards/Infrastructure/homelab-history.json`) reads both
+  DAGs' tables through the `Warehouse` datasource.
 
 ## Operating it
 
@@ -77,7 +95,7 @@ Airflow 3 with the KubernetesExecutor, plus one Postgres holding the metadata da
 - **Read a task's state from Airflow, never from Loki.** A task pod's stdout reaches
   loki-homelab only when the pod outlives Alloy's tail; a 0.3-second `check` often leaves no
   line there, so a missing line is not a failure. The operator reads a run's task states
-  with `airflow tasks states-for-dag-run prom_daily_rollup <run_id>`, run by `kubectl exec`
+  with `airflow tasks states-for-dag-run <dag_id> <run_id>`, run by `kubectl exec`
   in the `airflow-scheduler` container, or in the UI's Runs tab. The UI's log view reads only
   the pod's own file, which goes when the pod does (#9202).
 - **The Postgres init script runs only on an empty data directory.** To rotate

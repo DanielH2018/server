@@ -320,7 +320,10 @@ UI and round-trip with `scripts/grafana/export_grafana_dashboards.py`, then depl
 **observability**. A new board file also needs its name under its folder in that map. Three
 editing rules each otherwise leave a green deploy behind a blank board: a board in an unlisted
 folder is provisioned nowhere; a hand-edited board must stay in the writers' form; every
-datasource ref must resolve to a uid `templates/grafana.yaml.j2` declares. Three tests and the
+datasource ref must resolve to a uid that a template in
+`scripts/validate/grafana_dashboard_uids.py:DATASOURCES_TEMPLATES` declares. The `Warehouse`
+datasource (uid `warehouse`) is declared in `templates/grafana-warehouse-datasource-secret.yaml.j2`,
+not in `templates/grafana.yaml.j2`. Three tests and the
 `validate-grafana-dashboards` prek hook enforce them. Read the dashboards page first.
 
 **The dashboard ConfigMaps are a render.** `templates/grafana-dashboards.yaml.j2` renders one

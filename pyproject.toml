@@ -638,11 +638,12 @@ possibly-missing-submodule = "error"
 # `k8s_reads` from its own directory, which is on extra-paths above and would otherwise be
 # checked — a typo there now reports nothing here and surfaces as a ModuleNotFoundError when the
 # pod starts. ty has no per-module suppression, so the alternatives are this or losing the rule
-# tree-wide. The role's own tests are what cover that file's imports. airflow's two files
-# import Airflow, which only its image installs; the image build's check_dags run imports both.
+# tree-wide. The role's own tests are what cover that file's imports. airflow's check_dags and
+# DAG files import Airflow, which only its image installs; the image build's check_dags run
+# imports every DAG. The glob stops at the DAG folder, so `homelab_warehouse/` stays checked.
 include = [
   "k8s/roles/airflow/files/check_dags.py",
-  "k8s/roles/airflow/files/dags/prom_daily_rollup.py",
+  "k8s/roles/airflow/files/dags/*.py",
   "k8s/roles/homelab-mcp/files/app.py",
   "k8s/roles/karakeep/files/karakeep-time-tagger.py",
   "k8s/roles/home-assistant/files/cast_quit_app.py",
