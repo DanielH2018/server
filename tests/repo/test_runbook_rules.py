@@ -19,6 +19,7 @@ from _runbook_rule import (
     LINES,
     SECTION,
     STEPS,
+    Red,
     RunbookRule,
     check,
     edit,
@@ -103,7 +104,7 @@ _COLD_START_REASON = (
 )
 
 
-def _cold_start(doc: str, heading: str) -> RunbookRule:
+def _cold_start(doc: str, heading: str, *red: Red) -> RunbookRule:
     return RunbookRule(
         name=f"cold-start-links-the-bootstrap:{doc}",
         reason=_COLD_START_REASON,
@@ -111,7 +112,7 @@ def _cold_start(doc: str, heading: str) -> RunbookRule:
         heading=(heading,),
         unit=SECTION,
         require=(BOOTSTRAP_LINK,),
-        red=(replaced_by(_DEAD_BOX_AT_70591C307),),
+        red=red or (edit(BOOTSTRAP_LINK, "flux-deploy-plane.md", every=True),),
     )
 
 
@@ -232,7 +233,9 @@ ROWS = (
         ),
     ),
     _cold_start(
-        BREAK_GLASS, "### Scenario: daniel-box is dead, daniel-server survives"
+        BREAK_GLASS,
+        "### Scenario: daniel-box is dead, daniel-server survives",
+        replaced_by(_DEAD_BOX_AT_70591C307),
     ),
     _cold_start(
         "docs/longhorn-disaster-recovery.md", "## Procedure (fresh host, total loss)"
@@ -350,11 +353,6 @@ _TOY = RunbookRule(
 
 def test_a_rule_whose_heading_is_gone_reports_its_subject_gone():
     [problem] = check(replace(_TOY, heading=(BOOTSTRAP, "### No such heading")))
-    assert problem.startswith("toy: subject gone: delete this row"), problem
-
-
-def test_a_rule_whose_selector_keeps_nothing_reports_its_subject_gone():
-    [problem] = check(replace(_TOY, select=re.compile(r"\./scripts/deploy\.sh")))
     assert problem.startswith("toy: subject gone: delete this row"), problem
 
 

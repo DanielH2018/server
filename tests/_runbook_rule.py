@@ -156,13 +156,13 @@ def SECTION(text: str) -> list[str]:
 Red = Callable[[str], str]
 
 
-def edit(old: str, new: str) -> Red:
-    """The section with `old` replaced once. A missing `old` fails the proof, never passes it."""
+def edit(old: str, new: str, *, every: bool = False) -> Red:
+    """The section with `old` replaced once, or everywhere. A missing `old` fails the proof."""
 
     def red(text: str) -> str:
         if old not in text:
             raise LookupError(f"red fixture anchor {old!r} is gone")
-        return text.replace(old, new, 1)
+        return text.replace(old, new, -1 if every else 1)
 
     return red
 
