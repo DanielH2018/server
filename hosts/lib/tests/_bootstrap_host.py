@@ -133,6 +133,11 @@ class FakeHost:
         self.calls = tmp_path / "apt-get.calls"
         self.bin = tmp_path / "bin"
         self.bin.mkdir()
+        # The real age-keygen, wherever this machine keeps it: `run` pins PATH to system paths.
+        self.tools = tmp_path / "tools"
+        self.tools.mkdir()
+        if keygen := shutil.which("age-keygen"):
+            (self.tools / "age-keygen").symlink_to(keygen)
         self.kit = tmp_path / "kit"
         self.kit.mkdir()
         self.log = tmp_path / "commands.log"
@@ -259,7 +264,7 @@ class FakeHost:
         return subprocess.run(
             ["/bin/sh", str(self.dir / SCRIPT.name), *argv],
             env={
-                "PATH": f"{self.bin}:/usr/bin:/bin",
+                "PATH": f"{self.bin}:/usr/bin:/bin:{self.tools}",
                 "HOMELAB_ROOT": str(self.root),
                 **env,
             },

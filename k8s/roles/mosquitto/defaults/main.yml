@@ -26,7 +26,7 @@ mosquitto_k8s_claim: mosquitto-data
 mosquitto_k8s_storage_class: longhorn-nobackup
 mosquitto_k8s_size: 1Gi
 
-# The claim the renderer emits for this role, which the mosquitto Kustomization applies (#3387).
+# The claim the renderer emits for this role, which the mosquitto Kustomization applies.
 # Not seeded from the Docker copy: the broker's persistence file is retained/queued state the
 # clients rebuild on their first reconnect, so a fresh store is correct.
 k8s_claims:

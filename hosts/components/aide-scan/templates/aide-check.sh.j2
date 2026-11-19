@@ -11,7 +11,8 @@
 # it by hand is safe, but it takes as long as the scheduled run and it rewrites the textfile.
 #
 # --accept: after a human has reviewed a DOWN run's unexplained changes, moves that run's
-# aide.db.new over aide.db, so the next run reports against the accepted state. It scans nothing
+# aide.db.new over aide.db, and its root-only copies of the account files into
+# /var/lib/aide/accounts, so the next run reports against the accepted state. It scans nothing
 # and writes no verdict; the alert clears on the next run.
 #
 # WHY A SCRIPT. A cron that pipes `aide --check` into `logger -t aide` reports logger's exit
@@ -40,14 +41,20 @@
 #   /run/homelab-secrets/, and a link into a system tree whose target is missing, such as the
 #   kernel headers' rust link to a package that is not installed, in a window its owner ran.
 # - /etc: a package-owned path whose content differs from the package's copy, or that is gone.
-#   Ansible writes unpackaged /etc files on every merge, so those are logged, not paged.
+#   Ansible writes unpackaged /etc files on every merge, so those are logged, not paged. A
+#   conffile the host package's lines arm adds a block to is the package's copy while removing
+#   that block, once, between its markers and as declared, leaves the digest dpkg records.
 # - The login, privilege, startup and code-loading files in PERSIST, owned or not: sudoers, sshd,
 #   PAM, cron, the user and group databases, the loader and module config, shell startup files,
 #   apt hooks, sources and keys, udev rules, systemd units and drop-ins, rc.local, init scripts,
 #   MOTD scripts, /usr/local/sbin and every authorized_keys. The units the k3s installer and
 #   snapd write are listed in ROLE_WRITTEN and are judged only when a package owns them.
 #   snapd's udev rules are explained only beside a new revision of their snap, and only while
-#   every key in them only matches, sets ENV or jumps (SNAPD_UDEV).
+#   every key in them only matches, sets ENV or jumps (SNAPD_UDEV). A change to passwd, group,
+#   shadow or gshadow is explained only when every line that differs from the copy the baseline
+#   advanced to is an account the host package's users arm declares, with its declared uid,
+#   home and shell (not its comment, which the arm never sets), the gid of its own group, no
+#   password and no undeclared member.
 # - An added or changed /usr/local/bin entry named like a command a package installs, because
 #   root's PATH reaches /usr/local/bin first. The roles' own scripts there have no such twin.
 # - Any of the above, or any package-owned /etc path, whose owner, group or permissions changed,
@@ -96,6 +103,8 @@ DPKG_DIR=/var/lib/dpkg
 FS_ROOT=""
 # homelab-secrets' manifest, read under FS_ROOT for the outputs the host package links.
 SECRETS_MANIFEST=/usr/lib/homelab/secrets.json
+# The host package's manifest, read under FS_ROOT for the users its users arm declares.
+HOST_MANIFEST=/usr/lib/homelab/manifest.json
 
 # Regexes over the absolute path, in awk's dialect. Kept to what mawk accepts: no intervals. They reach
 # awk through ENVIRON, because -v would read each backslash as an escape.
@@ -119,6 +128,9 @@ ROLE_WRITTEN='^/etc/systemd/system/(k3s(-agent)?\.service(\.env)?|snap-[a-z0-9-]
 # A rule an edit or a connected interface changes outside a refresh still pages.
 SNAPD_UDEV='^/etc/udev/rules\.d/70-snap\.[a-z0-9_-]+\.rules$'
 SNAPD_MOUNT='^/etc/systemd/system/snap-[a-z0-9-]+-[0-9]+\.mount$'
+# The user and group databases: no package owns them, and the host package's users arm writes them.
+# A change is judged line by line against the copy the baseline advanced to (accounts_verdict).
+ACCOUNT_FILES='^/etc/(passwd|group|shadow|gshadow)$'
 # snapd's own helper and its snap_* tags, which put a device in a snap's cgroup. They are removed
 # before the keys are judged.
 SNAPD_UDEV_OWN='RUN\+="/usr/lib/snapd/snap-device-helper [^"]*"|TAG\+="snap_[a-z0-9_-]+"'
@@ -184,9 +196,28 @@ report() {
 
 # Moves aide.db.new over aide.db. Refuses when aide.db is missing, so a deleted baseline stays an
 # error exit instead of becoming a fresh, trusted one; bootstrap-host.sh owns the first.
+#
+# The run's copies of the account files move with it. A run that made none, such as one from
+# before the copies existed, leaves none, so an account change pages until a run that made them
+# advances.
 advance_baseline() {
   [[ -e "$AIDE_DIR/aide.db" && -s "$AIDE_DIR/aide.db.new" ]] || return 1
-  mv -f "$AIDE_DIR/aide.db.new" "$AIDE_DIR/aide.db"
+  mv -f "$AIDE_DIR/aide.db.new" "$AIDE_DIR/aide.db" || return 1
+  rm -rf "$AIDE_DIR/accounts"
+  [[ ! -d "$AIDE_DIR/accounts.new" ]] || mv "$AIDE_DIR/accounts.new" "$AIDE_DIR/accounts"
+}
+
+# Copies the account files, root-only, beside aide.db.new before the scan reads them. A change
+# made during the scan is then in the next diff, where it is judged, rather than hidden in the
+# copy. A file that cannot be copied has no copy, which pages its next change.
+copy_accounts() {
+  local name
+  rm -rf "$AIDE_DIR/accounts.new"
+  mkdir -m 0700 "$AIDE_DIR/accounts.new" || return 0
+  for name in passwd group shadow gshadow; do
+    install -m 0600 "$FS_ROOT/etc/$name" "$AIDE_DIR/accounts.new/$name" 2>/dev/null \
+      || logger -t aide-check "could not copy /etc/${name}; its next change pages"
+  done
 }
 
 # One scan at a time. A scan that outlives its week would otherwise have the next Monday's start a
@@ -314,12 +345,99 @@ secret_links() {
     "$FS_ROOT$SECRETS_MANIFEST" 2>/dev/null | tr '\n' ' '
 }
 
+# Prints "explained" when every line of the account file $1 that differs from the copy the
+# baseline advanced to names an account the host package's users arm declares, as it declares
+# it, and a reason otherwise. A line is keyed by its name, so a uid move is one changed line. A
+# declared user's gid must be its same-named group's, and that group's gid must be its own and
+# not 0. Its members must be declared users. Every other line pages, and so does a removal,
+# since the arm only expires a user. Prints account names only, never another field, because
+# shadow and gshadow hold hashes.
+accounts_verdict() {
+  local name=${1#/etc/} declared
+  if [[ ! -r "$AIDE_DIR/accounts/$name" ]]; then
+    echo "no copy of it from the run the baseline advanced to, so its change cannot be judged"
+    return
+  fi
+  if ! declared=$(jq -er '.users.users[] | [.name, (.uid | tostring), .home, .shell] | join("\t")' \
+    "$FS_ROOT$HOST_MANIFEST" 2>/dev/null); then
+    echo "the host package's users declaration is unreadable"
+    return
+  fi
+  DECLARED="$declared" awk -F ':' -v file="$name" '
+    BEGIN {
+      n = split(ENVIRON["DECLARED"], rows, "\n")
+      for (i = 1; i <= n; i++) {
+        split(rows[i], f, "\t"); uid[f[1]] = f[2]; home[f[1]] = f[3]; shell[f[1]] = f[4]
+      }
+    }
+    FNR == 1 { part++ }
+    part == 1 { old[$1] = $0; next }
+    part == 2 { pwgid[$1] = $4; next }
+    part == 3 { grgid[$1] = $3; gids[$3]++; next }
+    { if ($1 in cur) twice = $1; cur[$1] = $0 }
+    # A line with no colon is all one field, a hash included, so only a valid name is printed.
+    function shown(k) { return k ~ /^[a-z_][a-z0-9_.-]*[$]?$/ ? k : "one whose name is not a valid account name" }
+    function judge(k, line,    f, nf, m, members, i) {
+      if (!(k in uid)) return "changes the line of an account the host package does not declare: " shown(k)
+      nf = split(line, f, ":")
+      if (file == "passwd") {
+        if (nf != 7 || f[2] != "x" || f[3] != uid[k] || f[6] != home[k] || f[7] != shell[k])
+          return "the line of declared user " k " does not match its declaration"
+        if (!(k in grgid) || f[4] != grgid[k]) return "declared user " k "\047s gid is not its own group\047s"
+      } else if (file == "group") {
+        if (f[3] !~ /^[0-9]+$/ || f[3] == 0 || gids[f[3]] > 1) return "the gid of declared group " k " is 0 or another group\047s"
+        if ((k in pwgid) && pwgid[k] != f[3]) return "declared user " k "\047s gid is not its own group\047s"
+        m = split(f[4], members, ",")
+        for (i = 1; i <= m; i++) if (!(members[i] in uid)) return "declared group " k " has a member the host package does not declare"
+      } else if (f[2] !~ /^[!*]/) {
+        return "declared account " k " has a password"
+      } else if (file == "gshadow" && (f[3] != "" || f[4] != "")) {
+        return "declared group " k " has an administrator or a member in gshadow"
+      }
+      return ""
+    }
+    END {
+      if (twice != "") { print "names an account twice: " shown(twice); exit }
+      for (k in old) if (!(k in cur)) { print "removes the line of an account: " shown(k); exit }
+      for (k in cur) {
+        if ((k in old) && old[k] == cur[k]) continue
+        changed = 1; why = judge(k, cur[k])
+        if (why != "") { print why; exit }
+      }
+      print (changed ? "explained" : "AIDE reports a change, but no line differs from the copy")
+    }' "$AIDE_DIR/accounts/$name" "$FS_ROOT/etc/passwd" "$FS_ROOT/etc/group" "$FS_ROOT$1"
+}
+
+# Prints the md5 of the file $1 without the one block the host package's lines arm declares for
+# it, or nothing when no single block edit names it, or when the file does not hold that block
+# exactly once between its markers. The arm writes BEGIN, the block less its trailing newlines,
+# then END, each on its own line.
+unblocked_digest() {
+  local edit digest
+  edit=$(jq -ec --arg p "$1" '[.lines.edits[] | select(.path == $p and .block != null)]
+    | if length == 1 then .[0] else error("not one block edit") end' "$FS_ROOT$HOST_MANIFEST" 2>/dev/null) || return 0
+  digest=$(MARKER=$(jq -r .marker <<<"$edit") BLOCK=$(jq -r .block <<<"$edit") awk '
+    BEGIN {
+      b = ENVIRON["MARKER"]; sub(/\{mark\}/, "BEGIN", b)
+      e = ENVIRON["MARKER"]; sub(/\{mark\}/, "END", e)
+      want = ENVIRON["BLOCK"]; sub(/\n+$/, "", want)
+    }
+    $0 == b { begins++; inside = 1; n = 0; body = ""; next }
+    $0 == e { ends++; if (!inside) bad = 1; inside = 0; next }
+    inside { body = (n++ ? body "\n" : "") $0; next }
+    { print }
+    END { if (bad || inside || begins != 1 || ends != 1 || body != want) exit 1 }' "$FS_ROOT$1" \
+    | md5sum) || return 0
+  echo "${digest%% *}"
+}
+
 # Prints "path (reason)" for each paged entry no package explains. Reads the files as they are
 # now: AIDE has just hashed them, and a change in between is next week's report.
 unexplained_entries() {
-  local kind type pug scope path digest target dangling rule
+  local kind type pug scope path digest target dangling rule unblocked block_paths
+  block_paths=" $(jq -r '.lines.edits[] | select(.block != null) | .path' "$FS_ROOT$HOST_MANIFEST" 2>/dev/null | tr '\n' ' ') "
   paged_entries | while IFS=$'\t' read -r kind type pug scope path; do
-    digest=- target=- dangling=- rule=-
+    digest=- target=- dangling=- rule=- unblocked=-
     if [[ "$kind" != removed ]]; then
       if [[ -L "$FS_ROOT$path" ]]; then
         # -m, not -f: a link into a directory that is missing still has a target to judge, and
@@ -330,17 +448,24 @@ unexplained_entries() {
         digest=$(md5sum <"$FS_ROOT$path" | awk '{ print $1 }') || digest=-
         if [[ "$path" =~ $SNAPD_UDEV ]]; then
           rule=$(snapd_rule_verdict "$FS_ROOT$path") || rule=active
+        elif [[ "$kind" == changed && "$path" =~ $ACCOUNT_FILES ]]; then
+          rule=$(accounts_verdict "$path")
+          [[ -n "$rule" ]] || rule="comparing it with its copy failed"
+        fi
+        if [[ "$block_paths" == *" $path "* ]]; then
+          unblocked=$(unblocked_digest "$path")
+          [[ -n "$unblocked" ]] || unblocked=-
         fi
       fi
     fi
-    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$kind" "$type" "$pug" "$scope" "$path" "$digest" "$target" "$dangling" "$rule"
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$kind" "$type" "$pug" "$scope" "$path" "$digest" "$target" "$dangling" "$rule" "$unblocked"
   done | SNAPS_REVISED="$(snaps_revised)" SNAPD_UDEV="$SNAPD_UDEV" \
     ROLE_WRITTEN="$ROLE_WRITTEN" USRMERGE="$USRMERGE" BOOT_LINKS="$BOOT_LINKS" \
     BOOT_LINK_TARGET="$BOOT_LINK_TARGET" BOOT_ENV="$BOOT_ENV" DERIVED_KERNEL="$DERIVED_KERNEL" \
     DERIVED_GRUB="$DERIVED_GRUB" DERIVED_EFI="$DERIVED_EFI" DERIVED_FIRMWARE="$DERIVED_FIRMWARE" \
     DERIVED_PYCACHE="$DERIVED_PYCACHE" PKGS_KERNEL="$PKGS_KERNEL" PKGS_GRUB="$PKGS_GRUB" \
     PKGS_EFI="$PKGS_EFI" PKGS_FIRMWARE="$PKGS_FIRMWARE" PKGS_PYTHON="$PKGS_PYTHON" \
-    SECRET_LINKS=" $(secret_links) " SYSTEM="$SYSTEM" awk -F '\t' '
+    SECRET_LINKS=" $(secret_links) " SYSTEM="$SYSTEM" ACCOUNT_FILES="$ACCOUNT_FILES" awk -F '\t' '
     # dpkg records merged-/usr paths under either name, so compare both without the /usr.
     function norm(p) { return p ~ /^\/usr\/(bin|sbin|lib|lib32|lib64|libx32)\// ? substr(p, 5) : p }
     function touched_any(re,    k) { for (k in touched) if (k ~ re) return 1; return 0 }
@@ -429,7 +554,8 @@ unexplained_entries() {
       else if ($3 == "pug" && !(scope != "persist" && owner_ran(p, upgraded) && (scope == "etc" || !owner_matches(p, "^homelab-"))) && (scope != "etc" || (p in owned))) why = "owner, group or permissions changed"
       else if (type == "d") next
       else if (kind == "removed") { if (p in owned) why = "removed, but a package still owns it" }
-      else if (d != "") { if (index(d " ", " " $6 " ") == 0) why = "differs from its package copy" }
+      # $10 is the digest with the lines arm block removed, set only for a path a block edit names.
+      else if (d != "") { if (index(d " ", " " $6 " ") == 0 && ($10 == "-" || index(d " ", " " $10 " ") == 0)) why = "differs from its package copy" }
       # dpkg records no digest for a symlink, so an owned one must still resolve inside a package.
       # Every installed package on daniel-server records md5sums, so an owned regular
       # file with no digest was a link or a directory in its package.
@@ -441,6 +567,8 @@ unexplained_entries() {
         snap = base; sub(/^70-snap\./, "", snap); sub(/\.rules$/, "", snap)
         if (index(ENVIRON["SNAPS_REVISED"], " " snap " ") == 0) why = "a snapd udev rule changed, but the report adds no new revision of that snap"
       }
+      # $9 is set only for a changed regular file ACCOUNT_FILES names: accounts_verdict.
+      else if (path ~ ENVIRON["ACCOUNT_FILES"] && $9 != "-") { if ($9 != "explained") why = $9 }
       else if (scope == "persist") why = "no package owns this login, privilege or startup file"
       else if (scope == "system") why = "no package owns it"
       if (why != "") print path " (" why ")"
@@ -454,6 +582,7 @@ unexplained_entries() {
 # does and also writes aide.db.new, which advance_baseline moves into place. A stale aide.db.new
 # from a run nobody accepted goes first, so the database moved is always this run's.
 rm -f "$AIDE_DIR/aide.db.new"
+copy_accounts
 START=$SECONDS
 REPORT=$(/usr/bin/nice -n19 /usr/bin/ionice -c3 /usr/bin/aide --config=/etc/aide/aide.conf --update 2>&1)
 RC=$?

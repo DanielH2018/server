@@ -154,8 +154,6 @@ k3s_flannel_node_ips:
 # trustedIPs note, authelia's bypass policy, docker_install's bridge-carve-out) cite one
 # name instead of repeating the literal.
 wg_client_subnet: "10.8.0.0/24"
-# code-server's read-only docker-proxy is gated on this host_var. Override per-host.
-has_code_server: false
 # The k3s cluster's ingress VIP, served by MetalLB from a dedicated autoAssign: false pool.
 # Global rather than a k3s role default because two hosts consume it: daniel-box's k8s
 # Traefik Service claims it, and Pi-hole answers the cluster hostnames with it.

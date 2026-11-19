@@ -16,6 +16,7 @@ def _prepared(tmp_path: Path) -> SimpleNamespace:
         work=tmp_path / "work",
         debs={"pi-head": debs / "real-pi.deb"},
         versions={"pi-head": "1.0"},
+        passed=[],
         failed=[],
         no_verdict=[],
         image="homelab-host-test:24.04",

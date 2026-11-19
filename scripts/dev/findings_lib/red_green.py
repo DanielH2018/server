@@ -16,7 +16,7 @@ _sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from dev.findings_lib.tracked_paths import resolve_fragments, tracked_files
 
 RED_GREEN_LABEL = "red-green"
-# `plan_ensure_label` creates it the first time `open` applies it, as it does a dated label.
+# `plan_ensure_label` creates it the first time `open` applies it.
 RED_GREEN_STYLE = (
     "a6e3a1",
     "A --review fan-out writes failing tests for this before the fix (red phase)",

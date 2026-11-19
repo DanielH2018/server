@@ -111,7 +111,7 @@ RUNNER = "run-hook.sh"
 # Written for `/bin/sh` (dash on these hosts), so no `[[` and no `$(...)`.
 GUARD_SUFFIX = (
     ' || {{ rc=$?; [ -x "$CLAUDE_PROJECT_DIR"/.claude/hooks/run-hook.sh ] && exit $rc;'
-    ' echo "run-hook.sh {name}: $CLAUDE_PROJECT_DIR/.claude/hooks/run-hook.sh is missing'
+    ' echo "[{name}] $CLAUDE_PROJECT_DIR/.claude/hooks/run-hook.sh is missing'
     " or not executable (exit $rc), so this call was checked by none of: {guards}. The"
     ' checkout this session started in is gone; restart the session from a live checkout."'
     " >&2; exit 2; }}"

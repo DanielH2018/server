@@ -91,8 +91,8 @@ spec:
           # init chowns
           # /etc/pihole then drops privileges. Runs as root by image design — the DAC_OVERRIDE
           # memory's "use the pod uid" fix does not fit an image whose entrypoint demands the
-          # drop-privileges dance. No NET_RAW: that was for DHCP raw sockets, and this copy is
-          # DNS-only (D4 — DHCP measured inactive on the Docker copy, :67 not exposed here).
+          # drop-privileges dance. No NET_RAW: that was for DHCP raw sockets, and this pod is
+          # DNS-only (:67 not exposed here).
 {{ hardened_security_context(add=['CHOWN', 'DAC_OVERRIDE', 'NET_ADMIN', 'NET_BIND_SERVICE', 'SETFCAP', 'SETUID', 'SETGID', 'SYS_NICE']) }}
           volumeMounts:
             - name: etc-pihole
@@ -115,7 +115,7 @@ spec:
               port: 53
             periodSeconds: 30
           # First boot builds gravity from scratch (big.oisd is ~200k domains); give it the
-          # same generous window the *arr DOCKER_MODS lesson bought (radarr, 2026-08-09).
+          # same generous window as the *arr DOCKER_MODS first boot (radarr).
           startupProbe:
             tcpSocket:
               port: 53

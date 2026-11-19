@@ -1,7 +1,7 @@
 {# DECIDED: valheim opens two UDP ports to every source, so this fence stays bespoke.
    The callers model (`netpol_from` / `netpol_fences`, macro in
    k8s/templates/networkpolicy.yml.j2) renders one TCP port admitting same-namespace `app:`
-   peers, and its header rules out growing it to absorb another shape. Census: #3701.
+   peers, and its header rules out growing it to absorb another shape.
    Do not reach for `from_apps: []`: it renders `from:` as null, which admits every source by
    accident rather than by statement.
 #}
@@ -14,7 +14,7 @@
 # Valheim is UDP, and it needs BOTH ports: 2456 is the game port and 2457 is the query port the
 # server browser uses. Opening only 2456 leaves the server running and unlistable.
 #
-# 2456 and 2457 are the containerPorts AND the Service ports — verified 2026-08-20, they match.
+# 2456 and 2457 are the containerPorts AND the Service ports.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:

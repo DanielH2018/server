@@ -45,6 +45,13 @@ sweep in `.github/workflows/pytest-sweep.yml`, which runs every module on master
 reports a red run as one GitHub issue. A push whose tree no pull-request run tested still
 sweeps in full.
 
+**Extended on 2026-11-19.** A push whose tree no pull-request run tested no longer sweeps
+in full. Its `pytest` legs select against the newest ancestor whose gate passed
+(`scripts/dev/tested_tree.py:green_base`). The reasoning is the same: the nightly sweep is
+the net for a stale row, so the per-push sweep adds nothing a selection from a green base
+leaves out. The parent is not used as the base unless it is green, because a selection
+against a red parent would leave out what the parent broke.
+
 ## Consequences
 
 - A module broken through a stale row stays broken on master until the next sweep, up to a
@@ -58,6 +65,8 @@ sweeps in full.
 - `scripts/dev/pytest_shard.py` no longer widens a selection that needs more than half the
   legs. That rule existed to keep the tested-tree record, which a selection no longer loses.
 - A landing batch still records its members only from a run that swept in full.
+- A push run's selection rests on its base's gate, so a gate that passed wrongly at one
+  commit is trusted by every push after it until the nightly sweep runs.
 - Reversing this means restoring a second status context and the `pytest-proven` output
   across `tested_tree.py`, the gate and `hosts/lib/ci_verdict.py:jobs_verdict`.
 

@@ -117,6 +117,21 @@ def _load(log, path, session_id):
     )
 
 
+def test_a_failed_row_exits_non_zero_so_run_hook_can_report_it(tmp_path):
+    """`run-hook.sh` reports a crash only on a non-zero exit, so an error must not be swallowed."""
+    payload = {"hook_event_name": "InstructionsLoaded", "globs": [1]}
+    proc = subprocess.run(
+        [sys.executable, os.path.join(_HERE, "log-instructions.py")],
+        input=json.dumps(payload),
+        capture_output=True,
+        text=True,
+        timeout=30,
+        env={**os.environ, INSTRUCTIONS_LOG_ENV: str(tmp_path / "instructions.log")},
+    )
+    assert proc.returncode != 0
+    assert proc.stderr.strip().splitlines()[-1].startswith("TypeError")
+
+
 def test_each_load_row_carries_the_byte_size_of_the_file_it_loaded(tmp_path):
     # Two files of different sizes, so a row carrying a running sum or the other file's size fails.
     log = tmp_path / "instructions.log"

@@ -25,7 +25,7 @@ spec:
     spec:
 {{ pod_shell('homelab-standard') }}
       securityContext:
-        # The whole reason for the kubelet allow-list (D11). wg-quick attempts to set this
+        # The whole reason for the kubelet allow-list. wg-quick attempts to set this
         # itself and aborts the tunnel when it cannot — /proc/sys is mounted read-only in a pod
         # even with NET_ADMIN. Pre-set here, wg-quick finds it already 1 and skips the write.
         sysctls:
@@ -77,17 +77,13 @@ spec:
             initialDelaySeconds: 10
             periodSeconds: 10
           livenessProbe:
-            # Never present, never deliberately removed (no comment on this container ever
-            # explained its absence) — a k3s-migration oversight, not a decision.
             # K8sDeploymentReplicasUnavailable already pages on this, so this probe closes
-            # a self-healing gap, not an alerting one: nothing restarted a wedged WebUI in the
-            # Docker/autoheal era's absence.
+            # a self-healing gap, not an alerting one: it restarts a wedged WebUI.
             #
             # Deliberately looser than the sidecar's own liveness (failureThreshold 6 / period
             # 60s = 6 min) — ~10 min of sustained failure before a restart. The kill-switch
             # iptables rules live in the POD network namespace, not this container, and survive a
-            # container restart (a recorded incident deadlocked qbittorrent for 9h behind 107
-            # restarts before that was understood). Restarting just this container can't touch
+            # container restart. Restarting just this container can't touch
             # that netns state, so if a wedge outlives several restarts here, the fault is
             # netns-adjacent — the sidecar's own restart resets it (files/netns-reset.sh);
             # tightening this probe would not.

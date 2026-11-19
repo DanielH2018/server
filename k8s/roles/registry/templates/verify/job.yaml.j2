@@ -2,11 +2,10 @@
   registry's verify Jobs and the ConfigMap that carries their script.
 
   The renderer emits `templates/verify/*.yaml.j2` into the `registry-verify` Kustomization once
-  `registry` reads Ready (D5, Wave D). These Jobs replaced the self-test and netpol probe
-  tasks and their three Job templates, which registry's flip deleted.
+   `registry` reads Ready.
 
-  THE PULL JOBS RUN A COPY OF THE FLEET'S PYTHON JOB IMAGE FROM THE PUSH STORE (ruling on
-  #5680). Their proof is that containerd on each node pulls the pod's own image from
+  THE PULL JOBS RUN A COPY OF THE FLEET'S PYTHON JOB IMAGE FROM THE PUSH STORE. Their proof is
+  that containerd on each node pulls the pod's own image from
   `{{ k8s_registry_pull_host }}`, and the Job census requires every container to run
   `python3 <mount>/<script>.py`, so the image they pull must hold Python. The push Job writes
   that copy: after its round trip it copies `flux_job_image`'s linux/amd64 image into

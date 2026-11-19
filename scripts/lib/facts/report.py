@@ -1,6 +1,6 @@
-"""``fact_status.py report``: the notice's yield and the docs' load, read from git and the log.
+"""``fact_status.py report``: the docs' load, read from git and the log.
 
-Five measurements, none kept in a store of its own.
+Four measurements, none kept in a store of its own.
 
 - **The sections citing nothing, ranked by reads.** Every section with no in-tree citation,
   a CONVENTION section, ranked by how often its doc loaded into a session according to
@@ -13,18 +13,15 @@ Five measurements, none kept in a store of its own.
   ``bash_path_match`` row with the size of the block it injected (#4653). The report sums them
   per session id, user-level files outside the repo included (#4610). That is the always-loaded context's trend, which
   otherwise shows only when someone runs ``wc -c`` by hand.
-- **The notice replay.** ``notice.moved_sections`` runs once per first-parent commit in the
-  ``--days`` window, with the parent as the base (``replay.notice_replay``).
-  ``docs/adr/0023-fact-support-is-a-diff-notice.md`` records why the notice replaced the lock.
-- **The comment-class replay.** ``removed.stale_comment_uses`` runs over the same commits
-  (``replay.comment_replay``), and the JSON form lists every row for a session to grade.
+- **The comment-class replay.** ``removed.stale_comment_uses`` runs once per first-parent
+  commit in the ``--days`` window, with the parent as the base (``replay.comment_replay``), and the JSON form lists every row for a session to grade.
 
 The window ends at ``now``, which ``--until`` sets, and starts ``--days`` before it.
 """
 
 import re
 from collections import Counter
-from collections.abc import Callable, Iterator
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -36,13 +33,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from lib.repo_paths import primary_checkout_of
 
 from .citations import Citations
-from .notice import Notice, moved_sections
-from .replay import (
-    comment_replay,
-    notice_replay,
-    render_comment_replay,
-    render_replay,
-)
+from .replay import comment_replay, render_comment_replay
 
 LOG_REL = ".claude/logs/instructions.log"
 _ROW = re.compile(r"^(\S+) \[[^\]]*\]\s+\S+\s+\S+\s+(\S+)")
@@ -196,13 +187,12 @@ def build(
     days: int,
     log: Path,
     now: datetime | None = None,
-    notice: Callable[[Path, str, str], list[Notice]] = moved_sections,
     replays: bool = True,
 ) -> dict:
     """Every measurement as one JSON-ready mapping; ``render`` prints the same thing as text.
 
-    Without ``replays`` the mapping leaves out both replays, which walk every commit in the
-    window and take minutes, where the rest reads the log in seconds.
+    Without ``replays`` the mapping leaves out the replay, which walks every commit in the
+    window and takes minutes, where the rest reads the log in seconds.
     """
     now = now or datetime.now(timezone.utc)
     since = now - timedelta(days=days)
@@ -237,7 +227,6 @@ def build(
         ],
     }
     if replays:
-        report["notice_replay"] = notice_replay(repo, since, now, notice)
         report["comment_replay"] = comment_replay(repo, since, now)
     return report
 
@@ -247,7 +236,7 @@ def render(report: dict, top: int) -> str:
 
     The ``top`` most-read sections citing nothing come first, then the ``top`` most-read docs
     delivered as a head, then the instruction bytes of the ``top`` most recent sessions, then
-    the two replays when the mapping holds them, which name every crash whatever ``top`` says.
+    the replay when the mapping holds it, which names every crash whatever ``top`` says.
     """
     log = report["log"]
     span = f"{log['first']} to {log['last']}" if log["rows"] else "no rows"
@@ -280,7 +269,6 @@ def render(report: dict, top: int) -> str:
     rest = len(sessions) - top
     if rest > 0:
         lines.append(f"  ... {rest} older; --top or --json lists them")
-    if "notice_replay" in report:
-        lines += render_replay(report["notice_replay"])
+    if "comment_replay" in report:
         lines += render_comment_replay(report["comment_replay"])
     return "\n".join(lines)

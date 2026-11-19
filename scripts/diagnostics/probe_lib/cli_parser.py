@@ -462,7 +462,7 @@ def _build_parser():
             "something blocks",
         ),
     )
-    _flag(landing, "--json", "the JSON document the deck mod reads")
+    _flag(landing, "--json", "print one JSON document, every worktree included")
     # The add_parser literal stays here because test_setup_wiring.py scans this file for it.
     add_verdicts_args(sub.add_parser("landing-verdicts", help=VERDICTS_HELP))
     push_rules = sub.add_parser(

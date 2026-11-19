@@ -1,25 +1,21 @@
 #!/bin/bash
 # Pull daniel-pi's wg-easy peer configs (wg0.conf/wg0.json — WireGuard private keys)
 # into the Longhorn-backed /data PVC, so an SD-card death on the Pi doesn't mean
-# re-enrolling every VPN client. Successor to the daniel-server host cron (host flip 1,
-# 2026-08-14): the Longhorn 03:30 nightly carries the PVC to B2, replacing the retired
-# Kopia scope.
+# re-enrolling every VPN client. The Longhorn 03:30 nightly carries the PVC to B2.
 #
 # sudo rsync on the Pi (NOPASSWD sudo for the ubuntu user) is REQUIRED: the files are
 # root:root 0600/0640. StrictHostKeyChecking=yes against the known_hosts pin committed in
-# the role (stricter than the old accept-new — the pin is mounted, never TOFU'd here). No
+# the role (the pin is mounted, never TOFU'd here). No
 # --delete: a removed peer lingering in the backup is harmless, and --delete would wipe
 # the copy if the source were ever momentarily empty.
 #
 # Reporting: the verdict leaves the pod as annotations on one ConfigMap (VERDICT_CONFIGMAP),
-# which kube-state-metrics exports to Prometheus (M6 batch B7, docs/target-architecture/
-# monitoring/m6-retire-kuma.md). The image carries no kubectl, so export_verdict sends one
+# which kube-state-metrics exports to Prometheus. The image carries no kubectl, so export_verdict sends one
 # merge PATCH with curl and the pod's ServiceAccount token. A failed export makes the run exit
 # 1, so the CronJob's last successful time stops moving and the NotReporting rule fires. The
 # run also pings an off-premises Healthchecks.io check when HC_PING_URL is set, which is what
-# still alerts when the whole cluster is down. The "WG Pi Peer Backup" Kuma push stopped at
-# B7's Cutover-2. `set -uo` (not -euo) so the rsync exit code is captured and reported, not
-# swallowed.
+# still alerts when the whole cluster is down. `set -uo` (not -euo) so the rsync exit code is
+# captured and reported, not swallowed.
 #
 # Usage: pull-pi-peers.sh (no arguments)
 # Runs as the pi-peer-backup CronJob at 23:00 America/Chicago, and once per deploy as the
@@ -99,8 +95,7 @@ export_verdict() { # status msg
   fi
 }
 
-# Reports one run: the verdict line, the ConfigMap export and the Healthchecks.io ping. The Kuma
-# push stopped at M6 batch B7's Cutover-2, so a Kuma outage no longer touches this function.
+# Reports one run: the verdict line, the ConfigMap export and the Healthchecks.io ping.
 push() { # status msg
   if [[ "$GATE_RUN" -eq 1 ]]; then
     echo "deploy-gate run — not reporting ($1: $2)"
@@ -120,7 +115,7 @@ push() { # status msg
     # Deliberately not "$2": an rsync failure echoes PI_SRC, which carries the Pi's LAN IP and
     # ssh user, and Healthchecks.io stores ping bodies. The status is what has to escape the
     # house; the detail stays in the pod log and the verdict ConfigMap.
-    # No `-S`, stderr discarded — see longhorn-backup-health.sh.j2 (#2511). This one runs as a
+    # No `-S`, stderr discarded — see longhorn-backup-health.sh.j2. This one runs as a
     # pod rather than a cron, so the chatter lands in the pod log rather than in mail; the rule
     # is uniform across every hc-ping site so that none of them has to be exempted.
     curl -fs -m 10 --retry 3 --data-raw "peer pull reported $1; detail in the pod log" "$url" >/dev/null 2>&1 \

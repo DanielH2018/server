@@ -39,8 +39,7 @@ source /usr/lib/homelab/homelab-check-lib.sh || {
     has no default, so a missing one fails the render. The set also holds the
     sub-proxies the docker-proxy service file
     (hosts/components/pi-compose/services/docker-proxy) declares beside its list entry
-    (docker-proxy-lifecycle always; docker-proxy-codeserver only under has_code_server, the
-    same gate the compose template uses). A blanket `docker ps -a --filter status=exited`
+    (docker-proxy-lifecycle). A blanket `docker ps -a --filter status=exited`
     would catch those for free and also resurrect a container an operator `docker stop`ped
     on purpose, every 5 minutes — `restart: unless-stopped` leaves those alone, and so does
     this. A set hardcoded to autoheal + docker-proxy would leave every other container
@@ -48,9 +47,6 @@ source /usr/lib/homelab/homelab-check-lib.sh || {
 {% set _names = compose_services | map(attribute='name') | sort | list %}
 {% if 'docker-proxy' in _names %}
 {%   set _names = _names + ['docker-proxy-lifecycle'] %}
-{%   if has_code_server | default(false) %}
-{%     set _names = _names + ['docker-proxy-codeserver'] %}
-{%   endif %}
 {% endif %}
 CONTAINERS=({{ _names | join(' ') }})
 

@@ -205,8 +205,14 @@ still takes its `| default(...)`.
 
 The same rule holds one level down. A variable whose value names an undefined variable, such
 as `x: "{{ no_such_name }}"`, is left undefined rather than resolved to `STUB` or `None`, so a
-template that reads `x` stops the render. One that nothing reads costs nothing. That matters because three `group_vars/all.yml` values name
-variables that only setup roles or Ansible itself define. A `hosts` entry carries only a host's literal values, so none of them can fail to resolve.
+template that reads `x` stops the render. One that nothing reads costs nothing. Every
+inventory value resolves under the strict context, and host mode relies on the rule: it
+withholds the secret keys, so a value that reads one is dropped. A `hosts` entry carries only
+a host's literal values, so none of them can fail to resolve.
+
+A render key is the exception. `cluster.py:role_context` fails the render when one of
+`cluster.py:INCLUDE_KEYS` that the role's defaults set is left undefined, because an undefined
+file list would fall back to the derived one unseen.
 
 ### The file rules
 
@@ -251,8 +257,7 @@ A role sets the keys of `scripts/lib/k8s_roles.py:RENDER_KEYS` in its
 `scripts/lib/k8s_roles.py:resolved_manifest_files` read `defaults/main.yml` only, and each raises
 on a role without that file.
 
-The render reads no role's `tasks/`. The only task files under `k8s/roles/` are the
-revert runbook's, and `scripts/renderer/tests/test_renderer_runbook_allowlist.py` holds that set.
+The render reads no role's `tasks/`, and no role under `k8s/roles/` has one.
 
 The renderer resolves only the five keys it renders with: the
 two file lists, the deferred pair and `manifests_prune`. The others stay strings until a
@@ -421,9 +426,9 @@ Two embeds in image-builder name their target through a variable, so they cannot
 resolved. They pass only `indent`, which rule 5 accepts on an unresolved embed.
 
 Rule 5 also follows a key through a name bound to it, so a transform of the name fails as a
-transform of the key. It reads two kinds of binding.
+transform of the key.
 
-- **Template-local.** A `{% set %}`, a set block, a `{% with %}`, a loop target (unpacked
+- **Template-local bindings.** A `{% set %}`, a set block, a `{% with %}`, a loop target (unpacked
   targets included) or a macro parameter that receives an expression naming a key is an
   alias of that key. A `{% set x = 'a.' ~ K %}` followed by `{{ x | trim }}` fails like
   `{{ K | trim }}`. A bare use of the alias passes. A binding that receives a list, tuple or
@@ -431,13 +436,12 @@ transform of the key. It reads two kinds of binding.
   alias also passes iteration, a part selected by a constant name and, when a `{% set %}`
   bound it to a literal container, a length test in an `{% if %}`. A value alias passes none
   of the three.
-- **Role defaults and inventory.** The Jinja strings in `k8s/roles/*/defaults/main.yml`,
-  `inventory/group_vars/` and `inventory/host_vars/` are parsed the same way.
-  A value that names a key is an alias for it, the text around an interpolation counts as a
-  `~` concatenation, and a transform in the value is a violation. Every template that uses
-  the variable then treats it as the key, and an alias of an alias counts too. The tree has
-  none since `domain` was published. Its one alias was `headlamp_k8s_oidc_issuer_url`,
-  `https://auth.{{ domain }}`.
+- **Role defaults and inventory name no key.** A Jinja string in
+  `k8s/roles/*/defaults/main.yml`, `inventory/group_vars/` or `inventory/host_vars/` that
+  names a secret key, bare or through a literal `vars` lookup, is a violation, and so is a
+  non-literal `vars` lookup there. A template reads a key by its own name, so no template
+  sees an alias it did not bind itself
+  (`scripts/renderer/renderer_lib/var_aliases.py:vars_file_refusals`).
 
 The residual: rule 5 has no types, so a part of a container alias is untyped. A loop over a
 part that holds a string would iterate the string character by character, and the check
@@ -693,23 +697,18 @@ registry digest and authelia's password digests. The stub file holds exactly R1'
 stub map plus the sentinel `homelab_secret_stubs`, and a placeholder render overrides only
 the secret keys.
 
-Two tests hold this:
+Two checks hold this:
 
 - `scripts/renderer/tests/test_renderer_stub_file.py` requires the stub file's key set to be
   the secret keys plus the sentinel. A stub writer that adds one other key fails it.
-- The live-read census, `scripts/renderer/tests/test_renderer_live_read_census.py`, walks
-  every task file a render target's `tasks/main.yml` reaches. It fails when a name a task
-  sets reaches a template the render reads, directly or through a role default, an
-  inventory value, an `include_role` var or a `set_fact`, unless the renderer derives that
-  name from the tree. It also fails on a lookup whose reads it cannot name: any plugin but
-  `b64file`, `file`, `template` and `vars`, and a `vars` lookup outside a loop over
-  `py_table('CHECKS')` or `scrape_jobs`. A read through
-  `vars.X` or `hosts[H].X` counts as a read of `X`, and a `vars` or `hosts` read whose
-  name it cannot list fails it too. The engine is `_live_read_census.py` beside it.
+- `scripts/renderer/renderer_lib/dialect.py` refuses every lookup plugin but `b64file`,
+  `file`, `template` and `vars`, so a template cannot shell out with `pipe` or query the
+  cluster
+  (`scripts/renderer/tests/test_renderer_dialect.py::test_an_off_the_list_lookup_fails_the_render_and_the_census`).
+  A `vars` lookup reads only the variable layers, and every layer comes from the tree.
 
-A new value that a task reads from the cluster and a template needs fails the census. Move
-the value into the tree instead: a SOPS key, a committed file, or a value
-`task_inputs.derived_facts` computes from the tree.
+A value a template needs from the cluster has no way in. Move it into the tree instead: a SOPS
+key, a committed file, or a value `task_inputs.derived_facts` computes from the tree.
 
 ## Stub output is never published
 

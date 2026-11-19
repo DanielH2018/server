@@ -2,19 +2,16 @@
 zigbee2mqtt_k8s_image: ghcr.io/koenkk/zigbee2mqtt:2.14.3@sha256:fb4a6b0f6868ad1cd6a9996479802b2420e599c3463b62bbff8c8cd9a908f43a
 
 # Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
-# DENIED — state coupling, not missing recovery. Deploy mechanics alone would allow it:
-# Recreate + RWO PVC, protected by the zigbee2mqtt-snapshot Job and an operator revert.
-# The volume's state is coupled to something the snapshot cannot capture: the
-# SLZB-06M coordinator's own NVRAM keeps the network key and frame counters. A revert puts
-# database.db/devices.yaml/coordinator_backup.json back to the snapshot while the coordinator
-# keeps counting from where it actually got to, so paired devices can go silent and recovery
-# is re-pairing each one by hand. The snapshot Job and the revert runbook work fine here — they are
-# not why this is denied.
+# DENIED — state coupling, not missing recovery. The SLZB-06M coordinator's own NVRAM keeps the
+# network key and frame counters. A revert puts database.db/devices.yaml/coordinator_backup.json
+# back to the snapshot while the coordinator keeps counting from where it got to, so paired
+# devices can go silent and recovery is re-pairing each one by hand. The snapshot Job and the
+# revert runbook work fine here; they are not why this is denied.
 k8s_autodeploy: false
 k8s_autodeploy_reason: "state coupled outside the volume — the SLZB-06M coordinator's NVRAM holds the network key and frame counters, so reverting zigbee2mqtt-data to a snapshot desynchronises it from the coordinator and can silence paired devices; the snapshot Job and the operator revert work fine and are not the blocker"
 # The claim snapshotted before each revision applies. Under Flux the renderer turns this
-# list into the zigbee2mqtt-snapshot Kustomization, whose Job snapshots it before zigbee2mqtt applies
-# (D5.2a). Declared regardless of k8s_autodeploy.
+# list into the zigbee2mqtt-snapshot Kustomization, whose Job snapshots it before zigbee2mqtt
+# applies. Declared regardless of k8s_autodeploy.
 k8s_autodeploy_snapshot_pvcs: [zigbee2mqtt-data]
 
 # The config-install initContainer needs alpine (`install`). Same init image peanut and

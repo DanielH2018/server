@@ -333,6 +333,22 @@ def test_an_arm_that_raises_loses_only_its_own_verdict(sandbox, monkeypatch, cap
     assert "arm is broken" in captured.err
 
 
+def test_an_arm_that_raises_is_named_to_the_model_in_one_line(
+    sandbox, monkeypatch, capsys
+):
+    """Exit-0 stderr never reaches the model, so the raise rides in `additionalContext`."""
+
+    def load(filename, module_name):
+        if filename == "block-footguns":
+            raise RuntimeError("arm is broken\nsecond line")
+        return sandbox(filename, module_name)
+
+    out = dispatch("echo hi", load, monkeypatch, capsys)
+    assert out["additionalContext"].splitlines()[0] == (
+        "[bash-pretool] arm block-footguns raised RuntimeError: arm is broken"
+    )
+
+
 # ── arm 4: block-batch-full-suite ────────────────────────────────────────────────────
 
 
