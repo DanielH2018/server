@@ -61,7 +61,7 @@ loop to auto-tag bookmarks
   the app, `karakeep-chrome`, meilisearch and the tagger. The Job copies the pods' *preferred*
   affinity for daniel-server, so a pod the scheduler sends elsewhere still pays a cold pull
   inside the 1200s rollout budget. `defaults/main.yml` has the measurements, and
-  `tests/services/test_karakeep_prepulls_its_images.py` holds the render.
+  The `prepull-*` rows of `tests/k8s/test_rendered_properties.py` hold the render.
 - **The two backend NetworkPolicies ship in THIS role, not in netpol-baseline** (#1620).
   `deployment.yaml.j2`'s `wait-for-deps` initContainer retries `karakeep-chrome:9222` and
   `karakeep-meilisearch:7700` in an unbounded loop, and the baseline admits neither path, so a
