@@ -8,6 +8,7 @@ import os
 import sys
 
 import pytest
+from _hook_common import parse_payload
 
 _HOOKS = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _HOOKS)  # the arm imports _hook_common
@@ -34,7 +35,8 @@ def batch(tmp_path, monkeypatch):
 
 
 def _decide(command, cwd):
-    return arm.decision({"tool_input": {"command": command}, "cwd": str(cwd)})
+    payload = {"tool_name": "Bash", "tool_input": {"command": command}, "cwd": str(cwd)}
+    return arm.decision(parse_payload(payload).bash())
 
 
 @pytest.mark.parametrize(

@@ -383,10 +383,11 @@ def guard_decision(command: str, monkeypatch) -> str | None:
         "tool_input": {"command": command},
         "cwd": str(REPO),
     }
+    call = importlib.import_module("_hook_common").parse_payload(payload).bash()
     verdicts = [
         verdict
         for filename, module in dispatcher._DECISION_ARMS
-        if (verdict := dispatcher.load_arm(filename, module).decision(payload))
+        if (verdict := dispatcher.load_arm(filename, module).decision(call))
     ]
     return dispatcher.merge(verdicts)[0]
 

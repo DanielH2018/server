@@ -33,7 +33,7 @@ from pathlib import Path
 
 _sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/dev
 _sys.path.insert(0, str(Path(__file__).resolve().parents[3]))  # scripts/
-from deploy_tools.land_lib.detach import result_in
+from deploy_tools.land_lib.detach import result_fields, result_in
 from fanout_lib.land_result import FINISHED_VERDICTS, VERDICT_LINE, park_line
 
 LAND_SH = Path("scripts") / "deploy_tools" / "land.sh"
@@ -62,7 +62,9 @@ class Landing:
     Attributes:
         rc: the exit code of the last command run: land.sh's when it refused to start,
             else cc-wait's, which is the landing's own code once the landing has ended.
-        verdict: the VERDICT token, "" when the log holds none.
+        verdict: the VERDICT token, "" when the log holds none. A land.sh that refused to
+            start prints its own, with a `LAND-RESULT:` line, when another landing of the PR
+            is live.
         line: the whole VERDICT line, "" when the log holds none.
         tail: the last lines of the landing's log, or of land.sh's output when it refused.
         wait: the command that resumes the wait, for a landing still running at the deadline.
@@ -165,7 +167,15 @@ def land(
     )  # fmt: skip
     if started.returncode != 0:
         _release(run, worktree, checkout)
-        return Landing(started.returncode, tail=_tail(started.stdout + started.stderr))
+        output = started.stdout + started.stderr
+        refused = VERDICT_LINE.search(output)
+        return Landing(
+            started.returncode,
+            verdict=refused.group(1) if refused else "",
+            line=refused.group(0) if refused else "",
+            tail=_tail(output),
+            result=result_fields(output) or {},
+        )
     wait = ["cc-wait", "land", pr, "--log-dir", str(log_dir)]
     waited = run(login(wait), None)
     while waited.returncode == STILL_WAITING and time_left() > WAIT_MARGIN_S:

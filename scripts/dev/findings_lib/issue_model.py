@@ -13,6 +13,7 @@ answers into gh argv, `findings_lib/gh_calls.py` runs them, and `findings.py` is
 
 import hashlib
 import re
+from collections.abc import Collection
 from datetime import UTC, date, datetime
 
 SEVERITIES = ("high", "medium", "low")
@@ -169,6 +170,10 @@ _CITED_PATH_RE = re.compile(
 # every issue, so without cutting it every two batches would share that file.
 _TRAILER_RE = re.compile(r"^---[ \t]*\nFingerprint: `[0-9a-f]+`\n.*\Z", re.M | re.S)
 _CODE_SPAN_RE = re.compile(r"`[^`\n]*`")
+# What an inline code span holds when it names a file with no directory: `ci.yml`,
+# `land.sh:42`, `issue_model.py:cited_paths`. The whole span, so a command line or an
+# attribute read (`uv run findings.py`, `args.limit = 3`) is never a candidate.
+_BARE_NAME_RE = re.compile(r"([A-Za-z0-9_.-]*\.[A-Za-z0-9_-]+)(?::[\w.-]+)?")
 
 
 def _drop_quoted_output(span: re.Match) -> str:
@@ -183,19 +188,50 @@ def _drop_quoted_output(span: re.Match) -> str:
     return text
 
 
-def cited_paths(body: str) -> list[str]:
-    """Every repo-relative file path an issue body cites, sorted and deduplicated.
+def _named_by(spelled: str, tracked: Collection[str]) -> list[str]:
+    """The tracked files whose path is `spelled` or ends with it at a directory boundary."""
+    return [t for t in tracked if t == spelled or t.endswith(f"/{spelled}")]
+
+
+def cited_paths(body: str, tracked: Collection[str] = ()) -> list[str]:
+    """Every file an issue body cites, as a repo-root path where one is known, sorted.
+
+    This is the one answer to "which files does this issue touch". The fan-out's two
+    shared-file gates, the brief and the `paths` field of `next --json` all read it, so two
+    issues that cite one script are one batch, whatever their `domain` label says. The
+    `--file` an issue was filed with lands only in the fingerprint, so the body's own
+    citations are the record.
 
     The trailer is cut first: it is `findings.py`'s own text, not the finding's. So is an
     inline code span that lists several paths with commas, which quotes program output.
 
-    This is the input to the fan-out's file-level collision check: two issues that cite one
-    script are one batch, whatever their `domain` label says. The `--file` an issue was filed
-    with lands only in the fingerprint, so the body's own citations are the record.
+    A body spells a file three ways, and `tracked` decides the last two:
+
+    - A path from the repo root (`scripts/dev/fanout_place.py`) is returned as written.
+    - A path from a subdirectory (`fanout_lib/clean.py`) becomes the one tracked file that
+      ends with it. With no such file, or several, it stays as written: it may name a file
+      the fix creates.
+    - A filename with no directory, alone in an inline code span (`` `ci.yml` ``), becomes
+      the one tracked file of that name. With no such file, or several, it is dropped: a
+      bare word with a dot in it is more often a version or an attribute than a file.
+
+    Args:
+        body: the issue body, as gh returns it.
+        tracked: the tracked files of the repo the issue is about. Empty resolves nothing,
+            so every path comes back as the body spells it and no bare filename counts.
     """
     text = _TRAILER_RE.sub("", (body or "").replace("\r\n", "\n"))
     text = _CODE_SPAN_RE.sub(_drop_quoted_output, text)
-    return sorted({m.group(1) for m in _CITED_PATH_RE.finditer(text)})
+    paths = set()
+    for spelled in {m.group(1) for m in _CITED_PATH_RE.finditer(text)}:
+        hits = [spelled] if spelled in tracked else _named_by(spelled, tracked)
+        paths.add(hits[0] if len(hits) == 1 else spelled)
+    for span in _CODE_SPAN_RE.finditer(text):
+        bare = _BARE_NAME_RE.fullmatch(span.group(0)[1:-1])
+        hits = _named_by(bare.group(1), tracked) if bare else []
+        if len(hits) == 1:
+            paths.add(hits[0])
+    return sorted(paths)
 
 
 def label_names(issue: dict) -> set[str]:
@@ -671,12 +707,14 @@ def close_outcome(issue: dict) -> str:
     return _STATE_REASONS.get(reason, reason.lower() or "closed")
 
 
-def issue_rows(issues: list[dict]) -> list[dict]:
+def issue_rows(issues: list[dict], tracked: Collection[str] = ()) -> list[dict]:
     """Flattens gh's issue JSON into the rows ``sort_key`` and ``cmd_list`` consume.
 
     Args:
         issues: gh issue objects, each carrying labels, comments and the other
             ``_LIST_FIELDS``.
+        tracked: the register's tracked files, which each row's ``paths`` resolve against
+            as `cited_paths` describes.
     """
     rows = []
     for issue in issues:
@@ -697,7 +735,7 @@ def issue_rows(issues: list[dict]) -> list[dict]:
                 "outcome": close_outcome(issue),
                 "no_vetted_remediation": "no-vetted-remediation" in names,
                 "verify_by": parse_verify_by(issue.get("body") or "") is not None,
-                "paths": cited_paths(issue.get("body") or ""),
+                "paths": cited_paths(issue.get("body") or "", tracked),
                 "manual": "manual" in names,
                 "review_leftover": "review-leftover" in names,
                 "not_before": day.isoformat() if day else None,
@@ -713,7 +751,12 @@ def issue_rows(issues: list[dict]) -> list[dict]:
 
 
 def pickable(
-    issues: list[dict], *, live_claims: set[int], pr_refs: set[int], today: date
+    issues: list[dict],
+    *,
+    live_claims: set[int],
+    pr_refs: set[int],
+    today: date,
+    tracked: Collection[str] = (),
 ) -> list[dict]:
     """The issues a session may pick up, best first.
 
@@ -725,10 +768,11 @@ def pickable(
             picks up work another session has finished but not yet landed.
         today: the date a Not Before date is compared to. Passed in, like `when` is to
             `plan_claim`, so the boundary is testable: an issue is offered ON its date.
+        tracked: the register's tracked files, passed on to `issue_rows`.
     """
     rows = [
         r
-        for r in issue_rows(issues)
+        for r in issue_rows(issues, tracked)
         if not r["manual"]
         and not is_waiting_row(r, today)
         and r["number"] not in live_claims
@@ -737,14 +781,18 @@ def pickable(
     return sorted(rows, key=lambda r: (r["review_leftover"], sort_key(r)))
 
 
-def waiting(issues: list[dict], *, today: date) -> list[dict]:
+def waiting(
+    issues: list[dict], *, today: date, tracked: Collection[str] = ()
+) -> list[dict]:
     """The rows `pickable` withholds for a not-before date or an open blocker, best first.
 
     `next` prints these beside the free set: a silently withheld issue reads as a closed one
     to the operator looking at the backlog, which is the failure `manual` has.
     """
     rows = [
-        r for r in issue_rows(issues) if not r["manual"] and is_waiting_row(r, today)
+        r
+        for r in issue_rows(issues, tracked)
+        if not r["manual"] and is_waiting_row(r, today)
     ]
     return sorted(rows, key=sort_key)
 

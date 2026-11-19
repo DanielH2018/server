@@ -355,7 +355,7 @@ def test_a_release_url_in_a_file_no_manager_reads_is_flagged() -> None:
 
 def test_the_release_url_census_finds_its_known_files_in_the_tree() -> None:
     known = {
-        ".github/workflows/ci.yml",
+        ".github/workflows/promote.yml",
         ".vale.ini",
         "k8s/roles/jellyfin/defaults/main.yml",
     }

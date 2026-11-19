@@ -32,7 +32,9 @@ git grep -nE "def test_(no|neither|nothing)_\w+" -- <path>
 ```
 
 - The first lists tests whose bodies are identical
-  (`scripts/dev/duplicate_tests.py:duplicate_groups`).
+  (`scripts/dev/duplicate_tests.py:duplicate_groups`). `tests/repo/copied_tests_allowlist.txt`
+  holds each file's count of them, a new copy fails the ratchet at commit time, and the
+  `tighten-ratchet-allowlists` hook lowers a file's line when you prune one.
 - The second lists tests named for something that went away.
 - The third lists empty allow-lists. A test that loops over one checks nothing.
 - The fourth lists skips on a missing import. One that names a declared dependency never skips.

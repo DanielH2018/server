@@ -37,6 +37,7 @@ import sys
 import uuid
 
 import pytest
+from _hook_common import parse_payload
 
 HOOKS = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _REPO = os.path.dirname(os.path.dirname(HOOKS))
@@ -58,20 +59,16 @@ arm = _load("uv-python")
 
 def rewrite(command, tool_name="Bash"):
     """The arm's rewritten command for a PreToolUse payload, or None."""
-    payload = {"tool_name": tool_name, "tool_input": {"command": command}}
-    return arm.rewrite(payload)
+    call = parse_payload(
+        {"tool_name": tool_name, "tool_input": {"command": command}}
+    ).bash()
+    return arm.rewrite(call) if call else None
 
 
 # --- the fail-open posture ----------------------------------------------------------------
 #
 # The old shell hook asserted its three bail-outs by grepping its own text. The arm is Python,
 # so each is measured instead: a refusal is a None return, and None means the command stands.
-
-
-def test_an_unreadable_payload_leaves_the_command_alone():
-    assert arm.rewrite({}) is None
-    assert arm.rewrite({"tool_name": "Bash", "tool_input": {}}) is None
-    assert arm.rewrite({"tool_name": "Bash", "tool_input": {"command": ""}}) is None
 
 
 def test_the_arm_rewrites_rather_than_pinning_a_venv_path():
