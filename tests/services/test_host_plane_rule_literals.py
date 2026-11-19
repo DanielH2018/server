@@ -57,12 +57,10 @@ def update_stale_rule(host: str, job: str, limit_seconds: int) -> dict:
         "annotations": {
             "summary": f"{host} has had no successful homelab update for {_duration(limit_seconds)}.",
             "description": (
-                f"No homelab-updater run on {host} has succeeded in {_duration(limit_seconds)}, or its "
-                "exporter is up and serves no success timestamp. A failed fetch, a stopped "
-                "homelab-apt-repo.service, a firewall rule, a keyring mismatch and a stopped "
-                "timer each leave it stale. Read `systemctl status homelab-updater.timer` and "
-                f"`journalctl -u homelab-updater` on {host}, and docs/host-packages.md, "
-                '"Host-plane pages".'
+                "Read `systemctl status homelab-updater.timer` and `journalctl -u "
+                f"homelab-updater` on {host}. No homelab-updater run there has succeeded in "
+                f"{_duration(limit_seconds)}, or its exporter is up and serves no success "
+                "timestamp. The runbook lists what leaves it stale."
             ),
             "runbook_url": RUNBOOK_URL,
         },

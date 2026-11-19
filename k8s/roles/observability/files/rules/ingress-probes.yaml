@@ -19,10 +19,11 @@ groups:
         annotations:
           summary: The ingress probe of {{ $labels.service }} is failing.
           description: >-
-            blackbox_exporter's {{ $labels.module }} probe of {{ $labels.instance }} has failed for
-            2 minutes. {{ $labels.service }} is home-critical. A probe behind SSO expects Authelia's
-            302 and never reaches the backend, so a failure there is in Traefik or Authelia. Read
-            probe_http_status_code for this instance, then the Traefik and Authelia logs.
+            Read probe_http_status_code for {{ $labels.instance }}, then the workload's log.
+            blackbox_exporter's {{ $labels.module }} probe has failed for 2 minutes. A probe behind
+            SSO expects Authelia's 302 and never reaches the backend, so read Traefik and Authelia
+            first there.
+          runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#ingressprobefailedcritical
       # The same, for every service outside home-critical.
       - alert: IngressProbeFailed
         expr: probe_success{job="blackbox-ingress", page_tier="warning"} == 0
@@ -68,3 +69,4 @@ groups:
             is down or unreachable from Prometheus and no ingress probe runs. The per-service
             ingress alerts go quiet while it lasts. Read the blackbox-exporter pod's events and
             log in the homelab namespace.
+          runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#blackboxexporterdown

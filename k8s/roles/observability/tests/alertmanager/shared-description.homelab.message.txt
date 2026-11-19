@@ -5,3 +5,5 @@ Started <t:1792832400:R>
 Started <t:1792832400:R>
 
 node_exporter publishes no temperature series, so nothing watches the host's temperature. Read `ls /sys/class/hwmon` on the host.
+
+Karma: https://karma.local.daniel-hunter.com/?q=alertname%3DHostTemperatureNotReporting&q=service%3Ddaniel-box

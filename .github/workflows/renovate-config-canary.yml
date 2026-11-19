@@ -5,29 +5,26 @@ name: renovate-config-canary
 # when renovate.json is next touched. The reasoning for validating unpinned is on the
 # `renovate-config` job in ci.yml, which runs the same script on a PR that touches the file.
 #
-# This does not run on every push to master. Per-merge buys nothing over
-# daily — Mend rolls its Renovate forward on its own cadence and deprecates config keys a
-# release ahead — and it costs a failure of its own: Renovate publishes to npm ~8 times a day,
-# and for a few minutes after each publish the tarball 404s. The script retries the install,
-# and a daily run lands in one of those windows minutes-per-day rather than every merge.
+# This does not run on every push to master. Mend rolls its Renovate forward on its own cadence
+# and deprecates config keys a release ahead, so per-merge buys nothing over daily. Renovate
+# publishes to npm ~8 times a day and the tarball 404s for a few minutes after each publish. The
+# script retries the install, and a daily run lands in one of those windows rarely.
 #
-# A red run here is on whatever SHA is master's head at 09:00 UTC; it is not that commit's
-# verdict. No deploy gate reads this context (`ci_required_contexts` names only the
-# prek gate), and it is not a required merge context — the PR-scoped job in ci.yml is.
+# A red run here is on whatever SHA is master's head at 09:00 UTC, not that commit's verdict. No
+# deploy gate reads this context (`ci_required_contexts` names only the prek gate), and it is
+# not a required merge context; the PR-scoped job in ci.yml is.
 #
-# It is its own workflow rather than a `schedule:` on ci.yml because a schedule trigger there
-# would run hooks, pytest and the gate as well, and would share the head SHA's concurrency
-# group with that commit's push run. Its own concurrency group below is keyed on the workflow
-# name alone, never on a ref or SHA, so it can never join a ci.yml group either.
+# It is its own workflow because a `schedule:` on ci.yml would run hooks, pytest and the gate as
+# well, and would share the head SHA's concurrency group with that commit's push run. Its own
+# group below is keyed on the workflow name alone, so it never joins a ci.yml group.
 on:
   schedule:
     - cron: "0 9 * * *" # 04:00 America/Chicago; nobody is landing, so a red run is not mistaken for a red merge
   workflow_dispatch: # after touching renovate.json on master, or when a Renovate major lands
 
-# One run at a time. A `workflow_dispatch` fired near 09:00 UTC otherwise overlaps the
-# scheduled run, and the two answer the same question against the same master head.
-# The superseded run is cancelled rather than queued: no run here is a commit's verdict (see
-# above), so a cancelled one loses nothing the next one does not re-establish.
+# One run at a time: a `workflow_dispatch` near 09:00 UTC otherwise overlaps the scheduled run
+# on the same master head. The superseded run is cancelled, not queued, because no run here is
+# a commit's verdict.
 concurrency:
   group: ${{ github.workflow }}
   cancel-in-progress: true

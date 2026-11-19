@@ -35,6 +35,7 @@ tests:
                 is gone or the flux scrape job is missing from prometheus.yml, or it has been
                 scraped with no controller_runtime_reconcile_total series. Read the Deployment
                 in the flux-system namespace.
+              runbook_url: https://docs.local.daniel-hunter.com/flux-deploy-plane/#recovering-flux-by-hand
           - exp_labels:
               job: flux
               app: kustomize-controller
@@ -47,6 +48,7 @@ tests:
                 is gone or the flux scrape job is missing from prometheus.yml, or it has been
                 scraped with no controller_runtime_reconcile_total series. Read the Deployment
                 in the flux-system namespace.
+              runbook_url: https://docs.local.daniel-hunter.com/flux-deploy-plane/#recovering-flux-by-hand
           - exp_labels:
               job: flux
               app: notification-controller
@@ -59,6 +61,7 @@ tests:
                 pod is gone or the flux scrape job is missing from prometheus.yml, or it has
                 been scraped with no controller_runtime_reconcile_total series. Read the
                 Deployment in the flux-system namespace.
+              runbook_url: https://docs.local.daniel-hunter.com/flux-deploy-plane/#recovering-flux-by-hand
       - eval_time: 16m
         alertname: FluxNotReady
         exp_alerts: []
@@ -107,6 +110,7 @@ tests:
                 source-controller-579bc67689-2rrfs has failed its scrape for 5 minutes, so
                 source-controller is down or unreachable from Prometheus. Read its pod's
                 events and log in the flux-system namespace.
+              runbook_url: https://docs.local.daniel-hunter.com/flux-deploy-plane/#recovering-flux-by-hand
       - eval_time: 16m
         alertname: FluxControllerDown
         exp_alerts:
@@ -123,6 +127,7 @@ tests:
                 source-controller-579bc67689-2rrfs has failed its scrape for 5 minutes, so
                 source-controller is down or unreachable from Prometheus. Read its pod's
                 events and log in the flux-system namespace.
+              runbook_url: https://docs.local.daniel-hunter.com/flux-deploy-plane/#recovering-flux-by-hand
 
   # A controller with no pod, and one scraped with no controller-runtime series. Both fire the
   # absent() rule after 5m and not at 4m, one alert each. source-controller is healthy and
@@ -181,8 +186,9 @@ tests:
             exp_annotations: &not_ready_kustomization
               summary: The Kustomization homelab has not been Ready for 15 minutes.
               description: >-
-                The Kustomization homelab in flux-system has had a Ready condition other than
-                True for 15 minutes. Its status conditions name the failing step.
+                The Kustomization homelab in flux-system is not Ready after 15 minutes; read its
+                conditions.
+              runbook_url: https://docs.local.daniel-hunter.com/flux-deploy-plane/#alerts
 
   # A failing Kustomization whose Ready flips between False and Unknown every minute, as on
   # each retry. Each flip ends one series and starts another, so without the max by() each
@@ -260,8 +266,9 @@ tests:
             exp_annotations:
               summary: The OCIRepository homelab has not been Ready for 15 minutes.
               description: >-
-                The OCIRepository homelab in flux-system has had a Ready condition other than
-                True for 15 minutes. Its status conditions name the failing step.
+                The OCIRepository homelab in flux-system is not Ready after 15 minutes; read its
+                conditions.
+              runbook_url: https://docs.local.daniel-hunter.com/flux-deploy-plane/#alerts
 
   # kube-state-metrics scraped with no gotk_resource_info at all, as after an upgrade that
   # changed its custom-resource-state format or a ClusterRole that lost list/watch on the Flux
@@ -288,12 +295,8 @@ tests:
                 kube-state-metrics has exported no gotk_resource_info for the root
                 Kustomization for 15 minutes.
               description: >-
-                kube-state-metrics is scraped, but for 15 minutes it has exported no
-                gotk_resource_info series for the Kustomization homelab, so FluxNotReady and
-                FluxSuspended cannot see any Flux object. Read the kube-state-metrics log in
-                the observability namespace for a Forbidden or a custom-resource-state config
-                error, and compare the Flux CRD versions with
-                observability_ksm_flux_resource_state.
+                kube-state-metrics exports no gotk_resource_info for homelab; read its log.
+              runbook_url: https://docs.local.daniel-hunter.com/flux-deploy-plane/#alerts
 
   # The same missing series with kube-state-metrics' scrape failing. ScrapeTargetDown pages
   # that up == 0, so the absent() arm stays quiet.

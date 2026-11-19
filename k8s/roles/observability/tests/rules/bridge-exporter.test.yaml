@@ -42,13 +42,11 @@ tests:
             exp_annotations:
               summary: monitor-bridge cannot reach the public internet.
               description: >-
-                Both WAN probe providers failed from monitor-bridge, so this house
-                has no working link or no DNS. The rows behind this gate (Discord
-                delivery, R2 headroom, Cloudflare IP drift, Healthchecks.io console
-                drift and the domain registration read) are held by the inhibit
-                rule. Read the probe's failure messages in the monitor-bridge log in
-                the homelab namespace. Its DOWN line: `kubectl -n homelab logs
-                deploy/monitor-bridge | grep 'DOWN wan_reachable '`.
+                Check the router and the modem. Both WAN probe providers failed from monitor-bridge,
+                so the house has no working link or no DNS, and the rows that need the internet are
+                held. The probe's errors: `kubectl -n homelab logs deploy/monitor-bridge | grep
+                'DOWN wan_reachable '`.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#wanunreachable
       - eval_time: 1m
         alertname: DiscordDeliveryFailing
         exp_alerts:
@@ -62,12 +60,10 @@ tests:
             exp_annotations:
               summary: A Discord webhook no longer resolves, or the SMTP backstop login failed.
               description: >-
-                One of the five Discord webhooks (Kuma, CrowdSec, gitops-deploy,
-                *arr, healthchecks) no longer resolves, or the Gmail SMTP backstop
-                login failed. Rotate the named webhook in SOPS and redeploy its
-                consumer. The monitor-bridge log names the failing webhook. Its DOWN
-                line: `kubectl -n homelab logs deploy/monitor-bridge | grep 'DOWN
-                discord '`.
+                Rotate the named Discord webhook in SOPS and redeploy its consumer, or fix the Gmail
+                SMTP backstop login. The monitor-bridge log names which: `kubectl -n homelab logs
+                deploy/monitor-bridge | grep 'DOWN discord '`.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#discorddeliveryfailing
       - eval_time: 1m
         alertname: R2FreeTierHeadroomLow
         exp_alerts:
@@ -185,6 +181,7 @@ tests:
                 The registry's RDAP record dates the domain's expiry 10 days out. A lapse takes
                 down ACME renewal, every public route, the WireGuard endpoint name and the
                 alert plane's own notifications. Renew it at the registrar.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#domainregistrationexpiring
 
   # Every WAN-family row passes, so nothing fires. One dependent down with the gate up fires
   # that dependent alone: a dependent's rule does not read the gate.
@@ -226,12 +223,10 @@ tests:
             exp_annotations:
               summary: A Discord webhook no longer resolves, or the SMTP backstop login failed.
               description: >-
-                One of the five Discord webhooks (Kuma, CrowdSec, gitops-deploy,
-                *arr, healthchecks) no longer resolves, or the Gmail SMTP backstop
-                login failed. Rotate the named webhook in SOPS and redeploy its
-                consumer. The monitor-bridge log names the failing webhook. Its DOWN
-                line: `kubectl -n homelab logs deploy/monitor-bridge | grep 'DOWN
-                discord '`.
+                Rotate the named Discord webhook in SOPS and redeploy its consumer, or fix the Gmail
+                SMTP backstop login. The monitor-bridge log names which: `kubectl -n homelab logs
+                deploy/monitor-bridge | grep 'DOWN discord '`.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#discorddeliveryfailing
 
   # The zero-series case for the WAN family: a missing row is BridgeCheckStale's page, so none
   # of the five rules fires on an exporter with no `homelab_check_success` series.
@@ -276,6 +271,7 @@ tests:
                 up{job="monitor-bridge"} has been 0 or missing for 10 minutes, so either the
                 monitor-bridge pod is down or the monitor-bridge scrape job is gone from
                 prometheus.yml. Read the pod's events and log in the homelab namespace.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#monitorbridgedown
       - eval_time: 30m
         alertname: BridgeCheckStale
         exp_alerts: []
@@ -347,11 +343,11 @@ tests:
               summary: >-
                 monitor-bridge's verdicts have gone stale for a.
               description: >-
-                For 10 minutes either a row's homelab_check_last_run_timestamp_seconds has
-                aged past its homelab_check_deadline_seconds, or fewer rows export
-                homelab_check_success than homelab_check_rows counts. The scrape works, so the
-                run loop is hung or skipping rows. Read the monitor-bridge pod's log in the
-                homelab namespace.
+                Read the monitor-bridge pod's log in the homelab namespace. The scrape works, but
+                for 10 minutes a row has aged past its deadline or fewer rows export
+                homelab_check_success than homelab_check_rows counts, so the run loop is hung or
+                skipping rows.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#bridgecheckstale
       - eval_time: 30m
         alertname: MonitorBridgeDown
         exp_alerts: []
@@ -388,11 +384,11 @@ tests:
               summary: >-
                 monitor-bridge exports fewer check rows than homelab_check_rows counts.
               description: >-
-                For 10 minutes either a row's homelab_check_last_run_timestamp_seconds has
-                aged past its homelab_check_deadline_seconds, or fewer rows export
-                homelab_check_success than homelab_check_rows counts. The scrape works, so the
-                run loop is hung or skipping rows. Read the monitor-bridge pod's log in the
-                homelab namespace.
+                Read the monitor-bridge pod's log in the homelab namespace. The scrape works, but
+                for 10 minutes a row has aged past its deadline or fewer rows export
+                homelab_check_success than homelab_check_rows counts, so the run loop is hung or
+                skipping rows.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#bridgecheckstale
 
   # A restart's first cycle: the exporter already reports 3 rows, but row "c" has no verdict for
   # its first 6m. The count arm is pending for 6m, under the hold, so nothing fires, and the
@@ -773,12 +769,11 @@ tests:
             exp_annotations:
               summary: "Scrutiny reports a failing drive, stale collector data or high NVMe wear."
               description: >-
-                A drive's collector data is older than 26h, its SMART
-                self-assessment or an attribute threshold failed, or NVMe wear
-                passed 80%. Scrutiny's own notifier is unconfigured, so this is the
-                only drive-failure page. The monitor-bridge log names the drive. Its
-                DOWN line: `kubectl -n homelab logs deploy/monitor-bridge | grep
+                A drive failed its SMART self-assessment or an attribute threshold, its NVMe wear
+                passed 80%, or its collector data is older than 26h. This is the only drive-failure
+                page. The log names the drive: `kubectl -n homelab logs deploy/monitor-bridge | grep
                 'DOWN scrutiny '`.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#smarthealthfailing
       - eval_time: 10m
         alertname: SpeedtestDegraded
         exp_alerts:
@@ -836,12 +831,10 @@ tests:
             exp_annotations:
               summary: Alert delivery is failing on Kuma.
               description: >-
-                One of the five Discord webhooks (Kuma, CrowdSec, gitops-deploy,
-                *arr, healthchecks) no longer resolves, or the Gmail SMTP backstop
-                login failed. Rotate the named webhook in SOPS and redeploy its
-                consumer. The monitor-bridge log names the failing webhook. Its DOWN
-                line: `kubectl -n homelab logs deploy/monitor-bridge | grep 'DOWN
-                discord '`.
+                Rotate the named Discord webhook in SOPS and redeploy its consumer, or fix the Gmail
+                SMTP backstop login. The monitor-bridge log names which: `kubectl -n homelab logs
+                deploy/monitor-bridge | grep 'DOWN discord '`.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#discorddeliveryfailing
       - eval_time: 10m
         alertname: R2FreeTierHeadroomLow
         exp_alerts:
@@ -904,12 +897,11 @@ tests:
             exp_annotations:
               summary: Scrutiny reports nvme0 (SHPP41-500GM) worn.
               description: >-
-                A drive's collector data is older than 26h, its SMART
-                self-assessment or an attribute threshold failed, or NVMe wear
-                passed 80%. Scrutiny's own notifier is unconfigured, so this is the
-                only drive-failure page. The monitor-bridge log names the drive. Its
-                DOWN line: `kubectl -n homelab logs deploy/monitor-bridge | grep
+                A drive failed its SMART self-assessment or an attribute threshold, its NVMe wear
+                passed 80%, or its collector data is older than 26h. This is the only drive-failure
+                page. The log names the drive: `kubectl -n homelab logs deploy/monitor-bridge | grep
                 'DOWN scrutiny '`.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#smarthealthfailing
 
   # A one-cycle blip never fires. A gauge that reads 0 for one 300s cycle spans five to seven
   # 1-minute samples (the A6 soak saw both five and six), so the 0 samples at minutes 0 to 6

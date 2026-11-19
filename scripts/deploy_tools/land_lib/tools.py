@@ -300,8 +300,9 @@ class Tools:
     # `handoff.land_through_unit`'s one boundary: starts the lander unit, reads its exit code.
     # The landing's own modules that lag master at a base commit; None when git could not say.
     stale_code: Callable[[str], list[str] | None] = own_checkout.stale_landing_code
-    # `--fresh`: runs `land.sh <argv>` from a new checkout of origin/master; its exit code.
-    fresh_landing: Callable[[Path, list[str]], int] = fresh.land_fresh
+    # `--fresh`: runs `land.sh <argv>` from a new checkout of origin/master; its exit code. A
+    # third argument, the landing turn's locked descriptor, passes the turn to that landing.
+    fresh_landing: Callable[..., int] = fresh.land_fresh
     systemctl: Callable[..., subprocess.CompletedProcess[str]] = systemctl
     # Its other boundary: follows the unit's journal, so its phase lines reach the handoff's log.
     follow_journal: Callable[[str, float], subprocess.Popen[str]] = follow_journal
