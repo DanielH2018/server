@@ -4,6 +4,9 @@
 keys are the ones the three arms read:
 
     users: {name: uid}. The accounts `getent passwd` knows.
+    gids: {name: gid}. A primary gid `getent passwd` reports instead of the uid.
+    group_gids: {name: gid}. The gid `getent group` reports for the user's own group, when it
+        differs from the passwd gid.
     sysusers: {"creates": {name: uid}, "fail": bool}. What `systemd-sysusers` adds, when it does
         not fail. A name already in `users` keeps its uid, as sysusers leaves an existing user alone.
     expired: names `usermod --expiredate 1` was run for. "fail_usermod": true makes it exit 1.
@@ -24,9 +27,12 @@ def getent(state: dict, args: list[str]) -> int:
     name = args[1]
     if name not in state.get("users", {}):
         return NOT_FOUND
-    print(
-        f"{name}:x:{state['users'][name]}:{state['users'][name]}::/home/{name}:/bin/sh"
-    )
+    uid = state["users"][name]
+    gid = state.get("gids", {}).get(name, uid)
+    if args[0] == "group":
+        print(f"{name}:x:{state.get('group_gids', {}).get(name, gid)}:")
+    else:
+        print(f"{name}:x:{uid}:{gid}::/home/{name}:/bin/sh")
     return 0
 
 

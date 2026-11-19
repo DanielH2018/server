@@ -9,10 +9,10 @@
 # directory until the operator's cleanup removes it.
 users:
   # The homelab band 900-949 sits below the uids Ubuntu hands out from 999 down.
-  - {name: renovate-agent, uid: 901, home: /var/lib/renovate-agent, shell: /bin/bash, comment: Unattended Renovate agent}
+  - {name: renovate-agent, uid: 901, gid: 986, home: /var/lib/renovate-agent, shell: /bin/bash, comment: Unattended Renovate agent}
   # The controller: runs the runner, owns its state and the write token, and
   # alone may start the session and lander units. No login.
-  - {name: renovate-agent-ctl, uid: 905, home: /var/lib/renovate-agent-ctl, shell: /usr/sbin/nologin, comment: Renovate agent controller}
+  - {name: renovate-agent-ctl, uid: 905, gid: 905, home: /var/lib/renovate-agent-ctl, shell: /usr/sbin/nologin, comment: Renovate agent controller}
 units:
   homelab-renovate-agent.service: {policy: manual}
   homelab-renovate-agent-session.service: {policy: manual}

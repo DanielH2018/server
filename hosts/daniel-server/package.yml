@@ -54,7 +54,7 @@ description: daniel-server's homelab host package
 component: claude-code
 users:
   # The homelab band 900-949 sits below the uids Ubuntu hands out from 999 down.
-  - {name: claude, uid: 900, home: /var/lib/claude, shell: /bin/bash, comment: Claude agent}
+  - {name: claude, uid: 900, gid: 900, home: /var/lib/claude, shell: /bin/bash, comment: Claude agent}
 # daniel-server's resolver has no record for the Pi, so `ssh daniel-pi` and `probe.py pi`
 # fail here for every user. The regexp anchors on the NAME, so a new Pi address rewrites the
 # line rather than adding a second one. The arm never removes a line: dropping this entry leaves

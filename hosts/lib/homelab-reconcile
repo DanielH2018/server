@@ -76,7 +76,7 @@ Its state and record, /var/lib/homelab-reconcile/applied.json:
      "started": {"<unit>": <epoch>},               (when steps 2, 3 or 4b last called the unit)
      "drift": {"<arm>": <items the arm left alone>},
      "ufw": {"ids": ["<rule id>", ...]},           (once any manifest has declared ufw)
-     "users": {"names": [...]}, "libvirt": {"networks": {...}, "nwfilters": {...}},  (likewise)
+     "users": {"names": [...], "expired": [...]}, "libvirt": {"networks": {...}, "nwfilters": {...}},  (likewise)
      "udev": {"<rule path>": "<sha256>", ...},     (only while a rule is shipped)
      "secrets_inputs_sha256": "<hex>"}   (only after a run in which homelab-secrets succeeded)
 
