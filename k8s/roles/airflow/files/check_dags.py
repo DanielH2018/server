@@ -7,6 +7,7 @@ a DAG that raises on import, or a folder that yields no DAG, fails the build ins
 reaching a tag. Exits 1 and prints each failing file's error.
 """
 
+import argparse
 import sys
 
 
@@ -25,4 +26,5 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    argparse.ArgumentParser(description=__doc__.splitlines()[0]).parse_args()
     sys.exit(main())
