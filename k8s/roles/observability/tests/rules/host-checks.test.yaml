@@ -2621,3 +2621,71 @@ tests:
                 `journalctl -t claude-weekly-summary`, then
                 /var/lib/node-exporter-textfile/claude-weekly-summary.prom on the host. If
                 `claude_code_weekly_summary_enabled` was set false on purpose, delete this rule.
+  # KubeletShutdownLockMissing: the lock is missing from minute 0 and kubelet takes it at minute
+  # 20. The 15m `for` holds the page through the 14th minute, and the next verdict of 1 resolves
+  # it with no silence. The check keeps writing, so NotReporting stays quiet.
+  - interval: 1m
+    input_series:
+      - series: 'up{instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '1x30'
+      - series: 'homelab_check_success{check="kubelet-shutdown-lock", instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '0x20 1x10'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="kubelet-shutdown-lock", instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '0+60x30'
+    alert_rule_test:
+      - eval_time: 14m
+        alertname: KubeletShutdownLockMissing
+        exp_alerts: []
+      - eval_time: 15m
+        alertname: KubeletShutdownLockMissing
+        exp_alerts:
+          - exp_labels:
+              check: kubelet-shutdown-lock
+              instance: daniel-server
+              job: node
+              origin: daniel-server
+              severity: warning
+              service: daniel-server
+            exp_annotations:
+              summary: daniel-server's kubelet holds no shutdown delay lock, so its next shutdown skips the pod drain.
+              description: >-
+                Without the lock, a shutdown stops pods without draining them and can abort
+                Longhorn's ext4 journals. Read {job="k3s"} in loki-homelab for "Failed to start node
+                shutdown manager" and the logind value it names, check `systemd-analyze cat-config
+                systemd/logind.conf`, then restart k3s-agent. The next check resolves this alert.
+      - eval_time: 21m
+        alertname: KubeletShutdownLockMissing
+        exp_alerts: []
+      - eval_time: 25m
+        alertname: KubeletShutdownLockNotReporting
+        exp_alerts: []
+  # KubeletShutdownLockNotReporting: the check writes until minute 5 and then stops, so the
+  # verdict is older than 900s from minute 21.
+  - interval: 1m
+    input_series:
+      - series: 'up{instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '1x30'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="kubelet-shutdown-lock", instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '0+60x5 300x25'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: KubeletShutdownLockNotReporting
+        exp_alerts: []
+      - eval_time: 21m
+        alertname: KubeletShutdownLockNotReporting
+        exp_alerts:
+          - exp_labels:
+              check: kubelet-shutdown-lock
+              instance: daniel-server
+              job: node
+              origin: daniel-server
+              severity: warning
+              service: daniel-server
+            exp_annotations:
+              summary: daniel-server's kubelet shutdown-lock check has stopped reporting.
+              description: >-
+                No kubelet-shutdown-lock verdict newer than 900s reached Prometheus from
+                daniel-server's textfile collector, so nothing reads kubelet's shutdown lock. Read
+                `systemctl status homelab-kubelet-shutdown-lock.timer` and `journalctl -t
+                kubelet-shutdown-lock` on daniel-server, then
+                /var/lib/node-exporter-textfile/kubelet-shutdown-lock.prom on the host.
