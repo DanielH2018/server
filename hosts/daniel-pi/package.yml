@@ -107,6 +107,11 @@ legacy:
   - {unit: kuma-check-github-interaction-limit-boot.service}
   - {path: /var/lib/kuma-check/github-ruleset-drift.down}
   - {path: /var/lib/kuma-check/github-interaction-limit.down}
+  # The `/./` gives each marker a second legacy key, because the first one retired before the
+  # last marker was written. The directory follows its files.
+  - {path: /var/lib/kuma-check/./github-ruleset-drift.down}
+  - {path: /var/lib/kuma-check/./github-interaction-limit.down}
+  - {path: /var/lib/kuma-check}
   - {cron_file: github-ruleset-drift}
   - {cron_file: github-interaction-limit}
   - {path: /var/lib/node-exporter-textfile/github-ruleset-drift.prom}

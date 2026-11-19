@@ -213,6 +213,7 @@ def test_the_manifest_lists_nut_monitor_and_retires_the_ansible_entries(package)
         {"path": "/usr/local/bin/setup-drift-check.sh"},
         {"path": "/var/lib/node-exporter-textfile/setup-drift-check.prom"},
         {"path": "/var/lib/kuma-check/setup-drift.down"},
+        {"path": "/var/lib/kuma-check"},
         {"path": "/usr/local/lib/setup-drift-lib.sh"},
         {"path": "/usr/local/lib/homelab-check-lib.sh"},
         {"path": "/var/lib/homelab/setup-render-manifest.d/setup-drift-check"},
