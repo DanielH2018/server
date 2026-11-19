@@ -79,6 +79,7 @@ from pathlib import PurePosixPath
 from typing import NamedTuple
 
 from _hook_common import (
+    BashCall,
     append_instructions_row,
     emit_pretooluse_context,
     instructions_log_path,
@@ -698,27 +699,23 @@ def build_context(
     return preamble + "\n".join(blocks), chosen
 
 
-def context(payload):
-    """The docs `build_context` chooses for this payload, as injectable text, or None.
+def context(call: BashCall):
+    """The docs `build_context` chooses for this call, as injectable text, or None.
 
     Records each chosen doc in `instructions.log` as it goes, which is the side effect that
     keeps the injection once-per-session. The arm entry point `bash-pretool.py` calls;
     `main()` below is the same arm run as its own process.
     """
-    if payload.get("tool_name") != "Bash":
+    if "/" not in call.command:
         return None
-    command = (payload.get("tool_input") or {}).get("command") or ""
-    if "/" not in command:
-        return None
-    cwd = payload.get("cwd") or os.getcwd()
-    session_id = payload.get("session_id") or ""
-    agent_id = payload.get("agent_id") or None
+    session_id = call.session_id
+    agent_id = call.agent_id
     text, chosen = build_context(
-        command,
-        cwd,
+        call.command,
+        str(call.cwd),
         session_id,
         agent_id=agent_id,
-        transcript_path=payload.get("transcript_path") or "",
+        transcript_path=call.transcript_path,
     )
     if not chosen:
         return None
@@ -739,10 +736,11 @@ def context(payload):
 
 def main():
     """Read the hook payload from stdin and inject the docs `context` chooses."""
-    data = read_payload()
-    if data is None:
+    event = read_payload()
+    call = event.bash() if event else None
+    if call is None:
         return 0
-    text = context(data)
+    text = context(call)
     if text:
         emit_pretooluse_context(text)
     return 0

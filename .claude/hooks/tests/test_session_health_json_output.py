@@ -10,8 +10,12 @@ Run: uv run pytest .claude/hooks/tests/test_session_health_json_output.py
 import importlib.util
 import json
 import os
+import sys
 
 import pytest
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from _hook_common import parse_payload
 
 _HOOK = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "session-health.py"
@@ -40,7 +44,7 @@ def _output(
     """Run main() with every probe faked, and return its stdout parsed as one JSON object."""
     assert (
         _mod.main(
-            read_payload=lambda: {"source": "startup"},
+            read_payload=lambda: parse_payload({"source": "startup"}),
             target_problems=lambda: list(targets),
             master_moved_problems=lambda: [],
             dirty_primary_problems=lambda: [],
