@@ -130,6 +130,13 @@ def test_a_module_reached_only_through_a_callers_insert_gets_that_callers_dirs()
     assert SCRIPTS in dirs
 
 
+def test_a_launched_entry_reaches_the_scripts_root_its_launcher_sets(tmp_path):
+    entry = tmp_path / "entry.py"
+    entry.write_text("from lib import git\n", encoding="utf-8")
+    reached, dirs = _checker()._reach(entry, (), rooted=True)
+    assert SCRIPTS in dirs and SCRIPTS / "lib" / "git.py" in reached
+
+
 def test_yaml_added_to_the_fanout_review_path_turns_the_walk_red(tmp_path):
     checker = _checker()
     dirs = checker.stdlib_only_set()[FANOUT_REVIEW_UNIT]
