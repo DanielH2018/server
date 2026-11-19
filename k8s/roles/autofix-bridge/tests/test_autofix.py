@@ -3,6 +3,8 @@ import json
 import pathlib
 import urllib.request
 
+import pytest
+
 # Load the bind-mounted script directly (not a package), mirroring monitor-bridge/test_check.py.
 _SPEC = importlib.util.spec_from_file_location(
     "autofix", pathlib.Path(__file__).resolve().parent.parent / "files" / "autofix.py"
@@ -273,10 +275,15 @@ def test_dry_run_enabled_false_for_explicit_disable_values():
     assert autofix._dry_run_enabled("FALSE") is False
 
 
-def _configure_sonarr_only(monkeypatch):
+def _configure_sonarr_only(monkeypatch, delivered=True):
     """Points the cycle at Sonarr alone; returns the list its Discord posts land in."""
     posts = []
-    monkeypatch.setattr(autofix, "post_discord", posts.append)
+
+    def post(msg):
+        posts.append(msg)
+        return delivered
+
+    monkeypatch.setattr(autofix, "post_discord", post)
     monkeypatch.setattr(autofix, "SONARR_API_KEY", "sonarr-key")
     monkeypatch.setattr(autofix, "RADARR_API_KEY", "")
     return posts
@@ -335,7 +342,8 @@ def test_run_once_live_deletes_then_searches_in_order(monkeypatch):
     assert data == {"name": "SeriesSearch", "seriesId": 42}
 
 
-def test_run_once_held_branch_makes_zero_mutating_calls(monkeypatch):
+@pytest.mark.parametrize("delivered", [True, False])
+def test_run_once_held_branch_makes_zero_mutating_calls(monkeypatch, delivered):
     # fact: k8s/roles/autofix-bridge/CLAUDE.md#Autonomous-role contract (it changes state with no human in the loop)
     n = autofix.MAX_ACTIONS_PER_CYCLE + 1
     items = [
@@ -344,7 +352,7 @@ def test_run_once_held_branch_makes_zero_mutating_calls(monkeypatch):
     ]
     calls = []
     monkeypatch.setattr(autofix, "_request", _fake_request(items, calls))
-    posts = _configure_sonarr_only(monkeypatch)
+    posts = _configure_sonarr_only(monkeypatch, delivered)
     monkeypatch.setattr(autofix, "DRY_RUN", False)
 
     streaks = {autofix.item_key("Sonarr", it): autofix.GRACE_CYCLES - 1 for it in items}
@@ -355,7 +363,8 @@ def test_run_once_held_branch_makes_zero_mutating_calls(monkeypatch):
     assert calls == []
     assert ok is False
     assert msg.startswith("Holding")
-    assert posts == [msg]
+    # A delivered hold alert stays quiet the next cycle; an undelivered one is retried.
+    assert posts == ([msg] if delivered else [msg, msg])
 
 
 def test_an_unchanged_held_set_is_not_a_change():

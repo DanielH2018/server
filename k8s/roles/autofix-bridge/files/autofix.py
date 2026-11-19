@@ -279,9 +279,10 @@ def _request(url, method="GET", headers=None, data=None):
 
 
 def post_discord(msg):
+    """Posts `msg` to the *arr Discord webhook; True when it was delivered. Never raises."""
     if not DISCORD_WEBHOOK_URL:
         bridge.common.log("WARN: no Discord webhook set; skipping report:", msg)
-        return
+        return False
     try:
         # Discord rejects a message over 2000 characters, which would lose the whole report.
         _request(
@@ -289,12 +290,14 @@ def post_discord(msg):
         )
     except Exception as e:  # best-effort report; never crash the loop
         bridge.common.log("discord post failed (%s):" % msg, e)
+        return False
+    return True
 
 
 def run_once(state):
     """One poll+decide+act cycle over `state`, the `CycleState` the loop carries between cycles.
 
-    A held set posts to Discord once, and again only when its membership changes.
+    A held set posts to Discord once delivered, and again only when its membership changes.
 
     Returns (ok, msg) for the cycle's verdict. Raises on an unreachable *arr / failed mutation, which
     cycle_verdict() converts to a descriptive `down`.
@@ -332,8 +335,8 @@ def run_once(state):
             [(candidates[k][0], candidates[k][3].get("title") or "?") for k in held],
             MAX_ACTIONS_PER_CYCLE,
         )
-        if state.hold_changed(held):
-            post_discord(msg)
+        if state.hold_changed(held) and not post_discord(msg):
+            state.hold_changed(())
         return False, msg
     state.hold_changed(())
 
