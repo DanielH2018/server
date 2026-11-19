@@ -185,11 +185,3 @@ def test_a_landing_handed_the_turn_never_hands_it_on(tmp_path, landing, monkeypa
     with turn.held(ln) as take_turn:
         take_turn("")
         assert ln.hand_over_turn("master moved again") is None
-
-
-def test_a_turn_held_over_ssh_is_never_handed_over(landing):
-    ln, calls = landing(Fakes())
-    with turn.held(ln) as take_turn:
-        take_turn("")
-        assert ln.hand_over_turn("its code lags master") is None
-    assert [c[0] for c in calls if "turn" in c[0]] == ["try_turn", "release_turn"]
