@@ -14,6 +14,19 @@ Accepted. The operator accepted it on 2026-10-24. Slice M6 step C-0 (the
 [M6 plan](../target-architecture/monitoring/m6-retire-kuma.md)) wrote this record, and PR
 C-1 required that acceptance before it could merge.
 
+Amended by [ADR-0029](0029-each-host-is-configured-by-its-own-package-not-ansible.md) on
+2026-11-19. The decision stands: every check pages through Alertmanager, and Uptime Kuma is
+retired. Two statements below no longer hold.
+
+- *Decision* says the eight `kuma-check-*` timers keep their names. They did not. Each check
+  moved into a host component that ships its units under the `homelab-` prefix. Every
+  `kuma-check-*` name left under `hosts/` is a `legacy:` entry that `homelab-reconcile`
+  retires, and no host carries a `kuma-check-*` unit file. The down markers of the checks
+  that rerun while red moved with the units, from `/var/lib/kuma-check/` to
+  `/var/lib/homelab/check/`.
+- *Open questions* leaves the Pi's AutoKuma labels for H5 to drop. The `pi-compose` services
+  no longer carry them, so that question is closed.
+
 ## Context
 
 Two systems page today. Prometheus and Alertmanager carry the rules that slices M1 to M5 add.

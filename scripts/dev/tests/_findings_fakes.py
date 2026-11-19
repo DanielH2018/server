@@ -322,6 +322,11 @@ def build_tools(f: Fakes | None = None) -> tuple[FindingsTools, Calls]:
                 raise f.json_errors[f"api {path}"]
             if path not in f.api:
                 raise AssertionError(argv)
+            if path.endswith("/milestones") and "state=" in argv[1]:
+                state = argv[1].split("state=")[1].split("&")[0]
+                return [
+                    [m for m in page if m["state"] == state] for page in f.api[path]
+                ]
             return list(f.api[path])
         key = " ".join(argv[:2])
         if key in f.json_errors:

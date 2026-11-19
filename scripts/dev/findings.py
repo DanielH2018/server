@@ -41,14 +41,14 @@ Usage (every subcommand also takes `--repo OWNER/NAME`; see below)::
     uv run python scripts/dev/findings.py close 688 --fixed [--pr 700]
     uv run python scripts/dev/findings.py close 688 --refuted --reason "..."
     uv run python scripts/dev/findings.py close 688 --accepted --reason "..."
-    uv run python scripts/dev/findings.py list [--severity S] [--domain D] [--limit N] [--json]
+    uv run python scripts/dev/findings.py list [--severity S] [--domain D] [--milestone "<title>"|none] [--limit N] [--json]
     uv run python scripts/dev/findings.py history <terms> [--file path] [--limit N] [--json]
     uv run python scripts/dev/findings.py show 688 [--full] [--json]
     uv run python scripts/dev/findings.py export --out register.json
     uv run python scripts/dev/findings.py verify --all
     uv run python scripts/dev/findings.py verify 688 701
-    uv run python scripts/dev/findings.py next [--limit N] [--waiting] [--json]
-    uv run python scripts/dev/findings.py new-issues [--after N] [--describe]
+    uv run python scripts/dev/findings.py next [--milestone "<title>"|none] [--limit N] [--waiting] [--json]
+    uv run python scripts/dev/findings.py new-issues [--after N] [--milestone "<title>"|none] [--describe]
     uv run python scripts/dev/findings.py sync-board [688 701] [--dry-run]
 
 THE PROJECT BOARD FOLLOWS THE ISSUE. After any subcommand that writes or comments on an
@@ -104,6 +104,13 @@ leaves a fixed issue in. The `session-milestone` workflow files the branch's PR 
 the milestone once nothing in it is open. A later claim or PR reopens it. `milestone status`
 shows it, and `milestone close` abandons it. `findings_lib/milestone.py` has the rest.
 
+PROJECT MILESTONES. `milestone start --project "<title>" --worktree <branch>` opens a session
+milestone that also holds a backlog. `milestone add <n...>` files unclaimed issues under it
+and `milestone remove <n...>` takes them out. `release`, `reap` and `manual` leave an issue
+in a project, and a claim by another branch does not move it out. `next`, `list` and
+`new-issues` take `--milestone "<title>"` for the issues one milestone holds, and
+`--milestone none` for the issues no open milestone holds.
+
 PICKING UP WORK. `next` prints EVERY issue a session may claim, best severity first,
 withholding `manual` issues, issues deferred to a later date, issues an open issue blocks, issues a LIVE claim already
 holds, and issues an open PR already says it closes. An issue whose claim is stale IS
@@ -144,8 +151,8 @@ never dropped silently.
 
 Exit codes: 0 done; 1 gh failed, or `reap` refused a git read failure rather than call it
 "nothing is claimed"; 64 bad arguments, which includes a `--worktree` name the claim trailer
-could not carry; 3 nothing was written because the issue refuses it — closed, `manual`,
-deferred to a later date, blocked by an open issue, outside the register, held by another worktree, not claimed, or
+could not carry and a `--milestone` title no milestone has; 3 nothing was written because the issue refuses it — closed, `manual`,
+deferred to a later date, blocked by an open issue, outside the register, held by another worktree or milestone, not claimed, or
 lost a race to another claim — or because `claim`'s own `--worktree` would read stale at
 birth, or because `manual` found the label already in the state it was asked for.
 """
@@ -175,7 +182,7 @@ from lib.exit_codes import FINDINGS_BAD_ARGS
 from lib.progress import count_line
 from lib.worktrees import held_by_readable_process
 from dev.findings_lib.claim_cli import cmd_claim, cmd_claims, cmd_reap, cmd_release
-from dev.findings_lib.milestone_cli import cmd_milestone
+from dev.findings_lib.milestone_cli import cmd_milestone, open_issues
 from dev.findings_lib.cli import _parser
 from dev.findings_lib.export_cli import cmd_export
 from dev.findings_lib.history_cli import cmd_history, cmd_show
@@ -605,10 +612,11 @@ def cmd_list(args: argparse.Namespace, tools: FindingsTools) -> int:
     findings are `history`'s search (findings_lib/history_cli.py).
 
     Args:
-        args: parsed CLI namespace carrying ``json``, ``severity``, ``domain`` and ``limit``.
+        args: parsed CLI namespace carrying ``json``, ``severity``, ``domain``,
+            ``milestone`` and ``limit``.
         tools: the process boundaries the issue read goes through.
     """
-    rows = sorted(issue_rows(load_issues("open", tools)), key=sort_key)
+    rows = sorted(issue_rows(open_issues(args, tools)), key=sort_key)
     rows = [
         r
         for r in rows
@@ -665,10 +673,11 @@ def cmd_next(args: argparse.Namespace, tools: FindingsTools) -> int:
     the more conservative read instead of refusing to answer at all.
 
     Args:
-        args: parsed CLI namespace carrying ``limit``, ``json`` and ``waiting``.
+        args: parsed CLI namespace carrying ``limit``, ``json``, ``milestone`` and
+            ``waiting``.
         tools: the process boundaries every gh call goes through.
     """
-    issues = load_issues("open", tools)
+    issues = open_issues(args, tools)
     today = today_utc()
     rows, stale = free_issues(issues, tools, pr_refs=open_pr_refs(tools), today=today)
     rows = rows[: args.limit]

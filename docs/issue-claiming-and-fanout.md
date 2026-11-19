@@ -235,6 +235,59 @@ Four design rules hold across the subcommands, and no docstring states them:
   A PR body's `Closes #<n>` posts no release, and the next re-observation that reopens the issue
   would otherwise bring the claim back live.
 
+## Session milestones and project milestones
+
+A session milestone is a GitHub milestone that groups one branch's focused work.
+`findings.py milestone start "<title>" --worktree <branch>` opens it, and nothing else makes
+one. `claim` files the branch's issues under it. The `session-milestone` workflow files the
+branch's PR, and files a fan-out batch's PR under the milestone of the issue that PR closes.
+The workflow closes the milestone once nothing in it is open, and a later claim or PR
+reopens it. The milestone's description names its branch, and the tools touch only a
+milestone whose description they can parse. `scripts/dev/findings_lib/milestone.py` owns the
+scheme.
+
+A session milestone holds only claimed issues: `release`, `reap` and `manual` take an issue
+back out. So it cannot hold work nobody has started.
+
+A project milestone is a session milestone that also holds a backlog.
+`milestone start --project "<title>" --worktree <branch>` opens one, and its description
+says `project` where a session milestone's says `session`. One sub-coordinator session owns
+one project: the project is that session's milestone, and the session runs `issue-fanout`
+over the project's backlog. A project differs from a session milestone in four ways:
+
+- `milestone add <n...>` files unclaimed issues in the backlog. It refuses a closed issue,
+  a claimed issue, and an issue that another milestone holds.
+- `release`, `reap` and `manual` leave the issue in the project. A batch that fails and
+  releases its issue returns that issue to the backlog.
+- A claim by another branch leaves the issue in the project. A hand-steered worker that has
+  a session milestone of its own does not take the issue out of the backlog.
+- `next --milestone "<title>"` lists the project's free issues, and `list` and `new-issues`
+  take the same flag. `--milestone none` selects the issues that no open milestone holds,
+  which is the pool a root session assigns from. A title that no milestone has exits 64
+  rather than printing an empty list. `cc-wait findings --milestone "<title>"` waits on one
+  project, and ends only on an issue filed after the wait began: an older issue that
+  `milestone add` files later does not end it.
+
+Claim filing, PR joining, the close at zero open items and `reap` treat both forms alike. A
+project with issues in its backlog has open items, so it stays open while its backlog lasts.
+
+Each way in has a way out:
+
+- `milestone add` is reversed by `milestone remove <n...>`, which refuses a claimed issue.
+  To take a claimed issue out, `release` it first.
+- `milestone start` is reversed by `milestone close`, and `start` with the same title
+  reopens the closed milestone. `milestone status` prints the form and the counts.
+- No command converts a milestone between the two forms. `start` refuses a title the branch
+  already holds in the other form. To change form, close the milestone and start the other
+  form under another title.
+
+The operator decided on 2026-11-19 that a project is the sub-coordinator's session
+milestone, not a second kind of milestone. The rejected alternative was a milestone the
+operator makes by hand, with no owning branch. The tools never touch a milestone whose
+description names no branch, so they could not file a claim under one, close it when its
+work finished, or reopen it. A project with an owning branch gets all of that from the code
+that serves a session milestone.
+
 ## What a fan-out agent may not do
 
 A fanned-out agent may close an issue with `close --fixed --pr <n>` and nothing else.
