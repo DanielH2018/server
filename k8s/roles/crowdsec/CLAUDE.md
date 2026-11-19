@@ -223,7 +223,9 @@ Machine registration and the two allowlist creates run in the `lapi-register` in
 `k8s/roles/crowdsec/templates/deployment.yaml.j2`, against `crowdsec-db` before the LAPI
 serves (#5741). cscli writes the SQLite file directly, and
 `k8s/roles/crowdsec/tests/test_jobs_image.py::test_the_lapi_register_init_runs_against_a_fresh_database_with_no_lapi`
-runs the rendered script in the pinned image with no network. The script tolerates only an
+runs the rendered script in the pinned image with no network. That module runs in
+`.github/workflows/image-leg.yml`, which blocks no merge, so read its result on a pull request
+that changes this role or either image pin. The script tolerates only an
 allowlist that already exists. Any other failure leaves the pod in `Init:Error`, the LAPI out
 of its Service for every bouncer, and the `crowdsec` Kustomization's wait red. Read
 `kubectl -n homelab logs deploy/crowdsec -c lapi-register` first.
