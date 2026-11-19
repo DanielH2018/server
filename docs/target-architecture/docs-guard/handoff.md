@@ -52,8 +52,9 @@ Take the items in this order. Each names the effort it needs from an Opus sessio
    the step with both classes as advice. Take it in the same session as item 5, from
    2026-12-15.
 7. **The `ansible/` leftovers in comments.** Done. `11f09573f` repointed the 74 places
-   the advice listed, and `tests/repo/test_pre_rename_paths_census.py` holds `k8s/` and
-   the renderer's job files. A later PR fixed the comments outside those trees that still
+   the advice listed. A census held `k8s/` and the renderer's job files until 2026-11-19,
+   when the operator pruned it with the other tests that only assert a removed name stays
+   absent. A later PR fixed the comments outside those trees that still
    named a gone path. It also deleted the jsonpath quoting test, which scanned for Ansible
    command tasks after the last one was gone. The `ansible/` mentions left outside
    `docs/` name a path inside a pre-rename commit, a test fixture, or a quoted record.
