@@ -17,7 +17,7 @@ import tomllib
 import pytest
 from _helpers import REPO
 
-import gen_doc_fragments as g
+from docs import gen_doc_fragments as g
 
 HOOK_ID = "regen-doc-fragments"
 

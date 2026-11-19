@@ -3,7 +3,7 @@
 import yaml
 import pytest
 
-from validate_ha_config import (
+from home_assistant.validate_ha_config import (
     HAConfigError,
     HAConfigLoader,
     ROLE_DIR,
@@ -244,7 +244,7 @@ def _role_with_shipped_list(
     subdir="automations",
     var="home_assistant_automation_files",
 ):
-    from validate_ha_config import shipped_dir_list_errors
+    from home_assistant.validate_ha_config import shipped_dir_list_errors
 
     role = tmp_path / "role"
     _write(
@@ -377,13 +377,13 @@ def test_automation_file_list_flags_missing_file(tmp_path):
 
 
 def test_real_role_automation_file_list_matches_directory():
-    from validate_ha_config import shipped_dir_list_errors
+    from home_assistant.validate_ha_config import shipped_dir_list_errors
 
     assert shipped_dir_list_errors(ROLE_DIR) == []
 
 
 def test_uncoerced_macro_bool_uses_truth_table():
-    from validate_ha_config import uncoerced_macro_bool_uses as u
+    from home_assistant.validate_ha_config import uncoerced_macro_bool_uses as u
 
     names = {"m", "n"}
     assert u("{{ m() and x }}", names) == ["m"]

@@ -9,14 +9,7 @@ figure, caption included. ``diagram_svg_fragment`` is the bare ``<svg>`` element
 is what ``render_svg`` wraps into a standalone document for a Markdown page.
 """
 
-import sys as _sys
-from pathlib import Path as _Path
 from typing import Any
-
-# `infra_map` is a namespace package under `scripts/`, so reaching a sibling by package
-# name needs `scripts/` on sys.path: a directly-invoked script gets only its own directory,
-# and pyproject's `pythonpath` is a pytest setting.
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 from infra_map.style import e
 from lib.inventory_lists import LANDING_HOST, PI_HOST

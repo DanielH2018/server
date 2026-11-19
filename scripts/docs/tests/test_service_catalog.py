@@ -7,7 +7,7 @@ pattern this deliberately does NOT follow — the catalog derives facts rather t
 Run: uv run pytest scripts/docs/tests/test_service_catalog.py
 """
 
-import service_catalog
+from docs import service_catalog
 from _catalog_fixtures import make_repo, write
 from docs.catalog_lib.catalog_facts import k8s_route
 from docs.catalog_lib.catalog_model import ServiceRow

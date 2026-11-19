@@ -8,7 +8,7 @@ from datetime import date
 
 import pytest
 
-import build_docs
+from docs import build_docs
 from docs.reference import backlog as g
 
 

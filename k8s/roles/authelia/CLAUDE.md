@@ -35,7 +35,7 @@ Authelia skips a rule whose subject does not match, so without the `deny` a user
 `tests/services/test_authelia_access_tiers.py::test_a_user_outside_admins_is_denied_a_silence_ui`.
 
 **A `use_authelia: true` entry without `auth_tier` fails the render** — in
-`validate/k8s_manifests.py`, in the test render and in a real deploy alike — so a new service cannot ride
+`validate/render_lib/k8s.py`, in the test render and in a real deploy alike — so a new service cannot ride
 the wildcard by omission. ENFORCED:
 `tests/services/test_authelia_access_tiers.py`.
 

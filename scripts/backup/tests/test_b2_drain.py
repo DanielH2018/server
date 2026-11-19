@@ -13,7 +13,7 @@ import stat
 
 import pytest
 
-from b2_drain import (
+from backup.b2_drain import (
     BACKUPSTORE_PREFIX,
     DrainError,
     classify,

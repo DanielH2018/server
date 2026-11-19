@@ -2,7 +2,7 @@
 """The reap-orphan entry points' bootstrap, and every way they must fail closed.
 
 Two subjects, both about the entry point rather than about either subcommand's output. The
-bootstrap pair proves the scripts' own sys.path inserts resolve `host_lib` when the script is
+import pair proves the scripts resolve their imports, `host_lib` included, when the script is
 invoked directly, which is how an operator runs it (`uv run python
 scripts/backup/longhorn_reap.py backups`). The fail-closed arms prove an unreadable input — a
 `null` JSON body from kubectl, a non-integral env knob — produces a named ABORT rather than a
@@ -27,7 +27,7 @@ from _reap_entrypoint_harness import (
 )
 
 
-# ── sys.path bootstrap ───────────────────────────────────────────────────────────────────
+# ── imports resolve when run directly ───────────────────────────────────────────────────────────────────
 
 
 def test_backups_entrypoint_resolves_its_sibling_imports_when_run_directly(tmp_path):

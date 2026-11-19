@@ -13,7 +13,7 @@ import subprocess
 
 import pytest
 
-import export_grafana_dashboards as eg
+from grafana import export_grafana_dashboards as eg
 
 
 def test_slug_lowercases_and_hyphenates():

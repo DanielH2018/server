@@ -5,7 +5,7 @@ pattern is run twice: against crafted text it must accept or reject, and against
 tree, where it must name a member it is known to find.
 """
 
-from fragments_lib import fragments_hosts as h
+from docs.fragments_lib import fragments_hosts as h
 from lib.estate import Estate
 
 # --- renderers, against literals -------------------------------------------------------------

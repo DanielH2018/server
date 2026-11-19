@@ -6,7 +6,7 @@ running Prometheus, and monitor-bridge reads that Prometheus every cycle. Neithe
 nor the k8s manifest validator can see it, because the file is valid YAML inside a valid
 ConfigMap. Only Prometheus's own parser can, and promtool is that parser.
 
-THE TOOL PHASE. The script renders the observability role through `validate.k8s_manifests`,
+THE TOOL PHASE. The script renders the observability role through `validate.render_lib.k8s`,
 the render `probe.py health` uses, with secrets stubbed. It extracts each rendered file
 `RENDERED` names and runs:
 
@@ -135,8 +135,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from lib.cli_help import ArgumentParser
+from lib.k8s_roles import k8s_entries
+from lib.render_context import render_context
 from lib.repo_paths import K8S_ROLES, REPO
 from validate.notification_renders import RENDER_CASES, render_problems
+from validate.render_lib.k8s import check_template
 from validate.validate_lib.rule_test_parts import split_rule_test
 from validate.alert_conventions import (
     RULE_TESTS_DIR,
@@ -399,17 +402,13 @@ def rendered_files() -> dict[str, str]:
     Raises:
         RuntimeError: a template failed to render.
     """
-    from validate import k8s_manifests as validator
-
-    entries = validator.k8s_entries()
-    ctx = validator.render_context(
+    entries = k8s_entries()
+    ctx = render_context(
         ROLE_DIR, overrides={"container_item": entries[ROLE]}, strict=True
     )
     found = {}
     for key, (template, kind, name) in RENDERED.items():
-        err, docs = validator.check_template(
-            ROLE, ROLE_DIR / "templates" / template, ctx
-        )
+        err, docs = check_template(ROLE, ROLE_DIR / "templates" / template, ctx)
         if err:
             raise RuntimeError(f"{ROLE}/{template} failed to render: {err}")
         for doc in docs:
@@ -475,14 +474,12 @@ def _rendered_group_keys(
     Raises:
         RuntimeError: the template failed to render.
     """
-    from validate import k8s_manifests as validator
-
     role_dir = K8S_ROLES / role
-    entries = validator.k8s_entries()
-    ctx = validator.render_context(
+    entries = k8s_entries()
+    ctx = render_context(
         role_dir, overrides={"container_item": entries[role]}, strict=True
     )
-    err, docs = validator.check_template(role, role_dir / "templates" / template, ctx)
+    err, docs = check_template(role, role_dir / "templates" / template, ctx)
     if err:
         raise RuntimeError(f"{role}/{template} failed to render: {err}")
     keys = set()
@@ -522,14 +519,12 @@ def rendered_alloy_config() -> str:
     Raises:
         RuntimeError: the template failed to render or the ConfigMap carries no such key.
     """
-    from validate import k8s_manifests as validator
-
-    entries = validator.k8s_entries()
-    ctx = validator.render_context(
+    entries = k8s_entries()
+    ctx = render_context(
         LOKI_ROLE_DIR, overrides={"container_item": entries[LOKI_ROLE]}, strict=True
     )
     template = LOKI_ROLE_DIR / "templates" / ALLOY_CONFIG_TEMPLATE
-    err, docs = validator.check_template(LOKI_ROLE, template, ctx)
+    err, docs = check_template(LOKI_ROLE, template, ctx)
     if err:
         raise RuntimeError(
             f"{LOKI_ROLE}/{ALLOY_CONFIG_TEMPLATE} failed to render: {err}"

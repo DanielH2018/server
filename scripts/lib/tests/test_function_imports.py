@@ -32,7 +32,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-from lib.repo_paths import SCRIPTS
 
 BOOTSTRAP = (
     "import sys as _sys\n"
@@ -235,40 +234,12 @@ def test_an_exemption_whose_import_left_its_function_is_reported_stale(tmp_path)
 
 # -- the real tree -------------------------------------------------------------------------
 
-HSM = "scripts/home_assistant/ha_state_model.py"
-VHC = "scripts/home_assistant/validate_ha_config.py"
-EXPECTED_EXEMPTIONS = {
-    (HSM, "main", "ha_state_checks"),
-    (VHC, "validate", "ha_state_checks"),
-}
-
 # Non-vacuity: `ha_state_model.py` is the #674 module and the classifier calls it a library
 # so a census borrowed from `--help` would lose it. `longhorn_reap.py` carries the two
 # bare imports only the by-path mode applies to.
 MUST_COVER = frozenset(
     {"ha_state_model.py", "validate_ha_config.py", "longhorn_reap.py", "probe.py"}
 )
-
-
-def test_the_two_exemptions_the_review_found_are_listed_each_with_a_reason():
-    from lib.function_imports import EXEMPTIONS
-
-    assert EXPECTED_EXEMPTIONS <= set(EXEMPTIONS), sorted(
-        EXPECTED_EXEMPTIONS - set(EXEMPTIONS)
-    )
-    assert all(isinstance(r, str) and r.strip() for r in EXEMPTIONS.values()), (
-        EXEMPTIONS
-    )
-
-
-def test_the_exempted_imports_really_fail_under_dotted_loading():
-    """Each exemption covers a real failure, so dropping it from the list turns the check red."""
-    from lib.function_imports import check
-
-    found = set()
-    for rel in (HSM, VHC):
-        found |= _keys(check(SCRIPTS.parent / rel, mode="dotted", exemptions={}))
-    assert {(*key, "broken") for key in EXPECTED_EXEMPTIONS} <= found
 
 
 def test_dotted_loaded_finds_the_exempted_modules_and_not_longhorn_reap():

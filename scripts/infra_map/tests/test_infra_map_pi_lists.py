@@ -6,8 +6,7 @@ Run: uv run pytest scripts/infra_map/tests/test_infra_map_pi_lists.py
 
 import pytest
 
-import gen_infra_map as g
-
+from infra_map import gen_infra_map as g
 from _infra_map import GLOBALS, pi_host
 
 

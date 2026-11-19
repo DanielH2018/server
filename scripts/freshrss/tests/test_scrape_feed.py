@@ -1,7 +1,7 @@
 from pathlib import Path
 
 import pytest
-from scrape_feed import check, discover
+from freshrss.scrape_feed import check, discover
 
 BLOG = "https://example.org/blog"
 

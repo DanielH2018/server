@@ -391,7 +391,7 @@ CONFIG_PROPERTIES = (
             "`metadata`, `filtering.prohibit_backup_eligibility` and the experimental passkey "
             "toggles are what a copy-paste brings in. This pod rolls under `Recreate` in front "
             "of most public routes, so that failure lands with the old pod already gone, and "
-            "validate/k8s_manifests.py only asks whether the YAML parses."
+            "validate/render_lib/k8s.py only asks whether the YAML parses."
         ),
         select=_authelia_webauthn,
         offence=_webauthn_offence,

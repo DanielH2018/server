@@ -50,11 +50,11 @@ FACADE_EDGES = frozenset(
         # scripts/docs/reference/scripts.py renders the page; the census was split into lib/
         # so the `--help` test could reach it without importing the generator.
         ("docs.reference.scripts", "lib.script_classify"),
-        # scripts/validate/k8s_manifests.py re-exports the claim-name helpers from lib/k8s_yaml.py.
-        ("validate.k8s_manifests", "lib.k8s_yaml"),
-        # The rule modules only one validator imports sit in validate/validate_lib/.
-        ("validate.k8s_manifests", "validate.validate_lib.k8s_net_rules"),
-        ("validate.k8s_manifests", "validate.validate_lib.k8s_schema"),
+        # scripts/validate/render_lib/k8s.py reads the claim names through lib/k8s_yaml.py.
+        ("validate.render_lib.k8s", "lib.k8s_yaml"),
+        # The rule modules only one family imports sit in validate/validate_lib/.
+        ("validate.render_lib.k8s", "validate.validate_lib.k8s_net_rules"),
+        ("validate.render_lib.k8s", "validate.validate_lib.k8s_schema"),
         ("validate.render_lib.shell", "validate.validate_lib.shell_lint"),
         # scripts/docs/service_catalog.py over the four catalogue modules; catalog_model is the
         # one leaf with no first-party dependency beyond lib.repo_paths.
@@ -127,7 +127,7 @@ ANCHOR_MODULES = frozenset(
         "docs.service_catalog",
         "lib.repo_paths",
         "secrets_mgmt.secret_rotation",
-        "validate.k8s_manifests",
+        "validate.render_templates",
     }
 )
 

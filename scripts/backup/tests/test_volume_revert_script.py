@@ -4,7 +4,7 @@ import itertools
 import json
 
 import pytest
-import volume_revert
+from backup import volume_revert
 from lib.exit_codes import FAILED, OK, USAGE_ERROR
 from lib.operator_kubectl import KubectlFailed
 
