@@ -5,16 +5,16 @@
 # The scrape job sets no `service`, and Traefik's own `service` label names a backend, so every
 # rule sets `service: traefik` as a literal. A rule that groups by Traefik's backend copies it to
 # `backend` first with label_replace, because the literal replaces the series label of the same
-# name. Each threshold carries the value of the monitor-bridge env key named beside it, and its
+# name. Each threshold carries the value of the monitor-bridge check it ports, and its
 # `DECIDED:` marker on the rule is what a retune is reviewed against: no test pins the number.
 #
-# The volume floor (TRAEFIK_MIN_RPS, 0.05) is an `and` clause in each ratio rule: a single error
+# The volume floor (0.05 rps) is an `and` clause in each ratio rule: a single error
 # on a near-idle route is not a 100% error ratio.
 groups:
   - name: edge
     rules:
       # monitor-bridge's `cert` row. The series carry `cn`, `sans` and `serial`, so the alert
-      # names every breaching certificate. 14 days is CERT_MIN_DAYS.
+      # names every breaching certificate.
       # DECIDED: 14 days, the bridge's floor kept as is. It is critical, so it mails: two weeks
       # leaves time to repair a failed ACME renewal by hand before a browser refuses the name.
       - alert: CertExpiringSoon
@@ -30,7 +30,7 @@ groups:
             {{ $value | humanize }} days. Read Traefik's ACME log for a failed renewal, and
             `probe.py cert <host>` for the chain it serves.
           runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#certexpiringsoon
-      # `traefik5xx`: a backend's 5xx share over 5 minutes above 5% (TRAEFIK_5XX_PCT), behind the
+      # `traefik5xx`: a backend's 5xx share over 5 minutes above 5%, behind the
       # volume floor.
       # DECIDED: 5% of requests over 5 minutes, held 5 minutes, only at 0.05 rps or more: the
       # bridge's values kept as is. The floor keeps one error on an idle route from reading 100%.
@@ -56,10 +56,9 @@ groups:
             {{ $labels.backend }} in the last 5 minutes got a 5xx. Loki
             `{container="traefik"}` has the status codes, and the backend's own log has the
             cause.
-      # `traefik_latency`: over 5% of a backend's requests slower than the 5.0s bucket
-      # (TRAEFIK_SLOW_BUCKET, TRAEFIK_SLOW_PCT), with at least 3 of them in the window
-      # (TRAEFIK_SLOW_MIN_REQUESTS; the slow rate times the 300s window is the count), behind the
-      # volume floor. The services in TRAEFIK_STREAM_SERVICES hold connections open, and the
+      # `traefik_latency`: over 5% of a backend's requests slower than the 5.0s bucket,
+      # with at least 3 of them in the window (the slow rate times the 300s window is the count),
+      # behind the volume floor. The exempt services hold connections open, and the
       # histogram times a request to the end of its connection, so the regex excludes them from
       # every selector.
       # DECIDED: over 5% of requests past the 5.0s bucket, at least 3 slow requests in the 300s
@@ -136,7 +135,7 @@ groups:
             traefik_service_request_duration_seconds_bucket series with le="5.0", so
             TraefikBackendSlow cannot see it. Check the histogram buckets in Traefik's metrics
             configuration.
-      # `traefik_404`: over 90% (TRAEFIK_404_PCT) of ENTRYPOINT traffic is 404. The entrypoint
+      # `traefik_404`: over 90% of ENTRYPOINT traffic is 404. The entrypoint
       # counter survives a total-404 edge, which erases the per-service series.
       # DECIDED: 90%, the bridge's value kept as is. A healthy edge 404s scanners and stale
       # links, never nine requests in ten; a lost router set 404s everything.
@@ -158,8 +157,8 @@ groups:
             {{ $value | humanizePercentage }} of the entrypoint traffic in the last 5 minutes
             was 404, the shape of an edge that lost its routers (#1322). Read Traefik's startup
             log for a router or plugin error.
-      # `traefik_421`: a router answers 421 above 0.02 rps (TRAEFIK_421_RPS) for three bridge
-      # cycles (TRAEFIK_421_CONSECUTIVE, 5 minutes apart, so 10 minutes between the first and
+      # `traefik_421`: a router answers 421 above 0.02 rps for three bridge
+      # cycles (5 minutes apart, so 10 minutes between the first and
       # the third). A long-lived client connected while Traefik reconciled its routes and SNICheck
       # pinned the wrong TLS options on that connection.
       # DECIDED: 0.02 rps held 10 minutes, the bridge's rate and its three-cycle streak kept as
