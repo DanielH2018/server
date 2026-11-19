@@ -66,6 +66,7 @@ tests:
               description: up{job="autofix-bridge"} has been 0 or missing for 10 minutes, so either
                 the autofix-bridge pod is down or the autofix-bridge scrape job is gone from prometheus.yml.
                 Read the pod's events and log in the homelab namespace.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#autofixbridgedown
   # AutofixBridgeDown, arm two: the scrape job is missing, so there is no `up` series at all.
   - interval: 1m
     input_series: []
@@ -85,6 +86,7 @@ tests:
               description: up{job="autofix-bridge"} has been 0 or missing for 10 minutes, so either
                 the autofix-bridge pod is down or the autofix-bridge scrape job is gone from prometheus.yml.
                 Read the pod's events and log in the homelab namespace.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#autofixbridgedown
   # A restart: the pod is gone for 4 minutes (up 0, then no series), then returns. Quiet.
   - interval: 1m
     input_series:
@@ -130,10 +132,11 @@ tests:
               service: autofix-bridge
             exp_annotations:
               summary: autofix-bridge's loop has stopped recording its cycle verdict.
-              description: For 10 minutes either the cycle's homelab_check_last_run_timestamp_seconds
-                has aged past its homelab_check_deadline_seconds, or the exporter is up and serves no
-                homelab_check_success. The scrape works, so the loop is hung or never completes a cycle.
-                Read the autofix-bridge pod's log in the homelab namespace.
+              description: >-
+                Read the autofix-bridge pod's log in the homelab namespace. The scrape works, but
+                for 10 minutes the cycle's verdict has aged past its deadline or the exporter serves
+                no homelab_check_success, so the loop is hung or never completes a cycle.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#autofixbridgestale
   # A fresh timestamp: the loop records every minute. Quiet.
   - interval: 1m
     input_series:
@@ -171,10 +174,11 @@ tests:
               service: autofix-bridge
             exp_annotations:
               summary: autofix-bridge's loop has stopped recording its cycle verdict.
-              description: For 10 minutes either the cycle's homelab_check_last_run_timestamp_seconds
-                has aged past its homelab_check_deadline_seconds, or the exporter is up and serves no
-                homelab_check_success. The scrape works, so the loop is hung or never completes a cycle.
-                Read the autofix-bridge pod's log in the homelab namespace.
+              description: >-
+                Read the autofix-bridge pod's log in the homelab namespace. The scrape works, but
+                for 10 minutes the cycle's verdict has aged past its deadline or the exporter serves
+                no homelab_check_success, so the loop is hung or never completes a cycle.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#autofixbridgestale
   # A restart's partial first cycle: the exporter serves the timestamp and deadline from its
   # start, and the first cycle's success gauge appears 5 minutes later. Quiet at every step.
   - interval: 1m
@@ -233,6 +237,7 @@ tests:
               description: up{job="autofix-bridge"} has been 0 or missing for 10 minutes, so either
                 the autofix-bridge pod is down or the autofix-bridge scrape job is gone from prometheus.yml.
                 Read the pod's events and log in the homelab namespace.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#autofixbridgedown
   # CloudflareDdnsUnavailable: the direct Deployment has no available replica for the whole hold.
   - interval: 1m
     input_series:

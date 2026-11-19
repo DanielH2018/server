@@ -29,6 +29,13 @@ cannot reach `TURN_HOST`, goes on without it and merges as a landing without the
 Every landing that merges its PR directly takes the turn. A merge made outside `land.sh` can
 still move master under the holder.
 
+A holder whose landing code lags master forms no batch (`batch._members`). When it holds the
+turn as a lock on this host, it hands the turn to a landing of the same PR from a fresh checkout
+of origin/master instead (`HandOver`). The new landing inherits the locked descriptor through
+`fresh.TURN_FD_ENV`, so no other landing takes the turn in between. From then on the turn
+ends with the new landing, not with the one that handed it over. A landing that took a turn
+over never hands it on, and a turn held over ssh is never handed over.
+
 `LAND_TURN_DIR` moves the lock and the line into a directory on this host, whatever the host,
 so a test that runs a whole landing never takes the real turn.
 """
@@ -46,6 +53,7 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from deploy_tools.land_lib import line
+from deploy_tools.land_lib.fresh import TURN_FD_ENV
 from deploy_tools.land_lib.landing import Landing
 from deploy_tools.land_lib.outcome import say
 from lib.progress import OnChange
@@ -136,7 +144,35 @@ if fd is not None:
 """
 
 
-def try_take(path: _Path = LOCK) -> Callable[[], None] | None:
+class LocalTurn:
+    """The turn held as a lock on this host's file; calling it gives the turn up.
+
+    Attributes:
+        fd: The locked descriptor. A child process that inherits it holds the same lock.
+    """
+
+    def __init__(self, fd: int) -> None:
+        self.fd = fd
+
+    def __call__(self) -> None:
+        # Unlocks before closing: the landing that handed this turn over keeps its copy open.
+        fcntl.flock(self.fd, fcntl.LOCK_UN)
+        os.close(self.fd)
+
+
+class HandOver(Exception):
+    """A turn this landing passes to a landing of its PR from a fresh checkout.
+
+    Attributes:
+        fd: The turn's locked descriptor, for the new landing to inherit.
+    """
+
+    def __init__(self, fd: int, why: str) -> None:
+        super().__init__(why)
+        self.fd = fd
+
+
+def try_take(path: _Path = LOCK) -> LocalTurn | None:
     """Take the turn on this host without waiting.
 
     Returns:
@@ -146,7 +182,21 @@ def try_take(path: _Path = LOCK) -> Callable[[], None] | None:
         OSError: The lock file can be neither opened nor created.
     """
     fd = _lock(str(path))
-    return None if fd is None else lambda: os.close(fd)
+    return None if fd is None else LocalTurn(fd)
+
+
+def _adopt() -> LocalTurn | None:
+    """The turn a landing handed to this one (`HandOver`), or None when none was."""
+    fd = os.environ.pop(TURN_FD_ENV, "")
+    if not fd:
+        return None
+    try:
+        fcntl.flock(int(fd), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except (OSError, ValueError) as exc:
+        say(f"could not take over the landing turn handed to this landing ({exc})")
+        return None
+    say("took over the landing turn from the landing that handed it to this checkout")
+    return LocalTurn(int(fd))
 
 
 def try_take_over_ssh(
@@ -312,9 +362,12 @@ def held(ln: Landing) -> Generator[Callable[[str], tuple[bool, int]]]:
         up to `merge_timeout` and returns whether this landing holds the turn and the seconds
         that call waited. It asks once: a later call answers at once with what the first one
         got, until `ln.give_back_turn` gives the turn up and the next call asks again.
+
+    Raises:
+        HandOver: from `ln.hand_over_turn`, which leaves the turn locked for the caller.
     """
-    release: Callable[[], None] | None = None
-    asked = False
+    release: Callable[[], None] | None = _adopt()
+    asked = adopted = release is not None
 
     def take(draft: str) -> tuple[bool, int]:
         nonlocal release, asked
@@ -330,10 +383,19 @@ def held(ln: Landing) -> Generator[Callable[[str], tuple[bool, int]]]:
             release()
         release, asked = None, False
 
+    def hand_over(why: str) -> None:
+        if adopted or ln.opts.policy_active or not isinstance(release, LocalTurn):
+            return
+        raise HandOver(release.fd, why)
+
     ln.give_back_turn = give_back
+    ln.hand_over_turn = hand_over
     try:
         yield take
+    except HandOver:
+        release = None
+        raise
     finally:
-        ln.give_back_turn = None
+        ln.give_back_turn = ln.hand_over_turn = None
         if release:
             release()

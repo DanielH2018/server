@@ -176,7 +176,9 @@ M1's Alertmanager. Every rule carries `service="flux"`.
   fires when kube-state-metrics has been scraped for 15 minutes with no `gotk_resource_info`
   series for the root Kustomization. That loss would otherwise leave this rule and
   `FluxSuspended` quiet. Its alert carries no `exported_namespace`, and its description
-  points at the kube-state-metrics log.
+  points at the kube-state-metrics log. Read that log for a Forbidden or a
+  custom-resource-state config error, and compare the Flux CRD versions with
+  `k8s/roles/observability/defaults/main.yml:observability_ksm_flux_resource_state`.
 - **`FluxSuspended`, warning.** A Kustomization has been suspended for more than 24 hours.
   A role's `flux_suspend` and a hand suspend both count.
 - **`FluxWorkersSaturated`, warning.** For 30 minutes, every `kustomize-controller` reconcile

@@ -709,6 +709,11 @@ the hook's own directory. The auto-mode classifier refuses a compound command it
 alone, and a `cd` into the directory the shell is already in makes any command compound while
 changing nothing it does (#3957). Any other `cd` stands.
 
+Auto mode takes no rewrite (#9004). Its classifier reviews the call before the hook runs and
+refuses any call whose input a hook then changed. So in auto mode `strip-cd-cwd` does not run,
+and a `uv-python` rewrite becomes a `deny` whose reason names the rewritten command. The retry
+sends that command, which no rewrite arm changes again.
+
 The rewrite rides in the same `hookSpecificOutput` as the verdict. Per the Claude Code 2.1.267
 bundle, a `deny` drops the `updatedInput` and the call keeps the text as typed, an `ask`
 carries it so the prompt is about the rewritten command, and a rewrite with no verdict takes

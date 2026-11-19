@@ -265,6 +265,10 @@ prepare_tree() {
   git -C "$TREE" clean -ffdxq -e /.venv
 }
 
+# Every porcelain line but a fully staged one, flattened and capped for the alert: an untracked
+# file, or a tracked one modified and left unstaged.
+stray_writes() { git status --porcelain | grep -v '^[AMDR]  ' | head -c 300 | tr '\n' ' '; }
+
 cd "$REPO" || { alert "docs-refresh: $REPO missing"; exit 1; }
 BASE="$(git rev-parse HEAD)" || { alert "docs-refresh: $REPO has no HEAD"; exit 1; }
 prepare_tree "$BASE" || { alert "docs-refresh: could not prepare $TREE at $BASE"; exit 1; }
@@ -448,7 +452,7 @@ git add docs/reference docs/assets/generated scripts/dev/pytest_shard_weights.js
 # A STEP THAT WROTE OUTSIDE THOSE PATHS DEGRADES THE RUN. The commit leaves that write out and
 # the next prepare_tree discards it, so without this its output would never publish and nothing
 # would say so.
-STRAY="$(git status --porcelain | grep -v '^[AMDR]  ' | head -c 300 | tr '\n' ' ')"
+STRAY="$(stray_writes)"
 if [ -n "$STRAY" ]; then
   DEGRADED_MSG="a step wrote outside the staged paths: $STRAY"
   alert "docs-refresh: $DEGRADED_MSG"

@@ -356,13 +356,24 @@ B3 lands in four steps, each one exercised before the next:
       because the cluster-pin gate refuses a pin bump that shares its PR. A member merges
       under its PR's title, whatever `--subject` its own landing was given.
 
-      A landing compares its own code with master once, when it forms the batch, and a
-      landing whose code is older forms none (`classify.code_lags_master`). It does not
-      compare again before a member's merge. Until the last member merges, master moves
-      only by the batch's own merges, and the batch's run tested those. On 2026-11-14 the
-      landing of PR 8550 compared before each member: its own merge changed
-      `scripts/renderer/renderer_lib/cluster.py`, which a landing imports, so it refused
-      the two PRs stacked behind it and they cost a second run.
+      A landing compares its own code with master once, when it forms the batch
+      (`classify.code_lags_master`). It does not compare again before a member's merge.
+      Until the last member merges, master moves only by the batch's own merges, and the
+      batch's run tested those. On 2026-11-14 the landing of PR 8550 compared before each
+      member: its own merge changed `scripts/renderer/renderer_lib/cluster.py`, which a
+      landing imports, so it refused the two PRs stacked behind it and they cost a second
+      run.
+
+      A holder whose code is older hands the turn to a landing of its PR from a fresh
+      checkout of origin/master, which forms the batch (`turn.HandOver`). The new landing
+      inherits the turn's locked descriptor, so no other landing takes the turn in
+      between. A turn held over ssh, a lander unit's turn and a turn already handed over
+      are not handed on: that holder lands its PR alone. Before the hand-over, a holder
+      whose code was older formed no batch at all. A landing waits 30 to 60 minutes for
+      the turn under load, and master's landing code changes in that time, so most holders
+      formed none. On the night of 2026-11-18, 12 of the 17 holders that checked the line
+      for a batch logged `no batch ... its landing code is older than master's`. Each such holder held the turn for one full run per PR, so the line moved
+      one PR per run, and the waits for the turn reached 3060 to 4950 s.
 
       The landing pushes nothing. A `merges` call makes a commit with two parents where
       the squash merge makes one, and both make the same tree: for two open heads on

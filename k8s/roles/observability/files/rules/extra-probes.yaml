@@ -48,6 +48,7 @@ groups:
             blackbox_exporter's {{ $labels.module }} probe of {{ $labels.instance }} has failed for
             2 minutes. Read probe_http_status_code or probe_dns_lookup_time_seconds for this
             instance, then the workload's own log.
+          runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#extraprobefailedcritical
       # The same, for every other probe in the job.
       - alert: ExtraProbeFailed
         expr: probe_success{job="blackbox-extra", page_tier="warning"} == 0

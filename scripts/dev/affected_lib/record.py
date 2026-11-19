@@ -34,6 +34,15 @@ _NEVER_TRACKED_SUFFIXES = (".so", ".pyc")
 _SKIPPED = re.compile(r"\b\d+ skipped\b")
 
 
+def _is_utf8(path: str) -> bool:
+    """Whether `path` names no undecodable byte, which the JSON table could not hold."""
+    try:
+        path.encode()
+    except UnicodeEncodeError:
+        return False
+    return True
+
+
 def reduce(
     touched: trace.Touched,
     harness_listed: set[str],
@@ -42,6 +51,10 @@ def reduce(
     git_index: str,
 ) -> Row:
     """Keep what `touched` says about the tracked tree under `repo`.
+
+    A missing path with a byte that is not UTF-8 is dropped: `json.dumps` writes its
+    surrogate as a lone `\\udcXX` escape, which strict JSON parsers reject, and git reports
+    no change name such a row could match.
 
     Args:
         touched: The parsed trace of one module's run.
@@ -80,7 +93,7 @@ def reduce(
         missing=frozenset(
             path
             for path in missing
-            if path and path not in tracked and in_tracked_dir(path)
+            if path and path not in tracked and _is_utf8(path) and in_tracked_dir(path)
         ),
         tree=git_index in touched.reads,
     )

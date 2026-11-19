@@ -1,11 +1,16 @@
 CRITICAL: SystemdUnitsFailed (daniel-box, nut-monitor.service) has fired as a warning for 48 hours.
-The warning SystemdUnitsFailed for daniel-box has fired for 48 hours, and its Discord repeats have not cleared it. Karma lists it with its own description and runbook: https://karma.local.daniel-hunter.com/?q=alertname%3DSystemdUnitsFailed&q=service%3Ddaniel-box&q=unit%3Dnut-monitor.service This page resolves when the warning does. If the warning holds by design, give its rule the label escalate: "false".
+Fix the warning SystemdUnitsFailed for daniel-box, which has fired for 48 hours; the Karma link lists it with its own description and runbook. This page resolves when the warning does. A warning that holds by design takes the rule label escalate: "false".
 Started 2026-11-17 09:00 UTC
+Runbook: https://docs.local.example.com/alert-runbooks/#warningunresolved
 
 CRITICAL: SystemdUnitsFailed (daniel-box, homelab-claude-pipeline-timeline.service) has fired as a warning for 48 hours.
-The warning SystemdUnitsFailed for daniel-box has fired for 48 hours, and its Discord repeats have not cleared it. Karma lists it with its own description and runbook: https://karma.local.daniel-hunter.com/?q=alertname%3DSystemdUnitsFailed&q=service%3Ddaniel-box&q=unit%3Dhomelab-claude-pipeline-timeline.service This page resolves when the warning does. If the warning holds by design, give its rule the label escalate: "false".
+Fix the warning SystemdUnitsFailed for daniel-box, which has fired for 48 hours; the Karma link lists it with its own description and runbook. This page resolves when the warning does. A warning that holds by design takes the rule label escalate: "false".
 Started 2026-11-17 09:00 UTC
+Runbook: https://docs.local.example.com/alert-runbooks/#warningunresolved
 
 CRITICAL: SystemdUnitsFailed (daniel-server, nut-monitor.service) has fired as a warning for 48 hours.
-The warning SystemdUnitsFailed for daniel-server has fired for 48 hours, and its Discord repeats have not cleared it. Karma lists it with its own description and runbook: https://karma.local.daniel-hunter.com/?q=alertname%3DSystemdUnitsFailed&q=service%3Ddaniel-server&q=unit%3Dnut-monitor.service This page resolves when the warning does. If the warning holds by design, give its rule the label escalate: "false".
+Fix the warning SystemdUnitsFailed for daniel-server, which has fired for 48 hours; the Karma link lists it with its own description and runbook. This page resolves when the warning does. A warning that holds by design takes the rule label escalate: "false".
 Started 2026-11-17 09:00 UTC
+Runbook: https://docs.local.example.com/alert-runbooks/#warningunresolved
+
+Karma: https://karma.local.daniel-hunter.com/?q=alertname%3DSystemdUnitsFailed
