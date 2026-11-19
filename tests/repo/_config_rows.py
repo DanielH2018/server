@@ -176,7 +176,7 @@ _IMMUTABLE_URL = re.compile(r"/raw\.githubusercontent\.com/[^/]+/[^/]+/[0-9a-f]{
 
 
 def _fork_hash_offence(subject: Subject) -> list[str]:
-    actual = hashlib.sha256((REPO / subject.rel).read_bytes()).hexdigest()
+    actual = hashlib.sha256(subject.text.encode()).hexdigest()
     if actual == _FORK_SHA256:
         return []
     return [f"hashes {actual}, the row records {_FORK_SHA256}"]
@@ -213,7 +213,7 @@ KARAKEEP_TIME_TAGGER_MATCHES_ITS_SHA256 = Census(
     ),
     files=lambda: tracked(_TAGGER),
     offence=_fork_hash_offence,
-    red=(Subject("pyproject.toml"),),
+    red=(Subject(_TAGGER, _real(_TAGGER) + "# an edit FORK_SHA256 does not record\n"),),
     green=(Subject(_TAGGER),),
     must_find=frozenset({_TAGGER}),
 )
