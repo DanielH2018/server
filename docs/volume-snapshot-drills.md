@@ -8,8 +8,8 @@ the role. The measurements are kept out of that file so the rule stays
 short and the evidence stays findable (the same split `docs/monitor-bridge-checks.md` makes for
 monitor-bridge, #2699).
 
-A text test reads the runbook:
-`tests/longhorn/test_volume_revert_runbook_text.py`. Nothing tests the measurements.
+Text rules read the runbook: the `RunbookRule` rows of
+`tests/repo/test_runbook_rules.py`. Nothing tests the measurements.
 `scripts/renderer/job_files/flux_snapshot.py` is the authority on what the Job does; where a
 paragraph here disagrees with it, the script is right.
 
@@ -184,7 +184,7 @@ sudo .venv/bin/python -B scripts/backup/volume_revert.py --service <s> --namespa
   second claim leaves the service up. A failure after the scale-down leaves the service at zero
   replicas, and `docs/volume-revert-drill-and-sizing.md` has the hand recovery.
 - **Nothing runs it unattended.** No cron, unit or workflow calls it.
-- **The 2026-11-08 drill passed through the script**, so H7.55 deleted the
+- **HISTORY — the 2026-11-08 drill passed through the script**, so H7.55 deleted the
   `volume-revert.yml` playbook that had been its fallback.
 
 ### The drill
