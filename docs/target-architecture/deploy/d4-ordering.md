@@ -18,7 +18,7 @@ a full `./scripts/deploy.sh` ran from 23:04:20 UTC with `failed=0`. Afterwards
 
 PR D4.2, the renderer writes `dependsOn`: [#5177](https://github.com/DanielH2018/server/pull/5177).
 It also closed #5154. After its promotion, `469ba1108`, the bento-pdf Kustomization carried
-`homelab/ansible-owned-deps: authelia,traefik`. `dependsOn` stayed empty on all three
+a dropped-edge annotation naming `authelia,traefik`. `dependsOn` stayed empty on all three
 Kustomizations, and bento-pdf still ran ReplicaSet `865c4b8dd4`.
 
 PR D4.3, the per-file rule and the chained timeout: [#5191](https://github.com/DanielH2018/server/pull/5191).
@@ -445,8 +445,8 @@ hop to every chain.
   carries no `dependsOn` edges (D5 Open question 19), so the tag has no edge to it either.
   Whether the tag also waits on another tag's `<tag>-snapshot` or `<tag>-verify` is D5.1a1's
   to decide, when those kinds exist.
-- **Dropped edges stay visible.** They are listed in the annotation
-  `homelab/ansible-owned-deps` for a reader. Each one becomes a real `dependsOn` in the
+- **Dropped edges stay visible.** They are listed in an annotation for a reader, renamed
+  `homelab/unrendered-deps` by #9008. Each one becomes a real `dependsOn` in the
   first render after that dependency moves to Flux.
 - **A deferred tag** with `manifests_deferred_files` gets a second Kustomization. It is the
   second YAML document in `DIR/flux/<tag>.yaml`, so C1's one file per tag holds:
@@ -760,7 +760,7 @@ conditions of dispatch runs.
   scripts/deploy_tools/narrow_lib/containers.py    + DEPLOY_MECHANICS_FIELDS (owner, depends_on)
   scripts/dev/new_k8s_service.py                   append_entry inserts before K8S_APPLIES_LAST
   .claude/skills/new-k8s-service/SKILL.md          section 2 names K8S_APPLIES_LAST (D4.1)
-  scripts/renderer/                                dependsOn, <tag>-deferred, ansible-owned-deps,
+  scripts/renderer/                                dependsOn, <tag>-deferred, dropped-edge annotation,
                                                    reserved -deferred suffix (D4.2)
   scripts/deploy_tools/promote.py                  per-file document rule, chained timeout with
                                                    the queueing term and the cap (D4.3)
@@ -831,7 +831,7 @@ conditions of dispatch runs.
       reading `none` and no deploy in flight.
 3. **D4.2 — The renderer writes `dependsOn`** (about 170 lines).
     - Add `dependsOn`, the `K8S_APPLIES_LAST` rule for `-deferred` and `soak`, the
-      `<tag>-deferred` document and its namespace edges, the `homelab/ansible-owned-deps`
+      `<tag>-deferred` document and its namespace edges, the dropped-edge
       annotation, and the reserved `-deferred` suffix. No Job placement: C3 puts a verifying
       Job in `<tag>-verify`, and D5.1a1 renders that edge.
     - Tests in `scripts/renderer/tests/`:
