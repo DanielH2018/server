@@ -1,11 +1,8 @@
-#!/usr/bin/env python3
-"""Render every host component template and fail on a variable nothing defines.
+"""The setup family of `render_templates.py`: every host component template, every name defined.
 
-The other render guards cover other files: `compose_templates.py` reads the Pi's `pi-compose`
-services, `k8s_manifests.py` reads `k8s/roles`, `shell_templates.py` covers `*.sh.j2` anywhere
-and `unit_templates.py` covers `*.service.j2` / `*.timer.j2`. Nothing else renders a component's
-`*.yaml.j2`, `*.env.j2`, `*.conf.j2` or Corefile. A template with an undefined variable, a Jinja
-syntax error, or a rename its consumer missed would otherwise first fail in a package build.
+Renders a component's `*.yaml.j2`, `*.env.j2`, `*.conf.j2`, Corefile and the rest, its
+`*.sh.j2` excepted. A template with an undefined variable, a Jinja syntax error, or a rename its
+consumer missed would otherwise first fail in a package build.
 
 WHAT COUNTS AS UNDEFINED. Rendering with a bare `StrictUndefined` would fail on every SOPS
 secret and every key a host component supplies, so this guard renders with a tracking
@@ -26,30 +23,25 @@ takes: the producer moves and the consumer keeps the old name, which then matche
 sources above.
 
 The YAML templates (`*.yaml.j2` / `*.yml.j2`) are additionally parsed, the same structural check
-the other three guards make. The rest are rendered only — a `.env`, a Corefile and libvirt XML
-have no shared parser, and their shell/unit siblings already have validators of their own.
-
-Run directly or via the ``validate-setup-templates`` prek hook. Exits non-zero on any render
-failure, unresolved variable, or invalid YAML.
+the compose family makes. The rest are rendered only — a `.env`, a Corefile and libvirt XML
+have no shared parser, and their shell/unit siblings are the other families' to check.
 """
 
 import sys
-from collections.abc import Sequence
+from collections.abc import Callable
 from collections import defaultdict
 from pathlib import Path
 
 import yaml
-from jinja2 import ChainableUndefined, meta
+from jinja2 import meta
 
 # Reach the sibling package directories: a directly-invoked script gets only its own
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
 import sys as _sys
 from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
-from validate.validate_lib.ok_lines import ok_printer
-from lib.cli_help import answer_help
 from lib import yaml_fast
 from lib.render_context import render_context
 from lib.render_guard import (
@@ -57,6 +49,7 @@ from lib.render_guard import (
     dump_numbered,
     host_files,
     load_yaml,
+    StubUndefined,
     make_env,
 )
 from lib.repo_paths import REPO, SECRETS
@@ -73,22 +66,20 @@ HOST_RENDER_CONTEXT = {"inventory_hostname": "daniel-box"}
 
 
 def _tracking_undefined(seen: dict[str, set[str]], template: str):
-    """A Jinja Undefined that records the name it stood in for instead of raising.
+    """`StubUndefined`, recording into `seen[template]` each name it stood in for.
 
-    Renders as the literal ``STUB`` (the same fill the other guards use) so a single missing
-    value does not abort the render and hide every later problem in the same file. `main()`
-    judges the collected names afterwards.
+    It fills like the other families' stub, so a single missing value does not abort the
+    render and hide every later problem in the same file. `run()` judges the collected names
+    afterwards.
     """
 
-    class Tracking(ChainableUndefined):
-        _FILL = "STUB"
-
+    class Tracking(StubUndefined):
         def _record(self):
             seen[template].add(self._undefined_name or "<unnamed>")
 
         def __str__(self) -> str:
             self._record()
-            return self._FILL
+            return super().__str__()
 
         def __bool__(self) -> bool:
             # `{% if undefined %}` is an error under Ansible's Templar, so it is one here too.
@@ -99,13 +90,7 @@ def _tracking_undefined(seen: dict[str, set[str]], template: str):
 
         def __iter__(self):
             self._record()
-            return iter(())
-
-        def __add__(self, other):  # {{ secret | indent(n) }}
-            return str(self) + str(other)
-
-        def __radd__(self, other):
-            return str(other) + str(self)
+            return super().__iter__()
 
     return Tracking
 
@@ -140,7 +125,8 @@ def is_allowed_undefined(name: str, known: frozenset[str]) -> bool:
 def discover_templates(components: Path = COMPONENTS) -> list[Path]:
     """Every host component template under its `templates/`, shell templates excepted.
 
-    `shell_templates.py` renders each `*.sh.j2` with the host context it needs.
+    The shell family (`render_lib/shell.py`) renders each `*.sh.j2` with the host context it
+    needs.
     """
     return sorted(
         tpl
@@ -255,18 +241,15 @@ def check_role_template(
     )
 
 
-def main(argv: Sequence[str] = ()) -> int:
+def run(ok: Callable[[str], None]) -> tuple[int, int]:
     """Render every host component template and report unresolved variables and bad YAML.
 
     Args:
-        argv: The command-line arguments. `-v` or `--verbose` also lists each clean
-            template as an `[ok]` line; by default only failures and the summary print.
+        ok: Prints one clean template's `[ok]` line.
 
     Returns:
-        0 if every template rendered clean, 1 if any failed.
+        (templates checked, templates that failed).
     """
-    answer_help(__doc__, list(argv))
-    ok = ok_printer(argv)
     known = secret_names() | inventory_names()
     templates = discover_templates()
     failures = 0
@@ -279,9 +262,4 @@ def main(argv: Sequence[str] = ()) -> int:
                 print(f"  [FAIL] {rel}: {problem}", file=sys.stderr)
         else:
             ok(f"  [ok]   {rel}")
-    print(f"\n{len(templates)} component template(s) checked, {failures} failure(s).")
-    return 1 if failures else 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main(sys.argv[1:]))
+    return len(templates), failures

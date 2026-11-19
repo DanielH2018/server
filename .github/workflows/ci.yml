@@ -15,7 +15,7 @@ on:
   merge_group:
   # An on-demand full sweep, for a PR whose own diff scopes out every hook that matters. The
   # runner-image bump is the case it exists for: a workflow-only diff matches no hook's `files`
-  # regex, so that PR's green run says nothing about `validate-unit-templates` against the
+  # regex, so that PR's green run says nothing about `validate-render-templates` against the
   # image's systemd-analyze and Node, nor about gitleaks built with its Go. Without this trigger
   # the first full sweep on a new image is the merge commit's push run, and a red one there
   # parks every landing behind it.
@@ -218,7 +218,7 @@ jobs:
         with:
           prek-cache-key: prek
 
-      # validate-unit-templates is `language = "system"`, so it runs whatever `systemd-analyze`
+      # validate-render-templates is `language = "system"`, so it runs whatever `systemd-analyze`
       # is on PATH. This step exists so a runner image change that drops the binary fails loud
       # here rather than as an opaque "command not found" inside the hook.
       - name: Check systemd-analyze is available
@@ -546,7 +546,7 @@ jobs:
   #
   # DECIDED: a pull request's selection comes from a recorded table, never from a path list
   # Several tests discover their inputs by walking
-  # the tree (test_validate_shell_templates' pinned roster, test_healthchecks_pings' rglob), so
+  # the tree (test_render_shell's pinned roster, test_healthchecks_pings' rglob), so
   # a hand-kept map from changed paths to tests would skip the tests that should fail on a new
   # *.sh.j2. `scripts/dev/affected_tests.json` holds what each module's own run read and listed
   # under `strace`, so a module that walks a directory is selected when a file appears in it.
