@@ -201,7 +201,7 @@ killing it, so a rollout check alone reports green on a crashlooping pod.
 
 After a passing rollout verdict, the gate reads the alert plane (M6 B-1,
 `scripts/diagnostics/probe_lib/health_alerts.py`). The selector is C7's *Health gate* in
-`docs/target-architecture/contracts.md`, which D5's soak shares. A firing alert labelled
+`docs/archive/contracts.md`, which D5's soak shares. A firing alert labelled
 `service="<tag>"` fails the gate when it is `critical` or carries `verify="true"`, is not a
 shadow rule or the Watchdog, and became active after the tag's reference time. That time is
 when the tag's Kustomization first reported its current revision. Each ingress probe of the tag must then

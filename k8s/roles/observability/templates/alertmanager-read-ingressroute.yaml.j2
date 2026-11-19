@@ -2,7 +2,7 @@
 
    Prometheus' `ALERTS` series shows neither, and monitor-bridge's gates live in Alertmanager
    `inhibit_rules`, so without this door an inhibited alert is invisible to every host tool.
-   The design is answer 2 of docs/target-architecture/monitoring/alertmanager-ui-and-readers.md,
+   The design is answer 2 of docs/archive/monitoring/alertmanager-ui-and-readers.md,
    which accepts the unauthenticated LAN read.
 
    NARROW ON PURPOSE, in the shape of prometheus-ingressroute.yaml.j2:

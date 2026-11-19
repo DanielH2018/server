@@ -2,8 +2,8 @@
 
 `land.sh` runs it after merging M for every PR that may move the bundle. It waits until a
 promotion covers M, never on one `promote` run, because GitHub may evict a queued run and a run
-may promote a newer commit. The plan is docs/target-architecture/deploy/d2-first-leaf.md,
-*How `land.sh` waits*, and contract C6 in docs/target-architecture/contracts.md.
+may promote a newer commit. The plan is docs/archive/deploy/d2-first-leaf.md,
+*How `land.sh` waits*, and contract C6 in docs/archive/contracts.md.
 
 - It waits on `homelab` and M's changed set (`changed_set.py`), taken between M's
   `digests.json` and the one on the newest published ancestor of M's first parent. A file that
@@ -13,7 +13,7 @@ may promote a newer commit. The plan is docs/target-architecture/deploy/d2-first
 - The deploy tags of that changed set, joined with `--services`, are the PR's tags: the
   annotation names them, and `WaitResult.tags` hands them to the landing's health gate.
   `land.sh` derives no k8s tag from paths since D6.12, so the changed set alone names them
-  (docs/target-architecture/deploy/d6-delete-old-path.md, *`land.sh`'s k8s tags after D6*).
+  (docs/archive/deploy/d6-delete-old-path.md, *`land.sh`'s k8s tags after D6*).
   D3.4's `--also` went in the same PR: a `cluster-vars` change moves the footprint of every
   substituting tag, so the changed set already holds them.
 - It polls every POLL_S seconds until one of four outcomes:

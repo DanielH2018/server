@@ -25,7 +25,7 @@ while the role file stays put. That scan matches the key at any indent, as YAML 
 INI `key=`, in every YAML and INI file and every file under `inventory/`, `group_vars/` or
 `host_vars/`. A `-e` passed at run time is outside its reach.
 
-There is no bypass. The plan is docs/target-architecture/host/h1-cluster-config-to-flux.md,
+There is no bypass. The plan is docs/archive/host/h1-cluster-config-to-flux.md,
 *CI checks on the pins*, and docs/landing.md says what to do with a refused PR.
 
 - **A k3s downgrade.** `k3s_version` is a forward-only pin of its own kind (H6.3c). A decrease

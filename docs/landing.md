@@ -679,7 +679,7 @@ refused a PR that changed two roles on different planes along one dependency edg
 `land.sh` applied the Ansible half and `promote` the Flux half in whichever order they
 finished. The module was `cross_plane_order.py`. D5 left no Ansible-owned k8s role, so the arm
 had no subject, and D6.12 deleted it with the replay script that measured its cost
-(`docs/target-architecture/deploy/d6-delete-old-path.md`, *The render-diff gates after D6*).
+(`docs/archive/deploy/d6-delete-old-path.md`, *The render-diff gates after D6*).
 
 ### A cluster pin moves forward, one step, alone in its PR
 

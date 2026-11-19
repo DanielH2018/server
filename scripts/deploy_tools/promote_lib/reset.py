@@ -26,7 +26,7 @@ THE CHECKS, in order. Each refusal exits 1 and names its reason.
      read `last-good` again and dispatch again.
 
 Which holds pass is not a policy on what may be reset. Each runbook rules on that
-(docs/target-architecture/deploy/d5-bulk-move.md, *A reset input*).
+(docs/archive/deploy/d5-bulk-move.md, *A reset input*).
 
 OUTPUT. One line, `verdict=<move|none|refused> prod=<digest> last_good=<digest>`, with the
 reason on stderr. `$GITHUB_OUTPUT` gets `move`, `true` only for check 4's pass, and `prod`

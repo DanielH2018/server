@@ -19,7 +19,7 @@ exemptions through `stem` and `prune_disabled` here, so the two checks cannot dr
 
 `decide` reads `prod`'s bundle once per run and each weighed candidate's once, and skips an
 ineligible candidate with the line `refusal` returns. The plan is
-docs/target-architecture/deploy/d2-first-leaf.md, *Publication and verification*, and the
+docs/archive/deploy/d2-first-leaf.md, *Publication and verification*, and the
 operator's page docs/flux-deploy-plane.md, *Removing an object on purpose*.
 """
 

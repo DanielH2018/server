@@ -294,12 +294,21 @@ spec:
         # so it is projected twice with a subPath-style item selector rather than mounted
         # whole — a whole-ConfigMap mount would put datasources.yaml into the dashboards
         # provisioning directory, where Grafana tries to parse it as a dashboard provider.
+        # Projected with the warehouse datasource, which carries a password and so lives in a
+        # Secret (grafana-warehouse-datasource-secret.yaml.j2) rather than this ConfigMap.
         - name: grafana-provisioning-datasources
-          configMap:
-            name: grafana-provisioning
-            items:
-              - key: datasources.yaml
-                path: datasources.yaml
+          projected:
+            sources:
+              - configMap:
+                  name: grafana-provisioning
+                  items:
+                    - key: datasources.yaml
+                      path: datasources.yaml
+              - secret:
+                  name: grafana-warehouse-datasource
+                  items:
+                    - key: warehouse.yaml
+                      path: warehouse.yaml
         - name: grafana-provisioning-dashboards
           configMap:
             name: grafana-provisioning

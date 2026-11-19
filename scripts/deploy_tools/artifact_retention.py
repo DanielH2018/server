@@ -19,7 +19,7 @@ commit, and every signature of a surviving digest. When `prod` is absent, or any
 failed, nothing is deleted. A listing that lacks `prod`'s or `last-good`'s version counts as
 failed, because a short listing would make their signatures look orphaned.
 
-The plan is docs/target-architecture/deploy/d1-flux-installed.md, *Decisions*, *Old artifact
+The plan is docs/archive/deploy/d1-flux-installed.md, *Decisions*, *Old artifact
 versions are pruned daily (D1.7)*.
 """
 

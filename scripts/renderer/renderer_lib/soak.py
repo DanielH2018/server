@@ -1,7 +1,7 @@
 """The shared kind `soak`: one Job per revision that judges the services the revision changed.
 
 `bundle.bundle_files` renders it into every bundle (D5.3b2, `SHARED_KINDS`). The plan is
-docs/target-architecture/deploy/d5-bulk-move.md, *The soak as a Job (D5.3)*. The bundle gets:
+docs/archive/deploy/d5-bulk-move.md, *The soak as a Job (D5.3)*. The bundle gets:
 
 - `flux/soak.yaml`, the Kustomization `soak`. It carries no `dependsOn` edges (D5 Open
   question 19): the Job waits at run time for each Kustomization in its scope to read Ready at

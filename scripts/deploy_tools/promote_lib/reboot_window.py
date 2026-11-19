@@ -3,7 +3,7 @@
 The reboot kills the soak Job's pod, recreates pods and fires critical rules after T0, and M2's
 `weekly-reboot` mute is an Alertmanager route, so it silences nothing `verify` reads. A
 promotion verifying across the reboot would therefore hold, and only the operator clears a
-hold. So no promotion runs into it (docs/target-architecture/deploy/d5-bulk-move.md, *The
+hold. So no promotion runs into it (docs/archive/deploy/d5-bulk-move.md, *The
 stateful hold, its post, and the reset input*).
 
 THE WINDOW for a target T opens T's derived verify timeout before the reboot, so a promotion

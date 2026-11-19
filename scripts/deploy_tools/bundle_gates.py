@@ -2,7 +2,7 @@
 
 They run beside the census (`bundle_census.py`) in the render job, before gitleaks and before
 any push, so a refusal publishes nothing and `prod` stays where it was. Contracts C1 and C3
-hold the rules, and docs/target-architecture/deploy/d2-first-leaf.md, *Publication and
+hold the rules, and docs/archive/deploy/d2-first-leaf.md, *Publication and
 verification*, the design:
 
 - `source`: each Kustomization document in `flux/<name>.yaml` is judged against its own
