@@ -169,7 +169,17 @@ A claim is reclaimable when either holds:
 
 - the worktree it names is absent from `git worktree list`, or
 - `lib.worktrees.classify` already judges that worktree REMOVABLE — merged into `origin/master`,
-  clean, and holding no live session lock.
+  clean, and holding no live session lock — and no live process works in it.
+
+The last condition covers a session the Claude desktop app starts. The app creates the
+session's worktree itself, unlocked, on a `claude/<name>` branch. Between a clean commit and
+the next edit that tree reads merged, clean and unlocked. So `claim_is_live` in
+`scripts/dev/findings_lib/claim.py` also holds a tree that a process this user can read has
+as its cwd or `CLAUDE_PROJECT_DIR`, through `lib.worktrees.held_by_readable_process`. An
+unreadable process counts for nothing there, unlike in `remove`, because a hold with no
+evidence would stop `reap` releasing any claim. The main worktree is never held this way:
+every session tree sits under it, sessions also run in it, and its branch is `master`, which
+no claim may name.
 
 A claim is **not** reclaimable when the named worktree still exists with uncommitted changes,
 even if its lock owner is dead. That case is the 2026-09-05 incident: the container restarted,
@@ -382,6 +392,12 @@ not land its PR, because only daniel-box runs deploys. The manifest under
 `~/.claude/fanout/<run-id>.json` is what `status`, `clean`, and the SessionStart banner's
 `remote_fanout_lines` (`.claude/hooks/hooklib/worktree_lines.py`) all read to find a fan-out's
 live worktrees on the other host.
+
+A reader keeps the batch keys it does not know. `Batch.from_json` in
+`scripts/dev/fanout_lib/manifest.py` holds them in `Batch.extra`, and `Batch.to_json` writes
+them back beside the fields, so a `clean` run by one build does not erase what another build
+recorded. `to_json` never nests them under an `extra` key, because a reader that passes every
+key to the `Batch` constructor skips the whole run on a key it has no field for.
 
 The dispatcher scores a host on memory headroom, and an agent is throttled by two cgroup caps
 rather than one: `user.slice`, the fleet, and `user-1000.slice`, the login plane it runs in as

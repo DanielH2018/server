@@ -180,6 +180,7 @@ from dev.findings_lib.claim import free_issues
 from lib.cli_help import refuse_help_under_describe
 from lib.exit_codes import FINDINGS_BAD_ARGS
 from lib.progress import count_line
+from lib.worktrees import held_by_readable_process
 from dev.findings_lib.claim_cli import cmd_claim, cmd_claims, cmd_reap, cmd_release
 from dev.findings_lib.milestone_cli import cmd_milestone, open_issues
 from dev.findings_lib.cli import _parser
@@ -811,4 +812,12 @@ if __name__ == "__main__":
     # required argument so a library caller that forgets `tools` fails with a TypeError here
     # rather than reaching real `gh` and real subprocesses. `gh_calls.load_issues` keeps its
     # own default because `scripts/docs/reference/backlog.py` is a second production entry.
-    raise SystemExit(main(None, FindingsTools(peer_worktrees=read_peer_worktrees)))
+    raise SystemExit(
+        main(
+            None,
+            FindingsTools(
+                peer_worktrees=read_peer_worktrees,
+                tree_held=held_by_readable_process,
+            ),
+        )
+    )

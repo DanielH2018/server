@@ -25,7 +25,7 @@ from dataclasses import dataclass, field
 from dev.findings_lib.issue_model import LABELS
 from dev.fanout_lib.batch_holds import BatchHold
 from dev.findings_lib.boundaries import FindingsTools
-from lib.worktrees import Worktree
+from lib.worktrees import Worktree, held_by_readable_process
 
 CREATED_URL = "https://github.com/o/r/issues/42"
 
@@ -173,6 +173,8 @@ class Fakes:
     # Each branch's session milestone title, what the milestone lookup answers. A branch
     # absent here never ran `milestone start`.
     milestone_titles: dict[str, str] = field(default_factory=dict)
+    # The paths a live process works in, the /proc snapshot the real hold reader matches.
+    held_paths: set[str] = field(default_factory=set)
     # The branches of the open session milestones the idle-milestone close considers; it
     # closes each one `held` calls free.
     open_milestones: list[str] = field(default_factory=list)
@@ -418,6 +420,9 @@ def build_tools(f: Fakes | None = None) -> tuple[FindingsTools, Calls]:
             sync_board=sync_board,
             attach_milestone=attach_milestone,
             close_idle_milestones=close_idle_milestones,
+            tree_held=lambda path: held_by_readable_process(
+                path, holds=lambda: [(1, p, "cwd") for p in f.held_paths]
+            ),
         ),
         calls,
     )

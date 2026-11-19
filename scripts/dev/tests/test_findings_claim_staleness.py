@@ -272,6 +272,23 @@ def test_claim_is_stale_when_locked_with_dead_owner_clean_and_merged():
     assert "lock owner is dead" in reason
 
 
+def test_an_unlocked_merged_clean_tree_a_live_process_works_in_is_live():
+    # The Claude desktop app's own session tree: never locked, clean between commits.
+    tree = _tree(locked=False, reason="")
+    live, reason = claim_is_live(
+        WT, [tree], dirty=_never, merged=_always, held=lambda p: p == PATH
+    )
+    assert live is True
+    assert PATH in reason
+
+
+def test_an_unlocked_merged_clean_tree_no_process_works_in_is_stale():
+    tree = _tree(locked=False, reason="")
+    live, reason = claim_is_live(WT, [tree], dirty=_never, merged=_always, held=_never)
+    assert live is False
+    assert "merged, clean, unlocked" in reason
+
+
 # --- the merged read is asked once per worktree, not once per claim ------------------
 #
 # `claim_states` calls `merged(tree)` once per claimed issue, and a fan-out's claims all name
