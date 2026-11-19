@@ -296,7 +296,12 @@ per-file-target-version = { "hosts/components/gh-quota/files/gh_quota.py" = "py3
 #   default behaviour and no error, which is legal, silent and wrong. A slot that a fixed
 #   signature must accept, such as a callback's or a table row's, takes a leading underscore,
 #   which the rule skips. Test paths are exempt below, because a fake mirrors the signature of
-#   what it replaces. ARG005 stays off: a lambda with an unused argument is a callback.
+#   what it replaces.
+#
+# DECIDED: BLE001 and ARG005 stay off. A lambda with an unused argument is a callback. The
+# blind excepts outside tests sit at boundaries built not to crash, which are the hooks, the
+# monitor-bridge checks and the byte-pinned karakeep script, and S110 and S112 already cover
+# the swallowing forms. (ADR-0040)
 #
 # DOCSTRING LAYOUT (D205/D415/D212/D209/D210) IS THE ONE EXCEPTION to "bug-catching rules only",
 # and it is a narrow one. Those five check the SHAPE of a docstring that already exists: a
