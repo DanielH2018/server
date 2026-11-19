@@ -169,7 +169,17 @@ A claim is reclaimable when either holds:
 
 - the worktree it names is absent from `git worktree list`, or
 - `lib.worktrees.classify` already judges that worktree REMOVABLE — merged into `origin/master`,
-  clean, and holding no live session lock.
+  clean, and holding no live session lock — and no live process works in it.
+
+The last condition covers a session the Claude desktop app starts. The app creates the
+session's worktree itself, unlocked, on a `claude/<name>` branch. Between a clean commit and
+the next edit that tree reads merged, clean and unlocked. So `claim_is_live` in
+`scripts/dev/findings_lib/claim.py` also holds a tree that a process this user can read has
+as its cwd or `CLAUDE_PROJECT_DIR`, through `lib.worktrees.held_by_readable_process`. An
+unreadable process counts for nothing there, unlike in `remove`, because a hold with no
+evidence would stop `reap` releasing any claim. The main worktree is never held this way:
+every session tree sits under it, sessions also run in it, and its branch is `master`, which
+no claim may name.
 
 A claim is **not** reclaimable when the named worktree still exists with uncommitted changes,
 even if its lock owner is dead. That case is the 2026-09-05 incident: the container restarted,
