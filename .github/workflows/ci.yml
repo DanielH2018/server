@@ -280,7 +280,10 @@ jobs:
             mkdir -p "$RUNNER_TEMP/pinned/vale"
             curl --retry 5 --retry-all-errors --retry-delay 5 -fsSL -o "$archive" "$VALE_URL"
           fi
-          tar xzf "$archive" -C /usr/local/bin vale
+          mkdir -p "$RUNNER_TEMP/bin"
+          tar xzf "$archive" -C "$RUNNER_TEMP/bin" vale
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+          export PATH="$RUNNER_TEMP/bin:$PATH"
           vale --version
           scripts/validate/vale.sh
 

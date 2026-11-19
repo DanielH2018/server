@@ -721,6 +721,15 @@ The survey for C2 found three costs the plan had not counted:
   `/usr/local/bin`, and a pod under the `restricted` standard can do none of it. A pod needs
   an image of its own with those tools in it, and steps that differ between a pod and a
   hosted runner. That is a second copy of the environment, which is how the sweep went wrong.
+  Since 2026-11-19 the two jobs' own tool installs write to no system path (#9126).
+  `.github/actions/pytest-tools` puts SOPS, age and apt-utils in `~/.local/bin`, which the
+  runner image has on PATH, and `hooks` unpacks Vale into `$RUNNER_TEMP/bin`. Three uses of
+  root remain. `pytest-tools` runs `sudo apt-get update` when the image's package lists are
+  stale. `.github/actions/setup` edits the apt mirror list, and installs `libyaml-dev` when
+  the image lacks it. A pod still needs a base image with what the hosted image ships,
+  such as `systemd-analyze`, Go and `jq`. About ten test modules skip when one of those
+  binaries is missing, so a pod's run needs a step that fails on a missing one before its
+  result can be set beside a hosted run's.
 - **A test refuses any ResourceQuota.** `test_no_resourcequota_is_declared_anywhere` fails on
   one, and ADR-0032 names a quota as a bound on the launcher.
 - **The launcher's token takes operator steps.** It would reach daniel-box as the read-only
