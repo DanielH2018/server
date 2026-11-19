@@ -144,11 +144,17 @@ def test_parent_cap_renders_from_the_fleet_variables(
 def test_parent_cpu_weight_follows_its_variable_and_ranks_below_system_slice(
     defaults: dict[str, object],
 ) -> None:
-    """system.slice, where k3s runs, keeps systemd's default weight of 100."""
+    """system.slice, where k3s runs, carries k3s_system_slice_cpu_weight from k3s-server."""
+    from lib import yaml_fast
+    from lib.repo_paths import K3S_DEFAULTS
+
     weight = defaults["claude_code_fleet_cpu_weight"]
+    system_slice = yaml_fast.safe_load(K3S_DEFAULTS.read_text())[
+        "k3s_system_slice_cpu_weight"
+    ]
     assert f"CPUWeight={weight}" in render(FLEET_CONF)
     assert "CPUWeight=7" in render(FLEET_CONF, claude_code_fleet_cpu_weight=7)
-    assert int(str(weight)) < 100, (
+    assert int(str(weight)) < int(system_slice), (
         f"a fleet weight of {weight} ranks the sessions level with or above k3s, so a test "
         "fan-out can starve etcd"
     )
