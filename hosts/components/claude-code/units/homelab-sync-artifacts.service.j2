@@ -12,6 +12,10 @@ SyslogLevel=notice
 # The `+` runs this one command as root. It creates the artifacts directories
 # (tmpfiles.d/homelab-artifacts.conf.j2).
 ExecStartPre=+/usr/bin/systemd-tmpfiles --create /usr/lib/tmpfiles.d/homelab-artifacts.conf
+# Holds the ssh control socket the pull and the push share. A socket there is a live shell on the
+# peer, so only this user may enter it; systemd removes it when the run ends.
+RuntimeDirectory=homelab-sync-artifacts
+RuntimeDirectoryMode=0700
 ExecStart=/usr/lib/homelab/sync-artifacts
 # The cron's `| logger -t sync-artifacts`, which journalctl -t and Loki read.
 SyslogIdentifier=sync-artifacts
