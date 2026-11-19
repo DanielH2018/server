@@ -102,8 +102,10 @@ root-only host state on daniel-box or daniel-server, use `rootq`; a session has 
 ## Parallel Claude Sessions
 
 Several sessions work this repo at once, each in its own `.claude/worktrees/<name>` checkout:
-one worktree and one PR per session. `EnterWorktree` derives the branch from the worktree name,
-prefixing `worktree-`, which `scripts/lib/worktree_owner.py:branch_prefix` reads back. Before
+one worktree and one PR per session. A worktree `EnterWorktree` makes is on branch
+`worktree-<name>`, and one the desktop app makes is on `claude/<name>`. The tools take either:
+`scripts/lib/worktree_owner.py:branch_prefix` reads only whose clone a branch is in, the agent
+user's for `worktree-<prefix>+<name>` and the operator's for any other name. Before
 editing a file several sessions are near, run
 `uv run python .claude/hooks/session-health.py --sessions`
 (`.claude/hooks/session-health.py:print_all_sessions`).
