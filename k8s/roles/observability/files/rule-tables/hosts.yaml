@@ -1,0 +1,696 @@
+# The Prometheus arms of monitor-bridge's `disk`, `memory`, `host_temp` and `ups` checks, and the
+# Prometheus half of `pi_pressure`, as rules, plus HostClockUnsynchronised, which ports no bridge
+# check. scripts/dev/gen_host_rules.py renders this table into files/rules/hosts.yaml, plain
+# YAML that prometheus-rules.yaml.j2 carries verbatim. The design is M6's batch A1 (docs/target-architecture/monitoring/m6-retire-kuma.md, "Phase A")
+# on M2's recipe.
+#
+# HostDiskFull and the five UPS rules are critical, so Discord and email; the rest are
+# warnings, so Discord alone.
+# PiLoadHigh, PiMemoryLow, PiDiskFull, PiFilesystemReadOnly and PiMetricsMissing are the
+# Prometheus half of `pi_pressure`, and `PiPortDead` in extra-probes.yaml is the other half.
+# PiUndervoltage and PiUndervoltageMissing are check_host_temp's.
+#
+# ONE COPY PER HOST. `service` must be a literal (scripts/validate/alert_conventions.py), and a
+# node has no workload-service join, so the generator renders each host its own copy from the
+# rule's `hosts:` selector, as for host-checks. The bridge's `host_metric_sel` excludes
+# daniel-pi from disk and memory by name and keeps every other host. These rules instead select
+# the `node` job's hosts, so a new k3s node in observability_expected_hosts gains them.
+#
+# EVERY TARGET ALERT KEEPS `job` AND `instance`, so a future inhibit on ScrapeTargetDown{job="node"}
+# or {job="node-pi"} with `equal: [job, instance]` would match. Each aggregation below therefore
+# groups `by (origin, job, instance, ...)`, never the bridge's bare `by (origin)`.
+#
+# DECIDED: no Alertmanager inhibit for A1. The plan turned the bridge's EXPORTER_DEPENDENT map
+# into an inhibit with ScrapeTargetDown as its source, but the rules below never fire beside
+# it, bar two. Every missing-data arm starts from `up == 1`,
+# and every threshold arm reads a series that a dead scrape drops. ClaudeCgroupNotReporting holds
+# its arm for 5m after the last `up == 1` sample, which ends before ScrapeTargetDown's `for: 10m`.
+# The two coverage floors (HostCoverageShortfall, HostTemperatureCoverageShortfall) do fire beside
+# ScrapeTargetDown, and they carry no `job` or `instance`, so an `equal` list cannot match them. A
+# keyless inhibit would mute the census while a renamed series empties another host's vector, so
+# a dead exporter pages twice there, the safe direction. This is A5's ruling too (storage.yaml).
+# The "dead exporter" cases in hosts.test.yaml pin it: only the two floors fire. Read the
+# decision in m6-retire-kuma.md, A1 hosts, before adding an A1 rule that fires on a dead scrape.
+#
+# THE MISSING-DATA ARMS start from `up == 1`. Each `unless on (origin, instance)` arm here
+# fires only while the scrape succeeds and the series is absent, so a dead exporter pages
+# once through ScrapeTargetDown and these arms stay silent. Each `for:` is at least
+# ScrapeTargetDown's 10m anyway. The per-host coverage floors are stricter than the bridge's
+# cross-host floors: one host going quiet does not hide
+# behind another host's answer. A vanished scrape target, with no `up` series at all, is A3's
+# census.
+#
+# `for:` IS N x 300s for a bridge streak of N cycles: host coverage (3) is 15m,
+# temperature coverage (5) is 25m, temperature (12) is 1h, thermal throttling (3) is 15m, and
+# the UPS and Claude cgroup streaks (2) are 10m. The disk, memory, undervoltage and Pi pressure thresholds had no streak, so they have
+# no `for:`. The numeric literals are the retired bridge env keys' values. A ported
+# threshold's `DECIDED:` marker on its rule is what a retune is reviewed against.
+#
+# DROPPED ON PURPOSE. The Pi's published-port arm is `PiPortDead` in extra-probes.yaml.
+# DECIDED: a Claude Code process running as a retired uid never pages. As an arm it held the
+# Memory tile DOWN near-continuously, because background jobs and fan-out still started as the
+# operator's uid, and it masked any real memory page, so no rule here reads it.
+# `claude_uid_processes` is still written, and `test_claude_cgroup_metrics.py` holds the writer.
+groups:
+  - name: hosts
+    rules:
+      # The bridge's check_disk for daniel-box: any of /, /boot and /boot/efi over DISK_MAX_PCT
+      # (90). Percentage per series, so avail and size come from the same device.
+      # DECIDED: over 90% of /, /boot or /boot/efi, the bridge's value kept as is.
+      - alert: HostDiskFull
+        hosts: {job: node}
+        expr: |
+          max by (origin, job, instance, mountpoint) (
+            100 * (
+                1
+              -
+                node_filesystem_avail_bytes{origin="${host}", mountpoint=~"/|/boot|/boot/efi"}
+              /
+                node_filesystem_size_bytes{origin="${host}", mountpoint=~"/|/boot|/boot/efi"}
+            )
+          ) > 90
+        labels:
+          severity: critical
+          service: ${host}
+        annotations:
+          summary: "{{ $labels.origin }} {{ $labels.mountpoint }} is {{ $value | printf \"%.0f\" }}% full."
+          description: >-
+            {{ $labels.origin }} has its {{ $labels.mountpoint }} filesystem over 90% full. Longhorn
+            stops scheduling replicas on a node at 75%. Read `df -h` on the host.
+          runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#hostdiskfull
+      # The bridge's check_mem host arm: MemAvailable under 100 - 90 percent of
+      # MemTotal.
+      # DECIDED: 90% used, the bridge's value kept as is, and a warning.
+      - alert: HostMemoryHigh
+        hosts: {job: node}
+        expr: |
+          100 * (
+              1
+            -
+              node_memory_MemAvailable_bytes{origin="${host}"}
+            /
+              node_memory_MemTotal_bytes{origin="${host}"}
+          ) > 90
+        labels:
+          severity: warning
+          service: ${host}
+        annotations:
+          summary: "{{ $labels.origin }} memory is {{ $value | printf \"%.0f\" }}% used."
+          description: >-
+            {{ $labels.origin }} has less than 10% of its memory available. Per-container OOM kills
+            are ContainerOOMKilled's. Read `free -h` and the top memory cgroups on the host.
+      # The bridge's Claude Code cgroup arm of check_mem (with_claude_cgroups), arm 1: a watched
+      # memory.events counter rose within CLAUDE_CGROUP_EVENT_WINDOW (10m). `for: 5m`, not
+      # CLAUDE_CGROUP_CONSECUTIVE (2) x 300s, because the 10m window holds one event for only two
+      # bridge cycles, and a `for: 10m` would never complete.
+      - alert: ClaudeCgroupMemoryEvent
+        hosts: {component: claude-code}
+        expr: |
+          sum by (origin, job, instance, cgroup, event) (
+            increase(claude_cgroup_memory_events_total{origin="${host}", event=~"max|oom|oom_kill|oom_group_kill"}[10m])
+          ) > 0
+        for: 5m
+        labels:
+          severity: warning
+          service: ${host}
+        annotations:
+          summary: A Claude Code cgroup on {{ $labels.origin }} logged a {{ $labels.event }} memory event.
+          description: >-
+            {{ $labels.origin }}/{{ $labels.cgroup }} had {{ $value | printf "%.0f" }} `{{
+            $labels.event }}` memory events in the last 10 minutes. The kernel killed something in
+            that cgroup or a hard cap was hit.
+      # Arm 2: the PSI `full` stall rate, as a percent of wall time, over
+      # CLAUDE_CGROUP_STALL_MAX_PCT (10) across CLAUDE_CGROUP_STALL_WINDOW (5m). `for: 10m` is
+      # CLAUDE_CGROUP_CONSECUTIVE (2) x 300s.
+      - alert: ClaudeCgroupMemoryStalled
+        hosts: {component: claude-code}
+        expr: |
+          max by (origin, job, instance, cgroup) (
+            rate(claude_cgroup_memory_pressure_stalled_usec_total{origin="${host}", kind="full"}[5m]) / 10000
+          ) > 10
+        for: 10m
+        labels:
+          severity: warning
+          service: ${host}
+        annotations:
+          summary: "{{ $labels.origin }}/{{ $labels.cgroup }} is memory-stalled {{ $value | printf \"%.0f\" }}% of the time."
+          description: >-
+            The PSI `full` stall rate of {{ $labels.origin }}/{{ $labels.cgroup }} is over 10% of
+            the last 5 minutes, for 10 minutes running. No task in the cgroup made progress, which
+            is the 2026-09-05 shape (#1243) while it is still only a stall.
+      # Arm 3: an expected cgroup is missing for its host, per (origin, cgroup).
+      # tests/services/test_host_check_rule_literals.py holds the pairs to the inventory. `max_over_time(...[5m:1m])` holds the arm true
+      # through a crash-looping unit's brief reappearances, which reset a bare `for:` while the
+      # bridge's two sampled cycles still page. A gap under 5m stays quiet.
+      - alert: ClaudeCgroupNotReporting
+        hosts: {component: claude-code}
+        # daniel-box also runs the Remote Control unit, so it carries the claude-rc arm.
+        per_host:
+          daniel-box:
+            expr: |
+              max_over_time((
+                label_replace(
+                  up{job="${job}", origin="${host}"} == 1
+                unless on (origin, instance)
+                  claude_cgroup_memory_pressure_stalled_usec_total{origin="${host}", kind="full", cgroup="claude-rc"},
+                  "cgroup", "claude-rc", "", "")
+                or
+                label_replace(
+                  up{job="${job}", origin="${host}"} == 1
+                unless on (origin, instance)
+                  claude_cgroup_memory_pressure_stalled_usec_total{origin="${host}", kind="full", cgroup="fleet"},
+                  "cgroup", "fleet", "", "")
+              )[5m:1m])
+        expr: |
+          max_over_time((
+            label_replace(
+              up{job="${job}", origin="${host}"} == 1
+            unless on (origin, instance)
+              claude_cgroup_memory_pressure_stalled_usec_total{origin="${host}", kind="full", cgroup="fleet"},
+              "cgroup", "fleet", "", "")
+          )[5m:1m])
+        for: 10m
+        labels:
+          severity: warning
+          service: ${host}
+        annotations:
+          summary: "{{ $labels.origin }} reports no {{ $labels.cgroup }} cgroup metrics."
+          description: >-
+            {{ $labels.origin }} is scraped but publishes no claude_cgroup_* series for {{
+            $labels.cgroup }}, so that cgroup is not being checked. Read /var/lib/node-exporter-
+            textfile/claude_cgroup.prom and the claude-cgroup-metrics timer on the host.
+      # The bridge's check_host_temp temperature arm (hwmon_temp_limits). A sensor's limit is
+      # 0.90 of its first plausible source, in order:
+      # node_hwmon_temp_max_celsius, node_hwmon_temp_crit_celsius, then the part's rating
+      # (daniel-box's k10temp/Tctl at 100). A value outside
+      # (20, 150] is no declaration, which
+      # drops the 65261.85 sentinel. A sensor with none takes a flat 85 raw. Every
+      # series of one sensor shares one label set, so `or` keeps the first source that answers.
+      # Chips matching nvme_ are Scrutiny's. `for: 1h` is the bridge's 12-cycle streak x 300s.
+      # DECIDED: HostTemperatureHot holds for 1h (12 x 300s), not the 15 minutes (3 cycles) the
+      # bridge shipped with. daniel-box's k10temp/Tctl boosts into the low 90s as ordinary
+      # workload. Measured over a true 7 days (a [30d] query here truncates to about 11.4) at the
+      # 5-minute loop cadence: 12.0% of samples above the 90C limit, p95 93.1C, max 93.75C against
+      # AMD's rated 100C, in 115 excursions. Run lengths in cycles were 66x1, 23x2, 12x3, 5x4,
+      # 2x5, 3x6, 3x7, 1x8, then ONE of 18 (90 minutes). Nothing sits between 9 and 17 cycles, so
+      # 12 is 1.5x the largest ordinary excursion and half the outlier. Pages per week by
+      # threshold were 3 -> 26, 5 -> 10, 8 -> 2, 12 -> 1, 19 -> 0. Twelve keeps the one 90-minute
+      # excursion paging on purpose: 90 minutes pinned above 90C is the shape of a cooling fault,
+      # and a threshold fitted to silence it would leave no margin to detect one.
+      # DECIDED: a declared hwmon max or crit is sanity-bounded (20..150C), not trusted. Three of
+      # the ten max-declaring sensors declare 65261.85, a 0xFFFF sentinel encoded as a number, and
+      # a ratio of it is unreachable, so those sensors would read green through a fire. Such a
+      # value is read as undeclared and falls through to crit, then the flat 85C fallback.
+      # DECIDED: daniel-box's k10temp/Tctl takes its limit from AMD's published Tjmax of 100C (the
+      # Ryzen 7 8845HS page, `Max. Operating Temperature (Tjmax)`), so it lands on 90C, the same
+      # effective limit daniel-server's coretemp carries from its own declared max. k10temp
+      # subtracts no Tctl offset on this CPU (the driver's `tctl_offset_table` holds six
+      # family-0x17 SKUs), so Tctl is the junction temperature. amd.com answers a plain fetch
+      # only with a browser User-Agent.
+      # DECIDED: `for: 1h`, the 12-cycle hold the first marker above measures.
+      - alert: HostTemperatureHot
+        hosts: all
+        # daniel-box's k10temp/Tctl takes the rated arm, by the third marker above.
+        per_host:
+          daniel-box:
+            expr: |
+              node_hwmon_temp_celsius{origin="${host}", chip!~".*nvme_.*"}
+              >=
+                (
+                    (0.9 * ((node_hwmon_temp_max_celsius{origin="${host}"} > 20) <= 150))
+                  or
+                    (0.9 * ((node_hwmon_temp_crit_celsius{origin="${host}"} > 20) <= 150))
+                  or
+                    (node_hwmon_temp_celsius{origin="${host}", chip="pci0000:00_0000:00:18_3", sensor="temp1"} * 0 + 90)
+                  or
+                    (node_hwmon_temp_celsius{origin="${host}"} * 0 + 85)
+                )
+        expr: |
+          node_hwmon_temp_celsius{origin="${host}", chip!~".*nvme_.*"}
+          >=
+            (
+                (0.9 * ((node_hwmon_temp_max_celsius{origin="${host}"} > 20) <= 150))
+              or
+                (0.9 * ((node_hwmon_temp_crit_celsius{origin="${host}"} > 20) <= 150))
+              or
+                (node_hwmon_temp_celsius{origin="${host}"} * 0 + 85)
+            )
+        for: 1h
+        labels:
+          severity: warning
+          service: ${host}
+        annotations:
+          summary: "{{ $labels.origin }} {{ $labels.chip }}/{{ $labels.sensor }} is at {{ $value | printf \"%.1f\" }}C."
+          description: >-
+            {{ $labels.origin }} sensor {{ $labels.chip }}/{{ $labels.sensor }} has been at or over
+            its limit for an hour. The limit is 90% of the sensor's declared max, else its declared
+            crit, else its rated maximum, else a flat 85C. Read the sensor's chip on
+            Infrastructure/hardware-thermal.
+      # The bridge's empty-vector and per-host coverage arm of check_host_temp
+      # (3 hosts, over the series that survive the nvme_ exclusion). `for: 25m` is the bridge's
+      # 5-cycle streak x 300s.
+      # DECIDED: `for: 25m`, the bridge's 5-cycle streak kept as is.
+      - alert: HostTemperatureNotReporting
+        hosts: all
+        expr: |
+          up{job="${job}", origin="${host}"} == 1
+          unless on (origin, instance)
+            node_hwmon_temp_celsius{origin="${host}", chip!~".*nvme_.*"}
+        for: 25m
+        labels:
+          severity: warning
+          service: ${host}
+        annotations:
+          summary: "{{ $labels.origin }} publishes no hwmon temperature sensors."
+          description: >-
+            {{ $labels.origin }} is scraped but its node-exporter publishes no
+            node_hwmon_temp_celsius series outside the NVMe drives, so nothing is checking its
+            temperature. Read the hwmon collector on the host.
+      # The bridge's thermal-throttle arm of check_host_temp. `for: 15m` is
+      # the bridge's 3-cycle streak x 300s. daniel-pi publishes no Processor cooling device.
+      # DECIDED: `for: 15m`, the bridge's 3-cycle streak kept as is.
+      - alert: CPUThermalThrottled
+        hosts: {job: node}
+        expr: |
+          max by (origin, job, instance) (
+            node_cooling_device_cur_state{origin="${host}", type="Processor"}
+          ) > 0
+        for: 15m
+        labels:
+          severity: warning
+          service: ${host}
+        annotations:
+          summary: The kernel is thermally throttling {{ $labels.origin }}'s CPU.
+          description: >-
+            A Processor cooling device on {{ $labels.origin }} has held a non-zero cur_state for 15
+            minutes, so the kernel is throttling the CPU for heat. CFS throttling is
+            ContainerCPUThrottled's. Read the cooling devices under /sys/class/thermal.
+      # The missing-series arms of check_disk (`metric unavailable for <mount>`), check_mem, the
+      # thermal-throttle arm and HostClockUnsynchronised's `clock`, one `arm` label each.
+      # `for: 15m` is HOST_ORIGINS_CONSECUTIVE (3) x 300s.
+      - alert: HostMetricsMissing
+        hosts: {job: node}
+        expr: |
+          label_replace(
+            up{job="${job}", origin="${host}"} == 1
+            unless on (origin, instance)
+              node_filesystem_size_bytes{origin="${host}", mountpoint="/"},
+            "arm", "disk /", "", "")
+          or
+          label_replace(
+            up{job="${job}", origin="${host}"} == 1
+            unless on (origin, instance)
+              node_filesystem_size_bytes{origin="${host}", mountpoint="/boot"},
+            "arm", "disk /boot", "", "")
+          or
+          label_replace(
+            up{job="${job}", origin="${host}"} == 1
+            unless on (origin, instance)
+              node_filesystem_size_bytes{origin="${host}", mountpoint="/boot/efi"},
+            "arm", "disk /boot/efi", "", "")
+          or
+          label_replace(
+            up{job="${job}", origin="${host}"} == 1
+            unless on (origin, instance)
+              node_memory_MemAvailable_bytes{origin="${host}"},
+            "arm", "memory", "", "")
+          or
+          label_replace(
+            up{job="${job}", origin="${host}"} == 1
+            unless on (origin, instance)
+              node_cooling_device_cur_state{origin="${host}", type="Processor"},
+            "arm", "thermal-throttle", "", "")
+          or
+          label_replace(
+            up{job="${job}", origin="${host}"} == 1
+            unless on (origin, instance)
+              node_timex_sync_status{origin="${host}"},
+            "arm", "clock", "", "")
+        for: 15m
+        labels:
+          severity: warning
+          service: ${host}
+        annotations:
+          summary: "{{ $labels.origin }} publishes no {{ $labels.arm }} series."
+          description: >-
+            {{ $labels.origin }} is scraped but its node-exporter publishes no series for the {{
+            $labels.arm }} check, so that check is not looking at the host. Read the matching
+            collector on the host.
+      # The bridge's estate-wide floors (_host_origin_shortfall), and the zero-series case: a
+      # vanished scrape target leaves every per-host arm above with nothing to read, and `or
+      # vector(0)` turns an empty count into 0 < 2. The floor is 2 for disk and memory, which
+      # exclude daniel-pi by name, and 2 for thermal throttling because the Pi publishes no
+      # Processor cooling device. `for: 15m` is HOST_ORIGINS_CONSECUTIVE (3) x 300s. The alert
+      # carries no `job` or `instance`, so no inhibit can hold it: a dead exporter pages here
+      # as well as through ScrapeTargetDown, the safe direction.
+      # DECIDED: a floor of 2 hosts on every arm, the bridge's floors kept as is.
+      - alert: HostCoverageShortfall
+        expr: |
+          label_replace(
+            (count(count by (origin) (node_filesystem_size_bytes{mountpoint="/", origin!~"daniel-pi"})) or vector(0)) < 2,
+            "arm", "disk /", "", "")
+          or
+          label_replace(
+            (count(count by (origin) (node_filesystem_size_bytes{mountpoint="/boot", origin!~"daniel-pi"})) or vector(0)) < 2,
+            "arm", "disk /boot", "", "")
+          or
+          label_replace(
+            (count(count by (origin) (node_filesystem_size_bytes{mountpoint="/boot/efi", origin!~"daniel-pi"})) or vector(0)) < 2,
+            "arm", "disk /boot/efi", "", "")
+          or
+          label_replace(
+            (count(count by (origin) (node_memory_MemAvailable_bytes{origin!~"daniel-pi"})) or vector(0)) < 2,
+            "arm", "memory", "", "")
+          or
+          label_replace(
+            (count(count by (origin) (node_cooling_device_cur_state{type="Processor"})) or vector(0)) < 2,
+            "arm", "thermal-throttle", "", "")
+        for: 15m
+        labels:
+          severity: warning
+          service: observability
+        annotations:
+          summary: Only {{ $value | printf "%.0f" }} hosts report series for the {{ $labels.arm }} check, under the floor of 2.
+          description: >-
+            The {{ $labels.arm }} check reads one series family from every node-exporter and needs
+            two hosts answering, and {{ $value | printf "%.0f" }} do. The rest are unmonitored, not
+            idle. Read the node scrape targets on Prometheus.
+      # A floor of 3 hosts over the series that survive the nvme_ exclusion, with `for: 25m` for
+      # the bridge's 5-cycle streak x 300s.
+      # DECIDED: a floor of 3 hosts, the bridge's value kept as is.
+      - alert: HostTemperatureCoverageShortfall
+        expr: |
+          label_replace(
+            (count(count by (origin) (node_hwmon_temp_celsius{chip!~".*nvme_.*"})) or vector(0)) < 3,
+            "arm", "temperature", "", "")
+        for: 25m
+        labels:
+          severity: warning
+          service: observability
+        annotations:
+          summary: Only {{ $value | printf "%.0f" }} hosts report temperature sensors, under the floor of 3.
+          description: >-
+            The host temperature check needs a non-NVMe hwmon sensor from each of the three hosts,
+            and {{ $value | printf "%.0f" }} answer. The rest are unmonitored, not cool. Read the
+            node scrape targets on Prometheus.
+      # Clock skew breaks TOTP logins, ACME, etcd and Loki ingestion, and none of those failures
+      # names the clock. The kernel's NTP state, from node-exporter's timex collector: the
+      # `unsynchronised` arm is a sync_status of 0, the `offset` arm an offset past 0.5s either
+      # way. No bridge check preceded these, so `for: 15m` is the host rules' common hold, not a
+      # ported streak. A host with no timex series is the `clock` arm of HostMetricsMissing or
+      # PiMetricsMissing.
+      - alert: HostClockUnsynchronised
+        hosts: all
+        per_host:
+          daniel-pi:
+            annotations:
+              description: >-
+                The kernel on {{ $labels.origin }} reports its clock unsynchronised or more than
+                0.5s off, which breaks TOTP logins, ACME renewals, etcd and Loki ingestion. The Pi
+                has no RTC, so a boot without network starts it at a stale time. Read
+                `timedatectl timesync-status` on the host.
+        expr: |
+          label_replace(
+            max by (origin, job, instance) (node_timex_sync_status{job="${job}", origin="${host}"}) == 0,
+            "arm", "unsynchronised", "", "")
+          or
+          label_replace(
+            max by (origin, job, instance) (abs(node_timex_offset_seconds{job="${job}", origin="${host}"})) > 0.5,
+            "arm", "offset", "", "")
+        for: 15m
+        labels:
+          severity: warning
+          service: ${host}
+        annotations:
+          summary: "{{ $labels.origin }}'s clock is not in sync ({{ $labels.arm }})."
+          description: >-
+            The kernel on {{ $labels.origin }} reports its clock unsynchronised or more than 0.5s
+            off, which breaks TOTP logins, ACME renewals, etcd and Loki ingestion. Read
+            `timedatectl timesync-status` on the host.
+      # The bridge's undervoltage arm of check_host_temp. No `for:`: UNDERVOLTAGE_CONSECUTIVE is 1,
+      # and the firmware latched the bit.
+      - alert: PiUndervoltage
+        hosts: [daniel-pi]
+        expr: |
+          node_hwmon_in_lcrit_alarm_volts{origin="${host}"} > 0.5
+        labels:
+          severity: warning
+          service: ${host}
+        annotations:
+          summary: ${host}'s firmware reports undervoltage.
+          description: >-
+            The Raspberry Pi firmware latched its low-critical voltage alarm: the 5V supply fell
+            below its critical threshold, which corrupts SD cards and stalls USB devices. Check the
+            power supply and cable. A clean reading later does not undo the damage.
+      # The Prometheus half of the pi_pressure check: load5 per core over 1.5.
+      # DECIDED: load5 over 1.5 per core, the bridge's value kept as is.
+      - alert: PiLoadHigh
+        hosts: [daniel-pi]
+        expr: |
+          node_load5{origin="${host}"}
+          / on (origin, job, instance)
+            count by (origin, job, instance) (node_cpu_seconds_total{origin="${host}", mode="idle"})
+          > 1.5
+        labels:
+          severity: warning
+          service: ${host}
+        annotations:
+          summary: ${host}'s 5-minute load is {{ $value | printf "%.2f" }} per core.
+          description: >-
+            ${host} has a 5-minute load average of {{ $value | printf "%.2f" }} per core, over
+            1.5. Read `top` on the host for the process behind it.
+      # Available memory under 50 MB.
+      # DECIDED: 50 MB available, the bridge's value kept as is.
+      - alert: PiMemoryLow
+        hosts: [daniel-pi]
+        expr: |
+          node_memory_MemAvailable_bytes{origin="${host}"} < 50 * 1048576
+        labels:
+          severity: warning
+          service: ${host}
+        annotations:
+          summary: ${host} has {{ $value | humanize1024 }}B of memory available.
+          description: >-
+            ${host} can reclaim under 50 MB of memory, and the 456 MB box thrashes
+            when that runs out. Read `free -m` and `docker stats` on the host.
+      # Fullness per block device, not per mount: the SD card is mounted twice. tmpfs is out,
+      # because log2ram's /var/log fills and flushes by design.
+      # DECIDED: over 90% of a block device, the bridge's value kept as is.
+      - alert: PiDiskFull
+        hosts: [daniel-pi]
+        expr: |
+          max by (origin, job, instance, device) (
+            100 * (
+                1
+              -
+                node_filesystem_avail_bytes{origin="${host}", fstype!="tmpfs"}
+              /
+                node_filesystem_size_bytes{origin="${host}", fstype!="tmpfs"}
+            )
+          ) > 90
+        labels:
+          severity: warning
+          service: ${host}
+        annotations:
+          summary: ${host}'s {{ $labels.device }} is {{ $value | printf "%.0f" }}% full.
+          description: >-
+            The filesystem on {{ $labels.device }} of ${host} is over 90% full.
+            A filling SD card is the slow Pi death. Read `df -h` on the host.
+      # The read-only arm over `/|/boot/firmware`, anchored. No `for:`: a read-
+      # only remount does not self-heal.
+      - alert: PiFilesystemReadOnly
+        hosts: [daniel-pi]
+        expr: |
+          node_filesystem_readonly{origin="${host}", mountpoint=~"/|/boot/firmware"} > 0
+        labels:
+          severity: warning
+          service: ${host}
+        annotations:
+          summary: ${host}'s {{ $labels.mountpoint }} is mounted read-only.
+          description: >-
+            {{ $labels.mountpoint }} on ${host} is read-only, which is an SD card remounting
+            itself after an I/O error. Every other arm stays green through it. A reboot does not
+            come back from it.
+      # The missing-series arms of the pi_pressure check: a renamed series or a blind collector
+      # must surface. The `clock` arm is HostClockUnsynchronised's, and `for: 10m` is
+      # ScrapeTargetDown's floor. The undervoltage arm is check_host_temp's, so it is
+      # PiUndervoltageMissing below.
+      - alert: PiMetricsMissing
+        hosts: [daniel-pi]
+        expr: |
+          label_replace(
+            up{job="${job}", origin="${host}"} == 1
+            unless on (origin, instance)
+              node_load5{origin="${host}"},
+            "arm", "load", "", "")
+          or
+          label_replace(
+            up{job="${job}", origin="${host}"} == 1
+            unless on (origin, instance)
+              node_memory_MemAvailable_bytes{origin="${host}"},
+            "arm", "memory", "", "")
+          or
+          label_replace(
+            up{job="${job}", origin="${host}"} == 1
+            unless on (origin, instance)
+              node_filesystem_size_bytes{origin="${host}", fstype!="tmpfs"},
+            "arm", "filesystem", "", "")
+          or
+          label_replace(
+            up{job="${job}", origin="${host}"} == 1
+            unless on (origin, instance)
+              node_filesystem_readonly{origin="${host}", mountpoint=~"/|/boot/firmware"},
+            "arm", "read-only", "", "")
+          or
+          label_replace(
+            up{job="${job}", origin="${host}"} == 1
+            unless on (origin, instance)
+              node_timex_sync_status{origin="${host}"},
+            "arm", "clock", "", "")
+        for: 10m
+        labels:
+          severity: warning
+          service: ${host}
+        annotations:
+          summary: ${host} publishes no {{ $labels.arm }} series.
+          description: >-
+            ${host} is scraped but its node-exporter publishes no series for the {{ $labels.arm }}
+            arm of the Pi checks, so nothing is watching it. Read the exporter on the host.
+      # The empty-vector arm of check_host_temp's undervoltage check: undervoltage_verdict paged
+      # "no undervoltage alarm sensor scraped" while the Pi's own scrape was up, because a renamed
+      # sensor or a blind hwmon collector leaves PiUndervoltage nothing to read. The
+      # `up == 1` start keeps a dead scrape ScrapeTargetDown's, as in the bridge.
+      - alert: PiUndervoltageMissing
+        hosts: [daniel-pi]
+        expr: |
+          label_replace(
+            up{job="${job}", origin="${host}"} == 1
+            unless on (origin, instance)
+              node_hwmon_in_lcrit_alarm_volts{origin="${host}"},
+            "arm", "undervoltage", "", "")
+        for: 10m
+        labels:
+          severity: warning
+          service: ${host}
+        annotations:
+          summary: ${host} publishes no undervoltage series.
+          description: >-
+            ${host} is scraped but its node-exporter publishes no node_hwmon_in_lcrit_alarm_volts
+            series, so PiUndervoltage has nothing to read and a latched undervoltage alarm goes
+            unseen. A renamed sensor or a blind hwmon collector is the usual cause. Read the Pi's
+            hwmon collector on the host.
+      # The bridge's check_ups, mains-loss arm. It is judged first and alone: while it is red the
+      # charge, runtime and replace-battery rules below stay silent through `unless`, because they
+      # read the runway and a runway arm adds nothing to an outage. `for: 10m` is the bridge's
+      # 2-cycle streak x 300s. One UPS, so `max by (job, instance)` equals the bridge's bare max.
+      # DECIDED: every UPS arm reads nut-exporter alone. The Home Assistant re-export of the same
+      # UPS read the same upsd, so it covered only nut-exporter dying while upsd lived, which
+      # `ScrapeTargetDown{job="nut"}` already pages. Units are nut's own: charge in percent,
+      # runtime in seconds.
+      # DECIDED: `for: 10m`, the bridge's 2-cycle UPS streak kept as is.
+      - alert: UPSOnBattery
+        expr: |
+          max by (job, instance) (network_ups_tools_ups_status{flag="OB"}) > 0.5
+        for: 10m
+        labels:
+          severity: critical
+          service: nut-exporter
+        annotations:
+          summary: >-
+            The UPS is on battery{{ with query "max(network_ups_tools_battery_charge)" }}, {{ . | first | value | printf "%.0f" }}% charged{{ end }}{{ with query "max(network_ups_tools_battery_runtime)" }}, about {{ . | first | value | humanizeDuration }} of runtime left{{ end }}.
+          description: >-
+            NUT reports ups.status OB for 10 minutes: mains power is gone and the UPS is carrying
+            the load. Read the UPS on the NUT host.
+          runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#upsonbattery
+      # Charge under UPS_CHARGE_MIN_PCT (50), strict as the bridge's `<`.
+      # DECIDED: under 50% charge on mains, the bridge's value kept as is.
+      # DECIDED: `for: 10m`, the bridge's 2-cycle UPS streak kept as is.
+      - alert: UPSBatteryLow
+        expr: |
+          max by (job, instance) (network_ups_tools_battery_charge) < 50
+          unless on ()
+            (max(network_ups_tools_ups_status{flag="OB"}) > 0.5)
+        for: 10m
+        labels:
+          severity: critical
+          service: nut-exporter
+        annotations:
+          summary: The UPS battery is at {{ $value | printf "%.0f" }}%.
+          description: >-
+            The UPS battery charge is under 50% (UPS_CHARGE_MIN_PCT) while mains power is on, for 10
+            minutes. Read the UPS on the NUT host.
+          runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#upsbatterylow
+      # Estimated runtime under UPS_RUNTIME_MIN_S (300).
+      # DECIDED: under 300s of runtime, the bridge's value kept as is.
+      # DECIDED: `for: 10m`, the bridge's 2-cycle UPS streak kept as is.
+      - alert: UPSRuntimeLow
+        expr: |
+          max by (job, instance) (network_ups_tools_battery_runtime) < 300
+          unless on ()
+            (max(network_ups_tools_ups_status{flag="OB"}) > 0.5)
+        for: 10m
+        labels:
+          severity: critical
+          service: nut-exporter
+        annotations:
+          summary: The UPS has {{ $value | humanizeDuration }} of runtime.
+          description: >-
+            The UPS estimates under 5 minutes of runtime (UPS_RUNTIME_MIN_S) on a full charge, for
+            10 minutes. The battery has aged. Read the UPS on the NUT host.
+          runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#upsruntimelow
+      # The UPS's own replace-battery verdict (the NUT RB flag).
+      # DECIDED: `for: 10m`, the bridge's 2-cycle UPS streak kept as is.
+      - alert: UPSReplaceBattery
+        expr: |
+          max by (job, instance) (network_ups_tools_ups_status{flag="RB"}) > 0.5
+          unless on ()
+            (max(network_ups_tools_ups_status{flag="OB"}) > 0.5)
+        for: 10m
+        labels:
+          severity: critical
+          service: nut-exporter
+        annotations:
+          summary: The UPS asks for a battery replacement.
+          description: >-
+            NUT reports ups.status RB for 10 minutes: the UPS's own self-test says the battery needs
+            replacing. This trips before charge or runtime read low.
+          runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#upsreplacebattery
+      # The bridge's partial-absence and all-absent arms of check_ups. While the nut scrape is down
+      # the arms stay silent and ScrapeTargetDown owns the outage, as the bridge deferred to Scrape
+      # Targets.
+      - alert: UPSSensorAbsent
+        expr: |
+          label_replace(
+            up{job="nut"} == 1
+            unless on (job, instance)
+              network_ups_tools_battery_charge,
+            "arm", "charge", "", "")
+          or
+          label_replace(
+            up{job="nut"} == 1
+            unless on (job, instance)
+              network_ups_tools_battery_runtime,
+            "arm", "runtime", "", "")
+          or
+          label_replace(
+            up{job="nut"} == 1
+            unless on (job, instance)
+              network_ups_tools_ups_status{flag="RB"},
+            "arm", "replace-battery", "", "")
+          or
+          label_replace(
+            up{job="nut"} == 1
+            unless on (job, instance)
+              network_ups_tools_ups_status{flag="OB"},
+            "arm", "on-battery", "", "")
+        for: 10m
+        labels:
+          severity: critical
+          service: nut-exporter
+        annotations:
+          summary: The UPS {{ $labels.arm }} series is absent.
+          description: >-
+            The NUT exporter answers its scrape but publishes no {{ $labels.arm }} series for 10
+            minutes, so the UPS is unmonitored on that arm. A renamed or removed series is the usual
+            cause. Read nut-exporter's /ups_metrics.
+          runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#upssensorabsent

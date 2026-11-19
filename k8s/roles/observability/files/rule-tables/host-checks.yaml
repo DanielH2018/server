@@ -1,0 +1,1102 @@
+# The table scripts/dev/gen_host_rules.py renders into files/rules/host-checks.yaml: host checks
+# that write a node_exporter textfile, read from the `node` scrape job, or from `node-pi` for
+# daniel-pi. A rule with a `hosts:` selector renders one copy per host the selector takes from
+# observability_expected_hosts, and the generator's docstring lists the selectors and the
+# `${...}` placeholders. The rendered file is plain YAML, never Jinja: prometheus-rules.yaml.j2
+# carries it verbatim. The producer metric contract and the design are
+# docs/target-architecture/monitoring/m3-textfile-timer.md, "The rules". The host-plane rules at
+# the end are H3's (docs/target-architecture/host/h3-pi-pilot.md, "Host rules (PR H3.5d, C7)").
+#
+# Every copy names its host as a literal `service`. A node is not a workload, so M2's
+# workload-service join cannot supply it, and deriving it from `origin` needs a label_replace
+# that M1 has not admitted (M3's open question 3).
+groups:
+  - name: host-checks
+    rules:
+      - alert: DiskHealthFailed
+        hosts: {component: k3s-host-checks}
+        expr: homelab_check_success{check="disk-health",origin="${host}"} == 0
+        labels:
+          severity: critical
+          service: ${host}
+        annotations:
+          summary: ${host}'s root disk check is red.
+          description: >-
+            disk-health.sh on ${host} read the root filesystem above its threshold, or df
+            failed. Longhorn stops scheduling replicas on the node at 75%.
+            homelab_disk_root_used_ratio{check="disk-health"} holds the share it read, and the
+            `disk-health` syslog tag holds the run's message.
+          runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#diskhealthfailed
+      # This rule pages a silent cron.
+      #
+      # The first arm catches a file that stopped being refreshed: node_exporter keeps serving
+      # its last timestamp. The second catches a file that is gone, or a series that never
+      # arrived. It is absent_over_time over the deadline, never a bare absent(): Prometheus
+      # marks a target's series stale on every failed scrape and every node-exporter roll, and
+      # a bare absent() would fire at the next evaluation. The `unless` clause leaves a dead
+      # exporter to the bridge's `targets` check, so one dead exporter pages once.
+      #
+      # Both 1500s literals equal the DEADLINE_S that disk-health.sh.j2 renders from
+      # k3s_disk_health_cron_minute. tests/services/test_disk_health_rule_literals.py
+      # pins them to it.
+      - alert: DiskHealthNotReporting
+        hosts: {component: k3s-host-checks}
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="disk-health",origin="${host}"} > 1500
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="disk-health",origin="${host}"}[1500s])
+          )
+          unless on (origin) (up{job="${job}"} == 0)
+        labels:
+          severity: critical
+          service: ${host}
+        annotations:
+          summary: ${host}'s root disk check has stopped reporting.
+          description: >-
+            No disk-health verdict newer than 25 minutes reached Prometheus from ${host}'s
+            textfile collector, so nothing is watching the root disk. Read the `${host} disk
+            health` cron and the `disk-health` syslog tag, then
+            /var/lib/node-exporter-textfile/disk-health.prom on the host.
+          runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#diskhealthnotreporting
+      # The next four rules cover the Artifacts Peer Sync and k3s Telemetry OTLP Door checks.
+      # Both producers are daniel-box crons that write a check file through
+      # homelab-check-lib.sh. Each NotReporting pair mirrors DiskHealthNotReporting, and its two
+      # literals equal the deadline the producer renders from its own cron minute:
+      # tests/services/test_b6a_rule_literals.py pins them. The rules are `warning`, so
+      # Discord alone. No inhibit: each NotReporting rule carries its own
+      # `unless on (origin) (up{job="node"} == 0)`, and a dead exporter leaves each Failed rule
+      # no series, so `ScrapeTargetDown` is the one page.
+      - alert: ArtifactsSyncFailed
+        hosts: [daniel-box]
+        expr: homelab_check_success{check="sync-artifacts",origin="${host}"} == 0
+        labels:
+          severity: warning
+          service: ${host}
+        annotations:
+          summary: The peer artifact sync on ${host} is failing.
+          description: >-
+            sync-artifacts.sh has failed a peer for claude_code_artifacts_sync_alert_after_failures
+            consecutive runs, so that peer's artifacts are stale in the browser. Run `journalctl -t
+            sync-artifacts` on ${host} for the peer and its streak, then ssh to the named peer.
+      - alert: ArtifactsSyncNotReporting
+        hosts: [daniel-box]
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="sync-artifacts",origin="${host}"} > 900
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="sync-artifacts",origin="${host}"}[900s])
+          )
+          unless on (origin) (up{job="${job}"} == 0)
+        labels:
+          severity: warning
+          service: ${host}
+        annotations:
+          summary: The peer artifact sync on ${host} has stopped reporting.
+          description: >-
+            No sync-artifacts verdict newer than 15 minutes reached Prometheus from ${host}'s
+            textfile collector, so the cron stopped, or its flock is held by a hung run. Read the
+            `Sync peer Claude artifacts` cron and `journalctl -t sync-artifacts`, then
+            /var/lib/node-exporter-textfile/sync-artifacts.prom on the host.
+      - alert: OtlpDoorClosed
+        hosts: [daniel-box]
+        expr: homelab_check_success{check="claude-otel-health",origin="${host}"} == 0
+        labels:
+          severity: warning
+          service: ${host}
+        annotations:
+          summary: The telemetry OTLP receiver on ${host}'s loopback refuses connections.
+          description: >-
+            Claude Code cannot export telemetry even with every pod Ready, because the hostPort
+            DNAT is an iptables rule rather than a socket. Check the otel-collector DaemonSet pod
+            on ${host}, then the portmap rule.
+      - alert: OtlpDoorNotReporting
+        hosts: [daniel-box]
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="claude-otel-health",origin="${host}"} > 1500
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="claude-otel-health",origin="${host}"}[1500s])
+          )
+          unless on (origin) (up{job="${job}"} == 0)
+        labels:
+          severity: warning
+          service: ${host}
+        annotations:
+          summary: The telemetry OTLP-door check on ${host} has stopped reporting.
+          description: >-
+            No claude-otel-health verdict newer than 25 minutes reached Prometheus from ${host}'s
+            textfile collector, so nothing is watching the OTLP door. Read the `Claude Code
+            telemetry health` cron and `journalctl -t claude-otel-health`, then
+            /var/lib/node-exporter-textfile/claude-otel-health.prom on the host.
+      # The guardrail audit: claude-guardrail-audit loads the auditd watches on
+      # Claude Code's guardrail paths every 5 minutes, and its textfile says whether auditd runs
+      # with every watch in place. One pair per host that runs Claude Code. The NotReporting
+      # literals equal the DEADLINE_S the script renders, which
+      # tests/services/test_b6a_rule_literals.py pins.
+      - alert: ClaudeGuardrailAuditFailed
+        hosts: {component: claude-code}
+        expr: homelab_check_success{check="claude-guardrail-audit",origin="${host}"} == 0
+        labels:
+          severity: warning
+          service: ${host}
+        annotations:
+          summary: The audit watches on ${host}'s Claude Code guardrail paths are not in place.
+          description: >-
+            claude-guardrail-audit on ${host} ended with status=down: auditd is not running,
+            kernel auditing is off, or a guardrail path that exists has no watch. Until it
+            clears, a write to a hook, a settings file or a memory store leaves no audit record.
+            Run `journalctl -t claude-guardrail-audit` on ${host}, then `systemctl status
+            auditd`.
+      - alert: ClaudeGuardrailAuditNotReporting
+        hosts: {component: claude-code}
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="claude-guardrail-audit",origin="${host}"} > 900
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="claude-guardrail-audit",origin="${host}"}[900s])
+          )
+          unless on (origin) (up{job="${job}"} == 0)
+        labels:
+          severity: warning
+          service: ${host}
+        annotations:
+          summary: The guardrail audit check on ${host} has stopped reporting.
+          description: >-
+            No claude-guardrail-audit verdict newer than 15 minutes reached Prometheus from
+            ${host}'s textfile collector, so nothing reloads a watch an auditd restart dropped.
+            Read `systemctl status homelab-claude-guardrail-audit.timer` and `journalctl -t
+            claude-guardrail-audit`, then
+            /var/lib/node-exporter-textfile/claude-guardrail-audit.prom on the host.
+      # The guardrail acknowledgement: claude-guardrail-ack posts the
+      # guardrail changes that nothing merged explains. Same shape and deadline as the audit pair.
+      - alert: ClaudeGuardrailAckFailed
+        hosts: {component: claude-code}
+        expr: homelab_check_success{check="claude-guardrail-ack",origin="${host}"} == 0
+        labels:
+          severity: warning
+          service: ${host}
+        annotations:
+          summary: The guardrail change poster on ${host} is failing.
+          description: >-
+            claude-guardrail-ack on ${host} ended with status=down: it could not read a guardrail
+            path, render the dotfiles, or deliver its Discord post. Until it clears, a change
+            to a hook or a settings file reaches nobody. Run `journalctl -t claude-guardrail-ack`
+            on ${host}.
+      - alert: ClaudeGuardrailAckNotReporting
+        hosts: {component: claude-code}
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="claude-guardrail-ack",origin="${host}"} > 900
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="claude-guardrail-ack",origin="${host}"}[900s])
+          )
+          unless on (origin) (up{job="${job}"} == 0)
+        labels:
+          severity: warning
+          service: ${host}
+        annotations:
+          summary: The guardrail change poster on ${host} has stopped reporting.
+          description: >-
+            No claude-guardrail-ack verdict newer than 15 minutes reached Prometheus from
+            ${host}'s textfile collector, so no guardrail change is being posted. Read
+            `systemctl status homelab-claude-guardrail-ack.timer` and `journalctl -t
+            claude-guardrail-ack`, then
+            /var/lib/node-exporter-textfile/claude-guardrail-ack.prom on the host.
+      - alert: ClaudeDotfilesMirrorFailed
+        hosts: {component: claude-code}
+        expr: homelab_check_success{check="claude-dotfiles-mirror",origin="${host}"} == 0
+        labels:
+          severity: warning
+          service: ${host}
+        annotations:
+          summary: The dotfiles root mirror on ${host} refused a tag or could not fetch.
+          description: >-
+            claude-dotfiles-mirror on ${host} ended with status=down: it could not fetch the
+            dotfiles repo, or the newest tag is unsigned, signed by a key other than the
+            operator's, or does not descend from the last verified tag. T2's config stays at
+            the last verified tag until it clears. Run `journalctl -t claude-dotfiles-mirror`
+            on ${host}.
+      - alert: ClaudeDotfilesMirrorNotReporting
+        hosts: {component: claude-code}
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="claude-dotfiles-mirror",origin="${host}"} > 2100
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="claude-dotfiles-mirror",origin="${host}"}[2100s])
+          )
+          unless on (origin) (up{job="${job}"} == 0)
+        labels:
+          severity: warning
+          service: ${host}
+        annotations:
+          summary: The dotfiles root mirror on ${host} has stopped reporting.
+          description: >-
+            No claude-dotfiles-mirror verdict newer than 35 minutes reached Prometheus from
+            ${host}'s textfile collector, so no new dotfiles tag is being verified. Read
+            `systemctl status homelab-claude-dotfiles-mirror.timer` and `journalctl -t
+            claude-dotfiles-mirror`, then
+            /var/lib/node-exporter-textfile/claude-dotfiles-mirror.prom on the host.
+      # The weekly summary of the unattended Claude runs, on daniel-box only.
+      # Its timer runs every Monday and 10 minutes after each activation, so the 608400s
+      # deadline is a week plus an hour.
+      - alert: ClaudeWeeklySummaryFailed
+        hosts: [daniel-box]
+        expr: homelab_check_success{check="claude-weekly-summary",origin="${host}"} == 0
+        labels:
+          severity: warning
+          service: ${host}
+        annotations:
+          summary: The weekly Claude runs summary on ${host} did not post, or read a source.
+          description: >-
+            claude-weekly-summary on ${host} ended with status=down: the Discord post
+            failed, or a source of run records could not be read. A failed post is retried by
+            the next run. Run `journalctl -t claude-weekly-summary` on ${host}.
+      - alert: ClaudeWeeklySummaryNotReporting
+        hosts: [daniel-box]
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="claude-weekly-summary",origin="${host}"} > 608400
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="claude-weekly-summary",origin="${host}"}[608400s])
+          )
+          unless on (origin) (up{job="${job}"} == 0)
+        labels:
+          severity: warning
+          service: ${host}
+        annotations:
+          summary: The weekly Claude runs summary on ${host} has stopped reporting.
+          description: >-
+            No claude-weekly-summary verdict newer than 169 hours reached Prometheus from
+            ${host}'s textfile collector, so last week's unattended runs were not
+            summarised. Read `systemctl status homelab-claude-weekly-summary.timer` and
+            `journalctl -t claude-weekly-summary`, then
+            /var/lib/node-exporter-textfile/claude-weekly-summary.prom on the host. If
+            `claude_code_weekly_summary_enabled` was set false on purpose, delete this rule.
+      # These rules are the pager for the two k3s crons. Each check has the DiskHealth pair:
+      # `Failed` reads the verdict, and `NotReporting` reads the file's age. The deadline
+      # literal in a NotReporting rule equals the DEADLINE_S its producer renders, and
+      # tests/services/test_b1_rule_literals.py pins the two together. A daily check
+      # gets a day plus an hour (k3s_daily_check_deadline_s).
+      # The `unless` clause leaves a dead exporter to the bridge's `targets` check.
+      - alert: LonghornBackupHealthFailed
+        hosts: {component: k3s-host-checks}
+        expr: homelab_check_success{check="longhorn-backup-health",origin="${host}"} == 0
+        labels:
+          severity: critical
+          service: ${host}
+        annotations:
+          summary: ${host}'s Longhorn backup check is red.
+          description: >-
+            longhorn_backup_health.py on ${host} reported a failing backup-plane check: an
+            unavailable backup target, a stale or errored backup, a failed job, or a restore drill
+            that is overdue. `journalctl -t longhorn-backup-health` names the check. Read
+            docs/longhorn-disaster-recovery.md after it.
+          runbook_url: https://docs.local.daniel-hunter.com/longhorn-disaster-recovery/
+      - alert: LonghornBackupHealthNotReporting
+        hosts: {component: k3s-host-checks}
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="longhorn-backup-health",origin="${host}"} > 1500
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="longhorn-backup-health",origin="${host}"}[1500s])
+          )
+          unless on (origin) (up{job="${job}"} == 0)
+        labels:
+          severity: critical
+          service: ${host}
+        annotations:
+          summary: ${host}'s longhorn-backup-health check has stopped reporting.
+          description: >-
+            Read the `longhorn-backup-health` syslog tag on ${host}, then
+            /var/lib/node-exporter-textfile/longhorn-backup-health.prom. No verdict newer than 25
+            minutes reached Prometheus, so nothing watches the Longhorn backup plane.
+          runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#longhornbackuphealthnotreporting
+      - alert: EtcdSnapshotOffboxFailed
+        hosts: {component: k3s-host-checks}
+        expr: homelab_check_success{check="etcd-snapshot-offbox",origin="${host}"} == 0
+        labels:
+          severity: critical
+          service: ${host}
+        annotations:
+          summary: ${host}'s cluster-token drift check is red.
+          description: >-
+            etcd-token-drift.sh on ${host} found the cluster token changed since the off-box copy
+            was stamped, or could not compare the two. `journalctl -t etcd-snapshot-offbox` names
+            which. Read docs/k3s-etcd-restore.md after it.
+          runbook_url: https://docs.local.daniel-hunter.com/k3s-etcd-restore/
+      - alert: EtcdSnapshotOffboxNotReporting
+        hosts: {component: k3s-host-checks}
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="etcd-snapshot-offbox",origin="${host}"} > 90000
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="etcd-snapshot-offbox",origin="${host}"}[90000s])
+          )
+          unless on (origin) (up{job="${job}"} == 0)
+        labels:
+          severity: critical
+          service: ${host}
+        annotations:
+          summary: ${host}'s etcd-snapshot-offbox check has stopped reporting.
+          description: >-
+            Read the `etcd-snapshot-offbox` syslog tag on ${host}, then
+            /var/lib/node-exporter-textfile/etcd-snapshot-offbox.prom. No verdict newer than 25
+            hours reached Prometheus, so nothing compares the cluster token with its off-box stamp.
+          runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#etcdsnapshotoffboxnotreporting
+      # The weekly AIDE and rkhunter scans run on every host and write a textfile. Each host
+      # gets a Failed and a NotReporting rule for each scan it schedules; daniel-pi schedules no
+      # AIDE scan (integrity_scans_aide_unscheduled_hosts in
+      # hosts/components/integrity-scans/component.yml). A NotReporting rule's two literals
+      # equal the DEADLINE_S its script renders:
+      # hosts/tests/test_integrity_scan_rule_literals.py pins them. daniel-pi's rules read
+      # the `node-pi` job. The rules are `warning`, so Discord alone. Each NotReporting rule
+      # fires from its deploy until the scan's first run writes the file, up to a week.
+      # DECIDED: a failed scan holds until someone reviews it by hand, so each Failed rule carries
+      # escalate: "false" and Alertmanager repeats it daily. A NotReporting rule still escalates,
+      # because a scan that stops running holds by no design.
+      - alert: AideCheckFailed
+        hosts: {component: aide-scan}
+        expr: homelab_check_success{check="aide-check",origin="${host}"} == 0
+        labels:
+          severity: warning
+          service: ${host}
+          escalate: "false"
+        annotations:
+          summary: ${host}'s weekly AIDE check failed or found an unexplained change.
+          description: >-
+            aide-check on ${host} ended with status=down: a file changed that no package
+            explains, AIDE exited with an error and checked nothing, or the previous week's
+            run still held the lock. Run `journalctl -t aide-check` on ${host}; once every
+            unexplained path is reviewed, `sudo /usr/lib/homelab/aide-check --accept`, then
+            `sudo systemctl start homelab-aide-check.service`, which re-runs the check and
+            clears this alert and the unit's failed state together.
+      - alert: AideCheckNotReporting
+        hosts: {component: aide-scan}
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="aide-check",origin="${host}"} > 626400
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="aide-check",origin="${host}"}[626400s])
+          )
+          unless on (origin) (up{job="${job}"} == 0)
+        labels:
+          severity: warning
+          service: ${host}
+        annotations:
+          summary: ${host}'s weekly AIDE check has stopped reporting.
+          description: >-
+            No aide-check verdict newer than 626400s reached Prometheus from ${host}'s
+            textfile collector, so nothing confirms the file-integrity scan still runs. Read the
+            `Weekly AIDE file integrity check` cron and `journalctl -t aide-check`, then
+            /var/lib/node-exporter-textfile/aide-check.prom on the host.
+      - alert: RkhunterScanFailed
+        hosts: {component: integrity-scans}
+        expr: homelab_check_success{check="rkhunter-check",origin="${host}"} == 0
+        labels:
+          severity: warning
+          service: ${host}
+          escalate: "false"
+        annotations:
+          summary: ${host}'s weekly rkhunter scan warned or did not complete.
+          description: >-
+            rkhunter-check.sh on ${host} ended with status=down: rkhunter raised a warning, a
+            suspect file or a possible rootkit, or the scan wrote no summary. An account change
+            clears on the next run: `sudo systemctl start homelab-rkhunter-check.service` runs
+            it now and clears the unit's failed state with it, which running the script by hand
+            does not. Read /var/log/rkhunter.log and `journalctl -t rkhunter-check` on
+            ${host}.
+      - alert: RkhunterScanNotReporting
+        hosts: {component: integrity-scans}
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="rkhunter-check",origin="${host}"} > 612000
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="rkhunter-check",origin="${host}"}[612000s])
+          )
+          unless on (origin) (up{job="${job}"} == 0)
+        labels:
+          severity: warning
+          service: ${host}
+        annotations:
+          summary: ${host}'s weekly rkhunter scan has stopped reporting.
+          description: >-
+            No rkhunter-check verdict newer than 612000s reached Prometheus from ${host}'s
+            textfile collector, so nothing confirms the malware scan still runs. Read the
+            `Weekly rkhunter malware scan` cron and `journalctl -t rkhunter-check`, then
+            /var/lib/node-exporter-textfile/rkhunter-check.prom on the host.
+      # The weekly host-maintenance crons: apt autoremove and the dpkg purge on every
+      # host, the firmware update on daniel-box, the one host with fwupd. Each runs through
+      # initial_setup's files/host-maintenance.sh, which writes the check's textfile with
+      # success 0 when the job's command failed. No Healthchecks.io check watches these crons,
+      # so every rule here pages, and none is shadow: a shadow NotReporting source
+      # would still inhibit HostCheckOverdue and leave a stopped cron paging nobody.
+      #
+      # The absent arm differs from DiskHealthNotReporting's. A bare absent_over_time fires for a
+      # series that never existed, and no file exists until each cron's first Sunday run, so it
+      # would page from the Flux apply for up to a week with nothing wrong. The arm therefore
+      # also requires the series within the last 2419200s (28 days, inside Prometheus's 30-day
+      # retention). A file that vanishes after a run pages from its deadline until 28 days after
+      # its last sample; a cron that stops but leaves its file pages through the stale arm for as
+      # long as it stays stopped. Both literals of each NotReporting rule
+      # equal the script's DEADLINE_S, and hosts/tests/test_host_maintenance.py pins
+      # them to it and the rule set to the hosts that run each cron.
+      - alert: AptAutoremoveFailed
+        hosts: {component: host-maintenance}
+        expr: homelab_check_success{check="apt-autoremove",origin="${host}"} == 0
+        labels:
+          severity: warning
+          service: ${host}
+        annotations:
+          summary: ${host}'s weekly apt autoremove failed.
+          description: >-
+            host-maintenance.sh apt-autoremove on ${host} wrote success 0: apt-get autoremove exited non-zero. Read
+            `journalctl -t apt-autoremove` on ${host} for the command's output.
+      - alert: AptAutoremoveNotReporting
+        hosts: {component: host-maintenance}
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="apt-autoremove",origin="${host}"} > 612000
+            or
+              (
+                  absent_over_time(homelab_check_last_run_timestamp_seconds{check="apt-autoremove",origin="${host}"}[612000s])
+                and on ()
+                  present_over_time(homelab_check_last_run_timestamp_seconds{check="apt-autoremove",origin="${host}"}[2419200s])
+              )
+          )
+          unless on (origin) (up{job="${job}"} == 0)
+        labels:
+          severity: warning
+          service: ${host}
+        annotations:
+          summary: ${host}'s weekly apt autoremove has stopped reporting.
+          description: >-
+            No apt-autoremove verdict newer than 612000s reached Prometheus from ${host}'s textfile
+            collector, so nothing confirms the weekly apt autoremove still runs. Read the `Weekly apt autoremove` cron in
+            root's crontab and `journalctl -t apt-autoremove`, then
+            /var/lib/node-exporter-textfile/apt-autoremove.prom on the host.
+      - alert: DpkgPurgeFailed
+        hosts: {component: host-maintenance}
+        expr: homelab_check_success{check="dpkg-purge",origin="${host}"} == 0
+        labels:
+          severity: warning
+          service: ${host}
+        annotations:
+          summary: ${host}'s weekly dpkg purge of orphaned configs failed.
+          description: >-
+            host-maintenance.sh dpkg-purge on ${host} wrote success 0: the dpkg purge of removed packages' configs exited non-zero. Read
+            `journalctl -t dpkg-purge` on ${host} for the command's output.
+      - alert: DpkgPurgeNotReporting
+        hosts: {component: host-maintenance}
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="dpkg-purge",origin="${host}"} > 612000
+            or
+              (
+                  absent_over_time(homelab_check_last_run_timestamp_seconds{check="dpkg-purge",origin="${host}"}[612000s])
+                and on ()
+                  present_over_time(homelab_check_last_run_timestamp_seconds{check="dpkg-purge",origin="${host}"}[2419200s])
+              )
+          )
+          unless on (origin) (up{job="${job}"} == 0)
+        labels:
+          severity: warning
+          service: ${host}
+        annotations:
+          summary: ${host}'s weekly dpkg purge of orphaned configs has stopped reporting.
+          description: >-
+            No dpkg-purge verdict newer than 612000s reached Prometheus from ${host}'s textfile
+            collector, so nothing confirms the weekly dpkg purge of orphaned configs still runs. Read the `Weekly dpkg purge orphaned configs` cron in
+            root's crontab and `journalctl -t dpkg-purge`, then
+            /var/lib/node-exporter-textfile/dpkg-purge.prom on the host.
+      - alert: FirmwareUpdateFailed
+        hosts: [daniel-box]
+        expr: homelab_check_success{check="firmware-update",origin="${host}"} == 0
+        labels:
+          severity: warning
+          service: ${host}
+        annotations:
+          summary: ${host}'s weekly firmware update failed.
+          description: >-
+            host-maintenance.sh firmware-update on ${host} wrote success 0: fwupdmgr update exited with an error rather than 0 or 2 (nothing to update). Read
+            `journalctl -t fwupd-auto` on ${host} for the command's output.
+      - alert: FirmwareUpdateNotReporting
+        hosts: [daniel-box]
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="firmware-update",origin="${host}"} > 612000
+            or
+              (
+                  absent_over_time(homelab_check_last_run_timestamp_seconds{check="firmware-update",origin="${host}"}[612000s])
+                and on ()
+                  present_over_time(homelab_check_last_run_timestamp_seconds{check="firmware-update",origin="${host}"}[2419200s])
+              )
+          )
+          unless on (origin) (up{job="${job}"} == 0)
+        labels:
+          severity: warning
+          service: ${host}
+        annotations:
+          summary: ${host}'s weekly firmware update has stopped reporting.
+          description: >-
+            No firmware-update verdict newer than 612000s reached Prometheus from ${host}'s textfile
+            collector, so nothing confirms the weekly firmware update still runs. Read the `Weekly firmware update` cron in
+            root's crontab and `journalctl -t fwupd-auto`, then
+            /var/lib/node-exporter-textfile/firmware-update.prom on the host.
+      # The failed-unit check: systemd-units-check.sh in the host-maintenance component
+      # counts the failed system units every 5 minutes on every host. node-exporter runs without
+      # --collector.systemd, so this is the one rule that sees a unit with no OnFailure= hook and
+      # no verdict of its own. The 10m `for` spans two runs, so a unit that fails and is restarted
+      # or reset between them stays quiet. SystemdUnitsFailed fires once per failed unit, so an
+      # Alertmanager inhibit can let a unit's own alert, such as AideCheckFailed, hold it. Its
+      # second arm covers a failed check that named no unit. The NotReporting absent arm carries
+      # the same 28-day history guard as the weekly jobs above, because no file exists until a
+      # host's package installs the timer, and the Pi updates once a day. Both 900s literals equal the script's
+      # DEADLINE_S, and hosts/tests/test_systemd_units_check.py pins them to it.
+      - alert: SystemdUnitsFailed
+        hosts: {component: host-maintenance}
+        expr: |
+          homelab_systemd_unit_failed{origin="${host}"} == 1
+          or
+          (
+              homelab_check_success{check="systemd-units",origin="${host}"} == 0
+            unless on (origin)
+              homelab_systemd_unit_failed{origin="${host}"}
+          )
+        for: 10m
+        labels:
+          severity: warning
+          service: ${host}
+        annotations:
+          summary: >-
+            {{ with $labels.unit }}{{ . }} has failed on ${host}.{{ else }}${host} has failed system units that its check did not name.{{ end }}
+          description: >-
+            Read `systemctl status <unit>` and `journalctl -u <unit> -b` on ${host}, fix the
+            cause, then run `systemctl reset-failed <unit>`; the next check resolves this alert. A
+            summary that names no unit means the check named none, so run `systemctl --failed` on
+            ${host}.
+          runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#systemdunitsfailed
+      - alert: SystemdUnitsNotReporting
+        hosts: {component: host-maintenance}
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="systemd-units",origin="${host}"} > 900
+            or
+              (
+                  absent_over_time(homelab_check_last_run_timestamp_seconds{check="systemd-units",origin="${host}"}[900s])
+                and on ()
+                  present_over_time(homelab_check_last_run_timestamp_seconds{check="systemd-units",origin="${host}"}[2419200s])
+              )
+          )
+          unless on (origin) (up{job="${job}"} == 0)
+        labels:
+          severity: warning
+          service: ${host}
+        annotations:
+          summary: ${host}'s failed-unit check has stopped reporting.
+          description: >-
+            No systemd-units verdict newer than 900s reached Prometheus from ${host}'s textfile
+            collector, so nothing is counting its failed units. Read `systemctl status
+            homelab-systemd-units.timer` and `journalctl -t systemd-units` on ${host}, then
+            /var/lib/node-exporter-textfile/systemd-units.prom on the host.
+      # kubelet's shutdown delay lock on the nodes that run a graceful node shutdown, daniel-server
+      # alone (k3s-agent's kubelet-graceful-shutdown.conf.j2). The k3s-agent component's lock check
+      # writes the verdict every 5 minutes, so a node fixed by hand resolves the alert at its next
+      # run. The 15m `for` covers an agent restart, which drops the lock until kubelet starts
+      # again. The 900s literals equal the script's DEADLINE_S, and
+      # hosts/tests/test_kubelet_shutdown_lock_check.py pins them and the host set.
+      - alert: KubeletShutdownLockMissing
+        hosts: {component: k3s-agent}
+        expr: |
+          homelab_check_success{check="kubelet-shutdown-lock",origin="${host}"} == 0
+        for: 15m
+        labels:
+          severity: warning
+          service: ${host}
+        annotations:
+          summary: ${host}'s kubelet holds no shutdown delay lock, so its next shutdown skips the pod drain.
+          description: >-
+            Without the lock, a shutdown stops pods without draining them and can abort
+            Longhorn's ext4 journals. Read {job="k3s"} in loki-homelab for "Failed to start node
+            shutdown manager" and the logind value it names, check `systemd-analyze cat-config
+            systemd/logind.conf`, then restart k3s-agent. The next check resolves this alert.
+      - alert: KubeletShutdownLockNotReporting
+        hosts: {component: k3s-agent}
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="kubelet-shutdown-lock",origin="${host}"} > 900
+            or
+              (
+                  absent_over_time(homelab_check_last_run_timestamp_seconds{check="kubelet-shutdown-lock",origin="${host}"}[900s])
+                and on ()
+                  present_over_time(homelab_check_last_run_timestamp_seconds{check="kubelet-shutdown-lock",origin="${host}"}[2419200s])
+              )
+          )
+          unless on (origin) (up{job="${job}"} == 0)
+        labels:
+          severity: warning
+          service: ${host}
+        annotations:
+          summary: ${host}'s kubelet shutdown-lock check has stopped reporting.
+          description: >-
+            No kubelet-shutdown-lock verdict newer than 900s reached Prometheus from
+            ${host}'s textfile collector, so nothing reads kubelet's shutdown lock. Read
+            `systemctl status homelab-kubelet-shutdown-lock.timer` and `journalctl -t
+            kubelet-shutdown-lock` on ${host}, then
+            /var/lib/node-exporter-textfile/kubelet-shutdown-lock.prom on the host.
+      # The catch-all deadman, one rule per host so `service` stays a literal. It reads
+      # each check's own homelab_check_deadline_seconds, so a producer that writes the textfile
+      # is covered the day it ships, before anyone writes its NotReporting pair. It is the
+      # backstop, never the rule a check relies on, for two reasons the per-check literals keep:
+      # it cannot carry an absent_over_time arm, because only a check's name says which series
+      # should exist, and a file that loses its deadline series silently drops out of it, which
+      # is why M3 keeps the deadline out of every rule's verdict
+      # (docs/target-architecture/monitoring/m3-textfile-timer.md, "Three series"). Both sides
+      # are restricted to the node jobs, because the pod exporters' rules in pods.yaml and
+      # pod-producers.yaml already compare against the deadline. It fires beside every per-check
+      # NotReporting rule's stale arm, at the same threshold, so an Alertmanager inhibit keyed on
+      # `check` and `origin` (alertmanager-secret.yaml.j2) mutes it wherever a pair exists. It
+      # pages alone only for a producer with no pair, and so it carries no `shadow`.
+      # The `for: 2m` lets the pair fire first. Most pairs sit in another group, which Prometheus
+      # evaluates at its own offset inside the 1m evaluation interval, so a pair can start up to
+      # a minute after this rule crosses. Without the hold, this rule's page would flush after
+      # group_wait, before the inhibit's source exists.
+      # A producer switched off on purpose writes homelab_check_disarmed{check="<name>"} 1 (the
+      # renovate_agent role does), and this rule skips that check, because its pair goes quiet
+      # on the same marker and so leaves no inhibit source.
+      - alert: HostCheckOverdue
+        hosts: all
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{job="${job}",origin="${host}"}
+            > on (check, origin)
+              homelab_check_deadline_seconds{job="${job}",origin="${host}"}
+          )
+          unless on (check, origin) (homelab_check_disarmed{job="${job}",origin="${host}"} == 1)
+          unless on (origin) (up{job="${job}"} == 0)
+        for: 2m
+        labels:
+          severity: warning
+          service: ${host}
+        annotations:
+          summary: ${host}'s {{ $labels.check }} check is past its own deadline.
+          description: >-
+            The {{ $labels.check }} textfile on ${host} holds a verdict older than the
+            homelab_check_deadline_seconds it declares, so its producer stopped writing. Read
+            /var/lib/node-exporter-textfile/{{ $labels.check }}.prom on the host, then the
+            journal of the cron or timer that writes it.
+      # SHADOW UNTIL M6's BATCH A1. A malformed claude_cgroup.prom already pages through
+      # check_mem's cgroup arm, and a malformed disk-health.prom through DiskHealthNotReporting,
+      # so a paging collector alert would page twice for one cause. Until A1 its value is the
+      # diagnosis it leaves in ALERTS. One rule per host whose node_exporter runs the textfile
+      # collector, so `service` stays a literal: the two k3s nodes, and daniel-pi, whose host unit
+      # reads the same directory (hosts/components/pi-node-exporter/units/node_exporter.service.j2).
+      - alert: TextfileCollectorError
+        hosts: all
+        expr: node_textfile_scrape_error{origin="${host}"} == 1
+        for: 10m
+        labels:
+          severity: warning
+          service: ${host}
+          shadow: "true"
+        annotations:
+          summary: >-
+            node_exporter on ${host} cannot read a textfile, candidates: {{ $files := query `count by (file) (last_over_time(node_textfile_mtime_seconds{origin="${host}"}[7d])) unless count by (file) (node_textfile_mtime_seconds{origin="${host}"})` }}{{ if $files }}{{ range $i, $s := $files }}{{ if $i }}, {{ end }}{{ $s.Labels.file }}{{ end }}{{ else }}none known{{ end }}.
+          description: >-
+            Read the node-exporter log on ${host} for the textfile it rejects: a file in
+            /var/lib/node-exporter-textfile is malformed or unreadable, so every series in it is
+            gone. The summary lists candidates, and the runbook says which files the list misses.
+          runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#textfilecollectorerror
+      # A replaced Longhorn instance-manager leaves the iSCSI sessions it served in the kernel,
+      # FREE with a failed connection, and the next attach of such a volume on that node loops
+      # The node-exporter DaemonSet's `iscsi-sessions` sidecar writes one
+      # homelab_iscsi_session_info series per session. A session is FAILED for up to iscsid's
+      # replacement_timeout while it reconnects, so 15m keeps a recovering session quiet. One
+      # rule per k3s node, so `service` stays a literal. Both NotReporting rules mirror
+      # DiskHealthNotReporting's two arms. Their 300s literals equal DEADLINE_S in
+      # node-exporter's files/iscsi-sessions.sh, and
+      # k8s/roles/node-exporter/tests/test_iscsi_sessions.py pins them to it.
+      - alert: IscsiSessionStale
+        hosts: {job: node}
+        expr: homelab_iscsi_session_info{state!="LOGGED_IN",origin="${host}"} == 1
+        for: 15m
+        labels:
+          severity: warning
+          service: ${host}
+        annotations:
+          summary: >-
+            ${host}'s iSCSI session {{ $labels.session }} to {{ $labels.target }} reads {{ $labels.state }}.
+          description: >-
+            {{ $labels.session }} on ${host} has read {{ $labels.state }} for 15 minutes,
+            for target {{ $labels.target }}. The next attach of that volume on ${host} fails
+            its frontend init on `iscsiadm --logout` (error 32), and Longhorn deletes the pod
+            every ~30s. Clean it up with docs/longhorn-disaster-recovery.md, "A stale iSCSI
+            session blocks an attach".
+          runbook_url: https://docs.local.daniel-hunter.com/longhorn-disaster-recovery/
+      - alert: IscsiSessionsNotReporting
+        hosts: {job: node}
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="iscsi-sessions",origin="${host}"} > 300
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="iscsi-sessions",origin="${host}"}[300s])
+          )
+          unless on (origin) (up{job="${job}"} == 0)
+        labels:
+          severity: warning
+          service: ${host}
+        annotations:
+          summary: ${host}'s iSCSI session check has stopped reporting.
+          description: >-
+            No iscsi-sessions verdict newer than 5 minutes reached Prometheus from ${host}'s
+            textfile collector, so nothing is watching the node's iSCSI sessions. Read the
+            log of the node-exporter pod's `iscsi-sessions` container on ${host}.
+      # The claude_code timers. Each service writes its file from an ExecStartPost=, which
+      # systemd runs only after a clean ExecStart=, so the file only ever says success 1 and these
+      # rules have no Failed twin: OnFailure= pages a crash at once, and NotReporting catches a
+      # timer that stopped firing, which pages nothing else. Not shadow, because no other
+      # check watches these timers. One rule per host whose host_vars arm the timer. Setting the
+      # timer's flag false stops it, and the rule then fires on purpose: delete the rule in the
+      # same PR. Each deadline is the one the service renders through
+      # hosts/components/claude-code/templates/timer-textfile.j2, and
+      # hosts/tests/test_claude_timer_rule_literals.py pins both literals to it.
+      - alert: ClaudeCloneSyncNotReporting
+        hosts: {component: claude-code}
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="claude-clone-sync",origin="${host}"} > 2100
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="claude-clone-sync",origin="${host}"}[2100s])
+          )
+          unless on (origin) (up{job="${job}"} == 0)
+        labels:
+          severity: warning
+          service: ${host}
+        annotations:
+          summary: The agent clone sync on ${host} has stopped reporting.
+          description: >-
+            No claude-clone-sync verdict newer than 2100s reached Prometheus from ${host}'s textfile
+            collector, so the agent's clone fast-forward has not completed a clean run: the timer stopped firing, or
+            every run since failed and OnFailure has posted to Discord. Read `systemctl status
+            claude-clone-sync.timer` and `journalctl -u claude-clone-sync` on ${host}. If `claude_code_agent_user_enabled` was set false on purpose,
+            delete this rule.
+      - alert: ClaudeDotfilesSyncNotReporting
+        hosts: {component: claude-code}
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="claude-dotfiles-sync",origin="${host}"} > 2100
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="claude-dotfiles-sync",origin="${host}"}[2100s])
+          )
+          unless on (origin) (up{job="${job}"} == 0)
+        labels:
+          severity: warning
+          service: ${host}
+        annotations:
+          summary: The agent dotfiles sync on ${host} has stopped reporting.
+          description: >-
+            No claude-dotfiles-sync verdict newer than 2100s reached Prometheus from ${host}'s textfile
+            collector, so the agent's dotfiles apply has not completed a clean run: the timer stopped firing, or
+            every run since failed and OnFailure has posted to Discord. Read `systemctl status
+            claude-dotfiles-sync.timer` and `journalctl -u claude-dotfiles-sync` on ${host}. If `claude_code_agent_dotfiles` was set false on purpose,
+            delete this rule.
+      - alert: ClaudeMemorySyncNotReporting
+        hosts: [daniel-box]
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="claude-memory-sync",origin="${host}"} > 2100
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="claude-memory-sync",origin="${host}"}[2100s])
+          )
+          unless on (origin) (up{job="${job}"} == 0)
+        labels:
+          severity: warning
+          service: ${host}
+        annotations:
+          summary: The Claude memory sync from ${host} has stopped reporting.
+          description: >-
+            No claude-memory-sync verdict newer than 2100s reached Prometheus from ${host}'s textfile
+            collector, so the memory store copy to daniel-server has not completed a clean run: the timer stopped firing, or
+            every run since failed and OnFailure has posted to Discord. Read `systemctl status
+            homelab-claude-memory-sync.timer` and `journalctl -u homelab-claude-memory-sync` on ${host}. If `claude_code_memory_sync_enabled` was set false on purpose,
+            delete this rule. A run the ExecCondition skips, because ${host}'s MEMORY.md is
+            empty, writes nothing either, and an empty store is not a healthy state.
+      - alert: ClaudeTriagePollNotReporting
+        hosts: [daniel-box]
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="claude-triage-poll",origin="${host}"} > 660
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="claude-triage-poll",origin="${host}"}[660s])
+          )
+          unless on (origin) (up{job="${job}"} == 0)
+        labels:
+          severity: warning
+          service: ${host}
+        annotations:
+          summary: The triage poller on ${host} has stopped reporting.
+          description: >-
+            No claude-triage-poll verdict newer than 660s reached Prometheus from ${host}'s textfile
+            collector, so the monitor triage poll has not completed a clean run: the timer stopped firing, or
+            every run since failed and OnFailure has posted to Discord. Read `systemctl status
+            homelab-claude-triage-poll.timer` and `journalctl -u homelab-claude-triage-poll` on ${host}. If `claude_code_triage_enabled` was set false on purpose,
+            delete this rule.
+      - alert: ClaudeFanoutLanderNotReporting
+        hosts: [daniel-box]
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="claude-fanout-server-lander",origin="${host}"} > 3300
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="claude-fanout-server-lander",origin="${host}"}[3300s])
+          )
+          unless on (origin) (up{job="${job}"} == 0)
+        labels:
+          severity: warning
+          service: ${host}
+        annotations:
+          summary: The fan-out server lander on ${host} has stopped reporting.
+          description: >-
+            No claude-fanout-server-lander verdict newer than 3300s reached Prometheus from ${host}'s textfile
+            collector, so the fan-out server lander has not completed a clean run: the timer stopped firing, or
+            every run since failed and OnFailure has posted to Discord. Read `systemctl status
+            homelab-claude-fanout-server-lander.timer` and `journalctl -u homelab-claude-fanout-server-lander` on ${host}. If `claude_code_fanout_server_lander_enabled` was set false on purpose,
+            delete this rule.
+      - alert: ClaudePipelineTimelineNotReporting
+        hosts: [daniel-box]
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="claude-pipeline-timeline",origin="${host}"} > 174900
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="claude-pipeline-timeline",origin="${host}"}[174900s])
+          )
+          unless on (origin) (up{job="${job}"} == 0)
+        labels:
+          severity: warning
+          service: ${host}
+        annotations:
+          summary: The pipeline timeline snapshot on ${host} has stopped reporting.
+          description: >-
+            No claude-pipeline-timeline verdict newer than 174900s reached Prometheus from ${host}'s textfile
+            collector, so the daily snapshot of the PR timeline has not completed a clean run: the timer stopped firing, or
+            every run since failed and OnFailure has posted to Discord. The journal inputs it saves rotate after about ten days. Read `systemctl status
+            homelab-claude-pipeline-timeline.timer` and `journalctl -u homelab-claude-pipeline-timeline` on ${host}. If `claude_code_pipeline_timeline_enabled` was set false on purpose,
+            delete this rule.
+      # One copy per k3s node whose host_vars set k3s_node_static_link, reading that link. Each
+      # such node falls back to WiFi when the link drops (docs/k3s-node-plane-crons-and-incidents.md),
+      # so it stays Ready on a slower link and nothing else reports it. The carrier arm catches
+      # a pulled cable or a dead switch port. The `up` arm catches a link that is
+      # administratively down, where node_exporter serves no carrier series at all. A warning,
+      # not a page: the node still serves.
+      - alert: WiredLinkDown
+        hosts: {host_var: k3s_node_static_link}
+        expr: |
+          node_network_carrier{device="${k3s_node_static_link}",origin="${host}"} == 0
+            or
+          node_network_up{device="${k3s_node_static_link}",origin="${host}"} == 0
+        for: 5m
+        labels:
+          severity: warning
+          service: ${host}
+        annotations:
+          summary: ${host}'s wired link ${k3s_node_static_link} is down, so the node runs on WiFi.
+          description: >-
+            ${k3s_node_static_link} on ${host} has had no carrier, or has been down, for 5 minutes. The node
+            routes over its WiFi fallback, which carries Longhorn replication and media at a
+            fraction of the wired rate. Check the cable and the switch port, then run `ip link
+            show ${k3s_node_static_link}` and `ip route get 1.1.1.1` on ${host}.
+      # One copy per host, so `service` stays a literal. The updater writes
+      # homelab_host_reconcile_ok 0 on every run while the host holds, so the rule pages a hold
+      # that stands for 15 minutes, not one failed run.
+      #
+      # Convention 5 (m1-alertmanager.md) does not bind the host-plane rules, because the `node`
+      # and `node-pi` jobs both carry `origin`. They meet it anyway: neither pages on `up`, and
+      # HostUpdateStale's absent arm is conjoined with `up == 1`.
+      - alert: HostReconcileFailed
+        hosts: all
+        expr: homelab_host_reconcile_ok{origin="${host}"} == 0
+        for: 15m
+        labels:
+          severity: critical
+          service: ${host}
+        annotations:
+          summary: ${host}'s homelab package reconcile failed, so it installs no newer package.
+          description: >-
+            Read `journalctl -u homelab-updater -u homelab-reconcile` on ${host}, fix the
+            cause, then run `sudo /usr/lib/homelab/homelab-updater --clear-hold`.
+            homelab_host_reconcile_ok has read 0 for 15 minutes, so ${host} installs no newer
+            homelab package.
+          runbook_url: https://docs.local.daniel-hunter.com/host-packages/
+      # The Pi's Compose project. compose-run writes homelab_compose_up_result each time
+      # homelab-reconcile starts homelab-compose.service, and a failed `up --wait` writes 0. The
+      # Pi's recovery heartbeat pages the same 0 through PiRecoveryFailed, so this rule is SHADOW
+      # until that arm retires (h5-pi-compose.md, open question 5, "M1"). ComposeUpStale below
+      # is its stale-time twin.
+      - alert: ComposeUpFailed
+        hosts: [daniel-pi]
+        expr: homelab_compose_up_result{origin="${host}"} == 0
+        labels:
+          severity: warning
+          service: ${host}
+          shadow: "true"
+        annotations:
+          summary: The Pi's last Compose run did not bring the project up.
+          description: >-
+            compose-run on ${host} wrote homelab_compose_up_result 0 at package
+            {{ $labels.sha }}: a key check, the config check, an image pull, compose-adopt or
+            `docker compose up --wait` failed. Read `journalctl -u homelab-compose` and
+            `docker ps -a` on ${host}.
+      # No schedule bounds the age of the compose result: reconcile restarts the unit only when
+      # its file changes, so a quiet week leaves the timestamp a week old. Boot does
+      # bound it. The unit is enabled for multi-user.target, so every boot runs compose-run
+      # once, and TimeoutStartSec caps that run. A timestamp older than node_boot_time_seconds,
+      # once the boot is older than the cap, means the boot run never wrote: the unit was
+      # masked, systemd killed the run at its timeout, or the write failed. The second arm
+      # catches a file that is gone. Both arms need node_boot_time_seconds, which goes stale
+      # with every failed scrape, so a dead exporter leaves this quiet for ScrapeTargetDown.
+      #
+      # 1690s is the TimeoutStartSec that homelab-compose.service renders from the Pi's
+      # healthcheck variables, 1390s, plus 300s for boot to reach the unit and for one scrape.
+      # Both literals are pinned to the rendered unit by hosts/lib/tests/test_pi_compose_unit.py.
+      - alert: ComposeUpStale
+        hosts: [daniel-pi]
+        expr: |
+          (
+              homelab_compose_up_timestamp_seconds{origin="${host}"}
+              < on (origin) group_left node_boot_time_seconds{origin="${host}"}
+            or
+              absent_over_time(homelab_compose_up_timestamp_seconds{origin="${host}"}[1690s])
+          )
+          and on (origin)
+            time() - node_boot_time_seconds{origin="${host}"} > 1690
+        labels:
+          severity: warning
+          service: ${host}
+        annotations:
+          summary: The Pi's Compose project has not run since ${host} booted.
+          description: >-
+            ${host} booted more than 1690s ago, and homelab_compose_up_timestamp_seconds
+            still predates that boot or is missing, so the boot's compose-run never wrote its
+            result. The unit is masked or disabled, systemd killed the run at its
+            TimeoutStartSec, or the write to /var/lib/node-exporter-textfile/homelab_compose.prom
+            failed. Read `systemctl status homelab-compose` and `journalctl -b -u
+            homelab-compose` on ${host}.
+      # Reconcile also starts or restarts homelab-compose.service: when its file changes, when
+      # pending.json lists it after an env-file rotation, and in step 2 when it is not active.
+      # Reconcile records the time it made the call, blocks until compose-run returns, and then
+      # writes that time as homelab_host_unit_started_seconds. A compose-run that wrote its
+      # result ended after that time, so a result older than it means the run wrote nothing:
+      # systemd killed it at TimeoutStartSec, or the write failed after `up` succeeded. The
+      # second exits 0, so HostReconcileFailed stays quiet for it. ComposeUpStale covers
+      # the boot run, which reconcile does not start, and a file that is gone. Reconcile writes
+      # its file after compose-run's, so no scrape between the two writes can fire this; the 5m
+      # `for` is defensive.
+      - alert: ComposeRestartUnreported
+        hosts: [daniel-pi]
+        expr: |
+          homelab_host_unit_started_seconds{origin="${host}",unit="homelab-compose.service"}
+            > on (origin) group_left homelab_compose_up_timestamp_seconds{origin="${host}"}
+        for: 5m
+        labels:
+          severity: warning
+          service: ${host}
+        annotations:
+          summary: The Pi's Compose project wrote no result for reconcile's last start of it.
+          description: >-
+            homelab-reconcile started homelab-compose.service on ${host}, and
+            homelab_compose_up_timestamp_seconds still predates that call, so compose-run wrote
+            no result for it. systemd killed the run at its TimeoutStartSec, or the write to
+            /var/lib/node-exporter-textfile/homelab_compose.prom failed. Read `journalctl -u
+            homelab-compose -u homelab-reconcile` on ${host}.
+      # One rule per inventory host, so `service` stays a literal. Reconcile writes
+      # homelab_host_reboot_pending 1 when a package change needs a reboot, and the weekly
+      # reboot is what applies it. homelab_host_reboot_pending_since_seconds is when the host
+      # first owed that reboot, the flag's mtime, which a later change never moves. The age is
+      # read from it rather than from the file's mtime, because every later package change
+      # rewrites the file. homelab-reconcile-metrics.service rewrites the file at boot, so a 1
+      # does not outlive the reboot that cleared the flag. The 15m `for` covers the
+      # scrapes between boot and that unit. 691200s is 8 days, a weekly reboot slot plus a day.
+      - alert: HostRebootOverdue
+        hosts: all
+        expr: |
+          (
+              homelab_host_reboot_pending{origin="${host}"} == 1
+            and on (origin)
+              time() - homelab_host_reboot_pending_since_seconds{origin="${host}"} > 691200
+          )
+        for: 15m
+        labels:
+          severity: warning
+          service: ${host}
+        annotations:
+          summary: ${host} has owed a reboot for more than 8 days.
+          description: >-
+            Reconcile recorded a reboot-class package change on ${host} more than 8 days
+            ago, and the host has not booted since, so the weekly reboot did not run or was
+            refused. Read `journalctl -t weekly-restart` on ${host} and docs/host-packages.md,
+            "Reboot-pending and activation-pending", then reboot the host.
+          runbook_url: https://docs.local.daniel-hunter.com/host-packages/
+      # The Pi's held Docker engine. The updater writes
+      # homelab_docker_engine_pending 1 while an engine package is off its pin, and only
+      # homelab-docker-engine.service, started by its 00:30 UTC timer, moves the engine. A run
+      # that fails leaves homelab-updater.timer masked, and HostUpdateStale pages that half. This
+      # rule pages a pin that no run applied: the engine timer paused, the Pi off at 00:30, or a
+      # run that failed without masking the updater.
+      #
+      # 26h is the longest a pin legitimately waits, from the Pi's daily schedule. The
+      # updater first writes 1 at its 03:05 fire, so the pin waits 21h25m for the next 00:30. The
+      # unit's TimeoutStartSec is 90 minutes, and the updater's 03:05 fire after it, its 60s delay
+      # and its own 50-minute TimeoutStartSec rewrite the 1 to 0: 24h51m in all.
+      # scripts/renderer/tests/test_renderer_host_update_limits.py derives it from the unit
+      # files and fails a window shorter than it.
+      #
+      # It reads the range, never a `for:`. A failed scrape or the Pi's weekly reboot marks the
+      # series stale, and a stale evaluation resets a `for:` to zero, so the page would slip a
+      # day. present_over_time over the hour before the window keeps a series younger than 26h,
+      # such as a fresh textfile, from firing on its first samples. The `unless` leaves a dead
+      # exporter to ScrapeTargetDown.
+      - alert: DockerEnginePinUnapplied
+        hosts: [daniel-pi]
+        expr: |
+          (
+              min_over_time(homelab_docker_engine_pending{job="${job}",origin="${host}"}[26h]) == 1
+            and on (origin)
+              present_over_time(homelab_docker_engine_pending{job="${job}",origin="${host}"}[1h] offset 26h)
+          )
+          unless on (origin) (up{job="${job}"} == 0)
+        labels:
+          severity: warning
+          service: ${host}
+        annotations:
+          summary: ${host}'s Docker engine has sat off its pins for more than 26 hours.
+          description: >-
+            homelab_docker_engine_pending on ${host} has read 1 for 26 hours, so the nightly
+            00:30 UTC homelab-docker-engine.timer run has not applied the engine pins. Read
+            `systemctl status homelab-docker-engine.timer homelab-updater.timer` and `journalctl
+            -u homelab-docker-engine` on ${host}, and docs/host-packages.md, "Host-plane
+            pages". A failed run leaves homelab-updater.timer masked, so unmask and start it
+            once the cause is fixed.
+          runbook_url: https://docs.local.daniel-hunter.com/host-packages/
+      # HostUpdateStale: one copy per entry of observability_expected_hosts, each at the entry's
+      # limit_seconds.
+      - alert: HostUpdateStale
+        hosts: all
+        expr: |
+          (
+              time() - homelab_host_update_success_timestamp_seconds{job="${job}",origin="${host}"} > ${limit_seconds}
+            or
+              (
+                  absent(homelab_host_update_success_timestamp_seconds{job="${job}",origin="${host}"})
+                and on (job, origin)
+                  up{job="${job}",origin="${host}"} == 1
+              )
+          )
+        labels:
+          severity: critical
+          service: ${host}
+        annotations:
+          summary: ${host} has had no successful homelab update for ${limit}.
+          description: >-
+            Read `systemctl status homelab-updater.timer` and `journalctl -u homelab-updater` on
+            ${host}. No homelab-updater run there has succeeded in ${limit}, or its exporter is up
+            and serves no success timestamp. The runbook lists what leaves it stale.
+          runbook_url: https://docs.local.daniel-hunter.com/host-packages/

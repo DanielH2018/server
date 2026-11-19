@@ -983,9 +983,10 @@ arm64 only. The `arm64` build ships only the tools daniel-pi's packages name. To
       decides whether the host becomes a canary;
     - a third `apt-repo-<host>` rule under `ufw:` in `hosts/components/builder/component.yml`, or
       daniel-box's firewall refuses the host's `apt-get update` in step 6;
-    - one `HostReconcileFailed` rule in
-      `k8s/roles/observability/files/rules/host-checks.yaml`, because
-      `tests/services/test_host_plane_rule_literals.py` fails an inventory host without one.
+    - an `observability_expected_hosts` entry, described below, because
+      `scripts/dev/gen_host_rules.py --check` fails an inventory host without one. The
+      generator renders the host's `HostReconcileFailed` rule, and every other host-plane rule
+      whose selector takes it, from that entry.
 
     `host_secrets.py check` finds the host from `hosts/<host>/package.yml`, so it takes no edit.
 
@@ -997,12 +998,13 @@ arm64 only. The `arm64` build ships only the tools daniel-pi's packages name. To
     - add `<host>: {job: <scrape job>, limit_seconds: <seconds>}` to `observability_expected_hosts` in
       `k8s/roles/observability/defaults/main.yml`, with the limit above the host's longest
       updater gap;
-    - add the host's `HostUpdateStale` rule to `host-checks.yaml`. The test above prints the rule.
+    - run `uv run python scripts/dev/gen_host_rules.py` and commit the rule files it rewrites,
+      which carry the host's `HostUpdateStale` rule.
 
     A new cluster node instead needs a k3s mode in `hosts/bootstrap-host.sh` and an entry in `NODES`
     in `hosts/lib/k3s_gates.py`. It still needs the last two steps, with job `node`: every host
     whose package enables `homelab-updater.timer` needs an `observability_expected_hosts` entry,
-    and `tests/services/test_host_plane_rule_literals.py` fails a host that has none.
+    and `scripts/dev/gen_host_rules.py --check` fails a host that has none.
 1. **Operator-only**, after the merge: once the builder has published `homelab-<host>` and
    `homelab_host_applied_info{host="daniel-box"}` names the merge commit or a descendant, run
    the script to the end. daniel-box's firewall then holds the rule. To confirm the rule, check

@@ -10,13 +10,11 @@
 # labels, `job` and `instance` included. Its absent_over_time arm carries only the equality
 # matchers' `check` and `origin`. HostUpdateStale's two arms differ the same way.
 #
-# fixtures/host-update-stale.yaml holds the HostUpdateStale rule for a one-host map,
-# fixture-host at 11400s, which gives the rule's shape cases that name no shipped host.
-# host-checks.yaml carries daniel-pi's rule (job node-pi, 90000s), and the cases after the
-# fixture's own exercise it.
+# scripts/dev/gen_host_rules.py renders every host's copy of a rule from one entry of
+# files/rule-tables/host-checks.yaml, so a case exercises one host per entry, and a second host
+# appears only to show that one host's series leave another's copy quiet.
 rule_files:
   - ../../files/rules/host-checks.yaml
-  - fixtures/host-update-stale.yaml
 evaluation_interval: 1m
 tests:
   # The zero-series case: no input at all, so no disk-health series has existed for longer
@@ -618,32 +616,32 @@ tests:
                 newer homelab package.
               runbook_url: https://docs.local.daniel-hunter.com/host-packages/
 
-  # The fixture host's last success stays at 0 while its exporter is up. HostUpdateStale is
-  # quiet at 189 minutes (11340s) and fires at 191 (11460s), past the 11400s limit.
+  # daniel-box's last success stays at 0 while its exporter is up. HostUpdateStale is quiet at
+  # 59 minutes (3540s) and fires at 61 (3660s), past the 3600s limit.
   - interval: 1m
     input_series:
-      - series: 'homelab_host_update_success_timestamp_seconds{instance="fixture-host", job="node-fixture", origin="fixture-host"}'
+      - series: 'homelab_host_update_success_timestamp_seconds{instance="daniel-box", job="node", origin="daniel-box"}'
         values: '0x200'
-      - series: 'up{instance="fixture-host", job="node-fixture", origin="fixture-host"}'
+      - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
         values: '1x200'
     alert_rule_test:
-      - eval_time: 189m
+      - eval_time: 59m
         alertname: HostUpdateStale
         exp_alerts: []
-      - eval_time: 191m
+      - eval_time: 61m
         alertname: HostUpdateStale
         exp_alerts:
           - exp_labels:
-              instance: fixture-host
-              job: node-fixture
-              origin: fixture-host
+              instance: daniel-box
+              job: node
+              origin: daniel-box
               severity: critical
-              service: fixture-host
+              service: daniel-box
             exp_annotations:
-              summary: fixture-host has had no successful homelab update for 3 hours 10 minutes.
+              summary: daniel-box has had no successful homelab update for 60 minutes.
               description: >-
                 Read `systemctl status homelab-updater.timer` and `journalctl -u homelab-updater` on
-                fixture-host. No homelab-updater run there has succeeded in 3 hours 10 minutes, or
+                daniel-box. No homelab-updater run there has succeeded in 60 minutes, or
                 its exporter is up and serves no success timestamp. The runbook lists what leaves it
                 stale.
               runbook_url: https://docs.local.daniel-hunter.com/host-packages/
@@ -651,12 +649,12 @@ tests:
   # A success timestamp that follows the clock keeps HostUpdateStale quiet.
   - interval: 1m
     input_series:
-      - series: 'homelab_host_update_success_timestamp_seconds{instance="fixture-host", job="node-fixture", origin="fixture-host"}'
+      - series: 'homelab_host_update_success_timestamp_seconds{instance="daniel-box", job="node", origin="daniel-box"}'
         values: '0+60x200'
-      - series: 'up{instance="fixture-host", job="node-fixture", origin="fixture-host"}'
+      - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
         values: '1x200'
     alert_rule_test:
-      - eval_time: 191m
+      - eval_time: 61m
         alertname: HostUpdateStale
         exp_alerts: []
 
@@ -664,22 +662,22 @@ tests:
   # matchers' `job` and `origin` alone.
   - interval: 1m
     input_series:
-      - series: 'up{instance="fixture-host", job="node-fixture", origin="fixture-host"}'
+      - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
         values: '1x10'
     alert_rule_test:
       - eval_time: 5m
         alertname: HostUpdateStale
         exp_alerts:
           - exp_labels:
-              job: node-fixture
-              origin: fixture-host
+              job: node
+              origin: daniel-box
               severity: critical
-              service: fixture-host
+              service: daniel-box
             exp_annotations:
-              summary: fixture-host has had no successful homelab update for 3 hours 10 minutes.
+              summary: daniel-box has had no successful homelab update for 60 minutes.
               description: >-
                 Read `systemctl status homelab-updater.timer` and `journalctl -u homelab-updater` on
-                fixture-host. No homelab-updater run there has succeeded in 3 hours 10 minutes, or
+                daniel-box. No homelab-updater run there has succeeded in 60 minutes, or
                 its exporter is up and serves no success timestamp. The runbook lists what leaves it
                 stale.
               runbook_url: https://docs.local.daniel-hunter.com/host-packages/
@@ -688,7 +686,7 @@ tests:
   # reads as absent. `up` at 0 keeps the absent arm quiet: a failed scrape is not a stale host.
   - interval: 1m
     input_series:
-      - series: 'up{instance="fixture-host", job="node-fixture", origin="fixture-host"}'
+      - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
         values: '0x10'
     alert_rule_test:
       - eval_time: 5m
@@ -696,8 +694,8 @@ tests:
         exp_alerts: []
 
   # daniel-pi's last success stays at 0 while node-pi answers (`up` at 1). HostUpdateStale is
-  # quiet at 1491 minutes (89460s) and fires at 1501 (90060s) for daniel-pi alone: the
-  # fixture host has no series here. 1491 minutes is one day between the daily 03:05 fires,
+  # quiet at 1491 minutes (89460s) and fires at 1501 (90060s) for daniel-pi alone: no other
+  # host has series here. 1491 minutes is one day between the daily 03:05 fires,
   # then the next fire's delay and full run.
   - interval: 1m
     input_series:
