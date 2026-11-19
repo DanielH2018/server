@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Validate that every provisioned Grafana dashboard's datasource uid resolves to a real one.
 
-Checks each dashboard against the datasources declared in datasources.yml.j2. A panel
+Checks each dashboard against the datasources `DATASOURCES_TEMPLATES` provisions. A panel
 pointing at a wrong/empty datasource uid renders a silent "No data" with no error —
 exactly the stale-uid class the grafana role CLAUDE.md warns about (the lingering IH0jqv6nz
 uid). This guard is deterministic over all provisioned dashboards.
@@ -27,33 +27,38 @@ from lib.repo_paths import K8S_ROLES, REPO
 
 GRAFANA_ROLE = K8S_ROLES / "observability"
 DASHBOARDS_DIR = GRAFANA_ROLE / "files/dashboards"
-DATASOURCES_TEMPLATE = GRAFANA_ROLE / "templates/grafana.yaml.j2"
+# Every template that provisions a datasource: the provisioning ConfigMap, and the Secret
+# that carries the warehouse datasource's password.
+DATASOURCES_TEMPLATES = (
+    GRAFANA_ROLE / "templates/grafana.yaml.j2",
+    GRAFANA_ROLE / "templates/grafana-warehouse-datasource-secret.yaml.j2",
+)
 
 # Grafana built-in pseudo-datasources — always valid, never provisioned.
 BUILTIN_DATASOURCE_UIDS = {"-- Grafana --", "-- Mixed --", "-- Dashboard --", "grafana"}
 
 
 def provisioned_datasource_ids(
-    datasources_template: Path = DATASOURCES_TEMPLATE,
+    datasources_templates: Sequence[Path] = DATASOURCES_TEMPLATES,
 ) -> set[str]:
     """uids AND names of every provisioned datasource.
 
-    The live declaration is the cluster grafana's provisioning ConfigMap (observability
-    grafana.yaml.j2). That file carries Jinja, so the datasource entries are extracted by line
-    rather than yaml-parsed whole; including names as well as uids means a legacy name-form ref
+    The templates carry Jinja, so the datasource entries are extracted by line rather than
+    yaml-parsed whole; including names as well as uids means a legacy name-form ref
     ("datasource": "Prometheus") also resolves — a valid Grafana reference, not a bug.
     """
     ids: set[str] = set()
-    in_datasources = False
-    for line in datasources_template.read_text().splitlines():
-        stripped = line.strip()
-        if stripped == "datasources:":
-            in_datasources = True
-            continue
-        if in_datasources:
-            m = re.match(r"-?\s*(uid|name):\s*(\S+)$", stripped.lstrip("- "))
-            if m and "{{" not in m.group(2):
-                ids.add(m.group(2).strip("\"'"))
+    for template in datasources_templates:
+        in_datasources = False
+        for line in template.read_text().splitlines():
+            stripped = line.strip()
+            if stripped == "datasources:":
+                in_datasources = True
+                continue
+            if in_datasources:
+                m = re.match(r"-?\s*(uid|name):\s*(\S+)$", stripped.lstrip("- "))
+                if m and "{{" not in m.group(2):
+                    ids.add(m.group(2).strip("\"'"))
     return ids
 
 
@@ -166,14 +171,14 @@ def duplicate_dashboard_uids(boards: dict[str, list[str]]) -> list[str]:
 
 def validate(
     dashboards_dir: Path = DASHBOARDS_DIR,
-    datasources_template: Path = DATASOURCES_TEMPLATE,
+    datasources_templates: Sequence[Path] = DATASOURCES_TEMPLATES,
 ) -> list[str]:
     """Return a list of error strings, empty when clean.
 
     A dashboard JSON passes when every datasource ref resolves to a provisioned datasource or a
     built-in, and no other dashboard claims its uid.
     """
-    valid = provisioned_datasource_ids(datasources_template) | BUILTIN_DATASOURCE_UIDS
+    valid = provisioned_datasource_ids(datasources_templates) | BUILTIN_DATASOURCE_UIDS
     errors: list[str] = []
     for path in sorted(dashboards_dir.rglob("*.json")):
         try:
