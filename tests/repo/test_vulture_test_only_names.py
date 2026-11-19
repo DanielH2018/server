@@ -58,12 +58,6 @@ TEST_ONLY_NAMES = (
     ("scripts/lib/cli_registry.py", "package_entry_points"),
 )
 
-
-DELETED_NAMES = (
-    ("scripts/lib/facts/citations.py", "REJECT_REASONS"),
-    ("scripts/renderer/renderer_lib/secret_checks.py", "scan_template"),
-)
-
 CENSUS = Path(__file__).resolve().relative_to(REPO).as_posix()
 
 
@@ -137,8 +131,8 @@ def test_a_test_only_name_is_ignored_with_a_reason(path, name):
         f"{path} is not tracked: repoint its TEST_ONLY_NAMES rows to the module's new path"
     )
     assert _defines(path, name), (
-        f"{path} no longer binds {name!r}: if #8632's triage deleted it, move the row to "
-        "DELETED_NAMES, otherwise repoint it to where the name went"
+        f"{path} no longer binds {name!r}: delete its TEST_ONLY_NAMES row if the name is "
+        "gone, otherwise repoint the row to where the name went"
     )
     entry = _ignore_entry(name)
     assert entry is not None, (
@@ -152,17 +146,6 @@ def test_a_test_only_name_is_ignored_with_a_reason(path, name):
     assert _test_tree_names(name), (
         f"ignore_names keeps {name!r} for a guard, but no test under a tests/ directory "
         "other than this census names it as a whole word"
-    )
-
-
-@pytest.mark.parametrize(
-    ("path", "name"),
-    DELETED_NAMES,
-    ids=[f"{p.rsplit('/', 1)[-1]}::{n}" for p, n in DELETED_NAMES],
-)
-def test_a_deleted_name_stays_deleted(path, name):
-    assert not _defines(path, name), (
-        f"{path} binds {name!r} again after #8632 deleted it with its unit test"
     )
 
 
