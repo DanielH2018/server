@@ -161,10 +161,10 @@ def test_main_exits_nonzero_when_the_site_build_failed(monkeypatch):
 
 
 def test_skip_generators_runs_none(monkeypatch):
-    """The dirty-tree path in docs-refresh.sh depends on this.
+    """The unlanded-PR path in docs-refresh.sh depends on this.
 
-    A dirty working tree must rebuild the site without regenerating anything, or the
-    cron would mix its own writes into someone else's in-progress edit.
+    While a previous run's PR is open, the cron rebuilds the site without regenerating
+    anything, or it would regenerate the same diff and publish a duplicate.
     """
     ran: list[str] = []
     monkeypatch.setattr(build_docs, "run_generators", lambda: ran.append("x") or [])

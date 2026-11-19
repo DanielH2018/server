@@ -26,11 +26,8 @@ from renderer.renderer_lib.environment import strict_env
 
 ALLOW: dict[str, str] = {}
 # The grep half's named member: an import held in a string.
-ANSIBLE_FREE = "scripts/renderer/tests/test_renderer_ansible_free.py"
-IN_A_STRING = {
-    ANSIBLE_FREE: "the shim of its red half",
-    "tests/repo/test_ansible_core_census.py": "this census's own red fixtures",
-}
+THIS_CENSUS = "tests/repo/test_ansible_core_census.py"
+IN_A_STRING = {THIS_CENSUS: "this census's own red fixtures"}
 IMPORT_LINE = re.compile(
     r"^\s*(from|import) ansible\b"
     r"""|(import_module|find_spec)\(\s*["']ansible\b""",
@@ -45,9 +42,7 @@ def importers_by_text(paths: list[str]) -> list[str]:
 
 def test_no_tracked_python_names_ansible_core_in_an_import_outside_the_allowlist():
     found = importers_by_text(tracked("*.py"))
-    assert ANSIBLE_FREE in found, (
-        "the grep no longer finds test_renderer_ansible_free.py's import"
-    )
+    assert THIS_CENSUS in found, "the grep no longer finds this file's red fixtures"
     offenders = sorted(set(found) - set(ALLOW) - set(IN_A_STRING))
     assert not offenders, f"these files import ansible-core: {offenders}"
 

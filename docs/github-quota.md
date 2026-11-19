@@ -185,6 +185,17 @@ on 2026-11-14 one uid's ledger held two live windows per bucket, which one token
 counted in whichever window ended later. A caller whose `gh` has no token gets the uid as
 its identity. Two tokens of one GitHub user spend one quota and get two ledger files.
 
+**A counted call writes the ledger in one transaction.** `record` claims a due sample in one
+short write, runs `gh api rate_limit` while holding no lock, and then writes the sample's
+rows, the prune and the call's own row under one `BEGIN IMMEDIATE`. A writer waits up to
+`LOCK_WAIT_S` (5 seconds) for another writer, and then the call goes ahead unrecorded with
+a `database is locked` line in `failures.<uid>`. On 2026-11-18 a 1-second wait dropped 25
+calls between 20:36 and 21:27 UTC, while about 15 sessions wrote during a burst and the host
+was short of memory ([#9055](https://github.com/DanielH2018/server/issues/9055)). The wait delays a
+counted `gh` call only while another writer holds the lock. The ledger stays in SQLite's
+rollback journal, not WAL: WAL's `-wal` and `-shm` files take the writer's `umask`, and a
+reader running as another uid could then not open the ledger.
+
 **Each sample names its caller.** The ledger's `sampler` table, keyed by window and bucket
 like `truth`, stores three facts about the last caller that sampled that window: its session
 key, the resolved path of its `gh`, and the names of its `GH_*` and `GITHUB_*` variables.
@@ -209,13 +220,15 @@ with Python:
 uv run python3 -c "import sqlite3; db = sqlite3.connect('file:/var/lib/gh-quota/tok-<fingerprint>@1000.sqlite?mode=ro', uri=True); [print(r) for r in db.execute('SELECT t.window, t.bucket, t.used, s.session, s.gh, s.env_names, p.cgroup, p.ancestry FROM truth t JOIN sampler s USING (window, bucket) LEFT JOIN sampler_process p USING (window, bucket) ORDER BY t.window')]"
 ```
 
-**GitHub answers one token from two `graphql` counters.** The `sampler` rows from
+**GitHub answers one token from two counters per bucket.** The `sampler` rows from
 2026-11-15 to 2026-11-18 showed no second caller. The same sessions read both pools, with the
 same `/usr/bin/gh` and no `GH_*` or `GITHUB_*` names. Session `185cff7e` read the counter that
 resets at :29 at 22:29, then the counter that resets at :50 at 23:20. GitHub chooses which
 counter answers, so neither the caller nor the token separates them
-([#8741](https://github.com/DanielH2018/server/issues/8741)). GitHub's reported reset for one
-core window also moves by up to 45 seconds between samples.
+([#8741](https://github.com/DanielH2018/server/issues/8741)). `core` has two counters too:
+windows ending at 22:17 and 22:34 UTC on 2026-11-18 were live at once, and so were windows
+ending at 00:23 and 00:34 on 2026-11-19. GitHub's reported reset for one `core` window also moves by up to 45
+seconds between samples.
 
 The ledger handles both in two ways:
 
@@ -225,7 +238,7 @@ The ledger handles both in two ways:
   the live window that ends last. A stale sample of the other counter can outlive a fresh one
   by 21 minutes.
 
-Neither change tells the two `graphql` counters apart. Slice 2's ceiling has to hold against the
+Neither change tells a bucket's two counters apart. Slice 2's ceiling has to hold against the
 larger of them, because GitHub can refuse a call on either.
 
 **The session key** is the first of these that exists:
@@ -427,7 +440,9 @@ every session at once.
 +                           -> /usr/bin/gh-quota, the same file as a command
 +    templates/gh-quota.conf.j2
 +    tmpfiles.d/homelab-gh-quota.conf   creates /var/lib/gh-quota
-+    tests/test_gh_quota.py
++    tests/test_gh_quota.py           classifying, sampling and windows
++    tests/test_gh_quota_failures.py  a failed sample, a locked or corrupt file, two writers
++    tests/_gh_quota_fakes.py, tests/conftest.py   the fake gh, clock and ledger both share
  hosts/daniel-box/package.yml, hosts/daniel-server/package.yml   + gh-quota
  scripts/lib/gh.py          gh(): record each call
  scripts/dev/fanout_lib/launch.py   the fan-out snapshot carries the module

@@ -31,10 +31,12 @@ tests:
               origin: daniel-box
             exp_annotations:
               summary: daniel-box's UPS secondary watchdog has stopped reporting.
-              description: No ups-secondary-health verdict newer than 25 minutes reached Prometheus from daniel-box's
-                textfile collector, so nothing confirms the secondary upsmon can still hear upsd. Run
-                `systemctl status homelab-ups-watchdog.timer` and `journalctl -u homelab-ups-watchdog.service`
-                on the host, then read /var/lib/node-exporter-textfile/ups-secondary-health.prom.
+              description: >-
+                Run `systemctl status homelab-ups-watchdog.timer` and `journalctl -u
+                homelab-ups-watchdog.service` on daniel-box. No ups-secondary-health verdict newer
+                than 25 minutes reached Prometheus, so nothing confirms its secondary upsmon can
+                hear upsd.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#upssecondarynotreporting
           - exp_labels:
               severity: critical
               service: daniel-server
@@ -42,10 +44,12 @@ tests:
               origin: daniel-server
             exp_annotations:
               summary: daniel-server's UPS secondary watchdog has stopped reporting.
-              description: No ups-secondary-health verdict newer than 25 minutes reached Prometheus from daniel-server's
-                textfile collector, so nothing confirms the secondary upsmon can still hear upsd. Run
-                `systemctl status homelab-ups-watchdog.timer` and `journalctl -u homelab-ups-watchdog.service`
-                on the host, then read /var/lib/node-exporter-textfile/ups-secondary-health.prom.
+              description: >-
+                Run `systemctl status homelab-ups-watchdog.timer` and `journalctl -u
+                homelab-ups-watchdog.service` on daniel-server. No ups-secondary-health verdict
+                newer than 25 minutes reached Prometheus, so nothing confirms its secondary upsmon
+                can hear upsd.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#upssecondarynotreporting
       - eval_time: 900h
         alertname: FakeRemuxScanFailed
         exp_alerts: []
@@ -110,11 +114,12 @@ tests:
               origin: daniel-server
             exp_annotations:
               summary: The monthly etcd restore drill on daniel-server has stopped reporting.
-              description: No etcd-restore-drill-vm verdict newer than 35 days (35 days) reached Prometheus
-                from daniel-server's textfile collector, so no drill has run since the last 1st-of-month
-                timer slot plus four days of slack. Read homelab-etcd-restore-drill.timer and the journal of
-                homelab-etcd-restore-drill.service on daniel-server, then /var/lib/node-exporter-textfile/etcd-restore-drill-vm.prom
-                on the host.
+              description: >-
+                Read homelab-etcd-restore-drill.timer and the journal of
+                homelab-etcd-restore-drill.service on daniel-server. No etcd-restore-drill-vm
+                verdict newer than 35 days reached Prometheus, so no drill has run since the last
+                1st-of-month slot plus four days of slack.
+              runbook_url: https://docs.local.daniel-hunter.com/k3s-etcd-restore/#the-full-drill-runs-monthly-in-a-throwaway-guest
       - eval_time: 900h
         alertname: EtcdRestoreDrillEgressFenceFailed
         exp_alerts: []
@@ -181,11 +186,11 @@ tests:
               origin: daniel-box
             exp_annotations:
               summary: daniel-box's UPS secondary watchdog reported a failure.
-              description: '/usr/lib/homelab/ups-secondary-health on daniel-box ended with status=down: upsmon.conf
-                is unreadable or has no MONITOR line, nut-monitor is not active, or upsc cannot reach
-                upsd. Until it is fixed, daniel-box would not power off on FSD. Run `systemctl is-active
-                nut-monitor` and `upsc <endpoint> ups.status` on the host; the `ups-secondary-health`
-                syslog tag holds the message.'
+              description: >-
+                Run `systemctl is-active nut-monitor` and `upsc <endpoint> ups.status` on
+                daniel-box. Its UPS secondary watchdog ended with status=down, so daniel-box would
+                not power off on FSD. The `ups-secondary-health` syslog tag holds the message.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#upssecondaryfailed
   - interval: 1h
     input_series:
       - series: homelab_check_last_run_timestamp_seconds{check="ups-secondary-health", instance="daniel-box",
@@ -218,10 +223,12 @@ tests:
               origin: daniel-box
             exp_annotations:
               summary: daniel-box's UPS secondary watchdog has stopped reporting.
-              description: No ups-secondary-health verdict newer than 25 minutes reached Prometheus from daniel-box's
-                textfile collector, so nothing confirms the secondary upsmon can still hear upsd. Run
-                `systemctl status homelab-ups-watchdog.timer` and `journalctl -u homelab-ups-watchdog.service`
-                on the host, then read /var/lib/node-exporter-textfile/ups-secondary-health.prom.
+              description: >-
+                Run `systemctl status homelab-ups-watchdog.timer` and `journalctl -u
+                homelab-ups-watchdog.service` on daniel-box. No ups-secondary-health verdict newer
+                than 25 minutes reached Prometheus, so nothing confirms its secondary upsmon can
+                hear upsd.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#upssecondarynotreporting
   - interval: 1h
     input_series:
       - series: homelab_check_last_run_timestamp_seconds{check="ups-secondary-health", instance="daniel-box",
@@ -255,11 +262,11 @@ tests:
               origin: daniel-server
             exp_annotations:
               summary: daniel-server's UPS secondary watchdog reported a failure.
-              description: '/usr/lib/homelab/ups-secondary-health on daniel-server ended with status=down: upsmon.conf
-                is unreadable or has no MONITOR line, nut-monitor is not active, or upsc cannot reach
-                upsd. Until it is fixed, daniel-server would not power off on FSD. Run `systemctl is-active
-                nut-monitor` and `upsc <endpoint> ups.status` on the host; the `ups-secondary-health`
-                syslog tag holds the message.'
+              description: >-
+                Run `systemctl is-active nut-monitor` and `upsc <endpoint> ups.status` on
+                daniel-server. Its UPS secondary watchdog ended with status=down, so daniel-server
+                would not power off on FSD. The `ups-secondary-health` syslog tag holds the message.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#upssecondaryfailed
   - interval: 1h
     input_series:
       - series: homelab_check_last_run_timestamp_seconds{check="ups-secondary-health", instance="daniel-server",
@@ -292,10 +299,12 @@ tests:
               origin: daniel-server
             exp_annotations:
               summary: daniel-server's UPS secondary watchdog has stopped reporting.
-              description: No ups-secondary-health verdict newer than 25 minutes reached Prometheus from daniel-server's
-                textfile collector, so nothing confirms the secondary upsmon can still hear upsd. Run
-                `systemctl status homelab-ups-watchdog.timer` and `journalctl -u homelab-ups-watchdog.service`
-                on the host, then read /var/lib/node-exporter-textfile/ups-secondary-health.prom.
+              description: >-
+                Run `systemctl status homelab-ups-watchdog.timer` and `journalctl -u
+                homelab-ups-watchdog.service` on daniel-server. No ups-secondary-health verdict
+                newer than 25 minutes reached Prometheus, so nothing confirms its secondary upsmon
+                can hear upsd.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#upssecondarynotreporting
   - interval: 1h
     input_series:
       - series: homelab_check_last_run_timestamp_seconds{check="ups-secondary-health", instance="daniel-server",
@@ -529,6 +538,7 @@ tests:
                 failed, the egress fence leaked, or the restore in the throwaway guest did not pass. Read
                 the newest run directory under /var/log/etcd-restore-drill; the `etcd-restore-drill-vm`
                 syslog tag holds the message.'
+              runbook_url: https://docs.local.daniel-hunter.com/k3s-etcd-restore/#the-full-drill-runs-monthly-in-a-throwaway-guest
   - interval: 1h
     input_series:
       - series: homelab_check_last_run_timestamp_seconds{check="etcd-restore-drill-vm", instance="daniel-server",
@@ -559,11 +569,12 @@ tests:
               origin: daniel-server
             exp_annotations:
               summary: The monthly etcd restore drill on daniel-server has stopped reporting.
-              description: No etcd-restore-drill-vm verdict newer than 35 days (35 days) reached Prometheus
-                from daniel-server's textfile collector, so no drill has run since the last 1st-of-month
-                timer slot plus four days of slack. Read homelab-etcd-restore-drill.timer and the journal of
-                homelab-etcd-restore-drill.service on daniel-server, then /var/lib/node-exporter-textfile/etcd-restore-drill-vm.prom
-                on the host.
+              description: >-
+                Read homelab-etcd-restore-drill.timer and the journal of
+                homelab-etcd-restore-drill.service on daniel-server. No etcd-restore-drill-vm
+                verdict newer than 35 days reached Prometheus, so no drill has run since the last
+                1st-of-month slot plus four days of slack.
+              runbook_url: https://docs.local.daniel-hunter.com/k3s-etcd-restore/#the-full-drill-runs-monthly-in-a-throwaway-guest
   - interval: 1h
     input_series:
       - series: homelab_check_last_run_timestamp_seconds{check="etcd-restore-drill-vm", instance="daniel-server",
