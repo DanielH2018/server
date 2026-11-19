@@ -20,11 +20,13 @@ from lib.git_testing import commit, git, init_repo, scrub_process_git_env
 from lib.worktree_testing import ignore_foreign_slice_holds
 from _worktree_proc import _unreadable_proc
 from lib.worktrees import (
+    FOREIGN_UID,
     KEEP,
     REMOVABLE,
     VERDICT_CACHE,
     Worktree,
     classify,
+    held_by_readable_process,
     local_landed_layer,
     merged_layer,
     primary_checkout,
@@ -303,6 +305,29 @@ def test_unreadable_processes_outside_that_rule_do_not_block_removal_is_clean(tm
     _unreadable_proc(proc, 4, 0, f"/user.slice/user-{me}.slice/session-7.scope")
 
     assert processes_using(str(tmp_path), proc=proc) == []
+
+
+def test_a_readable_process_in_the_tree_holds_it_is_flagged():
+    holds = [(4242, "/w/a/scripts", "cwd"), (4243, "/w/ab", "CLAUDE_PROJECT_DIR")]
+
+    assert held_by_readable_process("/w/a", holds=lambda: holds)
+
+
+def test_an_unreadable_hold_or_a_sibling_tree_does_not_hold_it_is_clean():
+    # A foreign-uid hold names no path, so `holds_tree` matches it against every tree.
+    holds = [(4242, "", FOREIGN_UID), (4243, "/w/ab", "cwd")]
+
+    assert not held_by_readable_process("/w/a", holds=lambda: holds)
+
+
+def test_a_hold_in_the_main_worktree_does_not_hold_it_is_clean(tmp_path):
+    (tmp_path / ".git").mkdir()
+    holds = [
+        (4242, str(tmp_path), "cwd"),
+        (4243, f"{tmp_path}/.claude/worktrees/s", "cwd"),
+    ]
+
+    assert not held_by_readable_process(str(tmp_path), holds=lambda: holds)
 
 
 def test_remove_still_deregisters_a_deleted_tree_a_session_names_is_clean(
