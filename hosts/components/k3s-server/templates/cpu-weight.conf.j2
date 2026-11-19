@@ -1,0 +1,9 @@
+# Shipped by the homelab-{{ inventory_hostname }} package (hosts/components/k3s-server) -- edits
+# here are overwritten. Ranks k3s above its system.slice siblings, such as the docs-refresh run's
+# pytest and mkdocs, only while the CPU is contended. `k3s_cpu_weight` in
+# hosts/components/k3s-server/defaults/main.yml says why.
+#
+# A file of its own, outside the restart hash: the postinst's daemon-reload writes the weight into
+# the running unit's cgroup, so no k3s restart is owed.
+[Service]
+CPUWeight={{ k3s_cpu_weight }}

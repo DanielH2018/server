@@ -539,15 +539,24 @@ route:
       repeat_interval: 60s     # observability_alertmanager_watchdog_repeat_seconds
     - matchers: [shadow="true"]
       receiver: blackhole
-    - matchers: [alertname="DeployHoldActive"]
+    - matchers: [drill="true"]
+      receiver: blackhole
+    - matchers: [alertname="WarningUnresolved"]
+      group_by: [alertname, escalated_from]  # one message per escalated warning
+      routes: <the paging routes below>
+    - matchers: [service=~"daniel-box|daniel-pi|daniel-server"]
+      group_by: [alertname]    # one fault on every host is one message
+      routes: <the paging routes below>
+    # The paging routes, each with mute_time_intervals: [weekly-reboot]:
+    - matchers: [severity="warning", escalate="false"]
       receiver: discord
-      repeat_interval: 24h     # D2.6d's hold page: a standing hold repeats daily
+      repeat_interval: 24h     # a warning that holds by design, DeployHoldActive among them
     - matchers: [severity="critical"]
       receiver: discord
       continue: true
     - matchers: [severity="critical"]
       receiver: email
-    - receiver: discord        # catch-all; M2 adds mute_time_intervals here and above
+    - receiver: discord        # catch-all
 receivers:
   - name: blackhole
   - name: healthchecks         # url_file: https://hc-ping.com/<ping key>/alertmanager-watchdog

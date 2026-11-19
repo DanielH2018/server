@@ -17,7 +17,7 @@ import shutil
 import pytest
 from _helpers import registry_secret_names
 from lib import yaml_fast
-from lib.repo_paths import K3S_SERVER, REPO
+from lib.repo_paths import K3S_DEFAULTS, K3S_SERVER, REPO
 from longhorn_lib import longhorn_etcd_s3_logic as etcd_s3
 from renderer.renderer_lib import host as host_mode
 from renderer.renderer_lib.environment import RenderError
@@ -40,6 +40,7 @@ STARTUP_FILES = {
     "/etc/rancher/k3s/registries.yaml",
 }
 MARKER = "/var/lib/rancher/k3s/server/manifests/coredns.yaml.skip"
+CPU_WEIGHT = "/usr/lib/systemd/system/k3s.service.d/60-homelab-cpu-weight.conf"
 
 
 @pytest.fixture(scope="module")
@@ -163,6 +164,14 @@ def test_the_package_marks_exactly_the_startup_files_for_the_k3s_restart(package
     assert package.policies[UNIT] == "windowed"
     for quiet in ("/etc/logrotate.d/k3s", MARKER):
         assert quiet in package.files and quiet not in package.activations
+
+
+def test_the_cpu_weight_drop_in_ranks_k3s_above_its_siblings_with_no_restart(package):
+    """systemd's default weight is 100, so a weight at or below it ranks k3s no higher."""
+    weight = yaml_fast.safe_load(K3S_DEFAULTS.read_text())["k3s_cpu_weight"]
+    assert setting(text(package, CPU_WEIGHT), "CPUWeight") == str(weight)
+    assert int(weight) > 100
+    assert CPU_WEIGHT not in package.activations
 
 
 def test_the_logging_drop_in_sends_both_streams_to_the_log_file(package):
