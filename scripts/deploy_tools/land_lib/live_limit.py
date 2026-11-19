@@ -20,7 +20,7 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from lib.json_types import JsonValue, as_list, as_object
-from lib.role_paths import is_test_path, role_for
+from lib.role_paths import CLUSTER_VARS_PREFIX, is_test_path, role_for
 from validate.cluster_pins import PINS
 
 QUOTA_FLOOR = 1500
@@ -33,7 +33,6 @@ SERIAL = "serial"
 SERIAL_ROLES = frozenset(
     {key.removeprefix("k3s_").removesuffix("_version") for key in PINS} | {"flux"}
 )
-CLUSTER_VARS_PREFIX = "secrets/cluster-vars."
 # DECIDED: every edit to the service list is serial, a field change on one service included.
 # Every tag promotes with the bundle the list declares, and one crashlooping new service fails
 # that whole promotion and sets `DEPLOY_HOLD`.

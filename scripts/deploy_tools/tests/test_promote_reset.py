@@ -17,6 +17,7 @@ from lib.exit_codes import FAILED, OK
 from lib.proc_testing import fake_bin
 from lib.proc_testing import run as proc_run
 from lib.repo_paths import REPO
+from test_promote_settle import _functions
 
 from deploy_tools.promote_lib import reset
 
@@ -205,9 +206,7 @@ def _move(tmp_path, script: str, live: str):
         "GITHUB_OUTPUT": str(tmp_path / "github_output"),
         "RUNNER_TEMP": str(tmp_path),
         "PATH": "/usr/bin:/bin",
-        "RETRY_FUNCTIONS": yaml_fast.safe_load(WORKFLOW.read_text(encoding="utf-8"))
-        .get("env", {})
-        .get("RETRY_FUNCTIONS", ""),
+        **_functions(),
     }
     result = proc_run(["bash", "-c", script], env=env, stub_bin=stub)
     moves = [line for line in calls.read_text().splitlines() if line.startswith("flux")]

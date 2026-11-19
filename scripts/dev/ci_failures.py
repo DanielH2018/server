@@ -80,9 +80,16 @@ def _stamp(moment: datetime) -> str:
     return moment.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def runs_between(start: datetime, end: datetime) -> list[dict[str, Any]]:
-    """List the runs created from `start` to `end`, both inclusive, splitting past the cap."""
+def runs_between(
+    start: datetime, end: datetime, branch: str | None = None
+) -> list[dict[str, Any]]:
+    """List the runs created from `start` to `end`, both inclusive, splitting past the cap.
+
+    A `branch` keeps only the runs of that head branch.
+    """
     query = f"created={_stamp(start)}..{_stamp(end)}&per_page=100"
+    if branch:
+        query += f"&branch={branch}"
     pages = _api_pages(f"{ACTIONS}/runs?{query}")
     if pages[0]["total_count"] < SEARCH_CAP:
         return [run for page in pages for run in page["workflow_runs"]]
@@ -92,17 +99,21 @@ def runs_between(start: datetime, end: datetime) -> list[dict[str, Any]]:
         )
         return [run for page in pages for run in page["workflow_runs"]]
     middle = (start + (end - start) / 2).replace(microsecond=0)
-    return runs_between(start, middle) + runs_between(middle + ONE_SECOND, end)
+    return runs_between(start, middle, branch) + runs_between(
+        middle + ONE_SECOND, end, branch
+    )
 
 
-def runs_in_range(since: date, until: date) -> list[dict[str, Any]]:
+def runs_in_range(
+    since: date, until: date, branch: str | None = None
+) -> list[dict[str, Any]]:
     """List every run created from the start of `since` to the end of `until`."""
     start = datetime.combine(since, time.min, UTC)
     last = datetime.combine(until, time.max, UTC).replace(microsecond=0)
     runs: dict[int, dict[str, Any]] = {}
     while start <= last:
         end = min(start + START_WINDOW - ONE_SECOND, last)
-        runs.update((run["id"], run) for run in runs_between(start, end))
+        runs.update((run["id"], run) for run in runs_between(start, end, branch))
         start = end + ONE_SECOND
     return list(runs.values())
 
@@ -316,7 +327,7 @@ def gh_failure(exc: subprocess.CalledProcessError | subprocess.TimeoutExpired) -
 
 
 def survey(
-    since: date, until: date
+    since: date, until: date, branch: str | None = None
 ) -> tuple[
     list[dict[str, Any]],
     list[dict[str, Any]],
@@ -324,10 +335,12 @@ def survey(
 ]:
     """Return the runs in the range, their red attempts, and each attempt's rows and readability.
 
+    A `branch` keeps only the runs of that head branch.
+
     Raises `CalledProcessError` or `TimeoutExpired` when a `gh` call that lists runs, attempts
     or jobs fails.
     """
-    runs = runs_in_range(since, until)
+    runs = runs_in_range(since, until, branch)
     needing_a_read = [r for r in runs if r["run_attempt"] > 1 or r["conclusion"] in RED]
     with ThreadPoolExecutor(READERS) as pool:
         attempts = [
@@ -337,13 +350,17 @@ def survey(
     return runs, attempts, read
 
 
-def failing_test_modules(since: date, until: date) -> tuple[set[str], int]:
+def failing_test_modules(
+    since: date, until: date, branch: str | None = None
+) -> tuple[set[str], int]:
     """Return every test module a red attempt in the range reported failing.
+
+    A `branch` counts only the runs of that head branch.
 
     Also return how many red attempts had no readable log: a module that failed only in one
     of those is missing from the set.
     """
-    _, _, read = survey(since, until)
+    _, _, read = survey(since, until, branch)
     modules = {
         module for rows, _ in read for _, _, module in rows if module != NO_VALUE
     }
