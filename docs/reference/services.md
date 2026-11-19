@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/service_catalog.py
-generated_at: 2026-11-16 18:17 UTC
-generated_sha: 17f361985
+generated_at: 2026-11-19 06:17 UTC
+generated_sha: 74a6a49d0
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,12 +12,12 @@ generated_sha: 17f361985
 
 # Services
 
-69 service(s) declared across 1 host(s).
+70 service(s) declared across 1 host(s).
 
 
 ## daniel-box
 
-69 service(s).
+70 service(s).
 
 | Service | Route | Auth | Backup tier | Auto-deploy |
 |---|---|---|---|---|
@@ -88,6 +88,7 @@ generated_sha: 17f361985
 | traefik | no route (infra role) | unknown (use_authelia not declared on this entry) | daily -> R2 | n/a: applied by Flux, through `promote`; `land.sh` gates the rollout |
 | traefik-crds | no route (infra role) | unknown (use_authelia not declared on this entry) | no PVC (stateless) | n/a: applied by Flux, through `promote`; `land.sh` gates the rollout |
 | valheim | no route (infra role) | unknown (use_authelia not declared on this entry) | weekly -> B2 (default target); no backup (StorageClass longhorn-nobackup) | n/a: applied by Flux, through `promote`; `land.sh` gates the rollout |
+| vaultwarden | <span class="fqdn" data-host="vaultwarden.local">vaultwarden.local.&lt;domain&gt;</span> (LAN only) | none (public/no-auth) | weekly -> B2 (default target) | n/a: applied by Flux, through `promote`; `land.sh` gates the rollout |
 | wg-easy | <span class="fqdn" data-host="wg-easy">wg-easy.&lt;domain&gt;</span> · <span class="fqdn" data-host="wg-easy.local">wg-easy.local.&lt;domain&gt;</span> | Authelia one_factor | weekly -> B2 (default target) | n/a: applied by Flux, through `promote`; `land.sh` gates the rollout |
 | zigbee2mqtt | <span class="fqdn" data-host="zigbee2mqtt">zigbee2mqtt.&lt;domain&gt;</span> · <span class="fqdn" data-host="zigbee2mqtt.local">zigbee2mqtt.local.&lt;domain&gt;</span> | Authelia one_factor | daily -> R2 | n/a: applied by Flux, through `promote`; `land.sh` gates the rollout |
 
