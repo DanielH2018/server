@@ -1301,7 +1301,7 @@
  "tests/repo/test_python_version_consistency.py": 0.28,
  "tests/repo/test_ratchet_rules.py": 0.0,
  "tests/repo/test_ratchet_tighten.py": 0.0,
- "tests/repo/test_release_fetches_use_pinned_tool.py": 0.25,
+ "tests/repo/test_release_fetches_use_pinned_tool.py": 0.32,
  "tests/repo/test_render_gate.py": 0.0,
  "tests/repo/test_render_share.py": 6.04,
  "tests/repo/test_renovate_canary_is_scheduled_not_per_merge.py": 0.0,
