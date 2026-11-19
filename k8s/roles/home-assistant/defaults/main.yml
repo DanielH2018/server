@@ -1,5 +1,5 @@
 ---
-home_assistant_k8s_image: lscr.io/linuxserver/homeassistant:2026.11.1-ls264@sha256:29bdfa746fb4426b265d80f3dbb307d5c01215bde705a6951e86abb5f81665ea
+home_assistant_k8s_image: lscr.io/linuxserver/homeassistant:2026.11.2-ls267@sha256:9b260b889d67a21d1bef7b260090e03bf17e9b94ea85d5a26627a69a1de73538
 
 # The budget of the home-assistant-prepull Kustomization, whose Job pulls this role's images onto
 # its node before the home-assistant Kustomization applies
