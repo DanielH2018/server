@@ -343,6 +343,21 @@ def test_the_merge_wait_never_hand_polls_ci():
     assert "await_ci" in text
 
 
+_SKIPPED = f"dead1234: no verdict after 0s — {merge.await_ci.DRAFT_SKIPPED}"
+
+
+def _skipped_landing(landing, graces=3, is_draft=False, **fakes):
+    """A landing whose head's CI reads skipped as a draft, polled thrice per grace."""
+    fakes.setdefault("await_ci", [(75, _SKIPPED)])
+    views = {"state,mergeable,headRefOid": _wait(["OPEN MERGEABLE dead"])}
+    views.update(fakes.pop("gh_views", {}))
+    return landing(
+        Fakes(gh_views={**views, "isDraft": {"isDraft": is_draft}}, **fakes),
+        merge_timeout=merge.DRAFT_SKIPPED_GRACE_S * graces,
+        merge_poll=merge.DRAFT_SKIPPED_GRACE_S // 3,
+    )
+
+
 @pytest.mark.parametrize("is_draft, ends_early", [(False, True), (True, False)])
 def test_a_head_ci_skipped_as_a_draft_ends_the_wait_once_the_pr_is_ready(
     landing, capsys, is_draft, ends_early
@@ -350,18 +365,7 @@ def test_a_head_ci_skipped_as_a_draft_ends_the_wait_once_the_pr_is_ready(
     """A ready PR whose head's only run had skipped as a draft waited out
     its whole budget. A PR still a draft gets its run once it is marked ready, so it waits.
     The ending's message is what tells the two apart, so it is asserted."""
-    line = f"dead1234: no verdict after 0s — {merge.await_ci.DRAFT_SKIPPED}"
-    ln, _ = landing(
-        Fakes(
-            gh_views={
-                "state,mergeable,headRefOid": _wait(["OPEN MERGEABLE dead"]),
-                "isDraft": {"isDraft": is_draft},
-            },
-            await_ci=[(75, line)],
-        ),
-        merge_timeout=merge.DRAFT_SKIPPED_GRACE_S * 3,
-        merge_poll=merge.DRAFT_SKIPPED_GRACE_S // 3,
-    )
+    ln, _ = _skipped_landing(landing, is_draft=is_draft)
     with pytest.raises(Outcome) as exc:
         merge.await_merge(ln)
     assert (exc.value.rc, exc.value.verdict) == (75, "merge-timeout")
@@ -380,22 +384,12 @@ def test_a_ready_pr_whose_head_skipped_as_a_draft_is_converted_once_and_the_wait
     """GitHub starts no run on the ready flip, so the landing converts the PR to draft
     and back itself. The second poll after the toggle reads a run, so the wait proceeds to the
     merge instead of ending merge-timeout."""
-    skipped = f"dead1234: no verdict after 0s — {merge.await_ci.DRAFT_SKIPPED}"
-    grace = merge.DRAFT_SKIPPED_GRACE_S
+    states = ["OPEN MERGEABLE dead"] * 5 + ["MERGED MERGEABLE dead"]
     # One skipped poll per third of the grace, then the run the toggle started goes green.
-    polls = [(75, skipped)] * 4 + [(0, "dead1234: green")]
-    ln, calls = landing(
-        Fakes(
-            gh_views={
-                "state,mergeable,headRefOid": _wait(
-                    ["OPEN MERGEABLE dead"] * 5 + ["MERGED MERGEABLE dead"]
-                ),
-                "isDraft": {"isDraft": False},
-            },
-            await_ci=polls,
-        ),
-        merge_timeout=grace * 3,
-        merge_poll=grace // 3,
+    ln, calls = _skipped_landing(
+        landing,
+        gh_views={"state,mergeable,headRefOid": _wait(states)},
+        await_ci=[(75, _SKIPPED)] * 4 + [(0, "dead1234: green")],
     )
     merge.await_merge(ln)
     assert _ready_toggles(calls) == [
@@ -409,24 +403,29 @@ def test_a_second_draft_skip_on_the_same_head_after_the_toggle_ends_merge_timeou
     landing,
 ):
     """No loop: the toggle is once per head, and the dead end after it says it already ran."""
-    skipped = f"dead1234: no verdict after 0s — {merge.await_ci.DRAFT_SKIPPED}"
-    grace = merge.DRAFT_SKIPPED_GRACE_S
-    ln, calls = landing(
-        Fakes(
-            gh_views={
-                "state,mergeable,headRefOid": _wait(["OPEN MERGEABLE dead"]),
-                "isDraft": {"isDraft": False},
-            },
-            await_ci=[(75, skipped)],
-        ),
-        merge_timeout=grace * 10,
-        merge_poll=grace // 3,
-    )
+    ln, calls = _skipped_landing(landing, graces=10)
     with pytest.raises(Outcome) as exc:
         merge.await_merge(ln)
     assert (exc.value.rc, exc.value.verdict) == (75, "merge-timeout")
     assert len(_ready_toggles(calls)) == 2
     assert "already converted it to draft and back" in exc.value.error
+
+
+@pytest.mark.parametrize(
+    "gh_rc, left_draft", [([1], False), ([0, 1], True)], ids=["to-draft", "back"]
+)
+def test_a_toggle_a_secondary_limit_refuses_says_to_wait_not_to_toggle_by_hand(
+    landing, gh_rc, left_draft
+):
+    refused = "GraphQL: API rate limit already exceeded for user ID 41801780."
+    ln, _calls = _skipped_landing(landing, gh_merge_rc=gh_rc, gh_stderr=refused)
+    with pytest.raises(Outcome) as exc:
+        merge.await_merge(ln)
+    assert (exc.value.rc, exc.value.verdict) == (75, "merge-timeout")
+    assert "GitHub's secondary rate limit refused it" in exc.value.error
+    assert exc.value.error.endswith("wait a few minutes, then re-run this")
+    assert "gh pr ready" not in exc.value.error
+    assert ("is left as a draft" in exc.value.error) is left_draft
 
 
 _DRAFT_RUN = {"id": 1, "status": "completed", "conclusion": "skipped"}
