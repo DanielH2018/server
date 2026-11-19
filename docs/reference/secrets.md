@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/secrets.py
-generated_at: 2026-11-19 06:17 UTC
-generated_sha: 74a6a49d0
+generated_at: 2026-11-19 22:10 UTC
+generated_sha: fc80e375d
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: 74a6a49d0
 
 # Secrets
 
-115 secret(s) in the rotation registry (`secrets/secret_rotation.yml`).
+119 secret(s) in the rotation registry (`secrets/secret_rotation.yml`).
 
 !!! note "Names and dates only"
     This page is generated from the plaintext rotation registry. No secret VALUE is read here, and the generator never opens the encrypted store or invokes the decryption tool — a test enforces that.
@@ -33,6 +33,10 @@ needs a human to mint the new value in the app, then `sops set` it.
 
 | Secret | Last rotated | Due | Days left |
 |---|---|---|---|
+| `airflow_api_jwt_secret` | 2026-09-20 | 2027-08-27 | 281 |
+| `airflow_postgres_password` | 2026-09-17 | 2027-09-07 | 292 |
+| `airflow_warehouse_reader_password` | 2026-06-13 | 2027-05-24 | 186 |
+| `airflow_warehouse_writer_password` | 2026-05-09 | 2027-04-21 | 153 |
 | `alloy_pi_http_password` | 2026-04-25 | 2027-04-17 | 149 |
 | `anthropic_api_key` | 2026-11-15 | 2027-10-20 | 335 |
 | `arr_discord_webhook_url` | 2026-09-07 | 2027-08-30 | 284 |
