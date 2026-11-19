@@ -60,8 +60,19 @@ def test_the_dashboard_is_found_past_the_first_page_of_issues(monkeypatch):
         return _FakeJson(pages[page[0]])
 
     monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
-    issues = rn.fetch_issues_through_dashboard("o/r")
+    issues = rn.get_open("o/r", "issues", until_dashboard=True)
     assert notify_logic.dashboard_body(issues) == dashboard["body"]
+
+
+def test_every_page_of_open_pulls_is_read(monkeypatch):
+    pages = {"1": [{"number": n} for n in range(100)], "2": [{"number": 100}]}
+
+    def fake_urlopen(req, timeout=None):
+        page = urllib.parse.parse_qs(urllib.parse.urlsplit(req.full_url).query)["page"]
+        return _FakeJson(pages[page[0]])
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    assert len(rn.get_open("o/r", "pulls")) == 101
 
 
 def test_discord_returns_true_on_2xx(monkeypatch):
