@@ -48,7 +48,7 @@ spec:
           # `USER runner` named in the comment below is an image property, so it is pinned here
           # rather than trusted. This is the workload where it matters most: it executes
           # arbitrary workflow code, so an image rebuild that moved the uid to 0 would hand
-          # that code root. PID 1 (`tini`) measured at uid 1000 on 2026-08-31.
+          # that code root.
           # Executes arbitrary workflow code — the most code-exposed workload in the fleet,
           # so drop everything. The image ends `USER runner`, talks only to the broker, and
           # binds no port, so it needs none.
@@ -61,15 +61,14 @@ spec:
                 secretKeyRef:
                   name: n8n
                   key: N8N_RUNNERS_AUTH_TOKEN
-            # The values the launcher already used while these were unset (until 2026-10-02,
-            # #3255): its own defaults in task-runner-launcher internal/config/config.go. The
+            # The launcher's own defaults, from task-runner-launcher internal/config/config.go. The
             # launcher passes both to each runner today as legacy behaviour that upstream is
             # deprecating. n8n-task-runners.json.j2 lists them in every runner's `allowed-env`,
             # so they keep arriving after that legacy path is removed. `allowed-env` passes only
             # what is set in the launcher's own environment, which is why they are set here.
             #
             # 60 s is the Code-node limit, and the n8n Deployment sets the broker's
-            # N8N_RUNNERS_TASK_TIMEOUT to the same value (#3258). The runner aborts a task at its
+            # N8N_RUNNERS_TASK_TIMEOUT to the same value. The runner aborts a task at its
             # own timeout whatever the broker allows, so raising one alone changes nothing.
             - name: N8N_RUNNERS_TASK_TIMEOUT
               value: "60"

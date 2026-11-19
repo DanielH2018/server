@@ -1,8 +1,8 @@
 """What the longhorn-reconcile role renders, held to what the script and the old tasks did.
 
 The script's behaviour is in test_longhorn_reconcile.py. These cases read the render: the
-ConfigMap's tier lists against the keys `setup/k3s` still derives, and the CronJob and its grants
-against the CSI sidecars, which the `longhorn` role's Setting owns (#5958).
+ConfigMap's tier lists against the keys the k3s-server host component still derives, and the CronJob and its grants
+against the CSI sidecars, which the `longhorn` role's Setting owns.
 
 Run: uv run pytest k8s/roles/longhorn-reconcile/tests/test_longhorn_reconcile_render.py
 """
@@ -44,7 +44,7 @@ def test_the_configmap_tiers_are_the_three_lists_of_the_role_defaults():
 
 
 def test_setup_k3s_no_longer_defines_the_tier_lists():
-    """One home per key: a copy left in `setup/k3s` would drift from the ConfigMap's."""
+    """One home per key: a copy left in k3s-server's defaults would drift from the ConfigMap's."""
     host_plane = load_defaults(K3S_SERVER)
     for key in (
         "k3s_longhorn_r2_volumes",
@@ -105,7 +105,7 @@ def test_the_role_grants_nothing_on_deployments():
     # fact: k8s/roles/longhorn-reconcile/CLAUDE.md#Traps
     # fact: k8s/roles/longhorn-reconcile/CLAUDE.md#longhorn-reconcile — the hourly job that holds each volume in its backup tier
     # A grant the script no longer needs is a write path to the CSI Deployments that
-    # longhorn-manager undoes on its next tick, the flip-flop #5958 removed.
+    # longhorn-manager undoes on its next tick.
     rules = [
         r for d in _docs("rbac.yaml.j2") if d["kind"] == "Role" for r in d["rules"]
     ]

@@ -88,7 +88,7 @@ def parse_targets(resp: dict) -> list[dict]:
 
 
 # Credentials the apps write into their own log lines: Home Assistant's cast `refresh_token`
-# (#3015) and Prowlarr's `apikey=` in the *arr Torznab error URLs (#6276). Alloy redacts new
+# and Prowlarr's `apikey=` in the *arr Torznab error URLs. Alloy redacts new
 # records on the way into Loki, but the older records stay for its 744h retention and a pod's
 # live log never passes through Alloy. The image imports no first-party module, so these copy
 # `scripts/diagnostics/probe_lib/core.py:redact_log_secrets` rather than import it.
@@ -208,7 +208,7 @@ def cert_target_allowed(host: str, port: int, domains: str, ports: str = "443") 
     Its siblings each constrain their input to the character set the downstream uses
     (container_ref_valid, entity_id_valid, k8s_name_valid); this is the same idea for a socket:
     the destination is bounded to the hostnames Traefik serves, so a bearer holder cannot use
-    the pod as a TCP-connect oracle against the pod network, the LAN or the internet (#1931).
+    the pod as a TCP-connect oracle against the pod network, the LAN or the internet.
 
     `domains` is a comma-separated list of zone suffixes (`CERT_EXPIRY_DOMAINS`, rendered from
     `domain`); a host matches when it IS a listed zone or sits under one. The match is on a

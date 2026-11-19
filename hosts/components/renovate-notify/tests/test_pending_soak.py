@@ -101,7 +101,7 @@ def test_parse_pending_stops_at_the_next_section():
 
 
 def test_parse_pending_keeps_an_item_that_already_has_a_pr_link():
-    # kube-state-metrics renders as [Update ...](../pull/891) — still pending, still parsed.
+    # kube-state-metrics renders with a PR link — still pending, still parsed.
     key = "renovate/k8s-image-registry.k8s.iokube-state-metricskube-state-metrics"
     assert key in pl.parse_pending(FIXTURE)
 

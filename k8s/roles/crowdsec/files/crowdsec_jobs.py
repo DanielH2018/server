@@ -4,10 +4,9 @@
 The `crowdsec-jobs` sidecar of the crowdsec Deployment runs this module as its only process.
 Each job needs `cscli` against the LAPI's own database, and only a container in the LAPI's pod
 can run that without a `pods/exec` grant. So the jobs run here, beside the engine, rather than
-as CronJobs or as daniel-box root crons (the operator's rulings of 2026-10-18 on #5655 and
-#5701, recorded in the H2 plan's *Open questions* 2).
+as CronJobs or as daniel-box root crons.
 
-Four jobs run, each on its old host cron's UTC schedule:
+Four jobs run, each on its UTC schedule:
 
     crowdsec-remote-allowlist  remote_allowlist.py  every 5 minutes  exports its verdict
     crowdsec-appsec-verify     appsec_verify.py     every 15 minutes exports its verdict
@@ -21,10 +20,10 @@ Each job but the prune exports its verdict as gauges on `/metrics`, on the port 
 Each run is a child `python3` process, so a job that crashes or hangs cannot stop this one. A
 run that outlives its timeout is killed and reported as down. A job still running when its next
 slot comes is skipped for that slot, as `concurrencyPolicy: Forbid` would skip it. This process
-does what each job's bash wrapper did on the host: it takes the child's exit code and last
-output line as the verdict, prints `<tag>: status=<up|down> <summary>` to stdout, and records
-the verdict for `/metrics`. Each stdout line carries the host crons' syslog prefix,
-`<UTC time> <pod name> <tag>: <message>`, and is flushed as it is written.
+takes the child's exit code and last output line as the verdict, prints
+`<tag>: status=<up|down> <summary>` to stdout, and records the verdict for `/metrics`. Each
+stdout line carries a syslog-style prefix, `<UTC time> <pod name> <tag>: <message>`, and is
+flushed as it is written.
 
 No job runs in the first `STARTUP_GRACE_S` seconds. The engine container writes
 `/etc/crowdsec` on start, and a job that ran before it finished would page a fault that does

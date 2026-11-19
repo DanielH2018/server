@@ -2,7 +2,7 @@
    cross-namespace prometheus grant on :8080, so it stays bespoke.
    The callers model (`netpol_from` / `netpol_fences`, macro in
    k8s/templates/networkpolicy.yml.j2) renders one TCP port admitting same-namespace `app:`
-   peers, and its header rules out growing it to absorb another shape. Census: #3701.
+   peers, and its header rules out growing it to absorb another shape.
 #}
 ---
 apiVersion: networking.k8s.io/v1
@@ -17,83 +17,72 @@ spec:
   policyTypes:
     - Ingress
   ingress:
-{# THE ROLLBACK LEVER. All seven slice-4 policies carry this same conditional, and this file
-   carries the reasoning the other six point back to.
+{# THE ROLLBACK LEVER. Every bespoke policy in this role carries this same conditional, and this
+   file carries the reasoning the others point back to.
 
-   `netpol_baseline_enforced` is the documented undo for slice 4, and it only works if each
-   bespoke policy renders allow-all when the flag is false. Under the Ansible plane, where
-   `kubectl apply` never pruned, a `when:` on the include would have undone nothing: the
-   policies already applied stayed live and kept fencing, minus the traefik/prometheus grants the flag also switches off --
-   strictly worse than not rolling back at all. Real deletion is not available either;
-   `kubectl delete networkpolicy` is deny-listed for agents and refused by the readonly SA.
-   The observability policies (networkpolicy-observability.yaml.j2) use the same
-   render-allow-all pattern.
+   `netpol_baseline_enforced` is the documented undo, and it only works if each bespoke policy
+   renders allow-all when the flag is false. `kubectl apply` does not prune, so skipping a
+   policy's render would leave the applied policy live and still fencing, minus the
+   traefik/prometheus grants the flag also switches off -- strictly worse than not rolling back
+   at all. Real deletion is not available either; `kubectl delete networkpolicy` is deny-listed
+   for agents and refused by the readonly SA. The observability policies
+   (networkpolicy-observability.yaml.j2) use the same render-allow-all pattern.
 
-   `| bool` matches `netpol_baseline_probe_active` in defaults/main.yml. Without it the two disagree for a
-   STRING: `'false'` is truthy to Jinja (this branch renders, fencing applied) and False to
-   that list (the verify Job dials no leg) -- enforcement with no probe. #}
+   `| bool` matches `netpol_baseline_probe_active` in defaults/main.yml. Without it the two
+   disagree for a STRING: `'false'` is truthy to Jinja (this branch renders, fencing applied) and
+   False to that list (the verify Job dials no leg) -- enforcement with no probe. #}
 {% if netpol_baseline_enforced | bool %}
     # The front door, in two rules because the two ports admit different sources.
     #
     # THE PORT NUMBERS HERE ARE POD PORTS, NOT SERVICE PORTS. A NetworkPolicy matches the
     # destination port on the POD, after kube-proxy has already DNAT'd the Service port to the
     # targetPort. traefik's Service maps 80 -> targetPort `http` and 443 -> `https`, and those
-    # container ports are 8000 and 8443. Writing 80/443 here therefore admits traffic to two
-    # ports nothing listens on, and denies every in-cluster caller of the real ones.
-    # Measured 2026-08-20: that is exactly what happened -- the slice-1 probe's control leg
-    # failed with "cannot reach traefik:80" while the same route answered 200 from the LAN,
-    # because external traffic arrives over the VIP path rather than the ClusterIP.
-    # Every other service in this slice maps its ports 1:1, which is why only this file was hit.
+    # container ports are 8000 and 8443. Writing 80/443 here admits traffic to two ports nothing
+    # listens on, and denies every in-cluster caller of the real ones; external traffic still
+    # works, because it arrives over the VIP path rather than the ClusterIP.
     #
     # :8000 stays open to every source. It is the http->https redirect entrypoint
     # (static-config.yaml.j2, entryPoint.to: ":443") -- every client that arrives on plain HTTP
-    # hits that redirect before reaching :8443 -- and all four netpol probe control legs dial
+    # hits that redirect before reaching :8443 -- and the netpol probe's control legs dial
     # traefik:80 to prove the probe itself has a network. Nothing on :8000 reaches a backend, so
     # an origin-direct client gets a redirect to a port the next rule fences.
     - ports:
         - port: 8000
           protocol: TCP
     # :8443 admits only netpol_baseline_traefik_https_sources (defaults/main.yml): Cloudflare's
-    # published ranges, the LAN, the WireGuard client range, and the pod CIDR. Until 2026-09-18
-    # this port was open to every source, with the reasoning that an ipBlock list "would have to
-    # enumerate the internet". That was the wrong frame (#1974): the only source that is
-    # supposed to reach a public `Host(x.<domain>)` Rule is Cloudflare's edge, and its ranges are
-    # already enumerated in `cloudflare_ips` for forwardedHeaders.trustedIPs. An origin-direct
-    # client -- anyone who resolves the origin IP and sends the public Host header -- skipped
-    # Cloudflare's WAF and bot rules, arrived with no trusted X-Forwarded-For, and so shared ONE
+    # published ranges, the LAN, the WireGuard client range, and the pod CIDR. The only source
+    # supposed to reach a public `Host(x.<domain>)` Rule is Cloudflare's edge, and its ranges
+    # are already enumerated in `cloudflare_ips` for forwardedHeaders.trustedIPs. An origin-direct
+    # client -- anyone who resolves the origin IP and sends the public Host header -- would skip
+    # Cloudflare's WAF and bot rules, arrive with no trusted X-Forwarded-For, and share ONE
     # rate-limit bucket keyed on "" with every other origin-direct request. This list is the
-    # origin lock the Docker-era DOCKER-USER chain used to be. Cloudflare Tunnel and a
-    # ClientIP() clause on the public Rule were considered and rejected in #1974. Authenticated
-    # Origin Pulls (#1990) sits on top of this: the `cloudflare-origin-pull` TLSOption
-    # (k8s/templates/origin-pull.yml.j2) requires Cloudflare's client certificate on every
-    # public Host router, so a source this list admits still fails the handshake unless the
-    # connection is Cloudflare's.
+    # origin lock. Authenticated Origin Pulls sits on top of it: the `cloudflare-origin-pull`
+    # TLSOption (k8s/templates/origin-pull.yml.j2) requires Cloudflare's client certificate on
+    # every public Host router, so a source this list admits still fails the handshake unless
+    # the connection is Cloudflare's.
     #
     # ETP=Local preserves the source address on the VIP path, so each ipBlock matches what the
     # client really is. A WireGuard client arrives in one of two shapes, and both are listed:
     # as the Pi's LAN address if wg-easy's PostUp masquerades `wg_client_subnet` (the Pi's
     # docker-compose.yml.j2 sets no WG_POST_UP, so the image default decides), or as its own
-    # 10.8.0.x address if it routes. Neither shape was measured; listing both is what makes
-    # the measurement unnecessary.
+    # 10.8.0.x address if it routes.
     #
     # The pod CIDR here is the WHOLE /16 on purpose, which docs/networkpolicy-default-deny.md
     # ("Correction carried into this design") forbids for the baseline. There a /16 readmits
     # every pod to a fenced workload and cancels the default-deny. Here every pod is a legitimate
     # caller: traefik is the ingress, and an in-cluster caller of a `.local.` route
-    # (monitor-bridge, homepage's widgets) reaches the VIP as its own 10.42.x.y address.
-    # This port admitted every pod before this rule existed, so in-cluster reachability is
-    # unchanged and the rule is a strict narrowing. Both cni0 gateways and both flannel.1
-    # addresses sit inside the /16, so host-originated callers (the three host crons that dial
-    # traefik, a cross-node hop) need no separate /32 grant.
+    # (monitor-bridge, homepage's widgets) reaches the VIP as its own 10.42.x.y address, so
+    # in-cluster reachability is unchanged and the rule is a strict narrowing. Both cni0
+    # gateways and both flannel.1 addresses sit inside the /16, so host-originated callers (the
+    # three host crons that dial traefik, a cross-node hop) need no separate /32 grant.
     #
     # The list carries only the IPv4 half of `cloudflare_ips`. kube-router buckets ipBlocks per
     # address family (evalIPBlockPeer in pkg/controllers/netpol/policy.go, v2.6) and installs an
     # ipset only for a family the node runs, so on this single-stack v4 cluster an IPv6 entry
-    # fences nothing. It is not silent, though: kube-router logs a warning per IPv6 CIDR on every
-    # policy sync, which was 75% of daniel-box's k3s.log (#6495). The drift check compares
-    # `cloudflare_ips` itself against upstream, not this list, so dropping the v6 half here
-    # hides no drift. A dual-stack cluster needs the filter in defaults/main.yml removed, or
-    # every IPv6 client of a public name is refused at this port.
+    # fences nothing, and kube-router logs a warning per IPv6 CIDR on every policy sync. The
+    # drift check compares `cloudflare_ips` itself against upstream, not this list, so dropping
+    # the v6 half here hides no drift. A dual-stack cluster needs the filter in defaults/main.yml
+    # removed, or every IPv6 client of a public name is refused at this port.
     - from:
 {% for cidr in netpol_baseline_traefik_https_sources %}
         - ipBlock:
@@ -102,10 +91,10 @@ spec:
       ports:
         - port: 8443
           protocol: TCP
-    # :8080 is the port worth fencing. prometheus moved to the observability namespace in
-    # slice 3, so this is cross-namespace: namespaceSelector and podSelector are siblings in
-    # ONE from item, which ANDs them. As separate items they would OR, admitting every pod in
-    # observability and every prometheus anywhere.
+    # :8080 is the port worth fencing. prometheus runs in the observability namespace, so this is
+    # cross-namespace: namespaceSelector and podSelector are siblings in ONE from item, which
+    # ANDs them. As separate items they would OR, admitting every pod in observability and every
+    # prometheus anywhere.
     - from:
         - namespaceSelector:
             matchLabels:
@@ -117,7 +106,7 @@ spec:
         - port: 8080
           protocol: TCP
     # The crowdsec-agent SIDECAR's :6060 grant is not here: networkpolicy-crowdsec-sidecars.yaml.j2
-    # renders it for every pod in crowdsec_k8s_sidecar_agents (#4088).
+    # renders it for every pod in crowdsec_k8s_sidecar_agents.
 {% else %}
     # OFF. One empty rule admits everything. `ingress: []` would be the exact opposite and deny
     # everything, which is the easiest thing in this file to get backwards.

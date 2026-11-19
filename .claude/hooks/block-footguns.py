@@ -396,10 +396,10 @@ def pr_body_problem(stage: list[str], cwd: Path, command: str) -> str | None:
             return None
         return (
             "`gh pr create --fill` with no body takes the body from the commits and skips "
-            f"{root / _PR_TEMPLATE}, so the body gets rewritten after the PR opens (#3963). "
+            f"`{_PR_TEMPLATE}`, so the body gets rewritten after the PR opens (#3963). "
             "Write the template's sections to a file and pass it as well: "
             "`gh pr create --fill --body-file <path>`. gh keeps the commit title and uses the "
-            "file for the body."
+            f"file for the body. To print the template, run `cat {_PR_TEMPLATE}`."
         )
     present = {heading.strip() for heading in _HEADING_RE.findall(body)}
     missing = [heading for heading in headings if heading not in present]
@@ -407,10 +407,10 @@ def pr_body_problem(stage: list[str], cwd: Path, command: str) -> str | None:
         return None
     names = ", ".join(f"`## {heading}`" for heading in missing)
     return (
-        f"This PR body skips {len(missing)} section(s) of {root / _PR_TEMPLATE}: {names}. "
-        "Fit the body to the template before the PR opens rather than rewriting it after "
-        "(#3963). Keep every `## ` heading verbatim and fill or delete the comments under "
-        "each, then rerun the same command."
+        f"This PR body skips {len(missing)} section(s) of `{_PR_TEMPLATE}`: {names}. "
+        f"To print the template, run `cat {_PR_TEMPLATE}`. Fit the body to it before the PR "
+        "opens rather than rewriting it after (#3963). Keep every `## ` heading verbatim and "
+        "fill or delete the comments under each, then rerun the same command."
     )
 
 
@@ -579,7 +579,7 @@ def main() -> int:
         return 0
     verdict = decision(payload)
     if verdict:
-        emit_pretooluse_decision(*verdict)
+        emit_pretooluse_decision("block-footguns", *verdict)
     return 0
 
 

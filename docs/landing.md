@@ -97,7 +97,7 @@ the slots.
 **Three rules refuse a merge inside the landing turn.** A landing checks them when a draft
 takes the turn, before its CI run, and again just before the merge. A refused landing exits
 75 with `VERDICT: refused` and merges nothing; re-run the same command once the rule clears.
-`slots.refuse_before_merge` owns the rules, and each read that fails bars nothing.
+`slots._bar` owns the rules, and each read that fails bars nothing.
 
 - A PR that changes a k8s role is refused while `DEPLOY_HOLD` reads anything but `none`.
 - A serial PR is refused while another landing holds a slot or the serial lock. Otherwise it
@@ -105,6 +105,16 @@ takes the turn, before its CI run, and again just before the merge. A refused la
   until its process ends, so every other PR is refused meanwhile. A serial PR changes the
   `longhorn` or `metallb` role, which hold the forward-only pins, the `flux` role, or the
   cluster-vars file.
+- A serial PR that holds the turn waits for those landings instead of refusing. At the
+  draft's turn its CI run starts anyway. Just before the merge it waits in the turn, up to
+  `slots.DRAIN_S`, for the landings past their merge to reach their verdicts. Its log prints
+  `waiting in the landing turn for the landings past their merge to reach their verdicts`.
+  No other landing merges while it holds the turn, so those landings only finish. The wait
+  ends when the bar clears, when a rule that waiting cannot clear starts to apply, or at the
+  cap, and the last two refuse. On 2026-11-18, #9047, #9057 and #9059 were refused three or
+  four times each under the rule without the wait, each time after up to 82 minutes in line.
+  Inside the no-promotion window, under `DEPLOY_HOLD`, and in a landing that went on without
+  the turn, a serial PR is still refused at once.
 - A PR that changes a k8s role is refused inside the no-promotion window around the weekly
   reboot while another landing holds a slot, so one landing at a time waits out the window.
 
@@ -247,7 +257,7 @@ jobs. Every landing that merges its PR directly takes the turn.
   wait therefore stays inside the two merge budgets the `LAND_DEADLINE` sizing below counts.
 - A merge made outside `land.sh`, or by a landing that went on without the turn, can move
   master under the holder. The holder then merges a tree no run tested, and master's run
-  sweeps in full.
+  repeats every job, with the `pytest` legs running a selection (`docs/ci-throughput.md`).
 
 **A head whose only CI skipped as a draft is re-triggered once, then ends the wait if it skips again.** `ci.yml` runs
 no job on a draft, so the push's run skips every job, the `prek` gate included, and `await_ci`

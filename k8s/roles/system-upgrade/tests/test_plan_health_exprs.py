@@ -154,7 +154,7 @@ OBSERVED_MESSAGE = (
 )
 
 
-# The drill Plan as it ran on 2026-10-25, reduced to what the tests below read. It is a fixture
+# The drill Plan, reduced to what the tests below read. It is a fixture
 # because the Plan was reverted after the drill, so no template renders it.
 DRILL_PLAN = {
     "metadata": {"name": "k3s-redproof", "namespace": "system-upgrade"},

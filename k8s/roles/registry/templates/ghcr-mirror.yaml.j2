@@ -20,19 +20,19 @@ data:
   {{ key }}: {{ text | to_json }}
 {% endfor %}
 ---
-# The pull-through mirror of ghcr.io (D5 Open question 2). k3s's registries.yaml names it as the
+# The pull-through mirror of ghcr.io. k3s's registries.yaml names it as the
 # `ghcr.io` mirror, so containerd pulls a flux-owned GHCR image through it and a node keeps a LAN
 # copy for a cold start during a WAN outage. nut is the reason: its pod is half of the UPS
 # shutdown chain, and WAN outages arrive with power events.
 #
 # DECIDED: its own Deployment, not REGISTRY_PROXY_* on the push store and not a second container
-# in its pod (operator ruling on #5680, 2026-10-18). A registry in proxy mode refuses every
+# in its pod. A registry in proxy mode refuses every
 # manifest Put and Delete (`proxyManifestStore` returns ErrUnsupported in distribution v3.1.2),
-# which would break every image-builder push and registry-gc.sh's untag DELETEs. As a sidecar it
-# shared the push store's pod, so the mirror's weekly GC had to scale `deploy/registry` to zero,
-# and once Flux renders that Deployment's `replicas: 1` a second writer on that field restores
-# the pod mid-GC. Its own Deployment gives the mirror a GC that scales only this one, and a
-# mirror that cannot start no longer takes the push store's endpoint down with it. It keeps
+# which would break every image-builder push and registry-gc.sh's untag DELETEs. A sidecar would
+# share the push store's pod, so the mirror's weekly GC would have to scale `deploy/registry` to
+# zero, and with Flux rendering that Deployment's `replicas: 1` a second writer on that field
+# restores the pod mid-GC. Its own Deployment gives the mirror a GC that scales only this one,
+# and a mirror that cannot start does not take the push store's endpoint down. It keeps
 # every consumer's address: the same loopback hostPort on the same node, and the same pinned
 # ClusterIP through the shared Service in service.yaml.j2.
 apiVersion: apps/v1
@@ -72,7 +72,7 @@ spec:
         # so no Service port or NetworkPolicy rule names it.
         # A native sidecar, whose startupProbe holds the mirror's start until this port answers:
         # distribution's NewApp dials REGISTRY_PROXY_REMOTEURL once and panics if it is refused,
-        # so as a peer container the race restarted the mirror on every rollout (#7792).
+        # so as a peer container the race restarted the mirror on every rollout.
         - name: ghcr-resume
           image: {{ registry_k8s_ghcr_resume_image }}
           imagePullPolicy: IfNotPresent
@@ -105,7 +105,7 @@ spec:
               command: {{ resume_dial | to_json }}
             periodSeconds: 30
             timeoutSeconds: 5
-          # Four concurrent unthrottled 223 MB fetches through it on daniel-box on 2026-10-29
+          # Four concurrent unthrottled 223 MB fetches through it on daniel-box
           # peaked at 36 MB RSS and spent 2.9 CPU-seconds per GB, about 170 MB/s at this CPU
           # limit. The memory limit leaves room for the exec probe's second python process.
 {{ container_resources(cpu_limit='500m', mem_limit='128Mi', cpu_request='10m', mem_request='40Mi') }}

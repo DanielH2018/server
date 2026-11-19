@@ -81,7 +81,7 @@ def test_an_empty_node_list_selects_no_node_and_a_named_node_selects_it(template
         "values"
     ] == ["daniel-box"]
     # H6.3c widened the list to the server node, and H6.3d to daniel-server once its package
-    # shipped k3s_gates.py through the k3s-gates component (#6413).
+    # shipped k3s_gates.py through the k3s-gates component.
     assert DEFAULTS["system_upgrade_nodes"] == ["daniel-box", "daniel-server"]
 
 
@@ -332,7 +332,7 @@ def _is_best_effort(pod: dict) -> bool:
 
 def test_the_patched_controller_pod_is_not_best_effort():
     # The kubelet evicts a BestEffort pod first under memory pressure, whatever its
-    # priority class, and this pod applies the k3s upgrades to both nodes (#8225).
+    # priority class, and this pod applies the k3s upgrades to both nodes.
     assert not _is_best_effort(_patched_controller_pod())
 
 

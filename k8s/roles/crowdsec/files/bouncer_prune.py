@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prune the LAPI bouncer rows every past Traefik pod IP left behind (#2762).
+"""Prune the LAPI bouncer rows every past Traefik pod IP left behind.
 
 LAPI authenticates a bouncer by the pair (API-key hash, client IP). A key it knows arriving
 from an IP it has no row for gets a new auto-created row, `<base>@<ip>`, and the old row is
@@ -49,9 +49,9 @@ EDGE_BOUNCER = "k8straefik"
 # The sidecar's initContainer copies the binary into the shared `tools` emptyDir
 # (`templates/deployment.yaml.j2`).
 CSCLI = "/tools/cscli"
-# The plugin pulls every 60s (`updateIntervalSeconds`), and the longest silent gap measured was
-# the metrics-ticker stall #2752 removed: 1200s. An hour is three times that, and with an hourly
-# cron a restarted pod's old row is gone within two hours of its last pull.
+# The plugin pulls every 60s (`updateIntervalSeconds`), and the longest silent gap is 1200s. An
+# hour is three times that, and with an hourly cron a restarted pod's old row is gone within two
+# hours of its last pull.
 WINDOW = timedelta(minutes=60)
 # The survivor must have pulled this much inside the window, so that the seconds between the
 # list and the prune cannot age it out.
@@ -88,7 +88,7 @@ def report(before, after, edge=EDGE_BOUNCER):
     """The summary line, read from the list taken AFTER the prune rather than from the plan.
 
     It names the rows that actually went and the edge rows left, with the oldest `last_pull`
-    among them: the number to compare with the live Traefik pod's start (#2762's Verify-by).
+    among them: the number to compare with the live Traefik pod's start.
     """
     gone = sorted({r["name"] for r in before} - {r["name"] for r in after})
     left = [r for r in after if base_name(r["name"]) == edge]

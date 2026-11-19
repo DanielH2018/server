@@ -1,40 +1,28 @@
 # Use the official n8n image as the base.
 #
-# PINNED, and it must stay pinned. `:latest` was the documented rolling tier until 2026-08-19, on
-# the premise that a rebuild picks up the newest base — but the thing that forced those rebuilds
-# was roles/containers/common/tasks/redeploy_cron.yml, whose callers the k3s migration archived on
-# 2026-08-14. Nothing on the cluster side replaced it, so a `:latest` FROM has no updater at all:
-# Renovate has no version to bump, so there is no PR, no commit, and no gitops tick. n8n sat on
-# 2.34.6 while upstream shipped 2.35.4.
-#
+# PINNED, and it must stay pinned. A `:latest` FROM has no updater: Renovate has no version to
+# bump, so there is no PR, no commit, and no gitops tick, and n8n stays on an old release.
 # An explicit ref is what Renovate's built-in dockerfile manager reads. It raises a PR (no
 # automerge — the automerge rules match custom.regex managers only), a person merges it, and
 # promote builds and rolls the merged commit. That is the posture n8n's `k8s_autodeploy: false` asks
 # for.
 #
-# CHANNEL + DIGEST, not a version. `:2.35.4` was the first pin, and it had a side effect worth
-# naming: it changed which release train n8n follows. `:latest` is an alias for `:stable`, so every
-# rebuild had been quietly tracking the STABLE channel; pinning a bare version froze that and handed
-# the update stream to Renovate's docker datasource, which reads every published tag and so runs
-# AHEAD of stable — its next offer would have been 2.36.2, a release upstream has not promoted.
+# CHANNEL + DIGEST, not a version. `:latest` is an alias for `:stable`, so pinning a bare version
+# would move n8n off the STABLE channel and hand the update stream to Renovate's docker datasource,
+# which reads every published tag and so runs AHEAD of stable.
 #
-# Pinning the channel tag with a digest beside it restores the old behaviour and makes it explicit.
 # The tag names the channel; the digest is what Renovate bumps, so a PR arrives exactly when n8n
-# promotes a new stable, and an unpromoted release is never offered. Same shape as the four
-# line-tagged bases digest-pinned in PR #266 — the tag holds the line, the digest tracks movement
-# inside it.
+# promotes a new stable, and an unpromoted release is never offered.
 #
 # LOCKSTEP with Dockerfile-runners.j2: n8n and its task runners are version-coupled, both
-# repositories publish a `stable` tag and both resolved to 2.35.4 when this was written, and
-# renovate.json groups them into one PR. test_renovate_managers.py asserts the two carry the same
-# TAG — their digests differ by design, since they are different images.
+# repositories publish a `stable` tag, and renovate.json groups them into one PR.
+# test_renovate_managers.py asserts the two carry the same TAG — their digests differ by design,
+# since they are different images.
 #
 # EVERY DIGEST BUMP APPENDS A ROW TO ../base-pin-history.tsv. The tag never moves, so a bump
-# changes only 64 hex characters and the diff cannot show which way the version went: PR #1440
-# proposed moving both files from the 2.37.10 digests to the 2.37.9 digests — a downgrade —
-# through nine green checks (issue #1493). That file's header has the registry commands for
-# resolving a digest to its version, and test_renovate_dockerfiles.py fails until the row is
-# appended.
+# changes only 64 hex characters and the diff cannot show which way the version went. That file's
+# header has the registry commands for resolving a digest to its version, and
+# test_renovate_dockerfiles.py fails until the row is appended.
 FROM n8nio/n8n:stable@sha256:b4b90747b81fcda7e76550c0d3aa7f0f64917a1e9573cff40d6834eaf2e0f8ea
 
 # Switch to the root user to install packages
@@ -43,9 +31,9 @@ USER root
 # Force npm to use /usr/local
 ENV NPM_CONFIG_PREFIX=/usr/local
 
-# fuzzball, the one npm package this image adds. PINNED (#2213): a bare `npm install -g
-# fuzzball` took whatever npm served on build day, and nothing recorded which version a running
-# pod carried. The renovate.json regex manager over this line (npm datasource) raises a PR when
+# fuzzball, the one npm package this image adds. PINNED: a bare `npm install -g
+# fuzzball` takes whatever npm serves on build day, and nothing records which version a running
+# pod carries. The renovate.json regex manager over this line (npm datasource) raises a PR when
 # a new release ships; it merges by hand, and promote's `images` job then builds the moved
 # content tag, since a built image only moves when something rebuilds it.
 RUN npm install -g fuzzball@2.2.6

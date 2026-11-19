@@ -1,14 +1,13 @@
 ---
 # The build context, as a ConfigMap.
 #
-# This is the whole answer to "how does the build context reach daniel-box", and it is small
-# because the contexts are small: n8n's Dockerfile has no COPY at all, and the runners'
-# Dockerfile copies exactly one 914-byte file. A git-clone initContainer — the option that looks
-# rigorous — would fetch a whole repository to reach two files Ansible already holds rendered,
-# and would make the clone a SECOND source of truth for a file this play templates. A hostPath
-# would couple the build to whatever happens to be checked out on the node.
+# The contexts are small: n8n's Dockerfile has no COPY at all, and the runners' Dockerfile
+# copies exactly one small file. A git-clone initContainer would fetch a whole repository to
+# reach two files already rendered, and would make the clone a SECOND source of truth for a
+# file this role templates. A hostPath would couple the build to whatever happens to be checked
+# out on the node.
 #
-# Rendering here also means the context is templated like every other file this play writes:
+# Rendering here also means the context is templated like every other file this role writes:
 # same variables, same secrets, one definition. The 1 MiB ConfigMap ceiling is not close.
 apiVersion: v1
 kind: ConfigMap

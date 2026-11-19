@@ -2,11 +2,9 @@
   The bridge's Python modules, one flat key per autofix_bridge_modules entry, which the
   Deployment mounts back at each entry's `path` under /app.
 
-  Rendered here rather than staged on the node and applied by a task (D5's imperative-ConfigMap
-  row), so the ConfigMap is part of this role's manifests: under Ansible a module edit changes
-  the render and the shared role's rollout restart rolls the pod; under Flux the renderer's
-  `checksum/restart` hashes this ConfigMap into the Deployment's pod template.
-  scripts/renderer/tests/test_renderer_autofix_bridge_script.py holds both halves.
+  Rendered here rather than staged on the node, so the ConfigMap is part of this role's
+  manifests and the renderer's `checksum/restart` hashes it into the Deployment's pod template.
+  scripts/renderer/tests/test_renderer_autofix_bridge_script.py holds the test.
 
   The modules live in files/ and in two other roles, never in templates/, because
   validate/k8s_manifests.py renders every *.j2 under templates/ as a manifest. `lookup('file')`

@@ -27,9 +27,7 @@ spec:
         # local.d must be WRITABLE, which is why it is an emptyDir with a copy rather than the
         # ConfigMap mounted straight onto /opt/couchdb/etc/local.d. CouchDB's entrypoint writes
         # the admin credential from COUCHDB_USER/COUCHDB_PASSWORD into local.d/docker.ini on
-        # startup, and a read-only mount makes that fail. Verified on daniel-server, where the
-        # bind mount holds exactly two files: local.ini (Ansible, mtime Jun 29) and docker.ini
-        # (the entrypoint, mtime Aug 2 = last container restart).
+        # startup, and a read-only mount makes that fail.
         #
         # Nothing in there needs to persist: local.ini is regenerated from the ConfigMap every
         # start, docker.ini from the env. That is also why this directory is NOT one of the
@@ -59,18 +57,16 @@ spec:
           # via setpriv.
           #
           # FOWNER is the one addition, and it is required because the volume is an ext4
-          # Longhorn PVC rather than a bind mount, so it carries a
-          # lost+found at mode 0700. The entrypoint's second pass is
+          # Longhorn PVC, so it carries a lost+found at mode 0700. The entrypoint's second
+          # pass is
           #   find /opt/couchdb/data -type d ! -perm 0755 -exec chmod -f 0755 {} +
-          # which on daniel-server matches nothing (that tree is already all 0755). Here it
-          # matches lost+found — which the entrypoint's PRECEDING chown pass has just handed
-          # to couchdb, so root is no longer its owner, and chmod on a file you do not own
-          # needs FOWNER. Without it the chmod fails with EPERM, `-f` suppresses the message
+          # which matches lost+found — which the entrypoint's PRECEDING chown pass has just
+          # handed to couchdb, so root is no longer its owner, and chmod on a file you do not
+          # own needs FOWNER. Without it the chmod fails with EPERM, `-f` suppresses the message
           # but NOT the exit status, find propagates it, and `set -e` kills the entrypoint.
           #
-          # The failure mode is worth recording because it is invisible: the container exits
-          # 1 having logged absolutely nothing, which reads like a crashed image rather than
-          # a permission error. Found with `bash -x` on the entrypoint.
+          # The failure mode is invisible: the container exits 1 having logged absolutely
+          # nothing, which reads like a crashed image rather than a permission error.
 {{ hardened_security_context(add=['CHOWN', 'SETUID', 'SETGID', 'DAC_OVERRIDE', 'FOWNER']) }}
           env:
             - name: COUCHDB_USER
@@ -86,8 +82,8 @@ spec:
             - name: livesync-local-d
               mountPath: /opt/couchdb/etc/local.d
           # An exec probe, not httpGet, because local.ini sets require_valid_user = true: BOTH
-          # `/` and `/_up` answer 401 to an unauthenticated request. Measured against the running
-          # Docker container. A `curl -s` with no -f passes on the 401 and proves only that a
+          # `/` and `/_up` answer 401 to an unauthenticated request. A `curl -s` with no -f
+          # passes on the 401 and proves only that a
           # socket answered, and a k8s httpGet treats 401 as failure, so the pod would never
           # go ready.
           #

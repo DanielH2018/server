@@ -5,7 +5,7 @@
 ---
 # The Prometheus face of the UPS. It is a NUT network client, not a second UPS driver: it dials
 # upsd over the `nut` ClusterIP and reads variables anonymously, which upsd permits by default
-# (confirmed on daniel-server 2026-09-10 — `upsc apc-ups@127.0.0.1` returns every variable with
+# (`upsc apc-ups@127.0.0.1` on daniel-server returns every variable with
 # no credentials, and the nut pod's own livenessProbe already relies on that). So this workload
 # holds no secret and no upsd.users entry.
 #

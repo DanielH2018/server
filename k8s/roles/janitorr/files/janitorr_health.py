@@ -48,11 +48,10 @@ WINDOW_S = float(os.environ.get("JANITORR_WINDOW_H", "12")) * 3600
 GRACE_S = float(os.environ.get("JANITORR_STARTUP_GRACE_S", "600"))
 KUBECTL = os.environ.get("JANITORR_KUBECTL", "k3s kubectl")
 TIMEOUT = int(os.environ.get("JANITORR_KUBECTL_TIMEOUT_S", "30"))
-# M6 B6b: the verdict leaves the pod a second way, as annotations on this ConfigMap, which
+# The verdict leaves the pod a second way, as annotations on this ConfigMap, which
 # kube-state-metrics exports to Prometheus. Empty exports nothing.
 VERDICT_CONFIGMAP = os.environ.get("JANITORR_VERDICT_CONFIGMAP", "")
-# The pod log is the evidence, in the `<ts> <host> <tag>: <message>` shape rsyslog gave the host
-# script's `logger -t` lines (the H2 plan's *Evidence goes to stdout*).
+# The pod log is the evidence, in the `<ts> <host> <tag>: <message>` shape.
 TAG = "janitorr-health"
 
 
@@ -107,7 +106,7 @@ def export_verdict(
         configmap,
         "--type=merge",
         # Flux's server-side apply strips fields owned by a manager named `kubectl*`, and the
-        # default here is `kubectl-patch`, so the annotations vanished at every apply (#6746).
+        # default here is `kubectl-patch`, so the annotations vanish at every apply.
         "--field-manager=" + TAG,
         "--patch=" + json.dumps(patch),
     )

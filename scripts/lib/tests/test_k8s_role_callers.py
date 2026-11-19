@@ -58,7 +58,8 @@ def test_a_defaults_key_is_an_edge_and_a_mention_in_a_comment_is_not(tmp_path):
 
 
 def test_the_lookup_form_resolves(callers):
-    """sonarr and radarr reach arr-notification only through their seed Jobs' `lookup()`s."""
+    """The *arr apps reach arr-notification only through their seed Jobs' `lookup()`s."""
+    # fact: k8s/roles/arr-notification/CLAUDE.md#The Job form
     assert callers["arr-notification"] == {"lidarr", "radarr", "sonarr"}
 
 

@@ -1,16 +1,14 @@
-"""The Flux forms of netpol-baseline's lever asserts and live exempt-set gates (#5685).
+"""The Flux forms of netpol-baseline's lever asserts and live exempt-set gates.
 
-The role's `tasks/main.yml` ran both before its apply, and neither was part of the probe.
-Under Flux no task runs.
+Under Flux no task runs, so both checks live in the render and in the verify Job.
 
-- The lever asserts become a check over the render context: the variables
+- The lever asserts are a check over the render context: the variables
   `renderer_lib.cluster.tag_context` resolves for the tag, the context Flux's render reads.
   Flux takes no `-e`, so the repo's defaults and inventory are every value a lever can hold,
-  and CI runs this before a typo can merge. It evaluates the predicates of the Ansible assert it replaces, and every lever default must
-  be named there.
-- The exempt-set gates become the `exempt` check of the verify Job's `gate` initContainer,
+  and CI runs this before a typo can merge. Every lever default must be named in the asserts.
+- The exempt-set gates are the `exempt` check of the verify Job's `gate` initContainer,
   which runs after the apply. The script tests run it against fake API reads; the render
-  tests read the flipped Job.
+  tests read the Job.
 
 Run: uv run pytest k8s/roles/netpol-baseline/tests/test_netpol_baseline_flux_gates.py
 """
@@ -36,8 +34,8 @@ DEFAULTS = K8S_ROLES / TAG / "defaults" / "main.yml"
 LEVER = re.compile(r"^netpol_baseline_(?:\w+_)?(?:enforced|scope)$")
 
 
-# The `that:` list of the "Check the netpol-baseline levers" assert that `tasks/main.yml` ran
-# before its flip, verbatim (#5685). The levers are read where they coerce differently:
+# The `that:` conditions of the lever assert. The levers are read where they coerce
+# differently:
 #   - `netpol_baseline_enforced` and `netpol_baseline_obs_enforced` go through `| bool` in the
 #     templates, so a typo such as `fasle` is False, the allow-all body renders and nothing is
 #     fenced behind a green deploy.
@@ -255,7 +253,7 @@ def _exempt_sets(rendered_docs) -> list[dict]:
 
 
 def test_the_flipped_job_checks_each_namespace_scoped_baseline(stubs):
-    """The successor of the two exempt-set tasks: one row per namespace-scoped lever."""
+    """One exempt-set row per namespace-scoped lever."""
     sets = _exempt_sets(docs(verify_render(stubs)))
     assert sets == [
         {

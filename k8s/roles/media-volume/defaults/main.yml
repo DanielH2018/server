@@ -3,21 +3,18 @@
 # all see ONE filesystem or sonarr/radarr imports silently become copies instead of hardlinks.
 media_volume_claim: media-data
 
-# ── why a STATIC local PV rather than a dynamic local-path PVC ──────────────────────────────
-# The volume is node-local and unreplicated. A static PV avoids three things dynamic
-# provisioning gets wrong for THIS volume:
+# A STATIC local PV rather than a dynamic local-path PVC, which gets three things wrong here:
 #
 #   1. local-path names its directory pvc-<uuid>_<ns>_<claim>. The seeding rsync needs a path
 #      that a human, a doc and an Ansible task can all name before the volume exists.
 #   2. local-path's class reclaims Delete. A mistyped `kubectl delete pvc` would take the
-#      library with it, and nothing backs up containers/data/ — there is no second copy.
-#   3. WaitForFirstConsumer means a dynamic PVC does not bind, and its directory does not
-#      exist, until a pod mounts it. That is a chicken-and-egg for a volume that the seeding
-#      rsync fills BEFORE any workload exists.
+#      library with it, and nothing backs up containers/data/.
+#   3. WaitForFirstConsumer leaves a dynamic PVC unbound, and its directory absent, until a pod
+#      mounts it. The seeding rsync fills the volume BEFORE any workload exists.
 #
-# Named explicitly on the claim (D5). Two StorageClasses on this cluster are both marked
-# default, so an omitted class is non-deterministic, and here it would also let a dynamic
-# provisioner answer the claim with an empty volume somewhere else entirely.
+# Named explicitly on the claim. Two StorageClasses on this cluster are both marked default, so
+# an omitted class is non-deterministic, and a dynamic provisioner could answer the claim with an
+# empty volume somewhere else entirely.
 media_volume_storage_class: media-local
 # Its MODE is inherited from daniel-server's containers/data (0755, owner {{ puid }}) and is
 # deliberately not enforced. daniel-box's package creates the directories from a copy of this
@@ -33,8 +30,8 @@ media_volume_host_path: /srv/media
 # be no larger than the capacity.
 media_volume_size: 400Gi
 
-# The claim the renderer emits for this role, which the media-volume Kustomization applies
-# (#3387). ReadWriteMany matches the PV and the live claim; a claim's access modes are immutable
+# The claim the renderer emits for this role, which the media-volume Kustomization applies.
+# ReadWriteMany matches the PV and the live claim; a claim's access modes are immutable
 # once created.
 #
 # The media-volume Kustomization applies the claim, `media-local` and the PV together. On a fresh

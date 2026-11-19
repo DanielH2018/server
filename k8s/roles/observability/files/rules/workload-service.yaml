@@ -16,7 +16,7 @@
 #   3. The override table, one label_replace per rendered workload that carries no label.
 #      tests/k8s/test_workload_service_overrides.py derives that set from the rendered
 #      manifests and fails when the table and the render disagree.
-#   4. `k3s` for anything else in the add-on namespaces, which the setup/k3s role applies.
+#   4. `k3s` for anything else in the add-on namespaces.
 #   5. `unmapped`.
 #
 # Rules in one group evaluate in order, so the pod rule reads this cycle's Deployment and

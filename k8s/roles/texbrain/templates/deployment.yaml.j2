@@ -30,19 +30,15 @@ spec:
             - containerPort: {{ container_item.port }}
 {{ hardened_security_context(read_only=true, non_root=true) }}
           volumeMounts:
-            # The three paths nginx-unprivileged writes. Everything served is baked into
-            # the image and read-only; the app's own state lives in the browser (cache
-            # storage, localStorage, the user's own folder), never here.
+            # The three paths nginx-unprivileged writes. Everything served is baked into the image
+            # and read-only; the app's own state lives in the browser, never here.
             - name: nginx-cache
               mountPath: /var/cache/nginx
             - name: nginx-tmp
               mountPath: /etc/nginx/tmp
-            # nginx-unprivileged's main nginx.conf puts proxy_temp, client_body_temp and
-            # the rest under /tmp, and creates them at startup. Copying bento-pdf's two
-            # mounts alone crashlooped this pod on
+            # nginx-unprivileged's main nginx.conf puts proxy_temp, client_body_temp and the rest
+            # under /tmp and creates them at startup. Mounting only two paths crashloops the pod:
             #   [emerg] mkdir() "/tmp/proxy_temp" failed (30: Read-only file system)
-            # — bento-pdf survives on two because its image is a different nginx base
-            # whose temp paths already sit under the directories above.
             - name: nginx-run
               mountPath: /tmp
           readinessProbe:

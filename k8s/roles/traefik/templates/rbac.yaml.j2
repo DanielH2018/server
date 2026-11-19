@@ -10,13 +10,12 @@
    the cluster-wide grant buys nothing here and costs a great deal.
 
    WHAT IT COST. `secrets` cluster-wide, `get/list/watch`, bound with a ClusterRoleBinding, on
-   the only internet-facing workload in the fleet — and the pod does not set
+   the only internet-facing workload in the fleet. The pod does not set
    `automountServiceAccountToken: false`, so the token is on disk in FIVE containers (traefik,
-   the crowdsec-agent and access-log-rotate sidecars, and two init containers). Code execution
-   in any of them read every Secret in the cluster in one call: the Authelia session secret and
-   storage key, the Cloudflare DNS token, CouchDB and Grafana admin, Longhorn's B2 credentials.
-   dynamic.yaml.j2 deliberately moved the CrowdSec LAPI key into a Secret because a Middleware
-   CRD is readable by the read-only kubeconfig — and this grant read that Secret directly.
+   the crowdsec-agent and access-log-rotate sidecars, and two init containers), and code
+   execution in any of them read every Secret in the cluster in one call. dynamic.yaml.j2 keeps
+   the CrowdSec LAPI key in a Secret because a Middleware CRD is readable by the read-only
+   kubeconfig, and this grant read that Secret directly.
 
    WHAT MUST NOT BE "FIXED" HERE. Do NOT set `automountServiceAccountToken: false` on the pod.
    The kubernetesCRD provider needs that token to reach the API server at all; Traefik is a
@@ -42,16 +41,14 @@
    watched namespaces, which includes `authelia-config` and Longhorn's B2 credentials. What it
    loses is kube-system and every other namespace.
 
-   Re-syncing from upstream is no longer a copy-paste. Take upstream's rule list, then place
+   Re-syncing from upstream is not a copy-paste. Take upstream's rule list, then place
    each rule by scope using the factory layout above. #}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   name: traefik-ingress-controller
-  # Exempt from Flux's prune before traefik's flip moves this object into its bundle, so a
-  # later revert of only that move cannot prune it and strip the edge of its grants
-  # (d5-bulk-move.md, step 26's traefik bullet; R4's Open question 4).
+  # Exempt from Flux's prune: a pruned ClusterRole would strip the edge of its grants.
   labels:
     kustomize.toolkit.fluxcd.io/prune: disabled
 rules:
@@ -66,9 +63,9 @@ rules:
       - list
       - watch
   # IngressClasses are cluster-scoped objects. The kubernetesIngress provider is NOT enabled
-  # here (kubernetesCRD only), so nothing reads them today — kept so that enabling that
-  # provider later does not fail on a missing cluster-scoped grant, which would be hard to
-  # diagnose given the fail-green mode described above.
+  # here (kubernetesCRD only), so nothing reads them; kept so that enabling that provider
+  # later does not fail on a missing cluster-scoped grant, which would be hard to diagnose
+  # given the fail-green mode described above.
   - apiGroups:
       - extensions
       - networking.k8s.io
@@ -83,15 +80,15 @@ rules:
 # Namespaced half, one per watched namespace. Driven by the SAME variable as
 # static-config.yaml.j2's `providers.kubernetesCRD.namespaces`, so the two cannot drift: a
 # namespace Traefik watches but has no Role in cannot sync its informers, and the failure mode
-# is the silent one above. That agreement used to rest on this comment; it now rests on
+# is the silent one above. That agreement rests on
 # tests/services/test_traefik_watched_namespaces.py.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: traefik-ingress-controller
   namespace: {{ ns }}
-  # Exempt from prune like the ClusterRole above. After the flip traefik's tag prunes, and a
-  # pruned Role drops the Secrets grant, the fail-green outage in the header.
+  # Exempt from prune like the ClusterRole above: traefik's tag prunes, and a pruned Role drops
+  # the Secrets grant, the fail-green outage in the header.
   labels:
     kustomize.toolkit.fluxcd.io/prune: disabled
 rules:

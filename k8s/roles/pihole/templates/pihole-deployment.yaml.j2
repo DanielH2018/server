@@ -50,12 +50,12 @@ spec:
       # load-bearing for client IPs, announcement and placement stay on one node as a
       # unit; this pin only ever moves together with the L2Advertisement nodeSelector.
       # BOTH instances pin here, deliberately. Every VIP is announced from a single node
-      # (setup/k3s metallb-pool.yaml.j2, marked PERMANENT), and externalTrafficPolicy: Local
+      # (k8s/roles/metallb/templates/metallb-pool.yaml.j2, marked PERMANENT), and externalTrafficPolicy: Local
       # means a pod on the other node would receive nothing. Redundancy here is against a
       # rollout, not against node loss.
       nodeSelector:
         kubernetes.io/hostname: {{ k8s_primary_node }}
-      # Edge/auth/DNS eviction ordering — see setup/k3s templates/priorityclass.yaml.j2.
+      # Edge/auth/DNS eviction ordering — see k8s/roles/cluster-base/templates/priorityclass.yaml.j2.
 {{ pod_shell(services | tier_priority_class('pihole')) }}
       containers:
         # Both containers share the pod network namespace: FTL binds :53/:80, unbound sits on
@@ -91,8 +91,8 @@ spec:
           # init chowns
           # /etc/pihole then drops privileges. Runs as root by image design — the DAC_OVERRIDE
           # memory's "use the pod uid" fix does not fit an image whose entrypoint demands the
-          # drop-privileges dance. No NET_RAW: that was for DHCP raw sockets, and this copy is
-          # DNS-only (D4 — DHCP measured inactive on the Docker copy, :67 not exposed here).
+          # drop-privileges dance. No NET_RAW: that was for DHCP raw sockets, and this pod is
+          # DNS-only (:67 not exposed here).
 {{ hardened_security_context(add=['CHOWN', 'DAC_OVERRIDE', 'NET_ADMIN', 'NET_BIND_SERVICE', 'SETFCAP', 'SETUID', 'SETGID', 'SYS_NICE']) }}
           volumeMounts:
             - name: etc-pihole
@@ -115,7 +115,7 @@ spec:
               port: 53
             periodSeconds: 30
           # First boot builds gravity from scratch (big.oisd is ~200k domains); give it the
-          # same generous window the *arr DOCKER_MODS lesson bought (radarr, 2026-08-09).
+          # same generous window as the *arr DOCKER_MODS first boot (radarr).
           startupProbe:
             tcpSocket:
               port: 53

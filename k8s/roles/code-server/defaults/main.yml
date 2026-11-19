@@ -3,13 +3,13 @@ code_server_k8s_image: "{{ k8s_registry_pull_host }}/code-server:{{ k8s_built_im
 
 # Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
 # `code_server_k8s_image` above names a content tag computed from the build inputs, with no
-# upstream version scheme, so Renovate's k8s-defaults manager has nothing to bump. Since D5.16
-# Flux applies this role, so the flag's live reader is Renovate's automerge denylist.
+# upstream version scheme, so Renovate's k8s-defaults manager has nothing to bump. Flux
+# applies this role, so the flag's live reader is Renovate's automerge denylist.
 k8s_autodeploy: false
 k8s_autodeploy_reason: "in-cluster-built registry image with no upstream version scheme — Renovate can never generate an update PR for it, so there is no bump event to auto-deploy regardless of the migrating-state PVC shape below"
 # The claims snapshotted before each revision applies. Under Flux the renderer turns this list
 # into the code-server-snapshot Kustomization, whose Job snapshots both claims before
-# code-server applies (D5.2a).
+# code-server applies.
 k8s_autodeploy_snapshot_pvcs: [code-server-config, code-server-workspace]
 
 # 6.2 G — mostly extensions and npm/pip caches; the workspace itself is ~2 M.
@@ -26,25 +26,20 @@ code_server_k8s_size: 10Gi
 # config volume is reproducible — the seven extensions are baked into the image as .vsix and
 # reinstalled by /custom-cont-init.d/10-extensions.sh on every container start.
 #
-# Backing up the whole config volume made ONE service 52% of the 13.72 GiB backup set and 3,668
-# of its 7,023 blocks, which at one Class-B GET per block put a code-server restore at 147% of
-# B2's 2,500/day allowance: not restorable in a day. This claim is a plain one, not a seeded
-# one: the initContainer in deployment.yaml.j2 migrates the four paths off the config volume on
-# first boot. Nothing is deleted there — the config PVC keeps its copy, it simply stops being
-# backed up.
+# Backing up the whole config volume would put a code-server restore at 147% of B2's 2,500/day
+# Class-B allowance, at one GET per block: not restorable in a day. This claim is a plain one,
+# not a seeded one: the initContainer in deployment.yaml.j2 migrates the four paths off the
+# config volume on first boot. Nothing is deleted there — the config PVC keeps its copy, it
+# simply stops being backed up.
 code_server_k8s_workspace_claim: code-server-workspace
 code_server_k8s_workspace_storage_class: longhorn
-# 1 Gi, and the size is NOT free headroom. An empty ext4
-# volume still costs its journal and inode table, and Longhorn backs those blocks up like any
-# other. Measured on this cluster: n8n-files is an empty 1 Gi claim
-# and its backups are 78 MiB; wg-easy-config, terraria-stats-data and valheim-stats-data all
-# sit at 80-86 MiB on the same footing. mke2fs scales both structures with the device, so 5 Gi
-# would have meant a 128 MiB journal plus an ~80 MiB inode table — ~200 MiB of filesystem
-# metadata to protect ~2.5 M of files.
-# 1 Gi is the floor worth paying. The `longhorn` StorageClass has allowVolumeExpansion, so a
-# workspace that outgrows this expands in place; it does not need buying up front.
+# 1 Gi, and the size is NOT free headroom. An empty ext4 volume still costs its journal and
+# inode table, and Longhorn backs those blocks up like any other. mke2fs scales both structures
+# with the device, so 5 Gi would mean ~200 MiB of filesystem metadata to protect ~2.5 M of
+# files. The `longhorn` StorageClass has allowVolumeExpansion, so a workspace that outgrows
+# this expands in place.
 code_server_k8s_workspace_size: 1Gi
-# Note: .npm and friends are root-owned (written by the image's root init), so they are not
+# .npm and friends are root-owned (written by the image's root init), so they are not
 # backed up with the workspace. The workspace claim holds only user-owned state that the image
 # can write to without `sudo`.
 
@@ -54,7 +49,6 @@ code_server_k8s_mem_limit: 4096Mi
 code_server_k8s_cpu_request: "100m"
 code_server_k8s_mem_request: 256Mi
 
-# ── Build inputs pinned by version AND sha256 ─────────────────────────────────────────────
 # Renovate has no datasource for a VS Code extension (neither Open VSX nor the MS Marketplace),
 # so these are the inputs the build cannot track automatically. Each is a version plus the
 # sha256 of the exact artifact the Dockerfile downloads; the build verifies the checksum before
@@ -71,7 +65,7 @@ code_server_k8s_mem_request: 256Mi
 #   Either way, `uv run python scripts/validate/asset_pins.py --refresh '<pin name>'` does the
 #               hash step in one command once the version and URL are edited; the pin name is
 #               `code_server_k8s_extensions[<publisher>.<name>]`. Anthropic.claude-code moves
-#               with every Renovate bump of the `@anthropic-ai/claude-code` CLI (#4584).
+#               with every Renovate bump of the `@anthropic-ai/claude-code` CLI.
 # Then merge: the content tag moves, CI's `images` job pushes it to GHCR and `promote` rolls the
 # pod, and extensions.sh installs the new VSIX.
 # A base-image bump PR (the Renovate `k8s base image` group, manual for this role) is the natural
@@ -167,11 +161,9 @@ k8s_claims:
 # its node before the code-server Kustomization applies (scripts/renderer/renderer_lib/prepull.py).
 # The Deployment is `Recreate`, so without it the old pod stops before the new pod's pull
 # starts, and the editor is down for the whole pull. With it, the old pod keeps serving while
-# the image arrives. MEASURED 2026-10-17 (#5525), during a slow-GHCR episode: GHCR served
-# daniel-box at 0.21-0.33 MB/s, against 44-95 MB/s on 2026-10-24 (#5654). At the slow rate a
-# claude-code CLI bump re-pulls about 377 MB (about 22 minutes) and a base bump about 851 MB
-# (about 50 minutes). 4500s covers the full re-pull down to 0.19 MB/s, below the measured low:
-# at 0.21 MB/s it takes about 4050s. The Job has no deadline, so a pull slower still costs
+# the image arrives. A claude-code CLI bump re-pulls about 377 MB and a base bump about 851 MB.
+# 4500s covers the full re-pull down to 0.19 MB/s, below the slowest GHCR rate seen to
+# daniel-box (0.21 MB/s, about 4050s). The Job has no deadline, so a pull slower still costs
 # that revision its verdict, the Job keeps pulling, and Flux applies code-server on a later
 # retry. Only Flux reads it: the renderer adds the Kustomization for a published tag alone,
 # so an Ansible deploy ignores it.
@@ -183,19 +175,11 @@ image_builder_builds:
     # The one file the Dockerfile COPYs (flat — ConfigMap keys cannot contain '/').
     image_builder_context:
       "{{ role_file('files/extensions.sh') }}": extensions.sh
-    # MEASURED. This value is the Job's `activeDeadlineSeconds`
-    # (image-builder/templates/build-job.yaml.j2), so exceeding it kills the build rather than
-    # just failing the wait. A cold build with no layer cache took 1291 s end to end before
-    # Rust was added. Where it went, from the BuildKit log: 690 s pulling the linuxserver base
-    # from lscr.io, 247 s building the pip venv, 197 s fetching the Anthropic.claude-code VSIX
-    # from the MS marketplace, 45 s for Pylance, ~30 s for the rest.
-    #
-    # 1800 s stopped being enough when Rust joined the build (#4661). Its first build on
-    # 2026-10-12 hit the deadline: the base pull alone ran ~1100 s, and the Rust tarball
-    # (210 MB) and the CodeLLDB VSIX (55 MB) were still to come. That day static.rust-lang.org
-    # served daniel-box at ~0.35 MB/s and GitHub at ~0.4 MB/s, while Cloudflare served it at
-    # 17 MB/s, so the slow term is the upstream CDN path, which nothing here controls. 3600 s
-    # covers a cold build at those rates with headroom.
+    # This value is the Job's `activeDeadlineSeconds` (image-builder/templates/build-job.yaml.j2),
+    # so exceeding it kills the build rather than just failing the wait. A cold build with no
+    # layer cache is dominated by the upstream CDN path (the linuxserver base pull alone can run
+    # ~1100 s, then the Rust tarball and the CodeLLDB VSIX), which nothing here controls. 3600 s
+    # covers it with headroom.
     #
     # Pinning every input fixes WHAT a build fetches, not how fast the mirrors serve it. Lower
     # this only after a cold build measured well under the new figure. A build that hits the

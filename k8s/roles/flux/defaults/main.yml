@@ -10,7 +10,7 @@ flux_version: v2.9.6
 # controller upgrade whose components drop a CRD would otherwise delete that CRD and every
 # object of its kind; `deletionPolicy: Orphan` covers only a delete of the Kustomization
 # itself. The lever reaches `flux` alone, so `flux-deferred`, which applies the sync objects,
-# keeps prune: true and deletes `verify-drill` once the drill is off (D5 step 29).
+# keeps prune: true and deletes `verify-drill` once the drill is off.
 flux_prune: false
 
 k8s_autodeploy: false
@@ -59,8 +59,8 @@ flux_volume_suffixes:
 # The flags the flux_components filter sets on a controller's container, replacing upstream's
 # value for the same flag. kustomize-controller reconciles `--concurrent` Kustomizations at once,
 # and one that waits on health holds its worker until the check settles. The deploy play's
-# rollout batch width keeps the rollout concurrency the play has (D5.1c), and one more worker
-# is the soak's, which holds it from the start of a revision's rollout (D5.3b2).
+# rollout batch width keeps the rollout concurrency the play has, and one more worker is the
+# soak's, which holds it from the start of a revision's rollout.
 # scripts/deploy_tools/chained_timeout.py's CONCURRENT is the width alone, and
 # tests/k8s/test_flux_role.py fails a drift between the three.
 flux_controller_args:
@@ -70,7 +70,7 @@ flux_controller_args:
 # A `resources` merge patch the flux_components filter applies to a controller's first
 # container, replacing upstream's value for the keys it names. The limit stays upstream's 1Gi.
 # DECIDED: kustomize-controller requests 192Mi (2026-10-23, D5 step 31), sized to the exit-7
-# peak of 174002176 B (about 166 MiB) plus headroom. D1's 64Mi came from an empty root. The
+# peak of 174002176 B (about 166 MiB) plus headroom. The
 # long form is in this role's CLAUDE.md.
 flux_controller_resources:
   kustomize-controller:
@@ -90,7 +90,7 @@ flux_artifact_tag: prod
 flux_signer_subject: '^https://github\.com/DanielH2018/server/\.github/workflows/promote\.yml@refs/heads/master$'
 flux_signer_issuer: '^https://token\.actions\.githubusercontent\.com$'
 
-# Break-glass promotion (D6.11; docs/break-glass.md, *GitHub, GHCR or Sigstore is unreachable*).
+# Break-glass promotion (docs/break-glass.md, *GitHub, GHCR or Sigstore is unreachable*).
 # False renders the OCIRepository `homelab` against GHCR with the keyless identity above. True
 # renders its break-glass form: the in-cluster registry, over plain HTTP, verified against the
 # public key below. The operator flips it in an emergency commit and reverts it on the way back.
@@ -107,8 +107,8 @@ flux_break_glass_public_key: |
   -----END PUBLIC KEY-----
 
 # The manifest whose Secret holds the GitHub App credentials, a multi-line PEM block and two
-# all-digit IDs that no Flux placeholder can carry. A placeholder render (scripts/renderer, target
-# slice R2) leaves it out, and D3 ships it as a SOPS-encrypted manifest instead.
+# all-digit IDs that no Flux placeholder can carry. A placeholder render (scripts/renderer)
+# leaves it out, and it ships as a SOPS-encrypted manifest instead.
 # `sops-manifest-entries` in scripts/renderer/renderer_lib/sops_entries.py holds the entry to one
 # Secret of `SOPS_MANIFEST_KEYS` keys.
 render_sops_manifests: [github-status-secret.yaml]
@@ -116,7 +116,7 @@ render_sops_manifests: [github-status-secret.yaml]
 # The repository notification-controller posts commit statuses to.
 flux_github_repository_url: https://github.com/DanielH2018/server
 
-# Refused when true (D5 step 29). Flux applies its own sync objects, so a suspend rendered on
+# Refused when true. Flux applies its own sync objects, so a suspend rendered on
 # the OCIRepository `homelab` would stop the source that has to fetch the commit clearing it,
 # and the renderer fails the render instead (scripts/renderer/renderer_lib/suspension.py). To
 # stop everything, suspend that OCIRepository by hand, with its resume beside it:
@@ -126,11 +126,10 @@ flux_sync_suspend: false
 # The signature drill. True renders a second OCIRepository, `verify-drill`, that follows the
 # unsigned tag `promote.yml`'s `verify_drill` dispatch pushes and must read Ready=False. False
 # drops it from the render, and `flux-deferred`'s prune deletes it, which is why that
-# Kustomization keeps prune: true while `flux` renders prune: false (D5 step 29).
+# Kustomization keeps prune: true while `flux` renders prune: false.
 flux_verify_drill: false
 
-# The one image every Job Flux applies runs, such as `<tag>-snapshot`'s (target slice D5,
-# *Rules for every Job Flux applies*). The same python:3.15-alpine digest monitor_bridge_k8s_image
+# The one image every Job Flux applies runs, such as `<tag>-snapshot`'s. The same python:3.15-alpine digest monitor_bridge_k8s_image
 # pins, and Renovate's k8s-images manager moves both in one PR, as one dependency. The renderer
 # reads it here (scripts/renderer/renderer_lib/snapshot.py); no task of this role does.
 flux_job_image: python:3.15-alpine@sha256:0f9552bb28711333da16915ec146f5e6bb44a7fdac9ced15dc17c2e0206346dd

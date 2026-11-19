@@ -1,7 +1,7 @@
 ---
 # Gives longhorn-driver-deployer and its wait-longhorn-manager init container requests and
-# limits (#8326, #8543). Upstream ships both with no `resources`, and longhorn-system has no
-# LimitRange, so the pod ran BestEffort. The values are k3s_longhorn_driver_deployer_resources
+# limits. Upstream ships both with no `resources`, and longhorn-system has no
+# LimitRange, so the pod runs BestEffort. The values are k3s_longhorn_driver_deployer_resources
 # and k3s_longhorn_driver_deployer_wait_resources in defaults/main.yml; a kustomize patch is
 # copied verbatim and cannot read a variable, so
 # tests/longhorn/test_longhorn_control_plane_resources.py holds them equal.

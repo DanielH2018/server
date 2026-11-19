@@ -26,7 +26,7 @@ pihole_k8s_storage_class: longhorn-nobackup
 pihole_k8s_size: 2Gi
 
 # Both instances' claims, which the renderer emits for this role and the pihole Kustomization
-# applies (#3387).
+# applies.
 k8s_claims:
   - name: "{{ pihole_k8s_claim }}"
     storage_class: "{{ pihole_k8s_storage_class }}"
@@ -61,7 +61,7 @@ pihole_k8s_unbound_mem_limit: 256Mi
 pihole_k8s_unbound_cpu_request: 50m
 pihole_k8s_unbound_mem_request: 32Mi
 
-# Break-glass for the sibling guard (#5740). `false` leaves the guard Job and its ConfigMap out of
+# Break-glass for the sibling guard. `false` leaves the guard Job and its ConfigMap out of
 # the render, so `pihole-precheck` holds only the guard's RBAC and `pihole` is no longer held by
 # a failing guard. Set it in a PR to push a revision past a guard that holds a fix to a down
 # pihole-2, then restore `true` in a second PR. CLAUDE.md has the procedure.
@@ -69,8 +69,8 @@ pihole_k8s_sibling_guard: true
 
 # Desired blocklist state, reconciled into gravity.db by templates/verify/gravity.yaml.j2 (idempotent
 # INSERT/UPDATE, then a gravity rebuild only when something changed). DECLARED rather than
-# volume-seeded: the retired k8s/volume-claim seed verified against a quiescent source, and
-# pihole-FTL.db moves on every DNS query, so a coexistence seed could never pass verification.
+# volume-seeded: pihole-FTL.db moves on every DNS query, so a seed could not be verified against
+# a quiescent source.
 # StevenBlack is Pi-hole's first-boot default; declaring it disabled keeps a fresh boot from
 # silently re-enabling it.
 pihole_k8s_adlists:

@@ -5,7 +5,8 @@ name: pytest-sweep
 # be older than a dependency its module gained since. This run is the one that finds such a
 # module without being told where to look (`docs/ci-throughput.md`).
 #
-# A red run here is on whatever SHA is master's head at 09:30 UTC; it is not that commit's
+# A red run here is on whatever SHA is master's head when GitHub starts it, which has been
+# 8 to 10 hours after the cron time for this repository; it is not that commit's
 # verdict. No job below carries the name of ci.yml's gate, because `ci_verdict` in
 # `hosts/lib/ci_verdict.py` takes the worst check-run per required name on a commit, and a
 # red sweep under that name would hold every landing behind a SHA whose own run was green.

@@ -1,16 +1,13 @@
 {% from 'container-resources.yml.j2' import job_container_resources with context %}
 {% from 'security-context.yml.j2' import job_hardened_security_context with context %}
 {#
-  The nightly Longhorn restore drill (H2.3d). It replaced the daniel-box root cron `Longhorn
-  restore drill` and its script /usr/local/bin/longhorn-restore-drill.sh. The script's header is
-  the design, and this role's CLAUDE.md has the contract.
+  The nightly Longhorn restore drill. The script's header is the design, and this role's
+  CLAUDE.md has the contract.
 
-  `suspend: false` since H2.3e. The CronJob shipped suspended at H2.3d, because both runners name
-  their restore `restore-drill-${PVC}` and `cleanup()` deletes that name on every exit, so a
-  CronJob run beside the host cron could tear down the host run's restore. H2.3e flipped it after
-  the operator confirmed the host cron file was gone. `kubectl create job --from=cronjob/...`
-  takes the CronJob whether or not it is suspended, which is how the hand run in this role's
-  CLAUDE.md works.
+  Both runners name their restore `restore-drill-${PVC}` and `cleanup()` deletes that name on
+  every exit, so two runs at once could tear down each other's restore.
+  `kubectl create job --from=cronjob/...` takes the CronJob whether or not it is suspended,
+  which is how the hand run in this role's CLAUDE.md works.
 
   `concurrencyPolicy: Forbid` keeps two scheduled runs off each other. The deadline and the grace
   period come from this role's defaults, and test_longhorn_restore_drill_deadline.py holds the
@@ -28,7 +25,7 @@
   probe pod it creates is a separate pod in the claim's namespace.
 
   `homelab/gate: schedule` tells `probe.py health` that no gate Job runs this CronJob per
-  revision, so the scheduled run is the gate (#6128). With no Job yet, the gate passes for one
+  revision, so the scheduled run is the gate. With no Job yet, the gate passes for one
   schedule period after the revision applies and fails after it
   (`scripts/diagnostics/probe_lib/health_cronjob.py:format_schedule_gated`).
 #}

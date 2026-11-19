@@ -1,8 +1,8 @@
 """Declare Lidarr's quality profiles instead of leaving them as UI state.
 
 WHY THIS EXISTS. A quality profile is a row in `lidarr.db` on the `lidarr-config` claim, so a
-Longhorn revert past its creation, or a recreated claim, drops it silently. The operator's
-decision on #8190 fixed two profiles; this script makes the repo hold them.
+Longhorn revert past its creation, or a recreated claim, drops it silently. This script makes
+the cluster hold the two profiles the repo declares.
 
 IT ADOPTS BY NAME AND NEVER DELETES. Lidarr ships `Any`, `Lossless` and `Standard`. A declared
 profile whose name matches a live one is updated in place, so the shipped `Lossless` and
@@ -51,9 +51,6 @@ class SeedError(Exception):
 def deep_copy(body: dict) -> dict:
     """An independent copy of a JSON body, by a round trip; the Job census admits no `copy`."""
     return json.loads(json.dumps(body))
-
-
-# ── the decision (pure, and the part the tests drive) ────────────────────────────────────────
 
 
 def flat_items(items: list[dict]) -> list[dict]:
@@ -118,9 +115,6 @@ def find_profile(profiles: list[dict], name: str) -> dict | None:
         if entry.get("name") == name:
             return entry
     return None
-
-
-# ── the transport ────────────────────────────────────────────────────────────────────────────
 
 
 def request(base_url: str, api_key: str, path: str, method: str = "GET", body=None):

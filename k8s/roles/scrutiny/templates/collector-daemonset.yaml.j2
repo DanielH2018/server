@@ -19,9 +19,8 @@ spec:
         app: scrutiny-collector
         netpol-baseline: enforced
     spec:
-      # Phase F drain (2026-08-13): unpinned — the DaemonSet covers both nodes and the
-      # Docker spoke on daniel-server retired with it. Both hosts' SMART source is the
-      # same /dev/nvme0 controller path (verified on daniel-server before the unpin).
+      # Unpinned — the DaemonSet covers both nodes. Both hosts' SMART source is the
+      # same /dev/nvme0 controller path.
       # No serviceAccountName is set (defaults SA) and the collector never talks to the API
       # server, so it has no use for the token — and a privileged pod is the last place to
       # leave one mounted anyway.
@@ -31,8 +30,7 @@ spec:
           image: {{ scrutiny_k8s_collector_image }}
           imagePullPolicy: IfNotPresent
           securityContext:
-            # The SC3 open question, resolved 2026-08-10: the Docker cap set
-            # (SETUID/SETGID/SYS_RAWIO/SYS_ADMIN) + a CharDevice hostPath is NOT enough
+            # The cap set (SETUID/SETGID/SYS_RAWIO/SYS_ADMIN) + a CharDevice hostPath is NOT enough
             # under k8s — the device cgroup still refuses the open (`smartctl --info
             # --device nvme /dev/nvme0` → exit status 2, device detected but unreadable).
             # Unlike Docker's `devices:`, k8s has no per-device grant short of a device

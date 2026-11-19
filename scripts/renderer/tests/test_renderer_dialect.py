@@ -64,9 +64,9 @@ def test_the_variable_layers_render_the_literal(tmp_path):
     assert _tree_render(tmp_path) == TREE_LITERAL
 
 
-def test_an_extra_var_outranks_the_include(tmp_path):
+def test_an_extra_var_outranks_a_render_key(tmp_path):
     text = _tree_render(tmp_path, {"manifests_deferred_dir_name": "from-extra"})
-    assert "include=from-extra\n" in text
+    assert "render_key=from-extra\n" in text
 
 
 def test_an_undefined_variable_fails_the_render_and_names_it(tmp_path):

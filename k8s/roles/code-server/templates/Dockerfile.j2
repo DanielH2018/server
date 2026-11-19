@@ -1,23 +1,15 @@
-# DIGEST-PINNED. `:latest` here had no updater: the weekly redeploy cron that used to force a
-# rebuild of every locally-built role (roles/containers/common/tasks/redeploy_cron.yml) lost its
-# last caller in the 2026-08-14 k3s migration, and Renovate cannot bump a tag with no version in
-# it. The explicit -lsNN tag is what the built-in dockerfile manager tracks (the linuxserver
-# packageRule in renovate.json orders that form); the digest beside it is what makes the build
-# reproducible from a commit — linuxserver rebuilds a tag in place, so the tag alone named a
-# moving image (#2149). Renovate bumps both together. See Dockerfile.j2 in k8s/roles/n8n
-# for the full reasoning behind pinning a built image's base.
+# DIGEST-PINNED. Renovate cannot bump a tag with no version in it, so the explicit -lsNN tag is
+# what the built-in dockerfile manager tracks (the linuxserver packageRule in renovate.json
+# orders that form). The digest beside it makes the build reproducible from a commit, because
+# linuxserver rebuilds a tag in place. Renovate bumps both together. See Dockerfile.j2 in
+# k8s/roles/n8n for the full reasoning behind pinning a built image's base.
 FROM lscr.io/linuxserver/code-server:4.145.2-ls377@sha256:20ffca4512fcfc85dcd5612fb769233c1553192392d2ec417f0859135805f40c
 
 # 1. Install system dependencies
-#    No TeX Live here. LaTeX moved to the texbrain workload on 2026-08-27, which compiles in
-#    the browser via a WebAssembly pdfTeX — see k8s/roles/texbrain. The four packages that
-#    used to be in this list (texlive-latex-extra, texlive-fonts-recommended, tex-gyre,
-#    latexmk) pulled in 56 packages and ~309 MiB of the ~858 MiB installed here, and nothing
-#    outside that set depended on them.
-#
-#    Consequence worth knowing before you debug a document here: this image can no longer
-#    compile one at all, and there is no local fallback. texbrain needs the pod, a browser,
-#    and a jsDelivr mirror for any package outside its bundled TeX Live subset.
+#    No TeX Live here: LaTeX compiles in the browser through the texbrain workload (a
+#    WebAssembly pdfTeX, k8s/roles/texbrain). This image cannot compile a document, and there
+#    is no local fallback. texbrain needs the pod, a browser, and a jsDelivr mirror for any
+#    package outside its bundled TeX Live subset.
 #
 #    gcc and libc6-dev are the C toolchain step 3's rustc links through: without them the first
 #    `cargo build` fails with "linker `cc` not found". pkg-config and libssl-dev let the common
@@ -27,8 +19,7 @@ FROM lscr.io/linuxserver/code-server:4.145.2-ls377@sha256:20ffca4512fcfc85dcd561
 #    `pkg=version` pin breaks the build the day noble-updates supersedes the version — the
 #    archive pool keeps only the current one — and a snapshot.ubuntu.com timestamp has no
 #    Renovate datasource, so it would freeze the security updates for git/curl/python3 with
-#    nothing raising a PR. DECIDED: build-time apt resolution stays, on those grounds —
-#    operator decision on #2211 (2026-09-22), which holds the snapshot-mirror evidence.
+#    nothing raising a PR. DECIDED: build-time apt resolution stays, on those grounds.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     python3 \
@@ -43,8 +34,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && ln -s /usr/bin/python3 /usr/bin/python
 
 # 2. Node.js from the official tarball, checksum-verified, into /usr/local (node + npm + npx).
-#    This replaced NodeSource's `setup_22.x` script piped to bash on 2026-09-21: that script
-#    resolved whatever NodeSource served on build day and ran as root straight off the network.
+#    NodeSource's `setup_22.x` script piped to bash would resolve whatever NodeSource serves on
+#    build day and run as root straight off the network.
 #    Version and sha256 live in defaults/main.yml (code_server_k8s_node_*), where Renovate
 #    tracks the version; `sha256sum -c` is what turns a stale hash into a failed build rather
 #    than a silently different node.
@@ -65,7 +56,7 @@ RUN curl -fsSL -o /tmp/node.tar.xz \
 #
 #    There is no rustup, so a project's `rust-toolchain.toml` and `rustup target add` do nothing
 #    here. The image carries one stable toolchain for the host target. DECIDED: standalone
-#    tarball over a pinned rustup-init — operator choice on 2026-10-12, because it leaves no
+#    tarball over a pinned rustup-init, because it leaves no
 #    runtime-writable toolchain state and pins exactly like Node.
 #
 #    CARGO_HOME holds the registry cache and `cargo install` binaries, so the abc user must be
@@ -92,17 +83,16 @@ ENV PATH="/config/.cargo/bin:$PATH"
 # 4. Python virtual environment outside /config so it survives volume mounts, with its
 #    packages and its ownership settled in the SAME layer. `chown -R` rewrites every file,
 #    and a rewritten file is a new file to the layer format — so doing it in a later step
-#    stored a second full copy of the venv (89 M compressed) on top of the one already
+#    would store a second full copy of the venv (89 M compressed) on top of the one already
 #    written here. The chown must stay last: pip writes into the venv after it exists.
 ENV VIRTUAL_ENV=/opt/venv
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 #    python3-pip is deliberately NOT installed. `python3 -m venv` builds the venv's own pip
-#    from python3-venv's bundled wheel, so the system one was never needed here — it only
-#    supplied a second /usr/bin/pip that would install into the system interpreter and fail
-#    silently. Removing the package removes the footgun; the absolute-path call below stays
-#    anyway, because it is what makes the target unambiguous rather than PATH-dependent.
+#    from python3-venv's bundled wheel, and the system package would only supply a second
+#    /usr/bin/pip that installs into the system interpreter and fails silently. The
+#    absolute-path call below makes the target unambiguous rather than PATH-dependent.
 #
-#    Every package is `==`-pinned (#2149): a bare name re-resolved to newest PyPI on every
+#    Every package is `==`-pinned: a bare name re-resolved to newest PyPI on every
 #    rebuild. Renovate tracks each pin on PyPI (regex manager in renovate.json); transitive
 #    dependencies still resolve at build time, which a hashed requirements file would close.
 RUN python3 -m venv $VIRTUAL_ENV \
@@ -126,14 +116,12 @@ RUN npm install -g @anthropic-ai/claude-code@2.1.319 \
 
 # 6. VS Code extensions, downloaded at build time from the exact URL each entry in
 #    code_server_k8s_extensions (defaults/main.yml) names, and kept only when the sha256
-#    matches. Until 2026-09-21 this step asked Open VSX and the marketplace for the CURRENT
-#    version of each and took the first build listed — which for a platform-specific
-#    extension was alpine-arm64 (ruff, ty) or win32-x64 (Claude Code). The defaults comment
-#    has the details and the bump recipe.
-#    The `-A` and `--compressed` flags carry over from the marketplace half of the old step:
-#    the marketplace serves a vspackage gzip-encoded, `--compressed` decodes it, and the
-#    recorded hash is over the decoded VSIX. Open VSX serves the file as-is; both flags are
-#    inert there.
+#    matches. Asking an API for the CURRENT version takes the first build listed, which for a
+#    platform-specific extension is alpine-arm64 (ruff, ty) or win32-x64 (Claude Code). The
+#    defaults comment has the details and the bump recipe.
+#    The marketplace serves a vspackage gzip-encoded, `--compressed` decodes it, and the
+#    recorded hash is over the decoded VSIX. Open VSX serves the file as-is, so `-A` and
+#    `--compressed` are inert there.
 RUN mkdir -p /opt/vsix
 {% for ext in code_server_k8s_extensions %}
 # {{ ext.name }} {{ ext.version }}

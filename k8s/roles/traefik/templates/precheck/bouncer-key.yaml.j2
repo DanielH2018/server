@@ -1,6 +1,5 @@
 {#
-  traefik's bouncer-key precheck: refuse a key the CrowdSec LAPI rejects, before Traefik rolls
-  (#6095).
+  traefik's bouncer-key precheck: refuse a key the CrowdSec LAPI rejects, before Traefik rolls.
 
   A rotation that skips `cscli bouncers delete k8straefik` leaves the LAPI holding the old
   key's hash. The new pod's startupProbe catches that through AppSec's 401, but traefik rolls

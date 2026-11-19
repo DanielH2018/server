@@ -25,7 +25,7 @@ description: >-
 # its test.
 #
 # DECIDED: the steps below name actions by version tag with `zizmor: ignore[unpinned-uses]`
-# (#8014). `.github/workflows/actions.lock` pins each one under every workflow that calls this
+# `.github/workflows/actions.lock` pins each one under every workflow that calls this
 # action, and the ci.yml `lockfile` job verifies those pins. zizmor 1.32.0 applies the lockfile
 # to workflow files only, so it reads this file as unpinned. Drop the ignores once zizmor reads
 # the lockfile for a `$/` composite action.

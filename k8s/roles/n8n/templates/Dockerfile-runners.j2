@@ -10,51 +10,30 @@ FROM n8nio/runners:stable@sha256:c6215e7626277e194e39f1dfe768fbdda718b61c759875d
 
 USER root
 
-# Install JS packages.
+# Use the pnpm the BASE IMAGE ships, rather than fetching one. Upstream installs pnpm and builds
+# the runner's node_modules with it, so the client and the store layout in
+# `node_modules/.modules.yaml` agree by construction. That is why no version is named here.
 #
-# Use the pnpm the BASE IMAGE ships, rather than fetching one. Upstream installs pnpm into
-# /usr/local/lib/node_modules/pnpm and builds the runner's node_modules with it, so the client and
-# the store layout in `node_modules/.modules.yaml` agree by construction — which is the property
-# this line needs and the reason not to name a version here.
-#
-# It was `corepack prepare pnpm@<exact> --activate` until 2026-09-02, when n8n 2.37.7 replaced
-# corepack with a plain pnpm install and the build died with `corepack: not found` (exit 127).
-# The exact pin existed because the base's store was a major version behind the pnpm corepack
-# resolved by default, so a bare `pnpm add` aborted with ERR_PNPM_UNEXPECTED_STORE. Inheriting the
-# base's own pnpm removes that mismatch at the source instead of tracking it.
-#
-# CALLED BY ABSOLUTE PATH, AND NOT THROUGH `node`, because the base's pnpm is a native binary.
-# It was `node /usr/local/lib/node_modules/pnpm/bin/pnpm.mjs` until 2026-09-22, when n8n 2.40.5
-# stopped installing pnpm as an npm package: the image now carries a single 45 MB executable at
-# /usr/local/bin/pnpm, copied from a build stage, and /usr/local/lib/node_modules/pnpm/ is absent
-# from every layer. The old line died with `Cannot find module` (exit 1) — the loud build failure
-# the previous comment asked for, working as intended.
-#
-# A native binary cannot be named through the interpreter, so the mode-bit reasoning that chose
-# pnpm.mjs no longer applies: this file ships 0755. The absolute path is still deliberate over a
-# bare `pnpm` — it depends on no PATH entry, and it names in the diff the one location upstream
-# has to keep for its own entrypoint to work.
+# CALLED BY ABSOLUTE PATH, AND NOT THROUGH `node`, because the base's pnpm is a native binary: a
+# single executable at /usr/local/bin/pnpm, copied from a build stage, with no
+# /usr/local/lib/node_modules/pnpm/ in any layer. The absolute path depends on no PATH entry, and
+# it names in the diff the one location upstream has to keep for its own entrypoint to work.
 #
 # INSTALLED IN A SIBLING DIRECTORY AND LINKED IN, never `pnpm add` inside the runner's own tree.
 # Any pnpm write there reconciles node_modules against the runner's package.json, and that file
 # declares only acorn, acorn-walk, moment and ws. The base's `@n8n/{di,config,utils}` and
-# n8n-{core,workflow} sit in node_modules without being declared, so the reconcile deletes them.
-# Against the 2.42.6 base, adding fuzzball 2.2.6 there printed `Packages: +7 -433` and left no
-# node_modules/@n8n at all (#5391). The unpinned add did the same thing; the version was never
-# the cause.
-#
-# The same purge happened on 2026-08-06 through `CI=true pnpm install`. That build stayed green
-# and shipped an image whose runner process died on every task offer with
-# `Cannot find module '@n8n/di'`, so every Code-node workflow failed with `Task request timed out`
-# (100+ failed executions in 9 h) while the pod stayed Ready. The resolution check below exists
-# because of that incident, and it is what failed promote run 38992066819 at build time instead.
+# n8n-{core,workflow} sit in node_modules without being declared, so the reconcile deletes them:
+# adding fuzzball there printed `Packages: +7 -433` and left no node_modules/@n8n at all. The
+# build stays green and ships an image whose runner dies on every task offer with
+# `Cannot find module '@n8n/di'`, so every Code-node workflow fails with `Task request timed out`
+# while the pod stays Ready. The resolution check below exists because of that.
 #
 # The runner resolves an allowed external module with a plain `require()` from its own dist/, so
 # Node finds node_modules/fuzzball, follows the link to its real path, and resolves fuzzball's
 # own dependencies from extra-js's store. extra-js is a fresh pnpm project with nothing else in
 # it, so this add has nothing to prune.
 #
-# fuzzball PINNED (#2213), to the same version Dockerfile.j2 installs. The renovate.json fuzzball
+# fuzzball is PINNED, to the same version Dockerfile.j2 installs. The renovate.json fuzzball
 # manager reads both lines, so one PR bumps both, and test_n8n_build_is_pinned.py refuses a bare
 # or ranged add here.
 RUN mkdir /opt/runners/extra-js \
@@ -64,12 +43,9 @@ RUN mkdir /opt/runners/extra-js \
     && ln -s /opt/runners/extra-js/node_modules/fuzzball \
         /opt/runners/task-runner-javascript/node_modules/fuzzball
 
-# Fails the build if the base's workspace packages or the added one cannot be resolved. One line,
-# and it is the check that would have caught 2026-08-06 at build time instead of in production.
+# Fails the build if the base's workspace packages or the added one cannot be resolved.
 RUN cd /opt/runners/task-runner-javascript && node -e "require('@n8n/di'); require('fuzzball')"
 
-# Install Python packages
-#RUN cd /opt/runners/task-runner-python && uv pip install numpy pandas
 
 # Copy the config file
 COPY n8n-task-runners.json /etc/n8n-task-runners.json

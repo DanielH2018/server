@@ -39,9 +39,9 @@ data:
             period: 24h
     limits_config:
       retention_period: {{ loki_homelab_retention }}
-      # DECIDED: the k8s-audit stream keeps 7 days, not the default window. After #8512 it is
-      # still about 40 percent of ingest on a 5Gi volume; the apiserver's own file on
-      # daniel-box keeps 30 days (k3s_audit_log_maxage). Operator ruling on #8591, 2026-11-15.
+      # DECIDED: the k8s-audit stream keeps 7 days, not the default window. It is about 40
+      # percent of ingest on a 5Gi volume, and the apiserver's own file on daniel-box keeps
+      # 30 days (k3s_audit_log_maxage).
       retention_stream:
         - selector: '{job="k8s-audit"}'
           priority: 1

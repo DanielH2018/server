@@ -26,7 +26,7 @@
    record discloses an RFC1918 address and the existence of the naming scheme, nothing more.
    ACME is unaffected either way — issuance uses the DNS-01 TXT challenge, not this A record. #}
 address=/local.{{ domain }}/{{ pihole_wildcard_ip | default(k3s_metallb_ingress_vip) }}
-{# DECIDED (2026-09-18, #2010): `local=` here, not `address=/local.<domain>/::`. Both keep an
+{# DECIDED: `local=` here, not `address=/local.<domain>/::`. Both keep an
    AAAA for a `.local.` name from being forwarded upstream, which is the property that
    matters — since dnsmasq 2.86 an `address=` carrying only an IPv4 sends every OTHER record
    type upstream, past the public resolvers this file exists to keep LAN names away from.
@@ -41,8 +41,8 @@ local=/local.{{ domain }}/
 # above. dnsmasq resolves the most specific `address=` match, so these override
 # local.<domain> for exactly these names and nothing else.
 #
-# Derived from daniel-box's inventory rather than hand-listed: slice 2 moves ~33 more
-# services, and a hand-maintained list here is a second source of truth that silently rots
+# Derived from daniel-box's inventory rather than hand-listed: a hand-maintained list here is a
+# second source of truth that silently rots
 # the first time someone forgets it. Entries without a `hostname` (traefik itself) have no
 # route of their own and are skipped.
 #
@@ -63,15 +63,14 @@ address=/{{ name }}.local.{{ domain }}/{{ k3s_metallb_ingress_vip }}
 # services at daniel-pi.lan:<port>. IP via hostvars since the Pi isn't the host running Pi-hole.
 host-record=daniel-pi.lan,{{ hosts['daniel-pi'].server_ip }}
 
-# The two cluster nodes, under BOTH the `.lan` name and the bare hostname. Until this
-# existed, `daniel-box` resolved nowhere on the LAN. daniel-box reaches daniel-server
-# through a client-side alias in its own SSH client config, and that file is deliberately
-# not deployed to any of the three homelab hosts (see `.chezmoiignore` in the dotfiles
-# repo — its key paths name credentials these machines do not hold), so the reverse
-# direction had nothing to resolve with. otel-sweep-watch on daniel-server therefore
-# reported `box: unreachable (Could not resolve hostname daniel-box)` on every run from at
-# least 2026-08-30 — a daily false finding on the check whose whole purpose is to be
-# believed, and the exact failure that check's own header warns gets it muted.
+# The two cluster nodes, under BOTH the `.lan` name and the bare hostname. daniel-box reaches
+# daniel-server through a client-side alias in its own SSH client config, and that file is
+# deliberately not deployed to any of the three homelab hosts (see `.chezmoiignore` in the
+# dotfiles repo — its key paths name credentials these machines do not hold), so the reverse
+# direction has nothing to resolve with. otel-sweep-watch on daniel-server would otherwise
+# report `box: unreachable (Could not resolve hostname daniel-box)` on every run — a daily
+# false finding on the check whose whole purpose is to be believed, and the exact failure that
+# check's own header warns gets it muted.
 #
 # The BARE name is the load-bearing half. otel-sweep addresses its machines from a fixed
 # enum that is deliberately not caller-configurable, and that enum holds `daniel-box` and

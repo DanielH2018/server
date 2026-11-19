@@ -2,7 +2,7 @@
    another namespace, so this fence stays bespoke.
    The callers model (`netpol_from` / `netpol_fences`, macro in
    k8s/templates/networkpolicy.yml.j2) renders one TCP port admitting same-namespace `app:`
-   peers, and its header rules out growing it to absorb another shape. Census: #3701.
+   peers, and its header rules out growing it to absorb another shape.
 #}
 ---
 apiVersion: networking.k8s.io/v1
@@ -22,8 +22,7 @@ spec:
    networkpolicy-traefik.yaml.j2. All THREE rules below sit inside this conditional -- leaving
    any of them outside it would keep crowdsec fenced through a rollback. #}
 {% if netpol_baseline_enforced | bool %}
-    # LAPI (8080) and AppSec (7422): the Traefik bouncer plugin. Port 3000 was here for the
-    # Metabase dashboard, which shared this pod until 2026-08-22; nothing listens on it now.
+    # LAPI (8080) and AppSec (7422): the Traefik bouncer plugin.
     - from:
         - podSelector:
             matchLabels:
@@ -43,11 +42,10 @@ spec:
               app: crowdsec-node-agent
         # authelia runs a crowdsec-agent SIDECAR that ships its auth logs to this LAPI. A sidecar
         # has no identity of its own on the network -- it inherits its POD's labels, so this
-        # traffic arrives as `app: authelia`, not as anything crowdsec-shaped. Omitting it took
-        # authelia down on 2026-08-20: the sidecar crash-looped on "connection refused" (kube-router
-        # REJECTs rather than drops), which made the whole POD unready, which pulled authelia out of
-        # its Service endpoints, which broke SSO on every protected route. The authelia container
-        # itself was healthy throughout.
+        # traffic arrives as `app: authelia`, not as anything crowdsec-shaped. Omitting it
+        # crash-loops the sidecar on "connection refused" (kube-router REJECTs rather than drops),
+        # which makes the whole POD unready, pulls authelia out of its Service endpoints and
+        # breaks SSO on every protected route.
         # The three pods running this sidecar are traefik, authelia and the node-agent DaemonSet
         # (`grep -rl crowdsec-agent k8s/roles --include='*.j2'`); all three are admitted here.
         - podSelector:
@@ -62,8 +60,8 @@ spec:
         # traefik-precheck is traefik's bouncer-key precheck
         # (traefik/templates/precheck/bouncer-key.yaml.j2), which sends one HEAD to the LAPI
         # with the bouncer key before `traefik` applies. Like crowdsec-verify it never dials
-        # AppSec, so it sits here rather than in traefik's rule. This peer landed live before
-        # the Job was switched on (`traefik_k8s_bouncer_key_precheck`, #6157), because a refused
+        # AppSec, so it sits here rather than in traefik's rule. This peer must be live before
+        # the Job is switched on (`traefik_k8s_bouncer_key_precheck`), because a refused
         # precheck holds `traefik`, and this policy applies only after `traefik` does. To
         # remove or rename it, switch the Job off in an earlier revision.
         - podSelector:

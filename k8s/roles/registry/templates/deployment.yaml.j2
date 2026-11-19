@@ -23,11 +23,11 @@ spec:
         # The pinned `registry` Service selects on this label, which the ghcr-mirror pod
         # carries too. service.yaml.j2 says why.
         registry-service: "true"
-        # Opted OUT of the namespace baseline (slice 5). `networkpolicy.yaml.j2` is tighter than
+        # Opted OUT of the namespace baseline. `networkpolicy.yaml.j2` is tighter than
         # the baseline, and the baseline is additive — selecting this pod would widen it.
         netpol-baseline-exempt: "true"
     spec:
-      # Pinned to the registry node by design (2026-08-14 re-plumb): its loopback
+      # Pinned to the registry node by design: its loopback
       # hostPort and its RWO PVC both live here, and every node's registries.yaml mirror
       # (loopback on this node, pinned ClusterIP on agents) assumes it.
       nodeSelector:
@@ -54,8 +54,7 @@ spec:
             # registry:3.1.1 ships `debug` as its baked-in default, so leaving this unset does not
             # mean "the image's sensible default" — it means a full OTEL span JSON blob and an
             # `authorizing request` line on every single request, for a registry that exists to
-            # serve n8n's rebuilds. Confirmed live 2026-08-29: the pod was logging level=debug with
-            # no OTLP endpoint configured anywhere, so the spans were being formatted and thrown away.
+            # serve n8n's rebuilds. With no OTLP endpoint configured anywhere, the spans are formatted and thrown away.
             #
             # `info` keeps what is actually read. The `response completed` lines carry the status
             # and are info-level, and the Combined-Log-Format access line comes from a separate

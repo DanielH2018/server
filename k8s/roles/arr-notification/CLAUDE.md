@@ -3,9 +3,10 @@
 This role renders no manifest and starts no workload. It declares one *arr app's Discord
 "Connect" notification over the app's own API
 (`k8s/roles/arr-notification/files/seed_arr_notification.py:main`), so the notification is repo
-state rather than UI state. The declaration runs as a seed Job in sonarr's, radarr's and lidarr's
-`templates/verify/` (*The Job form*, below), which reads this role's script and defaults by
-`lookup()`. Those lookups are the role's only callers, and no app includes the role
+state rather than UI state. The declaration runs as a seed Job that sonarr's, radarr's and
+lidarr's `templates/verify/notification.yaml.j2` render (*The Job form*, below). Each of those
+templates reads this role's script and defaults by `lookup()`. Those lookups are the role's
+only callers, and no app includes the role
 (`k8s/roles/arr-notification/tests/test_seed_job.py::test_the_seed_job_reads_no_role_but_its_app_and_arr_notification`).
 
 **Why it exists.** A Connect notification is a row in `sonarr.db` / `radarr.db` on the app's
@@ -105,9 +106,13 @@ uv run python k8s/roles/arr-notification/files/seed_arr_notification.py --test
 ## The Job form
 
 The seed runs as a post-apply mutation Job in `sonarr-verify`, `radarr-verify` and
-`lidarr-verify`. `templates/verify/notification.yaml.j2` in each app's role holds it,
-byte-identical in all three
-(`k8s/roles/arr-notification/tests/test_seed_job.py::test_the_apps_carry_the_same_template`).
+`lidarr-verify`. The Job's body is one macro, `k8s/templates/arr-notification-seed.yml.j2`.
+Each app's `templates/verify/notification.yaml.j2` calls it, byte-identical in all three
+(`k8s/roles/arr-notification/tests/test_seed_job.py::test_the_apps_call_the_one_shared_seed_job`).
+The caller passes in every `lookup()` the macro needs. The two lookups into this role must stay
+in the caller, because `scripts/lib/k8s_role_callers.py:role_callers` reads only a role's own
+templates, and those lookups are each app's only edge to this role
+(`scripts/lib/tests/test_k8s_role_callers.py::test_the_lookup_form_resolves`).
 
 - **The script is the one this role ships**, read by a cross-role `lookup()`, so a change here
   changes all three apps' renders. The template also reads
@@ -128,7 +133,7 @@ byte-identical in all three
   (`k8s/roles/arr-notification/tests/test_seed_job.py::test_every_secret_the_job_reads_is_rendered_before_it_runs`).
 - **The Job reruns once per revision that rolls the app**, because its spec embeds a digest of
   the rendered Deployment (`ARR_DEPLOYMENT_DIGEST8` in
-  `k8s/roles/sonarr/templates/verify/notification.yaml.j2`).
+  `k8s/templates/arr-notification-seed.yml.j2`).
 - **The Job also reruns when `arr_discord_webhook_url` rotates.** Its spec embeds the
   `cluster-vars.source` digest of that key (`ARR_WEBHOOK_DIGEST8`), so a rotation alone renames
   the Job and the seed writes the new URL into each app's database (#8602). The rendered

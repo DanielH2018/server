@@ -1,9 +1,7 @@
 ---
-# The restore drill's own Flux tag. It renders the stamp ConfigMap (H2.3b) and, from H2.3d, the
-# drill's script ConfigMap, its CronJob, its ServiceAccount and its RBAC. The drill's objects
-# live in `homelab`, so they cannot go in the `longhorn` tag, which H1's DR order waits on before
-# anything creates `homelab`
-# (docs/target-architecture/host/h2-shrink-host-plane.md, *The drill's own tag*).
+# The restore drill's own Flux tag. It renders the stamp ConfigMap, the drill's script ConfigMap,
+# its CronJob, its ServiceAccount and its RBAC. The drill's objects live in `homelab`, so they
+# cannot go in the `longhorn` tag, which the DR order waits on before anything creates `homelab`.
 
 # Auto-deploy stance. Flux applies the tag, so this gates no apply; the stance decides whether
 # Renovate automerges a bump of the runner image below.
@@ -16,7 +14,7 @@ k8s_autodeploy: false
 k8s_autodeploy_reason: "the drill restores a real Volume, PV and PVC under a fixed name, so an extra run is not harmless; it runs on its own schedule and a bump of its runner image waits for a person"
 
 # The namespace the stamp ConfigMap, the script ConfigMap, the CronJob and the RBAC live in. It
-# mirrors `k3s_longhorn_restore_drill_namespace`, which backup health's readers read until H2.3f.
+# mirrors `k3s_longhorn_restore_drill_namespace`, which backup health's readers read.
 # tests/k8s/test_restore_drill_stamps.py holds the pair equal, so a rename changes both
 # sides in one PR.
 longhorn_drill_namespace: homelab
@@ -60,9 +58,6 @@ longhorn_restore_drill_mem_limit: 256Mi
 longhorn_restore_drill_cpu_request: 10m
 longhorn_restore_drill_mem_request: 64Mi
 
-# The eight keys below moved here from `setup/k3s`'s defaults under their names (H2.3d). The
-# comments moved with them.
-
 # Restore drill — proves the backups come BACK, which nothing else here checks. The heartbeat
 # watches Longhorn's own objects, and none of them can tell you whether the bytes in B2 restore.
 #
@@ -89,12 +84,10 @@ k3s_longhorn_restore_drill_pvc: ""
 # drill publishes it to `excluded_oversize` so the backup heartbeat pages naming it. Raise
 # this and the timeout below together.
 # DECIDED: 4 GiB, raised from 2 GiB on 2026-08-24. The old value's rationale said it "excludes
-# NOTHING today — the largest candidate is valheim-config at ~1.3 GB", and both halves had gone
-# wrong: valheim-config was 2.83 GiB of actualSize and HAD been excluded (25 volumes declared
-# backed-up, 24 in the candidate file), and the 1.3 GB figure was its B2-STORED size while this cap
-# is applied to actualSize — the wrong quantity was compared when the cap was first set. Compare
-# `actualSize` from the Volume CR, never the stored-block total from `probe.py b2-longhorn`.
-# Cost of the raise is ~100 Class B GETs and ~1.34 GB egress once per 25-night rotation.
+# NOTHING today", but valheim-config's actualSize is 2.83 GiB, so a 2 GiB cap excluded a
+# backed-up volume. This cap is applied to actualSize: compare `actualSize` from the Volume CR,
+# never the stored-block total from `probe.py b2-longhorn`. The cost of 4 GiB is ~100 Class B
+# GETs and ~1.34 GB egress once per 25-night rotation.
 k3s_longhorn_restore_drill_max_actual_bytes: 4294967296
 # A restored volume that mounts but is EMPTY is the failure mode this floor catches: an empty
 # filesystem passes every check that only asks whether the mount succeeded. Deliberately low —

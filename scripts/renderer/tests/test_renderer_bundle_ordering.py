@@ -21,8 +21,8 @@ from renderer.renderer_lib.bundle import (
     digests,
 )
 from renderer.renderer_lib.ordering import (
-    ANSIBLE_OWNED_DEPS,
     TAG_KIND_SUFFIXES,
+    UNRENDERED_DEPS,
     Ordering,
     dependency_cycle,
     kustomization_edges,
@@ -47,8 +47,8 @@ def _depends(doc: dict) -> list[str]:
     return [edge["name"] for edge in doc["spec"].get("dependsOn", [])]
 
 
-def _dropped(doc: dict) -> str | None:
-    return (doc["metadata"].get("annotations") or {}).get(ANSIBLE_OWNED_DEPS)
+def _unrendered(doc: dict) -> str | None:
+    return (doc["metadata"].get("annotations") or {}).get(UNRENDERED_DEPS)
 
 
 def _deferring(*tags: str, namespace: str = "homelab") -> dict:
@@ -57,19 +57,19 @@ def _deferring(*tags: str, namespace: str = "homelab") -> dict:
     return {name: files for tag in tags for name in (tag, f"{tag}-deferred")}
 
 
-def test_an_edge_to_an_ansible_owned_role_is_dropped_and_annotated():
+def test_an_edge_to_a_tag_that_is_not_flux_owned_is_left_out_and_annotated():
     ordering = Ordering(deps={"texbrain": ["authelia", "traefik"]})
     doc = _docs(ordering, ["texbrain"])["texbrain"]
     assert "dependsOn" not in doc["spec"]
-    assert _dropped(doc) == "authelia,traefik"
+    assert _unrendered(doc) == "authelia,traefik"
 
 
 def test_an_edge_between_two_flux_owned_roles_is_kept():
     ordering = Ordering(deps={"texbrain": ["bento-pdf", "traefik"], "bento-pdf": []})
     docs = _docs(ordering, ["bento-pdf", "texbrain"])
     assert _depends(docs["texbrain"]) == ["bento-pdf"]
-    assert _dropped(docs["texbrain"]) == "traefik"
-    assert _dropped(docs["bento-pdf"]) is None
+    assert _unrendered(docs["texbrain"]) == "traefik"
+    assert _unrendered(docs["bento-pdf"]) is None
 
 
 def test_a_flux_owned_role_outside_the_render_is_kept_not_annotated():
@@ -79,7 +79,7 @@ def test_a_flux_owned_role_outside_the_render_is_kept_not_annotated():
         flux_owned=frozenset({"texbrain", "bento-pdf"}),
     )
     doc = _docs(ordering, ["texbrain"])["texbrain"]
-    assert _depends(doc) == ["bento-pdf"] and _dropped(doc) is None
+    assert _depends(doc) == ["bento-pdf"] and _unrendered(doc) is None
 
 
 def test_an_applies_last_tag_depends_on_other_deferred_kustomizations_not_its_own():
@@ -94,7 +94,7 @@ def test_an_applies_last_tag_depends_on_other_deferred_kustomizations_not_its_ow
 
 
 def test_a_deferred_document_in_a_role_created_namespace_waits_on_that_role():
-    """flux-owned, the namespace's role is an edge; Ansible-owned, it is annotated."""
+    """flux-owned, the namespace's role is an edge; otherwise it is annotated."""
     directories = _deferring("headlamp", namespace="observability")
     roles = {"observability": "observability"}
     owned = Ordering(
@@ -102,10 +102,10 @@ def test_a_deferred_document_in_a_role_created_namespace_waits_on_that_role():
     )
     doc = _docs(owned, ["headlamp"], directories)["headlamp-deferred"]
     assert _depends(doc) == ["headlamp", "observability"]
-    ansible = Ordering(namespace_roles=roles)
-    doc = _docs(ansible, ["headlamp"], directories)["headlamp-deferred"]
+    unowned = Ordering(namespace_roles=roles)
+    doc = _docs(unowned, ["headlamp"], directories)["headlamp-deferred"]
     assert _depends(doc) == ["headlamp"]
-    assert _dropped(doc) == "observability"
+    assert _unrendered(doc) == "observability"
 
 
 def test_a_cycle_in_the_map_fails_the_bundle():
@@ -353,7 +353,7 @@ def test_a_verify_kind_of_a_tag_with_no_deferred_files_depends_on_the_tag():
 
 
 def test_a_verify_kind_waits_on_the_last_kustomization_of_each_tag_it_names():
-    """A named tag's `-deferred` stands in for it, and an Ansible-owned one is annotated."""
+    """A named tag's `-deferred` stands in for it, and one not flux-owned is annotated."""
     ordering = Ordering(
         flux_owned=frozenset({"bento-pdf", "pihole"}),
         verify_after={"bento-pdf": ["pihole", "traefik"]},
@@ -361,7 +361,7 @@ def test_a_verify_kind_waits_on_the_last_kustomization_of_each_tag_it_names():
     directories = _every_kind() | {"bento-pdf-verify": {}}
     doc = _docs(ordering, ["bento-pdf", "pihole"], directories)["bento-pdf-verify"]
     assert _depends(doc) == ["bento-pdf", "pihole-deferred"]
-    assert _dropped(doc) == "traefik"
+    assert _unrendered(doc) == "traefik"
 
 
 def test_crowdsec_verify_waits_on_the_rolled_traefik():
@@ -388,7 +388,7 @@ def test_a_snapshot_kind_inherits_its_tags_edges_and_the_tag_waits_on_it():
     ordering = Ordering(deps={"pihole": ["bento-pdf", "traefik"]})
     docs = _docs(ordering, ["bento-pdf", "pihole"], _every_kind())
     assert _depends(docs["pihole-snapshot"]) == ["bento-pdf"]
-    assert _dropped(docs["pihole-snapshot"]) == "traefik"
+    assert _unrendered(docs["pihole-snapshot"]) == "traefik"
     assert _depends(docs["pihole"]) == ["bento-pdf", "pihole-snapshot"]
 
 
@@ -397,7 +397,7 @@ def test_a_prepull_kind_inherits_its_tags_edges_beside_the_snapshot():
     directories = _every_kind() | {"pihole-prepull": {}}
     docs = _docs(ordering, ["bento-pdf", "pihole"], directories)
     assert _depends(docs["pihole-prepull"]) == ["bento-pdf"]
-    assert _dropped(docs["pihole-prepull"]) == "traefik"
+    assert _unrendered(docs["pihole-prepull"]) == "traefik"
     assert _depends(docs["pihole-snapshot"]) == ["bento-pdf"]
     assert _depends(docs["pihole"]) == [
         "bento-pdf",

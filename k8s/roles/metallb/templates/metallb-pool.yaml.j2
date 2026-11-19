@@ -7,12 +7,10 @@
 #
 # ORDER MATTERS. `kubectl apply -f` processes documents in file order, and MetalLB's
 # validating webhook rejects any pool overlapping an already-defined one. homelab-pool has to
-# narrow FIRST: when this file was introduced it still covered 10.0.0.240-250, so applying
-# ingress-pool ahead of it was denied with
+# narrow FIRST: while it still covers 10.0.0.240-250, applying ingress-pool is denied with
 #   CIDR "10.0.0.240/32" in pool "ingress-pool" overlaps with already defined CIDR "10.0.0.240/29"
-# (MetalLB normalises the old range into CIDRs, and .240/29 is the first of them). Narrowing
-# homelab-pool first makes the ingress /32 free by the time it is validated, on a fresh cluster
-# and on the upgrade path alike.
+# Narrowing homelab-pool first makes the ingress /32 free by the time it is validated, on a fresh
+# cluster and on the upgrade path alike.
 apiVersion: metallb.io/v1beta1
 kind: IPAddressPool
 metadata:
@@ -41,19 +39,15 @@ spec:
   ipAddressPools:
     - ingress-pool
     - homelab-pool
-  # Phase F join (2026-08-13): announce VIPs from daniel-box ONLY. Within minutes of the
-  # join, daniel-server's speaker won the L2 election for 10.0.0.240 and every Docker
-  # container on that host lost the cluster: a Docker-bridge client cannot reach a VIP
-  # its own host announces (the hairpin class again — crowdsec agent, terraria-stats and
-  # promtail all crash-looped on "dial tcp 10.0.0.240:443: i/o timeout" from 15:05).
-  # PERMANENT (operator decision 2026-08-14, design.md §10 #6): with ETP Local load-bearing
+  # Announce VIPs from daniel-box ONLY: when daniel-server's speaker wins the L2 election for
+  # 10.0.0.240, every Docker container on that host loses the cluster, because a Docker-bridge
+  # client cannot reach a VIP its own host announces (the hairpin class).
+  # PERMANENT (operator decision, design.md §10 #6): with ETP Local load-bearing
   # for client-IP preservation and two asymmetric nodes, this pin and the VIP-backed
   # workloads' daniel-box nodeSelectors are one unit — never move either alone.
   #
-  # THE FULL SET, because counting them was how two got missed: traefik, pihole, mosquitto,
-  # terraria, valheim, wg-easy, and jellyfin. Valheim and wg-easy joined 2026-08-14 — both
-  # had carried ETP Local and a VIP since going live with no pin at all, sitting on
-  # daniel-box by scheduler accident. Jellyfin is the odd one out: it is pinned here by the
+  # THE FULL SET: traefik, pihole, mosquitto, terraria, valheim, wg-easy, and jellyfin. Jellyfin
+  # is the odd one out: it is pinned here by the
   # media-volume `local` PV's required nodeAffinity rather than by its own nodeSelector, so
   # jellyfin-lan's VIP is safe only for as long as that volume stays node-local.
   #

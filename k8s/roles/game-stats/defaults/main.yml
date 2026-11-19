@@ -24,7 +24,7 @@ game_stats_valheim_claim: valheim-stats-data
 game_stats_valheim_pvc_size: 1Gi
 game_stats_valheim_storage_class: longhorn
 
-# The claims the renderer emits for this role, which the game-stats Kustomization applies (#3387).
+# The claims the renderer emits for this role, which the game-stats Kustomization applies.
 k8s_claims:
   - name: "{{ game_stats_terraria_claim }}"
     storage_class: "{{ game_stats_terraria_storage_class }}"

@@ -1,18 +1,13 @@
-"""`fact_status.py report`: the notice replay over the window, and the backlog ranked by reads."""
+"""`fact_status.py report`: the backlog ranked by reads, the heads and the session bytes."""
 
 from datetime import datetime, timedelta, timezone
 
-import pytest
-
 from lib.facts.citations import Citation
-from lib.facts.notice import Notice
-from lib.facts.replay import notice_replay
 from lib.facts.report import build, doc_reads, ranked_backlog, render, session_bytes
-from lib.git_testing import commit, git, git_out, init_repo, scrubbed_env
+from lib.git_testing import git, git_out, init_repo, scrubbed_env
 
 # A fixed epoch: the log rows and commit dates are set against it, never the live clock.
 _NOW = datetime(2026, 10, 10, 12, tzinfo=timezone.utc)
-_DOC = "## Gate\n`t/m.py:LIMIT` bounds {what}.\n"
 
 
 def _dated_commit(repo, message, days_ago, **files):
@@ -85,7 +80,7 @@ def test_the_docs_read_as_a_head_are_ranked_by_reads(tmp_path):
     repo = init_repo(tmp_path)
     _dated_commit(repo, "seed", 50, README="x\n")
 
-    report = build(repo, {}, 30, log, now=_NOW, notice=lambda *_: [])
+    report = build(repo, {}, 30, log, now=_NOW, replays=False)
 
     assert report["heads"] == [
         {"doc": "b/CLAUDE.md", "reads": 2},
@@ -129,139 +124,26 @@ def test_session_bytes_split_start_from_total_and_skip_unsized_and_subagent_rows
     ]
 
 
-# `commit` stamps the live clock, so a replay over its history needs an end past today.
-_LATER = datetime(2099, 1, 1, tzinfo=timezone.utc)
-
-
-def _replay(repo, notice=None):
-    since = _NOW - timedelta(days=30)
-    if notice:
-        return notice_replay(repo, since, _LATER, notice)
-    return notice_replay(repo, since, _LATER)
-
-
-def _gate_history(repo):
-    """A seed, a base citing ``LIMIT``, and a commit that moves it; returns the move's SHA."""
-    commit(repo, "seed", README="x\n")
-    commit(
-        repo, "base", **{"t/m.py": "LIMIT = 1\n", "CLAUDE.md": _DOC.format(what="it")}
-    )
-    return commit(repo, "move", **{"t/m.py": "LIMIT = 2\n"})
-
-
-def test_moved_counts_moved_rows_and_those_whose_prose_was_edited(tmp_path):
-    repo = init_repo(tmp_path)
-    _gate_history(repo)
-    rows = [
-        Notice("CLAUDE.md#A", "t/m.py:A", "symbol", "moved", True),
-        Notice("CLAUDE.md#B", "t/m.py:B", "symbol", "moved", False),
-        Notice("CLAUDE.md#C", "t/c.py", "path", "gone", True),
-    ]
-
-    def stub(repo, base, head):
-        return (
-            rows
-            if git(repo, "log", "-1", "--format=%s", head).stdout == "move\n"
-            else []
-        )
-
-    replay = _replay(repo, stub)
-
-    assert (replay["moved"], replay["moved_prose_edited"]) == (2, 1)
-    assert replay["notices"] == {"gone": 1, "moved": 2}
-    assert replay["commits_with_notice"] == 1
-
-
-def test_a_section_deleted_after_its_move_is_still_listed_at_the_move(tmp_path):
-    repo = init_repo(tmp_path)
-    move = _gate_history(repo)
-    commit(repo, "drop the section", **{"CLAUDE.md": "## Other\nno citations\n"})
-
-    replay = _replay(repo)
-
-    assert [(r["commit"], r["unit"]) for r in replay["content_notices"]] == [
-        (move, "CLAUDE.md#Gate")
-    ]
-
-
-def test_a_notice_that_raises_on_one_commit_is_recorded_and_the_replay_goes_on(
-    tmp_path,
-):
-    repo = init_repo(tmp_path)
-    move = _gate_history(repo)
-    seed = git(repo, "rev-list", "--max-parents=0", "HEAD").stdout.strip()
-
-    def stub(repo, base, head):
-        if base == seed:
-            raise KeyError("boom")
-        return [Notice("CLAUDE.md#Gate", "t/m.py:LIMIT", "symbol", "moved", False)]
-
-    replay = _replay(repo, stub)
-
-    [crash] = replay["crashed"]
-    assert crash["error"] == "KeyError"
-    assert replay["content_notices"] == [
-        {
-            "commit": move,
-            "unit": "CLAUDE.md#Gate",
-            "atom": "t/m.py:LIMIT",
-            "kind": "moved",
-            "prose_edited": False,
-        }
-    ]
-    assert replay["commits"] == 3
-
-
-@pytest.mark.parametrize("with_lock_commit", [True, False], ids=["lock", "no-lock"])
-def test_the_replay_window_is_the_days_before_now_and_nothing_after(
-    tmp_path, with_lock_commit
-):
-    repo = init_repo(tmp_path)
-    _dated_commit(repo, "seed", 50, README="x\n")
-    # A commit writing the lock 40 days back: the last lock commit before the 30-day boundary.
-    lock = {"docs/facts.lock": '{"units": {}}\n'} if with_lock_commit else {}
-    _dated_commit(repo, "lock", 40, **{"t/m.py": "LIMIT = 1\n", **lock})
-    _dated_commit(repo, "outside", 35, **{"t/m.py": "LIMIT = 2\n"})
-    inside = [
-        _dated_commit(repo, "inside 1", 5, **{"t/m.py": "LIMIT = 3\n"}),
-        _dated_commit(repo, "inside 2", 1, **{"t/m.py": "LIMIT = 4\n"}),
-    ]
-    _dated_commit(repo, "after the window", -1, **{"t/m.py": "LIMIT = 5\n"})
-    heads = []
-
-    def stub(repo, base, head):
-        heads.append(head)
-        return []
-
-    report = build(repo, {}, 30, tmp_path / "no.log", now=_NOW, notice=stub)
-
-    assert heads == inside
-    assert report["notice_replay"]["commits"] == 2
-
-
-def test_a_report_without_replays_walks_no_commit_and_still_ranks_the_backlog(
+def test_a_report_without_replays_leaves_out_the_comment_replay_and_still_ranks_the_backlog(
     tmp_path,
 ):
     repo = init_repo(tmp_path)
     _dated_commit(repo, "seed", 2, README="x\n")
-    _dated_commit(repo, "move", 1, **{"t/m.py": "LIMIT = 1\n"})
-    heads = []
-
-    def stub(repo, base, head):
-        heads.append(head)
-        return []
 
     report = build(
-        repo,
-        {"CLAUDE.md#Gate": []},
-        30,
-        tmp_path / "no.log",
-        now=_NOW,
-        notice=stub,
-        replays=False,
+        repo, {"CLAUDE.md#Gate": []}, 30, tmp_path / "no.log", now=_NOW, replays=False
     )
 
-    assert heads == []
-    assert "notice_replay" not in report and "comment_replay" not in report
+    assert "comment_replay" not in report
     assert report["backlog"] == [{"section": "CLAUDE.md#Gate", "reads": 0}]
-    assert "Notice replay" not in render(report, top=5)
+    assert "Comment-class replay" not in render(report, top=5)
+
+
+def test_a_report_with_replays_carries_the_comment_replay(tmp_path):
+    repo = init_repo(tmp_path)
+    _dated_commit(repo, "seed", 2, README="x\n")
+
+    report = build(repo, {}, 30, tmp_path / "no.log", now=_NOW)
+
+    assert report["comment_replay"]["commits"] == 1
+    assert "Comment-class replay" in render(report, top=5)

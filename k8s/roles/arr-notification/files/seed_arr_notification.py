@@ -1,11 +1,10 @@
 """Declare the *arr Discord Connect notification instead of leaving it as UI state.
 
 WHY THIS EXISTS. A Sonarr/Radarr/Lidarr "Connect" notification is a row in `sonarr.db` /
-`radarr.db` / `lidarr.db` on the app's config PVC — live state no manifest reproduces. The
-sonarr and radarr rows this script writes already existed when it was written (see the role's
-CLAUDE.md for the before-state), and both deliver, so the gap was never that health alerts went nowhere. It was that nothing but that
-volume held them: a Longhorn revert past their creation, or anyone recreating the claim, drops
-the notification silently and the app goes quiet in exactly the failure it exists to report.
+`radarr.db` / `lidarr.db` on the app's config PVC — live state no manifest reproduces. Nothing
+but that volume holds the row: a Longhorn revert past its creation, or anyone recreating the
+claim, drops the notification silently and the app goes quiet in exactly the failure it exists
+to report.
 
 IT ADOPTS THE ROW, IT DOES NOT ADD ONE. The match key is (implementation=Discord, name), and
 the default name is the one both live rows already carry. A second Discord notification at the
@@ -69,9 +68,6 @@ class SeedError(Exception):
 def deep_copy(body: dict) -> dict:
     """An independent copy of a JSON body, by a round trip; the Job census admits no `copy`."""
     return json.loads(json.dumps(body))
-
-
-# ── the decision (pure, and the part the tests drive) ────────────────────────────────────────
 
 
 def trigger_keys(body: dict) -> set[str]:
@@ -171,9 +167,6 @@ def find_notification(notifications: list[dict], name: str) -> dict | None:
         if entry.get("implementation") == IMPLEMENTATION and entry.get("name") == name:
             return entry
     return None
-
-
-# ── the transport ────────────────────────────────────────────────────────────────────────────
 
 
 def request(api_url: str, api_key: str, path: str, method: str = "GET", body=None):

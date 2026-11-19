@@ -16,9 +16,8 @@ k8s_autodeploy_reason: "CronJob gated on every revision by a gate Job in longhor
 longhorn_reconcile_k8s_image: python:3.15-alpine@sha256:0f9552bb28711333da16915ec146f5e6bb44a7fdac9ced15dc17c2e0206346dd
 
 # DECIDED: hourly, at minute 17. The Ansible tasks this job replaces ran once per `k3s-bringup.yml`
-# apply, with no clock, so there was no host cron to copy; the H1 plan fixes "hourly"
-# (*Longhorn objects that are not static*). Hourly bounds how long a PVC recreated from the
-# `longhorn` class sits in the daily group after a deploy that put it on another tier. Minute 17 keeps the run clear of the :00 and
+# apply. Hourly bounds how long a PVC recreated from the `longhorn` class sits in the daily
+# group after a deploy that put it on another tier. Minute 17 keeps the run clear of the :00 and
 # :30 marks that Longhorn's own cluster-wide jobs and the */10 health readers share. The job
 # writes nothing on a converged cluster, so the schedule costs two list calls an hour.
 longhorn_reconcile_k8s_schedule: "17 * * * *"
@@ -44,8 +43,7 @@ longhorn_reconcile_k8s_mem_limit: 128Mi
 longhorn_reconcile_k8s_cpu_request: 10m
 longhorn_reconcile_k8s_mem_request: 32Mi
 
-# The three tier lists, moved here from `setup/k3s`'s defaults in H1.7a under the names they had.
-# This role's ConfigMap renders them into `tiers.json`, and the job applies them to the cluster:
+# The three tier lists. This role's ConfigMap renders them into `tiers.json`, and the job applies them to the cluster:
 # the recurring-job group of every claim and, for the R2 list, the Volume's backup target. The
 # docs generators, the catalogue and the tier tests read them from this file
 # (`scripts/lib/service_tiers.py:resolved_tier_lists`).
@@ -63,7 +61,7 @@ longhorn_reconcile_k8s_mem_request: 32Mi
 # the keys of k3s_longhorn_weekly_volumes below.
 #
 # Derived, not listed: every `backup_claims` volume of every `home-critical` services
-# entry (tier `home-edge` or `home-automation`; template_filters/service_tier.py, #3389). To
+# entry (tier `home-edge` or `home-automation`; template_filters/service_tier.py). To
 # change the set, edit the entry.
 k3s_longhorn_r2_volumes: "{{ services | tier_backup_claims('home-critical', k8s_namespace) }}"
 
@@ -71,9 +69,9 @@ k3s_longhorn_r2_volumes: "{{ services | tier_backup_claims('home-critical', k8s_
 # (0=Sunday), so no weekday stacks two heavy volumes under B2's daily transaction cap.
 #
 # Derived, not listed: every `weekly_backup_claims` entry of every services entry, each
-# naming its own shard (template_filters/longhorn_groups.py, #4207). To change the set, edit the
-# entry. The shard used to be the volume's index mod 7 in a hand list here, so removing one
-# volume moved every volume below it to another weekday; a declared shard moves only itself.
+# naming its own shard (template_filters/longhorn_groups.py). To change the set, edit the
+# entry. A declared shard moves only its own volume; an index-derived shard would move every
+# volume below a removed one to another weekday.
 # This job swaps each volume's recurring-job group label, so a PVC recreated from the `longhorn`
 # StorageClass reverts to daily until its next hourly run: drift in the over-backed-up
 # direction, caught by the next run.
@@ -88,11 +86,10 @@ k3s_longhorn_weekly_volumes: "{{ services | longhorn_weekly_claims(k8s_namespace
 # never pruned and never refreshed, so excluding a volume to buy quiet under a live B2 cap
 # leaves it with stale recovery. Under a cap the answer is a staggered weekly group, not a
 # permanent exclusion. `Backup.status.size` is the backup's LOGICAL volume size, not blocks
-# uploaded (traefik-acme reports 35 -> 48 MB across daily backups of a 25 MB volume), and B2
-# publishes no cap-headroom endpoint, so **B2 Reachable** is the readout for a cap that fires.
+# uploaded, and B2 publishes no cap-headroom endpoint, so **B2 Reachable** is the readout for a cap that fires.
 #
 # Derived, not listed: every `no_backup_claims` entry of every services entry, where
-# each claim carries the reason it is excluded (template_filters/longhorn_groups.py, #4207).
+# each claim carries the reason it is excluded (template_filters/longhorn_groups.py).
 k3s_longhorn_nobackup_volumes: "{{ services | longhorn_nobackup_claims(k8s_namespace) }}"
 
 # The CronJob's one-off run per role revision, `longhorn-reconcile-deploy-gate-<spec digest8>` in

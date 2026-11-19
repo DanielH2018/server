@@ -11,9 +11,8 @@
 # self-sustaining twice over — the mod's api.mullvad.net call routes into the dead wg0 and
 # fails, and even when it succeeds, PostUp's `ip route add` hits the routes that already exist
 # and wg-quick tears the tunnel back down (see this role's CLAUDE.md, "A VPN kill-switch
-# outlives the container it fenced" — 9h/107 restarts on 2026-08-16, 3.5d/1005 restarts on
-# 2026-09-13, both cleared only by a pod delete). This script is what makes a container
-# restart equivalent to that pod delete.
+# outlives the container it fenced": cleared only by a pod delete). This script is what makes a
+# container restart equivalent to that pod delete.
 #
 # The order matters: the gate goes up BEFORE the stale tunnel comes down. qbittorrent keeps
 # running in the pod while the sidecar restarts, and between the reset and the mod's PostUp
@@ -25,15 +24,15 @@
 # The gate exempts fwmark 51820 as well as `-o wg0`, and the exemption is load-bearing. A
 # packet qbittorrent sends into wg0 leaves the pod as an encrypted UDP carrier on eth0, and
 # that carrier still belongs to the originating socket — so `--uid-owner` matches it and
-# `! -o wg0` is true. Without the mark exemption the gate rejected every carrier packet for
-# uid 1000 on 2026-09-17: the tunnel was up, root reached the internet through it, and
-# qbittorrent saw only timeouts (DHT 0 nodes, every peer and tracker dead). wg-quick sets
+# `! -o wg0` is true. Without the mark exemption the gate rejects every carrier packet for
+# uid 1000: the tunnel is up, root reaches the internet through it, and
+# qbittorrent sees only timeouts (DHT 0 nodes, every peer and tracker dead). wg-quick sets
 # the mark (`wg set wg0 fwmark 51820`) and the mod's own REJECT exempts it the same way.
 #
 # Fails closed. If the gate cannot be installed, the script exits non-zero and the container
 # restarts without touching the netns — the deadlock this script exists to break, but never a
 # leak. The one thing that can refuse it is the `owner` match being unavailable in the pod's
-# iptables, which the first deploy of this wrapper proves one way or the other.
+# iptables.
 #
 # Usage: netns-reset.sh (no arguments)
 # Runs as `/opt/netns-reset/netns-reset.sh && exec /init` in the wireguard sidecar container,
@@ -98,7 +97,7 @@ done
 
 # The pod's default route. LSIO's svc-wireguard runs `ip route del default` when a tunnel fails
 # to come up, and the route belongs to the pod netns, so every later start had no route to
-# CoreDNS, lscr.io or api.mullvad.net until a pod delete (#8402). A start that finds the route
+# CoreDNS, lscr.io or api.mullvad.net until a pod delete. A start that finds the route
 # stashes it in a routing table no rule reads, which dies with the netns; a start that finds it
 # gone re-adds it from there. The stash sits below 51820 because wg-quick picks its table and
 # fwmark by counting up from 51820 past any non-empty table, and the gate exempts 51820 only.
@@ -122,8 +121,8 @@ fi
 # The pod's resolv.conf. The kubelet bind-mounts one file into every container of the pod, so it
 # outlives a container restart like the netns does. wg-quick's `resolvconf -a wg0` points it at
 # MULLVAD_DNS, and only LSIO's graceful finish script takes that out again. A start after a
-# SIGKILL would look up api.mullvad.net through 10.64.0.1, which only the dead tunnel reaches
-# (#8489). openresolv signs every file it writes, so a start that finds no signature finds the
+# SIGKILL would look up api.mullvad.net through 10.64.0.1, which only the dead tunnel reaches.
+# openresolv signs every file it writes, so a start that finds no signature finds the
 # kubelet's own file and saves it, and a start that finds one writes the saved copy back. The
 # copy sits on the config claim, which outlives the pod, but every pod's first start finds the
 # kubelet's file and overwrites it, so a restart only ever restores its own pod's copy. `cat >`

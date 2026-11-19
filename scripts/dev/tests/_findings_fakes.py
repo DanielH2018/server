@@ -17,6 +17,7 @@ pass while gh ran.
 fixture in conftest.py is how a test reaches it.
 """
 
+import re
 import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -222,6 +223,77 @@ def _issues_named(f: Fakes, number: int) -> list[dict]:
     return found
 
 
+def _as_gh_returns(issue: dict) -> dict:
+    """``issue`` without its `fields`, which `gh issue list --json` cannot return.
+
+    Only `gh_calls.attach_fields` puts them back, so a loader that skips it fails here as it
+    would against GitHub. The lists inside are shared, so a posted comment still reaches the
+    fixture.
+    """
+    return {k: v for k, v in issue.items() if k != "fields"}
+
+
+def aimed_at(calls: Calls, repo: str) -> bool:
+    """Whether every gh call went to ``repo``: `--repo` on a subcommand, `-F name=` on GraphQL.
+
+    A mutation addresses its issue by node id, which the read that found it already aimed.
+    """
+
+    def aimed(argv: list[str]) -> bool:
+        if argv[:2] == ["api", "graphql"]:
+            return (
+                "query=mutation" in argv[3][:20] or f"name={repo.split('/')[1]}" in argv
+            )
+        return argv[-2:] == ["--repo", repo]
+
+    return all(aimed(c) for c in calls.gh + calls.gh_json)
+
+
+ISSUE_FIELD_DEFS = [
+    {
+        "id": "IF_sev",
+        "name": "Severity",
+        "options": [{"id": f"o_{s}", "name": s} for s in ("High", "Medium", "Low")],
+    },
+    {"id": "IF_nb", "name": "Not Before"},
+]
+
+
+def _graphql_answer(f: Fakes, query_arg: str) -> dict:
+    """What `gh api graphql` answers for the three queries `gh_calls` sends.
+
+    The aliased field read answers each issue's `fields` key, so a fixture sets its issue
+    fields as `{"Severity": "High", "Not Before": "2026-12-01"}`. `set_fields`' read answers
+    `ISSUE_FIELD_DEFS`, and its mutation answers nothing; `calls.gh_json` holds it.
+    """
+    query = query_arg.removeprefix("query=")
+    if query.startswith("mutation"):
+        return {"data": {}}
+    if "issueFields(first" in query:
+        (number,) = map(int, re.findall(r"issue\(number: (\d+)\)", query))
+        return {
+            "data": {
+                "repository": {
+                    "issue": {"id": f"I_{number}"},
+                    "issueFields": {"nodes": ISSUE_FIELD_DEFS},
+                }
+            }
+        }
+    repository = {}
+    for n in map(int, re.findall(r"i(\d+): issue\(", query)):
+        held = next(
+            (i.get("fields") for i in _issues_named(f, n) if i.get("fields")), {}
+        )
+        nodes = [
+            {"value": v, "field": {"name": k}}
+            if k == "Not Before"
+            else {"name": v, "field": {"name": k}}
+            for k, v in (held or {}).items()
+        ]
+        repository[f"i{n}"] = {"issueFieldValues": {"nodes": nodes}}
+    return {"data": {"repository": repository}}
+
+
 def build_tools(f: Fakes | None = None) -> tuple[FindingsTools, Calls]:
     """A `FindingsTools` answering from `f`, and the record of what it was asked."""
     f = f or Fakes()
@@ -231,6 +303,10 @@ def build_tools(f: Fakes | None = None) -> tuple[FindingsTools, Calls]:
 
     def gh_json(*argv, **kwargs):
         calls.gh_json.append(list(argv))
+        if argv[:2] == ("api", "graphql"):
+            if "api graphql" in f.json_errors:
+                raise f.json_errors["api graphql"]
+            return _graphql_answer(f, argv[argv.index("-f") + 1])
         if argv[0] == "api":
             assert "--repo" not in argv, f"gh api rejects --repo: {argv}"
             path = argv[1].split("?")[0]
@@ -266,10 +342,10 @@ def build_tools(f: Fakes | None = None) -> tuple[FindingsTools, Calls]:
                 number = int(argv[2])
                 i = view_reads.get(number, 0)
                 view_reads[number] = i + 1
-                return value[min(i, len(value) - 1)]
-            return value
+                return _as_gh_returns(value[min(i, len(value) - 1)])
+            return _as_gh_returns(value)
         if key == "issue list":
-            return list(f.issues)
+            return [_as_gh_returns(i) for i in f.issues]
         if key == "pr list":
             return list(f.prs)
         raise AssertionError(argv)

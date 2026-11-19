@@ -13,28 +13,21 @@ metadata:
   name: flaresolverr
   namespace: {{ k8s_namespace }}
 spec:
-  # No authoritative state: /config is a browser profile cache the app rebuilds on first use,
-  # so it moved to an emptyDir and the RWO constraint that
-  # forced Recreate is gone. maxUnavailable 0 and maxSurge 1 are what SHOULD make this
-  # zero-downtime — on a single replica maxUnavailable 0 forces the new pod Ready before the
-  # old one is removed, where the 25% default would round down to 0 anyway but says nothing
-  # about intent. This is unverified until the slice-1 measurement (measure_rollout_gap.py)
-  # actually runs against a live deploy — no deploy has been authorised on this branch, so
-  # "zero-downtime" here is intent, not a measured result.
+  # No authoritative state: /config is a browser profile cache the app rebuilds on first use, so
+  # it is an emptyDir and no RWO constraint forces Recreate. maxUnavailable 0 and maxSurge 1 are
+  # meant to make this zero-downtime — on a single replica maxUnavailable 0 forces the new pod
+  # Ready before the old one is removed, where the 25% default would round down to 0 anyway but
+  # says nothing about intent. That is intent, not a measured result.
   #
-  # Conversion-gate note: only the write-model half of the gate was confirmed against
-  # FlareSolverr's behaviour (the /config cache claim above, from this role's own prior
-  # investigation). The multi-instance half was NOT confirmed — maxSurge: 1 means two
-  # flaresolverr pods can run behind one Service simultaneously for the duration of a rollout,
-  # and nothing here confirms from FlareSolverr's own docs that this is safe. Assessed risk is
-  # low: Prowlarr drives FlareSolverr with sessionless `request.get`/`request.post` calls (a
-  # throwaway browser per request), not `sessions.create`, so there is no per-pod session state
-  # for a second pod to diverge from or lose. That is an inference from how Prowlarr's indexer
-  # proxy integration is used here, not a documented confirmation from FlareSolverr's own API
-  # docs — recorded honestly as a waiver, not papered over.
+  # maxSurge: 1 means two flaresolverr pods can run behind one Service simultaneously for the
+  # duration of a rollout, and nothing confirms from FlareSolverr's own docs that this is safe.
+  # Assessed risk is low: Prowlarr drives FlareSolverr with sessionless `request.get`/
+  # `request.post` calls (a throwaway browser per request), not `sessions.create`, so there is no
+  # per-pod session state for a second pod to diverge from or lose. That is an inference from how
+  # Prowlarr's indexer proxy integration is used here, not a documented confirmation.
 {{ spec_shell('RollingUpdate', max_surge=1, max_unavailable=0) }}
   replicas: 1
-  # A cold pull of this image took 8m54s (#2369), inside the 600s default only by chance. See
+  # A cold pull of this image took 8m54s, inside the 600s default only by chance. See
   # prowlarr_k8s_rollout_timeout in defaults/main.yml.
   progressDeadlineSeconds: {{ prowlarr_k8s_rollout_timeout[:-1] | int }}
   selector:
@@ -44,7 +37,7 @@ spec:
     metadata:
       labels:
         app: flaresolverr
-        # Opted OUT of the namespace baseline (slice 5). `networkpolicy.yaml.j2` admits only
+        # Opted OUT of the namespace baseline. `networkpolicy.yaml.j2` admits only
         # prowlarr on :8191; the baseline is additive, so selecting this pod would ADD traefik,
         # prometheus and both node CIDRs on top — the widening the guard exemption avoids today.
         netpol-baseline-exempt: "true"
@@ -58,21 +51,19 @@ spec:
           ports:
             - containerPort: {{ prowlarr_k8s_flaresolverr_port }}
           # The comment below is what makes this assertable where its LSIO siblings are not:
-          # no config chown means no root phase to preserve. PID 1 (`dumb-init`) measured at
-          # uid 1000 on 2026-08-31. It renders untrusted pages, so pinning the uid is worth
+          # no config chown means no root phase to preserve. It renders untrusted pages, so pinning the uid is worth
           # more here than on a passive workload.
           # Drop ALL with nothing added back. Unlike the LSIO images this one does not chown a
           # config tree on startup, so it needs none of
           # the s6 privilege-drop set.
 {{ hardened_security_context(non_root=true, run_as_user=1000) }}
           env:
-            # `warning`, not `info`: at info this container wrote 11,571 lines a day to serve 11
-            # real requests, and measured 2026-08-29 the bulk of that was the kubelet's own
-            # readiness probe hitting `/` every 10s and being logged as a request. A genuine
+            # `warning`, not `info`: at info the bulk of the log is the kubelet's own readiness
+            # probe hitting `/` every 10s and being logged as a request. A genuine
             # challenge-solve failure raises, and FlareSolverr logs that at ERROR, so it still
             # prints here.
             #
-            # The signal that a challenge is failing was never this log anyway: monitor-bridge
+            # The signal that a challenge is failing is not this log: monitor-bridge
             # reads Prowlarr's /api/v1/indexerstatus (files/checks/service.py's
             # `check_prowlarr_indexers`), which is independent of
             # anything FlareSolverr writes to stdout.
@@ -103,7 +94,7 @@ spec:
 {{ container_resources(cpu_limit=prowlarr_k8s_fs_cpu_limit, mem_limit=prowlarr_k8s_fs_mem_limit, cpu_request=prowlarr_k8s_fs_cpu_request, mem_request=prowlarr_k8s_fs_mem_request) }}
       volumes:
         - name: flaresolverr-config
-          # sizeLimit preserves the cap the retired 1Gi PVC used to provide. Most siblings here
+          # sizeLimit caps the profile. Most siblings here
           # use a bare `emptyDir: {}`, but this one holds a Chrome profile: uncapped, runaway
           # growth becomes node ephemeral-storage pressure and the kubelet evicts OTHER pods on
           # the node, turning one browser's disk leak into someone else's outage. Capped, the

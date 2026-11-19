@@ -1,11 +1,11 @@
 ---
 # registry has no REGISTRY_AUTH (see deployment.yaml.j2) and its Service has no auth in front of
 # it either — the loopback hostPort only protects the LAN path. Any pod in {{ k8s_namespace }}
-# can currently push or delete images over the ClusterIP, including qbittorrent's and jellyfin's
+# can push or delete images over the ClusterIP, including qbittorrent's and jellyfin's
 # untrusted-input neighbors. This narrows that to the pods that legitimately write here.
 #
 # INGRESS, deliberately — the direction proven enforced on this cluster. Egress policies select
-# pods correctly and block nothing (measured 2026-08-07, recorded in sonarr's deleted tasks/main.yml); this
+# pods correctly and block nothing; this
 # repeats the same choice prowlarr's flaresolverr policy and n8n's broker policy already made,
 # and the `isolation` check in templates/verify/ checks it on every roll rather than assuming.
 #
@@ -26,10 +26,10 @@
 #
 # WHAT DOES NOT NEED A RULE: the readinessProbe/livenessProbe on this same port. n8n's broker
 # policy left its probed port (5678) open to ALL sources specifically because kube-router's
-# handling of node-sourced probe traffic under a restrictive policy was untested at the time it
-# was written. It is no longer untested: flaresolverr's policy restricts its ONLY port (8191) to
-# `podSelector: {app: prowlarr}` with no exception of any kind, and that pod has run 1/1 Ready
-# for 4 days on readiness+liveness probes over that exact port (checked 2026-08-13). Kubelet
+# handling of node-sourced probe traffic under a restrictive policy was untested. It is not
+# untested: flaresolverr's policy restricts its ONLY port (8191) to
+# `podSelector: {app: prowlarr}` with no exception of any kind, and that pod runs 1/1 Ready
+# on readiness+liveness probes over that exact port. Kubelet
 # probes a pod's IP directly — not through the hostPort/loopback path — and kube-router does not
 # subject that path to ingress enforcement. This policy relies on the same proven behavior rather
 # than re-deriving it, and does not carve out {{ k8s_registry_port }} for probes.
@@ -91,11 +91,11 @@ spec:
     - from:
         - ipBlock:
             cidr: {{ registry_k8s_netpol_cni_gateway }}
-        # The AGENT pull path (2026-08-14, nut→k8s port): containerd on daniel-server
+        # The AGENT pull path: containerd on daniel-server
         # reaches the pinned ClusterIP through its registries.yaml mirror. Host-originated
         # traffic entering the overlay is SNAT'd to the node's own flannel.1 address —
-        # `ip -4 addr show flannel.1` on daniel-server reads 10.42.1.0/32 (checked
-        # 2026-08-14). Same (a)/(b)/(c) caveats as the loopback ipBlock above; the
+        # `ip -4 addr show flannel.1` on daniel-server reads 10.42.1.0/32.
+        # Same (a)/(b)/(c) caveats as the loopback ipBlock above; the
         # daniel-server-pinned pull selftest is what distinguishes (b) loudly.
         - ipBlock:
             cidr: {{ registry_k8s_netpol_agent_flannel }}
@@ -104,7 +104,7 @@ spec:
         - protocol: TCP
           port: {{ k8s_registry_port }}
     # DECIDED: a standing grant for source-controller, not a hand-applied policy at break-glass
-    # time (#6046). Break-glass points the OCIRepository `homelab` at this registry, so
+    # time. Break-glass points the OCIRepository `homelab` at this registry, so
     # source-controller must reach this port before it can fetch the artifact. A rule rendered
     # only under `flux_break_glass` would sit inside that artifact, so the operator would still
     # apply it by hand on the way in. The cost: the registry has no auth, so source-controller

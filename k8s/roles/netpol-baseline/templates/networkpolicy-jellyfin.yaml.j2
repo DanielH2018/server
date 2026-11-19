@@ -2,7 +2,7 @@
    bespoke.
    The callers model (`netpol_from` / `netpol_fences`, macro in
    k8s/templates/networkpolicy.yml.j2) renders one TCP port admitting same-namespace `app:`
-   peers, and its header rules out growing it to absorb another shape. Census: #3701.
+   peers, and its header rules out growing it to absorb another shape.
    Do not reach for `from_apps: []`: it renders `from:` as null, which admits every source by
    accident rather than by statement.
 #}

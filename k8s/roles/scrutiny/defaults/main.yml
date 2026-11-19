@@ -28,7 +28,7 @@ scrutiny_k8s_config_claim: scrutiny-web-config
 scrutiny_k8s_config_size: 1Gi
 scrutiny_k8s_config_storage_class: longhorn
 
-# The claims the renderer emits for this role, which the scrutiny Kustomization applies (#3387).
+# The claims the renderer emits for this role, which the scrutiny Kustomization applies.
 k8s_claims:
   - name: "{{ scrutiny_k8s_influxdb_claim }}"
     storage_class: "{{ scrutiny_k8s_influxdb_storage_class }}"
@@ -44,7 +44,7 @@ scrutiny_k8s_collector_cron: "0 0 * * *"
 manifests_rollout: scrutiny-web
 
 # The other two workloads, listed so the batch drain WAITS on their rollouts, never so this
-# role restarts them (#4564). A Renovate digest bump of `scrutiny_k8s_influxdb_image` or
+# role restarts them. A Renovate digest bump of `scrutiny_k8s_influxdb_image` or
 # `scrutiny_k8s_collector_image` rolls the workload through the apply, and before these
 # entries nothing waited on that roll. Neither needs a restart: the collector mounts its
 # ConfigMap as a directory, which kubelet syncs and each cron run re-reads, and InfluxDB

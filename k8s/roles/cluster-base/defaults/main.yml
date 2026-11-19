@@ -1,5 +1,5 @@
 ---
-# The cluster identity and the workload-tier PriorityClasses, handed to Flux (H1.2). Two
+# The cluster identity and the workload-tier PriorityClasses, handed to Flux. Two
 # objects here are needed before Flux can run: Flux's own controllers name `homelab-critical`,
 # and the read-only kubeconfig carries the token this Secret holds. So a rebuilt cluster
 # applies this tag by hand before it installs Flux (docs/longhorn-disaster-recovery.md,
@@ -32,7 +32,7 @@ k3s_readonly_crd_api_groups:
   # /etc/rancher/k3s), and an Addon records a manifest's path and checksum.
   - k3s.cattle.io
   # system-upgrade-controller's Plans. `k3s_gates.py host` reads them to refuse a restart while
-  # a Plan is applying (H6.3b). The template grants `resources: ["*"]`, which also covers the
+  # a Plan is applying. The template grants `resources: ["*"]`, which also covers the
   # group's only other resource, and both are read-only and hold no credential.
   - upgrade.cattle.io
 

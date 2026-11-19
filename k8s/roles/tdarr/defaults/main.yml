@@ -2,9 +2,9 @@
 # tdarr is the heaviest transcode consumer: it runs real files through VAAPI for minutes at a time.
 # Pinned by a VERSION TAG plus its digest, because tdarr is stateful AND rewrites library files in
 # place. Upstream pushes a numeric tag to ghcr.io for every release, so Renovate reads the version
-# off the tag and a major release arrives labelled as one. The `:latest@sha256:` pin this
-# replaced changed only its digest, which is how #4550 carried Tdarr v3 with no version anywhere
-# in its title, body or diff (#4555). The image's OCI version label reads `dev_<version>_<date>`
+# off the tag and a major release arrives labelled as one. A `:latest@sha256:` pin changes only
+# its digest, so a major release carries no version anywhere
+# in its title, body or diff. The image's OCI version label reads `dev_<version>_<date>`
 # on every build, this one included; `dev_` names upstream's build channel, not a pre-release.
 #
 # The digest is what pins; the tag is what Renovate's k8s-defaults manager matches on. A
@@ -18,21 +18,19 @@ tdarr_k8s_image: ghcr.io/haveagitgat/tdarr:3.08.00@sha256:84743e5ae433a5b49cb463
 # the shared default (manifests_rollout_timeout_default): the `tdarr-prepull` Kustomization
 # below puts the image on the node before the `tdarr` Kustomization applies, so a roll pays
 # only the container start and the `vaapi-encode` initContainer, and a stuck tdarr holds a Flux
-# worker for 10 minutes. Until the flip it was 3000s, because Ansible's crictl pre-pull and
-# the rollout wait shared it (D5 step 26).
+# worker for 10 minutes.
 # The literal is `manifests_rollout_timeout` because the renderer reads a role's Flux
 # Kustomization `timeout` only from a literal role default (`role_fields` in
-# scripts/lib/k8s_roles.py); as an include var it would render Flux's 600s default (#5464).
+# scripts/lib/k8s_roles.py); as an include var it would render Flux's 600s default.
 manifests_rollout_timeout: 600s
 tdarr_k8s_rollout_timeout: "{{ manifests_rollout_timeout }}"
 
 # The budget of the tdarr-prepull Kustomization, whose Job pulls tdarr's image onto its node
 # before the tdarr Kustomization applies (scripts/renderer/renderer_lib/prepull.py), so the
-# Recreate stops the old pod only once the new image is present (#3875). The image is
-# 1432 MiB compressed (node status `sizeBytes`, 2026-10-09).
-# 3000s is the cold-pull budget: the 1432 MiB pull took 25m37s on 2026-10-08 (#3689).
-# It covers a pull down to 0.5 MB/s. GHCR served daniel-box at 0.21-0.33 MB/s on 2026-10-17
-# (#5525), which would take 4550-7150s here. The Job has no deadline, so a pull that slow
+# Recreate stops the old pod only once the new image is present. The image is
+# 1432 MiB compressed. 3000s is the cold-pull budget: a 1432 MiB pull took 25m37s. It covers a
+# pull down to 0.5 MB/s. GHCR has served daniel-box at 0.21-0.33 MB/s, which would take
+# 4550-7150s here. The Job has no deadline, so a pull that slow
 # costs that revision its verdict, the Job keeps pulling, and Flux applies tdarr on a later
 # retry; a longer budget would hold a worker for over an hour on every cold pull instead.
 flux_prepull_timeout: 3000s
@@ -57,7 +55,7 @@ k8s_autodeploy: false
 k8s_autodeploy_reason: "state coupled outside the volume — rewrites media-data (shared RWX, not reverted) in place, an irreversible transcode the snapshot/revert can't undo; ALSO non-atomic two-claim revert (tdarr-configs, tdarr-server)"
 # The claims snapshotted before each revision applies. Under Flux the renderer turns this
 # list into the tdarr-snapshot Kustomization, whose Job snapshots them before tdarr applies
-# (D5.2a). Two claims, two seeds — same pairing as
+# Two claims, two seeds — same pairing as
 # tdarr_k8s_server_claim/tdarr_k8s_configs_claim below.
 # Declared regardless of k8s_autodeploy.
 k8s_autodeploy_snapshot_pvcs: [tdarr-configs, tdarr-server]
@@ -88,13 +86,11 @@ k8s_claims:
     storage_class: "{{ tdarr_k8s_storage_class }}"
     size: "{{ tdarr_k8s_configs_size }}"
 
-# ── the media mount ─────────────────────────────────────────────────────────────────────────
 # READ-WRITE, unlike jellyfin's two read-only mounts, and that asymmetry is the point: tdarr
 # rewrites library files IN PLACE. It is the one media consumer that must be able to.
 #
 # subPath `media` at /media, NOT the whole tree at /data. The path matters for the same reason
-# it does
-# for the *arrs (D4): tdarr's database stores absolute in-container paths, so a library rooted
+# it does for the *arrs: tdarr's database stores absolute in-container paths, so a library rooted
 # anywhere else loads fine and then fails to match a single file. It gets no access to
 # torrents/ — nothing in tdarr's job reaches into an in-flight download.
 tdarr_k8s_media_claim: media-data

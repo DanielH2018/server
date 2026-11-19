@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Weekly host maintenance -- managed by Ansible (initial_setup role); edits overwritten.
+# Weekly host maintenance -- shipped by the host package; edits are overwritten.
 #
 # Usage: host-maintenance.sh JOB
 # JOB is one of:

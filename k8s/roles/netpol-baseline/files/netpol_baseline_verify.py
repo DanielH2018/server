@@ -1,16 +1,15 @@
 """netpol-baseline's verify Job: prove the policies are enforced, not merely applied.
 
 `templates/verify/job.yaml.j2` holds the Job, which the renderer emits as
-`netpol-baseline-verify`. It carries the checks of the `netpol-baseline-probe` Job and the
-readiness gate the role's tasks ran before it.
+`netpol-baseline-verify`.
 The pod stands in for a compromised workload: its `app: netpol-baseline-verify` label is on no
 caller list, so every `refused` row must refuse it. The Job runs this script twice, once per
 stage, which `NETPOL_VERIFY_STAGE` names.
 
 - `gate`, the initContainer. First, under each namespace-scoped baseline, the pods carrying
-  `netpol-baseline-exempt` must be exactly the apps `EXEMPT_SETS` expects, the check
-  the role's tasks ran before their apply. Here it runs after the apply, so a mismatch is a
-  detection the revision's soak acts on rather than a gate. Then every active row of `netpol_baseline_probe_targets` must have an
+  `netpol-baseline-exempt` must be exactly the apps `EXEMPT_SETS` expects. The check runs
+  after the apply, so a mismatch is a detection the revision's soak acts on rather than a
+  gate. Then every active row of `netpol_baseline_probe_targets` must have an
   EndpointSlice endpoint whose `conditions.ready` is `true`. Most legs are inverted, so a
   target that is down would read as fenced. It reads the API server with the pod's
   ServiceAccount token, and the API server's CA reaches `urlopen` through `SSL_CERT_FILE`,
@@ -56,16 +55,15 @@ EXEMPT_LABEL = "netpol-baseline-exempt"
 # values included, and RBAC cannot narrow a `list` to metadata. This asks the API server for
 # the metadata alone.
 METADATA_ONLY = "application/json;as=PartialObjectMetadataList;g=meta.k8s.io;v=v1"
-# The socket timeout of each leg's connect, in seconds; the probe it replaces used `nc -w 5`.
+# The socket timeout of each leg's connect, in seconds.
 TIMEOUT = 5
-# The liveness fetch's socket timeout, in seconds; the probe used `wget -T 10`.
+# The liveness fetch's socket timeout, in seconds.
 LIVENESS_TIMEOUT = 10
 # How long the control retries a refused connect, in seconds: the helper's own default.
 CONTROL_RETRY_SECONDS = 60
-# How long the sentinel retries, in seconds: the probe's 12 attempts of up to 10s each. It is
-# the one leg whose admission needs kube-router to know this pod's labels, and a pod seconds
-# old failed one immediate attempt with the policy, the labels and the target all correct
-# (measured 2026-08-20).
+# How long the sentinel retries, in seconds. It is the one leg whose admission needs kube-router
+# to know this pod's labels, and a pod seconds old can fail one immediate attempt with the
+# policy, the labels and the target all correct.
 SENTINEL_RETRY_SECONDS = 120
 # The port the DNS leg dials once a name resolves. Only the resolution is the test, so any
 # port serves; a test passes a closed local one.
@@ -274,7 +272,7 @@ def isolated(row: Mapping) -> str:
     url = row["url"]
     # OPTIONS, because urllib follows a redirect only for GET, HEAD and POST and raises
     # `HTTPError` for any other method. A target that accepts and redirects to an address that
-    # refuses would otherwise read as refused, where the `nc -z` this replaces saw the accept.
+    # refuses would otherwise read as refused.
     err = _dial(url, TIMEOUT, 0, method="OPTIONS")
     if err is not None and refused(err):
         return f"isolated: {url} unreachable from an unlisted caller"

@@ -40,9 +40,9 @@ skipped required job as a pass.
 
 ## A pull request runs the test modules its diff can affect
 
-A pull-request run's `pytest` legs run a selection, and a push to master and a dispatch run
-every module (#8458, ruled by the operator on 2026-11-15). A push whose tree a
-pull-request run tested runs nothing
+A pull-request run's `pytest` legs run a selection (#8458, ruled by the operator on
+2026-11-15), and so does a push to master whose tree no pull-request run tested. A
+dispatch runs every module. A push whose tree a pull-request run tested runs nothing
 ([ADR-0036](adr/0036-a-selected-run-proves-its-tree-and-a-nightly-sweep-is-the-net.md)).
 
 - **The table.** `scripts/dev/affected_tests.json` holds, for each test module, the tracked
@@ -71,14 +71,28 @@ pull-request run tested runs nothing
   the same tree would diff it against the same base with the same table, so its selection
   would be the one the pull-request run already ran, and it skips every job
   (`tests/repo/test_ci_skip_proven_master.py::test_a_run_records_the_tree_it_tested_unless_it_was_proven`).
-  A landing batch whose run was selected still records nothing on its members.
+  A landing batch's run records its members the same way. Its selection comes from the
+  diff of every member stacked on master, so it holds each module any one member can
+  affect.
+- **An unproven push selects against the newest green ancestor.** Master moved under the
+  pull request, so no run tested the pushed tree. The `prove` job names a base,
+  `scripts/dev/tested_tree.py:green_base`: the newest first-parent ancestor whose `prek`
+  gate passed. The legs select the modules the diff from that base can affect. The base is
+  not always the parent. A selection against a parent whose run is red would leave out
+  what the parent broke, and master would read green with that module failing
+  (`scripts/dev/tests/test_tested_tree.py::test_a_red_or_unfinished_parent_is_skipped_for_the_ancestor_behind_it`).
+  A parent whose run has not finished is skipped the same way. With no green ancestor
+  within `MAX_BASE_WALK` commits, or a lookup that fails, the push runs every module.
 
 ## A nightly sweep runs every module
 
-`.github/workflows/pytest-sweep.yml` runs the whole suite on master's head at 09:30 UTC, on
+`.github/workflows/pytest-sweep.yml` runs the whole suite on master's head once a day, on
 one runner and with no selection. It finds a module whose row in the table is older than a
 dependency the module gained, which no selected run is told to run.
 
+- **It starts hours after its schedule.** The cron line says 09:30 UTC. GitHub started
+  the Renovate canary, scheduled for 09:00 UTC, between 17:38 and 18:58 UTC on each of
+  2026-11-16 to 2026-11-18. A stale-row miss can therefore go unseen for more than a day.
 - **It grades no commit.** No job in it carries the name of the `prek` gate, so
   `hosts/lib/ci_verdict.py:ci_verdict` never reads it and a red sweep holds no landing
   (`tests/repo/test_pytest_sweep_workflow.py::test_a_job_under_the_gates_name_is_flagged`).
@@ -161,7 +175,8 @@ rule in `scripts/deploy_tools/land_lib/` stays where it is, and so does every ch
 pull-request run makes, because the one run is still a pull-request run.
 
 The queue is never what makes a merge correct. When master moves between a PR's run and its
-merge, the trees differ, nothing is proven, and master's run sweeps in full as it did before.
+merge, the trees differ, nothing is proven, and master's run repeats every job but `pytest`,
+whose legs run a selection against the newest green ancestor.
 
 **D9, ruled by the operator on 2026-11-14: every landing forms a batch, and sessions and the
 fan-out open their PRs as drafts.** B3 saves runs only for a draft whose head has had no CI
@@ -732,6 +747,15 @@ The survey for C2 found three costs the plan had not counted:
   `/usr/local/bin`, and a pod under the `restricted` standard can do none of it. A pod needs
   an image of its own with those tools in it, and steps that differ between a pod and a
   hosted runner. That is a second copy of the environment, which is how the sweep went wrong.
+  Since 2026-11-19 the two jobs' own tool installs write to no system path (#9126).
+  `.github/actions/pytest-tools` puts SOPS, age and apt-utils in `~/.local/bin`, which the
+  runner image has on PATH, and `hooks` unpacks Vale into `$RUNNER_TEMP/bin`. Three uses of
+  root remain. `pytest-tools` runs `sudo apt-get update` when the image's package lists are
+  stale. `.github/actions/setup` edits the apt mirror list, and installs `libyaml-dev` when
+  the image lacks it. A pod still needs a base image with what the hosted image ships,
+  such as `systemd-analyze`, Go and `jq`. About ten test modules skip when one of those
+  binaries is missing, so a pod's run needs a step that fails on a missing one before its
+  result can be set beside a hosted run's.
 - **A test refuses any ResourceQuota.** `test_no_resourcequota_is_declared_anywhere` fails on
   one, and ADR-0032 names a quota as a bound on the launcher.
 - **The launcher's token takes operator steps.** It would reach daniel-box as the read-only

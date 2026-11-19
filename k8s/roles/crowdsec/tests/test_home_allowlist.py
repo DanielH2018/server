@@ -3,8 +3,8 @@
 `files/home_allowlist.py` runs with a recording runner that answers `kubectl get configmap`
 from a dict and `cscli allowlists inspect` from a list of stored entries, so each test reads
 the cscli writes the run made and its verdict. The rules it holds are the host script's,
-ported: an empty or failed IPv6 value never removes a stored /64 (#1248), an IPv6 fault is
-reported even when the IPv4 half synced, and an unreachable WAN is a skip (#2793).
+ported: an empty or failed IPv6 value never removes a stored /64, an IPv6 fault is
+reported even when the IPv4 half synced, and an unreachable WAN is a skip.
 
 Run: uv run pytest k8s/roles/crowdsec/tests/test_home_allowlist.py
 """

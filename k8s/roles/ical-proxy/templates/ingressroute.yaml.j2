@@ -1,10 +1,9 @@
 {% from 'ingressroute.yml.j2' import monitoring_route with context %}
 ---
-{# monitoring_route, not ingressroute(): under Docker this sat on the homepage_private
-   isolation net so ONLY homepage could read the unauthenticated private feeds. The
-   ClientIP(daniel-server) guard is that isolation's cluster equivalent — homepage still
-   runs there, and nothing else on the LAN can fetch the calendars. LAN-only by
-   construction (the macro ignores k8s_public_route). #}
+{# monitoring_route, not ingressroute(): the ClientIP(daniel-server) guard is what lets ONLY
+   homepage, which runs there, read the unauthenticated private feeds — nothing else on the
+   LAN can fetch the calendars. LAN-only by construction (the macro ignores
+   k8s_public_route). #}
 {{ monitoring_route(
     container_item.name,
     container_item.hostname | default(container_item.name),
@@ -17,9 +16,8 @@
 
    That CIDR is the whole pod network, so admitting it dissolved the very isolation this route's
    comment claims to provide — "only homepage could read the unauthenticated private feeds"
-   became "any pod can". Demonstrated live rather than argued: a GET of /calendar1.ics from a
-   source matching only the pod-CIDR clause returned 200 and 847,922 bytes of private calendar.
-   The role's own CLAUDE.md still said only Homepage reads these feeds; it did not.
+   became "any pod can": a GET of /calendar1.ics from a source matching only the pod-CIDR
+   clause returns 200 with the private calendar.
 
    A NetworkPolicy cannot substitute for this. baseline-ingress admits `app=traefik` on all
    ports and the traefik policy's first ingress rule has no `from:`, so every pod may reach

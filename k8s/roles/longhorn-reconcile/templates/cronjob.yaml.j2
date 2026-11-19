@@ -2,9 +2,8 @@
 {% from 'security-context.yml.j2' import job_hardened_security_context with context %}
 {#
   The Longhorn reconcile job, hourly: hold each Volume CR in the recurring-job group and backup
-  target its tier names. It replaced the `setup/k3s` tasks in `tasks/longhorn.yml` and
-  `tasks/longhorn-weekly-shard.yml` at H1.6. The script's docstring is the design, and this
-  role's CLAUDE.md has the write contract.
+  target its tier names. The script's docstring is the design, and this role's CLAUDE.md
+  has the write contract.
 
   It WRITES to the cluster: a merge patch of group labels and backup target on a Volume CR that
   must move. A converged cluster gets no write. Its ServiceAccount (rbac.yaml.j2) holds those verbs and no

@@ -2,7 +2,7 @@
    bespoke.
    The callers model (`netpol_from` / `netpol_fences`, macro in
    k8s/templates/networkpolicy.yml.j2) renders one TCP port admitting same-namespace `app:`
-   peers, and its header rules out growing it to absorb another shape. Census: #3701.
+   peers, and its header rules out growing it to absorb another shape.
    One rule here would fit that model on its own, but splitting it out leaves this file
    behind anyway, doubles the policy objects on one pod and renames a live object under the
    armed prune, so the whole fence keeps one owner.
@@ -33,11 +33,8 @@ spec:
     # the house down.
     #
     # Cluster DNS also lands here: CoreDNS forwards to pihole-dns's ClusterIP, so these queries
-    # arrive from a kube-system pod, not from a node. Verified live 2026-08-20: the Corefile's
-    # `forward .` target (10.43.252.187) equals pihole-dns's ClusterIP. An open :53 covers that
-    # too -- it is recorded because the spec asserted the opposite (docs/networkpolicy-default-
-    # deny.md's Slice 4 section claims pihole's :53 callers are "hosts, not pods"), and a future
-    # narrowing must not repeat that error.
+    # arrive from a kube-system pod, not from a node. An open :53 covers that too, and a future
+    # narrowing must not assume pihole's :53 callers are "hosts, not pods".
     - ports:
         - port: 53
           protocol: UDP
@@ -51,7 +48,6 @@ spec:
     #
     # pihole-gravity is pihole's gravity reconcile Job, which writes the declared blocklists
     # through the same API on both instances (pihole/templates/verify-inert/gravity.yaml.j2).
-    # It lands before pihole's Flux flip, so the Job is admitted the first time it runs.
     - from:
         - podSelector:
             matchLabels:

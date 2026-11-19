@@ -2,8 +2,6 @@
 # is a CronJob, not a Deployment, and its health is reported by a second CronJob,
 # configarr-health, that READS the last Job through its own ServiceAccount and records the
 # verdict for Prometheus.
-# Until H2.5b (docs/target-architecture/host/h2-shrink-host-plane.md, Steps item 13) that reader
-# was a daniel-box host cron; daniel-box's host package retires it through legacy entries.
 configarr_k8s_image: ghcr.io/raydak-labs/configarr:1.39.2@sha256:48893921c607e96e40310d3ced50a92584667a84595dc9b782f523d46267f2e7
 
 # Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
@@ -11,8 +9,7 @@ k8s_autodeploy: true
 k8s_autodeploy_reason: "CronJob gated on every revision by a gate Job in configarr-verify, which proves the new image RUNS and fails the revision on a sync that exits non-zero; the gate Job has no ownerReference, so concurrencyPolicy Forbid cannot keep a scheduled run off it, but the reconciler is convergent, so running the same sync twice is harmless; the configarr-health CronJob is gated the same way, and an extra run of it only re-reads the last Job and re-pushes its verdict"
 
 # The gate Jobs Flux runs in `configarr-verify`, one per CronJob, which the renderer copies from
-# each jobTemplate (scripts/renderer/renderer_lib/cronjob_gate.py). They replaced the two
-# k8s/cronjob-gate runs in tasks/main.yml at configarr's flip.
+# each jobTemplate (scripts/renderer/renderer_lib/cronjob_gate.py).
 # - configarr's gate run performs the reconcile, so it is a post-apply mutation. The sync
 #   converges on its config, so a second run reports no change; the rerun_safe test fails the
 #   rendered config on the shapes that would break that. It keeps the CronJob's backoffLimit: 0, and its Job keeps
@@ -55,17 +52,17 @@ configarr_k8s_max_age_hours: 26
 
 # */10 like the other k8s-side health readers. The rules read the verdict ConfigMap and the
 # CronJob's last successful time, so the reader runs far more often than the sync. Each run
-# re-reads the same Job and re-records it; the age gate above is what turns a stale one red. The host cron's UTC minute field, unchanged.
+# re-reads the same Job and re-records it; the age gate above is what turns a stale one red.
 configarr_k8s_health_schedule: "*/10 * * * *"
 
 # The ConfigMap the health reader writes its verdict to as annotations, which kube-state-metrics
-# exports (M6 batch B6b). The shadow rule ConfigarrHealthNotReporting holds the CronJob's last
+# exports. The shadow rule ConfigarrHealthNotReporting holds the CronJob's last
 # successful run to three periods of the schedule above, 1800s.
 configarr_k8s_health_verdict_configmap: configarr-health-verdict
 
 # The health reader runs in the repo's pinned python image and gets kubectl from an init
 # container of alpine/k8s, which keeps the binary at /usr/bin/kubectl (its upstream Dockerfile,
-# and the layer listing of this digest's linux/amd64 manifest, 2026-10-18). Its kubectl minor
+# and the layer listing of this digest's linux/amd64 manifest). Its kubectl minor
 # matches the server's v1.37.
 configarr_k8s_health_image: python:3.15-alpine@sha256:0f9552bb28711333da16915ec146f5e6bb44a7fdac9ced15dc17c2e0206346dd
 configarr_k8s_health_kubectl_image: alpine/k8s:1.37.2@sha256:7a82aeefea3d554a43a8676b137f2b88bae6c1fe11c13862b191b3a086cc28c0
@@ -73,12 +70,11 @@ configarr_k8s_health_kubectl_image: alpine/k8s:1.37.2@sha256:7a82aeefea3d554a43a
 # Above the reader's worst case; the gate Job copies it, and `bundle.flux_files` raises the
 # `configarr-verify` timeout above it. The worst case is two 30 s
 # kubectl calls (CONFIGARR_KUBECTL_TIMEOUT_S). The rest is the cold pull of both images, which
-# counts against the deadline too. The figure kept the margin the retired push needed until
-# M6 batch B6b's Cutover-2. A deadline that fires before the
+# counts against the deadline too. A deadline that fires before the
 # container starts fails the deploy.
 configarr_k8s_health_deadline_seconds: 420
 # How long a finished configarr-health Job, and so its pod, stays visible. A run the weekly reboot
-# interrupts fails, and without a TTL it reads Failed until two later runs fail (#6367).
+# interrupts fails, and without a TTL it reads Failed until two later runs fail.
 # 30 minutes clears it inside the hour after boot
 # (tests/k8s/test_reboot_window_cronjobs_age_out.py); the run's output is in Loki past that.
 configarr_k8s_health_job_ttl_seconds: 1800

@@ -10,13 +10,11 @@ file-system:
   free-space-check-dir: "/data"
 
 application:
-  # Live since 2026-06-10 (operator call after a dry-run trial period since the role
-  # was added) — janitorr now actually deletes per the rules below. The *arr tags
+  # Live: janitorr actually deletes per the rules below. The *arr tags
   # janitorr-keep / janitorr-keep-too exclude media from cleanup.
   #
-  # Templated rather than hardcoded so the k3s port can run dry while it proves the path
-  # contract, without forking this file — the k8s role renders it through lookup('template')
-  # and overrides the default. The Docker copy is unaffected: nothing else defines the var.
+  # Templated rather than hardcoded so the role can run dry without forking this file — the
+  # k8s role renders it through lookup('template') and overrides the default.
   dry-run: {{ janitorr_k8s_dry_run | default('false') }}
   run-once: false
   whole-tv-show: false
@@ -52,12 +50,12 @@ application:
       20: 120d # 4 months
       25: 240d # 8 months - the Longhorn floor, see DECIDED above
 
-  # DISABLED (2026-07-15 review M2): both features shipped enabled with janitorr's upstream DEMO tag
-  # placeholders — "5 - demo" / "10 - demo" (spaces) and janitorr_daily (underscore) — which all
-  # violate the *arr ^[a-z0-9-]+$ tag-label rule (same trap as exclusion-tags above), so no such tag
-  # can exist and neither feature ever matched any media; verified inert since the role began. Turned
-  # OFF rather than "fixed": they were never operator-wired (no matching tag exists in Sonarr/Radarr)
-  # and janitorr deletes for real. To use one, set enabled: true with HYPHENATED, operator-created tags.
+  # DISABLED: both features ship enabled with janitorr's upstream DEMO tag placeholders —
+  # "5 - demo" / "10 - demo" (spaces) and janitorr_daily (underscore) — which all violate the
+  # *arr ^[a-z0-9-]+$ tag-label rule (same trap as exclusion-tags above), so no such tag can
+  # exist and neither feature ever matches any media. Turned OFF rather than "fixed": they are
+  # not operator-wired (no matching tag exists in Sonarr/Radarr) and janitorr deletes for real.
+  # To use one, set enabled: true with HYPHENATED, operator-created tags.
   tag-based-deletion:
     enabled: false
     minimum-free-disk-percent: 100

@@ -4,10 +4,8 @@
 Longhorn reads a volume's backup schedule off its own Volume CR labels
 (`recurring-job-group.longhorn.io/<group>`), and a PVC's StorageClass decides the group only at
 provision time. A volume that must LEAVE the daily set after it is bound cannot be moved by
-editing either, so this job reconciles the label. It replaces the label, weekly-shard and
-legacy-label tasks that `setup/k3s` ran from `tasks/longhorn.yml` and
-`tasks/longhorn-weekly-shard.yml` (H1 plan, H1.6). From H1.7a it also holds each volume's
-`spec.backupTargetName`, which the two routing tasks of `tasks/longhorn-backup.yml` held.
+editing either, so this job reconciles the label. It also holds each volume's
+`spec.backupTargetName`.
 
 What one run does, in this order, for each volume:
 
@@ -28,9 +26,9 @@ backup target:
 5. A volume whose claim is on the `r2` list and whose `spec.backupTargetName` is not `r2` moves
    to `r2`. A volume on `r2` whose claim is on no `r2` list returns to `default`, the B2 target.
    A volume whose target is blank, or any other name, and whose claim is not listed is left
-   alone, as the Ansible routing tasks left it.
+   alone.
 
-Then one more step sets the trim label (H2.2a, the H2 plan's *Native trim*):
+Then one more step sets the trim label:
 
 6. A volume that is `attached` and has a Running ReplicaSet or StatefulSet workload gets the
    per-job label `recurring-job.longhorn.io/trim: enabled`, which puts it in Longhorn's `trim`
@@ -45,7 +43,7 @@ together. A converged cluster writes nothing.
 
 It does not touch the CSI sidecar Deployments. Their memory request is the `longhorn` role's
 `system-managed-csi-components-resource-limits` Setting, which longhorn-manager enforces and
-which clears any request another writer sets (#5958).
+which clears any request another writer sets.
 
 Inputs: `/config/tiers.json` (the ConfigMap's `{"r2": [...], "weekly": {claim: shard}, "nobackup":
 [...]}`, claims as `namespace/pvcName`) and the environment: `RECONCILE_NAMESPACE`, and
@@ -84,7 +82,7 @@ TIERS_FILE = "/config/tiers.json"
 CALL_TIMEOUT = 10
 
 # A Volume CR's recurring-job group labels. The names are a contract with the cluster, held
-# equal to `setup/k3s`'s `longhorn_lib/longhorn_backups.py` by tests/test_longhorn_reconcile.py.
+# equal to `scripts/lib/longhorn_lib/longhorn_backups.py` by tests/test_longhorn_reconcile.py.
 LABEL_PREFIX = "recurring-job-group.longhorn.io/"
 DEFAULT = "default"
 NO_BACKUP = "no-backup"
@@ -101,7 +99,7 @@ TRIM_WORKLOAD_TYPES = ("ReplicaSet", "StatefulSet")
 
 # The BackupTarget names a Volume CR's `spec.backupTargetName` takes: `default` is the B2 target
 # and `r2` the Cloudflare one. They are a contract with the cluster, held equal to
-# `setup/k3s`'s `longhorn_lib/longhorn_backups.py` by tests/test_longhorn_reconcile.py.
+# `scripts/lib/longhorn_lib/longhorn_backups.py` by tests/test_longhorn_reconcile.py.
 B2_TARGET = "default"
 R2_TARGET = "r2"
 
@@ -203,9 +201,9 @@ def load_tiers(path: str | Path) -> dict:
     both = sorted(set(weekly) & set(nobackup))
     if both:
         # DECIDED: refuse, where the Ansible tasks did not. A claim on both lists has no single
-        # desired group; the tasks gave such a volume both labels, which nothing intended, and
-        # picking one here would hide a wrong `containers_list` entry. The run stops before it
-        # writes anything, so the next hourly run retries once the entry is fixed.
+        # desired group, and picking one here would hide a wrong `containers_list` entry. The
+        # run stops before it writes anything, so the next hourly run retries once the entry is
+        # fixed.
         raise Failed(f"claim(s) on both the weekly and the no-backup list: {both}")
     return {
         "r2": set(r2),
@@ -254,8 +252,7 @@ def desired_labels(
         and claim not in weekly
     ):
         move(DEFAULT, NO_BACKUP)
-    # 3. The daily group, minus the weekly list. `in_default` is the state before step 1,
-    #    as the Ansible query was.
+    # 3. The daily group, minus the weekly list. `in_default` is the state before step 1.
     if in_default and claim in weekly:
         move(shard_group(weekly[claim]), DEFAULT)
     # 4. Each shard's membership, in shard order.

@@ -2,8 +2,7 @@
 
 `World` answers the script's reads from dicts, applies its merge patches the way the API server
 does, and records every call. The label cases are a transition table with the
-label strings typed out here, as `setup/k3s`'s `test_every_label_task_renders_the_live_labels`
-did for the tasks this script replaces: an expectation built from the script's own constants
+label strings typed out here: an expectation built from the script's own constants
 would follow a rename and pass, and a one-byte change in a live label drops the volume out of
 its RecurringJob with nothing failing.
 
@@ -164,7 +163,7 @@ def test_the_group_names_are_the_ones_setup_k3s_and_the_recurring_jobs_use():
 
 
 # (claim, target before) -> target after. The r2 list holds `homelab/traefik-acme` only.
-# A blank target on an unlisted claim stays blank: the Ansible routing tasks never wrote it.
+# A blank target on an unlisted claim stays blank.
 TARGET_TRANSITIONS = [
     pytest.param(
         "homelab/traefik-acme", "default", "r2", id="listed-claim-moves-to-r2"
@@ -274,7 +273,7 @@ def test_a_converged_cluster_reports_nothing_to_change_in_report_only(env, capsy
 def test_a_run_reads_and_writes_no_deployment(env, capsys):
     # fact: k8s/roles/longhorn-reconcile/CLAUDE.md#Traps
     # fact: k8s/roles/longhorn-reconcile/CLAUDE.md#longhorn-reconcile — the hourly job that holds each volume in its backup tier
-    """The CSI sidecars' request is the `longhorn` role's Setting, and the manager owns it (#5958).
+    """The CSI sidecars' request is the `longhorn` role's Setting, and the manager owns it.
 
     A second writer here made longhorn-manager clear the request on its next tick and each CSI
     Deployment roll twice an hour, so the run keeps off every Deployment.

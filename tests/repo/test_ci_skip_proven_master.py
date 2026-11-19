@@ -51,7 +51,6 @@ DEPENDENTS = (
     "hooks",
     "pr_gates",
     "pytest",
-    "deck_mod",
     "lockfile",
     "flux_roundtrip",
     "sops_manifest_type_proof",
@@ -65,7 +64,6 @@ GATE_ENV = (
     "HOOKS",
     "PR_GATES",
     "PYTEST",
-    "DECK_MOD",
     "LOCKFILE",
     "FLUX_ROUNDTRIP",
     "SOPS_TYPE_PROOF",
@@ -180,9 +178,15 @@ def test_a_push_asks_about_its_tree_and_a_pull_request_about_its_head(tmp_path):
 def test_the_prove_job_reads_statuses_and_publishes_its_answer():
     prove = _jobs()["prove"]
     assert prove["outputs"]["proven"] == "${{ steps.prove.outputs.proven }}"
-    assert set(prove["outputs"]) == {"proven"}
-    assert set(prove["permissions"]) == {"contents", "pull-requests", "statuses"}
-    assert prove["permissions"]["statuses"] == "read"
+    assert prove["outputs"]["base"] == "${{ steps.prove.outputs.base }}"
+    assert set(prove["outputs"]) == {"proven", "base"}
+    assert set(prove["permissions"]) == {
+        "checks",
+        "contents",
+        "pull-requests",
+        "statuses",
+    }
+    assert set(prove["permissions"].values()) == {"read"}
 
 
 def test_every_repeated_job_waits_for_the_proof_and_skips_on_it():
@@ -369,9 +373,11 @@ BATCH_STEPS = (
         ("pull_request", {"queue": True, "same_repo": False}, False),
         ("pull_request", {"queue": True, "prove": "success", "proven": "true"}, False),
         ("push", {"queue": True}, False),
-        ("pull_request", {"queue": True, "scope": "selected"}, False),
+        ("pull_request", {"queue": True, "scope": "selected"}, True),
+        # No leg reached its select step, so nothing says what the run tested.
+        ("pull_request", {"queue": True, "scope": ""}, False),
     ],
-    ids=["batch", "ordinary", "fork", "proven", "push", "selected"],
+    ids=["batch", "ordinary", "fork", "proven", "push", "selected", "no-scope"],
 )
 def test_only_a_batch_run_of_this_repository_records_its_members(event, facts, records):
     steps = {s["name"]: s for s in _jobs()["prek"]["steps"] if "name" in s}

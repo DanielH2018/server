@@ -6,8 +6,9 @@
 """SessionStart health banner: surfaces what's already broken before work starts.
 
 Usage: Claude Code runs this hook on the SessionStart event. It takes no stdin payload. It
-prints one SessionStart JSON object to stdout, or nothing when everything is green, and it always
-exits 0. `-h` or `--help` prints this text and exits 0. `--sessions` prints every other live
+prints one SessionStart JSON object to stdout, or nothing when everything is green, and it
+exits 0. A bug that escapes the per-probe guards raises and exits 1, which `run-hook.sh` turns
+into one `[session-health] failed: <cause>` line while still exiting 0. `-h` or `--help` prints this text and exits 0. `--sessions` prints every other live
 session in this repo with the paths it changed, which the banner lists only where they overlap
 this branch.
 
@@ -27,7 +28,7 @@ Design contract (mirrors the other hooks here):
   - SILENT when all-green: prints nothing, so it adds zero context noise on a
     healthy day. Set SESSION_HEALTH_VERBOSE=1 to force an all-clear line (demo/test).
   - READ-ONLY and NEVER BLOCKS: every external call is timeout-bounded and wrapped;
-    any failure degrades to a quiet skip. Always exits 0.
+    a probe's failure degrades to a quiet skip. `run-hook.sh` exits 0 whatever this does.
   - The Prometheus check
     goes through `uv run probe.py` (one subprocess, bounded) — SessionStart fires
     once per session, so the small cost is paid rarely; it's skipped on any error so
@@ -61,8 +62,12 @@ REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 # the banner.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 try:
-    from _hook_common import primary_checkout, read_payload
+    from _hook_common import primary_checkout, read_payload, tagged
 except ImportError, SyntaxError:
+
+    def tagged(hook, text):
+        return f"[{hook}] {text}"
+
     # Without the payload the banner cannot tell a compaction from an open, so it prints on
     # both. One repeat banner is the cost; a hook that printed none would hide this failure.
     def read_payload():
@@ -197,7 +202,12 @@ def target_problems():
 
 
 def master_moved_problems(git=None):
-    """One line when this branch is behind origin/master's remote-tracking ref, else [].
+    """One line when origin/master moved on a file this branch also changes, else [].
+
+    Being behind alone prints nothing: every fresh worktree falls behind within minutes, and
+    a warning in most sessions taught the reader to skip it. The line fires when the commits
+    this branch lacks touch a path the branch changes since the merge base, and names those
+    paths, because that is when a merge is due before trusting a test or a render.
 
     `git rev-list --count HEAD..origin/master` reads only the local object store -- no
     `git fetch` runs here, so this can only ever be as current as the last fetch this
@@ -240,16 +250,38 @@ def master_moved_problems(git=None):
         if res.returncode != 0:
             return []
         count = int(res.stdout.strip())
+        if count <= 0:
+            return []
+        shared = sorted(
+            _changed_files(git, "origin/master...HEAD")
+            & _changed_files(git, "HEAD...origin/master")
+        )
     except Exception:
         return []
-    if count <= 0:
+    if not shared:
         return []
     plural = "s" if count != 1 else ""
+    named = ", ".join(shared[:SHARED_FILES_NAMED])
+    if len(shared) > SHARED_FILES_NAMED:
+        named += f" and {len(shared) - SHARED_FILES_NAMED} more"
     return [
-        f"  ⚠ this branch is {count} commit{plural} behind origin/master (as of the last "
-        "fetch -- `git fetch` to refresh; a probe.py gate from here would be refused, see "
-        ".claude/hooks/_stale_probe_rule.py)"
+        f"  ⚠ this branch is {count} commit{plural} behind origin/master, which changed "
+        f"{len(shared)} file{'s' if len(shared) != 1 else ''} this branch also changes: "
+        f"{named} (as of the last fetch; `git fetch` and merge origin/master before "
+        "relying on them)"
     ]
+
+
+# How many shared paths the behind-master line names before it counts the rest.
+SHARED_FILES_NAMED = 3
+
+
+def _changed_files(git, revisions):
+    """The paths `git diff --name-only <revisions>` names, as a set; raises on a failed read."""
+    res = git("diff", "--name-only", revisions, cwd=REPO, check=False, timeout=5)
+    if res.returncode != 0:
+        raise RuntimeError(f"git diff {revisions} exited {res.returncode}")
+    return {line for line in res.stdout.splitlines() if line}
 
 
 # How long the per-worktree reads in `other_live_sessions` may take together, after
@@ -402,7 +434,7 @@ def unlabelled_worktree_lines(cwd, *, run=None):
     if not top or not has_generated_name(top) or read_label(top):
         return []
     return [
-        f"WARN: this worktree's name ({os.path.basename(top)}) was generated. Once you "
+        f"This worktree's name ({os.path.basename(top)}) was generated. Once you "
         "know the task, label it: `uv run python scripts/dev/label_worktree.py <issue>...` "
         'or `--text "<what you are doing>"`.'
     ]
@@ -448,7 +480,7 @@ def format_banner(targets=(), parked=(), master_moved=()):
         commands.append(f"{PROBE} landing")
     if targets:
         commands += [f"{PROBE} targets", f"{PROBE} health <svc>"]
-    out = ["WARN: homelab health check found issues:", *problems]
+    out = ["Homelab health check found issues:", *problems]
     if commands:
         out.append("  → triage: " + " or ".join(f"`{c}`" for c in commands))
     return out
@@ -457,6 +489,11 @@ def format_banner(targets=(), parked=(), master_moved=()):
 # Claude Code persists a longer SessionStart output to a file and shows the session only a
 # 2 KB preview of it, so a line past this budget is a line the session never reads.
 BANNER_BUDGET_BYTES = 2000
+
+
+def _tag_first(lines):
+    """`lines` with the `[session-health] ` tag on the first, so each message names its hook."""
+    return [tagged("session-health", lines[0]), *lines[1:]] if lines else []
 
 
 def fit_to_budget(lines, budget=BANNER_BUDGET_BYTES):
@@ -550,7 +587,9 @@ def main(
         context += ["Other Claude sessions in this repo:", *sessions]
 
     # Operator housekeeping goes to `systemMessage`, which the model never reads.
-    print_hook_output(fit_to_budget(context), worktrees + fanout)
+    print_hook_output(
+        fit_to_budget(_tag_first(context)), _tag_first(worktrees + fanout)
+    )
     return 0
 
 
@@ -578,7 +617,4 @@ if __name__ == "__main__":
     if any(arg in ("-h", "--help") for arg in sys.argv[1:]):
         print(__doc__.strip())
         sys.exit(0)
-    try:
-        sys.exit(print_all_sessions() if "--sessions" in sys.argv[1:] else main())
-    except Exception:
-        sys.exit(0)
+    sys.exit(print_all_sessions() if "--sessions" in sys.argv[1:] else main())

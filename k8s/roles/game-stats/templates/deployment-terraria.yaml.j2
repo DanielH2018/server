@@ -37,7 +37,7 @@ spec:
               value: "1"
             - name: PYTHONDONTWRITEBYTECODE
               value: "1"
-            # In-cluster now — no VIP route, no ClientIP gate in the path.
+            # In-cluster: no VIP route, no ClientIP gate in the path.
             - name: LOKI_URL
               value: http://loki-homelab.{{ k8s_namespace }}.svc.cluster.local:3100
             - name: LOKI_QUERY
@@ -54,8 +54,8 @@ spec:
           ports:
             - containerPort: {{ services | metrics_port('terraria-stats') }}
           # /healthz is 503 until the first successful poll and whenever the last one is
-          # older than HEALTH_MAX_AGE — the same contract the Docker healthcheck used;
-          # a failing liveness recreates the pod (and feeds the crash-loop alert arm).
+          # older than HEALTH_MAX_AGE; a failing liveness recreates the pod (and feeds the
+          # crash-loop alert arm).
           livenessProbe:
             httpGet:
               path: /healthz

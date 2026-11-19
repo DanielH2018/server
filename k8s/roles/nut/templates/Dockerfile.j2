@@ -7,20 +7,19 @@ FROM debian:bookworm-slim@sha256:734a72b3d6142a71993b4bc580ca01d8ca687f77a2c422d
 # DECIDED: these apt packages resolve at build time. A `pkg=version` pin 404s the day the
 # archive supersedes it (the pool keeps only the current deb) and nothing bumps it, and a
 # snapshot mirror freezes security updates with no Renovate datasource to raise a PR. The
-# base digest above is the pin; #2211 holds the evidence and the operator's decision.
+# base digest above is the pin.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     nut \
     nut-client \
     util-linux \
     && rm -rf /var/lib/apt/lists/*
 
-# Unlike the retired Docker build, /etc/nut is NOT baked in: this image is pushed to the
+# /etc/nut is NOT baked in: this image is pushed to the
 # unauthenticated in-cluster registry, and upsd.users carries passwords. Config mounts
 # from the nut-config Secret at /nut-config; the entrypoint stages it into /etc/nut.
 # COPY . (not per-file COPYs): the context is a ConfigMap mount, whose files are
 # symlinks into ..data/ — buildkit's transfer drops all but the first symlinked file
-# from per-file COPYs ("not found"; same trap homelab-mcp's Dockerfile documents,
-# verified 2026-08-13 and re-verified here 2026-08-14).
+# from per-file COPYs ("not found"; same trap homelab-mcp's Dockerfile documents).
 COPY . /build-context/
 RUN install -m 0755 /build-context/entrypoint.sh /entrypoint.sh \
     && install -m 0755 /build-context/upssched-cmd /usr/local/bin/upssched-cmd \

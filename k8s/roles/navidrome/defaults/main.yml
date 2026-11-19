@@ -42,7 +42,7 @@ navidrome_k8s_mem_limit: 512Mi
 navidrome_k8s_cpu_request: "50m"
 navidrome_k8s_mem_request: 64Mi
 
-# The claim the renderer emits for this role, which the navidrome Kustomization applies (#3387).
+# The claim the renderer emits for this role, which the navidrome Kustomization applies.
 k8s_claims:
   - name: "{{ navidrome_k8s_claim }}"
     storage_class: "{{ navidrome_k8s_storage_class }}"

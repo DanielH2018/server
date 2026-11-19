@@ -3,9 +3,8 @@
 # karakeep's search index. karakeep dials it at MEILI_ADDR=http://karakeep-meilisearch:7700
 # (deployment.yaml.j2), and nothing else does.
 #
-# THIS POLICY SHIPS WITH THE ROLE THAT NEEDS IT. It lived in k8s/roles/netpol-baseline/ until
-# 2026-09-10, one role away from the Deployment whose pod cannot start without it (#1620, the
-# same split as authelia's session store in #1609). The warrant here is the POD SPEC rather
+# THIS POLICY SHIPS WITH THE ROLE THAT NEEDS IT, not in k8s/roles/netpol-baseline/, which would
+# put it one role away from the Deployment whose pod cannot start without it. The warrant here is the POD SPEC rather
 # than the app: karakeep itself degrades when meilisearch is unreachable — it logs search
 # errors and serves — but deployment.yaml.j2's `wait-for-deps` initContainer retries
 # karakeep-meilisearch:7700 in an UNBOUNDED loop, so with this policy absent the pod sits in
@@ -15,8 +14,7 @@
 # expressed in a sibling role produces no edge and no ordering constraint to violate.
 # tests/services/test_karakeep_backend_policies.py pins the co-location.
 #
-# 7700 is the containerPort AND the Service port — verified 2026-08-20, they match, and that
-# same test keeps them matching.
+# 7700 is the containerPort AND the Service port, and that same test keeps them matching.
 #
 # NO `netpol_baseline_enforced` BRANCH, unlike netpol-baseline's own policies. That lever is a
 # role default of netpol-baseline, and Ansible role defaults are role-scoped: it does not

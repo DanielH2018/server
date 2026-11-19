@@ -14,16 +14,10 @@ data:
 
         # Every response revalidates. Without this nginx sends only Last-Modified and ETag,
         # and a browser with no explicit freshness falls back to a heuristic — a fraction of
-        # the age since Last-Modified — so a file that had not changed in days was cached for
-        # hours and not even revalidated.
-        #
-        # That is a real failure here, not a theoretical one. The docs site's own files carry
-        # no content hash: mkdocs copies docs/assets/ through under its authored name, and the
-        # pages are plain index.html. On 2026-08-25 a reader on the public name followed the
-        # new Artifacts nav link straight to the unresolved sentinel host, because their
-        # browser was still running the previous assets/fqdn-links.js — the copy with no
-        # sentinel rewrite in it. Material's own bundles are content-hashed and would have
-        # been safe; nothing this repo writes is.
+        # the age since Last-Modified — so a file unchanged for days is cached for hours with no
+        # revalidation. The docs site's own files carry no content hash: mkdocs copies
+        # docs/assets/ through under its authored name, and the pages are plain index.html.
+        # Material's own bundles are content-hashed and are safe; nothing this repo writes is.
         #
         # `no-cache` is revalidate-before-use, not no-store: an unchanged file still answers
         # 304 with no body. For a LAN docs site that is the right trade against serving a

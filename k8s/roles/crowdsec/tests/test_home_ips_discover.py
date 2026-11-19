@@ -26,8 +26,8 @@ def _row(address: str, plen: int = 0x40, scope: int = 0, flags: int = 0, dev="en
     return f"{raw} 02 {plen:02x} {scope:02x} {flags:02x} {dev:>8}"
 
 
-# The shape measured on daniel-server on 2026-10-18: a /64 SLAAC address and a /128 DHCPv6
-# address in one prefix, link-local rows on every veth, and loopback.
+# The shape seen on daniel-server: a /64 SLAAC address and a /128 DHCPv6 address in one
+# prefix, link-local rows on every veth, and loopback.
 TABLE = "\n".join(
     [
         _row("2601:600:a:b:1c2d:3e4f:5a6b:7c8d"),
@@ -184,7 +184,7 @@ def test_a_second_run_patches_the_same_values():
 
 
 def test_a_failed_ipv6_lookup_writes_its_error_and_leaves_the_stored_prefix():
-    """A merge patch that omits `ipv6_prefix` leaves the stored /64 as it is (#1248)."""
+    """A merge patch that omits `ipv6_prefix` leaves the stored /64 as it is."""
     # fact: k8s/roles/crowdsec/CLAUDE.md#The home allowlist is a host-network lookup and a sidecar sync
     kube = _Recorder()
     table = TABLE + "\n" + _row("2a02:1:2:3::1")

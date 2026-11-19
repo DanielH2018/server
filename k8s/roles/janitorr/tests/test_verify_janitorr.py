@@ -268,8 +268,6 @@ def test_the_arr_fences_admit_janitorr(fence, port, flipped, stubs):
     """Each fence admits the Job's pod and janitorr's own, on the app's port.
 
     The Job proves the apps answer `janitorr-verify`, so this also holds `janitorr` admitted.
-    The `janitorr-verify` peers landed in a PR of their own (#5709), because the cross-plane
-    gate refuses them beside a janitorr change.
     """
     # fact: k8s/roles/janitorr/CLAUDE.md#The Flux verify Job
     (policy,) = [
@@ -408,7 +406,7 @@ def test_the_job_reads_no_other_roles_file():
 
 
 def test_the_rendered_config_trims_media_at_longhorns_25_percent_floor(flipped_tag):
-    """#5806: the loosest rung is 25% free, so janitorr acts before Longhorn stops scheduling."""
+    """The loosest rung is 25% free, so janitorr acts before Longhorn stops scheduling."""
     # fact: k8s/roles/janitorr/CLAUDE.md#Retention rungs
     (secret,) = [
         doc

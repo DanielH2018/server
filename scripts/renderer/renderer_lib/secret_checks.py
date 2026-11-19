@@ -58,14 +58,13 @@ from renderer.renderer_lib.jinja_uses import (
     template_tag,
 )
 from renderer.renderer_lib.var_aliases import (
-    ALIAS_MEMBERS,
     NON_SECRET_VARS_LOOKUPS as NON_SECRET_VARS_LOOKUPS,
     NOT_ALIASES,
     VarsLookupSite as VarsLookupSite,
     not_alias_problems,
     rule5_var_files,
-    var_aliases,
     var_tag,
+    vars_file_refusals,
 )
 from renderer.renderer_lib.sops_entries import (
     SOPS_MANIFEST_KEYS,
@@ -143,7 +142,7 @@ _ROLE_TEMPLATES = "k8s/roles/{}/templates/{}"
 
 
 # The fewest in-scope templates whose syntax tree names a secret key, set to the tree's count.
-RULE5_FLOOR = 40
+RULE5_FLOOR = 38
 
 
 class NamedUse(NamedTuple):
@@ -166,7 +165,6 @@ RULE5_MEMBERS = (
         "filter to_json",
         1,
     ),
-    *(NamedUse(*member) for member in ALIAS_MEMBERS),
 )
 
 
@@ -315,7 +313,7 @@ def rule5(
 ) -> Rule5:
     """Run rule 5 over `paths`, by default every template it reads, embeds included.
 
-    `var_files` are the role defaults and inventory files the alias clause reads. They
+    `var_files` are the role defaults and inventory files the vars-file clause reads. They
     default to the real ones when `paths` does too, and to none otherwise.
     """
     keyset = frozenset(keys)
@@ -324,17 +322,19 @@ def rule5(
     if var_files is None:
         var_files = rule5_var_files() if paths is None else []
     paths = rule5_templates() if paths is None else paths
-    aliases = var_aliases(keyset, policy, var_files, env)
-    result = Rule5([_rule5_violation(*r, root, var_tag) for r in aliases.refused])
+    result = Rule5(
+        [
+            _rule5_violation(*r, root, var_tag)
+            for r in vars_file_refusals(keyset, var_files, env)
+        ]
+    )
     rels = {path: path.relative_to(root).as_posix() for path in paths}
     allowed = {
         path: frozenset(s.argument for s in non_secret if s.template == rel)
         for path, rel in rels.items()
     }
     sources = {path: path.read_text() for path in paths}
-    scans = scan_templates(
-        sources, keyset, policy, env, allowed, aliases=aliases.bindings
-    )
+    scans = scan_templates(sources, keyset, policy, env, allowed)
     for path, scan in scans.items():
         rel = rels[path]
         result.bindings.update((rel, name, alias) for name, alias in scan.bindings)

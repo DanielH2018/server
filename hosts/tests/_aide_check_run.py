@@ -8,6 +8,7 @@ import fcntl
 import hashlib
 import json
 import os
+import shlex
 import time
 
 from _helpers import REPO
@@ -100,6 +101,52 @@ RENAMED_SECRET_TARGET = "/run/homelab-secrets/drill/s3.env"
 SECRETS_MANIFEST = "/usr/lib/homelab/secrets.json"
 # The host package's apt hook and a script root runs, which dpkg lists with no digest here.
 HOMELAB_FILES = ("/etc/apt/apt.conf.d/91homelab-hook", "/usr/lib/homelab/check")
+# The user and group databases as the last accepted run copied them: root, a login user, the
+# declared claude with the gid its group kept from before the 900-949 band, and a group the setup
+# script manages.
+ACCOUNT_FILES = {
+    "/etc/passwd": (
+        "root:x:0:0:root:/root:/bin/bash\n"
+        "ubuntu:x:1000:1000:Ubuntu:/home/ubuntu:/bin/bash\n"
+        "claude:x:900:985:Claude agent:/var/lib/claude:/bin/bash\n"
+    ),
+    "/etc/group": "root:x:0:\nubuntu:x:1000:\nclaude:x:985:\nssh-users:x:990:ubuntu\n",
+    "/etc/shadow": (
+        "root:!*:20000:0:99999:7:::\n"
+        "ubuntu:$6$SECRETHASH:20000:0:99999:7:::\n"
+        "claude:!*:20000::::::\n"
+    ),
+    "/etc/gshadow": "root:*::\nubuntu:!::\nclaude:!::\nssh-users:!::ubuntu\n",
+}
+# The host package's lines arm: a block in the package's conffile, as k3s-server adds one to
+# /etc/zsh/zshenv, and a line edit elsewhere.
+BLOCK_MARKER = "# {mark} MANAGED — tool kubeconfig"
+LINE_EDITS = [
+    {
+        "path": "/etc/tool.conf",
+        "marker": BLOCK_MARKER,
+        "block": "export K=1\nexport L=2\n",
+    },
+    {"path": "/etc/login.defs", "line": "UMASK\t\t027", "regexp": "^UMASK\\s"},
+]
+# The host package's manifest, whose users arm declares claude and a service user svc.
+HOST_MANIFEST = "/usr/lib/homelab/manifest.json"
+DECLARED_USERS = [
+    {
+        "name": "claude",
+        "uid": 900,
+        "home": "/var/lib/claude",
+        "shell": "/bin/bash",
+        "comment": "Claude agent",
+    },
+    {
+        "name": "svc",
+        "uid": 906,
+        "home": "/var/lib/svc",
+        "shell": "/usr/sbin/nologin",
+        "comment": "Svc",
+    },
+]
 
 
 def _dpkg_name(path: str) -> str:
@@ -149,6 +196,11 @@ def _fake_host(root):
         for link, target in secret_links.items()
     ]
     (fs / SECRETS_MANIFEST.lstrip("/")).write_text(json.dumps({"outputs": outputs}))
+    (fs / HOST_MANIFEST.lstrip("/")).write_text(
+        json.dumps({"users": {"users": DECLARED_USERS}, "lines": {"edits": LINE_EDITS}})
+    )
+    for path, content in ACCOUNT_FILES.items():
+        (fs / path.lstrip("/")).write_text(content)
     (dpkg / "info" / "homelab-host.list").write_text(
         "".join(f"{p}\n" for p in (*secret_links, *HOMELAB_FILES))
     )
@@ -292,6 +344,9 @@ def _run_check(
     pending: bool = False,
     stubs: dict[str, str] | None = None,
     ignore_sigpipe: bool = False,
+    snapshot: dict[str, str | None] | None = None,
+    pending_snapshot: dict[str, str] | None = None,
+    during_scan: dict[str, str] | None = None,
 ):
     """Render aide-check.sh and run it with aide stubbed to print `report` and exit `rc`.
 
@@ -307,6 +362,10 @@ def _run_check(
     `packages_upgraded` adds an `upgrade` line after the baseline for each package it names.
     `pending` leaves an aide.db.new from an earlier run. `stubs` adds fake binaries in front of PATH.
     `ignore_sigpipe` starts the script with SIGPIPE ignored, as systemd starts a service.
+    The last accepted copies of the account files hold ACCOUNT_FILES, with `snapshot` replacing
+    a file's copy, or removing it for None. `pending_snapshot` leaves an earlier run's copies
+    beside its aide.db.new, ACCOUNT_FILES with those files replaced. `during_scan` has the aide
+    stub append the given text to each named path while it runs.
     The script's stderr lands in `tmp_path / "stderr"`. Returns (exit code, the verdict as a
     [status, message] pair read from the `status=` line the script logs, or None when it logged
     none, logged lines, whether aide ran).
@@ -356,6 +415,14 @@ def _run_check(
     )
     if pending:
         (aide_dir / "aide.db.new").write_text("reviewed\n")
+    copies = {"accounts": {**ACCOUNT_FILES, **(snapshot or {})}}
+    if pending_snapshot is not None:
+        copies["accounts.new"] = {**ACCOUNT_FILES, **pending_snapshot}
+    for name, files in copies.items():
+        (aide_dir / name).mkdir(mode=0o700)
+        for path, content in files.items():
+            if content is not None:
+                (aide_dir / name / path.rsplit("/", 1)[1]).write_text(content)
 
     lock_file = tmp_path / "aide-check.lock"
     report_file = tmp_path / "report"
@@ -363,7 +430,11 @@ def _run_check(
     aide = write_exec(
         tmp_path / "aide",
         f'touch "$AIDE_RAN"\ncat {report_file}\n'
-        f'[ {rc} -le 7 ] && echo "this week" > {aide_dir}/aide.db.new\nexit {rc}\n',
+        + "".join(
+            f"printf '%s' {shlex.quote(text)} >> {fs / path.lstrip('/')}\n"
+            for path, text in (during_scan or {}).items()
+        )
+        + f'[ {rc} -le 7 ] && echo "this week" > {aide_dir}/aide.db.new\nexit {rc}\n',
     )
     body = (
         body.replace(REAL_CHECK_LIB, str(CHECK_LIB))

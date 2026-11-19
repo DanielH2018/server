@@ -2,28 +2,28 @@
    the homelab namespace and from flux-system, so it stays bespoke.
    The callers model (`netpol_from` / `netpol_fences`, macro in
    k8s/templates/networkpolicy.yml.j2) renders one TCP port admitting same-namespace `app:`
-   peers, and its header rules out growing it to absorb another shape. Census: #3701.
+   peers, and its header rules out growing it to absorb another shape.
 #}
 ---
 # prometheus is one of three observability workloads (with loki and alertmanager) that need a
-# per-workload grant for an in-cluster, cross-namespace caller: monitor-bridge, homelab-mcp and homepage all run in
-# {{ k8s_namespace }} and reach it over the network (PROMETHEUS_URL on monitor-bridge and on
-# homelab-mcp, and the Headlamp tile's customapi widget URL on
-# homepage — k8s/roles/homepage/templates/config/services.yaml.j2). A fourth cross-namespace caller
-# runs in flux-system: the soak Job (D5.3, docs/target-architecture/deploy/d5-bulk-move.md,
-# *Reaching Prometheus*). It reads M2's `homelab:pod_service:info` and the critical alerts to
-# decide whether a promotion is healthy. Its name moves with each revision's SHA, so the peer
-# selects the stable pod label `app: soak` instead of `job-name`. A fifth runs in
-# {{ k8s_namespace }}: crowdsec's verify Job, `app: crowdsec-verify`
-# (k8s/roles/crowdsec/templates/verify/job.yaml.j2), which reads the edge's answers to
-# daniel-pi's probe from here. prometheus itself is ALSO read on host loopback
-# by `otelq` (a workstation host process — see observability/CLAUDE.md), covered the same way as
-# tempo/otel-collector below, not by this file. Headlamp's Prometheus plugin is a sixth
-# in-cluster reader that this file also does NOT admit, on purpose: it queries through the API
-# server's service proxy (k8s/roles/headlamp/templates/rbac.yaml.j2), so the hop that reaches
-# the pod is the API server's, from the node's cni0/flannel.1 address — the same node-CIDR peer
-# that carries otelq. The other four need no per-workload policy, each
-# for a different reason — don't collapse them into one mechanism:
+# per-workload grant for an in-cluster, cross-namespace caller. Five callers are admitted:
+#   - monitor-bridge and homelab-mcp (PROMETHEUS_URL), and homepage (the Headlamp tile's
+#     customapi widget URL, k8s/roles/homepage/templates/config/services.yaml.j2), all in
+#     {{ k8s_namespace }}.
+#   - crowdsec's verify Job, `app: crowdsec-verify` (k8s/roles/crowdsec/templates/verify/
+#     job.yaml.j2), in {{ k8s_namespace }}. It reads the edge's answers to daniel-pi's probe.
+#   - the soak Job in flux-system, which reads `homelab:pod_service:info` and the critical alerts
+#     to decide whether a promotion is healthy. Its name moves with each revision's SHA, so the
+#     peer selects the stable pod label `app: soak` instead of `job-name`.
+#
+# prometheus is ALSO read on host loopback by `otelq` (a workstation host process — see
+# observability/CLAUDE.md), covered the same way as tempo/otel-collector below, not by this
+# file. Headlamp's Prometheus plugin is another in-cluster reader this file does NOT admit, on
+# purpose: it queries through the API server's service proxy
+# (k8s/roles/headlamp/templates/rbac.yaml.j2), so the hop that reaches the pod is the API
+# server's, from the node's cni0/flannel.1 address — the same node-CIDR peer that carries otelq.
+# The other four observability workloads need no per-workload policy, each for a different
+# reason — don't collapse them into one mechanism:
 #   - tempo, otel-collector: loopback-hostPort callers only, admitted by the node-CIDR `ipBlock`
 #     peer (`netpol_baseline_obs_node_cidrs`, networkpolicy-observability.yaml.j2), which carries
 #     no `ports` restriction — trimming that list to "nameable" entries breaks otelq silently.
@@ -33,8 +33,8 @@
 #     namespace, covered by the plain `podSelector: {}` peer.
 #
 # INGRESS ONLY, same as the rest of this role: an Egress policy selects pods correctly on this
-# cluster and blocks nothing (measured 2026-08-07). Writing one would read like a control in the
-# repo and do nothing in the cluster.
+# cluster and blocks nothing. Writing one would read like a control in the repo and do nothing in
+# the cluster.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -47,10 +47,10 @@ spec:
   policyTypes:
     - Ingress
   ingress:
-{# `| bool`, matching `netpol_baseline_probe_active` in defaults/main.yml — same trap netpol_baseline_obs_enforced
-   already guards against for the namespace baseline: a STRING value like `'false'` is
-   truthy to bare Jinja and False to that list, which picks the verify Job's legs, so without `| bool` the two sides disagree and this policy would fence prometheus
-   with no probe to catch it. #}
+{# `| bool`, matching `netpol_baseline_probe_active` in defaults/main.yml: a STRING value like
+   `'false'` is truthy to bare Jinja and False to that list, which picks the verify Job's legs,
+   so without `| bool` the two sides disagree and this policy would fence prometheus with no
+   probe to catch it. #}
 {% if netpol_baseline_obs_enforced | bool %}
     - from:
         # namespaceSelector and podSelector are SIBLING KEYS in ONE list item, so they AND
@@ -68,7 +68,7 @@ spec:
                 values: [monitor-bridge, homelab-mcp, homepage, crowdsec-verify]
         # The soak Job, as ONE item for the same reason: `app: soak`, but only inside
         # flux-system. Split in two, the namespaceSelector alone would admit every pod in
-        # flux-system. D5.3b2's Job template sets the label on its POD template, because a
+        # flux-system. The Job template sets the label on its POD template, because a
         # NetworkPolicy matches pod labels and never the Job object's own.
         - namespaceSelector:
             matchLabels:
@@ -76,15 +76,14 @@ spec:
           podSelector:
             matchLabels:
               app: soak
-      # Port-9090-wide is the finest an L3/L4 NetworkPolicy can express — it does not
-      # distinguish a read (query) from a write/admin call on the same port. That is only safe
-      # because Prometheus runs today without --web.enable-admin-api, --web.enable-lifecycle or
-      # --web.enable-remote-write-receiver (all three absent from observability/prometheus.yaml.j2
-      # as of this writing). If any of those flags is ever added, this grant silently becomes a
-      # write/admin grant to all five callers with no NetworkPolicy-side change to
-      # flag in review — check for that when reviewing a future flag addition. homepage is the
-      # caller that makes that check matter most: its widget proxy fetches whatever URL its
-      # rendered config names, so its reach here is only ever as narrow as services.yaml.j2.
+      # Port-9090-wide is the finest an L3/L4 NetworkPolicy can express: it does not distinguish a
+      # read (query) from a write/admin call on the same port. That is only safe because
+      # Prometheus runs without --web.enable-admin-api, --web.enable-lifecycle and
+      # --web.enable-remote-write-receiver (all absent from observability/prometheus.yaml.j2).
+      # Adding any of those flags silently turns this grant into a write/admin grant to all five
+      # callers with no NetworkPolicy-side change to flag in review. homepage matters most: its
+      # widget proxy fetches whatever URL its rendered config names, so its reach here is only as
+      # narrow as services.yaml.j2.
       ports:
         - protocol: TCP
           port: 9090

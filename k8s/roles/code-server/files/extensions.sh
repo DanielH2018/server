@@ -13,20 +13,18 @@ for arg in "$@"; do
   esac
 done
 
-# --extensions-dir is NOT optional, and its absence was a silent bug from this script's first
-# commit (d9a33181) until 2026-08-16. The server is launched by the image's own run script with
+# --extensions-dir is NOT optional. The server is launched by the image's own run script with
 # `--extensions-dir /config/extensions`; this CLI invocation inherits none of those arguments,
-# so without the flag it installed into code-server's DEFAULT directory instead —
-# /config/.local/share/code-server/extensions, which the running server never reads. That
-# directory had reached 5.8 G by 2026-08-16 against 637 M in the live one: every image rebuild
-# fetches the current version of each extension, and nothing ever removed the previous ones.
+# so without the flag it installs into code-server's DEFAULT directory instead —
+# /config/.local/share/code-server/extensions, which the running server never reads. Every
+# image rebuild fetches the current version of each extension, and nothing removes the
+# previous ones, so that directory grows without bound.
 EXTENSIONS_DIR=/config/extensions
 
 # Extensions retired from the image. Dropping one from /opt/vsix does NOT remove it: this
 # script only ever installed, so a retired extension stays on the config volume and keeps
-# running against a toolchain the image no longer ships. The two below went with the TeX Live
-# removal on 2026-08-27 (43 M between them); LaTeX Workshop in particular would sit there
-# shelling out to a latexmk that is gone.
+# running against a toolchain the image no longer ships. The two below belong to TeX Live;
+# LaTeX Workshop in particular would sit there shelling out to a latexmk that is gone.
 #
 # An explicit list, NOT "remove anything not in /opt/vsix": extensions installed by hand
 # through the code-server UI live in the same directory and are not this script's to delete.

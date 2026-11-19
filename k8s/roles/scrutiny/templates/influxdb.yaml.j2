@@ -31,7 +31,7 @@ spec:
           image: {{ scrutiny_k8s_influxdb_image }}
           imagePullPolicy: IfNotPresent
           # Entrypoint chowns the data dir then drops root via gosu before starting
-          # influxd — the same add-backs the Docker copy carries.
+          # influxd.
 {{ hardened_security_context(add=['CHOWN', 'SETUID', 'SETGID', 'DAC_OVERRIDE', 'FOWNER']) }}
           env:
             - name: DOCKER_INFLUXDB_INIT_MODE
