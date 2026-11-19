@@ -54,7 +54,7 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
-from findings_lib.issue_model import current_claim, is_blocked, is_deferred
+from findings_lib.issue_model import Issue
 
 TEXTFILE = Path("/var/lib/node-exporter-textfile/fanout_operator_waits.prom")
 REASONS = (
@@ -207,7 +207,7 @@ def render(starts: Mapping[str, list[float]], now: float) -> str:
 ISSUE_STATES = ("free", "claimed", "deferred", "blocked", "manual")
 
 
-def issue_states(issues: Iterable[Mapping], today: str) -> dict[str, int]:
+def issue_states(issues: Iterable[Issue], today: str) -> dict[str, int]:
     """How many open `claude` issues sit in each state, read from labels, blockers and claims.
 
     `manual` wins, then a Not Before date later than `today` (`deferred`), then an
@@ -220,18 +220,13 @@ def issue_states(issues: Iterable[Mapping], today: str) -> dict[str, int]:
     """
     out = dict.fromkeys(ISSUE_STATES, 0)
     for issue in issues:
-        names = {
-            str(lbl.get("name"))
-            for lbl in issue.get("labels") or []
-            if isinstance(lbl, dict)
-        }
-        if "manual" in names:
+        if "manual" in issue.labels:
             out["manual"] += 1
-        elif is_deferred(dict(issue), date.fromisoformat(today)):
+        elif issue.deferred_on(date.fromisoformat(today)):
             out["deferred"] += 1
-        elif is_blocked(dict(issue)):
+        elif issue.open_blockers:
             out["blocked"] += 1
-        elif current_claim(dict(issue)):
+        elif issue.holder:
             out["claimed"] += 1
         else:
             out["free"] += 1

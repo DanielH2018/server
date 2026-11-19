@@ -13,11 +13,9 @@ import atexit
 import functools
 import re
 import shutil
-import sys
 import tempfile
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from lib import yaml_fast
 from lib.repo_paths import K8S_ROLES, REPO
 from renderer.renderer_lib.host_sources import SHARED_FILES

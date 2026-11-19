@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/freshness.py
-generated_at: 2026-11-19 22:20 UTC
-generated_sha: fa55061a6
+generated_at: 2026-11-19 22:44 UTC
+generated_sha: 777a7c626
 ---
 
 !!! warning "Generated file — do not edit"
@@ -43,6 +43,7 @@ generated_sha: fa55061a6
 | [adr/0027-fanout-batches-stay-on-host-cgroups.md](../adr/0027-fanout-batches-stay-on-host-cgroups.md) | 2026-11-08 | 7 | 6 | `scripts/dev/fanout_lib/launch_gates.py` (2026-11-19) |
 | [adr/0003-sops-with-age-for-secrets-at-rest.md](../adr/0003-sops-with-age-for-secrets-at-rest.md) | 2026-11-13 | 6 | 6 | `secrets/secrets.yml` (2026-11-19) |
 | [traefik-plugins-and-startup.md](../traefik-plugins-and-startup.md) | 2026-11-13 | 10 | 6 | `k8s/roles/traefik/templates/edge-selfcheck-ingressroute.yaml.j2` (2026-11-19) |
+| [qbittorrent-vpn-and-prefs.md](../qbittorrent-vpn-and-prefs.md) | 2026-11-14 | 9 | 6 | `k8s/roles/qbittorrent/files/apply_prefs.py` (2026-11-19) |
 | [adr/0012-zero-downtime-deploys-gate-on-rollout-and-restarts.md](../adr/0012-zero-downtime-deploys-gate-on-rollout-and-restarts.md) | 2026-11-13 | 6 | 5 | `scripts/deploy_tools/promote.py` (2026-11-19) |
 | [registry-push-store-gc.md](../registry-push-store-gc.md) | 2026-11-13 | 5 | 5 | `docs/break-glass.md` (2026-11-19) |
 | [longhorn-backup-tiering.md](../longhorn-backup-tiering.md) | 2026-11-14 | 8 | 5 | `k8s/roles/longhorn-backup/defaults/main.yml` (2026-11-19) |
@@ -50,7 +51,6 @@ generated_sha: fa55061a6
 | [adr/0023-fact-support-is-a-diff-notice.md](../adr/0023-fact-support-is-a-diff-notice.md) | 2026-11-13 | 4 | 4 | `CLAUDE.md` (2026-11-19) |
 | [claude-memory-sync.md](../claude-memory-sync.md) | 2026-11-14 | 4 | 4 | `CLAUDE.md` (2026-11-19) |
 | [game-stats-internals.md](../game-stats-internals.md) | 2026-11-14 | 6 | 4 | `k8s/roles/game-stats/files/stats_lib.py` (2026-11-19) |
-| [qbittorrent-vpn-and-prefs.md](../qbittorrent-vpn-and-prefs.md) | 2026-11-14 | 9 | 4 | `k8s/roles/qbittorrent/files/apply_prefs.py` (2026-11-19) |
 | [target-architecture/docs-guard/g8-memory-resolver-and-replica.md](../target-architecture/docs-guard/g8-memory-resolver-and-replica.md) | 2026-11-14 | 6 | 4 | `docs/archive/README.md` (2026-11-19) |
 | [adr/0007-backup-tiering-r2-daily-b2-weekly.md](../adr/0007-backup-tiering-r2-daily-b2-weekly.md) | 2026-11-13 | 3 | 3 | `docs/break-glass.md` (2026-11-19) |
 | [adr/0024-code-scanning-is-off.md](../adr/0024-code-scanning-is-off.md) | 2026-11-13 | 3 | 3 | `.github/workflows/ci.yml` (2026-11-19) |
@@ -93,7 +93,7 @@ generated_sha: fa55061a6
 | [adr/0036-a-selected-run-proves-its-tree-and-a-nightly-sweep-is-the-net.md](../adr/0036-a-selected-run-proves-its-tree-and-a-nightly-sweep-is-the-net.md) | 2026-11-19 | 8 | 0 | — |
 | [adr/0037-the-renderer-keeps-jinja-after-ansible.md](../adr/0037-the-renderer-keeps-jinja-after-ansible.md) | 2026-11-19 | 3 | 0 | — |
 | [adr/0038-design-is-checked-where-code-is-written.md](../adr/0038-design-is-checked-where-code-is-written.md) | 2026-11-19 | 5 | 0 | — |
-| [adr/0039-scripts-is-installed-in-place.md](../adr/0039-scripts-is-installed-in-place.md) | 2026-11-19 | 3 | 0 | — |
+| [adr/0039-scripts-is-installed-in-place.md](../adr/0039-scripts-is-installed-in-place.md) | 2026-11-19 | 4 | 0 | — |
 | [adr/index.md](../adr/index.md) | 2026-11-19 | 1 | 0 | — |
 | [airflow-warehouse-plan.md](../airflow-warehouse-plan.md) | 2026-11-19 | 4 | 0 | — |
 | [alert-runbooks.md](../alert-runbooks.md) | 2026-11-19 | 10 | 0 | — |
@@ -101,7 +101,7 @@ generated_sha: fa55061a6
 | [ci-throughput.md](../ci-throughput.md) | 2026-11-19 | 28 | 0 | — |
 | [claude-agent-user.md](../claude-agent-user.md) | 2026-11-19 | 49 | 0 | — |
 | [claude-code-rc-caps.md](../claude-code-rc-caps.md) | 2026-11-19 | 3 | 0 | — |
-| [claude-tooling.md](../claude-tooling.md) | 2026-11-19 | 77 | 0 | — |
+| [claude-tooling.md](../claude-tooling.md) | 2026-11-19 | 78 | 0 | — |
 | [docker-engine-pins-and-runtime.md](../docker-engine-pins-and-runtime.md) | 2026-11-19 | 9 | 0 | — |
 | [failure-classes.md](../failure-classes.md) | 2026-11-19 | 21 | 0 | — |
 | [flux-deploy-plane.md](../flux-deploy-plane.md) | 2026-11-19 | 93 | 0 | — |
@@ -111,16 +111,16 @@ generated_sha: fa55061a6
 | [host-baseline-record.md](../host-baseline-record.md) | 2026-11-19 | 34 | 0 | — |
 | [host-packages.md](../host-packages.md) | 2026-11-19 | 57 | 0 | — |
 | [index.md](../index.md) | 2026-11-19 | 1 | 0 | — |
-| [issue-claiming-and-fanout.md](../issue-claiming-and-fanout.md) | 2026-11-19 | 34 | 0 | — |
+| [issue-claiming-and-fanout.md](../issue-claiming-and-fanout.md) | 2026-11-19 | 36 | 0 | — |
 | [k3s-etcd-restore.md](../k3s-etcd-restore.md) | 2026-11-19 | 15 | 0 | — |
 | [k3s-node-plane-crons-and-incidents.md](../k3s-node-plane-crons-and-incidents.md) | 2026-11-19 | 16 | 0 | — |
 | [k3s-upgrade.md](../k3s-upgrade.md) | 2026-11-19 | 22 | 0 | — |
-| [landing.md](../landing.md) | 2026-11-19 | 45 | 0 | — |
+| [landing.md](../landing.md) | 2026-11-19 | 46 | 0 | — |
 | [longhorn-disaster-recovery.md](../longhorn-disaster-recovery.md) | 2026-11-19 | 21 | 0 | — |
 | [monitor-bridge-checks.md](../monitor-bridge-checks.md) | 2026-11-19 | 44 | 0 | — |
 | [monitor-bridge-internals.md](../monitor-bridge-internals.md) | 2026-11-19 | 36 | 0 | — |
 | [pi-host-tuning-record.md](../pi-host-tuning-record.md) | 2026-11-19 | 23 | 0 | — |
-| [python-code-organization.md](../python-code-organization.md) | 2026-11-19 | 41 | 0 | — |
+| [python-code-organization.md](../python-code-organization.md) | 2026-11-19 | 43 | 0 | — |
 | [renovate-agent-bounds-and-digest.md](../renovate-agent-bounds-and-digest.md) | 2026-11-19 | 35 | 0 | — |
 | [renovate-notify-internals.md](../renovate-notify-internals.md) | 2026-11-19 | 10 | 0 | — |
 | [secret-rotation.md](../secret-rotation.md) | 2026-11-19 | 36 | 0 | — |

@@ -39,12 +39,7 @@ from dev.findings_lib.claim import (
     stale_holder,
 )
 from dev.findings_lib.gh_calls import _load_issue, load_issues, run
-from dev.findings_lib.issue_model import (
-    current_claim,
-    now_iso,
-    today_utc,
-    validate_worktree_name,
-)
+from dev.findings_lib.issue_model import now_iso, today_utc
 from dev.findings_lib.plans import (
     ClaimRefused,
     plan_claim,
@@ -87,14 +82,6 @@ def cmd_claim(args: argparse.Namespace, tools: FindingsTools) -> int:
     # below needs the read once, and the reap path further down reuses the same tuple. A
     # lazy read would skip several git calls per registered worktree on a batch where
     # nothing was blocked, but the guard needs them on every batch anyway.
-    bad = validate_worktree_name(args.worktree)
-    if bad:
-        sys.stderr.write(
-            f"claim: --worktree `{args.worktree}` {bad}. The claim comment and the label "
-            "would be written and the trailer would then fail to parse on read-back, which "
-            "reported a race against nobody (#1284).\n"
-        )
-        return FINDINGS_BAD_ARGS
     facts = tools.worktree_facts()
     trees, dirty, merged, ok = facts
     if ok:
@@ -178,7 +165,7 @@ def cmd_claim(args: argparse.Namespace, tools: FindingsTools) -> int:
             print(f"#{number} refused: {exc.reason}", file=sys.stderr)
             refused = True
             continue
-        already_mine = current_claim(issue) == args.worktree
+        already_mine = issue.holder == args.worktree
         if not plans:
             print(f"#{number} already claimed by `{args.worktree}`")
             continue
@@ -197,7 +184,7 @@ def cmd_claim(args: argparse.Namespace, tools: FindingsTools) -> int:
             continue
         # Read back. Two sessions can both post a claim comment; the FIRST one holds it,
         # and without this the loser prints success and starts work on someone else's issue.
-        winner = current_claim(_load_issue(number, tools))
+        winner = _load_issue(number, tools).holder
         if winner is None:
             # NOT a race. The comment was posted and the read-back found nothing holding the
             # issue at all, so the READ is what failed — an unparseable trailer, or a
@@ -219,10 +206,6 @@ def cmd_claim(args: argparse.Namespace, tools: FindingsTools) -> int:
 
 def cmd_release(args: argparse.Namespace, tools: FindingsTools) -> int:
     """Releases this worktree's claim on one or more issues."""
-    bad = validate_worktree_name(args.worktree)
-    if bad:
-        sys.stderr.write(f"release: --worktree `{args.worktree}` {bad}\n")
-        return FINDINGS_BAD_ARGS
     if bool(args.numbers) == args.all:
         sys.stderr.write("release: give issue numbers or --all, not both or neither\n")
         return FINDINGS_BAD_ARGS
@@ -230,9 +213,9 @@ def cmd_release(args: argparse.Namespace, tools: FindingsTools) -> int:
     # sit under a branch that stays live, so `reap` never clears them.
     if args.all:
         pairs = [
-            (i["number"], i)
+            (i.number, i)
             for i in load_issues("open", tools)
-            if current_claim(i) == args.worktree
+            if i.holder == args.worktree
         ]
         if not pairs:
             print(f"release: `{args.worktree}` holds no open claims")
@@ -327,7 +310,7 @@ def cmd_reap(args: argparse.Namespace, tools: FindingsTools) -> int:
         print("reap: could not read git; refusing to release anything", file=sys.stderr)
         return 1
     issues = load_issues("open", tools)
-    by_number = {i["number"]: i for i in issues}
+    by_number = {i.number: i for i in issues}
     reaped = 0
     states = claim_states(
         issues,

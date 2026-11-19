@@ -122,8 +122,10 @@ Land and re-land **only the PRs of your own runs**, without asking, inside `CLAU
 from you. `place status` names the ones that do.
 
 - **Before any `land.sh` on a daniel-server batch's PR, run `uv run python
-  scripts/diagnostics/probe.py lander`.** `land.sh` holds no per-PR lock, and a landing the
-  server lander started would be armed twice.
+  scripts/diagnostics/probe.py lander`.** It shows what the server lander did with the PR
+  and how that landing ended, which decides whether the PR is yours to land. `land.sh`
+  itself refuses a second landing of a PR whose landing is live (`docs/landing.md`, *One
+  landing of a PR at a time*), so the probe is no guard against a double landing.
 - **Never land a PR the server lander qualifies.** `docs/issue-claiming-and-fanout.md`,
   *Who lands a daniel-server batch's PR*, says which outcome is the lander's and which is
   yours.
@@ -131,7 +133,8 @@ from you. `place status` names the ones that do.
   its review comment. An operator step goes under `asks:`. Any other reason is yours to
   land once the probe shows no landing for it.
 - **Re-land each `parked` PR.** Run `cc-wait landing-clear`, then the `land.sh` command the
-  park line names. A park line ending `unattributed` also goes under `asks:` for the root.
+  park line names. A park line that opens `another landing has it` is the exception: run
+  the `cc-wait land` command it quotes and read that landing's verdict. A park line ending `unattributed` also goes under `asks:` for the root.
 - **A re-land of a merged PR starts no promotion, and neither does clearing the hold.** The
   re-land settles only if master took a later merge. Otherwise it ends `deferred`, cause
   `promote-timeout`, unless the operator dispatched `promote` for the tip. When nothing

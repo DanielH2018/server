@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 
 from fanout_lib.target import SERVER_CHECKOUT
 from fanout_lib.transport import Tools
+from findings_lib.issue_model import Issue, IssueState
 
 OPERATOR_CHECKOUT = "/home/ubuntu/server"
 
@@ -177,3 +178,9 @@ def fake_tools(
 
 def ok(stdout: str) -> subprocess.CompletedProcess:
     return subprocess.CompletedProcess(["x"], 0, stdout=stdout, stderr="")
+
+
+def labelled_issue(number: int, title: str, *labels: str) -> Issue:
+    """An open issue whose body is `body <title>`, labelled `claude` unless ``labels`` say."""
+    names = frozenset(labels or ("claude",))
+    return Issue(number, title, IssueState.OPEN, body=f"body {title}", labels=names)

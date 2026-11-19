@@ -80,9 +80,8 @@ _sys.path.insert(1, str(_Path(__file__).resolve().parents[1]))
 from lib.exit_codes import FAILED, LAND_GAVE_UP, OK
 from lib.progress import OnChange
 from lib.summary import grouped
-from lib.repo_paths import HOST_LIB_FILES
 
-_sys.path.insert(0, str(HOST_LIB_FILES))
+from lib import host_modules  # noqa: F401
 from host_lib import deploy_event
 
 import forge

@@ -16,9 +16,9 @@ from pathlib import Path as _Path
 # sys.path. `longhorn_backups` imports host_lib, so both directories go on it too.
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
-from lib.repo_paths import HOST_LIB_FILES
 
-_sys.path.insert(0, str(HOST_LIB_FILES))
+from lib import host_modules  # noqa: F401
+
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2] / "lib"))
 from longhorn_lib import longhorn_backups
 

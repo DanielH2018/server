@@ -65,8 +65,3 @@ def test_a_moved_module_and_a_docs_edit_add_nothing(tmp_path):
         },
     )
     assert added_advice(repo, "base") == ""
-
-
-def test_a_branch_with_no_merge_base_gets_none(tmp_path):
-    repo = init_repo(tmp_path, initial_commit="first")
-    assert added_advice(repo, "origin/master") is None

@@ -546,7 +546,8 @@ is live from `git worktree list`, which lists only the reading user's own clone.
 from the other clone therefore read as stale, with the reason `no worktree`, and `claim` or `reap`
 released it while its session worked on. `lib/worktree_owner.py` reads the owner from the branch
 name. A `worktree-<prefix>+…` branch belongs to the user whose `CLAUDE_WORKTREE_PREFIX` is
-`<prefix>`, and a branch with no prefix belongs to the operator. A claim under the other user's
+`<prefix>`, and a branch with no prefix belongs to the operator. A desktop-app session's
+`claude/<name>` branch has no such prefix, so it reads as the operator's. A claim under the other user's
 branch reads as held, with the reason `held by another user's clone`. To release a stale claim
 from the other clone, run `findings.py reap` or `release` as that clone's user; neither user can
 judge the other's worktrees.
