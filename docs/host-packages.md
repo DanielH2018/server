@@ -163,6 +163,8 @@ changes. The grammar and the validations are the docstring of
   reconcile only when a package changes, so `homelab-reconcile-metrics.service` runs
   `homelab-reconcile --metrics` once per boot. It rewrites the file from `applied.json`, and
   the reboot-pending series reads 0 after the reboot that cleared the flag (#6188).
+  `HostRebootOverdue` pages a flag older than 8 days, which means the weekly reboot did not
+  run or was refused: read `journalctl -t weekly-restart` on the host, then reboot it.
 - **Start times.** Each time reconcile starts or restarts a unit in steps 2, 3 or 4b, it
   records the time of the call and writes it as
   `homelab_host_unit_started_seconds{host,unit}`. A rule compares it with the unit's own

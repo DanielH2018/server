@@ -74,7 +74,9 @@ uv run python scripts/secrets_mgmt/recovery_kit.py record   # then commit secret
 `recovery_kit.py record` writes the refresh date to `secrets/recovery_kit.yml`, the only
 record of the kit's age. The daily secret-rotation audit on daniel-box runs
 `recovery_kit.py check`, which reads down when the stamp is missing or older than
-`MAX_AGE_DAYS` in `scripts/secrets_mgmt/recovery_kit.py`. The audit writes that verdict to
+`MAX_AGE_DAYS` in `scripts/secrets_mgmt/recovery_kit.py`.
+`uv run python scripts/secrets_mgmt/recovery_kit.py check` prints which condition failed: a
+stamp that is missing, unreadable, dated after today, or older than `MAX_AGE_DAYS`. The audit writes that verdict to
 its own `recovery-kit` check, and `RecoveryKitStale` fires on it. The kit's verdict stays out
 of `SecretRotationAuditFailed`, so a stale kit cannot hide an overdue secret. A fresh `record`
 clears the alert at the next daily audit run. No CI check reads the stamp's age, so an old

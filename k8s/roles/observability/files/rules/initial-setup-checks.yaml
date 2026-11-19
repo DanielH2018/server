@@ -119,7 +119,7 @@ groups:
           summary: The off-site recovery kit is overdue for a refresh.
           description: >-
             `recovery_kit.py check` on daniel-box found secrets/recovery_kit.yml missing,
-            unreadable, future-dated or older than MAX_AGE_DAYS. Refresh the kit (docs/longhorn-disaster-recovery.md, The off-site recovery kit), then
+            unreadable, future-dated or older than MAX_AGE_DAYS; rerun it to read which. Refresh the kit (docs/longhorn-disaster-recovery.md, The off-site recovery kit), then
             run `recovery_kit.py record` and commit the stamp.
           runbook_url: https://docs.local.daniel-hunter.com/longhorn-disaster-recovery/
       - alert: LokiReadRouteFailed

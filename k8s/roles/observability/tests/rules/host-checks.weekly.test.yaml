@@ -50,3 +50,4 @@ tests:
                 so nothing confirms the weekly apt autoremove still runs. Read the `Weekly apt
                 autoremove` cron and `journalctl -t apt-autoremove`, then
                 /var/lib/node-exporter-textfile/apt-autoremove.prom on the host.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#aptautoremovenotreporting

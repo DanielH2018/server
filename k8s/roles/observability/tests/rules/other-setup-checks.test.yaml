@@ -141,6 +141,7 @@ tests:
                 from daniel-server, so the fence went unmeasured this month. A run that dies
                 before the fence leg writes nothing. Read the newest run directory under
                 /var/log/etcd-restore-drill.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#etcdrestoredrillegressfencenotreporting
       - eval_time: 900h
         alertname: RenovateNotifyNotReporting
         exp_alerts:
@@ -156,6 +157,7 @@ tests:
                 daniel-box: the daily 13:00 timer did not fire or the run failed. Read
                 `systemctl status homelab-renovate-notify.timer` and `journalctl -u
                 homelab-renovate-notify`. This says nothing about Renovate itself.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#renovatenotifynotreporting
       - eval_time: 900h
         alertname: RenovateAgentNotReporting
         exp_alerts:
@@ -652,6 +654,7 @@ tests:
                 from daniel-server, so the fence went unmeasured this month. A run that dies
                 before the fence leg writes nothing. Read the newest run directory under
                 /var/log/etcd-restore-drill.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#etcdrestoredrillegressfencenotreporting
   - interval: 1h
     input_series:
       - series: homelab_check_last_run_timestamp_seconds{check="etcd-restore-drill-egress-fence", instance="daniel-server",
@@ -698,6 +701,7 @@ tests:
                 daniel-box: the daily 13:00 timer did not fire or the run failed. Read
                 `systemctl status homelab-renovate-notify.timer` and `journalctl -u
                 homelab-renovate-notify`. This says nothing about Renovate itself.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#renovatenotifynotreporting
   - interval: 1h
     input_series:
       - series: homelab_check_last_run_timestamp_seconds{check="renovate-notify", instance="daniel-box",

@@ -147,6 +147,7 @@ groups:
             kernel auditing is off, or a guardrail path has no watch, so guardrail writes leave
             no audit record. Run `journalctl -t claude-guardrail-audit` on ${host}, then
             `systemctl status auditd`.
+          runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#claudeguardrailauditfailed
       - alert: ClaudeGuardrailAuditNotReporting
         hosts: {component: claude-code}
         expr: |
@@ -166,6 +167,7 @@ groups:
             ${host}, so nothing reloads a watch an auditd restart dropped. Read `systemctl
             status homelab-claude-guardrail-audit.timer` and `journalctl -t
             claude-guardrail-audit`.
+          runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#claudeguardrailauditnotreporting
       # The guardrail acknowledgement: claude-guardrail-ack posts the
       # guardrail changes that nothing merged explains. Same shape and deadline as the audit pair.
       - alert: ClaudeGuardrailAckFailed
@@ -213,6 +215,7 @@ groups:
             repo, or the newest tag is unsigned, signed by another key, or does not
             descend from the last verified tag. T2's config stays at the last verified tag. Run
             `journalctl -t claude-dotfiles-mirror` on ${host}.
+          runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#claudedotfilesmirrorfailed
       - alert: ClaudeDotfilesMirrorNotReporting
         hosts: {component: claude-code}
         expr: |
@@ -231,6 +234,7 @@ groups:
             No claude-dotfiles-mirror verdict newer than 35 minutes reached Prometheus from
             ${host}, so no new dotfiles tag is being verified. Read `systemctl status
             homelab-claude-dotfiles-mirror.timer` and `journalctl -t claude-dotfiles-mirror`.
+          runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#claudedotfilesmirrornotreporting
       # The weekly summary of the unattended Claude runs, on daniel-box only.
       # Its timer runs every Monday and 10 minutes after each activation, so the 608400s
       # deadline is a week plus an hour.
@@ -265,6 +269,7 @@ groups:
             unattended runs were not summarised. Read `systemctl status
             homelab-claude-weekly-summary.timer` and `journalctl -t claude-weekly-summary`. If
             you disabled the timer on purpose, delete this rule.
+          runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#claudeweeklysummarynotreporting
       # These rules are the pager for the two k3s crons. Each check has the DiskHealth pair:
       # `Failed` reads the verdict, and `NotReporting` reads the file's age. The deadline
       # literal in a NotReporting rule equals the DEADLINE_S its producer renders, and
@@ -465,6 +470,7 @@ groups:
             nothing confirms the weekly apt autoremove still runs. Read the `Weekly apt
             autoremove` cron and `journalctl -t apt-autoremove`, then
             /var/lib/node-exporter-textfile/apt-autoremove.prom on the host.
+          runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#aptautoremovenotreporting
       - alert: DpkgPurgeFailed
         hosts: {component: host-maintenance}
         expr: homelab_check_success{check="dpkg-purge",origin="${host}"} == 0
@@ -633,6 +639,7 @@ groups:
             so nothing reads kubelet's shutdown lock. Read `systemctl status
             homelab-kubelet-shutdown-lock.timer` and `journalctl -t kubelet-shutdown-lock` on
             ${host}.
+          runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#kubeletshutdownlocknotreporting
       # The catch-all deadman, one rule per host so `service` stays a literal. It reads
       # each check's own homelab_check_deadline_seconds, so a producer that writes the textfile
       # is covered the day it ships, before anyone writes its NotReporting pair. It is the
@@ -768,6 +775,7 @@ groups:
             fast-forward has not completed a clean run. Read `systemctl status
             claude-clone-sync.timer` and `journalctl -u claude-clone-sync`. If you disabled the
             timer on purpose, delete this rule.
+          runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#claudeclonesyncnotreporting
       - alert: ClaudeDotfilesSyncNotReporting
         hosts: {component: claude-code}
         expr: |
@@ -787,6 +795,7 @@ groups:
             dotfiles apply has not completed a clean run. Read `systemctl status
             claude-dotfiles-sync.timer` and `journalctl -u claude-dotfiles-sync`. If you
             disabled the timer on purpose, delete this rule.
+          runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#claudedotfilessyncnotreporting
       - alert: ClaudeMemorySyncNotReporting
         hosts: [daniel-box]
         expr: |
@@ -826,6 +835,7 @@ groups:
             poll has not completed a clean run. Read `systemctl status
             homelab-claude-triage-poll.timer` and `journalctl -u homelab-claude-triage-poll`. If
             you disabled the timer on purpose, delete this rule.
+          runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#claudetriagepollnotreporting
       - alert: ClaudeFanoutLanderNotReporting
         hosts: [daniel-box]
         expr: |
@@ -846,6 +856,7 @@ groups:
             homelab-claude-fanout-server-lander.timer` and `journalctl -u
             homelab-claude-fanout-server-lander`. If you disabled the timer on purpose, delete
             this rule.
+          runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#claudefanoutlandernotreporting
       - alert: ClaudePipelineTimelineNotReporting
         hosts: [daniel-box]
         expr: |

@@ -267,6 +267,7 @@ tests:
             exp_annotations: &traefik_annotations
               summary: The traefik Service does not hold the reserved ingress VIP.
               description: "homelab/traefik has no LoadBalancer ingress at the reserved VIP for 5 minutes, or kube-state-metrics is not scraped. Cloudflare, the router and the LAN DNS cannot reach the edge. MetalLB does not re-evaluate an existing allocation, so delete the Service and the next apply of traefik re-creates it."
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#traefikingressaddressnotpinned
 
   # MetalLB gave traefik an auto-assigned address. The rule holds 5 minutes, then fires.
   - interval: 1m

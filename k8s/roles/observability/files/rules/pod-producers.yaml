@@ -111,7 +111,8 @@ groups:
           description: >-
             The configarr-health reader judged the newest configarr Job down: older than 26
             hours, exited non-zero, logged an error-level line, or its pod logs are gone. Read
-            the annotation `homelab/check-message` on the configarr-health-verdict ConfigMap.
+            the annotation `homelab/check-message` on the configarr-health-verdict ConfigMap, then
+            `kubectl -n homelab logs job/<newest Job>`.
       - alert: JanitorrErrorsFound
         expr: >-
           kube_configmap_annotations{namespace="homelab", configmap="janitorr-health-verdict", annotation_homelab_check_verdict="down"} == 1

@@ -22,6 +22,7 @@ tests:
             exp_annotations: &annotations
               summary: The ghcr-mirror Deployment has wanted zero replicas for 2 hours.
               description: "homelab/ghcr-mirror has been scaled to zero for 2 hours, or kube-state-metrics is unscraped. A registry-gc.sh run probably died before its restore. Check `journalctl -t registry-gc` on daniel-box and that no run is active, then `kubectl -n homelab scale deploy/ghcr-mirror --replicas=1`."
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#ghcrmirrorscaledtozero
 
   # A GC run holds the mirror at zero for 25 minutes and restores it: nothing fires.
   - interval: 1m
@@ -91,6 +92,7 @@ tests:
             exp_annotations:
               summary: daniel-server cannot pull nut's manifest through its ghcr.io mirror endpoint.
               description: "The ghcr-mirror-pull check on daniel-server has failed for 45 minutes: nut's manifest GET via the node's ghcr.io mirror failed, or the probe ConfigMap has no tag. Read the `ghcr-mirror-pull` log of the node-exporter pod on daniel-server, then the ghcr-mirror pod and registries.yaml."
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#ghcrmirrorpullfailed
       - eval_time: 46m
         alertname: GhcrMirrorPullNotReporting
         exp_alerts: []
@@ -193,6 +195,7 @@ tests:
             exp_annotations:
               summary: daniel-box cannot pull a manifest through its docker.io mirror endpoint.
               description: "The dockerhub-mirror-pull check on daniel-box has failed for 45 minutes: a manifest GET via the node's docker.io mirror failed. Read the `dockerhub-mirror-pull` log of the node-exporter pod on daniel-box, then the dockerhub-mirror pod and registries.yaml."
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#dockerhubmirrorpullfailed
       - eval_time: 46m
         alertname: GhcrMirrorPullFailed
         exp_alerts: []
@@ -280,6 +283,7 @@ tests:
             exp_annotations:
               summary: The dockerhub-mirror Deployment has wanted zero replicas for 2 hours.
               description: "homelab/dockerhub-mirror has been scaled to zero for 2 hours, or kube-state-metrics is unscraped. A registry-gc.sh run probably died before its restore. Check `journalctl -t registry-gc` on daniel-box and that no run is active, then `kubectl -n homelab scale deploy/dockerhub-mirror --replicas=1`."
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#dockerhubmirrorscaledtozero
 
   # A GC phase holds the dockerhub-mirror at zero for 25 minutes and restores it: nothing fires.
   - interval: 1m

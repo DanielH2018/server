@@ -165,14 +165,17 @@ tests:
             exp_annotations:
               summary: cAdvisor covers 0 pods for the restarts check, under the floor of 20.
               description: "The restarts check reads a per-pod cAdvisor vector that holds 0 pods where the estate holds about 70 to 100. The kubernetes-cadvisor job or a selector is broken, so the restart, OOM and CPU rules read green. Read the kubernetes-cadvisor targets on Prometheus."
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#cadvisorcoverageshortfall
           - exp_labels: {arm: oom, service: observability, severity: warning}
             exp_annotations:
               summary: cAdvisor covers 0 pods for the oom check, under the floor of 20.
               description: "The oom check reads a per-pod cAdvisor vector that holds 0 pods where the estate holds about 70 to 100. The kubernetes-cadvisor job or a selector is broken, so the restart, OOM and CPU rules read green. Read the kubernetes-cadvisor targets on Prometheus."
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#cadvisorcoverageshortfall
           - exp_labels: {arm: cpu, service: observability, severity: warning}
             exp_annotations:
               summary: cAdvisor covers 0 pods for the cpu check, under the floor of 20.
               description: "The cpu check reads a per-pod cAdvisor vector that holds 0 pods where the estate holds about 70 to 100. The kubernetes-cadvisor job or a selector is broken, so the restart, OOM and CPU rules read green. Read the kubernetes-cadvisor targets on Prometheus."
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#cadvisorcoverageshortfall
   # CAdvisorCoverageShortfall, the boundary: 20 pods for the restart and OOM vectors is the
   # floor and stays silent, 19 pods for the CPU vector is under it and fires alone.
   - interval: 1m
@@ -341,3 +344,4 @@ tests:
             exp_annotations:
               summary: cAdvisor covers 19 pods for the cpu check, under the floor of 20.
               description: "The cpu check reads a per-pod cAdvisor vector that holds 19 pods where the estate holds about 70 to 100. The kubernetes-cadvisor job or a selector is broken, so the restart, OOM and CPU rules read green. Read the kubernetes-cadvisor targets on Prometheus."
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#cadvisorcoverageshortfall

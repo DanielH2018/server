@@ -286,7 +286,8 @@ tests:
               summary: configarr's last sync is stale, failed or logged an error.
               description: 'The configarr-health reader judged the newest configarr Job down: older than
                 26 hours, exited non-zero, logged an error-level line, or its pod logs are gone. Read
-                the annotation `homelab/check-message` on the configarr-health-verdict ConfigMap.'
+                the annotation `homelab/check-message` on the configarr-health-verdict ConfigMap, then
+                `kubectl -n homelab logs job/<newest Job>`.'
       - eval_time: 5m
         alertname: JanitorrErrorsFound
         exp_alerts:

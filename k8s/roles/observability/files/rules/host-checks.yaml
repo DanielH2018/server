@@ -100,6 +100,7 @@ groups:
         claude-guardrail-audit on daniel-box ended with status=down: auditd is not running, kernel auditing
         is off, or a guardrail path has no watch, so guardrail writes leave no audit record. Run `journalctl
         -t claude-guardrail-audit` on daniel-box, then `systemctl status auditd`.
+      runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#claudeguardrailauditfailed
   - alert: ClaudeGuardrailAuditFailed
     expr: >-
       homelab_check_success{check="claude-guardrail-audit",origin="daniel-server"} == 0
@@ -113,6 +114,7 @@ groups:
         claude-guardrail-audit on daniel-server ended with status=down: auditd is not running, kernel
         auditing is off, or a guardrail path has no watch, so guardrail writes leave no audit record.
         Run `journalctl -t claude-guardrail-audit` on daniel-server, then `systemctl status auditd`.
+      runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#claudeguardrailauditfailed
   - alert: ClaudeGuardrailAuditNotReporting
     expr: |
       (
@@ -130,6 +132,8 @@ groups:
         No claude-guardrail-audit verdict newer than 15 minutes reached Prometheus from daniel-box, so
         nothing reloads a watch an auditd restart dropped. Read `systemctl status homelab-claude-guardrail-audit.timer`
         and `journalctl -t claude-guardrail-audit`.
+      runbook_url: >-
+        https://docs.local.daniel-hunter.com/alert-runbooks/#claudeguardrailauditnotreporting
   - alert: ClaudeGuardrailAuditNotReporting
     expr: |
       (
@@ -147,6 +151,8 @@ groups:
         No claude-guardrail-audit verdict newer than 15 minutes reached Prometheus from daniel-server,
         so nothing reloads a watch an auditd restart dropped. Read `systemctl status homelab-claude-guardrail-audit.timer`
         and `journalctl -t claude-guardrail-audit`.
+      runbook_url: >-
+        https://docs.local.daniel-hunter.com/alert-runbooks/#claudeguardrailauditnotreporting
   - alert: ClaudeGuardrailAckFailed
     expr: homelab_check_success{check="claude-guardrail-ack",origin="daniel-box"} == 0
     labels:
@@ -214,6 +220,7 @@ groups:
         claude-dotfiles-mirror on daniel-box ended with status=down: it could not fetch the repo, or the
         newest tag is unsigned, signed by another key, or does not descend from the last verified tag.
         T2's config stays at the last verified tag. Run `journalctl -t claude-dotfiles-mirror` on daniel-box.
+      runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#claudedotfilesmirrorfailed
   - alert: ClaudeDotfilesMirrorFailed
     expr: >-
       homelab_check_success{check="claude-dotfiles-mirror",origin="daniel-server"} == 0
@@ -227,6 +234,7 @@ groups:
         the newest tag is unsigned, signed by another key, or does not descend from the last verified
         tag. T2's config stays at the last verified tag. Run `journalctl -t claude-dotfiles-mirror` on
         daniel-server.
+      runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#claudedotfilesmirrorfailed
   - alert: ClaudeDotfilesMirrorNotReporting
     expr: |
       (
@@ -244,6 +252,8 @@ groups:
         No claude-dotfiles-mirror verdict newer than 35 minutes reached Prometheus from daniel-box, so
         no new dotfiles tag is being verified. Read `systemctl status homelab-claude-dotfiles-mirror.timer`
         and `journalctl -t claude-dotfiles-mirror`.
+      runbook_url: >-
+        https://docs.local.daniel-hunter.com/alert-runbooks/#claudedotfilesmirrornotreporting
   - alert: ClaudeDotfilesMirrorNotReporting
     expr: |
       (
@@ -261,6 +271,8 @@ groups:
         No claude-dotfiles-mirror verdict newer than 35 minutes reached Prometheus from daniel-server,
         so no new dotfiles tag is being verified. Read `systemctl status homelab-claude-dotfiles-mirror.timer`
         and `journalctl -t claude-dotfiles-mirror`.
+      runbook_url: >-
+        https://docs.local.daniel-hunter.com/alert-runbooks/#claudedotfilesmirrornotreporting
   - alert: ClaudeWeeklySummaryFailed
     expr: homelab_check_success{check="claude-weekly-summary",origin="daniel-box"} == 0
     labels:
@@ -289,6 +301,8 @@ groups:
         No claude-weekly-summary verdict newer than 169 hours from daniel-box, so last week's unattended
         runs were not summarised. Read `systemctl status homelab-claude-weekly-summary.timer` and `journalctl
         -t claude-weekly-summary`. If you disabled the timer on purpose, delete this rule.
+      runbook_url: >-
+        https://docs.local.daniel-hunter.com/alert-runbooks/#claudeweeklysummarynotreporting
   - alert: LonghornBackupHealthFailed
     expr: homelab_check_success{check="longhorn-backup-health",origin="daniel-box"} == 0
     labels:
@@ -551,6 +565,7 @@ groups:
         No apt-autoremove verdict newer than 612000s reached Prometheus from daniel-box, so nothing confirms
         the weekly apt autoremove still runs. Read the `Weekly apt autoremove` cron and `journalctl -t
         apt-autoremove`, then /var/lib/node-exporter-textfile/apt-autoremove.prom on the host.
+      runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#aptautoremovenotreporting
   - alert: AptAutoremoveNotReporting
     expr: |
       (
@@ -572,6 +587,7 @@ groups:
         No apt-autoremove verdict newer than 612000s reached Prometheus from daniel-pi, so nothing confirms
         the weekly apt autoremove still runs. Read the `Weekly apt autoremove` cron and `journalctl -t
         apt-autoremove`, then /var/lib/node-exporter-textfile/apt-autoremove.prom on the host.
+      runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#aptautoremovenotreporting
   - alert: AptAutoremoveNotReporting
     expr: |
       (
@@ -593,6 +609,7 @@ groups:
         No apt-autoremove verdict newer than 612000s reached Prometheus from daniel-server, so nothing
         confirms the weekly apt autoremove still runs. Read the `Weekly apt autoremove` cron and `journalctl
         -t apt-autoremove`, then /var/lib/node-exporter-textfile/apt-autoremove.prom on the host.
+      runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#aptautoremovenotreporting
   - alert: DpkgPurgeFailed
     expr: homelab_check_success{check="dpkg-purge",origin="daniel-box"} == 0
     labels:
@@ -887,6 +904,8 @@ groups:
         No kubelet-shutdown-lock verdict newer than 900s reached Prometheus from daniel-server, so nothing
         reads kubelet's shutdown lock. Read `systemctl status homelab-kubelet-shutdown-lock.timer` and
         `journalctl -t kubelet-shutdown-lock` on daniel-server.
+      runbook_url: >-
+        https://docs.local.daniel-hunter.com/alert-runbooks/#kubeletshutdownlocknotreporting
   - alert: HostCheckOverdue
     expr: |
       (
@@ -1079,6 +1098,7 @@ groups:
         No claude-clone-sync verdict newer than 2100s from daniel-box, so the agent's clone fast-forward
         has not completed a clean run. Read `systemctl status claude-clone-sync.timer` and `journalctl
         -u claude-clone-sync`. If you disabled the timer on purpose, delete this rule.
+      runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#claudeclonesyncnotreporting
   - alert: ClaudeCloneSyncNotReporting
     expr: |
       (
@@ -1096,6 +1116,7 @@ groups:
         No claude-clone-sync verdict newer than 2100s from daniel-server, so the agent's clone fast-forward
         has not completed a clean run. Read `systemctl status claude-clone-sync.timer` and `journalctl
         -u claude-clone-sync`. If you disabled the timer on purpose, delete this rule.
+      runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#claudeclonesyncnotreporting
   - alert: ClaudeDotfilesSyncNotReporting
     expr: |
       (
@@ -1113,6 +1134,8 @@ groups:
         No claude-dotfiles-sync verdict newer than 2100s from daniel-box, so the agent's dotfiles apply
         has not completed a clean run. Read `systemctl status claude-dotfiles-sync.timer` and `journalctl
         -u claude-dotfiles-sync`. If you disabled the timer on purpose, delete this rule.
+      runbook_url: >-
+        https://docs.local.daniel-hunter.com/alert-runbooks/#claudedotfilessyncnotreporting
   - alert: ClaudeDotfilesSyncNotReporting
     expr: |
       (
@@ -1130,6 +1153,8 @@ groups:
         No claude-dotfiles-sync verdict newer than 2100s from daniel-server, so the agent's dotfiles apply
         has not completed a clean run. Read `systemctl status claude-dotfiles-sync.timer` and `journalctl
         -u claude-dotfiles-sync`. If you disabled the timer on purpose, delete this rule.
+      runbook_url: >-
+        https://docs.local.daniel-hunter.com/alert-runbooks/#claudedotfilessyncnotreporting
   - alert: ClaudeMemorySyncNotReporting
     expr: |
       (
@@ -1166,6 +1191,8 @@ groups:
         No claude-triage-poll verdict newer than 660s from daniel-box, so the monitor triage poll has
         not completed a clean run. Read `systemctl status homelab-claude-triage-poll.timer` and `journalctl
         -u homelab-claude-triage-poll`. If you disabled the timer on purpose, delete this rule.
+      runbook_url: >-
+        https://docs.local.daniel-hunter.com/alert-runbooks/#claudetriagepollnotreporting
   - alert: ClaudeFanoutLanderNotReporting
     expr: |
       (
@@ -1183,6 +1210,8 @@ groups:
         No claude-fanout-server-lander verdict newer than 3300s from daniel-box, so the lander has not
         completed a clean run. Read `systemctl status homelab-claude-fanout-server-lander.timer` and `journalctl
         -u homelab-claude-fanout-server-lander`. If you disabled the timer on purpose, delete this rule.
+      runbook_url: >-
+        https://docs.local.daniel-hunter.com/alert-runbooks/#claudefanoutlandernotreporting
   - alert: ClaudePipelineTimelineNotReporting
     expr: |
       (

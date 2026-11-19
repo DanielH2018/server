@@ -41,6 +41,7 @@ tests:
                 homelab-claude-triage-poll.timer` and `journalctl -u
                 homelab-claude-triage-poll`. If you disabled the timer on purpose, delete this
                 rule.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#claudetriagepollnotreporting
       - eval_time: 26m
         alertname: DiskHealthNotReporting
         exp_alerts:
@@ -1583,6 +1584,7 @@ tests:
                 homelab-claude-triage-poll.timer` and `journalctl -u
                 homelab-claude-triage-poll`. If you disabled the timer on purpose, delete this
                 rule.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#claudetriagepollnotreporting
       - eval_time: 35m
         alertname: ClaudeCloneSyncNotReporting
         exp_alerts: []
@@ -1603,6 +1605,7 @@ tests:
                 clone fast-forward has not completed a clean run. Read `systemctl status
                 claude-clone-sync.timer` and `journalctl -u claude-clone-sync`. If you disabled
                 the timer on purpose, delete this rule.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#claudeclonesyncnotreporting
           - exp_labels:
               check: claude-clone-sync
               instance: daniel-server
@@ -1617,6 +1620,7 @@ tests:
                 clone fast-forward has not completed a clean run. Read `systemctl status
                 claude-clone-sync.timer` and `journalctl -u claude-clone-sync`. If you disabled
                 the timer on purpose, delete this rule.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#claudeclonesyncnotreporting
       - eval_time: 35m
         alertname: ClaudeDotfilesSyncNotReporting
         exp_alerts: []
@@ -1637,6 +1641,7 @@ tests:
                 dotfiles apply has not completed a clean run. Read `systemctl status
                 claude-dotfiles-sync.timer` and `journalctl -u claude-dotfiles-sync`. If you
                 disabled the timer on purpose, delete this rule.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#claudedotfilessyncnotreporting
           - exp_labels:
               check: claude-dotfiles-sync
               instance: daniel-server
@@ -1651,6 +1656,7 @@ tests:
                 agent's dotfiles apply has not completed a clean run. Read `systemctl status
                 claude-dotfiles-sync.timer` and `journalctl -u claude-dotfiles-sync`. If you
                 disabled the timer on purpose, delete this rule.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#claudedotfilessyncnotreporting
       - eval_time: 35m
         alertname: ClaudeMemorySyncNotReporting
         exp_alerts: []
@@ -1693,6 +1699,7 @@ tests:
                 homelab-claude-fanout-server-lander.timer` and `journalctl -u
                 homelab-claude-fanout-server-lander`. If you disabled the timer on purpose,
                 delete this rule.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#claudefanoutlandernotreporting
 
   # The weekly host-maintenance crons on daniel-box. Every check file holds a green verdict
   # taken 611000s before time 0, so each NotReporting rule's first arm stays quiet at 10m
@@ -1750,6 +1757,7 @@ tests:
                 so nothing confirms the weekly apt autoremove still runs. Read the `Weekly apt
                 autoremove` cron and `journalctl -t apt-autoremove`, then
                 /var/lib/node-exporter-textfile/apt-autoremove.prom on the host.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#aptautoremovenotreporting
       - eval_time: 20m
         alertname: DpkgPurgeNotReporting
         exp_alerts:
@@ -1887,6 +1895,7 @@ tests:
                 running, kernel auditing is off, or a guardrail path has no watch, so guardrail
                 writes leave no audit record. Run `journalctl -t claude-guardrail-audit` on
                 daniel-box, then `systemctl status auditd`.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#claudeguardrailauditfailed
           - exp_labels:
               check: claude-guardrail-audit
               instance: daniel-server
@@ -1901,6 +1910,7 @@ tests:
                 running, kernel auditing is off, or a guardrail path has no watch, so guardrail
                 writes leave no audit record. Run `journalctl -t claude-guardrail-audit` on
                 daniel-server, then `systemctl status auditd`.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#claudeguardrailauditfailed
       - eval_time: 10m
         alertname: ClaudeGuardrailAuditNotReporting
         exp_alerts: []
@@ -1921,6 +1931,7 @@ tests:
                 daniel-box, so nothing reloads a watch an auditd restart dropped. Read
                 `systemctl status homelab-claude-guardrail-audit.timer` and `journalctl -t
                 claude-guardrail-audit`.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#claudeguardrailauditnotreporting
           - exp_labels:
               check: claude-guardrail-audit
               instance: daniel-server
@@ -1935,6 +1946,7 @@ tests:
                 daniel-server, so nothing reloads a watch an auditd restart dropped. Read
                 `systemctl status homelab-claude-guardrail-audit.timer` and `journalctl -t
                 claude-guardrail-audit`.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#claudeguardrailauditnotreporting
 
   # The guardrail acknowledgement pairs, on the audit pairs' timeline: Failed fires on the 0
   # verdict, NotReporting holds at 600s and fires at 1200s past the 900s deadline.
@@ -2226,6 +2238,7 @@ tests:
                 the repo, or the newest tag is unsigned, signed by another key, or does not
                 descend from the last verified tag. T2's config stays at the last verified tag.
                 Run `journalctl -t claude-dotfiles-mirror` on daniel-box.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#claudedotfilesmirrorfailed
           - exp_labels:
               check: claude-dotfiles-mirror
               instance: daniel-server
@@ -2240,6 +2253,7 @@ tests:
                 fetch the repo, or the newest tag is unsigned, signed by another key, or does
                 not descend from the last verified tag. T2's config stays at the last verified
                 tag. Run `journalctl -t claude-dotfiles-mirror` on daniel-server.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#claudedotfilesmirrorfailed
       - eval_time: 30m
         alertname: ClaudeDotfilesMirrorNotReporting
         exp_alerts: []
@@ -2260,6 +2274,7 @@ tests:
                 daniel-box, so no new dotfiles tag is being verified. Read `systemctl status
                 homelab-claude-dotfiles-mirror.timer` and `journalctl -t
                 claude-dotfiles-mirror`.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#claudedotfilesmirrornotreporting
           - exp_labels:
               check: claude-dotfiles-mirror
               instance: daniel-server
@@ -2274,6 +2289,7 @@ tests:
                 daniel-server, so no new dotfiles tag is being verified. Read `systemctl status
                 homelab-claude-dotfiles-mirror.timer` and `journalctl -t
                 claude-dotfiles-mirror`.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#claudedotfilesmirrornotreporting
 
   # The weekly summary pair: Failed fires on the 0 verdict, NotReporting holds at 169h, the
   # 608400s deadline, and fires an hour later. The 1h interval keeps every eval on a sample.
@@ -2322,6 +2338,7 @@ tests:
                 week's unattended runs were not summarised. Read `systemctl status
                 homelab-claude-weekly-summary.timer` and `journalctl -t claude-weekly-summary`.
                 If you disabled the timer on purpose, delete this rule.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#claudeweeklysummarynotreporting
   # KubeletShutdownLockMissing: the lock is missing from minute 0 and kubelet takes it at minute
   # 20. The 15m `for` holds the page through the 14th minute, and the next verdict of 1 resolves
   # it with no silence. The check keeps writing, so NotReporting stays quiet.
@@ -2389,3 +2406,4 @@ tests:
                 daniel-server, so nothing reads kubelet's shutdown lock. Read `systemctl status
                 homelab-kubelet-shutdown-lock.timer` and `journalctl -t kubelet-shutdown-lock`
                 on daniel-server.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#kubeletshutdownlocknotreporting

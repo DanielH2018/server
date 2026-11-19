@@ -100,3 +100,4 @@ groups:
             kube-state-metrics is not scraped. Cloudflare, the router and the LAN DNS cannot reach
             the edge. MetalLB does not re-evaluate an existing allocation, so delete the Service
             and the next apply of traefik re-creates it.
+          runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#traefikingressaddressnotpinned

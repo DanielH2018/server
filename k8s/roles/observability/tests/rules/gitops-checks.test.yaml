@@ -43,7 +43,7 @@ tests:
               summary: daniel-box's GitHub interaction-limit re-arm has stopped reporting.
               description: >-
                 No github-interaction-limit verdict newer than 25 hours reached Prometheus from
-                daniel-box, so nothing confirms the limit is being re-armed. Read
+                daniel-box, so nothing confirms the limit is re-armed before it lapses. Read
                 `systemctl status homelab-github-interaction-limit` on daniel-box, then
                 /var/lib/node-exporter-textfile/github-interaction-limit.prom.
       - eval_time: 30h
@@ -91,6 +91,7 @@ tests:
                 logged in for the deploy user, the PUT failed, or the readback did not match the
                 declared limit. Run `gh auth status` as the deploy user, then check the limit
                 in the repo settings.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#githubinteractionlimitnotarmed
 
   # The file stopped being refreshed: node_exporter keeps serving the timestamp written at 0.
   # The first arm is quiet when the gap equals the deadline and fires one hour later.
@@ -133,7 +134,7 @@ tests:
               summary: daniel-box's GitHub interaction-limit re-arm has stopped reporting.
               description: >-
                 No github-interaction-limit verdict newer than 25 hours reached Prometheus from
-                daniel-box, so nothing confirms the limit is being re-armed. Read
+                daniel-box, so nothing confirms the limit is re-armed before it lapses. Read
                 `systemctl status homelab-github-interaction-limit` on daniel-box, then
                 /var/lib/node-exporter-textfile/github-interaction-limit.prom.
 

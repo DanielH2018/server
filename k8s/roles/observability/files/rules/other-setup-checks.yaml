@@ -250,6 +250,7 @@ groups:
             daniel-server, so the fence went unmeasured this month. A run that dies before the
             fence leg writes nothing. Read the newest run directory under
             /var/log/etcd-restore-drill.
+          runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#etcdrestoredrillegressfencenotreporting
       # No Failed rule: see the header.
       - alert: RenovateNotifyNotReporting
         expr: |
@@ -269,6 +270,7 @@ groups:
             the daily 13:00 timer did not fire or the run failed. Read
             `systemctl status homelab-renovate-notify.timer` and
             `journalctl -u homelab-renovate-notify`. This says nothing about Renovate itself.
+          runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#renovatenotifynotreporting
       # No Failed rule: see the header.
       - alert: RenovateAgentNotReporting
         expr: |

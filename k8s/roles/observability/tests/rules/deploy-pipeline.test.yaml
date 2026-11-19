@@ -28,10 +28,10 @@ tests:
             exp_annotations: &absent
               summary: Prometheus has lost the deploy-pipeline job or one of its five gauges.
               description: >-
-                Either no up{job="deploy-pipeline"} series exists, or monitor-bridge is scraped
-                without one of the five homelab_deploy_* gauges. Its log has a deploy-pipeline
-                line each cycle naming the read that failed. Meanwhile DeployHoldActive,
-                PromotionStalled and ProdMovedOutsidePromote cannot fire.
+                Either no up{job="deploy-pipeline"} series exists (the job left prometheus.yml) or
+                monitor-bridge is scraped without one of the five homelab_deploy_* gauges. Its
+                deploy-pipeline log line names the failed read. DeployHoldActive,
+                PromotionStalled and ProdMovedOutsidePromote cannot fire meanwhile.
       - eval_time: 30m
         alertname: DeployHoldActive
         exp_alerts: []
@@ -150,8 +150,10 @@ tests:
                 A green master commit has waited 3h 0m 0s for promotion.
               description: >-
                 The oldest green master commit that prod lacks went green 3h 0m 0s ago, and
-                no hold stands. Read the promote workflow's recent runs with `gh run list
-                --workflow promote.yml`. A run that never settles stalls promotion as current.
+                no hold stands. Read `gh run list --workflow promote.yml`;
+                docs/flux-deploy-plane.md, The deploy-pipeline alerts, covers a run that never
+                settles or ends without its settle job.
+              runbook_url: https://docs.local.daniel-hunter.com/flux-deploy-plane/#the-deploy-pipeline-alerts
   - interval: 1m
     input_series:
       - series: 'homelab_deploy_unpromoted_age_seconds{job="deploy-pipeline", instance="monitor-bridge.homelab.svc:9180"}'
@@ -205,8 +207,10 @@ tests:
                 A green master commit has waited 5h 50m 0s for promotion.
               description: >-
                 The oldest green master commit that prod lacks went green 5h 50m 0s ago, and
-                no hold stands. Read the promote workflow's recent runs with `gh run list
-                --workflow promote.yml`. A run that never settles stalls promotion as current.
+                no hold stands. Read `gh run list --workflow promote.yml`;
+                docs/flux-deploy-plane.md, The deploy-pipeline alerts, covers a run that never
+                settles or ends without its settle job.
+              runbook_url: https://docs.local.daniel-hunter.com/flux-deploy-plane/#the-deploy-pipeline-alerts
 
   # ProdMovedOutsidePromote fires after 15 minutes at 0, and stays silent after 10.
   - interval: 1m

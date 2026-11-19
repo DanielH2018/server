@@ -185,3 +185,4 @@ groups:
             {{ $value | printf "%.0f" }} pods where the estate holds about 70 to 100. The
             kubernetes-cadvisor job or a selector is broken, so the restart, OOM and CPU rules
             read green. Read the kubernetes-cadvisor targets on Prometheus.
+          runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#cadvisorcoverageshortfall
