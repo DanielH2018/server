@@ -142,14 +142,14 @@ def search(query):
 
 
 def _survey_with(
-    tmp_path: Path, overlay: str, *runs: dict
+    tmp_path: Path, overlay: str, *runs: dict, flags: tuple[str, ...] = ()
 ) -> subprocess.CompletedProcess[str]:
     """Run the survey against the fake with `overlay` replacing some of its functions."""
     source = FAKE_GITHUB.read_text().removesuffix("main()\n") + overlay + "main()\n"
     fake = f"#!{sys.executable} -IS\n{source}"
     stubs = fake_bin(tmp_path / "bin", gh=fake, ghread=fake)
     (stubs / "world.json").write_text(json.dumps(runs))
-    argv = [sys.executable, str(SCRIPT), "--since", SINCE, "--until", UNTIL]
+    argv = [sys.executable, str(SCRIPT), "--since", SINCE, "--until", UNTIL, *flags]
     return run(argv, cwd=REPO, stub_bin=stubs)
 
 
@@ -198,7 +198,7 @@ def test_cancelled_attempt_is_clean(tmp_path):
         ),
         _green_attempt(),
     )
-    out = _survey(tmp_path, cancelled).stdout
+    out = _survey(tmp_path, cancelled, flags=("--all",)).stdout
     assert "43000000006" not in out, out
     assert "test_in_a_cancelled_attempt" not in out, out
 
@@ -212,7 +212,9 @@ def test_timed_out_and_startup_failure_attempts_are_flagged(tmp_path, conclusion
         conclusion=conclusion,
     )
     out = _survey(
-        tmp_path, _run(43000000007, _attempt(job, conclusion=conclusion))
+        tmp_path,
+        _run(43000000007, _attempt(job, conclusion=conclusion)),
+        flags=("--all",),
     ).stdout
     assert "run 43000000007 attempt 1" in out, out
     assert "stalled / - / -" in out, f"want the red job with no failed step:\n{out}"
@@ -256,3 +258,26 @@ def test_a_window_under_the_search_cap_does_not_warn(tmp_path):
     done = _survey_with(tmp_path, "", _run(43000000010, _green_attempt()))
     assert done.returncode == 0, done.stderr
     assert "search cap" not in done.stderr, done.stderr
+
+
+def test_a_failed_listing_prints_one_stderr_line(tmp_path):
+    overlay = """
+def search(query):
+    die("gh: request trace line one\\ngh: request trace line two\\nHTTP 502: Bad Gateway")
+
+"""
+    done = _survey_with(tmp_path, overlay)
+    assert done.returncode == 1, done.stdout
+    assert done.stderr.strip() == "gh failed: HTTP 502: Bad Gateway", done.stderr
+
+
+def test_a_rate_limited_listing_names_gh_quota_status(tmp_path):
+    overlay = """
+def search(query):
+    die("gh: API rate limit exceeded for user ID 1. (HTTP 403)")
+
+"""
+    done = _survey_with(tmp_path, overlay)
+    assert done.returncode == 1, done.stdout
+    assert "rate limit exceeded" in done.stderr, done.stderr
+    assert "gh-quota status" in done.stderr, done.stderr
