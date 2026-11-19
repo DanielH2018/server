@@ -59,11 +59,13 @@ def test_the_audit_reruns_while_red_and_a_boot_unit_covers_a_reboot(package):
     assert "Restart=on-failure\nRestartSec=30min\n" in service
     assert "secret-rotation-audit.down" in service
     boot = text(package, f"{UNITS}/homelab-secret-rotation-audit-boot.service")
-    assert "ConditionPathExists=/var/lib/kuma-check/secret-rotation-audit.down" in boot
+    assert (
+        "ConditionPathExists=/var/lib/homelab/check/secret-rotation-audit.down" in boot
+    )
     assert "start --no-block homelab-secret-rotation-audit.service" in boot
 
 
-def test_the_timer_keeps_the_kuma_check_slot(package):
+def test_the_timer_keeps_its_0830_slot(package):
     audit = text(package, f"{UNITS}/homelab-secret-rotation-audit.timer")
     assert "OnCalendar=*-*-* 08:30:00\n" in audit
     assert "Persistent=true\n" in audit
@@ -91,6 +93,7 @@ def test_the_package_retires_the_ansible_era_cron_timer_and_scripts(package):
         "Daily secret rotation audit",
         "/usr/local/bin/secret-rotate.sh",
         "/usr/local/bin/secret-rotation-audit.sh",
+        "/var/lib/kuma-check/secret-rotation-audit.down",
     }
 
 

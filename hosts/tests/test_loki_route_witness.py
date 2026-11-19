@@ -11,8 +11,7 @@ textfile, which Prometheus labels with the host's origin.
 THE DEADLINE EXCEEDS THE PRODUCER'S PERIOD. A deadline shorter than its timer's period fires the
 NotReporting rule with nothing wrong.
 
-M6 batch B2's Cutover-2 removed the Kuma push, so a run's verdict is its textfile
-and its exit code.
+A run's verdict is its textfile and its exit code.
 
 Run: uv run pytest hosts/tests/test_loki_route_witness.py
 """
@@ -36,20 +35,6 @@ UV_PATH = "/usr/bin/uv"
 CHECK_LIB = (
     REPO / "hosts" / "components" / "check-lib" / "files" / "homelab-check-lib.sh"
 )
-# What a render carries while it still pushes to Kuma: the library, its call, a push URL, or the
-# credential and env file that fed the token.
-KUMA_PUSH_MARKERS = (
-    "kuma-push-lib",
-    "kuma_push",
-    "/api/push/",
-    "PUSH_TOKEN",
-    "loki-route-kuma-push.env",
-)
-
-
-def kuma_push_markers(body: str) -> list[str]:
-    """The Kuma push markers a rendered witness still carries, or nothing."""
-    return [marker for marker in KUMA_PUSH_MARKERS if marker in body]
 
 
 def _render() -> str:
@@ -109,7 +94,7 @@ def _textfile_series(tmp_path) -> dict[str, str]:
 def test_a_down_verdict_writes_zero_and_exits_nonzero_so_the_timer_reruns_it(
     tmp_path,
 ):
-    """The kuma-check timer's contract: exit 1 after a down verdict, and Restart=on-failure reruns."""
+    """The timer's contract: exit 1 after a down verdict, and Restart=on-failure reruns."""
     assert _run_witness(tmp_path, route_rc=1) == 1
     series = _textfile_series(tmp_path)
     assert series['homelab_check_success{check="loki-read-route-health"}'] == "0"
@@ -125,25 +110,6 @@ def test_an_up_verdict_writes_one_with_the_deadline_the_rules_pin_and_exits_zero
     assert series[f"homelab_check_deadline_seconds{{{check}}}"] == str(
         MONITOR_INTERVAL_S
     )
-
-
-def test_the_witness_does_not_push_to_kuma():
-    # RED if the push, its library, its token or its env file returns: the tiles are gone, so a
-    # push would be refused (`by=kuma`) every run.
-    body = _render()
-    # Non-vacuity: the render is the real script, which still records its verdict.
-    assert "write_check_textfile loki-read-route-health" in body
-    assert kuma_push_markers(body) == []
-
-
-def test_a_witness_that_pushes_to_kuma_is_flagged():
-    pushing = (
-        "source /usr/local/lib/kuma-push-lib.sh\n"
-        ". /etc/homelab/loki-route-kuma-push.env\n"
-        'PUSH_URL="https://kuma/api/push/${LOKI_ROUTE_WITNESS_PUSH_TOKEN}"\n'
-        'kuma_push "$STATUS" "$MSG" "$PUSH_URL"\n'
-    )
-    assert kuma_push_markers(pushing) == list(KUMA_PUSH_MARKERS)
 
 
 def test_the_verdict_reads_the_body_rather_than_the_exit_code():

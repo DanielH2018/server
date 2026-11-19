@@ -9,7 +9,7 @@
 # at every boot. `--no-block` keeps the check out of the boot transaction.
 [Unit]
 Description=Loki read-route witness (boot rerun while red)
-ConditionPathExists=/var/lib/kuma-check/loki-route-witness.down
+ConditionPathExists=/var/lib/homelab/check/loki-route-witness.down
 
 [Service]
 SyslogLevel=notice
