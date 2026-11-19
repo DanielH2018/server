@@ -16,7 +16,7 @@ The caller supplies `alert`, its own failure reporter: each script's alert recor
 verdict. `job` names the script in the message, and `consequence` says what a skip costs that job.
 Import it `with context`, or `server_git_tree_lock` renders empty and the lock is split in two.
 
-Named `.j2`, not `.sh.j2`: it is not a script, and validate/render_lib/shell.py lints every
+Named `.j2`, not `.sh.j2`: it is not a script, and validate/shell_templates.py lints every
 `*.sh.j2` as one.
 #}
 {% set git_tree_lock_wait_s = 10800 %}

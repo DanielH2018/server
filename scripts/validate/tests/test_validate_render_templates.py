@@ -21,7 +21,14 @@ def _broken(ok: Callable[[str], None]) -> tuple[int, int]:
     return 2, 1
 
 
-@pytest.mark.parametrize("name", sorted(rt.FAMILIES))
+FAMILIES = ("compose", "setup", "shell", "units")
+
+
+def test_the_entry_point_runs_every_family():
+    assert set(rt.FAMILIES) == set(FAMILIES)
+
+
+@pytest.mark.parametrize("name", FAMILIES)
 def test_each_family_checks_the_real_tree_clean(name):
     if name == "units" and shutil.which("systemd-analyze") is None:
         pytest.skip("systemd-analyze not on PATH")
