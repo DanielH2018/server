@@ -209,13 +209,15 @@ with Python:
 uv run python3 -c "import sqlite3; db = sqlite3.connect('file:/var/lib/gh-quota/tok-<fingerprint>@1000.sqlite?mode=ro', uri=True); [print(r) for r in db.execute('SELECT t.window, t.bucket, t.used, s.session, s.gh, s.env_names, p.cgroup, p.ancestry FROM truth t JOIN sampler s USING (window, bucket) LEFT JOIN sampler_process p USING (window, bucket) ORDER BY t.window')]"
 ```
 
-**GitHub answers one token from two `graphql` counters.** The `sampler` rows from
+**GitHub answers one token from two counters per bucket.** The `sampler` rows from
 2026-11-15 to 2026-11-18 showed no second caller. The same sessions read both pools, with the
 same `/usr/bin/gh` and no `GH_*` or `GITHUB_*` names. Session `185cff7e` read the counter that
 resets at :29 at 22:29, then the counter that resets at :50 at 23:20. GitHub chooses which
 counter answers, so neither the caller nor the token separates them
-([#8741](https://github.com/DanielH2018/server/issues/8741)). GitHub's reported reset for one
-core window also moves by up to 45 seconds between samples.
+([#8741](https://github.com/DanielH2018/server/issues/8741)). `core` has two counters too:
+windows ending at 22:17 and 22:34 UTC on 2026-11-18 were live at once, and so were windows
+ending at 00:23 and 00:34 on 2026-11-19. GitHub's reported reset for one `core` window also moves by up to 45
+seconds between samples.
 
 The ledger handles both in two ways:
 
@@ -225,7 +227,7 @@ The ledger handles both in two ways:
   the live window that ends last. A stale sample of the other counter can outlive a fresh one
   by 21 minutes.
 
-Neither change tells the two `graphql` counters apart. Slice 2's ceiling has to hold against the
+Neither change tells a bucket's two counters apart. Slice 2's ceiling has to hold against the
 larger of them, because GitHub can refuse a call on either.
 
 **The session key** is the first of these that exists:
