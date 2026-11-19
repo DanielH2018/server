@@ -41,7 +41,9 @@
 #   /run/homelab-secrets/, and a link into a system tree whose target is missing, such as the
 #   kernel headers' rust link to a package that is not installed, in a window its owner ran.
 # - /etc: a package-owned path whose content differs from the package's copy, or that is gone.
-#   Ansible writes unpackaged /etc files on every merge, so those are logged, not paged.
+#   Ansible writes unpackaged /etc files on every merge, so those are logged, not paged. A
+#   conffile the host package's lines arm adds a block to is the package's copy while removing
+#   that block, once, between its markers and as declared, leaves the digest dpkg records.
 # - The login, privilege, startup and code-loading files in PERSIST, owned or not: sudoers, sshd,
 #   PAM, cron, the user and group databases, the loader and module config, shell startup files,
 #   apt hooks, sources and keys, udev rules, systemd units and drop-ins, rc.local, init scripts,
@@ -406,12 +408,36 @@ accounts_verdict() {
     }' "$AIDE_DIR/accounts/$name" "$FS_ROOT/etc/passwd" "$FS_ROOT/etc/group" "$FS_ROOT$1"
 }
 
+# Prints the md5 of the file $1 without the one block the host package's lines arm declares for
+# it, or nothing when no single block edit names it, or when the file does not hold that block
+# exactly once between its markers. The arm writes BEGIN, the block less its trailing newlines,
+# then END, each on its own line.
+unblocked_digest() {
+  local edit digest
+  edit=$(jq -ec --arg p "$1" '[.lines.edits[] | select(.path == $p and .block != null)]
+    | if length == 1 then .[0] else error("not one block edit") end' "$FS_ROOT$HOST_MANIFEST" 2>/dev/null) || return 0
+  digest=$(MARKER=$(jq -r .marker <<<"$edit") BLOCK=$(jq -r .block <<<"$edit") awk '
+    BEGIN {
+      b = ENVIRON["MARKER"]; sub(/\{mark\}/, "BEGIN", b)
+      e = ENVIRON["MARKER"]; sub(/\{mark\}/, "END", e)
+      want = ENVIRON["BLOCK"]; sub(/\n+$/, "", want)
+    }
+    $0 == b { begins++; inside = 1; n = 0; body = ""; next }
+    $0 == e { ends++; if (!inside) bad = 1; inside = 0; next }
+    inside { body = (n++ ? body "\n" : "") $0; next }
+    { print }
+    END { if (bad || inside || begins != 1 || ends != 1 || body != want) exit 1 }' "$FS_ROOT$1" \
+    | md5sum) || return 0
+  echo "${digest%% *}"
+}
+
 # Prints "path (reason)" for each paged entry no package explains. Reads the files as they are
 # now: AIDE has just hashed them, and a change in between is next week's report.
 unexplained_entries() {
-  local kind type pug scope path digest target dangling rule
+  local kind type pug scope path digest target dangling rule unblocked block_paths
+  block_paths=" $(jq -r '.lines.edits[] | select(.block != null) | .path' "$FS_ROOT$HOST_MANIFEST" 2>/dev/null | tr '\n' ' ') "
   paged_entries | while IFS=$'\t' read -r kind type pug scope path; do
-    digest=- target=- dangling=- rule=-
+    digest=- target=- dangling=- rule=- unblocked=-
     if [[ "$kind" != removed ]]; then
       if [[ -L "$FS_ROOT$path" ]]; then
         # -m, not -f: a link into a directory that is missing still has a target to judge, and
@@ -426,9 +452,13 @@ unexplained_entries() {
           rule=$(accounts_verdict "$path")
           [[ -n "$rule" ]] || rule="comparing it with its copy failed"
         fi
+        if [[ "$block_paths" == *" $path "* ]]; then
+          unblocked=$(unblocked_digest "$path")
+          [[ -n "$unblocked" ]] || unblocked=-
+        fi
       fi
     fi
-    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$kind" "$type" "$pug" "$scope" "$path" "$digest" "$target" "$dangling" "$rule"
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$kind" "$type" "$pug" "$scope" "$path" "$digest" "$target" "$dangling" "$rule" "$unblocked"
   done | SNAPS_REVISED="$(snaps_revised)" SNAPD_UDEV="$SNAPD_UDEV" \
     ROLE_WRITTEN="$ROLE_WRITTEN" USRMERGE="$USRMERGE" BOOT_LINKS="$BOOT_LINKS" \
     BOOT_LINK_TARGET="$BOOT_LINK_TARGET" BOOT_ENV="$BOOT_ENV" DERIVED_KERNEL="$DERIVED_KERNEL" \
@@ -524,7 +554,8 @@ unexplained_entries() {
       else if ($3 == "pug" && !(scope != "persist" && owner_ran(p, upgraded) && (scope == "etc" || !owner_matches(p, "^homelab-"))) && (scope != "etc" || (p in owned))) why = "owner, group or permissions changed"
       else if (type == "d") next
       else if (kind == "removed") { if (p in owned) why = "removed, but a package still owns it" }
-      else if (d != "") { if (index(d " ", " " $6 " ") == 0) why = "differs from its package copy" }
+      # $10 is the digest with the lines arm block removed, set only for a path a block edit names.
+      else if (d != "") { if (index(d " ", " " $6 " ") == 0 && ($10 == "-" || index(d " ", " " $10 " ") == 0)) why = "differs from its package copy" }
       # dpkg records no digest for a symlink, so an owned one must still resolve inside a package.
       # Every installed package on daniel-server records md5sums, so an owned regular
       # file with no digest was a link or a directory in its package.
