@@ -75,9 +75,28 @@ rules:
   # cluster's substitution values by a compromised controller token.
   #
   # A watch writes a `ResponseStarted` entry when it opens and a `ResponseComplete` one when it
-  # ends. The second names the same reader and Secret, so the first is omitted.
+  # ends. For the controllers below, which hold their watches open for good (about 160 entries an
+  # hour between them), the second names the same reader and Secret, so the first is omitted.
+  # DECIDED: everyone else keeps both stages. The client picks a watch's timeoutSeconds, so
+  # another identity's watch could stream every Secret and defer its ResponseComplete for as
+  # long as it likes.
   - level: Metadata
     omitStages: ["ResponseStarted"]
+    users:
+      - "system:k3s-supervisor"
+      - "system:kube-controller-manager"
+      - "system:serviceaccount:flux-system:kustomize-controller"
+      - "system:serviceaccount:flux-system:notification-controller"
+      - "system:serviceaccount:homelab:traefik-ingress-controller"
+      - "system:serviceaccount:longhorn-system:longhorn-service-account"
+      - "system:serviceaccount:metallb-system:controller"
+      - "system:serviceaccount:metallb-system:speaker"
+      - "system:serviceaccount:system-upgrade:system-upgrade"
+    verbs: ["watch"]
+    resources:
+      - group: ""
+        resources: ["secrets"]
+  - level: Metadata
     verbs: ["get", "list", "watch"]
     resources:
       - group: ""

@@ -157,7 +157,10 @@ def test_secret_reads_are_logged_at_metadata():
         (
             i
             for i, rule in enumerate(rules)
-            if rule.get("level") == "Metadata" and "secrets" in _named_resources(rule)
+            if rule.get("level") == "Metadata"
+            and "secrets" in _named_resources(rule)
+            and not rule.get("users")
+            and not rule.get("userGroups")
         ),
         -1,
     )
@@ -196,33 +199,14 @@ def test_secret_reads_are_logged_at_metadata():
         )
 
 
-def test_a_secret_watch_is_logged_once_and_a_pod_exec_at_both_stages():
-    """A watch's ResponseComplete names the same reader, so its ResponseStarted is a duplicate.
-
-    A long exec only reaches ResponseComplete when it ends, so its ResponseStarted is the record
-    that a session entered the pod, and must stay.
-    """
-    policy = _audit_policy()
-    assert "ResponseStarted" not in policy.get("omitStages", []), policy["omitStages"]
-    rules = policy["rules"]
-    (secret_rule,) = [
-        r
-        for r in rules
-        if r.get("level") == "Metadata" and "secrets" in _named_resources(r)
-    ]
-    assert "ResponseStarted" in secret_rule.get("omitStages", []), secret_rule
-    (exec_rule,) = [r for r in rules if "pods/exec" in _named_resources(r)]
-    assert "ResponseStarted" not in exec_rule.get("omitStages", []), exec_rule
-
-
 KUSTOMIZE_CONTROLLER = "system:serviceaccount:flux-system:kustomize-controller"
 LONGHORN_MANAGER = "system:serviceaccount:longhorn-system:longhorn-service-account"
 METRICS_SERVER = "system:serviceaccount:kube-system:metrics-server"
 OPERATOR = "system:admin"
 
 
-def _audit_level(user: str, verb: str, group: str, resource: str) -> str:
-    """The level of the first rule matching a ServiceAccount or user's resource request.
+def _audit_rule(user: str, verb: str, group: str, resource: str) -> dict | None:
+    """The first rule matching a ServiceAccount or user's resource request, or None.
 
     `resource` takes the policy's `name/subresource` form. A rule naming `nonResourceURLs`
     matches only non-resource requests, so it never matches here.
@@ -243,8 +227,40 @@ def _audit_level(user: str, verb: str, group: str, resource: str) -> str:
             for entry in entries
         ):
             continue
-        return rule["level"]
-    return "None"
+        return rule
+    return None
+
+
+def _audit_level(user: str, verb: str, group: str, resource: str) -> str:
+    """The level of the first rule matching the request, as `_audit_rule` finds it."""
+    rule = _audit_rule(user, verb, group, resource)
+    return rule["level"] if rule else "None"
+
+
+@pytest.mark.parametrize(
+    ("user", "verb", "resource", "omits_started"),
+    [
+        (KUSTOMIZE_CONTROLLER, "watch", "secrets", True),
+        (LONGHORN_MANAGER, "watch", "secrets", True),
+        (KUSTOMIZE_CONTROLLER, "get", "secrets", False),
+        (OPERATOR, "watch", "secrets", False),
+        (OPERATOR, "create", "pods/exec", False),
+    ],
+)
+def test_only_a_known_controllers_secret_watch_skips_response_started(
+    user: str, verb: str, resource: str, omits_started: bool
+):
+    """A controller's endless watch is logged once; any other watch keeps its opening entry.
+
+    The client picks a watch's timeoutSeconds, so for an unknown identity ResponseStarted is
+    the only prompt record of a stream that reads every Secret. A long exec reaches
+    ResponseComplete only when it ends, so it keeps ResponseStarted too.
+    """
+    policy = _audit_policy()
+    assert "ResponseStarted" not in policy["omitStages"], policy["omitStages"]
+    rule = _audit_rule(user, verb, "", resource)
+    assert rule and rule["level"] == "Metadata", rule
+    assert ("ResponseStarted" in rule.get("omitStages", [])) == omits_started, rule
 
 
 @pytest.mark.parametrize(
