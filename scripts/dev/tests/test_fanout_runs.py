@@ -15,32 +15,6 @@ def _runs(tmp_path, *args):
     return main(["runs", *args, "--manifest-root", str(tmp_path)], fake_tools()[0])
 
 
-def test_runs_lists_every_manifest_and_skips_an_unreadable_one(tmp_path, capsys):
-    b1 = Batch("1", "daniel-box", "/w1", "worktree-fanout-1", "u1", [1], "t")
-    b2 = Batch("2-3", "daniel-server", "/w2", "worktree-fanout-2-3", "u2", [2, 3], "t")
-    save(Manifest("20260101T000010Z", "worktree-a", [b1]), root=tmp_path)
-    save(Manifest("20260102T000010Z", "worktree-b", [b2]), root=tmp_path)
-    (tmp_path / "20260103T000010Z.json").write_text("{truncated")
-    assert _runs(tmp_path) == 0
-    out = capsys.readouterr().out
-    assert "20260101T000010Z  orchestrator worktree-a" in out
-    assert "2-3 on daniel-server: worktree-fanout-2-3 #2,#3 standing" in out
-    assert "20260103T000010Z" not in out
-
-
-def test_runs_filters_by_orchestrator_and_prints_json(tmp_path, capsys):
-    b1 = Batch("1", "daniel-box", "/w1", "worktree-fanout-1", "u1", [1], "t")
-    save(Manifest("20260101T000010Z", "worktree-a", [b1]), root=tmp_path)
-    save(Manifest("20260102T000010Z", "worktree-b", []), root=tmp_path)
-    assert _runs(tmp_path, "--json", "--orchestrator", "worktree-a") == 0
-    runs = json.loads(capsys.readouterr().out)
-    assert [(r["run_id"], r["batches"][0]["branch"]) for r in runs] == [
-        ("20260101T000010Z", "worktree-fanout-1")
-    ]
-    assert _runs(tmp_path, "--orchestrator", "worktree-c") == 0
-    assert "no fan-out runs for worktree-c" in capsys.readouterr().out
-
-
 def _entry(**more) -> dict:
     return {
         "batch": "1",
@@ -62,6 +36,34 @@ def _write(tmp_path, run_id: str, *entries) -> None:
     )
 
 
+def test_runs_lists_every_manifest_and_skips_an_unreadable_one(tmp_path, capsys):
+    b1 = Batch("1", "daniel-box", "/w1", "worktree-fanout-1", "u1", [1], "t")
+    b2 = Batch("2-3", "daniel-server", "/w2", "worktree-fanout-2-3", "u2", [2, 3], "t")
+    save(Manifest("20260101T000010Z", "worktree-a", [b1]), root=tmp_path)
+    save(Manifest("20260102T000010Z", "worktree-b", [b2]), root=tmp_path)
+    (tmp_path / "20260103T000010Z.json").write_text("{truncated")
+    _write(tmp_path, "20260104T000010Z", "not an object")
+    assert _runs(tmp_path) == 0
+    out = capsys.readouterr().out
+    assert "20260101T000010Z  orchestrator worktree-a" in out
+    assert "2-3 on daniel-server: worktree-fanout-2-3 #2,#3 standing" in out
+    assert "20260103T000010Z" not in out
+    assert "20260104T000010Z" not in out
+
+
+def test_runs_filters_by_orchestrator_and_prints_json(tmp_path, capsys):
+    b1 = Batch("1", "daniel-box", "/w1", "worktree-fanout-1", "u1", [1], "t")
+    save(Manifest("20260101T000010Z", "worktree-a", [b1]), root=tmp_path)
+    save(Manifest("20260102T000010Z", "worktree-b", []), root=tmp_path)
+    assert _runs(tmp_path, "--json", "--orchestrator", "worktree-a") == 0
+    runs = json.loads(capsys.readouterr().out)
+    assert [(r["run_id"], r["batches"][0]["branch"]) for r in runs] == [
+        ("20260101T000010Z", "worktree-fanout-1")
+    ]
+    assert _runs(tmp_path, "--orchestrator", "worktree-c") == 0
+    assert "no fan-out runs for worktree-c" in capsys.readouterr().out
+
+
 def test_a_batch_key_this_build_does_not_know_survives_a_rewrite(tmp_path):
     run_id = "20260101T000010Z"
     _write(tmp_path, run_id, _entry(cited_paths=["scripts/a.py"]))
@@ -70,25 +72,35 @@ def test_a_batch_key_this_build_does_not_know_survives_a_rewrite(tmp_path):
     run.batches[0] = dataclasses.replace(run.batches[0], removed_at="later")
     save(run, root=tmp_path)
     assert json.loads(path(run_id, tmp_path).read_text())["batches"] == [
-        _entry(cited_paths=["scripts/a.py"], removed_at="later")
-        | {"repo": run.batches[0].repo, "rung": run.batches[0].rung}
+        _entry(
+            cited_paths=["scripts/a.py"],
+            removed_at="later",
+            repo="DanielH2018/server",
+            rung="opus-medium",
+        )
     ]
 
 
-def test_a_saved_batch_loads_in_a_reader_that_passes_every_key_to_the_constructor(
-    tmp_path,
-):
+# The fields of `Batch` in the builds that read an entry with `Batch(**entry)`.
+CONSTRUCTOR_READER_FIELDS = frozenset(
+    {
+        "batch",
+        "host",
+        "worktree",
+        "branch",
+        "unit",
+        "issues",
+        "launched_at",
+        "removed_at",
+        "repo",
+        "rung",
+    }
+)
+
+
+def test_a_saved_batch_has_only_keys_a_constructor_reader_accepts(tmp_path):
     b = Batch("1", "daniel-box", "/w1", "worktree-fanout-1", "u1", [1], "t")
     save(Manifest("20260101T000010Z", "worktree-a", [b]), root=tmp_path)
     (entry,) = json.loads(path("20260101T000010Z", tmp_path).read_text())["batches"]
-    assert "extra" not in entry
+    assert set(entry) == CONSTRUCTOR_READER_FIELDS
     assert Batch(**entry) == b
-
-
-def test_a_run_whose_batch_lacks_a_field_is_still_skipped(tmp_path):
-    lacks_branch = _entry()
-    del lacks_branch["branch"]
-    _write(tmp_path, "20260101T000010Z", lacks_branch)
-    _write(tmp_path, "20260102T000010Z", "not an object")
-    _write(tmp_path, "20260103T000010Z", _entry())
-    assert [r.run_id for r in all_runs(tmp_path)] == ["20260103T000010Z"]
