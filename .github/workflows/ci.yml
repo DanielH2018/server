@@ -665,8 +665,8 @@ jobs:
       # twice. The runner is slower per test than the workstation, so a local `--durations` run does
       # not tell you which tests dominate HERE. Printing it on every run means the next person to
       # attack this reads the answer off a green build instead of guessing at the shape. It is
-      # also the signal that the shards have gone lopsided: `pytest_shard.py --record` re-measures
-      # the weights locally, and these per-shard step times say when that is worth doing.
+      # also the signal that the shards have gone lopsided: `pytest_shard.py --leg-spread` reads
+      # these per-shard times off a run.
       #
       # `=0` rather than `=15`, and the log is teed because the next step reads it.
       # A per-file total cannot be summed out of the top 15 lines: a module costing 30s across
@@ -711,7 +711,8 @@ jobs:
       # The measured half of the shard-weight check. Nothing static separates a heavy module from
       # a light one, so this step reads the durations report the shard just wrote. It has three
       # arms: a heavy module with no recorded weight, a recorded weight far HIGHER than what the
-      # module measured, and one far LOWER. Each complaint names its own repair.
+      # module measured, and one far LOWER. The recorded weights are the runner-seconds table,
+      # scripts/dev/pytest_shard_runner_weights.json.
       #
       # DECIDED: the step annotates and never fails, on every event. A wrong weight costs one leg
       # at most that module's own seconds, until the docs-refresh cron's `--refresh-runner` reads

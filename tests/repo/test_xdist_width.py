@@ -14,7 +14,7 @@ import xdist_width
 
 # A literal rather than `xdist_width.WEIGHTS_TABLE`, so these tests run against a module that
 # never read the table and fail on its behaviour rather than on a missing name.
-WEIGHTS_TABLE = "scripts/dev/pytest_shard_weights.json"
+WEIGHTS_TABLE = "scripts/dev/pytest_shard_runner_weights.json"
 
 
 def _tree(root: Path, modules: int, weights: dict[str, float] | None = None) -> Path:
@@ -56,12 +56,13 @@ def test_a_path_it_cannot_see_or_the_repo_root_is_left_to_xdist(tmp_path):
 @pytest.mark.parametrize(
     ("seconds", "cap", "workers"),
     [
-        # The rows of the 2026-10-25 table: recorded seconds, heaviest module included.
+        # The selections of the 2026-10-25 table. The first is in the runner table's seconds,
+        # because its heaviest module is the only one the floor could decide.
         (
-            [1.88, 0.01, 1.59, 2.22, 0.0],
+            [6.28, 1.17, 7.02, 5.48],
             16,
             3,
-        ),  # the `-python` hook's five ran fastest on 3
+        ),  # the `-python` hook's modules ran fastest on 3
         (
             [8.07, 8.0, 8.0, 8.0],
             16,
