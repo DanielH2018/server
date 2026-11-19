@@ -122,9 +122,11 @@ def test_a_refused_connection_is_retried_until_prometheus_answers():
 
 
 def test_an_http_error_is_not_retried():
-    error = urllib.error.HTTPError(pr.PROM_URL, 400, "bad query", Message(), None)
-    opener, calls = _opener([error, error])
+    with urllib.error.HTTPError(
+        pr.PROM_URL, 400, "bad query", Message(), io.BytesIO()
+    ) as error:
+        opener, calls = _opener([error, error])
 
-    with pytest.raises(urllib.error.HTTPError):
-        pr.fetch_range(pr.PROM_URL, "not promql(", WINDOW, opener, lambda s: None)
+        with pytest.raises(urllib.error.HTTPError):
+            pr.fetch_range(pr.PROM_URL, "not promql(", WINDOW, opener, lambda s: None)
     assert len(calls) == 1
