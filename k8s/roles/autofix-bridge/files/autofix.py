@@ -214,6 +214,54 @@ def format_action(dry_run, app_name, title, reason, streak, grace):
     )
 
 
+HOLD_TITLES_SHOWN = 3
+
+
+def format_hold(held, cap):
+    """Formats the alert for a cycle that holds every grace-met item because more than `cap` met.
+
+    Args:
+        held: (app_name, title) pairs for the held items, in key order.
+        cap: MAX_ACTIONS_PER_CYCLE.
+
+    Returns:
+        One line naming the held count per app and the first HOLD_TITLES_SHOWN titles.
+    """
+    per_app = {}
+    for app_name, _title in held:
+        per_app[app_name] = per_app.get(app_name, 0) + 1
+    apps = ", ".join("%s %d" % (a, n) for a, n in sorted(per_app.items()))
+    shown = "; ".join("[%s] %s" % (a, sanitize(t)) for a, t in held[:HOLD_TITLES_SHOWN])
+    more = len(held) - HOLD_TITLES_SHOWN
+    if more > 0:
+        shown += "; and %d more" % more
+    return (
+        "Holding %d eligible queue items (%s), over the %d/cycle cap, so acting on none. "
+        "Investigate: %s" % (len(held), apps, cap, shown)
+    )
+
+
+class CycleState:
+    """What the loop carries from one cycle to the next, in process only.
+
+    Attributes:
+        streaks: item_key -> consecutive cycles the item has been a candidate.
+        posted_hold: the held item keys the last hold alert named. A cycle that holds nothing
+          empties it, so a hold that recurs alerts again.
+    """
+
+    def __init__(self, streaks=None):
+        self.streaks = {} if streaks is None else streaks
+        self.posted_hold = frozenset()
+
+    def hold_changed(self, held):
+        """Records `held` as this cycle's held keys; True when they differ from the last cycle's."""
+        held = frozenset(held)
+        changed = held != self.posted_hold
+        self.posted_hold = held
+        return changed
+
+
 # I/O
 def _request(url, method="GET", headers=None, data=None):
     """One HTTP call. Always sends a User-Agent (Discord Cloudflare 1010-403s without one)."""
@@ -231,9 +279,10 @@ def _request(url, method="GET", headers=None, data=None):
 
 
 def post_discord(msg):
+    """Posts `msg` to the *arr Discord webhook; True when it was delivered. Never raises."""
     if not DISCORD_WEBHOOK_URL:
         bridge.common.log("WARN: no Discord webhook set; skipping report:", msg)
-        return
+        return False
     try:
         # Discord rejects a message over 2000 characters, which would lose the whole report.
         _request(
@@ -241,10 +290,14 @@ def post_discord(msg):
         )
     except Exception as e:  # best-effort report; never crash the loop
         bridge.common.log("discord post failed (%s):" % msg, e)
+        return False
+    return True
 
 
-def run_once(streaks):
-    """One poll+decide+act cycle.
+def run_once(state):
+    """One poll+decide+act cycle over `state`, the `CycleState` the loop carries between cycles.
+
+    A held set posts to Discord once delivered, and again only when its membership changes.
 
     Returns (ok, msg) for the cycle's verdict. Raises on an unreachable *arr / failed mutation, which
     cycle_verdict() converts to a descriptive `down`.
@@ -275,20 +328,22 @@ def run_once(streaks):
                 candidates[item_key(app_name, item)] = (app_name, base, key, item)
 
     to_act, held = eligible(
-        set(candidates), streaks, GRACE_CYCLES, MAX_ACTIONS_PER_CYCLE
+        set(candidates), state.streaks, GRACE_CYCLES, MAX_ACTIONS_PER_CYCLE
     )
     if held:
-        msg = "%d queue items eligible — holding (max %d/cycle), investigate" % (
-            len(held),
+        msg = format_hold(
+            [(candidates[k][0], candidates[k][3].get("title") or "?") for k in held],
             MAX_ACTIONS_PER_CYCLE,
         )
-        post_discord(msg)
+        if state.hold_changed(held) and not post_discord(msg):
+            state.hold_changed(())
         return False, msg
+    state.hold_changed(())
 
     acted = 0
     for k in to_act:
         app_name, base, key, item = candidates[k]
-        streak = streaks.get(k, GRACE_CYCLES)
+        streak = state.streaks.get(k, GRACE_CYCLES)
         if not DRY_RUN:
             # Mutate FIRST: if the DELETE/search raises, it must propagate (cycle_verdict()
             # records a `down`) without a false "Blocklisted" report having already gone to
@@ -338,14 +393,14 @@ def start_exporter(port, interval, factory=jobs_metrics.Exposition):
     return exposition
 
 
-def cycle_verdict(streaks, run=None):
+def cycle_verdict(state, run=None):
     """Returns `(ok, msg)` for one cycle; a cycle that raises is a DOWN naming the error.
 
     An unreachable *arr or a failed mutation must not kill the loop. `run` defaults to
     `run_once`; a test passes a stub.
     """
     try:
-        return (run or run_once)(streaks)
+        return (run or run_once)(state)
     except Exception as e:
         return False, "autofix-bridge error: %s" % e
 
@@ -366,14 +421,14 @@ def main():
     (`report_cycle`), which `--once` never starts.
     """
     once = "--once" in sys.argv
-    streaks = {}
+    state = CycleState()
     exposition = None if once else start_exporter(CHECK_EXPORTER_PORT, INTERVAL)
     bridge.common.log(
         "autofix-bridge starting (interval=%ss, dry_run=%s, once=%s)"
         % (INTERVAL, DRY_RUN, once)
     )
     while True:
-        ok, msg = cycle_verdict(streaks)
+        ok, msg = cycle_verdict(state)
         report_cycle(exposition, ok, msg)
         bridge.common.touch_heartbeat(HEARTBEAT_FILE)
 

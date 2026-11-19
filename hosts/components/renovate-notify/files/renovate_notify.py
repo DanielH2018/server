@@ -44,8 +44,8 @@ from notify_logic import (
     parse_automerge,
     read_check_pages,
     problems_fingerprint,
+    compose_message,
     render_autoclosed,
-    render_digest,
     render_problems,
     should_notify,
     CLEARED_MSG,
@@ -79,7 +79,7 @@ USER_AGENT = "renovate-notify"
 # an argument because every fetch below, build_pr and dead_paths included, goes through `get`.
 _token: str | None = None
 DASHBOARD_STALE_MSG = (
-    "⚠️ Renovate looks DOWN — its Dependency Dashboard is stale or missing. The Renovate "
+    "Renovate looks DOWN — its Dependency Dashboard is stale or missing. The Renovate "
     "App or renovate.json may be broken, so dependency/security updates have silently "
     "stopped (the 'Renovate Notifier — Alive' monitor only watches this notifier, not "
     "Renovate itself). Check https://github.com/%s/issues"
@@ -369,37 +369,25 @@ def main() -> int:
     )
 
     if notify:
-        if (
-            stale
-            or problems
-            or stuck_pending
-            or churning
-            or autoclosed
-            or unparseable
-            or pending_reset
-        ):
-            parts = []
-            if stale:
-                parts.append(DASHBOARD_STALE_MSG % repo)
-            if unparseable:
-                parts.append(DASHBOARD_UNPARSEABLE_MSG % repo)
-            if pending_reset:
-                parts.append(render_pending_reset(now, repo))
-            if problems:
-                parts.append(render_problems(problems))
-            if stuck_pending:
-                parts.append(render_pending(stuck_pending))
-            if churning:
-                parts.append(render_churning(churning))
-            if autoclosed:
-                parts.append(render_autoclosed(autoclosed))
-            content = "\n\n".join(parts)
-            if items:
-                content += "\n\n" + render_digest(items)
-        elif kind == "cleared":
-            content = CLEARED_MSG
+        parts = []
+        if stale:
+            parts.append(DASHBOARD_STALE_MSG % repo)
+        if unparseable:
+            parts.append(DASHBOARD_UNPARSEABLE_MSG % repo)
+        if pending_reset:
+            parts.append(render_pending_reset(now, repo))
+        if problems:
+            parts.append(render_problems(problems))
+        if stuck_pending:
+            parts.append(render_pending(stuck_pending))
+        if churning:
+            parts.append(render_churning(churning))
+        if autoclosed:
+            parts.append(render_autoclosed(autoclosed))
+        if parts or kind != "cleared":
+            content = compose_message(parts, items)
         else:
-            content = render_digest(items)
+            content = CLEARED_MSG
         if dry:
             log("--- DRY RUN, would post ---\n%s" % content)
         else:
