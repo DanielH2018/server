@@ -223,6 +223,81 @@ End your final message with the PR URL, with any `MANUAL APPLY PENDING` heading 
 """
 
 
+def _file_list(files: Sequence[str]) -> str:
+    listed = "\n".join(f"- `{f}`" for f in files)
+    return listed or "- git named none; `git status` lists them during the rebase"
+
+
+def conflict_prompt(pr: str, line: str, files: Sequence[str], base: str) -> str:
+    """The prompt that resumes the implementer after a landing ended `merge-conflict`.
+
+    The pipeline ran `land.sh` itself, so this session never saw the conflict. The session
+    only brings the branch up to the base: `conflict_resume` reviews the resolution and runs
+    the landing again.
+    """
+    return f"""The pipeline landed {pr} with `land.sh`, and the landing stopped on a conflict
+with master. Nothing merged and nothing deployed:
+
+{line}
+
+The files that conflict with `{base}`:
+{_file_list(files)}
+
+Bring the branch up to master:
+
+1. `git fetch origin`, then `git rebase {base}`.
+2. Resolve each conflict so that both changes keep their intent: master's change stays, and
+   this PR still does what its issues ask. Never drop a side to make the conflict go away.
+   Read master's commit for the file where its intent is not plain from the hunk.
+3. Run the tests you ran for this change, and the checks that cover each file you resolved.
+4. Push with `git push --force-with-lease`.
+
+Do not merge or land. The pipeline has a fresh reviewer read the resolution, then runs the
+same landing again. If a conflict cannot be resolved with both intents kept, abort the
+rebase, push nothing, and say which file and why in one sentence.
+
+End your final message with the PR URL.
+"""
+
+
+def conflict_review_prompt(
+    issues: str,
+    old_base: str,
+    before: str,
+    base: str,
+    after: str,
+    files: Sequence[str],
+) -> str:
+    """The reviewer's prompt for a conflict resolution: what the rebase changed in the PR.
+
+    `before` is the head the earlier review read, on `old_base`. `after` is the rebased
+    head, on `base`.
+    """
+    return f"""This pull request was reviewed at `{before}`. Its landing then found a conflict
+with master, and the author rebased the branch onto master and resolved the conflict. The
+head is `{after}`, and nobody has reviewed the resolution.
+
+- What the rebase changed in the PR's own commits:
+  `git range-diff {old_base}..{before} {base}..{after}`.
+- The whole change as it stands: `git diff {base}...{after}`.
+
+The files that conflicted:
+{_file_list(files)}
+
+Report each defect the resolution introduces: a change of master's or of the PR's that the
+resolution dropped, two changes kept where they contradict each other, a test that no longer
+checks what it checked. Run the tests that cover the files that conflicted. Do not report a
+finding about code the rebase left as the earlier review read it.
+
+For every finding, set `line` to the line where the defect is in the tree at `{after}`, and
+set `evidence` to that line's text copied verbatim from the file there. The pipeline checks
+the quote against `{after}`; a finding without a quote that the file holds there is recorded
+as unverified and does not hold the PR.
+
+{issues}
+"""
+
+
 def file_prompt(record: "Record") -> str:
     public = [f for f in record.remaining if not is_held(f)]
     return f"""The review of {record.pr} is finished. These findings were not resolved. File

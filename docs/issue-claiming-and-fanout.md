@@ -489,6 +489,38 @@ reading a host whose report file went with the worktree. Once every batch is rem
 manifest moves into `~/.claude/fanout/retired/`, out of every listing, and `status` still
 reads the run as cleaned (#4907).
 
+### A batch whose landing conflicts with master
+
+A review batch's landing ends `VERDICT: merge-conflict` when master moved under its PR. That
+landing merged and deployed nothing. The pipeline then resumes the implementer once, as the
+`conflict` phase (`scripts/dev/fanout_lib/review/conflict_resume.py:land_resolving`). It
+decides on the verdict token, never on the sentence after it.
+
+- **The resume.** The prompt names the conflicting files, which the pipeline reads with
+  `git merge-tree` after a fetch of the base. The implementer rebases the branch onto
+  `origin/master`, resolves each conflict with both changes' intent kept, runs its tests and
+  pushes with `--force-with-lease`. It does not land.
+- **The review of the resolution.** The rebase moves the head past the commit the reviewer
+  read, and a resolution is code nobody reviewed. A fresh reviewer therefore reads what the
+  rebase changed in the PR's own commits (`git range-diff`) before anything lands. The
+  record's reviewed head moves to the rebased head only once that review has read it. A
+  finding of medium severity or worse at confidence 0.8 or more holds the PR, as one left
+  after the fix round does, and so does a review that fails.
+- **The re-land.** The pipeline runs the same landing again from a fresh checkout of the
+  base. On daniel-server the rebased head first passes
+  `scripts/dev/fanout_lib/review/review_ci.py:server_lands` again.
+
+The resume is bounded. A batch gets one, and only with
+`scripts/dev/fanout_lib/review/review_land.py:LAND_MARGIN_S` of the unit's run time left,
+checked before the resume and again before the re-land. A second conflict, too little run
+time, or a resume that pushed no new head ends the batch `needs input: the landing of <PR>
+stopped short on a merge conflict`, and the line names the conflicting files.
+
+A daniel-box batch and a daniel-server batch that lands its own draft behave the same. A
+daniel-server PR that the server lander lands is out of scope: that landing runs outside
+the batch's unit, the unit has ended by then, and a conflict there is the sub-coordinator's
+to hand to a person or a session.
+
 ### A parked batch
 
 A review batch lands its own PR with `land.sh`. Another PR's failed promotion sets
