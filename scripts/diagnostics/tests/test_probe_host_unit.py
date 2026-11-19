@@ -4,11 +4,8 @@ The documents are in the shape `host_reader.READER` returns, with the values dan
 `homelab-builder` units held on 2026-11-15.
 """
 
-import os
-import sys
 from types import SimpleNamespace
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import pytest
 from diagnostics.probe_lib import core, host_unit

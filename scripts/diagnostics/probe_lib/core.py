@@ -17,13 +17,8 @@ import subprocess
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-# `lib.repo_paths` is a sibling package under `scripts/`: a directly-invoked script gets only
-# its own directory on sys.path, and pyproject's `pythonpath` is a pytest setting. This has to
-# sit ABOVE the import below, which is what needs it.
 import sys as _sys
-from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from lib.inventory_lists import LANDING_HOST, PI_HOST
 from lib.exit_codes import PROBE_UNREADABLE, PROBE_USAGE_ERROR

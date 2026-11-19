@@ -13,16 +13,11 @@ Run: uv run pytest scripts/diagnostics/tests/test_probe_could_not_read_exits.py
 
 import inspect
 import json
-import os
 import shutil
 import subprocess
-import sys
 
-# `scripts/diagnostics` is deliberately absent from `pythonpath` in pyproject.toml, so this
-# module puts its own parent directory on `sys.path` — the insert every sibling here carries.
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import probe
+from diagnostics import probe
 from diagnostics.probe_lib import ha, health
 from diagnostics.probe_lib.core import SECRETS_PATH
 from lib import kubectl

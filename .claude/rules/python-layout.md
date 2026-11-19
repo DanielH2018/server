@@ -32,7 +32,8 @@ keeps its own insert of `hosts/lib/`, because no `lib` ships beside it.
 
 A module under a `tests/` directory carries none of this: pytest is its only invoker, and
 `pythonpath` lists `scripts/` and every subdirectory but `validate` and `diagnostics`. A test
-under those two inserts its own package directory. Any other insert is dead weight, and
+under `diagnostics` imports its package dotted (`from diagnostics import probe`), and a test
+under `validate` inserts its own package directory. Any other insert is dead weight, and
 `scripts/tests/test_test_module_bootstraps_present.py` refuses it.
 
 The subdirectories have **no `__init__.py`**: they are PEP 420 namespace packages, and adding

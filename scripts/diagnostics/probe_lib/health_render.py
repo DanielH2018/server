@@ -5,11 +5,6 @@ reads the role's `containers_list` entry. Both come from the validator module, s
 builds that pair once and hands it to every caller.
 """
 
-import sys as _sys
-from pathlib import Path as _Path
-
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
-
 _RENDER_CONTEXT = None
 
 from lib.repo_paths import K8S_ROLES  # noqa: E402
@@ -26,7 +21,6 @@ def render_context():
     """
     global _RENDER_CONTEXT
     if _RENDER_CONTEXT is None:
-        # The bootstrap above put `scripts/` on sys.path, the root pytest imports from.
         from validate import k8s_manifests as validator
 
         _RENDER_CONTEXT = (validator, validator.k8s_entries())
