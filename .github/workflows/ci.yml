@@ -667,8 +667,8 @@ jobs:
       # twice. The runner is slower per test than the workstation, so a local `--durations` run does
       # not tell you which tests dominate HERE. Printing it on every run means the next person to
       # attack this reads the answer off a green build instead of guessing at the shape. It is
-      # also the signal that the shards have gone lopsided: `pytest_shard.py --record` re-measures
-      # the weights locally, and these per-shard step times say when that is worth doing.
+      # also the signal that the shards have gone lopsided: `pytest_shard.py --leg-spread` reads
+      # these per-shard times off a run.
       #
       # `=0` rather than `=15`, and the log is teed because the next step reads it.
       # A per-file total cannot be summed out of the top 15 lines: a module costing 30s across
@@ -713,7 +713,8 @@ jobs:
       # The measured half of the shard-weight check. Nothing static separates a heavy module from
       # a light one, so this step reads the durations report the shard just wrote. It has three
       # arms: a heavy module with no recorded weight, a recorded weight far HIGHER than what the
-      # module measured, and one far LOWER. Each complaint names its own repair.
+      # module measured, and one far LOWER. The recorded weights are the runner-seconds table,
+      # scripts/dev/pytest_shard_runner_weights.json.
       #
       # DECIDED: the step annotates and never fails, on every event. A wrong weight costs one leg
       # at most that module's own seconds, until the docs-refresh cron's `--refresh-runner` reads
@@ -833,7 +834,7 @@ jobs:
           [ "$rc" = 1 ]
           grep -qx 'traefik: Deployment/homelab/traefik differs' "$RUNNER_TEMP/rt-map.log"
 
-  # Target slice D3's in-cluster proof (docs/target-architecture/deploy/d3-secrets.md).
+  # Target slice D3's in-cluster proof (docs/archive/deploy/d3-secrets.md).
   # `mullvad_account`, whose value is all digits, lives in a SOPS manifest that
   # kustomize-controller decrypts and applies. This job measures what the controller and
   # the API server do with such a value in a quoted `stringData` field, in a throwaway kind
@@ -1063,7 +1064,7 @@ jobs:
           kubectl -n flux-system logs deployment/source-controller --tail=100 || true
           kubectl -n flux-system logs deployment/kustomize-controller --tail=200 || true
 
-  # Target slice H3's host packages (docs/target-architecture/host/h3-pi-pilot.md, *CI (builds,
+  # Target slice H3's host packages (docs/archive/host/h3-pi-pilot.md, *CI (builds,
   # never signs)*), in two jobs. `host_packages_build` renders every package at the head and at
   # the merge base on every run, with no path filter, because a group_vars edit can change a
   # render. When no rendered tree differs, its build and lint steps skip and it ends green.
@@ -1568,7 +1569,7 @@ jobs:
   # leg would read as pending to every copy installed before the rename.
   #
   # The steps and the job's `if:` are the legs', and the job gates like them. The id starts with
-  # `host_packages`, so the prefix filter in docs/target-architecture/host/h3-pi-pilot.md selects
+  # `host_packages`, so the prefix filter in docs/archive/host/h3-pi-pilot.md selects
   # these legs too. The budget matches the legs', because a Dockerfile PR builds the image here too.
   host_packages_bootstrap:
     name: host_packages_bootstrap (${{ matrix.release }}, ${{ matrix.python }})
@@ -1745,7 +1746,7 @@ jobs:
             --python "$PYTHON" --render "$RUNNER_TEMP/render" --debs "$RUNNER_TEMP/debs" \
             --work "$RUNNER_TEMP/cases-k3s-download" "${seed[@]}" --k3s-download
 
-  # Target slice H3.11, the `arm64` half of homelab-tools (docs/target-architecture/host/
+  # Target slice H3.11, the `arm64` half of homelab-tools (docs/archive/host/
   # h3-pi-pilot.md, *`homelab-tools`* and *Open questions* 9). The `host_packages_build` job builds
   # both architectures with the pinned nfpm and uploads the `arm64` .deb. This job installs it
   # in the test image, built here for `arm64`, and runs each tool's `--version`, so a binary

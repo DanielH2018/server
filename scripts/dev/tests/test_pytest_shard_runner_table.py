@@ -44,32 +44,42 @@ def test_the_runner_table_keeps_only_the_census_and_refuses_an_empty_record(tmp_
         shard_weight_gate.write_runner_weights(["no durations here"], keep, table)
 
 
-def test_the_split_packs_runner_seconds_and_scales_the_unmeasured_rest():
-    """The recorded weights pack the runner-heavy pair a, b into one shard of two; the runner
-    seconds split them, and a module the runner table lacks scales by the median ratio."""
-    a, b, c, d, e = FILES[:5]
-    recorded = {a: 1.0, b: 1.0, c: 1.5, d: 0.5, e: 2.0}
-    runner = {a: 9.0, b: 9.0, c: 1.0, d: 1.0}
-    assert (
-        len(set(pytest_shard.assign([a, b, c, d], 2, recorded)[f] for f in (a, b))) == 1
-    )
-    weights = shard_weight_gate.packing_weights(recorded, runner)
-    # The ratios are 9, 9, 0.67 and 2, so their median is 5.5.
-    assert weights == runner | {e: 11.0}
-    assert (
-        len(set(pytest_shard.assign([a, b, c, d], 2, weights)[f] for f in (a, b))) == 2
-    )
+def test_a_module_the_table_lacks_is_packed_at_its_directorys_median():
+    """A heavy directory's new module is packed heavy and a light one's light. A module in a
+    directory with no row takes the median of every row."""
+    weights = {
+        "heavy/tests/test_a.py": 8.0,
+        "heavy/tests/test_b.py": 10.0,
+        "heavy/tests/test_c.py": 30.0,
+        "light/tests/test_d.py": 0.1,
+    }
+    new = ["heavy/tests/test_new.py", "light/tests/test_new.py", "fresh/test_new.py"]
+    packed = pytest_shard.packing_seconds([*weights, *new], weights)
+    assert packed == weights | dict(zip(new, (10.0, 0.1, 9.0), strict=True))
 
 
 def test_the_committed_runner_table_is_populated():
-    """Non-vacuity: an empty or unreadable table would pack every module on scaled weights.
+    """Non-vacuity: an empty or unreadable table would pack every module at one guess.
 
     No named module and no value bound. The docs-refresh cron rewrites this table and runs
     the suite before it commits, so a test an honest refresh can break would park the cron
     on its own output. No census check either: an entry for a deleted module is ignored, so
-    a PR deleting a test module need not touch the table (the weight table has the
-    same trap)."""
+    a PR deleting a test module need not touch the table."""
     assert len(shard_weight_gate.load_runner_weights()) >= 100
+
+
+@pytest.mark.parametrize(
+    ("recorded", "measured", "expected"),
+    [
+        pytest.param(7.31, 12.16, True, id="grew-past-the-band"),
+        pytest.param(12.0, 4.0, True, id="shrank-past-the-band"),
+        pytest.param(7.31, 10.5, False, id="inside-the-band"),
+        pytest.param(0.02, 0.05, False, id="under-the-floor"),
+        pytest.param(0.0, 0.8, True, id="free-entry-past-the-floor"),
+    ],
+)
+def test_drift_is_a_ratio_past_a_floor(recorded, measured, expected):
+    assert shard_weight_gate.drifted(recorded, measured) is expected
 
 
 def test_a_shard_reading_no_render_is_charged_nothing_and_a_k8s_reader_the_k8s_render(

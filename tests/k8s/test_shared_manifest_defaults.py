@@ -41,6 +41,7 @@ from _role_census import role_dirs
 # `all(...)` over an empty set. Members, not just a count.
 ROLES_WITH_A_DEFAULT_SERVICE = frozenset(
     {
+        "airflow",
         "artifacts",
         "authelia",
         "bazarr",
@@ -77,6 +78,7 @@ ROLES_WITH_A_DEFAULT_SERVICE = frozenset(
 # `scripts/renderer/template_filters/toposort.py` now derives their traefik ordering edge from.
 ROLES_WITH_A_DEFAULT_INGRESSROUTE = frozenset(
     {
+        "airflow",
         "bazarr",
         "bento-pdf",
         "code-server",

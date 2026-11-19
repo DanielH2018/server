@@ -33,7 +33,7 @@ hold every Kustomization on it at `DependencyNotReady`. Beside the per-tag kinds
 which other tags it waits on, `prepull_timeouts` which call for `<tag>-prepull`,
 `prepull_workloads` which scope it to named workloads, and `precheck_files` which call for
 `<tag>-precheck`. Like `bundle.py`, this module imports
-neither Ansible nor Jinja. The plan is docs/target-architecture/deploy/d4-ordering.md, *The
+neither Ansible nor Jinja. The plan is docs/archive/deploy/d4-ordering.md, *The
 renderer writes `dependsOn`*.
 """
 

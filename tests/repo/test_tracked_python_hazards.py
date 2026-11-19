@@ -34,9 +34,8 @@ separate red-proof pairs: merging the walk must not merge the evidence that each
    With no argument, `parser.parse_args()` falls back to `sys.argv[1:]`. Inside a test that is
    pytest's own command line, so any flag the entry point does not define exits its parser with
    status 2 before the check under test runs. Under `uv run pytest`, xdist workers can carry an
-   argv the entry point happens to accept, so the failure shows only under the
-   `-n0 -vv --durations=0` run that `pytest_shard.py --record` uses, which would make `--record`
-   impossible for the whole repo.
+   argv the entry point happens to accept, so the failure shows only under
+   a serial `-n0` run.
    The predicate is the hazard, not the call shape. Most zero-arg
    `main()` calls in the tree are harmless — hook `main()`s read stdin,
    `renovate_notify` does a membership test on `sys.argv` that cannot exit,
@@ -454,8 +453,8 @@ def test_no_test_calls_an_argparse_main_with_pytests_argv():
 
     assert not failures, (
         "A bare main() over an argparse entry point reads PYTEST's argv and exits 2 under any "
-        "flag it does not define (invisible under `-n auto`, fatal under `pytest_shard.py "
-        "--record`). Pass `main([])` / an explicit argv, or patch `sys.argv`:\n"
+        "flag it does not define (invisible under `-n auto`, fatal under a serial `-n0` "
+        "run). Pass `main([])` / an explicit argv, or patch `sys.argv`:\n"
         + "\n".join(failures)
     )
 

@@ -42,7 +42,7 @@ laid out beside it: each host package installs with every shared package, so a h
 over the shared `homelab-updater.timer` is verified over that timer. A component no host
 package lists yet renders through a package of its own. The run fails unless it verified
 `homelab-updater.timer`, so a host render that emits nothing cannot pass (H3.2c,
-`docs/target-architecture/host/h3-pi-pilot.md`).
+`docs/archive/host/h3-pi-pilot.md`).
 
 Also renders every polkit rule (`*.rules.j2`) under k8s/roles/ — JavaScript that the
 roles' tests content-check but whose syntax nothing else checks — and runs `node --check` on

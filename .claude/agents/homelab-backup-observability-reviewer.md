@@ -34,7 +34,7 @@ operator's time).
   (`docs/adr/0026-one-alert-plane-on-prometheus-and-alertmanager.md`). The rules are git files
   under `k8s/roles/observability/files/rules/`, plus LogQL rules on the `loki-homelab` ruler.
   A `Watchdog` rule always fires to Healthchecks.io, so an Alertmanager outage pages off-site.
-  Every check pages through these rules (M6, `docs/target-architecture/monitoring/m6-retire-kuma.md`),
+  Every check pages through these rules (M6, `docs/archive/monitoring/m6-retire-kuma.md`),
   so a missing pager is a missing rule.
 - **The producers each follow one recipe.** `monitor-bridge` (a k8s workload,
   `k8s/roles/monitor-bridge/`) is an exporter: `files/check_table.py`'s `CHECKS` lists every

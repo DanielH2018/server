@@ -554,10 +554,11 @@ fi
 stop_after 4
 
 # create_declared_users <deb>: create the users the .deb declares in sysusers.d, and die unless
-# each holds its declared uid. A Depends that creates a system user takes the next free uid down
-# from 999. The host packages declare uids in 900-949 below that, and this runs before any
-# install so a Depends cannot take one first. sysusers gives a user whose declared uid is already
-# held another uid and exits 0, so the uids are compared here, while step 5 can still be rerun.
+# each holds its declared uid and gid. A Depends that creates a system user takes the next free
+# uid down from 999. The host packages declare uids in 900-949 below that, and this runs before
+# any install so a Depends cannot take one first. sysusers gives a user whose declared uid is
+# already held another uid and exits 0, so the ids are compared here, while step 5 can still be
+# rerun.
 create_declared_users() {
     users_dir=$(mktemp -d)
     CLEAN="$CLEAN $users_dir"
@@ -567,9 +568,12 @@ create_declared_users() {
     systemd-sysusers "$users_conf" || die "systemd-sysusers failed on the users $1 declares"
     while read -r kind name declared _; do
         [ "$kind" = u ] || continue
-        live=$(getent passwd "$name" | cut -d: -f3)
+        live=$(getent passwd "$name" | cut -d: -f3,4)
         [ "$live" = "$declared" ] ||
-            die "$name has uid ${live:-none}; homelab-$host declares $declared. Move any user that holds uid $declared, give $name that uid, then rerun bootstrap-host.sh"
+            die "$name has uid:gid ${live:-none}; homelab-$host declares $declared. Move any user or group that holds those ids, give $name and its group them, then rerun bootstrap-host.sh"
+        group_gid=$(getent group "$name" | cut -d: -f3)
+        [ "$group_gid" = "${declared#*:}" ] ||
+            die "group $name has gid ${group_gid:-none}; homelab-$host declares ${declared#*:}. Move any group that holds that gid, give group $name it, then rerun bootstrap-host.sh"
     done < "$users_conf"
 }
 

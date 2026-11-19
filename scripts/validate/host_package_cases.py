@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Run the host_packages job's container cases: the updater against real apt, dpkg and systemd.
 
-H3's *CI (builds, never signs)*, step 5 (docs/target-architecture/host/h3-pi-pilot.md). The job
+H3's *CI (builds, never signs)*, step 5 (docs/archive/host/h3-pi-pilot.md). The job
 builds the test image from `hosts/lib/tests/container/Dockerfile` for one Ubuntu release, then
 runs this. It boots that image with systemd as PID 1 and hostname `daniel-pi`, serves the
 packages from a repository signed with a throwaway key with `python3 -m http.server` on

@@ -501,7 +501,7 @@ claude_code_stop_alert_enabled: true
 # heartbeat (claude-otel-health.sh.j2) ship only on this node, in its host package.
 #
 # DECIDED: a key pair held equal by a test, not one shared key in group_vars/all.yml. A shared
-# key routes as a deploy-plane change only (docs/target-architecture/host/h2-shrink-host-plane.md).
+# key routes as a deploy-plane change only (docs/archive/host/h2-shrink-host-plane.md).
 # Each name below that has a twin in a k8s role is held equal to it by
 # hosts/lib/tests/test_claude_artifacts_node_timers.py, so a change edits both.
 #

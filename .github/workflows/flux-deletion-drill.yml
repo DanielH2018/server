@@ -2,7 +2,7 @@ name: Flux deletion drill
 
 # Proves on a throwaway kind cluster what kustomize-controller does when a tag leaves the
 # bundle, and that break-glass promotion verifies a key-signed bundle (target slice D6,
-# docs/target-architecture/deploy/d6-delete-old-path.md). The bundles come from the
+# docs/archive/deploy/d6-delete-old-path.md). The bundles come from the
 # renderer's own writers (scripts/renderer/deletion_drill.py), so a green drill shows that the
 # form the renderer writes is one that Flux honours.
 #

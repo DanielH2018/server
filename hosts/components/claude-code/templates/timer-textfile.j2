@@ -10,7 +10,7 @@ User= and sandboxing, because only root writes the textfile directory. `%%s` kee
 expanding `%s` to the user's shell.
 
 The deadline is two timer periods plus `slack_s` plus 300s
-(docs/target-architecture/monitoring/m3-textfile-timer.md). One period is the normal gap, the
+(docs/archive/monitoring/m3-textfile-timer.md). One period is the normal gap, the
 second covers one failed or skipped run, `slack_s` is the longest legitimate run, and the 300s
 covers the 1m `node` scrape and the 1m rule evaluation. `period` is an `<N>min` timespan. Any
 other shape fails the render rather than publish a guessed deadline.

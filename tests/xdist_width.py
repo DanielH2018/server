@@ -41,12 +41,18 @@ and fewer leave the heaviest module waiting behind others. So:
 
 `workers = min(ceiling, ceil(total / max(heaviest, MIN_SECONDS_PER_WORKER)))`, at least 1.
 
-That gives the first two rows above 3 and 4, the fastest width measured for each. It gives the
-third 1, where a second worker saved under half a second in one round of two. The seconds
-come from `scripts/dev/pytest_shard_weights.json`, which the shard split already keeps current.
-A module the table does not hold is charged the table's mean. A run that names no path (the
+The seconds come from `scripts/dev/pytest_shard_runner_weights.json`, which the shard split
+keeps current from CI's own logs. The runner measures a median 1.8x the seconds in the tables
+above. A selection's total over its heaviest module does not move with that scale, so only
+`MIN_SECONDS_PER_WORKER` is stated in runner seconds.
+
+On 2026-11-19 the rule gave the `-python` hook's modules 3 (19.9 runner seconds, heaviest
+7.02s), the fastest width measured for them. It gave `scripts/lib/tests` 5 (105.1s, heaviest 23.99s), where
+4 measured faster than 8 and 5 was not measured. It gives four light files 1, where a second
+worker saved under half a second in one round of two. A module the table does not hold is
+charged the table's mean. A run that names no path (the
 whole suite, from `testpaths`) is left to xdist, which gives it every core. Each of CI's six
-shards holds about 254 modules and 157-180 recorded seconds, its heaviest module 13.5-30.4s, on
+shards holds about 250 modules and 305-324 runner seconds, its heaviest module 26-39s, on
 a 4-core runner, so each keeps 4.
 
 `PYTEST_XDIST_AUTO_NUM_WORKERS`, when set, replaces the core count as the ceiling rather than
@@ -70,13 +76,14 @@ from pathlib import Path
 
 import pytest
 
-# Below this many recorded seconds a worker costs more to start than it saves. Four
+# Below this many runner seconds a worker costs more to start than it saves. Four
 # `scripts/dev/tests` files ran in 1.4s serial and 1.7s on four workers (the 2026-10-18 table),
-# and four files recorded at 0.3s saved under half a second on two (the 2026-10-25 table). It
-# sits under the 2.22s heaviest module of the `-python` hook's five, which run fastest on 3.
-MIN_SECONDS_PER_WORKER = 2.0
+# and four files measuring 0.3s saved under half a second on two (the 2026-10-25 table). Those
+# tables put the floor at 2.0 of their own seconds, under the 2.22s heaviest module of the
+# `-python` hook's five, which ran fastest on 3. The runner measures a median 1.8x that.
+MIN_SECONDS_PER_WORKER = 3.6
 
-WEIGHTS_TABLE = Path("scripts/dev/pytest_shard_weights.json")
+WEIGHTS_TABLE = Path("scripts/dev/pytest_shard_runner_weights.json")
 
 
 def ceiling() -> int:
