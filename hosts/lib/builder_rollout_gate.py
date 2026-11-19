@@ -1,7 +1,7 @@
 """The builder's staged-rollout gate: the canary's package first, the other hosts' after it reports.
 
 Split from host_package_builder.py, which inherits `RolloutGate`. The design is
-docs/target-architecture/host/h3-pi-pilot.md, *Staged rollout*. A run whose changed set holds
+docs/archive/host/h3-pi-pilot.md, *Staged rollout*. A run whose changed set holds
 more than one host package stages the canary's alone and opens a gate at that commit. While the
 gate is open the builder builds no other host package. The gate closes when the operator's
 root-owned `release` file names the gate's commit or a descendant, or when Prometheus reports

@@ -2,8 +2,8 @@
 
 import pytest
 
-from doc_values_lib.readers import match, phrase
-from doc_values_lib.rows_roles import _rungs
+from docs.doc_values_lib.readers import match, phrase
+from docs.doc_values_lib.rows_roles import _rungs
 
 
 def _source(tmp_path, text):

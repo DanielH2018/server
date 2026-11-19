@@ -5,7 +5,7 @@ Authelia config template renders the per-service rules from that declaration. Un
 the policy lived in the template alone, joined to the inventory by a hostname string: four
 services had a rule and the other 24 rode the `*.local.<domain>` one_factor wildcard by
 omission. An entry that attaches the middleware but declares no tier now fails the
-render — here, in `validate/k8s_manifests.py`, and in a real deploy alike — so the fall-through
+render — here, in `validate/render_lib/k8s.py`, and in a real deploy alike — so the fall-through
 has no representation.
 """
 

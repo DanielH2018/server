@@ -15,7 +15,7 @@ import subprocess
 import pytest
 from lib import kubectl as kubectl_lib
 
-import gen_infra_map as g
+from infra_map import gen_infra_map as g
 from infra_map import live
 
 from _infra_map import (

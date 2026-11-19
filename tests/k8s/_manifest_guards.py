@@ -15,7 +15,7 @@ from lib.render_guard import host_layer, k8s_services
 from jinja2 import Undefined
 
 from lib.k8s_roles import manifest_template
-from validate.k8s_manifests import make_lookup
+from lib.k8s_yaml import make_lookup
 from _helpers import K8S_ROLES
 from lib.repo_paths import ALL_VARS, HOST_VARS, K3S_DEFAULTS
 
@@ -32,7 +32,7 @@ SERVER_VARS = yaml_fast.safe_load((HOST_VARS / "daniel-server.yml").read_text())
 def _render(path: Path, **ctx) -> str:
     """Render a template with the given context; undefined values are left to raise.
 
-    `role_path` and `lookup` are wired the same way `validate/k8s_manifests.py` wires
+    `role_path` and `lookup` are wired the same way `validate/render_lib/k8s.py` wires
     them, not just the caller's own `ctx`: this helper renders every role's
     `deployment.yaml.j2` generically, and any of them may call `lookup('file', ...)`.
     """

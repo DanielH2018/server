@@ -16,8 +16,8 @@ import re
 
 from _helpers import REPO
 from _k8s_render import rendered_docs
-from fragment_renderers import deadman_crons
-from gen_doc_fragments import deadman_inputs
+from docs.fragment_renderers import deadman_crons
+from docs.gen_doc_fragments import deadman_inputs
 from lib.estate import role_defaults
 
 BRIDGE_ROLE = REPO / "k8s/roles/monitor-bridge"

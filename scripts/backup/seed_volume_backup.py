@@ -32,18 +32,12 @@ import sys
 import time
 from collections.abc import Callable
 from datetime import datetime, timezone
-from pathlib import Path as _Path
 
-sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))  # scripts/
-sys.path.insert(0, str(_Path(__file__).resolve().parents[1] / "lib"))
-sys.path.insert(
-    0, str(_Path(__file__).resolve().parents[2] / "hosts" / "lib")
-)  # host_lib
 from lib.cli_help import ArgumentParser, error
 from lib.exit_codes import FAILED, OK
 from lib.kubectl import MissingKubectl
 from lib.operator_kubectl import Kubectl, KubectlFailed, for_mode
-from longhorn_lib.longhorn_backups import (
+from lib.longhorn_lib.longhorn_backups import (
     B2_TARGET,
     GROUP_LABEL_PREFIX,
     NO_BACKUP_GROUP,

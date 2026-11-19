@@ -21,9 +21,6 @@ import datetime as dt
 import sys
 from pathlib import Path
 
-# Reach the sibling package directories: a directly-invoked script gets only its own
-# directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import yaml
 

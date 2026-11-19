@@ -26,10 +26,16 @@ weekly sweep cron runs, also reaps once it has removed a tree. A failed reap onl
 because each claim still reaps a stale claim on the issue it takes.
 
 `next` withholds `manual` issues, issues deferred to a later date, issues an open issue
-blocks, anything a LIVE claim holds, and anything an open PR already closes — every row it prints is free to take. An issue
+blocks, anything a LIVE claim holds, anything an open PR already closes, and anything an open
+project milestone reserves for another branch — every row it prints is free to take. An issue
 whose claim is stale is offered, marked `[stale claim by ...]`; `claim` reaps that claim itself
 on the way past, so a refusal from `claim` means the claim is live and another session is
 really working it.
+
+`next` counts the issues an open project reserves on one line that starts
+`N reserved by a project` and names each project, on stderr with `--json`. They belong to that project's sub-coordinator: `claim` and `launch` refuse them
+under any other branch, so put none in a batch. Only an orchestrator that owns the project
+reads them, with `next --milestone "<title>" --json`.
 
 `next` counts the issues it withholds for a date or a blocker on one line,
 `N waiting (deferred/blocked); --waiting to list`, on stderr with `--json` so the array stays
@@ -325,7 +331,8 @@ re-run it on exit 75. N is the highest issue number the orchestrator has seen. T
 (4) when gh has no login, which no wait fixes. The `new` detail is JSON
 naming each one's number, title, severity, cited paths, `no_vetted_remediation` and
 `solo_only`, so the orchestrator can group and claim without another read. A new issue that
-is claimed, deferred, blocked, `manual` or named by an open PR keeps the wait open, because
+is claimed, deferred, blocked, `manual`, named by an open PR or reserved by another
+branch's open project keeps the wait open, because
 the source shares `scripts/dev/findings_lib/claim.py:free_issues` with `next`. Pass
 `--after` every time. Without it the baseline is the highest open number when the wait
 starts, so each resume re-baselines and misses an issue filed between the two runs. Each
@@ -359,7 +366,9 @@ text. A blocker line (`needs input:` or `failed:`) outranks a PR URL, so a held 
 progress report and the Stop hook's three continuations ran out. Both print the final text
 and exit 1, because there is no PR to land, or the PR is held. A host whose read timed out reads `unread` and exits 75
 unless another batch exits 1 or 5; `place.py`'s docstring has every tier. A daniel-server batch reports `done <PR URL>` once its PR's CI has passed, so land that
-PR from this session with `land.sh`. A batch on either host whose CI stayed red after its one
+PR from this session with `land.sh`. A daniel-server batch whose PR the server lander holds
+for a person reads `needs-input: the server lander will not land #N`, with the next step
+and the lander's ruling (`scripts/dev/fanout_lib/status.py:with_lander_verdict`). A batch on either host whose CI stayed red after its one
 resume, or gave no verdict in its wait, reads `needs-input` with the failing checks named. Read the
 failure, then fix the branch or re-run the CI before landing.
 

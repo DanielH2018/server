@@ -48,8 +48,6 @@ __all__ = [
 # reports; this bound only stops one from hanging the suite.
 TIMEOUT_S = 120
 
-HSM = "scripts/home_assistant/ha_state_model.py"
-VHC = "scripts/home_assistant/validate_ha_config.py"
 
 # Function-local imports that fail under dotted-name loading and are never reached that way.
 # Keyed by (file, enclosing function, imported module), not by line, so an edit above the
@@ -57,16 +55,7 @@ VHC = "scripts/home_assistant/validate_ha_config.py"
 # `stale-exemption`, and one whose import no longer fails as `unused-exemption`, so the list
 # cannot outlive what it excuses. The exemption applies to the dotted mode only: by path,
 # every one of these imports must still execute.
-EXEMPTIONS: dict[tuple[str, str, str], str] = {
-    (HSM, "main", "ha_state_checks"): (
-        "the `check` branch of main(); probe_lib/ha.py loads this module by dotted name for "
-        "build_model() and never calls main(), so only a direct invocation reaches it"
-    ),
-    (VHC, "validate", "ha_state_checks"): (
-        "ha_state_model.py imports only ROLE_DIR, HAConfigLoader and assemble_config by "
-        "dotted name and never calls validate(), so only a direct invocation reaches it"
-    ),
-}
+EXEMPTIONS: dict[tuple[str, str, str], str] = {}
 
 # Function-local imports of a module that lives outside the repo, from a directory the function
 # itself puts on `sys.path` just before the import. No repo-side loading can resolve one, so

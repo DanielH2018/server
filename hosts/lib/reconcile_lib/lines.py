@@ -1,6 +1,6 @@
 """The line arm: one anchored line, or one marker-delimited block, in a file dpkg does not overwrite.
 
-The design is docs/target-architecture/host/h7-delete-ansible.md, *Reconcilers for state dpkg
+The design is docs/archive/host/h7-delete-ansible.md, *Reconcilers for state dpkg
 does not hold*. A host package's manifest lists "lines" in `reconcilers` and carries:
 
     "lines": {"edits": [

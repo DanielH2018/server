@@ -23,7 +23,7 @@ offence on that key.
 
 Rendering goes through `_k8s_render.rendered_docs()`, the same corpus
 `test_container_security_context.py` and `test_readiness_coverage.py` census. That corpus
-inherits `validate.k8s_manifests.SKIP_ROLES`, and `_UNCOVERED_ROLES` in
+inherits `validate.render_lib.k8s.SKIP_ROLES`, and `_UNCOVERED_ROLES` in
 `test_container_security_context.py` pins which roles that leaves out. The one pod spec among
 them, `image-builder/templates/build-job.yaml.j2`, is a Job and out of scope here.
 """

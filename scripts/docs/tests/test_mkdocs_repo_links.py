@@ -10,8 +10,7 @@ import markdown
 import pytest
 import yaml
 
-import _mkdocs_repo_links as hook
-
+from docs import _mkdocs_repo_links as hook
 from lib.repo_paths import REPO
 
 DOCS = REPO / "docs"

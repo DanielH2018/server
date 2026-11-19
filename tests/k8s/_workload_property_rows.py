@@ -355,7 +355,7 @@ WORKLOAD_PROPERTIES = (
     Property(
         name="rendered-kinds-have-vendored-schemas",
         reason=(
-            "validate/k8s_manifests.py reports an object with no schema as skipped and lets it "
+            "validate/render_lib/k8s.py reports an object with no schema as skipped and lets it "
             "through, so a manifest in a new API group, or a new CRD kind, would arrive checked "
             "by nothing. scripts/validate/refresh_vendored_schemas.py refreshes the schemas."
         ),

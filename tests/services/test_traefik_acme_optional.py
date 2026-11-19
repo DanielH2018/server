@@ -21,7 +21,7 @@ from lib import yaml_fast
 
 from _k8s_render import render_role_template
 from lib.render_context import render_context
-from validate.k8s_manifests import K8S_ROLES
+from lib.repo_paths import K8S_ROLES
 
 _ROLE = "traefik"
 _FLAG = "traefik_k8s_manage_acme"

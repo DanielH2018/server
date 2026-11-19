@@ -16,7 +16,7 @@ import os
 import subprocess
 import sys
 
-import gen_doc_fragments as g
+from docs import gen_doc_fragments as g
 from lib.repo_paths import REPO
 
 DOCS = REPO / "scripts" / "docs"
@@ -77,7 +77,7 @@ def test_the_entrypoint_takes_each_library_fragment_from_the_package():
     modules = _lib_modules()
     assert len(modules) == len(DOMAINS), modules
     for stem in modules:
-        built = importlib.import_module(f"fragments_lib.{stem}").FRAGMENTS
+        built = importlib.import_module(f"docs.fragments_lib.{stem}").FRAGMENTS
         assert built, f"fragments_lib.{stem} builds no fragment"
         for name, build in built.items():
             assert g.FRAGMENTS.get(name) is build, (

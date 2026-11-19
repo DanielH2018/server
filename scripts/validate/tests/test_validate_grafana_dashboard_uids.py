@@ -102,6 +102,16 @@ def test_the_real_tree_resolves_every_datasource_uid():
     assert [e for e in vgd.validate() if "not provisioned" in e] == []
 
 
+def test_a_datasource_provisioned_outside_the_main_configmap_resolves():
+    """The warehouse datasource lives in its own Secret, so a board on it must still pass."""
+    ids = vgd.provisioned_datasource_ids()
+
+    assert {"EGdsQqhVk", "warehouse"} <= ids
+    assert "warehouse" not in vgd.provisioned_datasource_ids(
+        vgd.DATASOURCES_TEMPLATES[:1]
+    )
+
+
 # ── the rule reads the real files, not just a hand-built dict ─────────────────────────────────
 
 
@@ -156,6 +166,9 @@ def test_main_prints_each_error_as_a_fail_line_on_stderr(tmp_path):
     (role / "templates").mkdir(parents=True)
     (role / "templates/grafana.yaml.j2").write_text(
         "datasources:\n  - name: Prometheus\n    uid: prometheus\n"
+    )
+    (role / "templates/grafana-warehouse-datasource-secret.yaml.j2").write_text(
+        "datasources:\n  - name: Warehouse\n    uid: warehouse\n"
     )
     (role / "files/dashboards").mkdir(parents=True)
     board = {

@@ -18,17 +18,11 @@ import sys
 from pathlib import Path as _Path
 from dataclasses import dataclass, field
 
-# host_lib.py is the host components' shared module and stays in
-# hosts/lib/. Each importer carries its own insert rather than relying on
-# the entry point's having run first.
-sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 
 from lib import host_modules  # noqa: F401
 import host_lib
 
-# The Backup CR reader and the group names, shared with the backup-health cron.
-sys.path.insert(0, str(_Path(__file__).resolve().parents[2] / "lib"))
-from longhorn_lib import longhorn_backups
+from lib.longhorn_lib import longhorn_backups
 
 RECURRING_JOB_GROUP_PREFIX = longhorn_backups.GROUP_LABEL_PREFIX
 

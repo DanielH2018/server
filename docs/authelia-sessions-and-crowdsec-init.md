@@ -28,7 +28,7 @@ both enrols twice. This is a WebAuthn spec constraint, not a setting to fix.
 
 **Do not add a `webauthn` key from the docs site.** Authelia refuses to start on a key it does
 not recognise, this pod rolls under `Recreate` in front of most public routes, and
-`validate/k8s_manifests.py` only asks whether the YAML parses. The pinned version's own
+`validate/render_lib/k8s.py` only asks whether the YAML parses. The pinned version's own
 `config.template.yml` is the source —
 `https://raw.githubusercontent.com/authelia/authelia/v<tag>/config.template.yml` — and
 the `authelia-webauthn-is-a-checked-second-factor` row in

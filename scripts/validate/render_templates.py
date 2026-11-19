@@ -15,9 +15,8 @@ variables, so no SOPS access is needed, then checks the output with the tool tha
            (`render_lib/units.py`)
   setup    every other host component template: no variable nothing defines, and YAML for the
            `*.yaml.j2` (`render_lib/setup_plane.py`)
-
-The k8s manifests have their own entry point, `k8s_manifests.py`: it validates what
-`render_tag` writes for each role rather than a template glob, and CI skips its hook by id.
+  k8s      every file `render_tag` writes for a k8s role in stub mode: YAML, the vendored
+           OpenAPI and CRD schemas, and the joins across the whole tree (`render_lib/k8s.py`)
 
 Usage: render_templates.py [-v] [FILE ...]
 
@@ -26,11 +25,17 @@ covers only the families with one of them among their inputs, and the summary li
 families it skipped. Given none, every family runs. `-v` / `--verbose` also lists each clean
 template as an `[ok]` line; by default only failures and the summary print. Exits 1 when any
 family reports a failure, 0 otherwise.
+
+Environment:
+  RENDER_TEMPLATES_SKIP  Comma-separated families to leave out whatever the files select. CI's
+                         prek sweep names `k8s`, which its pytest job runs over the same tree.
+                         A name that is no family fails the run.
 """
 
+import os
 import re
 import sys
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 
 # Reach the sibling package directories: a directly-invoked script gets only its own
@@ -41,7 +46,7 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 from lib.cli_help import answer_help
-from validate.render_lib import compose, setup_plane, shell, units
+from validate.render_lib import compose, k8s, setup_plane, shell, units
 from validate.validate_lib.ok_lines import ok_printer
 
 # A family's run takes the `[ok]` printer and returns (checked, failures), printing its own
@@ -74,6 +79,9 @@ _SHARED = (
     r"|host_modules|render_context|render_guard|repo_paths|role_files|yaml_fast)\.py"
 )
 
+# A k8s role's defaults, which a render of any of the role's templates layers in.
+_ROLE_DEFAULTS = r"k8s/roles/[^/]+/defaults/main\.yml"
+
 # The Pi's compose trees, which only the compose family and the host package render read.
 _COMPOSE_TREES = "pi-compose/services/"
 
@@ -90,7 +98,8 @@ FAMILIES: dict[str, Family] = {
     "shell": _family(
         shell.run,
         rf"hosts/components/(?!{_COMPOSE_TREES}).*|hosts/[^/]+/package\.yml"
-        r"|k8s/roles/.*\.sh\.j2|scripts/validate/(validate_lib/shell_lint|render_lib/shell)\.py",
+        rf"|k8s/roles/.*\.sh\.j2|{_ROLE_DEFAULTS}"
+        r"|scripts/validate/(validate_lib/shell_lint|render_lib/shell)\.py",
     ),
     # DECIDED: every file under hosts/, so a compose-template-only commit runs units too. The
     # family renders every host package, and the daniel-pi package renders the compose trees
@@ -98,22 +107,39 @@ FAMILIES: dict[str, Family] = {
     # package unit may also be a static file.
     "units": _family(
         units.run,
-        r"hosts/.*|k8s/roles/.*\.(service|timer|socket|rules)\.j2|scripts/validate/render_lib/units\.py",
+        rf"hosts/.*|k8s/roles/.*\.(service|timer|socket|rules)\.j2|{_ROLE_DEFAULTS}"
+        r"|scripts/validate/render_lib/units\.py",
     ),
     "setup": _family(
         setup_plane.run,
         rf"hosts/components/(?!{_COMPOSE_TREES}).*\.(j2|yml)|secrets/secret_rotation\.yml"
         r"|scripts/validate/render_lib/setup_plane\.py",
     ),
+    # Every `.j2` under a role, not only templates/: a manifest embeds a script or a config
+    # from anywhere in the role with `lookup()`.
+    "k8s": _family(
+        k8s.run,
+        rf"k8s/roles/.*\.j2|{_ROLE_DEFAULTS}|k8s/templates/ingressroute\.yml\.j2"
+        r"|scripts/renderer/shadow_diff\.py|scripts/lib/plain_scalar\.py"
+        r"|scripts/validate/(render_lib/k8s|validate_lib/(k8s_net_rules|k8s_schema))\.py"
+        r"|scripts/validate/schemas/(kubernetes\.io|traefik\.io)/.*\.json",
+    ),
 }
 
+SKIP_ENV = "RENDER_TEMPLATES_SKIP"
 
-def main(argv: Sequence[str] = (), families: dict[str, Family] | None = None) -> int:
+
+def main(
+    argv: Sequence[str] = (),
+    families: dict[str, Family] | None = None,
+    environ: Mapping[str, str] = os.environ,
+) -> int:
     """Run each family whose inputs the given files touch, and print one summary line.
 
     Args:
         argv: The command-line arguments; see the module docstring.
         families: The families to choose from, `FAMILIES` by default. A test passes its own.
+        environ: Where `RENDER_TEMPLATES_SKIP` is read. A test passes its own.
 
     Returns:
         1 if any family reported a failure, 0 otherwise.
@@ -122,10 +148,20 @@ def main(argv: Sequence[str] = (), families: dict[str, Family] | None = None) ->
     ok = ok_printer(argv)
     paths = [arg for arg in argv if not arg.startswith("-")]
     table = families or FAMILIES
+    held = [name for name in environ.get(SKIP_ENV, "").split(",") if name]
+    unknown = [name for name in held if name not in table]
+    if unknown:
+        print(
+            f"{SKIP_ENV} names no family: {', '.join(unknown)}. "
+            f"The families are {', '.join(table)}.",
+            file=sys.stderr,
+        )
+        return 1
     chosen = [
         name
         for name, family in table.items()
-        if not paths or any(family.files.match(path) for path in paths)
+        if name not in held
+        and (not paths or any(family.files.match(path) for path in paths))
     ]
     counts = {name: table[name].run(ok) for name in chosen}
     checked = sum(n for n, _ in counts.values())
@@ -134,8 +170,10 @@ def main(argv: Sequence[str] = (), families: dict[str, Family] | None = None) ->
         f"{name} {n}" + (f" ({f} failed)" if f else "")
         for name, (n, f) in counts.items()
     )
-    skipped = [name for name in table if name not in counts]
-    tail = f"; skipped {', '.join(skipped)}, no input changed" if skipped else ""
+    unchanged = [name for name in table if name not in counts and name not in held]
+    tail = f"; skipped {', '.join(unchanged)}, no input changed" if unchanged else ""
+    if held:
+        tail += f"; skipped {', '.join(held)}, {SKIP_ENV}"
     print(
         f"\n{checked} template(s) checked ({per_family}), {failures} failure(s){tail}."
     )

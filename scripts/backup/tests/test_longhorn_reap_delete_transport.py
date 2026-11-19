@@ -16,9 +16,9 @@ import json
 import subprocess
 
 import host_lib
-from longhorn_reap_lib import backups as backups_mod
-from longhorn_reap_lib import logic
-from longhorn_reap_lib import snapshots as snapshots_mod
+from backup.longhorn_reap_lib import backups as backups_mod
+from backup.longhorn_reap_lib import logic
+from backup.longhorn_reap_lib import snapshots as snapshots_mod
 
 
 class _FakeCompleted:

@@ -219,23 +219,52 @@ def ups_energy_rows(
     return rows
 
 
+@dataclass(frozen=True)
+class DayStats:
+    """One series' summary over one day, from the steps the range query returned."""
+
+    min: float
+    avg: float
+    max: float
+    p95: float
+    samples: int
+    max_gap_s: int
+
+
+def day_stats(series: Mapping, window: DayWindow) -> DayStats | None:
+    """The day's summary of one range-query series; None when it has no sample in `window`."""
+    points = {
+        t: v for t, v in _points(series).items() if window.start <= t <= window.end
+    }
+    if not points:
+        return None
+    values = list(points.values())
+    return DayStats(
+        min=min(values),
+        avg=round(sum(values) / len(values), 3),
+        max=max(values),
+        p95=round(percentile(values, 0.95), 3),
+        samples=len(values),
+        max_gap_s=max_gap_s(points, window),
+    )
+
+
 def cpu_temp_rows(window: DayWindow, temps: list[dict]) -> list[tuple]:
     """One row per host: the day's min, max and 95th percentile package temperature."""
     rows = []
     for series in temps:
-        points = _points(series)
-        if not points:
+        stats = day_stats(series, window)
+        if stats is None:
             continue
-        values = list(points.values())
         rows.append(
             (
                 window.day,
                 series["metric"].get("instance", ""),
-                min(values),
-                max(values),
-                round(percentile(values, 0.95), 3),
-                len(values),
-                max_gap_s(points, window),
+                stats.min,
+                stats.max,
+                stats.p95,
+                stats.samples,
+                stats.max_gap_s,
             )
         )
     return rows
