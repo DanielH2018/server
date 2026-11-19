@@ -60,6 +60,8 @@ MUX_PERSIST_S = 180
 CONTROL_DIR_NAME = "fanout-ssh"
 READ_TIMEOUT_S = 20.0
 GH_TIMEOUT_S = 30.0
+# Above any count of PRs this repo has had open at once; `gh pr list` stops at 30 unasked.
+OPEN_PR_LIMIT = "1000"
 # The one read every host gets: READ_COMMAND's four memory lines and live-agent count, plus
 # the signing-key line the launch gate needs, folded into the same connection because the ssh
 # budget (2 reads plus MAX_BATCHES_PER_REMOTE_HOST launches = the 5 `ufw limit ssh` allows
@@ -345,6 +347,34 @@ def branch_pr_urls(branch: str, repo: str = SERVER) -> list[str] | None:
     return parse_branch_prs(out.stdout) if out.returncode == 0 else None
 
 
+def open_pr_branches(repo: str = SERVER) -> frozenset[str] | None:
+    """The head branch of every open PR in `repo`, read in one call; None when unreadable.
+
+    None is a `gh` that failed, timed out or printed something unparseable. A caller must
+    not read it as "no open PR".
+    """
+    try:
+        out = gh(
+            "pr",
+            "list",
+            "--repo",
+            repo,
+            "--state",
+            "open",
+            "--json",
+            "headRefName",
+            "--limit",
+            OPEN_PR_LIMIT,
+            check=False,
+            timeout=GH_TIMEOUT_S,
+        )
+        if out.returncode != 0:
+            return None
+        return frozenset(str(pr["headRefName"]) for pr in json.loads(out.stdout))
+    except subprocess.TimeoutExpired, ValueError, KeyError, TypeError:
+        return None
+
+
 def earlier_pr_urls(branch: str, repo: str, launched_at: str) -> list[str]:
     """The PR urls of `branch` in `repo` that merged before `launched_at`; [] when unreadable."""
     try:
@@ -408,6 +438,7 @@ class Tools:
         merged_pr: the URL of a merged PR for a branch in a repo, or "".
         branch_prs: every PR url for a branch in a repo, newest first, or None when unreadable.
         earlier_prs: the PR urls of a branch in a repo that merged before a launch time.
+        open_pr_branches: the head branch of every open PR in a repo, or None when unreadable.
         findings: run `findings.py` with an argv, for the claim `launch` takes itself.
         default_ref: read a checkout's remote default branch, for `target.resolve`.
         head_branch: read the orchestrator's own branch, which holds this repo's claims.
@@ -422,6 +453,7 @@ class Tools:
     merged_pr: Callable[[str, str], str] = merged_pr_url
     branch_prs: Callable[[str, str], list[str] | None] = branch_pr_urls
     earlier_prs: Callable[[str, str, str], list[str]] = earlier_pr_urls
+    open_pr_branches: Callable[[str], frozenset[str] | None] = open_pr_branches
     findings: Callable[[list[str]], subprocess.CompletedProcess] = run_findings
     default_ref: Callable[[str], str | None] = default_ref
     head_branch: Callable[[], str] = head_branch

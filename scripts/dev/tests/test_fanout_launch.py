@@ -28,7 +28,14 @@ from fanout_lib.launch import (
     worktree_path,
     write_brief_command,
 )
-from fanout_lib.manifest import Batch, Manifest, load, new_run_id, save
+from fanout_lib.manifest import (
+    Batch,
+    Manifest,
+    load,
+    new_run_id,
+    save,
+    unused_run_id,
+)
 from fanout_lib.sizing import DEFAULT
 from fanout_lib.transport import REPO
 from _fanout_fakes import as_operator, fake_tools, ok
@@ -472,6 +479,12 @@ def test_manifest_round_trips_outside_the_repo(tmp_path):
 
 def _one_batch_manifest(run_id="20260101T000000Z"):
     return Manifest(run_id, "o", [Batch("b", "h", "/w", "br", "u", [1], "t")])
+
+
+def test_a_run_named_in_a_second_another_run_took_gets_the_next_free_id(tmp_path):
+    save(_one_batch_manifest("20260101T000000Z"), root=tmp_path)
+    now = datetime(2026, 1, 1, tzinfo=UTC)
+    assert unused_run_id(now, tmp_path) == "20260101T000001Z"
 
 
 def test_saving_a_manifest_leaves_no_temporary_file_behind(tmp_path):
