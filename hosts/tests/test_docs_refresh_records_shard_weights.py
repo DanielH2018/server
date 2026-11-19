@@ -132,7 +132,7 @@ def test_a_successful_weight_step_reaches_the_crons_output(tmp_path, message):
     moved = "scripts/x/tests/test_moved.py"
     stubs = fake_bin(
         tmp_path / "bin",
-        uv=f"echo 'wrote 1 runner weight(s): {moved}'\n",
+        uv=f"echo 'wrote 1 row: {moved}'\n",
         logger='echo "$@"\n',
     )
 

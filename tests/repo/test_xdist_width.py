@@ -56,20 +56,13 @@ def test_a_path_it_cannot_see_or_the_repo_root_is_left_to_xdist(tmp_path):
 @pytest.mark.parametrize(
     ("seconds", "cap", "workers"),
     [
-        # The selections of the 2026-10-25 table. The first is in the runner table's seconds,
-        # because its heaviest module is the only one the floor could decide.
-        (
-            [6.28, 1.17, 7.02, 5.48],
-            16,
-            3,
-        ),  # the `-python` hook's modules ran fastest on 3
-        (
-            [8.07, 8.0, 8.0, 8.0],
-            16,
-            4,
-        ),  # scripts/lib/tests: 32.1s, heaviest 8.07s, on 4
+        # The `-python` hook's modules in runner seconds, which ran fastest on 3.
+        ([6.28, 1.17, 7.02, 5.48], 16, 3),
+        # Every module under the floor: a worker per floor's worth, not per module.
+        ([2.5, 2.5, 2.5, 2.5], 16, 3),
+        ([8.07, 8.0, 8.0, 8.0], 16, 4),  # a worker per heaviest module's worth
         ([0.27, 0.01, 0.01, 0.01], 16, 1),  # four light files
-        ([21.55] + [1.0] * 100, 16, 6),  # the guard set: 121s, heaviest 21.55s
+        ([21.55] + [1.0] * 100, 16, 6),  # 121s, heaviest 21.55s
         ([21.0] + [1.0] * 219, 4, 4),  # a CI shard on a 4-core runner keeps every core
         ([1.0] * 30, 4, 4),  # the session ceiling of 4 still binds
         ([], 16, 1),
