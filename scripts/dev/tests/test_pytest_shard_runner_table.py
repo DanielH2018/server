@@ -218,13 +218,18 @@ def _fake_gh(
 
     def gh(*args, cwd=None):
         calls.append(args)
-        path = args[-1] if args[0] == "api" and "--jq" not in args else args[1]
-        if "--jq" in args:
+        path = args[-1] if args[0] == "api" else args[1]
+        if "/workflows/" in path:
             rows = [
-                {"id": r, "sha": _oid(r), "tree": _oid(r + 1000), "repo": "o/r"}
+                {
+                    "id": r,
+                    "head_sha": _oid(r),
+                    "head_commit": {"tree_id": _oid(r + 1000)},
+                    "repository": {"full_name": "o/r"},
+                }
                 for r in master
             ]
-            out = json.dumps(rows)
+            out = json.dumps({"workflow_runs": rows})
         elif args[:2] == ("run", "view"):
             run = int(args[2])
             listed = [

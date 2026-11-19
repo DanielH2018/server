@@ -496,18 +496,18 @@ def green_pytest_legs(run_id: int, gh=gh_mod.gh) -> dict[str, str]:
     }
 
 
-def _tested_run(run: dict[str, str], gh) -> int | None:
+def _tested_run(run: dict, gh) -> int | None:
     """The id of the run that tested master run `run`'s tree before it merged, or None.
 
     A push to master runs no pytest leg when a pull-request run already tested its tree, so
     that run's logs are the tree's measurement. `tested_tree.tested_run` finds it from the
-    record the push itself was proven by.
+    record the push itself was proven by. `run` is one row of GitHub's workflow-runs listing.
     """
     url, _ = tested_tree.tested_run(
         lambda path: json.loads(gh("api", path, cwd=REPO).stdout),
-        run["repo"],
-        run["sha"],
-        run["tree"],
+        run["repository"]["full_name"],
+        run["head_sha"],
+        (run.get("head_commit") or {}).get("tree_id", ""),
     )
     return int(url.rsplit("/", 1)[1]) if url else None
 
@@ -533,11 +533,7 @@ def fetch_runner_logs(runs: int, gh=gh_mod.gh) -> list[str]:
         f"repos/{{owner}}/{{repo}}/actions/workflows/{CI_WORKFLOW}/runs"
         f"?branch={CI_BRANCH}&event=push&status=success&per_page={RUN_WINDOW}"
     )
-    fields = (
-        "[.workflow_runs[] | {id, sha: .head_sha, tree: .head_commit.tree_id,"
-        " repo: .repository.full_name}]"
-    )
-    listed = json.loads(gh("api", listing, "--jq", fields, cwd=REPO).stdout or "[]")
+    listed = json.loads(gh("api", listing, cwd=REPO).stdout)["workflow_runs"]
     seen: set[int] = set()
 
     def measured(run_id: int | None) -> list[str]:
