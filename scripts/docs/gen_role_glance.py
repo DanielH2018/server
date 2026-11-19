@@ -68,16 +68,9 @@ Usage::
     uv run python scripts/docs/gen_role_glance.py --fix    # write, exit 1 if any was stale
 """
 
-import sys as _sys
 import textwrap
 from collections.abc import Callable
-from pathlib import Path as _Path
 import re
-
-
-# Reach the sibling package directories: a directly-invoked script gets only its own
-# directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 from pathlib import Path
 from typing import Any

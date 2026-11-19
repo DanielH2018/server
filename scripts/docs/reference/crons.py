@@ -22,17 +22,6 @@ Usage::
 import re
 from pathlib import Path
 
-
-# Reach the sibling package directories: a directly-invoked script gets only its own
-# directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
-from pathlib import Path as _Path
-import sys as _sys
-
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
-# This directory's secrets.py would shadow the stdlib module the host renderer needs.
-if __name__ == "__main__":
-    _sys.path.remove(str(_Path(__file__).resolve().parent))
-
 from lib.cli_help import ArgumentParser
 
 from docs.catalog_lib.package_timers import package_timers
