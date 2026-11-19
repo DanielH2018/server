@@ -64,13 +64,14 @@ def test_the_agent_user_is_declared_with_its_homelab_band_uid(package, manifest)
         {
             "name": "claude",
             "uid": 900,
+            "gid": 900,
             "home": "/var/lib/claude",
             "shell": "/bin/bash",
             "comment": "Claude agent",
         }
     ]
     assert text(package, "/usr/lib/sysusers.d/homelab.conf") == (
-        'u claude 900 "Claude agent" /var/lib/claude /bin/bash\n'
+        'g claude 900\nu claude 900:900 "Claude agent" /var/lib/claude /bin/bash\n'
     )
 
 
