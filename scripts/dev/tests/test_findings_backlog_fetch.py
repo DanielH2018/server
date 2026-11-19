@@ -24,6 +24,8 @@ def _tools(answer_for=lambda argv: []):
     seen: list[list[str]] = []
 
     def gh_json(*argv, **kwargs):
+        if argv[:2] == ("api", "graphql"):
+            return {"data": {"repository": {}}}
         seen.append(list(argv))
         return answer_for(list(argv))
 

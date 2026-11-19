@@ -48,6 +48,7 @@ groups:
             {{ $labels.state }} for 15 minutes. With two replicas, degraded is one copy from data
             loss and faulted is no healthy replica. `longhorn-disaster-recovery` has the rebuild
             and revert procedures.
+          runbook_url: https://docs.local.daniel-hunter.com/longhorn-disaster-recovery/
       # The bridge's "no longhorn_volume_robustness series" branch: the one-hot shape guarantees a
       # `state="healthy"` series per volume even at value 0, so its absence means the exporter
       # went away, which is not the same as healthy. The second arm requires up == 1, so a failed
@@ -71,6 +72,7 @@ groups:
             Either no up{job="longhorn"} series exists, so the job is gone from prometheus.yml, or
             the scrape works and longhorn_volume_robustness is missing. Replica redundancy is
             UNMONITORED while this fires, which is not the same as healthy.
+          runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#longhornvolumesmissing
       # monitor-bridge's `pvc_fullness`, percentage arm: a claim over PVC_MAX_PCT (85). media-data
       # is PVC_EXCLUDE: a `local` PV that is the `/` filesystem the host disk rules already watch.
       - alert: PVCFull
@@ -88,6 +90,7 @@ groups:
           description: >-
             {{ $labels.persistentvolumeclaim }} is {{ $value | printf "%.0f" }}% full. A claim
             cannot borrow space, so expand the volume in its role.
+          runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#pvcfull
       # The `pvc_fullness` free-bytes floor, for a claim whose peak is a step rather than a
       # slope. PVC_MIN_FREE declares valheim-server's largest transient, 3 GiB.
       - alert: PVCBelowFreeFloor
@@ -104,6 +107,7 @@ groups:
           description: >-
             {{ $labels.persistentvolumeclaim }} has {{ $value | humanize1024 }}B free, under the
             3 GiB its updater stages before swapping the install in. Expand the volume in its role.
+          runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#pvcbelowfreefloor
       # A declared floor whose claim reports no free bytes is a breach, not silence: the arm above
       # evaluates to nothing exactly when its input vanishes. A valheim Deployment parked at zero
       # replicas mounts no volume, so the kubelet reports nothing by design: the `unless` mutes
@@ -122,6 +126,7 @@ groups:
             PVCBelowFreeFloor reads kubelet_volume_stats_available_bytes for valheim-server and
             finds no series, so its free-space floor is UNMONITORED. The claim was renamed or
             excluded, or the kubelet stopped reporting it.
+          runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#pvcfreefloorunmonitored
       # The `pvc_fullness` census (PVC_MIN_CLAIMS, 32): fewer claims visible than the floor means
       # the kubelet stats are not scraped, and an empty fullness vector reads like "no claim is
       # full". The count includes excluded claims, as the bridge's did. The kubelet job is the
@@ -142,6 +147,7 @@ groups:
             Only {{ $value | printf "%.0f" }} claims report kubelet_volume_stats, below the floor
             of 32. PVC fullness is UNKNOWN, not OK. Read the kubernetes-kubelet targets, one
             per node.
+          runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#pvccoverageshortfall
       # monitor-bridge's `snapshot_headroom`: snapshot bytes against the declared
       # spec.snapshotMaxSize, at SNAPSHOT_CAP_WARN_RATIO (0.9) of the cap. Longhorn refuses new
       # snapshots at the cap, which fails every deploy of the service. SNAPSHOT_CAPS declares
@@ -167,6 +173,7 @@ groups:
             {{ $labels.pvc }} holds {{ $value | humanize1024 }}B of snapshots against a cap of
             16 GiB. Longhorn refuses new snapshots at the cap rather than pruning, so the next
             deploy of the service fails until snapshots are deleted by hand.
+          runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#longhornsnapshotnearcap
       # A capped claim with a capacity series and no snapshot series is a breach, not green. A
       # capped volume is snapshotted on every deploy, so an empty reading means the exporter or
       # the join went away. Zero capacity series is LonghornVolumesMissing's case.
@@ -188,6 +195,7 @@ groups:
           description: >-
             {{ $labels.pvc }} declares a snapshot cap and has no longhorn_snapshot_actual_size_bytes
             series, so its snapshot headroom is UNMONITORED, which is not the same as empty.
+          runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#longhornsnapshotcapunmonitored
       # A node's Longhorn disk past the replica scheduling floor. Longhorn's
       # storage-minimal-available-percentage is 25, its default, so above 75% used it refuses
       # replica placement on the node: a rebuild or a new volume then runs degraded, and only that
@@ -206,11 +214,10 @@ groups:
         annotations:
           summary: The Longhorn disk on {{ $labels.node }} is past the 75% replica scheduling floor.
           description: >-
-            Longhorn's disk {{ $labels.disk }} on {{ $labels.node }} is
-            {{ $value | humanizePercentage }} used. Above 75% Longhorn places no replica on the
-            node, so with two replicas a rebuild or a new volume stays degraded. The disk shares
-            the root filesystem, so containerd's unused images count too: `sudo k3s crictl rmi
-            --prune` on the node frees them.
+            Run `sudo k3s crictl rmi --prune` on {{ $labels.node }}, then read what else holds the
+            space. Longhorn's disk {{ $labels.disk }} there is {{ $value | humanizePercentage }}
+            used, and above 75% Longhorn places no replica on the node.
+          runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#longhorndiskoverschedulingfloor
       # monitor-bridge's `kubelet_plugin_readonly`: a CSI global mount remounted ext4
       # read-only after an iSCSI stall. Longhorn's own state stays healthy through it. The
       # selector takes every origin: the Pi has no kubelet plugin mounts, and a pin to one
@@ -232,6 +239,7 @@ groups:
             {{ $labels.mountpoint }} remounted read-only after an iSCSI stall, behind a Longhorn
             volume that still reads healthy. Scale the workload to 0, wait for the volume to
             detach, and scale back.
+          runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#kubeletcsimountreadonly
       # monitor-bridge's `etcd_db_size`: the DB over ETCD_DB_MAX_PCT (80) of its
       # 2147483648-byte backend quota. At the quota etcd goes read-only and the control plane stops
       # accepting writes. The size comes from `apiserver_storage_size_bytes`, which two jobs carry
@@ -250,3 +258,4 @@ groups:
             The etcd database is {{ $value | printf "%.0f" }}% of its 2 GiB quota. At the quota
             etcd rejects every write and the control plane stops. Compact and defragment, or raise
             --etcd-arg=quota-backend-bytes. `k3s-etcd-restore` has the procedure.
+          runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#etcddbnearquota

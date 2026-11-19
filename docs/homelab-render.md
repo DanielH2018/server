@@ -251,8 +251,7 @@ A role sets the keys of `scripts/lib/k8s_roles.py:RENDER_KEYS` in its
 `scripts/lib/k8s_roles.py:resolved_manifest_files` read `defaults/main.yml` only, and each raises
 on a role without that file.
 
-The render reads no role's `tasks/`. The only task files under `k8s/roles/` are the
-revert runbook's, and `scripts/renderer/tests/test_renderer_runbook_allowlist.py` holds that set.
+The render reads no role's `tasks/`, and no role under `k8s/roles/` has one.
 
 The renderer resolves only the five keys it renders with: the
 two file lists, the deferred pair and `manifests_prune`. The others stay strings until a
@@ -693,23 +692,18 @@ registry digest and authelia's password digests. The stub file holds exactly R1'
 stub map plus the sentinel `homelab_secret_stubs`, and a placeholder render overrides only
 the secret keys.
 
-Two tests hold this:
+Two checks hold this:
 
 - `scripts/renderer/tests/test_renderer_stub_file.py` requires the stub file's key set to be
   the secret keys plus the sentinel. A stub writer that adds one other key fails it.
-- The live-read census, `scripts/renderer/tests/test_renderer_live_read_census.py`, walks
-  every task file a render target's `tasks/main.yml` reaches. It fails when a name a task
-  sets reaches a template the render reads, directly or through a role default, an
-  inventory value, an `include_role` var or a `set_fact`, unless the renderer derives that
-  name from the tree. It also fails on a lookup whose reads it cannot name: any plugin but
-  `b64file`, `file`, `template` and `vars`, and a `vars` lookup outside a loop over
-  `py_table('CHECKS')` or `scrape_jobs`. A read through
-  `vars.X` or `hosts[H].X` counts as a read of `X`, and a `vars` or `hosts` read whose
-  name it cannot list fails it too. The engine is `_live_read_census.py` beside it.
+- `scripts/renderer/renderer_lib/dialect.py` refuses every lookup plugin but `b64file`,
+  `file`, `template` and `vars`, so a template cannot shell out with `pipe` or query the
+  cluster
+  (`scripts/renderer/tests/test_renderer_dialect.py::test_an_off_the_list_lookup_fails_the_render_and_the_census`).
+  A `vars` lookup reads only the variable layers, and every layer comes from the tree.
 
-A new value that a task reads from the cluster and a template needs fails the census. Move
-the value into the tree instead: a SOPS key, a committed file, or a value
-`task_inputs.derived_facts` computes from the tree.
+A value a template needs from the cluster has no way in. Move it into the tree instead: a SOPS
+key, a committed file, or a value `task_inputs.derived_facts` computes from the tree.
 
 ## Stub output is never published
 

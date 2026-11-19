@@ -204,6 +204,15 @@ jobs. Every landing that merges its PR directly takes the turn.
   `the landing that holds the turn merged PR #N with its own` and goes on to the deploy.
   One whose batch was not green prints `a batch that tested PR #N was not green; it lands
   alone`, leaves the line and gets a run of its own.
+- A holder whose landing code is older than master's, found when it forms its batch, hands
+  the turn to a landing of its PR from a fresh checkout of origin/master (`turn.HandOver`).
+  Its log prints `land: this landing holds the landing turn, and its landing code is older
+  than master's: ...`. The new landing's log follows in the same file, starting with `took over
+  the landing turn from the landing that handed it to this checkout`. That landing inherits
+  the lock, so the turn passes to it with no gap. It forms the batch, prints the
+  `VERDICT:` line and records the verdict. A turn held over ssh, a lander unit's turn and a
+  turn already handed over are not handed on: that holder prints `no batch: ... its
+  landing code is older than master's` and lands its PR alone.
 - A PR lands on the fewest runs when it is opened as a draft. A draft's pushes start no
   job, so its one full run is its batch's, shared with up to three other PRs, and master's
   run after its merge skips. A PR opened ready has a run of its own at every push. The
@@ -238,7 +247,7 @@ jobs. Every landing that merges its PR directly takes the turn.
   wait therefore stays inside the two merge budgets the `LAND_DEADLINE` sizing below counts.
 - A merge made outside `land.sh`, or by a landing that went on without the turn, can move
   master under the holder. The holder then merges a tree no run tested, and master's run
-  sweeps in full.
+  repeats every job, with the `pytest` legs running a selection (`docs/ci-throughput.md`).
 
 **A head whose only CI skipped as a draft is re-triggered once, then ends the wait if it skips again.** `ci.yml` runs
 no job on a draft, so the push's run skips every job, the `prek` gate included, and `await_ci`

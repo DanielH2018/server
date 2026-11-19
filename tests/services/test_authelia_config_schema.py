@@ -42,13 +42,12 @@ import copy
 import json
 import re
 
+import jsonschema
 import pytest
 import yaml
 from _helpers import REPO, image_tag
 from _k8s_render import rendered_docs
 from lib import yaml_fast
-
-jsonschema = pytest.importorskip("jsonschema")
 
 SCHEMA_MINOR = "v4.39"
 SCHEMA_PATH = (

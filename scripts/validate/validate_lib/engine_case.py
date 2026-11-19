@@ -22,7 +22,7 @@ so the updater never asks apt to move the engine, and the hold is apt's to keep.
     which "held broken packages" alone would not. WITHOUT the hold, the same install moves
     docker-ce from A to B (`red_outcome` is `moved`), onto the pin, and the next updater run
     reads `homelab_docker_engine_pending` 0. So the hold is the only thing that kept the
-    engine at A, and the pending series follows the version. The job log's `[PASS]` line
+    engine at A, and the pending series follows the version. The job log's `[MEASURED]` line
     carries both outcomes for each release leg.
 
 Measured. The container half runs only in the `host_packages` job: it needs
@@ -351,8 +351,9 @@ def run(cases) -> None:
         ).stdout
         print(f"::group::journal after {NAME}\n{journal}::endgroup::", file=sys.stderr)
     else:
+        cases.passed.append(NAME)
         print(
-            f"[PASS] {c.name}: {NAME}: {ENGINE} stayed held and the engine reads pending;"
+            f"[MEASURED] {NAME}: {ENGINE} stayed held and the engine reads pending;"
             f" the red fixture's Depends on the offered version: {outcome}",
             file=sys.stderr,
         )

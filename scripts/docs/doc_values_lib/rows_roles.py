@@ -296,7 +296,7 @@ VALUES = rows(
             ),
             (
                 _NODE_EXPORTER,
-                r"Liveness probe interval is (\d+)s",
+                r"wget` on `/metrics` every (\d+)s",
                 match(r"livenessProbe:\n(?:.*\n)*? +periodSeconds: (\d+)"),
             ),
             (

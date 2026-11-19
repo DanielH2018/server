@@ -64,6 +64,8 @@ from pathlib import Path
 _sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 _sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+from dev.findings_lib.boundaries import FindingsTools
+from dev.findings_lib.gh_calls import load_issues
 from fanout_lib import operator_waits, own_surface
 from fanout_lib.clean import sweep_runs
 from fanout_lib.launch_gates import LOCAL_HOST, live_batch_cap
@@ -185,16 +187,8 @@ def read_open_prs() -> list[dict]:
 
 
 def read_open_issues() -> list[dict]:
-    """Every open `claude` issue with its labels, blockers and comments, for the queue gauge; raises on a failed read."""
-    out = gh(
-        "issue", "list", "--repo", SERVER, "--label", "claude", "--state", "open",
-        "--limit", "1000", "--json", "number,labels,blockedBy,comments",
-        timeout=GH_TIMEOUT_S,
-    )  # fmt: skip
-    data = json.loads(out.stdout)
-    if not isinstance(data, list):
-        raise ValueError("gh issue list did not print a list")
-    return [i for i in data if isinstance(i, dict)]
+    """Every open register issue as `findings.py` loads it, for the queue gauge; raises on a failed read."""
+    return load_issues("open", FindingsTools())
 
 
 def newest_per_pr(records: Sequence[dict]) -> dict[int, dict]:

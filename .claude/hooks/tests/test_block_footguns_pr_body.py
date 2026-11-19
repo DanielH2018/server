@@ -74,6 +74,19 @@ def test_a_create_whose_body_file_skips_a_heading_is_denied(repo):
     assert "`## What changed`" not in reason
 
 
+@pytest.mark.parametrize(
+    "command",
+    ["gh pr create --title t --body-file partial.md", "gh pr create --fill"],
+)
+def test_the_deny_names_the_template_by_relative_path_and_how_to_print_it(
+    repo, command
+):
+    reason = _verdict(command, repo)
+    assert reason is not None
+    assert "`cat .github/pull_request_template.md`" in reason
+    assert str(repo) not in reason
+
+
 def test_a_create_whose_body_file_fills_the_template_is_clean(repo):
     assert _verdict("gh pr create --title t --body-file full.md", repo) is None
 

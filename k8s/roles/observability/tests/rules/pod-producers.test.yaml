@@ -60,10 +60,12 @@ tests:
               service: crowdsec
             exp_annotations:
               summary: The crowdsec engine has no enabled AppSec configuration or rule.
-              description: The crowdsec-jobs sidecar's AppSec verify found no enabled appsec-config or
-                appsec-rule, so the inline WAF is not loaded and the edge is ban-list-only, because the
-                bouncer fails open. Run `cscli appsec-configs list` in the crowdsec pod, and read the
-                crowdsec-appsec-verify lines in the crowdsec-jobs container log.
+              description: >-
+                Run `cscli appsec-configs list` in the crowdsec pod, and read the
+                crowdsec-appsec-verify lines in the crowdsec-jobs container log. No appsec-config or
+                appsec-rule is enabled, so the inline WAF is not loaded and the edge is
+                ban-list-only.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#crowdsecappsecverifyfailed
       - eval_time: 5m
         alertname: CrowdSecHomeAllowlistFailed
         exp_alerts:
@@ -153,6 +155,7 @@ tests:
               description: The crowdsec-home-allowlist job has not ended a run within three of its periods,
                 so the sidecar's scheduler is hung or the job is skipped at every slot. Read the crowdsec-jobs
                 container log in the crowdsec pod.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#crowdsecjobstale
           - exp_labels:
               job: crowdsec-jobs
               instance: crowdsec.homelab.svc:9182
@@ -164,6 +167,7 @@ tests:
               description: The crowdsec-remote-allowlist job has not ended a run within three of its periods,
                 so the sidecar's scheduler is hung or the job is skipped at every slot. Read the crowdsec-jobs
                 container log in the crowdsec pod.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#crowdsecjobstale
       - eval_time: 49m
         alertname: CrowdSecJobStale
         exp_alerts:
@@ -178,6 +182,7 @@ tests:
               description: The crowdsec-home-allowlist job has not ended a run within three of its periods,
                 so the sidecar's scheduler is hung or the job is skipped at every slot. Read the crowdsec-jobs
                 container log in the crowdsec pod.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#crowdsecjobstale
           - exp_labels:
               job: crowdsec-jobs
               instance: crowdsec.homelab.svc:9182
@@ -189,6 +194,7 @@ tests:
               description: The crowdsec-remote-allowlist job has not ended a run within three of its periods,
                 so the sidecar's scheduler is hung or the job is skipped at every slot. Read the crowdsec-jobs
                 container log in the crowdsec pod.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#crowdsecjobstale
       - eval_time: 51m
         alertname: CrowdSecJobStale
         exp_alerts:
@@ -203,6 +209,7 @@ tests:
               description: The crowdsec-appsec-verify job has not ended a run within three of its periods,
                 so the sidecar's scheduler is hung or the job is skipped at every slot. Read the crowdsec-jobs
                 container log in the crowdsec pod.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#crowdsecjobstale
           - exp_labels:
               job: crowdsec-jobs
               instance: crowdsec.homelab.svc:9182
@@ -214,6 +221,7 @@ tests:
               description: The crowdsec-home-allowlist job has not ended a run within three of its periods,
                 so the sidecar's scheduler is hung or the job is skipped at every slot. Read the crowdsec-jobs
                 container log in the crowdsec pod.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#crowdsecjobstale
           - exp_labels:
               job: crowdsec-jobs
               instance: crowdsec.homelab.svc:9182
@@ -225,6 +233,7 @@ tests:
               description: The crowdsec-remote-allowlist job has not ended a run within three of its periods,
                 so the sidecar's scheduler is hung or the job is skipped at every slot. Read the crowdsec-jobs
                 container log in the crowdsec pod.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#crowdsecjobstale
   - interval: 1m
     input_series: []
     alert_rule_test:
@@ -243,6 +252,7 @@ tests:
               description: No up{job="crowdsec-jobs"} series has existed for 10 minutes, so the job is
                 gone from prometheus.yml and the three crowdsec sidecar verdicts are UNMONITORED, which
                 is not the same as healthy.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#crowdsecjobsexporterabsent
       - eval_time: 11m
         alertname: CrowdSecJobStale
         exp_alerts: []
