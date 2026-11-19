@@ -52,7 +52,7 @@ its `containers_list` entry is in `cluster/services.yml`.
   holds the rollout.
 - **Ported WITHOUT docker plumbing** (operator decision 2026-08-10): no DOCKER_HOST, so the
   in-IDE docker CLI and devcontainers are gone; docker-proxy-codeserver and the `codeserver`
-  net dissolved with the Docker copy (`has_code_server: false` in daniel-server host_vars).
+  net dissolved with the Docker copy.
 
 ## Notable
 - Extensions are downloaded at build time (Open VSX + MS Marketplace) into `/opt/vsix`;

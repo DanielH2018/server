@@ -400,9 +400,8 @@ dead autoheal stops recovering Pi containers, and a dead docker-proxy stops this
 container logs reaching Loki while Alloy keeps running with zero targets.
 
 `pi-recovery-health.sh.j2` (`homelab-pi-recovery.timer`, every 5 minutes) watches **every container the
-host deploys** — each `compose_services` entry, plus `docker-proxy-lifecycle` and, under
-`has_code_server`, `docker-proxy-codeserver`, which are services inside the docker-proxy
-role's compose file rather than list entries. It reads `docker ps` against the real socket
+host deploys** — each `compose_services` entry, plus `docker-proxy-lifecycle`, which is a service inside the docker-proxy
+role's compose file rather than a list entry. It reads `docker ps` against the real socket
 through the docker group, so it still reports docker-proxy's own death, and writes its verdict
 to `pi-recovery-health.prom`. Any one container down is a failing verdict, which
 `PiRecoveryFailed` pages; a dead timer or host trips `PiRecoveryNotReporting` after 900

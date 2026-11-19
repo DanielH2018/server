@@ -145,8 +145,7 @@ def verdict_path(ns):
     """The subcommand path a `PROBE-VERDICT:` line names for `ns`, or None for no line.
 
     None for a subcommand that judges nothing, and for `--dry-run` and `--json`, whose stdout
-    is a command list or one JSON document that a trailing line would break (the deck mod
-    parses `landing --json`).
+    is a command list or one JSON document that a trailing line would break.
     """
     if getattr(ns, "dry_run", False) or getattr(ns, "json", False):
         return None
