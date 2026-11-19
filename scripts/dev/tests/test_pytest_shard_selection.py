@@ -1,8 +1,8 @@
 """`pytest_shard.py --changed-since`: a pull request's legs carry only what its diff selects.
 
 The selection rule has its own module, `test_affected_table.py`. This one covers what the
-shard script adds: reading the diff from git, the CI-only modules, how many legs a selection
-needs, and what a leg tells the workflow.
+shard script adds: reading the diff from git, how many legs a selection needs, and what a leg
+tells the workflow.
 
 Run: uv run pytest scripts/dev/tests/test_pytest_shard_selection.py
 """
@@ -14,7 +14,6 @@ from affected_lib import table
 
 from lib.git_testing import commit, init_repo
 
-CI_ONLY = next(iter(pytest_shard.CI_ONLY_WEIGHTS))
 EMPTY = table.Row(frozenset(), frozenset(), frozenset(), False)
 
 
@@ -22,12 +21,11 @@ def _outputs(path) -> dict[str, str]:
     return dict(line.split("=", 1) for line in path.read_text().splitlines())
 
 
-def test_the_diff_from_a_base_selects_its_readers_and_every_ci_only_module(tmp_path):
+def test_the_diff_from_a_base_selects_its_readers(tmp_path):
     repo = init_repo(tmp_path / "repo")
     tree = {
         "tests/test_reads_x.py": "",
         "tests/test_reads_y.py": "",
-        CI_ONLY: "",
         "lib/x.py": "X = 1\n",
         "lib/y.py": "Y = 1\n",
     }
@@ -38,7 +36,6 @@ def test_the_diff_from_a_base_selects_its_readers_and_every_ci_only_module(tmp_p
     for module, read in (
         ("tests/test_reads_x.py", "lib/x.py"),
         ("tests/test_reads_y.py", "lib/y.py"),
-        (CI_ONLY, "lib/y.py"),
     ):
         rows.put(
             module,
@@ -49,7 +46,7 @@ def test_the_diff_from_a_base_selects_its_readers_and_every_ci_only_module(tmp_p
     selection = pytest_shard.affected("HEAD^1", repo, rows)
 
     assert not selection.full
-    assert selection.modules == sorted([CI_ONLY, "tests/test_reads_x.py"])
+    assert selection.modules == ["tests/test_reads_x.py"]
 
 
 @pytest.mark.parametrize(

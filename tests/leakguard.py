@@ -170,13 +170,6 @@ _LIVE_API_TESTS = frozenset(
         # to the Pi's watchdog daemon is decided by systemd's job queue. Skipped where no user
         # manager answers.
         "hosts/lib/tests/test_pi_watchdog_dropin.py::test_a_restart_leaves_the_watchdog_daemon_running_and_a_stop_or_a_crash_starts_the_keepalive",
-        # They `docker run` crowdsec's sidecar modules in the pinned
-        # images, which is the linkage the operator asked to check. They
-        # skip where docker is missing and CI is unset.
-        "k8s/roles/crowdsec/tests/test_jobs_image.py::test_the_appsec_verify_runs_in_the_jobs_image_against_a_stub_cscli",
-        "k8s/roles/crowdsec/tests/test_jobs_image.py::test_the_engines_cscli_runs_in_the_jobs_image",
-        "k8s/roles/crowdsec/tests/test_jobs_image.py::test_the_home_allowlist_runs_in_the_jobs_image_against_stub_tools",
-        "k8s/roles/crowdsec/tests/test_jobs_image.py::test_the_lapi_register_init_runs_against_a_fresh_database_with_no_lapi",
     }
 )
 
@@ -186,7 +179,8 @@ _LIVE_API_TESTS = frozenset(
 _LIVE_MARKER = "ui"
 
 # The marker on tests that run a script inside a pinned container image with `docker run`
-# (tests/longhorn/test_longhorn_restore_drill_image.py). They reach the Docker socket
+# (tests/longhorn/test_longhorn_restore_drill_image.py,
+# k8s/roles/crowdsec/tests/test_jobs_image.py). They reach the Docker socket
 # and pull from a registry on purpose. `addopts` deselects them from the `pytest` shards,
 # and `.github/workflows/image-leg.yml` runs them.
 _IMAGE_MARKER = "image"

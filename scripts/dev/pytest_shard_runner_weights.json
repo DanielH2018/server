@@ -306,7 +306,6 @@
  "k8s/roles/crowdsec/tests/test_crowdsec_jobs.py": 0.69,
  "k8s/roles/crowdsec/tests/test_crowdsec_verify.py": 1.54,
  "k8s/roles/crowdsec/tests/test_home_ips_discover.py": 0.01,
- "k8s/roles/crowdsec/tests/test_jobs_image.py": 15.28,
  "k8s/roles/crowdsec/tests/test_jobs_metrics.py": 0.38,
  "k8s/roles/crowdsec/tests/test_remote_allowlist.py": 0.28,
  "k8s/roles/crowdsec/tests/test_remote_allowlist_fixtures.py": 0.02,
