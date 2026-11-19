@@ -7,8 +7,8 @@ nfpm: an `actions/cache` step keyed on the pinned version and sha256, then a ste
 the release only when the cached file is absent and checks the digest every time.
 
 The jobs are named rather than derived from the action, because the fix removes the string a
-derivation would match. A step that runs a local composite action is read as that action's
-steps, so a shared install action passes.
+derivation would match. ci.yml's flux jobs fetch through `.github/actions/pinned-tool`, which
+tests/repo/test_release_fetches_use_pinned_tool.py holds to the same shape.
 
 Run: uv run pytest tests/repo/test_ci_flux_cli_is_cached.py
 """
@@ -20,20 +20,17 @@ import re
 import pytest
 from _helpers import REPO
 from lib import yaml_fast
-from lib.proc_testing import run
 
-ACTION = "fluxcd/flux2/action@"
 CACHE = "actions/cache@"
 FLUX_RELEASE = "fluxcd/flux2/releases/download"
 PINNED_FLUX = re.compile(r"\$RUNNER_TEMP/pinned/flux[\w-]*")
 PIN_EXPRESSION = re.compile(r"\$\{\{[^}]*\b(?:env\.|steps\.|inputs\.|hashFiles\()")
 RETRY = re.compile(r"--retry (\d+)\b.*--retry-delay (\d+)\b")
 FLUX_JOBS = (
-    ("ci.yml", "flux_roundtrip"),
-    ("ci.yml", "sops_manifest_type_proof"),
     ("promote.yml", "publish"),
     ("promote.yml", "tag"),
     ("promote.yml", "settle"),
+    ("promote.yml", "reconcile"),
     ("promote.yml", "reset-move"),
     ("bootstrap-drill.yml", "drill"),
     ("flux-deletion-drill.yml", "drill"),
@@ -116,36 +113,24 @@ def _unguarded_curls(run: str) -> list[str]:
     return found
 
 
-def _nfpm_retry_window() -> int:
-    """The nfpm fetch's retries times delay, the window #7655 set for a release outage."""
-    _, steps = _job("ci.yml", "host_packages_build")
+def _pinned_tool_retry_window() -> int:
+    """The pinned-tool action's retries times delay, the window a release outage needs."""
+    steps = (_load(".github/actions/pinned-tool/action.yml").get("runs") or {}).get(
+        "steps"
+    )
     windows = [
         int(m[1]) * int(m[2])
-        for s in steps
-        if "pinned/nfpm" in str(s.get("run", ""))
+        for s in steps or []
         for line in _curls(str(s.get("run", "")))
         if (m := RETRY.search(line))
     ]
-    assert windows, "host_packages_build no longer curls nfpm with a retry window"
+    assert windows, "the pinned-tool action no longer curls with a retry window"
     return max(windows)
 
 
 def _flux_amd64_pin() -> dict:
     tools = _load("hosts/packages/homelab-tools/package.yml").get("tools") or {}
     return (tools.get("flux") or {}).get("amd64") or {}
-
-
-def test_no_workflow_installs_flux_through_the_action():
-    tracked = run(
-        ["git", "ls-files", ".github/workflows/*.yml", ".github/actions/*/action.yml"],
-        cwd=REPO,
-        check=True,
-    ).stdout.split()
-    assert ".github/workflows/ci.yml" in tracked
-    offenders = [p for p in tracked if ACTION in (REPO / p).read_text(encoding="utf-8")]
-    assert offenders == [], (
-        "fluxcd/flux2/action downloads the CLI uncached with a fixed 5x5s retry window"
-    )
 
 
 @pytest.mark.parametrize(("workflow", "job"), FLUX_JOBS)
@@ -181,7 +166,7 @@ def test_each_flux_job_fetches_only_on_a_cache_miss(workflow, job):
 
 @pytest.mark.parametrize(("workflow", "job"), FLUX_JOBS)
 def test_each_flux_fetch_outlasts_a_release_outage(workflow, job):
-    floor = _nfpm_retry_window()
+    floor = _pinned_tool_retry_window()
     _, steps = _job(workflow, job)
     curls = [
         line for _, s in _installs(steps) for line in _curls(str(s.get("run", "")))
@@ -210,15 +195,17 @@ def test_each_flux_job_checks_the_pinned_sha256(workflow, job):
 
 
 def _broken(monkeypatch, mutate) -> None:
-    """Point `_job` at a copy of ci.yml's flux_roundtrip job with `mutate` applied to its steps."""
-    loaded, steps = _job("ci.yml", "flux_roundtrip")
+    """Point `_job` at a copy of bootstrap-drill.yml's drill job with `mutate` applied to its steps."""
+    loaded, steps = _job("bootstrap-drill.yml", "drill")
     mutate(steps)
     real = _job
     monkeypatch.setattr(
         sys.modules[__name__],
         "_job",
         lambda w, j: (
-            (loaded, steps) if (w, j) == ("ci.yml", "flux_roundtrip") else real(w, j)
+            (loaded, steps)
+            if (w, j) == ("bootstrap-drill.yml", "drill")
+            else real(w, j)
         ),
     )
 
@@ -239,7 +226,7 @@ def test_a_flux_job_without_its_cache_step_is_flagged(monkeypatch):
     )
     with pytest.raises(AssertionError, match="no earlier pin-keyed actions/cache"):
         test_each_flux_job_restores_the_cli_from_a_cache_keyed_on_the_pin(
-            "ci.yml", "flux_roundtrip"
+            "bootstrap-drill.yml", "drill"
         )
 
 
@@ -252,7 +239,7 @@ def test_a_flux_cache_with_a_constant_key_is_flagged(monkeypatch):
     _broken(monkeypatch, constant_key)
     with pytest.raises(AssertionError, match="no earlier pin-keyed actions/cache"):
         test_each_flux_job_restores_the_cli_from_a_cache_keyed_on_the_pin(
-            "ci.yml", "flux_roundtrip"
+            "bootstrap-drill.yml", "drill"
         )
 
 
@@ -264,13 +251,13 @@ def test_a_flux_curl_outside_the_cache_check_is_flagged(monkeypatch):
         ),
     )
     with pytest.raises(AssertionError):
-        test_each_flux_job_fetches_only_on_a_cache_miss("ci.yml", "flux_roundtrip")
+        test_each_flux_job_fetches_only_on_a_cache_miss("bootstrap-drill.yml", "drill")
 
 
 def test_a_flux_curl_with_a_short_retry_window_is_flagged(monkeypatch):
     _broken(monkeypatch, lambda steps: _edit_fetch(steps, "--retry 12", "--retry 3"))
     with pytest.raises(AssertionError, match="must retry all errors"):
-        test_each_flux_fetch_outlasts_a_release_outage("ci.yml", "flux_roundtrip")
+        test_each_flux_fetch_outlasts_a_release_outage("bootstrap-drill.yml", "drill")
 
 
 def test_a_flux_fetch_without_its_digest_check_is_flagged(monkeypatch):
@@ -279,4 +266,4 @@ def test_a_flux_fetch_without_its_digest_check_is_flagged(monkeypatch):
         lambda steps: _edit_fetch(steps, "| sha256sum -c --strict", "> /dev/null"),
     )
     with pytest.raises(AssertionError, match="no flux step runs sha256sum -c"):
-        test_each_flux_job_checks_the_pinned_sha256("ci.yml", "flux_roundtrip")
+        test_each_flux_job_checks_the_pinned_sha256("bootstrap-drill.yml", "drill")

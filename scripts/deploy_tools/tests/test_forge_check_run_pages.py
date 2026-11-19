@@ -13,7 +13,7 @@ from urllib.parse import parse_qs, urlsplit
 import pytest
 
 import forge
-from ci_verdict import ci_verdict
+from ci_verdict import CheckRun, ci_verdict
 
 T = "a" * 40
 FAILING = "lint"
@@ -53,7 +53,7 @@ def test_a_failing_run_on_the_second_page_reaches_the_reader():
     failing = {"name": FAILING, "status": "completed", "conclusion": "failure"}
     runs = forge.GitHub(two_page_check_runs([failing]), None).check_runs(T)
     assert len(runs) == 101
-    assert failing in runs
+    assert CheckRun.parse(failing) in runs
 
 
 def test_a_failing_run_on_the_second_page_fails_the_ci_verdict():
@@ -92,4 +92,4 @@ def test_a_run_created_between_page_reads_is_not_a_short_read():
     transport = two_page_check_runs([passing("late"), pending], total_count=101)
     runs = forge.GitHub(transport, None).check_runs(T)
     assert len(runs) == 102
-    assert pending in runs
+    assert CheckRun.parse(pending) in runs

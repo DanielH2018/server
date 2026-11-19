@@ -87,7 +87,7 @@ host packages and their components under `hosts/` goes in `hosts/tests/`. The sh
 
 Any validator, guard, health check or probe lands with a paired test: one input it must
 accept, one it must reject. Without the rejecting half there is no evidence it can fail.
-`scripts/validate/tests/test_validate_compose_templates.py` is the worked example: name the
+`scripts/validate/tests/test_render_compose.py` is the worked example: name the
 pair `..._is_clean` / `..._is_flagged`.
 
 ## A check that finds its subject by pattern names a member it must find

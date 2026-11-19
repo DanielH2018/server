@@ -253,10 +253,6 @@ ROWS = (
             "tests/services/test_host_check_rule_literals.py": (
                 "a join of the rule file against the inventory, which #9019 rewrites"
             ),
-            "tests/repo/test_ci_pytest_apt_tools_cache.py": (
-                "a per-tool cache check, which #9025 replaces with one check over the "
-                "pinned-tool action"
-            ),
             "tests/repo/test_vale_matches_the_ci_pin.py": (
                 "a join of ci.yml's Vale pin against the homelab-tools package's"
             ),

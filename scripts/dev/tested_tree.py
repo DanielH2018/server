@@ -64,7 +64,7 @@ from lib.repo_paths import HOST_LIB_FILES
 from lib.tree_stack import Conflict, stack
 
 sys.path.insert(0, str(HOST_LIB_FILES))
-from ci_verdict import CI_GATE_NAME, ci_verdict
+from ci_verdict import CI_GATE_NAME, CIVerdict, ci_verdict, parse_check_runs
 
 # The commit-status context the PR run writes and this script reads. ci.yml's `prek` job writes
 # it; tests/repo/test_ci_skip_proven_master.py pins both sides to this name.
@@ -179,7 +179,8 @@ def green_base(get: Get, repo: str, sha: str) -> tuple[str, str]:
                     f"the commit listing ends {behind - 1} commit(s) behind {sha[:8]}",
                 )
             page: Any = get(f"repos/{repo}/commits/{ancestor}/check-runs?per_page=100")
-            if ci_verdict(page["check_runs"], {CI_GATE_NAME}) == "pass":
+            runs = parse_check_runs(page["check_runs"])
+            if ci_verdict(runs, {CI_GATE_NAME}) is CIVerdict.PASS:
                 return ancestor, f"{ancestor[:8]} is green, {behind} commit(s) back"
             ancestor = first_parent.get(ancestor)
         return "", f"no green ancestor within {MAX_BASE_WALK} commits of {sha[:8]}"

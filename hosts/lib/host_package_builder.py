@@ -47,11 +47,8 @@ from typing import Any
 from host_lib import ERR, atomic_write, github_get, github_token, parse_env_file
 from host_lib import log as host_log
 import homelab_tool_fetch as tools
-from builder_ci_grade import (
-    ci_verdict,
-    read_check_pages,
-    token_refused,
-)
+from builder_ci_grade import CiSettings, read_check_pages, token_refused
+from ci_verdict import CIVerdict, ci_verdict, parse_check_runs
 from builder_python import render_python
 from builder_rollout_gate import RELEASE, RolloutGate, admit
 from homelab_tool_fetch import Failure
@@ -220,9 +217,11 @@ class Builder(RolloutGate):
         self.config = parse_env_file(str(self.config_path))
         self.state = self._load("state.json")
         # A cached `fail` would block a SHA a re-run turned green, so only a `pass` survives the
-        # load.
+        # load, and so does no value that is not a verdict.
         self.cache = {
-            sha: v for sha, v in self._load("ci-cache.json").items() if v == "pass"
+            sha: CIVerdict.PASS
+            for sha, v in self._load("ci-cache.json").items()
+            if v == CIVerdict.PASS
         }
         # 1. No token, no request: anonymous reads share one quota with the tick's gate. The stub
         # `run` keeps `gh auth token` out of it. LoadCredential= supplies the token, never the file.
@@ -285,20 +284,11 @@ class Builder(RolloutGate):
 
     # 4 and 5. The anchor.
     def choose(self, tip: str, last: str | None) -> str | None:
-        contexts = frozenset(
-            c.strip()
-            for c in self.config.get("CI_CONTEXTS", "").split(",")
-            if c.strip()
-        )
-        walk = self.config.get("CI_ANCESTOR_WALK_MAX", "").strip()
-        # An empty context set would grade every commit green (ci_verdict.ci_verdict says so,
-        # and await_ci.py's DisarmedGateError refuses it), so refuse it before grading.
-        if not contexts:
-            raise Failure("ci", "CI_CONTEXTS in config.env is empty")
-        if not walk.isdigit() or int(walk) <= 0:
-            raise Failure(
-                "ci", f"CI_ANCESTOR_WALK_MAX={walk!r} is not a positive integer"
-            )
+        try:
+            settings = CiSettings.parse(self.config)
+        except ValueError as exc:
+            raise Failure("ci", str(exc)) from exc
+        walk = settings.walk_max
         # A gate that just closed leaves deferred packages to build at the last commit, which
         # is green, so they need no newer green commit.
         owed = (
@@ -318,8 +308,8 @@ class Builder(RolloutGate):
         # verdict, and nothing more. The builder checks no commit signature and no landing tag:
         # master commits carry GitHub's signature, not the operator's, and the signing key is
         # reachable from a merged change to this role however the builder checks (ADR-0021).
-        for sha in candidates[: int(walk)]:
-            if self.verdict(sha, contexts) == "pass":
+        for sha in candidates[:walk]:
+            if self.verdict(sha, settings.contexts) is CIVerdict.PASS:
                 if sha != tip:
                     log(
                         f"building {sha[:12]}, the newest green commit below {tip[:12]}"
@@ -329,16 +319,16 @@ class Builder(RolloutGate):
         # bound of 1 when one commit is unbuilt.
         since = f"since the last build {last[:12]}" if last else "on master"
         log(
-            f"no green commit: graded {min(len(candidates), int(walk))} of the "
+            f"no green commit: graded {min(len(candidates), walk)} of the "
             f"{len(candidates)} commits {since}, walk bound {walk}; walking again next run"
         )
         if owed:
             log(f"building the deferred packages at the last build {owed[:12]}")
         return owed
 
-    def verdict(self, sha: str, contexts: frozenset[str]) -> str:
-        if self.cache.get(sha) == "pass":
-            return "pass"
+    def verdict(self, sha: str, contexts: frozenset[str]) -> CIVerdict:
+        if self.cache.get(sha) is CIVerdict.PASS:
+            return CIVerdict.PASS
 
         def fetch_page(query: str) -> object:
             self.requests += 1
@@ -352,7 +342,7 @@ class Builder(RolloutGate):
         try:
             # A ValueError here includes a read short of total_count, so a partial listing
             # reads as pending below rather than grading page 1 alone.
-            runs = read_check_pages(fetch_page, "check_runs")
+            runs = parse_check_runs(read_check_pages(fetch_page, "check_runs"))
         except urllib.error.HTTPError as exc:
             if token_refused(exc):
                 # The fetch is anonymous and keeps succeeding, so this read is the only one
@@ -362,7 +352,7 @@ class Builder(RolloutGate):
                     "token", f"the check-runs read for {sha[:12]} was refused: {exc}"
                 ) from exc
             log(f"ci: {sha[:12]} unreadable, read as pending: {exc}")
-            return "pending"
+            return CIVerdict.PENDING
         except (
             urllib.error.URLError,
             TimeoutError,
@@ -373,14 +363,14 @@ class Builder(RolloutGate):
         ) as exc:
             # Fail closed: an unreadable verdict is pending, and pending is never cached.
             log(f"ci: {sha[:12]} unreadable, read as pending: {exc}")
-            return "pending"
+            return CIVerdict.PENDING
         result = ci_verdict(runs, contexts)
         # DECIDED: only `pass` is cached. GitHub's check-runs API returns the latest run per
         # name, so `gh run rerun --failed` turns a red SHA green, and a cached `fail` would
         # never see it while checkout-sync's gate, which caches nothing, takes the SHA
         # Re-reading a fail costs one request per page of a red commit's runs, in a
         # walk that CI_ANCESTOR_WALK_MAX bounds.
-        if result == "pass":
+        if result is CIVerdict.PASS:
             self.cache[sha] = result
         return result
 
