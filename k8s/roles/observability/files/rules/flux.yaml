@@ -24,6 +24,7 @@ groups:
             {{ $labels.pod }} has failed its scrape for 5 minutes, so {{ $labels.app }} is down
             or unreachable from Prometheus. Read its pod's events and log in the flux-system
             namespace.
+          runbook_url: https://docs.local.daniel-hunter.com/flux-deploy-plane/#recovering-flux-by-hand
       # The family's zero-series alert, and what ScrapeTargetDown cannot see. Pod discovery finds no
       # target for a controller with no pod, so a Deployment at 0 replicas or a pod that never
       # schedules leaves no up series at all. One absent() per controller, because a job-wide
@@ -51,6 +52,7 @@ groups:
             gone or the flux scrape job is missing from prometheus.yml, or it has been scraped
             with no controller_runtime_reconcile_total series. Read the Deployment in the
             flux-system namespace.
+          runbook_url: https://docs.local.daniel-hunter.com/flux-deploy-plane/#recovering-flux-by-hand
       # The max by() drops the labels that change while an object stays unhealthy. A failing
       # Kustomization's Ready flips between False and Unknown on every retry, and a label change
       # starts a new series, which would restart the 15-minute hold each time. The

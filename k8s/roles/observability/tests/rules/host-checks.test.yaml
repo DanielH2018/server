@@ -56,6 +56,7 @@ tests:
                 textfile collector, so nothing is watching the root disk. Read the `daniel-box
                 disk health` cron and the `disk-health` syslog tag, then
                 /var/lib/node-exporter-textfile/disk-health.prom on the host.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#diskhealthnotreporting
       - eval_time: 26m
         alertname: DiskHealthFailed
         exp_alerts: []
@@ -132,6 +133,7 @@ tests:
                 df failed. Longhorn stops scheduling replicas on the node at 75%.
                 homelab_disk_root_used_ratio{check="disk-health"} holds the share it read, and
                 the `disk-health` syslog tag holds the run's message.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#diskhealthfailed
       - eval_time: 4m
         alertname: DiskHealthNotReporting
         exp_alerts: []
@@ -165,6 +167,7 @@ tests:
                 textfile collector, so nothing is watching the root disk. Read the `daniel-box
                 disk health` cron and the `disk-health` syslog tag, then
                 /var/lib/node-exporter-textfile/disk-health.prom on the host.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#diskhealthnotreporting
 
   # The file is gone from minute 6, so the series goes stale while the exporter stays up. The
   # absent_over_time arm fires once 1500s pass with no sample, after minute 30 and not
@@ -195,6 +198,7 @@ tests:
                 textfile collector, so nothing is watching the root disk. Read the `daniel-box
                 disk health` cron and the `disk-health` syslog tag, then
                 /var/lib/node-exporter-textfile/disk-health.prom on the host.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#diskhealthnotreporting
 
   # The exporter is down from minute 6: `up` reads 0 and the series is gone, as in the
   # control above. The bridge's `targets` check pages the dead exporter, so the `unless`
@@ -227,10 +231,10 @@ tests:
             exp_annotations:
               summary: daniel-box's longhorn-backup-health check has stopped reporting.
               description: >-
-                No longhorn-backup-health verdict newer than 25 minutes reached Prometheus from
-                daniel-box's textfile collector, so nothing is watching the Longhorn backup plane.
-                Read the `Longhorn backup health` cron and the `longhorn-backup-health` syslog tag,
-                then /var/lib/node-exporter-textfile/longhorn-backup-health.prom on the host.
+                Read the `longhorn-backup-health` syslog tag on daniel-box, then
+                /var/lib/node-exporter-textfile/longhorn-backup-health.prom. No verdict newer than
+                25 minutes reached Prometheus, so nothing watches the Longhorn backup plane.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#longhornbackuphealthnotreporting
       - eval_time: 26h
         alertname: LonghornBackupHealthFailed
         exp_alerts: []
@@ -245,10 +249,11 @@ tests:
             exp_annotations:
               summary: daniel-box's etcd-snapshot-offbox check has stopped reporting.
               description: >-
-                No etcd-snapshot-offbox verdict newer than 25 hours reached Prometheus from
-                daniel-box's textfile collector, so nothing is comparing the cluster token with its
-                stamp. Read the `etcd token drift` cron and the `etcd-snapshot-offbox` syslog tag,
-                then /var/lib/node-exporter-textfile/etcd-snapshot-offbox.prom on the host.
+                Read the `etcd-snapshot-offbox` syslog tag on daniel-box, then
+                /var/lib/node-exporter-textfile/etcd-snapshot-offbox.prom. No verdict newer than 25
+                hours reached Prometheus, so nothing compares the cluster token with its off-box
+                stamp.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#etcdsnapshotoffboxnotreporting
       - eval_time: 26h
         alertname: EtcdSnapshotOffboxFailed
         exp_alerts: []
@@ -342,10 +347,10 @@ tests:
             exp_annotations:
               summary: daniel-box's longhorn-backup-health check has stopped reporting.
               description: >-
-                No longhorn-backup-health verdict newer than 25 minutes reached Prometheus from
-                daniel-box's textfile collector, so nothing is watching the Longhorn backup plane.
-                Read the `Longhorn backup health` cron and the `longhorn-backup-health` syslog tag,
-                then /var/lib/node-exporter-textfile/longhorn-backup-health.prom on the host.
+                Read the `longhorn-backup-health` syslog tag on daniel-box, then
+                /var/lib/node-exporter-textfile/longhorn-backup-health.prom. No verdict newer than
+                25 minutes reached Prometheus, so nothing watches the Longhorn backup plane.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#longhornbackuphealthnotreporting
 
   # The exporter is down from minute 0 and every file is gone, so the bridge's
   # `targets` check pages the dead exporter and the `unless` clause keeps both
@@ -475,14 +480,10 @@ tests:
             exp_annotations:
               summary: daniel-pi's homelab package reconcile failed, so it installs no newer package.
               description: >-
-                homelab_host_reconcile_ok on daniel-pi has read 0 for 15 minutes, so the host
-                holds and installs no newer homelab package. Read `journalctl -u
-                homelab-updater -u homelab-reconcile` on daniel-pi and docs/host-packages.md,
-                "Host-plane pages". Once the cause is fixed, `sudo
-                /usr/lib/homelab/homelab-updater --clear-hold` reruns reconcile and clears the
-                hold if it passes, and `sudo /usr/lib/homelab/homelab-updater --clear-hold
-                --install-newest` clears the hold and then installs the newest packages as a
-                timer run does.
+                Read `journalctl -u homelab-updater -u homelab-reconcile` on daniel-pi, fix the
+                cause, then run `sudo /usr/lib/homelab/homelab-updater --clear-hold`.
+                homelab_host_reconcile_ok has read 0 for 15 minutes, so daniel-pi installs no newer
+                homelab package.
               runbook_url: https://docs.local.daniel-hunter.com/host-packages/
 
   # daniel-pi's engine pins moved, and no run applied them. The pending series reads 0 for 2h,
@@ -601,14 +602,10 @@ tests:
             exp_annotations:
               summary: daniel-box's homelab package reconcile failed, so it installs no newer package.
               description: >-
-                homelab_host_reconcile_ok on daniel-box has read 0 for 15 minutes, so the host
-                holds and installs no newer homelab package. Read `journalctl -u
-                homelab-updater -u homelab-reconcile` on daniel-box and docs/host-packages.md,
-                "Host-plane pages". Once the cause is fixed, `sudo
-                /usr/lib/homelab/homelab-updater --clear-hold` reruns reconcile and clears the
-                hold if it passes, and `sudo /usr/lib/homelab/homelab-updater --clear-hold
-                --install-newest` clears the hold and then installs the newest packages as a
-                timer run does.
+                Read `journalctl -u homelab-updater -u homelab-reconcile` on daniel-box, fix the
+                cause, then run `sudo /usr/lib/homelab/homelab-updater --clear-hold`.
+                homelab_host_reconcile_ok has read 0 for 15 minutes, so daniel-box installs no newer
+                homelab package.
               runbook_url: https://docs.local.daniel-hunter.com/host-packages/
           - exp_labels:
               instance: daniel-server
@@ -619,14 +616,10 @@ tests:
             exp_annotations:
               summary: daniel-server's homelab package reconcile failed, so it installs no newer package.
               description: >-
-                homelab_host_reconcile_ok on daniel-server has read 0 for 15 minutes, so the host
-                holds and installs no newer homelab package. Read `journalctl -u
-                homelab-updater -u homelab-reconcile` on daniel-server and docs/host-packages.md,
-                "Host-plane pages". Once the cause is fixed, `sudo
-                /usr/lib/homelab/homelab-updater --clear-hold` reruns reconcile and clears the
-                hold if it passes, and `sudo /usr/lib/homelab/homelab-updater --clear-hold
-                --install-newest` clears the hold and then installs the newest packages as a
-                timer run does.
+                Read `journalctl -u homelab-updater -u homelab-reconcile` on daniel-server, fix the
+                cause, then run `sudo /usr/lib/homelab/homelab-updater --clear-hold`.
+                homelab_host_reconcile_ok has read 0 for 15 minutes, so daniel-server installs no
+                newer homelab package.
               runbook_url: https://docs.local.daniel-hunter.com/host-packages/
 
   # The fixture host's last success stays at 0 while its exporter is up. HostUpdateStale is
@@ -653,12 +646,10 @@ tests:
             exp_annotations:
               summary: fixture-host has had no successful homelab update for 3 hours 10 minutes.
               description: >-
-                No homelab-updater run on fixture-host has succeeded in 3 hours 10 minutes, or its exporter is
-                up and serves no success timestamp. A failed fetch, a stopped
-                homelab-apt-repo.service, a firewall rule, a keyring mismatch and a stopped
-                timer each leave it stale. Read `systemctl status homelab-updater.timer` and
-                `journalctl -u homelab-updater` on fixture-host, and docs/host-packages.md,
-                "Host-plane pages".
+                Read `systemctl status homelab-updater.timer` and `journalctl -u homelab-updater` on
+                fixture-host. No homelab-updater run there has succeeded in 3 hours 10 minutes, or
+                its exporter is up and serves no success timestamp. The runbook lists what leaves it
+                stale.
               runbook_url: https://docs.local.daniel-hunter.com/host-packages/
 
   # A success timestamp that follows the clock keeps HostUpdateStale quiet.
@@ -691,12 +682,10 @@ tests:
             exp_annotations:
               summary: fixture-host has had no successful homelab update for 3 hours 10 minutes.
               description: >-
-                No homelab-updater run on fixture-host has succeeded in 3 hours 10 minutes, or its exporter is
-                up and serves no success timestamp. A failed fetch, a stopped
-                homelab-apt-repo.service, a firewall rule, a keyring mismatch and a stopped
-                timer each leave it stale. Read `systemctl status homelab-updater.timer` and
-                `journalctl -u homelab-updater` on fixture-host, and docs/host-packages.md,
-                "Host-plane pages".
+                Read `systemctl status homelab-updater.timer` and `journalctl -u homelab-updater` on
+                fixture-host. No homelab-updater run there has succeeded in 3 hours 10 minutes, or
+                its exporter is up and serves no success timestamp. The runbook lists what leaves it
+                stale.
               runbook_url: https://docs.local.daniel-hunter.com/host-packages/
 
   # The exporter is down, so every series of the target is stale and the success timestamp
@@ -736,12 +725,9 @@ tests:
             exp_annotations:
               summary: daniel-pi has had no successful homelab update for 25 hours.
               description: >-
-                No homelab-updater run on daniel-pi has succeeded in 25 hours, or its exporter is
-                up and serves no success timestamp. A failed fetch, a stopped
-                homelab-apt-repo.service, a firewall rule, a keyring mismatch and a stopped
-                timer each leave it stale. Read `systemctl status homelab-updater.timer` and
-                `journalctl -u homelab-updater` on daniel-pi, and docs/host-packages.md,
-                "Host-plane pages".
+                Read `systemctl status homelab-updater.timer` and `journalctl -u homelab-updater` on
+                daniel-pi. No homelab-updater run there has succeeded in 25 hours, or its exporter
+                is up and serves no success timestamp. The runbook lists what leaves it stale.
               runbook_url: https://docs.local.daniel-hunter.com/host-packages/
 
   # A success timestamp that follows the clock keeps daniel-pi's rule quiet. This is the
@@ -774,12 +760,9 @@ tests:
             exp_annotations:
               summary: daniel-pi has had no successful homelab update for 25 hours.
               description: >-
-                No homelab-updater run on daniel-pi has succeeded in 25 hours, or its exporter is
-                up and serves no success timestamp. A failed fetch, a stopped
-                homelab-apt-repo.service, a firewall rule, a keyring mismatch and a stopped
-                timer each leave it stale. Read `systemctl status homelab-updater.timer` and
-                `journalctl -u homelab-updater` on daniel-pi, and docs/host-packages.md,
-                "Host-plane pages".
+                Read `systemctl status homelab-updater.timer` and `journalctl -u homelab-updater` on
+                daniel-pi. No homelab-updater run there has succeeded in 25 hours, or its exporter
+                is up and serves no success timestamp. The runbook lists what leaves it stale.
               runbook_url: https://docs.local.daniel-hunter.com/host-packages/
 
   # node-pi fails its scrape (`up` at 0, a 30s-timeout miss on the Zero 2 W), so the success

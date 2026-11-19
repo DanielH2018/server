@@ -35,6 +35,7 @@ tests:
                 is gone or the flux scrape job is missing from prometheus.yml, or it has been
                 scraped with no controller_runtime_reconcile_total series. Read the Deployment
                 in the flux-system namespace.
+              runbook_url: https://docs.local.daniel-hunter.com/flux-deploy-plane/#recovering-flux-by-hand
           - exp_labels:
               job: flux
               app: kustomize-controller
@@ -47,6 +48,7 @@ tests:
                 is gone or the flux scrape job is missing from prometheus.yml, or it has been
                 scraped with no controller_runtime_reconcile_total series. Read the Deployment
                 in the flux-system namespace.
+              runbook_url: https://docs.local.daniel-hunter.com/flux-deploy-plane/#recovering-flux-by-hand
           - exp_labels:
               job: flux
               app: notification-controller
@@ -59,6 +61,7 @@ tests:
                 pod is gone or the flux scrape job is missing from prometheus.yml, or it has
                 been scraped with no controller_runtime_reconcile_total series. Read the
                 Deployment in the flux-system namespace.
+              runbook_url: https://docs.local.daniel-hunter.com/flux-deploy-plane/#recovering-flux-by-hand
       - eval_time: 16m
         alertname: FluxNotReady
         exp_alerts: []
@@ -107,6 +110,7 @@ tests:
                 source-controller-579bc67689-2rrfs has failed its scrape for 5 minutes, so
                 source-controller is down or unreachable from Prometheus. Read its pod's
                 events and log in the flux-system namespace.
+              runbook_url: https://docs.local.daniel-hunter.com/flux-deploy-plane/#recovering-flux-by-hand
       - eval_time: 16m
         alertname: FluxControllerDown
         exp_alerts:
@@ -123,6 +127,7 @@ tests:
                 source-controller-579bc67689-2rrfs has failed its scrape for 5 minutes, so
                 source-controller is down or unreachable from Prometheus. Read its pod's
                 events and log in the flux-system namespace.
+              runbook_url: https://docs.local.daniel-hunter.com/flux-deploy-plane/#recovering-flux-by-hand
 
   # A controller with no pod, and one scraped with no controller-runtime series. Both fire the
   # absent() rule after 5m and not at 4m, one alert each. source-controller is healthy and

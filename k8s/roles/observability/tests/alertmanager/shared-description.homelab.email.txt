@@ -5,3 +5,5 @@ WARNING: daniel-box publishes no nvme temperature sensors.
 Started 2026-10-24 09:00 UTC
 
 node_exporter publishes no temperature series, so nothing watches the host's temperature. Read `ls /sys/class/hwmon` on the host.
+
+Karma: https://karma.local.daniel-hunter.com/?q=alertname%3DHostTemperatureNotReporting

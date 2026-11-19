@@ -43,12 +43,11 @@ tests:
               summary: >-
                 DocsRefreshFailed (daniel-box) has fired as a warning for 48 hours.
               description: >-
-                The warning DocsRefreshFailed for daniel-box has fired for 48 hours, and its
-                Discord repeats have not cleared it. Karma lists it with its own description and
-                runbook:
-                https://karma.local.daniel-hunter.com/?q=alertname%3DDocsRefreshFailed&q=service%3Ddaniel-box
-                This page resolves when the warning does. If the warning holds by design, give
-                its rule the label escalate: "false".
+                Fix the warning DocsRefreshFailed for daniel-box, which has fired for 48 hours; the
+                Karma link lists it with its own description and runbook. This page resolves when
+                the warning does. A warning that holds by design takes the rule label escalate:
+                "false".
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#warningunresolved
 
   # SystemdUnitsFailed fires once per unit, so each escalation names its unit in the summary
   # and filters its Karma link by it, escaped for the query string.
@@ -79,12 +78,11 @@ tests:
                 SystemdUnitsFailed (daniel-box, nut-monitor.service) has fired as a warning for
                 48 hours.
               description: >-
-                The warning SystemdUnitsFailed for daniel-box has fired for 48 hours, and its
-                Discord repeats have not cleared it. Karma lists it with its own description and
-                runbook:
-                https://karma.local.daniel-hunter.com/?q=alertname%3DSystemdUnitsFailed&q=service%3Ddaniel-box&q=unit%3Dnut-monitor.service
-                This page resolves when the warning does. If the warning holds by design, give
-                its rule the label escalate: "false".
+                Fix the warning SystemdUnitsFailed for daniel-box, which has fired for 48 hours; the
+                Karma link lists it with its own description and runbook. This page resolves when
+                the warning does. A warning that holds by design takes the rule label escalate:
+                "false".
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#warningunresolved
           - exp_labels:
               escalated_from: SystemdUnitsFailed
               escalated_service: daniel-box
@@ -98,12 +96,11 @@ tests:
                 SystemdUnitsFailed (daniel-box, systemd-fsck@dev-disk-by\x2duuid-1.service) has
                 fired as a warning for 48 hours.
               description: >-
-                The warning SystemdUnitsFailed for daniel-box has fired for 48 hours, and its
-                Discord repeats have not cleared it. Karma lists it with its own description and
-                runbook:
-                https://karma.local.daniel-hunter.com/?q=alertname%3DSystemdUnitsFailed&q=service%3Ddaniel-box&q=unit%3Dsystemd-fsck%40dev-disk-by%5Cx2duuid-1.service
-                This page resolves when the warning does. If the warning holds by design, give
-                its rule the label escalate: "false".
+                Fix the warning SystemdUnitsFailed for daniel-box, which has fired for 48 hours; the
+                Karma link lists it with its own description and runbook. This page resolves when
+                the warning does. A warning that holds by design takes the rule label escalate:
+                "false".
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#warningunresolved
 
   # A one-hour absence, as across a Prometheus restart, does not restart the age: 30 hours, a
   # gap, then 30 more still escalate. A ten-hour absence does.
@@ -130,12 +127,11 @@ tests:
               summary: >-
                 EvalSweepFailed (daniel-box) has fired as a warning for 48 hours.
               description: >-
-                The warning EvalSweepFailed for daniel-box has fired for 48 hours, and its
-                Discord repeats have not cleared it. Karma lists it with its own description and
-                runbook:
-                https://karma.local.daniel-hunter.com/?q=alertname%3DEvalSweepFailed&q=service%3Ddaniel-box
-                This page resolves when the warning does. If the warning holds by design, give
-                its rule the label escalate: "false".
+                Fix the warning EvalSweepFailed for daniel-box, which has fired for 48 hours; the
+                Karma link lists it with its own description and runbook. This page resolves when
+                the warning does. A warning that holds by design takes the rule label escalate:
+                "false".
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#warningunresolved
 
   # None of these escalate after 60 hours: a pending warning, a critical (it already emails),
   # an info, a shadow and a drill alert (they page nobody), and a rule that opts out with

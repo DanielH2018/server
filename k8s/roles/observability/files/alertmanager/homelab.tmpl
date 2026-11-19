@@ -14,7 +14,8 @@
   its description, because the description says what to fix. When two or more firing alerts
   share one description, it prints once after the list rather than once per alert. A single
   firing alert keeps its description under its summary, because .CommonAnnotations of a
-  one-alert group is that alert's own annotations.
+  one-alert group is that alert's own annotations. A firing group ends with a Karma link filtered
+  to its alert name, or to the escalated warning's name for a WarningUnresolved group.
 
   Discord renders <t:UNIX:R> as a relative time in the reader's own timezone. Email cannot,
   so homelab.email prints UTC. k8s/roles/observability/tests/alertmanager/ holds the
@@ -56,6 +57,9 @@ Started <t:{{ .StartsAt.Unix }}:R>
 {{ if and .Alerts.Firing $shared }}{{ $shared }}
 
 {{ end -}}
+{{ if .Alerts.Firing }}Karma: https://karma.local.daniel-hunter.com/?q=alertname%3D{{ or .CommonLabels.escalated_from .CommonLabels.alertname }}
+
+{{ end -}}
 {{ if .Alerts.Resolved }}{{ if $mixed }}**Resolved ({{ len .Alerts.Resolved }})**
 
 {{ end -}}
@@ -82,6 +86,9 @@ Started {{ .StartsAt.UTC.Format "2006-01-02 15:04 MST" }}
 {{ end }}
 {{ end -}}
 {{ if and .Alerts.Firing $shared }}{{ $shared }}
+
+{{ end -}}
+{{ if .Alerts.Firing }}Karma: https://karma.local.daniel-hunter.com/?q=alertname%3D{{ or .CommonLabels.escalated_from .CommonLabels.alertname }}
 
 {{ end -}}
 {{ if .Alerts.Resolved }}{{ if $mixed }}RESOLVED ({{ len .Alerts.Resolved }})

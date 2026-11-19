@@ -159,8 +159,9 @@ walks the routing tree to prove the alerts reach the mute.
 that holds for 48 hours, so it reaches Discord and email instead of repeating in Discord
 alone (#8218). It moves the source's name and service to `escalated_from` and
 `escalated_service`, and carries `service="alert-escalation"`, a tag no health gate reads.
-To silence one escalation, match `escalated_from`. Its description links Karma filtered to
-the escalated warning, because `ALERTS` carries no annotations to copy the runbook from. Shadow
+To silence one escalation, match `escalated_from`. Every firing notification ends with a Karma
+link, which `homelab.tmpl` filters to the escalated warning here, because `ALERTS` carries no
+annotations to copy the runbook from. Shadow
 and drill alerts never escalate, and neither does a rule labelled `escalate: "false"`:
 `DeployHoldActive`, `FluxSuspended`, and the weekly scans' `AideCheckFailed` and
 `RkhunterScanFailed`, which hold until someone reviews the scan by hand. Such a warning repeats

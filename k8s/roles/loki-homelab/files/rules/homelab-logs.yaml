@@ -146,11 +146,11 @@ groups:
         annotations:
           summary: The kernel on {{ $labels.machine }} remounted a filesystem read-only in the last hour.
           description: >-
-            The kernel on {{ $labels.machine }} logged {{ $value }} "Remounting filesystem
-            read-only" lines in the last hour. An sdX device there is a Longhorn iSCSI volume,
-            and its workload cannot write until the volume detaches and reattaches. Read
-            {job="syslog", program="kernel"} in loki-homelab for the device and the errors before
-            it, then scale the workload to 0, wait for the volume to detach, and scale back.
+            Scale the workload on the remounted device to 0, wait for its Longhorn volume to detach,
+            and scale back. The kernel on {{ $labels.machine }} logged {{ $value }} "Remounting
+            filesystem read-only" lines in the last hour; {job="syslog", program="kernel"} in
+            loki-homelab names the device.
+          runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#hostfilesystemremountedreadonly
       # Home Assistant's Cast connect-back loop. pychromecast logs "Heartbeat timeout,
       # resetting connection" at INFO each time it drops the Nest Hub's socket, and nothing else
       # signals the loop. Storms log 57-119 per hour and an ordinary hour at most 19, so 30 sits
