@@ -489,7 +489,7 @@ language = "system"
 pass_filenames = false
 # Any Python file can be the one that shrank, and the lists themselves so a hand edit that
 # raises an entry is pulled back down in the commit that writes it.
-files = "(\\.py|^tests/repo/(module_length|monkeypatch)_allowlist\\.txt)$"
+files = "(\\.py|^tests/repo/(module_length|monkeypatch|copied_tests)_allowlist\\.txt)$"
 
 # Lint the fact citations in any CLAUDE.md section this branch touched, against origin/master
 # (`tests/repo/test_every_section_lints_clean.py` holds every section at every commit;
@@ -792,6 +792,17 @@ files = "(\\.py$|^(pyproject\\.toml|uv\\.lock)$)"
 id = "ty"
 name = "Type-check first-party Python (ty)"
 entry = "uv run --frozen ty check"
+language = "system"
+pass_filenames = false
+files = "(\\.py$|^(pyproject\\.toml|uv\\.lock)$)"
+
+# A name is dead only against every caller in the tree, so this runs over the whole project
+# like ty above. [tool.vulture] in pyproject.toml holds the roots and the names a framework,
+# a guard or an unread script calls.
+[[repos.hooks]]
+id = "vulture"
+name = "No Python name that nothing uses (vulture)"
+entry = "uv run --frozen vulture"
 language = "system"
 pass_filenames = false
 files = "(\\.py$|^(pyproject\\.toml|uv\\.lock)$)"

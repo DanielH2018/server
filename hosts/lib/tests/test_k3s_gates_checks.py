@@ -30,7 +30,6 @@ from k3s_gates import ReadError
 
 SERVER_PLAN = f"{k3s_gates.PLANS_PATH}/{k3s_gates.SERVER_PLAN}"
 AGENT_PLAN = f"{k3s_gates.PLANS_PATH}/{k3s_gates.AGENT_PLAN}"
-BOTH = (node("daniel-box", server=True), node("daniel-server"))
 
 
 def _run(check, routes, *args):

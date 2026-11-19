@@ -267,10 +267,14 @@ guard in this tree.
 module 400. A code line holds a token that is neither a comment nor part of a docstring,
 so blank lines, comments and docstrings are free and the cap never argues for deleting
 documentation. A test module may patch no first-party module at all — a
-patch on the standard library is not counted, because no seam here can remove one. The files
-already past either limit are listed one per line in
-`tests/repo/module_length_allowlist.txt` and
-`tests/repo/monkeypatch_allowlist.txt`, with the number each stands at today, and
+patch on the standard library is not counted, because no seam here can remove one. A test
+module may hold no test whose body is a copy of another test's, in any module:
+`scripts/dev/duplicate_tests.py` defines a copy, and the remedy is one parametrized test or
+one census row. The files
+already past any of these limits are listed one per line in
+`tests/repo/module_length_allowlist.txt`,
+`tests/repo/monkeypatch_allowlist.txt` and
+`tests/repo/copied_tests_allowlist.txt`, with the number each stands at today, and
 `tests/repo/test_module_length_ratchet.py` fails when one grows past its line, when a
 file over a cap has no line, when a file that has come back under its cap keeps one, and when
 a file has shrunk below its line without the line following it down — an entry records what
@@ -317,9 +321,9 @@ erases it.
 - **A task file has no render, so the structural read is a parse.** Read `tasks/*.yml` through
   `yaml_fast` or `_helpers.walk_tasks`. Convert a regex over YAML or TOML text to a parse only
   where its claim survives the parse unchanged.
-- **The two ratchet lists are a different subject.** `tests/repo/module_length_allowlist.txt`
-  and `tests/repo/monkeypatch_allowlist.txt` run on one harness, `tests/_ratchet.py`,
-  and neither records a textual read.
+- **The three ratchet lists are a different subject.** `tests/repo/module_length_allowlist.txt`,
+  `tests/repo/monkeypatch_allowlist.txt` and `tests/repo/copied_tests_allowlist.txt` run on
+  one harness, `tests/_ratchet.py`, and none records a textual read.
 
 ## Why the check rules exist
 
