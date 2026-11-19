@@ -646,7 +646,6 @@ the other test files that cover at least one of those lines.
 | `hosts/lib/tests/test_bootstrap_host_seed.py` | 4 | 317 |
 | `hosts/lib/tests/test_bootstrap_host_steps.py` | 4 | 317 |
 | `tests/services/test_registry_gc_watchers_cover_the_worst_run.py` | 4 | 662 |
-| `tests/services/test_host_plane_rule_literals.py` | 3 | 654 |
 | `k8s/roles/crowdsec/tests/test_authenticated_app_whitelist.py` | 2 | 2 |
 | `scripts/lib/tests/test_jinja_comments.py` | 2 | 584 |
 | `scripts/lib/tests/test_tree_lock.py` | 2 | 1026 |
