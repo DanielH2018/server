@@ -47,7 +47,6 @@ from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path as _Path
 
-sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))  # scripts/
 from lib.cli_help import ArgumentParser
 from lib.exit_codes import (
     B2_DRAIN_BAD_ARGS,

@@ -9,8 +9,8 @@ of these cases is reachable through `test_longhorn_reap_logic.py`'s fixtures.
 Run: uv run pytest scripts/backup/tests/test_longhorn_reap_selectors.py
 """
 
-from longhorn_reap_lib import logic
-from longhorn_reap_lib import selection as selectors
+from backup.longhorn_reap_lib import logic
+from backup.longhorn_reap_lib import selection as selectors
 from _reap_entrypoint_harness import _backup, _volume
 
 

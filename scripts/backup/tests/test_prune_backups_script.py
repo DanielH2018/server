@@ -3,7 +3,7 @@
 import subprocess
 from pathlib import Path
 
-import prune_backups
+from backup import prune_backups
 from lib.exit_codes import B2_DRAIN_ERRORED, B2_DRAIN_OK, B2_DRAIN_REFUSED
 from lib.operator_kubectl import KubectlFailed
 

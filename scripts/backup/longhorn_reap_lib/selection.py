@@ -35,14 +35,9 @@ does the kubectl reads/writes and the printing.
 """
 
 import json
-import sys as _sys
 from dataclasses import dataclass, field
-from pathlib import Path as _Path
 
-# The package's own parent, so `longhorn_reap_lib` resolves for a directly-invoked entry point
-# that has not inserted it first.
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))  # scripts/backup/
-from longhorn_reap_lib import logic
+from backup.longhorn_reap_lib import logic
 
 
 SEED_NAME_PREFIX = "seed-"
