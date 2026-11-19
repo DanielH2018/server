@@ -60,7 +60,7 @@ def _variant_runner(tmp_path: Path, cd_target: str) -> Path:
         f"RUN_HOOK_UV:-{_UV}}}",
         'cd "$project_dir" ||',
         'exec "$uv" run',
-        'err=$("$uv" run',
+        '"$uv" run --quiet --no-project',
     ):
         assert host_fact in text, f"run-hook.sh no longer holds {host_fact!r}"
     # Checked before the swap, because the runner-side values can live under /home/ubuntu too.

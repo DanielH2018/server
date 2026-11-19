@@ -184,7 +184,7 @@ def test_the_remote_command_resets_fetches_then_runs_the_primary_checkouts_copy_
     # the primary checkout's cwd against the primary checkout's copy of the script, never the
     # batch worktree's, which is frozen at launch and cannot carry a later fix.
     assert (
-        "else cd /home/ubuntu/server && "
+        "else cd /home/ubuntu/server && PYTHONPATH=/home/ubuntu/server/scripts "
         "uv run --no-project --no-python-downloads --python 3.15.2 python "
         f"/home/ubuntu/server/scripts/dev/fanout.py place clean-one {B.worktree} {B.branch}"
         in cmd
@@ -367,7 +367,7 @@ def test_a_dotfiles_clean_fetches_main_and_runs_this_repos_copy_with_repo():
         "git -C /home/ubuntu/.local/share/chezmoi fetch --quiet origin main && " in cmd
     )
     assert (
-        "else cd /home/ubuntu/.local/share/chezmoi && "
+        "else cd /home/ubuntu/.local/share/chezmoi && PYTHONPATH=/home/ubuntu/server/scripts "
         "uv run --no-project --no-python-downloads --python 3.15.2 python "
         f"/home/ubuntu/server/scripts/dev/fanout.py place clean-one {wt} "
         "worktree-fanout-763 --repo DanielH2018/dotfiles" in cmd

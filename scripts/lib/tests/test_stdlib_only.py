@@ -16,11 +16,16 @@ The contract these tests pin, in `scripts/lib/stdlib_only.py`:
 - `runtime_import(path, dirs) -> tuple[bool, str]` imports `path` in a fresh interpreter with no
   site-packages and `PYTHONPATH` set to `dirs`, returning whether it imported and its stderr.
 
+Each launcher of a no-venv entry point sets `PYTHONPATH` to the `scripts/` of the copy it runs,
+because a no-venv run gets no `.pth` to supply that import root.
+
 Run: uv run pytest scripts/lib/tests/test_stdlib_only.py
 """
 
 import ast
 import importlib
+import os
+import re
 from pathlib import Path
 
 import pytest
@@ -256,6 +261,103 @@ def test_the_declared_fanout_units_are_the_commands_the_builders_write():
     for entry, argv in FANOUT_UNITS:
         shape = " ".join([entry.relative_to(REPO).as_posix(), *argv]) + " "
         assert any(shape in command for command in written), shape
+
+
+_NO_PROJECT_RUN = re.compile(r"\buv\"? run\b.*--no-project\b")
+_ROOT_SET = re.compile(r"\bPYTHONPATH=\"?\S*/scripts\"?\s+\S*\buv\"? run\b")
+
+
+def _unrooted(text: str) -> list[str]:
+    """Each non-comment line of `text` that runs `uv run --no-project` without the scripts root."""
+    return [
+        line.strip()
+        for line in text.splitlines()
+        if not line.lstrip().startswith("#")
+        and _NO_PROJECT_RUN.search(line)
+        and not _ROOT_SET.search(line)
+    ]
+
+
+def _launchers() -> dict[str, str]:
+    """Every launcher of a no-venv entry point, as the command text it runs."""
+    from fanout_lib.clean import remote_clean_command
+    from fanout_lib.launch import review_command
+    from fanout_lib.manifest import Batch
+    from fanout_lib.notify import stop_post
+    from fanout_lib.session_banner import HEALTH_CMD
+    from fanout_lib.target import SERVER_TARGET
+    from lib.stdlib_only import WAIT_SOURCES
+
+    batch = Batch("1", "daniel-box", "/w1", "wt-1", "fanout-1", [1], "t")
+    return {
+        "run-hook.sh": (REPO / ".claude/hooks/run-hook.sh").read_text(encoding="utf-8"),
+        **{
+            f"wait-sources/{source.name}": source.read_text(encoding="utf-8")
+            for source in sorted(WAIT_SOURCES.iterdir())
+        },
+        "etcd_restore_drill.sh": (
+            REPO / "scripts/backup/etcd_restore_drill.sh"
+        ).read_text(encoding="utf-8"),
+        "review_command": review_command("1"),
+        "remote_clean_command": remote_clean_command(batch),
+        "stop_post": stop_post("1", SERVER_TARGET),
+        "HEALTH_CMD": HEALTH_CMD,
+    }
+
+
+def test_every_no_venv_launcher_sets_the_scripts_root():
+    found = {
+        name: bad for name, text in _launchers().items() if (bad := _unrooted(text))
+    }
+    assert found == {}
+
+
+def test_a_launcher_line_without_the_root_is_flagged():
+    line = 'exec uv run --no-project --quiet --python 3.15 python "$root/scripts/x.py"'
+    assert _unrooted(line) == [line]
+
+
+def test_a_launcher_line_with_the_root_is_clean():
+    line = 'exec env PYTHONPATH="$root/scripts" uv run --no-project python "$root/scripts/x.py"'
+    assert _unrooted(line) == []
+
+
+def test_each_wait_source_with_an_entry_is_a_launcher_the_root_check_reads():
+    from lib.stdlib_only import WAIT_SOURCES
+
+    with_entry = {
+        f"wait-sources/{source.name}"
+        for source in WAIT_SOURCES.iterdir()
+        if "--no-project" in source.read_text(encoding="utf-8")
+    }
+    assert with_entry and with_entry <= set(_launchers())
+
+
+def test_the_fanout_launchers_name_the_scripts_of_the_copy_they_run():
+    from fanout_lib.brief import _snapshot_root
+    from fanout_lib.launch import review_command, worktree_path
+    from fanout_lib.notify import stop_post
+    from fanout_lib.target import SERVER_TARGET, resolve
+
+    other = resolve("DanielH2018/dotfiles")
+    assert f"PYTHONPATH={worktree_path('1')}/scripts " in review_command("1")
+    assert f"PYTHONPATH={_snapshot_root('1', other)}/scripts " in review_command(
+        "1", other
+    )
+    assert f"PYTHONPATH={worktree_path('1')}/scripts " in stop_post("1", SERVER_TARGET)
+    assert f"PYTHONPATH={_snapshot_root('1', other)}/scripts " in stop_post("1", other)
+
+
+def test_the_review_unit_leaves_its_phases_no_launcher_pythonpath(
+    tmp_path, monkeypatch
+):
+    # The review unit is the one no-venv entry whose children run in other checkouts.
+    from fanout_lib import review_unit
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("PYTHONPATH", "/w1/scripts")
+    review_unit.build(["--batch", "b", "--repo", "DanielH2018/server"], "brief")
+    assert "PYTHONPATH" not in os.environ
 
 
 def _uv_gate_leg(drill: str) -> str:
