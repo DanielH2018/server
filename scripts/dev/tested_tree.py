@@ -32,8 +32,14 @@ It fails safe in every direction: any error, any missing status and any mismatch
 error. Each command exits 0 in all of those cases, so a broken lookup never turns a run red
 by itself.
 
-`prove` and `prove-head` write `proven=true|false` to the file named by $GITHUB_OUTPUT when
-that variable is set. Every command prints its answer with the reason.
+A push whose tree is not proven gets a second answer from `prove`: `base`, the newest
+ancestor whose CI gate passed (`green_base`). The run's `pytest` legs select the modules the
+diff from that base can affect, where they would otherwise run every module. `base` is empty
+when the tree is proven, when no ancestor in reach is green and on `prove-head`.
+
+`prove` and `prove-head` write `proven=true|false` and `base=<sha or nothing>` to the file
+named by $GITHUB_OUTPUT when that variable is set. Every command prints its answer with the
+reason.
 
 Run: python3 scripts/dev/tested_tree.py prove --repo OWNER/NAME --sha SHA --tree TREE
      python3 scripts/dev/tested_tree.py prove-head --repo OWNER/NAME --head SHA
@@ -54,7 +60,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from lib.cli_help import ArgumentParser
 from lib.git import git
+from lib.repo_paths import HOST_LIB_FILES
 from lib.tree_stack import Conflict, stack
+
+sys.path.insert(0, str(HOST_LIB_FILES))
+from ci_verdict import CI_GATE_NAME, ci_verdict
 
 # The commit-status context the PR run writes and this script reads. ci.yml's `prek` job writes
 # it; tests/repo/test_ci_skip_proven_master.py pins both sides to this name.
@@ -131,6 +141,55 @@ def tree_is_proven(get: Get, repo: str, sha: str, tree: str) -> tuple[bool, str]
         )
     except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
         return False, f"the lookup failed: {type(exc).__name__}: {exc}"
+
+
+# The most ancestors `green_base` asks GitHub about. Each costs one request, and a base
+# further back than this selects nearly every module anyway.
+MAX_BASE_WALK = 10
+
+
+def green_base(get: Get, repo: str, sha: str) -> tuple[str, str]:
+    """The newest first-parent ancestor of `sha` whose CI gate passed, for a push to diff against.
+
+    A push run that selects its test modules needs a base on which every module passed.
+    The pushed commit's parent does not qualify while its own run is red or unfinished: a
+    selection against it would leave out whatever the parent broke. Diffing from the newest
+    green ancestor puts every change since back in the diff.
+
+    `get` maps an API path to its decoded JSON and raises on any failure. Returns the
+    ancestor and the reason, or `""` and the reason when no ancestor within
+    `MAX_BASE_WALK` commits is green or the lookup fails, and the run then sweeps in full.
+    """
+    if not _OBJECT_ID.fullmatch(sha):
+        return "", "the commit id is unreadable"
+    try:
+        listed = get(f"repos/{repo}/commits?sha={sha}&per_page={MAX_BASE_WALK + 1}")
+        first_parent = {
+            commit["sha"]: commit["parents"][0]["sha"]
+            for commit in listed
+            if commit.get("parents")
+        }
+        ancestor = first_parent.get(sha)
+        for behind in range(1, MAX_BASE_WALK + 1):
+            if ancestor is None or not _OBJECT_ID.fullmatch(ancestor):
+                return (
+                    "",
+                    f"the commit listing ends {behind - 1} commit(s) behind {sha[:8]}",
+                )
+            page: Any = get(f"repos/{repo}/commits/{ancestor}/check-runs?per_page=100")
+            if ci_verdict(page["check_runs"], {CI_GATE_NAME}) == "pass":
+                return ancestor, f"{ancestor[:8]} is green, {behind} commit(s) back"
+            ancestor = first_parent.get(ancestor)
+        return "", f"no green ancestor within {MAX_BASE_WALK} commits of {sha[:8]}"
+    except (
+        OSError,
+        ValueError,
+        KeyError,
+        TypeError,
+        AttributeError,
+        IndexError,
+    ) as exc:
+        return "", f"the lookup failed: {type(exc).__name__}: {exc}"
 
 
 def head_is_proven(get: Get, repo: str, head: str) -> tuple[bool, str]:
@@ -309,16 +368,20 @@ def main(
         )
         print(told)
         return 0
+    base = ""
     if args.command == "prove":
         proven, reason = tree_is_proven(get, args.repo, args.sha, args.tree)
+        if not proven:
+            base, base_reason = green_base(get, args.repo, args.sha)
+            reason = f"{reason}; {base_reason}"
     else:
         proven, reason = head_is_proven(get, args.repo, args.head)
-    answer = f"proven={'true' if proven else 'false'}"
-    print(f"{answer}: {reason}")
+    answers = [f"proven={'true' if proven else 'false'}", f"base={base}"]
+    print(f"{' '.join(answers)}: {reason}")
     output = os.environ.get("GITHUB_OUTPUT")
     if output:
         with open(output, "a", encoding="utf-8") as handle:
-            handle.write(f"{answer}\n")
+            handle.write("".join(f"{answer}\n" for answer in answers))
     return 0
 
 

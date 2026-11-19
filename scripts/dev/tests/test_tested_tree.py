@@ -147,7 +147,7 @@ def test_main_answers_the_pull_request_question_from_the_head_alone(
     argv = ["prove-head", "--repo", REPO_NAME, "--head", HEAD]
 
     assert tested_tree.main(argv, _api(OSError("no pulls read"), _status())) == 0
-    assert output.read_text() == "proven=true\n"
+    assert output.read_text() == "proven=true\nbase=\n"
 
 
 def test_main_writes_the_answer_and_exits_zero_when_the_lookup_fails(
@@ -158,8 +158,86 @@ def test_main_writes_the_answer_and_exits_zero_when_the_lookup_fails(
     argv = ["prove", "--repo", REPO_NAME, "--sha", SQUASH, "--tree", TREE]
 
     assert tested_tree.main(argv, _api(OSError("down"), [])) == 0
-    assert output.read_text() == "proven=false\n"
+    assert output.read_text() == "proven=false\nbase=\n"
     assert "proven=false" in capsys.readouterr().out
+
+
+def _chain(*shas):
+    """The commits API's listing for a linear history, newest first."""
+    pairs = zip(shas, shas[1:], strict=False)
+    return [{"sha": sha, "parents": [{"sha": parent}]} for sha, parent in pairs]
+
+
+def _gate(conclusion):
+    run = {"name": tested_tree.CI_GATE_NAME, "status": "completed"}
+    return {"check_runs": [run | {"conclusion": conclusion}]}
+
+
+def _history(gates):
+    """A `get` serving the commit listing and each ancestor's check-runs; counts the reads."""
+    listing = _chain(SQUASH, *gates)
+    asked = []
+
+    def get(path):
+        if "/check-runs" in path:
+            sha = path.split("/commits/")[1].split("/")[0]
+            asked.append(sha)
+            return gates[sha]
+        return listing
+
+    return get, asked
+
+
+PARENT, GRANDPARENT = "1" * 40, "2" * 40
+
+
+def test_a_green_parent_is_the_base_and_costs_one_check_run_read():
+    get, asked = _history({PARENT: _gate("success"), GRANDPARENT: _gate("success")})
+    assert tested_tree.green_base(get, REPO_NAME, SQUASH)[0] == PARENT
+    assert asked == [PARENT]
+
+
+@pytest.mark.parametrize("parent", [_gate("failure"), {"check_runs": []}])
+def test_a_red_or_unfinished_parent_is_skipped_for_the_ancestor_behind_it(parent):
+    get, _ = _history({PARENT: parent, GRANDPARENT: _gate("success")})
+    assert tested_tree.green_base(get, REPO_NAME, SQUASH)[0] == GRANDPARENT
+
+
+def test_no_green_ancestor_within_the_walk_is_no_base():
+    shas = [f"{n:040x}" for n in range(1, tested_tree.MAX_BASE_WALK + 3)]
+    gates = dict.fromkeys(shas, _gate("failure")) | {shas[-1]: _gate("success")}
+    get, asked = _history(gates)
+    assert tested_tree.green_base(get, REPO_NAME, SQUASH)[0] == ""
+    assert len(asked) == tested_tree.MAX_BASE_WALK
+
+
+def test_an_unreadable_history_is_no_base():
+    def down(path):
+        raise OSError("down")
+
+    assert tested_tree.green_base(down, REPO_NAME, SQUASH)[0] == ""
+
+
+def test_main_names_the_base_for_an_unproven_push_and_none_for_a_proven_one(
+    tmp_path, monkeypatch
+):
+    output = tmp_path / "out"
+    monkeypatch.setenv("GITHUB_OUTPUT", str(output))
+    argv = ["prove", "--repo", REPO_NAME, "--sha", SQUASH, "--tree", TREE]
+    history, _ = _history({PARENT: _gate("success")})
+
+    def get(path):
+        if path.endswith("/pulls"):
+            return _pr()
+        if "/statuses" in path:
+            return statuses
+        return history(path)
+
+    statuses = _status(tree=OTHER_TREE)
+    assert tested_tree.main(argv, get) == 0
+    statuses = _status()
+    assert tested_tree.main(argv, get) == 0
+    assert output.read_text() == f"proven=false\nbase={PARENT}\nproven=true\nbase=\n"
 
 
 @pytest.mark.parametrize(

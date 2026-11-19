@@ -247,7 +247,7 @@ jobs. Every landing that merges its PR directly takes the turn.
   wait therefore stays inside the two merge budgets the `LAND_DEADLINE` sizing below counts.
 - A merge made outside `land.sh`, or by a landing that went on without the turn, can move
   master under the holder. The holder then merges a tree no run tested, and master's run
-  sweeps in full.
+  repeats every job, with the `pytest` legs running a selection (`docs/ci-throughput.md`).
 
 **A head whose only CI skipped as a draft is re-triggered once, then ends the wait if it skips again.** `ci.yml` runs
 no job on a draft, so the push's run skips every job, the `prek` gate included, and `await_ci`
