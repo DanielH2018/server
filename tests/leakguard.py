@@ -188,7 +188,7 @@ _LIVE_MARKER = "ui"
 # The marker on tests that run a script inside a pinned container image with `docker run`
 # (tests/longhorn/test_longhorn_restore_drill_image.py). They reach the Docker socket
 # and pull from a registry on purpose. `addopts` deselects them from the `pytest` shards,
-# which have no Docker daemon, and `.github/workflows/image-leg.yml` runs them.
+# and `.github/workflows/image-leg.yml` runs them.
 _IMAGE_MARKER = "image"
 
 
