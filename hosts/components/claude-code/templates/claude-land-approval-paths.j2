@@ -88,6 +88,11 @@ hosts/components/renovate-agent/templates/homelab-renovate-agent-setup.service.j
 hosts/components/renovate-agent/component.yml
 # The landing policy and the code that runs it.
 scripts/deploy_tools/land
+# The startup hooks Python imports from `scripts/` once it is on sys.path (the installed
+# package's .pth), before any landing check runs. The import walk above sees only modules land.py
+# has loaded, so it would miss a new `scripts/sitecustomize.py` or `scripts/usercustomize.py`.
+scripts/sitecustomize
+scripts/usercustomize
 # The interpreter and packages `uv run` syncs before land.py starts. A package can run code at
 # interpreter start through a .pth file, before any policy check.
 pyproject.toml
