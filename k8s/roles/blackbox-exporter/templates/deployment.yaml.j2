@@ -31,6 +31,8 @@ spec:
           # Named explicitly: the mount below shadows the image's own /etc/blackbox_exporter.
           args:
             - --config.file=/etc/blackbox_exporter/blackbox.yml
+            # At info every SSO probe logs two redirect lines; the verdict is probe_success.
+            - --log.level=warn
           ports:
             - containerPort: {{ container_item.port }}
 {{ hardened_security_context(read_only=true, non_root=true) }}

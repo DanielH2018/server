@@ -1,9 +1,10 @@
 """The rendered Alloy `loki.process "pods"` pipeline's `stage.replace` and level stages, run in Python.
 
 `ship(container, line)` returns a line as Loki stores it, so a redaction test asserts on what
-ships rather than restating an expression. `pod_level(line)` returns the `level` the pipeline
-attaches to a line. The stages are parsed out of the rendered config: a
-`stage.replace` at the top of the block applies to every container, and one inside a
+ships rather than restating an expression. `dropped_by(container, line)` names the
+`stage.drop` that discards a line, or None when it ships. `pod_level(line)` returns the `level`
+the pipeline attaches to a line. The stages are parsed out of the rendered config: a
+stage at the top of the block applies to every container, and one inside a
 `stage.match` applies where the selector does. Alloy compiles each expression as RE2; Python's
 `re` stands in, which is equivalent for the literals, classes, bounded repeats and
 non-capturing groups these stages use.
@@ -82,25 +83,53 @@ def _pods_block() -> str:
     return pods[0]
 
 
+_LINE_STAGES = ("stage.replace", "stage.drop")
+
+
 @cache
-def _replace_stages() -> list[tuple[str | None, re.Pattern, str]]:
-    """Every (selector or None, expression, replacement) in config order."""
+def _line_stages() -> list[tuple[str, str | None, re.Pattern, str]]:
+    """Every (kind, selector or None, expression, replacement or drop reason) in config order."""
     stages = []
     for name, inner in _blocks(_pods_block()):
-        if name == "stage.replace":
-            scoped = [(None, inner)]
+        if name in _LINE_STAGES:
+            scoped = [(name, None, inner)]
         elif name == "stage.match":
             selector = _attribute(inner, "selector")
-            scoped = [(selector, s) for n, s in _blocks(inner) if n == "stage.replace"]
+            scoped = [(n, selector, s) for n, s in _blocks(inner) if n in _LINE_STAGES]
         else:
             continue
-        for selector, stage in scoped:
+        for kind, selector, stage in scoped:
             pattern = re.compile(_attribute(stage, "expression"))
+            if kind == "stage.drop":
+                stages.append(
+                    (kind, selector, pattern, _attribute(stage, "drop_counter_reason"))
+                )
+                continue
             assert pattern.groups == 1, (
                 f"{pattern.pattern!r} must have exactly one capture group; Alloy replaces only it"
             )
-            stages.append((selector, pattern, _attribute(stage, "replace")))
+            stages.append((kind, selector, pattern, _attribute(stage, "replace")))
     return stages
+
+
+def _replace_stages() -> list[tuple[str | None, re.Pattern, str]]:
+    """Every (selector or None, expression, replacement) in config order."""
+    return [
+        (sel, pat, rep)
+        for kind, sel, pat, rep in _line_stages()
+        if kind == "stage.replace"
+    ]
+
+
+def _replace(line: str, pattern: re.Pattern, replacement: str) -> str:
+    return pattern.sub(
+        lambda m: (
+            m.group(0)[: m.start(1) - m.start(0)]
+            + replacement
+            + m.group(0)[m.end(1) - m.start(0) :]
+        ),
+        line,
+    )
 
 
 def _selector_applies(selector: str | None, labels: dict[str, str]) -> bool:
@@ -130,15 +159,26 @@ def ship(container: str, line: str, namespace: str = "homelab") -> str:
     labels = {"container": container, "namespace": namespace}
     for selector, pattern, replacement in _replace_stages():
         if _selector_applies(selector, labels):
-            line = pattern.sub(
-                lambda m, r=replacement: (
-                    m.group(0)[: m.start(1) - m.start(0)]
-                    + r
-                    + m.group(0)[m.end(1) - m.start(0) :]
-                ),
-                line,
-            )
+            line = _replace(line, pattern, replacement)
     return line
+
+
+def dropped_by(container: str, line: str, namespace: str = "homelab") -> str | None:
+    """The `drop_counter_reason` of the stage that discards `line`, or None when it ships.
+
+    Replace and drop stages run in config order, so a drop sees the line as the replaces before
+    it left it.
+    """
+    labels = {"container": container, "namespace": namespace}
+    for kind, selector, pattern, value in _line_stages():
+        if not _selector_applies(selector, labels):
+            continue
+        if kind == "stage.drop":
+            if pattern.search(line):
+                return value
+        else:
+            line = _replace(line, pattern, value)
+    return None
 
 
 _LINE_FILTER = re.compile(r'^\{namespace=~"\.\+"\} \|~ "(.*)"$')
