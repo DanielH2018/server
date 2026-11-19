@@ -22,6 +22,7 @@ from renderer.renderer_lib.bundle import (
 
 import forge
 from deploy_tools.promote_lib import verify_promotion as vp
+from deploy_tools.promote_lib.flux_status import StatusState, flux_states
 
 T = "a" * 40
 PRIOR = "b" * 40
@@ -85,6 +86,16 @@ def reads(statuses: dict[str, dict[str, str]], clock: Clock | None = None):
 
 def ok(*names: str) -> dict[str, str]:
     return {f"flux/{n}": "success" for n in names}
+
+
+def test_the_status_map_keeps_flux_contexts_by_name_and_drops_an_unknown_state():
+    raw = {
+        "flux/sonarr": "failure",
+        "flux/radarr": "queued",
+        "homelab/promote-verdict": "success",
+        "fluxsonarr": "success",
+    }
+    assert flux_states(raw) == {"sonarr": StatusState.FAILURE}
 
 
 # -- the verdict -----------------------------------------------------------------------------

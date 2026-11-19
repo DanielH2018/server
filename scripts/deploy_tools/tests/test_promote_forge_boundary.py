@@ -43,6 +43,7 @@ CHECKOUT_ONLY = frozenset(
     {
         "controller_rollout.py",
         "decision.py",
+        "flux_status.py",
         "supersede.py",
         "reboot_window.py",
         "storage_rollout.py",

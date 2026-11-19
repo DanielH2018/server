@@ -100,6 +100,12 @@ from changed_set import ROOT, changed_set, footprints, suspended_tags
 from chained_timeout import promote_timeout
 from deploy_tools.kustomizations import kustomization_graph
 from deploy_tools.promote_lib import controller_rollout, storage_rollout, superseded
+from deploy_tools.promote_lib.flux_status import (
+    FAILED_STATES,
+    STATUS_PREFIX,
+    StatusState,
+    flux_states,
+)
 from deploy_tools.promote_lib.verify_handoff import read_handoff, read_recorded
 
 # Re-exported, as `verify.write_handoff`, for `promote.py`'s `hand_off`.
@@ -108,8 +114,6 @@ from renderer.renderer_lib.ordering import split_kind
 
 DIGESTS_FILE = "digests.json"
 KUSTOMIZATION_API = "kustomize.toolkit.fluxcd.io/v1"
-STATUS_PREFIX = "flux/"
-FAILED_STATES = frozenset({"failure", "error"})
 _SHA = re.compile(r"[0-9a-f]{40}")
 
 # How far before `--moved-at` a status on T still counts, for clock skew between the runner
@@ -271,7 +275,7 @@ def prior_statuses(
     target: dict[str, bytes],
     prod: dict[str, bytes],
     read: Callable[[], dict[str, str]],
-) -> dict[str, str]:
+) -> dict[str, StatusState]:
     """`decide`'s record: the newest status on `prod`'s commit for each name in the changed set.
 
     `read` returns the newest status per context on `prod`'s commit. It is called once, and
@@ -291,12 +295,8 @@ def prior_statuses(
     )
     if not found.names - found.direct:
         return {}
-    states = read()
-    return {
-        name: states[STATUS_PREFIX + name]
-        for name in sorted(found.names)
-        if STATUS_PREFIX + name in states
-    }
+    states = flux_states(read())
+    return {name: states[name] for name in sorted(found.names) if name in states}
 
 
 # -- the wait --------------------------------------------------------------------------------
@@ -356,7 +356,9 @@ def already_failing(
 
     Only `failure` excuses. An `error`, a `success` or no record keeps the dependent expected.
     """
-    return frozenset(name for name in dependents if recorded.get(name) == "failure")
+    return frozenset(
+        name for name in dependents if recorded.get(name) == StatusState.FAILURE
+    )
 
 
 def verify(
@@ -398,7 +400,7 @@ def verify(
         flush=True,
     )
     started = reads.clock()
-    states: dict[str, str] = {}
+    states: dict[str, StatusState] = {}
     last = ""
     controller = controller_rollout.Window()
     window = storage_rollout.Window(
@@ -414,13 +416,11 @@ def verify(
         if moved := moved_past():
             return moved
         try:
-            states = reads.statuses(target, since)
-            line = ", ".join(
-                f"{n}={states.get(STATUS_PREFIX + n, 'none')}" for n in names
-            )
+            states = flux_states(reads.statuses(target, since))
+            line = ", ".join(f"{n}={states.get(n, 'none')}" for n in names)
         except forge.ForgeError as err:
             line = f"the statuses could not be read: {err}"
-        failed = [n for n in names if states.get(STATUS_PREFIX + n) in FAILED_STATES]
+        failed = [n for n in names if states.get(n) in FAILED_STATES]
         rolling = controller.provisional(names, failed, reads.clock())
         final = [n for n in failed if n not in rolling]
         if final and not window.provisional(final, states, reads.clock()):
@@ -429,13 +429,13 @@ def verify(
             )
         if failed:
             line += window.note() if final else controller.note()
-        if all(states.get(STATUS_PREFIX + n) == "success" for n in names):
+        if all(states.get(n) == StatusState.SUCCESS for n in names):
             return Verdict(VerifyVerdict.GOOD, excused=tuple(sorted(excused)))
         if line != last:
             print(f"  verify: {line}", flush=True)
             last = line
         if reads.clock() - started >= expected.timeout_s:
-            missing = [n for n in names if states.get(STATUS_PREFIX + n) != "success"]
+            missing = [n for n in names if states.get(n) != StatusState.SUCCESS]
             return moved_past() or Verdict(
                 VerifyVerdict.FAILED, tuple(missing), tuple(sorted(excused))
             )
