@@ -2070,7 +2070,8 @@ jobs:
 
       # The script's `npm install renovate@latest` re-downloads Renovate on every run, which
       # makes this job the longest in the workflow on a PR that runs it. Skip it on PRs that
-      # cannot change what it checks; that is a fast green for nearly every PR.
+      # cannot change what it checks. A Renovate bump PR edits a pinned file, so it runs the
+      # extract; most other PRs get a fast green.
       #
       # Caching does not help. The key cannot be content-derived from an unpinned package, so a
       # rolling key would write a large entry every run and churn the repo's 10 GB cache budget,
@@ -2099,9 +2100,14 @@ jobs:
           if grep -qFx renovate.json "$RUNNER_TEMP/changed.txt" "$RUNNER_TEMP/deleted.txt"; then
             checks="validate"
           fi
-          if [ "$(python3 scripts/validate/renovate_extract.py scope "$RUNNER_TEMP/changed.txt" "$RUNNER_TEMP/deleted.txt")" = true ]; then
-            checks="$checks extract"
-          fi
+          # Assigned first so `set -e` fails the step when the script errors; inside the `if`
+          # test an error would read as "skip the extract" and leave the required job green.
+          scope=$(python3 scripts/validate/renovate_extract.py scope "$RUNNER_TEMP/changed.txt" "$RUNNER_TEMP/deleted.txt")
+          case "$scope" in
+            true) checks="$checks extract" ;;
+            false) ;;
+            *) echo "::error::renovate_extract.py scope printed '$scope', not true or false"; exit 1 ;;
+          esac
           echo "checks=$checks" >> "$GITHUB_OUTPUT"
           if [ -z "$checks" ]; then
             echo "Nothing this PR changes can move the Renovate config or its extract; the daily renovate-config-canary run checks master."

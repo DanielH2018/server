@@ -44,6 +44,15 @@ from lib.git import git_stdout
 from lib.repo_paths import REPO
 
 TABLE = REPO / "scripts/validate/renovate_expected_deps.tsv"
+# The check's own code and inputs: a PR changing one runs the extract against the real tree.
+CHECK_FILES = frozenset(
+    {
+        "scripts/validate/renovate_expected_deps.tsv",
+        "scripts/validate/renovate_extract.py",
+        "scripts/validate/renovate_config.sh",
+        "scripts/validate/asset_pins.py",
+    }
+)
 UNTABLED_MANAGERS = frozenset({"github-actions", "pep621"})
 TABLE_HEADER = (
     "# Every dependency Renovate's extract finds, one row per occurrence, sorted.\n"
@@ -173,13 +182,29 @@ def read_table(text: str) -> list[tuple[str, ...]]:
 def table_drift(
     expected: Iterable[tuple[str, ...]], actual: Iterable[tuple[str, ...]]
 ) -> list[str]:
-    """One line per table row the extract lacks and per extracted row the table lacks."""
-    want, got = Counter(expected), Counter(actual)
-    missing = sorted((want - got).elements())
-    extra = sorted((got - want).elements())
-    return [f"not extracted: {' '.join(r)}" for r in missing] + [
-        f"not in the table: {' '.join(r)}" for r in extra
-    ]
+    """One line per dep the table and the extract disagree on, the row tab-separated.
+
+    Deps compare on (manager, file, depName, datasource), as a multiset. The digest column
+    fails only one way: a dep the table records with a digest that comes back without one,
+    which is what a matchString that stopped capturing it produces. A dep gaining a digest is
+    Renovate's own pinDigest update landing, so it passes.
+    """
+    expected, actual = list(expected), list(actual)
+    want, got = Counter(r[:4] for r in expected), Counter(r[:4] for r in actual)
+    want_digest = Counter(r[:4] for r in expected if r[4] == "digest")
+    got_digest = Counter(r[:4] for r in actual if r[4] == "digest")
+    lost = (want_digest - got_digest) & got
+    return (
+        [f"not extracted:\t{chr(9).join(r)}" for r in sorted((want - got).elements())]
+        + [
+            f"not in the table:\t{chr(9).join(r)}"
+            for r in sorted((got - want).elements())
+        ]
+        + [
+            f"digest no longer captured:\t{chr(9).join(r)}"
+            for r in sorted(lost.elements())
+        ]
+    )
 
 
 _IF_BLOCK = re.compile(r"\{\{#if (\w+)\}\}(.*?)\{\{/if\}\}", re.S)
@@ -389,11 +414,12 @@ def check(report: dict, table_text: str) -> list[str]:
 def needs_extract(changed: Iterable[str], table_text: str) -> bool:
     """Whether a PR changing `changed` can change what the extract finds.
 
-    True for renovate.json, the table, a file the table lists, or a file a census rule reads.
-    A new file that only a manager's pattern would match is left to the daily canary.
+    True for renovate.json, the table, a file the table lists, a file a census rule reads, or
+    the check itself. A new file that only a manager's pattern would match is left to the
+    daily canary.
     """
     watched = {row[1] for row in read_table(table_text)}
-    watched |= {"renovate.json", str(TABLE.relative_to(REPO))}
+    watched |= {"renovate.json", *CHECK_FILES}
     for path in changed:
         if path in watched or any(fnmatch(path, g) for g in IMAGE_DEFAULTS):
             return True
@@ -448,8 +474,9 @@ def main(argv: list[str] | None = None) -> int:
     for line in problems:
         print(f"  {line}", file=sys.stderr)
     print(
-        "If a pin was added or moved on purpose, regenerate the table with "
-        "`uv run python scripts/validate/renovate_extract.py write <report>`.",
+        f"Renovate's report is {args.report}. If a pin was added or moved on purpose, "
+        "regenerate scripts/validate/renovate_expected_deps.tsv with "
+        f"`uv run python scripts/validate/renovate_extract.py write {args.report}`.",
         file=sys.stderr,
     )
     return 1

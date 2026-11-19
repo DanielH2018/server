@@ -142,14 +142,27 @@ def test_a_matchstring_that_lost_its_digest_is_flagged() -> None:
     ]
     actual = [("regex", "ci.yml", "goreleaser/nfpm", "github-release-attachments", "-")]
     assert table_drift(expected, actual) == [
-        "not extracted: regex ci.yml goreleaser/nfpm github-release-attachments digest",
-        "not in the table: regex ci.yml goreleaser/nfpm github-release-attachments -",
+        "digest no longer captured:\tregex\tci.yml\tgoreleaser/nfpm"
+        "\tgithub-release-attachments"
     ]
+
+
+def test_a_pin_digest_renovate_added_is_clean() -> None:
+    """Renovate's pinDigest update gives a tag-only pin a digest; its own PR must stay green."""
+    expected = [("regex", "a.yml", "a/b", "docker", "-")]
+    assert table_drift(expected, [("regex", "a.yml", "a/b", "docker", "digest")]) == []
 
 
 def test_a_second_occurrence_the_extract_dropped_is_flagged() -> None:
     row = ("regex", "a.yml", "a/b", "docker", "-")
-    assert table_drift([row, row], [row]) == ["not extracted: regex a.yml a/b docker -"]
+    assert table_drift([row, row], [row]) == [
+        "not extracted:\tregex\ta.yml\ta/b\tdocker"
+    ]
+
+
+def test_a_dep_the_table_lacks_is_flagged() -> None:
+    row = ("regex", "a.yml", "a/b", "docker", "-")
+    assert table_drift([], [row]) == ["not in the table:\tregex\ta.yml\ta/b\tdocker"]
 
 
 # ── the autoReplaceStringTemplate ─────────────────────────────────────────────────────────
@@ -287,6 +300,8 @@ def test_a_pr_touching_a_pinned_file_runs_the_extract() -> None:
     assert needs_extract([".vale.ini"], table)
     assert needs_extract(["renovate.json"], table)
     assert needs_extract(["k8s/roles/new-role/defaults/main.yml"], table)
+    assert needs_extract(["scripts/validate/renovate_extract.py"], table)
+    assert needs_extract(["scripts/validate/asset_pins.py"], table)
 
 
 def test_a_pr_touching_only_unpinned_files_skips_the_extract() -> None:
