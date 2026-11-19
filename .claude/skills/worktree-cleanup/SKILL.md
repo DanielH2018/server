@@ -48,6 +48,8 @@ exactly what `ExitWorktree` refused.
 content is already on `origin/master` (#2430). Removing a worktree leaves its branch, and
 roughly 249 had accumulated by 2026-09-24. Report-only runs count them; the containment check
 is the same ladder, minus the forge lookup (`scripts/dev/prune_worktrees.py:landed_orphan_branches`).
+The sweep lists `worktree-*` only (`scripts/dev/prune_worktrees.py:BRANCH_PREFIX`). A desktop-app
+session's branch is `claude/<name>`, so `--prune` removes its worktree and leaves its branch.
 
 **A prune also repairs the shared object store.** Removing a worktree makes its branch's objects
 unreachable, and `git gc --auto` only runs once loose objects pass 6700 or packs pass 50 — so the
