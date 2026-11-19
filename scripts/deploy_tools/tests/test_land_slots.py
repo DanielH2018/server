@@ -13,12 +13,12 @@ from _land_fakes import Fakes
 from _land_turn_fakes import MERGED, OPEN, START_VIEW, call_order
 from deploy_tools.land_lib import batch, slots, turn
 from deploy_tools.land_lib.outcome import Outcome
-from deploy_tools.promote_lib.wait import WaitResult
+from deploy_tools.promote_lib.wait import WaitResult, WaitVerdict
 from lib.proc_testing import fake_bin, path_with
 
 # A reset epoch decades away, so the quota always resets "far" from the real clock.
 _RESETS_IN_2096 = 4_000_000_000
-_SETTLED = WaitResult("settled", detail="1 applied", tags=("sonarr",))
+_SETTLED = WaitResult(WaitVerdict.SETTLED, detail="1 applied", tags=("sonarr",))
 
 
 def _names(calls):

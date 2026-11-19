@@ -17,6 +17,7 @@ import subprocess
 
 import host_lib
 from longhorn_reap_lib import backups as backups_mod
+from longhorn_reap_lib import logic
 from longhorn_reap_lib import snapshots as snapshots_mod
 
 
@@ -50,31 +51,28 @@ def _record_subprocess_run(monkeypatch, calls, result=None):
 # ── backups: bounded on both sides ──────────────────────────────────────────────────────
 
 
+DEFAULTS = logic.parse_reap_config({})
+
+
 def test_backups_delete_passes_both_the_server_wait_and_the_subprocess_cap(monkeypatch):
     calls = []
     _record_subprocess_run(monkeypatch, calls)
-    rc, _out = backups_mod._delete_backup("some-backup")
+    rc, _out = backups_mod._delete_backup("some-backup", DEFAULTS)
     assert rc == 0
     argv, kwargs = calls[0]
-    assert "--timeout=%ds" % backups_mod.DELETE_TIMEOUT_S in argv
-    assert kwargs["timeout"] == (
-        backups_mod.DELETE_TIMEOUT_S + backups_mod.DELETE_TIMEOUT_MARGIN_S
-    ), (
+    assert "--timeout=120s" in argv
+    assert kwargs["timeout"] == 120 + logic.DELETE_TIMEOUT_MARGIN_S, (
         "an unbounded backup delete hangs the whole run with nothing reported -- the sibling "
         "snapshot reaper wedged for 23 minutes that way on 2026-08-16"
     )
 
 
-def test_backups_computed_cap_outlives_the_server_side_wait():
+def test_the_default_delete_cap_outlives_the_server_wait_and_the_read_cap():
     # Assert the COMPUTED value, not wall time: the client cap must never fire first and turn a
     # delete that is still legitimately running on the server into a false FAILED.
-    assert (
-        backups_mod.DELETE_TIMEOUT_S + backups_mod.DELETE_TIMEOUT_MARGIN_S
-        > backups_mod.DELETE_TIMEOUT_S
-    )
-    assert backups_mod.DELETE_TIMEOUT_S + backups_mod.DELETE_TIMEOUT_MARGIN_S > (
-        backups_mod.TIMEOUT
-    )  # host_lib.kubectl_runner's read cap, which a backup delete routinely runs past
+    assert DEFAULTS.delete_subprocess_timeout_s > DEFAULTS.delete_timeout_s
+    # host_lib.kubectl_runner's read cap, which a delete routinely runs past.
+    assert DEFAULTS.delete_subprocess_timeout_s > DEFAULTS.kubectl_timeout_s
 
 
 def test_backups_delete_timeout_expired_reports_kubectl_timed_out(monkeypatch):
@@ -82,45 +80,23 @@ def test_backups_delete_timeout_expired_reports_kubectl_timed_out(monkeypatch):
         raise subprocess.TimeoutExpired(cmd=argv, timeout=kwargs.get("timeout") or 0.0)
 
     monkeypatch.setattr(host_lib.subprocess, "run", fake_run)
-    rc, out = backups_mod._delete_backup("some-backup")
+    rc, out = backups_mod._delete_backup("some-backup", DEFAULTS)
     assert rc == host_lib.KUBECTL_TIMEOUT_RC
     assert "timed out" in out
 
 
-# ── snapshots: cap = the knob plus a margin ─────────────────────────────────────────────
+# ── snapshots: the same seconds knob ────────────────────────────────────────────────────
 
 
-def test_snapshots_delete_timeout_seconds_parses_kubectl_duration_strings():
-    assert snapshots_mod._delete_timeout_seconds("120s") == 120
-    assert snapshots_mod._delete_timeout_seconds("2m") == 120
-    assert snapshots_mod._delete_timeout_seconds("1h") == 3600
-
-
-def test_snapshots_computed_cap_outlives_the_kubectl_runner_cap_that_made_the_knob_unreachable():
-    # Assert the COMPUTED value, not wall time -- a real 120s+margin sleep would make this
-    # suite slow for no benefit; this is the number that made --timeout=120s unreachable.
-    computed = (
-        snapshots_mod._delete_timeout_seconds(snapshots_mod.DELETE_TIMEOUT)
-        + snapshots_mod.DELETE_TIMEOUT_MARGIN_S
-    )
-    # TIMEOUT is parsed lazily inside main() (see longhorn_reap_lib/snapshots.py's
-    # _TIMEOUT_RAW), so the module itself carries only the raw env string.
-    assert computed > int(
-        snapshots_mod._TIMEOUT_RAW
-    )  # host_lib.kubectl_runner's 30s default
-    assert computed >= snapshots_mod._delete_timeout_seconds(
-        snapshots_mod.DELETE_TIMEOUT
-    )
-
-
-def test_snapshots_delete_passes_the_computed_cap_to_the_subprocess(monkeypatch):
+def test_snapshots_delete_reads_the_same_seconds_knob_as_backups(monkeypatch):
     calls = []
     _record_subprocess_run(monkeypatch, calls)
-    rc, _out = snapshots_mod._delete_snapshot("some-snap", subprocess_timeout=130)
+    config = logic.parse_reap_config({"LONGHORN_REAP_DELETE_TIMEOUT_S": "100"})
+    rc, _out = snapshots_mod._delete_snapshot("some-snap", config)
     assert rc == 0
     argv, kwargs = calls[0]
-    assert "--timeout=%s" % snapshots_mod.DELETE_TIMEOUT in argv
-    assert kwargs["timeout"] == 130
+    assert "--timeout=100s" in argv
+    assert kwargs["timeout"] == 100 + logic.DELETE_TIMEOUT_MARGIN_S
 
 
 def test_snapshots_delete_timeout_expired_reports_kubectl_timed_out(monkeypatch):
@@ -128,7 +104,7 @@ def test_snapshots_delete_timeout_expired_reports_kubectl_timed_out(monkeypatch)
         raise subprocess.TimeoutExpired(cmd=argv, timeout=kwargs.get("timeout") or 0.0)
 
     monkeypatch.setattr(host_lib.subprocess, "run", fake_run)
-    rc, out = snapshots_mod._delete_snapshot("some-snap", subprocess_timeout=5)
+    rc, out = snapshots_mod._delete_snapshot("some-snap", DEFAULTS)
     assert rc == host_lib.KUBECTL_TIMEOUT_RC
     assert "timed out" in out
 

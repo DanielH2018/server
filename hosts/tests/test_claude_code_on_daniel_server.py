@@ -34,7 +34,7 @@ def _render(template: str, host_vars: dict) -> str:
     """One claude_code template rendered with `host_vars` laid over the role's defaults.
 
     The host's vars arrive as render OVERRIDES rather than as a context assembled here, so the
-    text asserted on below is the text `validate/setup_templates.py` renders.
+    text asserted on below is the text `validate/render_lib/setup_plane.py` renders.
     """
     return render_component_text("claude-code", template, host_vars)
 

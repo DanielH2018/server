@@ -84,6 +84,56 @@ def parse_int_env(name: str, raw: str) -> tuple[int, str]:
         return 0, "%s expects an integer, got: %s" % (name, raw)
 
 
+# Margin the CLIENT-side subprocess cap carries over kubectl's own server-side --timeout, so the
+# subprocess can never fire first and report a still-running delete as FAILED.
+DELETE_TIMEOUT_MARGIN_S = 30
+
+
+@dataclass(frozen=True)
+class ReapConfig:
+    """The integer knobs both reapers read from the environment, parsed once in `main()`.
+
+    Attributes:
+      kubectl_timeout_s: the subprocess cap on each kubectl read.
+      delete_timeout_s: kubectl's server-side `--timeout` on each delete, in whole seconds.
+      min_age_days: how old a stranded snapshot must be before it is offered. A tier move
+        leaves a window where the new job has not run yet, so a two-day-old snapshot may
+        still be a volume's most useful local restore point; three days clears that window.
+    """
+
+    kubectl_timeout_s: int
+    delete_timeout_s: int
+    min_age_days: int
+
+    @property
+    def delete_subprocess_timeout_s(self) -> int:
+        """The client-side cap on one delete, which outlives the server-side wait."""
+        return self.delete_timeout_s + DELETE_TIMEOUT_MARGIN_S
+
+
+# (field, env var, default) for each ReapConfig knob.
+_REAP_ENV = (
+    ("kubectl_timeout_s", "LONGHORN_REAP_KUBECTL_TIMEOUT_S", "30"),
+    ("delete_timeout_s", "LONGHORN_REAP_DELETE_TIMEOUT_S", "120"),
+    ("min_age_days", "LONGHORN_REAP_MIN_AGE_DAYS", "3"),
+)
+
+
+def parse_reap_config(environ=None) -> ReapConfig:
+    """The reapers' env knobs, read from `environ` (default `os.environ`).
+
+    Raises:
+      ValueError: a knob is not an integer; the message names the first such knob.
+    """
+    environ = os.environ if environ is None else environ
+    values = {}
+    for field_name, var, default in _REAP_ENV:
+        values[field_name], err = parse_int_env(var, environ.get(var, default))
+        if err:
+            raise ValueError(err)
+    return ReapConfig(**values)
+
+
 def print_bucket(header: str, rows: list, none_msg: str = "(none)") -> None:
     """Print one report section shared verbatim by both entry points.
 

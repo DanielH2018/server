@@ -11,7 +11,8 @@ import json
 
 from _review_fakes import PR, _finding, _pipeline, _report
 from fanout_lib.review.base_check import BaseCheck
-from fanout_lib.review.review import PROMPT_FILE, Pipeline, actionable
+from fanout_lib.review.review import Pipeline, actionable
+from fanout_lib.review.review_prompts import system_prompt
 from fanout_lib.target import SERVER_TARGET, Target
 
 
@@ -340,7 +341,7 @@ def test_the_reviewer_prompt_is_the_text_read_before_the_implementer_ran(tmp_pat
         "PROMPT AT START"
     )
     assert Pipeline(tmp_path, "1", "h", SERVER_TARGET, "").review_prompt == (
-        PROMPT_FILE.read_text()
+        system_prompt()
     )
 
 

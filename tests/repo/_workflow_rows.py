@@ -1,12 +1,125 @@
-"""The census rows over the GitHub Actions workflows.
+"""The workflow-row table: census rows over the GitHub Actions workflows and actions.
 
-`test_census_rows_text.py` runs them with its own rows. They sit in a module of their own
-because that file is at its module-length cap.
+`test_census_rows_workflows.py` runs every row here and in the `_*_workflow_rows.py`
+modules. The rows below read a workflow as text; a row that reads one step or job property
+parses it with `judge`, and proves its red half on the real file with one property broken,
+built by `mutant`.
 """
 
+import copy
 import re
+from collections.abc import Callable
+from functools import cache
+from pathlib import Path
 
-from _row_table import Census, Subject, lines_matching, tracked
+import yaml
+from _helpers import REPO
+from _row_table import Census, Offence, Subject, lines_matching, tracked
+from lib import yaml_fast
+
+PROMOTE = ".github/workflows/promote.yml"
+CI = ".github/workflows/ci.yml"
+SETUP_ACTION = ".github/actions/setup/action.yml"
+_DUMPER = getattr(yaml, "CSafeDumper", yaml.SafeDumper)
+
+Workflow = dict
+Judge = Callable[[Workflow], list[str]]
+
+
+@cache
+def _parse(text: str) -> Workflow:
+    return yaml_fast.safe_load(text) or {}
+
+
+def parsed(subject: Subject) -> Workflow:
+    """`subject` parsed, shared between rows: a judge reads it and never mutates it."""
+    return _parse(subject.text)
+
+
+def load(rel: str | Path) -> Workflow:
+    """A tracked workflow or action, parsed into a copy the caller owns."""
+    return copy.deepcopy(_parse((REPO / rel).read_text(encoding="utf-8")))
+
+
+def judge(rule: Judge) -> Offence:
+    """An offence that runs `rule` on the parsed document: one line per broken property."""
+    return lambda subject: rule(parsed(subject))
+
+
+class Mutant(Subject):
+    """A tracked workflow with one property broken by `mutate`, for a row's `red` half.
+
+    Its `rel` names the source and the case, so a red that passes says which case. Reading
+    its text raises when `mutate` changed nothing, since an unchanged file proves nothing.
+    """
+
+    def __init__(self, source: str, case: str, mutate: Callable[[Workflow], object]):
+        super().__init__(f"{source} [{case}]")
+        self._source = source
+        self._mutate = mutate
+
+    @property
+    def text(self) -> str:
+        if self._text is None:
+            doc = load(self._source)
+            self._mutate(doc)
+            if doc == load(self._source):
+                raise AssertionError(
+                    f"{self.rel}: the mutation left the file unchanged"
+                )
+            self._text = yaml.dump(doc, Dumper=_DUMPER, sort_keys=False)
+        return self._text
+
+
+def mutants(source: str, **cases: Callable[[Workflow], object]) -> tuple[Mutant, ...]:
+    """One `Mutant` of `source` per case, named by its keyword with `_` read as a space."""
+    return tuple(
+        Mutant(source, case.replace("_", " "), mutate) for case, mutate in cases.items()
+    )
+
+
+def triggers(wf: Workflow) -> dict:
+    # YAML 1.1 reads the bare key `on` as the boolean True.
+    return wf.get("on", wf.get(True)) or {}
+
+
+def jobs(wf: Workflow) -> dict[str, dict]:
+    return wf.get("jobs") or {}
+
+
+def steps(job: dict) -> list[dict]:
+    return job.get("steps") or []
+
+
+def uses(step: dict, action: str) -> bool:
+    return str(step.get("uses", "")).split("@")[0] == action
+
+
+def runs(step: dict) -> str:
+    """A step's `run` script, or "" for a step that uses an action."""
+    return str(step.get("run", ""))
+
+
+def checkouts(job: dict) -> list[dict]:
+    return [s for s in steps(job) if uses(s, "actions/checkout")]
+
+
+def step_index(job: dict, step_id: str) -> int | None:
+    return next((i for i, s in enumerate(steps(job)) if s.get("id") == step_id), None)
+
+
+def index_of(job: dict, step_id: str) -> int:
+    """`step_index` for a mutation, which raises when the job has no step `step_id`."""
+    at = step_index(job, step_id)
+    if at is None:
+        raise KeyError(f"no step with id {step_id!r}")
+    return at
+
+
+def condition(node: dict) -> str:
+    """A job's or a step's `if`, with its whitespace collapsed to single spaces."""
+    return " ".join(str(node.get("if", "")).split())
+
 
 _RUNS_ON = re.compile(r"^\s*runs-on:\s*(.+?)\s*$", re.MULTILINE)
 _VERSIONED = re.compile(r"^[a-z]+-\d+(\.\d+)?(-[a-z]+)?$")

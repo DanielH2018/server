@@ -22,6 +22,7 @@ from secrets_mgmt.git_dates import (
     revived_departures,
     undeclared_departures,
 )
+from secrets_mgmt.secrets_lib.registry_model import Entry, Registry
 
 
 def _history_tools(revs):
@@ -187,10 +188,10 @@ def test_a_key_introduced_at_a_reencrypt_commit_still_dates_to_it():
 
 
 def test_advance_moves_a_stale_date_forward():
-    reg = {"entries": {"tok": {"tier": "assisted", "last_rotated": "2025-08-24"}}}
+    reg = Registry({"tok": Entry("assisted", dt.date(2025, 8, 24))})
     advanced = advance_last_rotated(reg, {"tok": dt.date(2026, 3, 13)})
     assert advanced == [("tok", "2025-08-24", "2026-03-13")]
-    assert reg["entries"]["tok"]["last_rotated"] == "2026-03-13"
+    assert reg.entries["tok"].last_rotated == dt.date(2026, 3, 13)
 
 
 def test_advance_never_moves_a_date_backward():
@@ -198,15 +199,15 @@ def test_advance_never_moves_a_date_backward():
 
     A registry date newer than git's — a rotation recorded before its commit landed — must survive.
     """
-    reg = {"entries": {"tok": {"tier": "assisted", "last_rotated": "2026-08-25"}}}
+    reg = Registry({"tok": Entry("assisted", dt.date(2026, 8, 25))})
     assert advance_last_rotated(reg, {"tok": dt.date(2026, 3, 13)}) == []
-    assert reg["entries"]["tok"]["last_rotated"] == "2026-08-25"
+    assert reg.entries["tok"].last_rotated == dt.date(2026, 8, 25)
 
 
 def test_advance_ignores_secrets_git_has_no_date_for():
-    reg = {"entries": {"tok": {"tier": "assisted", "last_rotated": "2025-08-24"}}}
+    reg = Registry({"tok": Entry("assisted", dt.date(2025, 8, 24))})
     assert advance_last_rotated(reg, {}) == []
-    assert reg["entries"]["tok"]["last_rotated"] == "2025-08-24"
+    assert reg.entries["tok"].last_rotated == dt.date(2025, 8, 24)
 
 
 def test_derivation_failure_degrades_to_recorded_dates():

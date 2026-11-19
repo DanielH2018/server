@@ -5,4 +5,4 @@
 # The repo is 3.15-only and the probe is stdlib-only, so it runs under uv's 3.15 with no
 # project environment, which a fresh worktree would otherwise build on the first read.
 root=$(cd "$(dirname "$0")/../.." && pwd)
-exec uv run --no-project --quiet --python 3.15 python "$root/scripts/diagnostics/flux_wait.py" "$@"
+exec env PYTHONPATH="$root/scripts" uv run --no-project --quiet --python 3.15 python "$root/scripts/diagnostics/flux_wait.py" "$@"

@@ -127,8 +127,8 @@ _GLOB_METHODS = frozenset({"glob", "rglob"})
 # The terminal name is what matches, so `sv.discover_templates`, a bare
 # `discover_templates` and any alias of either are the same hit.
 #
-# `discover_templates` is three functions (`validate.shell_templates`, `.setup_templates`,
-# `.unit_templates`), each over a different file set. Matching the bare name over-matches the
+# `discover_templates` is three functions (`validate.render_lib.shell`, `.setup_plane`,
+# `.units`), each over a different file set. Matching the bare name over-matches the
 # setup and unit planes deliberately: a test that reads through those gets an exemption with its
 # reason, which is cheaper than teaching the matcher which module an alias came from.
 #

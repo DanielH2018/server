@@ -67,6 +67,11 @@ host packages and their components under `hosts/` goes in `hosts/tests/`. The sh
   `test_census_rows_roles.py`, `test_census_rows_layout.py` or `test_census_rows_suite.py`.
   A rule over the test modules goes in `scripts/tests/test_census_rows_test_modules.py` or
   `test_census_rows_test_renders.py`.
+- A property of a GitHub Actions workflow or action goes in a row of
+  `tests/repo/test_census_rows_workflows.py`, from the `_*_workflow_rows.py` module for its
+  workflow. `tests/repo/_workflow_rows.py:judge` runs a rule over the parsed file, and
+  `tests/repo/_workflow_rows.py:mutants` builds the red half as the real file with one property
+  broken.
 - An ordering or flag rule over an operator-only runbook's section goes in a `RunbookRule`
   row of `tests/repo/test_runbook_rules.py`: the doc, the heading, the unit, a selector, and
   the strings it requires, the pattern it forbids or the step that must come first.
@@ -82,7 +87,7 @@ host packages and their components under `hosts/` goes in `hosts/tests/`. The sh
 
 Any validator, guard, health check or probe lands with a paired test: one input it must
 accept, one it must reject. Without the rejecting half there is no evidence it can fail.
-`scripts/validate/tests/test_validate_compose_templates.py` is the worked example: name the
+`scripts/validate/tests/test_render_compose.py` is the worked example: name the
 pair `..._is_clean` / `..._is_flagged`.
 
 ## A check that finds its subject by pattern names a member it must find

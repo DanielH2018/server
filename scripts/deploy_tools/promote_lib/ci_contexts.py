@@ -27,7 +27,7 @@ from deploy_tools.promote_lib.prune import READ_ERRORS, ReadError
 
 # ci_verdict imports nothing first-party, so this pulls in no other host module.
 sys.path.insert(0, str(HOST_LIB_FILES))
-from ci_verdict import ci_verdict
+from ci_verdict import CIVerdict, ci_verdict
 
 # The required check-run names, as one literal so a `git grep` for the path or the key finds
 # this reader. The key moved from the deployer's role defaults to group_vars in H7.2e.
@@ -75,4 +75,4 @@ def ci_check(f: forge.Forge, repo: Path, sha: str) -> int:
         error(f"ci-verdict {sha}: {err}")
         return FAILED
     print(f"sha={sha} ci={verdict}")
-    return OK if verdict == "pass" else FAILED
+    return OK if verdict is CIVerdict.PASS else FAILED

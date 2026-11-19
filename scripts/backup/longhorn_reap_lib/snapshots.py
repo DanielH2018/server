@@ -21,8 +21,8 @@ specific, identified, stale snapshots instead. A snapshot delete is LOCAL ONLY; 
 untouched.
 
 HOW A DELETE IS BOUNDED. Reads and deletes both go through host_lib.kubectl_runner; the delete
-differs only in the timeout bound to its runner. `--timeout=%s % DELETE_TIMEOUT` (120s by
-default) is the SERVER-side wait kubectl itself honours, so the CLIENT-side subprocess cap has
+differs only in the timeout bound to its runner. `--timeout`, from
+`LONGHORN_REAP_DELETE_TIMEOUT_S` (120 by default), is the SERVER-side wait kubectl itself honours, so the CLIENT-side subprocess cap has
 to outlive it by DELETE_TIMEOUT_MARGIN_S -- the runner's default 30s cap would kill the process
 long before the server-side bound could ever return, making that bound unreachable. Neither bound
 cancels anything: kubectl has already issued the DELETE, and exceeding --timeout only gives up
@@ -66,23 +66,6 @@ from longhorn_reap_lib import logic
 
 NAMESPACE = "longhorn-system"
 KUBECTL_BIN = os.environ.get("LONGHORN_REAP_KUBECTL", "k3s kubectl")
-# Parsed lazily in main() via logic.parse_int_env, for the same reason as _MIN_AGE_DAYS_RAW
-# below: a bad value here must not raise before main() can print a named ABORT.
-_TIMEOUT_RAW = os.environ.get("LONGHORN_REAP_KUBECTL_TIMEOUT_S", "30")
-DELETE_TIMEOUT = os.environ.get("LONGHORN_REAP_DELETE_TIMEOUT", "120s")
-# How old a stranded snapshot must be before it is offered. A tier move leaves a window where
-# the new job has not run yet, so a two-day-old snapshot may still be a volume's most useful
-# local restore point even though the job that made it no longer owns the volume. Three days
-# clears that window; the strays that motivated the script were four to seven days old.
-# An integer: bash's arithmetic context only ever held one, and printed "younger than 3d", not
-# "3.0d". Left as a raw string here rather than `int(...)`'d at import time: a non-integral
-# value (a typo'd `3.5`) would raise ValueError before main() is reached, printing a
-# traceback instead of naming the bad knob. Parsed lazily in main() via logic.parse_int_env.
-_MIN_AGE_DAYS_RAW = os.environ.get("LONGHORN_REAP_MIN_AGE_DAYS", "3")
-# Margin the CLIENT-side subprocess timeout carries over kubectl's own --timeout, so the
-# subprocess can never fire first and turn a delete that was still legitimately running on the
-# server into a false "FAILED". See the module docstring.
-DELETE_TIMEOUT_MARGIN_S = 30
 
 # Overridable via env purely so a test can point this at a fixture instead of the real
 # root-only file; production never sets this, so it stays the fixed admin path.
@@ -95,31 +78,17 @@ READONLY_KUBECONFIG = os.environ.get("LONGHORN_REAP_READONLY_KUBECONFIG", "")
 SUDO_HINT = logic.sudo_hint(logic.ENTRY_POINT, "snapshots")
 
 
-def _delete_timeout_seconds(text: str) -> float:
-    """Parse a Kubernetes duration string ("120s", "2m") into seconds.
-
-    Matches kubectl's own --timeout flag format; the default ("120s") only ever uses the `s`
-    suffix, but `m`/`h` are cheap to cover.
-    """
-    text = text.strip()
-    if text.endswith("s"):
-        return float(text[:-1])
-    if text.endswith("m"):
-        return float(text[:-1]) * 60
-    if text.endswith("h"):
-        return float(text[:-1]) * 3600
-    return float(text)
-
-
-def _delete_snapshot(name: str, subprocess_timeout: float) -> tuple[int, str]:
-    """Delete one Snapshot CR. `subprocess_timeout` must outlive kubectl's own --timeout."""
-    kubectl = host_lib.kubectl_runner(KUBECTL_BIN, NAMESPACE, int(subprocess_timeout))
+def _delete_snapshot(name: str, config: logic.ReapConfig) -> tuple[int, str]:
+    """Delete one Snapshot CR, bounded server-side and client-side. See the module docstring."""
+    kubectl = host_lib.kubectl_runner(
+        KUBECTL_BIN, NAMESPACE, config.delete_subprocess_timeout_s
+    )
     return kubectl(
         "delete",
         "snapshots.longhorn.io",
         name,
         "--ignore-not-found",
-        "--timeout=%s" % DELETE_TIMEOUT,
+        "--timeout=%ds" % config.delete_timeout_s,
     )
 
 
@@ -208,15 +177,10 @@ def main(argv: list[str], now: float | None = None) -> int:
         print(refusal, file=sys.stderr)
         return 1
 
-    timeout, err = logic.parse_int_env("LONGHORN_REAP_KUBECTL_TIMEOUT_S", _TIMEOUT_RAW)
-    if err:
-        print("ABORT: %s" % err, file=sys.stderr)
-        return USAGE_ERROR
-    min_age_days, err = logic.parse_int_env(
-        "LONGHORN_REAP_MIN_AGE_DAYS", _MIN_AGE_DAYS_RAW
-    )
-    if err:
-        print("ABORT: %s" % err, file=sys.stderr)
+    try:
+        config = logic.parse_reap_config()
+    except ValueError as e:
+        print("ABORT: %s" % e, file=sys.stderr)
         return USAGE_ERROR
 
     kubeconfig, err = logic.resolve_kubeconfig(
@@ -232,7 +196,7 @@ def main(argv: list[str], now: float | None = None) -> int:
     if kubeconfig:
         os.environ["KUBECONFIG"] = kubeconfig
 
-    kubectl = host_lib.kubectl_runner(KUBECTL_BIN, NAMESPACE, timeout)
+    kubectl = host_lib.kubectl_runner(KUBECTL_BIN, NAMESPACE, config.kubectl_timeout_s)
 
     rj_rc, rj_out = kubectl("get", "recurringjobs.longhorn.io", "-o", "json")
     if rj_rc != 0:
@@ -287,7 +251,7 @@ def main(argv: list[str], now: float | None = None) -> int:
             snapshots,
             owner,
             attached,
-            min_age_days,
+            config.min_age_days,
             time.time() if now is None else now,
         )
     except logic.ReapAbort as e:
@@ -310,15 +274,11 @@ def main(argv: list[str], now: float | None = None) -> int:
         print("  --apply  deletes them, then asks each affected volume to purge")
         return 0
 
-    delete_subprocess_timeout = (
-        _delete_timeout_seconds(DELETE_TIMEOUT) + DELETE_TIMEOUT_MARGIN_S
-    )
-
     deleted = 0
     partial = False
     touched: set[str] = set()
     for name, vol, _created, _job in result.candidates:
-        rc, out = _delete_snapshot(name, delete_subprocess_timeout)
+        rc, out = _delete_snapshot(name, config)
         if rc != 0:
             print(
                 "delete FAILED or timed out for %s after %d deletion(s) — stopping: %s"

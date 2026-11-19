@@ -20,10 +20,10 @@ runs:
     # apt-utils is for the repository signer's tests, which drive apt-ftparchive as the
     # signer does on daniel-box (hosts/lib/tests/test_repo_signer.py).
     #
-    # Nothing here installs into a system path, so the step needs no root where apt's package
-    # lists are fresh. sops and the two packages' /usr/bin binaries go to ~/.local/bin, which
-    # the runner image has on PATH and the step checks, and `apt-get download` with
-    # `dpkg-deb -x` unpacks the packages. The one `sudo` left refreshes stale lists.
+    # Nothing here needs root. sops and the two packages' /usr/bin binaries go to ~/.local/bin,
+    # which the runner image has on PATH and the step checks, and `apt-get download` with
+    # `dpkg-deb -x` unpacks the packages. Stale package lists are refreshed into a directory
+    # under $RUNNER_TEMP, which apt then reads in place of /var/lib/apt/lists.
     #
     # The download runs once per runner image version: an apt-get install took a median 4.1s
     # of a leg's 28s outside `Run the test suite`. The unpacked binaries are cached
@@ -88,8 +88,13 @@ runs:
           echo "age and apt-utils: cached"
         else
           debs=$(mktemp -d)
-          download() { (cd "$debs" && apt-get download age apt-utils); }
-          download || { sudo apt-get update -q && download; }
+          lists="$RUNNER_TEMP/apt-lists"
+          private=(-o "Dir::State::Lists=$lists/lists" -o "Dir::Cache=$lists/cache" -o Debug::NoLocking=1)
+          download() { (cd "$debs" && apt-get "$@" download age apt-utils); }
+          download || {
+            mkdir -p "$lists/lists/partial" "$lists/cache/archives/partial"
+            apt-get -q "${private[@]}" update && download "${private[@]}"
+          }
           for deb in "$debs"/*.deb; do dpkg-deb -x "$deb" "$debs/root"; done
           mkdir -p "$apt_tools"
           cp "$debs"/root/usr/bin/* "$apt_tools"/
@@ -125,3 +130,23 @@ runs:
         mkdir -p "$HOME/.local/share"
         ln -s "$src/home/dot_local/share/claude-guard" "$HOME/.local/share/claude-guard"
         ln -s "$src/home/dot_local/share/claude-worktree" "$HOME/.local/share/claude-worktree"
+    # Test modules skip when one of these binaries is missing, so a runner without one passes
+    # them as skips and its run cannot be set beside a hosted run's. Each is in the hosted
+    # image; a runner pod's base image owes the same list. tests/repo/test_ci_baseline_binaries.py
+    # holds BASELINE against every skip gate in the suite.
+    - name: Fail on a missing binary the suite skips without
+      shell: bash
+      env:
+        BASELINE: apt-config logger node perl rsync sshd systemd-analyze systemd-tmpfiles visudo
+      run: |
+        set -euo pipefail
+        read -ra bins <<< "$BASELINE"
+        missing=()
+        for bin in "${bins[@]}"; do
+          command -v "$bin" > /dev/null || missing+=("$bin")
+        done
+        if (( ${#missing[@]} )); then
+          echo "::error::not on PATH: ${missing[*]}. The tests gated on them would pass as skips."
+          exit 1
+        fi
+        echo "${#bins[@]} baseline binaries on PATH"

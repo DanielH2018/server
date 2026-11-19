@@ -4,6 +4,7 @@ Run: uv run pytest scripts/deploy_tools/tests/test_land_ci.py
 """
 
 import pytest
+from ci_verdict import CheckRun
 
 from _land_fakes import Fakes
 from deploy_tools.land_lib import ci
@@ -112,10 +113,9 @@ def _step_3_over_master(
     monkeypatch.chdir(clone)
 
     passed = [
-        {"name": name, "status": "completed", "conclusion": "success"}
-        for name in await_ci.REQUIRED_CONTEXTS
+        CheckRun(name, "completed", "success") for name in await_ci.REQUIRED_CONTEXTS
     ]
-    failed = [{**run, "conclusion": "failure"} for run in passed]
+    failed = [CheckRun(run.name, "completed", "failure") for run in passed]
     runs = {
         sha: (passed if ok else failed if i in red else [])
         for i, (sha, ok) in enumerate(zip(shas, green, strict=True))

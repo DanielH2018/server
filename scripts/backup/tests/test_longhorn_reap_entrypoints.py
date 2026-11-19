@@ -178,6 +178,20 @@ def test_snapshots_aborts_cleanly_on_a_non_integral_min_age_days(tmp_path):
     assert calls == []
 
 
+def test_backups_aborts_cleanly_on_a_non_integral_delete_timeout(tmp_path):
+    proc, calls = _run(
+        BACKUPS_ENTRY,
+        [],
+        {"volumes": []},
+        tmp_path,
+        extra_env={"LONGHORN_REAP_DELETE_TIMEOUT_S": "120s"},
+    )
+    assert proc.returncode == 64
+    assert "LONGHORN_REAP_DELETE_TIMEOUT_S expects an integer, got: 120s" in proc.stderr
+    assert "Traceback" not in proc.stderr, proc.stderr
+    assert calls == []
+
+
 def test_snapshots_aborts_cleanly_on_a_non_integral_kubectl_timeout(tmp_path):
     proc, calls = _run(
         SNAPSHOTS_ENTRY,

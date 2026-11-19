@@ -42,13 +42,13 @@ def test_every_other_status_success_holds_naming_soak(states):
     verdict = vp.verify(
         reads({T: states}, clock), T, PRIOR, vp.expected_set(TARGET, PROD)
     )
-    assert verdict == vp.Verdict("failed", ("soak",))
+    assert verdict == vp.Verdict(vp.VerifyVerdict.FAILED, ("soak",))
 
 
 def test_a_flux_soak_success_is_good():
     states = ok("homelab", "bento-pdf", "soak")
     verdict = vp.verify(reads({T: states}), T, PRIOR, vp.expected_set(TARGET, PROD))
-    assert verdict == vp.Verdict("good")
+    assert verdict == vp.Verdict(vp.VerifyVerdict.GOOD)
 
 
 @pytest.mark.parametrize("states", SOAK_STATES.values(), ids=SOAK_STATES)
@@ -57,4 +57,4 @@ def test_with_soak_left_out_the_same_statuses_read_good(states):
     gating = vp.expected_set(TARGET, PROD)
     observed = replace(gating, names=gating.names - {"soak"})
     verdict = vp.verify(reads({T: states}), T, PRIOR, observed)
-    assert verdict == vp.Verdict("good")
+    assert verdict == vp.Verdict(vp.VerifyVerdict.GOOD)

@@ -13,6 +13,11 @@ import yaml
 # rotation_tools` binds a SECOND module object in a pytest session, since the module under
 # test reaches the same file as `secrets_mgmt.rotation_tools`.
 from secrets_mgmt.rotation_tools import RotationTools
+from secrets_mgmt.secrets_lib.registry_model import (
+    Registry,
+    dump_registry,
+    parse_registry,
+)
 
 TODAY = dt.date(2026, 9, 1)
 
@@ -21,6 +26,8 @@ TODAY = dt.date(2026, 9, 1)
 class Fakes:
     """What each fake answers; every field is a per-test override."""
 
+    # The registry file's plain shape; the fake loader parses it and the fake saver records
+    # the dump, as the real pair reads and writes the file.
     registry: dict = field(default_factory=lambda: {"entries": {}})
     names: list[str] = field(default_factory=list)
     today: dt.date = TODAY
@@ -51,12 +58,12 @@ def build_tools(f: Fakes) -> tuple[RotationTools, list]:
             raise AssertionError(f"unscripted git call: {args}")
         return yaml.safe_dump(blobs[args[1].split(":", 1)[0]])
 
-    def load_registry(*_args, **_kwargs) -> dict:
+    def load_registry(*_args, **_kwargs) -> Registry:
         calls.append(("load_registry", (), {}))
-        return f.registry
+        return parse_registry(f.registry)
 
-    def save_registry(reg, *_args, **_kwargs) -> None:
-        calls.append(("save_registry", (reg,), {}))
+    def save_registry(reg: Registry, *_args, **_kwargs) -> None:
+        calls.append(("save_registry", (dump_registry(reg),), {}))
 
     def sops_names(*_args, **_kwargs) -> list[str]:
         calls.append(("sops_names", (), {}))

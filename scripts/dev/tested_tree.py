@@ -64,7 +64,7 @@ from lib.repo_paths import HOST_LIB_FILES
 from lib.tree_stack import Conflict, stack
 
 sys.path.insert(0, str(HOST_LIB_FILES))
-from ci_verdict import CI_GATE_NAME, ci_verdict
+from ci_verdict import CI_GATE_NAME, CIVerdict, ci_verdict, parse_check_runs
 
 # The commit-status context the PR run writes and this script reads. ci.yml's `prek` job writes
 # it; tests/repo/test_ci_skip_proven_master.py pins both sides to this name.
@@ -113,34 +113,36 @@ def _is_recorded_run(status: dict[str, Any], repo: str, tree: str | None) -> boo
     )
 
 
-def tree_is_proven(get: Get, repo: str, sha: str, tree: str) -> tuple[bool, str]:
-    """Whether a green run recorded `tree` on the head of the PR that `sha` squash-merged.
+def tested_run(get: Get, repo: str, sha: str, tree: str) -> tuple[str, str]:
+    """The green run that recorded `tree` on the head of the PR that `sha` squash-merged.
 
-    `get` maps an API path to its decoded JSON and raises on any failure. Returns the answer
-    and the reason, which the push run prints.
+    `get` maps an API path to its decoded JSON and raises on any failure. Returns the run's
+    URL and the reason, which the push run prints. The URL is empty when no run recorded the
+    tree, and the tree is then not proven.
     """
     if not (_OBJECT_ID.fullmatch(sha) and _OBJECT_ID.fullmatch(tree)):
-        return False, "the commit or its tree id is unreadable"
+        return "", "the commit or its tree id is unreadable"
     try:
         pulls = get(f"repos/{repo}/commits/{sha}/pulls")
         # Only a PR that this commit IS the merge of counts. A commit can be listed under a PR
         # that merely contains it, and that PR's run tested some other tree.
         heads = [p["head"]["sha"] for p in pulls if p.get("merge_commit_sha") == sha]
         if not heads:
-            return False, "no pull request merged as this commit"
+            return "", "no pull request merged as this commit"
         for head in heads:
             statuses = get(f"repos/{repo}/commits/{head}/statuses?per_page=100")
-            if any(_is_recorded_run(status, repo, tree) for status in statuses):
-                return (
-                    True,
-                    f"PR head {head[:8]} recorded a green run on tree {tree[:8]}",
-                )
+            for status in statuses:
+                if _is_recorded_run(status, repo, tree):
+                    return (
+                        status["target_url"],
+                        f"PR head {head[:8]} recorded a green run on tree {tree[:8]}",
+                    )
         return (
-            False,
+            "",
             f"no green {CONTEXT} status from this repository's CI on the PR head carries tree {tree[:8]}",
         )
     except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
-        return False, f"the lookup failed: {type(exc).__name__}: {exc}"
+        return "", f"the lookup failed: {type(exc).__name__}: {exc}"
 
 
 # The most ancestors `green_base` asks GitHub about. Each costs one request, and a base
@@ -177,7 +179,8 @@ def green_base(get: Get, repo: str, sha: str) -> tuple[str, str]:
                     f"the commit listing ends {behind - 1} commit(s) behind {sha[:8]}",
                 )
             page: Any = get(f"repos/{repo}/commits/{ancestor}/check-runs?per_page=100")
-            if ci_verdict(page["check_runs"], {CI_GATE_NAME}) == "pass":
+            runs = parse_check_runs(page["check_runs"])
+            if ci_verdict(runs, {CI_GATE_NAME}) is CIVerdict.PASS:
                 return ancestor, f"{ancestor[:8]} is green, {behind} commit(s) back"
             ancestor = first_parent.get(ancestor)
         return "", f"no green ancestor within {MAX_BASE_WALK} commits of {sha[:8]}"
@@ -370,7 +373,8 @@ def main(
         return 0
     base = ""
     if args.command == "prove":
-        proven, reason = tree_is_proven(get, args.repo, args.sha, args.tree)
+        run, reason = tested_run(get, args.repo, args.sha, args.tree)
+        proven = bool(run)
         if not proven:
             base, base_reason = green_base(get, args.repo, args.sha)
             reason = f"{reason}; {base_reason}"
