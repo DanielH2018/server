@@ -6,12 +6,7 @@ importing one another. ``gen_infra_map`` re-exports the public names, so
 """
 
 import re
-import sys
 from pathlib import Path
-
-# Reach the sibling package directories: a directly-invoked script gets only its own
-# directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from lib.inventory_lists import host_names
 from lib.repo_paths import REPO as REPO_ROOT  # noqa: F401 -- re-exported

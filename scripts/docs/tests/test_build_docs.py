@@ -13,7 +13,7 @@ from pathlib import Path
 
 import json
 
-import build_docs
+from docs import build_docs
 
 
 def _fail_on_service_catalog(monkeypatch, calls=None):

@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-import gen_role_glance as g
+from docs import gen_role_glance as g
 from lib.estate import Inventory
 
 KNOWN_SERVICES = frozenset(

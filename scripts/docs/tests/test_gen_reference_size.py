@@ -11,7 +11,7 @@ import importlib.util
 import re
 from datetime import datetime, timedelta, timezone
 
-import build_docs
+from docs import build_docs
 from _shell_render import rendered_shell_text
 from lib.git_testing import git, init_repo, scrub_process_git_env, scrubbed_env
 

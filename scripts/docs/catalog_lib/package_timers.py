@@ -12,14 +12,9 @@ Typical usage example:
 
 import functools
 import re
-import sys as _sys
 from dataclasses import dataclass
 from pathlib import Path as _Path
 from pathlib import PurePosixPath
-
-# Reach the sibling package directories: a directly-invoked script gets only its own
-# directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 
 from lib import yaml_fast
 from lib.systemd_timer import calendar_fires, span_s, timer_settings

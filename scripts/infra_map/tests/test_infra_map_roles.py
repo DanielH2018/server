@@ -8,7 +8,7 @@ Run: uv run pytest scripts/infra_map/tests/test_infra_map_roles.py
 
 import pytest
 
-import gen_infra_map as g
+from infra_map import gen_infra_map as g
 
 
 def test_load_roles_derives_ownership_from_the_role_trees():

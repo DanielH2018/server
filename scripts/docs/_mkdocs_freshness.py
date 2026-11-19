@@ -15,11 +15,8 @@ The footer is appended as Markdown so the theme styles it like the rest of the p
 """
 
 import posixpath
-import sys
 from pathlib import Path
 from typing import Any
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from lib.doc_freshness import (
     is_hand_written,
