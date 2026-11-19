@@ -98,7 +98,7 @@ def test_the_template_round_trips_every_live_pin() -> None:
         for r in _match_res(mgr)
         for m in r.finditer((_REPO / path).read_text())
     ]
-    assert len(spans) == 6, "alloy 1, autoheal 1, docker-proxy 3, wg-easy 1"
+    assert len(spans) == 5, "alloy 1, autoheal 1, docker-proxy 2, wg-easy 1"
     assert all(m.group("currentDigest") for m in spans)
 
     def render(template: str, m: re.Match[str]) -> str:
