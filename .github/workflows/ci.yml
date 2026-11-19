@@ -780,7 +780,8 @@ jobs:
       # The same FLUX_* pin as promote.yml's, so the CLI that checks the round trip is the CLI
       # that publishes and the controllers' release. scripts/tests/test_renovate_flux_cli.py
       # fails a drift.
-      - uses: $/.github/actions/pinned-tool
+      - name: Fetch the pinned flux CLI and check its sha256
+        uses: $/.github/actions/pinned-tool
         with:
           tool: flux
           version: ${{ env.FLUX_VERSION }}
@@ -846,7 +847,7 @@ jobs:
   #   exists to catch, and it fails.
   #
   # It runs on a PR that touches the flux pin, the sops pin, the registry image pin,
-  # `cluster_vars.py`, its fixture or this file, and on a dispatch. On a push to master its steps skip and it passes:
+  # `cluster_vars.py`, its fixture, the pinned-tool action or this file, and on a dispatch. On a push to master its steps skip and it passes:
   # the PR run already measured it. The scope step is step-level, never a job-level `if:`,
   # because the `prek` gate requires `success` and a skipped job reports `skipped`.
   sops_manifest_type_proof:
@@ -893,6 +894,7 @@ jobs:
               scripts/secrets_mgmt/cluster_vars_check.py \
               scripts/secrets_mgmt/tests/_cluster_vars_fixture.py \
               scripts/secrets_mgmt/tests/_sops_type_proof.py \
+              .github/actions/pinned-tool/action.yml \
               .github/workflows/ci.yml; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
             echo "No pin, cluster_vars.py, fixture or job change, so there is nothing to measure."
@@ -904,7 +906,8 @@ jobs:
         if: github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true'
 
       # The flux_roundtrip job's pin. The CLI pushes the fixture artifact.
-      - uses: $/.github/actions/pinned-tool
+      - name: Fetch the pinned flux CLI and check its sha256
+        uses: $/.github/actions/pinned-tool
         if: github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true'
         with:
           tool: flux
@@ -925,14 +928,16 @@ jobs:
           echo "version=$sops_version" >> "$GITHUB_OUTPUT"
           echo "sha256=$sops_sha256" >> "$GITHUB_OUTPUT"
 
-      - uses: $/.github/actions/pinned-tool
+      - name: Fetch the pinned sops and check its sha256
+        uses: $/.github/actions/pinned-tool
         if: github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true'
         with:
           tool: sops
           version: ${{ steps.sops.outputs.version }}
           sha256: ${{ steps.sops.outputs.sha256 }}
 
-      - uses: $/.github/actions/pinned-tool
+      - name: Fetch the pinned kind and check its sha256
+        uses: $/.github/actions/pinned-tool
         if: github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true'
         with:
           tool: kind
@@ -1116,7 +1121,8 @@ jobs:
 
       - uses: $/.github/actions/setup
 
-      - uses: $/.github/actions/pinned-tool
+      - name: Fetch the pinned nfpm and check its sha256
+        uses: $/.github/actions/pinned-tool
         with:
           tool: nfpm
           version: ${{ env.NFPM_VERSION }}
