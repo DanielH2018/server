@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 
 from host_lib import DISCORD_MAX, clamp_discord
 from pending_logic import PENDING_HEADER
+from renovate_identity import is_renovate
 
 # Renovate rewrites its Dependency Dashboard issue on every run (~daily on this repo's
 # daily schedule + at-any-time security/lockfile runs). If the dashboard goes stale or
@@ -68,8 +69,7 @@ def _find_dashboard_issue(issues: list[dict]) -> dict | None:
     for it in issues:
         if it.get("pull_request"):
             continue
-        login = (it.get("user") or {}).get("login", "")
-        if it.get("title") == DASHBOARD_TITLE and login.startswith("renovate"):
+        if it.get("title") == DASHBOARD_TITLE and is_renovate(it.get("user")):
             return it
     return None
 
@@ -532,7 +532,7 @@ def find_autoclosed(
         branch = (pr.get("head") or {}).get("ref", "")
         closed_at = pr.get("closed_at") or ""
         if (
-            (pr.get("user") or {}).get("login") != "renovate[bot]"
+            not is_renovate(pr.get("user"))
             or pr.get("merged_at")
             or not title.endswith(AUTOCLOSED_SUFFIX)
             or not closed_at

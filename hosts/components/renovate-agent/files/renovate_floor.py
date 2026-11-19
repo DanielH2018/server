@@ -15,9 +15,10 @@ from __future__ import annotations
 import re
 from pathlib import PurePosixPath
 
+from renovate_identity import BOT_LOGIN, is_renovate, login
+
 # The T2 approval floor this component ships, which every T2 lander reads (A5a).
 FLOOR_FILE = "/usr/lib/homelab/t2-approval-floor"
-RENOVATE_BOT = "renovate[bot]"
 SOAK_CONTEXT = "renovate/stability-days"
 # The only shape the digest-only exception admits: a host component's defaults.
 _DIGEST_FILE = "hosts/components/*/defaults/main.yml"
@@ -124,9 +125,9 @@ def pusher_problem(events: list[dict], head: str) -> str:
         return "no branch creation is in the activity the API returned"
     others = sorted(
         {
-            (e.get("actor") or {}).get("login") or "an unknown account"
+            login(e.get("actor")) or "an unknown account"
             for e in since
-            if (e.get("actor") or {}).get("login") != RENOVATE_BOT
+            if not is_renovate(e.get("actor"))
         }
     )
     if others:
@@ -146,10 +147,10 @@ def soak_problem(statuses: list[dict]) -> str:
     for status in statuses:
         if status.get("context") != SOAK_CONTEXT:
             continue
-        creator = (status.get("creator") or {}).get("login")
-        if creator != RENOVATE_BOT:
+        if not is_renovate(status.get("creator")):
             return (
-                f"its {SOAK_CONTEXT} status was posted by {creator}, not {RENOVATE_BOT}"
+                f"its {SOAK_CONTEXT} status was posted by "
+                f"{login(status.get('creator'))}, not {BOT_LOGIN}"
             )
         if status.get("state") != "success":
             return f"its {SOAK_CONTEXT} status has not passed"

@@ -43,7 +43,7 @@
 # The host baseline (host-hardening) is the sudo cache, auditd's rules, the module blacklist, the
 # core-dump drop-in, the login banner and the base packages. No file here needs a credential.
 description: daniel-pi's homelab host package
-components: [reconcile, secrets-unit, pi-heartbeats, pi-updater-poll, crowdsec-probe, pi-compose, unattended-upgrades, sshd, host-tuning, apt-docker, apt-azlux, pi-tuning, pi-node-exporter, pi-resolver, pi-peer-backup-target, pi-docker, sops, fail2ban, integrity-scans, postfix, accounting, host-maintenance, ssh-firewall, host-hardening]
+components: [reconcile, secrets-unit, pi-heartbeats, pi-updater-poll, crowdsec-probe, pi-compose, unattended-upgrades, sshd, host-tuning, apt-docker, apt-azlux, pi-tuning, pi-node-exporter, pi-resolver, pi-peer-backup-target, pi-docker, sops, fail2ban, integrity-scans, postfix, accounting, host-maintenance, ssh-firewall, host-hardening, kuma-check-dir]
 credentials:
   - healthchecks_ping_key
 # The Pi is the arm64 pilot of homelab-tools, whose arm64 build ships sops and

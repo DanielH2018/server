@@ -72,9 +72,9 @@ Airflow 3 with the KubernetesExecutor, plus one Postgres holding the metadata da
 
 - **To rerun a day**, clear its run in the UI. `catchup` already queues every day since
   `start_date` that the source still holds, at most four at once.
-- **A failed task's pod stays, and its log file lives only in that pod.** Read it with
-  `kubectl logs -n homelab <pod>`, then delete the pod. No remote log store exists yet
-  (#9202).
+- **A task pod's stdout reaches loki-homelab.** Read a run's log with
+  `uv run python scripts/diagnostics/probe.py loki-query --loki homelab '{namespace="homelab", pod=~"prom-daily-rollup-.*"}'`.
+  The UI's log view reads only the pod's own file, which goes when the pod does (#9202).
 - **The Postgres init script runs only on an empty data directory.** To rotate
   `airflow_postgres_password`, `airflow_warehouse_writer_password` or
   `airflow_warehouse_reader_password`, the operator runs `ALTER ROLE … PASSWORD` in the pod

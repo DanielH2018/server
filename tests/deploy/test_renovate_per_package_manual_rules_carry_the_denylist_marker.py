@@ -11,13 +11,11 @@ see — would ship through `land.sh --arm-merge` like a jellyfin plugin work ord
 The rule is the class, not the instance: every per-package manual rule whose pin a denied
 role owns ends its parenthetical with the marker, and one whose pin no denied role owns does
 not, so a role promoted out of the denylist drops the marker with it. Who owns a pin is read
-from `customManagers`: a manager with a `depNameTemplate` or `packageNameTemplate` names its package outright, so every
-file it matches owns the pin; one without derives the name from the file, so the file must
-carry the package literally (the `_image:` pins). Renovate's built-in `dockerfile` manager
-reads the n8n Dockerfiles with no entry in `customManagers`, so it is spelled here. A build role that renders no workload of
-its own would hand the bump to the role that runs what it builds
-in `deploy_changes.py` — so ownership follows that same coupling, and a pin
-no role owns fails rather than passing as "not denied".
+from `scripts/validate/renovate_expected_deps.tsv`, the table CI holds against Renovate's own
+extract: the role whose file Renovate extracts a dep from owns it, matched by depName or by
+packageName where the two differ. The n8n Dockerfiles' FROM lines are the built-in
+`dockerfile` manager's rows, so n8n owns its base image. A pin no role owns fails rather than
+passing as "not denied".
 `test_renovate_agent_unit.py` reads the marker out of every such groupName and pins that the
 prompt names the same phrase.
 
@@ -32,7 +30,7 @@ import pytest
 
 from _autodeploy import _denylist
 from _helpers import REPO
-from lib.renovate_annotations import effective_managers
+from validate.renovate_extract import TABLE, Row, read_table
 from test_renovate_automerge_follows_the_autodeploy_denylist import (
     MANUAL_GROUP_PREFIX,
     find_rule,
@@ -50,16 +48,6 @@ KNOWN_DENIED_PER_PACKAGE_GROUPS = frozenset(
 
 
 _ROLES = REPO / "k8s" / "roles"
-
-# Renovate's built-in dockerfile manager, which `customManagers` does not list: its second
-# default pattern is what reaches `templates/Dockerfile*.j2`. Content-derived, like the
-# `_image:` manager.
-BUILTIN_MANAGERS = [
-    {
-        "managerFilePatterns": ["/(^|/)[Dd]ockerfile[^/]*$/"],
-        "datasourceTemplate": "docker",
-    }
-]
 
 # Built-in managers that read no file a role deploys, each with its default
 # `managerFilePatterns` (upstream `lib/modules/manager/<name>/index.ts`). A rule whose
@@ -90,10 +78,6 @@ def _file_pattern(pattern: str) -> re.Pattern[str]:
     return re.compile(pattern[1:-1])
 
 
-def _read(rel: str) -> str:
-    return (REPO / rel).read_text(errors="replace")
-
-
 def _in_file_scope(rel: str, file_names: list[str]) -> bool:
     """Whether a rule's `matchFileNames` (minimatch globs or `/regex/`) selects `rel`.
 
@@ -113,49 +97,29 @@ def _in_file_scope(rel: str, file_names: list[str]) -> bool:
 
 def pin_owner_roles(
     package: str,
-    managers: list[dict],
-    files: list[str],
-    read=_read,
+    deps: list[Row],
     datasources: set[str] | None = None,
     file_names: list[str] | None = None,
 ) -> set[str]:
-    """The k8s roles whose files a custom manager reads `package` from.
+    """The k8s roles whose files Renovate's extract reads `package` from.
 
-    `datasources` is the rule's `matchDatasources`: a manager whose datasource the rule never
-    matches cannot own its pin, whatever its files say. Without it, a github-releases rule for
-    `astral-sh/uv` read as karakeep's, because the docker `_image:` manager's file names
-    `ghcr.io/astral-sh/uv` -- a different package in a different datasource. None
-    means the rule matches every datasource.
+    `datasources` is the rule's `matchDatasources`: a dep in a datasource the rule never
+    matches is not its pin, whatever its name. Without it, a github-releases rule for
+    `astral-sh/uv` read as karakeep's, whose `_image:` names `ghcr.io/astral-sh/uv`, a
+    different package in a different datasource. None means the rule matches every
+    datasource.
 
     `file_names` is the rule's `matchFileNames`, which narrows the files the same way: a
     Pi-only wg-easy rule does not own `k8s/roles/wg-easy`'s pin. None means every file.
     """
-    if file_names:
-        files = [rel for rel in files if _in_file_scope(rel, file_names)]
-    owners: set[str] = set()
-    for manager in managers + BUILTIN_MANAGERS:
-        # A manager names its package by depNameTemplate or, where the two differ, by
-        # packageNameTemplate, which Renovate also matches `matchPackageNames` against. The
-        # headlamp plugins manager is one: its depName carries the plugin, its packageName the
-        # repo every plugin ships from.
-        names = {
-            manager[key]
-            for key in ("depNameTemplate", "packageNameTemplate")
-            if key in manager
-        }
-        named = names or None
-        if named is not None and package not in named:
-            continue
-        if datasources and manager.get("datasourceTemplate") not in datasources:
-            continue
-        for pattern in map(_file_pattern, manager.get("managerFilePatterns", [])):
-            for rel in files:
-                if not pattern.search(rel):
-                    continue
-                if named is None and package not in read(rel):
-                    continue
-                owners.add(Path(rel).parts[2])
-    return owners
+    return {
+        Path(dep.file).parts[2]
+        for dep in deps
+        if dep.file.startswith("k8s/roles/")
+        and package in dep.names()
+        and not (datasources and dep.datasource not in datasources)
+        and not (file_names and not _in_file_scope(dep.file, file_names))
+    }
 
 
 def _reads_no_role(rule: dict, role_files: list[str] | None) -> bool:
@@ -234,19 +198,15 @@ def _renovate() -> dict:
 
 
 def _owners_by_package(config: dict) -> dict[str, set[str]]:
-    files = _role_relative_files()
-    # An annotated pin names its package in the defaults file, not in the config, so the
-    # annotation manager is expanded into one per-pin manager before ownership is read.
-    managers = effective_managers(config["customManagers"], files, _read)
+    deps = read_table(TABLE.read_text())
     return {
         package: pin_owner_roles(
             package,
-            managers,
-            files,
+            deps,
             datasources=set(rule.get("matchDatasources", [])) or None,
             file_names=rule.get("matchFileNames"),
         )
-        for rule in per_package_manual_rules(config["packageRules"], files)
+        for rule in per_package_manual_rules(config["packageRules"])
         for package in rule["matchPackageNames"]
     }
 
@@ -273,86 +233,75 @@ def test_the_per_package_census_finds_the_known_denied_groups() -> None:
     )
 
 
-# --- the pin-owner census: a named package maps by pattern, a derived one by file content ---
-
-_DEFAULTS_PATTERN = "/^k8s/roles/[^/]+/defaults/main\\.yml$/"
+# --- the pin-owner census: the role whose file the extract reads a dep from owns it ---
 
 
-def test_a_named_package_manager_maps_the_pin_to_every_file_it_matches() -> None:
-    managers = [
-        {"managerFilePatterns": [_DEFAULTS_PATTERN], "depNameTemplate": "vendor/plugin"}
+def _dep(
+    file: str, dep_name: str, datasource: str = "docker", package_name: str = "-"
+) -> Row:
+    return Row("regex", file, dep_name, datasource, "-", package_name)
+
+
+def test_a_dep_is_owned_by_the_role_whose_file_holds_it() -> None:
+    deps = [_dep("k8s/roles/traefik/defaults/main.yml", "vendor/plugin")]
+    assert pin_owner_roles("vendor/plugin", deps) == {"traefik"}
+    assert pin_owner_roles("vendor/other", deps) == set()
+
+
+def test_a_package_name_maps_the_pin_like_a_dep_name() -> None:
+    deps = [
+        _dep(
+            "k8s/roles/headlamp/defaults/main.yml",
+            "vendor-plugin/flux",
+            "github-releases",
+            "vendor/plugins",
+        )
     ]
-    files = [
-        "k8s/roles/traefik/defaults/main.yml",
-        "k8s/roles/traefik/templates/deployment.yaml.j2",
-    ]
-    assert pin_owner_roles("vendor/plugin", managers, files, read=lambda _: "") == {
-        "traefik"
-    }
-    assert pin_owner_roles("vendor/other", managers, files, read=lambda _: "") == set()
-
-
-def test_a_package_name_template_maps_the_pin_like_a_dep_name() -> None:
-    managers = [
-        {
-            "managerFilePatterns": [_DEFAULTS_PATTERN],
-            "depNameTemplate": "vendor-plugin/{{{pluginName}}}",
-            "packageNameTemplate": "vendor/plugins",
-        }
-    ]
-    files = ["k8s/roles/headlamp/defaults/main.yml"]
-    assert pin_owner_roles("vendor/plugins", managers, files, read=lambda _: "") == {
-        "headlamp"
-    }
-    assert pin_owner_roles("vendor/other", managers, files, read=lambda _: "") == set()
+    assert pin_owner_roles("vendor/plugins", deps) == {"headlamp"}
+    assert pin_owner_roles("vendor-plugin/flux", deps) == {"headlamp"}
 
 
 def test_a_dockerfile_pin_is_owned_by_the_role_that_builds_and_runs_it() -> None:
     """n8n builds the image it runs, so the Dockerfile pin is n8n's alone."""
-    files = ["k8s/roles/n8n/templates/Dockerfile.j2"]
-    assert pin_owner_roles(
-        "n8nio/n8n", [], files, read=lambda _: "FROM n8nio/n8n:1.0\n"
-    ) == {"n8n"}
-
-
-def test_a_content_derived_manager_maps_the_pin_only_where_the_file_names_it() -> None:
-    managers = [{"managerFilePatterns": [_DEFAULTS_PATTERN]}]
-    files = [
-        "k8s/roles/karakeep/defaults/main.yml",
-        "k8s/roles/sonarr/defaults/main.yml",
+    deps = [
+        Row(
+            "dockerfile",
+            "k8s/roles/n8n/templates/Dockerfile.j2",
+            "n8nio/n8n",
+            "docker",
+            "digest",
+            "-",
+        )
     ]
-    text = {
-        files[0]: "meili_image: getmeili/meilisearch:v1.0\n",
-        files[1]: "x_image: a/b:1\n",
-    }
-    assert pin_owner_roles("getmeili/meilisearch", managers, files, read=text.get) == {
-        "karakeep"
-    }
+    assert pin_owner_roles("n8nio/n8n", deps) == {"n8n"}
 
 
-def test_a_manager_in_another_datasource_does_not_own_the_pin() -> None:
-    """karakeep's `_image:` file names ghcr.io/astral-sh/uv; a github-releases rule for
-    astral-sh/uv is initial_setup's alone."""
-    managers = [
-        {"managerFilePatterns": [_DEFAULTS_PATTERN], "datasourceTemplate": "docker"},
-        {
-            "managerFilePatterns": ["/host-basics\\.yml$/"],
-            "depNameTemplate": "astral-sh/uv",
-            "datasourceTemplate": "github-releases",
-        },
+def test_a_dep_outside_the_roles_has_no_owner() -> None:
+    deps = [
+        _dep(
+            ".github/workflows/promote.yml",
+            "sigstore/cosign",
+            "github-release-attachments",
+        )
     ]
-    files = [
-        "k8s/roles/karakeep/defaults/main.yml",
-        "k8s/roles/initial-setup/tasks/host-basics.yml",
+    assert pin_owner_roles("sigstore/cosign", deps) == set()
+
+
+def test_a_dep_in_another_datasource_does_not_own_the_pin() -> None:
+    """karakeep's `_image:` names ghcr.io/astral-sh/uv; a github-releases rule for
+    astral-sh/uv is initial-setup's alone."""
+    deps = [
+        _dep("k8s/roles/karakeep/defaults/main.yml", "astral-sh/uv"),
+        _dep(
+            "k8s/roles/initial-setup/tasks/host-basics.yml",
+            "astral-sh/uv",
+            "github-releases",
+        ),
     ]
-    read = lambda _: "tagger_image: ghcr.io/astral-sh/uv:3.14\n"
-    assert pin_owner_roles("astral-sh/uv", managers, files, read=read) == {
-        "karakeep",
-        "initial-setup",
+    assert pin_owner_roles("astral-sh/uv", deps) == {"karakeep", "initial-setup"}
+    assert pin_owner_roles("astral-sh/uv", deps, datasources={"github-releases"}) == {
+        "initial-setup"
     }
-    assert pin_owner_roles(
-        "astral-sh/uv", managers, files, read=read, datasources={"github-releases"}
-    ) == {"initial-setup"}
 
 
 # --- the red-proof pair: the checker must accept an agreeing rule and reject a drifted one ---
@@ -447,9 +396,7 @@ def _wg_easy_problems(rule_extra: dict) -> list[str]:
     rules[1].update(rule_extra)
     owners = pin_owner_roles(
         _WG_EASY,
-        [{"managerFilePatterns": [_DEFAULTS_PATTERN]}],
-        _WG_EASY_ROLE_FILES,
-        read=lambda _: f"wg_easy_image: {_WG_EASY}:15\n",
+        [_dep(_WG_EASY_ROLE_FILES[0], _WG_EASY)],
         file_names=rules[1].get("matchFileNames"),
     )
     return per_package_marker_problems(
@@ -481,20 +428,15 @@ def test_a_file_scope_entry_the_census_cannot_read_is_refused(entry: str) -> Non
 
 
 def test_a_file_scope_keeps_only_the_roles_its_globs_select() -> None:
-    managers = [{"managerFilePatterns": [_DEFAULTS_PATTERN]}]
-    files = [
-        "k8s/roles/loki-homelab/defaults/main.yml",
-        "k8s/roles/alloy-edge/defaults/main.yml",
+    deps = [
+        _dep("k8s/roles/loki-homelab/defaults/main.yml", "grafana/alloy"),
+        _dep("k8s/roles/alloy-edge/defaults/main.yml", "grafana/alloy"),
     ]
-    read = lambda _: "alloy_image: grafana/alloy:v1\n"
-    assert pin_owner_roles("grafana/alloy", managers, files, read=read) == {
-        "loki-homelab",
-        "alloy-edge",
-    }
+    assert pin_owner_roles("grafana/alloy", deps) == {"loki-homelab", "alloy-edge"}
     for scope in (
         ["k8s/roles/loki-homelab/**"],
         ["/^k8s/roles/loki-homelab/defaults/main\\.yml$/"],
     ):
-        assert pin_owner_roles(
-            "grafana/alloy", managers, files, read=read, file_names=scope
-        ) == {"loki-homelab"}, scope
+        assert pin_owner_roles("grafana/alloy", deps, file_names=scope) == {
+            "loki-homelab"
+        }, scope

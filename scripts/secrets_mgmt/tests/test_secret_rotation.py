@@ -17,15 +17,21 @@ from lib import yaml_fast
 
 from secrets_mgmt import secret_rotation as sr
 from _rotation_fakes import Fakes, build_tools, named_calls
+from secrets_mgmt.secrets_lib.registry_model import parse_registry
 from secrets_mgmt.secrets_lib.secret_registry import audit
 
 
-def _reg(*entries):
+def _plain(*entries):
+    """The registry file's plain shape, which `Fakes.registry` holds."""
     return {
         "entries": {
             name: {"tier": tier, "last_rotated": lr} for name, tier, lr in entries
         }
     }
+
+
+def _reg(*entries):
+    return parse_registry(_plain(*entries))
 
 
 # ── the audit's summary line ────────────────────────────────────────────────
@@ -62,7 +68,7 @@ def test_audit_verdict_exits_nonzero_on_a_down_audit(capsys):
     # to reach both as a non-zero exit.
     tools, _ = build_tools(
         Fakes(
-            registry=_reg(("stale_push_token", "assisted", "2025-01-01")),
+            registry=_plain(("stale_push_token", "assisted", "2025-01-01")),
             names=["stale_push_token"],
         )
     )
@@ -73,7 +79,7 @@ def test_audit_verdict_exits_nonzero_on_a_down_audit(capsys):
 def test_audit_verdict_exits_zero_on_an_up_audit(capsys):
     tools, _ = build_tools(
         Fakes(
-            registry=_reg(("fresh_push_token", "assisted", "2026-09-01")),
+            registry=_plain(("fresh_push_token", "assisted", "2026-09-01")),
             names=["fresh_push_token"],
         )
     )
@@ -143,7 +149,7 @@ def test_record_moves_the_date_backward_and_saves(capsys):
     or a renamed credential keeps the fictional freshness `sync` seeded it with.
     """
     tools, recorded = build_tools(
-        Fakes(registry=_reg(("tok", "assisted", "2026-08-01")))
+        Fakes(registry=_plain(("tok", "assisted", "2026-08-01")))
     )
     assert sr.cmd_record(_record_args("tok", "2026-01-15"), tools) == 0
     saved = [c[1][0] for c in recorded if c[0] == "save_registry"]
@@ -160,7 +166,7 @@ def test_record_moves_a_renamed_row_to_its_new_name(capsys):
     Whether or not a `sync` already seeded the new name: the source row carries the
     operator's tier override, so it is the one that survives.
     """
-    reg = _reg(("kopia_b2_key_id", "pinned", "2026-05-29"))
+    reg = _plain(("kopia_b2_key_id", "pinned", "2026-05-29"))
     reg["entries"]["kopia_b2_key_id"]["source"] = "record"
     tools, recorded = build_tools(Fakes(registry=reg))
     assert sr.cmd_record(_record_args("longhorn_b2_key_id", "2026-05-29"), tools) == 0
@@ -176,7 +182,7 @@ def test_record_moves_a_renamed_row_to_its_new_name(capsys):
 
 def test_record_refuses_a_key_the_registry_lacks(capsys):
     tools, recorded = build_tools(
-        Fakes(registry=_reg(("tok", "assisted", "2026-08-01")))
+        Fakes(registry=_plain(("tok", "assisted", "2026-08-01")))
     )
     assert sr.cmd_record(_record_args("other", "2026-01-15"), tools) == 64
     assert "save_registry" not in named_calls(recorded)
@@ -185,7 +191,7 @@ def test_record_refuses_a_key_the_registry_lacks(capsys):
 
 def test_record_refuses_a_date_after_today(capsys):
     tools, recorded = build_tools(
-        Fakes(registry=_reg(("tok", "assisted", "2026-08-01")))
+        Fakes(registry=_plain(("tok", "assisted", "2026-08-01")))
     )
     assert sr.cmd_record(_record_args("tok", "2026-09-02"), tools) == 64
     assert "save_registry" not in named_calls(recorded)
