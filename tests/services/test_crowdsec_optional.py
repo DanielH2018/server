@@ -72,7 +72,7 @@ def test_nothing_names_crowdsec_once_the_flag_is_off(role: str) -> None:
 
     Instead every CrowdSec variable is given a sentinel value. A reference that renders is a
     reference that survived, wherever it hides. `crowdsec-secret.yaml.j2` is excluded because
-    the flag retires it by dropping it from manifests_secret_files, not by gating its body.
+    the flag retires it by dropping it from manifests_files, not by gating its body.
     """
     sentinel = "SURVIVING-CROWDSEC-REFERENCE"
     role_vars = load_yaml(K8S_ROLES / role / "defaults" / "main.yml")

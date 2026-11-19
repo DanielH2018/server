@@ -1,4 +1,4 @@
-"""`declared_manifest_files` reads every value shape a caller writes a file list in.
+"""`resolved_manifest_files` reads every value shape a caller writes a file list in.
 
 The offline render harnesses ask this which manifests a role renders, so they can render
 the shared default the renderer would render for a basename the role ships no template for.
@@ -16,7 +16,6 @@ Run: uv run pytest scripts/lib/tests/test_k8s_roles_manifest_files.py
 import pytest
 
 from lib.k8s_roles import (
-    declared_manifest_files,
     manifest_template,
     resolved_manifest_files,
     shared_default_templates,
@@ -44,7 +43,7 @@ def test_an_inline_list_is_read(tmp_path):
         "manifests_files: [deployment.yaml, service.yaml]\n"
         "manifests_rollout: widget\n",
     )
-    assert declared_manifest_files("widget", tmp_path) == {
+    assert resolved_manifest_files("widget", tmp_path) == {
         "deployment.yaml",
         "service.yaml",
     }
@@ -54,14 +53,11 @@ def test_a_block_list_is_read(tmp_path):
     _role(
         tmp_path,
         "widget",
-        "---\n"
-        "manifests_files:\n  - deployment.yaml\n  - service.yaml\n"
-        "manifests_secret_files:\n  - secret.yaml\n",
+        "---\nmanifests_files:\n  - deployment.yaml\n  - service.yaml\n",
     )
-    assert declared_manifest_files("widget", tmp_path) == {
+    assert resolved_manifest_files("widget", tmp_path) == {
         "deployment.yaml",
         "service.yaml",
-        "secret.yaml",
     }
 
 
@@ -76,7 +72,7 @@ def test_a_folded_jinja_expression_is_read(tmp_path):
         "     + ['deployment.yaml', 'service.yaml'] }}\n"
         "manifests_rollout: widget\n",
     )
-    assert declared_manifest_files("widget", tmp_path) == {
+    assert resolved_manifest_files("widget", tmp_path) == {
         "pvc.yaml",
         "deployment.yaml",
         "service.yaml",
@@ -93,7 +89,7 @@ def test_a_sibling_key_is_not_read_as_a_manifest(tmp_path):
         "manifests_deferred_dir_name: widget-later\n"
         "loop_control:\n  label: other.yaml\n",
     )
-    assert declared_manifest_files("widget", tmp_path) == {"deployment.yaml"}
+    assert resolved_manifest_files("widget", tmp_path) == {"deployment.yaml"}
 
 
 def test_a_name_in_a_comment_is_not_read(tmp_path):
@@ -106,11 +102,8 @@ def test_a_name_in_a_comment_is_not_read(tmp_path):
         "  # macro.yaml is imported by deployment.yaml, not applied.\n"
         "  - macro.yaml  # and so is not service.yaml\n",
     )
-    assert declared_manifest_files("widget", tmp_path) == set()
-    assert resolved_manifest_files("widget", tmp_path, {"port": 80}) == (
-        {"service.yaml"},
-        set(),
-    )
+    assert resolved_manifest_files("widget", tmp_path) == set()
+    assert resolved_manifest_files("widget", tmp_path, {"port": 80}) == {"service.yaml"}
 
 
 def test_a_name_in_a_list_item_is_read(tmp_path):
@@ -119,13 +112,13 @@ def test_a_name_in_a_list_item_is_read(tmp_path):
         "widget",
         "---\nmanifests_exclude_files:\n  - service.yaml\n",
     )
-    assert resolved_manifest_files("widget", tmp_path, {"port": 80}) == (set(), set())
+    assert resolved_manifest_files("widget", tmp_path, {"port": 80}) == set()
 
 
 def test_a_role_with_no_defaults_file_raises(tmp_path):
     (tmp_path / "widget").mkdir()
     with pytest.raises(ValueError, match=r"widget has no defaults/main\.yml"):
-        declared_manifest_files("widget", tmp_path)
+        resolved_manifest_files("widget", tmp_path)
 
 
 def test_the_shared_default_resolves_only_when_the_role_ships_no_template(tmp_path):
@@ -156,13 +149,13 @@ def test_a_role_that_names_no_service_gets_no_default(tmp_path):
 
 def test_the_real_tree_answers_both_ways():
     """Non-vacuity against the repo itself, not just synthetic roles."""
-    assert "service.yaml" in declared_manifest_files(TAKES_THE_DEFAULT)
+    assert "service.yaml" in resolved_manifest_files(TAKES_THE_DEFAULT)
     # bazarr takes both shared defaults: its Service and its route.
     assert [p.name for p in shared_default_templates(TAKES_THE_DEFAULT)] == [
         "ingressroute-default.yaml.j2",
         "service-default.yaml.j2",
     ]
-    assert "service.yaml" in declared_manifest_files(SHIPS_ITS_OWN)
+    assert "service.yaml" in resolved_manifest_files(SHIPS_ITS_OWN)
     assert shared_default_templates(SHIPS_ITS_OWN) == []
 
 
@@ -201,11 +194,9 @@ def test_a_folded_list_in_defaults_is_read(tmp_path):
         "manifests_files: >-\n"
         "  {{ ['deployment.yaml'] + (['route.yaml'] if lever | bool else []) }}\n"
         "\n"
-        "manifests_secret_files:\n"
-        "  - secret.yaml\n"
         "other: unrelated.yaml\n",
     )
-    assert resolved_manifest_files("widget", tmp_path) == (
-        {"deployment.yaml", "route.yaml"},
-        {"secret.yaml"},
-    )
+    assert resolved_manifest_files("widget", tmp_path) == {
+        "deployment.yaml",
+        "route.yaml",
+    }
