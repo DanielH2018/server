@@ -19,9 +19,8 @@ secret of its own (`k8s/roles/pihole-exporter/defaults/main.yml:manifests_outsid
 - **Its rollout.** The Kustomization's `wait` holds the rollout.
   `k8s_autodeploy` gates no apply: Flux applies every merged change. It still
   decides whether Renovate automerges the image bump.
-- **Its Kustomization carries `dependsOn: pihole`.** pihole is flux-owned too, so the renderer
-  turns the entry's `depends_on: [pihole]` into a real `dependsOn` rather than dropping it into
-  the `homelab/ansible-owned-deps` annotation. Flux therefore applies this tag only after
+- **Its Kustomization carries `dependsOn: pihole`.** The renderer turns the entry's
+  `depends_on: [pihole]` into a real `dependsOn`. Flux therefore applies this tag only after
   pihole's Kustomization is Ready, which is where the `pihole-env` Secret this pod reads comes
   from (below).
 

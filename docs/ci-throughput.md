@@ -40,9 +40,9 @@ skipped required job as a pass.
 
 ## A pull request runs the test modules its diff can affect
 
-A pull-request run's `pytest` legs run a selection, and a push to master and a dispatch run
-every module (#8458, ruled by the operator on 2026-11-15). A push whose tree a
-pull-request run tested runs nothing
+A pull-request run's `pytest` legs run a selection (#8458, ruled by the operator on
+2026-11-15), and so does a push to master whose tree no pull-request run tested. A
+dispatch runs every module. A push whose tree a pull-request run tested runs nothing
 ([ADR-0036](adr/0036-a-selected-run-proves-its-tree-and-a-nightly-sweep-is-the-net.md)).
 
 - **The table.** `scripts/dev/affected_tests.json` holds, for each test module, the tracked
@@ -72,6 +72,15 @@ pull-request run tested runs nothing
   would be the one the pull-request run already ran, and it skips every job
   (`tests/repo/test_ci_skip_proven_master.py::test_a_run_records_the_tree_it_tested_unless_it_was_proven`).
   A landing batch whose run was selected still records nothing on its members.
+- **An unproven push selects against the newest green ancestor.** Master moved under the
+  pull request, so no run tested the pushed tree. The `prove` job names a base,
+  `scripts/dev/tested_tree.py:green_base`: the newest first-parent ancestor whose `prek`
+  gate passed. The legs select the modules the diff from that base can affect. The base is
+  not always the parent. A selection against a parent whose run is red would leave out
+  what the parent broke, and master would read green with that module failing
+  (`scripts/dev/tests/test_tested_tree.py::test_a_red_or_unfinished_parent_is_skipped_for_the_ancestor_behind_it`).
+  A parent whose run has not finished is skipped the same way. With no green ancestor
+  within `MAX_BASE_WALK` commits, or a lookup that fails, the push runs every module.
 
 ## A nightly sweep runs every module
 
@@ -161,7 +170,8 @@ rule in `scripts/deploy_tools/land_lib/` stays where it is, and so does every ch
 pull-request run makes, because the one run is still a pull-request run.
 
 The queue is never what makes a merge correct. When master moves between a PR's run and its
-merge, the trees differ, nothing is proven, and master's run sweeps in full as it did before.
+merge, the trees differ, nothing is proven, and master's run repeats every job but `pytest`,
+whose legs run a selection against the newest green ancestor.
 
 **D9, ruled by the operator on 2026-11-14: every landing forms a batch, and sessions and the
 fan-out open their PRs as drafts.** B3 saves runs only for a draft whose head has had no CI
@@ -356,13 +366,24 @@ B3 lands in four steps, each one exercised before the next:
       because the cluster-pin gate refuses a pin bump that shares its PR. A member merges
       under its PR's title, whatever `--subject` its own landing was given.
 
-      A landing compares its own code with master once, when it forms the batch, and a
-      landing whose code is older forms none (`classify.code_lags_master`). It does not
-      compare again before a member's merge. Until the last member merges, master moves
-      only by the batch's own merges, and the batch's run tested those. On 2026-11-14 the
-      landing of PR 8550 compared before each member: its own merge changed
-      `scripts/renderer/renderer_lib/cluster.py`, which a landing imports, so it refused
-      the two PRs stacked behind it and they cost a second run.
+      A landing compares its own code with master once, when it forms the batch
+      (`classify.code_lags_master`). It does not compare again before a member's merge.
+      Until the last member merges, master moves only by the batch's own merges, and the
+      batch's run tested those. On 2026-11-14 the landing of PR 8550 compared before each
+      member: its own merge changed `scripts/renderer/renderer_lib/cluster.py`, which a
+      landing imports, so it refused the two PRs stacked behind it and they cost a second
+      run.
+
+      A holder whose code is older hands the turn to a landing of its PR from a fresh
+      checkout of origin/master, which forms the batch (`turn.HandOver`). The new landing
+      inherits the turn's locked descriptor, so no other landing takes the turn in
+      between. A turn held over ssh, a lander unit's turn and a turn already handed over
+      are not handed on: that holder lands its PR alone. Before the hand-over, a holder
+      whose code was older formed no batch at all. A landing waits 30 to 60 minutes for
+      the turn under load, and master's landing code changes in that time, so most holders
+      formed none. On the night of 2026-11-18, 12 of the 17 holders that checked the line
+      for a batch logged `no batch ... its landing code is older than master's`. Each such holder held the turn for one full run per PR, so the line moved
+      one PR per run, and the waits for the turn reached 3060 to 4950 s.
 
       The landing pushes nothing. A `merges` call makes a commit with two parents where
       the squash merge makes one, and both make the same tree: for two open heads on

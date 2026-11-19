@@ -369,7 +369,7 @@ def free_issues(
         issues: open register issues in gh's JSON shape, comments included.
         tools: the boundaries the worktree, running-batch and peer-host reads go through.
         pr_refs: issue numbers an open PR says it closes.
-        today: the date a `not-before:` label is compared to.
+        today: the date a Not Before date is compared to.
     """
     trees, dirty, merged, ok = tools.worktree_facts()
     stale: dict[int, str] = {}

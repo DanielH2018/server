@@ -4,8 +4,8 @@ Every edge is generated, never hand-written, from an `Ordering` the caller reads
 `scripts/renderer/template_filters/toposort.py` (`cluster.bundle_ordering`):
 
 - a tag depends on the flux-owned members of its `build_k8s_dep_map` edges. An edge to any
-  other role is dropped, because it would name a Kustomization that does not exist, and the
-  annotation `homelab/ansible-owned-deps` lists it for a reader;
+  other name is left out, because it would name a Kustomization that does not exist, and the
+  annotation `homelab/unrendered-deps` lists it for a reader;
 - a `K8S_APPLIES_LAST` tag also depends on every other tag's `<tag>-deferred`;
 - a tag with a document in `k8s_namespace`, in any of its directories, depends on the shared
   kind `homelab-namespace`, which creates that Namespace and its LimitRange (D5 step 30);
@@ -103,9 +103,8 @@ VERIFY_AFTER = "flux_verify_after"
 
 
 # Lists, comma-separated and sorted, the edges a Kustomization's `dependsOn` leaves out because
-# their role is Ansible-owned. Each becomes a real `dependsOn` in the first render after that
-# role moves to Flux (D4.2).
-ANSIBLE_OWNED_DEPS = "homelab/ansible-owned-deps"
+# they name no flux-owned tag, so no Kustomization of that name exists.
+UNRENDERED_DEPS = "homelab/unrendered-deps"
 # Lists, comma-separated and sorted, the edges a Kustomization's `dependsOn` leaves out because
 # they name a Kustomization of a tag whose role sets `flux_suspend: true` (D5.1b). Each comes
 # back in the first render after the resume.
@@ -118,14 +117,14 @@ class Edges:
 
     Attributes:
         kept: The names its `dependsOn` lists.
-        dropped: The Ansible-owned roles it waits on in the play, which `dependsOn` cannot
-            name. `ANSIBLE_OWNED_DEPS` lists them.
+        unrendered: The names it waits on that are no flux-owned tag, which `dependsOn`
+            cannot name. `UNRENDERED_DEPS` lists them.
         suspended: The Kustomizations of suspended tags it would otherwise depend on.
             `SUSPENDED_DEPS` lists them.
     """
 
     kept: frozenset[str] = frozenset()
-    dropped: frozenset[str] = frozenset()
+    unrendered: frozenset[str] = frozenset()
     suspended: frozenset[str] = frozenset()
 
 
@@ -139,7 +138,7 @@ class Ordering:
         applies_last: The `K8S_APPLIES_LAST` tags.
         namespace_roles: Each namespace a role creates mapped to that role.
         flux_owned: The k8s tags the bundle publishes, or None for the published
-            tags. An edge to any other name is dropped and annotated.
+            tags. An edge to any other name is left out and annotated.
         suspended: The tags whose role sets `flux_suspend: true`, read over every flux-owned
             role so a `--role` subset drops the same edges. An edge to any of their
             Kustomizations is dropped and annotated (`drop_suspended`).
@@ -528,9 +527,9 @@ def kustomization_edges(
             }
             edges[name] = Edges(
                 edges[name].kept | (wanted & owned),
-                edges[name].dropped | (wanted - owned),
+                edges[name].unrendered | (wanted - owned),
             )
-        edges[tag] = Edges(edges[tag].kept | set(before), edges[tag].dropped)
+        edges[tag] = Edges(edges[tag].kept | set(before), edges[tag].unrendered)
         if tag + VERIFY_SUFFIX in directories:
             # The other tags' last Kustomizations, read from `directories`: a flux-owned tag
             # outside the render is kept by its own name, as a tag's edge onto it is.
@@ -569,7 +568,7 @@ def drop_suspended(
     result = {}
     for name, edge in edges.items():
         gone = frozenset(n for n in edge.kept if is_suspended(n))
-        result[name] = Edges(edge.kept - gone, edge.dropped, edge.suspended | gone)
+        result[name] = Edges(edge.kept - gone, edge.unrendered, edge.suspended | gone)
     return result
 
 

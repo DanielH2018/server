@@ -134,6 +134,8 @@ jobs:
   # or failed job, because the job set it and then did not succeed.
   #
   # A normal run takes 6-10s. A hang delays the sweep by the whole timeout, so it is short.
+  # An unproven push also reads up to eleven pages for its green base. A walk that outlasts
+  # the timeout cancels the job, which leaves no base and runs the sweep in full.
   prove:
     name: prove the pushed tree was tested
     if: >-
@@ -144,12 +146,17 @@ jobs:
       && github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-26.04
     timeout-minutes: 2
+    # `checks: read` is for the green-base walk, which reads each ancestor's check-runs.
     permissions:
+      checks: read
       contents: read
       pull-requests: read
       statuses: read
+    # `base` is the newest ancestor whose gate passed, for a push whose tree is not proven:
+    # the `pytest` legs select against it. It is empty on every other answer.
     outputs:
       proven: ${{ steps.prove.outputs.proven }}
+      base: ${{ steps.prove.outputs.base }}
     steps:
       - uses: actions/checkout@v7.0.1
         with:
@@ -443,8 +450,13 @@ jobs:
         # --skip validate-k8s-manifests: the `pytest` job runs the same `main()` over the real
         # tree and asserts it exits 0 (scripts/validate/tests/test_validate_k8s_manifests.py,
         # `real_tree`), so the hook here would be a second render of every k8s role.
-        # --verbose: prek prints each hook's duration only with it, and this log is where a slow hook shows.
-        run: prek run --all-files --verbose --skip validate-k8s-manifests --skip static-ratchet-tests --skip static-ratchet-tests-python --skip static-ratchet-tests-lander --skip static-ratchet-tests-checksum --skip static-ratchet-tests-shell --skip static-ratchet-tests-renovate --skip static-ratchet-tests-evals --skip static-ratchet-tests-landing --skip static-ratchet-tests-alerts --skip static-ratchet-tests-units --skip static-ratchet-tests-test-modules --color always
+        # --log-file: prek's trace log holds each hook's duration, which the next step tabulates.
+        # Without --verbose the job log holds only a failing hook's output.
+        run: prek run --all-files --log-file "$RUNNER_TEMP/prek.log" --skip validate-k8s-manifests --skip static-ratchet-tests --skip static-ratchet-tests-python --skip static-ratchet-tests-lander --skip static-ratchet-tests-checksum --skip static-ratchet-tests-shell --skip static-ratchet-tests-renovate --skip static-ratchet-tests-evals --skip static-ratchet-tests-landing --skip static-ratchet-tests-alerts --skip static-ratchet-tests-units --skip static-ratchet-tests-test-modules --color always
+      - name: Write the slowest hooks to the job summary
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        run: uv run python scripts/dev/prek_durations.py "$RUNNER_TEMP/prek.log" >> "$GITHUB_STEP_SUMMARY"
 
   # The two PR-only refusals, the render-diff gates and the cluster pin checks, in a job of
   # their own. They run beside the `hooks` sweep, so the run wall is the slower of the two jobs
@@ -510,8 +522,9 @@ jobs:
 
   # The pytest suite, invoked as the prek `pytest` hook invokes it (`uv run python -m pytest`,
   # addopts from pyproject.toml), so a local `prek run --all-files` and this job cannot disagree
-  # about what a test run is. A push to master and a dispatch run every module. A pull request
-  # runs the modules its diff can affect; the `Select` step below has the rule.
+  # about what a test run is. A dispatch runs every module, and so does a push with no green
+  # ancestor in reach. A push that has one runs the modules the diff from it can affect, and a
+  # pull request the modules its own diff can affect; the `Select` step below has the rule.
   #
   # Sharded across a matrix, because this job is the pole of every run and a landing
   # waits on it twice — once on the PR, once on the master merge commit that `land.sh` and
@@ -538,8 +551,9 @@ jobs:
   # The accepted cost: a module can gain a dependency after its row was recorded, pass on the
   # pull request for not being selected, and fail later. The net for that module is the
   # nightly sweep in pytest-sweep.yml, which runs every module and reports a red run as an
-  # issue, and the push run of a tree no pull-request run tested, which sweeps in full. A
-  # selected pull-request run records its tested tree, so the push run of that tree skips.
+  # issue. A selected pull-request run records its tested tree, so the push run of that tree
+  # skips. The push run of a tree no pull-request run tested selects too, against the newest
+  # ancestor whose gate passed, so a red or unfinished parent's change stays in its diff.
   # What no run can reach is a test outside `testpaths`, which
   # test_testpaths_covers_every_test_file guards.
   #
@@ -593,14 +607,16 @@ jobs:
       # On a pull request the checkout is the merge commit, so `HEAD^1` is the base and the
       # diff from it is the pull request's own change. `--changed-since` packs only the modules
       # that diff can affect, into as few legs as keep each no heavier than a full sweep's leg
-      # (`scripts/dev/affected_lib/table.py` has the rule). A selection that needs more than half
-      # the legs runs as the whole census and writes `scope=full`, so the run still records its
-      # tested tree (`pytest_shard.py:worthwhile`). The matrix cannot shrink to match,
+      # (`scripts/dev/affected_lib/table.py` has the rule). The matrix cannot shrink to match,
       # because `strategy.job-total` is fixed before any step runs. So a leg the selection does
       # not need gets an empty list, writes `count=0`, and every later step skips on it: the
-      # leg ends green after the checkout and the setup. A push and a dispatch pass no base and
-      # run the whole census, where an empty list is still an error, because a shard that has
-      # silently stopped covering anything must not read as green.
+      # leg ends green after the checkout and the setup.
+      #
+      # A push diffs against the base the `prove` job names: the newest ancestor whose gate
+      # passed, which is not always the parent (`scripts/dev/tested_tree.py:green_base`). A
+      # push with no such base and a dispatch run the whole census, where an empty list is
+      # still an error, because a shard that has silently stopped covering anything must not
+      # read as green.
       #
       # The step sits ahead of the tool installs so an empty leg pays for none of them.
       - name: Select this shard's test files
@@ -608,10 +624,14 @@ jobs:
         env:
           SHARD: ${{ matrix.shard }}
           SHARDS: ${{ strategy.job-total }}
+          GREEN_BASE: ${{ needs.prove.outputs.base }}
         run: |
           set -euo pipefail
           since=()
           if [ "$GITHUB_EVENT_NAME" = pull_request ]; then since=(--changed-since "HEAD^1"); fi
+          if [ "$GITHUB_EVENT_NAME" = push ] && [ -n "${GREEN_BASE:-}" ]; then
+            since=(--changed-since "$GREEN_BASE")
+          fi
           uv run python scripts/dev/pytest_shard.py --of "$SHARDS" --shard "$SHARD" \
             "${since[@]}" --out "$RUNNER_TEMP/shard.txt"
       # sops, age, apt-utils and the dotfiles packages, from the action the nightly sweep in
@@ -2019,18 +2039,35 @@ jobs:
           # `prove` runs on a push and on a labelled PR, so it is `skipped` on every other run. A `cancelled`
           # or `failure` `prove` broke on the runner, so whatever it said is unproven and every
           # dependent ran.
-          case "$PROVE" in success | skipped | cancelled | failure) ;; *) exit 1 ;; esac
+          case "$PROVE" in
+            success | skipped | cancelled | failure) ;;
+            *) echo "::error title=gate::prove's result is '$PROVE', not success, skipped, cancelled or failure"; exit 1 ;;
+          esac
           proven=false
           if [ "$PROVE" = success ] && [ "${PROVEN:-}" = true ]; then proven=true; fi
           ok() { [ "$1" = success ] || { [ "$proven" = true ] && [ "$1" = skipped ]; }; }
           # $1 a build reader's result, $2 the build's answer to whether it had work for it. The
           # build's own result is required below, so a build that failed passes nothing here.
-          idle() { [ "$1" = skipped ] && [ "$2" = false ]; }
-          ok "$HOOKS" && ok "$PR_GATES" && ok "$PYTEST" && ok "$DECK_MOD" && ok "$LOCKFILE" \
-            && ok "$FLUX_ROUNDTRIP" && ok "$SOPS_TYPE_PROOF" && ok "$HOST_PACKAGES_BUILD" \
-            && { ok "$HOST_PACKAGES" || idle "$HOST_PACKAGES" "${RUN_CASES:-}"; } \
-            && { ok "$HOST_PACKAGES_BOOTSTRAP" || idle "$HOST_PACKAGES_BOOTSTRAP" "${RUN_CASES:-}"; } \
-            && { ok "$HOST_TOOLS_ARM64" || idle "$HOST_TOOLS_ARM64" "${ARM64_TOOLS:-}"; }
+          ok_or_idle() { ok "$1" || { [ "$1" = skipped ] && [ "$2" = false ]; }; }
+          # `need <half> <check> <result> [<build's answer>]` records the half as `<half>=<result>`
+          # when the check refuses its result.
+          failed=()
+          need() { local half=$1; shift; "$@" || failed+=("$half=$2"); }
+          need hooks ok "$HOOKS"
+          need pr-gates ok "$PR_GATES"
+          need pytest ok "$PYTEST"
+          need deck-mod ok "$DECK_MOD"
+          need lockfile ok "$LOCKFILE"
+          need flux-roundtrip ok "$FLUX_ROUNDTRIP"
+          need sops-type-proof ok "$SOPS_TYPE_PROOF"
+          need host-packages-build ok "$HOST_PACKAGES_BUILD"
+          need host-packages ok_or_idle "$HOST_PACKAGES" "${RUN_CASES:-}"
+          need host-packages-bootstrap ok_or_idle "$HOST_PACKAGES_BOOTSTRAP" "${RUN_CASES:-}"
+          need host-tools-arm64 ok_or_idle "$HOST_TOOLS_ARM64" "${ARM64_TOOLS:-}"
+          if [ "${#failed[@]}" -gt 0 ]; then
+            echo "::error title=gate::${#failed[@]} halves failed: ${failed[*]}"
+            exit 1
+          fi
 
       # Records what this green run tested, for the push run's `prove` job. On a pull
       # request GITHUB_SHA is the merge commit of refs/pull/N/merge, and its tree is the tree

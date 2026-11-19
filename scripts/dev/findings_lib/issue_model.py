@@ -38,9 +38,6 @@ NO_REOPEN = frozenset(("refuted", "accepted"))
 # system with the artifacts; severity is red / yellow / green, state markers are greys.
 LABELS: dict[str, tuple[str, str]] = {
     "claude": ("cba6f7", "Filed by Claude via scripts/dev/findings.py"),
-    "severity/high": ("f38ba8", "Review severity: High"),
-    "severity/medium": ("f9e2af", "Review severity: Medium"),
-    "severity/low": ("a6e3a1", "Review severity: Low"),
     "kind/gap": ("fab387", "Something missing that should exist"),
     "kind/improvement": ("89b4fa", "Something present that could be better"),
     "kind/addition": ("94e2d5", "A new capability"),
@@ -60,14 +57,16 @@ LABELS: dict[str, tuple[str, str]] = {
     ),
     "review-leftover": ("fab387", "Left after a fan-out fix round; next ranks it last"),
 }
-# `not-before:<YYYY-MM-DD>` is NOT listed here: its name carries a date, so there is one label
-# per date and `plan_sync_labels` cannot know them ahead of time. `plan_ensure_label` creates
-# one on demand with this style, the moment `open --not-before` or `defer` first needs it.
+# The account-level issue fields that hold an issue's severity and its not-before date. The
+# operator created both under Settings > Planning > Issue fields; the names and the Severity
+# options are matched exactly. `gh_calls.attach_fields` puts their values in `issue["fields"]`.
+SEVERITY_FIELD, NOT_BEFORE_FIELD = "Severity", "Not Before"
+SEVERITY_OPTIONS = {s: s.capitalize() for s in SEVERITIES}
+# The labels that held the same two values. Sessions still on a pre-field checkout write only
+# these, so the readers below take them as a fallback.
+# TODO: https://github.com/DanielH2018/server/issues/9120 - delete with the labels.
 NOT_BEFORE_PREFIX = "not-before:"
-NOT_BEFORE_STYLE = (
-    "585b70",
-    "Withheld from `next` and `claim` until the date in the name; expires on its own",
-)
+SEVERITY_PREFIX = "severity/"
 for _d in DOMAINS:
     LABELS[f"domain/{_d}"] = ("b4befe", f"Reviewer domain: {_d}")
 
@@ -202,29 +201,50 @@ def label_names(issue: dict) -> set[str]:
     return {lab["name"] for lab in issue.get("labels", [])}
 
 
-def not_before_label(day: date) -> str:
-    return f"{NOT_BEFORE_PREFIX}{day.isoformat()}"
+def field_value(issue: dict, name: str) -> str | None:
+    """The value of issue field ``name`` on ``issue``, or None when it is unset."""
+    return (issue.get("fields") or {}).get(name)
+
+
+def severity(issue: dict) -> str | None:
+    """``issue``'s severity as one of `SEVERITIES`, or None.
+
+    Read from the Severity issue field, falling back to a `severity/<level>` label.
+    """
+    held = field_value(issue, SEVERITY_FIELD)
+    if held:
+        return held.lower()
+    return _prefixed(label_names(issue), SEVERITY_PREFIX)
 
 
 def not_before(issue: dict) -> date | None:
     """The date before which ``issue`` is withheld from `next` and `claim`, or None.
 
-    Read from a `not-before:<YYYY-MM-DD>` LABEL, not a body trailer, and on purpose: this
-    repo is public, so a trailer needs the author check `current_claim` does, while only a
-    collaborator can apply a label. Being a label also means it expires on its own — the
-    callers compare it to today and nobody has to clear it, which is what `manual` lacks.
+    Read from the Not Before issue field, not a body trailer, and on purpose: this repo is
+    public, so a trailer needs the author check `current_claim` does, while setting an issue
+    field takes triage access or more, as applying a label does. A date also expires on its
+    own — the callers compare it to today and nobody has to clear it, which is what `manual`
+    lacks.
 
-    A label whose date does not parse counts as no deferral: `issue_rows` feeds the docs
-    cron, which must not fall over on a hand-typed label. Several labels take the LATEST
-    date, so a stray earlier one cannot un-defer the issue.
+    A `not-before:<YYYY-MM-DD>` label counts too, and the LATEST of the field and every such
+    label wins, so a session on a pre-field checkout that defers by label still withholds the
+    issue, and a stray earlier date cannot un-defer it. A value whose date does not parse
+    counts as no deferral: `issue_rows` feeds the docs cron, which must not fall over on a
+    hand-typed label.
     """
+    held = field_value(issue, NOT_BEFORE_FIELD)
+    texts = [held] if held else []
+    texts += [
+        name[len(NOT_BEFORE_PREFIX) :]
+        for name in label_names(issue)
+        if name.startswith(NOT_BEFORE_PREFIX)
+    ]
     days = []
-    for name in label_names(issue):
-        if name.startswith(NOT_BEFORE_PREFIX):
-            try:
-                days.append(date.fromisoformat(name[len(NOT_BEFORE_PREFIX) :]))
-            except ValueError:
-                continue
+    for text in texts:
+        try:
+            days.append(date.fromisoformat(text))
+        except ValueError:
+            continue
     return max(days) if days else None
 
 
@@ -652,7 +672,7 @@ def issue_rows(issues: list[dict]) -> list[dict]:
                 "number": issue["number"],
                 "title": issue["title"],
                 "state": issue.get("state", "OPEN"),
-                "severity": _prefixed(names, "severity/"),
+                "severity": severity(issue),
                 "kind": _prefixed(names, "kind/"),
                 "domain": _prefixed(names, "domain/"),
                 "escalated": "escalated" in names,
@@ -688,7 +708,7 @@ def pickable(
             every one of them at once.
         pr_refs: issue numbers an open PR already says it closes. Without this, a session
             picks up work another session has finished but not yet landed.
-        today: the date a `not-before:` label is compared to. Passed in, like `when` is to
+        today: the date a Not Before date is compared to. Passed in, like `when` is to
             `plan_claim`, so the boundary is testable: an issue is offered ON its date.
     """
     rows = [

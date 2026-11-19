@@ -105,6 +105,7 @@ tests:
                 https://edge-selfcheck.local.example.com/.well-known/traefik-edge-selfcheck has
                 failed for 2 minutes. Read probe_http_status_code or probe_dns_lookup_time_seconds
                 for this instance, then the workload's own log.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#extraprobefailedcritical
       - eval_time: 6m
         alertname: ExtraProbeFailed
         exp_alerts: []

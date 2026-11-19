@@ -10,7 +10,7 @@ Run: uv run pytest scripts/dev/tests/test_findings_open.py
 import subprocess
 
 import pytest
-from _findings_fakes import Fakes, build_tools
+from _findings_fakes import Fakes, aimed_at, build_tools
 from dev import findings
 from dev.findings_lib.issue_model import (
     LABELS,
@@ -270,7 +270,7 @@ def test_open_cli_with_repo_aims_every_read_and_write_there(tmp_path, make_tools
     assert {"label list", "issue list", "label create", "issue create"} <= _commands(
         calls
     )
-    assert all(c[-2:] == ["--repo", _OTHER] for c in calls.gh + calls.gh_json)
+    assert aimed_at(calls, _OTHER)
 
 
 def test_open_cli_with_repo_aims_the_reopen_and_release_there(
@@ -293,7 +293,7 @@ def test_open_cli_with_repo_aims_the_reopen_and_release_there(
         c[:3] == ["issue", "comment", "3"] and f"Released: `{_HOLDER}`" in c[4]
         for c in calls.gh
     )
-    assert all(c[-2:] == ["--repo", _OTHER] for c in calls.gh + calls.gh_json)
+    assert aimed_at(calls, _OTHER)
 
 
 def test_open_cli_without_repo_passes_no_repo_flag(tmp_path, make_tools):

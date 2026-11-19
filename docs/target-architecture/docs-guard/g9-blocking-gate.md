@@ -84,8 +84,10 @@ content citation reaches 419.
 exit code. A session and a fan-out batch both run that script before they open a PR.
 `fact_status.py notice --format reread` prints the same lines.
 
-**What reopens the slice.** A later replay whose graded share reaches 20%. The report
-lists the rows to grade:
+**What reopens the slice.** A later replay whose graded share reaches 20%. The report no
+longer runs the notice replay: the PR that deleted it left `comment_replay` only. To measure
+again, restore `notice_replay` and `render_replay` from `scripts/lib/facts/replay.py` at
+`d494d4084`, wire them into `scripts/lib/facts/report.py`, then list the rows to grade:
 
 ```bash
 uv run python scripts/dev/fact_status.py report --days 30 --json \

@@ -94,10 +94,11 @@ tests:
             exp_annotations:
               summary: The ingress probe of authelia is failing.
               description: >-
-                blackbox_exporter's http_2xx probe of https://auth.local.example.com has failed for
-                2 minutes. authelia is home-critical. A probe behind SSO expects Authelia's 302 and
-                never reaches the backend, so a failure there is in Traefik or Authelia. Read
-                probe_http_status_code for this instance, then the Traefik and Authelia logs.
+                Read probe_http_status_code for https://auth.local.example.com, then the workload's
+                log. blackbox_exporter's http_2xx probe has failed for 2 minutes. A probe behind SSO
+                expects Authelia's 302 and never reaches the backend, so read Traefik and Authelia
+                first there.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#ingressprobefailedcritical
       - eval_time: 6m
         alertname: IngressProbeFailed
         exp_alerts: []
@@ -128,6 +129,7 @@ tests:
                 exporter is down or unreachable from Prometheus and no ingress probe runs. The
                 per-service ingress alerts go quiet while it lasts. Read the blackbox-exporter
                 pod's events and log in the homelab namespace.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#blackboxexporterdown
       - eval_time: 11m
         alertname: IngressProbesMissing
         exp_alerts: []

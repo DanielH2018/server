@@ -152,7 +152,7 @@ def test_reject_a_deny_guard_whose_project_dir_is_gone_exits_2(tmp_path, name):
     """Bare, `/bin/sh` exits 127 here, which the harness lets through."""
     proc = _run_as_the_harness(COMMANDS[name], tmp_path / "gone")
     assert proc.returncode == 2, proc.stderr
-    assert f"run-hook.sh {name}:" in proc.stderr
+    assert f"[{name}] " in proc.stderr
     assert "exit 127" in proc.stderr
     if name == "bash-pretool":
         for guard in MERGED_DENY_GUARDS:
