@@ -61,6 +61,36 @@ def test_a_row_keeps_what_the_run_touched_in_the_tracked_tree(tmp_path):
     )
 
 
+@pytest.mark.parametrize(
+    ("escaped", "kept"),
+    [(r"caf\303\251.md", {"docs/café.md"}), (r"caf\351.md", set())],
+)
+def test_a_missing_path_is_kept_only_when_the_table_can_hold_it(
+    tmp_path, escaped, kept
+):
+    (tmp_path / "docs").mkdir()
+    log = (
+        f'1 openat(AT_FDCWD<{tmp_path}>, "docs/{escaped}", O_RDONLY) = -1 ENOENT '
+        "(No such file or directory)\n"
+    )
+
+    row = record.reduce(
+        trace.parse([log], str(tmp_path)),
+        set(),
+        tmp_path,
+        frozenset({"docs/a.md"}),
+        "/git/index",
+    )
+
+    assert row.missing == kept
+    row_table = table.Table()
+    row_table.put(TRACE_TEST, row, "0" * 40)
+    out = tmp_path / "table.json"
+    table.dump(row_table, out)
+    # Python's json accepts a lone surrogate escape; prek's `check json` refuses it.
+    assert "\\udc" not in out.read_text()
+
+
 def test_a_run_that_read_gits_index_depends_on_the_whole_tree(tmp_path):
     touched = trace.Touched(reads={"/git/index"}, root_pid=1)
 
