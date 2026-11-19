@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/size.py
-generated_at: 2026-11-19 06:17 UTC
-generated_sha: 74a6a49d0
+generated_at: 2026-11-19 22:39 UTC
+generated_sha: f1939c91b
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,13 +12,13 @@ generated_sha: 74a6a49d0
 
 # Repo size
 
-Tracked files and lines at the last commit before 00:00 UTC on the day in `generated_at`, and at the last commit before 00:00 UTC 30 and 90 days earlier. A proposal names its net complexity delta against these numbers. A line is one line of a tracked file as `git diff --numstat` counts it from the empty tree; a binary file counts as a file with no lines. The files the docs-refresh cron commits are not counted: `docs/reference/`, `docs/assets/generated/`, `scripts/dev/pytest_shard_weights.json`, `scripts/dev/pytest_shard_runner_weights.json`, `scripts/dev/affected_tests.json`.
+Tracked files and lines at the last commit before 00:00 UTC on the day in `generated_at`, and at the last commit before 00:00 UTC 30 and 90 days earlier. A proposal names its net complexity delta against these numbers. A line is one line of a tracked file as `git diff --numstat` counts it from the empty tree; a binary file counts as a file with no lines. The files the docs-refresh cron commits are not counted: `docs/reference/`, `docs/assets/generated/`, `scripts/dev/pytest_shard_runner_weights.json`, `scripts/dev/affected_tests.json`.
 
 ## Files and lines per top-level tree
 
 | Tree | Files today | Lines today | Files 30 days earlier | Lines 30 days earlier | Files 90 days earlier | Lines 90 days earlier |
 |---|---:|---:|---:|---:|---:|---:|
-| `scripts/` | 1,210 | 259,104 | 1,013 | 238,715 | 57 | 17,831 |
+| `scripts/` | 1,211 | 260,576 | 1,014 | 240,073 | 57 | 17,831 |
 | `k8s/` | 974 | 172,572 | 0 | 0 | 0 | 0 |
 | `docs/` | 198 | 118,818 | 425 | 106,678 | 45 | 16,601 |
 | `hosts/` | 838 | 105,611 | 49 | 3,819 | 0 | 0 |
@@ -33,7 +33,7 @@ Tracked files and lines at the last commit before 00:00 UTC on the day in `gener
 | `styles/` | 3 | 684 | 3 | 666 | 0 | 0 |
 | `.vscode/` | 1 | 14 | 1 | 18 | 1 | 18 |
 | `ansible/` | 0 | 0 | 2,092 | 363,145 | 1,023 | 117,421 |
-| **Total** | 3,938 | 779,410 | 3,771 | 745,278 | 1,232 | 160,559 |
+| **Total** | 3,939 | 780,882 | 3,772 | 746,636 | 1,232 | 160,559 |
 
 ## Tests and instructions
 

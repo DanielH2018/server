@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/networking.py
-generated_at: 2026-11-19 06:17 UTC
-generated_sha: 74a6a49d0
+generated_at: 2026-11-19 22:39 UTC
+generated_sha: f1939c91b
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: 74a6a49d0
 
 # Networking
 
-38 routed k8s service(s).
+39 routed k8s service(s).
 
 !!! note "The domain is filled in by your browser"
     A route answers on the LAN name, the public name or both, and a static page cannot know which one you are on, so the generator writes `<domain>`. On the docs site the routes below become links, built from the domain of the URL you are reading this on — so you get LAN links on the LAN name and public links on the public one.
@@ -25,6 +25,7 @@ generated_sha: 74a6a49d0
 
 | Service | Host | Route | Reachable from | Middlewares |
 |---|---|---|---|---|
+| airflow | daniel-box | <span class="fqdn" data-host="airflow">airflow.&lt;domain&gt;</span> · <span class="fqdn" data-host="airflow.local">airflow.local.&lt;domain&gt;</span> | LAN + public | `rate-limit`, `authelia` |
 | artifacts | daniel-box | <span class="fqdn" data-host="artifacts">artifacts.&lt;domain&gt;</span> · <span class="fqdn" data-host="artifacts.local">artifacts.local.&lt;domain&gt;</span> | LAN + public | `rate-limit`, `authelia` |
 | authelia | daniel-box | <span class="fqdn" data-host="auth">auth.&lt;domain&gt;</span> · <span class="fqdn" data-host="auth.local">auth.local.&lt;domain&gt;</span> | LAN + public | `rate-limit` |
 | bazarr | daniel-box | <span class="fqdn" data-host="bazarr.local">bazarr.local.&lt;domain&gt;</span> (LAN only) | LAN only | `rate-limit`, `authelia` |
