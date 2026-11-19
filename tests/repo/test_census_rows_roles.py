@@ -11,6 +11,7 @@ Run: uv run pytest tests/repo/test_census_rows_roles.py
 import re
 
 import pytest
+from _extra_rollouts_row import EXTRA_ROLLOUTS_RESTART_AS_DECLARED
 from _flux_ownership_row import K8S_ROLES_ARE_REACHABLE
 from _host_script_row import HOST_SCRIPT_WRITES
 from _role_files_rows import DASHBOARDS_IN_EXPORTER_FORM, ROLE_PYTHON_HAS_TESTS
@@ -368,6 +369,7 @@ ROWS = (
     RETIRED_CRON_ARMS,
     ROLE_PYTHON_HAS_TESTS,
     DASHBOARDS_IN_EXPORTER_FORM,
+    EXTRA_ROLLOUTS_RESTART_AS_DECLARED,
 )
 
 _IDS = [row.name for row in ROWS]

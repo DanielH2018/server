@@ -259,9 +259,8 @@ Because the node stays Ready on WiFi, a pulled cable or a dead switch port cause
 that anything else reports. Prometheus raises `WiredLinkDown`, a warning routed to Discord,
 once the link that `k3s_node_static_link` names has had no carrier, or has been down, for 5
 minutes. The rules live in the observability role's `host-checks` group, one per node.
-`tests/services/test_host_plane_rule_literals.py` holds them to each node's
-`k3s_node_static_link`, so a node that pins a new link fails that test until its rule is
-added (#5124).
+`scripts/dev/gen_host_rules.py` renders them from each node's `k3s_node_static_link`, so a
+node that pins a new link gains its rule at the next render (#5124).
 
 The same ARP behaviour has a cost with the cable in. Both links answer a broadcast ARP
 request, so a client can learn the WiFi MAC for an address the wired link carries. MetalLB's

@@ -3,9 +3,9 @@
 
 Each workflow that runs the flux CLI pins it in env as `FLUX_VERSION` and `FLUX_SHA256`, and
 its jobs fetch that release through a cache keyed on the pin.
-tests/repo/test_promote_workflow.py holds the promote workflow's pin equal to
-`flux_version` in k8s/roles/flux, and the census below holds every workflow's pin equal to it
-and to the amd64 digest in homelab-tools. A custom manager reads each pin from the
+The `promote-flux-cli-matches-the-controllers` row of tests/repo/test_census_rows_workflows.py
+holds the promote workflow's pin equal to `flux_version` in k8s/roles/flux, and the census below
+holds every workflow's pin equal to it and to the amd64 digest in homelab-tools. A custom manager reads each pin from the
 `# renovate:` comment on the line above it.
 
 These tests hold two things. The manager finds every pin, version and digest in one match. And
@@ -34,14 +34,17 @@ DEP_NAME = "fluxcd/flux2"
 HOMELAB_TOOLS = "hosts/packages/homelab-tools/package.yml"
 
 # Named rather than derived: a workflow that lost its pin fails here instead of shrinking the
-# census and passing. Each value counts the jobs whose fetch reads the file's one pin.
+# census and passing. Each value counts the jobs whose fetch reads the file's one pin, inline or
+# through the pinned-tool action.
 FLUX_PINS = {
     WORKFLOW: 5,
     ".github/workflows/ci.yml": 2,
     ".github/workflows/bootstrap-drill.yml": 1,
     ".github/workflows/flux-deletion-drill.yml": 1,
 }
-FETCH = "fluxcd/flux2/releases/download/$FLUX_VERSION/"
+FETCH = re.compile(
+    r"fluxcd/flux2/releases/download/\$FLUX_VERSION/|^\s+tool: flux$", re.M
+)
 
 # The deps named `fluxcd/flux2` other than the workflow pin, as the extract reports each:
 # (file, datasource, manager, depType). `_dep` derives the workflow pin from its manager.
@@ -113,7 +116,7 @@ def test_the_manager_reads_every_flux_cli_pin(workflow: str) -> None:
     patterns = _manager().get("managerFilePatterns", [])
     assert any(_file_pattern_to_regex(fp).search(workflow) for fp in patterns), patterns
     text = (_REPO / workflow).read_text(encoding="utf-8")
-    assert text.count(FETCH) == FLUX_PINS[workflow]
+    assert len(FETCH.findall(text)) == FLUX_PINS[workflow]
     matches = _matches(text)
     assert [(m["currentValue"], m["currentDigest"]) for m in matches] == [
         (_flux_version(), _amd64_digest())

@@ -16,7 +16,7 @@ from pathlib import Path
 
 _sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from fanout_lib.brief import APPLY_OWED, fence_for
+from fanout_lib.brief import APPLY_OWED, DESIGN_HEADING, DESIGN_RULES, fence_for
 from fanout_lib.review.review_land import LAND_SH
 
 if TYPE_CHECKING:
@@ -27,6 +27,12 @@ if TYPE_CHECKING:
 HYGIENE_SKILL = (
     Path.home() / ".claude" / "skills" / "test-scenario-hygiene" / "SKILL.md"
 )
+PROMPT_FILE = Path(__file__).resolve().parent / "review_system_prompt.md"
+
+
+def system_prompt() -> str:
+    """The reviewer's system prompt: the prompt file, then the brief's design list."""
+    return f"{PROMPT_FILE.read_text()}\n# {DESIGN_HEADING}\n\n{DESIGN_RULES}"
 
 
 def anti_patterns(skill: Path = HYGIENE_SKILL) -> str:
@@ -63,6 +69,7 @@ FINDINGS_SCHEMA = {
                             "security",
                             "test",
                             "convention",
+                            "design",
                             "other",
                         ],
                     },

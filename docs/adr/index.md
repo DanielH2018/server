@@ -82,6 +82,7 @@ wrong is worth more than the record of one that did not.
 | [0035](0035-skeptic-and-implementer-carry-no-maxturns.md) | The skeptic and implementer agents carry no turn cap | Accepted | 2026-11-14 |
 | [0036](0036-a-selected-run-proves-its-tree-and-a-nightly-sweep-is-the-net.md) | A selected pull-request run proves its tree, and a nightly sweep is the net for a stale row | Accepted | 2026-11-19 |
 | [0037](0037-the-renderer-keeps-jinja-after-ansible.md) | The renderer keeps Jinja after Ansible, and sheds the Ansible model instead | Accepted | 2026-11-19 |
+| [0038](0038-design-is-checked-where-code-is-written.md) | Design is checked where code is written, and a design finding only takes code out | Accepted | 2026-11-19 |
 
 ## The long-form behind a record
 

@@ -12,7 +12,7 @@ import re
 from functools import cache
 
 import pytest
-from _workflow_rows import WORKFLOW_ROWS
+from _config_rows import CONFIG_ROWS
 from _shimmed_path_row import PREPENDED_PATHS, RESET_PATHS, SHIMMED_PATHS
 from _test_script_bodies_row import TEST_SCRIPT_BODIES
 from _component_contract_row import COMPONENT_TIMERS_CARRY_A_CONTRACT
@@ -347,7 +347,7 @@ ROWS = (
             "domain, and the settled-findings register in `docs/reference/backlog.md`. An "
             'inline "Honor accepted designs (don\'t re-flag): ..." list in an agent drifts '
             "from both. Point at the domain's section instead "
-            "(`test_reviewer_agents_carry_no_hand_reflag_list.py` holds the pointers)."
+            "(the `pointed-reviewer-agents-name-their-domain-in-both-sources` row holds the pointers)."
         ),
         files=lambda: tracked(".claude/agents/*.md"),
         offence=lines_matching(INLINE_REFLAG_LIST),
@@ -407,7 +407,7 @@ ROWS = (
     ),
 )
 
-ROWS += WORKFLOW_ROWS
+ROWS += CONFIG_ROWS
 ROWS += (
     SHIMMED_PATHS,
     PREPENDED_PATHS,

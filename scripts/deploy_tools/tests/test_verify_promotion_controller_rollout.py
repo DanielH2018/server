@@ -32,7 +32,7 @@ def test_the_627fd395_timeline_reads_good():
     expected = vp.expected_set(HOP, PROD)
     clock = Clock()
     reads = timeline(clock, [(0, REPLACED), (12, FLUX_UP), (90, RECOVERED)])
-    assert vp.verify(reads, T, PRIOR, expected) == vp.Verdict("good")
+    assert vp.verify(reads, T, PRIOR, expected) == vp.Verdict(vp.VerifyVerdict.GOOD)
 
 
 def test_the_soaks_parting_failure_waits_for_its_fresh_success():
@@ -40,7 +40,7 @@ def test_the_soaks_parting_failure_waits_for_its_fresh_success():
     expected = vp.expected_set(HOP, PROD)
     clock = Clock()
     reads = timeline(clock, [(0, FLUX_UP), (45, RECOVERED)])
-    assert vp.verify(reads, T, PRIOR, expected) == vp.Verdict("good")
+    assert vp.verify(reads, T, PRIOR, expected) == vp.Verdict(vp.VerifyVerdict.GOOD)
     assert clock.now >= 45
 
 
@@ -50,7 +50,7 @@ def test_regression_guard_without_flux_in_the_changed_set_the_same_failure_holds
     clock = Clock()
     verdict = vp.verify(timeline(clock, [(0, REPLACED)]), T, PRIOR, expected)
     assert "flux" not in expected.names
-    assert verdict == vp.Verdict("failed", ("soak",))
+    assert verdict == vp.Verdict(vp.VerifyVerdict.FAILED, ("soak",))
     assert clock.sleeps == 0
 
 
@@ -58,14 +58,14 @@ def test_a_success_late_in_the_grace_still_reads_good():
     expected = vp.expected_set(HOP, PROD)
     clock = Clock()
     reads = timeline(clock, [(0, REPLACED), (cr.GRACE_S - 60, RECOVERED)])
-    assert vp.verify(reads, T, PRIOR, expected) == vp.Verdict("good")
+    assert vp.verify(reads, T, PRIOR, expected) == vp.Verdict(vp.VerifyVerdict.GOOD)
 
 
 def test_a_flux_failure_no_success_follows_holds_when_the_grace_ends():
     expected = vp.expected_set(HOP, PROD)
     clock = Clock()
     verdict = vp.verify(timeline(clock, [(0, REPLACED)]), T, PRIOR, expected)
-    assert verdict == vp.Verdict("failed", ("flux", "soak"))
+    assert verdict == vp.Verdict(vp.VerifyVerdict.FAILED, ("flux", "soak"))
     assert cr.GRACE_S <= clock.now < cr.GRACE_S + vp.POLL_S < expected.timeout_s
 
 
@@ -75,5 +75,5 @@ def test_regression_guard_another_names_failure_stays_final_in_a_flux_hop():
     clock = Clock()
     states = {**FLUX_UP, "flux/sonarr": "failure"}
     verdict = vp.verify(timeline(clock, [(0, states)]), T, PRIOR, expected)
-    assert verdict == vp.Verdict("failed", ("soak", "sonarr"))
+    assert verdict == vp.Verdict(vp.VerifyVerdict.FAILED, ("soak", "sonarr"))
     assert clock.sleeps == 0

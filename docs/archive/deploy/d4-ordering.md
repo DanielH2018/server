@@ -584,7 +584,8 @@ hop to every chain.
   at 5.5 hours for that reason, and at the cap `settle` writes the hold like any other
   timeout.
     - **Three limits move with the derived timeout.**
-      `tests/repo/test_promote_workflow_verify.py` holds them against each other:
+      the `promote-verify-*` and `promote-job-timeout-*` rows of
+      `tests/repo/test_census_rows_workflows.py` hold them against each other:
       `verify`'s `timeout-minutes` must exceed the derived timeout, `decide`'s in-flight wait
       (`scripts/deploy_tools/promote_lib/verify_promotion.py:IN_FLIGHT_WAIT_S`) must cover
       `verify`'s and `settle`'s `timeout-minutes`, and the `promote` job's `timeout-minutes`

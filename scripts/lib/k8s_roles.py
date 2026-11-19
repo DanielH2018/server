@@ -216,7 +216,7 @@ def is_manifest_template(path: Path) -> bool:
     """True if this `.j2` under a role's templates/ is a manifest this script should parse.
 
     A role may also ship a helper script (registry's registry-gc.sh.j2) or a Dockerfile
-    for image-builder (homelab-mcp). Shell is rendered and linted by validate/shell_templates.py;
+    for image-builder (homelab-mcp). Shell is rendered and linted by validate/render_lib/shell.py;
     a Dockerfile is consumed by buildctl. Parsing either here reports a comment line as malformed
     YAML.
 

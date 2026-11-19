@@ -346,11 +346,30 @@ def test_deploy_failed_and_gave_up_write_no_annotation(sim):
 
 def test_the_exit_codes_are_land_sh_s(capsys):
     assert (
-        promote_wait.report_wait(M, promote_wait.WaitResult("settled", revision=D)) == 0
+        promote_wait.report_wait(
+            M, promote_wait.WaitResult(promote_wait.WaitVerdict.SETTLED, revision=D)
+        )
+        == 0
     )
-    assert promote_wait.report_wait(M, promote_wait.WaitResult("deploy-failed")) == 1
-    assert promote_wait.report_wait(M, promote_wait.WaitResult("gave-up")) == 75
+    assert (
+        promote_wait.report_wait(
+            M, promote_wait.WaitResult(promote_wait.WaitVerdict.DEPLOY_FAILED)
+        )
+        == 1
+    )
+    assert (
+        promote_wait.report_wait(
+            M, promote_wait.WaitResult(promote_wait.WaitVerdict.GAVE_UP)
+        )
+        == 75
+    )
     assert capsys.readouterr().out.splitlines()[-1].startswith("verdict=gave-up ")
+
+
+def test_a_verdict_outside_the_set_is_refused_where_the_result_is_built():
+    """A misspelt verdict would otherwise reach `wait_on_promotion` and end the wrong way."""
+    with pytest.raises(ValueError, match="setled"):
+        promote_wait.WaitResult("setled")  # ty: ignore[invalid-argument-type]
 
 
 # -- the forge reads -------------------------------------------------------------------------

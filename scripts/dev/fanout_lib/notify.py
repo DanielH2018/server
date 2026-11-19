@@ -29,7 +29,7 @@ import sys as _sys
 _sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 _sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from fanout_lib.brief import _snapshot_root
+from fanout_lib.brief import _snapshot_root, _worktree_path
 from fanout_lib.manifest import Batch
 from fanout_lib.target import HEADLESS_PYTHON, Target, branch_name
 from fanout_lib.status import (
@@ -70,11 +70,13 @@ def stop_post(batch: str, target: Target) -> str:
     Another repo's worktree does not carry this file, so its batch runs the copy in its
     snapshot of this repo, as `launch.review_script` does.
     """
-    script = NOTIFY_SCRIPT
+    script, copy = NOTIFY_SCRIPT, _worktree_path(batch, target)
     if not target.is_server:
-        script = f"{_snapshot_root(batch, target)}/{NOTIFY_SCRIPT}"
+        copy = _snapshot_root(batch, target)
+        script = f"{copy}/{NOTIFY_SCRIPT}"
     command = (
-        f"exec uv run --no-project --no-python-downloads --python {HEADLESS_PYTHON} "
+        f"exec env PYTHONPATH={copy}/scripts "
+        f"uv run --no-project --no-python-downloads --python {HEADLESS_PYTHON} "
         f"{script} --batch {batch} --unit {target.unit_prefix}-{batch} "
         f"--branch {branch_name(batch)} --repo {target.repo} >>.fanout/notify.log 2>&1"
     )

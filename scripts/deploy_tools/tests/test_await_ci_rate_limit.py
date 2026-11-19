@@ -9,6 +9,7 @@ import urllib.error
 
 import await_ci
 import pytest
+from ci_verdict import CheckRun
 
 INTERVAL_S = 20
 
@@ -38,8 +39,7 @@ def test_a_rate_limit_403_waits_for_the_reset_rather_than_polling_as_pending(
     rate_limited,
 ):
     green = [
-        {"name": name, "status": "completed", "conclusion": "success"}
-        for name in await_ci.required_contexts()
+        CheckRun(name, "completed", "success") for name in await_ci.required_contexts()
     ]
     answers = iter([rate_limited])
 

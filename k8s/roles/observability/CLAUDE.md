@@ -177,17 +177,21 @@ about 2 hours does not restart the age. Prometheus cannot see an inhibit, so eac
 whose target is a warning has a copy in `templates/alertmanager-secret.yaml.j2` that holds
 the escalation, and the same test module fails an inhibit with no copy.
 
-**A host-plane rule names its host as a literal, so a new host is a rule edit.** The
-`host-checks` group carries one `HostReconcileFailed` per inventory host, and one
-`HostUpdateStale` per entry of `observability_expected_hosts`, each from the shape in
-`tests/rules/fixtures/host-update-stale.yaml`, which `host-checks.test.yaml` fires.
-`tests/services/test_host_plane_rule_literals.py` holds both sets to their sources and
-prints the rule a new entry needs. The same module fails a host whose package enables
-`homelab-updater.timer` with no `observability_expected_hosts` entry, so every armed host
-pages when its updates stop. `docs/host-packages.md` is the runbook for both pages. The
-group also carries one `WiredLinkDown` warning per node whose host_vars set
-`k3s_node_static_link`, reading that link's carrier and operstate (#5124). The same test
-module holds that set to host_vars, so a node that pins a new link needs a rule edit too.
+**The host-plane rule groups render from tables, so a new host is one host-table entry.**
+`scripts/dev/gen_host_rules.py` writes `files/rules/host-checks.yaml` and `files/rules/hosts.yaml`
+from `files/rule-tables/`. Each rule there names its hosts with a selector: every host, a
+list, a scrape job, a host-package component or a host_vars key. The generator renders one
+copy per host, and each copy names its host as a literal `service`, because a node has no
+workload-service join. The host table is
+`k8s/roles/observability/defaults/main.yml:observability_expected_hosts`, which gives each host
+its scrape job and its `HostUpdateStale` limit. To change a host-plane rule, edit its table
+entry, run the generator, and commit the table and the rule file together. The
+`gen-host-rules` prek hook and
+`scripts/dev/tests/test_gen_host_rules.py::test_the_committed_rule_files_are_the_render_of_their_tables_is_clean`
+fail a rule file that differs from its table. The generator refuses to render while an
+inventory host has no host-table entry, so every host pages for its reconcile and its updates. `docs/host-packages.md` is the
+runbook for both pages. `WiredLinkDown` takes one copy per node whose host_vars set
+`k3s_node_static_link`, reading that link's carrier and operstate (#5124).
 
 **`HostCheckOverdue` is the host checks' catch-all deadman, never a replacement for a pair.**
 One rule per host compares each check's timestamp with the
@@ -249,9 +253,9 @@ temperature and UPS rules replace monitor-bridge's `disk`, `memory`, `host_temp`
 checks and page since M6's batch A1 Cutover-b. Its Pi pressure rules replace the Prometheus half
 of `pi_pressure` and page since B8's. `HostClockUnsynchronised` ports no bridge check: it pages
 a host whose kernel reports its clock unsynchronised, or more than 0.5s off, for 15 minutes
-(#8518). A rule's `service` is a literal, so a host gets its
-own copy, and a fourth host needs rules added. A1 has no Alertmanager inhibit on
-`ScrapeTargetDown`, by the `DECIDED:` marker in the file's header. A missing-data arm starts from
+(#8518). The generator renders each host its own copy, as for `host-checks`. A1 has no
+Alertmanager inhibit on
+`ScrapeTargetDown`, by the `DECIDED:` marker in its table's header. A missing-data arm starts from
 `up == 1`, so it fires only while the scrape succeeds and the series is absent. A dead exporter
 pages once, through `ScrapeTargetDown`. The two coverage-floor rules count hosts, so they carry
 neither `job` nor `instance`, and a dead exporter also pages through them.

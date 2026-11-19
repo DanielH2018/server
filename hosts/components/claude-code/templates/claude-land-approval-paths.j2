@@ -63,6 +63,7 @@ hosts/lib/claude_config_lock.py
 # them. Its defaults, tests and CLAUDE.md stay off.
 hosts/components/renovate-agent/files/t2-approval-floor
 hosts/components/renovate-agent/files/renovate_floor.py
+hosts/lib/renovate_identity.py
 hosts/components/renovate-agent/files/land_renovate_pr.py
 hosts/components/renovate-agent/templates/renovate-agent-land@.service.j2
 hosts/components/renovate-agent/templates/50-renovate-agent-land.rules.j2
@@ -88,6 +89,11 @@ hosts/components/renovate-agent/templates/homelab-renovate-agent-setup.service.j
 hosts/components/renovate-agent/component.yml
 # The landing policy and the code that runs it.
 scripts/deploy_tools/land
+# The startup hooks Python imports from `scripts/` once it is on sys.path (the installed
+# package's .pth), before any landing check runs. The import walk above sees only modules land.py
+# has loaded, so it would miss a new `scripts/sitecustomize.py` or `scripts/usercustomize.py`.
+scripts/sitecustomize
+scripts/usercustomize
 # The interpreter and packages `uv run` syncs before land.py starts. A package can run code at
 # interpreter start through a .pth file, before any policy check.
 pyproject.toml

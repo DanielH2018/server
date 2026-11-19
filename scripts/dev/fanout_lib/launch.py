@@ -311,8 +311,15 @@ def review_command(
     target: Target = SERVER_TARGET,
     rung: Rung = DEFAULT,
 ) -> str:
-    """The unit's command for a `--review` batch: `fanout.py review` in place of `claude -p`."""
+    """The unit's command for a `--review` batch: `fanout.py review` in place of `claude -p`.
+
+    `PYTHONPATH` supplies the import root a no-venv run lacks: the `scripts/` of the copy
+    `review_script` names.
+    """
+    wt = worktree_path(batch, target)
+    root = f"{wt if target.is_server else snapshot_root(wt)}/scripts"
     return (
+        f"env PYTHONPATH={root} "
         f"uv run --no-project --no-python-downloads --python {HEADLESS_PYTHON} "
         f"{review_script(batch, target)} review --batch {batch} --repo {target.repo}"
         f" --rung {rung.name}"

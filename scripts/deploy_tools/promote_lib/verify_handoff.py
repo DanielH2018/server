@@ -11,6 +11,7 @@ Run: imported only. `uv run pytest scripts/deploy_tools/tests/test_verify_promot
 
 import json
 import re
+from collections.abc import Mapping
 from pathlib import Path
 
 # The statuses `decide` recorded on `prod`'s commit, at the handoff's root beside `prod/` and
@@ -24,7 +25,7 @@ def write_handoff(
     directory: Path,
     prod: dict[str, bytes] | None,
     target: dict[str, bytes],
-    recorded: dict[str, str] | None = None,
+    recorded: Mapping[str, str] | None = None,
 ) -> None:
     """Write the files `verify` reads from `prod`'s bundle and T's under `directory`.
 

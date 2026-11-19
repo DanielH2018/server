@@ -44,7 +44,7 @@ FAILING = {**ok("homelab", "bento-pdf-deferred"), "flux/bento-pdf": "failure"}
 
 def test_t_still_named_by_prod_reads_good_is_clean():
     verdict = vp.verify(reads(GOOD, [DIGEST]), T, PRIOR, EXPECTED, digest=DIGEST)
-    assert verdict == vp.Verdict("good")
+    assert verdict == vp.Verdict(vp.VerifyVerdict.GOOD)
 
 
 def test_prod_moved_past_t_reads_superseded_before_the_statuses_is_flagged():
@@ -81,18 +81,18 @@ def test_an_unreadable_prod_never_reads_as_superseded():
     verdict = vp.verify(
         reads(GOOD, [forge.ForgeError("HTTP 503")]), T, PRIOR, EXPECTED, digest=DIGEST
     )
-    assert verdict == vp.Verdict("good")
+    assert verdict == vp.Verdict(vp.VerifyVerdict.GOOD)
 
 
 def test_no_digest_reads_no_prod():
     """A run with no `--digest` behaves as before D7.2."""
     verdict = vp.verify(reads(GOOD, [LATER]), T, PRIOR, EXPECTED)
-    assert verdict == vp.Verdict("good")
+    assert verdict == vp.Verdict(vp.VerifyVerdict.GOOD)
 
 
 def test_superseded_exits_0_and_writes_the_verdict(tmp_path):
     out = tmp_path / "out"
-    assert vp.report(T, vp.Verdict("superseded"), str(out)) == 0
+    assert vp.report(T, vp.Verdict(vp.VerifyVerdict.SUPERSEDED), str(out)) == 0
     assert "verdict=superseded" in out.read_text()
 
 

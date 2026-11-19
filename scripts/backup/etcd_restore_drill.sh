@@ -242,7 +242,8 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 # gate's import closure is stdlib plus `lib.kubectl`, `lib.cli_registry` and the two
 # `runbook_gates_lib` modules it runs (the dispatcher imports the other runbooks only when one is
 # named), so `--no-project` is enough for it and the python version comes from the repo's own
-# `.python-version` rather than a second copy of the number here.
+# `.python-version` rather than a second copy of the number here. A no-venv run gets no `.pth`,
+# so `PYTHONPATH` supplies the import root, the checkout's `scripts/`.
 #
 # GATE_CMD is an array so the test can stub it — hosts/tests/test_etcd_restore_drill_gate.py
 # drives a refusal and a pass through it without a cluster.
@@ -251,7 +252,7 @@ if [[ -x "$REPO_ROOT/.venv/bin/python" ]]; then
   GATE_CMD=("$REPO_ROOT/.venv/bin/python" "$GATE_SCRIPT" etcd-restore --gate 3)
 else
   GATE_CMD=(
-    /usr/bin/uv run --no-project --no-python-downloads
+    /usr/bin/env PYTHONPATH="$REPO_ROOT/scripts" /usr/bin/uv run --no-project --no-python-downloads
     --python "$(cat "$REPO_ROOT/.python-version" 2>/dev/null || echo 3.14)"
     "$GATE_SCRIPT" etcd-restore --gate 3
   )

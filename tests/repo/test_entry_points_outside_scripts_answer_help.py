@@ -58,7 +58,8 @@ HELP_TIMEOUT_S = 30
 # Entry points that answer `--help` where they run but cannot here, each with the reason.
 EXEMPT = {
     # Vendored byte-for-byte from upstream and pinned by sha256 in
-    # tests/services/test_karakeep_time_tagger_script.py, so a guard would break the pin.
+    # the `karakeep-time-tagger-script-matches-its-pinned-sha256` row in tests/repo/_config_rows.py,
+    # so a guard would break the pin.
     # It ends in `fire.Fire(main)`, which answers --help in the tagger image; the repo env has
     # no `fire`, so the import fails here first.
     "k8s/roles/karakeep/files/karakeep-time-tagger.py",
