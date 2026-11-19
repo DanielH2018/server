@@ -173,6 +173,8 @@ class Fakes:
     # Each branch's session milestone title, what the milestone lookup answers. A branch
     # absent here never ran `milestone start`.
     milestone_titles: dict[str, str] = field(default_factory=dict)
+    # The worktree paths a live process works in, what the /proc hold read answers.
+    held_paths: set[str] = field(default_factory=set)
     # The branches of the open session milestones the idle-milestone close considers; it
     # closes each one `held` calls free.
     open_milestones: list[str] = field(default_factory=list)
@@ -413,6 +415,7 @@ def build_tools(f: Fakes | None = None) -> tuple[FindingsTools, Calls]:
             sync_board=sync_board,
             attach_milestone=attach_milestone,
             close_idle_milestones=close_idle_milestones,
+            tree_held=lambda path: path in f.held_paths,
         ),
         calls,
     )
