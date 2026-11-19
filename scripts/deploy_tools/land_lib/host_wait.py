@@ -1,8 +1,8 @@
 """The landing's wait on the hosts a merge reaches (H3, *Steps*, H3.9a and H3.9b).
 
 `pipeline.py:_step_ci` calls `host_targets` after master CI, and `_step_hosts` calls
-`wait_for_hosts` after the deploy phase. The plan is docs/target-architecture/host/h3-pi-pilot.md; the
-contract is C6's *Hosts* bullet in docs/target-architecture/contracts.md.
+`wait_for_hosts` after the deploy phase. The plan is docs/archive/host/h3-pi-pilot.md; the
+contract is C6's *Hosts* bullet in docs/archive/contracts.md.
 
 `host_targets` names the hosts whose package the merge changes. It renders every host package
 at the merge commit and at its first parent, each in a snapshot from `tools.gate_snapshot`,

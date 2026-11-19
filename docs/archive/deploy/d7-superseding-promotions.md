@@ -545,7 +545,7 @@ supersedes another.
 - The marker `DECIDED a verification in flight is guarded by two checks` in
   `verify_promotion.py` gains a sentence in D7.5: the guard is a wait unless
   `supersedable` holds.
-- `docs/target-architecture/contracts.md`, C2's *Verification*, *On failure* and
+- `docs/archive/contracts.md`, C2's *Verification*, *On failure* and
   *A verification in flight blocks the next promotion*, from the request below.
 
 ## Complexity delta

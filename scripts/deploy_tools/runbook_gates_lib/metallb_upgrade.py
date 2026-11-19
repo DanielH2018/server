@@ -1,7 +1,7 @@
 """Run the stop conditions of a MetalLB pin bump in order, exit code naming the first failure.
 
 After H1, merging `k3s_metallb_version` is the upgrade, so `land.sh` runs these gates before
-it merges such a bump (docs/target-architecture/host/h1-cluster-config-to-flux.md, *Longhorn
+it merges such a bump (docs/archive/host/h1-cluster-config-to-flux.md, *Longhorn
 and MetalLB bumps gate at the merge*). MetalLB owns the LoadBalancer VIPs, and its speakers
 announce them from every node, so the bump must land on a cluster that is whole and on a
 promotion that is not already holding a failed change. Both gates are `k3s_upgrade.py`'s own
@@ -43,7 +43,7 @@ from deploy_tools.runbook_gates_lib.k3s_upgrade import (
 from lib.kubectl import DEFAULT_TOOLS, Tools
 
 # No MetalLB runbook exists; the plan section that defines these gates is the one to read.
-RUNBOOK = "docs/target-architecture/host/h1-cluster-config-to-flux.md"
+RUNBOOK = "docs/archive/host/h1-cluster-config-to-flux.md"
 
 
 def _gate_hold(tools: Tools, read_hold: Callable[[], str | None]) -> list[str]:

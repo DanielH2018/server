@@ -6,10 +6,5 @@
   It is a ServiceAccount with no Role: the Job talks to the LAPI over HTTP and calls no
   Kubernetes API, so its pod mounts no token.
 #}
----
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: traefik-precheck
-  namespace: {{ k8s_namespace }}
-automountServiceAccountToken: false
+{% from 'digest-job.yml.j2' import verify_sa with context %}
+{{ verify_sa('traefik-precheck') }}

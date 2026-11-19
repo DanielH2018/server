@@ -1,7 +1,7 @@
 name: Bootstrap drill
 
 # Rehearses the order of the rebuilt-cluster Flux procedure (target slice D5, step 28, in
-# docs/target-architecture/deploy/d5-bulk-move.md) on a throwaway kind cluster. The numbered
+# docs/archive/deploy/d5-bulk-move.md) on a throwaway kind cluster. The numbered
 # comments below are that procedure's steps. Longhorn, the backupstore sync and the DR gate
 # (steps 7 and 8) are not drilled: a stand-in creates one claim, so the drill proves the
 # order, not a restore. Signature verification is not drilled either: the OCIRepository is

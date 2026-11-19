@@ -37,82 +37,36 @@
   Without the peer, the helper's 60 seconds of refused connects run out and the Job fails
   closed, naming the connect.
 #}
-{% set script_name = 'traefik_bouncer_key_precheck.py' %}
-{% set script_dir = '/precheck' %}
-{% set data = {
-  script_name: lookup('file', role_file('files/' + script_name), rstrip=False),
-  'flux_job_connect.py': flux_job_connect,
-} %}
-{% set configmap_name = 'traefik-precheck-' + ({'data': data, 'binaryData': {}} | to_json(sort_keys=True, separators=(',', ':')) | hash('sha256'))[:8] %}
+{% from 'digest-job.yml.j2' import digest_job with context %}
+{% set script = 'traefik_bouncer_key_precheck.py' %}
 {#- The key's ciphertext digest, read from the cluster file's source; no value enters the
     spec. -#}
 {% set key = namespace(digest='') %}
 {% for line in lookup('file', cluster_vars_source()).splitlines() if line and not line.startswith('#') and line.split()[0] == 'crowdsec_k8s_bouncer_api_key' %}
 {% set key.digest = line.split()[1] %}
 {% endfor %}
-{% set spec_text %}
+{% set head %}
 # No retry. A check that fails must not pass on its second try.
 backoffLimit: 0
 # One HEAD of 10s, plus the helper's 60s of connect retries, with slack.
 activeDeadlineSeconds: 120
-template:
-  metadata:
-    labels:
-      app: traefik-precheck
-  spec:
-    serviceAccountName: traefik-precheck
-    # The Job reads no Kubernetes API, so its pod holds no token.
-    automountServiceAccountToken: false
-    restartPolicy: Never
-    enableServiceLinks: false
-    securityContext:
-      runAsNonRoot: true
-      runAsUser: 65534
-      runAsGroup: 65534
-      seccompProfile:
-        type: RuntimeDefault
-    containers:
-      - name: precheck
-        image: {{ flux_job_image }}
-        imagePullPolicy: IfNotPresent
-        command:
-          - python3
-          - {{ script_dir }}/{{ script_name }}
-        env:
-          - name: LAPI_URL
-            value: "http://crowdsec.{{ k8s_namespace }}.svc.cluster.local:{{ crowdsec_k8s_lapi_port }}"
-          - name: BOUNCER_KEY
-            valueFrom:
-              secretKeyRef:
-                name: traefik-precheck
-                key: lapi_key
-          # Renames the Job whenever the key rotates; see the note above.
-          - name: BOUNCER_KEY_DIGEST
-            value: "{{ key.digest }}"
-          - name: PYTHONDONTWRITEBYTECODE
-            value: "1"
-        resources:
-          requests:
-            cpu: 10m
-            memory: 32Mi
-          limits:
-            memory: 64Mi
-        securityContext:
-          allowPrivilegeEscalation: false
-          readOnlyRootFilesystem: true
-          capabilities:
-            drop:
-              - ALL
-        volumeMounts:
-          - name: script
-            mountPath: {{ script_dir }}
-            readOnly: true
-    volumes:
-      - name: script
-        configMap:
-          name: {{ configmap_name }}
 {% endset %}
-{% set spec = spec_text | from_yaml %}
+{% set env %}
+- name: LAPI_URL
+  value: "http://crowdsec.{{ k8s_namespace }}.svc.cluster.local:{{ crowdsec_k8s_lapi_port }}"
+- name: BOUNCER_KEY
+  valueFrom:
+    secretKeyRef:
+      name: traefik-precheck
+      key: lapi_key
+# Renames the Job whenever the key rotates; see the note above.
+- name: BOUNCER_KEY_DIGEST
+  value: "{{ key.digest }}"
+{% endset %}
+{% set annotations %}
+# A read-only check that runs before `traefik` applies, the kind `traefik-precheck` admits.
+homelab/job-kind: precheck
+{% endset %}
 {% if traefik_k8s_bouncer_key_precheck | bool and traefik_k8s_manage_crowdsec | bool %}
 ---
 apiVersion: v1
@@ -123,25 +77,12 @@ metadata:
 type: Opaque
 stringData:
   lapi_key: "{{ crowdsec_k8s_bouncer_api_key }}"
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: {{ configmap_name }}
-  namespace: {{ k8s_namespace }}
-data:
-{% for name, text in data | dictsort %}
-  {{ name }}: {{ text | to_json }}
-{% endfor %}
----
-apiVersion: batch/v1
-kind: Job
-metadata:
-  name: traefik-precheck-{{ (spec | to_json(sort_keys=True, separators=(',', ':')) | hash('sha256'))[:8] }}
-  namespace: {{ k8s_namespace }}
-  annotations:
-    # A read-only check that runs before `traefik` applies, the kind `traefik-precheck` admits.
-    homelab/job-kind: precheck
-spec:
-{{ spec_text | indent(2, true) }}
+{{ digest_job(
+     name='traefik-precheck',
+     container='precheck',
+     script=script,
+     script_text=lookup('file', role_file('files/' + script), rstrip=False),
+     head=head,
+     env=env,
+     annotations=annotations) }}
 {% endif %}

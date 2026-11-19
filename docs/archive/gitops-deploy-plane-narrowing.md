@@ -26,4 +26,4 @@ them to the setup plane and to a landing's tag list.
 [ADR-0020](../adr/0020-flux-applies-the-cluster-from-a-promoted-artifact.md) records the move to
 Flux, and [ADR-0010](../adr/0010-pull-based-gitops-over-argo-and-flux.md) records the deployer
 that this narrowing belonged to. The plan that deleted the path is
-[D6](../target-architecture/deploy/d6-delete-old-path.md).
+[D6](../archive/deploy/d6-delete-old-path.md).

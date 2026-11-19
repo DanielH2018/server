@@ -12,7 +12,7 @@ governs:
 ## Status
 
 Accepted. The operator chose option (a) of
-[H3](../target-architecture/host/h3-pi-pilot.md) *Open questions* 1 on 2026-10-14, with the
+[H3](../archive/host/h3-pi-pilot.md) *Open questions* 1 on 2026-10-14, with the
 answer "(a) Master + green CI."
 
 Amended by [ADR-0029](0029-each-host-is-configured-by-its-own-package-not-ansible.md) on
@@ -42,7 +42,7 @@ the repository, signs the apt repository, and publishes it. Every host's updater
 installs those packages as root. So the commit the builder accepts is the root of trust
 for every host.
 
-Contract C5 in [the contracts](../target-architecture/contracts.md) names one anchor: a
+Contract C5 in [the contracts](../archive/contracts.md) names one anchor: a
 commit on `origin/master`'s first-parent chain with a green CI verdict.
 `hosts/lib/ci_verdict.py:ci_walk_candidates` already gives the GitOps deployer that anchor, and both
 k3s nodes take setup roles from master on it.
