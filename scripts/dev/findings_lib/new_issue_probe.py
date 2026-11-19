@@ -63,6 +63,7 @@ from dev.findings_lib.boundaries import FindingsTools
 from dev.findings_lib.claim import free_issues
 from dev.findings_lib.gh_calls import (
     newest_open_issues,
+    rest_issue,
     rest_open_pr_refs,
     threaded_issues,
 )
@@ -133,22 +134,24 @@ def read(
 
     Raises:
         subprocess.SubprocessError, OSError: a gh read failed; there is no verdict.
+        KeyError: an issue or a blocker came back without its `state`; no verdict either.
         UnknownMilestone: no milestone has the title ``milestone``.
     """
-    raw = newest_open_issues(tools)
+    raw = {int(str(data["number"])): data for data in newest_open_issues(tools)}
     if after is None:
         after = _recorded(baseline)
     if after is None:
-        after = max((i["number"] for i in raw), default=0)
+        after = max(raw, default=0)
         baseline.parent.mkdir(parents=True, exist_ok=True)
         baseline.write_text(json.dumps({"after": after}))
-    newer = held_issues(
-        [i for i in raw if i["number"] > after],
+    # Cut before threading: each kept issue costs a read for its comments and blockers.
+    kept = held_issues(
+        [rest_issue(data) for n, data in raw.items() if n > after],
         milestone,
         tools.owner_name,
         gh_json=tools.gh_json,
     )
-    newer = threaded_issues(newer, tools)
+    newer = threaded_issues([raw[i.number] for i in kept], tools)
     rows = (
         free_issues(newer, tools, pr_refs=rest_open_pr_refs(tools), today=today)[0]
         if newer

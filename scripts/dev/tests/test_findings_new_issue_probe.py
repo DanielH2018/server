@@ -29,6 +29,7 @@ def _rest_issue(
     issue = {
         "number": number,
         "title": f"finding {number}",
+        "state": "open",
         "labels": [{"name": n} for n in ("claude", *labels)],
         "body": body,
         "user": {"login": OPERATOR},
@@ -153,6 +154,17 @@ def test_a_new_issue_next_would_not_offer_keeps_the_wait_open(tmp_path, case):
     reading = new_issue_probe.read(tools, 5, tmp_path / "b.json", TODAY)
     assert reading["state"] == "none"
     assert reading["detail"].startswith("no new free issue above #5")
+
+
+def test_a_blocker_rest_returns_without_a_state_is_refused_not_read_as_unblocked(
+    tmp_path,
+):
+    issue, api, _ = _blocked()
+    blocker = api[f"{REG}/issues/7/dependencies/blocked_by"][0]
+    del blocker["state"]
+    tools, _ = _tools([issue, _rest_issue(5)], **api)
+    with pytest.raises(KeyError, match="state"):
+        new_issue_probe.read(tools, 5, tmp_path / "b.json", TODAY)
 
 
 def test_a_failed_github_read_exits_1_with_no_state_line_and_no_baseline(

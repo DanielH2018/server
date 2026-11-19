@@ -100,7 +100,7 @@ def _open_table(rows: list[dict]) -> list[str]:
         title = md_cell(r["title"]) + (" — " + ", ".join(flags) if flags else "")
         # Through `md_cell` like the title above it: a claim is a branch name, and a branch
         # name may carry a `|`, which silently adds a column and renders the table wrong.
-        # The author check in `current_claim` is what keeps the VALUE trustworthy;
+        # The author check in `issue_model.claim_of` is what keeps the VALUE trustworthy;
         # this keeps the row's shape intact whatever the value is.
         claimed = md_cell(r.get("claimed") or "-")
         verify_by = "✓" if r.get("verify_by") else "-"

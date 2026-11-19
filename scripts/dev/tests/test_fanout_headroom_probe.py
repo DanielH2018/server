@@ -9,7 +9,7 @@ import os
 import pytest
 
 from fanout_lib import headroom_probe, launch_lock
-from fanout_lib.brief import Issue
+from findings_lib.issue_model import Issue, IssueState
 from fanout_lib.manifest import Batch, Manifest, save
 from fanout_lib.place import main as place_main
 from _fanout_fakes import HOST_KEY, fake_tools, ok
@@ -33,7 +33,9 @@ SMALLER = _reply(6)
 def _tools(box: str, server: str, **kwargs):
     tools, _run = fake_tools(
         answers={"daniel-box": ok(box), "daniel-server": ok(server)},
-        issues=[Issue(1, "one", "body", ("claude",))],
+        issues=[
+            Issue(1, "one", IssueState.OPEN, body="body", labels=frozenset({"claude"}))
+        ],
         **kwargs,
     )
     return tools
@@ -141,7 +143,12 @@ def test_a_wait_right_after_a_launch_fills_the_last_slot_reads_full(tmp_path):
     ]
     save(Manifest("20260101T000010Z", "o", earlier), root=tmp_path)
     _server_at_its_cap(tmp_path)
-    issues = [Issue(n, f"issue {n}", "body", ("claude",)) for n in (1, 2)]
+    issues = [
+        Issue(
+            n, f"issue {n}", IssueState.OPEN, body="body", labels=frozenset({"claude"})
+        )
+        for n in (1, 2)
+    ]
 
     def tools():
         return fake_tools(

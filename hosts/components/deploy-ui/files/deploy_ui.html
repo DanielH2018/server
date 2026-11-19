@@ -37,7 +37,7 @@ button.link{background:none;color:var(--blue);font-size:12px;font-weight:500;pad
 .tab.on{background:var(--blue);color:var(--crust)}
 .pips{display:inline-flex;gap:2px;margin-right:8px;vertical-align:middle}
 .pip{width:10px;height:10px;border-radius:2px;background:var(--surface1)}.pip.done{background:var(--green)}.pip.now{background:var(--yellow)}
-td.at{max-width:560px}.latest{font:12px/1.5 ui-monospace,monospace;color:var(--mute);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+td.t{white-space:nowrap}td.at{max-width:560px}.latest{font:12px/1.5 ui-monospace,monospace;color:var(--mute);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 </style></head><body><main>
 <h1>Deploy queue</h1><div id="msg"></div>
 <h2>Landing queue</h2><div id="inflight"></div>
@@ -61,7 +61,9 @@ async function panel(id,path,render){const el=document.getElementById(id);try{co
   el.innerHTML=b.unavailable?`<span class="unavail">unavailable: ${esc(b.unavailable)}</span>`:render(b);}catch(e){el.innerHTML=`<span class="unavail">unavailable: ${esc(e)}</span>`;}}
 const base=p=>p.split('/').pop();
 let landRuns=[];
-const dur=s=>s<90?`${s}s`:s<5400?`${Math.round(s/60)}m`:`${(s/3600).toFixed(1)}h`;
+const dur=s=>`${Math.floor(s/60)}m ${String(s%60).padStart(2,'0')}s`;
+// The script a process runs, not its interpreter: `uv run python …/land.py --pr 1` is land.py.
+const procName=args=>{const w=args.split(/\s+/).filter(Boolean);return base(w.find(t=>/\.(py|sh)$/.test(t))||w[0]||'');};
 // Display order only: the landing locks grant no FIFO, so a row's place is not its turn.
 const stepRank=s=>!s?-3:s.verdict?99:s.step==='arm'?-1:s.step===''?-2:+s.step;
 function pips(s){if(!s.of)return '';const cur=s.step==='arm'?0:+s.step+1;let h='';
@@ -71,12 +73,12 @@ function queue(runs){const q=runs.filter(r=>r.kind==='land').sort((a,b)=>stepRan
   if(!q.length)return '<p class="mute">no landings in flight</p>';
   return `<p class="mute">${q.length} landing${q.length>1?'s':''}, furthest along first</p><table><tr><th>PR</th><th>step</th><th>elapsed</th><th></th></tr>`+q.map(r=>{const s=r.step;
     const at=!s?'<span class="mute">no readable log</span>':`${pips(s)}<b>${s.verdict?esc(s.verdict):stepName(s,s.of)}</b> ${esc(s.label)}${s.latest?`<div class="latest" title="${esc(s.latest)}">${esc(s.latest)}</div>`:''}`;
-    return `<tr><td>${r.pr?prLink(r.pr):esc(r.tag)}${r.title?`<br><span class="mute">${esc(r.title)}</span>`:''}</td><td class="at">${at}</td><td>${dur(r.elapsed_s)}</td><td>${r.log?`<button onclick="openLog('${esc(base(r.log))}')">log</button>`:''}</td></tr>`;}).join('')+'</table>';}
+    return `<tr><td>${r.pr?prLink(r.pr):esc(r.tag)}${r.title?`<br><span class="mute">${esc(r.title)}</span>`:''}</td><td class="at">${at}</td><td class="t">${dur(r.elapsed_s)}</td><td>${r.log?`<button onclick="openLog('${esc(base(r.log))}')">log</button>`:''}</td></tr>`;}).join('')+'</table>';}
 function inflight(b){const held=b.runs.filter(r=>r.locks.length);running=new Set(b.runs.filter(r=>r.log).map(r=>base(r.log)));
   landRuns=b.runs.filter(r=>r.kind==='land'&&r.log).map(r=>({name:base(r.log),pr:r.pr,title:r.title}));renderTabs();
-  let s=queue(b.runs)+'<h2>Locks, landings and deploys in flight</h2>'+`<p>Locks:${!b.locks_watched.length?'<span class="unavail">no lock files found</span>':held.length?held.map(r=>`<code>${esc(r.locks.join(' '))}</code> pid ${r.pid}, ${r.elapsed_s}s`).join('; '):`<span class="clear">free</span> <span class="mute">(${b.locks_watched.length} watched)</span>`}</p>`;
+  let s=queue(b.runs)+'<h2>Locks, landings and deploys in flight</h2>'+`<p>Locks:${!b.locks_watched.length?'<span class="unavail">no lock files found</span>':held.length?held.map(r=>`<code>${esc(r.locks.join(' '))}</code> pid ${r.pid}, ${dur(r.elapsed_s)}`).join('; '):`<span class="clear">free</span> <span class="mute">(${b.locks_watched.length} watched)</span>`}</p>`;
   if(!b.runs.length)return s+'<p class="mute">nothing in flight</p>';
-  return s+'<table><tr><th>kind</th><th>PR / tag</th><th>pid</th><th>elapsed</th><th>locks</th><th>command</th><th></th></tr>'+b.runs.map(r=>`<tr><td>${esc(r.kind)}</td><td>${r.pr?prLink(r.pr)+(r.title?`<br><span class="mute">${esc(r.title)}</span>`:''):esc(r.tag)}</td><td>${r.pid}</td><td>${r.elapsed_s}s</td><td>${esc(r.locks.join(' '))}${r.waiting_on.length?`<span class="mute">waiting on ${esc(r.waiting_on.join(' '))}</span>`:''}</td><td><code>${esc(r.args)}</code><br><span class="mute">${esc(r.log)}</span></td><td>${r.kind==='land'&&r.log?`<button onclick="openLog('${esc(base(r.log))}')">log</button> `:''}${r.kind==='land'?`<button class="danger" onclick="post('/api/cancel',{pid:${r.pid}})">cancel</button>`:''}</td></tr>`).join('')+'</table>';}
+  return s+'<table><tr><th>kind</th><th>PR / tag</th><th>pid</th><th>elapsed</th><th>locks</th><th>process</th><th></th></tr>'+b.runs.map(r=>`<tr><td>${esc(r.kind)}</td><td>${r.pr?prLink(r.pr)+(r.title?`<br><span class="mute">${esc(r.title)}</span>`:''):esc(r.tag)}</td><td>${r.pid}</td><td class="t">${dur(r.elapsed_s)}</td><td>${esc(r.locks.join(' '))}${r.waiting_on.length?`<span class="mute">waiting on ${esc(r.waiting_on.join(' '))}</span>`:''}</td><td><code title="${esc(r.args)}">${esc(procName(r.args))}</code>${r.log?`<br><span class="mute" title="${esc(r.log)}">${esc(base(r.log))}</span>`:''}</td><td>${r.kind==='land'&&r.log?`<button onclick="openLog('${esc(base(r.log))}')">log</button> `:''}${r.kind==='land'?`<button class="danger" onclick="post('/api/cancel',{pid:${r.pid}})">cancel</button>`:''}</td></tr>`).join('')+'</table>';}
 // Whether the finished list is hidden or expanded is a per-browser preference. Storage can be
 // blocked, so every read and write is guarded and the defaults stand in.
 const FIN_SHOWN=5,FIN_KEY='deploy-ui:finished';

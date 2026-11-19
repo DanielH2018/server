@@ -40,9 +40,8 @@ from dev.findings_lib.gh_calls import (
     HISTORY_FIELDS,
     ISSUE_LIST_CAP,
     REGISTER_FETCH_TIMEOUT,
-    _warn_at_the_comment_cap,
 )
-from dev.findings_lib.issue_model import PR_REPO
+from dev.findings_lib.issue_model import PR_REPO, comment_cap_warning
 from lib.json_types import as_object_list
 
 # The first window's width. Measured 2026-10-09: 1410 issues over 39 days, the busiest
@@ -123,7 +122,10 @@ def read_register(
     progress: Callable[[str], None],
     cap: int = ISSUE_LIST_CAP,
 ) -> list[dict]:
-    """Every register issue in every state, deduplicated and sorted by number."""
+    """Every register issue in every state, deduplicated and sorted by number.
+
+    Each stays in gh's own JSON shape, unparsed, because the export archives what gh holds.
+    """
     oldest = oldest_created(tools)
     if oldest is None:
         return []
@@ -134,7 +136,12 @@ def read_register(
         for issue in read_window(tools, start, end, progress, cap):
             by_number[issue["number"]] = issue
         start = end + timedelta(days=1)
-    return _warn_at_the_comment_cap([by_number[n] for n in sorted(by_number)])
+    issues = [by_number[n] for n in sorted(by_number)]
+    for issue in issues:
+        warning = comment_cap_warning(issue["number"], len(issue["comments"]))
+        if warning:
+            sys.stderr.write(warning + "\n")
+    return issues
 
 
 def _write_atomically(path: str, text: str) -> None:

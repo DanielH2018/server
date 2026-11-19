@@ -15,10 +15,9 @@ import subprocess
 from datetime import date
 
 import pytest
-from _findings_fakes import Fakes, facts, make_issue
+from _findings_fakes import Fakes, facts, make_issue, typed
 
 from dev import findings
-from dev.findings_lib.issue_model import not_before
 from dev.findings_lib.plans import ClaimRefused, plan_defer
 
 
@@ -39,11 +38,13 @@ def _field_writes(calls) -> list[str]:
 
 def test_a_later_label_from_a_pre_field_session_still_withholds_the_issue():
     issue = _deferred(1288, "2026-09-12", labels=["not-before:2026-09-20"])
-    assert not_before(issue) == date(2026, 9, 20)
+    assert typed(issue).not_before == date(2026, 9, 20)
 
 
 def test_an_unparseable_date_counts_as_no_deferral():
-    assert not_before(_deferred(1288, "soon", labels=["not-before:later"])) is None
+    assert (
+        typed(_deferred(1288, "soon", labels=["not-before:later"])).not_before is None
+    )
 
 
 # --- the planner ------------------------------------------------------------------------------
@@ -51,7 +52,7 @@ def test_an_unparseable_date_counts_as_no_deferral():
 
 def test_defer_removes_every_not_before_label_so_none_outlives_the_field():
     issue = make_issue(1288, labels=["not-before:2026-09-12", "not-before:2026-09-20"])
-    plans = plan_defer(issue, until=date(2026, 9, 1))
+    plans = plan_defer(typed(issue), until=date(2026, 9, 1))
     assert plans[0] == [
         "issue",
         "edit",
@@ -65,13 +66,13 @@ def test_defer_removes_every_not_before_label_so_none_outlives_the_field():
 
 def test_defer_clear_on_an_undeferred_issue_is_refused():
     with pytest.raises(ClaimRefused) as exc:
-        plan_defer(make_issue(1288), until=None)
+        plan_defer(typed(make_issue(1288)), until=None)
     assert "not deferred" in exc.value.reason
 
 
 def test_defer_on_a_closed_issue_is_refused():
     with pytest.raises(ClaimRefused) as exc:
-        plan_defer(make_issue(1288, state="CLOSED"), until=date(2026, 9, 12))
+        plan_defer(typed(make_issue(1288, state="CLOSED")), until=date(2026, 9, 12))
     assert "closed" in exc.value.reason
 
 

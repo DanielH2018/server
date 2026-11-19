@@ -17,7 +17,8 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from _hook_common import parse_payload
 from fanout_lib import status
-from fanout_lib.brief import Issue, render_brief
+from fanout_lib.brief import render_brief
+from findings_lib.issue_model import Issue, IssueState
 
 _HOOK = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "fanout-stop.py"
@@ -154,7 +155,7 @@ def test_a_landing_batch_may_still_stop_on_a_blocker_line(tmp_path):
 
 def test_the_landing_marker_is_a_line_the_real_daniel_box_brief_carries():
     """Non-vacuity: a reworded brief would silently stop the hook asking for a verdict."""
-    issues = [Issue(1, "one", "body")]
+    issues = [Issue(1, "one", IssueState.OPEN, body="body")]
     box = render_brief(issues, "daniel-box", "1", "worktree-orch", [])
     server = render_brief(issues, "daniel-server", "1", "worktree-orch", [])
     assert _mod.LANDING_MARKER in box
@@ -174,7 +175,7 @@ def test_a_review_phase_may_stop_on_its_json_but_the_same_text_outside_one_is_bl
 def test_a_review_batch_owes_no_verdict_in_any_phase(tmp_path):
     # Its pipeline runs land.sh itself, so the apply phase it resumes finishes on the
     # PR URL, and a PR URL alone still finishes a landing brief's session.
-    issues = [Issue(1, "one", "body")]
+    issues = [Issue(1, "one", IssueState.OPEN, body="body")]
     brief = render_brief(issues, "daniel-box", "1", "worktree-orch", [], review=True)
     root = _fanout_tree(tmp_path, brief)
     for running in ("implement", "file", "apply"):

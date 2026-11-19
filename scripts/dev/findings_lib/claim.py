@@ -24,19 +24,11 @@ import subprocess
 import sys
 from collections.abc import Callable, Collection, Mapping
 from dataclasses import dataclass, replace
-from datetime import UTC, date, datetime
+from datetime import date, datetime
 
 from dev.fanout_lib.batch_holds import BatchHold
 from dev.findings_lib.boundaries import FindingsTools
-from dev.findings_lib.issue_model import (
-    _CLAIM_RE,
-    _RELEASE_RE,
-    current_claim,
-    is_operator_comment,
-    label_names,
-    ordered_comments,
-    pickable,
-)
+from dev.findings_lib.issue_model import Issue, pickable
 from dev.findings_lib.solo_only import solo_only_reasons
 from lib.worktree_owner import other_clone_owner
 from lib.worktrees import REMOVABLE, Worktree, classify
@@ -193,7 +185,7 @@ def claim_is_live(
     return verdict != REMOVABLE, reason
 
 
-def another_claim_blocks(issue: dict, worktree: str) -> bool:
+def another_claim_blocks(issue: Issue, worktree: str) -> bool:
     """Whether a claim by someone else is the only thing standing in ``worktree``'s way.
 
     Cheap and pure, so `cmd_claim` reads it before paying for `worktree_facts` — several git
@@ -204,19 +196,14 @@ def another_claim_blocks(issue: dict, worktree: str) -> bool:
     issue would post a release to no purpose. There are three — closed, `manual`, and outside
     the `claude` register — and this list has to stay level with `plan_claim`'s.
     """
-    names = label_names(issue)
-    if (
-        issue.get("state", "OPEN") != "OPEN"
-        or "manual" in names
-        or "claude" not in names
-    ):
+    if not issue.is_open or "manual" in issue.labels or "claude" not in issue.labels:
         return False
-    held = current_claim(issue)
+    held = issue.holder
     return bool(held) and held != worktree
 
 
 def stale_holder(
-    issue: dict,
+    issue: Issue,
     trees: list[Worktree],
     dirty: Callable[[str], bool],
     merged: Callable[[Worktree], bool],
@@ -235,13 +222,13 @@ def stale_holder(
     decision about what a FAILED git read means — `cmd_claim` leaves the claim standing,
     `cmd_reap` refuses outright, and neither reads a git error as "every worktree is gone".
     """
-    held = current_claim(issue)
+    held = issue.holder
     if not held:
         return None
     live, why = claim_is_live(held, trees, dirty, merged, held_tree)
     if live or branch_is_held(held, trees, dirty, merged, peer_trees, held_tree):
         return None
-    if issue["number"] in batch_holds([issue["number"]]):
+    if issue.number in batch_holds([issue.number]):
         return None
     return held, why
 
@@ -267,7 +254,7 @@ def branch_is_held(
 
 
 def claim_states(
-    issues: list[dict],
+    issues: list[Issue],
     trees: list[Worktree],
     dirty: Callable[[str], bool],
     merged: Callable[[Worktree], bool],
@@ -289,14 +276,12 @@ def claim_states(
     """
     states = []
     for issue in issues:
-        held = current_claim(issue)
-        if not held:
+        claim = issue.claim
+        if claim is None:
             continue
-        live, reason = claim_is_live(held, trees, dirty, merged, held_tree)
+        live, reason = claim_is_live(claim.worktree, trees, dirty, merged, held_tree)
         states.append(
-            ClaimState(
-                issue["number"], held, live, reason, _claim_age_days(issue, held, now)
-            )
+            ClaimState(issue.number, claim.worktree, live, reason, claim.age_days(now))
         )
     missing = {
         s.number for s in states if not s.live and _unregistered(s.worktree, trees)
@@ -317,66 +302,8 @@ def claim_states(
     ]
 
 
-def _claim_age_days(issue: dict, held: str, now: datetime | None = None) -> int | None:
-    """Whole days since the comment that opened the currently open episode of ``held``'s claim, or None.
-
-    Folds the comment list forward like `current_claim` does, finding the LAST transition
-    from None -> held that is still open (not released). Returns None when that comment
-    carries no parseable `createdAt`, or when the datetime is naive (missing timezone info).
-
-    Skips comments `is_operator_comment` rejects, for the same reason `current_claim` does — and it has
-    to skip exactly the same ones, or the two disagree about which claim is current and a `claims` row
-    ages a claim the register does not think exists.
-    """
-    claimed_at_comment: dict | None = None
-    currently_held: str | None = None
-
-    for comment in ordered_comments(issue):
-        if not is_operator_comment(comment):
-            continue
-        body = comment.get("body") or ""
-
-        m = _CLAIM_RE.search(body)
-        if m:
-            worktree = m.group(1)
-            if currently_held is None:
-                currently_held = worktree
-                if worktree == held:
-                    claimed_at_comment = comment
-            # The same choice `current_claim` makes, and it has to stay the same: a body
-            # carrying both trailers holds the claim rather than releasing it. Grep
-            # `DECIDED: \`Claim:\` wins over \`Released:\`` in findings_lib/issue_model.py for the
-            # reasoning; `test_a_body_carrying_both_trailers_ages_the_claim_from_the_comment_
-            # that_opened_it` is what fails if the two diverge.
-            continue
-
-        m = _RELEASE_RE.search(body)
-        if m and m.group(1) == currently_held:
-            currently_held = None
-
-    if claimed_at_comment is None:
-        return None
-
-    raw = claimed_at_comment.get("createdAt")
-    if not raw:
-        return None
-
-    try:
-        when = datetime.fromisoformat(raw.replace("Z", "+00:00"))
-    except ValueError:
-        return None
-
-    # fromisoformat accepts date-only strings like "2026-09-01", parsing them as naive
-    # datetimes. Subtracting a naive datetime from datetime.now(UTC) raises TypeError,
-    # which is not caught by ValueError; return None to treat it as unparseable.
-    if when.tzinfo is None:
-        return None
-
-    return ((now if now is not None else datetime.now(UTC)) - when).days
-
-
 def free_issues(
-    issues: list[dict], tools: FindingsTools, *, pr_refs: set[int], today: date
+    issues: list[Issue], tools: FindingsTools, *, pr_refs: set[int], today: date
 ) -> tuple[list[dict], dict[int, str]]:
     """The rows of ``issues`` a session may pick up, best first, and who holds each stale claim.
 
@@ -412,9 +339,15 @@ def free_issues(
         sys.stderr.write(
             "warning: worktree read failed; withholding every currently claimed issue\n"
         )
-        live = {i["number"] for i in issues if current_claim(i)}
-    rows = pickable(issues, live_claims=live, pr_refs=pr_refs, today=today)
-    text_of = {i["number"]: (i["title"], i.get("body") or "") for i in issues}
+        live = {i.number for i in issues if i.holder}
+    rows = pickable(
+        issues,
+        live_claims=live,
+        pr_refs=pr_refs,
+        today=today,
+        tracked=tools.tracked(),
+    )
+    text_of = {i.number: (i.title, i.body) for i in issues}
     for r in rows:
         r["solo_only"] = bool(solo_only_reasons(*text_of[r["number"]], tools.repo))
         # An orchestrator reading `--json` told a free issue from one `claim` reaps.

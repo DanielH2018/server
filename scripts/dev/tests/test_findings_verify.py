@@ -7,7 +7,7 @@ fails saying which member went missing rather than quietly checking a smaller se
 Run: uv run pytest scripts/dev/tests/test_findings_verify.py
 """
 
-from _findings_fakes import Fakes
+from _findings_fakes import Fakes, typed
 from dev import findings
 import pytest
 
@@ -102,9 +102,9 @@ def test_a_new_section_is_not_fenced():
 
 def test_verification_instructions_reads_the_issue_body(issue):
     one = issue(1)
-    assert verification_instructions(one) is None
+    assert verification_instructions(typed(one)) is None
     one["body"] += verify_by_section(LIVE_PROSE)
-    assert verification_instructions(one) == LIVE_PROSE
+    assert verification_instructions(typed(one)) == LIVE_PROSE
 
 
 # --- the report ------------------------------------------------------------------------------
@@ -113,7 +113,7 @@ def test_verification_instructions_reads_the_issue_body(issue):
 def test_report_prints_the_instructions_for_a_finding_that_has_them(issue):
     one = issue(1, title="Traefik startupProbe has no live red-proof")
     one["body"] += verify_by_section(LIVE_PROSE)
-    out = verification_report([one])
+    out = verification_report([typed(one)])
     assert "#1  Traefik startupProbe has no live red-proof" in out
     assert "How to verify:" in out
     assert "nonexistent traefik_k8s_bouncer_plugin_version" in " ".join(out.split())
@@ -123,14 +123,14 @@ def test_report_prints_the_instructions_for_a_finding_that_has_them(issue):
 def test_report_names_the_findings_that_have_none(issue):
     one = issue(1, title="Documented")
     one["body"] += verify_by_section("Check the log.")
-    out = verification_report([one, issue(2), issue(3)])
+    out = verification_report([typed(one), typed(issue(2)), typed(issue(3))])
     assert "1 finding with verification instructions." in out
     assert "(2 have none: #2, #3.)" in out
 
 
 def test_report_says_so_when_nobody_wrote_any(issue):
     """The flagged half of the line above: a register with no instructions still reports."""
-    out = verification_report([issue(1), issue(2)])
+    out = verification_report([typed(issue(1)), typed(issue(2))])
     assert "0 findings with verification instructions." in out
     assert "(2 have none: #1, #2.)" in out
     assert "How to verify:" not in out
@@ -139,14 +139,16 @@ def test_report_says_so_when_nobody_wrote_any(issue):
 def test_report_omits_the_parenthetical_when_every_finding_has_instructions(issue):
     one = issue(1)
     one["body"] += verify_by_section("Check the log.")
-    out = verification_report([one])
+    out = verification_report([typed(one)])
     assert "have none" not in out and "has none" not in out
 
 
 def test_report_wraps_a_long_paragraph_and_keeps_the_indent(issue):
     one = issue(1)
     one["body"] += verify_by_section(" ".join(["word"] * 60))
-    body_lines = [ln for ln in verification_report([one]).splitlines() if "word" in ln]
+    body_lines = [
+        ln for ln in verification_report([typed(one)]).splitlines() if "word" in ln
+    ]
     assert len(body_lines) > 1
     assert all(ln.startswith("    word") for ln in body_lines)
 
@@ -154,7 +156,7 @@ def test_report_wraps_a_long_paragraph_and_keeps_the_indent(issue):
 def test_report_keeps_the_break_between_two_paragraphs(issue):
     one = issue(1)
     one["body"] += verify_by_section("First do this.\n\nThen check that.")
-    lines = verification_report([one]).splitlines()
+    lines = verification_report([typed(one)]).splitlines()
     first = lines.index("    First do this.")
     assert lines[first + 1] == ""
     assert lines[first + 2] == "    Then check that."
