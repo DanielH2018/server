@@ -41,9 +41,11 @@ Airflow 3 with the KubernetesExecutor, plus one Postgres holding the metadata da
 - **Two additive fences.** `k8s/roles/airflow/templates/networkpolicy.yaml.j2` admits
   `airflow-task` and `airflow-dag-processor` to 8080, from the entry's `netpol_from`.
   `k8s/roles/airflow/templates/networkpolicy-postgres.yaml.j2` admits the four Airflow apps
-  and observability's Grafana to 5432. Task pods reach Prometheus through `prometheus-callers`
-  in netpol-baseline. A source a new DAG reads needs the same allow for `app: airflow-task`,
-  after a caller census (ADR 0009).
+  and observability's Grafana to 5432. A source a DAG reads needs an allow for
+  `app: airflow-task` in its own fence, after a caller census (ADR 0009). Prometheus's is
+  netpol-baseline's `prometheus-callers`, and that grant lands in its own PR: the render-diff
+  gate refuses one PR that both adds this role's `dependsOn` edge onto netpol-baseline and
+  changes netpol-baseline's render.
 - **Backed up weekly to B2, on Tuesday's shard.** A lost week re-derives by backfill from
   sources that keep at least seven days. Home Assistant's recorder keeps exactly seven, so
   its slice depends on that week holding.
