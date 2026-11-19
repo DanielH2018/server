@@ -200,7 +200,9 @@ def findings_of(phase: Phase) -> tuple[list[dict] | None, str]:
     return [f for f in out["findings"] if isinstance(f, dict)], ""
 
 
-def held_for_findings(record: Record, state_dir: _Path) -> dict | None:
+def held_for_findings(
+    record: Record, state_dir: _Path, after: str = "the fix round"
+) -> dict | None:
     """A `needs input:` report holding the open PR on a confident leftover, else None.
 
     On every host: a daniel-server batch's PR is landed by the orchestrator from `status`'s
@@ -218,8 +220,8 @@ def held_for_findings(record: Record, state_dir: _Path) -> dict | None:
         "type": "result",
         "is_error": False,
         "result": (
-            "needs input: the review left a confident medium-or-worse finding after the "
-            f"fix round, so the PR was not landed: {'; '.join(named)}.\n{record.pr}"
+            "needs input: the review left a confident medium-or-worse finding after "
+            f"{after}, so the PR was not landed: {'; '.join(named)}.\n{record.pr}"
         ),
     }
 

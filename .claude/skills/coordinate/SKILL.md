@@ -137,6 +137,10 @@ from you. `place status` names the ones that do.
 - **Re-land each `parked` PR.** Run `cc-wait landing-clear`, then the `land.sh` command the
   park line names. A park line that opens `another landing has it` is the exception: run
   the `cc-wait land` command it quotes and read that landing's verdict. A park line ending `unattributed` also goes under `asks:` for the root.
+- **A batch that still ends on a merge conflict is a spawned agent's to rebase.** The
+  batch already spent its one resume, or had no run time for it, and its `needs-input`
+  line names the conflicting files. Hand those files to one agent that rebases the
+  branch onto `origin/master` and pushes, then land the PR.
 - **A re-land of a merged PR starts no promotion, and neither does clearing the hold.** The
   re-land settles only if master took a later merge. Otherwise it ends `deferred`, cause
   `promote-timeout`, unless the operator dispatched `promote` for the tip. When nothing
