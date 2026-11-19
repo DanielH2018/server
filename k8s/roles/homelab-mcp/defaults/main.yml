@@ -39,3 +39,11 @@ image_builder_builds:
 # Flux prunes by its own inventory, which holds the ClusterRole and ClusterRoleBinding in
 # rbac.yaml, so dropping one deletes it live.
 manifests_rollout: homelab-mcp
+
+# Each entry renders k8s/templates/secret-default.yaml.j2 as secret-<name>.yaml:
+# its `string_data` maps a Secret field to the SOPS key its value comes from.
+render_secrets:
+  - name: homelab-mcp-secrets
+    string_data:
+      HOMELAB_MCP_TOKEN: homelab_mcp_token
+      HOMELAB_HA_TOKEN: claude_ha_token

@@ -37,8 +37,8 @@ FIELDS = {"Secret": ("stringData", "data"), "ConfigMap": ("data",)}
 # The two Secrets that hold the settings. The census must read both, or a walk that
 # reached neither would pass.
 MEMBERS = {
-    ("autofix-bridge", "env-secret.yaml"),
-    ("monitor-bridge", "env-secret.yaml"),
+    ("autofix-bridge", "secret-autofix-bridge-env.yaml"),
+    ("monitor-bridge", "secret-monitor-bridge-env.yaml"),
 }
 KEY = "probe_key"
 _RESOLVER = Resolver()

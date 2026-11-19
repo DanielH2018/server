@@ -24,7 +24,7 @@ below record the problem, fall back to a placeholder, and hand the whole list to
 exits 2.
 
 A KEY THE POD'S ENVIRONMENT RENDERS HAS NO DEFAULT HERE. `templates/config/env.yaml.j2` holds the
-value the pod runs with, and `templates/env-secret.yaml.j2` the credentials, so a second default in this package would be a copy the deploy never reads, and
+value the pod runs with, and the role's `render_secrets` the credentials, so a second default in this package would be a copy the deploy never reads, and
 the two would drift apart. A read with no default is required:
 an absent key records a problem the same way a malformed one does. A default survives only on a
 key the template does not render. `tests/test_config_reads_the_rendered_env.py` holds both
@@ -99,7 +99,7 @@ def load_config(env: Mapping[str, str], problems: list[str] | None = None) -> Co
     def _env(name: str, default: str | None = None) -> str:
         """The `name` env var. With no `default`, the key is REQUIRED.
 
-        A required key is one `templates/config/env.yaml.j2` or the env-secret renders, so the
+        A required key is one `templates/config/env.yaml.j2` or `render_secrets` renders, so the
         template holds its value and this module holds none. Absent, it records a problem and reads
         as "" rather than raising, and `main()` exits 2 naming it.
         """
