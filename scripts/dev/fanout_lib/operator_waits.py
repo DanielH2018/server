@@ -210,7 +210,7 @@ ISSUE_STATES = ("free", "claimed", "deferred", "blocked", "manual")
 def issue_states(issues: Iterable[Mapping], today: str) -> dict[str, int]:
     """How many open `claude` issues sit in each state, read from labels, blockers and claims.
 
-    `manual` wins, then a `not-before:<date>` label later than `today` (`deferred`), then an
+    `manual` wins, then a Not Before date later than `today` (`deferred`), then an
     open "blocked by" issue (`blocked`), then a held `Claim:` comment (`claimed`); the rest
     are `free`. This is an
     approximation of `findings.py next`, which needs ssh to each batch's host to judge a

@@ -54,8 +54,7 @@ Usage (every subcommand also takes `--repo OWNER/NAME`; see below)::
 THE PROJECT BOARD FOLLOWS THE ISSUE. After any subcommand that writes or comments on an
 issue, `main` makes that issue's item on the "Server Issue Tracking" Project agree with it:
 Status (Todo, In Progress while a worktree holds its claim or an open PR will close it, Done
-once closed). It also sets the issue's own Severity and Not Before issue fields from its
-`severity/` and `not-before:` labels. `findings_lib/board.py` owns the mapping. A board
+once closed). `findings_lib/board.py` owns the mapping. A board
 write that fails prints one warning and leaves the exit code alone, because nothing reads the
 board back; `sync-board` repairs it, and with no numbers it checks every open issue. Another
 repo's register has no board, so `--repo` other than this one skips it.
@@ -90,7 +89,7 @@ account can post a `Claim:` or `Released:` trailer and none of them decide anyth
 refuses an issue another worktree LIVE-holds, refuses `manual` issues, closed issues and
 issues outside the `claude` register, RELEASES a claim it finds stale and takes the issue,
 and treats re-claiming its own claim as a no-op; `release` refuses any claim but its own.
-Both repair a label that disagrees with the comments, in either direction. Before it writes
+Before it writes
 anything, `claim` checks that `--worktree` would not read STALE the moment the claim lands,
 and refuses with `--force` named unless it is passed. `claims` lists every claim, warning on
 stderr (but still rendering) if the worktree read failed; `reap` refuses outright on that
@@ -112,9 +111,16 @@ offered, marked with who holds it — `claim` reaps that claim on the way past, 
 clears every one of them at once. `--limit N` bounds the list; there is no default bound,
 because one truncated the free set silently and the reader took ten rows for all of them.
 
-DEFERRING AN ISSUE. `defer <n> --until <date>` (or `open --not-before <date>`) puts a `not-before:<YYYY-MM-DD>`
-label on the issue. `next` and `claim` withhold it while today is before that date and offer it ON the date, with
-nothing to clear: the label expires by comparison, which `manual` cannot. `next` still names a deferred issue —
+SEVERITY AND DATES ARE ISSUE FIELDS. `open --severity` sets the issue's Severity issue field
+and `open --not-before` its Not Before field, once the issue exists, because `gh issue
+create` cannot set one; re-running the same `open` repairs a failed write. Every loader in
+`findings_lib/gh_calls.py` reads them with `attach_fields`, and a failed read fails the
+command rather than reading as "nothing is deferred". A `severity/` or `not-before:` label
+still counts as a fallback, for sessions on a pre-field checkout.
+
+DEFERRING AN ISSUE. `defer <n> --until <date>` (or `open --not-before <date>`) sets the issue's Not Before
+field. `next` and `claim` withhold it while today is before that date and offer it ON the date, with
+nothing to clear: the date expires by comparison, which `manual` cannot. `next` still names a deferred issue —
 under a `deferred:` line, and on stderr under `--json` so the array stays the free set — because a silently
 withheld issue reads as a closed one to whoever looks at the backlog. `defer <n> --clear` lifts it early.
 
@@ -181,18 +187,22 @@ from dev.findings_lib.gh_calls import (
     blocker_hints,
     open_pr_refs,
     run,
+    set_fields,
 )
 from dev.findings_lib.issue_model import (
     NO_REOPEN,
+    NOT_BEFORE_FIELD,
     PR_REPO,
+    SEVERITY_FIELD,
+    SEVERITY_OPTIONS,
     cited_paths,
+    field_value,
     recorded_blockers,
     is_deferred_row,
     now_iso,
     fingerprint,
     issue_rows,
     label_names,
-    not_before_label,
     sort_key,
     today_utc,
     waiting,
@@ -243,7 +253,10 @@ def cmd_open(args: argparse.Namespace, tools: FindingsTools) -> int:
     body = args.body_file.read_text()
     blockers = _split_refs(args.blocked_by)
     fp = fingerprint(args.title, args.file)
-    labels = ["claude", f"severity/{args.severity}", f"kind/{args.kind}"]
+    labels = ["claude", f"kind/{args.kind}"]
+    fields = {SEVERITY_FIELD: SEVERITY_OPTIONS[args.severity]}
+    if args.not_before:
+        fields[NOT_BEFORE_FIELD] = args.not_before.isoformat()
     if args.domain:
         labels.append(f"domain/{args.domain}")
     if args.no_vetted_remediation:
@@ -255,10 +268,9 @@ def cmd_open(args: argparse.Namespace, tools: FindingsTools) -> int:
     if tools.repo is None and red_green_eligible(cited_paths(body)):
         labels.append(RED_GREEN_LABEL)  # a --review fan-out runs a red phase
     # `gh issue create --label` fails on a label the repo lacks, so `open` creates LABELS
-    # first, and a dated label or `red-green` the first time it is used.
+    # first, and `red-green` the first time it is used.
     have = _existing_labels(tools)
-    extra = [not_before_label(args.not_before)] if args.not_before else []
-    extra += [RED_GREEN_LABEL] if RED_GREEN_LABEL in labels else []
+    extra = [RED_GREEN_LABEL] if RED_GREEN_LABEL in labels else []
     ensure = [plan for name in extra for plan in plan_ensure_label(name, have)]
     run(plan_sync_labels(have) + ensure, args.dry_run, tools)
     existing = fingerprint_match(fp, tools)
@@ -270,11 +282,11 @@ def cmd_open(args: argparse.Namespace, tools: FindingsTools) -> int:
         fp=fp,
         source=args.source,
         verify_by=args.verify_by,
-        defer_until=args.not_before,
     )
     if outcome == "created":
         if args.dry_run:
             run(plans, True, tools)
+            set_fields("<new>", fields, tools, dry_run=True)
             if blockers:
                 print(f"gh issue edit <new> --add-blocked-by {','.join(blockers)}")
             print(f"(dry-run) would create; fingerprint {fp}")
@@ -282,6 +294,9 @@ def cmd_open(args: argparse.Namespace, tools: FindingsTools) -> int:
             return 0
         url = _create(plans[0], tools)
         number = url.rsplit("/", 1)[-1]
+        # `gh issue create` cannot set an issue field, so the severity and date are a second
+        # write; re-running the same `open` repairs a failed one.
+        set_fields(int(number), fields, tools, dry_run=False)
         if blockers:
             # `gh issue create` has no blocked-by flag, so the relationship is a second write.
             run(plan_block({"number": number}, on=blockers, clear=False), False, tools)
@@ -317,6 +332,10 @@ def cmd_open(args: argparse.Namespace, tools: FindingsTools) -> int:
         if outcome != "reopened":
             plans += _release_for_manual(existing)
     run(plans, args.dry_run, tools)
+    if field_value(existing, SEVERITY_FIELD) is None:
+        # The repair for an `open` whose field write failed after `gh issue create`.
+        repair = {SEVERITY_FIELD: fields[SEVERITY_FIELD]}
+        set_fields(existing["number"], repair, tools, args.dry_run)
     print(f"#{existing['number']} {outcome}  {existing.get('url', '')}")
     return 0
 
@@ -373,12 +392,12 @@ def cmd_defer(args: argparse.Namespace, tools: FindingsTools) -> int:
     """
     issue = _load_issue(args.number, tools)
     try:
-        plans = plan_defer(
-            issue, until=args.until, existing_labels=_existing_labels(tools)
-        )
+        plans = plan_defer(issue, until=args.until)
     except ClaimRefused as exc:
         print(f"#{args.number} refused: {exc.reason}", file=sys.stderr)
         return 3
+    day = args.until.isoformat() if args.until else None
+    set_fields(args.number, {NOT_BEFORE_FIELD: day}, tools, args.dry_run)
     run(plans, args.dry_run, tools)
     what = (
         "deferral cleared" if args.clear else f"deferred until {args.until.isoformat()}"

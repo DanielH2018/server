@@ -8,7 +8,14 @@ reach through it: a checkout whose default branch is not origin/master.
 import json
 from pathlib import Path
 
-from _findings_fakes import Fakes, build_tools, facts, live_worktree, make_issue
+from _findings_fakes import (
+    Fakes,
+    aimed_at,
+    build_tools,
+    facts,
+    live_worktree,
+    make_issue,
+)
 from lib.git_testing import commit, git, init_repo, scrub_process_git_env
 
 from dev.findings import main
@@ -21,7 +28,7 @@ DOTFILES = "DanielH2018/dotfiles"
 
 
 def _all_aimed(calls) -> bool:
-    return all(c[-2:] == ["--repo", DOTFILES] for c in calls.gh + calls.gh_json)
+    return aimed_at(calls, DOTFILES)
 
 
 def test_claim_with_repo_aims_every_call_and_the_worktree_read_there():
