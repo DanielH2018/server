@@ -52,3 +52,23 @@ Three new detectors shipped with this page — `test_glob_census_non_vacuity.py`
 `test_fix_skeptic_pass_documented.py`. Each was measured against the live tree before being
 scoped, per the class-4 lesson this page itself documents: a detector that finds its subject
 by pattern is only as good as the census behind it.
+
+## Class 2 and the retired fan-out red phase
+
+**HISTORY — the operator retired fan-out's red phase on 2026-11-18.** The red phase was a
+class 2 remedy for fan-out batches. Before the implementer ran, a separate session wrote one
+failing test per stated behaviour from the issue text alone, and a gate proved each test
+failed on the unchanged code. `fanout.py stats` over 741 review records showed the phase did
+not pay for itself. It ran in 77 batches and took 32% of their spend. Its tests missed 198
+of 462 fix hunks when the pipeline reverted each hunk on its own. Red batches ended
+`needs-input` 36% of the time, against 24% for the 658 batches without the phase. Only
+findings whose cited paths were all suite-covered Python got the phase, so the two groups
+are different populations.
+[DanielH2018/server#9042](https://github.com/DanielH2018/server/issues/9042) holds the
+whole table.
+
+The plain review keeps the class 2 check that every batch already ran.
+`scripts/dev/fanout_lib/review/base_check.py` runs a PR's new tests with its code changes
+taken out and tells the reviewer which still pass. Nothing proves that a batch's tests were
+written before its fix. For a one-off proof that a test fails without its fix, run
+`redproof <ref> <changed paths> -- <test>`.

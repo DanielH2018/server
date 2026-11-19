@@ -12,7 +12,7 @@ governs:
 ## Status
 
 Accepted on 2026-11-12. The operator approved this record
-([H7](../target-architecture/host/h7-delete-ansible.md), exit observation 6) and ruled that
+([H7](../archive/host/h7-delete-ansible.md), exit observation 6) and ruled that
 ADR-0001, ADR-0003, ADR-0011 and ADR-0013 each carry an "Amended by ADR-0029" note
 (*Amendments* below). From the post-migration audit, also on 2026-11-12
 ([#8178](https://github.com/DanielH2018/server/issues/8178)), the operator added ADR-0012,
@@ -30,7 +30,7 @@ daniel-box's and daniel-server's setup plane from master on every tick, and dani
 its setup plays over SSH with `-e target=daniel-pi`.
 
 That model had four costs that the
-[target-architecture design](../target-architecture/design.md) names under its host plane:
+[target-architecture design](../archive/design.md) names under its host plane:
 
 - A role declared only what should exist. Removing a file or a unit needed an absent arm
   that someone remembered to write, and a missing one left the old state in place.
@@ -50,7 +50,7 @@ The design weighed these alternatives and rejected them:
 ansible-pull was the runner-up. It would have kept the roles and changed only who triggers
 them. The plan made it the fallback if H3's `Depends` test failed, or if reconcile crossed
 its line ceiling. The `Depends` test passed on the Pi on 2026-10-16
-([H3](../target-architecture/host/h3-pi-pilot.md)), and the reconcile-size census holds
+([H3](../archive/host/h3-pi-pilot.md)), and the reconcile-size census holds
 reconcile under its ceiling (exit observation 7).
 
 ## Decision

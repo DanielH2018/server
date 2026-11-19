@@ -50,7 +50,9 @@ def test_a_failed_read_lowers_nothing_and_reads_no_kind():
         ("k8s/roles/metallb/defaults/main.yml", live_limit.SERIAL),
         ("k8s/roles/flux/templates/sync.yaml.j2", live_limit.SERIAL),
         ("secrets/cluster-vars.sops.env", live_limit.SERIAL),
+        ("cluster/services.yml", live_limit.SERIAL),
         (K8S_PATH, live_limit.K8S),
+        ("k8s/roles/sonarr/defaults/main.yml", live_limit.K8S),
         ("docs/landing.md", ""),
     ],
 )
@@ -63,3 +65,10 @@ def test_every_serial_role_is_a_k8s_role_directory():
     assert {"longhorn", "metallb", "flux"} <= live_limit.SERIAL_ROLES
     for role in live_limit.SERIAL_ROLES:
         assert (REPO / "k8s" / "roles" / role).is_dir(), role
+
+
+def test_every_serial_path_is_a_file():
+    """A renamed service list matches no PR, so the rule would bar nothing."""
+    assert "cluster/services.yml" in live_limit.SERIAL_PATHS
+    for path in live_limit.SERIAL_PATHS:
+        assert (REPO / path).is_file(), path

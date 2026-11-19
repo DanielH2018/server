@@ -45,7 +45,7 @@ receives rendered Secrets that already carry plaintext.
 the cluster from a promoted artifact. Flux then renders a role's Secrets itself, so the
 cluster must decrypt something. Flux's `kustomize-controller` decrypts SOPS natively, with an
 age key held in a Secret in `flux-system`. Slice D3 has the plan, in
-[d3-secrets.md](../target-architecture/deploy/d3-secrets.md).
+[d3-secrets.md](../archive/deploy/d3-secrets.md).
 
 Three options existed:
 

@@ -426,7 +426,8 @@ def test_the_pis_real_manifest_runs_the_secrets_step_once_for_its_credentials(
         "sysstat.service",
     ):
         live_unit(node, unit)
-    node.state["users"] = {"node_exporter": 904}  # the uid the Pi's package declares
+    node.state["users"] = {"node_exporter": 904}  # the ids the Pi's package declares
+    node.state["gids"] = {"node_exporter": 986}
     (node.root / "var/lib/node-exporter-textfile").mkdir(parents=True)
     for edit in package.lines:
         target = node.root / edit["path"].lstrip("/")
@@ -451,6 +452,7 @@ def test_a_new_user_exists_before_the_secrets_step_writes_an_output_it_owns(node
             {
                 "name": "ctl",
                 "uid": 905,
+                "gid": 905,
                 "home": "/var/lib/ctl",
                 "shell": "/usr/sbin/nologin",
                 "comment": "controller",

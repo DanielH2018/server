@@ -14,7 +14,7 @@ a constant name, and a set-bound literal one is accepted at an `{% if %}`. Every
 enclosing node refuses it, so each use yields at most one refusal.
 
 `docs/homelab-render.md` is the operator's page, and
-`docs/target-architecture/render/r2-secret-placeholders.md` the plan.
+`docs/archive/render/r2-secret-placeholders.md` the plan.
 """
 
 import sys as _sys

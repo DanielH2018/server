@@ -63,10 +63,10 @@ the `CLAUDE.md` sections that cite code a PR changed.
 
 ## The plans
 
-[The design](target-architecture/design.md) says why the migration ran and in what order.
-[The contracts](target-architecture/contracts.md) state the interfaces the slices built
-against. Each slice plan's `Status:` line records the PRs that carried it. The plans keep
-their paths under `target-architecture/` because hundreds of files link into them.
+[The design](archive/design.md) says why the migration ran and in what order.
+[The contracts](archive/contracts.md) state the interfaces the slices built
+against. Each slice plan's `Status:` line records the PRs that carried it. The plans sit in
+the archive under `deploy/`, `host/`, `render/` and `monitoring/`.
 
 The docs-guard slices G6 to G11 continue past the migration's end.
 [ADR-0031](adr/0031-each-kind-of-fact-has-one-stateless-detector.md) opened them on

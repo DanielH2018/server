@@ -47,6 +47,9 @@ SLICE_2_ROLES = {
 # caller and it dials nothing itself, so labelling it at creation costs nothing and skips the
 # unfenced window a later slice would have to close.
 BORN_FENCED_ROLES = {
+    # Traefik is the UI's only caller from outside the role. Its in-role callers, the task pods
+    # on 8080 and every Airflow pod on Postgres, are admitted by the role's own additive fences.
+    "airflow",
     # Serves each host's ~/.claude/artifacts read-only; makes no outbound connection at all.
     "artifacts",
     # nginx over a hostPath of built MkDocs output. Same shape as artifacts, and for the same

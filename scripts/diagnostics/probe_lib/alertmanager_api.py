@@ -4,7 +4,7 @@ Two readers: `probe.py health <tag>` names the silence or inhibition on a gated 
 `probe.py monitors` lists the active silences and the alerts `ALERTS` lacks. Both read through Alertmanager's GET-only LAN
 door (`k8s/roles/observability/templates/alertmanager-read-ingressroute.yaml.j2`),
 which admits `/api/v2/alerts` and `/api/v2/silences` alone. The design is answer 2 of
-docs/target-architecture/monitoring/alertmanager-ui-and-readers.md.
+docs/archive/monitoring/alertmanager-ui-and-readers.md.
 
 Neither read decides a verdict. A silence mutes a page, not a deploy's health, so a silenced
 alert still fails the gate; an unread Alertmanager prints a line saying so.

@@ -18,10 +18,12 @@ read, not a command, and a field for the same reason `worktree_facts` is one.
 `running_batch_holds` reads the same manifests and asks each batch's host whether its unit is
 still running. It does run a command, `systemctl --user is-active`, over ssh for a peer host,
 and it is a field so no test reads a real unit.
-`peer_worktrees` reads the other host's `git worktree list` over ssh. It is the one
-field whose default is NOT the real implementation: the shared test fake leaves it unset, and
-a default that opened ssh would make every test with a "no worktree" claim depend on reaching
-the peer. `findings.py`'s entry point passes `read_peer_worktrees` instead.
+`peer_worktrees` reads the other host's `git worktree list` over ssh, and `tree_held` scans
+/proc for a process working in a tree. They are the two fields whose default is NOT the real
+implementation: the shared test fake leaves them unset, and a default that opened ssh or read
+the host's processes would make a claim test's verdict depend on the machine running it.
+`findings.py`'s entry point passes `read_peer_worktrees` and
+`lib.worktrees.held_by_readable_process` instead.
 `sync_board` writes the Project board through `gh api graphql`. It is a field of its own so
 the tests that pin the exact `gh` calls a command makes do not also pin the board's queries.
 """
@@ -79,6 +81,10 @@ def _no_peer_worktrees(_repo: str | None) -> list[Worktree] | None:
     return []
 
 
+def _never_held(_path: str) -> bool:
+    return False
+
+
 @dataclass(frozen=True)
 class FindingsTools:
     """The gh reads, the gh writes and the worktree read.
@@ -107,6 +113,9 @@ class FindingsTools:
     # `(repo) -> worktrees` the other host's checkout registers, or None when it cannot be
     # read. Asked only when a claim names no local worktree. None is this repo, as above.
     peer_worktrees: Callable[[str | None], list[Worktree] | None] = _no_peer_worktrees
+    # `(worktree path) -> bool`: whether a live process works in the tree, which keeps a claim
+    # on an unlocked tree live. A field so a test never scans the real /proc.
+    tree_held: Callable[[str], bool] = _never_held
     # `(issue numbers, repo, dry_run=) -> {issue: (outcome, detail)}`, `board.sync_board`'s
     # contract. None is this repo, as above.
     sync_board: Callable[..., dict[int, tuple[str, str]]] = sync_board

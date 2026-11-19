@@ -83,6 +83,7 @@ __all__ = [
 # no longer reading the ref the cluster gets. The digests are arbitrary; their SHAPE and this
 # map's keys are asserted by tests/k8s/test_built_images_name_the_content_tag.py.
 BUILT_IMAGE_TAG_STUBS: dict[str, str] = {
+    "airflow": "sha-a1f10e0aaaaa",
     "code-server": "sha-c0de5e2e7000",
     "homelab-mcp": "sha-70c1ab0e1111",
     "ical-proxy": "sha-1ca17e2d2222",

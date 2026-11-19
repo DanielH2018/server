@@ -7,7 +7,7 @@ and leaves `prod` on R. `<names>` are the expected names that failed or timed ou
 `unverified` when `verify` ended with no usable verdict. The value never takes C2's `failed=`
 form, so the revert rule never passes it, and only the operator clears it. `settle` writes it
 and tags R's digest `held`, as H1.1b's forward-only hold does, and wins over that hold when
-both apply. The plan is docs/target-architecture/deploy/d5-bulk-move.md, *The stateful hold,
+both apply. The plan is docs/archive/deploy/d5-bulk-move.md, *The stateful hold,
 its post, and the reset input (D5.2b1, D5.2b2)*; contracts.md C2 states it as *A hold without
 a reset*.
 

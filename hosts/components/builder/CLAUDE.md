@@ -1,7 +1,7 @@
 # `hosts/components/builder` — the host-package builder and its apt repository (daniel-box)
 
 The builder half of target-architecture slice H3, whose plan is
-`docs/target-architecture/host/h3-pi-pilot.md`. It builds the host packages from master, signs
+`docs/archive/host/h3-pi-pilot.md`. It builds the host packages from master, signs
 them, and serves the apt repository the hosts' updater reads. daniel-box's package ships it.
 The `failure-alert` component ships the page that
 a failed run opens. This file holds the rules for the component; the plan's *The builder and the
@@ -11,9 +11,10 @@ repository (daniel-box)* holds the design.
 
 `component.yml` and the files beside it declare everything the builder needs:
 
-- The system users `homelab-builder` (uid 902) and `homelab-signer` (uid 903), nologin, declared by
-  uid alone. The uids sit in the homelab band 900-949, below the uids Ubuntu hands out from 999
-  down. A rebuilt host gets groups whose gid equals the uid. Nothing reads the old gids 983 and 982.
+- The system users `homelab-builder` (uid 902) and `homelab-signer` (uid 903), nologin, with gids 983 and
+  982. The uids sit in the homelab band 900-949, below the uids Ubuntu hands out from 999 down.
+  The gids are the live groups' from before the band. A rebuilt host's sysusers file creates the
+  groups with them, and the users arm holds them fixed.
 - `tmpfiles.d/homelab-builder.conf`, which keeps the directories the units' `StateDirectory=` lines do
   not create: `src/` and `uv-cache/` (0700), `staged/` (owned by the builder, group
   `homelab-signer`, 2770, because the builder writes it and the signer empties it), the signer's

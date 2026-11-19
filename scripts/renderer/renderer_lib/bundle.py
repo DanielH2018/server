@@ -44,7 +44,7 @@ any Flux object (`suspension.py`, C3 *Suspension*).
 
 This module imports neither Ansible nor Jinja, so `promote.py check-bundle` reads
 `SHARED_KINDS` and the file names from it. The plan is
-docs/target-architecture/deploy/d2-first-leaf.md, *Publication and verification*.
+docs/archive/deploy/d2-first-leaf.md, *Publication and verification*.
 """
 
 import sys as _sys
