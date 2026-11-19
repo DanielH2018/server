@@ -20,8 +20,12 @@ from _workflow_rows import (
 )
 
 FLUX_DEFAULTS = "k8s/roles/flux/defaults/main.yml"
-FLUX_FETCH = "fluxcd/flux2/releases/download/$FLUX_VERSION/"
-COSIGN_FETCH = "sigstore/cosign/releases/download/$COSIGN_VERSION/"
+# tool -> the release URL its inline fetch curls.
+RELEASE_FETCH = {
+    "flux": "fluxcd/flux2/releases/download/$FLUX_VERSION/",
+    "cosign": "sigstore/cosign/releases/download/$COSIGN_VERSION/",
+}
+PINNED_TOOL = "$/.github/actions/pinned-tool"
 COSIGN_RELEASE = "v3.1.4"
 
 # The reset_to_last_good dispatch's two jobs (D5.2b2), guarded by RESET_GUARDS instead.
@@ -252,12 +256,16 @@ def handoff_problems(wf: Workflow) -> list[str]:
     return found
 
 
-def installed_in(wf: Workflow, fetch: str) -> set[str]:
+def fetches(step: dict, tool: str) -> bool:
+    """Whether the step fetches `tool`'s pinned release, inline or through pinned-tool."""
+    if step.get("uses") == PINNED_TOOL:
+        return (step.get("with") or {}).get("tool") == tool
+    return RELEASE_FETCH[tool] in str(step.get("run", ""))
+
+
+def installed_in(wf: Workflow, tool: str) -> set[str]:
     return {
-        name
-        for name, job in jobs(wf).items()
-        for s in steps(job)
-        if fetch in str(s.get("run", ""))
+        name for name, job in jobs(wf).items() for s in steps(job) if fetches(s, tool)
     }
 
 
