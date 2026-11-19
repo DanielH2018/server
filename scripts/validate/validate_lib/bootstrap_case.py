@@ -577,7 +577,7 @@ def run(cases) -> None:
         for i, item in enumerate(planned):
             failure, seconds = futures[i].result()
             if failure is None:
-                print(f"[PASS] {item.label}: {item.name}", file=sys.stderr)
+                cases.passed.append(item.name)
             else:
                 cases.failed.append(item.name)
                 print(f"[FAIL] {item.label}: {item.name}: {failure}", file=sys.stderr)
