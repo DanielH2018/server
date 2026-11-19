@@ -21,6 +21,9 @@ from pathlib import Path
 
 import pytest
 
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from _hook_common import parse_payload
+
 from lib.proc_testing import fake_bin, path_with
 
 _HOOK = os.path.join(
@@ -114,7 +117,7 @@ def _run_main(
     payload = json.loads(stdin)
     return functools.partial(
         _mod.main,
-        read_payload=lambda: payload,
+        read_payload=lambda: parse_payload(payload),
         target_problems=lambda: targets or [],
         master_moved_problems=lambda: master_moved or [],
         dirty_primary_problems=lambda: parked or [],

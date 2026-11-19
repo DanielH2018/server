@@ -29,6 +29,7 @@ from _hook_common import (
     Unsplittable,
     emit_pretooluse_decision,
     gh_repo,
+    parse_payload,
     primary_checkout,
     read_payload,
     session_state_path,
@@ -209,8 +210,77 @@ def test_a_payload_that_is_not_a_json_object_reads_as_none(text):
     assert read_payload(io.StringIO(text)) is None
 
 
-def test_a_json_object_payload_is_returned():
-    assert read_payload(io.StringIO('{"session_id": "s"}')) == {"session_id": "s"}
+def test_a_json_object_payload_is_parsed():
+    event = read_payload(io.StringIO('{"session_id": "s", "source": "startup"}'))
+    assert event is not None
+    assert event.session_id == "s"
+    assert event.raw["source"] == "startup"
+
+
+def test_a_bash_payload_is_a_bash_call_keeping_its_tool_input(tmp_path):
+    tool_input = {"command": "ls", "run_in_background": True}
+    call = parse_payload(
+        {
+            "tool_name": "Bash",
+            "tool_input": tool_input,
+            "cwd": str(tmp_path),
+            "agent_type": "skeptic",
+            "permission_mode": "auto",
+        }
+    ).bash()
+    assert call is not None
+    assert call.command == "ls"
+    assert call.cwd == tmp_path
+    assert call.agent_type == "skeptic"
+    assert call.agent_id is None
+    assert call.permission_mode == "auto"
+    assert call.tool_input == tool_input
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"tool_name": "Bash", "tool_input": None},
+        {"tool_name": "Bash", "tool_input": {"command": ""}},
+        {"tool_name": "Edit", "tool_input": {"command": "ls"}},
+    ],
+    ids=["null-input", "empty", "edit"],
+)
+def test_a_payload_with_no_bash_command_is_no_bash_call(payload):
+    assert parse_payload(payload).bash() is None
+
+
+@pytest.mark.parametrize("cwd", [None, "relative/dir"], ids=repr)
+def test_a_payload_with_no_absolute_cwd_runs_in_the_process_cwd(
+    cwd, tmp_path, monkeypatch
+):
+    monkeypatch.chdir(tmp_path)
+    payload = {"tool_name": "Bash", "tool_input": {"command": "ls"}}
+    if cwd is not None:
+        payload["cwd"] = cwd
+    call = parse_payload(payload).bash()
+    assert call is not None
+    assert call.cwd == tmp_path
+
+
+def test_an_edit_resolves_a_relative_file_path_against_the_payload_cwd(tmp_path):
+    event = parse_payload(
+        {
+            "tool_name": "Edit",
+            "tool_input": {"file_path": "a/b.md"},
+            "cwd": str(tmp_path),
+        }
+    )
+    call = event.edit()
+    assert call is not None
+    assert call.file_path == tmp_path / "a" / "b.md"
+
+
+@pytest.mark.parametrize("tool_input", [None, {"file_path": ""}])
+def test_an_edit_with_no_file_path_is_no_edit_call(tool_input):
+    assert (
+        parse_payload({"tool_name": "Write", "tool_input": tool_input}).edit() is None
+    )
 
 
 # Two ways to name the primary checkout were in use, and they disagree exactly where the git

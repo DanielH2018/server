@@ -93,7 +93,11 @@ def test_a_local_git_command_is_clean():
 
 
 def _run(monkeypatch, capsys, command):
-    payload = {"session_id": "s", "tool_input": {"command": command}}
+    payload = {
+        "session_id": "s",
+        "tool_name": "Bash",
+        "tool_input": {"command": command},
+    }
     monkeypatch.setattr(_mod.sys, "stdin", io.StringIO(json.dumps(payload)))
     assert _mod.main() == 0
     out = capsys.readouterr().out.strip()
