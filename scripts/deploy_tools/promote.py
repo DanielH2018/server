@@ -158,7 +158,7 @@ from deploy_tools.promote_lib.reads import (
 # The CI reduction every deploy path shares, so a promotion and checkout-sync agree on what
 # green means. It moved to `hosts/lib/` in H7.2e so the deployer could retire without it.
 sys.path.insert(0, str(HOST_LIB_FILES))
-from ci_verdict import ci_verdict
+from ci_verdict import CIVerdict, ci_verdict
 
 # The revert rule's switch (contract C2). Open question 11 of
 # docs/target-architecture/deploy/d2-first-leaf.md asks whether it turns on, and only the
@@ -227,7 +227,7 @@ def decide(
             digest = reads.tag(candidate)
             if digest is None:
                 continue
-            if ci_verdict(reads.check_runs(candidate), required) != "pass":
+            if ci_verdict(reads.check_runs(candidate), required) is not CIVerdict.PASS:
                 continue
             target_bundle = None
             if held is not None:

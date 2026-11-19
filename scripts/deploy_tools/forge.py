@@ -37,6 +37,11 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))  # scripts/
 from lib import gh_rate_limit
+from lib.repo_paths import HOST_LIB_FILES
+
+# The parsed check-run every CI grader reads. `ci_verdict` imports nothing first-party.
+_sys.path.insert(0, str(HOST_LIB_FILES))
+from ci_verdict import CheckRun, parse_check_runs
 from forge_transport import (
     TIMEOUT_S,
     ForgeError,
@@ -146,7 +151,7 @@ class GitHub:
             f"gh variable get {name} exited {proc.returncode}: {proc.stderr.strip()}"
         )
 
-    def check_runs(self, sha: str) -> list[dict]:
+    def check_runs(self, sha: str) -> list[CheckRun]:
         """Every check-run GitHub holds for commit `sha`, page after page.
 
         One page holds 100 runs, and a commit can carry more, so a single read would hide a
@@ -157,7 +162,7 @@ class GitHub:
         Raises:
             ForgeError: any status but 200 on any page, a body without a `check_runs` list or
                 an integer `total_count`, fewer runs than `total_count`, more than
-                CHECK_RUN_PAGES_MAX pages, or no answer.
+                CHECK_RUN_PAGES_MAX pages, an entry that is not an object, or no answer.
         """
         runs: list[dict] = []
         for page in range(1, CHECK_RUN_PAGES_MAX + 1):
@@ -188,7 +193,10 @@ class GitHub:
                     raise ForgeError(
                         f"check-runs for {sha}: read {len(runs)} of {total} runs"
                     )
-                return runs
+                try:
+                    return parse_check_runs(runs)
+                except ValueError as exc:
+                    raise ForgeError(f"check-runs for {sha}: {exc}") from exc
         raise ForgeError(f"check-runs for {sha}: more than {CHECK_RUN_PAGES_MAX} pages")
 
     def runs(self, workflow: str, status: str) -> list[dict]:
