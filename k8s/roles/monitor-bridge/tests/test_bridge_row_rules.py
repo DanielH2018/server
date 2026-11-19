@@ -258,6 +258,7 @@ MUTATIONS = {
     "service names the bridge": ("arr_queue", _label("service", "monitor-bridge")),
     "severity ignores critical": ("scrutiny", _label("severity", "warning")),
     "a rule gains shadow": ("bazarr", _label("shadow", "true")),
+    "a gate's rule is renamed": ("b2_reachable", _set("alert", "B2Down")),
     "the exporter exclusion is lost": (
         "host_packages",
         lambda rule: rule.update(expr=rule["expr"].replace(EXPORTER_EXCLUSION, "")),
