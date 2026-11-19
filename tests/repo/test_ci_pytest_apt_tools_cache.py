@@ -81,9 +81,9 @@ def test_an_apt_get_outside_the_fallback_branch_is_flagged(workflow):
 def test_a_sudo_apt_get_update_is_flagged(workflow):
     broken = copy.deepcopy(workflow)
     step = _step(broken, INSTALL_STEP)
-    step["run"] = step["run"].replace(
-        'apt-get -q "${private[@]}" update', "sudo apt-get update -q"
-    )
+    private_update = 'apt-get -q "${private[@]}" update'
+    assert private_update in step["run"]
+    step["run"] = step["run"].replace(private_update, "sudo apt-get update -q")
     assert problems(broken) == [
         "a step runs sudo, which a runner pod under `restricted` cannot"
     ]
