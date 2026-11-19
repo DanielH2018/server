@@ -11,10 +11,9 @@ from pathlib import Path
 
 import pytest
 
-
-import fragment_readers as readers
-import fragment_renderers as renderers
-import gen_doc_fragments as g
+from docs import fragment_readers as readers
+from docs import fragment_renderers as renderers
+from docs import gen_doc_fragments as g
 from lib.estate import Estate, Inventory
 
 DOCS = g.REPO / "docs"

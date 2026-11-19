@@ -40,16 +40,8 @@ import json
 import os
 import socket
 import sys
-import sys as _sys
 from datetime import datetime, timezone
 from pathlib import Path
-from pathlib import Path as _Path
-
-# `infra_map` is a namespace package under `scripts/`, so reaching a sibling by package
-# name needs `scripts/` on sys.path: a directly-invoked script — which is how the cron runs
-# this one — gets only its own directory, and pyproject's `pythonpath` is a pytest setting.
-# This has to sit ABOVE the sibling imports below, not after them: they are what needs it.
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 from infra_map.constants import (
     DEFAULT_OUTPUT,

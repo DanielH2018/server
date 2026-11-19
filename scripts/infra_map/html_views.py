@@ -5,14 +5,6 @@ comes from the inventory goes through ``e`` — the panels carry hostnames, imag
 and error strings this module does not control.
 """
 
-import sys as _sys
-from pathlib import Path as _Path
-
-# `infra_map` is a namespace package under `scripts/`, so reaching a sibling by package
-# name needs `scripts/` on sys.path: a directly-invoked script gets only its own directory,
-# and pyproject's `pythonpath` is a pytest setting.
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
-
 from infra_map.style import STATUS_LABELS, e
 
 

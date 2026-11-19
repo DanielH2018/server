@@ -43,16 +43,6 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-# Reach the sibling package directories: a directly-invoked script gets only its own
-# directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
-import sys as _sys
-from pathlib import Path as _Path
-
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
-# This directory's secrets.py would shadow the stdlib module the host renderer needs.
-if __name__ == "__main__":
-    _sys.path.remove(str(_Path(__file__).resolve().parent))
-
 import yaml
 from lib.cli_help import ArgumentParser
 from lib import yaml_fast
@@ -63,8 +53,7 @@ from lib.kubectl import DEFAULT_TOOLS, MissingKubectl, Tools, WrongCluster, kube
 from lib.repo_paths import K3S_HOST_CHECKS_DEFAULTS, K8S_ROLES
 
 # The drill's stamp ConfigMap parser, shared with backup health and the Longhorn upgrade gate.
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2] / "lib"))
-from longhorn_lib import longhorn_restore_drill_stamps as drill_stamps
+from lib.longhorn_lib import longhorn_restore_drill_stamps as drill_stamps
 
 LATE_MULTIPLIER = 2
 

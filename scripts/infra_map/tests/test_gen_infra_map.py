@@ -20,8 +20,7 @@ are in `test_infra_map_live.py`, and the HTML page, diagram and SVG in
 Run: uv run pytest scripts/infra_map/tests/test_gen_infra_map.py
 """
 
-import gen_infra_map as g
-
+from infra_map import gen_infra_map as g
 from _infra_map import (
     GLOBALS,
     PODS,

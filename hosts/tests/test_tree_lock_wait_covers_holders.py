@@ -25,8 +25,8 @@ from functools import cache
 import pytest
 from _setup_render import role_context
 from _shell_render import rendered_shell_text
-from build_docs import time_budget
-from fragments_lib.fragments_deploy import tree_lock_holders
+from docs.build_docs import time_budget
+from docs.fragments_lib.fragments_deploy import tree_lock_holders
 from lib import yaml_fast
 from lib.repo_paths import REPO
 from renderer.renderer_lib.environment import render_file

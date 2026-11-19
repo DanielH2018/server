@@ -14,13 +14,8 @@ the environment. The one import is `lib.exit_codes`, a module of constants and a
 
 import ast
 import re
-import sys as _sys
 from collections.abc import Callable
 from pathlib import Path as _Path
-
-# Reach the sibling package directories: a directly-invoked script gets only its own
-# directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from lib.docs_provenance import md_cell
 from lib.exit_codes import contract
