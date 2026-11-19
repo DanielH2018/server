@@ -9,12 +9,9 @@ GitHub's squash merge of that head makes when the heads before it have merged, w
 Run: uv run pytest scripts/lib/tests/test_tree_stack.py
 """
 
-import sys
 from collections.abc import Sequence
 from pathlib import Path
 
-# The `lib` convention for a module that imports its siblings as `lib.<name>`.
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from lib.git import git
 

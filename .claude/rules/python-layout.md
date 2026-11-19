@@ -12,14 +12,23 @@ This file is what you need while placing a file, plus the rules every new check 
 long form, with the measurements and the incidents behind each rule, is
 `docs/python-code-organization.md`.
 
-## Cross-directory imports need a `sys.path` bootstrap
+## Import from the installed root, and bootstrap only a bare sibling
 
-A directly-invoked script gets its OWN directory on `sys.path` and nothing else.
-`pythonpath` in `pyproject.toml` is a pytest setting, so a cross-directory import that pytest
-resolves still raises `ModuleNotFoundError` under the cron or prek hook that runs it. Every
-module reaching outside its own directory carries its own aliased insert
-(`_sys.path.insert(0, _Path(__file__).resolve().parents[1])`); copy it from a sibling. It goes
-on the module that needs it, never on a shared one.
+`scripts/` is the import root (`docs/adr/0039-scripts-is-installed-in-place.md`). In a venv
+the editable install's `.pth` supplies it, and outside one the launcher's `PYTHONPATH` does.
+So a dotted import from the root (`from lib.git import git`, `from deploy_tools.land_lib import
+policy`) needs no insert.
+
+A bare import of a sibling in another directory (`import fanout_lib` from outside
+`scripts/dev/`) still needs the module's own aliased insert of that directory until slice 3 of
+the scripts packaging milestone qualifies its area. `pythonpath` in `pyproject.toml` is a
+pytest setting, so pytest resolving it proves nothing about the cron or hook that runs it.
+`scripts/tests/test_script_bootstraps_present.py` flags a missing insert.
+
+A module that imports `host_lib`, `ci_verdict`, `builder_ci_grade` or `gh_quota` by bare name
+imports `lib.host_modules` first (`from lib import host_modules  # noqa: F401`). It is the one
+module under `scripts/` that adds to `sys.path`. A module a host package copies (`shared:`)
+keeps its own insert of `hosts/lib/`, because no `lib` ships beside it.
 
 A module under a `tests/` directory carries none of this: pytest is its only invoker, and
 `pythonpath` lists `scripts/` and every subdirectory but `validate` and `diagnostics`. A test
@@ -75,8 +84,9 @@ host packages and their components under `hosts/` goes in `hosts/tests/`. The sh
 - An ordering or flag rule over an operator-only runbook's section goes in a `RunbookRule`
   row of `tests/repo/test_runbook_rules.py`: the doc, the heading, the unit, a selector, and
   the strings it requires, the pattern it forbids or the step that must come first.
-- `tests/_row_table.py` is the harness the tables share. A property needing a second
-  render context, a cross-document join or a long exemption list keeps its own file.
+- `tests/_row_table.py` is the harness the tables share. A property over a second render is
+  still a row: it passes that render as the row's `source` (`_prepull_property_rows.py`).
+  One needing a long exemption list keeps its own file.
 - The `a-single-predicate-check-is-a-row` row of `tests/repo/test_census_rows_suite.py`
   refuses a new module under `tests/repo/` or `tests/services/` with three test functions or
   fewer that reads tracked text, by a walk or by one file's path, and runs no code: no

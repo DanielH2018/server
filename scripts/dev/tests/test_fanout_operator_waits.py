@@ -16,7 +16,7 @@ from test_fanout_autoland import _pr, _record
 
 from fanout_lib import autoland, operator_waits
 from fanout_lib.autoland import Boundaries
-from findings_lib.issue_model import claim_comment
+from findings_lib.issue_model import claim_comment, parse_issue
 
 # 2026-10-18T01:00:00Z, the stamp `_record` puts in every record's file name.
 SAVED = 1792285200.0
@@ -27,15 +27,23 @@ SAMPLE = re.compile(
 )
 
 
-def _issue(number, *labels, claimed=False):
+def _issue_json(number, *labels, claimed=False):
     comments = (
         [operator_comment(claim_comment("worktree-a", None, "t"))] if claimed else []
     )
     return {
         "number": number,
+        "title": f"issue {number}",
+        "state": "OPEN",
+        "body": "",
         "labels": [{"name": n} for n in ("claude", *labels)],
         "comments": comments,
+        "blockedBy": {"nodes": []},
     }
+
+
+def _issue(number, *labels, claimed=False):
+    return parse_issue(_issue_json(number, *labels, claimed=claimed))
 
 
 def _no_issues():
@@ -164,11 +172,18 @@ def test_each_issue_lands_in_one_state_and_manual_wins():
         _issue(4, "not-before:2026-10-17"),
         _issue(5, "manual", claimed=True),
         _issue(6, "manual", "not-before:2026-10-20"),
-        {
-            **_issue(7, claimed=True),
-            "blockedBy": {"nodes": [{"number": 9, "state": "OPEN"}]},
-        },
-        {**_issue(8), "blockedBy": {"nodes": [{"number": 9, "state": "CLOSED"}]}},
+        parse_issue(
+            {
+                **_issue_json(7, claimed=True),
+                "blockedBy": {"nodes": [{"number": 9, "state": "OPEN"}]},
+            }
+        ),
+        parse_issue(
+            {
+                **_issue_json(8),
+                "blockedBy": {"nodes": [{"number": 9, "state": "CLOSED"}]},
+            }
+        ),
     ]
     assert operator_waits.issue_states(issues, "2026-10-18") == {
         "free": 3,

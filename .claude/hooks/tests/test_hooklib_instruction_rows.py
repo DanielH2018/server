@@ -16,7 +16,7 @@ from lib.git_testing import git, init_repo
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from _hook_common import INSTRUCTIONS_LOG_ENV
+from _hook_common import INSTRUCTIONS_LOG_ENV, parse_payload
 from hooklib import instruction_rows
 
 
@@ -74,7 +74,7 @@ def test_a_linked_worktree_rows_its_primary_checkouts_memory_md(tmp_path, monkey
     monkeypatch.setenv(INSTRUCTIONS_LOG_ENV, str(log))
 
     instruction_rows.log_unevented_loads(
-        {"session_id": "dddd4656", "cwd": str(worktree)}
+        parse_payload({"session_id": "dddd4656", "cwd": str(worktree)})
     )
 
     rows = [r.split()[3:] for r in log.read_text(encoding="utf-8").splitlines()]

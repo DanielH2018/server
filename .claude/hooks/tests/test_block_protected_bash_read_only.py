@@ -14,6 +14,7 @@ import os
 import sys
 
 import pytest
+from _hook_common import parse_payload
 
 _HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _REPO = os.path.dirname(os.path.dirname(_HERE))
@@ -45,7 +46,7 @@ def _payload(command, agent="skeptic"):
     payload = {"tool_name": "Bash", "tool_input": {"command": command}, "cwd": _REPO}
     if agent:
         payload["agent_type"] = agent
-    return payload
+    return parse_payload(payload).bash()
 
 
 FLAGGED = [

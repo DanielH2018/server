@@ -23,11 +23,6 @@ only ever reaches one.
 Run: uv run pytest scripts/lib/tests/test_function_imports.py
 """
 
-import sys as _sys
-from pathlib import Path as _Path
-
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
-
 import ast
 import json
 import subprocess

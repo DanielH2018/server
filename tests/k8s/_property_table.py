@@ -52,6 +52,9 @@ class Property:
     min_matches: int = 1
     must_find: frozenset[str] = frozenset()
     allow: Mapping[str, str] = field(default_factory=lambda: MappingProxyType({}))
+    # The (role, template, doc) stream the selector reads. A row over another render passes
+    # its own, as `_prepull_property_rows.py` does with its Flux cluster render.
+    source: Callable[[], Iterable[tuple[str, str, dict]]] = rendered_docs
 
 
 def check(
@@ -59,11 +62,11 @@ def check(
 ) -> list[str]:
     """Every problem `prop` has, or [] when it holds.
 
-    `docs` defaults to the shared render; the harness's own tests pass a hand-built list.
+    `docs` defaults to the row's `source`; the harness's own tests pass a hand-built list.
     """
     found: dict[str, int] = {}
     offenders = []
-    for role, tpl, doc in rendered_docs() if docs is None else docs:
+    for role, tpl, doc in prop.source() if docs is None else docs:
         for key, subject in prop.select(role, tpl, doc):
             found[key] = found.get(key, 0) + 1
             reason = prop.offence(role, subject)

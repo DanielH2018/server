@@ -11,10 +11,9 @@ a worktree under ``.claude/worktrees/`` -- reads the checkout it lives in, never
 the shell happens to be in. That is the property a landing relies on when it runs
 from the worktree it was invoked from.
 
-Import it through the same bootstrap as any other ``lib`` module::
+Import it from the installed root, as any other ``lib`` module::
 
-    _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
-    from lib.repo_paths import REPO, HOST_VARS  # noqa: E402
+    from lib.repo_paths import REPO, HOST_VARS
 
 A test that needs to point a reader at a ``tmp_path`` passes the path as an argument; these
 constants are defaults, never the only way in.
@@ -63,6 +62,8 @@ MONITOR_BRIDGE_FILES = K8S_ROLES / "monitor-bridge" / "files"
 # moved them out of `setup/common/files/`). A tool under `scripts/` that imports `host_lib` or
 # `ci_verdict` puts this on `sys.path` first.
 HOST_LIB_FILES = REPO / "hosts" / "lib"
+# The GitHub spend ledger, `gh_quota.py`, which `lib.gh` records each call into.
+GH_QUOTA_FILES = REPO / "hosts" / "components" / "gh-quota" / "files"
 SHARED_TPL = K8S / "templates"  # shared macros
 
 INVENTORY = REPO / "inventory"

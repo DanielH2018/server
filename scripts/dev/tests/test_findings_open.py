@@ -10,14 +10,13 @@ Run: uv run pytest scripts/dev/tests/test_findings_open.py
 import subprocess
 
 import pytest
-from _findings_fakes import Fakes, aimed_at, build_tools, make_issue
+from _findings_fakes import Fakes, aimed_at, build_tools, make_issue, typed
 from dev import findings
 from dev.findings_lib.issue_model import (
     LABELS,
     NO_REOPEN,
     claim_comment,
     fingerprint,
-    kind,
     parse_verify_by,
 )
 from dev.findings_lib.plans import plan_open
@@ -64,7 +63,7 @@ def test_open_with_no_match_plans_a_create_with_every_label():
 def test_open_with_an_open_match_touches_instead_of_creating(issue):
     existing = issue(3, fp="f" * 12)
     outcome, code, plans = plan_open(
-        existing, title="T", body="B", labels=_LABELS, fp="f" * 12, source="s"
+        typed(existing), title="T", body="B", labels=_LABELS, fp="f" * 12, source="s"
     )
     assert (outcome, code) == ("touched", 0)
     assert all(argv[:2] != ["issue", "create"] for argv in plans)
@@ -74,7 +73,7 @@ def test_open_with_an_open_match_touches_instead_of_creating(issue):
 def test_open_with_a_refuted_match_refuses_and_plans_nothing(issue):
     existing = issue(3, state="CLOSED", labels=("refuted",), fp="f" * 12)
     outcome, code, plans = plan_open(
-        existing, title="T", body="B", labels=_LABELS, fp="f" * 12, source="s"
+        typed(existing), title="T", body="B", labels=_LABELS, fp="f" * 12, source="s"
     )
     assert (outcome, code, plans) == ("refuted", 3, [])
 
@@ -83,7 +82,7 @@ def test_open_with_an_accepted_match_refuses_and_plans_nothing(issue):
     """The accepting half of the pair below: an accepted trade-off is never re-filed."""
     existing = issue(3, state="CLOSED", labels=("accepted",), fp="f" * 12)
     outcome, code, plans = plan_open(
-        existing, title="T", body="B", labels=_LABELS, fp="f" * 12, source="s"
+        typed(existing), title="T", body="B", labels=_LABELS, fp="f" * 12, source="s"
     )
     assert (outcome, code, plans) == ("accepted", 3, [])
 
@@ -91,7 +90,7 @@ def test_open_with_an_accepted_match_refuses_and_plans_nothing(issue):
 def test_open_with_a_fixed_match_reopens_then_comments(issue):
     existing = issue(3, state="CLOSED", fp="f" * 12)
     outcome, code, plans = plan_open(
-        existing, title="T", body="B", labels=_LABELS, fp="f" * 12, source="s"
+        typed(existing), title="T", body="B", labels=_LABELS, fp="f" * 12, source="s"
     )
     assert (outcome, code) == ("reopened", 0)
     assert plans[0][:3] == ["issue", "reopen", "3"]
@@ -264,11 +263,11 @@ def _mutations(calls) -> list[str]:
 
 def test_the_issue_type_outranks_a_kind_label():
     issue = {**make_issue(1, labels=["kind/improvement"]), "issueType": {"name": "Gap"}}
-    assert kind(issue) == "gap"
+    assert typed(issue).kind == "gap"
 
 
 def test_an_addition_label_from_a_pre_type_session_reads_as_feature():
-    assert kind(make_issue(1, labels=["kind/addition"])) == "feature"
+    assert typed(make_issue(1, labels=["kind/addition"])).kind == "feature"
 
 
 def test_open_cli_types_the_new_issue_and_labels_no_kind(tmp_path, make_tools):

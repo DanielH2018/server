@@ -10,12 +10,12 @@ import subprocess
 from datetime import date
 
 import pytest
-from _findings_fakes import Fakes, facts, make_issue
+from _findings_fakes import Fakes, facts, make_issue, typed
 
 from dev import findings
 from lib.exit_codes import FINDINGS_BAD_ARGS
 from dev.findings_lib.gh_calls import blocker_hints
-from dev.findings_lib.issue_model import open_blockers, pickable, waited_on, waiting
+from dev.findings_lib.issue_model import pickable, waited_on, waiting
 from dev.findings_lib.plans import ClaimRefused, plan_block, plan_claim
 
 TODAY = date(2026, 11, 9)
@@ -41,15 +41,15 @@ def blocked(number, *blockers, **kw):
 
 
 def test_an_open_blocker_withholds_the_issue():
-    issue = blocked(7195, _blocker(7178))
-    assert open_blockers(issue) == ["#7178"]
+    issue = typed(blocked(7195, _blocker(7178)))
+    assert issue.open_blockers == ["#7178"]
     assert pickable([issue], live_claims=set(), pr_refs=set(), today=TODAY) == []
     assert [r["number"] for r in waiting([issue], today=TODAY)] == [7195]
 
 
 def test_a_closed_blocker_frees_the_issue_with_nothing_to_clear():
-    issue = blocked(7195, _blocker(7178, state="CLOSED"))
-    assert open_blockers(issue) == []
+    issue = typed(blocked(7195, _blocker(7178, state="CLOSED")))
+    assert issue.open_blockers == []
     rows = pickable([issue], live_claims=set(), pr_refs=set(), today=TODAY)
     assert [r["number"] for r in rows] == [7195]
     assert waiting([issue], today=TODAY) == []
@@ -57,21 +57,21 @@ def test_a_closed_blocker_frees_the_issue_with_nothing_to_clear():
 
 def test_a_blocker_in_another_repository_is_spelled_with_its_slug():
     other = _blocker(558, url="https://github.com/DanielH2018/dotfiles/issues/558")
-    assert open_blockers(blocked(1, other, _blocker(9))) == [
+    assert typed(blocked(1, other, _blocker(9))).open_blockers == [
         "#9",
         "DanielH2018/dotfiles#558",
     ]
 
 
 def test_an_open_blocker_still_withholds_once_the_date_has_passed():
-    issue = blocked(1, _blocker(2), labels=["not-before:2026-11-01"])
+    issue = typed(blocked(1, _blocker(2), labels=["not-before:2026-11-01"]))
     assert pickable([issue], live_claims=set(), pr_refs=set(), today=TODAY) == []
 
 
 def test_claim_refuses_a_blocked_issue_and_names_the_way_out():
     with pytest.raises(ClaimRefused) as exc:
         plan_claim(
-            blocked(7195, _blocker(7178)),
+            typed(blocked(7195, _blocker(7178))),
             worktree="wt",
             session=None,
             when="now",
@@ -86,7 +86,7 @@ def test_claim_refuses_a_blocked_issue_and_names_the_way_out():
 
 def test_block_clear_without_on_removes_every_blocker_open_or_closed():
     other = _blocker(558, url="https://github.com/DanielH2018/dotfiles/issues/558")
-    issue = blocked(1, _blocker(2, state="CLOSED"), other)
+    issue = typed(blocked(1, _blocker(2, state="CLOSED"), other))
     assert plan_block(issue, on=[], clear=True) == [
         [
             "issue",
@@ -101,9 +101,9 @@ def test_block_clear_without_on_removes_every_blocker_open_or_closed():
 @pytest.mark.parametrize(
     ("issue", "on", "clear", "reason"),
     [
-        (make_issue(1, state="CLOSED"), ["2"], False, "closed"),
-        (make_issue(1), ["1"], False, "cannot block itself"),
-        (make_issue(1), [], True, "not blocked"),
+        (typed(make_issue(1, state="CLOSED")), ["2"], False, "closed"),
+        (typed(make_issue(1)), ["1"], False, "cannot block itself"),
+        (typed(make_issue(1)), [], True, "not blocked"),
     ],
     ids=["closed", "self", "clear-with-nothing-to-clear"],
 )

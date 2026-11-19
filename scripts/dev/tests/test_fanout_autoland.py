@@ -14,6 +14,9 @@ import pytest
 from _fanout_fakes import fake_tools
 from _review_fakes import PR, _finding, _pipeline, _report
 
+from deploy_tools.land_lib import pr_lock
+from deploy_tools.land_lib.ledger import Ledger, result_line
+from deploy_tools.land_lib.outcome import Cause, Outcome, Verdict
 from fanout_lib import autoland, own_surface
 from fanout_lib.autoland import Boundaries
 
@@ -56,7 +59,7 @@ def _pr(number=5001, **over):
 class _Landings:
     """The boundaries a run crosses, recorded."""
 
-    def __init__(self, records, prs, start_rc=0, ssh=None):
+    def __init__(self, records, prs, start_rc=0, ssh=None, start_out=""):
         answer = ssh or subprocess.CompletedProcess([], 0, json.dumps(records), "")
         self.tools, self.ssh = fake_tools(answers={autoland.SERVER_HOST: answer})
         self.started, self.released, self.prepared, self.swept = [], [], [], []
@@ -67,7 +70,9 @@ class _Landings:
 
         def start(checkout, number, log_dir):
             self.started.append((number, checkout))
-            return subprocess.CompletedProcess([], start_rc, "", "land: refused: boom")
+            return subprocess.CompletedProcess(
+                [], start_rc, start_out, "" if start_out else "land: refused: boom"
+            )
 
         self.boundaries = Boundaries(
             tools=self.tools,
@@ -263,6 +268,25 @@ def test_a_pyproject_change_that_is_not_testpaths_only_holds_with_that_reason(tm
     _, text = run.run(tmp_path)
     assert run.started == []
     assert "ineligible, it changes the lander's own surface: pyproject.toml" in text
+
+
+def test_a_start_refused_for_a_live_landing_is_logged_as_another_landing_has_it(
+    tmp_path,
+):
+    ledger = Ledger(pr="5001", t_start=0.0)
+    ledger.cause = Cause.LANDING_LIVE
+    holder = pr_lock.Holder("daniel-server", "41", "ubuntu", "/tmp/land5001-1.log")
+    refused = Outcome(75, holder.refusal("5001", "daniel-box"), Verdict.REFUSED)
+    said = f"{result_line(ledger, refused)}\nVERDICT: refused ({refused.detail})\n"
+
+    run = _Landings([_record()], [_pr()], start_rc=75, start_out=said)
+    _, text = run.run(tmp_path)
+
+    assert (
+        "#5001 batch 5001: eligible, another landing has it: VERDICT: refused" in text
+    )
+    assert "handoff failed" not in text
+    assert run.released == [tmp_path / "state" / "checkouts" / "pr5001"]
 
 
 def test_a_failed_handoff_is_logged_with_its_reason_and_starts_nothing_else(tmp_path):
