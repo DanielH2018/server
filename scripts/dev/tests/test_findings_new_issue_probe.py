@@ -6,6 +6,7 @@ Run: uv run pytest scripts/dev/tests/test_findings_new_issue_probe.py
 import json
 import subprocess
 from datetime import date
+from pathlib import Path
 
 import pytest
 
@@ -177,3 +178,30 @@ def test_with_repo_reads_that_register_and_judges_claims_against_its_checkout(ca
     assert main(argv, tools) == 0
     assert json.loads(capsys.readouterr().out)["state"] == "new"
     assert calls.checkouts == [REGISTER_CHECKOUTS["DanielH2018/dotfiles"]]
+
+
+def test_a_milestone_wait_ends_only_on_a_new_issue_that_milestone_holds(tmp_path):
+    backups = {"title": "Backups", "number": 9, "state": "open"}
+    issues = [{**_rest_issue(8), "milestone": backups}, _rest_issue(7), _rest_issue(5)]
+    tools, _ = _tools(issues, **{f"{REG}/milestones": [[backups]]})
+    reading = new_issue_probe.read(tools, 5, tmp_path / "b.json", TODAY, "Backups")
+    assert [i["number"] for i in json.loads(reading["detail"])["issues"]] == [8]
+
+
+def test_a_wait_on_an_unknown_milestone_ends_unknown_milestone(capsys):
+    tools, _ = _tools([_rest_issue(7)], **{f"{REG}/milestones": [[]]})
+    assert main(["new-issues", "--after", "5", "--milestone", "Backup"], tools) == 0
+    assert json.loads(capsys.readouterr().out) == {
+        "state": "unknown-milestone",
+        "detail": "no milestone is titled `Backup`",
+    }
+
+
+def test_a_milestone_wait_records_a_baseline_of_its_own(tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
+    backups = {"title": "Backups", "number": 9, "state": "open"}
+    tools, _ = _tools([_rest_issue(7)], **{f"{REG}/milestones": [[backups]]})
+    assert main(["new-issues", "--milestone", "Backups"], tools) == 0
+    here = (None, Path.cwd())
+    assert new_issue_probe.baseline_file(*here, "Backups").exists()
+    assert not new_issue_probe.baseline_file(*here, None).exists()
