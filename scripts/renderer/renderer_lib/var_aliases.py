@@ -1,16 +1,15 @@
-"""Rule 5's second alias clause, over role defaults and inventory, and both clauses' members.
+"""Rule 5's vars-file clause, and the named sites rule 5's template clause reads.
 
-A key can be reached through a variable whose value names it. `var_aliases` parses every Jinja
-string in the k8s roles' `defaults/main.yml` and the inventory's vars files. A variable whose
-value outputs a key, or an alias of one, is an alias of that key in every template, so a
-template that transforms it fails as if it transformed the key. A transform inside the value
-is a violation of its own. Plain text around an interpolation is accepted, as a `~`
-concatenation is.
+A key could reach a template through a variable whose value names it, and every template that
+transformed the variable would then transform the key. `vars_file_refusals` closes that path:
+no Jinja string in the k8s roles' `defaults/main.yml` or the inventory's vars files may name a
+secret key, bare or through a `vars` lookup. A template reads a key by its own name, where the
+template clause judges it.
 
-`NON_SECRET_VARS_LOOKUPS` lives here too: the non-literal `vars` lookups that read no key,
-which neither clause counts as a secret reference.
+`NON_SECRET_VARS_LOOKUPS` lives here too: the non-literal `vars` lookups in templates that
+read no key, which rule 5 does not count as a secret reference.
 
-`jinja_aliases.py` holds the template-local clause and the walk both clauses share.
+`jinja_aliases.py` holds the template clause.
 
 `docs/homelab-render.md` is the operator's page, and
 `docs/target-architecture/render/r2-secret-placeholders.md` the plan.
@@ -26,11 +25,11 @@ from pathlib import Path
 from typing import NamedTuple
 
 import jinja2
+from jinja2 import nodes
 
 from lib import yaml_fast
 from lib.repo_paths import INVENTORY, K8S_ROLES
-from renderer.renderer_lib.jinja_aliases import Binding, judged_flows
-from renderer.renderer_lib.jinja_uses import Policy
+from renderer.renderer_lib.jinja_uses import lookup_argument, vars_lookup
 
 
 class VarsLookupSite(NamedTuple):
@@ -52,13 +51,6 @@ class VarsLookupSite(NamedTuple):
 # can take is a secret key. The tree holds no such lookup, so every non-literal `vars` lookup
 # is refused until an entry here names it.
 NON_SECRET_VARS_LOOKUPS: frozenset[VarsLookupSite] = frozenset()
-
-# The uses the alias clauses must find and accept on the real tree, as
-# `(template, key, form, count)`. It is empty: every alias the tree held was an alias of
-# `domain`, which is no longer a secret key. The role-default fixture pair in
-# `scripts/renderer/tests/test_renderer_secret_aliases.py` is the clause's proof that it can
-# go red.
-ALIAS_MEMBERS: tuple[tuple[str, str, str, int], ...] = ()
 
 # The bindings rule 5 must see and must not read as an alias, as `(template, name)`. The
 # `observability_prometheus_config` set block holds no key, and the Deployment hashes the block
@@ -95,18 +87,6 @@ def not_alias_problems(
     return problems
 
 
-class VarAliases(NamedTuple):
-    """The second alias clause's verdict on role defaults and inventory.
-
-    Attributes:
-        bindings: Each variable whose value names a key, as the alias every template sees.
-        refused: `(file, key, "variable: form")` for each transform of a key in a value.
-    """
-
-    bindings: dict[str, Binding]
-    refused: list[tuple[Path, str, str]]
-
-
 def rule5_var_files(roles: Path = K8S_ROLES, inventory: Path = INVENTORY) -> list[Path]:
     """The k8s roles' `defaults/main.yml` and every inventory vars file."""
     return sorted(
@@ -135,38 +115,37 @@ def _jinja_strings(value) -> Iterable[str]:
             yield from _jinja_strings(item)
 
 
-def var_aliases(
-    keys: frozenset[str], policy: Policy, files: list[Path], env: jinja2.Environment
-) -> VarAliases:
-    """Read every Jinja string in `files`, and return the aliases and transforms it holds.
+def vars_file_refusals(
+    keys: frozenset[str], files: list[Path], env: jinja2.Environment
+) -> list[tuple[Path, str, str]]:
+    """`(file, key, "variable: form")` for each secret key a Jinja string in `files` names.
 
-    A variable is an alias when its string, or any string nested in its list or dict,
-    outputs a key or an alias. A list or dict value makes a container alias. The pass
-    repeats until it adds no alias, so an alias of an alias counts.
+    A string names a key when it reads the key as a variable or through a literal
+    `lookup('vars', ...)`. A non-literal `vars` lookup counts as naming its argument, because
+    nothing shows which variable it reads.
     """
-    strings = []
+    refused = []
     for path in files:
         data = yaml_fast.safe_load(path.read_text()) or {}
         for name, value in data.items() if isinstance(data, dict) else ():
-            container = not isinstance(value, str)
             for text in _jinja_strings(value):
-                strings.append((path, str(name), env.parse(text), container))
-    bindings: dict[str, Binding] = {}
-    while True:
-        found: dict[str, Binding] = {}
-        refused = []
-        for path, name, tree, container in strings:
-            judged = judged_flows(path, tree, keys, policy, bindings)
-            refused += [
-                (path, use.key, f"{name}: {use.forms[-1]}")
-                for _, use in judged
-                if use.refused
-            ]
-            flows = frozenset(
-                f for f, u in judged if not u.refused and "output" in u.forms
-            )
-            if flows:
-                found[name] = Binding(flows, container).merge(found.get(name))
-        if found == bindings:
-            return VarAliases(bindings, refused)
-        bindings = found
+                refused += [
+                    (path, key, f"{name}: {form}")
+                    for key, form in _named_keys(env.parse(text), keys)
+                ]
+    return refused
+
+
+def _named_keys(
+    tree: nodes.Template, keys: frozenset[str]
+) -> Iterable[tuple[str, str]]:
+    for node in tree.find_all((nodes.Name, nodes.Call)):
+        if isinstance(node, nodes.Name) and node.ctx == "load" and node.name in keys:
+            yield node.name, "named in a vars file"
+            continue
+        argument = vars_lookup(node)
+        if isinstance(argument, nodes.Const):
+            if argument.value in keys:
+                yield argument.value, "vars lookup in a vars file"
+        elif argument is not None:
+            yield lookup_argument(argument), "non-literal vars lookup in a vars file"
