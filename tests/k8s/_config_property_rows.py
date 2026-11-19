@@ -258,6 +258,43 @@ def _local_wildcard_offence(role: str, data: dict) -> str | None:
 _PIHOLE_WILDCARD = "address=/local.example.com/10.0.0.2\nlocal=/local.example.com/\n"
 
 
+_QUIET_APPS = {
+    ("blackbox-exporter", "blackbox-exporter"),
+    ("karakeep", "karakeep"),
+}
+
+
+def _routine_logging_containers(role: str, tpl: str, doc: dict):
+    if doc.get("kind") != "Deployment":
+        return
+    for container in pod_spec(doc).get("containers", []):
+        if container["name"] == "exportarr":
+            yield f"{role}:exportarr", container
+        elif (role, container["name"]) in _QUIET_APPS:
+            yield role, container
+
+
+def _routine_logging_offence(role: str, container: dict) -> str | None:
+    if container["name"] == "blackbox-exporter":
+        if "--log.level=warn" in container.get("args", []):
+            return None
+        return "blackbox-exporter runs without --log.level=warn"
+    env = {e["name"]: e.get("value") for e in container.get("env", [])}
+    if env.get("LOG_LEVEL") != "warn":
+        return f"LOG_LEVEL is {env.get('LOG_LEVEL')!r}, not 'warn'"
+    if container["name"] == "karakeep" and not env.get("NO_COLOR"):
+        return "NO_COLOR is unset, so every line carries ANSI colour codes"
+    return None
+
+
+def _container(name: str, args=(), **env: str) -> dict:
+    return {
+        "name": name,
+        "args": list(args),
+        "env": [{"name": k, "value": v} for k, v in env.items()],
+    }
+
+
 CONFIG_PROPERTIES = (
     Property(
         name="speedtest-scraped-at-its-native-endpoint",
@@ -404,5 +441,40 @@ CONFIG_PROPERTIES = (
             ("pihole", {"02-wildcard.conf": "local=/local.example.com/\n"}),
         ),
         must_find=frozenset({"pihole-dns-config"}),
+    ),
+    Property(
+        name="routine-success-logs-at-warn",
+        reason=(
+            "At info, blackbox-exporter logs two lines per SSO probe, exportarr one per API "
+            "request of every scrape, and karakeep two coloured lines per request: about 230k "
+            "lines a day nobody reads (#8988). Each runs at warn, so its warnings and errors "
+            "still ship."
+        ),
+        select=_routine_logging_containers,
+        offence=_routine_logging_offence,
+        red=("sonarr", _container("exportarr", LOG_LEVEL="info")),
+        more_red=(
+            ("sonarr", _container("exportarr")),
+            ("blackbox-exporter", _container("blackbox-exporter", ["--config.file=x"])),
+            ("karakeep", _container("karakeep", LOG_LEVEL="warn")),
+        ),
+        green=("sonarr", _container("exportarr", LOG_LEVEL="warn")),
+        more_green=(
+            (
+                "blackbox-exporter",
+                _container("blackbox-exporter", ["--log.level=warn"]),
+            ),
+            ("karakeep", _container("karakeep", LOG_LEVEL="warn", NO_COLOR="1")),
+        ),
+        must_find=frozenset(
+            {
+                "blackbox-exporter",
+                "karakeep",
+                "sonarr:exportarr",
+                "radarr:exportarr",
+                "lidarr:exportarr",
+                "prowlarr:exportarr",
+            }
+        ),
     ),
 )

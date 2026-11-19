@@ -96,6 +96,14 @@ verbatim-prompts store this role's LAN route
   about 35,000 of 37,000 302s a day. The drop counts as `traefik_pod_probe_302` in
   `loki_process_dropped_lines_total`. `tests/services/test_traefik_access_log_drop.py` holds
   both halves.
+- **The Flux controllers' and the CrowdSec LAPI's routine info lines are dropped here**
+  (#8988), because a level flag on either app would also hide lines worth keeping. Flux at
+  `--log-level=error` loses its warnings. CrowdSec logs a ban and a `WAF block:` at info, so a
+  global warn level hides them. Each drop names one success shape; Flux's applies that changed
+  an object, its dispatched failure events and CrowdSec's non-2xx LAPI calls still ship.
+  `tests/k8s/test_alloy_drops_routine_success_lines.py` holds each shape both ways, through
+  `dropped_by` in `tests/k8s/_alloy_pods_pipeline.py`. blackbox-exporter, exportarr, karakeep
+  and the Pi's docker-proxy run at warn in their own config instead.
 - **Host lines carry a `program` label, and the line itself is untouched.** The
   `loki.process "host"` stage extracts the rsyslog tag from syslog and authlog lines (#6163).
   `HostLogErrors` counts syslog's fatal-pattern lines per machine and program over 6h, and

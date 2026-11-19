@@ -91,3 +91,9 @@ def test_the_proxy_alloys_log_source_reads_through_allows_container_logs(package
     assert reader_proxy in SUB_PROXIES
     env = project_of(package)["services"][reader_proxy]["environment"]
     assert "ALLOW_LOGS=1" in env
+
+
+def test_the_reader_proxy_logs_warnings_only(package):
+    """haproxy logs every request at info: about 73k `GET /containers/<id>/json` lines a day (#8988)."""
+    env = project_of(package)["services"]["docker-proxy"]["environment"]
+    assert "LOG_LEVEL=warning" in env

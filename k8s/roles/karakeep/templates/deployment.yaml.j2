@@ -103,6 +103,12 @@ spec:
               value: "{{ tz }}"
             - name: DATA_DIR
               value: /data
+            # Upstream defaults to debug, and its request logger writes two info lines per
+            # request. NO_COLOR is truthy on any non-empty string, "false" included.
+            - name: LOG_LEVEL
+              value: warn
+            - name: NO_COLOR
+              value: "1"
             # Service names, resolved through the cluster's DNS.
             - name: MEILI_ADDR
               value: http://karakeep-meilisearch:7700
