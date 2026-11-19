@@ -23,6 +23,10 @@ Judge the change against the issue text, not against the PR's own description. L
   add" below lists each kind. Report one as a `design` finding whose `detail` names what to
   delete, merge or inline, and for a second implementation, the `file:line` of the one that
   exists.
+- A cleanup with no check behind it. When the issue asks the change to remove instances of a
+  pattern, such as dead code, copied tests or stale names, the change adds a check that fails
+  on the next instance, or a commit message says why no check can tell the pattern from sound
+  code. Report a cleanup with neither as a `convention` finding.
 
 A `design` finding only takes code out. Its fix deletes, merges or inlines something the
 change added, so do not report one whose fix adds a layer, an option or a test. Code the
