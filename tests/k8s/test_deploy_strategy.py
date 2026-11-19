@@ -41,6 +41,11 @@ _RECREATE = {
         "lidarr",
     ): "sqlite config DB; two instances would double-run import jobs",
     ("bazarr", "bazarr"): "sqlite config DB",
+    ("airflow", "airflow-postgres"): "Postgres on an RWO Longhorn volume; one writer",
+    (
+        "airflow",
+        "airflow-scheduler",
+    ): "its init container runs `airflow db migrate`; a second scheduler would run beside the migration",
     (
         "prowlarr",
         "prowlarr",

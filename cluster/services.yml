@@ -1017,6 +1017,18 @@ containers_list:
     # Held at zero replicas, so the route has no backend and the probe would read 503. Drop
     # this once vaultwarden_k8s_replicas is raised.
     probe: false
+  - name: airflow
+    # Flux applies airflow through `promote`. A lost week of rollups re-derives from sources
+    # that keep at least seven days, so the warehouse needs no daily copy.
+    weekly_backup_claims: {airflow-postgres-data: 2}  # Tue
+    hostname: "airflow"
+    port: 8080
+    use_authelia: true
+    # The UI triggers, clears and backfills runs, which write to the warehouse.
+    auth_tier: two_factor
+    # The execution API on 8080: every task pod reports to it, and so does the dag-processor.
+    netpol_from: [airflow-task, airflow-dag-processor]
+    netpol_role_owned: true
   # Deploys LAST: every workload role must finish before this role fences the namespace
   # (docs/networkpolicy-slice-answers.md). K8S_APPLIES_LAST in template_filters/toposort.py gives
   # it an edge onto every other entry, so it applies last wherever it sits in this list, and an

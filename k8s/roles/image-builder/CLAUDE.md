@@ -38,7 +38,7 @@ every caller, where it would drift. See repo-root `CLAUDE.md` for shared convent
 
 ## Flux-owned roles (target slice D5.4)
 - **The renderer writes every context this role builds.** `homelab-render cluster` writes
-  each of the ten contexts to `DIR/images/<name>/` and each content tag to
+  each of the contexts to `DIR/images/<name>/` and each content tag to
   `DIR/images/tags.json` (`scripts/renderer/renderer_lib/images.py`). The tag is
   `scripts/renderer/renderer_lib/derived.py:content_tag` over the same `data`, which equals
   this role's own expression.
