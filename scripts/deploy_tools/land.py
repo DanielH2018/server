@@ -144,7 +144,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # scripts/
 from lib.exit_codes import LAND_BAD_ARGS
 from lib.git import git
-from deploy_tools.land_lib import detach, fresh, handoff, pin_gate, pipeline
+from deploy_tools.land_lib import detach, fresh, handoff, pin_gate, pipeline, turn
 from deploy_tools.land_lib.landing import Landing
 from deploy_tools.land_lib.ledger import annotation_line, result_line
 from deploy_tools.land_lib.options import HANDOFF_ENV, Options, parse_args
@@ -213,11 +213,11 @@ def main(
         return _hand_off(opts, unit, tools)
     if opts.detach:
         opts = _resolve_since(opts)
+    child = fresh.child_argv(sys.argv[1:] if argv is None else argv, opts.since)
     if opts.fresh:
-        child = fresh.child_argv(sys.argv[1:] if argv is None else argv, opts.since)
         landing = functools.partial(_land_fresh, opts.primary, tools, child)
     else:
-        landing = functools.partial(_land, opts, tools, classifier)
+        landing = functools.partial(_land, opts, tools, classifier, child)
     if opts.detach:
         return _detached(opts, landing)
     return landing()
@@ -312,15 +312,18 @@ def _land_fresh(primary: Path, tools: Tools, argv: list[str]) -> int:
         return 1
 
 
-def _land(opts: Options, tools: Tools, classifier: Classifier | None) -> int:
+def _land(
+    opts: Options, tools: Tools, classifier: Classifier | None, child: list[str]
+) -> int:
     """Run one landing to its verdict; its exit code.
 
-    The path every invocation took before `--detach` existed, unchanged: a caller that passes
-    neither new flag reaches this from `main` directly.
+    A caller that passes neither `--detach` nor `--fresh` reaches this from `main` directly.
 
     A merged PR whose grading moves to a fresh checkout (`fresh.GradeFresh`) gets its verdict,
     record and annotation from that checkout's landing, so this one writes none of them. When
     that landing never starts (`fresh.CheckoutFailed`), this one ends `refused` and records it.
+    A landing that hands its turn over (`turn.HandOver`) runs `child`, its own arguments,
+    from a fresh checkout the same way, and that landing inherits the turn.
     """
     _prepare_stdio()
     ln = Landing(opts, tools, classifier)
@@ -353,6 +356,24 @@ def _land(opts: Options, tools: Tools, classifier: Classifier | None) -> int:
             print(result_line(ln.ledger, refused))
             refused.emit()
             line = refused.file_line()
+    except turn.HandOver as handed:
+        print(f"land: {handed}", file=sys.stderr)
+        try:
+            rc = tools.fresh_landing(opts.primary, child, handed.fd)
+            graded_here = False
+        except fresh.CheckoutFailed as failed:
+            refused = Outcome(
+                1,
+                f"PR #{opts.pr} — {handed}, but {failed}; nothing is merged; re-run the "
+                "same land.sh command",
+            )
+            ln.ledger.verdict = refused.verdict or ""
+            rc = refused.rc
+            print(result_line(ln.ledger, refused))
+            refused.emit()
+            line = refused.file_line()
+        finally:
+            os.close(handed.fd)
     except Exception as exc:
         # Still one VERDICT line, as every exit-1 end prints, and the same verdict a
         # crash reaches through the handoff unit's STOPPED line. The traceback follows, and

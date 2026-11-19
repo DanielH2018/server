@@ -47,10 +47,10 @@ groups:
         annotations:
           summary: The crowdsec engine has no enabled AppSec configuration or rule.
           description: >-
-            The crowdsec-jobs sidecar's AppSec verify found no enabled appsec-config or
-            appsec-rule, so the inline WAF is not loaded and the edge is ban-list-only, because
-            the bouncer fails open. Run `cscli appsec-configs list` in the crowdsec pod, and read
-            the crowdsec-appsec-verify lines in the crowdsec-jobs container log.
+            Run `cscli appsec-configs list` in the crowdsec pod, and read the crowdsec-appsec-verify
+            lines in the crowdsec-jobs container log. No appsec-config or appsec-rule is enabled, so
+            the inline WAF is not loaded and the edge is ban-list-only.
+          runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#crowdsecappsecverifyfailed
       - alert: CrowdSecHomeAllowlistFailed
         expr: homelab_check_success{job="crowdsec-jobs", check="crowdsec-home-allowlist"} == 0
         labels:
@@ -81,6 +81,7 @@ groups:
             The {{ $labels.check }} job has not ended a run within three of its periods, so the
             sidecar's scheduler is hung or the job is skipped at every slot. Read the
             crowdsec-jobs container log in the crowdsec pod.
+          runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#crowdsecjobstale
       # The scrape job is gone from prometheus.yml. A failed scrape (up 0) is ScrapeTargetDown's
       # page (M1 convention 5), so only the missing series fires here.
       - alert: CrowdSecJobsExporterAbsent
@@ -95,6 +96,7 @@ groups:
             No up{job="crowdsec-jobs"} series has existed for 10 minutes, so the job is gone from
             prometheus.yml and the three crowdsec sidecar verdicts are UNMONITORED, which is not
             the same as healthy.
+          runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#crowdsecjobsexporterabsent
       # THE TWO CRONJOBS' VERDICTS. The reader patches `homelab/check-verdict` to `up` or
       # `down` each run. The series is absent until the first run, and stays at its last value
       # after, which is why the NotReporting rules below measure the run clock.

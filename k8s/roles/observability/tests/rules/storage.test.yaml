@@ -30,6 +30,7 @@ tests:
                 Either no up{job="longhorn"} series exists, so the job is gone from prometheus.yml, or
                 the scrape works and longhorn_volume_robustness is missing. Replica redundancy is
                 UNMONITORED while this fires, which is not the same as healthy.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#longhornvolumesmissing
       # No kubelet series at all: the claim census reads 0 through `or vector(0)`.
       - eval_time: 16m
         alertname: PVCCoverageShortfall
@@ -44,6 +45,7 @@ tests:
                 Only 0 claims report kubelet_volume_stats, below the floor
                 of 32. PVC fullness is UNKNOWN, not OK. Read the kubernetes-kubelet targets, one
                 per node.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#pvccoverageshortfall
 
   # The scrape works and the volume series are gone. LonghornVolumesMissing fires through its
   # second arm. A failed scrape (up 0) leaves it quiet: ScrapeTargetDown owns that page.
@@ -65,6 +67,7 @@ tests:
                 Either no up{job="longhorn"} series exists, so the job is gone from prometheus.yml, or
                 the scrape works and longhorn_volume_robustness is missing. Replica redundancy is
                 UNMONITORED while this fires, which is not the same as healthy.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#longhornvolumesmissing
   - interval: 1m
     input_series:
       - series: 'up{job="longhorn", instance="10.42.0.10:9500"}'
@@ -117,6 +120,7 @@ tests:
                 degraded for 15 minutes. With two replicas, degraded is one copy from data
                 loss and faulted is no healthy replica. `longhorn-disaster-recovery` has the rebuild
                 and revert procedures.
+              runbook_url: https://docs.local.daniel-hunter.com/longhorn-disaster-recovery/
           - exp_labels:
               volume: pvc-ddd
               pvc: odd-vol
@@ -130,6 +134,7 @@ tests:
                 rebalancing for 15 minutes. With two replicas, degraded is one copy from data
                 loss and faulted is no healthy replica. `longhorn-disaster-recovery` has the rebuild
                 and revert procedures.
+              runbook_url: https://docs.local.daniel-hunter.com/longhorn-disaster-recovery/
       - eval_time: 16m
         alertname: LonghornVolumesMissing
         exp_alerts: []
@@ -176,6 +181,7 @@ tests:
               description: >-
                 full is 90% full. A claim
                 cannot borrow space, so expand the volume in its role.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#pvcfull
           - exp_labels:
               namespace: homelab
               persistentvolumeclaim: valheim-server
@@ -186,6 +192,7 @@ tests:
               description: >-
                 valheim-server is 95% full. A claim
                 cannot borrow space, so expand the volume in its role.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#pvcfull
       - eval_time: 6m
         alertname: PVCBelowFreeFloor
         exp_alerts:
@@ -199,6 +206,7 @@ tests:
               description: >-
                 valheim-server has 1GiB free, under the
                 3 GiB its updater stages before swapping the install in. Expand the volume in its role.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#pvcbelowfreefloor
       - eval_time: 6m
         alertname: PVCFreeFloorUnmonitored
         exp_alerts: []
@@ -215,6 +223,7 @@ tests:
                 Only 4 claims report kubelet_volume_stats, below the floor
                 of 32. PVC fullness is UNKNOWN, not OK. Read the kubernetes-kubelet targets, one
                 per node.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#pvccoverageshortfall
 
   # The free-bytes floor's claim stops reporting while others do: PVCFreeFloorUnmonitored fires.
   - interval: 1m
@@ -238,6 +247,7 @@ tests:
                 PVCBelowFreeFloor reads kubelet_volume_stats_available_bytes for valheim-server and
                 finds no series, so its free-space floor is UNMONITORED. The claim was renamed or
                 excluded, or the kubelet stopped reporting it.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#pvcfreefloorunmonitored
 
   # A valheim Deployment parked at zero replicas mounts no volume, so the kubelet reports no free
   # bytes for it: PVCFreeFloorUnmonitored stays quiet. The case above, with no replicas series,
@@ -275,6 +285,7 @@ tests:
                 Only 1 claims report kubelet_volume_stats, below the floor
                 of 32. PVC fullness is UNKNOWN, not OK. Read the kubernetes-kubelet targets, one
                 per node.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#pvccoverageshortfall
 
   # Snapshot headroom. jellyfin-config has a 16 GiB cap. Two snapshots of 8 GiB and 7 GiB sum to
   # 15 GiB, over 90% (14.4 GiB). A snapshot both managers report counts once. Another claim's
@@ -310,6 +321,7 @@ tests:
                 jellyfin-config holds 15GiB of snapshots against a cap of
                 16 GiB. Longhorn refuses new snapshots at the cap rather than pruning, so the next
                 deploy of the service fails until snapshots are deleted by hand.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#longhornsnapshotnearcap
       - eval_time: 16m
         alertname: LonghornSnapshotCapUnmonitored
         exp_alerts: []
@@ -348,6 +360,7 @@ tests:
               description: >-
                 jellyfin-config declares a snapshot cap and has no longhorn_snapshot_actual_size_bytes
                 series, so its snapshot headroom is UNMONITORED, which is not the same as empty.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#longhornsnapshotcapunmonitored
 
   # A CSI global mount remounted read-only fires after the 1m hold. A writable mount and a
   # read-only mount outside the plugins directory do not.
@@ -378,6 +391,7 @@ tests:
                 /var/lib/kubelet/plugins/kubernetes.io/csi/driver.longhorn.io/abc/globalmount remounted read-only after an iSCSI stall, behind a Longhorn
                 volume that still reads healthy. Scale the workload to 0, wait for the volume to
                 detach, and scale back.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#kubeletcsimountreadonly
 
   # A remount that clears after 3 minutes still pages while it lasts. It resolves once the
   # mount is writable again.
@@ -401,6 +415,7 @@ tests:
                 /var/lib/kubelet/plugins/kubernetes.io/csi/driver.longhorn.io/ghi/globalmount remounted read-only after an iSCSI stall, behind a Longhorn
                 volume that still reads healthy. Scale the workload to 0, wait for the volume to
                 detach, and scale back.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#kubeletcsimountreadonly
       - eval_time: 6m
         alertname: KubeletCSIMountReadOnly
         exp_alerts: []
@@ -431,6 +446,7 @@ tests:
                 The etcd database is 90% of its 2 GiB quota. At the quota
                 etcd rejects every write and the control plane stops. Compact and defragment, or raise
                 --etcd-arg=quota-backend-bytes. `k3s-etcd-restore` has the procedure.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#etcddbnearquota
   - interval: 1m
     input_series:
       - series: 'apiserver_storage_size_bytes{job="kubernetes-apiserver", storage_cluster_id="etcd-0"}'
@@ -472,8 +488,7 @@ tests:
             exp_annotations:
               summary: The Longhorn disk on daniel-server is past the 75% replica scheduling floor.
               description: >-
-                Longhorn's disk default-disk-1 on daniel-server is
-                80% used. Above 75% Longhorn places no replica on the
-                node, so with two replicas a rebuild or a new volume stays degraded. The disk shares
-                the root filesystem, so containerd's unused images count too: `sudo k3s crictl rmi
-                --prune` on the node frees them.
+                Run `sudo k3s crictl rmi --prune` on daniel-server, then read what else holds the
+                space. Longhorn's disk default-disk-1 there is 80% used, and above 75% Longhorn
+                places no replica on the node.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#longhorndiskoverschedulingfloor

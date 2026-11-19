@@ -118,6 +118,9 @@ class Landing:
         # Gives the landing turn up so the next ask waits for it again (`turn.held`); None
         # outside the merge wait, and for a batch member, which the holder merges.
         self.give_back_turn: Callable[[], None] | None = None
+        # Raises `turn.HandOver` when this landing can pass its turn to a fresh checkout's
+        # landing, and returns when it cannot; None outside the merge wait.
+        self.hand_over_turn: Callable[[str], None] | None = None
 
     @property
     def plane(self) -> str:

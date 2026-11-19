@@ -55,27 +55,19 @@ spec:
             - containerPort: 9100
           # Host access is READ-ONLY and comes from the hostPath mounts below, not from a uid.
           # The image's own USER is 65534; pinning it guards an image bump that changes that.
-          # PROBING /metrics COSTS ONE LOG LINE PER UNWRITTEN METRIC FAMILY. kubelet's HTTP prober
-          # reads a bounded prefix of the response and closes, and node_exporter logs
-          # `error encoding and sending metric family: ... connection reset by peer` for each
-          # family it could not write (~180 lines per probe). A higher CPU limit does not help,
-          # because the prober closes after its fixed read however fast the body is produced.
-          # A smaller response does not help either: node_exporter has no /-/healthy,
-          # `?collect[]=<one collector>` still costs ~10KB (within ~200 bytes of the prober's read
-          # limit, a margin an image bump could erase), and a bogus collector name answers 400.
+          # An HTTP probe on /metrics floods the log: kubelet's prober reads a bounded prefix and
+          # closes, and node_exporter logs one `connection reset by peer` line per family it could
+          # not write (~280 per probe). busybox wget reads the whole body, so nothing resets.
 {{ hardened_security_context(read_only=true, non_root=true, run_as_user=65534) }}
           livenessProbe:
-            httpGet:
-              path: /metrics
-              port: 9100
+            # The one probe that renders metrics, because only a probe that asks for them times
+            # out on a WEDGED collector: a dead NFS mount leaves / answering while /metrics hangs.
+            exec:
+              command: [wget, -q, -T, "5", -O, /dev/null, "http://127.0.0.1:9100/metrics"]
             initialDelaySeconds: 15
-            # 300s, not 30s. This is the one probe that renders metrics, because only a probe that
-            # asks for metrics times out on a WEDGED collector (a dead NFS mount leaves / answering
-            # while /metrics hangs). The long period cuts the log flood ~97%; the cost is up to
-            # 15 min to restart (3 failures), while up{job="node"} == 0 pages within 5 min.
-            periodSeconds: 300
-            # 3s keeps headroom over the 1s default, since scrape cost grows with mount/disk count.
-            timeoutSeconds: 3
+            periodSeconds: 60
+            # A render takes ~50ms; the headroom covers growth in the mount and disk count.
+            timeoutSeconds: 5
           # Without a readiness probe, `rollout status` gates on numberAvailable meaning "Running",
           # and goes green on a container that never served a scrape. `/` gates the rollout as
           # well as /metrics does, because both paths share ONE listener that binds after the
@@ -115,9 +107,8 @@ spec:
             - name: node-exporter-dockerhub-mirror-textfile
               mountPath: /dockerhub-mirror-textfile
               readOnly: true
-          # 1 core, not 200m. The exporter renders ~320 metric families per request, and a slower
-          # render leaves more of the response unwritten when a probe closes early, so the
-          # "connection reset by peer" log flood tracks CPU throttling.
+          # 1 core, not 200m. The exporter renders ~320 metric families per request, and at
+          # 200m it was throttled on 42% of CFS periods, which slows every scrape and probe.
 {{ container_resources(cpu_limit='1', mem_limit='128Mi', cpu_request='20m', mem_request='32Mi') }}
         # Writes iscsi-sessions.prom, the node's iSCSI session states, every 60s. A
         # sidecar rather than a host timer because this DaemonSet reaches both nodes, mounts /sys

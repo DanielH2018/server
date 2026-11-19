@@ -31,12 +31,10 @@ groups:
         annotations:
           summary: daniel-pi's SD-card health heartbeat reported a failure.
           description: >-
-            pi-sd-health on daniel-pi ended with status=down: the root filesystem's ext4
-            errors_count is nonzero or unreadable, the rotated-log integrity verdict is bad or
-            stale, or /var/log is not log2ram's tmpfs. The `pi-sd-health` line in
-            /var/log/pi-health/health.log names the failing leg. Only a nonzero errors_count
-            calls for an fsck and a card replacement; a /var/log that is not a tmpfs means
-            log2ram refused to start, and a reboot after its cause is fixed recovers it.
+            Read the `pi-sd-health` line in /var/log/pi-health/health.log on daniel-pi for the
+            failing leg: a nonzero ext4 errors_count, a bad rotated-log verdict, or a /var/log that
+            is not log2ram's tmpfs. Only a nonzero errors_count calls for an fsck and a new card.
+          runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#pisdhealthfailed
       - alert: PiSdHealthNotReporting
         expr: |
           (
@@ -55,6 +53,7 @@ groups:
             collector, so nothing confirms the SD card is being watched. Read
             `systemctl status homelab-pi-sd-health.timer` on daniel-pi, then
             /var/lib/node-exporter-textfile/pi-sd-health.prom.
+          runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#pisdhealthnotreporting
       - alert: PiRecoveryFailed
         expr: homelab_check_success{check="pi-recovery-health",origin="daniel-pi"} == 0
         labels:
