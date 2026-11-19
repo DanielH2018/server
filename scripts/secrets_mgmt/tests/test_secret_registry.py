@@ -1,6 +1,6 @@
 """Tests for the registry logic in scripts/secrets_mgmt/secrets_lib/secret_registry.py.
 
-Seeding, reconciliation, due dates and drift — all of it pure over a dict, so every test
+Seeding, reconciliation, due dates and drift — all of it pure over a `Registry`, so every test
 builds its own registry rather than reading the committed one. The cadence table comes from
 `rotation_tools.DEFAULT_TIER_DAYS`, which
 `test_the_default_tier_table_is_the_one_secret_rotation_assigns` holds equal to the literal
@@ -12,8 +12,6 @@ Run: uv run pytest scripts/secrets_mgmt/tests/test_secret_registry.py
 import datetime as dt
 from pathlib import Path
 
-from lib import yaml_fast
-
 from secrets_mgmt.secrets_lib.secret_registry import (
     audit,
     due_date,
@@ -24,17 +22,20 @@ from secrets_mgmt.secrets_lib.secret_registry import (
     stagger_span,
     sync,
 )
-from secrets_mgmt.rotation_tools import DEFAULT_TIER_DAYS, REGISTRY_FILE
+from secrets_mgmt.rotation_tools import DEFAULT_TIER_DAYS, REGISTRY_FILE, load_registry
+from secrets_mgmt.secrets_lib.registry_model import Entry, parse_registry
 
 REGISTRY = Path(REGISTRY_FILE)
 
 
 def _reg(*entries):
-    return {
-        "entries": {
-            name: {"tier": tier, "last_rotated": lr} for name, tier, lr in entries
+    return parse_registry(
+        {
+            "entries": {
+                name: {"tier": tier, "last_rotated": lr} for name, tier, lr in entries
+            }
         }
-    }
+    )
 
 
 # ── staggered seeding ───────────────────────────────────────────────────────
@@ -59,7 +60,7 @@ def test_seed_never_immediately_overdue_and_within_window():
             DEFAULT_TIER_DAYS[tier],
         )
         assert seeded is not None and cadence is not None, f"{name} has no cadence"
-        due = due_date(name, {"tier": tier, "last_rotated": seeded})
+        due = due_date(name, Entry(tier, seeded))
         assert due is not None
         assert due > today  # not overdue at registration
         assert due <= today + dt.timedelta(days=cadence)  # within one cadence
@@ -78,7 +79,7 @@ def test_seeds_spread_due_dates_no_single_day_pileup():
     for n in names:
         seeded = seed_last_rotated(n, "assisted", today)
         assert seeded is not None
-        due.append(due_date(n, {"tier": "assisted", "last_rotated": seeded}))
+        due.append(due_date(n, Entry("assisted", seeded)))
     # 20 assisted secrets must not all fall on the same day — expect many distinct due dates.
     assert len(set(due)) >= 12
 
@@ -89,7 +90,7 @@ def test_seeds_spread_due_dates_no_single_day_pileup():
 # proves it piles up. Without the second half the first is only ever observed passing, and
 # a stagger that stopped applying would read green.
 BATCH = ["mb_%d_push_token" % i for i in range(30)]
-ROTATED_ON = "2026-09-05"  # one commit changed every name in the batch
+ROTATED_ON = dt.date(2026, 9, 5)  # one commit changed every name in the batch
 
 
 def test_same_day_batch_rotation_fans_due_dates_out_is_clean():
@@ -98,7 +99,7 @@ def test_same_day_batch_rotation_fans_due_dates_out_is_clean():
     `advance_last_rotated` snaps every secret one commit changed to that commit's date, so
     `last_rotated` is identical across a batch. The spread has to come from the cadence, not from the stamp.
     """
-    due = [due_date(n, {"tier": "assisted", "last_rotated": ROTATED_ON}) for n in BATCH]
+    due = [due_date(n, Entry("assisted", ROTATED_ON)) for n in BATCH]
     assert len(set(due)) >= 10, "30 secrets rotated on one day share too few due dates"
     busiest = max(due.count(d) for d in set(due))
     assert busiest <= 5, "%d of 30 still land on one day" % busiest
@@ -108,9 +109,7 @@ def test_same_day_batch_without_the_stagger_piles_up_is_flagged():
     """The red proof: the pre-fix formula on the same batch gives one due date for all 30."""
     cadence = DEFAULT_TIER_DAYS["assisted"]
     assert cadence is not None
-    unstaggered = {
-        dt.date.fromisoformat(ROTATED_ON) + dt.timedelta(days=cadence) for _ in BATCH
-    }
+    unstaggered = {ROTATED_ON + dt.timedelta(days=cadence) for _ in BATCH}
     assert len(unstaggered) == 1, (
         "the pre-fix formula no longer piles up — retire this pair"
     )
@@ -125,9 +124,9 @@ def test_stagger_only_ever_pulls_a_due_date_earlier():
         if not cadence:
             continue
         for n in BATCH:
-            d = due_date(n, {"tier": tier, "last_rotated": ROTATED_ON})
+            d = due_date(n, Entry(tier, ROTATED_ON))
             assert d is not None
-            naive = dt.date.fromisoformat(ROTATED_ON) + dt.timedelta(days=cadence)
+            naive = ROTATED_ON + dt.timedelta(days=cadence)
             assert naive - dt.timedelta(days=stagger_span(cadence)) <= d <= naive
 
 
@@ -153,7 +152,7 @@ def test_audit_ignores_tiers_without_a_cadence():
 
 
 def test_due_date_pinned_uses_long_cadence():
-    entry = {"tier": "pinned", "last_rotated": "2026-01-01"}
+    entry = Entry("pinned", dt.date(2026, 1, 1))
     due = due_date("authelia_storage_key", entry)
     assert due is not None
     assert (
@@ -164,7 +163,7 @@ def test_due_date_pinned_uses_long_cadence():
 
 
 def test_due_date_is_none_for_a_tier_without_a_cadence():
-    entry = {"tier": "ignore", "last_rotated": "2026-01-01"}
+    entry = Entry("ignore", dt.date(2026, 1, 1))
     assert due_date("authelia_user", entry) is None
 
 
@@ -174,10 +173,10 @@ def test_sync_adds_missing_and_preserves_existing():
     reg = _reg(("kept_push_token", "assisted", "2026-05-05"))
     added, _stale = sync(reg, ["kept_push_token", "new_push_token"], today)
     assert added == ["new_push_token"]
-    assert (
-        reg["entries"]["kept_push_token"]["last_rotated"] == "2026-05-05"
+    assert reg.entries["kept_push_token"].last_rotated == dt.date(
+        2026, 5, 5
     )  # untouched
-    assert reg["entries"]["new_push_token"]["tier"] == "assisted"
+    assert reg.entries["new_push_token"].tier == "assisted"
 
 
 def test_sync_reports_stale_registry_entries():
@@ -192,7 +191,7 @@ def test_sync_preserves_a_manual_tier_override():
     # Operator downgraded a push token to ignore — sync must not reclassify it.
     reg = _reg(("special_push_token", "ignore", None))
     sync(reg, ["special_push_token"], today)
-    assert reg["entries"]["special_push_token"]["tier"] == "ignore"
+    assert reg.entries["special_push_token"].tier == "ignore"
 
 
 # ── registry drift (the `audit --check` CI gate) ─────────────────────────────
@@ -212,30 +211,34 @@ def test_registry_drift_clean_when_in_sync():
 def test_sync_preserves_the_record_source_field():
     """`sync` adds only what is missing, so a hand-set `source: record` survives every run."""
     today = dt.date(2026, 6, 11)
-    reg = {
-        "entries": {
-            "bazarr_api_key": {
-                "tier": "assisted",
-                "last_rotated": "2026-01-01",
-                "source": "record",
+    reg = parse_registry(
+        {
+            "entries": {
+                "bazarr_api_key": {
+                    "tier": "assisted",
+                    "last_rotated": "2026-01-01",
+                    "source": "record",
+                }
             }
         }
-    }
+    )
     sync(reg, ["bazarr_api_key", "new_push_token"], today)
-    assert reg["entries"]["bazarr_api_key"]["source"] == "record"
-    assert "source" not in reg["entries"]["new_push_token"], (
+    assert reg.entries["bazarr_api_key"].source == "record"
+    assert reg.entries["new_push_token"].source is None, (
         "a freshly seeded entry must not be presumed a record"
     )
 
 
 def test_is_record_reads_only_the_exact_marker():
-    reg = {
-        "entries": {
-            "a": {"tier": "assisted", "source": "record"},
-            "b": {"tier": "assisted"},
-            "c": {"tier": "assisted", "source": "repo"},
+    reg = parse_registry(
+        {
+            "entries": {
+                "a": {"tier": "assisted", "source": "record"},
+                "b": {"tier": "assisted"},
+                "c": {"tier": "assisted", "source": "repo"},
+            }
         }
-    }
+    )
     assert is_record(reg, "a") is True
     assert is_record(reg, "b") is False
     assert is_record(reg, "c") is False
@@ -249,8 +252,7 @@ def test_the_live_registry_marks_exactly_the_three_record_keys():
     monitor-bridge reader, and nothing in the tree reads promote_token (the
     GitHub repository secret holds the credential)."""
     # fact: k8s/roles/flux/CLAUDE.md#Tokens
-    reg = yaml_fast.safe_load(REGISTRY.read_text())
-    assert record_names(reg) == [
+    assert record_names(load_registry(str(REGISTRY))) == [
         "authelia_password",
         "bazarr_api_key",
         "promote_token",
