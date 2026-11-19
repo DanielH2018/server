@@ -33,13 +33,13 @@ def fanout_manifest_dir() -> Path:
     return Path.home() / ".claude" / "fanout"
 
 
-def _batch_line(batch, run_id, me):
-    """One banner line for `batch`, or None if it's on this host, cleaned, or malformed.
+def _remote_host(batch, me):
+    """The host `batch` runs on, or None if it's on this host, cleaned, or malformed.
 
     Narrow except, on its own: a batch missing `host`/`branch`/`issues`, or with a
     non-list `issues`, is skipped without touching its siblings in the same manifest.
 
-    A batch carrying `removed_at` is skipped too: `clean` took its worktree, so the line
+    A batch carrying `removed_at` is skipped too: `clean` took its worktree, so counting it
     would advertise a directory that no longer exists on the other host, in every session
     until the last batch of the run is cleaned. An older manifest has no such key and every
     batch reads as live, which is what it was.
@@ -47,11 +47,9 @@ def _batch_line(batch, run_id, me):
     try:
         if batch.get("host") == me or batch.get("removed_at"):
             return None
-        issues = batch["issues"]
-        if not isinstance(issues, list):
+        if not isinstance(batch["issues"], list) or not batch["branch"]:
             return None
-        rendered = ", ".join(f"#{n}" for n in issues)
-        return f"  • {batch['host']} {batch['branch']} — {rendered} (run {run_id})"
+        return batch["host"]
     except KeyError, AttributeError, TypeError:
         return None
 
@@ -86,14 +84,15 @@ def remote_fanout_lines(manifest_dir: Path | None = None, local_host=None, now=N
 
     Returns:
         Ready-to-print banner lines, or [] on any read/parse error, or with no batches
-        on another host. A batch launched more than `FANOUT_LIVE_FOR` ago is not named;
-        one closing line per host counts those instead.
+        on another host. Each run gets one line counting its batches on each host, since
+        `place status <run-id>` lists them. A batch launched more than `FANOUT_LIVE_FOR`
+        ago is counted on one closing line per host instead.
     """
     if manifest_dir is None:
         manifest_dir = fanout_manifest_dir()
     me = local_host or socket.gethostname()
     cutoff = (now or datetime.now(UTC)) - FANOUT_LIVE_FOR
-    found = []
+    live = Counter()
     uncleaned = Counter()
     for path in sorted(manifest_dir.glob("*.json")):
         try:
@@ -105,13 +104,17 @@ def remote_fanout_lines(manifest_dir: Path | None = None, local_host=None, now=N
         if not isinstance(batches, list):
             continue
         for batch in batches:
-            line = _batch_line(batch, run_id, me)
-            if not line:
+            host = _remote_host(batch, me)
+            if not host:
                 continue
             if _launched_before(batch, cutoff):
-                uncleaned[batch["host"]] += 1
+                uncleaned[host] += 1
             else:
-                found.append(line)
+                live[host, run_id] += 1
+    found = [
+        f"  • {host}: {n} batch{'es' if n != 1 else ''} in run {run_id}"
+        for (host, run_id), n in live.items()
+    ]
     found += [
         f"  • {host}: {n} uncleaned from runs over a day old "
         "(fanout.py place runs; place clean <run-id> removes the merged ones)"

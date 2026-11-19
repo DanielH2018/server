@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Tests for the SessionStart hook's behind-master warning (`master_moved_problems`).
 
-These seven tests share one subject and one seam (`git`), and the module-length ratchet
-says split rather than list.
+These tests share one subject and one seam (`git`), and the module-length ratchet says
+split rather than list.
 
 Run: uv run pytest .claude/hooks
 """
@@ -26,20 +26,50 @@ def _result(stdout, returncode=0):
     return types.SimpleNamespace(stdout=stdout, stderr="", returncode=returncode)
 
 
+def _git(behind, branch=(), master=(), diff_rc=0):
+    """A fake `lib.git.git`: the behind count, then the paths each side changed."""
+
+    def run(*args, **kwargs):
+        if args[0] == "rev-list":
+            return _result(f"{behind}\n")
+        paths = branch if args[2] == "origin/master...HEAD" else master
+        return _result("\n".join(paths) + "\n", returncode=diff_rc)
+
+    return run
+
+
 # The count comes from `lib.git.git`; each test passes a fake through `master_moved_problems`' `git` seam.
 def test_master_moved_silent_when_current():
-    assert _mod.master_moved_problems(lambda *a, **k: _result("0\n")) == []
+    assert _mod.master_moved_problems(_git(0, ["a.py"], ["a.py"])) == []
 
 
-def test_master_moved_reports_commit_count():
-    lines = _mod.master_moved_problems(lambda *a, **k: _result("3\n"))
+def test_master_moved_silent_when_behind_but_master_touched_none_of_the_branch_files():
+    assert _mod.master_moved_problems(_git(5, ["a.py"], ["b.py"])) == []
+
+
+def test_master_moved_names_only_the_files_both_sides_changed():
+    lines = _mod.master_moved_problems(
+        _git(3, ["a.py", "shared.py"], ["shared.py", "c.py"])
+    )
     assert len(lines) == 1
     assert "3 commits behind origin/master" in lines[0]
+    assert "1 file this branch also changes: shared.py" in lines[0]
+    assert "a.py" not in lines[0] and "c.py" not in lines[0]
 
 
 def test_master_moved_singular_commit():
-    lines = _mod.master_moved_problems(lambda *a, **k: _result("1\n"))
+    lines = _mod.master_moved_problems(_git(1, ["x.py"], ["x.py"]))
     assert "1 commit behind" in lines[0]  # not "1 commits"
+
+
+def test_master_moved_names_three_shared_files_and_counts_the_rest():
+    shared = [f"f{n}.py" for n in range(5)]
+    lines = _mod.master_moved_problems(_git(2, shared, shared))
+    assert "f0.py, f1.py, f2.py and 2 more" in lines[0]
+
+
+def test_master_moved_silent_when_a_diff_read_fails():
+    assert _mod.master_moved_problems(_git(3, ["a.py"], ["a.py"], diff_rc=128)) == []
 
 
 def test_master_moved_reads_this_checkout_without_fetching():

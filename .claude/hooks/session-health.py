@@ -202,7 +202,12 @@ def target_problems():
 
 
 def master_moved_problems(git=None):
-    """One line when this branch is behind origin/master's remote-tracking ref, else [].
+    """One line when origin/master moved on a file this branch also changes, else [].
+
+    Being behind alone prints nothing: every fresh worktree falls behind within minutes, and
+    a warning in most sessions taught the reader to skip it. The line fires when the commits
+    this branch lacks touch a path the branch changes since the merge base, and names those
+    paths, because that is when a merge is due before trusting a test or a render.
 
     `git rev-list --count HEAD..origin/master` reads only the local object store -- no
     `git fetch` runs here, so this can only ever be as current as the last fetch this
@@ -245,16 +250,38 @@ def master_moved_problems(git=None):
         if res.returncode != 0:
             return []
         count = int(res.stdout.strip())
+        if count <= 0:
+            return []
+        shared = sorted(
+            _changed_files(git, "origin/master...HEAD")
+            & _changed_files(git, "HEAD...origin/master")
+        )
     except Exception:
         return []
-    if count <= 0:
+    if not shared:
         return []
     plural = "s" if count != 1 else ""
+    named = ", ".join(shared[:SHARED_FILES_NAMED])
+    if len(shared) > SHARED_FILES_NAMED:
+        named += f" and {len(shared) - SHARED_FILES_NAMED} more"
     return [
-        f"  ⚠ this branch is {count} commit{plural} behind origin/master (as of the last "
-        "fetch -- `git fetch` to refresh; a probe.py gate from here would be refused, see "
-        ".claude/hooks/_stale_probe_rule.py)"
+        f"  ⚠ this branch is {count} commit{plural} behind origin/master, which changed "
+        f"{len(shared)} file{'s' if len(shared) != 1 else ''} this branch also changes: "
+        f"{named} (as of the last fetch; `git fetch` and merge origin/master before "
+        "relying on them)"
     ]
+
+
+# How many shared paths the behind-master line names before it counts the rest.
+SHARED_FILES_NAMED = 3
+
+
+def _changed_files(git, revisions):
+    """The paths `git diff --name-only <revisions>` names, as a set; raises on a failed read."""
+    res = git("diff", "--name-only", revisions, cwd=REPO, check=False, timeout=5)
+    if res.returncode != 0:
+        raise RuntimeError(f"git diff {revisions} exited {res.returncode}")
+    return {line for line in res.stdout.splitlines() if line}
 
 
 # How long the per-worktree reads in `other_live_sessions` may take together, after
