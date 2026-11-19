@@ -17,10 +17,10 @@ from deploy_tools.land_lib.host_wait import HostTarget
 from deploy_tools.land_lib.landing import Classification
 from deploy_tools.land_lib.outcome import Outcome
 from deploy_tools.land_lib.tools import Tools
-from deploy_tools.promote_lib.wait import WaitResult
+from deploy_tools.promote_lib.wait import WaitResult, WaitVerdict
 
 SUSPENDED = WaitResult(
-    "suspended",
+    WaitVerdict.SUSPENDED,
     "promote-suspended",
     "bento-pdf is suspended",
     suspended=("bento-pdf",),

@@ -15,6 +15,8 @@ import promote
 import pytest
 from _promote_fakes import NOW, World, bundle_files, digest_of
 from deploy_tools.promote_lib import stateful
+from deploy_tools.promote_lib.decision import Decision
+from lib.exit_codes import USAGE_ERROR
 from lib.repo_paths import REPO
 from renderer.renderer_lib.snapshot import snapshot_files
 
@@ -75,9 +77,10 @@ def test_a_revision_that_changes_a_snapshot_roles_own_digest_is_stateful(
     world.publish(r, files=_bundle({"sonarr": "s2", "traefik": "t1"}, snap=SONARR_SNAP))
     code, outputs = _decide(world, monkeypatch, capsys, tmp_path / "handoff")
     assert (code, outputs["verdict"], outputs["stateful"]) == (0, "promote", "sonarr")
+    assert outputs["hold_form"] == "stateful"
     found = stateful.read(tmp_path / "handoff")
-    assert found["digest"] == digest_of(r), "the digest the fixture registry names"
-    assert found["stateful"] == {
+    assert found.digest == digest_of(r), "the digest the fixture registry names"
+    assert found.stateful == {
         "sonarr": {
             "digest8": SONARR,
             "claims": [{"name": "sonarr-config", "namespace": "media"}],
@@ -99,6 +102,23 @@ def test_a_revision_that_leaves_every_snapshot_roles_own_digest_is_not_stateful(
     world.publish(r, files=_bundle(own, footprint, snap=SONARR_SNAP))
     code, outputs = _decide(world, monkeypatch, capsys, tmp_path / "handoff")
     assert (code, outputs["verdict"], outputs["stateful"]) == (0, "promote", "")
+    assert outputs["hold_form"] == "reset"
+
+
+@pytest.mark.parametrize(
+    ("roles", "tags", "form"),
+    [
+        (("sonarr",), (), "stateful"),
+        (("sonarr",), ("longhorn",), "stateful"),
+        ((), ("longhorn",), "no-reset"),
+        ((), (), "reset"),
+    ],
+    ids=["snapshot-role", "both", "forward-only", "neither"],
+)
+def test_the_hold_form_puts_a_snapshot_role_before_a_forward_only_tag(
+    roles, tags, form
+):
+    assert Decision("promote", stateful=roles, no_reset=tags).hold_form == form
 
 
 def test_an_unreadable_snapshot_job_is_an_error_and_moves_nothing(
@@ -115,9 +135,17 @@ def test_an_unreadable_snapshot_job_is_an_error_and_moves_nothing(
 
 T = "a" * 40
 DIGEST = "sha256:" + "d" * 64
+FAILED = stateful.VerifyVerdict.FAILED
 
 
-def _record(tmp_path, failed_soak_job: str = "") -> dict:
+def _parsed(tmp_path, target, base=None) -> stateful.StatefulRecord:
+    """`decide`'s record of `target` against `base`, written and read back as the post reads it."""
+    found = stateful.record(target, json.loads(target["digests.json"]), base, DIGEST)
+    stateful.write(tmp_path, found)
+    return stateful.read(tmp_path)
+
+
+def _record(tmp_path, failed_soak_job: str = "") -> stateful.StatefulRecord:
     target = _bundle(
         {"sonarr": "s2", "radarr": "r2", "traefik": "t2"},
         a=SONARR_SNAP,
@@ -130,12 +158,12 @@ def _record(tmp_path, failed_soak_job: str = "") -> dict:
             f"apiVersion: batch/v1\nkind: Job\nmetadata:\n  name: {failed_soak_job}\n"
         ).encode()
     base = json.loads(_bundle({"sonarr": "s1", "radarr": "r1"})["digests.json"])
-    found = stateful.record(target, json.loads(target["digests.json"]), base, DIGEST)
-    stateful.write(tmp_path, found)
-    return found
+    return _parsed(tmp_path, target, base)
 
 
-def _hold(tmp_path, failed: str, post=None) -> tuple[int, list[str]]:
+def _hold(
+    tmp_path, failed: str, post=None, verdict: str = "failed"
+) -> tuple[int, list[str]]:
     sent: list[str] = []
     argv = [
         "hold",
@@ -145,7 +173,7 @@ def _hold(tmp_path, failed: str, post=None) -> tuple[int, list[str]]:
         "--bundle-dir",
         str(tmp_path),
     ]
-    argv += ["--verdict", "failed", "--failed", failed]
+    argv += ["--verdict", verdict, "--failed", failed]
     code = promote.main(argv, post=post or sent.append)
     return code, sent
 
@@ -185,6 +213,32 @@ def test_a_failing_non_snapshot_role_is_marked_and_the_snapshot_roles_still_post
     assert "Failed or timed out: traefik (not a snapshot role)" in sent[0]
 
 
+def test_an_empty_verdict_posts_the_hold_as_one_with_no_verdict(tmp_path):
+    """promote.yml passes `--verdict ""` when verify wrote no output."""
+    _record(tmp_path)
+    code, sent = _hold(tmp_path, "radarr", verdict="")
+    assert code == 0
+    assert "none named, because verify ended with no verdict" in sent[0]
+
+
+def test_a_verdict_verify_never_writes_is_a_usage_error(tmp_path, capsys):
+    _record(tmp_path)
+    with pytest.raises(SystemExit) as stop:
+        _hold(tmp_path, "radarr", verdict="faild")
+    assert stop.value.code == USAGE_ERROR
+    assert "--verdict" in capsys.readouterr().err
+
+
+def test_a_record_field_of_the_wrong_shape_is_unreadable(tmp_path):
+    _record(tmp_path)
+    path = tmp_path / stateful.STATEFUL_FILE
+    found = json.loads(path.read_text())
+    found["stateful"]["sonarr"]["claims"] = "sonarr-config"
+    path.write_text(json.dumps(found))
+    with pytest.raises(ValueError, match="shape"):
+        stateful.read(tmp_path)
+
+
 def test_each_claim_of_a_role_gets_its_snapshot_prefix(tmp_path):
     _record(tmp_path)
     _, sent = _hold(tmp_path, "radarr")
@@ -221,8 +275,8 @@ def test_every_message_fits_discord_with_long_names_and_many_claims(tmp_path):
     target = _bundle(
         {tag: "x2", "sonarr": "s2"}, a=SONARR_SNAP, b=_snapshot(tag, "3333cccc", claims)
     )
-    found = stateful.record(target, json.loads(target["digests.json"]), None, DIGEST)
-    sent = stateful.messages(T, f"{T} stateful=sonarr", "failed", ["sonarr"], found)
+    found = _parsed(tmp_path, target)
+    sent = stateful.messages(T, f"{T} stateful=sonarr", FAILED, ["sonarr"], found)
     assert all(len(m) <= forge.DISCORD_MAX for m in sent), [len(m) for m in sent]
     assert all(m.count("```") in (0, 2) for m in sent), "a block was cut"
     blocks = [m for m in sent if "```" in m and "1. classify" in m]
@@ -294,10 +348,10 @@ def test_a_header_listing_every_tag_splits_across_messages_that_each_fit(tmp_pat
     tags = sorted(p.name for p in (REPO / "k8s" / "roles").iterdir())
     assert len(tags) >= 60
     target = _bundle({t: "x" for t in tags} | {"sonarr": "s2"}, a=SONARR_SNAP)
-    found = stateful.record(target, json.loads(target["digests.json"]), None, DIGEST)
-    assert found["widened"]
+    found = _parsed(tmp_path, target)
+    assert found.widened
     failed = tags[:40]
-    sent = stateful.messages(T, f"{T} stateful=x", "failed", failed, found)
+    sent = stateful.messages(T, f"{T} stateful=x", FAILED, failed, found)
     assert all(len(m) <= forge.DISCORD_MAX for m in sent), [len(m) for m in sent]
     text = "\n".join(sent)
     assert all(f"{t} (" in text for t in tags), "a changed tag went missing"
@@ -306,8 +360,8 @@ def test_a_header_listing_every_tag_splits_across_messages_that_each_fit(tmp_pat
 
 def test_the_header_says_when_the_revert_script_is_absent(tmp_path):
     found = _record(tmp_path)
-    absent = stateful.messages(T, f"{T} stateful=x", "failed", ["sonarr"], found, False)
-    present = stateful.messages(T, f"{T} stateful=x", "failed", ["sonarr"], found, True)
+    absent = stateful.messages(T, f"{T} stateful=x", FAILED, ["sonarr"], found, False)
+    present = stateful.messages(T, f"{T} stateful=x", FAILED, ["sonarr"], found, True)
     assert f"{stateful.REVERT_SCRIPT} is not in this checkout" in absent[0]
     assert stateful.REVERT_SCRIPT + " is not" not in present[0]
 

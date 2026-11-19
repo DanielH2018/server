@@ -39,7 +39,7 @@ example of a plain service, and `alloy/` of one with a config file.
 - Add `name`, `use_authelia: false`, `networks`, and `port` or `udp_port` if it publishes one.
   The template reads them as `container_item`.
 - Never add the service to `containers_list`. That key stays empty, and
-  `scripts/validate/compose_templates.py` fails on a Docker entry in it.
+  `scripts/validate/render_lib/compose.py` fails on a Docker entry in it.
 
 **`hosts/components/pi-compose/services/<name>/compose.yaml.j2`**
 - Open with a `{#- … -#}` header that holds what a role's `CLAUDE.md` would have: what the
@@ -47,9 +47,9 @@ example of a plain service, and `alloy/` of one with a config file.
 - A service tree has no `k8s/templates/` on its search path, so the shared macros are not
   available. Write the `networks:`, `deploy.resources` and label blocks out, as `autoheal/`
   does.
-- Pin the image as `tag@sha256:<digest>`; `compose_templates.py` refuses a bare tag.
+- Pin the image as `tag@sha256:<digest>`; `render_lib/compose.py` refuses a bare tag.
 - Set `restart: unless-stopped`, `cap_drop: [ALL]` and
-  `security_opt: [no-new-privileges:true]`; `compose_templates.py` refuses a service without
+  `security_opt: [no-new-privileges:true]`; `render_lib/compose.py` refuses a service without
   the last two unless it is allowlisted with a reason.
 - Publish a UI port bound to `{{ server_ip }}`, the Pi's LAN IP, never `0.0.0.0`. The Pi has
   no Traefik in front of it, so a service carries no routing labels.
@@ -72,7 +72,7 @@ example of a plain service, and `alloy/` of one with a config file.
   agent never decrypts a secret.
 
 **Check before committing**
-- `uv run python scripts/validate/compose_templates.py -v` renders every `compose_services`
+- `uv run python scripts/validate/render_templates.py -v` renders every `compose_services`
   entry and runs the compose checks.
 - `uv run pytest hosts/lib/tests hosts/tests/test_pi_service_lists_census.py` runs
   the package and service-list censuses.

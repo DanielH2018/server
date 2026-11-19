@@ -100,9 +100,9 @@ from lib import git as git_mod
 from lib.repo_paths import HOST_LIB_FILES
 
 # The gate job's check-run name and its `needs`, which the red-PR read below needs to excuse a
-# gate that failed only because its run was cancelled.
+# gate that failed only because its run was cancelled, and the rule that grades one check.
 sys.path.insert(0, str(HOST_LIB_FILES))
-from ci_verdict import CI_GATE_NAME, CI_GATE_NEEDS_JOBS
+from ci_verdict import CI_GATE_NAME, CI_GATE_NEEDS_JOBS, CheckRun, RunState
 
 # Same bound the shell's `tr '\n' ' ' | tail -c 400` applied: enough to carry the ruleset's
 # rejection line, short enough for a one-line report.
@@ -133,14 +133,6 @@ LAND_START_TIMEOUT_S = 60.0
 
 # `gh pr create` prints the new PR's URL as its last line.
 PR_URL = re.compile(r"/pull/(\d+)\s*$")
-
-# A check that finished without blocking a merge. A StatusContext reports `state` instead.
-PASSING = frozenset({"SUCCESS", "NEUTRAL", "SKIPPED"})
-
-# A check that finished and says the head is bad. CANCELLED and STALE are deliberately absent:
-# they mean "no verdict for this SHA", the rule `hosts/lib/ci_verdict.py` applies to master.
-# ERROR is a StatusContext's failed `state`; the rest are CheckRun conclusions.
-FAILING = frozenset({"FAILURE", "ERROR", "TIMED_OUT", "STARTUP_FAILURE"})
 
 # The shell's convention for "the command was killed on a timeout". `lib.gh.gh` bounds every
 # call at 60s where the inline shell these crons carried had no bound at all, so this is a
@@ -377,6 +369,11 @@ def pr_view(number: str, tools: PublishTools) -> dict:
     return view if isinstance(view, dict) else {}
 
 
+def rollup_checks(view: dict) -> list[CheckRun]:
+    """The PR's ``statusCheckRollup``, each node parsed once; a malformed node raises ValueError."""
+    return [CheckRun.from_rollup(node) for node in view.get("statusCheckRollup") or []]
+
+
 def failed_checks(view: dict) -> list[str]:
     """The names of the checks in ``view`` that concluded red, in rollup order.
 
@@ -385,21 +382,18 @@ def failed_checks(view: dict) -> list[str]:
     gate once the check-suites API confirms the suite was cancelled. The rollup carries no
     suite, so this excuses a failed gate whenever a need was cancelled and no need failed. A
     need past its ``timeout-minutes`` also reads cancelled and is excused with it: that errs
-    toward "no verdict", the same side CANCELLED itself takes.
+    toward "no verdict", the same side CANCELLED itself takes. A conclusion
+    ``CheckRun.state`` grades FAIL, such as ``ACTION_REQUIRED``, counts as red.
     """
-    checks = view.get("statusCheckRollup") or []
-
-    def red(c: dict) -> bool:
-        return (c.get("conclusion") or c.get("state") or "") in FAILING
-
-    needs = [c for c in checks if c.get("name") in CI_GATE_NEEDS_JOBS]
-    cancelled_run = any(c.get("conclusion") == "CANCELLED" for c in needs) and not any(
-        red(c) for c in needs
+    checks = rollup_checks(view)
+    needs = [c for c in checks if c.name in CI_GATE_NEEDS_JOBS]
+    cancelled_run = any(c.conclusion == "cancelled" for c in needs) and not any(
+        c.state is RunState.FAIL for c in needs
     )
     return [
-        str(c.get("name") or c.get("context") or "?")
+        c.name or "?"
         for c in checks
-        if red(c) and not (cancelled_run and c.get("name") == CI_GATE_NAME)
+        if c.state is RunState.FAIL and not (cancelled_run and c.name == CI_GATE_NAME)
     ]
 
 
@@ -422,11 +416,11 @@ def merge_if_stalled(number: str, view: dict, tools: PublishTools) -> str:
       lookup that failed. Otherwise a clause for the caller's message saying the PR was merged
       or why the merge was refused.
     """
-    checks = view.get("statusCheckRollup") or []
+    checks = rollup_checks(view)
     # Green needs the CI gate itself: a rollup holding only an app's check, such as
-    # GitGuardian's, is a PR whose CI never ran.
-    green = any(c.get("name") == CI_GATE_NAME for c in checks) and all(
-        (c.get("conclusion") or c.get("state") or "") in PASSING for c in checks
+    # GitGuardian's, is a PR whose CI never ran. Every check must pass, not only the gate.
+    green = any(c.name == CI_GATE_NAME for c in checks) and all(
+        c.passed for c in checks
     )
     head = str(view.get("headRefOid") or "")
     # A requested change is a human asking for this PR not to merge as it stands.

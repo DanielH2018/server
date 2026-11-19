@@ -61,14 +61,13 @@ def build_rows(
     now = today or rotation_tools.today()
     reg = rotation_tools.load_registry(str(registry))
     rows = []
-    for name, entry in sorted((reg.get("entries") or {}).items()):
-        tier = str(entry.get("tier", "unknown"))
+    for name, entry in sorted(reg.entries.items()):
         due = rotation_registry.due_date(name, entry)
         rows.append(
             {
                 "name": name,
-                "tier": tier,
-                "last_rotated": str(entry.get("last_rotated", "unknown")),
+                "tier": entry.tier,
+                "last_rotated": str(entry.last_rotated),
                 "due": due.isoformat() if due else "never (no interval for this tier)",
                 "days_left": str((due - now).days) if due else "n/a",
             }

@@ -68,6 +68,19 @@ direction differs from the two wave-level bounds below: a shared file is
 merged into one batch, never held for the next wave, because holding it would still produce
 two identical fixes.
 
+**Another coordinator's live batch holds the files it cites.** `launch` compares your
+batches with the batches other runs launched
+(`scripts/dev/fanout_lib/launch_gates.py:refuse_live_shared_files`). It refuses a batch that
+cites a file such a batch holds, and a batch holds its files while its unit is active or its
+branch has an open PR. The refusal names the file, the run and the orchestrator branch that
+launched it. Ask that coordinator, hold the issue for a later wave, or pass
+`--allow-shared-file <path>` when the citation is context. Never clean another coordinator's
+run to clear the refusal. `launch` also runs one at a time for all coordinators on the host:
+exit 8 (`scripts/lib/exit_codes.py:FANOUT_PLACE_LOCK_TIMEOUT`) means another launch held the
+lock for the whole wait and this one did nothing, so run it again.
+`docs/issue-claiming-and-fanout.md`, *One launch at a time, and files held across runs*,
+has both rules and their limits.
+
 **An issue that cites the fan-out tooling goes in no batch.** `next` marks it
 `[solo-only: cites fan-out tooling]` (`solo_only` under `--json`) when its body names any
 `fanout*.py` or a file under `fanout_lib/`, or its title or body uses the phrase
@@ -81,11 +94,19 @@ that merely mentions `fanout.py` is ordinary batch work (#4624).
 Two shapes collide across roles as well, so they are bounded per wave rather than per role.
 Both were measured on the 2026-09-10 fan-outs:
 
-- **At most one batch per wave rotates or adds a SOPS secret.** `secrets/secrets.yml` is
-  ciphertext, so two branches that both touch it conflict at merge and the conflict is not
-  hand-resolvable; the second lander has to take master's file wholesale and re-mint its own
-  value on top. Two of eight wave-1 agents hit exactly that (PRs #1556 and #1567), and one
-  stalled six hours on it. Hold the second secret issue for the next wave.
+- **At most one live batch rotates or adds a SOPS secret, across every run.**
+  `secrets/secrets.yml` is ciphertext, so two branches that both touch it conflict at merge
+  and the conflict is not hand-resolvable; the second lander has to take master's file
+  wholesale and re-mint its own value on top. Two of eight wave-1 agents hit exactly that
+  (PRs #1556 and #1567), and one stalled six hours on it. `launch` refuses the second batch
+  whose issues cite the file: within one launch as a shared file, and against a live batch
+  in another run with no override, because
+  `scripts/dev/fanout_lib/launch_gates.py:excusable` rules the file out of
+  `--allow-shared-file`
+  (`scripts/dev/tests/test_fanout_launch_gates.py::test_allow_shared_file_cannot_excuse_the_sops_file_another_run_holds`).
+  Do not pass `--allow-shared-file` for the file within one launch either. The gates
+  read citations, so an issue that needs a secret and does not cite the file is still yours
+  to hold. Hold the second secret issue until the first batch's PR has merged.
 - **A batch that touches a path every tag renders runs alone.** `land.sh` holds this
   itself for `cluster/services.yml`, where a `containers_list` entry lives: a PR that
   changes the file lands as a serial PR (`docs/landing.md`, *Rules that refuse a merge*).
@@ -184,7 +205,8 @@ CI-fix phases that resume its session. The reviewer stays on Opus at
 and `stats`.
 
 The dispatcher claims each batch (step 2), writes the brief (issue bodies verbatim, the claim
-note, the landing path or the stop-at-PR rule, and the session-health lines of the placed host
+note, the landing path or the stop-at-PR rule, the list of what a change must not add
+(`scripts/dev/fanout_lib/brief.py:DESIGN_RULES`), and the session-health lines of the placed host
 that name a role or host the batch's issues cite, the rest as a count, and, for this repo, the
 deploy tag and the test files the cited paths imply, which `findings.py show <n> --brief`
 prints for a solo session, plus the call to `scripts/dev/repo_guards.py`, which runs the
@@ -224,7 +246,9 @@ daniel-server the pipeline marks the PR ready after the review and its fix round
 once, on the reviewed head (#5563). On daniel-box a PR the pipeline lands stays a draft until its landing, and a held batch's
 PR is marked ready as on daniel-server.
 A fresh reviewer then reads only the issue text and the diff, and returns findings with
-a severity and a confidence. A finding of severity medium or worse, or a test the reviewer
+a severity and a confidence. A `design` finding names code the change added that the repo
+would not miss, and its fix only takes code out
+([ADR-0038](../../../docs/adr/0038-design-is-checked-where-code-is-written.md)). A finding of severity medium or worse, or a test the reviewer
 marks vacuous at any severity, resumes the agent for one fix round when its
 confidence is 0.5 or more, and a second reviewer reads only the fix. A finding of
 severity medium or worse at confidence 0.8 or more that survives the fix round holds the PR:
@@ -242,8 +266,8 @@ landing's log. Any other verdict ends the batch. A daniel-server PR the pipeline
 ten minutes when the review record and the PR both pass `scripts/dev/fanout_lib/autoland.py:problems`:
 a reviewed batch with a passed CI gate and no leftover finding, whose PR is open, still at the reviewed
 head, with no operator step in its body. Run `probe.py lander` before
-landing a server batch's PR by hand, because `land.sh` holds no per-PR lock and a second landing would
-arm the merge twice. The orchestrator lands every other server PR, `--no-review` batches included,
+landing a server batch's PR by hand: it shows whether the lander landed the PR and how that ended. `land.sh` refuses a
+second landing of a PR while one is live. The orchestrator lands every other server PR, `--no-review` batches included,
 after that wait. A red CI verdict resumes the agent once on either host, with
 each failed check's name and the end of its job's log, and the pipeline waits again on the new
 head, or lands again on daniel-box. When the resume pushed nothing, the pipeline first re-runs the failed jobs once, because

@@ -152,6 +152,34 @@ def test_no_flags_reaches_the_same_landing_as_before(tmp_path):
     assert "rev-parse origin/master" not in _git_argv(tmp_path)
 
 
+def test_detach_refuses_a_second_landing_of_a_live_pr_before_it_forks(tmp_path):
+    """The detached landing holds the lock its caller took, and the second caller reads why."""
+    slow_gh = _GH_STUB.replace('case "$*" in', 'sleep 3\ncase "$*" in', 1)
+    env = _env(tmp_path, gh=slow_gh)
+    argv = ["bash", str(_LAND_SH), "--pr", "939", "--detach"]
+    first = subprocess.run(argv, env=env, capture_output=True, text=True, timeout=180)
+    assert first.returncode == 0, first.stderr
+    [log] = _logs(tmp_path)
+
+    second = subprocess.run(argv, env=env, capture_output=True, text=True, timeout=180)
+
+    try:
+        assert second.returncode == 75, second.stdout + second.stderr
+        result, verdict = second.stdout.rstrip().splitlines()[-2:]
+        assert result.startswith(
+            "LAND-RESULT: verdict=refused cause=landing-live exit=75 pr=939 "
+        )
+        assert f"pid {detach.recorded_pid(log)}, " in verdict
+        assert verdict.endswith(f"Wait on it with `cc-wait land 939 --log {log}`)")
+        assert _logs(tmp_path) == [log]
+    finally:
+        assert _recorded(log) == 0, log.read_text()
+    # The first landing has ended, so nothing refuses the next.
+    third = subprocess.run(argv, env=env, capture_output=True, text=True, timeout=180)
+    assert third.returncode == 0, third.stdout + third.stderr
+    assert _recorded(_logs(tmp_path)[-1]) == 0
+
+
 def _descendants(root: int) -> set[int]:
     """Every live pid below `root`, found by parent pid -- the walk a harness timeout does."""
     children: dict[int, list[int]] = {}
@@ -365,6 +393,14 @@ def test_the_log_name_leads_with_the_pr_number(tmp_path):
     path = detach.log_path("2853", log_dir=tmp_path)
     assert path.name.startswith("land2853-") and path.suffix == ".log"
     assert path.parent == tmp_path
+
+
+def test_two_landings_started_in_one_second_get_a_log_each(tmp_path):
+    first = detach.log_path("7", log_dir=tmp_path)
+    second = detach.log_path("7", log_dir=tmp_path)
+    # Sorted by name, the later landing's log is still the newest, which `cc-wait land` reads.
+    assert sorted(tmp_path.glob("land7-*.log")) == [first, second]
+    assert first != second
 
 
 def test_the_log_dir_follows_claude_job_dir(monkeypatch, tmp_path):

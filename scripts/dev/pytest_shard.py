@@ -19,8 +19,9 @@ longest-processing-time bin packing over per-file durations: the runner seconds 
 `pytest_shard_runner_weights.json`, which `shard_weight_gate.RUNNER_WEIGHTS_PATH` describes.
 
 THE TABLE IS CI'S OWN MEASUREMENT. The docs-refresh cron runs `--refresh-runner` twice a day,
-which reads every pytest leg's log from the newest green master runs, and nothing measured on
-a workstation is written to it. `shard_weight_gate.refresh_runner_weights` has what a refresh
+which reads every pytest leg's log from the newest runs that tested a green master tree. That
+is the master run itself, or the pull-request run that tested the tree when the push skipped
+its legs. Nothing measured on a workstation is written to it. `shard_weight_gate.refresh_runner_weights` has what a refresh
 adds, rewrites and drops.
 
 STALENESS IS GRACEFUL, WHICH IS WHY THE TABLE IS SAFE TO COMMIT. A path the table does not
@@ -340,8 +341,9 @@ def main(argv=None, select=affected) -> int:
         type=int,
         metavar="RUNS",
         help=(
-            "download every pytest leg's log from the newest RUNS green master runs of CI and "
-            "merge their medians into the runner table, rewriting only drifted rows"
+            "download every pytest leg's log from the newest RUNS runs that tested a green "
+            "master tree and merge their medians into the runner table, rewriting only "
+            "drifted rows"
         ),
     )
     parser.add_argument(

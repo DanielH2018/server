@@ -492,6 +492,34 @@ def test_next_rows_carry_the_cited_paths_for_triage():
     assert row["paths"] == ["scripts/diagnostics/probe_lib/alerts.py"]
 
 
+CI_YML = ".github/workflows/ci.yml"
+TRACKED = frozenset(
+    {
+        CI_YML,
+        "k8s/roles/sonarr/defaults/main.yml",
+        "k8s/roles/radarr/defaults/main.yml",
+    }
+)
+
+
+def test_cited_paths_resolves_a_bare_filename_only_one_tracked_file_has():
+    assert cited_paths("`ci.yml` runs the job twice", TRACKED) == [CI_YML]
+    assert cited_paths("see `ci.yml:48`", TRACKED) == [CI_YML]
+
+
+def test_cited_paths_drops_a_bare_filename_two_tracked_files_share():
+    assert cited_paths("the default in `main.yml` is wrong", TRACKED) == []
+
+
+def test_cited_paths_drops_a_bare_word_that_names_no_tracked_file():
+    body = "`args.limit` is unset in `v1.2`; `new_check.py` would hold it"
+    assert cited_paths(body, TRACKED) == []
+
+
+def test_cited_paths_counts_a_bare_filename_only_alone_in_a_code_span():
+    assert cited_paths("ci.yml and `yamllint ci.yml` both name it", TRACKED) == []
+
+
 def test_cited_paths_ignores_the_trailer_findings_py_writes():
     # Every filed issue ends in `Filed by \`scripts/dev/findings.py\``; read as a citation, it
     # would make every two batches collide on that one file.

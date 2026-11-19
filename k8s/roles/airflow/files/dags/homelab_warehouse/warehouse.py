@@ -1,8 +1,9 @@
-"""Write one day's rows into a warehouse table, replacing whatever that day held.
+"""Write one day's rows into a warehouse table, replacing whatever that day held, and read them back.
 
 Every load DAG writes through `replace_partition`, so a rerun or a backfill of any day is safe:
-the day's old rows and the new ones never coexist. Works on any DB-API connection; the DAGs pass
-the Postgres hook's connection.
+the day's old rows and the new ones never coexist. Its check task reads through
+`read_partition`. Both work on any DB-API connection and use no driver-specific cursor; the
+DAGs pass the Postgres hook's connection, which is psycopg 3 or psycopg2 by what is installed.
 
 Typical usage example:
 
@@ -84,3 +85,26 @@ def replace_partition(
     finally:
         cursor.close()
     return len(rows)
+
+
+def read_partition(
+    conn, table: str, day_column: str, day: date, placeholder: str = "%s"
+) -> list[dict]:
+    """`table`'s rows for `day`, each a dict keyed by column name.
+
+    Args:
+      conn: A DB-API connection.
+      table: The table, schema-qualified where the database has schemas.
+      day_column: The column holding each row's day.
+      day: The partition read.
+      placeholder: The driver's parameter marker; `%s` for psycopg.
+    """
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            f"SELECT * FROM {table} WHERE {day_column} = {placeholder}", (day,)
+        )
+        names = [column[0] for column in cursor.description]
+        return [dict(zip(names, row, strict=True)) for row in cursor.fetchall()]
+    finally:
+        cursor.close()

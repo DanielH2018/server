@@ -5,7 +5,7 @@ The issue-fanout skill's required-contents list (its step 3) is the source; keep
 """
 
 import re
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from dataclasses import dataclass
 
 # Reach the sibling package: a directly-invoked script gets only its own directory on
@@ -215,7 +215,7 @@ forks the landing into its own logfile and returns, and `cc-wait land` waits on 
 Run it in the foreground with the Bash tool's `timeout: 600000`, do not redirect it, and do not
 end your turn on it: `cc-wait` prints the landing's `VERDICT:` line and exits with the landing's
 own code. It waits at most 570s. Exit 75 means the landing is still running: re-run ONLY
-`cc-wait land <n> --log-dir "{log_dir}"`, never `land.sh`, which would start a second landing.
+`cc-wait land <n> --log-dir "{log_dir}"`, never `land.sh`, which a live landing of the PR refuses.
 State `gave-up` (exit 3) is land.sh's own give-up, a resume point: re-run the whole command.
 State `deferred` (exit 4) is not: the PR landed, and a host's updater applies its package.
 Close a fixed issue with exactly `findings.py close <n> --fixed --pr <n>`; `--refuted` and
@@ -296,10 +296,34 @@ uv run python scripts/dev/repo_guards.py
 ```
 Fix a red guard. Never skip or deselect it. When the run ends with a `facts notice:` list,
 re-read each section it names and edit any sentence your change made false. When it ends with
-a `removed names:` list, edit each doc and comment that still uses a name you removed. Do not run the whole suite: a hook refuses a
+a `removed names:` list, edit each doc and comment that still uses a name you removed. When
+its `branch adds:` line is followed by names with no caller outside tests, delete each one, or
+say in the PR body what calls it. Do not run the whole suite: a hook refuses a
 pytest run that names no path or more than 300 test modules in a batch, because CI runs the
 whole suite on the PR and the pipeline resumes you with each failing check.
 """
+
+
+DESIGN_HEADING = "What a change must not add"
+
+# The reviewer's system prompt carries this list too (`review_prompts.system_prompt`), so a
+# `design` finding names a rule in the words the implementer was given.
+DESIGN_RULES = """- A function, module or layer that only passes its arguments on, or only renames what it
+  wraps. Its caller can hold that code.
+- A parameter, flag, option or config key that no caller sets, or that every caller sets to
+  the same value.
+- A second implementation of something the repo already has. Call the one that exists.
+- An alias, shim or fallback for an old path that no caller in the repo still takes.
+- More than one check of the same value read from JSON, YAML or a command's output. Parse it
+  into a typed value where it is read, and pass that value on.
+- A test that asserts something the change removed stays removed. Bringing it back would be
+  a decision, not a regression.
+"""
+
+DESIGN_STEP = f"""## {DESIGN_HEADING}
+The reviewer reports each of these in your diff as a `design` finding, and the fix round
+takes it out. Read your own diff for them before `gh pr create`:
+{DESIGN_RULES}"""
 
 
 TESTS_FAIL_HEADING = "Tests fail without the change"
@@ -355,6 +379,7 @@ def render_brief(
     health: Sequence[str],
     target: Target = SERVER_TARGET,
     review: bool = False,
+    tracked: Collection[str] = (),
 ) -> str:
     """Render the stdin brief a headless fan-out agent reads on launch.
 
@@ -373,6 +398,7 @@ def render_brief(
             the PR.
         review: the batch runs `fanout_lib.review.review`'s pipeline. The agent stops at the PR
             on every host, and the pipeline hands it the landing after the review.
+        tracked: the target repo's tracked files, which the cited paths resolve against.
 
     Returns:
         The full brief text.
@@ -387,7 +413,7 @@ def render_brief(
     )
     holder = orchestrator_branch if target.is_server else branch
     # Only this repo's paths mean anything to `land.sh`'s classifier and this tree's tests.
-    cited = sorted({p for i in issues for p in cited_paths(i.body)})
+    cited = sorted({p for i in issues for p in cited_paths(i.body, tracked)})
     facts = _precomputed(cited) if target.is_server else ""
     # Unconditional for this repo: `_precomputed` is empty when the issues cite no path, and a
     # new file trips these guards wherever it lands. Another repo has its own suite.
@@ -417,6 +443,7 @@ dispatcher has posted the `Worked by` comment naming your branch on each of them
 {health_block}
 
 {facts}
+{DESIGN_STEP}
 {_test_proof_step(target.base)}
 {guards}
 {_review_landing(target) if review else _landing(host, batch, target)}

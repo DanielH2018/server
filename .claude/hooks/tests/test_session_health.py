@@ -21,6 +21,9 @@ from pathlib import Path
 
 import pytest
 
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from _hook_common import parse_payload
+
 from lib.proc_testing import fake_bin, path_with
 
 _HOOK = os.path.join(
@@ -114,7 +117,7 @@ def _run_main(
     payload = json.loads(stdin)
     return functools.partial(
         _mod.main,
-        read_payload=lambda: payload,
+        read_payload=lambda: parse_payload(payload),
         target_problems=lambda: targets or [],
         master_moved_problems=lambda: master_moved or [],
         dirty_primary_problems=lambda: parked or [],
@@ -470,8 +473,10 @@ def test_a_hooklib_that_will_not_compile_is_named_rather_than_killing_the_banner
     and exits 0. An uncaught SyntaxError at import would take the whole banner out with nothing
     a session could see, and nothing at module scope may do that.
     """
+    # `-S`: without it the venv's `.pth` supplies this checkout's `scripts/`, which the copy
+    # lacks, so the other-session section would read the real worktrees.
     proc = subprocess.run(
-        [sys.executable, str(_hook_copy_with_a_broken_hooklib(tmp_path))],
+        [sys.executable, "-S", str(_hook_copy_with_a_broken_hooklib(tmp_path))],
         input='{"source": "startup"}',
         capture_output=True,
         text=True,

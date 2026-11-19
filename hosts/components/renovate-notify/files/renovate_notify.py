@@ -51,6 +51,7 @@ from notify_logic import (
     CLEARED_MSG,
     DASHBOARD_UNPARSEABLE_MSG,
 )
+import renovate_identity
 from pending_logic import (
     churn_fingerprint,
     churning_pending,
@@ -99,9 +100,9 @@ def get(path: str):
 
 
 def is_renovate(pr: dict) -> bool:
-    return (pr.get("user") or {}).get("login") == "renovate[bot]" or (
-        pr.get("head") or {}
-    ).get("ref", "").startswith("renovate/")
+    return renovate_identity.is_renovate(pr.get("user")) or (pr.get("head") or {}).get(
+        "ref", ""
+    ).startswith("renovate/")
 
 
 def build_pr(repo: str, pr: dict) -> PR:
@@ -188,8 +189,8 @@ def autoclosed_candidates(repo: str, now: datetime) -> list[dict]:
     """
     since = (now - timedelta(days=AUTOCLOSED_LOOKBACK_DAYS)).date().isoformat()
     query = (
-        "repo:%s is:pr is:closed is:unmerged author:app/renovate in:title autoclosed "
-        "closed:>=%s" % (repo, since)
+        "repo:%s is:pr is:closed is:unmerged author:%s in:title autoclosed "
+        "closed:>=%s" % (repo, renovate_identity.GH_AUTHOR, since)
     )
     hits = get("search/issues?q=%s&per_page=100" % urllib.parse.quote(query))
     return [

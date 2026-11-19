@@ -38,7 +38,7 @@ import os
 import re
 import sys
 
-from _hook_common import emit_pretooluse_decision, read_payload
+from _hook_common import BashCall, emit_pretooluse_decision, read_payload
 from hooklib.read_only_agents import read_only_decision
 
 
@@ -115,25 +115,17 @@ def decide(command, repo_root):
     return None, None
 
 
-def decision(payload):
-    """The `(decision, reason)` pair `decide` returns for this payload, or None.
+def decision(call: BashCall):
+    """The `(decision, reason)` pair `decide` returns for this call, or None.
 
     The arm entry point `bash-pretool.py` calls. `main()` below is the same arm run as its
     own process, which is what the tests and a hand invocation use.
     """
-    if payload.get("tool_name") != "Bash":
-        return None
-    command = (payload.get("tool_input") or {}).get("command") or ""
-    if not command:
-        return None
-    # DECIDED: the process cwd, not `claude_guard.hook.read_cwd`'s `""`, when the payload
-    # carries no `cwd`. Every arm joins `repo_root` as a path prefix, and an empty prefix
-    # resolves against the cwd implicitly. The shim's `cd` makes the cwd the primary checkout.
-    repo_root = payload.get("cwd") or os.getcwd()
-    denied = read_only_decision(payload, command, repo_root, written_paths)
+    repo_root = str(call.cwd)
+    denied = read_only_decision(call, repo_root, written_paths)
     if denied:
         return denied
-    verdict, reason = decide(command, repo_root)
+    verdict, reason = decide(call.command, repo_root)
     return (verdict, reason) if verdict else None
 
 
@@ -143,10 +135,11 @@ def main():
     Emits the PreToolUse deny or ask decision it returns; ignores non-Bash tool calls and
     commands `decide` has no opinion on. Always returns 0.
     """
-    data = read_payload()
-    if data is None:
+    event = read_payload()
+    call = event.bash() if event else None
+    if call is None:
         return 0
-    verdict = decision(data)
+    verdict = decision(call)
     if verdict:
         emit_pretooluse_decision("block-protected-bash", *verdict)
     return 0

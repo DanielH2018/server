@@ -623,8 +623,9 @@ server batch runs as `ubuntu` on `worktree-fanout-<batch>`.
   without starting anything.
 - **Abort valves:** a run starts every eligible PR, and the landing turn and the landing slots
   order and bound the landings (#8823). A PR is started once: a log in `~/.local/state/fanout-server-lander/logs/`, or
-  a live `land.py --pr <n>` process anywhere, skips it. `land.sh` holds no per-PR lock, so
-  this check is the only guard against a second landing. The unit sets
+  a live `land.py --pr <n>` process on daniel-box, skips it. `land.sh` refuses a second
+  landing of a PR while one is live on either host, and the lander logs that start as
+  `another landing has it`. The unit sets
   `LAND_REQUIRE_BRANCH_PREFIX`, which makes `land.sh`
   pin the merge to the head it checked, and `LAND_REQUIRE_AUTHOR`.
 - **Evidence:** `journalctl -u homelab-claude-fanout-server-lander` has one line per candidate PR,

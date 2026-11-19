@@ -1,0 +1,109 @@
+"""Tests for scripts/validate/render_templates.py, the entry point over the render families.
+
+Each family's own rules, and the known-bad fixture each must flag, are in
+`test_render_<family>.py` beside this file. This module runs every family over the real tree
+and holds the entry point's summary and exit code.
+"""
+
+import re
+import shutil
+import tomllib
+from collections.abc import Callable
+
+import pytest
+from lib.proc_testing import run
+from lib.repo_paths import REPO
+from validate import render_templates as rt
+
+
+def _clean(ok: Callable[[str], None]) -> tuple[int, int]:
+    ok("  [ok]   x")
+    return 3, 0
+
+
+def _broken(ok: Callable[[str], None]) -> tuple[int, int]:
+    return 2, 1
+
+
+def _family(run, files: str = ".*") -> rt.Family:
+    return rt.Family(run, re.compile(files))
+
+
+def _chosen(path: str) -> set[str]:
+    return {name for name, family in rt.FAMILIES.items() if family.files.match(path)}
+
+
+FAMILIES = ("compose", "setup", "shell", "units")
+
+
+def test_the_entry_point_runs_every_family():
+    assert set(rt.FAMILIES) == set(FAMILIES)
+
+
+@pytest.mark.parametrize("name", FAMILIES)
+def test_each_family_checks_the_real_tree_clean(name):
+    if name == "units" and shutil.which("systemd-analyze") is None:
+        pytest.skip("systemd-analyze not on PATH")
+    checked, failures = rt.FAMILIES[name].run(print)
+    assert checked > 0
+    assert failures == 0
+
+
+def test_a_family_failure_fails_the_run_and_is_named_in_the_summary(capsys):
+    assert rt.main([], {"clean": _family(_clean), "broken": _family(_broken)}) == 1
+    assert (
+        capsys.readouterr()
+        .out.strip()
+        .endswith("5 template(s) checked (clean 3, broken 2 (1 failed)), 1 failure(s).")
+    )
+
+
+def test_clean_families_pass_and_print_no_ok_line_without_verbose(capsys):
+    assert rt.main([], {"clean": _family(_clean)}) == 0
+    assert "[ok]" not in capsys.readouterr().out
+
+
+def test_verbose_passes_the_ok_lines_through(capsys):
+    assert rt.main(["-v"], {"clean": _family(_clean)}) == 0
+    assert "  [ok]   x\n" in capsys.readouterr().out
+
+
+def test_every_path_the_hook_matches_selects_a_family():
+    hooks = [
+        hook
+        for repo in tomllib.loads((REPO / "prek.toml").read_text())["repos"]
+        for hook in repo.get("hooks", [])
+        if hook["id"] == "validate-render-templates"
+    ]
+    pattern = re.compile(hooks[0]["files"])
+    tracked = run(["git", "ls-files"], cwd=REPO, check=True).stdout.splitlines()
+    matched = [path for path in tracked if pattern.search(path)]
+    assert "hosts/components/pi-compose/services/alloy/compose.yaml.j2" in matched
+    assert [path for path in matched if not _chosen(path)] == []
+
+
+def test_a_compose_template_selects_compose_and_the_host_render_only():
+    assert _chosen("hosts/components/pi-compose/services/alloy/compose.yaml.j2") == {
+        "compose",
+        "units",
+    }
+
+
+def test_a_role_shell_template_selects_the_shell_family_alone():
+    assert _chosen("k8s/roles/longhorn/files/x.sh.j2") == {"shell"}
+
+
+def test_a_shared_input_selects_every_family():
+    assert _chosen("scripts/lib/render_guard.py") == set(FAMILIES)
+
+
+def test_files_run_only_the_matching_families_and_the_summary_names_the_skipped(capsys):
+    table = {"clean": _family(_clean, "a/.*"), "broken": _family(_broken, "b/.*")}
+    assert rt.main(["a/x.j2"], table) == 0
+    assert (
+        capsys.readouterr()
+        .out.strip()
+        .endswith(
+            "3 template(s) checked (clean 3), 0 failure(s); skipped broken, no input changed."
+        )
+    )

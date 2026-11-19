@@ -330,10 +330,11 @@ observability_rule_groups:
   - pods
   - k3s-upgrade
 
-# The hosts whose homelab-updater must report, each with the scrape job that reads its node
-# exporter and the age in seconds past which its last successful update pages. host-checks.yaml
-# carries one literal HostUpdateStale rule per entry, because a rule file is never Jinja, and
-# tests/services/test_host_plane_rule_literals.py holds the rules equal to this map.
+# The host table: every host, each with the scrape job that reads its node exporter and the age
+# in seconds past which its last successful update pages. scripts/dev/gen_host_rules.py renders
+# the host-checks and hosts rule groups from files/rule-tables/ over these hosts, one literal
+# copy per host a rule's selector takes, and refuses to render while an inventory host is
+# missing here.
 # scripts/renderer/tests/test_renderer_host_update_limits.py fails a limit shorter than the
 # longest gap between two of the host's updater fires plus the updater's TimeoutStartSec, read
 # from the rendered timer and its drop-in. A host that ships homelab-docker-engine.timer also

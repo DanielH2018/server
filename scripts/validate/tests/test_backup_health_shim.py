@@ -12,7 +12,7 @@ Run: uv run pytest scripts/validate/tests/test_backup_health_shim.py
 import re
 import shutil
 
-from validate import shell_templates as v
+from validate.render_lib import shell as v
 from validate.validate_lib import shell_lint as sl
 from validate.validate_lib.shipped_render import render_shipped_text
 from lib.proc_testing import fake_bin, run, write_exec

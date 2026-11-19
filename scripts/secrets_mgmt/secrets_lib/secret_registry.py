@@ -1,7 +1,7 @@
 """Pure logic over the rotation registry: seeding, reconciliation, due dates and drift.
 
-Every function here takes the registry as a plain dict and returns a value or mutates that
-dict — none of them read or write the file. `RotationTools.load_registry` /
+Every function here takes the registry as a `registry_model.Registry` and returns a value or
+mutates it — none of them read or write the file. `RotationTools.load_registry` /
 `.save_registry` own the file, so the CLI can be driven end-to-end without touching disk.
 
 Cadence arrives as a `tier_days` mapping, defaulting to `rotation_tools.DEFAULT_TIER_DAYS`.
@@ -23,6 +23,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 
 from secrets_mgmt.secrets_lib.secret_classify import classify
 from secrets_mgmt.rotation_tools import DEFAULT_TIER_DAYS
+from secrets_mgmt.secrets_lib.registry_model import Entry, Registry
 
 
 def _stable_offset(name: str, span: int) -> int:
@@ -39,7 +40,7 @@ def stagger_span(days: int) -> int:
 
 def seed_last_rotated(
     name: str, tier: str, today: dt.date, tier_days: Mapping = DEFAULT_TIER_DAYS
-) -> str | None:
+) -> dt.date | None:
     """A staggered seed date.
 
     `due = seed + cadence - stagger` lands in [today+span+2, today+cadence], so nothing is
@@ -51,22 +52,22 @@ def seed_last_rotated(
         return None
     span = stagger_span(days)
     offset = _stable_offset(name, days - 2 * span)
-    return (today - dt.timedelta(days=offset)).isoformat()
+    return today - dt.timedelta(days=offset)
 
 
 def sync(
-    reg: dict, names: list[str], today: dt.date, tier_days: Mapping = DEFAULT_TIER_DAYS
+    reg: Registry,
+    names: list[str],
+    today: dt.date,
+    tier_days: Mapping = DEFAULT_TIER_DAYS,
 ) -> tuple[list[str], list[str]]:
     """Add missing secrets (classified + staggered seed); report stale registry entries."""
-    entries = reg.setdefault("entries", {})
-    added, stale = [], []
+    entries = reg.entries
+    added = []
     for name in names:
         if name not in entries:
             tier = classify(name)
-            entries[name] = {
-                "tier": tier,
-                "last_rotated": seed_last_rotated(name, tier, today, tier_days),
-            }
+            entries[name] = Entry(tier, seed_last_rotated(name, tier, today, tier_days))
             added.append(name)
     live = set(names)
     stale = sorted(n for n in entries if n not in live)
@@ -74,7 +75,7 @@ def sync(
 
 
 def due_date(
-    name: str, entry: dict, tier_days: Mapping = DEFAULT_TIER_DAYS
+    name: str, entry: Entry, tier_days: Mapping = DEFAULT_TIER_DAYS
 ) -> dt.date | None:
     """The date `name`'s secret comes due, or None when its tier has no cadence.
 
@@ -90,25 +91,25 @@ def due_date(
     `docs/secret-rotation.md` and the `secret-tiers` fragment, so a secret must never come
     due later than `last_rotated + days`; pulling it earlier stays inside that promise.
     """
-    tier = entry.get("tier", "assisted")
-    days = tier_days.get(tier)
-    lr = entry.get("last_rotated")
-    if not days or not lr:
+    days = tier_days.get(entry.tier)
+    if not days or entry.last_rotated is None:
         return None
     # A salted hash domain: the seed offset is drawn from the same name, and reusing it
     # unsalted would correlate the two subtractions instead of compounding the spread.
     offset = _stable_offset("due:" + name, stagger_span(days))
-    return dt.date.fromisoformat(lr) + dt.timedelta(days=days - offset)
+    return entry.last_rotated + dt.timedelta(days=days - offset)
 
 
-def audit(reg: dict, today: dt.date, tier_days: Mapping = DEFAULT_TIER_DAYS) -> dict:
+def audit(
+    reg: Registry, today: dt.date, tier_days: Mapping = DEFAULT_TIER_DAYS
+) -> dict:
     """Returns {overdue: [...], soon: [...], by_tier: {...}} sorted by urgency."""
     rows = []
-    for name, entry in reg.get("entries", {}).items():
+    for name, entry in reg.entries.items():
         d = due_date(name, entry, tier_days)
         if d is None:
             continue
-        rows.append((name, entry.get("tier"), d, (d - today).days))
+        rows.append((name, entry.tier, d, (d - today).days))
     rows.sort(key=lambda r: r[3])
     overdue = [r for r in rows if r[3] < 0]
     soon = [r for r in rows if 0 <= r[3] <= 14]
@@ -121,16 +122,14 @@ def audit(reg: dict, today: dt.date, tier_days: Mapping = DEFAULT_TIER_DAYS) -> 
 
 # DECIDED: the registry tracks SOPS keys only; a hand-added non-SOPS name reads as stale, fails
 # cmd_audit and every secrets PR, and no tier value rescues it.
-def unknown_tiers(reg: dict, tier_days: Mapping = DEFAULT_TIER_DAYS) -> list[str]:
+def unknown_tiers(reg: Registry, tier_days: Mapping = DEFAULT_TIER_DAYS) -> list[str]:
     """Registry rows whose tier `tier_days` has no entry for, sorted.
 
     `due_date` returns None for such a row, so `audit` would skip it silently and nothing
-    would ever report it due. A row with no `tier` reads as `assisted`, as in `due_date`.
+    would ever report it due.
     """
     return sorted(
-        name
-        for name, entry in reg.get("entries", {}).items()
-        if entry.get("tier", "assisted") not in tier_days
+        name for name, entry in reg.entries.items() if entry.tier not in tier_days
     )
 
 
@@ -152,12 +151,12 @@ def registry_drift(registered: set, present: set) -> tuple[list, list]:
 RECORD_SOURCE = "record"
 
 
-def is_record(reg: dict, name: str) -> bool:
+def is_record(reg: Registry, name: str) -> bool:
     """Whether `name`'s registry entry carries `source: record`."""
-    entry = reg.get("entries", {}).get(name, {})
-    return entry.get("source") == RECORD_SOURCE
+    entry = reg.entries.get(name)
+    return entry is not None and entry.source == RECORD_SOURCE
 
 
-def record_names(reg: dict) -> list[str]:
+def record_names(reg: Registry) -> list[str]:
     """Every key marked `source: record`, sorted."""
-    return sorted(n for n in reg.get("entries", {}) if is_record(reg, n))
+    return sorted(n for n in reg.entries if is_record(reg, n))

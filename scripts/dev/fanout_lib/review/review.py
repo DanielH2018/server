@@ -96,6 +96,7 @@ from fanout_lib.review.review_prompts import (
     is_held,
     apply_prompt,
     review_prompt,
+    system_prompt,
 )
 from fanout_lib.review.fix_round import fix_rounds
 from fanout_lib.review.base_check import BaseCheck, unproven_tests
@@ -131,7 +132,6 @@ from fanout_lib.prompt_tool import prompt_tool_args
 from fanout_lib.sizing import REVIEWER
 from fanout_lib.target import Target
 
-PROMPT_FILE = Path(__file__).resolve().parent / "review_system_prompt.md"
 # The checkout this module was loaded from: the batch worktree for this repo, the batch's
 # `.fanout/server` snapshot for another repo. Both are trees the implementer can write.
 SOURCE_ROOT = Path(__file__).resolve().parents[4]
@@ -200,7 +200,7 @@ class Pipeline:
         # are held the same way for every phase the implementer's session resumes into: each
         # phase gets the prompt as text and runs the hook from `hook_root`,
         # which `_snapshot_hook` rewrites from these bytes before every call.
-        self.review_prompt = PROMPT_FILE.read_text()
+        self.review_prompt = system_prompt()
         self.headless_prompt = HEADLESS_PROMPT_FILE.read_text()
         self.hooks = read_hooks(SOURCE_ROOT)
         # Another repo's snapshot has no `.claude/settings.json`; its worktree's are its own.

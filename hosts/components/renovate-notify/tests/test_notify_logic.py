@@ -314,6 +314,11 @@ def test_find_dashboard_ignores_non_renovate_author():
     assert nl.find_dashboard([_issue("Dependency Dashboard", login="someuser")]) is None
 
 
+def test_find_dashboard_ignores_a_lookalike_renovate_login():
+    issue = _issue("Dependency Dashboard", login="renovate-fan")
+    assert nl.find_dashboard([issue]) is None
+
+
 # A package whose lookup starts failing (karakeep's gcr.io image, say) gets no PR and
 # doesn't touch dashboard staleness — the dashboard still updates on schedule. This section
 # is the only signal, so it must be parsed into the notify path or it silently stops

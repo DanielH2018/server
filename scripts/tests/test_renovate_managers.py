@@ -1,18 +1,12 @@
 #!/usr/bin/env python3
-"""Guard that every Renovate custom-regex manager still matches its live target(s).
+"""Guards on renovate.json's config and packageRules that Renovate's own extract cannot see.
 
-renovate.json's `customManagers` are hand-rolled regexes (the built-in ansible-galaxy /
-pre-commit managers weren't reliably matching these paths — see the in-file descriptions). If a
-template is renamed, a pin's formatting shifts, or a matchString is edited, a manager silently
-matches ZERO files/lines and that dependency axis ages with no signal: the 8-day dependency-
-dashboard-stale detector only catches Renovate dying *entirely*, not one manager regressing.
-
-This compiles each manager's `managerFilePatterns` + `matchStrings` and asserts each finds >=1 file
-AND >=1 in-file match across the tracked repo, so a regression fails CI at commit time instead of
-surfacing as a silently-un-bumped dependency weeks later. The regex translations and the
-parsed config are in `_renovate.py`, and the `tracked` file list is a conftest fixture.
-The Dockerfile and lockstep guards are in `test_renovate_dockerfiles.py`; the
-release-download URL guard is in `test_renovate_release_urls.py`.
+Whether each custom manager still matches its pins is CI's job: `renovate_config.sh extract`
+runs Renovate's extract and `scripts/validate/renovate_extract.py` holds it against the
+expected-dependency table, including every `_image:` key and control-plane version. What stays
+here is what an extract does not report: the preset globs `ignorePaths` must restate, which
+packageRule disables or groups a dep, and the `image:` literals no manager is pointed at.
+The Dockerfile and lockstep guards are in `test_renovate_dockerfiles.py`.
 
 Run: uv run pytest scripts/tests/test_renovate_managers.py
 """
@@ -23,47 +17,17 @@ from pathlib import PurePosixPath
 
 import pytest
 
-from lib.repo_paths import ALL_VARS, REPO, SYSTEM_UPGRADE_DEFAULTS
+from lib.repo_paths import ALL_VARS, REPO
+from validate.renovate_extract import IMAGE_DEFAULTS, REGISTRY_BUILT_IMAGES
 from _renovate import (
-    _CONFIG_MANAGERS,
-    _MANAGERS,
+    EXPECTED_DEPS,
     _PACKAGE_RULES,
     _RENOVATE_CONFIG,
     _REPO,
     _disabling_currentvalue_rules,
-    _file_pattern_to_regex,
     _is_disabled_by_packagerule,
-    _k8s_image_manager,
     _resolve_group_name,
-    _to_python_regex,
 )
-
-
-@pytest.mark.parametrize(
-    "mgr",
-    _CONFIG_MANAGERS,
-    ids=[m["description"].split(".")[0][:40] for m in _CONFIG_MANAGERS],
-)
-def test_custom_manager_matches_live_targets(mgr: dict, tracked: list[str]) -> None:
-    assert mgr["customType"] == "regex"
-
-    file_res = [_file_pattern_to_regex(fp) for fp in mgr["managerFilePatterns"]]
-    matched_files = [f for f in tracked if any(r.search(f) for r in file_res)]
-    assert matched_files, (
-        f"Renovate manager {mgr['description'][:60]!r} matched NO tracked files — its "
-        f"managerFilePatterns {mgr['managerFilePatterns']} no longer resolve to anything."
-    )
-
-    match_res = [re.compile(_to_python_regex(ms)) for ms in mgr["matchStrings"]]
-    hits = sum(
-        len(r.findall((_REPO / f).read_text()))
-        for f in matched_files
-        for r in match_res
-    )
-    assert hits > 0, (
-        f"Renovate manager {mgr['description'][:60]!r} matched {len(matched_files)} file(s) but "
-        f"its matchStrings found ZERO dependency lines — the regex has drifted from the file format."
-    )
 
 
 def test_ignore_paths_keeps_the_inherited_preset_globs() -> None:
@@ -95,67 +59,6 @@ def test_ignore_paths_keeps_the_inherited_preset_globs() -> None:
     )
 
 
-def test_group_vars_images_are_tracked() -> None:
-    """Some customManager must scan inventory/group_vars/all.yml.
-
-    crowdsec_k8s_image lives in group_vars, which is outside the k8s-defaults manager's
-    file patterns AND outside the glob the per-image coverage test below uses — so without
-    this check the WAF core, the one image whose staleness is a security problem, would be
-    the single pin that neither could see.
-    """
-    scanned = [p for m in _MANAGERS for p in m["managerFilePatterns"]]
-    assert any("group_vars" in p for p in scanned), (
-        "no customManager scans inventory/group_vars/all.yml; an image pinned there "
-        "(crowdsec_k8s_image) ages with no update signal"
-    )
-
-
-# Repo-relative, because the managerFilePatterns it is matched against are.
-_CONTROL_PLANE_DEFAULTS = SYSTEM_UPGRADE_DEFAULTS.relative_to(REPO).as_posix()
-
-
-def test_control_plane_version_pins_are_tracked() -> None:
-    """Every `*_version:` pin in k8s/roles/system-upgrade/defaults must be matched by a customManager.
-
-    k3s and system-upgrade-controller are pinned here, and the k8s-images manager one directory over
-    scans k8s/roles/*/defaults and matches `_image:` keys, so neither its file patterns nor the
-    per-image coverage test above can see these. Widening that test's glob would NOT have caught
-    it — these are version vars, not image vars — which is why this is a separate guard.
-
-    Written to read the pins out of the file rather than assert three known names, so a fourth
-    component pinned here later (cilium, cert-manager, a k3s addon) fails this test until it is
-    tracked, instead of quietly repeating the same escape.
-    """
-    text = SYSTEM_UPGRADE_DEFAULTS.read_text()
-    pins = re.findall(r"^([a-z0-9_]*_version):\s*\"?(v[^\"\s]+)", text, re.MULTILINE)
-    assert pins, (
-        f"no `<name>_version: vX.Y.Z` pins found in {_CONTROL_PLANE_DEFAULTS} — either they "
-        "moved or their formatting changed, so this test is no longer guarding anything"
-    )
-    covering = [
-        m
-        for m in _MANAGERS
-        if any(
-            _file_pattern_to_regex(p).search(_CONTROL_PLANE_DEFAULTS)
-            for p in m["managerFilePatterns"]
-        )
-    ]
-    untracked = [
-        f"{name}: {value}"
-        for name, value in pins
-        if not any(
-            re.search(_to_python_regex(ms), f"{name}: {value}")
-            for m in covering
-            for ms in m["matchStrings"]
-        )
-    ]
-    assert not untracked, (
-        "control-plane version pin(s) no customManager tracks — the Kubernetes version, the "
-        "LoadBalancer implementation, or the storage layer under every PVC would age with no "
-        "update signal:\n" + "\n".join(untracked)
-    )
-
-
 def test_coredns_allowed_versions_skip_the_upstream_stray_tags() -> None:
     """coredns/coredns carries stray tags `v002` ... `v011` beside its releases.
 
@@ -174,91 +77,57 @@ def test_coredns_allowed_versions_skip_the_upstream_stray_tags() -> None:
     assert not [t for t in ("v002", "v005", "v011") if allowed.fullmatch(t)]
 
 
-# Images BUILT by this repo and pushed to the node-local registry have no upstream ref for
-# Renovate to compare against. Exempt by variable name rather than by pattern, so adding one is a
-# deliberate act. The FROM line of each Dockerfile is what moves, and Renovate's built-in
-# dockerfile manager watches it (test_every_dockerfile_is_renovate_visible).
-REGISTRY_BUILT_IMAGES = {
-    "airflow_k8s_image",  # k8s/roles/airflow/templates/Dockerfile.j2
-    # The same build at its GHCR ref, for the task pods' pod template.
-    "airflow_k8s_task_image",
-    "n8n_k8s_image",  # k8s/roles/n8n/templates/Dockerfile.j2
-    "n8n_k8s_runners_image",  # k8s/roles/n8n/templates/Dockerfile-runners.j2
-    "ical_proxy_k8s_image",  # k8s/roles/ical-proxy/templates/Dockerfile.j2
-    "code_server_k8s_image",  # k8s/roles/code-server/templates/Dockerfile.j2
-    "homelab_mcp_k8s_image",  # k8s/roles/homelab-mcp/templates/Dockerfile.j2
-    # k8s/roles/karakeep/templates/Dockerfile.j2 — a chown layer over the pinned uv
-    # base so the time-tagger runs as uid 1000. Its FROM is watched like the rest; the
-    # pip pins the container installs at boot sit in deployment-time-tagger.yaml.j2 and have
-    # their own regex manager.
-    "karakeep_k8s_tagger_image",
-    "nut_k8s_image",  # k8s/roles/nut/templates/Dockerfile.j2
-    "pi_peer_backup_k8s_image",  # k8s/roles/pi-peer-backup/templates/Dockerfile.j2
-    "terraria_k8s_image",  # k8s/roles/terraria/templates/Dockerfile.j2
-    # k8s/roles/valheim/templates/Dockerfile.j2 — the BepInEx plugin DLLs. Its FROM is
-    # watched like the rest; the MOD versions inside it are Thunderstore releases Renovate has
-    # no manager for, and valheim/CLAUDE.md carries the by-hand bump procedure instead.
-    "valheim_k8s_mods_image",
-}
+def _image_tag(ref: str) -> str:
+    """The tag of an image reference, after any registry host and before any digest."""
+    return ref.partition("@")[0].rsplit("/", 1)[-1].partition(":")[2]
 
 
-def test_every_k8s_role_image_is_renovate_tracked() -> None:
-    """The sibling of the test above, for the cluster.
+def test_no_k8s_role_image_is_disabled_by_a_package_rule() -> None:
+    """A `/^latest$/` packageRule once disabled every k8s image whose tag is `latest`.
 
-    A k8s role has no compose template to read: the `*_image:` vars in its defaults ARE the
-    source of truth for what every pod runs. Without it the entire cluster fleet's pins (21
-    across 13 roles) could age with no update signal.
-
-    Per-var rather than aggregate, for the same reason as the compose guard: the manager
-    matching SOMETHING passes even when one role's image slips the regex. An untagged or
-    digest-only pin does exactly that, because the matchString requires an explicit :tag.
-
-    Regex-match alone is NOT sufficient, either: a `/^latest$/` packageRule disables the WHOLE
-    dependency for any k8s image whose extracted currentValue is `latest` — including the
-    deliberate `latest@sha256:...` digest pins (littlelink, tdarr, dri-device-plugin) — even
-    though every one of those lines matches this manager's matchStrings. So beyond matching,
-    assert nothing DISABLES the match: walk packageRules the same way Renovate would and fail
-    if an `enabled: false` rule applies to this file's currentValue.
+    That swallowed the deliberate `latest@sha256:...` digest pins (littlelink, tdarr,
+    dri-device-plugin) even though the manager extracts every one of them. So beyond the
+    extract, walk the disabling packageRules the way Renovate would and fail if one applies
+    to the tag a pin carries.
     """
     # fact: k8s/roles/texbrain/CLAUDE.md#The image comes from a fork, and why
-    match_res = [
-        re.compile(_to_python_regex(ms)) for ms in _k8s_image_manager()["matchStrings"]
-    ]
     disabling_rules = _disabling_currentvalue_rules(_PACKAGE_RULES)
-    # group_vars/all.yml is included because crowdsec_k8s_image lives there, outside the role
-    # defaults. The registry-gc component's defaults are included for the same reason:
-    # registry_k8s_image and registry_k8s_netpol_probe_image sit outside the role defaults.
-    # A role-defaults-only glob would leave them matched by no manager and by no test.
     defaults = sorted((_REPO / "k8s/roles").glob("*/defaults/main.yml"))
-    assert defaults, "no k8s role defaults found"
-    defaults.append(_REPO / "hosts/components/registry-gc/defaults/main.yml")
-    defaults.append(ALL_VARS)
-    untracked = []
+    defaults += [_REPO / p for p in IMAGE_DEFAULTS if "*" not in p]
+    assert ALL_VARS in defaults, "the census lost inventory/group_vars/all.yml"
+    disabled = []
     for f in defaults:
         rel_path = str(f.relative_to(_REPO))
         for line in f.read_text().splitlines():
-            if not re.match(r"\s*\w*_image:\s*\S", line):
+            m = re.match(r"\s*(\w*_image):\s*[\"']?([^\s\"'#]+)", line)
+            if not m or m.group(1) in REGISTRY_BUILT_IMAGES:
                 continue
-            if line.split(":", 1)[0].strip() in REGISTRY_BUILT_IMAGES:
-                continue
-            matches = (r.search(line) for r in match_res)
-            m = next((match for match in matches if match), None)
-            if m is None:
-                untracked.append(f"{rel_path}: {line.strip()} — matched no manager")
-                continue
-            disabling_rule = _is_disabled_by_packagerule(
-                m.group("currentValue"), rel_path, disabling_rules
+            rule = _is_disabled_by_packagerule(
+                _image_tag(m.group(2)), rel_path, disabling_rules
             )
-            if disabling_rule is not None:
-                untracked.append(
+            if rule is not None:
+                disabled.append(
                     f"{rel_path}: {line.strip()} — disabled by packageRule "
-                    f"{disabling_rule['description'][:60]!r}"
+                    f"{rule['description'][:60]!r}"
                 )
-    assert not untracked, (
-        "k8s role image pin(s) the Renovate k8s-defaults manager will NOT actually update "
-        "(unmatched, or matched but disabled by a packageRule) — the pods run them and "
-        "nothing will ever offer a bump:\n" + "\n".join(untracked)
+    assert not disabled, (
+        "k8s role image pin(s) a packageRule disables — the pods run them and nothing will "
+        "ever offer a bump:\n" + "\n".join(disabled)
     )
+
+
+@pytest.mark.parametrize(
+    ("ref", "tag"),
+    [
+        ("ghcr.io/a/b:latest@sha256:" + "0" * 64, "latest"),
+        ("localhost:5000/n8n:1.2", "1.2"),
+        ("a/b@sha256:" + "0" * 64, ""),
+    ],
+)
+def test_image_tag_reads_past_the_registry_port_and_the_digest(
+    ref: str, tag: str
+) -> None:
+    assert _image_tag(ref) == tag
 
 
 def test_disabling_currentvalue_rule_scoped_to_its_files() -> None:
@@ -344,7 +213,7 @@ def test_no_literal_image_lines_in_k8s_templates() -> None:
         # python is absent on purpose: its minor and major bumps resolve to the cross-manager
         # `python (manual` group, held by test_renovate_python_group.py.
         ("node", ".github/actions/setup/action.yml", "node-version"),
-        ("vale-cli/vale", ".github/workflows/ci.yml", "github-releases"),
+        ("vale-cli/vale", ".github/workflows/ci.yml", "github-release-attachments"),
         ("goreleaser/nfpm", ".github/workflows/ci.yml", "github-release-attachments"),
         ("vale-cli/Google", ".vale.ini", "github-releases"),
     ],
@@ -403,9 +272,7 @@ def _pin_digest_rule_for(path: str) -> dict | None:
     return None
 
 
-def test_every_k8s_image_file_gets_pin_digests_from_a_package_rule(
-    tracked: list[str],
-) -> None:
+def test_every_k8s_image_file_gets_pin_digests_from_a_package_rule() -> None:
     """The top-level `pinDigests: true` does not reach a regex-managed pin.
 
     Renovate's regex custom manager ships `defaultConfig = { pinDigests: false }`, and a
@@ -416,12 +283,18 @@ def test_every_k8s_image_file_gets_pin_digests_from_a_package_rule(
     The rule must also re-slug the group: Renovate's built-in `pinDigest` config groups every
     pin into one branch, which would restart every pinned service from a single PR.
     """
-    patterns = [
-        _file_pattern_to_regex(p) for p in _k8s_image_manager()["managerFilePatterns"]
-    ]
-    files = [f for f in tracked if any(p.search(f) for p in patterns)]
+    files = sorted(
+        {
+            d.file
+            for d in EXPECTED_DEPS
+            if d.manager == "regex"
+            and d.datasource == "docker"
+            and d.file.startswith("k8s/roles/")
+            and d.file.endswith("/defaults/main.yml")
+        }
+    )
     assert "k8s/roles/loki-homelab/defaults/main.yml" in files, (
-        "the k8s-images manager no longer scans a known role's defaults; this census is empty"
+        "no docker dep extracted from a known role's defaults; this census is empty"
     )
     uncovered = [f for f in files if _pin_digest_rule_for(f) is None]
     assert not uncovered, (
@@ -443,3 +316,23 @@ def test_every_k8s_image_file_gets_pin_digests_from_a_package_rule(
         "the pinDigests rule must keep the group name in the PR title, or a denied role's pin PR "
         "loses the k8s_autodeploy: false marker the renovate_agent reads"
     )
+
+
+def test_a_pin_digest_automerges_unless_the_role_is_denied_auto_deploy():
+    """Renovate types the update the k8s-images template makes possible as `pinDigest`.
+
+    A rule matching only `digest` automerged none of the tag-only pins, so each opened a
+    hand-merge PR. The denylist rule must stay unscoped by update type, or a denied
+    role's pinDigest would fall through to the automerge rule above it.
+    """
+    assert any(
+        r.get("automerge") and "pinDigest" in r.get("matchUpdateTypes", [])
+        for r in _PACKAGE_RULES
+    ), "no automerge rule matches updateType pinDigest"
+    denylist = [
+        r
+        for r in _PACKAGE_RULES
+        if str(r.get("groupName", "")).startswith("k8s images (manual")
+    ]
+    assert len(denylist) == 1, denylist
+    assert "matchUpdateTypes" not in denylist[0], denylist[0]["matchUpdateTypes"]

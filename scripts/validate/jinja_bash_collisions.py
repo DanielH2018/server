@@ -11,9 +11,9 @@ This is a TEXT scan, not a render check, and that is the point: the failing case
 and the swallowing case renders to output with the evidence already deleted. Neither is visible
 to the render-then-lint validators beside this one.
 
-It is also the only validator scoped to every `.j2` in the tree. compose_templates.py covers
-the Pi's compose files, k8s_manifests.py `k8s/roles/**`, shell_templates.py `*.sh.j2` and
-unit_templates.py the systemd units — but a `${#` collision bites any template that carries
+It is also the only validator scoped to every `.j2` in the tree. render_lib/compose.py covers
+the Pi's compose files, k8s_manifests.py `k8s/roles/**`, render_lib/shell.py `*.sh.j2` and
+render_lib/units.py the systemd units — but a `${#` collision bites any template that carries
 shell, including a ConfigMap's embedded script and a compose `healthcheck.test`.
 
 A template that must hold a literal `${#` wraps it in `{% raw %}` / `{% endraw %}`, which this
@@ -40,7 +40,7 @@ from lib.cli_help import answer_help
 from lib.repo_paths import K8S, REPO
 
 # The collision itself. Deliberately narrow: `${` on its own is ordinary Jinja-safe shell, and
-# the compose `$$`-escaping rule is validate/compose_templates.py's job.
+# the compose `$$`-escaping rule is validate/render_lib/compose.py's job.
 COLLISION = "${#"
 
 _RAW_OPEN = re.compile(r"\{%-?\s*raw\s*-?%\}")

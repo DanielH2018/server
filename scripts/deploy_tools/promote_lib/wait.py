@@ -67,7 +67,9 @@ Run: uv run python scripts/deploy_tools/promote.py land-wait <sha> [--services <
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
+from enum import StrEnum
 from pathlib import Path
+from typing import assert_never
 
 import sys as _sys
 from pathlib import Path as _Path
@@ -207,12 +209,21 @@ class WaitReads:
     clock: Callable[[], float]
 
 
+class WaitVerdict(StrEnum):
+    """How `land_wait` ended, as the `verdict=` field of `report_wait`'s last line."""
+
+    SETTLED = "settled"
+    DEPLOY_FAILED = "deploy-failed"
+    GAVE_UP = "gave-up"
+    SUSPENDED = "suspended"
+
+
 @dataclass(frozen=True)
 class WaitResult:
     """How `land_wait` ended.
 
     Attributes:
-        verdict: `settled`, `deploy-failed`, `gave-up` or `suspended`.
+        verdict: how the wait ended.
         cause: HOLD_CAUSE or SOAK_CAUSE beside `deploy-failed`, TIMEOUT_CAUSE or
             UNREADABLE_CAUSE beside `gave-up`, SUSPENDED_CAUSE beside `suspended`, "" beside
             `settled`.
@@ -226,7 +237,7 @@ class WaitResult:
         hold_owner: `hold_owner`'s answer for that hold, beside HOLD_CAUSE; "" otherwise.
     """
 
-    verdict: str
+    verdict: WaitVerdict
     cause: str = ""
     detail: str = ""
     revision: str = ""
@@ -235,6 +246,10 @@ class WaitResult:
     tags: tuple[str, ...] = ()
     hold_sha: str = ""
     hold_owner: str = ""
+
+    def __post_init__(self) -> None:
+        # Raises ValueError on a value outside WaitVerdict, where the result is built.
+        object.__setattr__(self, "verdict", WaitVerdict(self.verdict))
 
 
 # The changed-set names that are no deploy tag: the root, the shared kinds, and Flux's own
@@ -447,7 +462,7 @@ def land_wait(
             items = reads.kustomizations()
         except KubectlSetupError as err:
             return WaitResult(
-                "gave-up",
+                WaitVerdict.GAVE_UP,
                 UNREADABLE_CAUSE,
                 f"this host cannot read the cluster, and no retry fixes that: {err}. "
                 "Give the landing user a readable kubeconfig, then re-run land.sh",
@@ -487,7 +502,7 @@ def land_wait(
                     )
                 elif soak in SOAK_FAILED_STATES:
                     return WaitResult(
-                        "deploy-failed",
+                        WaitVerdict.DEPLOY_FAILED,
                         SOAK_CAUSE,
                         f"{SOAK_CONTEXT} reads {soak} on {revision[:8]}. The soak Job "
                         f"names the services it failed: `{SOAK_READ}`",
@@ -502,7 +517,7 @@ def land_wait(
                 if tags:
                     annotate_promotion(reads.annotate, tags, revision)
                 return WaitResult(
-                    "settled",
+                    WaitVerdict.SETTLED,
                     detail=f"{len(names)} Kustomizations applied {revision[:8]}",
                     revision=revision,
                     widened=widened,
@@ -518,7 +533,7 @@ def land_wait(
             hold, line = "", f"{line}; {HOLD_VARIABLE} could not be read: {err}"
         if hold and hold != "none":
             return WaitResult(
-                "deploy-failed",
+                WaitVerdict.DEPLOY_FAILED,
                 HOLD_CAUSE,
                 hold_detail(hold, own),
                 widened=widened,
@@ -528,7 +543,7 @@ def land_wait(
             )
         if all_paused:
             return WaitResult(
-                "suspended",
+                WaitVerdict.SUSPENDED,
                 SUSPENDED_CAUSE,
                 f"{', '.join(paused)} is suspended at {merge[:8]}, so Flux applies "
                 "nothing for it until a PR removes its flux_suspend",
@@ -555,7 +570,7 @@ def land_wait(
         progress(line)
         if now >= deadline or (cap_end is not None and now >= cap_end):
             return WaitResult(
-                "gave-up",
+                WaitVerdict.GAVE_UP,
                 TIMEOUT_CAUSE,
                 f"no promotion covered {merge[:8]} within {int(now - started)}s. Look first "
                 "at the `promote` workflow's failed `publish` jobs: a publish refusal leaves "
@@ -653,9 +668,15 @@ def report_wait(merge: str, result: WaitResult) -> int:
         f"verdict={result.verdict} cause={result.cause} merge={merge} "
         f"revision={result.revision} widened={result.widened}"
     )
-    if result.verdict == "settled":
-        return OK
-    return LAND_GAVE_UP if result.verdict == "gave-up" else FAILED
+    match result.verdict:
+        case WaitVerdict.SETTLED:
+            return OK
+        case WaitVerdict.GAVE_UP:
+            return LAND_GAVE_UP
+        case WaitVerdict.DEPLOY_FAILED | WaitVerdict.SUSPENDED:
+            return FAILED
+        case unknown:
+            assert_never(unknown)
 
 
 def add_parser(commands, repo: Path) -> None:

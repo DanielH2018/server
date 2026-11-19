@@ -9,10 +9,7 @@ reads:
   stale branch rather than recomputing it, so a branch cut before an earlier bump landed keeps
   naming the older version.
 - **It rewrites one copy of a version and leaves another.** `pip install prek==` appeared in
-  TWO jobs, and the Vale download URL carries its version TWICE (the release tag and the asset
-  name). A partial rewrite leaves one job installing the old tool, which is green and wrong.
-  `renovate.json`'s Vale manager already carries two `matchStrings` for exactly this reason;
-  nothing asserted the outcome.
+  TWO jobs. A partial rewrite leaves one job installing the old tool, which is green and wrong.
 
 The escape hatch is an inline `# downgrade-ok:` comment on the pin's own line. A version ratchet
 with no override is a one-way door, and a yanked release makes a deliberate downgrade correct —
@@ -50,10 +47,7 @@ PINS: dict[str, tuple[str, tuple[str, ...]]] = {
     "prek": (".github/actions/setup/action.yml", (r"pip install prek==([\d.]+)",)),
     "vale-cli/vale": (
         ".github/workflows/ci.yml",
-        (
-            r"vale-cli/vale/releases/download/v([\d.]+)/",
-            r"vale_([\d.]+)_Linux",
-        ),
+        (r"VALE_VERSION:\s*v([\d.]+)",),
     ),
 }
 

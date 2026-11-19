@@ -79,6 +79,8 @@ class FakeRunner:
         # The VERDICT lines of the first landings, in order; `verdict` answers the rest.
         self.verdicts = []
         self.land_rc = 0
+        # What a land.sh that refused to start printed on stdout.
+        self.land_out = ""
         self.waits = [0]
         # The CI wait a batch that does not land runs: each `cc-wait gh-ci` command, the
         # (exit code, output) it answers with in order (the last repeats), the PR's
@@ -194,7 +196,10 @@ class FakeRunner:
                 verdict = self.verdicts.pop(0) if self.verdicts else self.verdict
                 log.write_text(f"  waiting for CI\n{verdict}\n")
             return subprocess.CompletedProcess(
-                argv, self.land_rc, "", "refused: bad body"
+                argv,
+                self.land_rc,
+                self.land_out,
+                "" if self.land_out else "refused: bad body",
             )
         rc = self.waits.pop(0) if len(self.waits) > 1 else self.waits[0]
         return subprocess.CompletedProcess(argv, rc, "", "")

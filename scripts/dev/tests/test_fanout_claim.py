@@ -93,7 +93,7 @@ def test_a_batch_with_no_claimed_issue_launches_nothing_and_writes_no_manifest(
     )
     assert _launch(tools, tmp_path, "1") == 3
     assert [host for host, _, _ in run.host_calls] == ["daniel-box", "daniel-box"]
-    assert not any(tmp_path.iterdir())
+    assert not list(tmp_path.glob("*.json"))
 
 
 def test_a_failed_launch_releases_the_claims_it_took(tmp_path, capsys):

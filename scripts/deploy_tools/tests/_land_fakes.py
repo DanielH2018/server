@@ -15,7 +15,7 @@ import subprocess
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
-from deploy_tools.promote_lib.wait import WaitResult
+from deploy_tools.promote_lib.wait import WaitResult, WaitVerdict
 from typing import Any
 
 from deploy_tools.land_lib.health_gate import GateResult
@@ -175,7 +175,11 @@ class Fakes:
     land_wait: list[WaitResult] = field(
         default_factory=lambda: [
             WaitResult(
-                verdict="settled", cause="", detail="1 applied", revision="", widened=""
+                verdict=WaitVerdict.SETTLED,
+                cause="",
+                detail="1 applied",
+                revision="",
+                widened="",
             )
         ]
     )

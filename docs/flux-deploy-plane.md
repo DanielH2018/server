@@ -1133,9 +1133,9 @@ digest, `reconcile` acts as follows:
   hold once the reset lands.
 - A missing status, or one for another digest, takes the form from `decide`, unless a hold
   already stands. On the lost-settle path, `decide` reads `prod`'s and `last-good`'s
-  bundles and outputs the snapshot roles and forward-only tags `prod` changes as `stateful`
-  and `no_reset`. A snapshot role writes `<commit> stateful=unverified`, and a forward-only
-  tag writes `<commit>` alone; both tag the digest `held`. With neither, it writes
+  bundles, and its `hold_form` output names the form the snapshot roles and forward-only
+  tags `prod` changes need. `stateful` writes `<commit> stateful=unverified`, and
+  `no-reset` writes `<commit>` alone; both tag the digest `held`. `reset` writes
   `<commit> unverified` (#7876).
 
 A failed read of `prod`, the hold or the statuses writes nothing and fails the job, and the
@@ -1183,7 +1183,8 @@ promote rule*.
 
 - **A hold without a reset.** `decide` names, in its `no_reset` output, each forward-only tag
   whose `footprint` differs between T's `digests.json` and `last-good`'s, or that one of
-  the two lacks. On anything but `good`, `settle` then writes T's SHA alone to `DEPLOY_HOLD`,
+  the two lacks, and a name there makes its `hold_form` output `no-reset` unless T is
+  stateful. On anything but `good`, `settle` then writes T's SHA alone to `DEPLOY_HOLD`,
   never the `failed=` form, so the revert rule never clears it. It leaves `prod` on T and
   tags `sha-<T>` as `held`. `decide` reads `held` once the hold is cleared: a `prod` that
   names the `held` digest is settled, so the in-flight wait does not stall the next run.
@@ -1223,7 +1224,9 @@ input*.
   `<names>` are the names `verify` printed as failed or timed out, or `unverified` when it
   printed none. The value never takes the `failed=` form, so the revert rule never clears it.
   `settle` tags `sha-<T>` as `held` and leaves `prod` on T. When T also changes a
-  forward-only tag, the stateful form wins; neither resets.
+  forward-only tag, the stateful form wins
+  (`scripts/deploy_tools/promote_lib/decision.py:Decision.hold_form`);
+  neither resets.
 - **The post.** Once the hold is written, the `post` job runs `promote.py hold`, which posts
   to the `discord_alert_webhook` channel through the `DEPLOY_DISCORD_WEBHOOK` repository secret,
   a copy of `discord_alert_webhook`. It names the held SHA, every changed tag and
@@ -1353,8 +1356,8 @@ with no verdict, and `settle` holds it as `<T> unverified`.
 `verify` job that its own `timeout-minutes` stops leaves no verdict, and `settle` writes
 `<T> unverified`, which names no Kustomization. At the cap `verify` prints `failed` with the
 names that never passed, and `settle` writes that hold like any other timeout. Three limits
-are sized from the cap, and `tests/repo/test_promote_workflow_verify.py` holds them
-against each other:
+are sized from the cap, and the `promote-verify-*` and `promote-job-timeout-*` rows of
+`tests/repo/test_census_rows_workflows.py` hold them against each other:
 
 | Limit | Value | Why |
 |---|---|---|
@@ -1415,7 +1418,8 @@ without `--role` renders every tag. That bundle holds the shared kinds and a roo
 and no tag, so the first decryption of the cluster file gets a revision of its own. Both
 branches pass `--all-images`, because the `images` job refuses a render without
 `images/tags.json` and `publish` needs that job (#5593).
-`tests/repo/test_promote_workflow_bundle.py` fails a no-tag branch without
+The `promote-render-no-tag-branch-renders-the-shared-kinds` row of
+`tests/repo/test_census_rows_workflows.py` fails a no-tag branch without
 `--shared-only` or `--all-images`.
 
 After the census, the step `ciphertext` runs `cluster_vars.py check --ciphertext-only` on
