@@ -188,7 +188,8 @@ tag `deploy-ui` (`SyslogIdentifier=` in
 on an `/api/` route, which writes no line, because the panels poll those
 (`hosts/components/deploy-ui/files/deploy_ui.py:is_poll`,
 `hosts/components/deploy-ui/tests/test_deploy_ui_app.py::test_a_panel_poll_writes_no_request_line_is_clean`).
-A failed read still writes its line. `user` is the Authelia login
+An `/api/` read answered with anything but 200 still writes its line. A panel that cannot read
+answers 200 with `unavailable`, so its poll writes none. `user` is the Authelia login
 Traefik forwards, and `-` for a caller that reached the port around Authelia. The query
 string is dropped, so a log path never reaches the journal
 (`hosts/components/deploy-ui/tests/test_deploy_ui_app.py::test_request_line_drops_the_query_and_neuters_a_hostile_user_is_flagged`).

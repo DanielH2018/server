@@ -445,7 +445,7 @@ def test_a_panel_poll_writes_no_request_line_is_clean(app, capsys):
         ),
     ],
 )
-def test_a_page_load_or_a_failed_read_still_writes_its_line_is_flagged(
+def test_a_page_load_or_a_non_200_read_still_writes_its_line_is_flagged(
     app, capsys, raw, line
 ):
     assert _request_lines(app, capsys, raw) == [line]
