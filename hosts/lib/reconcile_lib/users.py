@@ -1,6 +1,6 @@
 """The users arm: the system users a host package declares, each with a fixed uid and gid.
 
-The design is docs/target-architecture/host/h7-delete-ansible.md, *Reconcilers for state dpkg
+The design is docs/archive/host/h7-delete-ansible.md, *Reconcilers for state dpkg
 does not hold*. A host package's manifest lists "users" in `reconcilers` and carries:
 
     "users": {"users": [{"name": "claude", "uid": 1001, "gid": 1001, "home": "/home/claude",
