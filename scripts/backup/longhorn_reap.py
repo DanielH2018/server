@@ -18,12 +18,7 @@ an --apply re-runs the same interpreter under sudo for the admin one:
 """
 
 import sys
-from pathlib import Path as _Path
 
-# A directly-invoked script gets only its own directory on sys.path, which is the one that
-# holds longhorn_reap_lib/; scripts/ is for `lib`.
-sys.path.insert(0, str(_Path(__file__).resolve().parent))
-sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))  # scripts/
 from lib.cli_help import HELP_FLAGS
 from lib.exit_codes import USAGE_ERROR
 
@@ -51,11 +46,11 @@ def main(argv: list[str], now: float | None = None) -> int:
     # Imported only once chosen: the backups reaper int()s its timeout env at import, so a
     # malformed value there must not traceback a `snapshots` run.
     if subcommand == "backups":
-        from longhorn_reap_lib import backups
+        from backup.longhorn_reap_lib import backups
 
         return backups.main(rest)
     if subcommand == "snapshots":
-        from longhorn_reap_lib import snapshots
+        from backup.longhorn_reap_lib import snapshots
 
         return snapshots.main(rest, now=now)
     print(

@@ -25,8 +25,10 @@ THE PHASES, each one `claude -p` in the batch's worktree:
    (`review_ci.land_draft`, which runs `land.sh` through `review_land`). The landing marks it
    ready or tests it in a landing batch, so its first CI run is the one it merges on. A landing
    that ends `pr-ci-red` resumes the implementer once, as the `ci-fix` phase, and the PR is
-   landed again. The implementer is resumed as the `apply` phase only for a verdict that
-   needs a decision. Before the landing, and on every other host instead of it, a session
+   landed again. A landing that ends `merge-conflict` resumes it once as the `conflict`
+   phase, a fresh reviewer reads the resolution, and the PR is landed again
+   (`conflict_resume`). The implementer is resumed as the `apply` phase only for a
+   verdict that needs a decision. Before the landing, and on every other host instead of it, a session
    resumes to file what is left.
 5b. CI wait — on a host that does not land, for this repo's batch only, `review_ci`
    waits for the PR's CI with `cc-wait gh-ci --pr` before the comment and before the filing
@@ -104,10 +106,10 @@ from fanout_lib.review.processes import otel_attributes, reaping, run_process
 from fanout_lib.review.review_ci import (
     awaits_ci,
     ci_gate,
-    land_draft,
     ready_gate,
     server_lands,
 )
+from fanout_lib.review.conflict_resume import land_resolving
 from fanout_lib.review.review_land import (
     LAND_MARGIN_S,
     out_of_time,
@@ -440,11 +442,11 @@ class Pipeline:
                 return out_of_time(self.record.pr)
             # Filed before the merge, so the PR body names each leftover's issue.
             self._file_leftovers()
-            landing, still_red = land_draft(self)
+            landing, stopped = land_resolving(self)
             self.record.verdict = landing.line or f"none (exit {landing.rc})"
             try:
-                if still_red:
-                    return still_red
+                if stopped:
+                    return stopped
                 if landing.resumes and self.session:
                     log_dir = str(self.worktree / ".fanout")
                     prompt = apply_prompt(self.record.pr, landing, log_dir)

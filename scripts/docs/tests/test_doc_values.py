@@ -2,9 +2,9 @@
 
 import pytest
 
-import doc_values
-from doc_values_lib.readers import staged_paths
-from doc_values import Value, fix, main, stale
+from docs import doc_values
+from docs.doc_values_lib.readers import staged_paths
+from docs.doc_values import Value, fix, main, stale
 
 _PATTERN = r"a (\d+)-second restart window"
 

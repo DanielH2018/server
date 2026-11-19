@@ -1,7 +1,7 @@
 """Step 3b: run the `activate:` action of each packaged file whose hash changed.
 
 dpkg installs a file and nothing applies it. A `component.yml` file entry therefore declares an
-`activate:` action (docs/target-architecture/host/h7-delete-ansible.md, *How moved config becomes
+`activate:` action (docs/archive/host/h7-delete-ansible.md, *How moved config becomes
 live*), and the renderer writes the entries into the manifest's `activations` map, path to action:
 
     none                         a file the program reads on each use, such as limits.d

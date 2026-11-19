@@ -3,7 +3,7 @@
 CI's PR run of prek checks only the changed files, so a hook runs only when a changed path
 matches its `files` regex. A module the entry imports that the regex misses can change alone
 and merge green with the hook skipped; master's full sweep catches it only after the merge
-(`.github/workflows/ci.yml`). `validate-k8s-manifests` missed `lib/inventory_lists.py` and
+(`.github/workflows/ci.yml`). The k8s manifest hook missed `lib/inventory_lists.py` and
 `lib/render_context.py` this way.
 
 The import closure is read from the source, transitively, resolving each import the way the
@@ -191,10 +191,10 @@ def gaps(hook: dict, modules: set[Path]) -> list[str]:
 HOOKS = python_hooks(tomllib.loads((REPO / "prek.toml").read_text()))
 
 
-def test_the_census_reads_validate_k8s_manifests_imports():
+def test_the_census_reads_validate_render_templates_imports():
     by_id = {hook_id: entry for hook_id, entry, _ in HOOKS}
-    assert "validate-k8s-manifests" in by_id, sorted(by_id)
-    closure = import_closure(by_id["validate-k8s-manifests"])
+    assert "validate-render-templates" in by_id, sorted(by_id)
+    closure = import_closure(by_id["validate-render-templates"])
     for module in ("scripts/lib/inventory_lists.py", "scripts/lib/render_context.py"):
         assert (REPO / module).resolve() in closure, module
 
@@ -212,19 +212,19 @@ def test_a_hook_runs_when_any_module_its_entry_imports_changes(hook_id, entry, h
 
 
 def test_a_regex_matching_only_the_entry_is_flagged():
-    entry = REPO / "scripts/validate/k8s_manifests.py"
-    hook = {"files": r"^scripts/validate/k8s_manifests\.py$"}
+    entry = REPO / "scripts/validate/render_templates.py"
+    hook = {"files": r"^scripts/validate/render_templates\.py$"}
     assert "scripts/lib/render_context.py" in gaps(hook, import_closure(entry))
 
 
 def test_an_excluded_module_is_flagged():
-    entry = REPO / "scripts/validate/k8s_manifests.py"
+    entry = REPO / "scripts/validate/render_templates.py"
     hook = {"files": r"\.py$", "exclude": r"^scripts/lib/render_context\.py$"}
     assert gaps(hook, import_closure(entry)) == ["scripts/lib/render_context.py"]
 
 
 def test_a_regex_matching_the_whole_closure_is_clean():
-    entry = REPO / "scripts/validate/k8s_manifests.py"
+    entry = REPO / "scripts/validate/render_templates.py"
     assert gaps({"files": r"\.py$"}, import_closure(entry)) == []
 
 

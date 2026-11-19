@@ -1,6 +1,6 @@
 """Hermetic tests for the HA state-model checks (no live HA / Docker / network)."""
 
-import ha_state_checks as hsm
+from home_assistant import ha_state_checks as hsm
 
 
 def test_referenced_entities_collects_write_and_trigger_targets():

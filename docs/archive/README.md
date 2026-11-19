@@ -95,5 +95,6 @@ The docs-guard slices stay live under `docs/target-architecture/docs-guard/`, be
 G11 are in progress. Beside them, `docs/target-architecture/` holds one stub for each archived
 plan that a rendered comment still cites: a `#` line in a template or a shipped file renders
 into a manifest or a host package, so repointing it restarts the workload or rebuilds the
-package. [#9170](https://github.com/DanielH2018/server/issues/9170) repoints those comments
-and deletes the stubs.
+package. [#9170](https://github.com/DanielH2018/server/issues/9170) repoints those comments one
+role group at a time, and each slice deletes the stubs it leaves uncited. The last slice,
+[#9378](https://github.com/DanielH2018/server/issues/9378), deletes the rest.

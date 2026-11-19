@@ -19,7 +19,7 @@ reaper's case is in `test_longhorn_reap_opt_out_snapshots.py`.
 Run: uv run pytest scripts/backup/tests/test_longhorn_reap_trim_label.py
 """
 
-from longhorn_reap_lib import logic
+from backup.longhorn_reap_lib import logic
 
 from _reap_entrypoint_harness import _backup
 

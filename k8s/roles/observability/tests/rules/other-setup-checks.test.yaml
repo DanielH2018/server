@@ -63,10 +63,11 @@ tests:
               origin: daniel-box
             exp_annotations:
               summary: The fake-remux heartbeat on daniel-box has stopped reporting the scan.
-              description: No fake-remux-scan verdict newer than 25 minutes reached Prometheus from daniel-box's
-                textfile collector, so nothing confirms the scan's state file is being read. Read the
-                `fake-remux health` cron and the `fake-remux-health` syslog tag, then /var/lib/node-exporter-textfile/fake-remux-scan.prom
-                on the host.
+              description: >-
+                No fake-remux-scan verdict newer than 25 minutes reached Prometheus from
+                daniel-box, so nothing confirms the scan's state file is being read. Read the
+                `fake-remux health` cron and the `fake-remux-health` syslog tag, then
+                /var/lib/node-exporter-textfile/fake-remux-scan.prom.
       - eval_time: 900h
         alertname: FakeRemuxReplaceFailed
         exp_alerts: []
@@ -80,10 +81,11 @@ tests:
               origin: daniel-box
             exp_annotations:
               summary: The fake-remux heartbeat on daniel-box has stopped reporting the reconciler.
-              description: No fake-remux-replace verdict newer than 25 minutes reached Prometheus from daniel-box's
-                textfile collector, so nothing confirms the reconciler's state file is being read. Read
-                the `fake-remux health` cron and the `fake-remux-health` syslog tag, then /var/lib/node-exporter-textfile/fake-remux-replace.prom
-                on the host.
+              description: >-
+                No fake-remux-replace verdict newer than 25 minutes reached Prometheus from
+                daniel-box, so nothing confirms the reconciler's state file is being read. Read
+                the `fake-remux health` cron and the `fake-remux-health` syslog tag, then
+                /var/lib/node-exporter-textfile/fake-remux-replace.prom.
       - eval_time: 900h
         alertname: MkvAttachmentRepairFailed
         exp_alerts: []
@@ -97,10 +99,11 @@ tests:
               origin: daniel-box
             exp_annotations:
               summary: The fake-remux heartbeat on daniel-box has stopped reporting the mkv repair.
-              description: No mkv-attachment-repair verdict newer than 25 minutes reached Prometheus from daniel-box's
-                textfile collector, so nothing confirms the repair sweep's state file is being read. Read
-                the `fake-remux health` cron and the `fake-remux-health` syslog tag, then /var/lib/node-exporter-textfile/mkv-attachment-repair.prom
-                on the host.
+              description: >-
+                No mkv-attachment-repair verdict newer than 25 minutes reached Prometheus from
+                daniel-box, so nothing confirms the repair sweep's state file is being read.
+                Read the `fake-remux health` cron and the `fake-remux-health` syslog tag, then
+                /var/lib/node-exporter-textfile/mkv-attachment-repair.prom.
       - eval_time: 900h
         alertname: EtcdRestoreDrillFailed
         exp_alerts: []
@@ -133,11 +136,12 @@ tests:
               origin: daniel-server
             exp_annotations:
               summary: The etcd drill's egress fence leg on daniel-server has stopped reporting.
-              description: No etcd-restore-drill-egress-fence verdict newer than 35 days (35 days) reached
-                Prometheus from daniel-server's textfile collector. A run that dies before the fence leg
-                executes writes nothing here, so the fence went unmeasured this month. Read the newest
-                run directory under /var/log/etcd-restore-drill, then /var/lib/node-exporter-textfile/etcd-restore-drill-egress-fence.prom
-                on the host.
+              description: >-
+                No etcd-restore-drill-egress-fence verdict newer than 35 days reached Prometheus
+                from daniel-server, so the fence went unmeasured this month. A run that dies
+                before the fence leg writes nothing. Read the newest run directory under
+                /var/log/etcd-restore-drill.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#etcdrestoredrillegressfencenotreporting
       - eval_time: 900h
         alertname: RenovateNotifyNotReporting
         exp_alerts:
@@ -148,10 +152,12 @@ tests:
               origin: daniel-box
             exp_annotations:
               summary: The renovate notifier on daniel-box has not completed a run in 36 hours.
-              description: 'No renovate-notify verdict newer than 36 hours reached Prometheus from daniel-box''s
-                textfile collector: the daily 13:00 timer did not fire or the run failed, and OnFailure
-                will also have posted to Discord. It says nothing about Renovate itself. Read `systemctl
-                status homelab-renovate-notify.timer` and `journalctl -u homelab-renovate-notify`.'
+              description: >-
+                No renovate-notify verdict newer than 36 hours reached Prometheus from
+                daniel-box: the daily 13:00 timer did not fire or the run failed. Read
+                `systemctl status homelab-renovate-notify.timer` and `journalctl -u
+                homelab-renovate-notify`. This says nothing about Renovate itself.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#renovatenotifynotreporting
       - eval_time: 900h
         alertname: RenovateAgentNotReporting
         exp_alerts:
@@ -367,10 +373,11 @@ tests:
               origin: daniel-box
             exp_annotations:
               summary: The fake-remux heartbeat on daniel-box has stopped reporting the scan.
-              description: No fake-remux-scan verdict newer than 25 minutes reached Prometheus from daniel-box's
-                textfile collector, so nothing confirms the scan's state file is being read. Read the
-                `fake-remux health` cron and the `fake-remux-health` syslog tag, then /var/lib/node-exporter-textfile/fake-remux-scan.prom
-                on the host.
+              description: >-
+                No fake-remux-scan verdict newer than 25 minutes reached Prometheus from
+                daniel-box, so nothing confirms the scan's state file is being read. Read the
+                `fake-remux health` cron and the `fake-remux-health` syslog tag, then
+                /var/lib/node-exporter-textfile/fake-remux-scan.prom.
   - interval: 1h
     input_series:
       - series: homelab_check_last_run_timestamp_seconds{check="fake-remux-scan", instance="daniel-box",
@@ -432,10 +439,11 @@ tests:
               origin: daniel-box
             exp_annotations:
               summary: The fake-remux heartbeat on daniel-box has stopped reporting the reconciler.
-              description: No fake-remux-replace verdict newer than 25 minutes reached Prometheus from daniel-box's
-                textfile collector, so nothing confirms the reconciler's state file is being read. Read
-                the `fake-remux health` cron and the `fake-remux-health` syslog tag, then /var/lib/node-exporter-textfile/fake-remux-replace.prom
-                on the host.
+              description: >-
+                No fake-remux-replace verdict newer than 25 minutes reached Prometheus from
+                daniel-box, so nothing confirms the reconciler's state file is being read. Read
+                the `fake-remux health` cron and the `fake-remux-health` syslog tag, then
+                /var/lib/node-exporter-textfile/fake-remux-replace.prom.
   - interval: 1h
     input_series:
       - series: homelab_check_last_run_timestamp_seconds{check="fake-remux-replace", instance="daniel-box",
@@ -498,10 +506,11 @@ tests:
               origin: daniel-box
             exp_annotations:
               summary: The fake-remux heartbeat on daniel-box has stopped reporting the mkv repair.
-              description: No mkv-attachment-repair verdict newer than 25 minutes reached Prometheus from daniel-box's
-                textfile collector, so nothing confirms the repair sweep's state file is being read. Read
-                the `fake-remux health` cron and the `fake-remux-health` syslog tag, then /var/lib/node-exporter-textfile/mkv-attachment-repair.prom
-                on the host.
+              description: >-
+                No mkv-attachment-repair verdict newer than 25 minutes reached Prometheus from
+                daniel-box, so nothing confirms the repair sweep's state file is being read.
+                Read the `fake-remux health` cron and the `fake-remux-health` syslog tag, then
+                /var/lib/node-exporter-textfile/mkv-attachment-repair.prom.
   - interval: 1h
     input_series:
       - series: homelab_check_last_run_timestamp_seconds{check="mkv-attachment-repair", instance="daniel-box",
@@ -640,11 +649,12 @@ tests:
               origin: daniel-server
             exp_annotations:
               summary: The etcd drill's egress fence leg on daniel-server has stopped reporting.
-              description: No etcd-restore-drill-egress-fence verdict newer than 35 days (35 days) reached
-                Prometheus from daniel-server's textfile collector. A run that dies before the fence leg
-                executes writes nothing here, so the fence went unmeasured this month. Read the newest
-                run directory under /var/log/etcd-restore-drill, then /var/lib/node-exporter-textfile/etcd-restore-drill-egress-fence.prom
-                on the host.
+              description: >-
+                No etcd-restore-drill-egress-fence verdict newer than 35 days reached Prometheus
+                from daniel-server, so the fence went unmeasured this month. A run that dies
+                before the fence leg writes nothing. Read the newest run directory under
+                /var/log/etcd-restore-drill.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#etcdrestoredrillegressfencenotreporting
   - interval: 1h
     input_series:
       - series: homelab_check_last_run_timestamp_seconds{check="etcd-restore-drill-egress-fence", instance="daniel-server",
@@ -686,10 +696,12 @@ tests:
               origin: daniel-box
             exp_annotations:
               summary: The renovate notifier on daniel-box has not completed a run in 36 hours.
-              description: 'No renovate-notify verdict newer than 36 hours reached Prometheus from daniel-box''s
-                textfile collector: the daily 13:00 timer did not fire or the run failed, and OnFailure
-                will also have posted to Discord. It says nothing about Renovate itself. Read `systemctl
-                status homelab-renovate-notify.timer` and `journalctl -u homelab-renovate-notify`.'
+              description: >-
+                No renovate-notify verdict newer than 36 hours reached Prometheus from
+                daniel-box: the daily 13:00 timer did not fire or the run failed. Read
+                `systemctl status homelab-renovate-notify.timer` and `journalctl -u
+                homelab-renovate-notify`. This says nothing about Renovate itself.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#renovatenotifynotreporting
   - interval: 1h
     input_series:
       - series: homelab_check_last_run_timestamp_seconds{check="renovate-notify", instance="daniel-box",

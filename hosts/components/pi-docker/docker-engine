@@ -1,6 +1,6 @@
 #!/bin/sh
 # Install, hold or upgrade the Pi's Docker engine to the versions docker-engine.pins names (H7.26;
-# docs/target-architecture/host/h7-delete-ansible.md, *The Docker engine stays held*).
+# docs/archive/host/h7-delete-ansible.md, *The Docker engine stays held*).
 #
 # Usage:
 #   docker-engine apply     homelab-docker-engine.service's ExecStart

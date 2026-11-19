@@ -33,9 +33,7 @@ import time
 import urllib.error
 import urllib.request
 from collections.abc import Callable
-from pathlib import Path as _Path
 
-sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))  # scripts/
 from lib.cli_help import ArgumentParser, error
 from lib.exit_codes import FAILED, OK, USAGE_ERROR
 from lib.kubectl import MissingKubectl

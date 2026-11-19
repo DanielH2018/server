@@ -7,11 +7,6 @@ the prose still name ``scripts/docs/service_catalog.py``, because that is the fi
 has to open to find the FIELD NOTES those sentences point at.
 """
 
-import sys as _sys
-from pathlib import Path as _Path
-
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
-
 import html
 
 from docs.catalog_lib.catalog_model import UNKNOWN, ServiceRow

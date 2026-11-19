@@ -120,7 +120,7 @@ Delete a check in the PR that obsoletes it, when either holds:
 - **Its subject is gone.** A check over a missing subject still passes, so green is no
   evidence it is worth keeping.
 - **A census or schema check covers it.** `tests/_k8s_render.py`'s role censuses and
-  `scripts/validate/k8s_manifests.py`'s OpenAPI validation usually swallow a single-shape
+  `scripts/validate/render_lib/k8s.py`'s OpenAPI validation usually swallow a single-shape
   guard. Name the covering check in the PR body.
 
 `scripts/dev/repo_guards.py --drop-candidates --cited` lists each check file under `tests/`

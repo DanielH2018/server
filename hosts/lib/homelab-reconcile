@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 """homelab-reconcile: bring this host's units and legacy entries in line with its packages.
 
-The design is H3's *The reconcile unit* (docs/target-architecture/host/h3-pi-pilot.md), and the
+The design is H3's *The reconcile unit* (docs/archive/host/h3-pi-pilot.md), and the
 step numbers below are that section's. `homelab-reconcile.service` runs this as root, under the
 host's /usr/bin/python3, which is 3.12 on Ubuntu 24.04. It uses the standard library only, and
 hosts/lib/tests/test_reconcile_component.py parses it with the 3.12 grammar. The activation step,
@@ -53,7 +53,7 @@ packaged file to the action step 3b runs when its hash changes (reconcile_lib/ac
 `secrets_inputs_sha256` is present only when the package ships the `secrets-unit` component, and
 every secrets rule below keys on it.
 
-The restart contract (docs/target-architecture/host/h4-secrets-unit.md, *The restart contract*):
+The restart contract (docs/archive/host/h4-secrets-unit.md, *The restart contract*):
 reconcile is the only process that starts or restarts a unit outside the boot path. It never starts
 or restarts a `windowed` unit, and never restarts a `manual` one. Step 1b runs `homelab-secrets`
 when the secrets inputs changed. The restart set, built before step 2, holds the units whose file

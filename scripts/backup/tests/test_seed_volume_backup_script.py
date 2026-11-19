@@ -4,7 +4,7 @@ import json
 from datetime import datetime, timezone
 
 import pytest
-import seed_volume_backup as seed
+from backup import seed_volume_backup as seed
 from lib.exit_codes import FAILED, OK
 from lib.operator_kubectl import KubectlFailed
 

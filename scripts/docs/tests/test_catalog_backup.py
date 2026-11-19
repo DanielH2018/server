@@ -7,7 +7,7 @@ test_service_catalog.py when the StorageClass axis took it past the module-lengt
 Run: uv run pytest scripts/docs/tests/test_catalog_backup.py
 """
 
-import service_catalog
+from docs import service_catalog
 from _catalog_fixtures import make_repo, write
 from docs.catalog_lib import catalog_backup
 from docs.catalog_lib.catalog_backup import (
