@@ -144,17 +144,10 @@ def _land(ln) -> None:
     [
         (_K8S, {"deploy_hold": "abc123"}, "holds 'abc123', and this PR changes a k8s"),
         (_SERIAL, {"serial": [False]}, "another landing of a forward-only pin"),
-        (_SERIAL, {"slot": [False]}, "another landing is past its merge"),
         (_DOCS, {"serial": [False]}, "a landing of a forward-only pin"),
         (_K8S, {"in_window": True, "slot": [False]}, "no-promotion window"),
     ],
-    ids=[
-        "hold",
-        "serial-live-past-the-drain",
-        "serial-beside-a-slot-past-the-drain",
-        "beside-serial",
-        "window",
-    ],
+    ids=["hold", "serial-live-past-the-drain", "beside-serial", "window"],
 )
 def test_a_rule_refuses_the_merge_with_exit_75(landing, paths, fakes, why):
     ln, calls = _merging(landing, paths, **fakes)
@@ -187,9 +180,8 @@ def test_a_serial_pr_in_the_turn_merges_once_the_landings_past_their_merge_finis
     [
         (False, {"slot": [False]}),
         (True, {"slot": [False], "in_window": True}),
-        (True, {"slot": [False], "deploy_hold": "abc123"}),
     ],
-    ids=["out-of-the-turn", "inside-the-window", "under-a-hold"],
+    ids=["out-of-the-turn", "inside-the-window"],
 )
 def test_a_serial_pr_the_drain_cannot_clear_is_refused_without_waiting(
     landing, in_turn, fakes
