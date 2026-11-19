@@ -32,7 +32,7 @@ from lib.repo_paths import REPO
 from renderer.renderer_lib.environment import render_file
 from renderer.renderer_lib.host_sources import confined_env
 
-KNOWN_HOLDERS = frozenset({"homelab-checkout-sync.service", "docs-refresh", "eval-run"})
+KNOWN_HOLDERS = frozenset({"homelab-checkout-sync.service", "eval-run"})
 HEADROOM_S = 600
 
 _FLOCK_WAIT = re.compile(r"\bflock -w (\d+) 9\b")
@@ -113,7 +113,7 @@ def test_every_waiter_outlasts_the_longest_hold_with_headroom():
         for job, text, _ in _holders()
         if _FLOCK_WAIT.search(text)
     ]
-    assert {"docs-refresh", "eval-run"} <= {job for job, _ in waiters}
+    assert "eval-run" in {job for job, _ in waiters}
     floor = bound + HEADROOM_S
     short = [f"{job} waits {wait}s" for job, wait in waiters if wait < floor]
     assert not short, (

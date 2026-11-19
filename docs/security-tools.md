@@ -115,6 +115,12 @@ It refuses when `aide.db` is missing, because a deleted baseline must stay an er
 
 The script logs at most 2000 report lines. A longer report ends with a `report truncated` line. To see the rest, run the check by hand. Its verdict goes to syslog tagged `aide-check` as `status=<up|down> <message>`.
 
+Before the report, the script logs a `report by tree:` count line under `aide-check`, then the 15 trees with the most entries. A tree is the entry's directory, cut to its first three levels. Each tree line carries its added, removed and changed counts, which show where a new exclude in `98_aide_local.conf` would cut the most:
+
+```bash
+sudo journalctl -t aide-check --since -7d | grep -A15 'report by tree'
+```
+
 To prove the alert pages, force an error exit on one host and run the script by hand. Rename the database, run `sudo /usr/lib/homelab/aide-check`, then put the database back. AIDE exits 18 at once, and the verdict goes DOWN with `open (read-only) failed for file '/var/lib/aide/aide.db'` in its message:
 
 ```bash

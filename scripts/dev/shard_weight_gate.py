@@ -598,7 +598,7 @@ def green_pytest_legs(run_id: int, gh=gh_mod.gh) -> dict[str, str]:
 def fetch_runner_logs(runs: int, gh=gh_mod.gh) -> list[str]:
     """The raw log of every pytest leg in the newest `runs` green master runs that ran them.
 
-    The docs-refresh cron holds the git-tree lock while this runs. Three runs of six legs is at
+    The docs-refresh cron runs this twice a day. Three runs of six legs is at
     most 1 + `RUN_WINDOW` + 18 calls, against the authenticated 5000 an hour.
 
     Raises:
