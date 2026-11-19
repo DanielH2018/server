@@ -46,6 +46,7 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
+from dev.findings_lib.issue_model import Issue
 from lib.gh import gh as real_gh, gh_json as real_gh_json
 from lib.json_types import JsonValue, as_list, as_object, as_object_list
 
@@ -226,16 +227,16 @@ def _refuse_other_form(milestone: dict, project: bool) -> None:
 
 
 def held_issues(
-    issues: list[dict],
+    issues: list[Issue],
     title: str | None,
     repo: str,
     *,
     gh_json: GhJson = real_gh_json,
-) -> list[dict]:
+) -> list[Issue]:
     """The members of ``issues`` the milestone titled ``title`` holds.
 
     Args:
-        issues: issues in gh's JSON shape, each with its `milestone` object or None.
+        issues: register issues, each with its `milestone` object or None.
         title: a milestone's title; `NO_MILESTONE` for the issues no open milestone
             holds, which includes one left in a closed milestone; None for every issue,
             which reads nothing.
@@ -251,16 +252,14 @@ def held_issues(
     open_now = _milestones(repo, "open", gh_json)
     if title == NO_MILESTONE:
         numbers = {m["number"] for m in open_now}
-        return [
-            i for i in issues if (i.get("milestone") or {}).get("number") not in numbers
-        ]
+        return [i for i in issues if (i.milestone or {}).get("number") not in numbers]
     if not any(
         m["title"] == title
         for known in (open_now, _milestones(repo, "closed", gh_json))
         for m in known
     ):
         raise UnknownMilestone(f"no milestone is titled `{title}`")
-    return [i for i in issues if (i.get("milestone") or {}).get("title") == title]
+    return [i for i in issues if i.milestone_title == title]
 
 
 def close(

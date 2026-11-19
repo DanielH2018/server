@@ -7,7 +7,7 @@ Run: uv run pytest scripts/dev/tests/test_findings_manual.py
 """
 
 import pytest
-from _findings_fakes import Fakes, make_issue
+from _findings_fakes import Fakes, make_issue, typed
 
 from dev import findings
 from dev.findings_lib.issue_model import claim_comment, fingerprint
@@ -20,13 +20,13 @@ _HOLDER = "worktree-issue-2978"
 
 
 def test_manual_adds_the_label_and_comments():
-    plans = plan_manual(make_issue(2978), clear=False)
+    plans = plan_manual(typed(make_issue(2978)), clear=False)
     assert plans[0] == ["issue", "edit", "2978", "--add-label", "manual"]
     assert plans[1][:3] == ["issue", "comment", "2978"]
 
 
 def test_manual_clear_removes_the_label_and_comments():
-    plans = plan_manual(make_issue(2978, labels=["manual"]), clear=True)
+    plans = plan_manual(typed(make_issue(2978, labels=["manual"])), clear=True)
     assert plans[0] == ["issue", "edit", "2978", "--remove-label", "manual"]
     assert plans[1][:3] == ["issue", "comment", "2978"]
 
@@ -34,9 +34,9 @@ def test_manual_clear_removes_the_label_and_comments():
 @pytest.mark.parametrize(
     ("issue", "clear", "reason"),
     [
-        (make_issue(2978, state="CLOSED"), False, "closed"),
-        (make_issue(2978, labels=["manual"]), False, "already manual"),
-        (make_issue(2978), True, "not manual"),
+        (typed(make_issue(2978, state="CLOSED")), False, "closed"),
+        (typed(make_issue(2978, labels=["manual"])), False, "already manual"),
+        (typed(make_issue(2978)), True, "not manual"),
     ],
 )
 def test_manual_refuses_when_there_is_nothing_to_change(issue, clear, reason):

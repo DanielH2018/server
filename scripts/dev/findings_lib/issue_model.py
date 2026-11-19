@@ -13,8 +13,11 @@ answers into gh argv, `findings_lib/gh_calls.py` runs them, and `findings.py` is
 
 import hashlib
 import re
-from collections.abc import Collection
+from collections.abc import Collection, Mapping
+from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
+from enum import StrEnum
+from functools import cached_property
 
 SEVERITIES = ("high", "medium", "low")
 KINDS = ("gap", "improvement", "feature")
@@ -57,7 +60,7 @@ LABELS: dict[str, tuple[str, str]] = {
 }
 # The account-level issue fields that hold an issue's severity and its not-before date. The
 # operator created both under Settings > Planning > Issue fields; the names and the Severity
-# options are matched exactly. `gh_calls.attach_fields` puts their values in `issue["fields"]`.
+# options are matched exactly. `gh_calls.attach_fields` puts their values in `Issue.fields`.
 SEVERITY_FIELD, NOT_BEFORE_FIELD = "Severity", "Not Before"
 SEVERITY_OPTIONS = {s: s.capitalize() for s in SEVERITIES}
 # The repository's issue type for each kind; the operator created Gap and Improvement beside
@@ -83,9 +86,328 @@ _LIST_FIELDS = "number,title,state,stateReason,labels,body,createdAt,closedAt,ur
 REGISTER_AUTHOR = "DanielH2018"
 
 
-def issue_author(issue: dict) -> str:
-    """The login that opened ``issue``, or an empty string when gh returned none."""
-    return str((issue.get("author") or {}).get("login") or "")
+class IssueState(StrEnum):
+    """An issue's state as gh's GraphQL spells it; REST's lower-case form is upper-cased."""
+
+    OPEN = "OPEN"
+    CLOSED = "CLOSED"
+
+
+@dataclass(frozen=True)
+class Comment:
+    """One comment on an issue, with the author fields the claim protocol trusts.
+
+    Attributes:
+        body: the comment text.
+        author: the commenter's login, or "" when gh returned none.
+        association: gh's `authorAssociation`, such as `OWNER` or `NONE`.
+        viewer_did_author: whether the account gh is authenticated as wrote it.
+        created_at: gh's ISO-8601 `createdAt`, or "" when it carries none.
+    """
+
+    body: str
+    author: str = ""
+    association: str = ""
+    viewer_did_author: bool = False
+    created_at: str = ""
+
+    @property
+    def by_operator(self) -> bool:
+        """Whether this comment's claim trailer counts, from the author fields gh returns.
+
+        FAIL-CLOSED: a comment carrying neither field folds into nothing. gh populates both
+        on every comment — on `issue list` as well as `issue view`, verified against this
+        repo — so the missing case is a fixture that did not stamp authorship rather than a
+        real comment, and a comment nothing can attribute must not decide who holds an issue.
+        """
+        return self.viewer_did_author or self.association in _TRUSTED_ASSOCIATIONS
+
+
+@dataclass(frozen=True)
+class Blocker:
+    """One issue recorded as blocking another, from GitHub's "blocked by" relationship."""
+
+    number: int
+    state: IssueState
+    url: str = ""
+
+
+@dataclass(frozen=True)
+class Claim:
+    """The worktree holding an issue, and when the comment that opened its claim was posted.
+
+    Attributes:
+        worktree: the branch named in the `Claim:` trailer.
+        opened_at: the opening comment's timezone-aware `createdAt`, or None when it carries
+            none, carries one that does not parse, or carries a date with no timezone.
+    """
+
+    worktree: str
+    opened_at: datetime | None
+
+    def age_days(self, now: datetime | None = None) -> int | None:
+        """Whole days the claim has been held at ``now`` (the clock when None), or None."""
+        if self.opened_at is None:
+            return None
+        return ((now if now is not None else datetime.now(UTC)) - self.opened_at).days
+
+
+@dataclass(frozen=True)
+class Issue:
+    """One register issue, parsed once from gh's JSON by `parse_issue` or `gh_calls`.
+
+    Attributes:
+        number: the issue number.
+        title: the issue title.
+        state: open or closed.
+        body: the issue body.
+        labels: every label name.
+        comments: every comment in gh's order, at most `COMMENT_PAGE_CAP`.
+        blockers: every issue recorded as blocking this one, open or closed.
+        state_reason: gh's `stateReason`, such as `COMPLETED`, or "".
+        created_at: gh's ISO-8601 `createdAt`, or "".
+        closed_at: gh's ISO-8601 `closedAt`, or "" while it is open.
+        url: the issue's web URL, or "".
+        author: the login that opened it, or "" when gh returned none.
+        issue_type: the name of its issue type, or None.
+        milestone: gh's milestone object, which `milestone.branch_of` reads, or None.
+        fields: its issue-field values by field name, which `gh_calls.attach_fields` fills.
+        closing_prs: (`owner/name`, number) for each PR GitHub records as closing it.
+    """
+
+    number: int
+    title: str
+    state: IssueState
+    body: str = ""
+    labels: frozenset[str] = frozenset()
+    comments: tuple[Comment, ...] = ()
+    blockers: tuple[Blocker, ...] = ()
+    state_reason: str = ""
+    created_at: str = ""
+    closed_at: str = ""
+    url: str = ""
+    author: str = ""
+    issue_type: str | None = None
+    milestone: Mapping[str, object] | None = field(default=None, hash=False)
+    fields: Mapping[str, str] = field(default_factory=dict, hash=False)
+    closing_prs: tuple[tuple[str, int], ...] = ()
+
+    @property
+    def is_open(self) -> bool:
+        return self.state == IssueState.OPEN
+
+    @property
+    def milestone_title(self) -> object:
+        return (self.milestone or {}).get("title")
+
+    @property
+    def severity(self) -> str | None:
+        """This issue's severity as one of `SEVERITIES`, or None.
+
+        Read from the Severity issue field, falling back to a `severity/<level>` label.
+        """
+        held = self.fields.get(SEVERITY_FIELD)
+        if held:
+            return held.lower()
+        return _prefixed(self.labels, SEVERITY_PREFIX)
+
+    @property
+    def kind(self) -> str | None:
+        """This issue's kind as one of `KINDS`, or None.
+
+        Read from the issue type, falling back to a `kind/<kind>` label, where `addition`
+        was the name for `feature`.
+        """
+        by_type = {name: k for k, name in KIND_TYPES.items()}
+        if self.issue_type in by_type:
+            return by_type[self.issue_type]
+        label = _prefixed(self.labels, KIND_PREFIX)
+        return "feature" if label == "addition" else label
+
+    @property
+    def not_before(self) -> date | None:
+        """The date before which this issue is withheld from `next` and `claim`, or None.
+
+        Read from the Not Before issue field, not a body trailer, and on purpose: this repo
+        is public, so a trailer needs the author check the claim fold does, while setting an
+        issue field takes triage access or more, as applying a label does. A date also
+        expires on its own — the callers compare it to today and nobody has to clear it,
+        which is what `manual` lacks.
+
+        A `not-before:<YYYY-MM-DD>` label counts too, and the LATEST of the field and every
+        such label wins, so a session on a pre-field checkout that defers by label still
+        withholds the issue, and a stray earlier date cannot un-defer it. A value whose date
+        does not parse counts as no deferral: `issue_rows` feeds the docs cron, which must
+        not fall over on a hand-typed label.
+        """
+        held = self.fields.get(NOT_BEFORE_FIELD)
+        texts = [held] if held else []
+        texts += [
+            name[len(NOT_BEFORE_PREFIX) :]
+            for name in self.labels
+            if name.startswith(NOT_BEFORE_PREFIX)
+        ]
+        days = []
+        for text in texts:
+            try:
+                days.append(date.fromisoformat(text))
+            except ValueError:
+                continue
+        return max(days) if days else None
+
+    def deferred_on(self, today: date) -> bool:
+        """Whether this issue is withheld on ``today``. `not-before: D` means workable ON D."""
+        day = self.not_before
+        return day is not None and today < day
+
+    @property
+    def open_blockers(self) -> list[str]:
+        """The still-open issues blocking this one, as `#n` or `owner/repo#n`, sorted.
+
+        Read from GitHub's native "blocked by" relationship, which `block` and `open
+        --blocked-by` write. A closed blocker no longer withholds anything, so the issue
+        becomes workable the moment its last blocker closes, with nothing to clear. A
+        blocker in another repository is spelled with its slug.
+        """
+        found = []
+        for b in self.blockers:
+            if b.state != IssueState.OPEN:
+                continue
+            m = _ISSUE_URL_RE.match(b.url)
+            repo = (
+                "" if m is None or m.group(1).lower() == PR_REPO.lower() else m.group(1)
+            )
+            found.append((repo, b.number))
+        return [f"{repo}#{n}" for repo, n in sorted(found)]
+
+    @cached_property
+    def claim(self) -> Claim | None:
+        """The claim currently holding this issue, or None; see `claim_of`."""
+        return claim_of(self.comments)
+
+    @property
+    def holder(self) -> str | None:
+        """The worktree named by `claim`, or None when nothing holds this issue."""
+        return self.claim.worktree if self.claim else None
+
+
+def ordered_comments(comments: tuple[Comment, ...]) -> tuple[Comment, ...]:
+    """``comments`` in `createdAt` order, or in gh's own order when it cannot say.
+
+    THE ORDER IS THE PROTOCOL. `claim_of` folds forward and implements FIRST WRITER WINS,
+    so its answer is only correct if the list really is oldest-first. gh returns them that
+    way — measured ascending across 17 issues — but nothing enforced it.
+
+    SORTS ONLY WHEN EVERY COMMENT CARRIES A TIMESTAMP. A mixed list is the dangerous case: a
+    key of `created_at or ""` hoists every unstamped comment to the front, which can flip
+    the verdict of the one function in this protocol that must not change by accident.
+    Fixtures routinely omit `createdAt`, so the mixed list is not hypothetical.
+    """
+    if not all(c.created_at for c in comments):
+        return comments
+    return tuple(sorted(comments, key=lambda c: c.created_at))
+
+
+def claim_of(comments: tuple[Comment, ...]) -> Claim | None:
+    """The claim ``comments`` leave open, or None.
+
+    Folds `ordered_comments` forward: a ``Claim:`` line opens IF nothing is currently held,
+    and a ``Released:`` line naming the SAME worktree closes. The claim's `opened_at` is the
+    `createdAt` of the comment that opened it.
+
+    FIRST WRITER WINS, not last. gh returns comments in createdAt order, so the earlier of
+    two racing claims is the earlier comment. Letting a later claim overwrite a live one
+    would mean a session could take an issue out from under another by claiming it again,
+    and — worse — the first claimant's own ``release`` would then be refused, so it could
+    not even clean up after losing.
+
+    A release naming some other worktree is ignored, so one session cannot release
+    another's claim by accident.
+
+    Only the OPERATOR's comments are folded — see `Comment.by_operator`. This repo is
+    public, so a comment from any other account is prose on the thread and nothing more.
+    """
+    held: Claim | None = None
+    for comment in ordered_comments(comments):
+        if not comment.by_operator:
+            continue
+        claimed = _CLAIM_RE.search(comment.body)
+        if claimed:
+            if held is None:
+                held = Claim(claimed.group(1), _aware(comment.created_at))
+            # DECIDED: `Claim:` wins over `Released:` within ONE comment body. Neither
+            # `claim_comment` nor `release_comment` ever emits both trailers, so a body
+            # carrying both is malformed input, and every fail-safe in this module points
+            # the same way: `Comment.by_operator` folds an unattributable comment into
+            # nothing, `claim_is_live` HOLDS a claim whose worktree it cannot read,
+            # `cmd_reap` refuses on a git error, and `cmd_next` withholds. Releasing on
+            # ambiguity is the one direction that hands live work to a second session,
+            # which is the harm this protocol exists to prevent. This `continue` is what
+            # implements the choice, so it is not a tidy-up — dropping it inverts the
+            # verdict.
+            continue
+        released = _RELEASE_RE.search(comment.body)
+        if released and held is not None and released.group(1) == held.worktree:
+            held = None
+    return held
+
+
+def _aware(stamp: str) -> datetime | None:
+    """``stamp`` as a timezone-aware datetime, or None when it is empty, unparseable or naive."""
+    try:
+        when = datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return when if when.tzinfo is not None else None
+
+
+def parse_comment(data: Mapping) -> Comment:
+    """One `gh issue ... --json comments` entry as a `Comment`."""
+    return Comment(
+        body=str(data.get("body") or ""),
+        author=str((data.get("author") or {}).get("login") or ""),
+        association=str(data.get("authorAssociation") or ""),
+        viewer_did_author=bool(data.get("viewerDidAuthor")),
+        created_at=str(data.get("createdAt") or ""),
+    )
+
+
+def parse_issue(data: Mapping) -> Issue:
+    """One `gh issue list|view --json` object as an `Issue`.
+
+    Raises:
+        KeyError: a field every reader depends on is missing: `number`, `title`, `state`,
+            `body`, `labels`, `comments` or `blockedBy`, or a blocker's `number` or `state`.
+            gh returns an empty list or object for each when there is nothing to report, so
+            an absent key means the fetch stopped asking for it. Read with a default, a
+            missing `state` read as open and a missing blocker state as unblocked.
+        ValueError: `state` is neither `OPEN` nor `CLOSED`.
+    """
+    closing = []
+    for ref in data.get("closedByPullRequestsReferences") or []:
+        where = ref.get("repository") or {}
+        owner = (where.get("owner") or {}).get("login")
+        closing.append((f"{owner}/{where.get('name')}", int(ref["number"])))
+    return Issue(
+        number=int(data["number"]),
+        title=str(data["title"]),
+        state=IssueState(data["state"]),
+        body=str(data["body"] or ""),
+        labels=frozenset(str(label["name"]) for label in data["labels"]),
+        comments=tuple(parse_comment(c) for c in data["comments"]),
+        blockers=tuple(
+            Blocker(int(b["number"]), IssueState(b["state"]), str(b.get("url") or ""))
+            for b in (data["blockedBy"] or {}).get("nodes") or []
+        ),
+        state_reason=str(data.get("stateReason") or ""),
+        created_at=str(data.get("createdAt") or ""),
+        closed_at=str(data.get("closedAt") or ""),
+        url=str(data.get("url") or ""),
+        author=str((data.get("author") or {}).get("login") or ""),
+        issue_type=(data.get("issueType") or {}).get("name"),
+        milestone=data.get("milestone"),
+        closing_prs=tuple(closing),
+    )
 
 
 # `\s*$` rather than `$`: a body fetched from the API can carry CRLF line endings, and
@@ -234,108 +556,6 @@ def cited_paths(body: str, tracked: Collection[str] = ()) -> list[str]:
     return sorted(paths)
 
 
-def label_names(issue: dict) -> set[str]:
-    return {lab["name"] for lab in issue.get("labels", [])}
-
-
-def field_value(issue: dict, name: str) -> str | None:
-    """The value of issue field ``name`` on ``issue``, or None when it is unset."""
-    return (issue.get("fields") or {}).get(name)
-
-
-def severity(issue: dict) -> str | None:
-    """``issue``'s severity as one of `SEVERITIES`, or None.
-
-    Read from the Severity issue field, falling back to a `severity/<level>` label.
-    """
-    held = field_value(issue, SEVERITY_FIELD)
-    if held:
-        return held.lower()
-    return _prefixed(label_names(issue), SEVERITY_PREFIX)
-
-
-def kind(issue: dict) -> str | None:
-    """``issue``'s kind as one of `KINDS`, or None.
-
-    Read from the issue type, falling back to a `kind/<kind>` label, where `addition` was
-    the name for `feature`.
-    """
-    held = (issue.get("issueType") or {}).get("name")
-    by_type = {name: k for k, name in KIND_TYPES.items()}
-    if held in by_type:
-        return by_type[held]
-    label = _prefixed(label_names(issue), KIND_PREFIX)
-    return "feature" if label == "addition" else label
-
-
-def not_before(issue: dict) -> date | None:
-    """The date before which ``issue`` is withheld from `next` and `claim`, or None.
-
-    Read from the Not Before issue field, not a body trailer, and on purpose: this repo is
-    public, so a trailer needs the author check `current_claim` does, while setting an issue
-    field takes triage access or more, as applying a label does. A date also expires on its
-    own — the callers compare it to today and nobody has to clear it, which is what `manual`
-    lacks.
-
-    A `not-before:<YYYY-MM-DD>` label counts too, and the LATEST of the field and every such
-    label wins, so a session on a pre-field checkout that defers by label still withholds the
-    issue, and a stray earlier date cannot un-defer it. A value whose date does not parse
-    counts as no deferral: `issue_rows` feeds the docs cron, which must not fall over on a
-    hand-typed label.
-    """
-    held = field_value(issue, NOT_BEFORE_FIELD)
-    texts = [held] if held else []
-    texts += [
-        name[len(NOT_BEFORE_PREFIX) :]
-        for name in label_names(issue)
-        if name.startswith(NOT_BEFORE_PREFIX)
-    ]
-    days = []
-    for text in texts:
-        try:
-            days.append(date.fromisoformat(text))
-        except ValueError:
-            continue
-    return max(days) if days else None
-
-
-def is_deferred(issue: dict, today: date) -> bool:
-    """Whether ``issue`` is withheld on ``today``. `not-before: D` means workable ON D."""
-    day = not_before(issue)
-    return day is not None and today < day
-
-
-def open_blockers(issue: dict) -> list[str]:
-    """The still-open issues ``issue`` is blocked by, as `#n` or `owner/repo#n`, sorted.
-
-    Read from GitHub's native "blocked by" relationship (`gh issue ... --json blockedBy`),
-    which `block` and `open --blocked-by` write. A closed blocker no longer withholds
-    anything, so the issue becomes workable the moment its last blocker closes, with
-    nothing to clear. A blocker in another repository is spelled with its slug.
-    """
-    found = []
-    for node in (issue.get("blockedBy") or {}).get("nodes") or []:
-        if node.get("state") != "OPEN":
-            continue
-        m = _ISSUE_URL_RE.match(node.get("url") or "")
-        repo = "" if m is None or m.group(1).lower() == PR_REPO.lower() else m.group(1)
-        found.append((repo, int(node["number"])))
-    return [f"{repo}#{n}" for repo, n in sorted(found)]
-
-
-def recorded_blockers(issue: dict) -> list[str]:
-    """The number of every issue recorded as blocking ``issue``, open or closed."""
-    return [
-        str(node["number"])
-        for node in (issue.get("blockedBy") or {}).get("nodes") or []
-    ]
-
-
-def is_blocked(issue: dict) -> bool:
-    """Whether an open blocker withholds ``issue`` from `next` and `claim`."""
-    return bool(open_blockers(issue))
-
-
 _SENTENCE_RE = re.compile(r"(?<=[.!?])\s+|\n")
 _WAIT_WORD_RE = re.compile(
     r"(?i)\b(?:once|after|until|waits? (?:on|for)|blocked (?:by|on)|depends on)\b"
@@ -375,20 +595,16 @@ def today_utc() -> date:
     return datetime.now(UTC).date()
 
 
-def find_by_fingerprint(issues: list[dict], fp: str) -> dict | None:
+def find_by_fingerprint(issues: list[Issue], fp: str) -> Issue | None:
     for issue in issues:
-        m = _FP_RE.search(issue.get("body") or "")
+        m = _FP_RE.search(issue.body)
         if m and m.group(1) == fp:
             return issue
     return None
 
 
-def reobservations(issue: dict) -> int:
-    return sum(
-        1
-        for c in issue.get("comments", [])
-        if (c.get("body") or "").startswith(_REOBSERVED)
-    )
+def reobservations(issue: Issue) -> int:
+    return sum(1 for c in issue.comments if c.body.startswith(_REOBSERVED))
 
 
 # What `plan_close` opens a not-planned close comment with, keyed by outcome name (also the
@@ -417,12 +633,12 @@ def fold_marker(body: str) -> str | None:
     return None
 
 
-def settled_reason(issue: dict) -> str | None:
+def settled_reason(issue: Issue) -> str | None:
     """The `--reason` the operator's last `--accepted`/`--refuted` close recorded, first line."""
-    for c in reversed(issue.get("comments", [])):
-        if not is_operator_comment(c):
+    for c in reversed(issue.comments):
+        if not c.by_operator:
             continue
-        body = (c.get("body") or "").strip()
+        body = c.body.strip()
         if body.startswith(_SETTLED_PREFIXES):
             return body.split(":", 1)[1].strip().splitlines()[0]
     return None
@@ -450,23 +666,10 @@ _RELEASE_RE = re.compile(r"^Released: `([^`\n]+)`\s*$", re.M)
 _TRUSTED_ASSOCIATIONS = frozenset(("OWNER", "MEMBER", "COLLABORATOR"))
 
 
-def is_operator_comment(comment: dict) -> bool:
-    """Whether ``comment``'s claim trailer counts, from the author fields gh returns.
-
-    FAIL-CLOSED: a comment carrying neither field folds into nothing. gh populates both on
-    every comment — on `issue list` as well as `issue view`, verified against this repo — so
-    the missing case is a fixture that did not stamp authorship rather than a real comment,
-    and a comment nothing can attribute must not decide who holds an issue.
-    """
-    if comment.get("viewerDidAuthor"):
-        return True
-    return (comment.get("authorAssociation") or "") in _TRUSTED_ASSOCIATIONS
-
-
 def _one_line(text: str) -> str:
     """``text`` with every line break collapsed to a space.
 
-    THE PROSE ABOVE A TRAILER IS PARSED TOO. `current_claim` tests `_CLAIM_RE` before
+    THE PROSE ABOVE A TRAILER IS PARSED TOO. `Issue.claim` tests `_CLAIM_RE` before
     `_RELEASE_RE` on the WHOLE comment body, and `release_comment` puts the reason above the
     trailer — so a reason carrying a line ``Claim: `x` `` makes a release read as a claim by
     `x`. That is not a hypothetical hand-typed `--reason`: `cmd_reap` builds its own reason
@@ -476,32 +679,11 @@ def _one_line(text: str) -> str:
     Collapsing the breaks closes it at the builder rather than at argparse, which is where
     the named vector arrives — `_CLAIM_RE` is anchored with `re.M`, so a trailer that cannot
     start a line cannot match at all. Anchoring the parser to the body's last trailer line
-    was the alternative and is rejected: it inverts the DECIDED marker in `current_claim`
+    was the alternative and is rejected: it inverts the DECIDED marker in `Issue.claim`
     that makes a `Claim:` line win over a `Released:` one, which points the other way on
     purpose.
     """
     return " ".join((text or "").splitlines())
-
-
-def validate_worktree_name(name: str) -> str | None:
-    """Why ``name`` cannot be carried by a claim trailer, or None when it can.
-
-    `_CLAIM_RE` captures `[^`\\n]+` between backticks, so a name holding a backtick or a line
-    break writes a comment and a label and then fails to parse its own trailer on read-back —
-    and `cmd_claim` reported `lost the race to \\`None\\``, telling the operator they lost a
-    race that never happened. Refusing the name up front is the fix; the read-back
-    message below it is the second half, for a read that comes back empty for any other
-    reason.
-    """
-    if not name.strip():
-        return "empty"
-    if name != name.strip():
-        return "has leading or trailing whitespace"
-    if "`" in name:
-        return "contains a backtick, which ends the claim trailer's own quoting"
-    if any(c in name for c in "\r\n"):
-        return "contains a line break, so the claim trailer would not parse"
-    return None
 
 
 def now_iso() -> str:
@@ -545,89 +727,18 @@ def release_comment(worktree: str, when: str, reason: str | None) -> str:
 COMMENT_PAGE_CAP = 100
 
 
-def comment_cap_warning(issue: dict) -> str | None:
-    """A warning when ``issue`` carries as many comments as gh will return, else None.
+def comment_cap_warning(number: int, n: int) -> str | None:
+    """A warning when issue ``number`` carries ``n`` comments, as many as gh returns, else None.
 
     Pure, so `gh_calls` decides where it is printed and the rule itself is testable
     without a boundary.
     """
-    n = len(issue.get("comments", []))
     if n < COMMENT_PAGE_CAP:
         return None
     return (
-        f"warning: #{issue.get('number')} has {n} comments, gh's page cap — a claim or "
+        f"warning: #{number} has {n} comments, gh's page cap — a claim or "
         "release past the cap is invisible to the fold, so its claim verdict may be wrong"
     )
-
-
-def ordered_comments(issue: dict) -> list[dict]:
-    """``issue``'s comments in `createdAt` order, or in gh's own order when it cannot say.
-
-    THE ORDER IS THE PROTOCOL. `current_claim` folds forward and implements FIRST WRITER
-    WINS, so the fold's answer is only correct if the list really is oldest-first. gh returns
-    them that way — measured ascending across 17 issues — but nothing enforced it.
-
-    SORTS ONLY WHEN EVERY COMMENT CARRIES A TIMESTAMP. A mixed list is the dangerous case: a
-    key of `c.get("createdAt") or ""` hoists every unstamped comment to the front, which can
-    flip the verdict of the one function in this protocol that must not change by accident.
-    Fixtures routinely omit `createdAt`, so the mixed list is not hypothetical. When any
-    comment lacks one, gh's own order stands — exactly the behaviour that shipped before.
-
-    `current_claim` and `_claim_age_days` in findings_lib/claim.py carry the identical fold and
-    must consume the identical order, or a `claims` row ages a claim the register does not
-    think exists.
-    """
-    comments = list(issue.get("comments", []))
-    if not all(c.get("createdAt") for c in comments):
-        return comments
-    return sorted(comments, key=lambda c: c["createdAt"])
-
-
-def current_claim(issue: dict) -> str | None:
-    """The worktree currently holding ``issue``, or None.
-
-    Folds the comment list forward oldest-first (see `ordered_comments`): a ``Claim:`` line
-    opens IF nothing is currently held, and a ``Released:`` line naming the SAME worktree
-    closes.
-
-    FIRST WRITER WINS, not last. gh returns comments in createdAt order, so the earlier of
-    two racing claims is the earlier comment. Letting a later claim overwrite a live one
-    would mean a session could take an issue out from under another by claiming it again,
-    and — worse — the first claimant's own ``release`` would then be refused, so it could
-    not even clean up after losing.
-
-    A release naming some other worktree is ignored, so one session cannot release
-    another's claim by accident.
-
-    Only the OPERATOR's comments are folded — see `is_operator_comment`. This repo is public,
-    so a comment from any other account is prose on the thread and nothing more.
-    """
-    held: str | None = None
-    for comment in ordered_comments(issue):
-        if not is_operator_comment(comment):
-            continue
-        body = comment.get("body") or ""
-        claimed = _CLAIM_RE.search(body)
-        if claimed:
-            if held is None:
-                held = claimed.group(1)
-            # DECIDED: `Claim:` wins over `Released:` within ONE comment body. Neither
-            # `claim_comment` nor `release_comment` ever emits both trailers, so a body
-            # carrying both is malformed input, and every fail-safe in this module points
-            # the same way: `is_operator_comment` folds an unattributable comment into
-            # nothing, `claim_is_live` HOLDS a claim whose worktree it cannot read,
-            # `cmd_reap` refuses on a git error, and `cmd_next` withholds. Releasing on
-            # ambiguity is the one direction that hands live work to a second session,
-            # which is the harm this protocol exists to prevent. This `continue` is what
-            # implements the choice, so it is not a tidy-up — dropping it inverts the
-            # verdict. `_claim_age_days` in findings_lib/claim.py carries the identical fold
-            # and must keep the identical skip, or a `claims` row ages a claim the
-            # register does not think exists.
-            continue
-        released = _RELEASE_RE.search(body)
-        if released and released.group(1) == held:
-            held = None
-    return held
 
 
 # The repository this register lives in, as GitHub spells it in a qualified closing
@@ -669,7 +780,7 @@ def pr_refs(bodies: list[str], repo: str = PR_REPO) -> set[int]:
     }
 
 
-def _prefixed(names: set[str], prefix: str) -> str | None:
+def _prefixed(names: frozenset[str], prefix: str) -> str | None:
     """The first label under ``prefix``, alphabetically.
 
     Iterating the set directly would pick an arbitrary one of two `severity/*` labels, so
@@ -690,43 +801,41 @@ _STATE_REASONS = {
 }
 
 
-def close_outcome(issue: dict) -> str:
+def close_outcome(issue: Issue) -> str:
     """How ``issue`` was closed: `open`, `refuted`, `accepted`, `fixed`, `not planned`, ...
 
     The label decides before `stateReason` does, because `findings.py close` writes the
     label and gh records both not-planned outcomes as the same `NOT_PLANNED`. `stateReason`
     is read only on a closed issue: a reopened one carries `REOPENED`.
     """
-    if issue.get("state") != "CLOSED":
+    if issue.is_open:
         return "open"
-    names = label_names(issue)
     for settled in ("refuted", "accepted"):
-        if settled in names:
+        if settled in issue.labels:
             return settled
-    reason = issue.get("stateReason") or ""
+    reason = issue.state_reason
     return _STATE_REASONS.get(reason, reason.lower() or "closed")
 
 
-def issue_rows(issues: list[dict], tracked: Collection[str] = ()) -> list[dict]:
-    """Flattens gh's issue JSON into the rows ``sort_key`` and ``cmd_list`` consume.
+def issue_rows(issues: list[Issue], tracked: Collection[str] = ()) -> list[dict]:
+    """Flattens issues into the rows ``sort_key`` and ``cmd_list`` consume.
 
     Args:
-        issues: gh issue objects, each carrying labels, comments and the other
-            ``_LIST_FIELDS``.
+        issues: the issues to flatten.
         tracked: the register's tracked files, which each row's ``paths`` resolve against
             as `cited_paths` describes.
     """
     rows = []
     for issue in issues:
-        names = label_names(issue)
-        day = not_before(issue)
+        names = issue.labels
+        day = issue.not_before
         rows.append(
             {
-                "number": issue["number"],
-                "title": issue["title"],
-                "state": issue.get("state", "OPEN"),
-                "severity": severity(issue),
-                "kind": kind(issue),
+                "number": issue.number,
+                "title": issue.title,
+                "state": issue.state.value,
+                "severity": issue.severity,
+                "kind": issue.kind,
                 "domain": _prefixed(names, "domain/"),
                 "escalated": "escalated" in names,
                 "refuted": "refuted" in names,
@@ -734,24 +843,24 @@ def issue_rows(issues: list[dict], tracked: Collection[str] = ()) -> list[dict]:
                 "reason": settled_reason(issue),
                 "outcome": close_outcome(issue),
                 "no_vetted_remediation": "no-vetted-remediation" in names,
-                "verify_by": parse_verify_by(issue.get("body") or "") is not None,
-                "paths": cited_paths(issue.get("body") or "", tracked),
+                "verify_by": parse_verify_by(issue.body) is not None,
+                "paths": cited_paths(issue.body, tracked),
                 "manual": "manual" in names,
                 "review_leftover": "review-leftover" in names,
                 "not_before": day.isoformat() if day else None,
-                "blocked_by": open_blockers(issue),
-                "claimed": current_claim(issue),
-                "first_seen": (issue.get("createdAt") or "")[:10],
-                "closed_on": (issue.get("closedAt") or "")[:10] or None,
+                "blocked_by": issue.open_blockers,
+                "claimed": issue.holder,
+                "first_seen": issue.created_at[:10],
+                "closed_on": issue.closed_at[:10] or None,
                 "reobservations": reobservations(issue),
-                "url": issue.get("url", ""),
+                "url": issue.url,
             }
         )
     return rows
 
 
 def pickable(
-    issues: list[dict],
+    issues: list[Issue],
     *,
     live_claims: set[int],
     pr_refs: set[int],
@@ -782,7 +891,7 @@ def pickable(
 
 
 def waiting(
-    issues: list[dict], *, today: date, tracked: Collection[str] = ()
+    issues: list[Issue], *, today: date, tracked: Collection[str] = ()
 ) -> list[dict]:
     """The rows `pickable` withholds for a not-before date or an open blocker, best first.
 

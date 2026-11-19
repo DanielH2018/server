@@ -67,6 +67,7 @@ _sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from dev.findings_lib.boundaries import FindingsTools
 from dev.findings_lib.gh_calls import load_issues
+from dev.findings_lib.issue_model import Issue
 from fanout_lib import operator_waits, own_surface
 from deploy_tools.land_lib.detach import result_fields
 from fanout_lib.clean import sweep_runs
@@ -159,7 +160,7 @@ class Boundaries:
     local_records: Callable[[], list[dict]] = lambda: operator_waits.read_local_records(
         READER
     )
-    open_issues: Callable[[], list[dict]] = lambda: read_open_issues()
+    open_issues: Callable[[], list[Issue]] = lambda: read_open_issues()
     clock: Callable[[], float] = time.time
     testpaths_only: Callable[[str], bool] = lambda head: (
         own_surface.live_testpaths_only(head)
@@ -189,7 +190,7 @@ def read_open_prs() -> list[dict]:
     return [p for p in data if isinstance(p, dict)]
 
 
-def read_open_issues() -> list[dict]:
+def read_open_issues() -> list[Issue]:
     """Every open register issue as `findings.py` loads it, for the queue gauge; raises on a failed read."""
     return load_issues("open", FindingsTools())
 

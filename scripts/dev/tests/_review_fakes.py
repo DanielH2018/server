@@ -4,13 +4,18 @@ import json
 import subprocess
 
 from fanout_lib.review.base_check import BaseCheck
-from fanout_lib.brief import Issue, render_brief
+from fanout_lib.brief import render_brief
+from findings_lib.issue_model import Issue, IssueState
 from fanout_lib.review.review import Pipeline
 from fanout_lib.target import SERVER_TARGET
 
 PR = "https://github.com/DanielH2018/server/pull/4000"
 BRANCH = "worktree-batch-1345"
-ISSUES = [Issue(1345, "Traefik startupProbe has no red-proof", "body one")]
+ISSUES = [
+    Issue(
+        1345, "Traefik startupProbe has no red-proof", IssueState.OPEN, body="body one"
+    )
+]
 
 
 def _report(result="", session="sid-1", structured=None, is_error=False, cost=1.0):

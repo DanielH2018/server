@@ -3,6 +3,7 @@
 import json
 
 
+import pytest
 from _findings_fakes import (
     Fakes,
     build_tools,
@@ -463,16 +464,21 @@ def test_claim_refuses_a_worktree_name_the_trailer_cannot_carry(capsys):
     """
     issue = make_issue(1132)
     tools, calls = build_tools(Fakes(issues=[issue], view=issue))
-    assert main(["claim", "1132", "--worktree", "worktree-`bad"], tools) == 64
+    with pytest.raises(SystemExit) as exc:
+        main(["claim", "1132", "--worktree", "worktree-`bad"], tools)
+    assert exc.value.code == 64
     assert calls.none()
-    assert "backtick" in capsys.readouterr().err
+    err = capsys.readouterr().err
+    assert "argument --worktree" in err and "backtick" in err
 
 
 def test_release_refuses_the_same_name(capsys):
     """The same trailer, so the same refusal — a release must name a parseable worktree."""
     issue = make_issue(1132)
     tools, calls = build_tools(Fakes(issues=[issue], view=issue))
-    assert main(["release", "1132", "--worktree", "worktree-`bad"], tools) == 64
+    with pytest.raises(SystemExit) as exc:
+        main(["release", "1132", "--worktree", "worktree-`bad"], tools)
+    assert exc.value.code == 64
     assert calls.none()
 
 

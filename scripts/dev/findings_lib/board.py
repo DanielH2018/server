@@ -38,7 +38,7 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
-from dev.findings_lib.issue_model import PR_REPO, current_claim
+from dev.findings_lib.issue_model import PR_REPO, claim_of, parse_comment
 from lib.gh import gh as real_gh
 
 PROJECT_TITLE = "Server Issue Tracking"
@@ -160,7 +160,8 @@ def parse_issue(node: dict, board: Board) -> BoardIssue:
             for value in item["fieldValues"]["nodes"]:
                 if ((value or {}).get("field") or {}).get("name") == STATUS:
                     held = value.get("name")
-    claimed = current_claim({"comments": node["comments"]["nodes"]}) is not None
+    comments = tuple(parse_comment(c) for c in node["comments"]["nodes"])
+    claimed = claim_of(comments) is not None
     return BoardIssue(
         node["number"],
         node["id"],

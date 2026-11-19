@@ -1,13 +1,14 @@
 """The gh argv a claim or a release plans, and the two cases each refuses."""
 
+from dataclasses import replace
 from datetime import date
 
 import pytest
 
 
-from _findings_fakes import operator_comment
+from _findings_fakes import operator_comment, typed
 
-from dev.findings_lib.issue_model import claim_comment
+from dev.findings_lib.issue_model import IssueState, claim_comment
 from dev.findings_lib.milestone import description_for
 from dev.findings_lib.plans import (
     ClaimRefused,
@@ -31,13 +32,18 @@ PROJECT_MILESTONE = {
 
 def _issue(number=1132, labels=(), comments=(), milestone=None):
     """One issue, always carrying `claude` — `plan_claim` refuses one without it."""
-    return {
-        "number": number,
-        "state": "OPEN",
-        "labels": [{"name": n} for n in ("claude", *labels)],
-        "comments": [operator_comment(b) for b in comments],
-        "milestone": milestone,
-    }
+    return typed(
+        {
+            "number": number,
+            "title": "t",
+            "state": "OPEN",
+            "body": "",
+            "labels": [{"name": n} for n in ("claude", *labels)],
+            "comments": [operator_comment(b) for b in comments],
+            "blockedBy": {"nodes": []},
+            "milestone": milestone,
+        }
+    )
 
 
 def test_claiming_an_unclaimed_issue_only_comments():
@@ -55,8 +61,7 @@ def test_claiming_for_a_branch_with_a_milestone_files_the_issue_under_it():
 
 
 def test_claiming_a_closed_issue_is_refused():
-    closed = _issue()
-    closed["state"] = "CLOSED"
+    closed = replace(_issue(), state=IssueState.CLOSED)
     with pytest.raises(ClaimRefused) as exc:
         plan_claim(closed, worktree=WT, session=None, when="t", today=TODAY)
     assert "closed" in exc.value.reason
@@ -106,7 +111,7 @@ def test_claiming_an_issue_outside_the_register_is_refused():
     Dependency Dashboard. `load_issues` DOES filter `--label claude`, so `claims`, `reap` and
     `next` were all blind to the claim and only a hand-typed `release` could clear it.
     """
-    outsider = {"number": 3, "state": "OPEN", "labels": [], "comments": []}
+    outsider = replace(_issue(number=3), labels=frozenset())
     with pytest.raises(ClaimRefused) as exc:
         plan_claim(outsider, worktree=WT, session=None, when="t", today=TODAY)
     assert "claude" in exc.value.reason
@@ -170,8 +175,8 @@ def test_claiming_from_your_own_project_backlog_only_comments():
 @pytest.mark.parametrize(
     ("issue", "reason"),
     [
-        ({**_issue(), "state": "CLOSED"}, "closed"),
-        ({**_issue(), "labels": []}, "not in the register"),
+        (replace(_issue(), state=IssueState.CLOSED), "closed"),
+        (replace(_issue(), labels=frozenset()), "not in the register"),
         (_issue(comments=[claim_comment(WT, None, "t")]), f"claimed by `{WT}`"),
     ],
     ids=["closed", "outside-the-register", "claimed"],

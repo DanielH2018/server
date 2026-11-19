@@ -20,9 +20,9 @@ fixture in conftest.py is how a test reaches it.
 import re
 import subprocess
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
-from dev.findings_lib.issue_model import LABELS
+from dev.findings_lib.issue_model import LABELS, Issue, parse_issue
 from dev.fanout_lib.batch_holds import BatchHold
 from dev.findings_lib.boundaries import FindingsTools
 from lib.worktrees import Worktree, held_by_readable_process
@@ -101,7 +101,17 @@ def make_issue(
         "comments": [
             c if isinstance(c, dict) else operator_comment(c) for c in comments
         ],
+        "blockedBy": {"nodes": []},
     }
+
+
+def typed(raw: dict) -> Issue:
+    """``raw``, a gh issue object such as `make_issue` builds, parsed into an `Issue`.
+
+    A `fields` key, which gh's JSON never carries but `attach_fields` fills, becomes
+    `Issue.fields`, so a test of a pure reader can set an issue field without the graphql fake.
+    """
+    return replace(parse_issue(raw), fields=raw.get("fields") or {})
 
 
 @dataclass

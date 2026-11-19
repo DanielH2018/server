@@ -12,7 +12,7 @@ import json
 import re
 
 import pytest
-from _findings_fakes import Fakes
+from _findings_fakes import Fakes, typed
 from dev import findings
 from dev.findings_lib.gh_calls import ISSUE_LIST_CAP, load_issues, run
 from dev.findings_lib.issue_model import (
@@ -61,10 +61,10 @@ def test_find_by_fingerprint_matches_the_trailer_only(issue):
     hit = issue(3, fp="abc123def456")
     miss = issue(4)
     miss["body"] = "mentions abc123def456 in prose"
-    found = find_by_fingerprint([miss, hit], "abc123def456")
+    found = find_by_fingerprint([typed(miss), typed(hit)], "abc123def456")
     assert found is not None, "the fingerprinted issue was not matched at all"
-    assert found["number"] == 3
-    assert find_by_fingerprint([miss], "abc123def456") is None
+    assert found.number == 3
+    assert find_by_fingerprint([typed(miss)], "abc123def456") is None
 
 
 def test_reobservations_counts_only_reobserved_comments(issue):
@@ -76,7 +76,7 @@ def test_reobservations_counts_only_reobserved_comments(issue):
             "Re-observed by review-2026-08-27",
         ),
     )
-    assert reobservations(one) == 2
+    assert reobservations(typed(one)) == 2
 
 
 # --- rows and order ---------------------------------------------------------------------
@@ -88,7 +88,7 @@ def test_issue_rows_reads_labels_into_fields(issue):
         labels=("claude", "severity/high", "kind/gap", "domain/network", "escalated"),
         fp="f",
     )
-    (row,) = issue_rows([one])
+    (row,) = issue_rows([typed(one)])
     assert (
         row["severity"] == "high"
         and row["kind"] == "gap"
@@ -101,10 +101,10 @@ def test_issue_rows_reads_labels_into_fields(issue):
 def test_sort_key_puts_escalated_high_before_plain_high_before_medium(issue):
     rows = issue_rows(
         [
-            issue(1, labels=("severity/medium",)),
-            issue(2, labels=("severity/high",)),
-            issue(3, labels=("severity/high", "escalated")),
-            issue(4, labels=()),
+            typed(issue(1, labels=("severity/medium",))),
+            typed(issue(2, labels=("severity/high",))),
+            typed(issue(3, labels=("severity/high", "escalated"))),
+            typed(issue(4, labels=())),
         ]
     )
     assert [r["number"] for r in sorted(rows, key=sort_key)] == [3, 2, 1, 4]
@@ -114,7 +114,7 @@ def test_issue_rows_reads_verify_by_presence(issue):
     with_it = issue(1, fp="a" * 12)
     with_it["body"] += verify_by_section("Check the log.")
     without = issue(2, fp="b" * 12)
-    rows = {r["number"]: r for r in issue_rows([with_it, without])}
+    rows = {r["number"]: r for r in issue_rows([typed(with_it), typed(without)])}
     assert rows[1]["verify_by"] is True
     assert rows[2]["verify_by"] is False
 
@@ -124,7 +124,7 @@ def test_issue_rows_reads_a_labelless_not_planned_close_as_unruled(issue):
     ruled = issue(2, state="CLOSED", labels=("claude", "accepted"))
     for one in (hand, ruled):
         one.update(stateReason="NOT_PLANNED", closedAt="2026-10-03T19:50:51Z")
-    rows = {r["number"]: r for r in issue_rows([hand, ruled])}
+    rows = {r["number"]: r for r in issue_rows([typed(hand), typed(ruled)])}
     assert rows[1]["outcome"] == "not planned"
     assert rows[2]["outcome"] == "accepted"
     assert rows[1]["closed_on"] == "2026-10-03"
@@ -227,7 +227,7 @@ def test_dry_run_is_accepted_before_the_subcommand(make_tools):
 
 
 def test_touch_second_sighting_does_not_escalate(issue):
-    plans = plan_touch(issue(1, comments=()), "review-2026-09-02")
+    plans = plan_touch(typed(issue(1, comments=())), "review-2026-09-02")
     assert [p[:2] for p in plans] == [["issue", "comment"]]
     assert "sighting 2" in plans[0][-1]
 
@@ -237,20 +237,24 @@ def test_touch_names_the_sighting_this_run_makes(issue):
     seen_three_times = issue(
         1, comments=("Re-observed by a", "Re-observed by b", "Re-observed by c")
     )
-    plans = plan_touch(seen_three_times, "d")
+    plans = plan_touch(typed(seen_three_times), "d")
     assert "sighting 5" in plans[0][-1]
 
 
 def test_touch_third_sighting_escalates(issue):
-    plans = plan_touch(issue(1, comments=("Re-observed by a",)), "b")
+    plans = plan_touch(typed(issue(1, comments=("Re-observed by a",))), "b")
     assert [p[:2] for p in plans] == [["issue", "comment"], ["issue", "edit"]]
     assert plans[1][-1] == "escalated"
 
 
 def test_touch_already_escalated_does_not_add_the_label_again(issue):
     plans = plan_touch(
-        issue(
-            1, labels=("escalated",), comments=("Re-observed by a", "Re-observed by b")
+        typed(
+            issue(
+                1,
+                labels=("escalated",),
+                comments=("Re-observed by a", "Re-observed by b"),
+            )
         ),
         "c",
     )
@@ -316,8 +320,8 @@ def test_settled_reason_reads_back_what_plan_close_wrote(issue):
     plans = plan_close(5, outcome="accepted", reason="one voter is the trade-off")
     comment = plans[1][plans[1].index("--comment") + 1]
     one = issue(5, comments=("Claim: by someone", comment))
-    assert settled_reason(one) == "one voter is the trade-off"
-    (row,) = issue_rows([one])
+    assert settled_reason(typed(one)) == "one voter is the trade-off"
+    (row,) = issue_rows([typed(one)])
     assert row["reason"] == "one voter is the trade-off"
 
 
@@ -330,14 +334,14 @@ def test_settled_reason_takes_the_last_ruling_and_only_its_first_line(issue):
             "Accepted: the later ruling\nwith a second line the table cell cannot hold",
         ),
     )
-    assert settled_reason(one) == "the later ruling"
+    assert settled_reason(typed(one)) == "the later ruling"
 
 
 def test_settled_reason_is_none_without_a_ruling_comment(issue):
     one = issue(
         5, comments=("Fixed by PR #700.", "prose mentioning Accepted: mid-line")
     )
-    assert settled_reason(one) is None
+    assert settled_reason(typed(one)) is None
 
 
 def test_close_refuted_without_a_reason_is_rejected_before_any_write(make_tools):
@@ -411,15 +415,15 @@ _CRLF_BODY = "details\r\n\r\n---\r\nFingerprint: `abc123def456`\r\nSource: s\r\n
 def test_find_by_fingerprint_matches_a_crlf_body(issue):
     crlf = issue(7)
     crlf["body"] = _CRLF_BODY
-    found = find_by_fingerprint([crlf], "abc123def456")
+    found = find_by_fingerprint([typed(crlf)], "abc123def456")
     assert found is not None, "a CRLF body hid the fingerprint"
-    assert found["number"] == 7
+    assert found.number == 7
 
 
 def test_find_by_fingerprint_rejects_a_different_id_in_a_crlf_body(issue):
     crlf = issue(7)
     crlf["body"] = _CRLF_BODY
-    assert find_by_fingerprint([crlf], "0123456789ab") is None
+    assert find_by_fingerprint([typed(crlf)], "0123456789ab") is None
 
 
 # --- label prefixes resolve deterministically ---------------------------------------------------
@@ -427,7 +431,7 @@ def test_find_by_fingerprint_rejects_a_different_id_in_a_crlf_body(issue):
 
 def test_prefixed_picks_the_alphabetically_first_of_two():
     for names in ({"domain/network", "domain/cicd"}, {"domain/cicd", "domain/network"}):
-        assert _prefixed(names, "domain/") == "cicd"
+        assert _prefixed(frozenset(names), "domain/") == "cicd"
 
 
 # --- the injected seam is required, not defaulted --------------------------------------------
@@ -478,17 +482,10 @@ def test_cited_paths_is_empty_for_prose_that_names_no_file():
     assert cited_paths("") == []
 
 
-def test_next_rows_carry_the_cited_paths_for_triage():
-    (row,) = issue_rows(
-        [
-            {
-                "number": 1,
-                "title": "t",
-                "body": f"fix {'scripts/diagnostics/probe_lib/alerts.py'} please",
-                "labels": [],
-            }
-        ]
-    )
+def test_next_rows_carry_the_cited_paths_for_triage(issue):
+    citing = issue(1)
+    citing["body"] = f"fix {'scripts/diagnostics/probe_lib/alerts.py'} please"
+    (row,) = issue_rows([typed(citing)])
     assert row["paths"] == ["scripts/diagnostics/probe_lib/alerts.py"]
 
 

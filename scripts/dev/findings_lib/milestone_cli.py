@@ -23,7 +23,7 @@ from lib.json_types import as_object_list
 from dev.findings_lib import milestone
 from dev.findings_lib.boundaries import FindingsTools
 from dev.findings_lib.gh_calls import _load_issue, load_issues, run
-from dev.findings_lib.issue_model import current_claim, validate_worktree_name
+from dev.findings_lib.issue_model import Issue
 from dev.findings_lib.plans import (
     ClaimRefused,
     plan_milestone_add,
@@ -31,7 +31,7 @@ from dev.findings_lib.plans import (
 )
 
 
-def open_issues(args: argparse.Namespace, tools: FindingsTools) -> list[dict]:
+def open_issues(args: argparse.Namespace, tools: FindingsTools) -> list[Issue]:
     """The open register issues, cut to the ones ``args.milestone`` holds when it is set.
 
     Raises:
@@ -98,10 +98,6 @@ def cmd_milestone(args: argparse.Namespace, tools: FindingsTools) -> int:
     Returns 0 when done, 3 when `start`, `add` or `remove` was refused or `close` found
     nothing open.
     """
-    bad = validate_worktree_name(args.worktree)
-    if bad:
-        sys.stderr.write(f"milestone: --worktree `{args.worktree}` {bad}\n")
-        return FINDINGS_BAD_ARGS
     if args.project and args.action != "start":
         sys.stderr.write("milestone: --project goes with `start`\n")
         return FINDINGS_BAD_ARGS
@@ -137,9 +133,7 @@ def cmd_milestone(args: argparse.Namespace, tools: FindingsTools) -> int:
     except ValueError as exc:
         print(f"milestone start refused: {exc}", file=sys.stderr)
         return 3
-    claimed = [
-        i["number"] for i in load_issues("open", tools) if current_claim(i) == branch
-    ]
+    claimed = [i.number for i in load_issues("open", tools) if i.holder == branch]
     prs = as_object_list(
         tools.gh_json(
             "pr", "list", "--head", branch, "--state", "open", "--json", "number"

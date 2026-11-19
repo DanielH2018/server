@@ -6,7 +6,7 @@ Run: uv run pytest scripts/dev/tests/test_fanout_status_view.py
 import json
 import re
 
-from fanout_lib.brief import Issue
+from findings_lib.issue_model import Issue, IssueState
 from fanout_lib.manifest import Batch, Manifest, save
 from fanout_lib.place import main
 from fanout_lib.status_view import runs_lines, status_lines
@@ -95,7 +95,9 @@ def test_runs_all_lists_every_run_and_batch():
 def test_launch_prints_one_line_with_the_run_id_and_each_batchs_host_and_rung(
     tmp_path, capsys
 ):
-    issues = [Issue(1, "one", "body one", ("claude",))]
+    issues = [
+        Issue(1, "one", IssueState.OPEN, body="body one", labels=frozenset({"claude"}))
+    ]
     tools, run = fake_tools(answers={"daniel-box": ok(HEADROOM)}, issues=issues)
     run.answers_by_call = [ok(HEADROOM), ok(""), ok("")]
     argv = ["launch", "--batch", "1", "--host", "daniel-box", "--manifest-root"]
