@@ -327,7 +327,8 @@ def _retrigger_ready_run(ln: Landing, head: str) -> str:
             left = (
                 ""
                 if step == "to draft"
-                else f"; PR #{pr} is left as a draft, run `gh pr ready {pr}`"
+                else f"; PR #{pr} is left as a draft, "
+                + ln.remedy(why, f"run `gh pr ready {pr}`")
             )
             return f"converting it {step} failed: {why}{left}"
         except subprocess.TimeoutExpired:
@@ -337,23 +338,8 @@ def _retrigger_ready_run(ln: Landing, head: str) -> str:
 
 def _mark_ready(ln: Landing) -> None:
     """Mark a draft PR ready: a draft's CI run runs no job, and a draft cannot merge."""
-    pr = str(ln.opts.pr)
-    try:
-        ln.tools.gh("pr", "ready", pr)
-    except subprocess.CalledProcessError as exc:
-        why = (exc.stderr or "").strip() or f"gh exited {exc.returncode}"
-        ln.die(
-            f"PR #{pr} is a draft and could not be marked ready ({why}); run "
-            f"`gh pr ready {pr}`, then re-run this",
-            1,
-        )
-    except subprocess.TimeoutExpired:
-        ln.die(
-            f"PR #{pr} is a draft and marking it ready timed out; run `gh pr ready {pr}`, "
-            "then re-run this",
-            1,
-        )
-    say(f"PR #{pr} was a draft; marked it ready")
+    stale_base.ready_again(ln)
+    say(f"PR #{ln.opts.pr} was a draft; marked it ready")
 
 
 def _no_turn(draft: str) -> tuple[bool, int]:
