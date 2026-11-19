@@ -350,8 +350,8 @@ The boot's compose-run on daniel-pi wrote no result: `homelab_compose_up_timesta
 predates the boot or is missing.
 
 - The `homelab-compose` unit is masked or disabled, systemd killed the run at its
-  `TimeoutStartSec`, or the write to `/var/lib/node-exporter-textfile/homelab_compose.prom`
-  failed.
+  `TimeoutStartSec`, or compose-run failed to write its
+  textfile.
 - Read `systemctl status homelab-compose` and `journalctl -b -u homelab-compose` on daniel-pi.
 
 ### `ComposeRestartUnreported`
@@ -360,8 +360,7 @@ predates the boot or is missing.
 result for that start.
 
 - systemd killed the run at its `TimeoutStartSec`.
-- The write to `/var/lib/node-exporter-textfile/homelab_compose.prom` failed after `up`
-  succeeded. The run exits 0, so `HostReconcileFailed` stays quiet.
+- compose-run failed to write its textfile after `up` succeeded. The run exits 0, so `HostReconcileFailed` stays quiet.
 - Read `journalctl -u homelab-compose -u homelab-reconcile` on daniel-pi.
 
 ### `PiRecoveryNotReporting`
@@ -369,8 +368,8 @@ result for that start.
 No `pi-recovery-health` verdict newer than 15 minutes reached Prometheus from daniel-pi, so
 nothing confirms that the Pi's containers are watched.
 
-- Read `systemctl status homelab-pi-recovery.timer` on daniel-pi, then
-  `/var/lib/node-exporter-textfile/pi-recovery-health.prom`.
+- Read `systemctl status homelab-pi-recovery.timer` on daniel-pi, then the
+  `pi-recovery-health` file in `/var/lib/node-exporter-textfile/`.
 - A host that sets `optimize_pi_recovery_restart_enabled` to false drops the timer, so this
   alert fires on purpose there.
 
