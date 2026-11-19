@@ -6,7 +6,7 @@ rest. `--all` restores one line per batch.
 """
 
 import sys as _sys
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable, Mapping
 from pathlib import Path as _Path
 
 # Reach `lib` (scripts/): a directly-invoked script gets only its own directory on sys.path.
@@ -58,20 +58,31 @@ def status_lines(rows: Iterable[dict], show_all: bool) -> list[str]:
     return lines
 
 
-def runs_lines(runs: list, show_all: bool) -> list[str]:
+def runs_lines(
+    runs: list,
+    show_all: bool,
+    parked: Mapping[tuple[str, str], str] | None = None,
+    one_line: Callable[[str], str] = one_line,
+) -> list[str]:
     """The count line, then the runs `place runs` prints by default.
 
     Args:
         runs: the `Manifest`s to show.
         show_all: print every run and every batch, cleaned ones included.
+        parked: `status.parked_batches`' answer for the standing batches.
+        one_line: collapses a parked batch's final text to one line.
 
     Returns:
         The lines to print. A run appears with its standing batches only, and a run whose
-        batches are all cleaned is counted in the last line instead.
+        batches are all cleaned is counted in the last line instead. A parked batch reads
+        `parked` with its reason in place of `standing`.
     """
+    parked = parked or {}
 
     def state(b) -> str:
-        return "cleaned" if b.removed_at else "standing"
+        if b.removed_at:
+            return "cleaned"
+        return "parked" if (b.host, b.batch) in parked else "standing"
 
     lines = [count_line(state(b) for r in runs for b in r.batches)]
     hidden = 0
@@ -82,7 +93,9 @@ def runs_lines(runs: list, show_all: bool) -> list[str]:
             continue
         lines.append(f"{r.run_id}  orchestrator {r.orchestrator_branch}")
         for b in shown:
-            when = f"cleaned {b.removed_at}" if b.removed_at else "standing"
+            when = f"cleaned {b.removed_at}" if b.removed_at else state(b)
+            if when == "parked":
+                when = one_line(parked[(b.host, b.batch)])
             issues = ",".join(f"#{n}" for n in b.issues)
             lines.append(f"  {b.batch} on {b.host}: {b.branch} {issues} {when}")
     if hidden:

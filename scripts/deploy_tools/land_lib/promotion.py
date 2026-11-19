@@ -234,6 +234,7 @@ def wait_on_promotion(ln: Landing) -> None:
         )
     if result.verdict == "deploy-failed":
         ln.ledger.cause = Cause.PROMOTE_HELD
+        ln.ledger.hold_sha, ln.ledger.hold_owner = result.hold_sha, result.hold_owner
         ln.finish(
             Verdict.DEPLOY_FAILED,
             1,

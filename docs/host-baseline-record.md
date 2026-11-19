@@ -243,17 +243,18 @@ push to Kuma, which M6 batch B2's Cutover-2 removed. B2's token PR retired both 
 
 - **Why it weights test modules at all (#2274).** CI's `pytest_shard.py --check-durations` step
   only annotates an unweighted module costing `RUNNER_HEAVY_SECONDS` or more, and never fails
-  the run. It says nothing about a lighter one, and an unweighted file is packed at the suite
-  median of 0.0s, so the cron is what repairs the table. `--record-missing`, never `--record`: it measures only the files the table lacks,
-  and writes the same bytes back when there are none, so an ordinary run leaves no diff.
-- **Why it also refreshes present weights (#4888).** `--record-missing` never touches an entry
-  the table holds, and CI's under-recorded arm fires only at `UNDER_WEIGHT_RATIO` (20x).
-  Three modules measured 1.66x to 1.98x their weights in a serial run on 2026-10-13 and nothing
-  noticed. A lower CI ratio cannot catch that, because the runner measures correctly recorded
-  entries 1.1x to 13x their weight. So the cron runs `--refresh-drifted 8`, which re-measures
-  one hash slice of the table serially on this host, and every entry once in four days. It
-  rewrites only an entry more than `DRIFT_RATIO` (1.5x) from what it measured, so noise inside
-  that band leaves no diff.
+  the run. It says nothing about a lighter one, and an unweighted file is packed at its
+  directory's median, so the cron is what writes the table.
+- **Why the weights come from CI's logs and not from this host (#9013).** The split packs on
+  what the runner measures, and the runner does not scale this host's seconds evenly. So the
+  cron runs `--refresh-runner 3`, which reads every pytest leg's log from the three newest
+  green master runs. It adds a module the table lacks, drops a deleted one, and rewrites a
+  present row only when it is more than `DRIFT_RATIO` (1.5x) from what the logs measured, so
+  noise inside that band leaves no diff.
+- **HISTORY — a second table, measured on this host.** Until 2026-11-19 the cron also wrote
+  `scripts/dev/pytest_shard_weights.json`, with `--record-missing` and `--refresh-drifted 8`.
+  That table drew 340 refresh commits in the 30 days to 2026-11-18, and the split used it only
+  for the 174 modules the runner table lacks.
 - **Why it records what each test module depends on (#8458).** A pull request's CI run
   executes only the test modules its diff can affect, and `scripts/dev/affected_tests.json`
   is the table that decides it. `affected_tests.py record --slices 12 --budget 540` traces
@@ -261,23 +262,11 @@ push to Kuma, which M6 batch B2's Cutover-2 removed. B2's token PR retired both 
   All 1,461 modules would take about 54 minutes at six jobs, so the budget spreads a backlog
   over several runs. The table holds nothing that moves with the clock, so recording an
   unchanged row writes the same bytes.
-- **Why a refresh can keep a drifted weight (#7132).** Two agreeing runs defend against one-off
-  load, not against a cost that is real on this host alone. The cron wrote 85.09s for a module
-  CI measured at 2.08s. `--refresh-drifted` compares the reading with
-  `pytest_shard_runner_weights.json`. At `STALE_WEIGHT_FLOOR_SECONDS` and
-  `LOCAL_READING_MAX_RATIO` or more of CI's seconds, it keeps the recorded weight and names the
-  module in the journal under the tag `docs-refresh`.
-- **Why a new row can hold CI's seconds (#7136).** `--record-missing` applies the same comparison
-  to a new row, which has no recorded weight to keep. It writes the module's seconds from
-  `pytest_shard_runner_weights.json` and names the module in the journal. Writing no row would
-  leave the module unweighted, so every tick would measure it twice for as long as the local cost
-  lasts. The row stays stable: `--refresh-drifted` refuses to raise it, and `assign` packs the
-  module on the runner table regardless.
 - **A red suite is not a case degradation saves**: the script runs the suite before its commit
   and exits 1 on a failure, because no prek hook runs the suite: #2827 moved the `pytest` hook
-  to pre-push, and it was removed on 2026-10-02. What degradation saves is the suite being fine and the measurement alone
-  failing — the `timeout` firing, or a durations report that parses to nothing. The `timeout`
-  makes a wedged step fail the run rather than hang it.
+  to pre-push, and it was removed on 2026-10-02. What degradation saves is the suite being fine
+  and one step alone failing — its `timeout` firing, or `gh` returning fewer than three green
+  runs. The `timeout` makes a wedged step fail the run rather than hang it.
 - **It works in its own worktree, never in the primary checkout.** `prepare_tree` checks out
   `/var/lib/homelab/docs-refresh.d/tree` at the primary checkout's HEAD and runs
   `git clean -ffdx`, keeping only `.venv`. The primary checkout keeps ignored debris CI never

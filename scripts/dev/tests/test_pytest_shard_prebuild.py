@@ -55,13 +55,10 @@ def test_the_packing_balances_the_census_pass_a_shard_triggers():
 def test_the_ci_split_balances_test_seconds_and_prebuilds_together():
     """The Verify-by's leg gap, projected: the legs holding the census files carried 64 runner
     seconds more prebuild than the split projected, which is the 14-17s gap CI measured."""
-    weights = pytest_shard.packing_table(pytest_shard.load_weights())
     files = pytest_shard.census()
+    packed = pytest_shard.packing_seconds(files, pytest_shard.load_runner_weights())
     loads = [
-        _projected(
-            pytest_shard.shard_files(i, CI_SHARDS, files, weights),
-            {f: weights.get(f, 0.0) for f in files},
-        )
+        _projected(pytest_shard.shard_files(i, CI_SHARDS, files), packed)
         for i in range(1, CI_SHARDS + 1)
     ]
     assert max(loads) - min(loads) < RESOLVABLE_SPREAD_SECONDS, loads
@@ -115,8 +112,7 @@ def test_the_tree_s_indirect_k8s_render_readers_are_charged_the_render():
 def test_the_census_files_share_one_leg_so_the_census_pass_runs_once():
     """Placed one at a time, the second census file costs less on an empty shard than beside
     the first, which ran the 16s pass on two legs."""
-    weights = pytest_shard.packing_table(pytest_shard.load_weights())
-    placed = pytest_shard.assign(pytest_shard.census(), CI_SHARDS, weights)
+    placed = pytest_shard.assign(pytest_shard.census(), CI_SHARDS)
     assert len({placed[f] for f in CENSUS_FILES}) == 1, {
         f: placed[f] for f in CENSUS_FILES
     }

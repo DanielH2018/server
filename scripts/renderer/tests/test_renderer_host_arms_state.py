@@ -21,6 +21,7 @@ NET = f"<network><name>staging</name><uuid>{UUID}</uuid><bridge name='{{{{ bridg
 CLAUDE = {
     "name": "claude",
     "uid": 1001,
+    "gid": 1001,
     "home": "/home/claude",
     "shell": "/bin/bash",
     "comment": "Claude agent",
@@ -107,14 +108,16 @@ def test_a_libvirt_entry_with_a_path_in_its_name_fails_the_render(hosts):
 
 
 def test_users_reach_the_manifest_and_a_sysusers_file_and_reconcile_accepts_them(hosts):
-    other = {**CLAUDE, "name": "bot", "uid": 1002, "comment": ""}
+    other = {**CLAUDE, "name": "bot", "uid": 1002, "gid": 1002, "comment": ""}
 
     package = _render(hosts, {"users": [other, CLAUDE]})
     manifest = _manifest(package)
 
     assert package.files["/usr/lib/sysusers.d/homelab.conf"][0].decode() == (
-        'u claude 1001 "Claude agent" /home/claude /bin/bash\n'
-        'u bot 1002 "-" /home/claude /bin/bash\n'
+        "g claude 1001\n"
+        'u claude 1001:1001 "Claude agent" /home/claude /bin/bash\n'
+        "g bot 1002\n"
+        'u bot 1002:1002 "-" /home/claude /bin/bash\n'
     )
     assert [u["name"] for u in manifest["users"]["users"]] == ["claude", "bot"]
     assert manifest["reconcilers"] == ["users"]
@@ -126,13 +129,22 @@ def test_users_reach_the_manifest_and_a_sysusers_file_and_reconcile_accepts_them
     [
         pytest.param([{**CLAUDE, "uid": 0}], id="root-uid"),
         pytest.param([{**CLAUDE, "uid": "1001"}], id="string-uid"),
+        pytest.param([{**CLAUDE, "gid": 0}], id="root-gid"),
+        pytest.param([{k: v for k, v in CLAUDE.items() if k != "gid"}], id="no-gid"),
         pytest.param([{**CLAUDE, "name": "Claude"}], id="name"),
         pytest.param([{**CLAUDE, "home": "home/claude"}], id="relative-home"),
         pytest.param([{**CLAUDE, "shell": "/bin/ba sh"}], id="space-in-shell"),
         pytest.param([{**CLAUDE, "comment": 'a"b'}], id="quote"),
         pytest.param([{**CLAUDE, "extra": 1}], id="unknown-key"),
-        pytest.param([CLAUDE, {**CLAUDE, "name": "other"}], id="duplicate-uid"),
-        pytest.param([CLAUDE, {**CLAUDE, "uid": 1002}], id="duplicate-name"),
+        pytest.param(
+            [CLAUDE, {**CLAUDE, "name": "other", "gid": 1002}], id="duplicate-uid"
+        ),
+        pytest.param(
+            [CLAUDE, {**CLAUDE, "name": "other", "uid": 1002}], id="duplicate-gid"
+        ),
+        pytest.param(
+            [CLAUDE, {**CLAUDE, "uid": 1002, "gid": 1002}], id="duplicate-name"
+        ),
     ],
 )
 def test_a_user_the_arm_would_refuse_fails_the_render(hosts, users):
