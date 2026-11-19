@@ -169,7 +169,17 @@ A claim is reclaimable when either holds:
 
 - the worktree it names is absent from `git worktree list`, or
 - `lib.worktrees.classify` already judges that worktree REMOVABLE — merged into `origin/master`,
-  clean, and holding no live session lock.
+  clean, and holding no live session lock — and no live process works in it.
+
+The last condition covers a session the Claude desktop app starts. The app creates the
+session's worktree itself, unlocked, on a `claude/<name>` branch. Between a clean commit and
+the next edit that tree reads merged, clean and unlocked. So `claim_is_live` in
+`scripts/dev/findings_lib/claim.py` also holds a tree that a process this user can read has
+as its cwd or `CLAUDE_PROJECT_DIR`, through `lib.worktrees.held_by_readable_process`. An
+unreadable process counts for nothing there, unlike in `remove`, because a hold with no
+evidence would stop `reap` releasing any claim. The main worktree is never held this way:
+every session tree sits under it, sessions also run in it, and its branch is `master`, which
+no claim may name.
 
 A claim is **not** reclaimable when the named worktree still exists with uncommitted changes,
 even if its lock owner is dead. That case is the 2026-09-05 incident: the container restarted,
@@ -224,6 +234,59 @@ Four design rules hold across the subcommands, and no docstring states them:
   `next` read only open issues, so a claim stranded on a closed issue leaves every view at once.
   A PR body's `Closes #<n>` posts no release, and the next re-observation that reopens the issue
   would otherwise bring the claim back live.
+
+## Session milestones and project milestones
+
+A session milestone is a GitHub milestone that groups one branch's focused work.
+`findings.py milestone start "<title>" --worktree <branch>` opens it, and nothing else makes
+one. `claim` files the branch's issues under it. The `session-milestone` workflow files the
+branch's PR, and files a fan-out batch's PR under the milestone of the issue that PR closes.
+The workflow closes the milestone once nothing in it is open, and a later claim or PR
+reopens it. The milestone's description names its branch, and the tools touch only a
+milestone whose description they can parse. `scripts/dev/findings_lib/milestone.py` owns the
+scheme.
+
+A session milestone holds only claimed issues: `release`, `reap` and `manual` take an issue
+back out. So it cannot hold work nobody has started.
+
+A project milestone is a session milestone that also holds a backlog.
+`milestone start --project "<title>" --worktree <branch>` opens one, and its description
+says `project` where a session milestone's says `session`. One sub-coordinator session owns
+one project: the project is that session's milestone, and the session runs `issue-fanout`
+over the project's backlog. A project differs from a session milestone in four ways:
+
+- `milestone add <n...>` files unclaimed issues in the backlog. It refuses a closed issue,
+  a claimed issue, and an issue that another milestone holds.
+- `release`, `reap` and `manual` leave the issue in the project. A batch that fails and
+  releases its issue returns that issue to the backlog.
+- A claim by another branch leaves the issue in the project. A hand-steered worker that has
+  a session milestone of its own does not take the issue out of the backlog.
+- `next --milestone "<title>"` lists the project's free issues, and `list` and `new-issues`
+  take the same flag. `--milestone none` selects the issues that no open milestone holds,
+  which is the pool a root session assigns from. A title that no milestone has exits 64
+  rather than printing an empty list. `cc-wait findings --milestone "<title>"` waits on one
+  project, and ends only on an issue filed after the wait began: an older issue that
+  `milestone add` files later does not end it.
+
+Claim filing, PR joining, the close at zero open items and `reap` treat both forms alike. A
+project with issues in its backlog has open items, so it stays open while its backlog lasts.
+
+Each way in has a way out:
+
+- `milestone add` is reversed by `milestone remove <n...>`, which refuses a claimed issue.
+  To take a claimed issue out, `release` it first.
+- `milestone start` is reversed by `milestone close`, and `start` with the same title
+  reopens the closed milestone. `milestone status` prints the form and the counts.
+- No command converts a milestone between the two forms. `start` refuses a title the branch
+  already holds in the other form. To change form, close the milestone and start the other
+  form under another title.
+
+The operator decided on 2026-11-19 that a project is the sub-coordinator's session
+milestone, not a second kind of milestone. The rejected alternative was a milestone the
+operator makes by hand, with no owning branch. The tools never touch a milestone whose
+description names no branch, so they could not file a claim under one, close it when its
+work finished, or reopen it. A project with an owning branch gets all of that from the code
+that serves a session milestone.
 
 ## What a fan-out agent may not do
 
@@ -329,6 +392,12 @@ not land its PR, because only daniel-box runs deploys. The manifest under
 `~/.claude/fanout/<run-id>.json` is what `status`, `clean`, and the SessionStart banner's
 `remote_fanout_lines` (`.claude/hooks/hooklib/worktree_lines.py`) all read to find a fan-out's
 live worktrees on the other host.
+
+A reader keeps the batch keys it does not know. `Batch.from_json` in
+`scripts/dev/fanout_lib/manifest.py` holds them in `Batch.extra`, and `Batch.to_json` writes
+them back beside the fields, so a `clean` run by one build does not erase what another build
+recorded. `to_json` never nests them under an `extra` key, because a reader that passes every
+key to the `Batch` constructor skips the whole run on a key it has no field for.
 
 The dispatcher scores a host on memory headroom, and an agent is throttled by two cgroup caps
 rather than one: `user.slice`, the fleet, and `user-1000.slice`, the login plane it runs in as

@@ -75,6 +75,7 @@ RUNS_PER_DAY = 96
 DAILY_LINE_BUDGET = 1000
 SHIPPED_LEVELS = {"info", "success", "warning"}
 PER_BOOKMARK_METHODS = {"process_bookmark"}
+FILTER = "not_library_record"
 
 
 def _tree() -> ast.Module:
@@ -328,14 +329,42 @@ def test_every_slot_the_estimate_returns_is_a_tag_the_script_recognises():
     )
 
 
-def test_the_script_handler_rejects_the_library_records_its_own_sink_prints():
-    """karakeep_python_api prints its records through its own sink, so an unfiltered
-    script handler would ship each of them twice."""
+def _filter_function():
+    """`not_library_record`, compiled alone: it needs none of the script's imports."""
+    node = next(
+        n for n in _tree().body if isinstance(n, ast.FunctionDef) and n.name == FILTER
+    )
+    namespace: dict = {}
+    exec(
+        compile(ast.Module(body=[node], type_ignores=[]), str(SCRIPT), "exec"),
+        namespace,
+    )
+    return namespace[FILTER]
+
+
+def test_the_filter_drops_the_library_records_and_keeps_the_scripts_own():
+    """karakeep_python_api prints its records through its own sink, so a script handler
+    that kept them would ship each twice; one that dropped `__main__` would ship nothing."""
+    keep = _filter_function()
+    assert not keep({"name": "karakeep_python_api.karakeep_api"}), (
+        f"{FILTER} keeps a karakeep_python_api record, so the library's lines ship twice"
+    )
+    assert keep({"name": "__main__"}), (
+        f"{FILTER} drops a __main__ record, so the script's own lines never ship"
+    )
+
+
+def test_every_stderr_handler_setup_logging_adds_uses_the_filter():
     adds = [
         n
         for n in ast.walk(_method(_tree(), "setup_logging"))
         if _logger_call(n, "add") and n.args and _is_stderr(n.args[0])
     ]
-    assert adds and all(any(k.arg == "filter" for k in n.keywords) for n in adds), (
-        "every stderr handler setup_logging adds needs a filter= that drops the library's records"
+    filters = [
+        next((ast.unparse(k.value) for k in n.keywords if k.arg == "filter"), None)
+        for n in adds
+    ]
+    assert filters and all(f == FILTER for f in filters), (
+        f"setup_logging adds stderr handlers with filter= {filters}; each needs "
+        f"filter={FILTER}, which drops the library's records"
     )

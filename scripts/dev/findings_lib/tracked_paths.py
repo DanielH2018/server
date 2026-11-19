@@ -2,9 +2,8 @@
 
 WHY. An issue body often cites a path from a subdirectory: `fanout_lib/clean.py`, meaning
 `scripts/dev/fanout_lib/clean.py`. `issue_model.cited_paths` returns what the body spells, so
-two consumers that compare against repo-root paths would miss: `red_green_eligible` would
-refuse the fragment, and the fan-out collision check would let a fragment and its full path
-land in two batches.
+a consumer that compares against repo-root paths would miss: the fan-out collision check would
+let a fragment and its full path land in two batches.
 
 A fragment resolves only when exactly one tracked file ends with `/<fragment>`. An ambiguous or
 unmatched one stays as written, so nothing is resolved by guesswork.

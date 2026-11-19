@@ -488,8 +488,7 @@ def land_draft(pipe: "Pipeline") -> tuple[Landing, dict | None]:
     """Land the PR the pipeline left a draft, resuming the implementer once on a red run.
 
     A landing that ends `pr-ci-red` resumes the implementer as `ci_gate` does, and the PR is
-    landed once more if `LAND_MARGIN_S` of run time is left. After an upheld contest nobody is
-    resumed, as in `ci_gate`.
+    landed once more if `LAND_MARGIN_S` of run time is left.
 
     Returns the landing that ended last, and a `needs input:` report when the PR's CI is red
     with no resume left or the resume left too little time to land; else None.
@@ -505,9 +504,6 @@ def land_draft(pipe: "Pipeline") -> tuple[Landing, dict | None]:
     landing = landed()
     if landing.verdict != PR_CI_RED:
         return landing, None
-    contest = record.green_contest.removeprefix("upheld: ")
-    if contest != record.green_contest:
-        return landing, ci_hold(record, CiResult(FAILED, landing.line), contest)
     if not pipe.session:
         return landing, None
     _ci_fix(pipe, landing.line, failing_checks(pipe.run, pr, repo))
@@ -554,11 +550,6 @@ def ci_gate(pipe: "Pipeline", last: Phase) -> tuple[Phase, dict | None]:
         )
 
     result = wait()
-    # After an upheld contest, the red test CI fails on is wrong, and a resume that rewrote it
-    # would face no green gate and no reviewer. A hand corrects it instead.
-    contest = record.green_contest.removeprefix("upheld: ")
-    if contest != record.green_contest:
-        return last, ci_hold(record, result, contest)
     if result.state == FAILED and pipe.session:
         fix = _ci_fix(pipe, result.line, result.failures)
         last = fix if PR_URL.search(fix.text) else last
@@ -580,19 +571,6 @@ def ci_gate(pipe: "Pipeline", last: Phase) -> tuple[Phase, dict | None]:
             f"and re-run `cc-wait gh-ci --pr <n> --repo {pipe.target.repo}`"
         )
     return last, _needs_input(record, why)
-
-
-def ci_hold(record: Record, result: "CiResult", contest: str) -> dict | None:
-    """A hold on a PR whose CI is not green after an upheld contest, or None when it is green."""
-    if result.state == PASSED:
-        record.ci_gate = "passed"
-        return None
-    record.ci_gate = f"held after an upheld contest: {result.line or 'no state'}"
-    why = (
-        f"CI is not green on a PR whose contest of {contest} a fresh reviewer upheld. Correct "
-        f"those red tests to the cited fact by hand, then land it: {result.line or 'no state'}"
-    )
-    return _needs_input(record, why)
 
 
 def _needs_input(record: Record, why: str) -> dict:

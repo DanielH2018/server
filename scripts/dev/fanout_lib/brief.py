@@ -315,9 +315,9 @@ def _test_proof_step(base: str) -> str:
     The wording follows `fanout_lib.review.base_check`, which runs the same check on the PR:
     the changed files outside the tests go back to the merge base, a file the PR added is
     deleted, the tests stay, and the new tests that still pass are reported. The implementer
-    and the reviewer then use the same terms. The red phase covers only a `red-green` batch,
-    and `test/vacuous` and `test/missing-coverage` drove 71 of the actionable findings in the
-    three days measured, so every batch gets this step.
+    and the reviewer then use the same terms. `test/vacuous` and `test/missing-coverage`
+    drove 71 of the actionable findings in the three days measured, so every batch gets this
+    step.
     """
     return f"""## Prove each new test can fail
 A test that passes on the code as it stood before your change cannot be checking what the

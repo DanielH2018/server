@@ -118,6 +118,7 @@ def test_a_slot_file_that_cannot_be_opened_leaves_the_others_free(tmp_path):
 
 _K8S = ["k8s/roles/sonarr/defaults/main.yml"]
 _SERIAL = ["k8s/roles/longhorn/defaults/main.yml"]
+_SERVICES = ["cluster/services.yml"]
 _DOCS = ["docs/landing.md"]
 
 
@@ -143,11 +144,18 @@ def _land(ln) -> None:
     ("paths", "fakes", "why"),
     [
         (_K8S, {"deploy_hold": "abc123"}, "holds 'abc123', and this PR changes a k8s"),
-        (_SERIAL, {"serial": [False]}, "another landing of a forward-only pin"),
-        (_DOCS, {"serial": [False]}, "a landing of a forward-only pin"),
+        (_SERVICES, {"deploy_hold": "abc123"}, "holds 'abc123', and this PR changes"),
+        (_SERIAL, {"serial": [False]}, f"another {slots._SERIAL_LIVE}"),
+        (_DOCS, {"serial": [False]}, f"a {slots._SERIAL_LIVE}"),
         (_K8S, {"in_window": True, "slot": [False]}, "no-promotion window"),
     ],
-    ids=["hold", "serial-live-past-the-drain", "beside-serial", "window"],
+    ids=[
+        "hold",
+        "services-yml-under-a-hold",
+        "serial-live-past-the-drain",
+        "beside-serial",
+        "window",
+    ],
 )
 def test_a_rule_refuses_the_merge_with_exit_75(landing, paths, fakes, why):
     ln, calls = _merging(landing, paths, **fakes)

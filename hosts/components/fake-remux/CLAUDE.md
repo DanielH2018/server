@@ -16,7 +16,10 @@ what is specific to the host timers: the schedule, the lock, and the contract be
     ffprobes the library for files whose encoder tag or keyframe interval contradicts a
     "remux" filename, and seeds
     the ledger (`replacements.json` under `fake_remux_state_dir`). It writes the ledger and
-    nothing else.
+    a `replacements.json.held` record of the episode ids it holds, and nothing else. The record
+    limits the hold post to one per change in the held set, and the scan removes it when the
+    hold ends. A hand-cleared ledger needs the record removed too, or the same held set posts
+    nothing.
   - **fake-remux reconcile** (`fake_remux.py replace`, shell in
     `files/fake_remux_lib/fake_remux_replace.py`, every
     `fake_remux_replace_cron_minute`): for each ledger entry, asks Sonarr for a replacement,

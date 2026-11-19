@@ -1,9 +1,8 @@
 """Which of a PR's new tests still pass with its code changes taken out.
 
 WHY. A test that passes on the code as it stood before the fix cannot be checking what the
-fix changed. The red gate proves that property for the red phase's tests, but only a batch
-whose every issue carries the `red-green` label gets a red phase, and a reviewer can only find an implementer test that "passes on the
-unchanged code" by reading it. This module finds such a test by running it.
+fix changed, and a reviewer can only find an implementer test that "passes on the unchanged
+code" by reading it. This module finds such a test by running it.
 
 HOW. In a clean clone of HEAD (`hardened_runs.clone_at`), every file the PR changed outside its
 tests goes back to the merge base, and a file the PR added is deleted. The tests stay at HEAD.
@@ -12,12 +11,10 @@ reported. A node whose module no longer imports errors rather than passes, and
 `--continue-on-collection-errors` keeps that from stopping the rest.
 
 It reports and never refuses. A regression guard for behaviour the fix keeps passes on the
-base legitimately, so the reviewer gets the list as data and judges each test, as it does for
-`red_tests.red_by_absence`'s absence nodes.
+base legitimately, so the reviewer gets the list as data and judges each test.
 """
 
 import tempfile
-from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 
@@ -57,9 +54,7 @@ def is_test_side(path: str) -> bool:
     )
 
 
-def unproven_tests(
-    run: Runner, worktree: Path, start: str, head: str, exclude: Sequence[str] = ()
-) -> BaseCheck:
+def unproven_tests(run: Runner, worktree: Path, start: str, head: str) -> BaseCheck:
     """Run the test nodes `start..head` adds against `start`'s code.
 
     Args:
@@ -67,7 +62,6 @@ def unproven_tests(
         worktree: the batch worktree, cloned rather than run in.
         start: the merge base the PR's diff is taken from.
         head: the PR's head.
-        exclude: node ids to leave out, the red phase's own.
     """
     diff = worktree_git(
         run, worktree, "diff", "--name-only", "--no-renames", start, head
@@ -87,7 +81,7 @@ def unproven_tests(
         present = [f for f in modules if f.endswith(".py") and (tree / f).is_file()]
         before = _nodes_at(run, tree, start, head, present)
         after, _ = collect(run, tree, present)
-        new = sorted(after - before - set(exclude))
+        new = sorted(after - before)
         if not new:
             return BaseCheck()
         code = [f for f in changed if not is_test_side(f)]

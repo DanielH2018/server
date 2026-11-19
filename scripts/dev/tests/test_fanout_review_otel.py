@@ -63,8 +63,8 @@ def test_an_attribute_the_unit_already_carries_is_kept(tmp_path, monkeypatch):
 def test_the_assignment_has_one_shape_for_every_phase(tmp_path, monkeypatch):
     monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path))
     monkeypatch.delenv("OTEL_RESOURCE_ATTRIBUTES", raising=False)
-    assert processes.otel_attributes("5651-5654", "red") == (
-        "OTEL_RESOURCE_ATTRIBUTES=fanout.batch=5651-5654,fanout.phase=red"
+    assert processes.otel_attributes("5651-5654", "review") == (
+        "OTEL_RESOURCE_ATTRIBUTES=fanout.batch=5651-5654,fanout.phase=review"
     )
 
 
