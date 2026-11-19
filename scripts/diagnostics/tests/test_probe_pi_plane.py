@@ -204,7 +204,7 @@ def test_format_targets_flags_only_the_down_target():
     active[1]["labels"]["job"] = "loki"
     text, code = pi_plane.format_targets(active)
     assert code == 1
-    assert text.splitlines() == ["  ✗ loki [daniel-pi] refused", "1/2 targets up"]
+    assert text.splitlines() == ["1/2 targets up", "  ✗ loki [daniel-pi] refused"]
 
 
 def test_run_targets_prints_the_count(capsys):
@@ -240,16 +240,16 @@ def test_run_targets_passes_a_down_target_whose_deployment_is_scaled_to_zero(cap
     """An idle on-demand game server's exporter is down by design, not a failure."""
     assert _run_targets_one_down({"terraria-stats"}) == 0
     assert capsys.readouterr().out.splitlines() == [
-        "  - terraria-stats [daniel-pi] scaled to 0",
         "1/2 targets up, 1 scaled to 0",
+        "  - terraria-stats [daniel-pi] scaled to 0",
     ]
 
 
 def test_run_targets_fails_a_down_target_whose_deployment_runs(capsys):
     assert _run_targets_one_down(set()) == 1
     assert capsys.readouterr().out.splitlines() == [
-        "  ✗ terraria-stats [daniel-pi] refused",
         "1/2 targets up",
+        "  ✗ terraria-stats [daniel-pi] refused",
     ]
 
 

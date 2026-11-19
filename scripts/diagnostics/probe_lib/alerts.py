@@ -35,6 +35,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 from diagnostics.probe_lib import core, metrics, pi_plane
 from diagnostics.probe_lib.core import PI_HOST, prom_endpoint
 from lib.exit_codes import PROBE_UNREADABLE
+from lib.progress import count_line
 
 QUERY = 'ALERTS{alertstate="firing",alertname!="Watchdog"}'
 # Prometheus refuses a range query over 11,000 points per series, so the step widens with
@@ -176,26 +177,57 @@ def _fmt_duration(secs, step_s):
     return f"{secs / 86400:.1f}d"
 
 
-def format_alert_episodes(episodes, days, step_s):
-    """One aligned row per episode, newest first, with both ends of each. Pure.
+def _episode_row(e, name, width, step_s):
+    span = f"{_fmt_utc(e['first_s'])} -> {_fmt_utc_end(e['first_s'], e['last_s'])}"
+    dur = _fmt_duration(e["last_s"] - e["first_s"], step_s)
+    tag = " shadow" if e["shadow"] else ""
+    return f"{span:<36} {dur:>6}  {name:<{width}}  {e['severity']}{tag}"
 
-    An empty list renders an all-clear line naming the window.
+
+def format_alert_episodes(episodes, days, step_s, now, show_all=False):
+    """A count line, then one row per `service/alertname`, still-firing ones first. Pure.
+
+    A row carries the alert's episode count and total firing time. An alert is still firing
+    when its newest sample is within the splitting gap of `now`. `show_all` lists every
+    episode, newest first, with both ends of each, in place of the grouped rows. An empty
+    list renders an all-clear line naming the window.
     """
     if not episodes:
         return f"no firing alerts in the last {days:g}d"
-    names = [f"{e['service']}/{e['alertname']}" for e in episodes]
-    width = max(len(n) for n in names)
-    lines = [
-        f"{len(episodes)} firing episode(s), last {days:g}d, times UTC, "
-        f"{step_s}s resolution (Prometheus ALERTS):",
-        "",
-    ]
-    for e, name in zip(episodes, names, strict=True):
-        span = f"{_fmt_utc(e['first_s'])} -> {_fmt_utc_end(e['first_s'], e['last_s'])}"
-        dur = _fmt_duration(e["last_s"] - e["first_s"], step_s)
-        tag = " shadow" if e["shadow"] else ""
-        lines.append(f"{span:<36} {dur:>6}  {name:<{width}}  {e['severity']}{tag}")
-    return "\n".join(lines)
+    groups = defaultdict(list)
+    for e in episodes:
+        groups[f"{e['service']}/{e['alertname']}"].append(e)
+    newest = {name: max(e["last_s"] for e in eps) for name, eps in groups.items()}
+    live = {
+        name for name, last_s in newest.items() if now - last_s <= step_s * _GAP_STEPS
+    }
+    states = count_line("firing now" if name in live else "cleared" for name in groups)
+    head = (
+        f"{len(episodes)} firing episode(s) of {len(groups)} alert(s) ({states}), "
+        f"last {days:g}d, times UTC, {step_s}s resolution (Prometheus ALERTS)"
+    )
+    if show_all:
+        names = [f"{e['service']}/{e['alertname']}" for e in episodes]
+        width = max(len(n) for n in names)
+        rows = [
+            _episode_row(e, n, width, step_s)
+            for e, n in zip(episodes, names, strict=True)
+        ]
+        return "\n".join([head, "", *rows])
+    ordered = sorted(groups, key=lambda n: (n not in live, -newest[n]))
+    width = max(len(n) for n in ordered)
+    rows = []
+    for name in ordered:
+        eps = groups[name]
+        total = sum(max(e["last_s"] - e["first_s"], step_s) for e in eps)
+        severities = "/".join(sorted({e["severity"] for e in eps}))
+        tag = " shadow" if any(e["shadow"] for e in eps) else ""
+        now_tag = "  firing now" if name in live else ""
+        rows.append(
+            f"{name:<{width}}  {len(eps):>3}x {_fmt_duration(total, step_s):>6}  "
+            f"{severities}{tag}{now_tag}"
+        )
+    return "\n".join([head + "; --all to list every episode", "", *rows])
 
 
 def run_alerts(ns, now=None):
@@ -235,5 +267,5 @@ def run_alerts(ns, now=None):
     if ns.json:
         print(json.dumps(episodes))
     else:
-        print(format_alert_episodes(episodes, ns.days, step_s))
+        print(format_alert_episodes(episodes, ns.days, step_s, now, ns.all))
     return 0

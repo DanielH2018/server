@@ -108,7 +108,8 @@ loop to auto-tag bookmarks
   init containers assert uid 1000 as well.
 - `files/karakeep-time-tagger.py` is a fork of upstream's script (not fetched at render time)
   because CI renders every template on a machine that has never deployed. It carries the
-  logging changes of #8985, so `test_karakeep_time_tagger_script.py` holds it to its own sha256
+  logging changes of #8985 and lists `0-5m` in `TIME_TAGS`, the slot its estimate returns
+  that upstream's list left out (#9095), so `test_karakeep_time_tagger_script.py` holds it to its own sha256
   and names the upstream commit it forked from. Edit the script and the test's hash together.
 - **`karakeep-archive-pruner`** (CronJob) prunes archived bookmarks by age, and only logs a
   dry run while `karakeep_k8s_pruner_apply` is false. Rules: `files/karakeep_archive_pruner.py`.

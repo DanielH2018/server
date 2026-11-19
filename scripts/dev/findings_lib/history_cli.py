@@ -214,9 +214,7 @@ def cmd_show(args: argparse.Namespace, tools: FindingsTools) -> int:
     ]
     if args.json:
         print(
-            json.dumps(
-                {**row, "body": issue.get("body") or "", "comments": comments}, indent=2
-            )
+            json.dumps({**row, "body": issue.get("body") or "", "comments": comments})
         )
         return 0
     _print_row(row)

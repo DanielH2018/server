@@ -43,6 +43,9 @@ Environment=CLAUDE_GUARD_HOME={{ pins.tools_dir }}/.local/share/claude-guard
 Environment=CLAUDE_WORKTREE_HOME={{ pins.tools_dir }}/.local/share/claude-worktree
 # The controller owns the binary; the session cannot update it.
 Environment=DISABLE_AUTOUPDATER=1
+# No error reports or telemetry to Claude Code's third-party intakes, which the egress allowlist
+# leaves out.
+Environment=CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
 # A memory written here would die with the tmpfs home, and none may reach a later run (I2).
 Environment=CLAUDE_CODE_DISABLE_AUTO_MEMORY=1
 Environment=PYTHONDONTWRITEBYTECODE=1

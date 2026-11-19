@@ -61,19 +61,18 @@ def _lines(snap: dict) -> dict[str, str]:
 DEPLOY_HOLD = "DEPLOY_HOLD (promote workflow, Flux-owned tags)"
 
 
-@pytest.mark.parametrize(
-    "deploy_hold, want_hold",
-    [
-        (f"{'e' * 40} failed=bento-pdf", "failed=bento-pdf"),
-        ("none", ": none"),
-    ],
-    ids=["set", "none"],
-)
-def test_the_hold_line_prints_whatever_it_reads(deploy_hold, want_hold):
-    snap = _snap(deploy_hold)
+def test_a_set_hold_prints_its_line():
+    snap = _snap(f"{'e' * 40} failed=bento-pdf")
     line = _lines(snap)[DEPLOY_HOLD]
-    assert line.endswith(want_hold)
+    assert line.endswith("failed=bento-pdf")
     assert line in landing.format_text({**snap, "claims": None})
+
+
+def test_a_clear_landing_prints_no_none_rows():
+    text = landing.format_text({**_snap(), "claims": None})
+    assert text.splitlines()[0] == "0 landing blocker(s)"
+    assert ": none" not in text
+    assert "prod:" in text
 
 
 @pytest.mark.parametrize(
