@@ -38,6 +38,7 @@ _sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
 from deploy_tools.land_lib import live_limit, pin_gate, turn
 from deploy_tools.land_lib.landing import Landing
 from deploy_tools.land_lib.outcome import Verdict, say
+from deploy_tools.land_lib.serial_lock import SERIAL_NAME
 from lib.progress import OnChange
 
 # DECIDED: 6. The operator set it on 2026-11-15 (D10 in docs/ci-throughput.md): on 2026-11-14,
@@ -49,14 +50,15 @@ COUNT = 6
 FALLBACK_COUNT = 3
 _LOCK_DIR = turn.LOCK.parent
 SLOT_NAMES = tuple(f"homelab-land-slot-{n}.lock" for n in range(COUNT))
-# Held by a landing of a serial PR from the check before its merge until its process ends.
-SERIAL_NAME = "homelab-land-serial.lock"
 # DECIDED: 2400 s, the longest a serial PR in the turn waits for the landings past their merge
 # (`_drain`). On 2026-11-18 and 2026-11-19 every landing that settled took 7 to 2209 s from its
 # merge to its verdict (the `landing-annotation` records' wait_ci plus deploy). A landing stuck
 # on a soak for longer would otherwise hold the turn for two merge budgets.
 DRAIN_S = 2400
-_SERIAL_LIVE = f"landing of a PR that changes {live_limit.SERIAL_WHAT} is live"
+_SERIAL_LIVE = (
+    f"landing of a PR that changes {live_limit.SERIAL_WHAT} is live "
+    "(`cc-wait landing-clear` waits for it)"
+)
 
 Release = Callable[[], None]
 Locker = Callable[[Sequence[str], int], Release | None]
