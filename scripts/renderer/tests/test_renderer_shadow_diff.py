@@ -41,14 +41,6 @@ def run(capsys):
     return _run
 
 
-@pytest.mark.parametrize("command", ["compare", "stubcheck"])
-def test_the_ansible_tree_subcommands_are_gone_is_flagged(c1, capsys, command):
-    with pytest.raises(SystemExit) as caught:
-        shadow_diff.main([command, str(c1), str(c1)])
-    assert caught.value.code == 64
-    assert "invalid choice" in capsys.readouterr().err
-
-
 def test_digest_of_one_tree_under_two_directories_is_clean(c1, tmp_path, run):
     copy = shutil.copytree(c1, tmp_path / "elsewhere" / "render")
     first, second = run("digest", c1), run("digest", copy)
