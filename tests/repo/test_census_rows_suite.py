@@ -106,11 +106,6 @@ BUILDS_A_ROW = re.compile(r"\b(?:Census|RunbookRule|Property)\(")
 # A module with this many test functions or fewer is a selector, a predicate and its red
 # proof: a row's shape.
 ROW_SIZED = 3
-# The files the row found when it shipped, before anyone judged whether each fits a row.
-_PREDATES = (
-    "predates the rule; #9237 converts it to a row or replaces this with the reason it "
-    "stays a file"
-)
 
 
 def _standalone_check_offence(subject: Subject) -> list[str]:
@@ -250,10 +245,6 @@ ROWS = (
         min_matches=100,
         must_find=frozenset({SELF, "tests/repo/test_runbook_rules.py"}),
         allow={
-            "tests/repo/test_ci_k3s_download_leg_does_not_gate.py": (
-                "an existential claim over every workflow: some step runs the cases outside "
-                "the gate, which no per-file offence can hold"
-            ),
             "tests/repo/test_shed_offline_hold_order.py": (
                 "a pinned sentence with a must-refuse case table, which no RunbookRule "
                 "field holds"
@@ -261,33 +252,20 @@ ROWS = (
             "tests/services/test_host_check_rule_literals.py": (
                 "a join of the rule file against the inventory, which #9019 rewrites"
             ),
-            **dict.fromkeys(
-                (
-                    "tests/repo/test_ci_bootstrap_cases_own_job.py",
-                    "tests/repo/test_ci_pytest_apt_tools_cache.py",
-                    "tests/repo/test_fix_skeptic_pass_documented.py",
-                    "tests/repo/test_gitleaks_manifest_digest_allowlist.py",
-                    "tests/repo/test_gitleaks_secret_key_name_allowlist.py",
-                    "tests/repo/test_host_package_cases_run_on_their_inputs.py",
-                    "tests/repo/test_prek_hooks_run_only_at_commit.py",
-                    "tests/repo/test_prek_uv_entries_are_frozen.py",
-                    "tests/repo/test_promote_workflow.py",
-                    "tests/repo/test_promote_workflow_bundle.py",
-                    "tests/repo/test_promote_workflow_schedule.py",
-                    "tests/repo/test_promote_workflow_starters.py",
-                    "tests/repo/test_promote_workflow_uv_groups.py",
-                    "tests/repo/test_promote_workflow_verify.py",
-                    "tests/repo/test_prune_artifacts_workflow.py",
-                    "tests/repo/test_reviewer_agents_carry_no_hand_reflag_list.py",
-                    "tests/repo/test_setup_action_uv_cache.py",
-                    "tests/repo/test_vale_matches_the_ci_pin.py",
-                    "tests/services/test_claude_cgroup_consumers_agree_with_the_writer.py",
-                    "tests/services/test_deploy_pipeline_reboot_window_rule.py",
-                    "tests/services/test_flux_not_ready_comment_pager.py",
-                    "tests/services/test_karakeep_time_tagger_script.py",
-                    "tests/services/test_pi_peer_backup_schedule_clears_the_longhorn_slots.py",
-                ),
-                _PREDATES,
+            "tests/repo/test_ci_pytest_apt_tools_cache.py": (
+                "a per-tool cache check, which #9025 replaces with one check over the "
+                "pinned-tool action"
+            ),
+            "tests/repo/test_vale_matches_the_ci_pin.py": (
+                "a join of ci.yml's Vale pin against the homelab-tools package's"
+            ),
+            "tests/services/test_claude_cgroup_consumers_agree_with_the_writer.py": (
+                "a join of the writer script's metrics against the alert rules and the "
+                "Grafana board that read them"
+            ),
+            "tests/services/test_pi_peer_backup_schedule_clears_the_longhorn_slots.py": (
+                "a join of pi-peer-backup's schedule against two other roles' Longhorn "
+                "slots and the group vars' time zone"
             ),
         },
     ),

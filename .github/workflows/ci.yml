@@ -200,7 +200,7 @@ jobs:
     # runs these hooks on it first. The same reasoning covers the `python-version:` and
     # `node-version:` pins in .github/actions/setup/action.yml.
     # Every `runs-on` in .github/workflows is a versioned label, ENFORCED by
-    # the `workflow-runners-are-pinned` row of tests/repo/test_census_rows_text.py.
+    # the `workflow-runners-are-pinned` row of tests/repo/test_census_rows_workflows.py.
     runs-on: ubuntu-26.04
     timeout-minutes: 20  # cap a wedged network hook so it can't burn to the 6h default
     env:

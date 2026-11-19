@@ -3,9 +3,9 @@
 
 Each workflow that runs the flux CLI pins it in env as `FLUX_VERSION` and `FLUX_SHA256`, and
 its jobs fetch that release through a cache keyed on the pin.
-tests/repo/test_promote_workflow.py holds the promote workflow's pin equal to
-`flux_version` in k8s/roles/flux, and the census below holds every workflow's pin equal to it
-and to the amd64 digest in homelab-tools. A custom manager reads each pin from the
+The `promote-flux-cli-matches-the-controllers` row of tests/repo/test_census_rows_workflows.py
+holds the promote workflow's pin equal to `flux_version` in k8s/roles/flux, and the census below
+holds every workflow's pin equal to it and to the amd64 digest in homelab-tools. A custom manager reads each pin from the
 `# renovate:` comment on the line above it.
 
 These tests hold two things. The manager finds every pin, version and digest in one match. And

@@ -69,7 +69,8 @@ name: promote
 # Every commit merged in the window was published by its own run, so this one skips render,
 # images and publish and starts at `promote`.
 #
-# tests/repo/test_promote_workflow.py holds every guard, permission and handoff here.
+# The promote rows of tests/repo/test_census_rows_workflows.py hold every guard, permission and
+# handoff here.
 
 on:
   # zizmor: ignore[dangerous-triggers] -- every job requires a successful push run of CI on master in this repository, `render` refuses a commit not on master, and no job checks out a pull-request ref.
@@ -114,12 +115,13 @@ permissions: {}
 # command calls `annotate <level> <message>`, which builds the `::` prefix at run time. A
 # literal `::error::` here would show in every step's log, and test_promote_workflow_retry.py
 # fails one.
-# prune-artifacts.yml carries a copy, and test_prune_artifacts_workflow.py holds the two equal.
+# prune-artifacts.yml carries a copy, and the `prune-retry-helper-equals-promotes` row of
+# tests/repo/test_census_rows_workflows.py holds the two equal.
 env:
   # Every `uv run` here installs pyproject.toml's [project] dependencies and skips both default
   # groups, so an unreachable tool download (actionlint-py's build) cannot block a
-  # promotion. UV_NO_DEV drops only `dev`. test_promote_workflow_uv_groups.py fails a workflow
-  # without them.
+  # promotion. UV_NO_DEV drops only `dev`. The promote-env-installs-no-default-group row
+  # of tests/repo/test_census_rows_workflows.py fails a workflow without them.
   UV_NO_DEV: "1"
   UV_NO_GROUP: lint
   # The flux CLI this workflow's flux steps fetch, equal to flux_version in k8s/roles/flux and to
@@ -280,7 +282,9 @@ jobs:
       # A --role render writes only the named tags' image contexts, and --shared-only writes
       # none, so both branches pass --all-images: the `images` job builds and pushes all ten
       # from out/images/ and refuses a render without tags.json.
-      # tests/repo/test_promote_workflow_bundle.py fails either branch without it.
+      # The promote-render-no-tag-branch-renders-the-shared-kinds and
+      # promote-render-tag-branch-writes-every-image-context rows of
+      # tests/repo/test_census_rows_workflows.py fail either branch without it.
       - name: Build the bundle
         id: build
         run: |
