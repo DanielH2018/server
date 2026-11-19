@@ -27,9 +27,8 @@
       (`alloy_pi_http_password`; the operator runs `host_secrets.py sync daniel-pi` after a
       rotation). The domain is a plain inventory variable, rendered at build time. A secret
       rotation changes this environment, so `up -d` recreates the container. A config edit
-      changes the `homelab.config-sha256` label, which replaces the role's
-      `common_config_changed` flag: Alloy reads its config once, at startup, so without the
-      label an edit would sit inert while the deploy reported green.
+      changes the `homelab.config-sha256` label: Alloy reads its config once, at startup, so
+      without the label an edit would sit inert while the deploy reported green.
     - **The host journal is not shipped, and the container's memory is the reason.**
       `loki.source.journal` works on this image, and a `docker.service` unit matcher would ship
       ~50 lines a day, so line volume is not the cost. The container's resident memory peaks at

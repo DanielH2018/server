@@ -48,8 +48,8 @@ SECONDS_PER_CYCLE = 300
 # `ScrapeTargetDown{job="nut"}` already pages. Units are nut's own: charge in percent,
 # runtime in seconds.
 #
-# DECIDED: a Claude Code process running as a retired uid never pages (operator, 2026-10-17,
-# #5125). As an arm it held the Memory tile DOWN near-continuously, because
+# DECIDED: a Claude Code process running as a retired uid never pages.
+# As an arm it held the Memory tile DOWN near-continuously, because
 # background jobs and fan-out still started as the operator's uid, and it masked any real memory
 # page. The `hosts` rules have no rule for it. `claude_uid_processes` is still written, and
 # `test_claude_cgroup_metrics.py` holds the writer.

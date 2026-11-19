@@ -356,7 +356,7 @@ logger:
   # it reaches neither stdout (`kubectl logs`) nor system_log. A failed cast logs its
   # `cast_show_view` args on this logger, and they carry the cast user's refresh_token.
   # DECIDED: drop the record at the logger rather than close `kubectl logs` (operator,
-  # 2026-11-12). The cost is the only record of a failed cast; #8206 is its replacement signal.
+  # 2026-11-12). The cost is the only record of a failed cast; `HomeAssistantCastHeartbeatStorm` is its replacement signal.
   filters:
     homeassistant.util.logging:
       - "refresh_token"
