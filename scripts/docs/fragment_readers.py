@@ -13,13 +13,7 @@ fail2ban jail template from `configparser`.
 
 import ast
 import configparser
-import sys as _sys
 from pathlib import Path as _Path
-
-
-# Reach the sibling package directories: a directly-invoked script gets only its own
-# directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 from lib import yaml_fast
 from lib.estate import Estate

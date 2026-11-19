@@ -249,7 +249,9 @@ def _parser(description: str) -> argparse.ArgumentParser:
         example=_example("claim 1234 1235 --worktree worktree-my-branch"),
         epilog="`claim` itself reaps a claim that `next` marks stale, so a refusal here means "
         "the claim is LIVE: find the other session before you take the issue. `claims` shows "
-        "who holds what, and `reap` releases the claims whose worktree is gone.",
+        "who holds what, and `reap` releases the claims whose worktree is gone. An issue "
+        "in another branch's open project milestone is refused too: that project's branch "
+        "claims it, or `milestone remove` takes it out of the backlog first.",
     )
     _add_dry_run(cl, suppress=True)
     _add_repo(cl)
@@ -318,7 +320,9 @@ def _parser(description: str) -> argparse.ArgumentParser:
         "workflow closes it once nothing in it is open, and a later claim or PR reopens it. "
         "`start --project` makes one that also holds a backlog: `add` files unclaimed "
         "issues under it, `remove` takes them out, a released issue stays in it, and "
-        '`next --milestone "<title>"` lists its free issues.',
+        '`next --milestone "<title>"` lists its free issues. While it is open, only its '
+        "branch claims from that backlog, and a plain `next` counts the backlog instead "
+        "of offering it.",
     )
     _add_dry_run(ms, suppress=True)
     _add_repo(ms)

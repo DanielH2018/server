@@ -40,6 +40,7 @@ from dev.findings_lib.claim import (
 )
 from dev.findings_lib.gh_calls import _load_issue, load_issues, run
 from dev.findings_lib.issue_model import now_iso, today_utc
+from dev.findings_lib.milestone import reservations
 from dev.findings_lib.plans import (
     ClaimRefused,
     plan_claim,
@@ -115,7 +116,11 @@ def cmd_claim(args: argparse.Namespace, tools: FindingsTools) -> int:
     refused = False
     for number in args.numbers:
         issue = _load_issue(number, tools)
-        if another_claim_blocks(issue, args.worktree):
+        reserved_by = reservations(
+            [issue], tools.owner_name, branch=args.worktree, gh_json=tools.gh_json
+        ).get(number)
+        # A stale claim on a reserved issue stands: reaping it would free nothing here.
+        if another_claim_blocks(issue, args.worktree) and not reserved_by:
             # Same fail-safe direction `cmd_reap` takes: a transient git error must not read
             # as "every worktree is gone". The claim blocks, as it did before this path
             # existed, and `plan_claim` refuses it below. The warning was said once, above.
@@ -160,6 +165,7 @@ def cmd_claim(args: argparse.Namespace, tools: FindingsTools) -> int:
                 when=now_iso(),
                 today=today_utc(),
                 milestone=milestone,
+                reserved_by=reserved_by,
             )
         except ClaimRefused as exc:
             print(f"#{number} refused: {exc.reason}", file=sys.stderr)

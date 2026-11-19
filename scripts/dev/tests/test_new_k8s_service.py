@@ -14,7 +14,7 @@ Run: uv run pytest scripts/dev/tests/test_new_k8s_service.py
 
 import pytest
 
-import gen_role_glance
+from docs import gen_role_glance
 from lib import yaml_fast
 from lib.guard_jinja_env import template_env
 from lib.k8s_roles import (

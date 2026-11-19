@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from fragments_lib import fragments_deploy as fd
+from docs.fragments_lib import fragments_deploy as fd
 from lib.repo_paths import REPO
 
 

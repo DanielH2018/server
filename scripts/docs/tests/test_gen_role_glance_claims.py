@@ -7,7 +7,7 @@ claim between lists and checks the line moves with it.
 
 import yaml
 
-import gen_role_glance as g
+from docs import gen_role_glance as g
 from lib.estate import Inventory
 
 
