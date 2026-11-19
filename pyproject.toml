@@ -361,6 +361,8 @@ ignore_names = [
   "expiry",
   # Dataclass fields serialised with asdict() into the fan-out review record.
   "base_error", "ci_rerun_jobs",
+  # A Batch field the run manifest records for whoever reads the file; no code reads it back.
+  "excused_paths",
   # Read by test_host_census.py and named in docs/host-packages.md.
   "NEVER_CANARY",
   # Bound in scripts/conftest.py so a bare `import grafana_panel_report` resolves.
