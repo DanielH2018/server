@@ -340,9 +340,9 @@ def test_the_fanout_launchers_name_the_scripts_of_the_copy_they_run():
     from fanout_lib.brief import _snapshot_root
     from fanout_lib.launch import review_command, worktree_path
     from fanout_lib.notify import stop_post
-    from fanout_lib.target import SERVER_TARGET, resolve
+    from fanout_lib.target import SERVER_TARGET, Target
 
-    other = resolve("DanielH2018/dotfiles")
+    other = Target("DanielH2018/dotfiles", "/c", "origin/main")
     assert f"PYTHONPATH={worktree_path('1')}/scripts " in review_command("1")
     assert f"PYTHONPATH={_snapshot_root('1', other)}/scripts " in review_command(
         "1", other
